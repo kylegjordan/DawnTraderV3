@@ -698,6 +698,28 @@ export class SignalOrchestrator {
       const patternPoolPairs = activeFilterPool.getPatternPool(this.mode);
       const patternSymbols = patternPoolPairs.map(p => normalizeToInternalSymbol(p.symbol));
       console.log(`[14.5][ORCHESTRATOR] Pattern pool: ${patternSymbols.length} pairs for pattern/hybrid strategy evaluation`);
+
+    // Batch 22: Read family pools for family-aware strategy selection
+    const { STRATEGY_FAMILY_MAP, FILTER_FAMILIES, HYBRID_FAMILY_ELIGIBILITY } = await import('../config/canonical-regime-strategy-map.js');
+    const familyPools: Record<string, string[]> = {};
+    for (const family of FILTER_FAMILIES) {
+      const familyPairs = activeFilterPool.getFamilyPool(this.mode, family);
+      familyPools[family] = familyPairs.map(p => normalizeToInternalSymbol(p.symbol));
+      console.log(`[22][ORCHESTRATOR] ${family} pool: ${familyPools[family].length} pairs`);
+    }
+    // Build per-symbol family set for strategy selection
+    const symbolFamilies = new Map<string, Set<string>>();
+    for (const [family, symbols] of Object.entries(familyPools)) {
+      for (const sym of symbols) {
+        if (!symbolFamilies.has(sym)) symbolFamilies.set(sym, new Set());
+        symbolFamilies.get(sym)!.add(family);
+      }
+    }
+    // Pattern pool pairs get 'pattern' family
+    for (const sym of patternSymbols) {
+      if (!symbolFamilies.has(sym)) symbolFamilies.set(sym, new Set());
+      symbolFamilies.get(sym)!.add('pattern');
+    }
       // Directive 11.4H Task 1: Normalize symbols at data ingress
       const eligibleSymbols = fx5Survivors.map(p => normalizeToInternalSymbol(p.symbol));
       const fx5SymbolSet = new Set(eligibleSymbols);
@@ -1008,6 +1030,32 @@ export class SignalOrchestrator {
       const activeStrategies = new Set(
         [...this.enabledStrategies].filter(s => regimeStrategies.has(s))
       );
+
+      // Batch 22: Family-aware strategy filtering
+      // Only run strategies whose family matches the families this symbol survived.
+      // If a symbol has no family tags (didn't go through family filters), skip family
+      // filtering entirely — use regime-only selection (backward compatible).
+      const pairFamilies = symbolFamilies.get(symbol);
+      if (pairFamilies && pairFamilies.size > 0) {
+        const familyFilteredStrategies = new Set<string>();
+        for (const strat of activeStrategies) {
+          const stratFamily = STRATEGY_FAMILY_MAP[strat];
+          if (!stratFamily) { familyFilteredStrategies.add(strat); continue; } // Unknown strategy — allow
+          if (stratFamily === 'hybrid') {
+            // Hybrid strategies are eligible if pair survived ANY parent family
+            const parentFamilies = HYBRID_FAMILY_ELIGIBILITY[strat] ?? [];
+            if (parentFamilies.some(f => pairFamilies.has(f))) {
+              familyFilteredStrategies.add(strat);
+            }
+          } else if (pairFamilies.has(stratFamily)) {
+            familyFilteredStrategies.add(strat);
+          }
+        }
+        console.log(`[22][ORCHESTRATOR] ${symbol}: families=${Array.from(pairFamilies).join(',')} strategies=${familyFilteredStrategies.size}/${activeStrategies.size}`);
+        // Replace activeStrategies with family-filtered set
+        activeStrategies.clear();
+        for (const s of familyFilteredStrategies) activeStrategies.add(s);
+      }
 
       if (activeStrategies.size === 0) {
         console.log(`[Phase13][MCE] SKIP ${symbol}: No enabled strategies for regime ${mceContext.regime.regime}`);

@@ -596,6 +596,24 @@ export class Fx5ScannerService {
         DI_MIN: parseFloat(patternDbRow?.diMin ?? '30'),
       };
 
+    // Batch 22: Load family-specific filter profiles from DB
+    const familyFilterPaths = ['trend', 'reversal', 'breakout', 'oscillator'] as const;
+    const familyDbRows: Record<string, any> = {};
+    const familyImfThresholds: Record<string, { LQ_MIN: number; VN_MAX: number; DI_MIN: number; DI_MAX: number }> = {};
+
+    for (const family of familyFilterPaths) {
+      const familyPath = isPassiveLearningMode ? `vts_${family}` : `active_${family}`;
+      const familyRow = await storage.getScreenerFilters({ mode, filterPath: familyPath });
+      familyDbRows[family] = familyRow;
+      familyImfThresholds[family] = {
+        LQ_MIN: parseFloat(familyRow?.lqMin ?? (family === 'trend' ? '40' : '25')),
+        VN_MAX: parseFloat(familyRow?.vnMax ?? (family === 'trend' ? '0.60' : '0.85')),
+        DI_MIN: parseFloat(familyRow?.diMin ?? (family === 'trend' ? '55' : '0')),
+        DI_MAX: parseFloat(familyRow?.diMax ?? (family === 'reversal' || family === 'oscillator' ? '35' : '100')),
+      };
+      console.log(`[22][FX5] Family filter '${familyPath}': LQ>=${familyImfThresholds[family].LQ_MIN} VN<=${familyImfThresholds[family].VN_MAX} DI=${familyImfThresholds[family].DI_MIN}-${familyImfThresholds[family].DI_MAX}`);
+    }
+
       // Directive 11.4C.1: Execute adaptive batch scanning (100 pairs: 60% Ideal + 40% Rotational)
       const batchResult: BatchResult = await collectAdaptiveBatch(
         this.krakenService,
@@ -1000,6 +1018,34 @@ export class Fx5ScannerService {
         }
       }
 
+
+    // Batch 22: Run family-specific IMF filters on all classified survivors
+    const familyPoolSurvivors: Record<string, typeof classifiedSurvivors> = {};
+    const familyImfDiagnostics: Record<string, { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }> = {};
+
+    for (const family of familyFilterPaths) {
+      const thresholds = familyImfThresholds[family];
+      let failedLQ = 0, failedVN = 0, failedDI = 0, passed = 0;
+      const survivors: typeof classifiedSurvivors = [];
+
+      for (const s of classifiedSurvivors) {
+        const lq = s.LQ ?? 0;
+        const vn = s.VolNoise ?? 1;
+        const di = s.DI ?? 50;
+
+        if (lq < thresholds.LQ_MIN) { failedLQ++; continue; }
+        if (vn > thresholds.VN_MAX) { failedVN++; continue; }
+        if (di < thresholds.DI_MIN || di > thresholds.DI_MAX) { failedDI++; continue; }
+
+        passed++;
+        survivors.push(s);
+      }
+
+      familyPoolSurvivors[family] = survivors;
+      familyImfDiagnostics[family] = { failedLQ, failedVN, failedDI, passed, total: classifiedSurvivors.length };
+      console.log(`[22][FX5] Family '${family}' IMF: ${passed} passed / ${classifiedSurvivors.length} total (LQ=${failedLQ} VN=${failedVN} DI=${failedDI} failed)`);
+    }
+
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
       const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
       const benchmarkBypassedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && (s.bypassVolatilityReject || s.bypassBoringReject)).length;
@@ -1085,6 +1131,14 @@ export class Fx5ScannerService {
           } : null,
           survivors: patternPoolSurvivors.length,
         },
+        // Batch 22: Family path diagnostics (includes survivor symbols for VTS family tagging)
+        familyPaths: Object.fromEntries(
+          familyFilterPaths.map(f => [f, {
+            imf: familyImfDiagnostics[f] ?? { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 },
+            survivors: familyPoolSurvivors[f]?.length ?? 0,
+            survivorSymbols: (familyPoolSurvivors[f] ?? []).map(s => s.symbol),
+          }])
+        ),
         destination: isEngineActive ? 'active_pool' : 'vts_batch',
         destinationCount: metricFilteredSurvivors.length + patternPoolSurvivors.length,
       };

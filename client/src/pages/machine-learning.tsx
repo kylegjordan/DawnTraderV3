@@ -1713,6 +1713,34 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2">Destination: {lastScan.destination === 'active_pool' ? 'Active Pool' : 'VTS Batch'}</td>
                     <td colSpan={2} className="p-2 text-right text-primary">{fmt(lastScan.destinationCount)} pairs total</td>
                   </tr>
+                  {/* Batch 22: Family Path IMF Results */}
+                  {data?.lastScan?.familyPaths && (
+                    <>
+                      <tr className="bg-muted/30">
+                        <td colSpan={3} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Family Path IMF Results (Batch 22)
+                        </td>
+                      </tr>
+                      {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
+                        const fp = (data.lastScan as any)?.familyPaths?.[family];
+                        if (!fp) return null;
+                        return (
+                          <tr key={family} className="border-b hover:bg-muted/30">
+                            <td className="p-2 capitalize font-medium">{family}</td>
+                            <td className="p-2 text-right">
+                              <span className="text-green-600">{fp.survivors}</span>
+                              <span className="text-muted-foreground text-xs ml-1">
+                                / {fp.imf?.total ?? 0}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right text-xs text-muted-foreground">
+                              LQ:{fp.imf?.failedLQ ?? 0} VN:{fp.imf?.failedVN ?? 0} DI:{fp.imf?.failedDI ?? 0}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>

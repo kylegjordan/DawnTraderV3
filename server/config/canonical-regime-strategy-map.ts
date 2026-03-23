@@ -736,3 +736,61 @@ export function getAllStrategiesForSignalType(signalType: CanonicalSignalType): 
 
 export const CANONICAL_VERSION = '14.0.0';
 export const CANONICAL_SCHEMA_DATE = '2026-03-05';
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Batch 22 — Strategy Family Classification
+// ══════════════════════════════════════════════════════════════════════════════
+// Maps each strategy to its filter family. This determines which IMF filter
+// profile a pair must survive to be eligible for that strategy.
+//
+// A pair can survive MULTIPLE family paths and be evaluated by multiple
+// strategy families. This is a FEATURE, not a bug — versatile pairs get
+// more evaluation coverage.
+//
+// Hybrid strategies inherit from BOTH parent families and are eligible
+// when a pair survives EITHER parent family's filter path.
+// ══════════════════════════════════════════════════════════════════════════════
+
+export type StrategyFamily = 'trend' | 'reversal' | 'breakout' | 'oscillator' | 'pattern' | 'hybrid';
+
+export const STRATEGY_FAMILY_MAP: Record<string, StrategyFamily> = {
+  // TREND family — want clean directional movement (high DI, low VN)
+  vwap_pullback: 'trend',
+  sma_trend_ride: 'trend',
+  dhma: 'trend',
+
+  // REVERSAL family — want choppy/ranging conditions (low DI, higher VN tolerated)
+  mean_reversion: 'reversal',
+  range_trade: 'reversal',
+  liquidity_trap: 'reversal',
+
+  // BREAKOUT family — want directional expansion (medium-high DI, moderate VN)
+  breakout: 'breakout',
+  vwap_bounce: 'breakout',
+
+  // PATTERN family — pattern detection drives strategy, tolerant of noise
+  morning_star: 'pattern',
+  inside_bar_reversal: 'pattern',
+  support_bounce: 'pattern',
+  abcd_long: 'pattern',
+
+  // HYBRID family — inherits from component families
+  pivot_shift: 'hybrid',
+  reverse_impulse: 'hybrid',
+  defensive_hedge: 'hybrid',
+  adaptive_flow: 'hybrid',
+  volatility_edge: 'hybrid',
+};
+
+// Canonical list of filter families (excluding pattern and hybrid which have their own paths)
+export const FILTER_FAMILIES: readonly StrategyFamily[] = ['trend', 'reversal', 'breakout', 'oscillator'] as const;
+
+// Which filter families each hybrid strategy can use (inherits from parents)
+export const HYBRID_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
+  pivot_shift: ['trend', 'pattern'],
+  reverse_impulse: ['reversal', 'pattern'],
+  defensive_hedge: ['reversal', 'breakout'],
+  adaptive_flow: ['trend', 'reversal'],
+  volatility_edge: ['breakout', 'reversal'],
+};

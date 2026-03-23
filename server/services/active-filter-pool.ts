@@ -61,6 +61,16 @@ class ActiveFilterPoolService {
   private paperPatternPool: Map<string, ActiveFilteredPair> = new Map();
   private livePatternPool: Map<string, ActiveFilteredPair> = new Map();
 
+  // Batch 22: Family-specific filter pools
+  private paperTrendPool: Map<string, ActiveFilteredPair> = new Map();
+  private liveTrendPool: Map<string, ActiveFilteredPair> = new Map();
+  private paperReversalPool: Map<string, ActiveFilteredPair> = new Map();
+  private liveReversalPool: Map<string, ActiveFilteredPair> = new Map();
+  private paperBreakoutPool: Map<string, ActiveFilteredPair> = new Map();
+  private liveBreakoutPool: Map<string, ActiveFilteredPair> = new Map();
+  private paperOscillatorPool: Map<string, ActiveFilteredPair> = new Map();
+  private liveOscillatorPool: Map<string, ActiveFilteredPair> = new Map();
+
   // Volume cache for Kraken ticker fallback (symbol -> volume data)
   private volumeCache: Map<string, VolumeCacheEntry> = new Map();
 
@@ -371,6 +381,58 @@ class ActiveFilterPoolService {
     return Array.from(pool.values());
   }
 
+  // Batch 22: Get family pool survivors
+  getFamilyPool(mode: 'paper' | 'live', family: string): ActiveFilteredPair[] {
+    const poolMap: Record<string, Map<string, ActiveFilteredPair>> = {
+      'paper_trend': this.paperTrendPool,
+      'live_trend': this.liveTrendPool,
+      'paper_reversal': this.paperReversalPool,
+      'live_reversal': this.liveReversalPool,
+      'paper_breakout': this.paperBreakoutPool,
+      'live_breakout': this.liveBreakoutPool,
+      'paper_oscillator': this.paperOscillatorPool,
+      'live_oscillator': this.liveOscillatorPool,
+    };
+    const key = `${mode}_${family}`;
+    return Array.from(poolMap[key]?.values() ?? []);
+  }
+
+  // Batch 22: Add family pool survivors
+  addFamilyPoolSurvivors(mode: 'paper' | 'live', family: string, survivors: any[]): void {
+    const poolMap: Record<string, Map<string, ActiveFilteredPair>> = {
+      'paper_trend': this.paperTrendPool,
+      'live_trend': this.liveTrendPool,
+      'paper_reversal': this.paperReversalPool,
+      'live_reversal': this.liveReversalPool,
+      'paper_breakout': this.paperBreakoutPool,
+      'live_breakout': this.liveBreakoutPool,
+      'paper_oscillator': this.paperOscillatorPool,
+      'live_oscillator': this.liveOscillatorPool,
+    };
+    const key = `${mode}_${family}`;
+    const pool = poolMap[key];
+    if (!pool) return;
+
+    const now = new Date().toISOString();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minute TTL
+
+    for (const s of survivors) {
+      const symbol = s.symbol;
+      pool.set(symbol, {
+        symbol,
+        price: s.price ?? 0,
+        volume24h: s.volume24h ?? s.volumeUSD ?? 0,
+        dailyRange: s.dailyRange ?? 0,
+        firstSeen: pool.get(symbol)?.firstSeen ?? now,
+        lastUpdated: now,
+        expiresAt,
+        source: mode,
+        sourcePool: family as any,
+      });
+    }
+    console.log(`[22][POOL] ${family} pool (${mode}): ${pool.size} pairs`);
+  }
+
   /**
    * Phase 14.5: Get pattern pool size
    */
@@ -421,6 +483,16 @@ class ActiveFilterPoolService {
     const patternPool = this.getPatternPoolMap(mode);
     const patternSize = patternPool.size;
     patternPool.clear();
+
+    // Batch 22: Clear family pools
+    this.paperTrendPool.clear();
+    this.liveTrendPool.clear();
+    this.paperReversalPool.clear();
+    this.liveReversalPool.clear();
+    this.paperBreakoutPool.clear();
+    this.liveBreakoutPool.clear();
+    this.paperOscillatorPool.clear();
+    this.liveOscillatorPool.clear();
 
     console.log(`[8.6.7][DEBUG] Cleared ${mode} Active Pool (${size} quant + ${patternSize} pattern entries removed)`);
   }

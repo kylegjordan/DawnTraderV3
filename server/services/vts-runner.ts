@@ -1436,6 +1436,35 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   // Batch 19G: Hybrid confluence dedupe guard — prevent duplicate hybrids per cycle
   const hybridDedupeSet = new Set<string>();
 
+    // Batch 22: Build per-symbol family set for VTS from ACTUAL family filter results.
+    // FX5 scanner runs family IMF filters and stores results in familyPoolSurvivors.
+    // We need those results tagged onto VTS pairs. Read from FX5 scanner's last diagnostics.
+    const { STRATEGY_FAMILY_MAP, FILTER_FAMILIES, HYBRID_FAMILY_ELIGIBILITY } = await import('../config/canonical-regime-strategy-map.js');
+    const { fx5Scanner } = await import('./fx5-scanner.js');
+    const vtsSymbolFamilies = new Map<string, Set<string>>();
+
+    // Get family filter results from last FX5 scan
+    const lastDiag = fx5Scanner.getLastScanDiagnostics();
+    if (lastDiag?.familyPaths) {
+      for (const [family, data] of Object.entries(lastDiag.familyPaths as Record<string, any>)) {
+        const survivorSymbols: string[] = data.survivorSymbols ?? [];
+        for (const sym of survivorSymbols) {
+          if (!vtsSymbolFamilies.has(sym)) vtsSymbolFamilies.set(sym, new Set());
+          vtsSymbolFamilies.get(sym)!.add(family);
+        }
+      }
+    }
+
+    // Also tag pattern-pool pairs with 'pattern' family
+    for (const pair of pairs) {
+      if (pair.sourcePool === 'pattern') {
+        if (!vtsSymbolFamilies.has(pair.symbol)) vtsSymbolFamilies.set(pair.symbol, new Set());
+        vtsSymbolFamilies.get(pair.symbol)!.add('pattern');
+      }
+    }
+
+    console.log(`[22][VTS] Family tags built: ${vtsSymbolFamilies.size} symbols with family data`);
+
   for (const pair of pairs) {
     try {
       const priceData = priceDataMap.get(pair.symbol);
@@ -1540,6 +1569,18 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
 
       for (const stratDef of effectiveStrategies) {
+        // Batch 22: Family-aware strategy check
+        const stratFamily = STRATEGY_FAMILY_MAP[stratDef.strategyKey];
+        const pairFams = vtsSymbolFamilies.get(pair.symbol);
+        if (stratFamily && stratFamily !== 'hybrid' && pairFams && !pairFams.has(stratFamily)) {
+          continue; // Skip strategy — pair didn't survive this family's filter path
+        }
+        if (stratFamily === 'hybrid') {
+          const parentFams = HYBRID_FAMILY_ELIGIBILITY[stratDef.strategyKey] ?? [];
+          if (pairFams && !parentFams.some(f => pairFams.has(f))) {
+            continue;
+          }
+        }
         const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;

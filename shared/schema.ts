@@ -477,6 +477,7 @@ export const screenerFilters = pgTable("screener_filters", {
   vnMax: decimal("vn_max", { precision: 5, scale: 4 }).default("0.9300"),
   corrMax: decimal("corr_max", { precision: 5, scale: 4 }).default("0.9200"),
   diMin: decimal("di_min", { precision: 5, scale: 2 }).default("55.00"),
+  diMax: decimal("di_max", { precision: 5, scale: 2 }).default("100.00"),  // Batch 22: DI ceiling for reversal/oscillator families
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
