@@ -118,6 +118,7 @@ interface FilterDiagnosticsData {
     aggregated: {
       quant: ScanDiagnostics['quant'];
       pattern: ScanDiagnostics['pattern'];
+      familyPaths?: Record<string, { imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }; survivors: number }>;
     };
   };
   signalRejections: {
@@ -1808,6 +1809,34 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
                     <td className="p-2 text-right text-muted-foreground">—</td>
                   </tr>
+                  {/* Batch 22 HF2: Family Path 24h Rolling Results */}
+                  {rolling24h.aggregated.familyPaths && (
+                    <>
+                      <tr className="bg-muted/30">
+                        <td colSpan={3} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Family Path IMF Results (24h)
+                        </td>
+                      </tr>
+                      {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
+                        const fp = rolling24h.aggregated.familyPaths?.[family];
+                        if (!fp) return null;
+                        return (
+                          <tr key={`24h-${family}`} className="border-b hover:bg-muted/30">
+                            <td className="p-2 capitalize font-medium">{family}</td>
+                            <td className="p-2 text-right">
+                              <span className="text-green-600">{fmt(fp.survivors)}</span>
+                              <span className="text-muted-foreground text-xs ml-1">
+                                / {fmt(fp.imf?.total ?? 0)}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right text-xs text-muted-foreground">
+                              LQ:{fmt(fp.imf?.failedLQ ?? 0)} VN:{fmt(fp.imf?.failedVN ?? 0)} DI:{fmt(fp.imf?.failedDI ?? 0)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
                   <tr className="bg-muted/30 font-semibold">
                     <td className="p-2">Total Survivors (24h)</td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.survivors)}</td>

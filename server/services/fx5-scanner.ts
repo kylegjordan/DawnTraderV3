@@ -255,6 +255,7 @@ export class Fx5ScannerService {
     aggregated: {
       quant: ScanDiagnostics['quant'];
       pattern: ScanDiagnostics['pattern'];
+      familyPaths?: Record<string, { imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }; survivors: number }>;
     };
   } {
     // Prune entries older than 24h
@@ -295,6 +296,9 @@ export class Fx5ScannerService {
     let aggPatternSurvivors = 0;
     let hasPatternData = false;
 
+    // Batch 22 HF2: Family path aggregation
+    const aggFamilyPaths: Record<string, { imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }; survivors: number }> = {};
+
     for (const d of history) {
       totalPairsScanned += d.totalPairsScanned;
       for (const sym of d.allSymbolsScanned) uniqueSymbols.add(sym);
@@ -325,6 +329,23 @@ export class Fx5ScannerService {
         aggPatternImf.total += d.pattern.imf.total;
       }
       aggPatternSurvivors += d.pattern.survivors;
+
+      // Batch 22 HF2: Aggregate family path data
+      if ((d as any).familyPaths) {
+        for (const [family, fData] of Object.entries((d as any).familyPaths as Record<string, any>)) {
+          if (!aggFamilyPaths[family]) {
+            aggFamilyPaths[family] = { imf: { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 }, survivors: 0 };
+          }
+          if (fData.imf) {
+            aggFamilyPaths[family].imf.failedLQ += fData.imf.failedLQ ?? 0;
+            aggFamilyPaths[family].imf.failedVN += fData.imf.failedVN ?? 0;
+            aggFamilyPaths[family].imf.failedDI += fData.imf.failedDI ?? 0;
+            aggFamilyPaths[family].imf.passed += fData.imf.passed ?? 0;
+            aggFamilyPaths[family].imf.total += fData.imf.total ?? 0;
+          }
+          aggFamilyPaths[family].survivors += fData.survivors ?? 0;
+        }
+      }
     }
 
     return {
@@ -342,6 +363,7 @@ export class Fx5ScannerService {
           imf: hasPatternData ? aggPatternImf : null,
           survivors: aggPatternSurvivors,
         },
+        familyPaths: Object.keys(aggFamilyPaths).length > 0 ? aggFamilyPaths : undefined,
       },
     };
   }
