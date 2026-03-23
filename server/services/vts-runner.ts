@@ -90,6 +90,7 @@ import { computeGlobalStability } from '../core/governance/regime-stability.js';
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import path from 'path';
 
 // Phase 14 HF6: Strategy call settings (same defaults as signal orchestrator lines 680-688)
@@ -124,6 +125,64 @@ import type { VTSEvalSnapshot, NullReasonBreakdown } from '../types/virtual-trad
 
 const VTS_EVAL_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 let vtsEvalHistory: VTSEvalSnapshot[] = [];
+
+// Batch 22 HF7: Disk persistence for VTS eval history
+const VTS_EVAL_HISTORY_DIR = path.join(process.cwd(), 'logs', 'vts_eval_history');
+const getVtsEvalHistoryPath = () => path.join(VTS_EVAL_HISTORY_DIR, `${new Date().toISOString().slice(0, 10)}.json`);
+
+function hydrateVtsEvalHistory(): void {
+  try {
+    if (!existsSync(VTS_EVAL_HISTORY_DIR)) {
+      mkdirSync(VTS_EVAL_HISTORY_DIR, { recursive: true });
+    }
+    const now = Date.now();
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(now - 86400000).toISOString().slice(0, 10);
+    for (const dateStr of [yesterday, today]) {
+      const filePath = path.join(VTS_EVAL_HISTORY_DIR, `${dateStr}.json`);
+      if (existsSync(filePath)) {
+        try {
+          const data = JSON.parse(readFileSync(filePath, 'utf-8'));
+          if (Array.isArray(data)) {
+            for (const entry of data) {
+              if (entry.timestamp && entry.timestamp > cutoff) {
+                vtsEvalHistory.push(entry);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`[22HF7] Failed to parse ${filePath}:`, e);
+        }
+      }
+    }
+    console.log(`[22HF7] Hydrated ${vtsEvalHistory.length} VTS eval snapshots from disk`);
+  } catch (e) {
+    console.warn('[22HF7] VTS eval history hydration failed:', e);
+  }
+}
+
+function persistVtsEvalSnapshot(snapshot: VTSEvalSnapshot): void {
+  try {
+    if (!existsSync(VTS_EVAL_HISTORY_DIR)) {
+      mkdirSync(VTS_EVAL_HISTORY_DIR, { recursive: true });
+    }
+    const filePath = getVtsEvalHistoryPath();
+    let existing: VTSEvalSnapshot[] = [];
+    if (existsSync(filePath)) {
+      try {
+        existing = JSON.parse(readFileSync(filePath, 'utf-8'));
+      } catch { existing = []; }
+    }
+    existing.push(snapshot);
+    writeFileSync(filePath, JSON.stringify(existing, null, 2));
+  } catch (e) {
+    console.warn('[22HF7] Failed to persist VTS eval snapshot:', e);
+  }
+}
+
+// Run hydration on module load
+hydrateVtsEvalHistory();
 
 export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
   // Prune entries older than 24h
@@ -1733,6 +1792,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   // Batch 19I: Store VTS evaluation diagnostics
   vtsEvalHistory.push({ ...vtsEvalCounters, timestamp: Date.now() });
+  persistVtsEvalSnapshot({ ...vtsEvalCounters, timestamp: Date.now() }); // Batch 22 HF7
   console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
   console.log(`[21][VTS_EVAL] totalStratEvals=${vtsEvalCounters.totalStrategyEvaluations} nullReasons: conditions=${vtsEvalCounters.nullReasons.conditionsNotMet} netEV=${vtsEvalCounters.nullReasons.netEvBelowFloor} adx=${vtsEvalCounters.nullReasons.adxGuard} dup=${vtsEvalCounters.nullReasons.duplicatePosition} maxTrades=${vtsEvalCounters.nullReasons.maxOpenTrades} noRegimeStrats=${vtsEvalCounters.nullReasons.regimeNoStrategies}`);
 

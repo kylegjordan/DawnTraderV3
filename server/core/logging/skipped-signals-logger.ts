@@ -91,7 +91,9 @@ export function logSkippedSignal(entry: Omit<SkippedSignalEntry, 'timestamp'>): 
   };
   
   writeBuffer.push(fullEntry);
-  
+  // Batch 22 HF7: Force immediate flush to prevent data loss on crash
+  flushBuffer().catch(console.error);
+
   if (flushTimeout) {
     clearTimeout(flushTimeout);
   }
