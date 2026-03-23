@@ -170,20 +170,25 @@ Phase 14.5 is treated as fully complete in the current governance state. It is o
 
 ---
 
-## Batch 20 — Strategy-Family Filter Profiles Audit (2026-03-23)
+## Phase 14.6 — Strategy-Family Filter Profiles (Batches 20-22)
 
 ### Purpose
-Pre-implementation code audit to establish a verified factual baseline before implementing strategy-family-aware filtering. This was an audit-only batch with no code changes.
+Implement strategy-family-aware filtering so each strategy family gets IMF thresholds tuned to its market environment preferences. Trend strategies get clean directional markets; reversal/oscillator strategies get choppy/ranging conditions.
 
-### Key Outputs
-- **10 code review steps** covering the entire filter pipeline, signal generation, and supporting systems
-- **5 audit artifacts**: pipeline map, input/units matrix, layer-responsibility matrix, architecture comparison, diagnostics plan
-- **Architecture B (brute-force fan-out) selected** as practical front-runner over Architecture A (early MCE)
-- **10 confirmed findings** including DI threshold misalignment, telemetry gaps, and hybrid confluence inconsistency
-- **DI calibration methodology established**: theory anchors + empirical validation + outcome-linked calibration + conservative provisional thresholds
+### Included Batches
+- **Batch 20** (2026-03-23) — Pre-implementation audit. 10 code review steps, 5 artifacts. Architecture B selected. DI threshold recalibration identified. Whole-number batch numbering resumed.
+- **Batch 21** (2026-03-23) — Telemetry & Calibration Scaffolding. VTSEvalSnapshot expanded with NullReasonBreakdown + totalStrategyEvaluations. DI distribution logging. ML page dashboard updates.
+- **Batch 22** (2026-03-23) — Architecture B Implementation. diMax column added. STRATEGY_FAMILY_MAP (17 strategies). 4 family IMF filter paths in FX5 scanner. ActiveFilterPool expanded. Family-aware strategy selection in orchestrator + VTS. Filter diagnostics UI updated. DB seed for 8 new filter_path rows.
+
+### Key Architecture Decisions
+- **Architecture B (brute-force fan-out)** over Architecture A (early MCE)
+- **Multi-family survival** preserved — pair+strategy dedup handles multi-path
+- **No hidden fallbacks** — explicit family filtering, regime-only selection when no family data
+- **VTS uses actual filter results** from FX5 diagnostics, not inference
+- **Candidate thresholds** — to be calibrated from telemetry data
 
 ### Outcome
-Batch 20 marks the transition from Phase 14.5 sub-batches (19-series) to whole-number batch numbering. The audit provided the factual foundation for Batch 21 (Telemetry & Calibration Scaffolding) and Batch 22 (Architecture B Implementation).
+Phase 14.6 establishes the family-aware filter architecture. All 300 pairs now run through trend, reversal, breakout, and oscillator IMF filters alongside the existing quant and pattern paths. Next: DI threshold calibration from collected telemetry, then Phase 14.7/15 (X Stocks + Perpetual Futures).
 
 ---
 
@@ -298,14 +303,15 @@ The pre-governance era established nearly all of DawnTrader’s core ambitions: 
 
 ## Current Historical Position
 
-As of the 19-series governance era:
+As of Batch 22 (2026-03-23):
 - Phase 12 is complete.
 - Phase 13 is complete.
 - Phase 14.1 is complete.
 - Phase 14.2 is treated as effectively complete.
 - Phase 14.3 is deferred indefinitely.
 - Phase 14.4 is canceled.
-- Phase 14.5 is fully complete.
-- Phase 14.6 and later roadmap work remain ahead.
+- Phase 14.5 is fully complete (Batches 19 through 19L).
+- **Phase 14.6 is complete** (Batches 20-22: Strategy-Family Filter Profiles audit, telemetry scaffolding, Architecture B implementation).
+- Next: DI threshold calibration, then Phase 14.7/15 (X Stocks + Perpetual Futures), then Phase 11 Finalization.
 
 The system is now in a far more governable state than at any point in the pre-governance history.
