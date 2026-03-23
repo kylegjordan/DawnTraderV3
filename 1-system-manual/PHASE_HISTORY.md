@@ -170,6 +170,23 @@ Phase 14.5 is treated as fully complete in the current governance state. It is o
 
 ---
 
+## Batch 20 — Strategy-Family Filter Profiles Audit (2026-03-23)
+
+### Purpose
+Pre-implementation code audit to establish a verified factual baseline before implementing strategy-family-aware filtering. This was an audit-only batch with no code changes.
+
+### Key Outputs
+- **10 code review steps** covering the entire filter pipeline, signal generation, and supporting systems
+- **5 audit artifacts**: pipeline map, input/units matrix, layer-responsibility matrix, architecture comparison, diagnostics plan
+- **Architecture B (brute-force fan-out) selected** over Architecture A (early MCE) as the practical front-runner
+- **10 confirmed findings** including DI threshold misalignment, telemetry gaps, and hybrid confluence inconsistency
+- **DI calibration methodology established**: theory anchors + empirical validation + outcome-linked calibration + conservative provisional thresholds
+
+### Outcome
+Batch 20 marks the transition from Phase 14.5 sub-batches (19-series) to whole-number batch numbering. The audit provided the factual foundation for Batch 21 (Telemetry & Calibration Scaffolding) and Batch 22 (Architecture B Implementation).
+
+---
+
 ## Inter-Phase Work — API Budget Optimization + Repair Hotfixes
 
 ### Purpose
