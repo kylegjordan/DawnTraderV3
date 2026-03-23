@@ -178,7 +178,7 @@ Pre-implementation code audit to establish a verified factual baseline before im
 ### Key Outputs
 - **10 code review steps** covering the entire filter pipeline, signal generation, and supporting systems
 - **5 audit artifacts**: pipeline map, input/units matrix, layer-responsibility matrix, architecture comparison, diagnostics plan
-- **Architecture B (brute-force fan-out) selected** over Architecture A (early MCE) as the practical front-runner
+- **Architecture B (brute-force fan-out) selected** as practical front-runner over Architecture A (early MCE)
 - **10 confirmed findings** including DI threshold misalignment, telemetry gaps, and hybrid confluence inconsistency
 - **DI calibration methodology established**: theory anchors + empirical validation + outcome-linked calibration + conservative provisional thresholds
 
