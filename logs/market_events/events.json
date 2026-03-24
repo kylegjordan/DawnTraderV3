@@ -6,6 +6,46 @@
     "previousValue": "TREND_FRIENDLY_STABLE",
     "newValue": "RANGE_BOUND_STABLE",
     "severity": "info",
+    "id": "mkt_evt_1774311598803_354",
+    "timestamp": "2026-03-24T00:19:58.803Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774311178710_353",
+    "timestamp": "2026-03-24T00:12:58.710Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774311118697_352",
+    "timestamp": "2026-03-24T00:11:58.697Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Range-Bound Stable to Trend-Friendly Stable",
+    "explanation": "Market regime changed from Range-Bound Stable to Trend-Friendly Stable. Strategy selection and position sizing will adjust accordingly.",
+    "previousValue": "RANGE_BOUND_STABLE",
+    "newValue": "TREND_FRIENDLY_STABLE",
+    "severity": "info",
+    "id": "mkt_evt_1774310938679_351",
+    "timestamp": "2026-03-24T00:08:58.679Z"
+  },
+  {
+    "type": "REGIME_TRANSITION",
+    "message": "Global regime changed from Trend-Friendly Stable to Range-Bound Stable",
+    "explanation": "Market has entered a choppy phase with unclear direction. Range-based strategies and smaller positions are recommended. Avoid chasing breakouts.",
+    "previousValue": "TREND_FRIENDLY_STABLE",
+    "newValue": "RANGE_BOUND_STABLE",
+    "severity": "info",
     "id": "mkt_evt_1774310790334_350",
     "timestamp": "2026-03-24T00:06:30.334Z"
   },
@@ -4958,45 +4998,5 @@
     "severity": "info",
     "id": "mkt_evt_1774207098645_354",
     "timestamp": "2026-03-22T19:18:18.645Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Structural Transition",
-    "explanation": "Market is transitioning between regimes. Conditions are uncertain - the system will be more selective until a clear trend emerges.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "STRUCTURAL_TRANSITION",
-    "severity": "info",
-    "id": "mkt_evt_1774206858605_353",
-    "timestamp": "2026-03-22T19:14:18.605Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Structural Transition to High-Volatility Unstable",
-    "explanation": "Market regime changed from Structural Transition to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "STRUCTURAL_TRANSITION",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774206798604_352",
-    "timestamp": "2026-03-22T19:13:18.604Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from High-Volatility Unstable to Structural Transition",
-    "explanation": "Market is transitioning between regimes. Conditions are uncertain - the system will be more selective until a clear trend emerges.",
-    "previousValue": "HIGH_VOLATILITY_UNSTABLE",
-    "newValue": "STRUCTURAL_TRANSITION",
-    "severity": "info",
-    "id": "mkt_evt_1774206738598_351",
-    "timestamp": "2026-03-22T19:12:18.598Z"
-  },
-  {
-    "type": "REGIME_TRANSITION",
-    "message": "Global regime changed from Structural Transition to High-Volatility Unstable",
-    "explanation": "Market regime changed from Structural Transition to High-Volatility Unstable. Strategy selection and position sizing will adjust accordingly.",
-    "previousValue": "STRUCTURAL_TRANSITION",
-    "newValue": "HIGH_VOLATILITY_UNSTABLE",
-    "severity": "info",
-    "id": "mkt_evt_1774206558581_350",
-    "timestamp": "2026-03-22T19:09:18.581Z"
   }
 ]

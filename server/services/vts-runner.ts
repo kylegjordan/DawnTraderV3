@@ -1531,6 +1531,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   for (const pair of pairs) {
     try {
+      // Batch 23: Max open trades check
+      if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
+        vtsEvalCounters.nullReasons.maxOpenTrades++;
+        continue; // Skip this pair — portfolio full
+      }
       const priceData = priceDataMap.get(pair.symbol);
       if (!priceData || priceData.price <= 0) {
         continue;
@@ -1657,6 +1662,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           continue;
         }
 
+        // Batch 23: ADX guard for sma_trend_ride
+        if (stratDef.strategyKey === 'sma_trend_ride' && mceContext.raw?.adx !== undefined && mceContext.raw.adx < 25) {
+          vtsEvalCounters.nullReasons.adxGuard++;
+          continue; // Skip — ADX too low for trend-following strategy
+        }
+
         const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
@@ -1675,6 +1686,20 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         vtsEvalCounters.signalsGenerated++;
 
         const { signal, tradeRecord } = result;
+
+        // Batch 23: Net EV floor check
+        if (signal && signal.netEV !== undefined && signal.netEV < VTS_NET_EV_FLOOR) {
+          vtsEvalCounters.nullReasons.netEvBelowFloor++;
+          logSkippedSignal({
+            symbol: pair.symbol,
+            reason: 'Net_EV_Negative',
+            regime: pairRegime ?? 'UNKNOWN',
+            signalType: signal.signalType ?? 'QUANT',
+            strategy: stratDef.strategyKey,
+            source: 'VTS'
+          });
+          continue; // Skip — Net EV below floor
+        }
 
         const telemetry = getTelemetryAggregator();
         telemetry.recordPairTelemetry(pair.symbol, {

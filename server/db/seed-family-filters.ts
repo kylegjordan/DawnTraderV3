@@ -11,14 +11,14 @@ import { screenerFilters } from '../../shared/schema.js';
 
 const FAMILY_FILTER_SEEDS = [
   // Active trading family paths
-  { mode: 'paper', filterPath: 'active_trend',      lqMin: '40.00', vnMax: '0.6000', diMin: '55.00', diMax: '100.00', corrMax: '0.9200', minVolume: '500000.00', minHistoryDays: 30 },
+  { mode: 'paper', filterPath: 'active_trend',      lqMin: '40.00', vnMax: '0.6000', diMin: '25.00', diMax: '100.00', corrMax: '0.9200', minVolume: '500000.00', minHistoryDays: 30 },
   { mode: 'paper', filterPath: 'active_reversal',   lqMin: '25.00', vnMax: '0.8500', diMin: '0.00',  diMax: '35.00',  corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 21 },
-  { mode: 'paper', filterPath: 'active_breakout',   lqMin: '35.00', vnMax: '0.6800', diMin: '45.00', diMax: '100.00', corrMax: '0.9200', minVolume: '400000.00', minHistoryDays: 21 },
+  { mode: 'paper', filterPath: 'active_breakout',   lqMin: '35.00', vnMax: '0.6800', diMin: '20.00', diMax: '100.00', corrMax: '0.9200', minVolume: '400000.00', minHistoryDays: 21 },
   { mode: 'paper', filterPath: 'active_oscillator', lqMin: '25.00', vnMax: '0.8500', diMin: '0.00',  diMax: '30.00',  corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 14 },
   // VTS (passive learning) family paths — relaxed thresholds
-  { mode: 'paper', filterPath: 'vts_trend',          lqMin: '30.00', vnMax: '0.7000', diMin: '45.00', diMax: '100.00', corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 21 },
+  { mode: 'paper', filterPath: 'vts_trend',          lqMin: '30.00', vnMax: '0.7000', diMin: '20.00', diMax: '100.00', corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 21 },
   { mode: 'paper', filterPath: 'vts_reversal',       lqMin: '20.00', vnMax: '0.9000', diMin: '0.00',  diMax: '40.00',  corrMax: '0.9800', minVolume: '150000.00', minHistoryDays: 14 },
-  { mode: 'paper', filterPath: 'vts_breakout',       lqMin: '28.00', vnMax: '0.7500', diMin: '35.00', diMax: '100.00', corrMax: '0.9500', minVolume: '200000.00', minHistoryDays: 14 },
+  { mode: 'paper', filterPath: 'vts_breakout',       lqMin: '28.00', vnMax: '0.7500', diMin: '15.00', diMax: '100.00', corrMax: '0.9500', minVolume: '200000.00', minHistoryDays: 14 },
   { mode: 'paper', filterPath: 'vts_oscillator',     lqMin: '20.00', vnMax: '0.9000', diMin: '0.00',  diMax: '35.00',  corrMax: '0.9800', minVolume: '150000.00', minHistoryDays: 14 },
 ];
 

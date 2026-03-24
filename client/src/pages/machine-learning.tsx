@@ -2071,21 +2071,25 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         </tr>
                       </thead>
                       <tbody>
-                        {[
-                          { key: 'conditionsNotMet', label: 'Strategy Conditions Not Met' },
-                          { key: 'netEvBelowFloor', label: 'Net EV Below Floor' },
-                          { key: 'adxGuard', label: 'ADX Guard (< 25)' },
-                          { key: 'duplicatePosition', label: 'Duplicate Position' },
-                          { key: 'maxOpenTrades', label: 'Max Open Trades' },
-                          { key: 'regimeNoStrategies', label: 'No Strategies for Regime' },
-                        ].filter(r => (ve.nullReasons as any)[r.key] > 0)
-                          .sort((a, b) => (ve.nullReasons as any)[b.key] - (ve.nullReasons as any)[a.key])
-                          .map(r => {
-                            const count = (ve.nullReasons as any)[r.key] as number;
+                        {Object.entries(ve.nullReasons as Record<string, number>)
+                          .filter(([key, val]) => val > 0 && key !== 'uniqueDuplicateCombos')
+                          .sort(([,a], [,b]) => b - a)
+                          .map(([key, count]) => {
+                            const labels: Record<string, string> = {
+                              conditionsNotMet: 'Strategy Conditions Not Met',
+                              netEvBelowFloor: 'Net EV Below Floor',
+                              adxGuard: 'ADX Guard (< 25)',
+                              duplicatePosition: 'Duplicate Position',
+                              maxOpenTrades: 'Max Open Trades',
+                              regimeNoStrategies: 'No Strategies for Regime',
+                              vnVeto: 'VN Veto (Extreme Noise)',
+                              unknownCanonical: 'Unknown Canonical Pattern',
+                            };
+                            const label = labels[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
                             const totalNulls = ve.quantStrategyNulls || 1;
                             return (
-                              <tr key={r.key} className="border-b hover:bg-muted/30">
-                                <td className="p-2">{r.label}</td>
+                              <tr key={key} className="border-b hover:bg-muted/30">
+                                <td className="p-2">{label}</td>
                                 <td className="p-2 text-right text-orange-500">{fmt(count)}</td>
                                 <td className="p-2 text-right">{Math.round(count / totalNulls * 100)}%</td>
                               </tr>
