@@ -21,6 +21,7 @@ export type SkipReason =
   | 'RegimeWeight_Low'
   | 'ADX_Guard'
   | 'Duplicate_Position'
+  | 'Duplicate_Position_Max'  // Batch 24: Add missing type — used by vts-runner.ts DUP_GUARD
   | 'BLOCKED_GOVERNANCE'
   | 'LEARNING_DEFERRED'
   | 'Confidence_Floor';  // 11.7S: Mode-specific confidence threshold not met

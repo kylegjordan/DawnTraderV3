@@ -100,6 +100,11 @@ export interface VTSEvalSnapshot {
   patternNoDetection: number;
   patternDetected: number;
   signalsGenerated: number;
+  // Batch 24: Pool-level counter split
+  quantStrategyEvaluations?: number;
+  patternStrategyEvaluations?: number;
+  quantSignalsGenerated?: number;
+  patternSignalsGenerated?: number;
   totalStrategyEvaluations: number;  // Batch 21: total detect() calls across all pairs
   nullReasons: NullReasonBreakdown;  // Batch 21: granular null reason tracking
   byStrategy: Record<string, { evaluated: number; nulls: number; signals: number }>;

@@ -1962,13 +1962,13 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </thead>
                     <tbody>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Pairs Evaluated</td>
+                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(sampled per cycle)</span></td>
                         <td className="p-2 text-right">{fmt(ve.quantPairsEvaluated)}</td>
                         <td className="p-2 text-right">{fmt(ve.patternPairsEvaluated)}</td>
                         <td className="p-2 text-right font-semibold">{fmt(ve.quantPairsEvaluated + ve.patternPairsEvaluated)}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Pattern Detection</td>
+                        <td className="p-2">Pattern Detection <span className="text-xs text-muted-foreground">(pattern pool only)</span></td>
                         <td className="p-2 text-right text-muted-foreground">—</td>
                         <td className="p-2 text-right">
                           <span className="text-green-600">{fmt(ve.patternDetected)}</span>
@@ -1981,22 +1981,22 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <td className="p-2 text-right text-muted-foreground">—</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Total Strategy Evaluations</td>
+                        <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
                         <td className="p-2">Strategy Returned Null</td>
                         <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
                         <td className="p-2 text-right text-muted-foreground">—</td>
                         <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
                       </tr>
-                      {ve.totalStrategyEvaluations > 0 && (
-                        <tr className="border-b hover:bg-muted/30">
-                          <td className="p-2">Total Strategy Evaluations</td>
-                          <td colSpan={2} className="p-2 text-right">{fmt(ve.totalStrategyEvaluations)}</td>
-                          <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
-                        </tr>
-                      )}
                       <tr className="bg-muted/30 font-semibold">
                         <td className="p-2">Signals Generated</td>
-                        <td colSpan={2} className="p-2 text-right text-green-600">{fmt(ve.signalsGenerated)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt(ve.signalsGenerated)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantSignalsGenerated ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternSignalsGenerated ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-green-600">{fmt(ve.signalsGenerated)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -2072,7 +2072,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       </thead>
                       <tbody>
                         {Object.entries(ve.nullReasons as Record<string, number>)
-                          .filter(([key, val]) => val > 0 && key !== 'uniqueDuplicateCombos')
+                          .filter(([key]) => key !== 'uniqueDuplicateCombos')
                           .sort(([,a], [,b]) => b - a)
                           .map(([key, count]) => {
                             const labels: Record<string, string> = {

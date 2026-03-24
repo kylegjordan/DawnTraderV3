@@ -200,6 +200,10 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     patternNoDetection: 0,
     patternDetected: 0,
     signalsGenerated: 0,
+    quantStrategyEvaluations: 0,
+    patternStrategyEvaluations: 0,
+    quantSignalsGenerated: 0,
+    patternSignalsGenerated: 0,
     totalStrategyEvaluations: 0,
     nullReasons: {
       conditionsNotMet: 0,
@@ -220,6 +224,10 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     aggregated.patternDetected += snap.patternDetected;
     aggregated.signalsGenerated += snap.signalsGenerated;
     aggregated.totalStrategyEvaluations += snap.totalStrategyEvaluations;
+    aggregated.quantStrategyEvaluations = (aggregated.quantStrategyEvaluations ?? 0) + (snap.quantStrategyEvaluations ?? 0);
+    aggregated.patternStrategyEvaluations = (aggregated.patternStrategyEvaluations ?? 0) + (snap.patternStrategyEvaluations ?? 0);
+    aggregated.quantSignalsGenerated = (aggregated.quantSignalsGenerated ?? 0) + (snap.quantSignalsGenerated ?? 0);
+    aggregated.patternSignalsGenerated = (aggregated.patternSignalsGenerated ?? 0) + (snap.patternSignalsGenerated ?? 0);
     // Batch 21: Aggregate null reasons
     if (snap.nullReasons) {
       aggregated.nullReasons.conditionsNotMet += snap.nullReasons.conditionsNotMet;
@@ -1449,6 +1457,10 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     patternNoDetection: 0,
     patternDetected: 0,
     signalsGenerated: 0,
+    quantStrategyEvaluations: 0,
+    patternStrategyEvaluations: 0,
+    quantSignalsGenerated: 0,
+    patternSignalsGenerated: 0,
     totalStrategyEvaluations: 0,
     nullReasons: {
       conditionsNotMet: 0,
@@ -1656,6 +1668,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         ).length;
         if (dupCheckCount >= VTS_MAX_CONCURRENT_PER_COMBO) {
           vtsEvalCounters.totalStrategyEvaluations++;
+          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
           vtsEvalCounters.quantStrategyNulls++;
           vtsEvalCounters.nullReasons.duplicatePosition++;
           blockedDupCombos.add(`${pair.symbol}:${stratDef.strategyKey}`);
@@ -1676,6 +1689,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         }
         vtsEvalCounters.byStrategy[stratKey].evaluated++;
         vtsEvalCounters.totalStrategyEvaluations++;
+        if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
         if (!result) {
           vtsEvalCounters.byStrategy[stratKey].nulls++;
           vtsEvalCounters.quantStrategyNulls++;
@@ -1684,6 +1698,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         }
         vtsEvalCounters.byStrategy[stratKey].signals++;
         vtsEvalCounters.signalsGenerated++;
+        if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsGenerated = (vtsEvalCounters.patternSignalsGenerated ?? 0) + 1; } else { vtsEvalCounters.quantSignalsGenerated = (vtsEvalCounters.quantSignalsGenerated ?? 0) + 1; }
 
         const { signal, tradeRecord } = result;
 
