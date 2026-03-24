@@ -1876,28 +1876,44 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(signalRejections.byReason)
-                      .sort(([, a], [, b]) => (b as number) - (a as number))
-                      .map(([reason, count]) => (
-                        <React.Fragment key={reason}>
-                          <tr className="border-b hover:bg-muted/30">
-                            <td className="p-2">{formatReasonName(reason)}</td>
-                            <td className="p-2 text-right">{fmt(count as number)}</td>
-                            <td className="p-2 text-right text-muted-foreground">
-                              {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
-                            </td>
-                          </tr>
-                          {reason === 'Duplicate_Position_Max' && (signalRejections as any)?.duplicateUniqueCombos > 0 && (
-                            <tr className="border-b hover:bg-muted/20">
-                              <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
-                              <td className="p-2 text-right text-orange-400 text-xs">{(signalRejections as any).duplicateUniqueCombos}</td>
-                              <td className="p-2 text-right text-xs text-muted-foreground">
-                                avg {((count as number) / (signalRejections as any).duplicateUniqueCombos).toFixed(1)} attempts/combo
+                    {(() => {
+                      const ALL_REJECTION_REASONS = [
+                        'Duplicate_Position_Max',
+                        'Net_EV_Negative',
+                        'Low_ROI',
+                        'FinalScore_Low',
+                        'RegimeWeight_Low',
+                        'ADX_Guard',
+                        'Duplicate_Position',
+                        'BLOCKED_GOVERNANCE',
+                        'LEARNING_DEFERRED',
+                        'Confidence_Floor',
+                        'Illiquid_USD',
+                      ];
+                      return ALL_REJECTION_REASONS.map(reason => {
+                        const count = ((signalRejections.byReason as Record<string, number>)[reason] ?? 0);
+                        return (
+                          <React.Fragment key={reason}>
+                            <tr className="border-b hover:bg-muted/30">
+                              <td className="p-2">{formatReasonName(reason)}</td>
+                              <td className="p-2 text-right">{fmt(count)}</td>
+                              <td className="p-2 text-right text-muted-foreground">
+                                {signalRejections.total > 0 ? (count / signalRejections.total * 100).toFixed(1) : 0}%
                               </td>
                             </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
+                            {reason === 'Duplicate_Position_Max' && (signalRejections as any)?.duplicateUniqueCombos > 0 && (
+                              <tr className="border-b hover:bg-muted/20">
+                                <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
+                                <td className="p-2 text-right text-orange-400 text-xs">{(signalRejections as any).duplicateUniqueCombos}</td>
+                                <td className="p-2 text-right text-xs text-muted-foreground">
+                                  avg {(count / (signalRejections as any).duplicateUniqueCombos).toFixed(1)} attempts/combo
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -1989,8 +2005,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2">Strategy Returned Null</td>
                         <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
-                        <td className="p-2 text-right text-muted-foreground">—</td>
-                        <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
+                        <td className="p-2 text-right text-orange-500">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
                       </tr>
                       <tr className="bg-muted/30 font-semibold">
                         <td className="p-2">Signals Generated</td>

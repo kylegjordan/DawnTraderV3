@@ -97,6 +97,7 @@ export interface VTSEvalSnapshot {
   quantPairsEvaluated: number;
   patternPairsEvaluated: number;
   quantStrategyNulls: number;
+  patternStrategyNulls?: number;  // Batch 25: Pattern pool null counter (was lumped into quantStrategyNulls)
   patternNoDetection: number;
   patternDetected: number;
   signalsGenerated: number;

@@ -220,6 +220,7 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     aggregated.quantPairsEvaluated += snap.quantPairsEvaluated;
     aggregated.patternPairsEvaluated += snap.patternPairsEvaluated;
     aggregated.quantStrategyNulls += snap.quantStrategyNulls;
+    aggregated.patternStrategyNulls = (aggregated.patternStrategyNulls ?? 0) + (snap.patternStrategyNulls ?? 0);
     aggregated.patternNoDetection += snap.patternNoDetection;
     aggregated.patternDetected += snap.patternDetected;
     aggregated.signalsGenerated += snap.signalsGenerated;
@@ -1454,6 +1455,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     quantPairsEvaluated: 0,
     patternPairsEvaluated: 0,
     quantStrategyNulls: 0,
+    patternStrategyNulls: 0,
     patternNoDetection: 0,
     patternDetected: 0,
     signalsGenerated: 0,
@@ -1669,7 +1671,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         if (dupCheckCount >= VTS_MAX_CONCURRENT_PER_COMBO) {
           vtsEvalCounters.totalStrategyEvaluations++;
           if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
-          vtsEvalCounters.quantStrategyNulls++;
+          if (pair.sourcePool === 'pattern') {
+            vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1;
+          } else {
+            vtsEvalCounters.quantStrategyNulls++;
+          }
           vtsEvalCounters.nullReasons.duplicatePosition++;
           blockedDupCombos.add(`${pair.symbol}:${stratDef.strategyKey}`);
           continue;
@@ -1692,7 +1698,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
         if (!result) {
           vtsEvalCounters.byStrategy[stratKey].nulls++;
-          vtsEvalCounters.quantStrategyNulls++;
+          if (pair.sourcePool === 'pattern') {
+            vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1;
+          } else {
+            vtsEvalCounters.quantStrategyNulls++;
+          }
           vtsEvalCounters.nullReasons.conditionsNotMet++;
           continue;
         }
