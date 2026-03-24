@@ -179,6 +179,7 @@ Implement strategy-family-aware filtering so each strategy family gets IMF thres
 - **Batch 20** (2026-03-23) — Pre-implementation audit. 10 code review steps, 5 artifacts. Architecture B selected. DI threshold recalibration identified. Whole-number batch numbering resumed.
 - **Batch 21** (2026-03-23) — Telemetry & Calibration Scaffolding. VTSEvalSnapshot expanded with NullReasonBreakdown + totalStrategyEvaluations. DI distribution logging. ML page dashboard updates.
 - **Batch 22** (2026-03-23) — Architecture B Implementation. diMax column added. STRATEGY_FAMILY_MAP (17 strategies). 4 family IMF filter paths in FX5 scanner. ActiveFilterPool expanded. Family-aware strategy selection in orchestrator + VTS. Filter diagnostics UI updated. DB seed for 8 new filter_path rows.
+- **Batch 22 HF-HF7** (2026-03-23) — Post-deployment hotfixes: seed import/migration fix, 24h family rolling aggregation, duplicate combos tracking (unique combos blocked sub-row), VTS eval history disk persistence, skipped signals immediate flush. 7 hotfixes total addressing UI gaps, data persistence, and telemetry accuracy.
 
 ### Key Architecture Decisions
 - **Architecture B (brute-force fan-out)** over Architecture A (early MCE)

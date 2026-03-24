@@ -86,7 +86,11 @@
 | **Batch 22** | 2026-03-23 | `c5fa3286` | **Architecture B: Family-Specific Filter Paths (Phase 14.6).** Added diMax column to schema. Created STRATEGY_FAMILY_MAP (17 strategies to 5 families). FX5 scanner runs 4 family IMF filters in parallel. ActiveFilterPool expanded with 8 family Maps. Signal orchestrator does family-aware strategy selection. VTS reads actual family filter results from diagnostics. ML page shows Family Path IMF Results. DB seed file for 8 new filter_path rows with candidate thresholds. | `BATCH_22_SCOPE.md` | `BATCH_22_COMPLETION_REPORT.md` |
 | Batch 22 HF | 2026-03-23 | `0306c263` | Fixed seed import path (../../db.js → ../db.js), added auto-execute call, ran Drizzle migration to add di_max column to PostgreSQL. Seeded 8 family filter rows with candidate thresholds. | — | — |
 | Batch 22 HF2 | 2026-03-23 | `2b119866` | Extended Filter Diagnostics with 24-hour rolling aggregation for family path results. Family IMF metrics now accumulate across scan cycles for trend/reversal/breakout/oscillator families. | — | — |
-| Batch 22 HF3 | 2026-03-23 | `ca831ae5` | Split duplicate position rejection counter into 3 metrics: events (existing), unique combos blocked (new), avg attempts per combo (derived). Added outer-loop tracking with blockedDupCombos Set. ML page shows "Unique Combos Blocked" sub-row under Duplicate Position. | — | — |
+| Batch 22 HF3 | 2026-03-23 | (rolled into HF4) | Split duplicate position rejection counter into 3 metrics: events, unique combos blocked, avg attempts per combo. Added blockedDupCombos Set to vts-runner.ts. | — | — |
+| Batch 22 HF4 | 2026-03-23 | `b6bf4422` | UI: TOTAL row in by-strategy breakdown table. Unique Combos Blocked sub-row under Duplicate Position Max in Signal Rejection Breakdown. | — | — |
+| Batch 22 HF5 | 2026-03-23 | `2dab3808` | Moved unique combos computation from in-memory vtsEvaluation to disk-persisted skipped signals logger. Survives server restarts. | — | — |
+| Batch 22 HF6 | 2026-03-23 | `dd4ff646` | Fixed reason key mismatch: getSkippedSignalsSummary() checked Duplicate_Position but vts-runner logs Duplicate_Position_Max. Now matches both. | — | — |
+| Batch 22 HF7 | 2026-03-23 | `33c8225f` | VTS eval history disk persistence at logs/vts_eval_history/. Hydrates on startup, persists each cycle. Skipped signals immediate flush — prevents data loss on crash. | — | `BATCH_22_HF_COMPLETION_REPORT.md` |
 
 ---
 
