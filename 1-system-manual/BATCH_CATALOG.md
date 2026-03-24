@@ -91,6 +91,8 @@
 | Batch 22 HF5 | 2026-03-23 | `2dab3808` | Moved unique combos computation from in-memory vtsEvaluation to disk-persisted skipped signals logger. Survives server restarts. | — | — |
 | Batch 22 HF6 | 2026-03-23 | `dd4ff646` | Fixed reason key mismatch: getSkippedSignalsSummary() checked Duplicate_Position but vts-runner logs Duplicate_Position_Max. Now matches both. | — | — |
 | Batch 22 HF7 | 2026-03-23 | `33c8225f` | VTS eval history disk persistence at logs/vts_eval_history/. Hydrates on startup, persists each cycle. Skipped signals immediate flush — prevents data loss on crash. | — | `BATCH_22_HF_COMPLETION_REPORT.md` |
+| **Batch 23** | 2026-03-24 | `bafb5770` | **DI Threshold Calibration + Null Reason Expansion.** Lowered DI thresholds for trend (55→25) and breakout (45→20). Wired 3 unused null reason counters (netEvBelowFloor, adxGuard, maxOpenTrades). Made ML page null reason display dynamic. Created update-di-thresholds.ts script. | `BATCH_23_SCOPE.md` | `BATCH_23_COMPLETION_REPORT.md` |
+| Batch 23 HF | 2026-03-24 | `36288df1` | Empirical DI recalibration. Observed crypto DI distribution 3-20 under 48-candle window. Lowered thresholds further: active_trend 25→12, active_breakout 20→10, vts_trend 20→10, vts_breakout 15→8. Updated seed and script files to match DB. | — | — |
 
 ---
 
