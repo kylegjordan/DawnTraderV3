@@ -13,10 +13,10 @@ async function updateDiThresholds() {
   console.log('[23][DI_CAL] Updating DI thresholds for trend and breakout families...');
   
   const updates = [
-    { filterPath: 'active_trend', diMin: '25.00' },
-    { filterPath: 'active_breakout', diMin: '20.00' },
-    { filterPath: 'vts_trend', diMin: '20.00' },
-    { filterPath: 'vts_breakout', diMin: '15.00' },
+    { filterPath: 'active_trend', diMin: '12.00' },
+    { filterPath: 'active_breakout', diMin: '10.00' },
+    { filterPath: 'vts_trend', diMin: '10.00' },
+    { filterPath: 'vts_breakout', diMin: '8.00' },
   ];
 
   for (const u of updates) {
