@@ -205,13 +205,22 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     quantSignalsGenerated: 0,
     patternSignalsGenerated: 0,
     totalStrategyEvaluations: 0,
+    signalsRejected: 0,
+    quantSignalsRejected: 0,
+    patternSignalsRejected: 0,
+    pairsSkippedNoPrice: 0,
+    pairsSkippedInsufficientOHLC: 0,
     nullReasons: {
       conditionsNotMet: 0,
-      netEvBelowFloor: 0,
       adxGuard: 0,
       duplicatePosition: 0,
+      uniqueDuplicateCombos: 0,
       maxOpenTrades: 0,
       regimeNoStrategies: 0,
+      familyFilterMismatch: 0,
+    },
+    rejectedReasons: {
+      netEvBelowFloor: 0,
     },
     byStrategy: {},
   };
@@ -229,15 +238,31 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     aggregated.patternStrategyEvaluations = (aggregated.patternStrategyEvaluations ?? 0) + (snap.patternStrategyEvaluations ?? 0);
     aggregated.quantSignalsGenerated = (aggregated.quantSignalsGenerated ?? 0) + (snap.quantSignalsGenerated ?? 0);
     aggregated.patternSignalsGenerated = (aggregated.patternSignalsGenerated ?? 0) + (snap.patternSignalsGenerated ?? 0);
+    // Batch 26: Aggregate new counters
+    aggregated.signalsRejected = (aggregated.signalsRejected ?? 0) + (snap.signalsRejected ?? 0);
+    aggregated.quantSignalsRejected = (aggregated.quantSignalsRejected ?? 0) + (snap.quantSignalsRejected ?? 0);
+    aggregated.patternSignalsRejected = (aggregated.patternSignalsRejected ?? 0) + (snap.patternSignalsRejected ?? 0);
+    aggregated.pairsSkippedNoPrice = (aggregated.pairsSkippedNoPrice ?? 0) + (snap.pairsSkippedNoPrice ?? 0);
+    aggregated.pairsSkippedInsufficientOHLC = (aggregated.pairsSkippedInsufficientOHLC ?? 0) + (snap.pairsSkippedInsufficientOHLC ?? 0);
     // Batch 21: Aggregate null reasons
     if (snap.nullReasons) {
       aggregated.nullReasons.conditionsNotMet += snap.nullReasons.conditionsNotMet;
-      aggregated.nullReasons.netEvBelowFloor += snap.nullReasons.netEvBelowFloor;
       aggregated.nullReasons.adxGuard += snap.nullReasons.adxGuard;
       aggregated.nullReasons.duplicatePosition += snap.nullReasons.duplicatePosition;
       aggregated.nullReasons.uniqueDuplicateCombos += snap.nullReasons.uniqueDuplicateCombos ?? 0;
       aggregated.nullReasons.maxOpenTrades += snap.nullReasons.maxOpenTrades;
       aggregated.nullReasons.regimeNoStrategies += snap.nullReasons.regimeNoStrategies;
+      aggregated.nullReasons.familyFilterMismatch += snap.nullReasons.familyFilterMismatch ?? 0;
+    }
+    // Batch 26: Aggregate rejected reasons (separate from null reasons — signals that existed but failed post-generation guards)
+    if (snap.rejectedReasons) {
+      if (!aggregated.rejectedReasons) { aggregated.rejectedReasons = { netEvBelowFloor: 0 }; }
+      aggregated.rejectedReasons.netEvBelowFloor += snap.rejectedReasons.netEvBelowFloor ?? 0;
+    }
+    // Batch 26: Backwards compat — old snapshots may have netEvBelowFloor in nullReasons
+    if (snap.nullReasons && (snap.nullReasons as any).netEvBelowFloor) {
+      if (!aggregated.rejectedReasons) { aggregated.rejectedReasons = { netEvBelowFloor: 0 }; }
+      aggregated.rejectedReasons.netEvBelowFloor += (snap.nullReasons as any).netEvBelowFloor;
     }
 
     for (const [strat, counts] of Object.entries(snap.byStrategy)) {
@@ -1463,15 +1488,23 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     patternStrategyEvaluations: 0,
     quantSignalsGenerated: 0,
     patternSignalsGenerated: 0,
+    signalsRejected: 0,
+    quantSignalsRejected: 0,
+    patternSignalsRejected: 0,
+    pairsSkippedNoPrice: 0,
+    pairsSkippedInsufficientOHLC: 0,
     totalStrategyEvaluations: 0,
     nullReasons: {
       conditionsNotMet: 0,
-      netEvBelowFloor: 0,
       adxGuard: 0,
       duplicatePosition: 0,
       uniqueDuplicateCombos: 0,
       maxOpenTrades: 0,
       regimeNoStrategies: 0,
+      familyFilterMismatch: 0,
+    },
+    rejectedReasons: {
+      netEvBelowFloor: 0,
     },
     byStrategy: {} as Record<string, { evaluated: number; nulls: number; signals: number }>,
   };
@@ -1552,11 +1585,13 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       }
       const priceData = priceDataMap.get(pair.symbol);
       if (!priceData || priceData.price <= 0) {
+        vtsEvalCounters.pairsSkippedNoPrice = (vtsEvalCounters.pairsSkippedNoPrice ?? 0) + 1;
         continue;
       }
-      
+
       const ohlcData = await fetchOHLCForPair(pair.symbol);
       if (ohlcData.length < 10) {
+        vtsEvalCounters.pairsSkippedInsufficientOHLC = (vtsEvalCounters.pairsSkippedInsufficientOHLC ?? 0) + 1;
         continue;
       }
       
@@ -1656,11 +1691,29 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         const stratFamily = STRATEGY_FAMILY_MAP[stratDef.strategyKey];
         const pairFams = vtsSymbolFamilies.get(pair.symbol);
         if (stratFamily && stratFamily !== 'hybrid' && pairFams && !pairFams.has(stratFamily)) {
+          // Batch 26: Count family filter skips — pre-detect eligibility skip, not a strategy null
+          vtsEvalCounters.totalStrategyEvaluations++;
+          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
+          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1; } else { vtsEvalCounters.quantStrategyNulls++; }
+          const famStratKey = stratDef.strategyKey;
+          if (!vtsEvalCounters.byStrategy[famStratKey]) { vtsEvalCounters.byStrategy[famStratKey] = { evaluated: 0, nulls: 0, signals: 0 }; }
+          vtsEvalCounters.byStrategy[famStratKey].evaluated++;
+          vtsEvalCounters.byStrategy[famStratKey].nulls++;
+          vtsEvalCounters.nullReasons.familyFilterMismatch++;
           continue; // Skip strategy — pair didn't survive this family's filter path
         }
         if (stratFamily === 'hybrid') {
           const parentFams = HYBRID_FAMILY_ELIGIBILITY[stratDef.strategyKey] ?? [];
           if (pairFams && !parentFams.some(f => pairFams.has(f))) {
+            // Batch 26: Count hybrid family filter skips
+            vtsEvalCounters.totalStrategyEvaluations++;
+            if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
+            if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1; } else { vtsEvalCounters.quantStrategyNulls++; }
+            const hybStratKey = stratDef.strategyKey;
+            if (!vtsEvalCounters.byStrategy[hybStratKey]) { vtsEvalCounters.byStrategy[hybStratKey] = { evaluated: 0, nulls: 0, signals: 0 }; }
+            vtsEvalCounters.byStrategy[hybStratKey].evaluated++;
+            vtsEvalCounters.byStrategy[hybStratKey].nulls++;
+            vtsEvalCounters.nullReasons.familyFilterMismatch++;
             continue;
           }
         }
@@ -1683,6 +1736,13 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         // Batch 23: ADX guard for sma_trend_ride
         if (stratDef.strategyKey === 'sma_trend_ride' && mceContext.raw?.adx !== undefined && mceContext.raw.adx < 25) {
+          // Batch 26: Increment all counters (was only incrementing nullReasons.adxGuard)
+          vtsEvalCounters.totalStrategyEvaluations++;
+          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
+          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1; } else { vtsEvalCounters.quantStrategyNulls++; }
+          if (!vtsEvalCounters.byStrategy['sma_trend_ride']) { vtsEvalCounters.byStrategy['sma_trend_ride'] = { evaluated: 0, nulls: 0, signals: 0 }; }
+          vtsEvalCounters.byStrategy['sma_trend_ride'].evaluated++;
+          vtsEvalCounters.byStrategy['sma_trend_ride'].nulls++;
           vtsEvalCounters.nullReasons.adxGuard++;
           continue; // Skip — ADX too low for trend-following strategy
         }
@@ -1706,15 +1766,15 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           vtsEvalCounters.nullReasons.conditionsNotMet++;
           continue;
         }
-        vtsEvalCounters.byStrategy[stratKey].signals++;
-        vtsEvalCounters.signalsGenerated++;
-        if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsGenerated = (vtsEvalCounters.patternSignalsGenerated ?? 0) + 1; } else { vtsEvalCounters.quantSignalsGenerated = (vtsEvalCounters.quantSignalsGenerated ?? 0) + 1; }
-
         const { signal, tradeRecord } = result;
 
-        // Batch 23: Net EV floor check
+        // Batch 26: Net EV floor check BEFORE counting as generated signal
+        // Per semantic contract: rejected = signal created but failed post-generation guard (not a null)
         if (signal && signal.netEV !== undefined && signal.netEV < VTS_NET_EV_FLOOR) {
-          vtsEvalCounters.nullReasons.netEvBelowFloor++;
+          if (!vtsEvalCounters.rejectedReasons) { vtsEvalCounters.rejectedReasons = { netEvBelowFloor: 0 }; }
+          vtsEvalCounters.rejectedReasons.netEvBelowFloor++;
+          vtsEvalCounters.signalsRejected = (vtsEvalCounters.signalsRejected ?? 0) + 1;
+          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsRejected = (vtsEvalCounters.patternSignalsRejected ?? 0) + 1; } else { vtsEvalCounters.quantSignalsRejected = (vtsEvalCounters.quantSignalsRejected ?? 0) + 1; }
           logSkippedSignal({
             symbol: pair.symbol,
             reason: 'Net_EV_Negative',
@@ -1725,6 +1785,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           });
           continue; // Skip — Net EV below floor
         }
+
+        // Signal passed all post-generation guards — count as generated
+        vtsEvalCounters.byStrategy[stratKey].signals++;
+        vtsEvalCounters.signalsGenerated++;
+        if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsGenerated = (vtsEvalCounters.patternSignalsGenerated ?? 0) + 1; } else { vtsEvalCounters.quantSignalsGenerated = (vtsEvalCounters.quantSignalsGenerated ?? 0) + 1; }
 
         const telemetry = getTelemetryAggregator();
         telemetry.recordPairTelemetry(pair.symbol, {
