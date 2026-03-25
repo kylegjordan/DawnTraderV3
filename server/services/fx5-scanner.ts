@@ -615,7 +615,7 @@ export class Fx5ScannerService {
       const patternImfThresholds = {
         LQ_MIN: parseFloat(patternDbRow?.lqMin ?? '20'),
         VN_MAX: parseFloat(patternDbRow?.vnMax ?? '0.98'),
-        DI_MIN: parseFloat(patternDbRow?.diMin ?? '30'),
+        DI_MIN: parseFloat(patternDbRow?.diMin ?? '10'),
       };
 
     // Batch 22: Load family-specific filter profiles from DB

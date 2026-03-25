@@ -15,6 +15,9 @@ const FAMILY_FILTER_SEEDS = [
   { mode: 'paper', filterPath: 'active_reversal',   lqMin: '25.00', vnMax: '0.8500', diMin: '0.00',  diMax: '35.00',  corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 21 },
   { mode: 'paper', filterPath: 'active_breakout',   lqMin: '35.00', vnMax: '0.6800', diMin: '10.00', diMax: '100.00', corrMax: '0.9200', minVolume: '400000.00', minHistoryDays: 21 },
   { mode: 'paper', filterPath: 'active_oscillator', lqMin: '25.00', vnMax: '0.8500', diMin: '0.00',  diMax: '30.00',  corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 14 },
+  // Batch 28: Pattern pool paths — aligned with family-path calibration
+  { mode: 'paper', filterPath: 'active_pattern',    lqMin: '20.00', vnMax: '0.9800', diMin: '10.00', diMax: '100.00', corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 14 },
+  { mode: 'paper', filterPath: 'vts_pattern',       lqMin: '20.00', vnMax: '0.9800', diMin: '8.00',  diMax: '100.00', corrMax: '0.9800', minVolume: '150000.00', minHistoryDays: 14 },
   // VTS (passive learning) family paths — relaxed thresholds
   { mode: 'paper', filterPath: 'vts_trend',          lqMin: '30.00', vnMax: '0.7000', diMin: '10.00', diMax: '100.00', corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 21 },
   { mode: 'paper', filterPath: 'vts_reversal',       lqMin: '20.00', vnMax: '0.9000', diMin: '0.00',  diMax: '40.00',  corrMax: '0.9800', minVolume: '150000.00', minHistoryDays: 14 },
