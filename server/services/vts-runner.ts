@@ -850,7 +850,7 @@ async function generatePhase10Signal(
   if (kernelResult.netEV <= VTS_NET_EV_FLOOR) {
     logSkippedSignal({
       symbol,
-      reason: 'Net_EV_Below_VTS_Floor',
+      reason: 'Net_EV_Negative',
       regime,
       signalType,
       strategy,
@@ -1729,6 +1729,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           } else {
             vtsEvalCounters.quantStrategyNulls++;
           }
+          // Batch 27: Add byStrategy increment for duplicate guard (was missing — caused byStrategy TOTAL != totalStrategyEvaluations)
+          const dupStratKey = stratDef.strategyKey;
+          if (!vtsEvalCounters.byStrategy[dupStratKey]) { vtsEvalCounters.byStrategy[dupStratKey] = { evaluated: 0, nulls: 0, signals: 0 }; }
+          vtsEvalCounters.byStrategy[dupStratKey].evaluated++;
+          vtsEvalCounters.byStrategy[dupStratKey].nulls++;
           vtsEvalCounters.nullReasons.duplicatePosition++;
           blockedDupCombos.add(`${pair.symbol}:${stratDef.strategyKey}`);
           continue;

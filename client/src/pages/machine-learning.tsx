@@ -2098,11 +2098,12 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               duplicatePosition: 'Duplicate Position',
                               maxOpenTrades: 'Max Open Trades',
                               regimeNoStrategies: 'No Strategies for Regime',
+                              familyFilterMismatch: 'Family Filter Mismatch',
                               vnVeto: 'VN Veto (Extreme Noise)',
                               unknownCanonical: 'Unknown Canonical Pattern',
                             };
                             const label = labels[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
-                            const totalNulls = ve.quantStrategyNulls || 1;
+                            const totalNulls = Object.values(ve.nullReasons).reduce((sum: number, v: any) => sum + (typeof v === 'number' ? v : 0), 0) || 1;
                             return (
                               <tr key={key} className="border-b hover:bg-muted/30">
                                 <td className="p-2">{label}</td>
