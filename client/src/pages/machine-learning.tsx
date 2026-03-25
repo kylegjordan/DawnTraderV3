@@ -1756,6 +1756,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         <CardHeader className="py-3">
           <CardTitle className="text-lg flex items-center justify-between">
             <span>24-Hour Rolling Aggregates</span>
+            <span className="text-xs font-normal text-orange-400">(in-memory — resets on restart)</span>
             <span className="text-sm font-normal text-muted-foreground">
               {rolling24h.totalScans} scans · {fmt(rolling24h.totalPairsScanned)} total pairs · {fmt(rolling24h.uniquePairsScanned)} unique
             </span>
@@ -1851,112 +1852,13 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         </CardContent>
       </Card>
 
-      {/* TABLE 3: Signal Rejection Breakdown */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-lg flex items-center justify-between">
-            <span>Signal Rejection Breakdown (24h)</span>
-            <span className="text-sm font-normal text-muted-foreground">
-              {fmt(signalRejections.total)} total rejections
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {signalRejections.total > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-              {/* By Reason */}
-              <div>
-                <h4 className="text-sm font-medium mb-2">By Rejection Reason</h4>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Reason</th>
-                      <th className="text-right p-2 font-medium">Count</th>
-                      <th className="text-right p-2 font-medium">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const ALL_REJECTION_REASONS = [
-                        'Duplicate_Position_Max',
-                        'Net_EV_Negative',
-                        'Low_ROI',
-                        'FinalScore_Low',
-                        'RegimeWeight_Low',
-                        'ADX_Guard',
-                        'Duplicate_Position',
-                        'BLOCKED_GOVERNANCE',
-                        'LEARNING_DEFERRED',
-                        'Confidence_Floor',
-                        'Illiquid_USD',
-                      ];
-                      return ALL_REJECTION_REASONS.map(reason => {
-                        const count = ((signalRejections.byReason as Record<string, number>)[reason] ?? 0);
-                        return (
-                          <React.Fragment key={reason}>
-                            <tr className="border-b hover:bg-muted/30">
-                              <td className="p-2">{formatReasonName(reason)}</td>
-                              <td className="p-2 text-right">{fmt(count)}</td>
-                              <td className="p-2 text-right text-muted-foreground">
-                                {signalRejections.total > 0 ? (count / signalRejections.total * 100).toFixed(1) : 0}%
-                              </td>
-                            </tr>
-                            {reason === 'Duplicate_Position_Max' && (signalRejections as any)?.duplicateUniqueCombos > 0 && (
-                              <tr className="border-b hover:bg-muted/20">
-                                <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
-                                <td className="p-2 text-right text-orange-400 text-xs">{(signalRejections as any).duplicateUniqueCombos}</td>
-                                <td className="p-2 text-right text-xs text-muted-foreground">
-                                  avg {(count / (signalRejections as any).duplicateUniqueCombos).toFixed(1)} attempts/combo
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-              {/* By Regime */}
-              <div>
-                <h4 className="text-sm font-medium mb-2">By Market Regime</h4>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Regime</th>
-                      <th className="text-right p-2 font-medium">Count</th>
-                      <th className="text-right p-2 font-medium">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(signalRejections.byRegime)
-                      .sort(([, a], [, b]) => (b as number) - (a as number))
-                      .map(([regime, count]) => (
-                        <tr key={regime} className="border-b hover:bg-muted/30">
-                          <td className="p-2">{regime}</td>
-                          <td className="p-2 text-right">{fmt(count as number)}</td>
-                          <td className="p-2 text-right text-muted-foreground">
-                            {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 text-muted-foreground text-center">No signal rejections in the last 24 hours</div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* TABLE 4: VTS Evaluation Breakdown (Batch 19I) */}
       <Card className="max-w-4xl">
         <CardHeader className="py-3">
           <CardTitle className="text-lg flex items-center justify-between">
             <span>VTS Evaluation Breakdown</span>
             <span className="text-sm font-normal text-muted-foreground">
-              {data?.vtsEvaluation ? '24-Hour Rolling' : 'No VTS data yet'}
+              {data?.vtsEvaluation ? '24-Hour Rolling (disk-persisted, survives restart)' : 'No VTS data yet'}
             </span>
           </CardTitle>
         </CardHeader>
@@ -1978,10 +1880,22 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </thead>
                     <tbody>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(sampled per cycle)</span></td>
+                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(cumulative across all VTS cycles, not unique pairs)</span></td>
                         <td className="p-2 text-right">{fmt(ve.quantPairsEvaluated)}</td>
                         <td className="p-2 text-right">{fmt(ve.patternPairsEvaluated)}</td>
                         <td className="p-2 text-right font-semibold">{fmt(ve.quantPairsEvaluated + ve.patternPairsEvaluated)}</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30 text-xs text-muted-foreground">
+                        <td className="p-2 pl-6">↳ Skipped: No Price Data</td>
+                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedNoPrice ?? 0)}</td>
+                        <td className="p-2 text-right">—</td>
+                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedNoPrice ?? 0)}</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30 text-xs text-muted-foreground">
+                        <td className="p-2 pl-6">↳ Skipped: Insufficient OHLC (< 10 candles)</td>
+                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
+                        <td className="p-2 text-right">—</td>
+                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2">Pattern Detection <span className="text-xs text-muted-foreground">(pattern pool only)</span></td>
@@ -2008,8 +1922,14 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <td className="p-2 text-right text-orange-500">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
                         <td className="p-2 text-right font-semibold text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
                       </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Signals Rejected <span className="text-xs text-muted-foreground">(passed detect but failed post-generation guard)</span></td>
+                        <td className="p-2 text-right text-red-500">{fmt((ve as any).quantSignalsRejected ?? 0)}</td>
+                        <td className="p-2 text-right text-red-500">{fmt((ve as any).patternSignalsRejected ?? 0)}</td>
+                        <td className="p-2 text-right text-red-500">{fmt((ve as any).signalsRejected ?? 0)}</td>
+                      </tr>
                       <tr className="bg-muted/30 font-semibold">
-                        <td className="p-2">Signals Generated</td>
+                        <td className="p-2">Signals Generated <span className="text-xs text-muted-foreground">(= virtual trades opened)</span></td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).quantSignalsGenerated ?? 0)}</td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).patternSignalsGenerated ?? 0)}</td>
                         <td className="p-2 text-right font-semibold text-green-600">{fmt(ve.signalsGenerated)}</td>
@@ -2133,6 +2053,105 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
             );
           })() : (
             <div className="p-4 text-muted-foreground text-center">No VTS evaluation data yet — waiting for next VTS cycle</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* TABLE 3: Signal Rejection Breakdown */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>Signal Rejection Breakdown (24h)</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {fmt(signalRejections.total)} total rejections
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {signalRejections.total > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+              {/* By Reason */}
+              <div>
+                <h4 className="text-sm font-medium mb-2">By Rejection Reason</h4>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-2 font-medium">Reason</th>
+                      <th className="text-right p-2 font-medium">Count</th>
+                      <th className="text-right p-2 font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const ALL_REJECTION_REASONS = [
+                        'Duplicate_Position_Max',
+                        'Net_EV_Negative',
+                        'Low_ROI',
+                        'FinalScore_Low',
+                        'RegimeWeight_Low',
+                        'ADX_Guard',
+                        'Duplicate_Position',
+                        'BLOCKED_GOVERNANCE',
+                        'LEARNING_DEFERRED',
+                        'Confidence_Floor',
+                        'Illiquid_USD',
+                      ];
+                      return ALL_REJECTION_REASONS.map(reason => {
+                        const count = ((signalRejections.byReason as Record<string, number>)[reason] ?? 0);
+                        return (
+                          <React.Fragment key={reason}>
+                            <tr className="border-b hover:bg-muted/30">
+                              <td className="p-2">{formatReasonName(reason)}</td>
+                              <td className="p-2 text-right">{fmt(count)}</td>
+                              <td className="p-2 text-right text-muted-foreground">
+                                {signalRejections.total > 0 ? (count / signalRejections.total * 100).toFixed(1) : 0}%
+                              </td>
+                            </tr>
+                            {reason === 'Duplicate_Position_Max' && (signalRejections as any)?.duplicateUniqueCombos > 0 && (
+                              <tr className="border-b hover:bg-muted/20">
+                                <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
+                                <td className="p-2 text-right text-orange-400 text-xs">{(signalRejections as any).duplicateUniqueCombos}</td>
+                                <td className="p-2 text-right text-xs text-muted-foreground">
+                                  avg {(count / (signalRejections as any).duplicateUniqueCombos).toFixed(1)} attempts/combo
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+              {/* By Regime */}
+              <div>
+                <h4 className="text-sm font-medium mb-2">By Market Regime</h4>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-2 font-medium">Regime</th>
+                      <th className="text-right p-2 font-medium">Count</th>
+                      <th className="text-right p-2 font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(signalRejections.byRegime)
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .map(([regime, count]) => (
+                        <tr key={regime} className="border-b hover:bg-muted/30">
+                          <td className="p-2">{regime}</td>
+                          <td className="p-2 text-right">{fmt(count as number)}</td>
+                          <td className="p-2 text-right text-muted-foreground">
+                            {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 text-muted-foreground text-center">No signal rejections in the last 24 hours</div>
           )}
         </CardContent>
       </Card>
