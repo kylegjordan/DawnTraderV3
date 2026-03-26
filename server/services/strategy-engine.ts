@@ -13,6 +13,7 @@ import { detectDefensiveHedge } from '../strategies/defensive-hedge.js';
 import { detectAdaptiveFlow } from '../strategies/adaptive-flow.js';
 import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 /**
  * Compute ATR (Average True Range) from PriceData array.
@@ -89,6 +90,7 @@ export class StrategyEngine {
     // Calculate average volume from prior candles (minimum 10 required for reliable comparison)
     if (!priceHistory || priceHistory.length < 10) {
       console.log('[VWAP Strategy] ❌ Insufficient history for volume confirmation (need 10+ candles)');
+      setNullReason('insufficient_data');
       return null;
     }
     
@@ -102,6 +104,7 @@ export class StrategyEngine {
     
     if (totalVolume === 0) {
       console.log('[VWAP Strategy] ❌ Invalid volume data in history');
+      setNullReason('insufficient_data');
       return null;
     }
     
@@ -123,6 +126,7 @@ export class StrategyEngine {
       // B3: Safety validation - reject signal if target is not above entry
       if (finalTarget <= entryPrice) {
         console.log(`[VWAP Strategy] ❌ Target validation failed - target (${finalTarget.toFixed(2)}) <= entry (${entryPrice.toFixed(2)})`);
+        setNullReason('target_validation');
         return null;
       }
       
@@ -156,6 +160,7 @@ export class StrategyEngine {
     }
     
     console.log(`[VWAP Strategy] ❌ No signal - priceAboveVWAP=${priceAboveVWAP}, nearVWAP=${nearVWAP}, reversal=${hasReversalPattern}, volume=${hasVolumeConfirmation}`);
+    setNullReason('price_position');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
       strategy: "vwap_pullback",
@@ -180,7 +185,7 @@ export class StrategyEngine {
     
     console.log(`[ABCD Strategy] Using settings: minConsolidation=${minConsolidation} bars, breakout=${(breakoutThreshold*100).toFixed(1)}%, volumeMultiplier=${volumeMultiplier}x, exitType=${exitType}`);
     
-    if (priceHistory.length < minConsolidation + 10) return null;
+    if (priceHistory.length < minConsolidation + 10) { setNullReason('insufficient_data'); return null; }
     
     const recent = priceHistory.slice(-(minConsolidation + 10));
     const current = recent[recent.length - 1];
@@ -189,14 +194,14 @@ export class StrategyEngine {
     // A = spike, B = pullback, C = higher low above VWAP, D = breakout
     
     const aPoint = this.findSpike(recent.slice(0, 10));
-    if (!aPoint) return null;
+    if (!aPoint) { setNullReason('no_pattern'); return null; }
     
     const bPoint = this.findPullback(recent.slice(5, 15), aPoint);
-    if (!bPoint) return null;
+    if (!bPoint) { setNullReason('no_pattern'); return null; }
     
     // ✅ Using user-configured consolidation period
     const cPoint = this.findHigherLow(recent.slice(10, 10 + minConsolidation), bPoint);
-    if (!cPoint || !current.vwap || parseFloat(cPoint.close) < parseFloat(current.vwap)) return null;
+    if (!cPoint || !current.vwap || parseFloat(cPoint.close) < parseFloat(current.vwap)) { setNullReason('price_position'); return null; }
     
     // ✅ Check for breakout using user-configured threshold
     const cHigh = parseFloat(cPoint.high);
@@ -264,6 +269,7 @@ export class StrategyEngine {
       return signal;
     }
     
+    setNullReason('breakout_fail');
     console.log(`[ABCD Strategy] ❌ No signal - breakout=${isBreakout}, volumeConfirmed=${hasVolumeConfirmation}`);
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
@@ -290,7 +296,7 @@ export class StrategyEngine {
     
     console.log(`[SMA Strategy] Using settings: smaLength=${smaLength}, entryCondition=${entryCondition}, exitCondition=${exitCondition}, trailingStop=${(trailingStopPercent*100).toFixed(1)}%`);
     
-    if (!sma || priceHistory.length < 10) return null;
+    if (!sma || priceHistory.length < 10) { setNullReason('insufficient_data'); return null; }
     
     const recentPrices = priceHistory.slice(-10).map(p => parseFloat(p.close));
     const previousPrice = recentPrices[recentPrices.length - 2];
@@ -367,6 +373,7 @@ export class StrategyEngine {
       return signal;
     }
     
+    setNullReason('indicator_filter');
     console.log(`[SMA Strategy] ❌ No signal - entryCondition=${entryCondition}, entrySignal=${entrySignal}`);
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
@@ -387,7 +394,7 @@ export class StrategyEngine {
     const volumeMultiplier = params.volumeMultiplier || 1.5; // Crypto-calibrated (Batch 18H): 2.0 → 1.5
     const maxHoldingHours = params.maxHoldingHours || 12;
     
-    if (priceHistory.length < minConsolidationBars + 5) return null;
+    if (priceHistory.length < minConsolidationBars + 5) { setNullReason('insufficient_data'); return null; }
     
     // Batch 18H: ATR-based dynamic range width for crypto markets
     const atr = computeATR(priceHistory);
@@ -401,6 +408,7 @@ export class StrategyEngine {
     
     if (!rangeResult.isRange) {
       console.log('[Breakout] No valid consolidation range detected');
+      setNullReason('range_not_found');
       return null;
     }
     
@@ -452,6 +460,7 @@ export class StrategyEngine {
       return signal;
     }
     
+    setNullReason('breakout_fail');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
       strategy: "breakout",
@@ -477,7 +486,7 @@ export class StrategyEngine {
     const partialExitPercent = params.partialExitPercent || 50;
     const stopLossBuffer = (params.stopLossBuffer || 1) / 100;
     
-    if (priceHistory.length < 20) return null;
+    if (priceHistory.length < 20) { setNullReason('insufficient_data'); return null; }
     
     const { currentPrice, vwap } = indicators;
     
@@ -487,13 +496,13 @@ export class StrategyEngine {
       meanValue = this.calculateSMA(priceHistory, smaLength);
     } else if (meanType === 'midpoint') {
       const rangeResult = detectRange(priceHistory, 10, 8, 2);
-      if (!rangeResult.isRange) return null;
+      if (!rangeResult.isRange) { setNullReason('range_not_found'); return null; }
       meanValue = (rangeResult.rangeLow + rangeResult.rangeHigh) / 2;
     } else {
       meanValue = vwap;
     }
     
-    if (!meanValue || meanValue === 0) return null;
+    if (!meanValue || meanValue === 0) { setNullReason('insufficient_data'); return null; }
     
     // Check for oversold condition (price below mean)
     const deviation = (currentPrice - meanValue) / meanValue;
@@ -535,6 +544,7 @@ export class StrategyEngine {
       return signal;
     }
     
+    setNullReason('indicator_filter');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
       strategy: "mean_reversion",
@@ -554,7 +564,7 @@ export class StrategyEngine {
     const entryZoneWidth = (params.entryZoneWidth || 0.5) / 100;
     const stopLossBeyond = (params.stopLossBeyond || 1) / 100;
     
-    if (priceHistory.length < 30) return null;
+    if (priceHistory.length < 30) { setNullReason('insufficient_data'); return null; }
     
     // Batch 18H: ATR-based dynamic range width for crypto markets
     const atr = computeATR(priceHistory);
@@ -571,12 +581,13 @@ export class StrategyEngine {
     // Detect established range
     const rangeResult = detectRange(priceHistory, minBars, 20, minBoundaryTouches, touchTolerance);
     
-    if (!rangeResult.isRange) return null;
+    if (!rangeResult.isRange) { setNullReason('range_not_found'); return null; }
     
     // Check range width meets minimum
     const rangeWidth = (rangeResult.rangeHigh - rangeResult.rangeLow) / rangeResult.rangeLow;
     if (rangeWidth < minRangeWidth) {
       console.log(`[RangeTrading] Range too narrow: ${(rangeWidth * 100).toFixed(2)}% < ${(minRangeWidth * 100).toFixed(2)}%`);
+      setNullReason('range_not_found');
       return null;
     }
     
@@ -620,6 +631,7 @@ export class StrategyEngine {
       return signal;
     }
     
+    setNullReason('price_position');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
       strategy: "range_trading",
@@ -641,11 +653,11 @@ export class StrategyEngine {
     const maxPullbackBars = params.maxPullbackBars || 5;
     const partialExitR = params.partialExitR || 1.5;
     
-    if (priceHistory.length < 20) return null;
+    if (priceHistory.length < 20) { setNullReason('insufficient_data'); return null; }
     
     const { currentPrice, vwap, volume } = indicators;
     
-    if (!vwap || vwap === 0) return null;
+    if (!vwap || vwap === 0) { setNullReason('insufficient_data'); return null; }
     
     // Check VWAP is trending up
     const vwapHistory = priceHistory.slice(-10).map(p => parseFloat(p.vwap || '0'));
@@ -653,6 +665,7 @@ export class StrategyEngine {
     
     if (vwapSlope < minVWAPSlope) {
       console.log(`[VWAPBounce] VWAP not trending up: slope ${(vwapSlope * 100).toFixed(2)}%`);
+      setNullReason('indicator_filter');
       return null;
     }
     
@@ -703,6 +716,7 @@ export class StrategyEngine {
       return signal;
     }
     
+    setNullReason('price_position');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
       strategy: "vwap_bounce",
@@ -723,19 +737,19 @@ export class StrategyEngine {
     const minLevelTouches = params.minLevelTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
     const volumeRatio = params.volumeRatio || 1.5;
     
-    if (priceHistory.length < 30) return null;
+    if (priceHistory.length < 30) { setNullReason('insufficient_data'); return null; }
     
     // First, detect a range
     const rangeResult = detectRange(priceHistory.slice(0, -5), 10, 5, minLevelTouches);
     
-    if (!rangeResult.isRange) return null;
+    if (!rangeResult.isRange) { setNullReason('range_not_found'); return null; }
     
     // Check for stop zone near resistance
     const currentPrice = parseFloat(priceHistory[priceHistory.length - 1].close);
     const stopZone = detectStopZone(priceHistory, currentPrice, 20, minLevelTouches);
     
     const minClusterStrength = minStopZoneSize === 'small' ? 'weak' : minStopZoneSize === 'large' ? 'strong' : 'medium';
-    if (!stopZone.hasStopZone) return null;
+    if (!stopZone.hasStopZone) { setNullReason('range_not_found'); return null; }
     
     // Check for false breakout and return
     const recentBars = priceHistory.slice(-trapReturnBars - 2);
@@ -786,6 +800,7 @@ export class StrategyEngine {
       return signal;
     }
     
+    setNullReason('breakout_fail');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
       strategy: "liquidity_trap",
@@ -1072,6 +1087,7 @@ export class StrategyEngine {
     
     if (!priceHistory || priceHistory.length < window_session) {
       console.log('[DHMA] Insufficient price history');
+      setNullReason('insufficient_data');
       return null;
     }
     
@@ -1170,6 +1186,7 @@ export class StrategyEngine {
         inputSnapshot: { currentPrice, toxicity, tau_toxicity },
         output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null, rejectionReason: "high_toxicity" }
       }));
+      setNullReason('toxicity_high');
       return null;
     }
     
@@ -1181,6 +1198,7 @@ export class StrategyEngine {
         inputSnapshot: { currentPrice, spreadTicks, maxSpread },
         output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null, rejectionReason: "wide_spread" }
       }));
+      setNullReason('spread_wide');
       return null;
     }
     
@@ -1203,6 +1221,7 @@ export class StrategyEngine {
     );
     
     if (!longSignal && !shortSignal) {
+      setNullReason('regime_alignment');
       console.log('[DHMA] ❌ No regime alignment or insufficient OBI/tilt');
       console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
         symbol: "(pending)",
