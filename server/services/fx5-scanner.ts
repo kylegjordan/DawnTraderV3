@@ -634,7 +634,7 @@ export class Fx5ScannerService {
       familyDbRows[family] = familyRow;
       if (!familyRow) {
         console.error(`[BATCH34][CONFIG_MISSING] No DB row found for family filter path '${familyPath}' \u2014 family IMF filtering will be SKIPPED. Check screener_filters table.`);
-        familyImfThresholds[family] = null;
+        familyImfThresholds[family] = null as any;
         continue;
       }
       familyImfThresholds[family] = {
