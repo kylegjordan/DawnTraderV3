@@ -612,17 +612,16 @@ export class Fx5ScannerService {
       };
 
       // Batch 19G: Load pattern IMF thresholds from DB for pattern pool filtering
+      let patternConfigValid = true;
       if (!patternDbRow) {
-        console.error('[BATCH34][CONFIG_ERROR] No DB row found for pattern filter path \u2014 filter values will be unreliable. Check screener_filters table.');
+        console.error('[BATCH34][CONFIG_MISSING] No DB row found for pattern filter path. Pattern IMF filtering will be SKIPPED this cycle. Check screener_filters table.');
+        patternConfigValid = false;
       }
-      const patternImfThresholds = {
-        LQ_MIN: parseFloat(patternDbRow?.lqMin ?? '0'),
-        VN_MAX: parseFloat(patternDbRow?.vnMax ?? '999'),
-        DI_MIN: parseFloat(patternDbRow?.diMin ?? '0'),
-      };
-      if (!patternDbRow?.lqMin || !patternDbRow?.vnMax || !patternDbRow?.diMin) {
-        console.warn('[BATCH34][CONFIG_WARN] Pattern filter thresholds using permissive defaults due to missing DB values. lqMin=%s vnMax=%s diMin=%s', patternImfThresholds.LQ_MIN, patternImfThresholds.VN_MAX, patternImfThresholds.DI_MIN);
-      }
+      const patternImfThresholds = patternConfigValid ? {
+        LQ_MIN: parseFloat(patternDbRow!.lqMin!),
+        VN_MAX: parseFloat(patternDbRow!.vnMax!),
+        DI_MIN: parseFloat(patternDbRow!.diMin!),
+      } : null;
 
     // Batch 22: Load family-specific filter profiles from DB
     const familyFilterPaths = ['trend', 'reversal', 'breakout', 'oscillator'] as const;
