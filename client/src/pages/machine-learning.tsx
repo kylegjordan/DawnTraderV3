@@ -1852,63 +1852,6 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         </CardContent>
       </Card>
 
-      {/* Batch 33: Metric Distribution Stats */}
-      {(data?.lastScan as any)?.metricDistribution && (
-        <Card className="max-w-4xl">
-          <CardHeader className="py-3">
-            <CardTitle className="text-lg">Metric Distribution (Last Scan)</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left p-2 font-medium">Metric</th>
-                    <th className="text-right p-2 font-medium">Min</th>
-                    <th className="text-right p-2 font-medium">P25</th>
-                    <th className="text-right p-2 font-medium">Median</th>
-                    <th className="text-right p-2 font-medium">P75</th>
-                    <th className="text-right p-2 font-medium">Max</th>
-                    <th className="text-right p-2 font-medium">Count</th>
-                    <th className="text-right p-2 font-medium">Threshold</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const dist = (data?.lastScan as any).metricDistribution;
-                    const metrics = [
-                      { key: 'lq', label: 'LQ (Liquidity Quality)', threshold: '≥ 35', thresholdVal: 35 },
-                      { key: 'di', label: 'DI (Directional Integrity)', threshold: '≥ 10 (pattern)', thresholdVal: 10 },
-                      { key: 'vn', label: 'VN (Volume Noise)', threshold: '≤ 0.93', thresholdVal: 0.93 },
-                    ];
-                    return metrics.map(m => {
-                      const d = dist[m.key];
-                      if (!d || d.count === 0) return null;
-                      const isLQPassThrough = m.key === 'lq' && d.min >= m.thresholdVal;
-                      return (
-                        <tr key={m.key} className="border-b hover:bg-muted/30">
-                          <td className="p-2 font-medium">
-                            {m.label}
-                            {isLQPassThrough && <span className="ml-2 text-xs text-yellow-600">(all above threshold — not filtering)</span>}
-                          </td>
-                          <td className="p-2 text-right">{d.min}</td>
-                          <td className="p-2 text-right">{d.p25}</td>
-                          <td className="p-2 text-right font-semibold">{d.median}</td>
-                          <td className="p-2 text-right">{d.p75}</td>
-                          <td className="p-2 text-right">{d.max}</td>
-                          <td className="p-2 text-right text-muted-foreground">{d.count}</td>
-                          <td className="p-2 text-right text-blue-600">{m.threshold}</td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* TABLE 4: VTS Evaluation Breakdown (Batch 19I) */}
       <Card className="max-w-4xl">
         <CardHeader className="py-3">
@@ -2325,6 +2268,73 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
           )}
         </CardContent>
       </Card>
+      {/* Batch 34: Metric Distribution — moved to bottom, redesigned with plain language */}
+      {(data?.lastScan as any)?.metricDistribution && (
+        <Card className="max-w-4xl">
+          <CardHeader className="py-3">
+            <CardTitle className="text-lg">Filter Metric Ranges (Last Scan — updates each 30s cycle)</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Shows the spread of metric values across pairs that survived global filters. Helps assess whether thresholds are calibrated correctly — if the threshold sits in the middle of the range, it is actively filtering; if all values are well above/below the threshold, the filter is not doing meaningful work.
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              {(() => {
+                const dist = (data?.lastScan as any).metricDistribution;
+                const hasPools = dist?.quant && dist?.pattern;
+                const sections = hasPools
+                  ? [
+                      { label: 'Quant Pool', data: dist.quant, pools: ['lq', 'di'] },
+                      { label: 'Pattern Pool', data: dist.pattern, pools: ['lq', 'di'] },
+                    ]
+                  : [{ label: 'All Survivors', data: dist?.combined || dist, pools: ['lq', 'di', 'vn'] }];
+
+                return sections.map((section) => (
+                  <div key={section.label} className="mb-4">
+                    <div className="px-2 py-1 bg-muted/30 font-medium text-sm">{section.label}</div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">Metric</th>
+                          <th className="text-right p-2 font-medium">Lowest</th>
+                          <th className="text-right p-2 font-medium">25th %ile</th>
+                          <th className="text-right p-2 font-medium">Middle Value</th>
+                          <th className="text-right p-2 font-medium">75th %ile</th>
+                          <th className="text-right p-2 font-medium">Highest</th>
+                          <th className="text-right p-2 font-medium">Pairs</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.pools.map((key) => {
+                          const d = section.data?.[key];
+                          if (!d || d.count === 0) return null;
+                          const labels: Record<string, string> = {
+                            lq: 'Liquidity Quality (higher = more liquid)',
+                            di: 'Directional Integrity (higher = stronger trend)',
+                            vn: 'Volume Noise (lower = cleaner volume)',
+                          };
+                          return (
+                            <tr key={key} className="border-b hover:bg-muted/30">
+                              <td className="p-2 font-medium">{labels[key] || key}</td>
+                              <td className="p-2 text-right">{d.min}</td>
+                              <td className="p-2 text-right">{d.p25}</td>
+                              <td className="p-2 text-right font-semibold">{d.median}</td>
+                              <td className="p-2 text-right">{d.p75}</td>
+                              <td className="p-2 text-right">{d.max}</td>
+                              <td className="p-2 text-right text-muted-foreground">{d.count}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ));
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
     </div>
   );
 }
