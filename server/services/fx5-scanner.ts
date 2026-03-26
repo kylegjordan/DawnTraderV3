@@ -612,11 +612,17 @@ export class Fx5ScannerService {
       };
 
       // Batch 19G: Load pattern IMF thresholds from DB for pattern pool filtering
+      if (!patternDbRow) {
+        console.error('[BATCH34][CONFIG_ERROR] No DB row found for pattern filter path \u2014 filter values will be unreliable. Check screener_filters table.');
+      }
       const patternImfThresholds = {
-        LQ_MIN: parseFloat(patternDbRow?.lqMin ?? '20'),
-        VN_MAX: parseFloat(patternDbRow?.vnMax ?? '0.98'),
-        DI_MIN: parseFloat(patternDbRow?.diMin ?? '10'),
+        LQ_MIN: parseFloat(patternDbRow?.lqMin ?? '0'),
+        VN_MAX: parseFloat(patternDbRow?.vnMax ?? '999'),
+        DI_MIN: parseFloat(patternDbRow?.diMin ?? '0'),
       };
+      if (!patternDbRow?.lqMin || !patternDbRow?.vnMax || !patternDbRow?.diMin) {
+        console.warn('[BATCH34][CONFIG_WARN] Pattern filter thresholds using permissive defaults due to missing DB values. lqMin=%s vnMax=%s diMin=%s', patternImfThresholds.LQ_MIN, patternImfThresholds.VN_MAX, patternImfThresholds.DI_MIN);
+      }
 
     // Batch 22: Load family-specific filter profiles from DB
     const familyFilterPaths = ['trend', 'reversal', 'breakout', 'oscillator'] as const;
@@ -627,12 +633,18 @@ export class Fx5ScannerService {
       const familyPath = isPassiveLearningMode ? `vts_${family}` : `active_${family}`;
       const familyRow = await storage.getScreenerFilters({ mode, filterPath: familyPath });
       familyDbRows[family] = familyRow;
+      if (!familyRow) {
+        console.error(`[BATCH34][CONFIG_ERROR] No DB row found for family filter path '${familyPath}' \u2014 filter values will be unreliable. Check screener_filters table.`);
+      }
       familyImfThresholds[family] = {
-        LQ_MIN: parseFloat(familyRow?.lqMin ?? (family === 'trend' ? '40' : '25')),
-        VN_MAX: parseFloat(familyRow?.vnMax ?? (family === 'trend' ? '0.60' : '0.85')),
-        DI_MIN: parseFloat(familyRow?.diMin ?? (family === 'trend' ? '55' : '0')),
-        DI_MAX: parseFloat(familyRow?.diMax ?? (family === 'reversal' || family === 'oscillator' ? '35' : '100')),
+        LQ_MIN: parseFloat(familyRow?.lqMin ?? '0'),
+        VN_MAX: parseFloat(familyRow?.vnMax ?? '999'),
+        DI_MIN: parseFloat(familyRow?.diMin ?? '0'),
+        DI_MAX: parseFloat(familyRow?.diMax ?? '100'),
       };
+      if (!familyRow?.lqMin || !familyRow?.vnMax || !familyRow?.diMin) {
+        console.warn(`[BATCH34][CONFIG_WARN] Family '${familyPath}' using permissive defaults due to missing DB values. LQ>=${familyImfThresholds[family].LQ_MIN} VN<=${familyImfThresholds[family].VN_MAX} DI=${familyImfThresholds[family].DI_MIN}-${familyImfThresholds[family].DI_MAX}`);
+      }
       console.log(`[22][FX5] Family filter '${familyPath}': LQ>=${familyImfThresholds[family].LQ_MIN} VN<=${familyImfThresholds[family].VN_MAX} DI=${familyImfThresholds[family].DI_MIN}-${familyImfThresholds[family].DI_MAX}`);
     }
 
