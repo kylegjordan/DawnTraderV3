@@ -1165,6 +1165,28 @@ export class Fx5ScannerService {
         destinationCount: metricFilteredSurvivors.length + patternPoolSurvivors.length,
       };
       this.lastScanDiagnostics = scanDiag;
+
+      // Batch 33: Compute metric distribution stats for diagnostics visibility
+      const lqValues = classifiedSurvivors.map(s => s.LQ).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const diValues = classifiedSurvivors.map(s => s.DI).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const vnValues = classifiedSurvivors.map(s => s.VolNoise).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+
+      function computeDistStats(arr: number[]) {
+        if (arr.length === 0) return { min: 0, max: 0, median: 0, p25: 0, p75: 0, count: 0 };
+        const min = arr[0];
+        const max = arr[arr.length - 1];
+        const median = arr[Math.floor(arr.length / 2)];
+        const p25 = arr[Math.floor(arr.length * 0.25)];
+        const p75 = arr[Math.floor(arr.length * 0.75)];
+        return { min: Math.round(min * 100) / 100, max: Math.round(max * 100) / 100, median: Math.round(median * 100) / 100, p25: Math.round(p25 * 100) / 100, p75: Math.round(p75 * 100) / 100, count: arr.length };
+      }
+
+      (scanDiag as any).metricDistribution = {
+        lq: computeDistStats(lqValues),
+        di: computeDistStats(diValues),
+        vn: computeDistStats(vnValues),
+      };
+
       this.scanDiagnosticsHistory.push(scanDiag);
       // Prune history older than 24h
       const diagCutoff = Date.now() - DIAGNOSTICS_ROLLING_WINDOW_MS;
