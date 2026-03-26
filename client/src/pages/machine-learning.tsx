@@ -2112,6 +2112,56 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </table>
                   </div>
                 )}
+
+                {/* Batch 31: Strategy Null Reason Detail — granular reasons from strategy detect functions */}
+                {(ve as any).nullReasonDetail && Object.keys((ve as any).nullReasonDetail).length > 0 && (
+                  <div className="overflow-x-auto">
+                    <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
+                      Strategy Null Reason Detail (24h, cumulative) <span className="normal-case font-normal">— WHY each strategy returned null</span>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-left p-2 font-medium">Reason</th>
+                          <th className="text-right p-2 font-medium">Count</th>
+                          <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const detail = (ve as any).nullReasonDetail as Record<string, number>;
+                          const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
+                          const reasonLabels: Record<string, string> = {
+                            'unknown': 'Not Yet Instrumented',
+                            'insufficient_data': 'Insufficient Price Data / Candles',
+                            'no_pattern': 'No Pattern Detected',
+                            'weak_pattern': 'Pattern Too Weak (below strength threshold)',
+                            'indicator_filter': 'Indicator Out of Range (RSI/ADX/momentum)',
+                            'volume_insufficient': 'Volume Confirmation Failed',
+                            'price_position': 'Price Not in Required Zone',
+                            'guard_fail': 'ATR / Stop / R:R Guard Failed',
+                            'range_not_found': 'No Valid Range / Support Level Found',
+                            'correlation_fail': 'Correlation Check Failed',
+                            'volatility_filter': 'Volatility Percentile Too Low',
+                            'breakout_fail': 'No Breakout Detected',
+                            'toxicity_high': 'High Toxicity (DHMA)',
+                            'spread_wide': 'Spread Too Wide (DHMA)',
+                            'regime_alignment': 'Regime Alignment Failed',
+                          };
+                          return Object.entries(detail)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([reason, count]) => (
+                              <tr key={reason} className="border-b hover:bg-muted/30">
+                                <td className="p-2">{reasonLabels[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(count)}</td>
+                                <td className="p-2 text-right">{totalStratNulls > 0 ? Math.round(count / totalStratNulls * 100) : 0}%</td>
+                              </tr>
+                            ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             );
           })() : (
