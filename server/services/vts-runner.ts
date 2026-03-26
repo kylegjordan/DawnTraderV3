@@ -122,6 +122,7 @@ let patternRecognitionWarmedUp = false;
 
 // Batch 21: VTS evaluation diagnostics — imported from shared types
 import type { VTSEvalSnapshot, NullReasonBreakdown } from '../types/virtual-trade.interface.js';
+import { resetNullReason, getNullReason } from '../utils/null-reason-tracker.js';
 
 const VTS_EVAL_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 let vtsEvalHistory: VTSEvalSnapshot[] = [];
@@ -223,6 +224,7 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
       netEvBelowFloor: 0,
     },
     byStrategy: {},
+    nullReasonDetail: {},
   };
 
   for (const snap of vtsEvalHistory) {
@@ -272,6 +274,13 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
       aggregated.byStrategy[strat].evaluated += counts.evaluated;
       aggregated.byStrategy[strat].nulls += counts.nulls;
       aggregated.byStrategy[strat].signals += counts.signals;
+    }
+    // Batch 31: Aggregate nullReasonDetail
+    if (snap.nullReasonDetail) {
+      if (!aggregated.nullReasonDetail) { aggregated.nullReasonDetail = {}; }
+      for (const [reason, count] of Object.entries(snap.nullReasonDetail)) {
+        aggregated.nullReasonDetail![reason] = (aggregated.nullReasonDetail![reason] ?? 0) + count;
+      }
     }
   }
 
@@ -1507,6 +1516,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       netEvBelowFloor: 0,
     },
     byStrategy: {} as Record<string, { evaluated: number; nulls: number; signals: number }>,
+    nullReasonDetail: {} as Record<string, number>,
   };
   
   // Directive 11.0E.2: Use isolated VTS cache bucket for sandboxing
@@ -1752,6 +1762,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           continue; // Skip — ADX too low for trend-following strategy
         }
 
+        // Batch 31: Reset null reason tracker before each strategy call
+        resetNullReason();
         const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
@@ -1769,6 +1781,10 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             vtsEvalCounters.quantStrategyNulls++;
           }
           vtsEvalCounters.nullReasons.conditionsNotMet++;
+          // Batch 31: Capture granular null reason from strategy
+          const detailReason = getNullReason();
+          if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
+          vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
           continue;
         }
         const { signal, tradeRecord } = result;
