@@ -1176,10 +1176,15 @@ export class Fx5ScannerService {
       };
       this.lastScanDiagnostics = scanDiag;
 
-      // Batch 33: Compute metric distribution stats for diagnostics visibility
-      const lqValues = classifiedSurvivors.map(s => s.LQ).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
-      const diValues = classifiedSurvivors.map(s => s.DI).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
-      const vnValues = classifiedSurvivors.map(s => s.VolNoise).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      // Batch 34: Compute metric distribution stats — combined + per-pool (quant and pattern)
+      const allSurvivors = [...classifiedSurvivors, ...patternPoolSurvivors];
+      const lqValues = allSurvivors.map(s => s.LQ).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const diValues = allSurvivors.map(s => s.DI).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const vnValues = allSurvivors.map(s => s.VolNoise).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const quantLqValues = classifiedSurvivors.map(s => s.LQ).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const quantDiValues = classifiedSurvivors.map(s => s.DI).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const patternLqValues = patternPoolSurvivors.map(s => s.LQ).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
+      const patternDiValues = patternPoolSurvivors.map(s => s.DI).filter(v => v !== undefined && v !== null && Number.isFinite(v)).sort((a, b) => a - b);
 
       function computeDistStats(arr: number[]) {
         if (arr.length === 0) return { min: 0, max: 0, median: 0, p25: 0, p75: 0, count: 0 };
@@ -1192,9 +1197,19 @@ export class Fx5ScannerService {
       }
 
       (scanDiag as any).metricDistribution = {
-        lq: computeDistStats(lqValues),
-        di: computeDistStats(diValues),
-        vn: computeDistStats(vnValues),
+        combined: {
+          lq: computeDistStats(lqValues),
+          di: computeDistStats(diValues),
+          vn: computeDistStats(vnValues),
+        },
+        quant: {
+          lq: computeDistStats(quantLqValues),
+          di: computeDistStats(quantDiValues),
+        },
+        pattern: {
+          lq: computeDistStats(patternLqValues),
+          di: computeDistStats(patternDiValues),
+        },
       };
 
       this.scanDiagnosticsHistory.push(scanDiag);
