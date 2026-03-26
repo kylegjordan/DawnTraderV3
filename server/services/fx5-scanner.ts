@@ -626,25 +626,24 @@ export class Fx5ScannerService {
     // Batch 22: Load family-specific filter profiles from DB
     const familyFilterPaths = ['trend', 'reversal', 'breakout', 'oscillator'] as const;
     const familyDbRows: Record<string, any> = {};
-    const familyImfThresholds: Record<string, { LQ_MIN: number; VN_MAX: number; DI_MIN: number; DI_MAX: number }> = {};
+    const familyImfThresholds: Record<string, { LQ_MIN: number; VN_MAX: number; DI_MIN: number; DI_MAX: number } | null> = {};
 
     for (const family of familyFilterPaths) {
       const familyPath = isPassiveLearningMode ? `vts_${family}` : `active_${family}`;
       const familyRow = await storage.getScreenerFilters({ mode, filterPath: familyPath });
       familyDbRows[family] = familyRow;
       if (!familyRow) {
-        console.error(`[BATCH34][CONFIG_ERROR] No DB row found for family filter path '${familyPath}' \u2014 filter values will be unreliable. Check screener_filters table.`);
+        console.error(`[BATCH34][CONFIG_MISSING] No DB row found for family filter path '${familyPath}' \u2014 family IMF filtering will be SKIPPED. Check screener_filters table.`);
+        familyImfThresholds[family] = null;
+        continue;
       }
       familyImfThresholds[family] = {
-        LQ_MIN: parseFloat(familyRow?.lqMin ?? '0'),
-        VN_MAX: parseFloat(familyRow?.vnMax ?? '999'),
-        DI_MIN: parseFloat(familyRow?.diMin ?? '0'),
-        DI_MAX: parseFloat(familyRow?.diMax ?? '100'),
+        LQ_MIN: parseFloat(familyRow.lqMin!),
+        VN_MAX: parseFloat(familyRow.vnMax!),
+        DI_MIN: parseFloat(familyRow.diMin!),
+        DI_MAX: parseFloat(familyRow.diMax!),
       };
-      if (!familyRow?.lqMin || !familyRow?.vnMax || !familyRow?.diMin) {
-        console.warn(`[BATCH34][CONFIG_WARN] Family '${familyPath}' using permissive defaults due to missing DB values. LQ>=${familyImfThresholds[family].LQ_MIN} VN<=${familyImfThresholds[family].VN_MAX} DI=${familyImfThresholds[family].DI_MIN}-${familyImfThresholds[family].DI_MAX}`);
-      }
-      console.log(`[22][FX5] Family filter '${familyPath}': LQ>=${familyImfThresholds[family].LQ_MIN} VN<=${familyImfThresholds[family].VN_MAX} DI=${familyImfThresholds[family].DI_MIN}-${familyImfThresholds[family].DI_MAX}`);
+      console.log(`[22][FX5] Family filter '${familyPath}': LQ>=${familyImfThresholds[family]!.LQ_MIN} VN<=${familyImfThresholds[family]!.VN_MAX} DI=${familyImfThresholds[family]!.DI_MIN}-${familyImfThresholds[family]!.DI_MAX}`);
     }
 
       // Directive 11.4C.1: Execute adaptive batch scanning (100 pairs: 60% Ideal + 40% Rotational)
