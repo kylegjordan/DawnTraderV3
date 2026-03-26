@@ -30,6 +30,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // ============================================================================
 // Strategy Constants
@@ -73,17 +74,20 @@ export function detectMorningStar(
   const ohlc = parseCandles(candles);
   if (ohlc.length < 20) {
     console.log(`${LOG_PREFIX} Insufficient candle data (${ohlc.length} < 20). Skipping.`);
+    setNullReason('insufficient_data');
     return null;
   }
 
   // ── Condition 1: Pattern must be MORNING_STAR / BUY ──────────────────────
   if (!patternSignal || patternSignal.pattern !== 'MORNING_STAR' || patternSignal.direction !== 'BUY') {
+    setNullReason('no_pattern');
     return null;
   }
 
   // ── Condition 2: Minimum pattern strength ────────────────────────────────
   if (patternSignal.strength < MS_MIN_STRENGTH) {
     console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < ${MS_MIN_STRENGTH}. Skipping.`);
+    setNullReason('weak_pattern');
     return null;
   }
 
@@ -91,10 +95,12 @@ export function detectMorningStar(
   const sma20 = calculateSMA(ohlc, 20);
   if (sma20 === 0) {
     console.log(`${LOG_PREFIX} SMA(20) could not be computed. Skipping.`);
+    setNullReason('indicator_filter');
     return null;
   }
   if (currentPrice >= sma20) {
     console.log(`${LOG_PREFIX} Price ${currentPrice} >= SMA(20) ${sma20.toFixed(4)}. Skipping.`);
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -106,6 +112,7 @@ export function detectMorningStar(
       `${LOG_PREFIX} Volume check failed: c3Vol=${c3Volume.toFixed(2)}, ` +
       `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * MS_VOL_MULT).toFixed(2)}. Skipping.`
     );
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -113,6 +120,7 @@ export function detectMorningStar(
   const effectiveATR = getEffectiveATR(ohlc, currentPrice);
   if (effectiveATR === null) {
     console.log(`${LOG_PREFIX} ATR guard failed (ATR too small or zero). Skipping.`);
+    setNullReason('guard_fail');
     return null;
   }
 
@@ -129,6 +137,7 @@ export function detectMorningStar(
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
     console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
+    setNullReason('guard_fail');
     return null;
   }
 

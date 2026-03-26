@@ -25,6 +25,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -70,6 +71,7 @@ export function detectReverseImpulse(
   const ohlc = parseCandles(candles);
   if (ohlc.length < RI_LOOKBACK + 1) {
     console.log(`${LOG_PREFIX} Insufficient candles: ${ohlc.length}`);
+    setNullReason('insufficient_data');
     return null;
   }
 
@@ -78,14 +80,17 @@ export function detectReverseImpulse(
   // ── Pattern gate ───────────────────────────────────────────
   if (!patternSignal) {
     console.log(`${LOG_PREFIX} No pattern signal`);
+    setNullReason('no_pattern');
     return null;
   }
   if (patternSignal.pattern !== 'PINBAR' || patternSignal.direction !== 'BUY') {
     console.log(`${LOG_PREFIX} Pattern mismatch: ${patternSignal.pattern}/${patternSignal.direction}`);
+    setNullReason('no_pattern');
     return null;
   }
   if (patternSignal.strength < RI_MIN_STRENGTH) {
     console.log(`${LOG_PREFIX} Strength too low: ${patternSignal.strength.toFixed(3)} < ${RI_MIN_STRENGTH}`);
+    setNullReason('weak_pattern');
     return null;
   }
 
@@ -93,6 +98,7 @@ export function detectReverseImpulse(
   const momMin = minMomentum(ohlc, RI_LOOKBACK);
   if (momMin > RI_MOMENTUM_THRESHOLD) {
     console.log(`${LOG_PREFIX} Momentum not negative enough: ${momMin.toFixed(5)} > ${RI_MOMENTUM_THRESHOLD}`);
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -102,6 +108,7 @@ export function detectReverseImpulse(
   const pinbarVolume = lastCandle.volume;
   if (avgVol <= 0 || pinbarVolume < avgVol * RI_VOL_MULT) {
     console.log(`${LOG_PREFIX} Volume too low: ${pinbarVolume.toFixed(2)} < ${(avgVol * RI_VOL_MULT).toFixed(2)}`);
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -109,6 +116,7 @@ export function detectReverseImpulse(
   const rsi = calculateRSI(ohlc, 14);
   if (rsi >= RI_RSI_MAX) {
     console.log(`${LOG_PREFIX} RSI not oversold: ${rsi.toFixed(2)} >= ${RI_RSI_MAX}`);
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -116,6 +124,7 @@ export function detectReverseImpulse(
   const effectiveATR = getEffectiveATR(ohlc, currentPrice);
   if (effectiveATR === null) {
     console.log(`${LOG_PREFIX} ATR guard rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 
@@ -128,6 +137,7 @@ export function detectReverseImpulse(
   // ── Global guards ──────────────────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 

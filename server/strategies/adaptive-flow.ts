@@ -26,6 +26,7 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -74,6 +75,7 @@ export function detectAdaptiveFlow(
   const ohlc = parseCandles(candles);
   if (ohlc.length < AF_VOL_PERCENTILE_WINDOW + 15) {
     console.log(`${LOG_PREFIX} Insufficient candles: ${ohlc.length}`);
+    setNullReason('insufficient_data');
     return null;
   }
 
@@ -82,14 +84,17 @@ export function detectAdaptiveFlow(
   // ── Pattern gate ───────────────────────────────────────────
   if (!patternSignal) {
     console.log(`${LOG_PREFIX} No pattern signal`);
+    setNullReason('no_pattern');
     return null;
   }
   if (patternSignal.pattern !== 'THREE_SOLDIERS' || patternSignal.direction !== 'BUY') {
     console.log(`${LOG_PREFIX} Pattern mismatch: ${patternSignal.pattern}/${patternSignal.direction}`);
+    setNullReason('no_pattern');
     return null;
   }
   if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
     console.log(`${LOG_PREFIX} Strength too low: ${patternSignal.strength.toFixed(3)} < 0.50`);
+    setNullReason('weak_pattern');
     return null;
   }
 
@@ -97,6 +102,7 @@ export function detectAdaptiveFlow(
   const inversionCount = countMomentumInversions(ohlc, AF_LOOKBACK);
   if (inversionCount < AF_MIN_INVERSIONS) {
     console.log(`${LOG_PREFIX} Too few inversions: ${inversionCount} < ${AF_MIN_INVERSIONS}`);
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -104,6 +110,7 @@ export function detectAdaptiveFlow(
   const volPercentile = volatilityPercentile(ohlc, AF_VOL_PERCENTILE_WINDOW);
   if (volPercentile < AF_MIN_VOL_PERCENTILE) {
     console.log(`${LOG_PREFIX} Vol percentile too low: ${volPercentile.toFixed(2)} < ${AF_MIN_VOL_PERCENTILE}`);
+    setNullReason('volatility_filter');
     return null;
   }
 
@@ -114,6 +121,7 @@ export function detectAdaptiveFlow(
 
   if (avgVol <= 0 || currentVolume < avgVol * AF_VOL_MULT) {
     console.log(`${LOG_PREFIX} Volume too low: ${currentVolume.toFixed(2)} < ${(avgVol * AF_VOL_MULT).toFixed(2)}`);
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -121,6 +129,7 @@ export function detectAdaptiveFlow(
   const adx = calculateADX(ohlc, 14);
   if (adx >= AF_ADX_MAX) {
     console.log(`${LOG_PREFIX} ADX too high (trending): ${adx.toFixed(2)} >= ${AF_ADX_MAX}`);
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -128,6 +137,7 @@ export function detectAdaptiveFlow(
   const effectiveATR = getEffectiveATR(ohlc, currentPrice);
   if (effectiveATR === null) {
     console.log(`${LOG_PREFIX} ATR guard rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 
@@ -151,6 +161,7 @@ export function detectAdaptiveFlow(
   // ── Global guards ──────────────────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 

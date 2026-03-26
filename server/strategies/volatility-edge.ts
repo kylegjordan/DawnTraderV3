@@ -30,6 +30,7 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -79,6 +80,7 @@ export function detectVolatilityEdge(
   const ohlc = parseCandles(candles);
   if (ohlc.length < 50 + 15) {
     console.log(`${LOG_PREFIX} Insufficient candles: ${ohlc.length}`);
+    setNullReason('insufficient_data');
     return null;
   }
 
@@ -87,6 +89,7 @@ export function detectVolatilityEdge(
   // ── Pattern gate — ABCD metadata required ──────────────────
   if (!patternSignal) {
     console.log(`${LOG_PREFIX} No pattern signal`);
+    setNullReason('no_pattern');
     return null;
   }
 
@@ -99,6 +102,7 @@ export function detectVolatilityEdge(
     typeof meta.cPointHigh !== 'number'
   ) {
     console.log(`${LOG_PREFIX} Missing ABCD metadata fields (aPointLow, bPointHigh, cPointLow, cPointHigh)`);
+    setNullReason('no_pattern');
     return null;
   }
 
@@ -113,6 +117,7 @@ export function detectVolatilityEdge(
 
   if (avgVol <= 0 || aPointVolume < avgVol * VE_A_VOL_MULT) {
     console.log(`${LOG_PREFIX} A-point volume too low: ${aPointVolume.toFixed(2)} < ${(avgVol * VE_A_VOL_MULT).toFixed(2)}`);
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -120,18 +125,21 @@ export function detectVolatilityEdge(
   const volPercentile = volatilityPercentile(ohlc, 50);
   if (volPercentile < VE_MIN_VOL_PERCENTILE) {
     console.log(`${LOG_PREFIX} Vol percentile too low: ${volPercentile.toFixed(2)} < ${VE_MIN_VOL_PERCENTILE}`);
+    setNullReason('volatility_filter');
     return null;
   }
 
   // ── C-point above VWAP gate ────────────────────────────────
   if (cPointLow <= vwap) {
     console.log(`${LOG_PREFIX} C-point low (${cPointLow.toFixed(6)}) <= VWAP (${vwap.toFixed(6)})`);
+    setNullReason('price_position');
     return null;
   }
 
   // ── Breakout confirmation ──────────────────────────────────
   if (currentPrice <= cPointHigh * (1 + VE_BREAKOUT_BUFFER)) {
     console.log(`${LOG_PREFIX} No breakout: price ${currentPrice.toFixed(6)} <= cPointHigh*1.002 (${(cPointHigh * (1 + VE_BREAKOUT_BUFFER)).toFixed(6)})`);
+    setNullReason('breakout_fail');
     return null;
   }
 
@@ -140,6 +148,7 @@ export function detectVolatilityEdge(
   const breakoutVolume = lastCandle.volume;
   if (breakoutVolume < avgVol * VE_BREAKOUT_VOL_MULT) {
     console.log(`${LOG_PREFIX} Breakout volume too low: ${breakoutVolume.toFixed(2)} < ${(avgVol * VE_BREAKOUT_VOL_MULT).toFixed(2)}`);
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -147,6 +156,7 @@ export function detectVolatilityEdge(
   const effectiveATR = getEffectiveATR(ohlc, currentPrice);
   if (effectiveATR === null) {
     console.log(`${LOG_PREFIX} ATR guard rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 
@@ -164,6 +174,7 @@ export function detectVolatilityEdge(
   // ── Global guards ──────────────────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 

@@ -32,6 +32,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // ============================================================================
 // Strategy Constants
@@ -77,11 +78,13 @@ export function detectInsideBarReversal(
   const ohlc = parseCandles(candles);
   if (ohlc.length < 20) {
     console.log(`${LOG_PREFIX} Insufficient candle data (${ohlc.length} < 20). Skipping.`);
+    setNullReason('insufficient_data');
     return null;
   }
 
   // ── Condition 1: Pattern must be INSIDE_BAR ──────────────────────────────
   if (!patternSignal || patternSignal.pattern !== 'INSIDE_BAR') {
+    setNullReason('no_pattern');
     return null;
   }
 
@@ -92,6 +95,7 @@ export function detectInsideBarReversal(
 
   if (parentHigh === 0 || parentLow === 0) {
     console.log(`${LOG_PREFIX} Missing parentHigh/parentLow in metadata. Skipping.`);
+    setNullReason('no_pattern');
     return null;
   }
 
@@ -100,6 +104,7 @@ export function detectInsideBarReversal(
     console.log(
       `${LOG_PREFIX} Compression ratio ${compressionRatio.toFixed(3)} > ${IB_MAX_COMPRESSION}. Skipping.`
     );
+    setNullReason('no_pattern');
     return null;
   }
 
@@ -112,6 +117,7 @@ export function detectInsideBarReversal(
       `${LOG_PREFIX} No breakout detected: price=${currentPrice.toFixed(4)}, ` +
       `parentHigh=${parentHigh.toFixed(4)}, parentLow=${parentLow.toFixed(4)}. Skipping.`
     );
+    setNullReason('breakout_fail');
     return null;
   }
 
@@ -125,6 +131,7 @@ export function detectInsideBarReversal(
       `${LOG_PREFIX} Volume check failed: breakoutVol=${breakoutVolume.toFixed(2)}, ` +
       `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * IB_VOL_MULT).toFixed(2)}. Skipping.`
     );
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -132,10 +139,12 @@ export function detectInsideBarReversal(
   const rsi = calculateRSI(ohlc, 14);
   if (direction === 'BUY' && rsi >= 65) {
     console.log(`${LOG_PREFIX} BUY RSI filter: RSI=${rsi.toFixed(2)} >= 65. Skipping.`);
+    setNullReason('indicator_filter');
     return null;
   }
   if (direction === 'SELL' && rsi <= IB_SELL_RSI_MIN) {
     console.log(`${LOG_PREFIX} SELL RSI filter: RSI=${rsi.toFixed(2)} <= ${IB_SELL_RSI_MIN}. Skipping.`);
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -143,6 +152,7 @@ export function detectInsideBarReversal(
   const effectiveATR = getEffectiveATR(ohlc, currentPrice);
   if (effectiveATR === null) {
     console.log(`${LOG_PREFIX} ATR guard failed (ATR too small or zero). Skipping.`);
+    setNullReason('guard_fail');
     return null;
   }
 
@@ -164,6 +174,7 @@ export function detectInsideBarReversal(
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
     console.log(`${LOG_PREFIX} Global guards failed for ${direction}. Skipping.`);
+    setNullReason('guard_fail');
     return null;
   }
 

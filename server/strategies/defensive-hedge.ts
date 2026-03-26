@@ -26,6 +26,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -91,17 +92,20 @@ export function detectDefensiveHedge(
   const ohlc = parseCandles(candles);
   if (ohlc.length < DH_CORR_WINDOW + 2) {
     console.log(`${LOG_PREFIX} Insufficient asset candles: ${ohlc.length}`);
+    setNullReason('insufficient_data');
     return null;
   }
 
   // ── BTC candles required ───────────────────────────────────
   if (!btcCandles || btcCandles.length === 0) {
     console.log(`${LOG_PREFIX} No BTC candles provided — cannot compute correlation`);
+    setNullReason('insufficient_data');
     return null;
   }
   const btcOhlc = parseCandles(btcCandles);
   if (btcOhlc.length < DH_CORR_WINDOW + 2) {
     console.log(`${LOG_PREFIX} Insufficient BTC candles: ${btcOhlc.length}`);
+    setNullReason('insufficient_data');
     return null;
   }
 
@@ -123,14 +127,17 @@ export function detectDefensiveHedge(
   // ── Pattern gate ───────────────────────────────────────────
   if (!patternSignal) {
     console.log(`${LOG_PREFIX} No pattern signal`);
+    setNullReason('no_pattern');
     return null;
   }
   if (patternSignal.pattern !== 'ENGULFING' || patternSignal.direction !== 'BUY') {
     console.log(`${LOG_PREFIX} Pattern mismatch: ${patternSignal.pattern}/${patternSignal.direction}`);
+    setNullReason('no_pattern');
     return null;
   }
   if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
     console.log(`${LOG_PREFIX} Strength too low: ${patternSignal.strength.toFixed(3)} < 0.50`);
+    setNullReason('weak_pattern');
     return null;
   }
 
@@ -141,6 +148,7 @@ export function detectDefensiveHedge(
 
   if (Math.abs(btcCorrelation) >= DH_MAX_CORRELATION) {
     console.log(`${LOG_PREFIX} Correlation too high: |${btcCorrelation.toFixed(4)}| >= ${DH_MAX_CORRELATION}`);
+    setNullReason('correlation_fail');
     return null;
   }
 
@@ -150,12 +158,14 @@ export function detectDefensiveHedge(
 
   if (marketVol <= 0) {
     console.log(`${LOG_PREFIX} Market volatility is zero — cannot compute offset`);
+    setNullReason('insufficient_data');
     return null;
   }
 
   const volOffset = (assetVol - marketVol) / marketVol;
   if (volOffset <= DH_MIN_VOL_OFFSET) {
     console.log(`${LOG_PREFIX} Volatility offset too low: ${volOffset.toFixed(4)} <= ${DH_MIN_VOL_OFFSET}`);
+    setNullReason('volatility_filter');
     return null;
   }
 
@@ -166,6 +176,7 @@ export function detectDefensiveHedge(
 
   if (avgVol <= 0 || engulfingVolume < avgVol * DH_VOL_MULT) {
     console.log(`${LOG_PREFIX} Volume too low: ${engulfingVolume.toFixed(2)} < ${(avgVol * DH_VOL_MULT).toFixed(2)}`);
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -173,6 +184,7 @@ export function detectDefensiveHedge(
   const effectiveATR = getEffectiveATR(ohlc, currentPrice);
   if (effectiveATR === null) {
     console.log(`${LOG_PREFIX} ATR guard rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 
@@ -189,6 +201,7 @@ export function detectDefensiveHedge(
   // ── Global guards ──────────────────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
+    setNullReason('guard_fail');
     return null;
   }
 

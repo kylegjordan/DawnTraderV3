@@ -31,6 +31,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // ============================================================================
 // Strategy Constants
@@ -77,17 +78,20 @@ export function detectPivotShift(
   const ohlc = parseCandles(candles);
   if (ohlc.length < 30) {
     console.log(`${LOG_PREFIX} Insufficient candle data (${ohlc.length} < 30). Skipping.`);
+    setNullReason('insufficient_data');
     return null;
   }
 
   // ── Condition 1: Pattern must be MORNING_STAR / BUY ──────────────────────
   if (!patternSignal || patternSignal.pattern !== 'MORNING_STAR' || patternSignal.direction !== 'BUY') {
+    setNullReason('no_pattern');
     return null;
   }
 
   // ── Condition 2: Minimum pattern strength ────────────────────────────────
   if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
     console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.50. Skipping.`);
+    setNullReason('weak_pattern');
     return null;
   }
 
@@ -95,6 +99,7 @@ export function detectPivotShift(
   const rsi = calculateRSI(ohlc, 14);
   if (rsi < PS_RSI_LOW || rsi > PS_RSI_HIGH) {
     console.log(`${LOG_PREFIX} RSI ${rsi.toFixed(2)} outside [${PS_RSI_LOW}, ${PS_RSI_HIGH}]. Skipping.`);
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -102,6 +107,7 @@ export function detectPivotShift(
   const adxSeries = calculateADXSeries(ohlc, 14);
   if (adxSeries.length < 3) {
     console.log(`${LOG_PREFIX} ADX series too short (${adxSeries.length} < 3). Skipping.`);
+    setNullReason('insufficient_data');
     return null;
   }
 
@@ -117,6 +123,7 @@ export function detectPivotShift(
       `${LOG_PREFIX} ADX slope check failed: slope1=${slope1.toFixed(3)}, slope2=${slope2.toFixed(3)} ` +
       `(min=${PS_ADX_SLOPE_MIN}). Skipping.`
     );
+    setNullReason('indicator_filter');
     return null;
   }
 
@@ -128,6 +135,7 @@ export function detectPivotShift(
       `${LOG_PREFIX} Volume check failed: currentVol=${currentVolume.toFixed(2)}, ` +
       `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * PS_VOL_MULT).toFixed(2)}. Skipping.`
     );
+    setNullReason('volume_insufficient');
     return null;
   }
 
@@ -135,6 +143,7 @@ export function detectPivotShift(
   const effectiveATR = getEffectiveATR(ohlc, currentPrice);
   if (effectiveATR === null) {
     console.log(`${LOG_PREFIX} ATR guard failed (ATR too small or zero). Skipping.`);
+    setNullReason('guard_fail');
     return null;
   }
 
@@ -157,6 +166,7 @@ export function detectPivotShift(
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
     console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
+    setNullReason('guard_fail');
     return null;
   }
 
