@@ -1892,7 +1892,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <td className="p-2 text-right">{fmt((ve as any).pairsSkippedNoPrice ?? 0)}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30 text-xs text-muted-foreground">
-                        <td className="p-2 pl-6">↳ Skipped: Insufficient OHLC (< 10 candles)</td>
+                        <td className="p-2 pl-6">↳ Skipped: Insufficient OHLC (&lt; 10 candles)</td>
                         <td className="p-2 text-right">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
                         <td className="p-2 text-right">—</td>
                         <td className="p-2 text-right">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
