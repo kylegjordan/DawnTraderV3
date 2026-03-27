@@ -880,6 +880,18 @@ async function generatePhase10Signal(
       source: 'VTS'
     });
     console.log(`[18L][NetEV] Skipping ${symbol}: Net EV=${kernelResult.netEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
+    if (counters) {
+      if (!counters.rejectedReasons) {
+        counters.rejectedReasons = { netEvBelowFloor: 0 };
+      }
+      counters.rejectedReasons.netEvBelowFloor++;
+      counters.signalsRejected = (counters.signalsRejected ?? 0) + 1;
+      if (isQuantPool(sourcePool)) {
+        counters.quantSignalsRejected = (counters.quantSignalsRejected ?? 0) + 1;
+      } else {
+        counters.patternSignalsRejected = (counters.patternSignalsRejected ?? 0) + 1;
+      }
+    }
     return null;
   }
   
