@@ -1078,6 +1078,16 @@ export class Fx5ScannerService {
       console.log(`[22][FX5] Family '${family}' IMF: ${passed} passed / ${classifiedSurvivors.length} total (LQ=${failedLQ} VN=${failedVN} DI=${failedDI} failed)`);
     }
 
+      // Batch 35: Compute quant-level DI failures = unique pairs that failed DI in ALL families
+      const pairsFailedDiAllFamilies = classifiedSurvivors.filter(s => {
+        const di = s.DI ?? 50;
+        return !familyFilterPaths.some(f => {
+          const t = familyImfThresholds[f];
+          return t && di >= t.DI_MIN && di <= t.DI_MAX;
+        });
+      });
+      // Batch 35: Compute pattern benchmark bypassed count
+      const patternBenchmarkBypassed = patternPoolSurvivors.filter((s: any) => s.isBenchmark || s.bypassVolatilityReject || s.bypassBoringReject).length;
       const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
       const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
       const benchmarkBypassedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && (s.bypassVolatilityReject || s.bypassBoringReject)).length;
