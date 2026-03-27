@@ -1685,15 +1685,15 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedVN) : '—'}
                     </td>
                   </tr>
-                  {lastScan.pattern.imf && (
-                    <tr className="border-b hover:bg-muted/30">
-                      <td className="p-2">Failed DI</td>
-                      <td className="p-2 text-right text-muted-foreground">—</td>
-                      <td className={`p-2 text-right ${getRejectionColor(lastScan.pattern.imf.failedDI, lastScan.pattern.imf.total)}`}>
-                        {fmt(lastScan.pattern.imf.failedDI)}
-                      </td>
-                    </tr>
-                  )}
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed DI</td>
+                    <td className={`p-2 text-right ${getRejectionColor((lastScan.quant.imf as any).failedDI ?? 0, lastScan.quant.imf.total)}`}>
+                      {fmt((lastScan.quant.imf as any).failedDI ?? 0)}
+                    </td>
+                    <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedDI, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
+                      {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedDI) : '—'}
+                    </td>
+                  </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Benchmark Bypassed</td>
                     <td className="p-2 text-right text-blue-500">{fmt(lastScan.quant.imf.benchmarkBypassed)}</td>
@@ -2015,7 +2015,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                 {ve.nullReasons && (
                   <div className="overflow-x-auto">
                     <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
-                      Strategy Null Reason Breakdown <span className="normal-case font-normal">— categories should sum to Total Strategy Nulls above</span>
+                      Strategy Null Reason Breakdown <span className="normal-case font-normal">— by-strategy totals may differ from top-level due to pair-level skips (max trades, no regime strategies) counted before strategy evaluation</span>
                     </div>
                     <table className="w-full text-sm">
                       <thead>

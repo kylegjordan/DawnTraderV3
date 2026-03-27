@@ -287,7 +287,7 @@ export class Fx5ScannerService {
 
     // Aggregate quant global
     const aggQuantGlobal = { failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0, failed_min_price: 0, failed_stablecoin: 0, failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0, failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0, passed_all_filters: 0 };
-    const aggQuantImf = { failedLQ: 0, failedVN: 0, passed: 0, total: 0, benchmarkBypassed: 0 };
+    const aggQuantImf = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0 };
     let aggQuantSurvivors = 0;
 
     // Aggregate pattern global
@@ -309,6 +309,7 @@ export class Fx5ScannerService {
       }
       aggQuantImf.failedLQ += d.quant.imf.failedLQ;
       aggQuantImf.failedVN += d.quant.imf.failedVN;
+      aggQuantImf.failedDI += (d.quant.imf as any).failedDI ?? 0;
       aggQuantImf.passed += d.quant.imf.passed;
       aggQuantImf.total += d.quant.imf.total;
       aggQuantImf.benchmarkBypassed += d.quant.imf.benchmarkBypassed;
