@@ -1771,50 +1771,62 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <th className="text-left p-2 font-medium">Filter</th>
                     <th className="text-right p-2 font-medium">Quant Global (24h)</th>
                     <th className="text-right p-2 font-medium">Pattern Global (24h)</th>
+                    <th className="text-right p-2 font-medium">Total (24h)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(rolling24h.aggregated.quant.global).map(([key, value]) => (
-                    <tr key={key} className="border-b hover:bg-muted/30">
-                      <td className="p-2">{formatFilterName(key)}</td>
-                      <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, rolling24h.totalPairsScanned)}`}>
-                        {fmt(value as number)}
-                      </td>
-                      <td className={`p-2 text-right ${rolling24h.aggregated.pattern.global && key in rolling24h.aggregated.pattern.global ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : '') : 'text-muted-foreground'}`}>
-                        {rolling24h.aggregated.pattern.global && key in (rolling24h.aggregated.pattern.global as Record<string, number>)
-                          ? fmt((rolling24h.aggregated.pattern.global as Record<string, number>)[key])
-                          : '—'}
-                      </td>
-                    </tr>
-                  ))}
+                  {Object.entries(rolling24h.aggregated.quant.global).map(([key, value]) => {
+                    const patternVal = rolling24h.aggregated.pattern.global && key in (rolling24h.aggregated.pattern.global as Record<string, number>)
+                      ? (rolling24h.aggregated.pattern.global as Record<string, number>)[key]
+                      : null;
+                    const total = (value as number) + (patternVal ?? 0);
+                    return (
+                      <tr key={key} className="border-b hover:bg-muted/30">
+                        <td className="p-2">{formatFilterName(key)}</td>
+                        <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, rolling24h.totalPairsScanned)}`}>
+                          {fmt(value as number)}
+                        </td>
+                        <td className={`p-2 text-right ${patternVal !== null ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : '') : 'text-muted-foreground'}`}>
+                          {patternVal !== null ? fmt(patternVal) : '—'}
+                        </td>
+                        <td className={`p-2 text-right font-medium ${key === 'passed_all_filters' ? 'text-green-600' : ''}`}>
+                          {fmt(total)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   <tr className="border-b bg-muted/50">
-                    <td colSpan={3} className="p-2 font-medium text-xs uppercase tracking-wider">IMF Metrics (24h Totals)</td>
+                    <td colSpan={4} className="p-2 font-medium text-xs uppercase tracking-wider">IMF Metrics (24h Totals)</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed LQ</td>
                     <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedLQ)}</td>
                     <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedLQ) : '—'}</td>
+                    <td className="p-2 text-right font-medium">{fmt(rolling24h.aggregated.quant.imf.failedLQ + (rolling24h.aggregated.pattern.imf?.failedLQ ?? 0))}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed VN</td>
                     <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedVN)}</td>
                     <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedVN) : '—'}</td>
+                    <td className="p-2 text-right font-medium">{fmt(rolling24h.aggregated.quant.imf.failedVN + (rolling24h.aggregated.pattern.imf?.failedVN ?? 0))}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed DI</td>
-                    <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-right">{fmt((rolling24h.aggregated.quant.imf as any).failedDI ?? 0)}</td>
                     <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedDI) : '—'}</td>
+                    <td className="p-2 text-right font-medium">{fmt(((rolling24h.aggregated.quant.imf as any).failedDI ?? 0) + (rolling24h.aggregated.pattern.imf?.failedDI ?? 0))}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Benchmark Bypassed</td>
                     <td className="p-2 text-right text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
-                    <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-right text-blue-500">{fmt((rolling24h.aggregated.pattern.imf as any)?.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right font-medium text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed + ((rolling24h.aggregated.pattern.imf as any)?.benchmarkBypassed ?? 0))}</td>
                   </tr>
                   {/* Batch 22 HF2: Family Path 24h Rolling Results */}
                   {rolling24h.aggregated.familyPaths && (
                     <>
                       <tr className="bg-muted/30">
-                        <td colSpan={3} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        <td colSpan={4} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Family Path IMF Results (24h)
                         </td>
                       </tr>
@@ -1833,6 +1845,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <td className="p-2 text-right text-xs text-muted-foreground">
                               LQ:{fmt(fp.imf?.failedLQ ?? 0)} VN:{fmt(fp.imf?.failedVN ?? 0)} DI:{fmt(fp.imf?.failedDI ?? 0)}
                             </td>
+                            <td className="p-2 text-right text-xs text-muted-foreground">—</td>
                           </tr>
                         );
                       })}
@@ -1842,6 +1855,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2">Total Survivors (24h) <span className="text-xs text-muted-foreground">(cumulative across scan cycles, not unique pairs)</span></td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.survivors)}</td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.pattern.survivors)}</td>
+                    <td className="p-2 text-right text-green-600 font-medium">{fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors)}</td>
                   </tr>
                 </tbody>
               </table>
