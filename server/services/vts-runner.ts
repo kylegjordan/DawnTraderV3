@@ -633,7 +633,8 @@ async function generatePhase10Signal(
   pool: 'ideal' | 'rotational',
   strategyOverride?: StrategyDefinition,
   filterTier?: 'standard' | 'relaxed',
-  sourcePool?: 'quant' | 'pattern' // Batch 19E: Track origin pool
+  sourcePool?: 'quant' | 'pattern', // Batch 19E: Track origin pool
+  counters?: any
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
@@ -666,6 +667,10 @@ async function generatePhase10Signal(
   
   const detectedPatterns = scanPatterns(candles, symbol);
   const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
+  if (counters && (sourcePool === 'quant' || !sourcePool)) {
+    if (detectedPattern) { counters.quantPatternDetected = (counters.quantPatternDetected ?? 0) + 1; }
+    else { counters.quantPatternNoDetection = (counters.quantPatternNoDetection ?? 0) + 1; }
+  }
   
   // ══════════════════════════════════════════════════════════════════════════════
   // Directive 11.8C: Multi-Strategy Regime-Scoped Simulation
@@ -1771,7 +1776,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         // Batch 31: Reset null reason tracker before each strategy call
         resetNullReason();
-        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool);
+        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
         if (!vtsEvalCounters.byStrategy[stratKey]) {
