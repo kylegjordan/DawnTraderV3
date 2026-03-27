@@ -1267,6 +1267,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       globalFriction: trade.globalFriction,
       pairDirectionalBias: trade.pairDirectionalBias,
       globalDirectionalBias: trade.globalDirectionalBias,
+      sourcePool: trade.sourcePool,
     };
     
     // Add to session trades
