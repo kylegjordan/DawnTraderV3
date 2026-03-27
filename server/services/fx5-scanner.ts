@@ -1156,6 +1156,7 @@ export class Fx5ScannerService {
           imf: {
             failedLQ: quantImfFailedLQ,
             failedVN: quantImfFailedVN,
+            failedDI: pairsFailedDiAllFamilies,
             passed: metricFilteredSurvivors.length,
             total: classifiedSurvivors.length,
             benchmarkBypassed: quantImfBenchmarkBypassed,
@@ -1170,6 +1171,7 @@ export class Fx5ScannerService {
             failedDI: patternImfFailedDI,
             passed: patternPoolSurvivors.length,
             total: patternImfTotal,
+            benchmarkBypassed: patternBenchmarkBypassed,
           } : null,
           survivors: patternPoolSurvivors.length,
         },
