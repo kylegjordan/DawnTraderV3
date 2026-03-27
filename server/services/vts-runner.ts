@@ -200,6 +200,8 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     quantStrategyNulls: 0,
     patternNoDetection: 0,
     patternDetected: 0,
+    quantPatternDetected: 0,
+    quantPatternNoDetection: 0,
     signalsGenerated: 0,
     quantStrategyEvaluations: 0,
     patternStrategyEvaluations: 0,
@@ -234,6 +236,8 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     aggregated.patternStrategyNulls = (aggregated.patternStrategyNulls ?? 0) + (snap.patternStrategyNulls ?? 0);
     aggregated.patternNoDetection += snap.patternNoDetection;
     aggregated.patternDetected += snap.patternDetected;
+    aggregated.quantPatternDetected = (aggregated.quantPatternDetected ?? 0) + (snap.quantPatternDetected ?? 0);
+    aggregated.quantPatternNoDetection = (aggregated.quantPatternNoDetection ?? 0) + (snap.quantPatternNoDetection ?? 0);
     aggregated.signalsGenerated += snap.signalsGenerated;
     aggregated.totalStrategyEvaluations += snap.totalStrategyEvaluations;
     aggregated.quantStrategyEvaluations = (aggregated.quantStrategyEvaluations ?? 0) + (snap.quantStrategyEvaluations ?? 0);
@@ -1493,6 +1497,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     patternStrategyNulls: 0,
     patternNoDetection: 0,
     patternDetected: 0,
+    quantPatternDetected: 0,
+    quantPatternNoDetection: 0,
     signalsGenerated: 0,
     quantStrategyEvaluations: 0,
     patternStrategyEvaluations: 0,
