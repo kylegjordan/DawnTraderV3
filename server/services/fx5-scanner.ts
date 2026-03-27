@@ -1162,7 +1162,7 @@ export class Fx5ScannerService {
             total: classifiedSurvivors.length,
             benchmarkBypassed: quantImfBenchmarkBypassed,
           },
-          survivors: metricFilteredSurvivors.length,
+          survivors: Object.values(familyPoolSurvivors).reduce((sum, arr) => sum + arr.length, 0),
         },
         pattern: {
           global: batchResult.patternBreakdown ?? null,
@@ -1185,7 +1185,7 @@ export class Fx5ScannerService {
           }])
         ),
         destination: isEngineActive ? 'active_pool' : 'vts_batch',
-        destinationCount: metricFilteredSurvivors.length + patternPoolSurvivors.length,
+        destinationCount: taggedVtsSurvivors.length,
       };
       this.lastScanDiagnostics = scanDiag;
 
