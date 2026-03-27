@@ -1912,8 +1912,18 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <td className="p-2 text-right">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Pattern Detection <span className="text-xs text-muted-foreground">(pattern pool only)</span></td>
-                        <td className="p-2 text-right text-muted-foreground">—</td>
+                        <td className="p-2">Pattern Detection <span className="text-xs text-muted-foreground">(BUY pattern scan results)</span></td>
+                        <td className="p-2 text-right">
+                          {((ve as any).quantPatternDetected > 0 || (ve as any).quantPatternNoDetection > 0) ? (
+                            <>
+                              <span className="text-green-600">{fmt((ve as any).quantPatternDetected ?? 0)}</span>
+                              {' / '}
+                              <span className="text-red-500">{fmt((ve as any).quantPatternNoDetection ?? 0)}</span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="p-2 text-right">
                           {ve.patternPairsEvaluated > 0 ? (
                             <>
@@ -1928,7 +1938,24 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="p-2 text-right text-muted-foreground">—</td>
+                        <td className="p-2 text-right">
+                          {(() => {
+                            const qd = (ve as any).quantPatternDetected ?? 0;
+                            const qnd = (ve as any).quantPatternNoDetection ?? 0;
+                            const totalDetected = qd + ve.patternDetected;
+                            const totalNoDetection = qnd + ve.patternNoDetection;
+                            if (totalDetected + totalNoDetection > 0) {
+                              return (
+                                <>
+                                  <span className="text-green-600">{fmt(totalDetected)}</span>
+                                  {' / '}
+                                  <span className="text-red-500">{fmt(totalNoDetection)}</span>
+                                </>
+                              );
+                            }
+                            return <span className="text-muted-foreground">—</span>;
+                          })()}
+                        </td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2">Total Strategy Evaluations <span className="text-xs text-muted-foreground">(cumulative, 24h rolling)</span></td>
