@@ -2040,92 +2040,146 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </div>
                 )}
 
-                {/* Batch 35: Unified Strategy Null Reason Breakdown */}
+                {/* Batch 38: 3-Layer Null Reason Display */}
                 {ve.nullReasons && (
                   <div className="overflow-x-auto">
-                    <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
-                      Strategy Null Reason Breakdown <span className="normal-case font-normal">— by-strategy totals may differ from top-level due to pair-level skips (max trades, no regime strategies) counted before strategy evaluation</span>
-                    </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left p-2 font-medium">Category</th>
-                          <th className="text-right p-2 font-medium">Count</th>
-                          <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(() => {
-                          const nr = ve.nullReasons as any;
-                          const detail = (ve as any).nullReasonDetail as Record<string, number> | undefined;
-                          const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
-                          const pct = (n: number) => totalStratNulls > 0 ? Math.round(n / totalStratNulls * 100) : 0;
-                          const reasonLabels: Record<string, string> = {
-                            'unknown': 'Not Yet Instrumented',
-                            'insufficient_data': 'Insufficient Price Data / Candles',
-                            'no_pattern': 'No Pattern Detected',
-                            'weak_pattern': 'Pattern Too Weak (below strength threshold)',
-                            'indicator_filter': 'Indicator Out of Range (RSI/ADX/momentum)',
-                            'volume_insufficient': 'Volume Confirmation Failed',
-                            'price_position': 'Price Not in Required Zone',
-                            'guard_fail': 'ATR / Stop / R:R Guard Failed',
-                            'range_not_found': 'No Valid Range / Support Level Found',
-                            'correlation_fail': 'Correlation Check Failed',
-                            'volatility_filter': 'Volatility Percentile Too Low',
-                            'breakout_fail': 'No Breakout Detected',
-                            'toxicity_high': 'High Toxicity (DHMA)',
-                            'spread_wide': 'Spread Too Wide (DHMA)',
-                            'regime_alignment': 'Regime Alignment Failed',
-                          };
-                          const categories = [
-                            { key: 'conditionsNotMet', label: 'Strategy Conditions Not Met', count: nr.conditionsNotMet ?? 0, hasDetail: true },
-                            { key: 'familyFilterMismatch', label: 'Family Filter Mismatch', count: nr.familyFilterMismatch ?? 0, hasDetail: false },
-                            { key: 'duplicatePosition', label: 'Duplicate Position', count: nr.duplicatePosition ?? 0, hasDetail: false },
-                            { key: 'adxGuard', label: 'ADX Guard', count: nr.adxGuard ?? 0, hasDetail: false },
-                            { key: 'maxOpenTrades', label: 'Max Open Trades', count: nr.maxOpenTrades ?? 0, hasDetail: false },
-                            { key: 'regimeNoStrategies', label: 'Regime Has No Strategies', count: nr.regimeNoStrategies ?? 0, hasDetail: false },
-                          ].sort((a, b) => b.count - a.count);
-                          const sum = categories.reduce((acc, c) => acc + c.count, 0);
-                          const rows: React.ReactNode[] = [];
-                          categories.forEach(cat => {
-                            rows.push(
-                              <tr key={cat.key} className="border-b hover:bg-muted/30 font-medium">
-                                <td className="p-2">{cat.label}</td>
-                                <td className="p-2 text-right text-orange-500">{fmt(cat.count)}</td>
-                                <td className="p-2 text-right">{pct(cat.count)}%</td>
+                    {(() => {
+                      const nr = ve.nullReasons as any;
+                      const detail = (ve as any).nullReasonDetail as Record<string, number> | undefined;
+                      const rejectedReasons = (ve as any).rejectedReasons as Record<string, number> | undefined;
+                      const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
+                      const pct = (n: number) => totalStratNulls > 0 ? Math.round(n / totalStratNulls * 100) : 0;
+                      const reasonLabels: Record<string, string> = {
+                        'unknown': 'Not Yet Instrumented',
+                        'insufficient_data': 'Insufficient Price Data / Candles',
+                        'no_pattern': 'No Pattern Detected',
+                        'weak_pattern': 'Pattern Too Weak (below strength threshold)',
+                        'indicator_filter': 'Indicator Out of Range (RSI/ADX/momentum)',
+                        'volume_insufficient': 'Volume Confirmation Failed',
+                        'price_position': 'Price Not in Required Zone',
+                        'guard_fail': 'ATR / Stop / R:R Guard Failed',
+                        'range_not_found': 'No Valid Range / Support Level Found',
+                        'correlation_fail': 'Correlation Check Failed',
+                        'volatility_filter': 'Volatility Percentile Too Low',
+                        'breakout_fail': 'No Breakout Detected',
+                        'toxicity_high': 'High Toxicity (DHMA)',
+                        'spread_wide': 'Spread Too Wide (DHMA)',
+                        'regime_alignment': 'Regime Alignment Failed',
+                      };
+                      const groupDefs: { label: string; keys: string[] }[] = [
+                        { label: 'A — Data & Setup', keys: ['insufficient_data', 'unknown'] },
+                        { label: 'B — Pattern Detection', keys: ['no_pattern', 'weak_pattern', 'breakout_fail'] },
+                        { label: 'C — Indicator & Volatility', keys: ['indicator_filter', 'volatility_filter'] },
+                        { label: 'D — Volume & Price', keys: ['volume_insufficient', 'price_position', 'range_not_found'] },
+                        { label: 'E — Risk Guards', keys: ['guard_fail', 'correlation_fail'] },
+                        { label: 'F — Regime & Spread', keys: ['regime_alignment', 'toxicity_high', 'spread_wide'] },
+                      ];
+                      const SectionHeader = ({ title, colorClass }: { title: string; colorClass: string }) => (
+                        <div className={`border-l-4 pl-3 py-1.5 mx-2 my-1 ${colorClass}`}>
+                          <span className="text-xs font-semibold uppercase tracking-wider">{title}</span>
+                        </div>
+                      );
+                      return (
+                        <>
+                          {/* SECTION 1: Setup Nulls */}
+                          <SectionHeader title="Setup Nulls (Strategy Evaluation)" colorClass="border-blue-500 bg-blue-50/40 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400" />
+                          <table className="w-full text-sm mb-2">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-medium">Category</th>
+                                <th className="text-right p-2 font-medium">Count</th>
+                                <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
                               </tr>
-                            );
-                            if (cat.hasDetail && detail && Object.keys(detail).length > 0) {
-                              Object.entries(detail)
-                                .sort(([, a], [, b]) => b - a)
-                                .forEach(([reason, count]) => {
-                                  rows.push(
-                                    <tr key={`detail-${reason}`} className="border-b hover:bg-muted/20">
-                                      <td className="p-2 pl-8 text-xs text-muted-foreground">↳ {reasonLabels[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
-                                      <td className="p-2 text-right text-xs text-orange-400">{fmt(count)}</td>
-                                      <td className="p-2 text-right text-xs text-muted-foreground">{pct(count)}%</td>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b hover:bg-muted/30 font-medium">
+                                <td className="p-2">Strategy Conditions Not Met</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.conditionsNotMet ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.conditionsNotMet ?? 0)}%</td>
+                              </tr>
+                              {detail && Object.keys(detail).length > 0 && groupDefs.map(group => {
+                                const groupEntries = group.keys
+                                  .map(k => ({ key: k, count: detail[k] ?? 0 }))
+                                  .filter(e => e.count > 0);
+                                if (groupEntries.length === 0) return null;
+                                return (
+                                  <React.Fragment key={group.label}>
+                                    <tr className="bg-muted/10">
+                                      <td colSpan={3} className="p-1.5 pl-6 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</td>
                                     </tr>
-                                  );
-                                });
-                            }
-                          });
-                          rows.push(
-                            <tr key="sum-row" className="bg-muted/30 font-semibold border-t">
-                              <td className="p-2">Sum of Categories</td>
-                              <td className="p-2 text-right text-orange-500">{fmt(sum)}</td>
-                              <td className="p-2 text-right">
-                                {sum === totalStratNulls ? (
-                                  <span className="text-green-600">✓ reconciles ({fmt(totalStratNulls)})</span>
-                                ) : (
-                                  <span className="text-red-500">Δ {fmt(Math.abs(sum - totalStratNulls))} vs {fmt(totalStratNulls)}</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                          return rows;
-                        })()}
-                      </tbody>
-                    </table>
+                                    {groupEntries.map(({ key, count }) => (
+                                      <tr key={key} className="border-b hover:bg-muted/20">
+                                        <td className="p-2 pl-10 text-xs text-muted-foreground">↳ {reasonLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                        <td className="p-2 text-right text-xs text-orange-400">{fmt(count)}</td>
+                                        <td className="p-2 text-right text-xs text-muted-foreground">{pct(count)}%</td>
+                                      </tr>
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              })}
+                              <tr className="border-b hover:bg-muted/30 font-medium">
+                                <td className="p-2">ADX Guard</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.adxGuard ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.adxGuard ?? 0)}%</td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* SECTION 2: Routing / Path Failures */}
+                          <SectionHeader title="Routing / Path Failures" colorClass="border-yellow-500 bg-yellow-50/40 dark:bg-yellow-950/20 text-yellow-700 dark:text-yellow-400" />
+                          <table className="w-full text-sm mb-2">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-medium">Category</th>
+                                <th className="text-right p-2 font-medium">Count</th>
+                                <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Regime Has No Strategies</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.regimeNoStrategies ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.regimeNoStrategies ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Family Filter Mismatch</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.familyFilterMismatch ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.familyFilterMismatch ?? 0)}%</td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* SECTION 3: Post-Signal Rejections */}
+                          <SectionHeader title="Post-Signal Rejections" colorClass="border-red-500 bg-red-50/40 dark:bg-red-950/20 text-red-700 dark:text-red-400" />
+                          <table className="w-full text-sm mb-2">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-medium">Category</th>
+                                <th className="text-right p-2 font-medium">Count</th>
+                                <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Net EV Below Floor</td>
+                                <td className="p-2 text-right text-red-500">{fmt(rejectedReasons?.netEvBelowFloor ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(rejectedReasons?.netEvBelowFloor ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Duplicate Position</td>
+                                <td className="p-2 text-right text-red-500">{fmt(nr.duplicatePosition ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.duplicatePosition ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Max Open Trades</td>
+                                <td className="p-2 text-right text-red-500">{fmt(nr.maxOpenTrades ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.maxOpenTrades ?? 0)}%</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
