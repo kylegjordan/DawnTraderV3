@@ -2011,139 +2011,26 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </div>
                 )}
 
-                {/* Batch 30: Pair-Level Skips — these skip ALL strategies for a pair */}
-                {ve.nullReasons && ((ve.nullReasons as any).maxOpenTrades > 0 || (ve.nullReasons as any).regimeNoStrategies > 0 || (ve as any).pairsSkippedNoPrice > 0 || (ve as any).pairsSkippedInsufficientOHLC > 0) && (
-                  <div className="overflow-x-auto">
-                    <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
-                      Pair-Level Skips (24h, cumulative) <span className="normal-case font-normal">— entire pair skipped before strategy evaluation</span>
-                    </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left p-2 font-medium">Reason</th>
-                          <th className="text-right p-2 font-medium">Pairs Skipped</th>
-                          <th className="text-right p-2 font-medium">Est. Strategy Evals Skipped</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(() => {
-                          const avgStratsPerPair = (ve.quantPairsEvaluated + ve.patternPairsEvaluated) > 0
-                            ? ve.totalStrategyEvaluations / (ve.quantPairsEvaluated + ve.patternPairsEvaluated)
-                            : 6;
-                          const pairSkips = [
-                            { key: 'maxOpenTrades', label: 'Max Open Trades (portfolio full)', count: (ve.nullReasons as any).maxOpenTrades ?? 0 },
-                            { key: 'regimeNoStrategies', label: 'No Strategies for Regime', count: (ve.nullReasons as any).regimeNoStrategies ?? 0 },
-                            { key: 'noPrice', label: 'No Price Data Available', count: (ve as any).pairsSkippedNoPrice ?? 0 },
-                            { key: 'insufficientOHLC', label: 'Insufficient OHLC (< 10 candles)', count: (ve as any).pairsSkippedInsufficientOHLC ?? 0 },
-                          ].filter(s => s.count > 0);
-                          return pairSkips.map(skip => (
-                            <tr key={skip.key} className="border-b hover:bg-muted/30">
-                              <td className="p-2">{skip.label}</td>
-                              <td className="p-2 text-right text-orange-500">{fmt(skip.count)}</td>
-                              <td className="p-2 text-right text-muted-foreground">~{fmt(Math.round(skip.count * avgStratsPerPair))}</td>
-                            </tr>
-                          ));
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Batch 30: Strategy-Level Null Reasons — per strategy evaluation */}
+                {/* Batch 35: Unified Strategy Null Reason Breakdown */}
                 {ve.nullReasons && (
-                  (ve.nullReasons as any).conditionsNotMet > 0 ||
-                  (ve.nullReasons as any).adxGuard > 0 ||
-                  (ve.nullReasons as any).duplicatePosition > 0 ||
-                  (ve.nullReasons as any).familyFilterMismatch > 0
-                ) && (
                   <div className="overflow-x-auto">
                     <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
-                      Strategy-Level Null Reasons (24h, cumulative) <span className="normal-case font-normal">— per strategy evaluation that returned null</span>
+                      Strategy Null Reason Breakdown <span className="normal-case font-normal">— categories should sum to Total Strategy Nulls above</span>
                     </div>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/30">
-                          <th className="text-left p-2 font-medium">Reason</th>
+                          <th className="text-left p-2 font-medium">Category</th>
                           <th className="text-right p-2 font-medium">Count</th>
                           <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
                         </tr>
                       </thead>
                       <tbody>
                         {(() => {
-                          const strategyReasons = [
-                            { key: 'conditionsNotMet', label: 'Strategy Conditions Not Met', count: (ve.nullReasons as any).conditionsNotMet ?? 0 },
-                            { key: 'adxGuard', label: 'ADX Guard (< 25)', count: (ve.nullReasons as any).adxGuard ?? 0 },
-                            { key: 'duplicatePosition', label: 'Duplicate Position', count: (ve.nullReasons as any).duplicatePosition ?? 0 },
-                            { key: 'familyFilterMismatch', label: 'Family Filter Mismatch', count: (ve.nullReasons as any).familyFilterMismatch ?? 0 },
-                          ].sort((a, b) => b.count - a.count);
+                          const nr = ve.nullReasons as any;
+                          const detail = (ve as any).nullReasonDetail as Record<string, number> | undefined;
                           const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
-                          return strategyReasons.map(reason => (
-                            <tr key={reason.key} className="border-b hover:bg-muted/30">
-                              <td className="p-2">{reason.label}</td>
-                              <td className="p-2 text-right text-orange-500">{fmt(reason.count)}</td>
-                              <td className="p-2 text-right">{totalStratNulls > 0 ? Math.round(reason.count / totalStratNulls * 100) : 0}%</td>
-                            </tr>
-                          ));
-                        })()}
-                        {/* Sum row */}
-                        <tr className="bg-muted/30 font-semibold border-t">
-                          <td className="p-2">Sum of Strategy Reasons</td>
-                          <td className="p-2 text-right text-orange-500">
-                            {fmt(
-                              ((ve.nullReasons as any).conditionsNotMet ?? 0) +
-                              ((ve.nullReasons as any).adxGuard ?? 0) +
-                              ((ve.nullReasons as any).duplicatePosition ?? 0) +
-                              ((ve.nullReasons as any).familyFilterMismatch ?? 0)
-                            )}
-                          </td>
-                          <td className="p-2 text-right">
-                            {(() => {
-                              const sum = ((ve.nullReasons as any).conditionsNotMet ?? 0) + ((ve.nullReasons as any).adxGuard ?? 0) + ((ve.nullReasons as any).duplicatePosition ?? 0) + ((ve.nullReasons as any).familyFilterMismatch ?? 0);
-                              const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
-                              return totalStratNulls > 0 ? Math.round(sum / totalStratNulls * 100) : 0;
-                            })()}%
-                          </td>
-                        </tr>
-                        <tr className="text-xs text-muted-foreground">
-                          <td className="p-2" colSpan={3}>
-                            Total Strategy Nulls: {fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))} — sum should be close to 100% if all null paths are instrumented
-                          </td>
-                        </tr>
-                        {/* Batch 22 HF3: Unique Combos Blocked sub-row */}
-                        {((ve.nullReasons as any).uniqueDuplicateCombos ?? 0) > 0 && (
-                          <tr className="border-b hover:bg-muted/30">
-                            <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
-                            <td className="p-2 text-right text-orange-400">{(ve.nullReasons as any).uniqueDuplicateCombos ?? 0}</td>
-                            <td className="p-2 text-right text-xs text-muted-foreground">
-                              {((ve.nullReasons as any).uniqueDuplicateCombos ?? 0) > 0
-                                ? `avg ${((ve.nullReasons as any).duplicatePosition / (ve.nullReasons as any).uniqueDuplicateCombos).toFixed(1)} attempts/combo`
-                                : '—'}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Batch 31: Strategy Null Reason Detail — granular reasons from strategy detect functions */}
-                {(ve as any).nullReasonDetail && Object.keys((ve as any).nullReasonDetail).length > 0 && (
-                  <div className="overflow-x-auto">
-                    <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
-                      Strategy Null Reason Detail (24h, cumulative) <span className="normal-case font-normal">— WHY each strategy returned null</span>
-                    </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left p-2 font-medium">Reason</th>
-                          <th className="text-right p-2 font-medium">Count</th>
-                          <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(() => {
-                          const detail = (ve as any).nullReasonDetail as Record<string, number>;
-                          const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
+                          const pct = (n: number) => totalStratNulls > 0 ? Math.round(n / totalStratNulls * 100) : 0;
                           const reasonLabels: Record<string, string> = {
                             'unknown': 'Not Yet Instrumented',
                             'insufficient_data': 'Insufficient Price Data / Candles',
@@ -2161,15 +2048,52 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             'spread_wide': 'Spread Too Wide (DHMA)',
                             'regime_alignment': 'Regime Alignment Failed',
                           };
-                          return Object.entries(detail)
-                            .sort(([,a], [,b]) => b - a)
-                            .map(([reason, count]) => (
-                              <tr key={reason} className="border-b hover:bg-muted/30">
-                                <td className="p-2">{reasonLabels[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
-                                <td className="p-2 text-right text-orange-500">{fmt(count)}</td>
-                                <td className="p-2 text-right">{totalStratNulls > 0 ? Math.round(count / totalStratNulls * 100) : 0}%</td>
+                          const categories = [
+                            { key: 'conditionsNotMet', label: 'Strategy Conditions Not Met', count: nr.conditionsNotMet ?? 0, hasDetail: true },
+                            { key: 'familyFilterMismatch', label: 'Family Filter Mismatch', count: nr.familyFilterMismatch ?? 0, hasDetail: false },
+                            { key: 'duplicatePosition', label: 'Duplicate Position', count: nr.duplicatePosition ?? 0, hasDetail: false },
+                            { key: 'adxGuard', label: 'ADX Guard', count: nr.adxGuard ?? 0, hasDetail: false },
+                            { key: 'maxOpenTrades', label: 'Max Open Trades', count: nr.maxOpenTrades ?? 0, hasDetail: false },
+                            { key: 'regimeNoStrategies', label: 'Regime Has No Strategies', count: nr.regimeNoStrategies ?? 0, hasDetail: false },
+                          ].sort((a, b) => b.count - a.count);
+                          const sum = categories.reduce((acc, c) => acc + c.count, 0);
+                          const rows: React.ReactNode[] = [];
+                          categories.forEach(cat => {
+                            rows.push(
+                              <tr key={cat.key} className="border-b hover:bg-muted/30 font-medium">
+                                <td className="p-2">{cat.label}</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(cat.count)}</td>
+                                <td className="p-2 text-right">{pct(cat.count)}%</td>
                               </tr>
-                            ));
+                            );
+                            if (cat.hasDetail && detail && Object.keys(detail).length > 0) {
+                              Object.entries(detail)
+                                .sort(([, a], [, b]) => b - a)
+                                .forEach(([reason, count]) => {
+                                  rows.push(
+                                    <tr key={`detail-${reason}`} className="border-b hover:bg-muted/20">
+                                      <td className="p-2 pl-8 text-xs text-muted-foreground">↳ {reasonLabels[reason] || reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                      <td className="p-2 text-right text-xs text-orange-400">{fmt(count)}</td>
+                                      <td className="p-2 text-right text-xs text-muted-foreground">{pct(count)}%</td>
+                                    </tr>
+                                  );
+                                });
+                            }
+                          });
+                          rows.push(
+                            <tr key="sum-row" className="bg-muted/30 font-semibold border-t">
+                              <td className="p-2">Sum of Categories</td>
+                              <td className="p-2 text-right text-orange-500">{fmt(sum)}</td>
+                              <td className="p-2 text-right">
+                                {sum === totalStratNulls ? (
+                                  <span className="text-green-600">✓ reconciles ({fmt(totalStratNulls)})</span>
+                                ) : (
+                                  <span className="text-red-500">Δ {fmt(Math.abs(sum - totalStratNulls))} vs {fmt(totalStratNulls)}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                          return rows;
                         })()}
                       </tbody>
                     </table>
