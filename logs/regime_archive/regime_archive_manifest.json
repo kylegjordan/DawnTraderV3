@@ -1,25 +1,9 @@
 [
   {
-    "filename": "2026-03-16.json",
+    "filename": "2026-03-27.json",
     "entries": 13,
-    "checksum": "98097f40",
-    "createdAt": "2026-03-16T23:48:23.823Z",
-    "version": 1,
-    "compressed": false
-  },
-  {
-    "filename": "2026-03-17.json",
-    "entries": 13,
-    "checksum": "f64a1003",
-    "createdAt": "2026-03-17T10:06:09.467Z",
-    "version": 1,
-    "compressed": false
-  },
-  {
-    "filename": "2026-03-22.json",
-    "entries": 13,
-    "checksum": "ed2ad392",
-    "createdAt": "2026-03-22T00:45:00.028Z",
+    "checksum": "91930cb6",
+    "createdAt": "2026-03-27T10:27:45.569Z",
     "version": 1,
     "compressed": false
   }
