@@ -2275,6 +2275,7 @@ export function getOpenVirtualTradesForML(): Array<{
   signalType: string;
   patternType: string | null;
   pool: string;
+  sourcePool: string;
   dollarValue: number;    // Directive 11.6H: Fixed USD exposure
   quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
@@ -2348,6 +2349,7 @@ export function getOpenVirtualTradesForML(): Array<{
       signalType: trade.signalType,
       patternType: trade.patternType || null,
       pool: trade.pool.toUpperCase(),
+      sourcePool: trade.sourcePool || ("unknown" as string),
       dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure
       quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
       entryPrice: trade.entryPrice,
