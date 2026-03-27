@@ -1633,6 +1633,105 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
 
   return (
     <div className="space-y-4 max-w-4xl">
+      {/* Batch 39: Pipeline Summary Table */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg">Pipeline Summary (Last Scan)</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {lastScan ? (() => {
+            const quantGlobalPassed = (lastScan.quant.global as Record<string, number>)['passed_all_filters'] ?? 0;
+            const patternGlobalPassed = lastScan.pattern.global
+              ? ((lastScan.pattern.global as Record<string, number>)['passed_all_filters'] ?? 0)
+              : null;
+            const pct = (n: number, d: number) => d > 0 ? ` (${Math.round(n / d * 100)}%)` : '';
+            const universe = lastScan.totalPairsScanned;
+            const familySurvivorsTotal = ['trend', 'reversal', 'breakout', 'oscillator']
+              .reduce((sum, f) => sum + ((lastScan as any).familyPaths?.[f]?.survivors ?? 0), 0);
+            return (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2 font-medium">Stage</th>
+                    <th className="text-right p-2 font-medium">Quant</th>
+                    <th className="text-right p-2 font-medium">Pattern</th>
+                    <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Universe Scanned</td>
+                    <td className="p-2 text-right">{fmt(universe)}</td>
+                    <td className="p-2 text-right">{fmt(universe)}</td>
+                    <td className="p-2 text-xs text-muted-foreground">All Kraken pairs entering scan</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Global Filters Passed</td>
+                    <td className="p-2 text-right text-blue-500">
+                      {fmt(quantGlobalPassed)}<span className="text-xs text-muted-foreground">{pct(quantGlobalPassed, universe)}</span>
+                    </td>
+                    <td className="p-2 text-right text-blue-500">
+                      {patternGlobalPassed !== null
+                        ? <>{fmt(patternGlobalPassed)}<span className="text-xs text-muted-foreground">{pct(patternGlobalPassed, universe)}</span></>
+                        : '—'}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">vs. Universe</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">IMF Passed</td>
+                    <td className="p-2 text-right text-orange-500">
+                      {fmt(lastScan.quant.imf.passed)}<span className="text-xs text-muted-foreground">{pct(lastScan.quant.imf.passed, quantGlobalPassed)}</span>
+                    </td>
+                    <td className="p-2 text-right text-orange-500">
+                      {lastScan.pattern.imf
+                        ? <>{fmt(lastScan.pattern.imf.passed)}<span className="text-xs text-muted-foreground">{pct(lastScan.pattern.imf.passed, patternGlobalPassed ?? 0)}</span></>
+                        : '—'}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">vs. Global Filters Passed</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ LQ Fail / VN Fail / DI Fail</td>
+                    <td className="p-2 text-right text-xs text-muted-foreground">
+                      {fmt(lastScan.quant.imf.failedLQ)} / {fmt(lastScan.quant.imf.failedVN)} / {fmt((lastScan.quant.imf as any).failedDI ?? 0)}
+                    </td>
+                    <td className="p-2 text-right text-xs text-muted-foreground">
+                      {lastScan.pattern.imf
+                        ? `${fmt(lastScan.pattern.imf.failedLQ)} / ${fmt(lastScan.pattern.imf.failedVN)} / ${fmt(lastScan.pattern.imf.failedDI)}`
+                        : '—'}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">IMF rejection breakdown</td>
+                  </tr>
+                  {(lastScan as any).familyPaths && (
+                    <tr className="border-b hover:bg-muted/30">
+                      <td className="p-2 font-medium">Family IMF Survivors</td>
+                      <td className="p-2 text-right text-muted-foreground">—</td>
+                      <td className="p-2 text-right text-green-600">
+                        {fmt(familySurvivorsTotal)}
+                        <span className="text-xs text-muted-foreground">{pct(familySurvivorsTotal, lastScan.pattern.imf?.passed ?? 0)}</span>
+                      </td>
+                      <td className="p-2 text-xs text-muted-foreground">vs. Pattern IMF Passed (per family)</td>
+                    </tr>
+                  )}
+                  <tr className="border-b hover:bg-muted/30 font-semibold">
+                    <td className="p-2">Final Survivors</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.pattern.survivors)}</td>
+                    <td className="p-2 text-xs text-muted-foreground">Entering destination</td>
+                  </tr>
+                  <tr className="bg-muted/30 font-semibold">
+                    <td className="p-2">→ {lastScan.destination === 'active_pool' ? 'Active Pool' : 'VTS Batch'}</td>
+                    <td colSpan={2} className="p-2 text-right text-primary">{fmt(lastScan.destinationCount)} pairs total</td>
+                    <td className="p-2 text-xs text-muted-foreground">Unique deduped pairs</td>
+                  </tr>
+                </tbody>
+              </table>
+            );
+          })() : (
+            <div className="p-4 text-muted-foreground text-center">No scan data yet</div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* TABLE 1: Last Scan Stats */}
       <Card>
         <CardHeader className="py-3">
@@ -1726,9 +1825,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
                         const fp = (data.lastScan as any)?.familyPaths?.[family];
                         if (!fp) return null;
+                        const familyLabel: Record<string, string> = { trend: 'Trend Family', reversal: 'Reversal Family', breakout: 'Breakout Family', oscillator: 'Oscillator Family' };
                         return (
                           <tr key={family} className="border-b hover:bg-muted/30">
-                            <td className="p-2 capitalize font-medium">{family}</td>
+                            <td className="p-2 font-medium">{familyLabel[family] ?? family}</td>
                             <td className="p-2 text-right">
                               <span className="text-green-600">{fp.survivors}</span>
                               <span className="text-muted-foreground text-xs ml-1">
@@ -1834,9 +1934,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
                         const fp = rolling24h.aggregated.familyPaths?.[family];
                         if (!fp) return null;
+                        const familyLabel: Record<string, string> = { trend: 'Trend Family', reversal: 'Reversal Family', breakout: 'Breakout Family', oscillator: 'Oscillator Family' };
                         return (
                           <tr key={`24h-${family}`} className="border-b hover:bg-muted/30">
-                            <td className="p-2 capitalize font-medium">{family}</td>
+                            <td className="p-2 font-medium">{familyLabel[family] ?? family}</td>
                             <td className="p-2 text-right">
                               <span className="text-green-600">{fmt(fp.survivors)}</span>
                               <span className="text-muted-foreground text-xs ml-1">
