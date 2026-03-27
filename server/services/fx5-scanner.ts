@@ -1185,7 +1185,7 @@ export class Fx5ScannerService {
           }])
         ),
         destination: isEngineActive ? 'active_pool' : 'vts_batch',
-        destinationCount: taggedVtsSurvivors.length,
+        destinationCount: 0,
       };
       this.lastScanDiagnostics = scanDiag;
 
@@ -1348,6 +1348,7 @@ export class Fx5ScannerService {
       if (bothPoolsCount.count > 0) {
         console.log(`[19F][VTS_PARITY] ${bothPoolsCount.count} pairs duplicated in both quant+pattern pools for VTS parity`);
       }
+      scanDiag.destinationCount = taggedVtsSurvivors.length;
 
       // Directive 11.4C.1: FX5 does NOT write to telemetry (M70)
       // VTS is the sole source of telemetry writes - FX5 outputs raw data only
