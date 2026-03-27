@@ -246,7 +246,7 @@ class ActiveFilterPoolService {
             lastUpdated: nowISO,
             expiresAt,
             source: mode,
-            sourcePool: 'quant',        // Phase 14.5: quant pool origin
+            sourcePool: 'quant-trend',        // Batch 37: TODO -- pass family from FX5 when active mode family tagging is implemented
             assetClass: 'crypto_spot',  // Phase 14.5: default asset class
             fx5Snapshot: {
               volume24h: survivor.volume24h,
@@ -274,7 +274,7 @@ class ActiveFilterPoolService {
           lastUpdated: nowISO,
           expiresAt,
           source: mode,
-          sourcePool: 'quant',        // Phase 14.5: quant pool origin
+          sourcePool: 'quant-trend',        // Batch 37: TODO -- pass family from FX5 when active mode family tagging is implemented
           assetClass: 'crypto_spot',  // Phase 14.5: default asset class
           fx5Snapshot: {
             volume24h: survivor.volume24h,

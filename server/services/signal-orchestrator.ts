@@ -532,7 +532,7 @@ export class SignalOrchestrator {
       trendStrength: 0.5,
       volatility: extendedMetrics.volatility ?? 0.3,
       regimeStability: sqeRegimeStability,  // HF9: For governance gate + confidence floor in SQE
-      sourcePool: rawSignal.metadata?.sourcePool || 'quant',
+      sourcePool: rawSignal.metadata?.sourcePool || undefined,
     };
 
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
@@ -581,7 +581,7 @@ export class SignalOrchestrator {
       volatility: extendedMetrics.volatility ?? 0.3,
       currentPrice: rawSignal.entryPrice,
       volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null,
-      sourcePool: rawSignal.metadata?.sourcePool || 'quant',
+      sourcePool: rawSignal.metadata?.sourcePool || undefined,
       signalType: (rawSignal as any).signalType || rawSignal.metadata?.signalType || 'QUANT',
       assetClass: rawSignal.metadata?.assetClass || DEFAULT_ASSET_CLASS,
       metadata: {

@@ -209,7 +209,7 @@ export interface ScanBatchPair {
   lqScore?: number;         // HF9: Log-Liquidity score for IMF diagnostics
   volNoiseScore?: number;   // HF9: VolNoise score for IMF diagnostics
   filterTier?: 'standard' | 'relaxed'; // HF9: IMF filter tier (standard=strict, relaxed=VTS-only)
-  sourcePool?: 'quant' | 'pattern'; // Batch 19F: Filter path that admitted this pair
+  sourcePool?: string; // Batch 37: Family-qualified source pool (quant-trend, quant-reversal, etc.)
 }
 
 export class Fx5ScannerService {
@@ -1298,23 +1298,50 @@ export class Fx5ScannerService {
       // Batch 19F: VTS Sim-to-Live Parity — duplicate pairs that pass BOTH filters
       // A pair in both quant and pattern pools appears TWICE (once per sourcePool)
       // This matches active trading path behavior where the same pair can be in both pools
-      const taggedVtsSurvivors: Array<typeof vtsFilteredSurvivors[0] & { sourcePool: 'quant' | 'pattern' }> = [];
+      const taggedVtsSurvivors: Array<typeof vtsFilteredSurvivors[0] & { sourcePool: string }> = [];
       const bothPoolsCount = { count: 0 };
+
+      // Batch 37: Family-qualified sourcePool tagging
+      // Build reverse lookup: symbol -> set of families it survived
+      const symbolFamilyMap = new Map<string, Set<string>>();
+      for (const [family, survivors] of Object.entries(familyPoolSurvivors)) {
+        for (const sv of survivors) {
+          if (!symbolFamilyMap.has(sv.symbol)) symbolFamilyMap.set(sv.symbol, new Set());
+          symbolFamilyMap.get(sv.symbol)!.add(family);
+        }
+      }
 
       for (const s of vtsFilteredSurvivors) {
         const inQuant = quantSymbols.has(s.symbol);
         const inPattern = patternSymbolSet.has(s.symbol);
 
         if (inQuant) {
-          taggedVtsSurvivors.push({ ...s, sourcePool: 'quant' as const });
+          // Create one entry per family the pair survived through
+          const families = symbolFamilyMap.get(s.symbol);
+          if (families && families.size > 0) {
+            for (const family of families) {
+              taggedVtsSurvivors.push({ ...s, sourcePool: `quant-${family}` });
+            }
+          } else {
+            // Pair passed quant global+IMF but no family paths -- log error, skip
+            console.error(`[37][FX5] ${s.symbol} passed quant filters but has no family path -- CONFIG_MISSING`);
+          }
         }
         if (inPattern) {
-          taggedVtsSurvivors.push({ ...s, sourcePool: 'pattern' as const });
+          taggedVtsSurvivors.push({ ...s, sourcePool: 'pattern' });
           if (inQuant) bothPoolsCount.count++;
         }
         if (!inQuant && !inPattern) {
           // Fallback: pairs that passed VTS-relaxed but neither strict quant nor pattern
-          taggedVtsSurvivors.push({ ...s, sourcePool: 'quant' as const });
+          // Assign to all available families from their family path evaluation
+          const families = symbolFamilyMap.get(s.symbol);
+          if (families && families.size > 0) {
+            for (const family of families) {
+              taggedVtsSurvivors.push({ ...s, sourcePool: `quant-${family}` });
+            }
+          } else {
+            console.error(`[37][FX5] ${s.symbol} fallback pair has no family -- CONFIG_MISSING, skipping`);
+          }
         }
       }
 

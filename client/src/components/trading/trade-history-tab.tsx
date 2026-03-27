@@ -775,7 +775,7 @@ export function TradeHistoryTab() {
                           <td className="p-2">
                             {(trade as any).sourcePool ? (
                               <Badge className={cn("text-xs",
-                                (trade as any).sourcePool === 'quant' ? "bg-blue-500/10 text-blue-600" :
+                                (trade as any).sourcePool?.startsWith('quant') ? "bg-blue-500/10 text-blue-600" :
                                 (trade as any).sourcePool === 'pattern' ? "bg-purple-500/10 text-purple-600" :
                                 "bg-gray-500/10 text-gray-600"
                               )}>

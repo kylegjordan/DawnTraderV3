@@ -131,5 +131,5 @@ export const PATTERN_POOL_STRATEGIES: string[] = [
 export const DEFAULT_ASSET_CLASS = 'crypto_spot';
 
 // --- Source Pool Types ---
-export type SourcePool = 'quant' | 'pattern' | 'hybrid';
+export type SourcePool = 'quant-trend' | 'quant-reversal' | 'quant-breakout' | 'quant-oscillation' | 'pattern' | 'hybrid';
 export type AssetClass = 'crypto_spot'; // Extend when new asset classes added

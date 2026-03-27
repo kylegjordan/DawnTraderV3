@@ -54,7 +54,7 @@ export interface SQEInput {
   regime?: string;
   signalType?: string;
   regimeStability?: RegimeStability;  // Phase 14.1 HF8 (B3): For confidence floor check
-  sourcePool?: 'quant' | 'pattern';  // Phase 14.5: active filter path origin
+  sourcePool?: string;  // Batch 37: Family-qualified source pool
 }
 
 export interface SQEOptions {

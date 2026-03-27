@@ -182,6 +182,11 @@ function persistVtsEvalSnapshot(snapshot: VTSEvalSnapshot): void {
   }
 }
 
+// Batch 37: Helper to check if sourcePool is any quant family variant
+function isQuantPool(sourcePool?: string): boolean {
+  return !sourcePool || sourcePool === 'quant' || sourcePool.startsWith('quant-');
+}
+
 // Run hydration on module load
 hydrateVtsEvalHistory();
 
@@ -369,7 +374,7 @@ interface Phase10TradeRecord {
   profit?: number;
   positionSize: number;
   pool?: 'ideal' | 'rotational';
-  sourcePool?: 'quant' | 'pattern'; // Batch 19E: Track origin pool for pattern scanning analysis
+  sourcePool?: string; // Batch 37: Family-qualified source pool
   timestamp: string;
   exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending';
   volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
@@ -417,7 +422,7 @@ interface OpenVirtualTrade {
   modeOverlay?: StrategyModeOverlay;   // 11.7S: Overlay values for observability
   regimeStability?: RegimeStability;   // 11.7S: Regime stability for observability
   executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Identifies multi-strategy trades
-  sourcePool?: 'quant' | 'pattern';        // Batch 19F Phase 2: Track filter path origin
+  sourcePool?: string;        // Batch 37: Family-qualified source pool
   // Phase 14: 6 context dimensions captured at trade OPEN
   globalRegime?: string;
   pairFriction?: number;
@@ -633,7 +638,7 @@ async function generatePhase10Signal(
   pool: 'ideal' | 'rotational',
   strategyOverride?: StrategyDefinition,
   filterTier?: 'standard' | 'relaxed',
-  sourcePool?: 'quant' | 'pattern', // Batch 19E: Track origin pool
+  sourcePool?: string, // Batch 37: Family-qualified source pool
   counters?: any
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // Phase 13: MCE computes regime (uses cache from main loop call)
@@ -667,7 +672,7 @@ async function generatePhase10Signal(
   
   const detectedPatterns = scanPatterns(candles, symbol);
   const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
-  if (counters && (sourcePool === 'quant' || !sourcePool)) {
+  if (counters && isQuantPool(sourcePool)) {
     if (detectedPattern) { counters.quantPatternDetected = (counters.quantPatternDetected ?? 0) + 1; }
     else { counters.quantPatternNoDetection = (counters.quantPatternNoDetection ?? 0) + 1; }
   }
@@ -1004,7 +1009,7 @@ async function generatePhase10Signal(
     pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
     globalDirectionalBias: getLastGlobalDBSCategory(), // HF6: Read cached global DBS from market-indicators
     filterTier,  // HF9: IMF filter tier from FX5 scanner
-    sourcePool: sourcePool ?? 'quant',  // Batch 19F Phase 2: Persist sourcePool on open trade
+    sourcePool: sourcePool,  // Batch 37: Propagate as-is, no fallback
   };
 
   openVirtualTrades.set(tradeId, openTrade);
@@ -1060,7 +1065,7 @@ async function generatePhase10Signal(
     profit: undefined, // Directive 11.6: P&L calculated at exit
     positionSize,
     pool,
-    sourcePool: sourcePool ?? 'quant', // Batch 19E: Track origin pool for pattern scanning analysis
+    sourcePool: sourcePool, // Batch 37: Propagate as-is, no fallback
     timestamp: new Date().toISOString(),
     exitType: 'pending', // Directive 11.6: Awaiting real-price resolution
     volZ: zScoreResult.isWarmedUp ? zScoreResult.zScores.volZ : undefined, // Directive 11.7F-B
@@ -1077,7 +1082,7 @@ async function generatePhase10Signal(
  * Directive 11.4C.1: Get pairs directly from FX5 Scanner (not telemetry)
  * VTS is the sole source of telemetry writes - it gets raw pairs from FX5 and generates signal data
  */
-async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: 'quant' | 'pattern' }>> {
+async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: string }>> {
   try {
     // Directive 11.4C.1: Get pairs directly from FX5 scanner's current batch
     // Batch 19F Phase 2: FX5 scan batch now includes sourcePool tags from dual-path filters.
@@ -1089,11 +1094,11 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
       const tradablePairs = scanBatch.filter(p => !p.isBenchmark);
       const benchmarkCount = scanBatch.length - tradablePairs.length;
       const patternCount = tradablePairs.filter(p => p.sourcePool === 'pattern').length;
-      const quantCount = tradablePairs.filter(p => p.sourcePool === 'quant' || !p.sourcePool).length;
+      const quantCount = tradablePairs.filter(p => isQuantPool(p.sourcePool)).length;
       console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks excluded, ${tradablePairs.length} tradable: ${quantCount} quant + ${patternCount} pattern)`);
 
       // Directive 11.4H.1 Task 1: Normalize symbols at ingress with fallback and tier logging
-      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: 'quant' | 'pattern' }> = [];
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: string }> = [];
       for (const p of tradablePairs) {
         const rawSymbol = p.symbol;
         const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
@@ -1114,7 +1119,7 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
         }
 
         // Batch 19F Phase 2: Propagate sourcePool from FX5 scan batch
-        validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier, sourcePool: p.sourcePool ?? 'quant' });
+        validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier, sourcePool: p.sourcePool });
       }
       return validPairs;
     }
@@ -1125,7 +1130,7 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
 
     if (fx5Survivors && fx5Survivors.length >= 10) {
       console.log(`[11.4C.1][VTS] Using Active Filter Pool: ${fx5Survivors.length} pairs`);
-      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; sourcePool: 'quant' }> = [];
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; sourcePool: string }> = [];
       for (const p of fx5Survivors) {
         if ((p.price ?? 0) < vtsConfig.minPrice || (p.volume24h ?? 0) < vtsConfig.minVolume24h) {
           continue;
@@ -1135,7 +1140,8 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
           console.warn(`[11.4H.1][Symbol Warning] Unmappable symbol in fallback: ${p.symbol}`);
           continue;
         }
-        validPairs.push({ symbol: canonicalSymbol, pool: 'rotational' as const, sourcePool: 'quant' as const });
+        validPairs.push({ symbol: canonicalSymbol, pool: 'rotational' as const, sourcePool: 'quant-trend' });
+        console.warn('[37][COLD_START] Using quant-trend as cold-start default sourcePool');
         if (validPairs.length >= vtsConfig.pairsPerCycle) break;
       }
       return validPairs;
@@ -1459,7 +1465,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   const allPairs = await getIdealPoolPairs();
 
   // Split pairs by sourcePool for logging and strategy routing
-  const quantPairs = allPairs.filter(p => p.sourcePool === 'quant' || !p.sourcePool);
+  const quantPairs = allPairs.filter(p => isQuantPool(p.sourcePool));
   const patternPairs = allPairs.filter(p => p.sourcePool === 'pattern');
 
   // Use all pairs (quant + pattern) for the simulation loop

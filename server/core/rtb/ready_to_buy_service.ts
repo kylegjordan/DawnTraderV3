@@ -107,7 +107,7 @@ export interface SQESignalInput {
   volume24h?: number | null; // Directive 8.8.4-C.14.B: 24h USD volume (NULL if not in FX5 pool)
   metadata?: Record<string, unknown>;
   skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
-  sourcePool?: 'quant' | 'pattern';    // Phase 14.5: active filter path origin
+  sourcePool?: string;    // Batch 37: Family-qualified source pool
   signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';  // Phase 14.5: signal family
   assetClass?: string;                  // Phase 14.5: 'crypto_spot' default
   rankingScore?: number;                // Phase 14.5: cross-family desirability score
@@ -1675,7 +1675,7 @@ class ReadyToBuyService {
     // Phase 14.5: Persist routing and ranking metadata for auditability
     const enrichedMetadata = {
       ...(input.metadata || {}),
-      sourcePool: input.sourcePool || 'quant',
+      sourcePool: input.sourcePool || undefined,
       signalType: input.signalType || 'QUANT',
       assetClass: input.assetClass || 'crypto_spot',
       rankingScore: input.rankingScore ?? parseFloat(String(input.finalScore || '0')),

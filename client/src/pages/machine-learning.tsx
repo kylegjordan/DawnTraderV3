@@ -307,6 +307,7 @@ const getPoolBadgeColor = (pool: string) => {
 
 // Batch 19F Phase 2: Source pool badge colors
 const getSourcePoolBadgeColor = (sourcePool: string) => {
+  if (sourcePool?.startsWith('QUANT-') || sourcePool?.startsWith('quant-')) return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
   const sp = sourcePool?.toUpperCase() ?? 'QUANT';
   if (sp === 'QUANT') return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
   if (sp === 'PATTERN') return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
@@ -509,8 +510,8 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                     </Badge>
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'quant')}`}>
-                      {(trade.sourcePool ?? 'quant').toUpperCase()}
+                    <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'unknown')}`}>
+                      {(trade.sourcePool ?? 'unknown').toUpperCase()}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -740,8 +741,8 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                     </Badge>
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'quant')}`}>
-                      {(trade.sourcePool ?? 'quant').toUpperCase()}
+                    <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'unknown')}`}>
+                      {(trade.sourcePool ?? 'unknown').toUpperCase()}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right">

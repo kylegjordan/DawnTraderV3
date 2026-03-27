@@ -123,7 +123,7 @@ interface ActiveTrade {
   marketFrictionScore?: number;
   marketFrictionLabel?: string;
   // Batch 19E: Source pool tracking
-  sourcePool?: 'quant' | 'pattern' | null;
+  sourcePool?: string | null;
 }
 
 interface PortfolioSummary {
@@ -365,7 +365,7 @@ function TradeRow({
       <td className="px-3 py-3">
         {trade.sourcePool ? (
           <Badge className={cn("text-xs font-medium",
-            trade.sourcePool === 'quant' ? "bg-blue-500/10 text-blue-600" :
+            trade.sourcePool?.startsWith('quant') ? "bg-blue-500/10 text-blue-600" :
             trade.sourcePool === 'pattern' ? "bg-purple-500/10 text-purple-600" :
             "bg-gray-500/10 text-gray-600"
           )}>

@@ -1468,7 +1468,7 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
     const standardCount = scanBatch.filter(p => p.filterTier === 'standard' || !p.filterTier).length;
     const relaxedCount = scanBatch.filter(p => p.filterTier === 'relaxed').length;
-    const quantCount = scanBatch.filter(p => p.sourcePool === 'quant' || !p.sourcePool).length;
+    const quantCount = scanBatch.filter(p => !p.sourcePool || p.sourcePool.startsWith('quant-') || p.sourcePool === 'quant').length;
     const patternCount = scanBatch.filter(p => p.sourcePool === 'pattern').length;
     const totalCount = scanBatch.length;
 
