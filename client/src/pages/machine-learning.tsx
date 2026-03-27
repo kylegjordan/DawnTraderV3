@@ -1944,8 +1944,9 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2">Signals Rejected (Net EV Below Floor) <span className="text-xs text-muted-foreground">(cumulative, 24h — strategy fired but signal failed EV check)</span></td>
-                        <td colSpan={2} className="p-2 text-right text-muted-foreground">—</td>
-                        <td className="p-2 text-right text-red-500">{fmt((ve as any).rejectedReasons?.netEvBelowFloor ?? 0)}</td>
+                        <td className="p-2 text-right text-red-500">{fmt((ve as any).quantSignalsRejected ?? 0)}</td>
+                        <td className="p-2 text-right text-red-500">{fmt((ve as any).patternSignalsRejected ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-red-500">{fmt((ve as any).signalsRejected ?? 0)}</td>
                       </tr>
                       <tr className="bg-muted/30 font-semibold">
                         <td className="p-2">Signals Generated <span className="text-xs text-muted-foreground">(cumulative, 24h — = virtual trades opened)</span></td>
