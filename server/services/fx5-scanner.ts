@@ -292,7 +292,7 @@ export class Fx5ScannerService {
 
     // Aggregate pattern global
     const aggPatternGlobal = { failed_stablecoin: 0, failed_min_price: 0, failed_max_price: 0, failed_min_volume: 0, failed_spread: 0, failed_history: 0, passed_all_filters: 0 };
-    const aggPatternImf = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 };
+    const aggPatternImf = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0 };
     let aggPatternSurvivors = 0;
     let hasPatternData = false;
 
