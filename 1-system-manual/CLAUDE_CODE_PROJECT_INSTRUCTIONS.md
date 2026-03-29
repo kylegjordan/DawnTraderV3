@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-24 (Batch 23 GOV — DI threshold empirical calibration 12/10/10/8, null reason expansion, dynamic null display)
+> **Last Updated**: 2026-03-27 (Batches 36-39 GOV — diagnostics correctness fixes, source pool family-qualified identity model, 3-layer null taxonomy, pipeline summary table)
 
 ---
 
@@ -257,7 +257,7 @@ Required sections:
 | **90%** | Transition required: "Session must transition. Completing handoff now." |
 
 ### Governance Update Requirements
-- **Tier 1 (every batch):** CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md
+- **Tier 1 (every batch):** CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md, Scope File (in Scope Files/), Batch Completion Report (in Reports/Batch Completion/)
 - **Tier 2 (when relevant):** SYSTEM_MANUAL, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP
 - **Rule:** Essentials changes must also be applied to corresponding body sections
 
@@ -819,8 +819,8 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `36288df1` (Batch 23 HF: Empirical DI threshold recalibration 12/10/10/8)
-> **Next step**: Verify DI calibration producing non-zero Trend/Breakout survivors. Then Phase 14.7 or 15 — X Stocks + Perpetual Futures Integration. Then Phase 11 Finalization.
+> **Last commit**: `892d7f24` (Batch 39: Pipeline Summary Table with counting basis labels, family label polish)
+> **Next step**: Kyle review of Batches 36-39 in preview. Outstanding deferred items: pattern source pool investigation (#16), LQ strict threshold review (#11). Then Phase 15 — X Stocks + Perpetual Futures Integration. Then Phase 11 Finalization.
 > **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. **Filter Pipeline Diagnostics tab** deployed (Batch 19H). **Filter Diagnostics enhancement** deployed (Batch 19I — number formatting, VTS eval counters). **VTS Evaluation Breakdown** deployed (Batch 19J — 24-hour rolling aggregation). **Batch 20 COMPLETE** (Strategy-Family Filter Profiles audit — no code changes, Architecture B selected, 10 findings, 5 artifacts, DI threshold recalibration identified). **Whole-number batch numbering resumed** (Batch 20+). **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24, Markdown format). **Claude Code drives deployment** via replit-cmd through Langston's server. Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
@@ -855,7 +855,7 @@ See `1-system-manual/BATCH_CATALOG.md` for batch status and `1-system-manual/POS
 
 - 12.1.6 (LSP Error Triage) — PENDING (LOW priority, deferred)
 
-Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 (MCE Installation) is COMPLETE. Phase 14.1 is **COMPLETE** (HF9 done, Batch 17 `f9fa56c6`). Batch 18 (inter-phase optimization) COMPLETE (`4b6b2fa9`). **Phase 14.5 FULLY COMPLETE** (all batches 19 through 19L deployed). Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE (DBS in Batch 15). Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. **Batch 20 COMPLETE** (Strategy-Family Filter Profiles audit — Architecture B selected, DI threshold recalibration required). Next: Batch 21 Telemetry & Calibration, then Batch 22 Architecture B Implementation, then Phase 14.6 X Stocks, then Phase 11 Finalization.
+Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 COMPLETE. Phase 14.1 COMPLETE. Batch 18 COMPLETE. **Phase 14.5 FULLY COMPLETE**. **Phase 14.6 FULLY COMPLETE** (Batches 20-39: family-qualified identity model, 3-layer null taxonomy, pipeline summary table, reconciliation proof verified). Phase 14.1B ELIMINATED. Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED. Next: Phase 15 — X Stocks + Perpetual Futures Integration. Then Phase 11 Finalization.
 
 ### Investigation Notes for Future Batches
 - **12.2.1**: ~~Wave 1 Safe Deletions~~ **COMPLETE** (Batch 8). 2 files deleted (dhma.ts, latti-safety-monitor.tsx). 11 files surgically modified. ~1,254 lines removed. LATTi lazy-loader stub (RISK-044) remains — can be cleaned in a future batch.

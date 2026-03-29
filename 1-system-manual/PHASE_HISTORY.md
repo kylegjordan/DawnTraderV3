@@ -26,7 +26,7 @@
 | 14.4 | Phase 14.4 line of work | — | CANCELED |
 | 14.5 | Dual-Path Pattern Scanning + Merit-Based Ranking + Filter Diagnostics | Batch 19 through 19K GOV | COMPLETE |
 | Inter-phase | API Budget Optimization + routing/archive hotfixes | Batch 18, 18B, HF10, HF10B, HF11B, HF12, HF12B, HF12C, HF12D | COMPLETE |
-| 14.6 | X Stocks integration | — | PLANNED |
+| 14.6 | Filter Diagnostics Data Truth + Family-Qualified Identity | Batches 20-39 (all deployed and verified) | COMPLETE |
 | 15 | Strategy-family filter profiles / rules engine follow-on | — | PLANNED |
 | 19-22 | Paper-mode audit, production hardening, live activation, publication | — | PLANNED |
 
@@ -170,26 +170,39 @@ Phase 14.5 is treated as fully complete in the current governance state. It is o
 
 ---
 
-## Phase 14.6 — Strategy-Family Filter Profiles (Batches 20-22)
+## Phase 14.6 — Strategy-Family Filter Profiles + Diagnostics Data Truth (Batches 20-39)
 
 ### Purpose
-Implement strategy-family-aware filtering so each strategy family gets IMF thresholds tuned to its market environment preferences. Trend strategies get clean directional markets; reversal/oscillator strategies get choppy/ranging conditions.
+Implement strategy-family-aware filtering, establish data truth in filter diagnostics, and deploy the family-qualified candidate identity model. Each strategy family gets IMF thresholds tuned to its market environment. Filter pipeline metrics become fully reconcilable.
 
 ### Included Batches
-- **Batch 20** (2026-03-23) — Pre-implementation audit. 10 code review steps, 5 artifacts. Architecture B selected. DI threshold recalibration identified. Whole-number batch numbering resumed.
-- **Batch 21** (2026-03-23) — Telemetry & Calibration Scaffolding. VTSEvalSnapshot expanded with NullReasonBreakdown + totalStrategyEvaluations. DI distribution logging. ML page dashboard updates.
-- **Batch 22** (2026-03-23) — Architecture B Implementation. diMax column added. STRATEGY_FAMILY_MAP (17 strategies). 4 family IMF filter paths in FX5 scanner. ActiveFilterPool expanded. Family-aware strategy selection in orchestrator + VTS. Filter diagnostics UI updated. DB seed for 8 new filter_path rows.
-- **Batch 22 HF-HF7** (2026-03-23) — Post-deployment hotfixes: seed import/migration fix, 24h family rolling aggregation, duplicate combos tracking (unique combos blocked sub-row), VTS eval history disk persistence, skipped signals immediate flush. 7 hotfixes total addressing UI gaps, data persistence, and telemetry accuracy.
+- **Batch 20** (2026-03-23) — Pre-implementation audit. Architecture B selected. DI threshold recalibration identified.
+- **Batch 21** (2026-03-23) — Telemetry & Calibration Scaffolding.
+- **Batch 22** (2026-03-23) — Architecture B Implementation. 4 family IMF filter paths.
+- **Batch 22 HF-HF7** (2026-03-23) — Post-deployment hotfixes (7 total).
+- **Batch 23** (2026-03-24) — DI Threshold Calibration + Null Reason Expansion.
+- **Batch 23 HF** (2026-03-24) — Empirical DI recalibration (crypto DI distribution 3-20).
+- **Batch 24** (2026-03-24) — Filter Diagnostics data truth + per-pool counter split.
+- **Batch 25** (2026-03-25) — Counter reset + pattern null split + all rejection categories.
+- **Batch 26** (2026-03-25) — Counter truth fixes (ADX guard, family filter, Net EV reorder).
+- **Batch 27** (2026-03-26) — Counter fixes + investigation resolutions.
+- **Batch 28** (2026-03-26) — Pattern-path DI threshold adjustment.
+- **Batch 29** (2026-03-26) — UI layout + labeling fixes.
+- **Batch 36** (2026-03-27) — Diagnostics correctness fixes (sourcePool on closedTradeRecord, DI aggregation).
+- **Batch 37** (2026-03-27) — Source pool family-qualified identity model. Replaced generic `quant` with `quant-trend/reversal/breakout/oscillation`. 10 changes across 13 files. Reconciliation proof verified.
+- **Batch 38** (2026-03-27) — 3-layer null taxonomy (Setup Nulls A-F, Routing/Path Failures, Post-Signal Rejections). Signals rejected counter fix.
+- **Batch 39** (2026-03-27) — Pipeline Summary Table with counting basis labels. Family label polish.
 
 ### Key Architecture Decisions
 - **Architecture B (brute-force fan-out)** over Architecture A (early MCE)
-- **Multi-family survival** preserved — pair+strategy dedup handles multi-path
-- **No hidden fallbacks** — explicit family filtering, regime-only selection when no family data
-- **VTS uses actual filter results** from FX5 diagnostics, not inference
-- **Candidate thresholds** — to be calibrated from telemetry data
+- **Family-qualified candidate identity** — `quant-trend`, `quant-reversal`, `quant-breakout`, `quant-oscillation` replace generic `quant`
+- **Total quant survivors = sum of family survivors** (not deduplicated by symbol)
+- **No hidden fallbacks** — explicit family filtering, CONFIG_MISSING error if family path absent
+- **3-layer null taxonomy** — Setup Nulls (data/context), Routing/Path Failures, Post-Signal Rejections
+- **Pipeline Summary Table** — full pipeline flow with counting basis labels at top of Filter Diagnostics
 
 ### Outcome
-Phase 14.6 establishes the family-aware filter architecture. All 300 pairs now run through trend, reversal, breakout, and oscillator IMF filters alongside the existing quant and pattern paths. Next: DI threshold calibration from collected telemetry, then Phase 14.7/15 (X Stocks + Perpetual Futures).
+Phase 14.6 is COMPLETE. The system now has family-qualified candidate identity, reconcilable pipeline metrics, and transparent filter diagnostics. Next: Phase 15 (X Stocks + Perpetual Futures).
 
 ---
 
@@ -304,7 +317,7 @@ The pre-governance era established nearly all of DawnTrader’s core ambitions: 
 
 ## Current Historical Position
 
-As of Batch 22 (2026-03-23):
+As of Batch 39 (2026-03-27):
 - Phase 12 is complete.
 - Phase 13 is complete.
 - Phase 14.1 is complete.
@@ -312,7 +325,7 @@ As of Batch 22 (2026-03-23):
 - Phase 14.3 is deferred indefinitely.
 - Phase 14.4 is canceled.
 - Phase 14.5 is fully complete (Batches 19 through 19L).
-- **Phase 14.6 is complete** (Batches 20-22: Strategy-Family Filter Profiles audit, telemetry scaffolding, Architecture B implementation).
-- Next: DI threshold calibration, then Phase 14.7/15 (X Stocks + Perpetual Futures), then Phase 11 Finalization.
+- **Phase 14.6 is COMPLETE** (Batches 20-39: Strategy-Family Filter Profiles, DI calibration, counter truth fixes, family-qualified identity model, 3-layer null taxonomy, pipeline summary table).
+- Next: Phase 15 (X Stocks + Perpetual Futures), then Phase 11 Finalization.
 
 The system is now in a far more governable state than at any point in the pre-governance history.

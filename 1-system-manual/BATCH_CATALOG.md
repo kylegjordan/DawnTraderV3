@@ -94,6 +94,25 @@
 | **Batch 23** | 2026-03-24 | `bafb5770` | **DI Threshold Calibration + Null Reason Expansion.** Lowered DI thresholds for trend (55→25) and breakout (45→20). Wired 3 unused null reason counters (netEvBelowFloor, adxGuard, maxOpenTrades). Made ML page null reason display dynamic. Created update-di-thresholds.ts script. | `BATCH_23_SCOPE.md` | `BATCH_23_COMPLETION_REPORT.md` |
 | Batch 23 HF | 2026-03-24 | `36288df1` | Empirical DI recalibration. Observed crypto DI distribution 3-20 under 48-candle window. Lowered thresholds further: active_trend 25→12, active_breakout 20→10, vts_trend 20→10, vts_breakout 15→8. Updated seed and script files to match DB. | — | — |
 
+| **Batch 24** | 2026-03-24 | `6eef825f` | **Filter Diagnostics data truth + pipeline flow fixes.** Added per-pool counter split (quantStrategyEvaluations, patternStrategyEvaluations, quantSignalsGenerated, patternSignalsGenerated). Fixed SkipReason type to include Duplicate_Position_Max. Fixed Signal Rejection Breakdown table layout and row ordering. | `BATCH_24_SCOPE.md` | `Batch_Completion_24_03.24.26.md` |
+| **Batch 25** | 2026-03-25 | `ca5c5b45` | **P0 data truth — counter reset + pattern null split + all rejection categories.** Deleted stale VTS eval history files (incompatible counter generations). Split patternStrategyNulls from quantStrategyNulls. Added ALL_REJECTION_REASONS constant for zero-count display. | `BATCH_25_SCOPE.md` | `Batch_Completion_25_03.25.26.md` |
+| Batch 25 GOV | 2026-03-25 | `9d1a9f49` | Governance: Added Claude Comms and Packages folder to repo with batch records, scope files, completion reports. | — | — |
+| **Batch 26** | 2026-03-25 | `c805e6da` | **Counter truth — ADX guard + family filter + Net EV reorder + silent pair drops.** Fixed 6 counter truth bugs: ADX guard missing all counter increments, family filter silent drops (new familyFilterMismatch null reason), Net EV floor moved before signalsGenerated (new rejectedReasons/RejectedReasonBreakdown), silent pair drops now counted (pairsSkippedNoPrice, pairsSkippedInsufficientOHLC). Semantic contract applied: null vs rejected vs generated. | `BATCH_26_SCOPE.md` | `Batch_Completion_26_03.25.26.md` |
+
+| **Batch 27** | 2026-03-26 | `d8317c02` | **Counter fixes + investigation resolutions.** Fixed byStrategy TOTAL gap (duplicate guard missing byStrategy increment), null reason % denominator (was using quantStrategyNulls only, now uses sum of all nullReasons), logSkippedSignal key mismatch (Net_EV_Below_VTS_Floor → Net_EV_Negative), added familyFilterMismatch label. Resolved #7 LQ, #9 benchmark bypass, #5 quant pattern detection as by-design. | `BATCH_27_SCOPE.md` | `Batch_Completion_27_03.26.26.md` |
+
+| **Batch 28** | 2026-03-26 | `ca831f50` | **Pattern-path DI threshold adjustment.** Root cause: pattern DI hardcoded at 30 while family paths were 8-12. Added active_pattern (DI_MIN=10) and vts_pattern (DI_MIN=8) seed rows. Lowered hardcoded fallback from 30 to 10. Updated existing DB rows via SQL. | `BATCH_28_SCOPE (in BATCH_27_SCOPE.md)` | `Batch_Completion_28_03.26.26.md` |
+
+| **Batch 29** | 2026-03-26 | `018eed55` | **UI layout + labeling fixes.** Moved VTS Evaluation above Signal Rejection for pipeline narrative flow. Added cumulative labels ("not unique pairs"), pair skip reason sub-rows (pairsSkippedNoPrice, InsufficientOHLC), Signals Rejected row with "(= virtual trades opened)" annotation, data freshness tags (disk-persisted vs in-memory). | `BATCH_29_SCOPE (in README)` | `Batch_Completion_29_03.26.26.md` |
+
+| **Batch 36** | 2026-03-27 | `4cbe062b` | **Diagnostics correctness fixes.** Added sourcePool to closedTradeRecord, fixed pairsFailedDiAllFamilies to use .length, added failedDI to aggQuantImf initialization and aggregation. | — | `BATCHES_36-39_COMPLETION_REPORT.md` |
+
+| **Batch 37** | 2026-03-27 | `715b6a82` | **Source pool family-qualified identity model.** Replaced generic `quant` with `quant-trend/reversal/breakout/oscillation`. 10 changes across 13 files. Per-family tagging in FX5 scanner, isQuantPool() helper, fallback removal, UI badge updates. Reconciliation proof: family sum = quant.survivors (exact match). | — | `BATCHES_36-39_COMPLETION_REPORT.md` |
+
+| **Batch 38** | 2026-03-27 | `d8dcd448` | **3-layer null taxonomy + signals rejected counter fix.** Setup Nulls (A-F), Routing/Path Failures, Post-Signal Rejections as distinct UI sections. Fixed dead-code signals rejected counter. | — | `BATCHES_36-39_COMPLETION_REPORT.md` |
+
+| **Batch 39** | 2026-03-27 | `892d7f24` | **Pipeline Summary Table + label polish.** Full pipeline flow table with counting basis labels at top of Filter Diagnostics. Family labels polished. Pattern/LQ investigations resolved. | — | `BATCHES_36-39_COMPLETION_REPORT.md` |
+
 ---
 
 ## Notes
