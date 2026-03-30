@@ -33,9 +33,13 @@ export class OpenAIRateLimiter {
   private readonly INITIAL_BACKOFF_MS = 2000; // Start with 2 seconds
 
   private constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (apiKey && apiKey.startsWith('sk-') && apiKey.length > 20) {
+      this.openai = new OpenAI({ apiKey });
+    } else {
+      console.log('[OpenAIRateLimiter] No valid OPENAI_API_KEY set — AI features disabled');
+      this.openai = null as any;
+    }
 
     this.circuitBreaker = {
       isOpen: false,
