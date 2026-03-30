@@ -23,13 +23,12 @@ console.log(`[BOOT] DawnTrader v${version.version} - Phase ${version.phase}`);
 const app = express();
 
 // CORS Configuration - restrict access to allowed origins only
-// For Replit: automatically allow the current Replit dev/app domain + any custom ALLOWED_ORIGINS
-const replitDevDomain = process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null;
+// Set ALLOWED_ORIGINS env var to comma-separated list of allowed domains
+// e.g. ALLOWED_ORIGINS=https://staging.dawntrader.com,https://dawntrader.com
 const customOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
 const allowedOrigins = [
-  "http://localhost:3000", 
+  "http://localhost:3000",
   "http://localhost:5000",
-  ...(replitDevDomain ? [replitDevDomain] : []),
   ...customOrigins
 ].filter(Boolean);
 

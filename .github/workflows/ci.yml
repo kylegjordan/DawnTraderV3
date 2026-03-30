@@ -11,7 +11,7 @@ on:
   pull_request:
     branches: ['*']
   push:
-    branches: [dawntrader-v4, main]
+    branches: [dawntrader-v4, main, 'migration/**']
 
 concurrency:
   group: ci-${{ github.ref }}

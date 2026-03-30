@@ -8,8 +8,6 @@ export const env = {
   DATABASE_URL: process.env.DATABASE_URL || '',
   JWT_SECRET: process.env.JWT_SECRET || 'development-temp-secret',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
-  REPLIT: process.env.REPLIT === 'true',
-  REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT === '1',
   
   WALTER_DISABLED: process.env.WALTER_DISABLED === 'true',
   LATTI_ENABLED: process.env.LATTI_ENABLED !== 'false',

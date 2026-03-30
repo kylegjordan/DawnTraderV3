@@ -28,20 +28,19 @@ async function verifyDatabaseConnection(): Promise<boolean> {
 
 async function checkPITRSupport(): Promise<boolean> {
   try {
-    // Neon databases support PITR automatically
-    // Verify we're using Neon by checking the DATABASE_URL
+    // Check for managed Postgres providers that support PITR
     const dbUrl = process.env.DATABASE_URL || '';
-    
-    if (dbUrl.includes('neon.tech') || dbUrl.includes('neon-proxy')) {
-      logger.info('[Backup-Verify] PITR supported (Neon PostgreSQL)', { 
+
+    if (dbUrl.includes('neon.tech') || dbUrl.includes('neon-proxy') || dbUrl.includes('supabase')) {
+      logger.info('[Backup-Verify] PITR supported (managed PostgreSQL)', {
         phase: '5C',
-        provider: 'Neon'
+        provider: dbUrl.includes('supabase') ? 'Supabase' : 'Neon'
       });
       return true;
     } else {
       logger.warn('[Backup-Verify] PITR may not be available', {
         phase: '5C',
-        message: 'Database provider not recognized as Neon'
+        message: 'Database provider not recognized as managed Postgres with PITR'
       });
       return false;
     }
