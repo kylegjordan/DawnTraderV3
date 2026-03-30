@@ -1,0 +1,340 @@
+[
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "BULL_STABLE",
+    "strategy": "sma_trend_ride",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0,
+      "confidence": 0.2,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 100,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "91930cb6"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "BULL_STABLE",
+    "strategy": "pivot_shift",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0,
+      "confidence": 0.2,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 39,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "dc103524"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "BULL_STABLE",
+    "strategy": "morning_star",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0,
+      "confidence": 0.2,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 7,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "a38d92c4"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "TRANSITION",
+    "strategy": "liquidity_trap",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9333333333333333,
+      "confidence": 0.01333333333333333,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 108,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "5bb32920"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "TRANSITION",
+    "strategy": "pivot_shift",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9333333333333333,
+      "confidence": 0.01333333333333333,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 24,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "7a846a0e"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "TRANSITION",
+    "strategy": "morning_star",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9333333333333333,
+      "confidence": 0.01333333333333333,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 6,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "39b17d82"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "LOW_VOL_CHOP",
+    "strategy": "range_trade",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9767441860465116,
+      "confidence": 0.004651162790697683,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 49,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "a1e0932d"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "LOW_VOL_CHOP",
+    "strategy": "adaptive_flow",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9767441860465116,
+      "confidence": 0.004651162790697683,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 7,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "55c5e77a"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "LOW_VOL_CHOP",
+    "strategy": "support_bounce",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9767441860465116,
+      "confidence": 0.004651162790697683,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 3,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "e5213482"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "BEAR_VOLATILE",
+    "strategy": "defensive_hedge",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9857142857142858,
+      "confidence": 0.002857142857142847,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 14,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "333335be"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "BEAR_VOLATILE",
+    "strategy": "mean_reversion",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9857142857142858,
+      "confidence": 0.002857142857142847,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 90,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "671a6c37"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "BEAR_VOLATILE",
+    "strategy": "reverse_impulse",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0.9857142857142858,
+      "confidence": 0.002857142857142847,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 1,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "fbcf06f1"
+  },
+  {
+    "_schema": "regime-archive/v1.1",
+    "timestamp": "2026-03-27T10:27:45.569Z",
+    "source": "VTS",
+    "windowDays": 7,
+    "regime": "HIGH_VOL_IMPULSE",
+    "strategy": "breakout",
+    "metrics": {
+      "winRate": 0,
+      "avgPnL": 0,
+      "skipRatio": 0,
+      "confidence": 0.2,
+      "dynamicROI": 0.02,
+      "momentumWeight": 0,
+      "volatilityWeight": 0,
+      "trendWeight": 1
+    },
+    "_metadata": {
+      "telemetryVersion": 1,
+      "canonicalVersion": 1,
+      "predictiveAdjustments": 478,
+      "recordCount": 1,
+      "avgConfidence": 0.06634807053411705
+    },
+    "checksum": "87f0abe8"
+  }
+]
