@@ -618,13 +618,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     >
       <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-4">
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* Mobile Menu Toggle */}
+          {/* Mobile Menu Toggle — always visible, never pushed off-screen */}
           {showMenuButton && (
             <Button
               variant="ghost"
               size="sm"
               onClick={onMenuClick}
-              className="lg:hidden p-1.5 sm:p-2 hover:bg-muted"
+              className="lg:hidden p-1.5 sm:p-2 hover:bg-muted shrink-0 relative z-[60]"
               data-testid="button-menu"
             >
               <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
