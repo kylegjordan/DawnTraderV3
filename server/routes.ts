@@ -8,12 +8,17 @@ import { db } from "./db";
 import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
-import { AIAnalyst } from "./services/ai-analyst";
+// MIGRATION: ai-analyst disabled — legacy Walter/OpenAI dependency, will be fully removed
+// import { AIAnalyst } from "./services/ai-analyst";
 import { getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
 import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
-import { aiOpportunitiesService } from "./services/ai-opportunities";
-import { dailyBriefService } from "./services/daily-brief";
+// MIGRATION: ai-opportunities disabled — depends on OpenAI, legacy feature
+// import { aiOpportunitiesService } from "./services/ai-opportunities";
+const aiOpportunitiesService: any = null;
+// MIGRATION: daily-brief disabled — depends on OpenAI, legacy feature
+// import { dailyBriefService } from "./services/daily-brief";
+const dailyBriefService: any = null;
 import { formulaAuditService } from "./services/formula-audit";
 import { AlertsService } from "./services/alerts-service";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent, strategyParamSchema } from "@shared/schema";
@@ -30,7 +35,8 @@ import { parseIntent } from "./services/intent-parser";
 import { CommandRouter } from "./services/command-router";
 import { commandLogger } from "./services/command-logger";
 // Directive 12.2.7: NLAI imports removed (nlai-interpreter, nlai-execution-broker, execution-policy-controller)
-import OpenAI from "openai";
+// MIGRATION: OpenAI import disabled — legacy dependency, will be fully removed
+// import OpenAI from "openai";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import fs from 'fs/promises';
@@ -78,7 +84,9 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const aiAnalyst = new AIAnalyst();
+// MIGRATION: ai-analyst disabled — legacy Walter/OpenAI dependency
+// const aiAnalyst = new AIAnalyst();
+const aiAnalyst: any = null;
 
 // [41F-L.2] Trade test request schema
 const TradeTestSchema = z.object({
