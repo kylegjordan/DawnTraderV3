@@ -1,0 +1,47 @@
+# DawnTrader Docker Compose
+# Usage:
+#   Development:  docker compose up          (uses .env file)
+#   Production:   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This compose file is primarily for local development and staging.
+# Production deployments use PM2 on EC2 (see ecosystem.config.cjs and deploy/DEPLOYMENT.md).
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-5000}:5000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5000/api/health/summary').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # Optional: local Postgres for development without Supabase
+  # Uncomment to use a local database instead of Supabase
+  # db:
+  #   image: postgres:16
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_DB: dawntrader
+  #     POSTGRES_USER: dawntrader
+  #     POSTGRES_PASSWORD: localdev
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U dawntrader"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+# volumes:
+#   pgdata:

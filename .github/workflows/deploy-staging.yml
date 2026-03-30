@@ -1,0 +1,74 @@
+# DawnTrader Staging Deployment
+# Deploys to EC2 staging when code is merged to the staging branch.
+#
+# STATUS: TEMPLATE — requires EC2 provisioning and GitHub secrets before activation.
+# TODO gates are marked below. Do not enable this workflow until infrastructure is ready.
+
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [staging]
+
+# Prevent concurrent deployments
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Staging EC2
+    runs-on: ubuntu-latest
+    # TODO: Uncomment the 'if' below after staging environment is ready
+    # if: github.repository == 'kylegjordan/DawnTraderV3'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # TODO: Configure these GitHub repository secrets before enabling:
+      #   STAGING_SSH_KEY        - SSH private key for EC2 staging instance
+      #   STAGING_HOST           - EC2 staging instance IP or hostname
+      #   STAGING_USER           - SSH user (e.g., deploy, ubuntu)
+      #   STAGING_APP_DIR        - App directory on EC2 (e.g., /home/deploy/dawntrader)
+      #   STAGING_ENV_FILE       - Base64-encoded .env file content
+
+      - name: Deploy via SSH
+        # TODO: Uncomment and configure after EC2 is provisioned
+        # uses: appleboy/ssh-action@v1
+        # with:
+        #   host: ${{ secrets.STAGING_HOST }}
+        #   username: ${{ secrets.STAGING_USER }}
+        #   key: ${{ secrets.STAGING_SSH_KEY }}
+        #   script: |
+        #     cd ${{ secrets.STAGING_APP_DIR }}
+        #     git pull origin staging
+        #     npm ci --production=false
+        #     npm run build
+        #     pm2 restart ecosystem.config.cjs
+        #     pm2 save
+        #     echo "Deployed $(git rev-parse --short HEAD) at $(date)"
+        run: |
+          echo "=== STAGING DEPLOY TEMPLATE ==="
+          echo "This workflow is a template. It will deploy to EC2 staging once:"
+          echo "  1. EC2 staging instance is provisioned"
+          echo "  2. GitHub secrets are configured (STAGING_SSH_KEY, STAGING_HOST, etc.)"
+          echo "  3. The commented sections above are uncommented"
+          echo "  4. nginx + PM2 are configured on the EC2 instance"
+          echo ""
+          echo "See deploy/DEPLOYMENT.md for setup instructions."
+
+      # TODO: Uncomment after staging is live
+      # - name: Health check
+      #   run: |
+      #     sleep 10
+      #     curl -sf https://staging.dawntrader.com/api/health/summary || exit 1
+      #     echo "Staging health check passed"
+
+      # TODO: Uncomment to notify on Telegram
+      # - name: Notify deployment
+      #   if: success()
+      #   run: |
+      #     curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+      #       -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+      #       -d text="Staging deployed: ${{ github.sha }}"

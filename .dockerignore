@@ -1,0 +1,49 @@
+# Dependencies (reinstalled in Docker)
+node_modules/
+
+# Build output (rebuilt in Docker)
+dist/
+
+# Git
+.git/
+.gitignore
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Replit-specific (not needed in Docker)
+.replit
+replit.md
+.config/
+generated-icon.png
+
+# Claude Code worktrees
+.claude/
+
+# Environment files (secrets - never bake into image)
+.env
+.env.*
+!.env.example
+
+# Test/diagnostic artifacts
+diagnostic-reports/
+reports/
+logs/
+audit/
+*.log
+
+# Documentation / governance (not needed in runtime image)
+1-system-manual/
+directives/
+directives-archive/
+chaplet/docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
