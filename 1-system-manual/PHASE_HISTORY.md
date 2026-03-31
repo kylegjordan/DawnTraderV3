@@ -26,7 +26,9 @@
 | 14.4 | Phase 14.4 line of work | — | CANCELED |
 | 14.5 | Dual-Path Pattern Scanning + Merit-Based Ranking + Filter Diagnostics | Batch 19 through 19K GOV | COMPLETE |
 | Inter-phase | API Budget Optimization + routing/archive hotfixes | Batch 18, 18B, HF10, HF10B, HF11B, HF12, HF12B, HF12C, HF12D | COMPLETE |
-| 14.6 | Filter Diagnostics Data Truth + Family-Qualified Identity | Batches 20-39 (all deployed and verified) | COMPLETE |
+| 14.6 | Filter Diagnostics Data Truth + Family-Qualified Identity | Batches 20-39 (all deployed and verified on Replit) | COMPLETE |
+| Migration | Hetzner + Supabase Migration (Post-Replit) | Batch 40 | COMPLETE |
+| 14.7 | Strategy Filter Relaxation + Architecture Fixes | Batches 41-43 (deployed on Hetzner staging) | IN PROGRESS |
 | 15 | Strategy-family filter profiles / rules engine follow-on | — | PLANNED |
 | 19-22 | Paper-mode audit, production hardening, live activation, publication | — | PLANNED |
 

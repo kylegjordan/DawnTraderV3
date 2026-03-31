@@ -130,7 +130,7 @@ When the task-notification arrives: read the output, process any new messages, t
 | Replit Operations | 22 | Langston <-> Replit interactions | INACTIVE |
 | Reports | 23 | Reports now filed directly as Markdown | INACTIVE |
 
-**Session ID for topic 21**: `d26fe220-dfef-4fce-9093-7bf0748833e3`
+**Session ID for topic 21**: `dccc3974-18f4-4ae9-918a-9b2b709ef159`
 
 Session UUIDs change when sessions are cleared. Use `openclaw sessions --json` to get current values.
 
@@ -218,16 +218,16 @@ Required sections:
 ## Page 7 — Critical Rules + Governance Summary
 
 ### Non-Negotiable Rules
-1. Clone is READ ONLY
-2. Never pull into Replit
-3. Never skip the checklist
-4. Never improvise under pressure
-5. Communicate deviations before acting
-6. Do not confabulate when context degraded
-7. Single source of truth per domain (CCPI is canonical)
-8. Batch completion reports mandatory
-9. Langston reviews mandatory at each gate
-10. Essentials changes must be mirrored in CCPI body
+1. Clone repo is the working copy — edit directly, push to GitHub (Post-Replit workflow)
+2. Replit is FROZEN — no updates, no syncing, no code flows to or from Replit
+3. Never skip the workflow — every phase, every batch, no exceptions
+4. Never improvise under pressure — if blocked, tell Kyle
+5. Communicate deviations before acting — explain in plain English BEFORE making architectural changes
+6. Do not confabulate when context degraded — flag uncertainty, don't state compacted info confidently
+7. Single source of truth per domain — CCPI is canonical for workflow/rules
+8. Batch completion reports mandatory — every batch gets a report
+9. Langston code-level reviews mandatory — scope, pre-audit, code diff in clone BEFORE push, completion report
+10. All governance docs live in BOTH the repo AND Google Drive — no split
 
 ### Capacity Management
 - **Claude Code**: 1,000,000 token context (Opus 4.6)
