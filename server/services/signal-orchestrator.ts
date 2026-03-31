@@ -77,10 +77,11 @@ import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../config/score-weights.co
 import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost } from '../core/math/cost-model.js';
 // Directive 11.4F.1B: Canonical regime-strategy mapping (single source of truth)
 import { 
-  CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP, 
+  CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
   STRATEGY_DISPLAY_NAMES,
   normalizeStrategy,
-  type CanonicalRegimeType as MarketRegimeType 
+  normalizePatternToCanonical,
+  type CanonicalRegimeType as MarketRegimeType
 } from '../config/canonical-regime-strategy-map.js';
 // Directive 11.4H Task 1: Symbol normalization at data ingress
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
@@ -1257,7 +1258,7 @@ export class SignalOrchestrator {
         p.strength > best.strength ? p : best, patternSignals[0]) : null;
 
       const patternInput = bestPattern ? {
-        pattern: bestPattern.pattern,
+        pattern: normalizePatternToCanonical(bestPattern.pattern) ?? bestPattern.pattern,
         direction: bestPattern.direction as 'BUY' | 'SELL',
         strength: bestPattern.strength,
         metadata: {

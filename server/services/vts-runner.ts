@@ -741,19 +741,18 @@ async function generatePhase10Signal(
   };
 
   // Build patternInput from detected patterns (same as orchestrator lines 1048-1070)
-  // Batch 44: When strategyOverride provides a patternType (canonical name), use it as
-  // the pattern name in patternInput. This ensures detect() functions that check for their
-  // canonical pattern type (e.g., 'MORNING_STAR') will match even when the raw detected
-  // pattern is a canonical equivalent (e.g., 'THREE_SOLDIERS' → 'MORNING_STAR').
+  // Batch 44: Always normalize detected pattern name through normalizePatternToCanonical()
+  // before passing to strategy detect(). This is the single source of truth for pattern
+  // name mapping (PATTERN_TO_CANONICAL in canonical-regime-strategy-map.ts).
   const bestDetectedPattern = detectedPatterns.length > 0 ? detectedPatterns.reduce((best: any, p: any) =>
     p.strength > best.strength ? p : best, detectedPatterns[0]) : null;
 
-  const effectivePatternName = (strategyOverride?.patternType && bestDetectedPattern)
-    ? strategyOverride.patternType
-    : bestDetectedPattern?.pattern ?? null;
+  const canonicalPatternName = bestDetectedPattern
+    ? normalizePatternToCanonical(bestDetectedPattern.pattern)
+    : null;
 
   const stratPatternInput: PatternInput | null = bestDetectedPattern ? {
-    pattern: effectivePatternName!,
+    pattern: canonicalPatternName ?? bestDetectedPattern.pattern,
     direction: bestDetectedPattern.direction as 'BUY' | 'SELL',
     strength: bestDetectedPattern.strength,
     metadata: {
