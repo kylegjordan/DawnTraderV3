@@ -114,9 +114,11 @@ export class StrategyEngine {
     console.log(`[VWAP Strategy] Volume check: current=${volume.toFixed(0)}, avg=${avgVolume.toFixed(0)}, multiplier=${volumeMultiplier}x, confirmed=${hasVolumeConfirmation}`);
     
     if (priceAboveVWAP && nearVWAP && hasReversalPattern && hasVolumeConfirmation) {
-      const entryPrice = currentPrice * 1.001; // Slight premium for entry
-      const stopPrice = Math.min(vwap * 0.997, low24h * 1.001); // Below VWAP or pullback low
-      const targetPrice = high24h * 0.995; // Near prior swing high
+      // Batch 45: ATR-relative entry/stop/target
+      const atr = indicators.atr ?? (high24h - low24h) * 0.1; // Fallback: 10% of daily range
+      const entryPrice = currentPrice + atr * 0.1;
+      const stopPrice = Math.min(vwap - atr * 0.5, low24h + atr * 0.1);
+      const targetPrice = high24h - atr * 0.25;
       
       // B3 FIX: For long trades, use Math.max to pick the HIGHER of the two targets (not the lower)
       const riskDistance = entryPrice - stopPrice;
@@ -203,19 +205,27 @@ export class StrategyEngine {
     const cPoint = this.findHigherLow(recent.slice(10, 10 + minConsolidation), bPoint);
     if (!cPoint || !current.vwap || parseFloat(cPoint.close) < parseFloat(current.vwap)) { setNullReason('price_position'); return null; }
     
-    // ✅ Check for breakout using user-configured threshold
+    // Batch 45: ATR-relative breakout threshold
+    const abcdAtr = computeATR(priceHistory);
     const cHigh = parseFloat(cPoint.high);
     const currentPrice = parseFloat(current.close);
     const currentVolume = parseFloat(current.volume);
-    const isBreakout = currentPrice > cHigh * (1 + breakoutThreshold);
+    const atrBreakoutThreshold = cHigh > 0 ? Math.max(breakoutThreshold, abcdAtr / cHigh) : breakoutThreshold;
+    const isBreakout = currentPrice > cHigh * (1 + atrBreakoutThreshold);
     
-    // ✅ Volume confirmation using user setting
-    const avgVolume = parseFloat(aPoint.volume); // Using spike volume as reference
+    // Batch 45: Volume confirmation against AVERAGE volume, not spike max.
+    // The A-point is the max-volume bar by definition (findSpike), so comparing
+    // against 1.5x spike is nearly impossible. Use average volume of the lookback instead.
+    const lookbackVolumes = recent.map(p => parseFloat(p.volume)).filter(v => v > 0);
+    const avgVolume = lookbackVolumes.length > 0
+      ? lookbackVolumes.reduce((s, v) => s + v, 0) / lookbackVolumes.length
+      : parseFloat(aPoint.volume);
     const hasVolumeConfirmation = currentVolume >= avgVolume * volumeMultiplier;
     
     if (isBreakout && hasVolumeConfirmation) {
-      const entryPrice = cHigh * (1 + breakoutThreshold + 0.003); // Buy stop above breakout level
-      const stopPrice = parseFloat(cPoint.low) * 0.998; // Below C low
+      // Batch 45: ATR-relative entry and stop
+      const entryPrice = cHigh + abcdAtr * 0.3; // Entry: C-high + 0.3 ATR buffer
+      const stopPrice = parseFloat(cPoint.low) - abcdAtr * 0.5; // Stop: below C-low by 0.5 ATR
       
       let targetPrice: number;
       
@@ -561,7 +571,10 @@ export class StrategyEngine {
   ): StrategySignal | null {
     const minRangeDurationHours = params.minRangeDurationHours || 10; // Crypto-calibrated (Batch 18H): 12 → 10 hours
     const minBoundaryTouches = params.minBoundaryTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
-    const entryZoneWidth = (params.entryZoneWidth || 1.5) / 100; // Batch 41: 0.5% → 1.5% — crypto support is a zone, not a line
+    // Batch 45: Entry zone proportional to range width — bottom 25% of range instead of fixed %.
+    // For a 10% range, entry zone = 2.5% (bottom quarter). For a 5% range, entry zone = 1.25%.
+    // Fallback: 1 ATR above support if range not yet known.
+    const entryZoneWidthParam = (params.entryZoneWidth || 1.5) / 100; // Kept as minimum floor
     const stopLossBeyond = (params.stopLossBeyond || 1) / 100;
     
     if (priceHistory.length < 30) { setNullReason('insufficient_data'); return null; }
@@ -594,14 +607,18 @@ export class StrategyEngine {
     const current = priceHistory[priceHistory.length - 1];
     const currentPrice = parseFloat(current.close);
     
-    // Check if price is in entry zone near support
-    const supportEntryZone = rangeResult.rangeLow * (1 + entryZoneWidth);
+    // Batch 45: Entry zone = bottom 25% of range, with ATR as minimum width, capped at 40% of range.
+    const rangeAbsolute = rangeResult.rangeHigh - rangeResult.rangeLow;
+    const entryZoneRaw = Math.max(rangeAbsolute * 0.25, atr, rangeResult.rangeLow * entryZoneWidthParam);
+    const entryZoneWidth = Math.min(entryZoneRaw, rangeAbsolute * 0.4); // Cap: never more than 40% of range
+    const supportEntryZone = rangeResult.rangeLow + entryZoneWidth;
     const isNearSupport = currentPrice >= rangeResult.rangeLow && currentPrice <= supportEntryZone;
     
     if (isNearSupport) {
-      const entryPrice = currentPrice * 1.001;
-      const stopPrice = rangeResult.rangeLow * (1 - stopLossBeyond);
-      const targetPrice = rangeResult.rangeHigh * 0.995; // Target near resistance
+      // Batch 45: ATR-relative entry/stop/target
+      const entryPrice = currentPrice + atr * 0.1;
+      const stopPrice = rangeResult.rangeLow - atr * 0.5;
+      const targetPrice = rangeResult.rangeHigh - atr * 0.25;
       
       console.log(`[RangeTrading] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
@@ -940,12 +957,20 @@ export class StrategyEngine {
 
   // Helper methods
   private detectBullishReversal(indicators: TechnicalIndicators): boolean {
-    // Simplified reversal detection - in reality this would be more sophisticated
-    const { currentPrice, low24h, volume } = indicators;
-    const nearLow = (currentPrice - low24h) / low24h < 0.02; // Within 2% of low
-    const highVolume = volume > 0; // Placeholder - would need volume comparison
-    
-    return nearLow && highVolume;
+    // Batch 45: ATR-relative pullback depth check.
+    // Price must have pulled back within 1.5 ATR of VWAP from above.
+    // Replaces the old near-contradictory "within 2% of 24h low" check.
+    const { currentPrice, vwap, low24h, high24h } = indicators;
+    const atr = indicators.atr ?? (high24h - low24h) * 0.1;
+    if (atr <= 0 || vwap <= 0) return false;
+    // Pullback depth: price is within 1.5 ATR below a recent high (VWAP acts as anchor)
+    const pullbackFromVwap = currentPrice - vwap;
+    const pullbackDepthATR = Math.abs(pullbackFromVwap) / atr;
+    // Price should be near VWAP (within 1.5 ATR) and not too far above it
+    const nearVwap = pullbackDepthATR <= 1.5;
+    // Price should be in a pullback, not a free-fall (above low by at least 1 ATR)
+    const aboveLowByAtr = (currentPrice - low24h) >= atr;
+    return nearVwap && aboveLowByAtr;
   }
 
   private findSpike(data: PriceData[]): PriceData | null {

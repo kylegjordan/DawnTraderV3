@@ -1775,14 +1775,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         const stratFamily = STRATEGY_FAMILY_MAP[stratDef.strategyKey];
         const pairFams = vtsSymbolFamilies.get(pair.symbol);
         if (stratFamily && stratFamily !== 'hybrid' && pairFams && !pairFams.has(stratFamily)) {
-          // Batch 26: Count family filter skips — pre-detect eligibility skip, not a strategy null
-          vtsEvalCounters.totalStrategyEvaluations++;
-          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
-          if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1; } else { vtsEvalCounters.quantStrategyNulls++; }
-          const famStratKey = stratDef.strategyKey;
-          if (!vtsEvalCounters.byStrategy[famStratKey]) { vtsEvalCounters.byStrategy[famStratKey] = { evaluated: 0, nulls: 0, signals: 0 }; }
-          vtsEvalCounters.byStrategy[famStratKey].evaluated++;
-          vtsEvalCounters.byStrategy[famStratKey].nulls++;
+          // Batch 45: familyFilterMismatch is a pre-detect eligibility skip, NOT a strategy evaluation.
+          // Do NOT count it in totalStrategyEvaluations, byStrategy, or null counters.
+          // This keeps the detect()-level null rate honest.
           vtsEvalCounters.nullReasons.familyFilterMismatch++;
           continue; // Skip strategy — pair didn't survive this family's filter path
         }
