@@ -115,6 +115,12 @@
 
 | **Batch 40** | 2026-03-30 | `ae340c98` | **Migration to Hetzner + Supabase (Post-Replit).** Dockerfile, GitHub Actions CI/CD, nginx config, PM2 ecosystem config, .env template, deployment guide. DB driver swap (Neon to pg). Replit plugin removal. OpenAI import disable. Hetzner staging (188.245.193.8) provisioned. Supabase PostgreSQL (Frankfurt) provisioned. Full schema + data migrated. FX5 scanner operational on staging. Post-Replit workflow adopted. | `BATCH_40_SCOPE.md` | `BATCH_40_COMPLETION_REPORT.md` |
 
+| **Batch 41** | 2026-03-31 | `ec547467` | **Strategy detect filter relaxation.** range_trade threshold 0.5%→1.5%, morning_star SMA gate→confidence, support_bounce PINBAR→confidence + proximity 1.5%→2.5%. Three strategies with 10K+ evals and 0% signal rate now have relaxed thresholds to allow signal generation. | — | — |
+
+| **Batch 42** | 2026-03-31 | `8f083695` | **Filter Diagnostics UI fixes.** 24h Pipeline Summary column fix, DI labels, family IMF display in Screeners tab. | — | — |
+
+| **Batch 43** | 2026-03-31 | `4396c105`, `4bab105b` | **Quant architecture fix — remove redundant global IMF stage.** Removed `metricFilteredSurvivors` (global LQ/VN gate). classifiedSurvivors now flow directly into family fan-out. `familyQualifiedUnion` replaces old gate for active pool. VTS batch preserves family-qualified identity. Pipeline Summary restructured: Total column added, "Family IMF Passed (family-qualified entries)" replaces old "IMF Passed", per-family breakdown sub-row, counting basis labels. ScanDiagnostics type updated (failedDI added). Storage source labels added to every row. | `BATCH_43_SCOPE.md` | `Batch_Completion_43_03.31.26.md` |
+
 ---
 
 ## Notes
