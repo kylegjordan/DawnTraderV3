@@ -1837,7 +1837,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right text-muted-foreground">—</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30 font-semibold">
-                    <td className="p-2">Family IMF Passed (unique pairs)</td>
+                    <td className="p-2">Family IMF Passed (fan-out total)</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed)}</td>
                     <td className="p-2 text-right text-green-600">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.passed) : '—'}</td>
                   </tr>
