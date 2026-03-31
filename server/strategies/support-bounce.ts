@@ -8,14 +8,16 @@
  * Key:       support_bounce
  *
  * Identifies horizontal support levels from clustered local minima, then
- * fires a BUY signal when price bounces off a valid support zone with a
- * confirming pinbar pattern and volume surge.
+ * fires a BUY signal when price bounces off a valid support zone with
+ * volume confirmation. PINBAR pattern is a confidence bonus, not a hard
+ * gate (Batch 41 relaxation). Any bullish candle near support qualifies.
  *
  * Support detection:
  *   1. Find local minima in last 50 candles.
  *   2. Cluster nearby lows (tolerance = max(0.5%, ATR/price * 0.5)).
- *   3. Require >= 3 touches per cluster.
+ *   3. Require >= 2 touches per cluster (Batch 18H: 3 → 2).
  *   4. Select nearest valid support within 3% of current price.
+ *   5. Price must be within 2.5% of support (Batch 41: 1.5% → 2.5%).
  *
  * Entry: Slight premium above current price (0.1%).
  * Stop:  Below support level minus buffer (0.5%).
@@ -46,7 +48,7 @@ const SB_LOOKBACK_CANDLES       = 50;    // Candles to scan for local minima
 const SB_CLUSTER_TOLERANCE_BASE = 0.005; // 0.5% base cluster tolerance
 const SB_MIN_TOUCHES            = 2;     // Minimum touches — Crypto-calibrated (Batch 18H): 3 → 2
 const SB_MAX_DISTANCE           = 0.03;  // Support must be within 3% of price
-const SB_PROXIMITY              = 0.015; // 1.5% proximity for bounce entry
+const SB_PROXIMITY              = 0.025; // Batch 41: 1.5% → 2.5% — support is a zone, not a line
 const SB_VOL_MULT               = 1.2;   // Volume must be >= avgVol * this
 const SB_STOP_BELOW_SUPPORT     = 0.005; // 0.5% below support for stop
 const SB_TARGET_ATR_MULT        = 2.0;   // Target = entry + 2.0 * ATR
@@ -193,15 +195,27 @@ export function detectSupportBounce(
     return null;
   }
 
-  // ── Condition 3: Pattern must be PINBAR / BUY ────────────────────────────
-  if (!patternSignal || patternSignal.pattern !== 'PINBAR' || patternSignal.direction !== 'BUY') {
-    setNullReason('no_pattern');
-    return null;
+  // ── Condition 3: Pattern confirmation (Batch 41: PINBAR hard gate → confidence factor) ──
+  // Industry practice: PINBAR at exact support is ideal but not required.
+  // A bullish candle near support with volume is sufficient for a bounce setup.
+  // PINBAR presence becomes a confidence bonus instead of a hard gate.
+  const hasPinbar = patternSignal && patternSignal.pattern === 'PINBAR' && patternSignal.direction === 'BUY';
+  const hasBullishPattern = patternSignal && patternSignal.direction === 'BUY';
+
+  // Require at least a bullish pattern (any type) — but not specifically PINBAR
+  if (!hasBullishPattern) {
+    // Check if the last candle is at least bullish (close > open)
+    const lastCandle = ohlc[ohlc.length - 1];
+    if (lastCandle.close <= lastCandle.open) {
+      setNullReason('no_pattern');
+      return null;
+    }
   }
 
-  // ── Condition 4: Minimum pattern strength ────────────────────────────────
-  if (patternSignal.strength < 0.50) {  // Crypto-calibrated (Batch 18H): 0.55 → 0.50
-    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal.strength.toFixed(3)} < 0.50. Skipping.`);
+  // ── Condition 4: Minimum pattern strength (if pattern provided) ──────────
+  const patternStrength = patternSignal?.strength ?? 0.40; // Default if no pattern signal
+  if (hasBullishPattern && patternSignal!.strength < 0.40) { // Batch 41: 0.50 → 0.40 minimum
+    console.log(`${LOG_PREFIX} Pattern strength ${patternSignal!.strength.toFixed(3)} < 0.40. Skipping.`);
     setNullReason('weak_pattern');
     return null;
   }
@@ -231,7 +245,8 @@ export function detectSupportBounce(
   }
 
   // ── Confidence calculation ───────────────────────────────────────────────
-  const patternScore = patternSignal.strength * SB_PATTERN_WEIGHT;
+  const patternScore = patternStrength * SB_PATTERN_WEIGHT;
+  const pinbarBonus = hasPinbar ? 0.05 : 0; // Batch 41: PINBAR is now a confidence bonus, not a hard gate
   const supportScore = Math.min(1.0, touchCount / 3) * SB_SUPPORT_WEIGHT;
   const proximityDenom = supportLevel * SB_PROXIMITY;
   const proximityScore = proximityDenom > 0
@@ -240,7 +255,7 @@ export function detectSupportBounce(
   const volumeBonus = (bounceVolume >= avgVolume * 2.0) ? SB_HIGH_VOL_BONUS : 0;
 
   // Cap confidence at 0.93 for support bounce (spec constraint)
-  const rawConfidence = patternScore + supportScore + proximityScore + volumeBonus;
+  const rawConfidence = patternScore + supportScore + proximityScore + volumeBonus + pinbarBonus;
   const confidence = Math.max(0, Math.min(0.93, rawConfidence));
 
   // ── Build and return signal ──────────────────────────────────────────────
@@ -266,7 +281,7 @@ export function detectSupportBounce(
       supportLevel,
       touchCount,
       proximityDistance,
-      patternStrength: patternSignal.strength,
+      patternStrength, // Batch 41: uses safe value (handles null patternSignal)
       bounceVolume,
       avgVolume,
       effectiveATR,

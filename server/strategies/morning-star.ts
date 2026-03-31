@@ -8,8 +8,9 @@
  * Key:       morning_star
  *
  * Classic three-candle bullish reversal pattern. Requires a confirmed
- * Morning Star candlestick formation with volume confirmation and
- * price trading below SMA(20) to filter for mean-reversion setups.
+ * Morning Star candlestick formation with volume confirmation.
+ * SMA(20) context used as confidence factor (bonus if below, penalty if above)
+ * rather than a hard gate (Batch 41 relaxation).
  *
  * Entry: Slight premium above current price (0.1%).
  * Stop:  Below the lowest low of the star/first candle minus buffer.
@@ -91,18 +92,12 @@ export function detectMorningStar(
     return null;
   }
 
-  // ── Condition 3: Price below SMA(20) (mean-reversion filter) ─────────────
+  // ── Condition 3: SMA(20) context (Batch 41: hard gate → confidence factor) ──
+  // Industry practice: SMA below is downtrend context, not a universal hard gate.
+  // Morning Star pattern itself already implies reversal from a downtrend.
   const sma20 = calculateSMA(ohlc, 20);
-  if (sma20 === 0) {
-    console.log(`${LOG_PREFIX} SMA(20) could not be computed. Skipping.`);
-    setNullReason('indicator_filter');
-    return null;
-  }
-  if (currentPrice >= sma20) {
-    console.log(`${LOG_PREFIX} Price ${currentPrice} >= SMA(20) ${sma20.toFixed(4)}. Skipping.`);
-    setNullReason('indicator_filter');
-    return null;
-  }
+  const belowSMA = sma20 > 0 && currentPrice < sma20;
+  // Confidence bonus/penalty applied in confidence calculation below
 
   // ── Condition 4: Volume confirmation on the third candle ─────────────────
   const avgVolume = calculateAvgVolume(ohlc, 20);
@@ -147,8 +142,10 @@ export function detectMorningStar(
   const gapBonus = patternSignal.metadata?.hasGap ? MS_GAP_BONUS : 0;
   const recoveryRatio = patternSignal.metadata?.recoveryRatio || 0;
   const recoveryBonus = Math.min(MS_MAX_RECOVERY_BONUS, recoveryRatio * 0.05);
+  // Batch 41: SMA context as confidence factor — bonus if below SMA (downtrend), penalty if above
+  const smaContextBonus = belowSMA ? 0.05 : -0.08;
 
-  const confidence = clampConfidence(baseConfidence + volumeBonus + gapBonus + recoveryBonus);
+  const confidence = clampConfidence(baseConfidence + volumeBonus + gapBonus + recoveryBonus + smaContextBonus);
 
   // ── Build and return signal ──────────────────────────────────────────────
   console.log(

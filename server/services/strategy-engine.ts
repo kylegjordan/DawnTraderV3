@@ -561,7 +561,7 @@ export class StrategyEngine {
   ): StrategySignal | null {
     const minRangeDurationHours = params.minRangeDurationHours || 10; // Crypto-calibrated (Batch 18H): 12 → 10 hours
     const minBoundaryTouches = params.minBoundaryTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
-    const entryZoneWidth = (params.entryZoneWidth || 0.5) / 100;
+    const entryZoneWidth = (params.entryZoneWidth || 1.5) / 100; // Batch 41: 0.5% → 1.5% — crypto support is a zone, not a line
     const stopLossBeyond = (params.stopLossBeyond || 1) / 100;
     
     if (priceHistory.length < 30) { setNullReason('insufficient_data'); return null; }
