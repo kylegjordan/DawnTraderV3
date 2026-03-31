@@ -96,12 +96,12 @@ interface ScanDiagnostics {
   allSymbolsScanned: string[];
   quant: {
     global: Record<string, number>;
-    imf: { failedLQ: number; failedVN: number; passed: number; total: number; benchmarkBypassed: number };
+    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number; benchmarkBypassed: number };
     survivors: number;
   };
   pattern: {
     global: Record<string, number> | null;
-    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number } | null;
+    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number; benchmarkBypassed: number } | null;
     survivors: number;
   };
   destination: string;
@@ -1660,6 +1660,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <th className="text-left p-2 font-medium">Stage</th>
                     <th className="text-right p-2 font-medium">Quant</th>
                     <th className="text-right p-2 font-medium">Pattern</th>
+                    <th className="text-right p-2 font-medium">Total</th>
                     <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
                   </tr>
                 </thead>
@@ -1668,7 +1669,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 font-medium">Universe Scanned</td>
                     <td className="p-2 text-right">{fmt(universe)}</td>
                     <td className="p-2 text-right">{fmt(universe)}</td>
-                    <td className="p-2 text-xs text-muted-foreground">All Kraken pairs entering scan (cumulative 24h)</td>
+                    <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-xs text-muted-foreground">Same universe enters both paths</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2 font-medium">Global Filters Passed</td>
@@ -1680,48 +1682,58 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         ? <>{fmt(patternGlobalPassed)}<span className="text-xs text-muted-foreground">{pct(patternGlobalPassed, universe)}</span></>
                         : '—'}
                     </td>
-                    <td className="p-2 text-xs text-muted-foreground">vs. Universe</td>
+                    <td className="p-2 text-right text-blue-500">
+                      {fmt(quantGlobalPassed + (patternGlobalPassed ?? 0))}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">vs. Universe (not deduped — pair can be in both)</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
-                    <td className="p-2 font-medium">IMF Passed</td>
+                    <td className="p-2 font-medium">Family IMF Passed <span className="text-[10px] text-muted-foreground">(family-qualified entries)</span></td>
                     <td className="p-2 text-right text-orange-500">
-                      {fmt(r24.quant.imf.passed)}<span className="text-xs text-muted-foreground">{pct(r24.quant.imf.passed, quantGlobalPassed)}</span>
+                      {fmt(r24.quant.imf.passed)}<span className="text-xs text-muted-foreground">{pct(r24.quant.imf.passed, quantGlobalPassed * 4)}</span>
                     </td>
                     <td className="p-2 text-right text-orange-500">
                       {r24.pattern.imf
                         ? <>{fmt(r24.pattern.imf.passed)}<span className="text-xs text-muted-foreground">{pct(r24.pattern.imf.passed, patternGlobalPassed ?? 0)}</span></>
                         : '—'}
                     </td>
-                    <td className="p-2 text-xs text-muted-foreground">vs. Global Filters Passed</td>
+                    <td className="p-2 text-right text-orange-500">
+                      {fmt(r24.quant.imf.passed + (r24.pattern.imf?.passed ?? 0))}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">Quant: sum across 4 families (fan-out). Pattern: passed pattern IMF.</td>
                   </tr>
+                  {r24.familyPaths && (
+                    <tr className="border-b hover:bg-muted/30">
+                      <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Per-Family Breakdown</td>
+                      <td className="p-2 text-right text-xs text-orange-400">
+                        {['trend', 'reversal', 'breakout', 'oscillator'].map(f =>
+                          `${f[0].toUpperCase()}:${fmt(r24.familyPaths?.[f]?.survivors ?? 0)}`
+                        ).join(' ')}
+                      </td>
+                      <td className="p-2 text-right text-muted-foreground">—</td>
+                      <td className="p-2 text-right text-muted-foreground">—</td>
+                      <td className="p-2 text-xs text-muted-foreground">Each pair counted once per family it passes</td>
+                    </tr>
+                  )}
                   <tr className="border-b hover:bg-muted/30">
-                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ LQ Fail / VN Fail / DI Fail <span className="text-[10px] italic">(global IMF — family-level DI shown below)</span></td>
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ LQ / VN / DI rejections <span className="text-[10px] italic">(aggregate across families)</span></td>
                     <td className="p-2 text-right text-xs text-muted-foreground">
-                      {fmt(r24.quant.imf.failedLQ)} / {fmt(r24.quant.imf.failedVN)} / {fmt((r24.quant.imf as any).failedDI ?? 0)}
+                      {fmt(r24.quant.imf.failedLQ)} / {fmt(r24.quant.imf.failedVN)} / {fmt(r24.quant.imf.failedDI ?? 0)}
                     </td>
                     <td className="p-2 text-right text-xs text-muted-foreground">
                       {r24.pattern.imf
                         ? `${fmt(r24.pattern.imf.failedLQ)} / ${fmt(r24.pattern.imf.failedVN)} / ${fmt(r24.pattern.imf.failedDI)}`
                         : '—'}
                     </td>
-                    <td className="p-2 text-xs text-muted-foreground">IMF rejection breakdown</td>
+                    <td className="p-2 text-right text-xs text-muted-foreground">—</td>
+                    <td className="p-2 text-xs text-muted-foreground">Sum of 4 family rejection counts</td>
                   </tr>
-                  {r24.familyPaths && (
-                    <tr className="border-b hover:bg-muted/30">
-                      <td className="p-2 font-medium">Family IMF Survivors</td>
-                      <td className="p-2 text-right text-green-600">
-                        {fmt(familySurvivorsTotal)}
-                        <span className="text-xs text-muted-foreground">{pct(familySurvivorsTotal, quantGlobalPassed)}</span>
-                      </td>
-                      <td className="p-2 text-right text-muted-foreground">—</td>
-                      <td className="p-2 text-xs text-muted-foreground">Quant family fan-out (trend + reversal + breakout + oscillator)</td>
-                    </tr>
-                  )}
                   <tr className="border-b hover:bg-muted/30 font-semibold">
                     <td className="p-2">Final Survivors</td>
                     <td className="p-2 text-right text-green-600">{fmt(r24.quant.survivors)}</td>
                     <td className="p-2 text-right text-green-600">{fmt(r24.pattern.survivors)}</td>
-                    <td className="p-2 text-xs text-muted-foreground">Entering VTS batch (cumulative 24h)</td>
+                    <td className="p-2 text-right text-green-600 font-semibold">{fmt(r24.quant.survivors + r24.pattern.survivors)}</td>
+                    <td className="p-2 text-xs text-muted-foreground">Entering VTS batch (cumulative 24h, family-tagged)</td>
                   </tr>
                   {ve && (
                     <>
@@ -1729,19 +1741,22 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <td className="p-2 font-medium">Strategy Evaluations</td>
                         <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
-                        <td className="p-2 text-xs text-muted-foreground">Total strategy detect() calls (24h)</td>
+                        <td className="p-2 text-right">{fmt(((ve as any).quantStrategyEvaluations ?? 0) + ((ve as any).patternStrategyEvaluations ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">VTS counter (in-memory, 24h rolling)</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls</td>
                         <td className="p-2 text-right text-xs text-red-400">{fmt((ve as any).quantStrategyNulls ?? 0)}</td>
                         <td className="p-2 text-right text-xs text-red-400">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
-                        <td className="p-2 text-xs text-muted-foreground">detect() returned null</td>
+                        <td className="p-2 text-right text-xs text-red-400">{fmt(((ve as any).quantStrategyNulls ?? 0) + ((ve as any).patternStrategyNulls ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">VTS counter (in-memory, 24h rolling)</td>
                       </tr>
                       <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
                         <td className="p-2">Signals Produced</td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).quantSignalsGenerated ?? 0)}</td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).patternSignalsGenerated ?? 0)}</td>
-                        <td className="p-2 text-xs text-muted-foreground">Signals that passed all gates (24h)</td>
+                        <td className="p-2 text-right text-green-600">{fmt(((ve as any).quantSignalsGenerated ?? 0) + ((ve as any).patternSignalsGenerated ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">VTS counter (in-memory, 24h rolling)</td>
                       </tr>
                     </>
                   )}
@@ -1791,7 +1806,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   ))}
                   {/* IMF Section Header */}
                   <tr className="border-b bg-muted/50">
-                    <td colSpan={3} className="p-2 font-medium text-xs uppercase tracking-wider">IMF Metrics (Post-Global)</td>
+                    <td colSpan={3} className="p-2 font-medium text-xs uppercase tracking-wider">Family IMF Metrics (aggregate across 4 families)</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed LQ</td>
@@ -1809,8 +1824,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed DI</td>
-                    <td className={`p-2 text-right ${getRejectionColor((lastScan.quant.imf as any).failedDI ?? 0, lastScan.quant.imf.total)}`}>
-                      {fmt((lastScan.quant.imf as any).failedDI ?? 0)}
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedDI ?? 0, lastScan.quant.imf.total)}`}>
+                      {fmt(lastScan.quant.imf.failedDI ?? 0)}
                     </td>
                     <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedDI, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
                       {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedDI) : '—'}
@@ -1822,7 +1837,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right text-muted-foreground">—</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30 font-semibold">
-                    <td className="p-2">IMF Passed</td>
+                    <td className="p-2">Family IMF Passed (unique pairs)</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed)}</td>
                     <td className="p-2 text-right text-green-600">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.passed) : '—'}</td>
                   </tr>
@@ -1841,7 +1856,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <>
                       <tr className="bg-muted/30">
                         <td colSpan={3} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                          Family Path IMF Results (Batch 22)
+                          Family Path IMF Breakdown (per-family detail)
                         </td>
                       </tr>
                       {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
@@ -1919,7 +1934,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     );
                   })}
                   <tr className="border-b bg-muted/50">
-                    <td colSpan={4} className="p-2 font-medium text-xs uppercase tracking-wider">IMF Metrics (24h Totals)</td>
+                    <td colSpan={4} className="p-2 font-medium text-xs uppercase tracking-wider">Family IMF Metrics (24h aggregate across families)</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed LQ</td>
@@ -1935,15 +1950,15 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed DI</td>
-                    <td className="p-2 text-right">{fmt((rolling24h.aggregated.quant.imf as any).failedDI ?? 0)}</td>
+                    <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedDI ?? 0)}</td>
                     <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedDI) : '—'}</td>
-                    <td className="p-2 text-right font-medium">{fmt(((rolling24h.aggregated.quant.imf as any).failedDI ?? 0) + (rolling24h.aggregated.pattern.imf?.failedDI ?? 0))}</td>
+                    <td className="p-2 text-right font-medium">{fmt((rolling24h.aggregated.quant.imf.failedDI ?? 0) + (rolling24h.aggregated.pattern.imf?.failedDI ?? 0))}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Benchmark Bypassed</td>
                     <td className="p-2 text-right text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
-                    <td className="p-2 text-right text-blue-500">{fmt((rolling24h.aggregated.pattern.imf as any)?.benchmarkBypassed ?? 0)}</td>
-                    <td className="p-2 text-right font-medium text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed + ((rolling24h.aggregated.pattern.imf as any)?.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-right text-blue-500">{fmt(rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right font-medium text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed + (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                   </tr>
                   {/* Batch 22 HF2: Family Path 24h Rolling Results */}
                   {rolling24h.aggregated.familyPaths && (

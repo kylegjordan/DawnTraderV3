@@ -153,7 +153,7 @@ export interface ScanDiagnostics {
       already_active: number;
       passed_all_filters: number;
     };
-    imf: { failedLQ: number; failedVN: number; passed: number; total: number; benchmarkBypassed: number };
+    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number; benchmarkBypassed: number };
     survivors: number;
   };
   pattern: {
@@ -166,7 +166,7 @@ export interface ScanDiagnostics {
       failed_history: number;
       passed_all_filters: number;
     } | null;
-    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number } | null;
+    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number; benchmarkBypassed: number } | null;
     survivors: number;
   };
   destination: 'active_pool' | 'vts_batch';
@@ -273,7 +273,7 @@ export class Fx5ScannerService {
         aggregated: {
           quant: {
             global: { failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0, failed_min_price: 0, failed_stablecoin: 0, failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0, failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0, passed_all_filters: 0 },
-            imf: { failedLQ: 0, failedVN: 0, passed: 0, total: 0, benchmarkBypassed: 0 },
+            imf: { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0 },
             survivors: 0,
           },
           pattern: { global: null, imf: null, survivors: 0 },
@@ -309,7 +309,7 @@ export class Fx5ScannerService {
       }
       aggQuantImf.failedLQ += d.quant.imf.failedLQ;
       aggQuantImf.failedVN += d.quant.imf.failedVN;
-      aggQuantImf.failedDI += (d.quant.imf as any).failedDI ?? 0;
+      aggQuantImf.failedDI += d.quant.imf.failedDI ?? 0;
       aggQuantImf.passed += d.quant.imf.passed;
       aggQuantImf.total += d.quant.imf.total;
       aggQuantImf.benchmarkBypassed += d.quant.imf.benchmarkBypassed;
@@ -915,33 +915,10 @@ export class Fx5ScannerService {
       // REB 2.8.7: Enforce passive mode - clear pool if engine stopped
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
 
-      // Directive 9.1.F: Filter out pairs that fail LQ/VolNoise thresholds
-      // Directive 11.5 Task 4: Blue chips & stablecoins are scanned but only tradable when filters pass
-      // forceInclude pairs are included in scan pool but must ALSO pass metric filter for trading
-      // bypassVolatilityReject/bypassBoringReject allow benchmarks to be scanned for data collection
-      const metricFilteredSurvivors = classifiedSurvivors.filter(s => 
-        s.passesMetricFilter ||
-        (s.forceInclude && s.passesMetricFilter) ||
-        s.bypassVolatilityReject ||
-        s.bypassBoringReject
-      );
-
-      // Batch 19H: Compute per-metric IMF breakdown for diagnostics
-      const dbLqMinVal = parseFloat(filters.lqMin ?? '35');
-      const dbVnMaxVal = parseFloat(filters.vnMax ?? '0.93');
-      let quantImfFailedLQ = 0;
-      let quantImfFailedVN = 0;
-      let quantImfBenchmarkBypassed = 0;
-      for (const s of classifiedSurvivors) {
-        if (s.passesMetricFilter) continue;
-        if (s.bypassVolatilityReject || s.bypassBoringReject) {
-          quantImfBenchmarkBypassed++;
-          continue;
-        }
-        // Determine which metric(s) failed
-        if ((s.LQ ?? 0) < dbLqMinVal) quantImfFailedLQ++;
-        if ((s.VolNoise ?? 1) > dbVnMaxVal) quantImfFailedVN++;
-      }
+      // Batch 43: Global quant IMF stage REMOVED.
+      // classifiedSurvivors flow directly into the family fan-out (lines below).
+      // Family-specific IMF filters (trend/reversal/breakout/oscillator) are the
+      // operative quant IMF gate — no redundant global LQ/VN pre-filter.
 
       // Batch 19F: Pattern pool from dual global filter path
       // ALL 300 pairs went through pattern global filters in collectAdaptiveBatch()
@@ -1079,6 +1056,19 @@ export class Fx5ScannerService {
       console.log(`[22][FX5] Family '${family}' IMF: ${passed} passed / ${classifiedSurvivors.length} total (LQ=${failedLQ} VN=${failedVN} DI=${failedDI} failed)`);
     }
 
+      // Batch 43: Build family-qualified union = unique pairs that passed at least one family IMF
+      // This replaces the old metricFilteredSurvivors (global quant IMF gate)
+      const familyQualifiedSymbolSet = new Set<string>();
+      const familyQualifiedUnion: typeof classifiedSurvivors = [];
+      for (const survivors of Object.values(familyPoolSurvivors)) {
+        for (const s of survivors) {
+          if (!familyQualifiedSymbolSet.has(s.symbol)) {
+            familyQualifiedSymbolSet.add(s.symbol);
+            familyQualifiedUnion.push(s);
+          }
+        }
+      }
+
       // Batch 35: Compute quant-level DI failures = unique pairs that failed DI in ALL families
       const pairsFailedDiAllFamilies = classifiedSurvivors.filter(s => {
         const di = s.DI ?? 50;
@@ -1089,41 +1079,31 @@ export class Fx5ScannerService {
       });
       // Batch 35: Compute pattern benchmark bypassed count
       const patternBenchmarkBypassed = patternPoolSurvivors.filter((s: any) => s.isBenchmark || s.bypassVolatilityReject || s.bypassBoringReject).length;
-      const metricFilteredCount = classifiedSurvivors.length - metricFilteredSurvivors.length;
-      const forceIncludedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && s.forceInclude).length;
-      const benchmarkBypassedCount = classifiedSurvivors.filter(s => !s.passesMetricFilter && (s.bypassVolatilityReject || s.bypassBoringReject)).length;
-      if (metricFilteredCount > 0) {
-        console.log(`[9.1][FILTER] Removed ${metricFilteredCount}/${classifiedSurvivors.length} pairs failing LQ/VolNoise thresholds`);
-      }
-      if (forceIncludedCount > 0) {
-        console.log(`[11.4H][FILTER] Force-included ${forceIncludedCount} blue-chip/stablecoin pairs despite metric filter failures`);
-      }
-      if (benchmarkBypassedCount > 0) {
-        console.log(`[11.4H.6][BYPASS] Benchmark bypass active: ${benchmarkBypassedCount} pairs bypassed volatility/boring filters`);
-      }
-      
-      // Directive 11.4H.2: Log benchmark pair count for diagnostics
-      const benchmarkCount = metricFilteredSurvivors.filter(s => s.isBenchmark).length;
-      if (benchmarkCount > 0) {
-        const benchmarkSymbols = metricFilteredSurvivors.filter(s => s.isBenchmark).map(s => s.symbol).slice(0, 5);
-        console.log(`[11.4H.2][BENCHMARK] ${benchmarkCount} benchmark pairs in survivors: ${benchmarkSymbols.join(', ')}${benchmarkCount > 5 ? '...' : ''}`);
+      // Batch 43: Family-rejected count = classifiedSurvivors that didn't pass any family
+      const familyRejectedCount = classifiedSurvivors.length - familyQualifiedUnion.length;
+      if (familyRejectedCount > 0) {
+        console.log(`[43][FILTER] ${familyRejectedCount}/${classifiedSurvivors.length} quant pairs rejected by all family IMF filters`);
       }
 
-      // Directive 11.4H.6 Task 3: IMF Telemetry Persistence during Passive Learning
-      // IMF metrics are always calculated and persisted, regardless of tradingActive state
-      const imfMetricsCount = metricFilteredSurvivors.filter(s => s.LQ !== undefined || s.VolNoise !== undefined).length;
-      console.log(`[11.4H.6][IMF] Persisted IMF metrics for ${imfMetricsCount} pairs (tradingActive=${isEngineActive})`);
-      
-      // Directive 11.4H.6 Task 5: Non-Benchmark Pair Flow Diagnostics
-      const nonBenchmarkCount = metricFilteredSurvivors.filter(s => !s.isBenchmark).length;
-      const passedFiltersCount = metricFilteredSurvivors.filter(s => s.passesMetricFilter && !s.isBenchmark).length;
-      console.log(`[11.4H.6][ScanFlow] Total: ${classifiedSurvivors.length} | Passed Filters: ${passedFiltersCount} | IMF persisted: ${imfMetricsCount} | Benchmarks: ${benchmarkCount} | Non-benchmarks: ${nonBenchmarkCount}`);
+      // Directive 11.4H.2: Log benchmark pair count for diagnostics
+      const benchmarkCount = familyQualifiedUnion.filter(s => s.isBenchmark).length;
+      if (benchmarkCount > 0) {
+        const benchmarkSymbols = familyQualifiedUnion.filter(s => s.isBenchmark).map(s => s.symbol).slice(0, 5);
+        console.log(`[11.4H.2][BENCHMARK] ${benchmarkCount} benchmark pairs in family-qualified survivors: ${benchmarkSymbols.join(', ')}${benchmarkCount > 5 ? '...' : ''}`);
+      }
+
+      // Batch 43: IMF metrics count from family-qualified union
+      const imfMetricsCount = familyQualifiedUnion.filter(s => s.LQ !== undefined || s.VolNoise !== undefined).length;
+      console.log(`[43][IMF] Family-qualified survivors: ${familyQualifiedUnion.length}/${classifiedSurvivors.length} (tradingActive=${isEngineActive})`);
+
+      const totalFamilySurvivors = Object.values(familyPoolSurvivors).reduce((sum, arr) => sum + arr.length, 0);
+      console.log(`[43][ScanFlow] Global: ${classifiedSurvivors.length} | Family-qualified (unique): ${familyQualifiedUnion.length} | Family-qualified (sum): ${totalFamilySurvivors} | Benchmarks: ${benchmarkCount}`);
 
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE
       if (isEngineActive) {
-        // Engine ACTIVE: Add survivors to Active Filter Pool (with volume classification and metric filtering)
-        const poolStats = activeFilterPool.addSurvivors(mode, metricFilteredSurvivors);
-        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${metricFilteredSurvivors.length} (${metricFilteredCount} filtered by 9.1)`);
+        // Batch 43: Active pool built from family-qualified union (not global quant IMF)
+        const poolStats = activeFilterPool.addSurvivors(mode, familyQualifiedUnion);
+        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${familyQualifiedUnion.length} (family-qualified)`);
         // Phase 14.5: Add pattern pool survivors
         if (patternPoolSurvivors.length > 0) {
           const patternStats = activeFilterPool.addPatternPoolSurvivors(mode, patternPoolSurvivors.map(s => ({
@@ -1146,7 +1126,11 @@ export class Fx5ScannerService {
       const cycleStartTimestamp = new Date().toISOString();
       const cycleEndTimestamp = new Date().toISOString();
       
-      // Batch 19H: Store scan diagnostics for Filter Pipeline Diagnostics tab
+      // Batch 43: Store scan diagnostics — quant IMF now reflects family fan-out aggregate
+      // No global quant IMF stage exists. The "imf" section aggregates family-level results.
+      const aggFamilyFailedLQ = Object.values(familyImfDiagnostics).reduce((s, d) => s + d.failedLQ, 0);
+      const aggFamilyFailedVN = Object.values(familyImfDiagnostics).reduce((s, d) => s + d.failedVN, 0);
+      const aggFamilyFailedDI = Object.values(familyImfDiagnostics).reduce((s, d) => s + d.failedDI, 0);
       const scanDiag: ScanDiagnostics = {
         timestamp: new Date().toISOString(),
         mode,
@@ -1155,14 +1139,14 @@ export class Fx5ScannerService {
         quant: {
           global: { ...breakdown },
           imf: {
-            failedLQ: quantImfFailedLQ,
-            failedVN: quantImfFailedVN,
-            failedDI: pairsFailedDiAllFamilies.length,
-            passed: metricFilteredSurvivors.length,
-            total: classifiedSurvivors.length,
-            benchmarkBypassed: quantImfBenchmarkBypassed,
+            failedLQ: aggFamilyFailedLQ,
+            failedVN: aggFamilyFailedVN,
+            failedDI: aggFamilyFailedDI,
+            passed: totalFamilySurvivors,
+            total: classifiedSurvivors.length * familyFilterPaths.length,
+            benchmarkBypassed: 0,
           },
-          survivors: Object.values(familyPoolSurvivors).reduce((sum, arr) => sum + arr.length, 0),
+          survivors: totalFamilySurvivors,
         },
         pattern: {
           global: batchResult.patternBreakdown ?? null,
@@ -1244,8 +1228,8 @@ export class Fx5ScannerService {
         mode,
         pairsScanned: evaluatedCount,
         survivors: classifiedSurvivors.length,
-        metricFilteredSurvivors: metricFilteredSurvivors.length,
-        metricFilteredCount,
+        familyQualifiedSurvivors: familyQualifiedUnion.length,
+        familyRejectedCount,
         eligibleCount,
         idealCount,
         rotationalCount,
@@ -1256,21 +1240,14 @@ export class Fx5ScannerService {
         volumeStats
       }).catch(() => {});
       
-      // Batch 19G GOV: Relaxed filter pass REMOVED — all filtering now comes from DB-driven
-      // screener_filters table (4-column architecture). The VTS Pattern path serves the
-      // "broader ML training data" purpose with its own relaxed thresholds.
-      // No hidden secondary passes outside the screeners tab.
-      const vtsQuantSurvivors = classifiedSurvivors.filter(s =>
-        s.passesMetricFilter || s.bypassVolatilityReject || s.bypassBoringReject
-      ).map(s => ({
+      // Batch 43: VTS quant survivors = family-qualified union (replaces global quant IMF gate)
+      const vtsQuantSurvivors = familyQualifiedUnion.map(s => ({
         ...s,
         filterTier: 'standard' as 'standard' | 'relaxed'
       }));
 
       // Batch 19G VN HF2: Merge pattern-only IMF survivors into VTS batch
       // Pattern-only pairs passed pattern global + pattern IMF but NOT quant global.
-      // They exist in patternPoolSurvivors but NOT in classifiedSurvivors (quant global survivors).
-      // Without this merge, VTS/passive learning never sees pattern-only pairs.
       const vtsQuantSymbolSet = new Set(vtsQuantSurvivors.map(s => s.symbol));
       const patternOnlyImfSurvivors = patternPoolSurvivors
         .filter(s => {
@@ -1281,7 +1258,6 @@ export class Fx5ScannerService {
           ...s,
           symbol: normalizeToInternalSymbol(s.symbol),
           filterTier: 'standard' as 'standard' | 'relaxed',
-          passesMetricFilter: false, // Did not pass quant IMF
         }));
 
       if (patternOnlyImfSurvivors.length > 0) {
@@ -1291,8 +1267,8 @@ export class Fx5ScannerService {
       // Combined VTS survivors: quant path + pattern-only path
       const vtsFilteredSurvivors = [...vtsQuantSurvivors, ...patternOnlyImfSurvivors];
 
-      // Batch 19F: Tag sourcePool based on filter results for VTS consumption
-      const quantSymbols = new Set(metricFilteredSurvivors.map(s => s.symbol));
+      // Batch 43: Tag sourcePool — quant symbols = family-qualified union
+      const quantSymbols = new Set(familyQualifiedUnion.map(s => s.symbol));
       const patternSymbolSet = new Set(patternPoolSurvivors.map(s => s.symbol));
 
       // Batch 19F: VTS Sim-to-Live Parity — duplicate pairs that pass BOTH filters
