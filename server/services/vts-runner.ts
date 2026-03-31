@@ -1035,7 +1035,7 @@ async function generatePhase10Signal(
 
   openVirtualTrades.set(tradeId, openTrade);
   // Directive 11.8C: Enhanced entry logging with execution context
-  console.log(`[11.8C][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'} | openMapSize=${openVirtualTrades.size} pid=${process.pid}`);
+  console.log(`[11.8C][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
   
   // Directive 11.4C.3: VirtualSignal with full Phase-10 metrics and pattern (M50 compliant)
   // Directive 11.7R: Use finalScore which has governance multiplier applied
@@ -1426,7 +1426,6 @@ export function getOpenVirtualTradesStatus(): {
     hybridScore: number;        // Batch 19F Phase 2: Expose hybridScore for ML page
   }>;
 } {
-  console.log(`[45][DEBUG] getOpenVirtualTradesForML: openMapSize=${openVirtualTrades.size} pid=${process.pid}`);
   const now = Date.now();
   const trades = Array.from(openVirtualTrades.values()).map(t => ({
     symbol: t.symbol,
