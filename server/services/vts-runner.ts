@@ -639,7 +639,8 @@ async function generatePhase10Signal(
   strategyOverride?: StrategyDefinition,
   filterTier?: 'standard' | 'relaxed',
   sourcePool?: string, // Batch 37: Family-qualified source pool
-  counters?: any
+  counters?: any,
+  preDetectedPatterns?: any[] // Batch 44: Pre-detected patterns from outer loop (avoids duplicate scanPatterns)
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
@@ -670,7 +671,8 @@ async function generatePhase10Signal(
     volume: o.volume
   }));
   
-  const detectedPatterns = scanPatterns(candles, symbol);
+  // Batch 44: Use pre-detected patterns when available (avoids duplicate scanPatterns call)
+  const detectedPatterns = preDetectedPatterns ?? scanPatterns(candles, symbol);
   const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
   if (counters && isQuantPool(sourcePool)) {
     if (detectedPattern) { counters.quantPatternDetected = (counters.quantPatternDetected ?? 0) + 1; }
@@ -739,11 +741,19 @@ async function generatePhase10Signal(
   };
 
   // Build patternInput from detected patterns (same as orchestrator lines 1048-1070)
+  // Batch 44: When strategyOverride provides a patternType (canonical name), use it as
+  // the pattern name in patternInput. This ensures detect() functions that check for their
+  // canonical pattern type (e.g., 'MORNING_STAR') will match even when the raw detected
+  // pattern is a canonical equivalent (e.g., 'THREE_SOLDIERS' → 'MORNING_STAR').
   const bestDetectedPattern = detectedPatterns.length > 0 ? detectedPatterns.reduce((best: any, p: any) =>
     p.strength > best.strength ? p : best, detectedPatterns[0]) : null;
 
+  const effectivePatternName = (strategyOverride?.patternType && bestDetectedPattern)
+    ? strategyOverride.patternType
+    : bestDetectedPattern?.pattern ?? null;
+
   const stratPatternInput: PatternInput | null = bestDetectedPattern ? {
-    pattern: bestDetectedPattern.pattern,
+    pattern: effectivePatternName!,
     direction: bestDetectedPattern.direction as 'BUY' | 'SELL',
     strength: bestDetectedPattern.strength,
     metadata: {
@@ -1661,6 +1671,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       //   4. Regime is used for MCE context/indicators only, not strategy selection
 
       let effectiveStrategies: StrategyDefinition[] = [];
+      let outerLoopDetectedPatterns: any[] | undefined; // Batch 44: Cache patterns from outer loop
 
       if (pair.sourcePool === 'pattern') {
         vtsEvalCounters.patternPairsEvaluated++;
@@ -1675,6 +1686,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         }));
 
         const detectedPatterns = scanPatterns(candles, pair.symbol);
+        outerLoopDetectedPatterns = detectedPatterns; // Batch 44: Cache for inner loop
         const buyPatterns = detectedPatterns.filter(p => p.direction === 'BUY');
 
         if (buyPatterns.length === 0) {
@@ -1713,15 +1725,48 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         console.log(`[19G_HF1][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=pattern | Pattern-driven: ${effectiveStrategies.map(s => `${s.strategyKey}(${s.patternType})`).join(', ')}`);
       } else {
         vtsEvalCounters.quantPairsEvaluated++;
-        // Quant pairs: ALL regime strategies (existing behavior)
-        effectiveStrategies = regimeStrategies;
+        // Batch 44: Quant pairs — include QUANT strategies always.
+        // PATTERN/HYBRID strategies only when a matching pattern was detected.
+        // This prevents the massive null rate from evaluating quant pairs against
+        // pattern strategies that hard-gate on specific pattern types.
+        const quantOnlyStrategies = regimeStrategies.filter(s => s.signalType === 'QUANT');
+        const patternHybridStrategies = regimeStrategies.filter(s => s.signalType === 'PATTERN' || s.signalType === 'HYBRID');
+
+        // Scan for patterns on this quant pair to see if any pattern strategies apply
+        let quantPairPatternStrategies: typeof regimeStrategies = [];
+        if (patternHybridStrategies.length > 0 && ohlcData.length > 0) {
+          const candles = ohlcData.map(o => ({
+            timestamp: o.timestamp, open: o.open, high: o.high,
+            low: o.low, close: o.close, volume: o.volume,
+          }));
+          const detectedPatterns = scanPatterns(candles, pair.symbol);
+          const buyPatterns = detectedPatterns.filter(p => p.direction === 'BUY');
+          if (buyPatterns.length > 0) {
+            // Only include pattern/hybrid strategies whose canonical pattern was detected
+            for (const patSig of buyPatterns) {
+              const canonical = normalizePatternToCanonical(patSig.pattern);
+              if (!canonical) continue;
+              const matchingStrats = patternHybridStrategies.filter(s => s.patternType === canonical);
+              for (const ms of matchingStrats) {
+                if (!quantPairPatternStrategies.some(s => s.strategyKey === ms.strategyKey)) {
+                  quantPairPatternStrategies.push(ms);
+                }
+              }
+            }
+          }
+        }
+
+        effectiveStrategies = [...quantOnlyStrategies, ...quantPairPatternStrategies];
 
         if (effectiveStrategies.length === 0) {
           vtsEvalCounters.nullReasons.regimeNoStrategies++;
           continue;
         }
 
-        console.log(`[11.8C][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=${pair.sourcePool ?? 'quant'} | Simulating ${effectiveStrategies.length} strategies: ${effectiveStrategies.map(s => s.strategyKey).join(', ')}`);
+        const patternNote = quantPairPatternStrategies.length > 0
+          ? ` + ${quantPairPatternStrategies.length} pattern(${quantPairPatternStrategies.map(s => s.strategyKey).join(',')})`
+          : '';
+        console.log(`[44][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=${pair.sourcePool ?? 'quant'} | ${quantOnlyStrategies.length} quant${patternNote}`);
       }
 
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
@@ -1794,7 +1839,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         // Batch 31: Reset null reason tracker before each strategy call
         resetNullReason();
-        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters);
+        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters, outerLoopDetectedPatterns);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
         if (!vtsEvalCounters.byStrategy[stratKey]) {

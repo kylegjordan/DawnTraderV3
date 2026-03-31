@@ -21,6 +21,8 @@
  * - REB 2.6: Respects passive learning flag - pool stays empty when passiveLearning=true
  */
 
+import fs from 'fs';
+import path from 'path';
 import { storage } from '../storage.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused import
 import { KrakenService } from './kraken.js';
@@ -232,9 +234,81 @@ export class Fx5ScannerService {
   private lastScanDiagnostics: ScanDiagnostics | null = null;
   private scanDiagnosticsHistory: ScanDiagnostics[] = [];
 
+  // Batch 44: Diagnostics persistence directory
+  private static readonly DIAG_DIR = path.join(process.cwd(), 'logs', 'fx5_diagnostics');
+
   constructor() {
     // Phase 8.8.7: FilteredPairsService DEPRECATED - removed
     this.krakenService = new KrakenService();
+    // Batch 44: Rehydrate scan diagnostics from disk on startup
+    this.rehydrateDiagnostics();
+  }
+
+  // Batch 44: Persist scan diagnostics to disk (called after each scan cycle)
+  private persistDiagnostics(): void {
+    try {
+      if (!fs.existsSync(Fx5ScannerService.DIAG_DIR)) {
+        fs.mkdirSync(Fx5ScannerService.DIAG_DIR, { recursive: true });
+      }
+      const date = new Date().toISOString().split('T')[0];
+      const filePath = path.join(Fx5ScannerService.DIAG_DIR, `diagnostics_${date}.json`);
+      // Write only the 24h window (not unbounded history)
+      const cutoff = Date.now() - DIAGNOSTICS_ROLLING_WINDOW_MS;
+      const recentHistory = this.scanDiagnosticsHistory.filter(
+        d => new Date(d.timestamp).getTime() > cutoff
+      );
+      fs.writeFileSync(filePath, JSON.stringify({
+        lastScan: this.lastScanDiagnostics,
+        history: recentHistory,
+        persistedAt: new Date().toISOString(),
+      }));
+    } catch (err) {
+      console.error('[44][DIAG] Failed to persist diagnostics:', err);
+    }
+  }
+
+  // Batch 44: Rehydrate scan diagnostics from disk on startup
+  private rehydrateDiagnostics(): void {
+    try {
+      if (!fs.existsSync(Fx5ScannerService.DIAG_DIR)) return;
+      const cutoff = Date.now() - DIAGNOSTICS_ROLLING_WINDOW_MS;
+      // Read today's and yesterday's files to cover the 24h window
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const files = [
+        path.join(Fx5ScannerService.DIAG_DIR, `diagnostics_${yesterday}.json`),
+        path.join(Fx5ScannerService.DIAG_DIR, `diagnostics_${today}.json`),
+      ];
+      let rehydrated: ScanDiagnostics[] = [];
+      for (const filePath of files) {
+        if (!fs.existsSync(filePath)) continue;
+        try {
+          const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+          if (data.history && Array.isArray(data.history)) {
+            rehydrated.push(...data.history);
+          }
+          if (data.lastScan && !this.lastScanDiagnostics) {
+            this.lastScanDiagnostics = data.lastScan;
+          }
+        } catch { /* skip corrupted files */ }
+      }
+      // Filter to 24h window and deduplicate by timestamp
+      const seen = new Set<string>();
+      this.scanDiagnosticsHistory = rehydrated
+        .filter(d => new Date(d.timestamp).getTime() > cutoff)
+        .filter(d => {
+          if (seen.has(d.timestamp)) return false;
+          seen.add(d.timestamp);
+          return true;
+        })
+        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      if (this.scanDiagnosticsHistory.length > 0) {
+        this.lastScanDiagnostics = this.scanDiagnosticsHistory[this.scanDiagnosticsHistory.length - 1];
+        console.log(`[44][DIAG] Rehydrated ${this.scanDiagnosticsHistory.length} scan diagnostics from disk (24h window)`);
+      }
+    } catch (err) {
+      console.error('[44][DIAG] Failed to rehydrate diagnostics:', err);
+    }
   }
 
   // REB 2.8.5B: Get scanner start time for countdown calculation
@@ -1216,6 +1290,9 @@ export class Fx5ScannerService {
         d => new Date(d.timestamp).getTime() > diagCutoff
       );
       console.log(`[19H][DIAG] Scan diagnostics stored: quant=${scanDiag.quant.survivors} pattern=${scanDiag.pattern.survivors} → ${scanDiag.destination}(${scanDiag.destinationCount})`);
+
+      // Batch 44: Persist diagnostics to disk (survives PM2 restarts)
+      this.persistDiagnostics();
 
       // Directive 8.8.4-L1: Capture FX5 scan data for learning aggregation
       // Directive 9.0.B: Include volume classification stats
