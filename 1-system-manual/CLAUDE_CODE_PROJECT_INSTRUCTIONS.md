@@ -243,9 +243,16 @@ Required sections:
 | **90%** | Transition required: "Session must transition. Completing handoff now." |
 
 ### Governance Update Requirements
-- **Tier 1 (every batch):** CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md, Scope File (in Scope Files/), Batch Completion Report (in Reports/Batch Completion/)
+- **Tier 1 (every batch):** CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md, Scope File (in Scope Files/), Batch Change List (in Reports/Change Lists/), Batch Completion Report (in Reports/Batch Completion/)
 - **Tier 2 (when relevant):** SYSTEM_MANUAL, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP
 - **Rule:** Essentials changes must also be applied to corresponding body sections
+
+### Batch Change List (mandatory — Tier 1)
+Every batch must produce a Change List document at `Claude Comms and Packages/Reports/Change Lists/Batch_N_Changes_MM.DD.YY.md`. This lists:
+- Every file modified, created, or deleted
+- Per-file: what changed (line-level where relevant), why, and the type of change
+- Shared with Langston as part of code review (alongside the git diff)
+This replaces the old INSTRUCTIONS.md from the zip-file workflow.
 
 ---
 
