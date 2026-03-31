@@ -966,10 +966,10 @@ export class StrategyEngine {
     // Pullback depth: price is within 1.5 ATR below a recent high (VWAP acts as anchor)
     const pullbackFromVwap = currentPrice - vwap;
     const pullbackDepthATR = Math.abs(pullbackFromVwap) / atr;
-    // Price should be near VWAP (within 1.5 ATR) and not too far above it
-    const nearVwap = pullbackDepthATR <= 1.5;
-    // Price should be in a pullback, not a free-fall (above low by at least 1 ATR)
-    const aboveLowByAtr = (currentPrice - low24h) >= atr;
+    // Price should be near VWAP (within 2.0 ATR) and not too far above it
+    const nearVwap = pullbackDepthATR <= 2.0;
+    // Price should be in a pullback, not a free-fall (above low by at least 0.5 ATR)
+    const aboveLowByAtr = (currentPrice - low24h) >= atr * 0.5;
     return nearVwap && aboveLowByAtr;
   }
 
