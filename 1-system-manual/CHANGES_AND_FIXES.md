@@ -1474,3 +1474,26 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - BUG-007 (hybrid-integration.ts legacy types) — not addressed, may be obsoleted by new strategy modules
 
 **Test baseline**: 791/90 (881 total) — 9 new failures from strategy module interactions with existing tests
+
+---
+
+## Batch 40 — Migration to Hetzner + Supabase (2026-03-30)
+
+| Category | Description |
+|----------|-------------|
+| **Infrastructure** | Migrated from Replit to Hetzner CPX22 staging server (188.245.193.8, Falkenstein). nginx reverse proxy with WebSocket upgrade, SSL-ready, rate limiting. PM2 process manager. |
+| **Database** | Migrated from Neon serverless to Supabase PostgreSQL 17.6 (Frankfurt). Driver swap: `@neondatabase/serverless` to standard `pg`. Drizzle ORM adapter changed to `drizzle-orm/node-postgres`. 182 tables, full data imported. |
+| **CI/CD** | GitHub Actions pipeline: typecheck, build, Docker build on every push to migration branch. Deploy-staging workflow template with TODO gates. |
+| **Code cleanup** | Removed 3 Replit Vite plugins. Removed unused REPLIT/REPLIT_DEPLOYMENT env vars. Removed REPLIT_DEV_DOMAIN CORS handling. Disabled OpenAI-dependent imports (ai-analyst, ai-opportunities, daily-brief) to unblock Express startup. |
+| **Workflow** | Adopted Post-Replit workflow (POST_REPLIT_WORKFLOW.md). Replit frozen. Clone repo now read-write on migration branch. Direct SSH deployment. |
+
+**Items resolved:**
+- Replit operational friction (Agent queue confusion, prompt truncation, browser automation fragility) — RESOLVED: direct SSH access
+- Indirect deployment path (zip + INSTRUCTIONS.md + Agent) — RESOLVED: git-native workflow
+- Limited log/DB access — RESOLVED: direct PM2 logs and psql to Supabase
+
+**Items outstanding:**
+- ai-analyst.ts full removal (legacy Walter code — currently disabled, not removed)
+- Non-fatal DB column errors (some tables missing columns added in later batches)
+- ML service not running on staging (python3 PATH issue)
+- Sidebar toggle z-index fix needs testing across screen sizes

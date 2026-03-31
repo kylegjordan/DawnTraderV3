@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-27 (Batches 36-39 GOV — diagnostics correctness fixes, source pool family-qualified identity model, 3-layer null taxonomy, pipeline summary table)
+> **Last Updated**: 2026-03-31 (Governance sweep — Post-Replit workflow, Hetzner staging, Supabase migration, Batch 40)
 
 ---
 
@@ -17,86 +17,86 @@
 
 | Actor | Role | Tools |
 |-------|------|-------|
-| **Claude Code (You)** | Implements code, deploys to Replit (through Langston's server), pushes to GitHub, pulls to clone, runs post-implementation audits, writes batch completion reports, writes governance batches, participates in design of new features | Claude Code terminal, file read/write on staged changes, SSH to Langston's server (replit-cmd), preview site |
-| **Langston** | Reviews and validates: reviews scope/intent before implementation, reviews pre-implementation audit, reviews completed batch folder before upload, reviews batch completion reports after deployment, cross-actor capacity monitoring, participates in design of new features | OpenClaw gateway (GPT-5.4), Telegram, Google Drive, sub-agents for research |
-| **Replit Agent** | Applies surgical code edits and file changes per INSTRUCTIONS.md, source of truth for live codebase, runs diagnostics/troubleshooting/reporting when requested, provides implementation feedback. Does NOT run shell commands — shell commands go through the Replit Shell tool only. | Replit Agent chat, Replit file system |
-| **Kyle** | Approves scope/direction/architecture, breaks ties when Claude Code and Langston disagree, only person who can override governance with explicit exception declaration, reviews batch completion reports at his discretion | Google Drive, Telegram, Replit browser |
+| **Claude Code (You)** | Implements code directly in clone repo, pushes to GitHub, deploys to Hetzner staging via SSH, performs first-pass verification (logs, DB, UI), writes batch completion reports, writes governance updates, participates in design of new features | Claude Code terminal, file read/write in clone repo, SSH to staging server (188.245.193.8), SSH to Langston's server (204.168.141.77), Claude-in-Chrome for UI verification, psql to Supabase |
+| **Langston** | Code-level reviewer and quality gate: reviews scope/intent before implementation, performs code-level review of git diff in clone BEFORE GitHub push, independently verifies UI behavior after staging deploy, reviews batch completion reports, cross-actor capacity monitoring, participates in design of new features | OpenClaw gateway (GPT-5.4), Telegram, Google Drive mount, SSH to staging server, browser automation for UI verification |
+| **Kyle** | Approves scope/direction/architecture, breaks ties when Claude Code and Langston disagree, only person who can override governance with explicit exception declaration, reviews batch completion reports at his discretion, decides when Replit scanner is stopped and when cutover is final | Google Drive, Telegram, staging site browser |
+
+> **Note:** Replit Agent is no longer part of the workflow. Replit is frozen as of 2026-03-30. See Replit Policy section below.
 
 ---
 
-## Page 2 — Mandatory Batch Checklist
+## Page 2 — Mandatory Batch Workflow (Post-Replit)
 
-| Step | Action | Responsible |
-|------|--------|-------------|
+> **Full workflow detail:** See `Claude Comms and Packages/POST_REPLIT_WORKFLOW.md` for the complete reference.
+
+| Phase | Action | Responsible |
+|-------|--------|-------------|
 | **SCOPE & PLANNING** | | |
-| 1 | Check capacity for both Claude Code and Langston before starting | Claude Code |
-| 2 | Scope discussion — agree on what batch will include | Kyle + Claude Code (+ Langston for major features) |
-| 3 | Pre-implementation audit (trace data flow through ALL system states) | Claude Code |
-| 4 | Send audit + planned implementation overview to Langston — if rejected, revise and resubmit | Claude Code sends, Langston reviews |
-| **CODE WRITING** | | |
-| 5 | Write code changes, create new files, write INSTRUCTIONS.md for Replit | Claude Code |
-| 6 | Create batch folder in DT_Staged_Changes with all files | Claude Code |
-| 7 | Notify Langston to review batch folder — if rejected, revise and resubmit | Claude Code sends, Langston reviews |
-| 8 | Zip batch folder and place zip in Claude Comms and Packages/Batch Zips/ | Claude Code |
+| 1 | Planning + Scope — Kyle directive, Claude Code drafts BATCH_N_SCOPE.md with numbered objectives and verification criteria | Kyle + Claude Code (+ Langston for major features) |
+| 2 | Langston reviews and approves scope before implementation starts | Langston |
+| **PRE-AUDIT** | | |
+| 3 | Pre-implementation audit — read actual files, check PM2 logs, query Supabase, screenshot current UI state | Claude Code, Langston reviews reasoning |
+| **IMPLEMENTATION** | | |
+| 4 | Implement directly in clone repo on migration branch. Surgical edits explicitly documented. | Claude Code |
+| 5 | Code review — Langston reviews actual `git diff` in clone (via Google Drive mount) BEFORE push. Code-level, traces upstream/downstream impacts. | Langston reviews, Claude Code revises if needed |
 | **DEPLOYMENT** | | |
-| 9 | Upload zip to Replit via replit-cmd upload | Claude Code (through Langston's server) |
-| 10 | Tell Replit Agent to unzip and follow INSTRUCTIONS.md | Claude Code (via replit-cmd agent) |
-| 11 | Wait for Agent completion — verify no red flags in summary, no additional info requested. Then push to GitHub via replit-cmd shell | Claude Code |
-| 12 | Pull to clone repo — verify clean fast-forward merge | Claude Code |
+| 6 | Push to GitHub. CI runs automatically. | Claude Code |
+| 7 | Deploy to staging — SSH to Hetzner: `git pull && npm run build && pm2 restart`. Verify HTTP 200. | Claude Code |
 | **VERIFICATION** | | |
-| 13 | Post-implementation audit (see Page 4) — if issues found: troubleshoot, fix, send to Langston for review, re-deploy, re-audit. Repeat until clean. | Claude Code |
-| 14 | Write batch completion report (includes audit findings) as Markdown file in Reports/Batch Completion/ | Claude Code |
-| 15 | Send report to Langston for review — if disagreements, work toward consensus; if consensus cannot be reached, escalate to Kyle | Claude Code sends, Langston reviews |
-| **GOVERNANCE** | | |
-| 16 | Governance batch — update: CCPI, BATCH_CATALOG.md, PHASE_HISTORY.md, MEMORY.md, Scope File, Batch Completion Report, SYSTEM_MANUAL (if behavior changed), SYSTEM_IMPACT_MAP (if dependencies changed), CHANGES_AND_FIXES (if bugs resolved), POST_AUDIT_ROADMAP (if roadmap changed) | Claude Code |
-| 17 | Update MEMORY.md with current state, commit hash, batch status | Claude Code |
+| 8 | First-pass verification — logs (pm2 logs), DB (psql), UI (Claude-in-Chrome), CI, server health | Claude Code |
+| 9 | Second-pass verification — independently verify UI and evidence. Mandatory. | Langston |
+| 10 | Outcome-based iteration — if objectives not met: fix, Langston reviews, push, deploy, verify. Repeat. Code-level review on every substantive change. | Claude Code + Langston |
+| **GOVERNANCE & CLOSURE** | | |
+| 11 | Update ALL applicable governance docs in repo AND Google Drive | Claude Code |
+| 12 | Batch completion report with scope objectives checklist (YES/NO/PARTIAL + evidence) | Claude Code writes, Langston reviews and confirms |
 
-**NEVER skip steps. NEVER improvise. If blocked, tell Kyle.**
+**A batch is CLOSED only when every numbered objective from the scope is verifiably achieved in the staging UI and confirmed by both Claude Code and Langston.**
+
+**NEVER skip phases. NEVER improvise. If blocked, tell Kyle.**
 
 ---
 
 ## Page 3 — How to Execute (Operations Reference)
 
-### SSH to Langston's Server
-```
-ssh -i C:/Users/kyleg/.ssh/id_ed25519 root@204.168.141.77
-```
-
-### Replit Commands (via SSH)
+### Staging Server (Hetzner)
 ```bash
-# Upload a zip to Replit
-ssh root@204.168.141.77 "replit-cmd upload /mnt/gdrive/path/to/BATCH.zip"
+# SSH to staging server
+ssh root@188.245.193.8
 
-# Send instructions to Replit Agent
-ssh root@204.168.141.77 "replit-cmd agent 'Unzip BATCH.zip and follow INSTRUCTIONS.md inside.'"
+# Deploy (as deploy user)
+ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && git pull origin migration/aws-supabase && npm run build && pm2 restart dawntrader'"
 
-# Wait for Replit Agent to finish
-ssh root@204.168.141.77 "replit-cmd wait-for-agent 900"
+# Check logs
+ssh root@188.245.193.8 "su - deploy -c 'pm2 logs dawntrader --lines 50 --nostream'"
 
-# Run a shell command on Replit
-ssh root@204.168.141.77 "replit-cmd shell 'command here'"
+# Check process status
+ssh root@188.245.193.8 "su - deploy -c 'pm2 list'"
 
-# Read Replit Agent's latest output
-ssh root@204.168.141.77 "replit-cmd read-agent"
+# Full restart (with env vars)
+ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && set -a && source .env && set +a && pm2 delete all && pm2 start dist/index.js --name dawntrader'"
 ```
 
-**Note:** replit-cmd shell output appears as screenshots that LLMs cannot read as text. Commands execute successfully regardless. Verify results on GitHub directly.
-
-### Git Push Command (via replit-cmd shell)
+### Supabase Database
 ```bash
-git -C $HOME/workspace add -A && git -C $HOME/workspace diff --cached --quiet && git -C $HOME/workspace commit --amend -m "MSG" || git -C $HOME/workspace commit -m "MSG" ; git -C $HOME/workspace push origin dawntrader-v4
-```
-Replace `MSG` with the actual commit message. Always use `$HOME/workspace` — never `cd /home/runner/DawnTraderV3` (path does not exist).
-
-**PAT Authentication**: The push relies on a GitHub PAT stored as a Replit Secret (`GITHUB_PAT`) embedded in the remote URL. If push fails with auth errors, reset with:
-```bash
-git -C ~/workspace remote set-url origin https://kylegjordan:$GITHUB_PAT@github.com/kylegjordan/DawnTraderV3.git
+# Query Supabase directly
+ssh root@188.245.193.8 "psql 'postgresql://postgres:<PASSWORD>@db.vqqyisaudwenrdhnmjwt.supabase.co:5432/postgres'"
 ```
 
-### Git Pull to Clone
+### GitHub Operations (from clone repo)
 ```bash
-git -C "G:/My Drive/Dawn Trader/DT_Clone_Repo/DawnTraderV3" pull
+# Push changes (after Langston reviews in clone)
+git -C "G:/My Drive/Dawn Trader/DT_Clone_Repo/DawnTraderV3" push origin migration/aws-supabase
+
+# Pull latest
+git -C "G:/My Drive/Dawn Trader/DT_Clone_Repo/DawnTraderV3" pull origin migration/aws-supabase
 ```
+
+### Langston's Server (Hetzner — separate from staging)
+```bash
+ssh root@204.168.141.77
+```
+
+> **Legacy note:** The old Replit commands (replit-cmd upload, replit-cmd agent, replit-cmd shell) are no longer part of the workflow. Replit is frozen as of 2026-03-30. See Replit Policy section.
 
 ### Three-Way Discussion Protocol
 
@@ -134,15 +134,9 @@ When the task-notification arrives: read the output, process any new messages, t
 
 Session UUIDs change when sessions are cleared. Use `openclaw sessions --json` to get current values.
 
-### Replit Interaction Rules
+### Replit Interaction Rules — ARCHIVED
 
-1. Natural language requests to Agent for file edits and diagnostics
-2. Shell commands through replit-cmd shell ONLY — never in Agent chat
-3. Do not spam Agent — ONE message, wait for finish
-4. Do not break instructions into chunks — full INSTRUCTIONS.md in one message
-5. Shift+Enter for line breaks in Agent messages
-6. Verify edits before pushing
-7. If Agent gets stuck, refresh session
+> **ARCHIVED 2026-03-31:** Replit is frozen. These rules are retained for historical reference only. They are NOT part of the active workflow. See POST_REPLIT_WORKFLOW.md for current procedures.
 
 ---
 
@@ -162,17 +156,9 @@ Session UUIDs change when sessions are cleared. Use `openclaw sessions --json` t
 
 ## Page 5 — Standard Tools & Templates
 
-### Batch Folder Structure
-```
-DT_Staged_Changes/BATCH_N/
-  INSTRUCTIONS.md          -- Replit reads this first
-  README.md                -- Batch documentation for our records
-  [modified files in repo-relative paths]
-  [new files in repo-relative paths]
-```
+### Batch Folder Structure — ARCHIVED
 
-### INSTRUCTIONS.md Template
-Every INSTRUCTIONS.md must begin with the Replit Autonomy Constraints block (see Replit Behavior Constraints section in body).
+> **ARCHIVED 2026-03-31:** The DT_Staged_Changes folder and INSTRUCTIONS.md process are no longer used. Code is now edited directly in the clone repo and pushed to GitHub. See POST_REPLIT_WORKFLOW.md.
 
 ### Batch Completion Report Template (Markdown)
 **Filename:** `Batch_Completion_{BATCH_ID}_{MM.DD.YY}.md`
@@ -266,6 +252,10 @@ Required sections:
 # BODY — Detailed Reference
 
 > The sections below provide full context for areas summarized in the Essentials. Read these when you need deeper detail.
+>
+> **POST-REPLIT NOTE (2026-03-31):** Many body sections below were written during the Replit era and contain references to Replit Agent, replit-cmd, DT_Staged_Changes, INSTRUCTIONS.md, zip packages, checkpoint commits, and other Replit-specific processes. **These are legacy/historical references.** The active workflow is defined in the Essentials (Pages 1-4 above) and in `POST_REPLIT_WORKFLOW.md`. When a body section conflicts with the Essentials or the Post-Replit workflow, the Essentials and POST_REPLIT_WORKFLOW.md take precedence.
+>
+> **Commit rule:** Only Claude Code commits to the DawnTrader GitHub repository. Langston reviews code but does not commit to the repo unless Kyle explicitly instructs otherwise.
 
 ---
 
@@ -819,9 +809,12 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit**: `892d7f24` (Batch 39: Pipeline Summary Table with counting basis labels, family label polish)
-> **Next step**: Kyle review of Batches 36-39 in preview. Outstanding deferred items: pattern source pool investigation (#16), LQ strict threshold review (#11). Then Phase 15 — X Stocks + Perpetual Futures Integration. Then Phase 11 Finalization.
-> **Note**: Autonomous deployment pipeline OPERATIONAL. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. **Filter Pipeline Diagnostics tab** deployed (Batch 19H). **Filter Diagnostics enhancement** deployed (Batch 19I — number formatting, VTS eval counters). **VTS Evaluation Breakdown** deployed (Batch 19J — 24-hour rolling aggregation). **Batch 20 COMPLETE** (Strategy-Family Filter Profiles audit — no code changes, Architecture B selected, 10 findings, 5 artifacts, DI threshold recalibration identified). **Whole-number batch numbering resumed** (Batch 20+). **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24, Markdown format). **Claude Code drives deployment** via replit-cmd through Langston's server. Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Last commit (migration branch)**: `ae340c98` (Batch 40: Migration scaffolding + DB driver swap + Replit cleanup + sidebar fix)
+> **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
+> **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS accumulating data
+> **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
+> **Next step**: Continue roadmap work under new Post-Replit workflow. Outstanding deferred items: pattern source pool investigation (#16), LQ strict threshold review (#11), ai-analyst.ts full removal, remaining DB column fixes. Then Phase 15 — X Stocks + Perpetual Futures Integration. Then Phase 11 Finalization.
+> **Note**: **POST-REPLIT WORKFLOW ACTIVE as of 2026-03-31.** Replit is frozen. All work on migration/aws-supabase branch, deployed to Hetzner staging. See POST_REPLIT_WORKFLOW.md for full workflow detail. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. **Filter Pipeline Diagnostics tab** deployed (Batch 19H). **Filter Diagnostics enhancement** deployed (Batch 19I — number formatting, VTS eval counters). **VTS Evaluation Breakdown** deployed (Batch 19J — 24-hour rolling aggregation). **Batch 20 COMPLETE** (Strategy-Family Filter Profiles audit — no code changes, Architecture B selected, 10 findings, 5 artifacts, DI threshold recalibration identified). **Whole-number batch numbering resumed** (Batch 20+). **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24, Markdown format). **Claude Code drives deployment** via replit-cmd through Langston's server. Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |

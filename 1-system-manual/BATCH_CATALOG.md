@@ -113,6 +113,8 @@
 
 | **Batch 39** | 2026-03-27 | `892d7f24` | **Pipeline Summary Table + label polish.** Full pipeline flow table with counting basis labels at top of Filter Diagnostics. Family labels polished. Pattern/LQ investigations resolved. | — | `BATCHES_36-39_COMPLETION_REPORT.md` |
 
+| **Batch 40** | 2026-03-30 | `ae340c98` | **Migration to Hetzner + Supabase (Post-Replit).** Dockerfile, GitHub Actions CI/CD, nginx config, PM2 ecosystem config, .env template, deployment guide. DB driver swap (Neon to pg). Replit plugin removal. OpenAI import disable. Hetzner staging (188.245.193.8) provisioned. Supabase PostgreSQL (Frankfurt) provisioned. Full schema + data migrated. FX5 scanner operational on staging. Post-Replit workflow adopted. | `BATCH_40_SCOPE.md` | `BATCH_40_COMPLETION_REPORT.md` |
+
 ---
 
 ## Notes

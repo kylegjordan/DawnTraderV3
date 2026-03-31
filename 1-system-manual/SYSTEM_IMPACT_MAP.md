@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-20 (Batch 19G VN GOV — Phase 14.5 CLOSED: VN formula revision + threshold calibration, HF2/HF3 DB field fixes)
+> **Last Updated**: 2026-03-31 (Batch 40 — Migration to Hetzner + Supabase, Post-Replit workflow)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -608,5 +608,23 @@
 | **Hybrid Compatibility Registry** | Signal Orchestrator (hybrid confluence), VTS Runner (hybrid confluence buffer — Batch 19G) |
 
 ---
+
+---
+
+## Infrastructure Dependencies (Batch 40 — Post-Replit Migration)
+
+| Component | Dependencies | Notes |
+|-----------|-------------|-------|
+| **Hetzner Staging Server** | 188.245.193.8, Ubuntu 24.04, Node 20, PM2, nginx, deploy user, Python 3 venv for ML | Primary runtime environment. Replaces Replit. |
+| **Supabase PostgreSQL** | db.vqqyisaudwenrdhnmjwt.supabase.co:5432, Frankfurt region | Database host. Replaces Neon serverless. Standard `pg` driver via `server/db.ts`. |
+| **nginx** | Reverse proxy on port 80, upstream to localhost:5000. WebSocket upgrade for `/ws`. Rate limiting on `/api/`. | SSL-ready (certbot). Config at `/etc/nginx/sites-available/dawntrader`. |
+| **PM2** | Process manager for `dist/index.js` as `dawntrader` process under `deploy` user. | Logs at `/home/deploy/.pm2/logs/`. Ecosystem config at `ecosystem.config.cjs`. |
+| **GitHub Actions CI** | `.github/workflows/ci.yml` — typecheck, build, Docker build on push to migration branch. | Deploy-staging workflow is a template (not active until secrets configured). |
+| **Docker** | `Dockerfile` (multi-stage: Node 20 + Python 3 for ML). `.dockerignore`. `docker-compose.yml`. | Available for containerized deployments but PM2 is primary on staging. |
+| **Langston Server** | 204.168.141.77 (Hetzner, Helsinki). OpenClaw gateway, Telegram bot, cc-inbox, Google Drive mount. | Separate from staging. NOT moved during migration. |
+| **Replit (FROZEN)** | replit.com/@kylegjordan/The-Dawn-Trader. Branch: dawntrader-v4. Last commit: 892d7f24. | No updates. FX5 scanner runs temporarily. Backup only. |
+| **server/db.ts** | `pg` package (node-postgres), `drizzle-orm/node-postgres`, `DATABASE_URL` env var pointing to Supabase. | Changed from `@neondatabase/serverless` in Batch 40. All Drizzle ORM queries unchanged. |
+| **vite.config.ts** | React plugin only. Replit plugins removed in Batch 40. | No longer depends on `REPL_ID` or `@replit/vite-plugin-*`. |
+| **screener_filters DB table** | Now 24 rows: 4 base paths + 4 family paths x 2 modes (paper/live). Columns include `filter_path`, `lq_min`, `vn_max`, `corr_max`, `di_min`, `di_max`. | Expanded from 8 rows (Batch 19G) to 24 rows (Batch 40 — family-specific profiles added). |
 
 *This map is a living document. Update it after any directive that changes component dependencies, adds new services, or removes legacy systems.*

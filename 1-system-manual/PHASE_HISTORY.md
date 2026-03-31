@@ -329,3 +329,15 @@ As of Batch 39 (2026-03-27):
 - Next: Phase 15 (X Stocks + Perpetual Futures), then Phase 11 Finalization.
 
 The system is now in a far more governable state than at any point in the pre-governance history.
+
+### Migration (Batch 40, 2026-03-30)
+**Replit to Hetzner + Supabase migration.** Not a numbered phase — a cross-cutting infrastructure change.
+- Batch 40: Dockerfile, GitHub Actions CI/CD, nginx, PM2, .env template, deployment guide
+- Database driver swap: Neon serverless to standard pg (Supabase PostgreSQL, Frankfurt)
+- Replit Vite plugins removed, OpenAI imports disabled (legacy Walter code)
+- Hetzner CPX22 staging server provisioned (188.245.193.8, Falkenstein)
+- Full schema (182 tables) and data migrated from Neon to Supabase
+- FX5 scanner operational on staging, VTS accumulating data
+- Post-Replit workflow adopted (see POST_REPLIT_WORKFLOW.md)
+- Replit frozen as of 2026-03-30 — no further updates
+- Migration branch: `migration/aws-supabase`
