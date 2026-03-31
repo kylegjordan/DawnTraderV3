@@ -318,6 +318,10 @@ export class Fx5ScannerService {
 
   // Batch 19H: Get last scan diagnostics for API
   getLastScanDiagnostics(): ScanDiagnostics | null {
+    console.log(`[44][DIAG-API] getLastScanDiagnostics called: lastScan=${!!this.lastScanDiagnostics}, historyLen=${this.scanDiagnosticsHistory.length}`);
+    if (!this.lastScanDiagnostics && this.scanDiagnosticsHistory.length > 0) {
+      this.lastScanDiagnostics = this.scanDiagnosticsHistory[this.scanDiagnosticsHistory.length - 1];
+    }
     return this.lastScanDiagnostics;
   }
 
