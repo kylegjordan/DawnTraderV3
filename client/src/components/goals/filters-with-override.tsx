@@ -111,6 +111,75 @@ function FilterColumn({ title, data, color, tagLabel }: { title: string; data: F
   );
 }
 
+interface FamilyFilterData {
+  lqMin: number; vnMax: number; corrMax: number; diMin: number; diMax: number;
+}
+
+const FAMILY_INTENTS: Record<string, Record<string, string>> = {
+  active: { trend: 'Strong directional persistence', reversal: 'Choppy/ranging (low DI)', breakout: 'Emerging directional move', oscillator: 'Mean-reversion (very low DI)' },
+  vts: { trend: 'Relaxed for learning', reversal: 'Wider DI ceiling for exploration', breakout: 'Relaxed for learning', oscillator: 'Wider DI ceiling for exploration' },
+};
+
+function FamilyIMFPanel() {
+  const { data: imfStatus } = useQuery<any>({
+    queryKey: ['/api/vts/imf-status'],
+    refetchInterval: 30000,
+  });
+
+  const familyFilters = imfStatus?.familyFilters;
+  if (!familyFilters) return null;
+
+  const renderRow = (mode: 'active' | 'vts', family: string, f: FamilyFilterData | null, colorClass: string) => {
+    if (!f) return null;
+    return (
+      <tr key={`${mode}-${family}`} className="border-b hover:bg-muted/30">
+        <td className="p-2 font-medium capitalize">{family}</td>
+        <td className="p-2 text-right">{f.lqMin}</td>
+        <td className="p-2 text-right">{f.vnMax}</td>
+        <td className="p-2 text-right">{f.corrMax}</td>
+        <td className={`p-2 text-right ${colorClass}`}>{f.diMin}</td>
+        <td className={`p-2 text-right ${f.diMax < 100 ? 'text-orange-500' : ''}`}>{f.diMax}</td>
+        <td className="p-2 text-muted-foreground">{FAMILY_INTENTS[mode]?.[family] ?? ''}</td>
+      </tr>
+    );
+  };
+
+  return (
+    <div className="px-6 py-4 border-b bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/10 dark:to-orange-900/10">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-2 h-2 rounded-full bg-amber-500" />
+        <span className="font-semibold text-sm text-amber-700 dark:text-amber-300">Family-Specific IMF Thresholds</span>
+        <span className="text-xs text-muted-foreground ml-auto">Quant path only — from database (live values)</span>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        Each quant survivor is tested against all 4 family filters in parallel. A pair can qualify for multiple families.
+        DI determines which strategy families apply: high DI → trend/breakout, low DI → reversal/oscillator.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-amber-100/50 dark:bg-amber-900/20">
+              <th className="text-left p-2 font-medium">Family</th>
+              <th className="text-right p-2 font-medium">LQ Min</th>
+              <th className="text-right p-2 font-medium">VN Max</th>
+              <th className="text-right p-2 font-medium">Corr Max</th>
+              <th className="text-right p-2 font-medium">DI Min</th>
+              <th className="text-right p-2 font-medium">DI Max</th>
+              <th className="text-left p-2 font-medium">Intent</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b"><td colSpan={7} className="p-1 text-[10px] text-muted-foreground font-semibold bg-blue-50 dark:bg-blue-900/10">Active Trading</td></tr>
+            {['trend', 'reversal', 'breakout', 'oscillator'].map(f => renderRow('active', f, familyFilters.active?.[f], 'text-blue-600'))}
+            <tr className="border-b"><td colSpan={7} className="p-1 text-[10px] text-muted-foreground font-semibold bg-cyan-50 dark:bg-cyan-900/10">VTS / Passive Learning</td></tr>
+            {['trend', 'reversal', 'breakout', 'oscillator'].map(f => renderRow('vts', f, familyFilters.vts?.[f], 'text-cyan-600'))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DualPathFilterPanel() {
   const { data: imfStatus } = useQuery<{
     activeQuant?: FilterColumnData;
@@ -212,6 +281,9 @@ export function FiltersWithOverride() {
 
       {/* Batch 19G HF1: 4-column dual-path table is now the ONLY filter display */}
       <DualPathFilterPanel />
+
+      {/* Batch 42: Family-Specific IMF Thresholds from DB (quant path only) */}
+      <FamilyIMFPanel />
 
       <CardContent className="mt-6">
         {/* Directive 10.9D: Signal Quality Evaluator (SQE) Filters - Modernized */}

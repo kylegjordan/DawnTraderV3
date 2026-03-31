@@ -1441,11 +1441,22 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
     const mode = 'paper' as const; // IMF status always shows paper mode filters
 
     // Batch 19G: Read all 4 filter rows from DB
-    const [activeQuantRow, activePatternRow, vtsQuantRow, vtsPatternRow] = await Promise.all([
+    const [activeQuantRow, activePatternRow, vtsQuantRow, vtsPatternRow,
+           activeTrendRow, activeReversalRow, activeBreakoutRow, activeOscillatorRow,
+           vtsTrendRow, vtsReversalRow, vtsBreakoutRow, vtsOscillatorRow] = await Promise.all([
       storage.getScreenerFilters({ mode, filterPath: 'active_quant' }),
       storage.getScreenerFilters({ mode, filterPath: 'active_pattern' }),
       storage.getScreenerFilters({ mode, filterPath: 'vts_quant' }),
       storage.getScreenerFilters({ mode, filterPath: 'vts_pattern' }),
+      // Batch 42: Family-specific rows
+      storage.getScreenerFilters({ mode, filterPath: 'active_trend' }),
+      storage.getScreenerFilters({ mode, filterPath: 'active_reversal' }),
+      storage.getScreenerFilters({ mode, filterPath: 'active_breakout' }),
+      storage.getScreenerFilters({ mode, filterPath: 'active_oscillator' }),
+      storage.getScreenerFilters({ mode, filterPath: 'vts_trend' }),
+      storage.getScreenerFilters({ mode, filterPath: 'vts_reversal' }),
+      storage.getScreenerFilters({ mode, filterPath: 'vts_breakout' }),
+      storage.getScreenerFilters({ mode, filterPath: 'vts_oscillator' }),
     ]);
 
     // Helper to extract filter column data from DB row
@@ -1501,7 +1512,22 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
         pattern: patternCount,
         total: totalCount,
       },
-      schema: 'vts-imf-status/v3.0' // Batch 19G: bumped schema version
+      // Batch 42: Family-specific IMF thresholds from DB (quant path only)
+      familyFilters: {
+        active: {
+          trend: activeTrendRow ? { lqMin: parseFloat(activeTrendRow.lqMin ?? '20'), vnMax: parseFloat(activeTrendRow.vnMax ?? '0.85'), corrMax: parseFloat(activeTrendRow.corrMax ?? '0.92'), diMin: parseFloat(activeTrendRow.diMin ?? '12'), diMax: parseFloat(activeTrendRow.diMax ?? '100') } : null,
+          reversal: activeReversalRow ? { lqMin: parseFloat(activeReversalRow.lqMin ?? '20'), vnMax: parseFloat(activeReversalRow.vnMax ?? '0.85'), corrMax: parseFloat(activeReversalRow.corrMax ?? '0.92'), diMin: parseFloat(activeReversalRow.diMin ?? '0'), diMax: parseFloat(activeReversalRow.diMax ?? '35') } : null,
+          breakout: activeBreakoutRow ? { lqMin: parseFloat(activeBreakoutRow.lqMin ?? '20'), vnMax: parseFloat(activeBreakoutRow.vnMax ?? '0.85'), corrMax: parseFloat(activeBreakoutRow.corrMax ?? '0.92'), diMin: parseFloat(activeBreakoutRow.diMin ?? '10'), diMax: parseFloat(activeBreakoutRow.diMax ?? '100') } : null,
+          oscillator: activeOscillatorRow ? { lqMin: parseFloat(activeOscillatorRow.lqMin ?? '20'), vnMax: parseFloat(activeOscillatorRow.vnMax ?? '0.85'), corrMax: parseFloat(activeOscillatorRow.corrMax ?? '0.92'), diMin: parseFloat(activeOscillatorRow.diMin ?? '0'), diMax: parseFloat(activeOscillatorRow.diMax ?? '30') } : null,
+        },
+        vts: {
+          trend: vtsTrendRow ? { lqMin: parseFloat(vtsTrendRow.lqMin ?? '20'), vnMax: parseFloat(vtsTrendRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsTrendRow.corrMax ?? '0.92'), diMin: parseFloat(vtsTrendRow.diMin ?? '12'), diMax: parseFloat(vtsTrendRow.diMax ?? '100') } : null,
+          reversal: vtsReversalRow ? { lqMin: parseFloat(vtsReversalRow.lqMin ?? '20'), vnMax: parseFloat(vtsReversalRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsReversalRow.corrMax ?? '0.92'), diMin: parseFloat(vtsReversalRow.diMin ?? '0'), diMax: parseFloat(vtsReversalRow.diMax ?? '40') } : null,
+          breakout: vtsBreakoutRow ? { lqMin: parseFloat(vtsBreakoutRow.lqMin ?? '20'), vnMax: parseFloat(vtsBreakoutRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsBreakoutRow.corrMax ?? '0.92'), diMin: parseFloat(vtsBreakoutRow.diMin ?? '10'), diMax: parseFloat(vtsBreakoutRow.diMax ?? '100') } : null,
+          oscillator: vtsOscillatorRow ? { lqMin: parseFloat(vtsOscillatorRow.lqMin ?? '20'), vnMax: parseFloat(vtsOscillatorRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsOscillatorRow.corrMax ?? '0.92'), diMin: parseFloat(vtsOscillatorRow.diMin ?? '0'), diMax: parseFloat(vtsOscillatorRow.diMax ?? '35') } : null,
+        },
+      },
+      schema: 'vts-imf-status/v4.0' // Batch 42: added family filters
     });
   } catch (error) {
     console.error('[19G][API] VTS IMF status failed:', error);
