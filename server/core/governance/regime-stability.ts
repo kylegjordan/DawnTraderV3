@@ -194,3 +194,19 @@ export function getStabilityState(): {
     lastComputed: cachedStability.computedAt,
   };
 }
+
+// Batch 46: Export state for persistence
+export function getRegimeHistoryForPersistence(): { regime: string; timestamp: number }[] {
+  return [...regimeHistory];
+}
+
+export function restoreRegimeHistory(entries: { regime: string; timestamp: number }[]): void {
+  const cutoff = Date.now() - SEVEN_DAYS_MS;
+  const valid = entries.filter(e => e.timestamp >= cutoff);
+  regimeHistory.length = 0;
+  regimeHistory.push(...valid);
+  cachedStability = null; // Force recomputation
+  if (valid.length > 0) {
+    console.log(`[46][RegimeStability] Rehydrated ${valid.length} regime changes (7-day window)`);
+  }
+}

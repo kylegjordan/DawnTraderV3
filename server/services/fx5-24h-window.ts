@@ -15,7 +15,15 @@
  * - Pure data aggregation for REST endpoints
  */
 
+import fs from 'fs';
+import path from 'path';
+
 type Mode = 'paper' | 'live';
+
+// Batch 46: Persistence for 24h window data
+const FX5_WINDOW_STATE_DIR = path.join(process.cwd(), 'logs', 'fx5_state');
+const FX5_WINDOW_STATE_FILE = path.join(FX5_WINDOW_STATE_DIR, 'window_24h.json');
+let persistTimer: ReturnType<typeof setInterval> | null = null;
 
 interface Scan24hEntry {
   cycleId: string;
@@ -340,3 +348,62 @@ export function getDiagnostics(mode: Mode): {
     cyclesPerHour: getCyclesPerHour(mode),
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Batch 46: Persistence — survive PM2 restarts
+// ═══════════════════════════════════════════════════════════════════════════
+
+function persistWindowState(): void {
+  try {
+    if (!fs.existsSync(FX5_WINDOW_STATE_DIR)) {
+      fs.mkdirSync(FX5_WINDOW_STATE_DIR, { recursive: true });
+    }
+    const state: Record<string, any> = { version: 1, savedAt: Date.now() };
+    for (const mode of ['paper', 'live'] as Mode[]) {
+      state[`window_${mode}`] = window24hByMode.get(mode) ?? [];
+      state[`history_${mode}`] = scanHistoryByMode.get(mode) ?? { timestamps: [] };
+    }
+    fs.writeFileSync(FX5_WINDOW_STATE_FILE, JSON.stringify(state));
+  } catch (err) {
+    console.error('[46][FX5-24h] Failed to persist window state:', err);
+  }
+}
+
+function rehydrateWindowState(): void {
+  try {
+    if (!fs.existsSync(FX5_WINDOW_STATE_FILE)) return;
+    const data = JSON.parse(fs.readFileSync(FX5_WINDOW_STATE_FILE, 'utf-8'));
+    const now = Date.now();
+    const cutoff24h = now - 24 * 60 * 60 * 1000;
+    const cutoff1h = now - 60 * 60 * 1000;
+
+    for (const mode of ['paper', 'live'] as Mode[]) {
+      const entries: Scan24hEntry[] = data[`window_${mode}`] ?? [];
+      const filtered = entries.filter(e => e.completedAt >= cutoff24h);
+      if (filtered.length > 0) {
+        window24hByMode.set(mode, filtered);
+      }
+      const hist = data[`history_${mode}`];
+      if (hist?.timestamps) {
+        const filteredTs = hist.timestamps.filter((t: number) => t >= cutoff1h);
+        if (filteredTs.length > 0) {
+          scanHistoryByMode.set(mode, { timestamps: filteredTs });
+        }
+      }
+    }
+    const totalEntries = (window24hByMode.get('paper')?.length ?? 0) + (window24hByMode.get('live')?.length ?? 0);
+    if (totalEntries > 0) {
+      console.log(`[46][FX5-24h] Rehydrated ${totalEntries} scan entries from disk`);
+    }
+  } catch (err) {
+    console.error('[46][FX5-24h] Failed to rehydrate window state:', err);
+  }
+}
+
+// Auto-rehydrate on module load
+rehydrateWindowState();
+
+// Auto-persist every 5 minutes
+persistTimer = setInterval(persistWindowState, 5 * 60 * 1000);
+
+export { persistWindowState };

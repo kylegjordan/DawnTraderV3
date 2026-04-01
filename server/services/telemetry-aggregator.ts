@@ -1577,12 +1577,63 @@ export interface RankedPairEntry {
 // Singleton instance
 let telemetryInstance: TelemetryAggregatorService | null = null;
 
+// Batch 46: Telemetry aggregate persistence
+import fs from 'fs';
+import path from 'path';
+const TELEMETRY_STATE_DIR = path.join(process.cwd(), 'logs', 'telemetry_state');
+const TELEMETRY_STATE_FILE = path.join(TELEMETRY_STATE_DIR, 'aggregator_state.json');
+let telemetryPersistTimer: ReturnType<typeof setInterval> | null = null;
+
+function persistTelemetryState(instance: TelemetryAggregatorService): void {
+  try {
+    if (!fs.existsSync(TELEMETRY_STATE_DIR)) {
+      fs.mkdirSync(TELEMETRY_STATE_DIR, { recursive: true });
+    }
+    const state = {
+      version: 1,
+      savedAt: Date.now(),
+      cascadeHistory: (instance as any).cascadeHistory ?? [],
+      poolAggregates: Object.fromEntries((instance as any).poolAggregates ?? new Map()),
+    };
+    fs.writeFileSync(TELEMETRY_STATE_FILE, JSON.stringify(state));
+  } catch (err) {
+    console.error('[46][Telemetry] Failed to persist state:', err);
+  }
+}
+
+function rehydrateTelemetryState(instance: TelemetryAggregatorService): void {
+  try {
+    if (!fs.existsSync(TELEMETRY_STATE_FILE)) return;
+    const data = JSON.parse(fs.readFileSync(TELEMETRY_STATE_FILE, 'utf-8'));
+    if (data.cascadeHistory && Array.isArray(data.cascadeHistory)) {
+      (instance as any).cascadeHistory = data.cascadeHistory;
+    }
+    if (data.poolAggregates) {
+      // Batch 46 fix: Restore ALL saved pool aggregate entries, not just existing keys
+      const poolMap = (instance as any).poolAggregates as Map<string, any>;
+      for (const [key, val] of Object.entries(data.poolAggregates)) {
+        poolMap.set(key, val);
+      }
+      console.log(`[46][Telemetry] Rehydrated pool aggregates from disk`);
+    }
+    (instance as any).rehydrated = true; // Batch 46: Set rehydrated flag
+  } catch (err) {
+    console.error('[46][Telemetry] Failed to rehydrate state:', err);
+  }
+}
+
 export function getTelemetryAggregator(): TelemetryAggregatorService {
   if (!telemetryInstance) {
     telemetryInstance = new TelemetryAggregatorService();
     // Directive 11.4C.1 + 11.4C.3-C: Flush stale placeholder data and clear in-memory cache on restart
     // This prevents stale classifications and ensures only real VTS-generated telemetry is used
     telemetryInstance.flushStaleTelemetry();
+    // Batch 46: Rehydrate aggregates from disk
+    rehydrateTelemetryState(telemetryInstance);
+    // Batch 46: Auto-persist every 60 seconds (singleton-safe — only one timer)
+    if (!telemetryPersistTimer) {
+      telemetryPersistTimer = setInterval(() => persistTelemetryState(telemetryInstance!), 60 * 1000);
+    }
     console.log('[10.8][Telemetry] TelemetryAggregatorService initialized (11.4C.3-C cache purged on startup)');
   }
   return telemetryInstance;

@@ -87,6 +87,7 @@ import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/k
 import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 import { computeGlobalStability } from '../core/governance/regime-stability.js';
+import '../core/governance/governance-persistence.js'; // Batch 46: Auto-persist/rehydrate governance state
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
