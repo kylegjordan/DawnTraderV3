@@ -36,7 +36,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 // Strategy Constants
 // ═══════════════════════════════════════════════════════════════
 
-const VE_A_VOL_MULT          = 2.0;
+const VE_A_VOL_MULT          = 1.5; // Batch 47: 2.0→1.5, valid ABCD patterns form without extreme A-point volume
 const VE_MIN_VOL_PERCENTILE  = 70;   // Crypto-calibrated (Batch 18H): 80 → 70
 const VE_BREAKOUT_BUFFER     = 0.002;
 const VE_BREAKOUT_VOL_MULT   = 1.5;

@@ -569,7 +569,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const minRangeDurationHours = params.minRangeDurationHours || 10; // Crypto-calibrated (Batch 18H): 12 → 10 hours
+    const minRangeDurationHours = params.minRangeDurationHours || 7; // Batch 47: 10→7, crypto consolidates faster
     const minBoundaryTouches = params.minBoundaryTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
     // Batch 45: Entry zone proportional to range width — bottom 25% of range instead of fixed %.
     // For a 10% range, entry zone = 2.5% (bottom quarter). For a 5% range, entry zone = 1.25%.
@@ -585,7 +585,7 @@ export class StrategyEngine {
     const atrPct = refPrice > 0 ? atr / refPrice : 0;
     const minRangeWidth = params.minRangeWidth
       ? params.minRangeWidth / 100
-      : Math.max(0.03, 2.5 * atrPct); // Crypto floor: max(3%, 2.5×ATR/price)
+      : Math.max(0.015, 2.0 * atrPct); // Batch 47: 3%→1.5% floor, 2.5→2.0 ATR mult. 2% ranges are tradeable in crypto.
     const touchTolerance = refPrice > 0 ? atr / (4 * refPrice) : 0.003; // ATR/4 tolerance zone
     
     // Convert hours to bars (assuming 1h bars)

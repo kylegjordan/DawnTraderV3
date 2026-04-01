@@ -30,7 +30,7 @@ export const PATTERN_POOL_THRESHOLDS = {
   MIN_VOLUME_USD: 250_000,      // DB: screener_filters.min_volume where filterPath='active_pattern'
   LQ_MIN: 20,                   // DB: screener_filters.lq_min where filterPath='active_pattern'
   VN_MAX: 0.98,                 // DB: screener_filters.vn_max where filterPath='active_pattern'
-  DI_TRENDING_MIN: 30,          // DB: screener_filters.di_min where filterPath='active_pattern'
+  DI_TRENDING_MIN: 5,           // Batch 47: Aligned with DB seed (di_min=5 for active_pattern). Was 30 — mismatched DB intent.
   RSI_MIN: 15,                  // Not yet in DB — stays hardcoded
   RSI_MAX: 85,                  // Not yet in DB — stays hardcoded
 };
@@ -95,6 +95,8 @@ export function getPatternPoolThresholds(regime: string | null | undefined): typ
   if (regime && REGIME_PATTERN_THRESHOLDS[regime]) {
     return REGIME_PATTERN_THRESHOLDS[regime];
   }
+  // Batch 47: Warn when fallback thresholds are used — indicates regime data unavailable
+  console.warn(`[47][PATTERN_FILTER] Using static fallback thresholds (DI_TRENDING_MIN=${PATTERN_POOL_THRESHOLDS.DI_TRENDING_MIN}). Regime: ${regime ?? 'null'}. DB-governed thresholds preferred.`);
   return PATTERN_POOL_THRESHOLDS;
 }
 

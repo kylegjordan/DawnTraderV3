@@ -45,10 +45,10 @@ export interface StopZoneResult {
  */
 export function detectRange(
   priceHistory: PriceData[],
-  minBars: number = 10,
+  minBars: number = 7, // Batch 47: 10→7, crypto consolidates in shorter windows
   maxRangeWidthPct: number = 5.0,
   minTouches: number = 2,
-  touchTolerance: number = 0.003 // Batch 18H: ATR/4 tolerance when provided, default 0.3%
+  touchTolerance: number = 0.005 // Batch 47: 0.3%→0.5%, crypto wicks overshoot more
 ): RangeDetectionResult {
   
   if (priceHistory.length < minBars) {

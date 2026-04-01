@@ -34,7 +34,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 const RI_MIN_STRENGTH       = 0.58;  // Crypto-calibrated (Batch 18H): 0.65 → 0.58
 const RI_MOMENTUM_THRESHOLD = -0.01;
 const RI_LOOKBACK           = 5;
-const RI_VOL_MULT           = 1.5;
+const RI_VOL_MULT           = 1.2; // Batch 47: 1.5→1.2, pinbar reversals don't always need volume spikes
 const RI_RSI_MAX            = 38;    // Crypto-calibrated (Batch 18H): 35 → 38
 const RI_STOP_BUFFER        = 0.005;
 const RI_TARGET_ATR_MULT    = 2.0;

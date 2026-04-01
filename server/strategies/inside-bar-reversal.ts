@@ -40,7 +40,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 
 const IB_MAX_COMPRESSION    = 0.80;  // Maximum compression ratio — Crypto-calibrated (Batch 18H): 0.75 → 0.80
 const IB_BREAKOUT_BUFFER    = 0.002; // 0.2% breakout buffer above/below parent
-const IB_VOL_MULT           = 1.5;   // Volume must be >= avgVol * this
+const IB_VOL_MULT           = 1.3;   // Batch 47: 1.5→1.3, inside bar breakouts can occur on moderate volume
 const IB_STOP_BUFFER        = 0.003; // 0.3% buffer beyond parent extreme
 const IB_TARGET_ATR_MULT    = 2.0;   // Target = entry +/- 2.0 * ATR
 const IB_COMPRESSION_WEIGHT = 0.35;  // Weight of compression score in confidence
