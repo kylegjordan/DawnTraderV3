@@ -123,6 +123,10 @@
 
 | **Batch 44** | 2026-03-31 | `4ec0c173`, `1ebcf819`, `4b702a7d` | **Pattern-to-strategy routing fix + diagnostic persistence.** Fixed quant-pool blind pattern strategy spray (now filtered to QUANT-only + matched patterns). Fixed canonical pattern name mismatch using normalizePatternToCanonical() as single source of truth in BOTH vts-runner and signal-orchestrator. Removed duplicate scanPatterns() for pattern-pool pairs. Added FX5 scan diagnostics disk persistence (logs/fx5_diagnostics/) with startup rehydration. VTS eval counter persistence confirmed already complete. | `BATCH_44_SCOPE.md` | `Batch_Completion_44_03.31.26.md` |
 
+| **Batch 45** | 2026-04-01 | `b6894c00`, `6cd0bf25`, `89f8bcb0` | **Execution integrity.** Strategy detect fixes: ATR-relative thresholds for vwap_pullback (reversal check), abcd_long (volume comparison), range_trade (entry zone). familyFilterMismatch excluded from eval denominators. Disabled bearish-geometry strategies in long-only VTS: liquidity_trap (confirmed bearish by system manual + web research), DHMA short branch, inside_bar_reversal SELL path. Added 5-min post-close re-entry cooldown (fixes volatility_edge runaway loop). Fixed sourcePool propagation to closed trades. Fixed edge field mapping (actual expectedEdge instead of predictiveConfidence default 0.50). CCPI updated with mandatory System Impact Map review in pre-audit. | `BATCH_45_SCOPE.md` | `Batch_Completion_45_04.01.26.md` |
+
+| **Batch 46** | 2026-04-01 | `b518ef43` | **State persistence.** Added disk persistence + startup rehydration for: fx5-24h-window (scan entries + cycle timestamps, 5-min cadence), governance state (regimeHistory for 7-day flip rate, 60s cadence), telemetry aggregates (cascadeHistory + poolAggregates, 60s cadence). pairTelemetry NOT file-persisted (already DB-backed). Telemetry rehydration confirmed. Governance/fx5 pending non-empty verification. | `BATCH_46_SCOPE.md` | `Batch_Completion_46_04.01.26.md` |
+
 ---
 
 ## Notes
