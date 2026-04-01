@@ -127,6 +127,8 @@
 
 | **Batch 46** | 2026-04-01 | `b518ef43` | **State persistence.** Added disk persistence + startup rehydration for: fx5-24h-window (scan entries + cycle timestamps, 5-min cadence), governance state (regimeHistory for 7-day flip rate, 60s cadence), telemetry aggregates (cascadeHistory + poolAggregates, 60s cadence). pairTelemetry NOT file-persisted (already DB-backed). Telemetry rehydration confirmed. Governance/fx5 pending non-empty verification. | `BATCH_46_SCOPE.md` | `Batch_Completion_46_04.01.26.md` |
 
+| **Batch 47** | 2026-04-02 | `3f039788` | **Strategy threshold audit Round 1.** Relaxed detectRange() (minBars 10→7, touchTolerance 0.3%→0.5%). Range_trade minRangeWidth floor 3%→1.5%. Pattern DI fallback aligned with DB seed (30→5) with fallback-use warning. Volume multipliers relaxed: reverse_impulse 1.5→1.2, inside_bar 1.5→1.3, volatility_edge A-point 2.0→1.5. Before/after monitoring: range_not_found decreased 363→340 but remains dominant at 55%. No new signals yet — market structure and pattern detection are deeper bottlenecks. | `BATCH_47_SCOPE.md` | `Batch_Completion_47_04.02.26.md` |
+
 ---
 
 ## Notes
