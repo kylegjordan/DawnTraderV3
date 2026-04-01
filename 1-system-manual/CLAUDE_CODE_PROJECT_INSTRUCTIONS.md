@@ -38,7 +38,7 @@
 | 3 | Pre-implementation audit — read actual files, check PM2 logs, query Supabase, screenshot current UI state. **MANDATORY: Review SYSTEM_IMPACT_MAP.md for all affected components.** | Claude Code performs, Langston reviews audit including impact map review |
 | **IMPLEMENTATION** | | |
 | 4 | Implement directly in clone repo on migration branch. Surgical edits explicitly documented. | Claude Code |
-| 5 | Code review — Langston reviews actual `git diff` in clone (via Google Drive mount) BEFORE push. Code-level, traces upstream/downstream impacts. | Langston reviews, Claude Code revises if needed |
+| 5 | Code review — Langston reviews actual `git diff` in clone (via Google Drive mount) BEFORE push. Code-level, traces upstream/downstream impacts. **MANDATORY: Langston verifies changes against SYSTEM_IMPACT_MAP.md for affected components.** | Langston reviews, Claude Code revises if needed |
 | **DEPLOYMENT** | | |
 | 6 | Push to GitHub. CI runs automatically. | Claude Code |
 | 7 | Deploy to staging — SSH to Hetzner: `git pull && npm run build && pm2 restart`. Verify HTTP 200. | Claude Code |

@@ -367,6 +367,9 @@
 - **Execution**: **60-second interval** (passive learning mode)
 - **Blast Radius**: **HIGH** — all learning data flows through VTS
 - **Contamination**: ~~`simulateHybridScore()`, `simulatePredictiveConfidence()`, `simulateDecayPenalty()` — BUG-001 (CRITICAL)~~ **REPLACED** (HF6) with real score computation: `computeRealHybridScore()`, `getPredictiveConfidence()`, `computeRealDecayPenalty()`. Strategy-specific entry/stop/target from StrategyEngine detect functions. BUG-001 PARTIALLY RESOLVED.
+- **Batch 44**: Quant-pool pairs no longer sprayed against pattern strategies. Pattern routing uses normalizePatternToCanonical() as single source of truth. Duplicate scanPatterns() removed for pattern-pool pairs. FX5 scan diagnostics persist to `logs/fx5_diagnostics/`.
+- **Batch 45**: Bearish strategies disabled in long-only VTS: `liquidity_trap` (bearish by design), `DHMA` short branch, `inside_bar_reversal` SELL path. 5-min post-close re-entry cooldown prevents runaway loops. `sourcePool` propagated to closed trades. `expectedEdge` stored on open trade and used in API (replaces `predictiveConfidence` default).
+- **Batch 46**: Governance state persistence loaded via import (`governance-persistence.ts`).
 - **Tests**: `vts-modernization.test.ts`, `vts-signal-generation.test.ts`
 
 ### 7.2 VTS Service
@@ -402,7 +405,7 @@
 
 ### 7.6 Telemetry Aggregator
 - **File**: `server/services/telemetry-aggregator.ts` (~200+ lines)
-- **What**: Per-pair/per-pool performance tracking. Single source of truth for win rates and average edge. M70 enforcement: only VTS writes.
+- **What**: Per-pair/per-pool performance tracking. Single source of truth for win rates and average edge. M70 enforcement: only VTS writes. **Batch 46**: `cascadeHistory` and `poolAggregates` now persist to `logs/telemetry_state/aggregator_state.json` (60s cadence) and rehydrate on startup. `pairTelemetry` remains DB-backed only (NOT file-persisted).
 - **Upstream**: VTS Runner (trade outcomes — exclusive writer)
 - **Downstream**: Adaptive Ratio Manager (pool performance), FX5 scanning (pair ranking)
 - **Blast Radius**: **MEDIUM** — affects pair selection bias
@@ -413,7 +416,7 @@
 
 ### 7.8 Learning Cooldown Governance
 - **File**: `server/core/governance/learning-cooldown.ts` (~160+ lines)
-- **What**: Regime-aware learning update gating. Prevents bursty parameter changes.
+- **What**: Regime-aware learning update gating. Prevents bursty parameter changes. **Batch 46**: `regimeHistory` (7-day flip rate) and governance counters now persist to `logs/governance_state/governance_state.json` via `governance-persistence.ts` (60s cadence). Rehydrated on startup — critical for regime stability classification continuity.
 - **Blast Radius**: **LOW** — gates update frequency only
 
 ---
