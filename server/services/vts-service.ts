@@ -699,6 +699,8 @@ export class VTSService extends EventEmitter {
     decayPenalty: number;
     frictionCost: number;
     pool: 'ideal' | 'rotational';
+    sourcePool?: string; // Batch 45: Family-qualified source pool
+    expectedEdge?: number; // Batch 45: Actual computed expected edge
     globalRegime?: string;
     pairFriction?: number;
     globalFriction?: number;
@@ -769,6 +771,7 @@ export class VTSService extends EventEmitter {
       strategy: tradeData.strategy,
       regime: tradeData.regime,
       pool: tradeData.pool,
+      sourcePool: tradeData.sourcePool, // Batch 45: Propagate family-qualified sourcePool
       // HF9: Context dimensions from trade OPEN snapshot
       globalRegime: tradeData.globalRegime,
       pairFriction: tradeData.pairFriction,

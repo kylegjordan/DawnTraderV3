@@ -121,7 +121,12 @@ export function detectInsideBarReversal(
     return null;
   }
 
-  const direction: 'BUY' | 'SELL' = isBuyBreakout ? 'BUY' : 'SELL';
+  // Batch 45: Block SELL breakouts — system is long-only
+  if (!isBuyBreakout) {
+    setNullReason('sell_disabled_long_only');
+    return null;
+  }
+  const direction: 'BUY' = 'BUY';
 
   // ── Condition 4: Volume confirmation on breakout candle ──────────────────
   const avgVolume = calculateAvgVolume(ohlc, 20);

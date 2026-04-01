@@ -35,7 +35,7 @@
 | 1 | Planning + Scope — Kyle directive, Claude Code drafts BATCH_N_SCOPE.md with numbered objectives and verification criteria | Kyle + Claude Code (+ Langston for major features) |
 | 2 | Langston reviews and approves scope before implementation starts | Langston |
 | **PRE-AUDIT** | | |
-| 3 | Pre-implementation audit — read actual files, check PM2 logs, query Supabase, screenshot current UI state | Claude Code, Langston reviews reasoning |
+| 3 | Pre-implementation audit — read actual files, check PM2 logs, query Supabase, screenshot current UI state. **MANDATORY: Review SYSTEM_IMPACT_MAP.md for all affected components.** | Claude Code performs, Langston reviews audit including impact map review |
 | **IMPLEMENTATION** | | |
 | 4 | Implement directly in clone repo on migration branch. Surgical edits explicitly documented. | Claude Code |
 | 5 | Code review — Langston reviews actual `git diff` in clone (via Google Drive mount) BEFORE push. Code-level, traces upstream/downstream impacts. | Langston reviews, Claude Code revises if needed |

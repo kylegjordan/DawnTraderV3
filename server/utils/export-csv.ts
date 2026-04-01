@@ -165,7 +165,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             strategy: trade.strategy || trade.signal?.strategy || 'UNKNOWN',
             signalType: trade.signalType || trade.signal?.signalType || 'UNKNOWN',
             patternType: trade.patternType || trade.signal?.patternType || null,
-            pool: (trade.pool || 'UNKNOWN').toUpperCase(),
+            pool: (trade.sourcePool || trade.pool || 'UNKNOWN').toUpperCase(),
             dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure
             quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
             entryPrice,
@@ -180,7 +180,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
             finalScore: trade.finalScore || trade.signal?.finalScore || 0,
             hybridScore: trade.hybridScore || trade.signal?.hybridScore || 0,
-            expectedEdge: trade.predictiveConfidence || trade.expectedEdge || 0,
+            expectedEdge: trade.expectedEdge ?? trade.signal?.expectedEdge ?? 0,
             regimeWeight: trade.regimeWeight || 0,
             entryTime: new Date(entryTimestamp).toISOString(),
             exitTime: new Date(exitTimestamp).toISOString(),

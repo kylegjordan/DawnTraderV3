@@ -436,6 +436,11 @@ const MAX_OPEN_TRADES = 500; // Batch 18L: Increased from 300 to accommodate VTS
 // HF6 Item 3: openVirtualTrades is cleared at startup via vtsService.hf6ClearStaleTrades()
 // which handles the vts-service side. Runner-side Map starts empty on module load.
 console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
+
+// Batch 45: Post-close re-entry cooldown — prevents same symbol+strategy from reopening
+// immediately after closing (fixes volatility_edge runaway re-entry loop)
+const recentCloses: Map<string, number> = new Map(); // key → close timestamp
+const REENTRY_COOLDOWN_MS = 5 * 60 * 1000; // 5 minute cooldown after close
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
@@ -589,13 +594,12 @@ function callStrategyDetect(
         partialExitR: 1.5
       });
     case 'liquidity_trap':
-      return strategyEngine.detectLiquidityTrap(ohlcData, {
-        maxTrapExtension: 1.2,
-        trapReturnBars: 2,
-        minStopZoneSize: 'medium',
-        minLevelTouches: 2,         // HF8: Relaxed from 3 — 2 level touches confirms a real level
-        volumeRatio: 1.5
-      });
+      // Batch 45: DISABLED — strategy produces bearish geometry (stop > entry, target < entry)
+      // which is incompatible with long-only system. Confirmed by system manual spec and
+      // web research: this is a bearish failed-breakout fade by design. Bullish redesign
+      // (failed breakdown below support → long) is future work.
+      setNullReason('strategy_disabled_bearish');
+      return null;
     case 'dhma':
       return strategyEngine.detectDHMA(indicators, ohlcData, {
         theta_OBI: 0.3,
@@ -962,6 +966,14 @@ async function generatePhase10Signal(
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
   console.log(`[11.7S][VTS] ${symbol}: Stop ${stopLoss.toFixed(4)}→${adjustedStopLoss.toFixed(4)} | TP ${takeProfit.toFixed(4)}→${adjustedTakeProfit.toFixed(4)} (mode=${strategyMode})`);
   
+  // Batch 45: Post-close re-entry cooldown
+  const cooldownKey = `${symbol}:${strategy}`;
+  const lastClose = recentCloses.get(cooldownKey);
+  if (lastClose && Date.now() - lastClose < REENTRY_COOLDOWN_MS) {
+    setNullReason('reentry_cooldown');
+    return null;
+  }
+
   // Batch 19G HF1: Strict duplicate guard — only 1 open trade per symbol+strategy combo
   // Previously allowed 3 (Batch 18L Option B), now aligned with active trading policy
   const existingTradeCount = Array.from(openVirtualTrades.values()).filter(t =>
@@ -1010,6 +1022,7 @@ async function generatePhase10Signal(
     finalScore,
     hybridScore,
     predictiveConfidence,
+    expectedEdge: finalScore * dynamicTarget - frictionCost, // Batch 45: Store actual computed edge
     regimeWeight,
     decayPenalty,
     pool,
@@ -1352,6 +1365,8 @@ async function resolveOpenVirtualTrades(): Promise<{
         decayPenalty: trade.decayPenalty,
         frictionCost: trade.frictionCost,
         pool: trade.pool,
+        sourcePool: trade.sourcePool, // Batch 45: Propagate family-qualified sourcePool to closed trade
+        expectedEdge: trade.expectedEdge, // Batch 45: Propagate actual computed expectedEdge
         // HF9 Item A: Persist context dimensions from trade OPEN snapshot
         globalRegime: trade.globalRegime,
         pairFriction: trade.pairFriction,
@@ -1368,6 +1383,8 @@ async function resolveOpenVirtualTrades(): Promise<{
     
     // Remove from open trades registry
     openVirtualTrades.delete(id);
+    // Batch 45: Record close timestamp for re-entry cooldown
+    recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
     
     // Directive 11.6 Task 6: Verification logging
     const pnlSign = netPnl >= 0 ? '+' : '';
@@ -2417,7 +2434,7 @@ export function getOpenVirtualTradesForML(): Array<{
       netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
       finalScore: trade.finalScore,
       hybridScore: trade.hybridScore,
-      expectedEdge: trade.predictiveConfidence,
+      expectedEdge: trade.expectedEdge ?? trade.predictiveConfidence ?? 0, // Batch 45: Use actual computed edge, not default 0.5
       regimeWeight: trade.regimeWeight,
       entryTime: new Date(trade.openedAt).toISOString(),
       durationOpenMinutes: durationMinutes,

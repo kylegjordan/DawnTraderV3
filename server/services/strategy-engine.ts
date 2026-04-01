@@ -1245,9 +1245,10 @@ export class StrategyEngine {
       signedFlowRatio < -0.2
     );
     
-    if (!longSignal && !shortSignal) {
-      setNullReason('regime_alignment');
-      console.log('[DHMA] ❌ No regime alignment or insufficient OBI/tilt');
+    // Batch 45: Block short signals — system is long-only
+    if (!longSignal) {
+      setNullReason(shortSignal ? 'short_disabled_long_only' : 'regime_alignment');
+      console.log(`[DHMA] ❌ ${shortSignal ? 'Short signal blocked (long-only system)' : 'No regime alignment'}`);
       console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
         symbol: "(pending)",
         strategy: "dhma",
@@ -1256,22 +1257,12 @@ export class StrategyEngine {
       }));
       return null;
     }
-    
-    // Calculate entry/stop/target
+
+    // Calculate entry/stop/target (long only)
     const realizedVol = recentVolatility;
-    let entryPrice: number;
-    let stopPrice: number;
-    let targetPrice: number;
-    
-    if (longSignal) {
-      entryPrice = currentPrice * 1.001;
-      stopPrice = currentPrice - k_tp * realizedVol;
-      targetPrice = currentPrice + k_tp * realizedVol;
-    } else {
-      entryPrice = currentPrice * 0.999;
-      stopPrice = currentPrice + k_tp * realizedVol;
-      targetPrice = currentPrice - k_tp * realizedVol;
-    }
+    const entryPrice = currentPrice * 1.001;
+    const stopPrice = currentPrice - k_tp * realizedVol;
+    const targetPrice = currentPrice + k_tp * realizedVol;
     
     // Confidence calculation
     let confidence = 0.6;
