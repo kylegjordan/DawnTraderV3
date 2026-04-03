@@ -22,7 +22,7 @@ module.exports = {
       exec_mode: 'fork',      // Fork mode (not cluster) — WebSocket + in-memory state
       autorestart: true,
       watch: false,
-      max_memory_restart: '1G',
+      max_memory_restart: '2G', // Batch 47f15: Increased from 1G per Kyle directive. Memory purge system planned separately.
       env: {
         NODE_ENV: 'production',
         PORT: 5000,
