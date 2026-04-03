@@ -587,7 +587,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
-                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || '\u2014'}</td>
+                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</td>
                   <td className="px-3 py-2 text-xs">
                     {format(new Date(trade.entryTime), 'MM/dd HH:mm')}
                   </td>
@@ -815,7 +815,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
-                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || '\u2014'}</td>
+                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</td>
                   <td className="px-3 py-2 text-xs">
                     <div className="flex flex-col gap-0.5">
                       <span>{format(new Date(trade.entryTime), 'MM/dd HH:mm')}</span>
@@ -1596,7 +1596,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
     );
   }
 
-  const { lastScan, rolling24h, signalRejections } = data;
+  const { lastScan, rolling24h } = data;
 
   const formatFilterName = (key: string): string => {
     const names: Record<string, string> = {
@@ -1624,10 +1624,6 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
     if (pct > 0.2) return 'text-orange-500';
     if (pct > 0) return 'text-yellow-600';
     return 'text-green-600';
-  };
-
-  const formatReasonName = (reason: string): string => {
-    return reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   // Batch 19I: Format numbers with comma separators
@@ -1761,7 +1757,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   {ve && (
                     <>
                       <tr className="bg-muted/50 border-y">
-                        <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — Pairs Evaluated should match VTS Batch Size above)</span></td>
+                        <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — pairs processed after cooldown/skip filters)</span></td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2 font-medium">Strategy Evaluations</td>
@@ -1906,36 +1902,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       })}
                     </>
                   )}
-                  {/* Batch 49: VTS Signal Funnel — Kyle requested full pipeline visibility */}
-                  {data?.vtsEvaluation && (
-                    <>
-                      <tr className="bg-muted/50 border-y">
-                        <td colSpan={3} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                          VTS Signal Funnel <span className="font-normal">(what happens after pairs enter VTS — 24h rolling)</span>
-                        </td>
-                      </tr>
-                      <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Strategy Evaluations</td>
-                        <td className="p-2 text-right">{fmt(((data.vtsEvaluation as any).quantStrategyEvaluations ?? 0) + ((data.vtsEvaluation as any).patternStrategyEvaluations ?? 0))}</td>
-                        <td className="p-2 text-right text-xs text-muted-foreground">Per-strategy per-pair detect() calls</td>
-                      </tr>
-                      <tr className="border-b hover:bg-muted/30 text-xs">
-                        <td className="p-2 pl-6 text-muted-foreground">↳ Strategy Nulls (no setup found)</td>
-                        <td className="p-2 text-right text-red-400">{fmt(((data.vtsEvaluation as any).quantStrategyNulls ?? 0) + ((data.vtsEvaluation as any).patternStrategyNulls ?? 0))}</td>
-                        <td className="p-2 text-right text-muted-foreground">True nulls + post-signal rejections</td>
-                      </tr>
-                      <tr className="border-b hover:bg-muted/30 text-xs">
-                        <td className="p-2 pl-6 text-muted-foreground">↳ Signals Rejected (Net EV below floor)</td>
-                        <td className="p-2 text-right text-orange-400">{fmt((data.vtsEvaluation as any).signalsRejected ?? 0)}</td>
-                        <td className="p-2 text-right text-muted-foreground">Strategy found setup but economics negative</td>
-                      </tr>
-                      <tr className="border-b hover:bg-muted/30 font-semibold">
-                        <td className="p-2">Trades Opened</td>
-                        <td className="p-2 text-right text-green-600">{fmt(((data.vtsEvaluation as any).quantSignalsGenerated ?? 0) + ((data.vtsEvaluation as any).patternSignalsGenerated ?? 0))}</td>
-                        <td className="p-2 text-right text-xs text-muted-foreground font-normal">Passed all gates → became VTS trades</td>
-                      </tr>
-                    </>
-                  )}
+                  {/* Batch 50: VTS Signal Funnel moved to Pipeline Summary (24h section) to fix time-base mixing.
+                     Last Scan should only show last-scan data. VTS evaluation data is 24h rolling. */}
                 </tbody>
               </table>
             </div>
@@ -2094,7 +2062,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </thead>
                     <tbody>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(= VTS Batch Size above, cumulative 24h)</span></td>
+                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(VTS-side, cumulative 24h — less than Batch Size due to cooldown/skips)</span></td>
                         <td className="p-2 text-right">{fmt(ve.quantPairsEvaluated)}</td>
                         <td className="p-2 text-right">{fmt(ve.patternPairsEvaluated)}</td>
                         <td className="p-2 text-right font-semibold">{fmt(ve.quantPairsEvaluated + ve.patternPairsEvaluated)}</td>
@@ -2164,7 +2132,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Strategy Returned Null <span className="text-xs text-muted-foreground">(cumulative, 24h rolling)</span></td>
+                        <td className="p-2">True Strategy Nulls <span className="text-xs text-muted-foreground">(no setup found — excludes post-signal rejections)</span></td>
                         <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
                         <td className="p-2 text-right text-orange-500">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
                         <td className="p-2 text-right font-semibold text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
@@ -2196,8 +2164,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         <tr className="border-b bg-muted/30">
                           <th className="text-left p-2 font-medium">Strategy</th>
                           <th className="text-right p-2 font-medium">Evaluated</th>
-                          <th className="text-right p-2 font-medium">Nulls</th>
-                          <th className="text-right p-2 font-medium">Signals</th>
+                          <th className="text-right p-2 font-medium">True Nulls</th>
+                          <th className="text-right p-2 font-medium">Setups Found</th>
+                          <th className="text-right p-2 font-medium">Rejected</th>
+                          <th className="text-right p-2 font-medium">Trades</th>
                           <th className="text-right p-2 font-medium">Hit Rate</th>
                         </tr>
                       </thead>
@@ -2209,9 +2179,11 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               <td className="p-2 font-mono text-xs">{strategy}</td>
                               <td className="p-2 text-right">{fmt(counts.evaluated)}</td>
                               <td className="p-2 text-right text-orange-500">{fmt(counts.nulls)}</td>
+                              <td className="p-2 text-right text-blue-600">{fmt((counts as any).preRejectionSignals || 0)}</td>
+                              <td className="p-2 text-right text-amber-600">{fmt((counts as any).rejected || 0)}</td>
                               <td className="p-2 text-right text-green-600">{fmt(counts.signals)}</td>
                               <td className="p-2 text-right">
-                                {counts.evaluated > 0 ? `${Math.round(counts.signals / counts.evaluated * 100)}%` : '—'}
+                                {counts.evaluated > 0 ? `${((counts as any).preRejectionSignals || counts.signals) > 0 ? ((counts.signals / ((counts as any).preRejectionSignals || counts.signals) * 100).toFixed(1) + '% conv') : '0%'}` : '—'}
                               </td>
                             </tr>
                           ))
@@ -2219,17 +2191,25 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         {/* Batch 22 HF4: Total row for by-strategy breakdown */}
                         {(() => {
                           const totals = Object.values(ve.byStrategy).reduce(
-                            (acc, c) => ({ evaluated: acc.evaluated + c.evaluated, nulls: acc.nulls + c.nulls, signals: acc.signals + c.signals }),
-                            { evaluated: 0, nulls: 0, signals: 0 }
+                            (acc, c: any) => ({
+                              evaluated: acc.evaluated + c.evaluated,
+                              nulls: acc.nulls + c.nulls,
+                              preRejectionSignals: acc.preRejectionSignals + (c.preRejectionSignals || 0),
+                              rejected: acc.rejected + (c.rejected || 0),
+                              signals: acc.signals + c.signals
+                            }),
+                            { evaluated: 0, nulls: 0, preRejectionSignals: 0, rejected: 0, signals: 0 }
                           );
                           return (
                             <tr className="border-t-2 bg-muted/30 font-semibold">
                               <td className="p-2">TOTAL</td>
                               <td className="p-2 text-right">{fmt(totals.evaluated)}</td>
                               <td className="p-2 text-right text-orange-500">{fmt(totals.nulls)}</td>
+                              <td className="p-2 text-right text-blue-600">{fmt(totals.preRejectionSignals)}</td>
+                              <td className="p-2 text-right text-amber-600">{fmt(totals.rejected)}</td>
                               <td className="p-2 text-right text-green-600">{fmt(totals.signals)}</td>
                               <td className="p-2 text-right">
-                                {totals.evaluated > 0 ? `${Math.round(totals.signals / totals.evaluated * 100)}%` : '—'}
+                                {totals.preRejectionSignals > 0 ? `${(totals.signals / totals.preRejectionSignals * 100).toFixed(1)}% conv` : '—'}
                               </td>
                             </tr>
                           );
@@ -2247,7 +2227,9 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       const detail = (ve as any).nullReasonDetail as Record<string, number> | undefined;
                       const rejectedReasons = (ve as any).rejectedReasons as Record<string, number> | undefined;
                       const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
+                      const totalEvals = ve.totalStrategyEvaluations || 1;
                       const pct = (n: number) => totalStratNulls > 0 ? Math.round(n / totalStratNulls * 100) : 0;
+                      const pctOfEvals = (n: number) => totalEvals > 0 ? Math.round(n / totalEvals * 100) : 0;
                       const reasonLabels: Record<string, string> = {
                         'unknown': 'Not Yet Instrumented',
                         'insufficient_data': 'Insufficient Price Data / Candles',
@@ -2348,31 +2330,31 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             </tbody>
                           </table>
 
-                          {/* SECTION 3: Post-Signal Rejections */}
-                          <SectionHeader title="Post-Signal Rejections" colorClass="border-red-500 bg-red-50/40 dark:bg-red-950/20 text-red-700 dark:text-red-400" />
+                          {/* SECTION 3: Post-Signal Rejections (signal WAS produced, then rejected) */}
+                          <SectionHeader title="Post-Signal Rejections (strategy fired, trade blocked)" colorClass="border-red-500 bg-red-50/40 dark:bg-red-950/20 text-red-700 dark:text-red-400" />
                           <table className="w-full text-sm mb-2">
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2 font-medium">Category</th>
                                 <th className="text-right p-2 font-medium">Count</th>
-                                <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
+                                <th className="text-right p-2 font-medium">% of Evaluations</th>
                               </tr>
                             </thead>
                             <tbody>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Net EV Below Floor</td>
                                 <td className="p-2 text-right text-red-500">{fmt(rejectedReasons?.netEvBelowFloor ?? 0)}</td>
-                                <td className="p-2 text-right">{pct(rejectedReasons?.netEvBelowFloor ?? 0)}%</td>
+                                <td className="p-2 text-right">{pctOfEvals(rejectedReasons?.netEvBelowFloor ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Duplicate Position</td>
                                 <td className="p-2 text-right text-red-500">{fmt(nr.duplicatePosition ?? 0)}</td>
-                                <td className="p-2 text-right">{pct(nr.duplicatePosition ?? 0)}%</td>
+                                <td className="p-2 text-right">{pctOfEvals(nr.duplicatePosition ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Max Open Trades</td>
                                 <td className="p-2 text-right text-red-500">{fmt(nr.maxOpenTrades ?? 0)}</td>
-                                <td className="p-2 text-right">{pct(nr.maxOpenTrades ?? 0)}%</td>
+                                <td className="p-2 text-right">{pctOfEvals(nr.maxOpenTrades ?? 0)}%</td>
                               </tr>
                             </tbody>
                           </table>
@@ -2389,104 +2371,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         </CardContent>
       </Card>
 
-      {/* TABLE 3: Signal Rejection Breakdown */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-lg flex items-center justify-between">
-            <span>Signal Rejection Breakdown (24h)</span>
-            <span className="text-sm font-normal text-muted-foreground">
-              {fmt(signalRejections.total)} total rejections
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {signalRejections.total > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-              {/* By Reason */}
-              <div>
-                <h4 className="text-sm font-medium mb-2">By Rejection Reason</h4>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Reason</th>
-                      <th className="text-right p-2 font-medium">Count</th>
-                      <th className="text-right p-2 font-medium">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const ALL_REJECTION_REASONS = [
-                        'Duplicate_Position_Max',
-                        'Net_EV_Negative',
-                        'Low_ROI',
-                        'FinalScore_Low',
-                        'RegimeWeight_Low',
-                        'ADX_Guard',
-                        'Duplicate_Position',
-                        'BLOCKED_GOVERNANCE',
-                        'LEARNING_DEFERRED',
-                        'Confidence_Floor',
-                        'Illiquid_USD',
-                      ];
-                      return ALL_REJECTION_REASONS.map(reason => {
-                        const count = ((signalRejections.byReason as Record<string, number>)[reason] ?? 0);
-                        return (
-                          <React.Fragment key={reason}>
-                            <tr className="border-b hover:bg-muted/30">
-                              <td className="p-2">{formatReasonName(reason)}</td>
-                              <td className="p-2 text-right">{fmt(count)}</td>
-                              <td className="p-2 text-right text-muted-foreground">
-                                {signalRejections.total > 0 ? (count / signalRejections.total * 100).toFixed(1) : 0}%
-                              </td>
-                            </tr>
-                            {reason === 'Duplicate_Position_Max' && (signalRejections as any)?.duplicateUniqueCombos > 0 && (
-                              <tr className="border-b hover:bg-muted/20">
-                                <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Unique Combos Blocked</td>
-                                <td className="p-2 text-right text-orange-400 text-xs">{(signalRejections as any).duplicateUniqueCombos}</td>
-                                <td className="p-2 text-right text-xs text-muted-foreground">
-                                  avg {(count / (signalRejections as any).duplicateUniqueCombos).toFixed(1)} attempts/combo
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-              {/* By Regime */}
-              <div>
-                <h4 className="text-sm font-medium mb-2">By Market Regime</h4>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Regime</th>
-                      <th className="text-right p-2 font-medium">Count</th>
-                      <th className="text-right p-2 font-medium">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(signalRejections.byRegime)
-                      .sort(([, a], [, b]) => (b as number) - (a as number))
-                      .map(([regime, count]) => (
-                        <tr key={regime} className="border-b hover:bg-muted/30">
-                          <td className="p-2">{regime}</td>
-                          <td className="p-2 text-right">{fmt(count as number)}</td>
-                          <td className="p-2 text-right text-muted-foreground">
-                            {signalRejections.total > 0 ? ((count as number) / signalRejections.total * 100).toFixed(1) : 0}%
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 text-muted-foreground text-center">No signal rejections in the last 24 hours</div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Batch 50: Removed redundant "Signal Rejection Breakdown (24h)" section.
+         Post-signal rejections are now shown in the VTS Evaluation Breakdown above
+         with accurate counts from VTS counters. The old section used a separate
+         logSkippedSignal tracker with conflicting numbers. */}
       {/* Batch 34: Metric Distribution — moved to bottom, redesigned with plain language */}
       {(data?.lastScan as any)?.metricDistribution && (
         <Card className="max-w-4xl">

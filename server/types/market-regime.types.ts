@@ -24,6 +24,7 @@ export interface OHLCData {
   close: number;
   volume: number;
   timestamp: number;
+  vwap?: number; // Batch 50: Kraken OHLC index [5] — needed by detectABCDLong VWAP check
 }
 
 export interface RegimeCalculationResult {

@@ -546,6 +546,7 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
       high: parseFloat(candle.high || candle[2]),
       low: parseFloat(candle.low || candle[3]),
       close: parseFloat(candle.close || candle[4]),
+      vwap: parseFloat(candle.vwap || candle[5] || 0) || undefined, // Batch 50: Kraken OHLC index [5]
       volume: parseFloat(candle.volume || candle[6] || 0),
       timestamp: candle.timestamp || candle[0] * 1000
     }));
@@ -954,6 +955,8 @@ async function generatePhase10Signal(
         counters.patternSignalsRejected = (counters.patternSignalsRejected ?? 0) + 1;
       }
     }
+    // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
+    setNullReason('net_ev_rejected');
     return null;
   }
   
@@ -1038,9 +1041,11 @@ async function generatePhase10Signal(
       source: 'VTS'
     });
     console.log(`[18L][DUP_GUARD] Skipping ${symbol}/${strategy}: ${existingTradeCount}/${VTS_MAX_CONCURRENT_PER_COMBO} concurrent VTS trades`);
+    // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
+    setNullReason('duplicate_position');
     return null;
   }
-  
+
   // Directive 11.8C: Trade ID includes strategy for unique identification
   // Format: vts_{symbol}_{strategy}_{timestamp}
   const tradeId = `vts_${symbol.replace('/', '_')}_${strategy}_${Date.now()}`;
@@ -1048,6 +1053,8 @@ async function generatePhase10Signal(
   // Check if we can accept more open trades
   if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
     console.log(`[11.6][VTS] Max open trades reached (${MAX_OPEN_TRADES}), skipping new trade for ${symbol}`);
+    // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
+    setNullReason('max_open_trades');
     return null;
   }
   
@@ -1914,17 +1921,27 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         vtsEvalCounters.totalStrategyEvaluations++;
         if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
         if (!result) {
-          vtsEvalCounters.byStrategy[stratKey].nulls++;
-          if (pair.sourcePool === 'pattern') {
-            vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1;
-          } else {
-            vtsEvalCounters.quantStrategyNulls++;
-          }
-          vtsEvalCounters.nullReasons.conditionsNotMet++;
-          // Batch 31: Capture granular null reason from strategy
+          // Batch 50: Distinguish true strategy nulls from post-signal rejections
           const detailReason = getNullReason();
-          if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
-          vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
+          const isPostSignalRejection = detailReason === 'net_ev_rejected' || detailReason === 'duplicate_position' || detailReason === 'max_open_trades';
+
+          if (isPostSignalRejection) {
+            // Signal WAS produced but rejected after — don't count as strategy null
+            // Net EV and duplicate counters already incremented inside generatePhase10Signal
+            if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
+            vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
+          } else {
+            // True strategy null — no setup found
+            vtsEvalCounters.byStrategy[stratKey].nulls++;
+            if (pair.sourcePool === 'pattern') {
+              vtsEvalCounters.patternStrategyNulls = (vtsEvalCounters.patternStrategyNulls ?? 0) + 1;
+            } else {
+              vtsEvalCounters.quantStrategyNulls++;
+            }
+            vtsEvalCounters.nullReasons.conditionsNotMet++;
+            if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
+            vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
+          }
           continue;
         }
         const { signal, tradeRecord } = result;
