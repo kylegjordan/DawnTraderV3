@@ -1999,7 +1999,12 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </>
                   )}
                   <tr className="bg-muted/30 font-semibold">
-                    <td className="p-2">Total Survivors (24h) <span className="text-xs text-muted-foreground">(cumulative across scan cycles, not unique pairs)</span></td>
+                    <td className="p-2">
+                      Total Survivors (24h)
+                      <div className="text-[10px] font-normal text-muted-foreground">
+                        Family fan-out total (1 pair × 4 families = 4 entries). {rolling24h.totalScans > 0 && `~${Math.round((rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors) / rolling24h.totalScans)} per scan cycle.`}
+                      </div>
+                    </td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.survivors)}</td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.pattern.survivors)}</td>
                     <td className="p-2 text-right text-green-600 font-medium">{fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors)}</td>
