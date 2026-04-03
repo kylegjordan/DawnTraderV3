@@ -32,6 +32,7 @@ interface OpenTrade {
   costs: number;
   netProfitValue: number;
   netProfitPercent: string;
+  rankingScore?: number; // Batch 47f15: Cross-family desirability score
   finalScore: number;
   hybridScore: number;
   expectedEdge: number;
@@ -65,6 +66,7 @@ interface ClosedTrade {
   costs: number;
   netProfitValue: number;
   netProfitPercent: string;
+  rankingScore?: number; // Batch 47f15: Cross-family desirability score
   finalScore: number;
   hybridScore: number;
   expectedEdge: number;
@@ -469,6 +471,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <SortableHeader label="Gross P/L" field="grossProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Rank</th>
               <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
@@ -571,6 +574,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                       <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-purple-400">{(trade.rankingScore ?? 0).toFixed(2)}</td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-mono text-xs">{(trade.finalScore * 100).toFixed(0)}%</span>
@@ -700,6 +704,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <SortableHeader label="Gross P/L" field="grossProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Rank</th>
               <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />

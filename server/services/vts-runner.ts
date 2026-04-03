@@ -87,6 +87,7 @@ import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/k
 import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 import { computeGlobalStability } from '../core/governance/regime-stability.js';
+import { computeRankingScore, normalizeNetReturn } from '../config/ranking-weights.js';
 import '../core/governance/governance-persistence.js'; // Batch 46: Auto-persist/rehydrate governance state
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
@@ -2454,6 +2455,14 @@ export function getOpenVirtualTradesForML(): Array<{
       costs: parseFloat(costsDollar.toFixed(4)),
       netProfitValue: parseFloat(netProfitValue.toFixed(2)),
       netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
+      // Batch 47f15: Compute ranking score for display (same formula as RTB queue)
+      rankingScore: computeRankingScore(
+        trade.finalScore,
+        normalizeNetReturn(trade.expectedEdge ?? 0),
+        trade.frictionCost ?? 0,
+        0, // contextBonus — not available on open trade, use 0
+        trade.signalType ?? 'QUANT'
+      ),
       finalScore: trade.finalScore,
       hybridScore: trade.hybridScore,
       expectedEdge: trade.expectedEdge ?? trade.predictiveConfidence ?? 0, // Batch 45: Use actual computed edge, not default 0.5
