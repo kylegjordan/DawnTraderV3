@@ -124,7 +124,7 @@ let patternRecognitionWarmedUp = false;
 
 // Batch 21: VTS evaluation diagnostics — imported from shared types
 import type { VTSEvalSnapshot, NullReasonBreakdown } from '../types/virtual-trade.interface.js';
-import { resetNullReason, getNullReason } from '../utils/null-reason-tracker.js';
+import { setNullReason, resetNullReason, getNullReason } from '../utils/null-reason-tracker.js';
 
 const VTS_EVAL_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 let vtsEvalHistory: VTSEvalSnapshot[] = [];
