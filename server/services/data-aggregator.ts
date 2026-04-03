@@ -75,6 +75,8 @@ interface GlobalRollup {
   avgVolNoise: number;
 }
 
+const MAX_BUFFER_SIZE = 5000; // Memory audit: prevent runaway on I/O failure
+
 export class DataAggregator extends EventEmitter {
   private buffer: CaptureRecord[] = [];
   private mode: 'passive' | 'active' = 'passive';
@@ -107,7 +109,11 @@ export class DataAggregator extends EventEmitter {
 
   async capture(eventType: string, payload: Record<string, any>) {
     if (this.isShuttingDown) return;
-    
+    // Memory audit: cap buffer to prevent runaway on I/O failure
+    if (this.buffer.length >= MAX_BUFFER_SIZE) {
+      this.buffer.splice(0, this.buffer.length - MAX_BUFFER_SIZE + 100); // Drop oldest 100
+      console.warn(`[DataAggregator] Buffer capped at ${MAX_BUFFER_SIZE} — dropped oldest entries`);
+    }
     this.buffer.push({
       timestamp: Date.now(),
       mode: this.mode,
