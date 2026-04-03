@@ -1,5 +1,5 @@
 /**
- * Pattern Filter Profile — Phase 14.5 (Batch 19 + 19C)
+ * Pattern Filter Profile — Phase 14.5 (Batch 19)
  *
  * Defines relaxed filter thresholds for the pattern scanning pool.
  * Pairs that fail quant metric filters but pass these thresholds
@@ -10,12 +10,10 @@
  * - sourcePool tracks active filter path (quant/pattern), separate from VTS pool
  * - Pattern sizing surfaced in Guardrails as 15% display-only
  *
- * Batch 19C: Regime-aware thresholds — FX5 selects threshold set based on
- * MCE getDominantRegime() global regime. Fallback to static defaults when
- * regime is unknown or MCE cache is cold.
+ * Batch 48: Regime-aware pattern thresholds (Batch 19C) REMOVED per Kyle directive.
+ * DB screener_filters is the sole authority for all IMF thresholds.
+ * No code-driven regime overrides for any filter thresholds.
  */
-
-import type { CanonicalRegimeType } from './canonical-regime-strategy-map.js';
 
 // --- Pattern Pool Filter Thresholds (Static Defaults) ---
 // Applied to pairs that FAIL quant metric filters (LQ>=35, VN<=0.93, Vol>=$500K, DI>=55)
@@ -23,82 +21,16 @@ import type { CanonicalRegimeType } from './canonical-regime-strategy-map.js';
 
 /**
  * @deprecated Batch 19G: Static defaults moved to DB (screener_filters, filterPath='active_pattern').
- * Retained as fallback for getPatternPoolThresholds() when DB is unavailable.
- * REGIME_PATTERN_THRESHOLDS still override these when regime data is available.
+ * Retained only for guardrails/strategies export and RSI defaults not yet in DB.
  */
 export const PATTERN_POOL_THRESHOLDS = {
   MIN_VOLUME_USD: 250_000,      // DB: screener_filters.min_volume where filterPath='active_pattern'
   LQ_MIN: 20,                   // DB: screener_filters.lq_min where filterPath='active_pattern'
   VN_MAX: 0.98,                 // DB: screener_filters.vn_max where filterPath='active_pattern'
-  DI_TRENDING_MIN: 5,           // Batch 47: Aligned with DB seed (di_min=5 for active_pattern). Was 30 — mismatched DB intent.
+  DI_TRENDING_MIN: 5,           // DB: screener_filters.di_min where filterPath='active_pattern'
   RSI_MIN: 15,                  // Not yet in DB — stays hardcoded
   RSI_MAX: 85,                  // Not yet in DB — stays hardcoded
 };
-
-// --- Regime-Aware Pattern Pool Thresholds (Batch 19C) ---
-// Each canonical regime gets a tailored threshold set.
-// Rationale per regime:
-//   TREND_FRIENDLY_STABLE:    Loosen — patterns thrive in trending markets, lower barriers
-//   HIGH_VOLATILITY_UNSTABLE: Tighten — raise floors to avoid noise-dominated pairs
-//   RANGE_BOUND_STABLE:       Default — patterns work well in range-bound, keep relaxed
-//   IMPULSE_EXPANSION:        Moderate — keep DI floor, slightly tighten VN
-//   STRUCTURAL_TRANSITION:    Tighten — raise quality floors during regime transitions
-
-export const REGIME_PATTERN_THRESHOLDS: Record<string, typeof PATTERN_POOL_THRESHOLDS> = {
-  TREND_FRIENDLY_STABLE: {
-    MIN_VOLUME_USD: 200_000,
-    LQ_MIN: 18,
-    VN_MAX: 0.96,
-    DI_TRENDING_MIN: 25,
-    RSI_MIN: 15,
-    RSI_MAX: 85,
-  },
-  HIGH_VOLATILITY_UNSTABLE: {
-    MIN_VOLUME_USD: 300_000,
-    LQ_MIN: 25,
-    VN_MAX: 0.95,
-    DI_TRENDING_MIN: 35,
-    RSI_MIN: 20,
-    RSI_MAX: 80,
-  },
-  RANGE_BOUND_STABLE: {
-    MIN_VOLUME_USD: 250_000,
-    LQ_MIN: 20,
-    VN_MAX: 0.98,
-    DI_TRENDING_MIN: 20,
-    RSI_MIN: 15,
-    RSI_MAX: 85,
-  },
-  IMPULSE_EXPANSION: {
-    MIN_VOLUME_USD: 250_000,
-    LQ_MIN: 20,
-    VN_MAX: 0.97,
-    DI_TRENDING_MIN: 30,
-    RSI_MIN: 15,
-    RSI_MAX: 85,
-  },
-  STRUCTURAL_TRANSITION: {
-    MIN_VOLUME_USD: 300_000,
-    LQ_MIN: 22,
-    VN_MAX: 0.96,
-    DI_TRENDING_MIN: 30,
-    RSI_MIN: 18,
-    RSI_MAX: 82,
-  },
-};
-
-/**
- * Get pattern pool thresholds for the current global regime.
- * Falls back to static PATTERN_POOL_THRESHOLDS if regime is unknown.
- */
-export function getPatternPoolThresholds(regime: string | null | undefined): typeof PATTERN_POOL_THRESHOLDS {
-  if (regime && REGIME_PATTERN_THRESHOLDS[regime]) {
-    return REGIME_PATTERN_THRESHOLDS[regime];
-  }
-  // Batch 47: Warn when fallback thresholds are used — indicates regime data unavailable
-  console.warn(`[47][PATTERN_FILTER] Using static fallback thresholds (DI_TRENDING_MIN=${PATTERN_POOL_THRESHOLDS.DI_TRENDING_MIN}). Regime: ${regime ?? 'null'}. DB-governed thresholds preferred.`);
-  return PATTERN_POOL_THRESHOLDS;
-}
 
 // --- Pattern Pool Guardrails ---
 // Elevated quality floor compensates for lower-quality pair metrics

@@ -72,8 +72,8 @@ import {
   CANONICAL_BENCHMARK_SYMBOLS,
   isBenchmarkSymbolStrict 
 } from '../config/benchmark-regex.js';
-// Phase 14.5: Pattern pool filter thresholds (Batch 19C: regime-aware)
-import { PATTERN_POOL_THRESHOLDS, getPatternPoolThresholds } from '../config/pattern-filter-profile.js';
+// Phase 14.5: Pattern pool filter thresholds (Batch 48: regime overrides removed, DB-only)
+import { PATTERN_POOL_THRESHOLDS } from '../config/pattern-filter-profile.js';
 // Batch 19G: PATTERN_GLOBAL_FILTERS and VTS_PATTERN_GLOBAL_FILTERS removed — now read from DB
 import { getMarketContextEngine } from './market-context-engine.js';
 
@@ -1051,25 +1051,14 @@ export class Fx5ScannerService {
       // Merge: classifiedSurvivors (quant) + patternOnlyClassified (pattern-only) for IMF lookup
       const allClassifiedForPatternLookup = [...classifiedSurvivors, ...patternOnlyClassified];
 
-      // Batch 19G: Pattern IMF thresholds — DB values as base, regime-aware overrides from code
-      // DB provides the defaults; getPatternPoolThresholds() overrides when regime data is available
-      let activePatternThresholds = {
+      // Batch 48: Pattern IMF thresholds from DB only — no regime overrides.
+      // Regime-based DI overrides (Batch 19C) removed per Kyle directive.
+      // DB screener_filters is the sole authority for all IMF thresholds.
+      const activePatternThresholds = {
         LQ_MIN: patternImfThresholds.LQ_MIN,
         VN_MAX: patternImfThresholds.VN_MAX,
         DI_TRENDING_MIN: patternImfThresholds.DI_MIN,
       };
-      // Batch 47f15: Code-driven regime overrides DISABLED per Kyle directive.
-      // DB values are now the sole authority for pattern IMF thresholds.
-      // Regime-specific DI overrides (from Batch 19C) will be migrated to DB-governed
-      // model in a future batch. Until then, DB values apply directly.
-      // Original regime override code retained as comment for reference:
-      // try { const mce = getMarketContextEngine(); const globalRegime = mce.getDominantRegime();
-      //   if (globalRegime && globalRegime.pairCount >= 5) {
-      //     const regimeOverrides = getPatternPoolThresholds(globalRegime.regime);
-      //     activePatternThresholds = { LQ_MIN: regimeOverrides.LQ_MIN, VN_MAX: regimeOverrides.VN_MAX,
-      //       DI_TRENDING_MIN: regimeOverrides.DI_TRENDING_MIN }; regimeThresholdsActive = true;
-      // }} catch {}
-      const regimeThresholdsActive = false;
 
       // Apply pattern IMF thresholds to pattern global survivors
       // Now uses allClassifiedForPatternLookup which includes BOTH quant survivors AND pattern-only pairs
@@ -1092,7 +1081,7 @@ export class Fx5ScannerService {
           );
         });
 
-      console.log(`[19F][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternGlobalSurvivors.length} passed IMF${regimeThresholdsActive ? ' (regime-adjusted)' : ' (static)'} thresholds (dual-path)`);
+      console.log(`[19F][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternGlobalSurvivors.length} passed IMF (DB thresholds, dual-path)`);
 
       // Batch 19H: Pattern IMF per-metric breakdown
       let patternImfFailedLQ = 0;

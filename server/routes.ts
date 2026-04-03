@@ -11377,25 +11377,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode = (req.query.mode as 'paper' | 'live') || 'paper';
       const { activeFilterPool } = await import('./services/active-filter-pool.js');
-      const { PATTERN_POOL_THRESHOLDS, PATTERN_POOL_GUARDRAILS, PATTERN_POOL_STRATEGIES, getPatternPoolThresholds } = await import('./config/pattern-filter-profile.js');
-      const { getMarketContextEngine } = await import('./services/market-context-engine.js');
+      // Batch 48: Regime override imports removed — DB is sole authority for thresholds
+      const { PATTERN_POOL_THRESHOLDS, PATTERN_POOL_GUARDRAILS, PATTERN_POOL_STRATEGIES } = await import('./config/pattern-filter-profile.js');
 
       const patternPool = activeFilterPool.getPatternPool(mode);
       const patternPoolSize = activeFilterPool.getPatternPoolSize(mode);
       const quantPoolSize = activeFilterPool.getPoolSize(mode);
-
-      let globalRegime = null;
-      let activeThresholds = PATTERN_POOL_THRESHOLDS;
-      let regimeThresholdsActive = false;
-      try {
-        const mce = getMarketContextEngine();
-        globalRegime = mce.getDominantRegime();
-        if (globalRegime && globalRegime.pairCount >= 5) {
-          const regimeThresholds = getPatternPoolThresholds(globalRegime.regime);
-          regimeThresholdsActive = regimeThresholds !== PATTERN_POOL_THRESHOLDS;
-          activeThresholds = regimeThresholds;
-        }
-      } catch { /* MCE not ready */ }
 
       res.json({
         ok: true,
@@ -11411,12 +11398,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           })),
           patternPoolSize,
           quantPoolSize,
-          thresholds: activeThresholds,
+          thresholds: PATTERN_POOL_THRESHOLDS,
           guardrails: PATTERN_POOL_GUARDRAILS,
           strategies: PATTERN_POOL_STRATEGIES,
-          globalRegime,
-          regimeThresholdsActive,
-          activeRegimeThresholds: regimeThresholdsActive ? activeThresholds : null,
         },
       });
     } catch (error) {
