@@ -608,9 +608,9 @@ function callStrategyDetect(
     case 'range_trading':
     case 'range_trade':  // HF6B: Alias for canonical strategy map name
       return strategyEngine.detectRangeTrading(ohlcData, {
-        minRangeDurationHours: 12,
+        minRangeDurationHours: 7,   // Batch 48: 12→7, aligned with strategy-engine.ts default (crypto consolidates faster)
         minRangeWidth: 2,           // HF8: Relaxed from 3 — 2% range width is meaningful
-        minBoundaryTouches: 2,      // HF8: Relaxed from 3 — 2 touches per boundary in 12 hourly bars is valid
+        minBoundaryTouches: 1,      // Batch 48: 2→1, aligned with strategy-engine.ts (crypto ranges need fewer boundary touches)
         entryZoneWidth: 0.5,
         stopLossBeyond: 1
       });
