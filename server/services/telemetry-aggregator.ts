@@ -128,6 +128,9 @@ export class TelemetryAggregatorService {
   private currentRegime: string = REGIMES.RANGE_BOUND_STABLE;  // HF9: Fixed stale LOW_VOL_CHOP → canonical name
   private rehydrated = false;
   
+  // Memory audit: Z-score histories stored per-symbol (not per-entry). Saves ~40MB.
+  private pairZScoreHistory: Map<string, { volZ: number[]; trendZ: number[] }> = new Map();
+
   // Directive 11.2 R1: Pool-level performance tracking
   private poolAggregates: Map<PoolType, PoolPerformanceAggregate> = new Map([
     ['ideal', { pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() }],
@@ -182,17 +185,18 @@ export class TelemetryAggregatorService {
     
     // Directive 11.7F-B: Build rolling Z-score history from previous entries
     const MAX_ZSCORE_HISTORY = 50;
-    const prevEntry = recent.length > 0 ? recent[recent.length - 1] : null;
-    const prevVolZHistory = prevEntry?.volZHistory ?? [];
-    const prevTrendZHistory = prevEntry?.trendZHistory ?? [];
-    
-    // Directive 11.7F-B: Append new Z-scores to rolling history (ring buffer)
-    const newVolZHistory = data.volZ !== undefined 
-      ? [...prevVolZHistory.slice(-(MAX_ZSCORE_HISTORY - 1)), data.volZ]
-      : prevVolZHistory;
-    const newTrendZHistory = data.trendZ !== undefined
-      ? [...prevTrendZHistory.slice(-(MAX_ZSCORE_HISTORY - 1)), data.trendZ]
-      : prevTrendZHistory;
+    // Memory audit: Z-score histories stored per-symbol, not per-entry
+    const zHist = this.pairZScoreHistory.get(symbol) ?? { volZ: [], trendZ: [] };
+    if (data.volZ !== undefined) {
+      zHist.volZ = [...zHist.volZ.slice(-(MAX_ZSCORE_HISTORY - 1)), data.volZ];
+    }
+    if (data.trendZ !== undefined) {
+      zHist.trendZ = [...zHist.trendZ.slice(-(MAX_ZSCORE_HISTORY - 1)), data.trendZ];
+    }
+    this.pairZScoreHistory.set(symbol, zHist);
+    // Reference the shared history (not copied per entry)
+    const newVolZHistory = zHist.volZ;
+    const newTrendZHistory = zHist.trendZ;
 
     const entry: PairTelemetry = {
       symbol,
