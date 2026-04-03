@@ -918,6 +918,14 @@ async function generatePhase10Signal(
     DI
   });
   
+  // Batch 49: Count pre-rejection signal (strategy DID produce a setup, before EV check)
+  if (counters) {
+    if (!counters.byStrategy[strategy]) {
+      counters.byStrategy[strategy] = { evaluated: 0, nulls: 0, signals: 0, preRejectionSignals: 0, rejected: 0 };
+    }
+    counters.byStrategy[strategy].preRejectionSignals = (counters.byStrategy[strategy].preRejectionSignals ?? 0) + 1;
+  }
+
   // Batch 18L Option A: VTS-specific relaxed Net EV gate
   // Active trading still uses strict netEV > 0 (in signal-orchestrator.ts)
   // VTS allows marginally negative EV for ML boundary learning
@@ -938,6 +946,8 @@ async function generatePhase10Signal(
       }
       counters.rejectedReasons.netEvBelowFloor++;
       counters.signalsRejected = (counters.signalsRejected ?? 0) + 1;
+      // Batch 49: Track per-strategy rejection
+      counters.byStrategy[strategy].rejected = (counters.byStrategy[strategy].rejected ?? 0) + 1;
       if (isQuantPool(sourcePool)) {
         counters.quantSignalsRejected = (counters.quantSignalsRejected ?? 0) + 1;
       } else {
@@ -1898,7 +1908,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
         if (!vtsEvalCounters.byStrategy[stratKey]) {
-          vtsEvalCounters.byStrategy[stratKey] = { evaluated: 0, nulls: 0, signals: 0 };
+          vtsEvalCounters.byStrategy[stratKey] = { evaluated: 0, nulls: 0, signals: 0, preRejectionSignals: 0, rejected: 0 };
         }
         vtsEvalCounters.byStrategy[stratKey].evaluated++;
         vtsEvalCounters.totalStrategyEvaluations++;
@@ -1919,8 +1929,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         }
         const { signal, tradeRecord } = result;
 
-        // Batch 26: Net EV floor check BEFORE counting as generated signal
-        // Per semantic contract: rejected = signal created but failed post-generation guard (not a null)
+        // Batch 26: Net EV floor check (caller-side, for signals that passed inside generatePhase10Signal)
+        // Note: Most Net EV rejections are caught INSIDE generatePhase10Signal and return null.
+        // This catch handles edge cases where signal has netEV but wasn't checked inside.
         if (signal && signal.netEV !== undefined && signal.netEV < VTS_NET_EV_FLOOR) {
           if (!vtsEvalCounters.rejectedReasons) { vtsEvalCounters.rejectedReasons = { netEvBelowFloor: 0 }; }
           vtsEvalCounters.rejectedReasons.netEvBelowFloor++;
