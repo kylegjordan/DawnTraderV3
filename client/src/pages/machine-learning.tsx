@@ -1733,17 +1733,35 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right text-xs text-muted-foreground">—</td>
                     <td className="p-2 text-xs text-muted-foreground">Sum of 4 family rejection counts</td>
                   </tr>
+                  {/* Batch 48: Family-Qualified Unique — the true unique pair count after family IMF */}
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Family-Qualified (Unique Pairs)</td>
+                    <td className="p-2 text-right text-teal-600">
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
+                    </td>
+                    <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-right text-teal-600">
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">Unique pairs passing ≥1 family IMF (before fan-out expansion)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Family Fan-Out (Quant Entries)</td>
+                    <td className="p-2 text-right text-orange-500">{fmt(r24.quant.survivors)}</td>
+                    <td className="p-2 text-right text-orange-500">{fmt(r24.pattern.survivors)}</td>
+                    <td className="p-2 text-right text-orange-500">{fmt(r24.quant.survivors + r24.pattern.survivors)}</td>
+                    <td className="p-2 text-xs text-muted-foreground">1 pair × N families = N entries (expansion for per-family evaluation)</td>
+                  </tr>
                   <tr className="border-b hover:bg-muted/30 font-semibold">
-                    <td className="p-2">Final Survivors</td>
-                    <td className="p-2 text-right text-green-600">{fmt(r24.quant.survivors)}</td>
-                    <td className="p-2 text-right text-green-600">{fmt(r24.pattern.survivors)}</td>
-                    <td className="p-2 text-right text-green-600 font-semibold">{fmt(r24.quant.survivors + r24.pattern.survivors)}</td>
-                    <td className="p-2 text-xs text-muted-foreground">Entering VTS batch (cumulative 24h, family-tagged)</td>
+                    <td className="p-2">VTS Batch Size <span className="text-[10px] text-muted-foreground">(what VTS actually receives)</span></td>
+                    <td colSpan={2} className="p-2 text-right text-green-600">—</td>
+                    <td className="p-2 text-right text-green-600 font-semibold">{fmt((rolling24h as any).totalDestinationCount ?? 0)}</td>
+                    <td className="p-2 text-xs text-muted-foreground">Fan-out + pattern pool + dual-pool duplicates (cumulative 24h)</td>
                   </tr>
                   {ve && (
                     <>
                       <tr className="bg-muted/50 border-y">
-                        <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(separate counter — different counting basis than FX5 pipeline above)</span></td>
+                        <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — Pairs Evaluated should match VTS Batch Size above)</span></td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2 font-medium">Strategy Evaluations</td>
@@ -2002,7 +2020,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2">
                       Total Survivors (24h)
                       <div className="text-[10px] font-normal text-muted-foreground">
-                        Family fan-out total (1 pair × 4 families = 4 entries). {rolling24h.totalScans > 0 && `~${Math.round((rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors) / rolling24h.totalScans)} per scan cycle.`}
+                        Fan-out: {fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors)} entries · Unique: {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)} pairs{rolling24h.totalScans > 0 && ` · ~${Math.round(((rolling24h as any).totalFamilyQualifiedUnique ?? 0) / rolling24h.totalScans)} unique/cycle`}
                       </div>
                     </td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.survivors)}</td>
@@ -2046,7 +2064,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </thead>
                     <tbody>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(cumulative across all VTS cycles, not unique pairs)</span></td>
+                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(= VTS Batch Size above, cumulative 24h)</span></td>
                         <td className="p-2 text-right">{fmt(ve.quantPairsEvaluated)}</td>
                         <td className="p-2 text-right">{fmt(ve.patternPairsEvaluated)}</td>
                         <td className="p-2 text-right font-semibold">{fmt(ve.quantPairsEvaluated + ve.patternPairsEvaluated)}</td>

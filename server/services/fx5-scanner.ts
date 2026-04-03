@@ -171,6 +171,8 @@ export interface ScanDiagnostics {
     imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number; benchmarkBypassed: number } | null;
     survivors: number;
   };
+  // Batch 48: Track unique family-qualified pairs for Pipeline Summary reconciliation
+  familyQualifiedUnique: number;
   destination: 'active_pool' | 'vts_batch';
   destinationCount: number;
 }
@@ -326,6 +328,9 @@ export class Fx5ScannerService {
     totalScans: number;
     totalPairsScanned: number;
     uniquePairsScanned: number;
+    // Batch 48: Pipeline reconciliation fields
+    totalFamilyQualifiedUnique: number;
+    totalDestinationCount: number;
     aggregated: {
       quant: ScanDiagnostics['quant'];
       pattern: ScanDiagnostics['pattern'];
@@ -344,6 +349,8 @@ export class Fx5ScannerService {
         totalScans: 0,
         totalPairsScanned: 0,
         uniquePairsScanned: 0,
+        totalFamilyQualifiedUnique: 0,
+        totalDestinationCount: 0,
         aggregated: {
           quant: {
             global: { failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0, failed_min_price: 0, failed_stablecoin: 0, failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0, failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0, passed_all_filters: 0 },
@@ -372,6 +379,9 @@ export class Fx5ScannerService {
 
     // Batch 22 HF2: Family path aggregation
     const aggFamilyPaths: Record<string, { imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }; survivors: number }> = {};
+    // Batch 48: Pipeline reconciliation accumulators
+    let aggFamilyQualifiedUnique = 0;
+    let aggDestinationCount = 0;
 
     for (const d of history) {
       totalPairsScanned += d.totalPairsScanned;
@@ -421,12 +431,17 @@ export class Fx5ScannerService {
           aggFamilyPaths[family].survivors += fData.survivors ?? 0;
         }
       }
+      // Batch 48: Accumulate pipeline reconciliation fields
+      aggFamilyQualifiedUnique += d.familyQualifiedUnique ?? 0;
+      aggDestinationCount += d.destinationCount ?? 0;
     }
 
     return {
       totalScans: history.length,
       totalPairsScanned,
       uniquePairsScanned: uniqueSymbols.size,
+      totalFamilyQualifiedUnique: aggFamilyQualifiedUnique,
+      totalDestinationCount: aggDestinationCount,
       aggregated: {
         quant: {
           global: aggQuantGlobal,
@@ -1240,6 +1255,8 @@ export class Fx5ScannerService {
             survivorSymbols: (familyPoolSurvivors[f] ?? []).map(s => s.symbol),
           }])
         ),
+        // Batch 48: Unique pairs that passed at least one family IMF
+        familyQualifiedUnique: familyQualifiedUnion.length,
         destination: isEngineActive ? 'active_pool' : 'vts_batch',
         destinationCount: 0,
       };
