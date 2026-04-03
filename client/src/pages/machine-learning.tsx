@@ -1742,12 +1742,15 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   {ve && (
                     <>
+                      <tr className="bg-muted/50 border-y">
+                        <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(separate counter — different counting basis than FX5 pipeline above)</span></td>
+                      </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2 font-medium">Strategy Evaluations</td>
                         <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt(((ve as any).quantStrategyEvaluations ?? 0) + ((ve as any).patternStrategyEvaluations ?? 0))}</td>
-                        <td className="p-2 text-xs text-muted-foreground">VTS counter (in-memory, 24h rolling)</td>
+                        <td className="p-2 text-xs text-muted-foreground">Per-strategy per-pair detect() calls (24h)</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls</td>
