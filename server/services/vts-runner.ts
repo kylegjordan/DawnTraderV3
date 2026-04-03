@@ -322,7 +322,7 @@ interface VTSConfig {
 // These constants control VTS-ONLY behavior. Active trading is NOT affected.
 // Purpose: Increase VTS simulated trade volume for ML learning data.
 // ══════════════════════════════════════════════════════════════════════════════
-const VTS_NET_EV_FLOOR = -0.005;       // Option A: Allow marginally negative EV (down to -0.5%)
+const VTS_NET_EV_FLOOR = -0.02;        // Batch 48: Staged relaxation -0.5%→-2.0%. VTS learning benefits from boundary-case trades. Active trading unaffected (strict netEV>0).
 const VTS_MAX_CONCURRENT_PER_COMBO = 1; // Batch 19G HF1: Strict 1-per-combo (was 3). Only 1 open VTS trade per symbol+strategy.
 // Option C: ROI gate skipped entirely for VTS (see Edit 3)
 // Option D: simulationIntervalSec reduced to 30s (aligned with FX5 scan cycle)

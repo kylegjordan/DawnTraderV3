@@ -570,7 +570,7 @@ export class StrategyEngine {
     params: any
   ): StrategySignal | null {
     const minRangeDurationHours = params.minRangeDurationHours || 7; // Batch 47: 10→7, crypto consolidates faster
-    const minBoundaryTouches = params.minBoundaryTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
+    const minBoundaryTouches = params.minBoundaryTouches || 1; // Batch 48: 2→1, crypto ranges form with fewer distinct boundary touches over 7 bars
     // Batch 45: Entry zone proportional to range width — bottom 25% of range instead of fixed %.
     // For a 10% range, entry zone = 2.5% (bottom quarter). For a 5% range, entry zone = 1.25%.
     // Fallback: 1 ATR above support if range not yet known.
