@@ -17,7 +17,7 @@ module.exports = {
     {
       name: 'dawntrader',
       script: 'dist/index.js',
-      node_args: '--experimental-specifier-resolution=node',
+      node_args: '--experimental-specifier-resolution=node --env-file=.env',
       instances: 1,           // Single instance — trading state is in-memory
       exec_mode: 'fork',      // Fork mode (not cluster) — WebSocket + in-memory state
       autorestart: true,
