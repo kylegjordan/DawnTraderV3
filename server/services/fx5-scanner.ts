@@ -1043,20 +1043,18 @@ export class Fx5ScannerService {
         VN_MAX: patternImfThresholds.VN_MAX,
         DI_TRENDING_MIN: patternImfThresholds.DI_MIN,
       };
-      let regimeThresholdsActive = false;
-      try {
-        const mce = getMarketContextEngine();
-        const globalRegime = mce.getDominantRegime();
-        if (globalRegime && globalRegime.pairCount >= 5) {
-          const regimeOverrides = getPatternPoolThresholds(globalRegime.regime);
-          activePatternThresholds = {
-            LQ_MIN: regimeOverrides.LQ_MIN,
-            VN_MAX: regimeOverrides.VN_MAX,
-            DI_TRENDING_MIN: regimeOverrides.DI_TRENDING_MIN,
-          };
-          regimeThresholdsActive = true;
-        }
-      } catch { /* MCE not ready — use DB defaults */ }
+      // Batch 47f15: Code-driven regime overrides DISABLED per Kyle directive.
+      // DB values are now the sole authority for pattern IMF thresholds.
+      // Regime-specific DI overrides (from Batch 19C) will be migrated to DB-governed
+      // model in a future batch. Until then, DB values apply directly.
+      // Original regime override code retained as comment for reference:
+      // try { const mce = getMarketContextEngine(); const globalRegime = mce.getDominantRegime();
+      //   if (globalRegime && globalRegime.pairCount >= 5) {
+      //     const regimeOverrides = getPatternPoolThresholds(globalRegime.regime);
+      //     activePatternThresholds = { LQ_MIN: regimeOverrides.LQ_MIN, VN_MAX: regimeOverrides.VN_MAX,
+      //       DI_TRENDING_MIN: regimeOverrides.DI_TRENDING_MIN }; regimeThresholdsActive = true;
+      // }} catch {}
+      const regimeThresholdsActive = false;
 
       // Apply pattern IMF thresholds to pattern global survivors
       // Now uses allClassifiedForPatternLookup which includes BOTH quant survivors AND pattern-only pairs
