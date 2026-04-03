@@ -142,7 +142,7 @@ function issueTokens(user: { id: string; username: string; role?: UserRole }) {
       permissions 
     }, 
     JWT_SECRET, 
-    { expiresIn: '12h' }
+    { expiresIn: '7d' } // Batch 47f15: Extended from 12h to 7d — matches refresh token. Kyle prefers no session timeout.
   );
   const refreshToken = jwt.sign(
     { id: user.id }, 

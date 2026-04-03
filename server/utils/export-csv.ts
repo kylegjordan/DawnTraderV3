@@ -68,6 +68,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   signalType: string;
   patternType: string | null;
   pool: string;
+  sourcePool: string; // Batch 47f15: Family-qualified source pool (quant-trend, pattern, etc.)
   dollarValue: number;    // Directive 11.6H: Fixed USD exposure
   quantity: number;       // Directive 11.6H: Variable coin units
   entryPrice: number;
@@ -165,7 +166,8 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             strategy: trade.strategy || trade.signal?.strategy || 'UNKNOWN',
             signalType: trade.signalType || trade.signal?.signalType || 'UNKNOWN',
             patternType: trade.patternType || trade.signal?.patternType || null,
-            pool: (trade.sourcePool || trade.pool || 'UNKNOWN').toUpperCase(),
+            pool: (trade.pool || 'UNKNOWN').toUpperCase(),
+            sourcePool: (trade.sourcePool || 'UNKNOWN').toUpperCase(),
             dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure
             quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
             entryPrice,

@@ -460,8 +460,8 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
-              <SortableHeader label="Pool" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source</th>
+              <SortableHeader label="Pool (I/R)" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
               <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Entry/Current" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
@@ -691,8 +691,8 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
-              <SortableHeader label="Pool" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source</th>
+              <SortableHeader label="Pool (I/R)" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
               <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Entry/Exit" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
