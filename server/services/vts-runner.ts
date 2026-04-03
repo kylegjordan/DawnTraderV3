@@ -453,6 +453,23 @@ function computeSetupHash(entry: number, stop: number, _target: number): string 
   const round = (v: number) => Math.round(v / (v * SETUP_HASH_TOLERANCE)) * (v * SETUP_HASH_TOLERANCE);
   return `${round(entry).toFixed(4)}|${round(stop).toFixed(4)}`;
 }
+
+// Memory audit fix: prune stale entries from recentCloses and lastSetupHash
+function pruneReentryMaps(): void {
+  const now = Date.now();
+  const HASH_EXPIRY_MS = 30 * 60 * 1000; // 30 min — hashes expire when setup likely changed
+  for (const [key, ts] of recentCloses) {
+    if (now - ts > REENTRY_COOLDOWN_MS) {
+      recentCloses.delete(key);
+    }
+  }
+  for (const [key] of lastSetupHash) {
+    const closeTs = recentCloses.get(key);
+    if (!closeTs || now - closeTs > HASH_EXPIRY_MS) {
+      lastSetupHash.delete(key);
+    }
+  }
+}
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
@@ -1498,7 +1515,10 @@ export function getOpenVirtualTradesStatus(): {
 async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   const cycleStart = Date.now();
   cycleCount++;
-  
+
+  // Memory audit: prune stale re-entry suppression data each cycle
+  pruneReentryMaps();
+
   // Directive 11.6: First resolve any open trades before creating new ones
   await resolveOpenVirtualTrades();
   
@@ -2037,8 +2057,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   }
 
   // Batch 19I: Store VTS evaluation diagnostics
-  vtsEvalHistory.push({ ...vtsEvalCounters, timestamp: Date.now() });
-  persistVtsEvalSnapshot({ ...vtsEvalCounters, timestamp: Date.now() }); // Batch 22 HF7
+  const evalSnapshot = { ...vtsEvalCounters, timestamp: Date.now() };
+  vtsEvalHistory.push(evalSnapshot);
+  // Memory audit: prune on write (not just on read via getVTSEvalRolling24h)
+  const evalCutoff = Date.now() - VTS_EVAL_ROLLING_WINDOW_MS;
+  vtsEvalHistory = vtsEvalHistory.filter(s => s.timestamp > evalCutoff);
+  persistVtsEvalSnapshot(evalSnapshot); // Batch 22 HF7
   console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
   console.log(`[21][VTS_EVAL] totalStratEvals=${vtsEvalCounters.totalStrategyEvaluations} nullReasons: conditions=${vtsEvalCounters.nullReasons.conditionsNotMet} netEV=${vtsEvalCounters.rejectedReasons?.netEvBelowFloor ?? 0} adx=${vtsEvalCounters.nullReasons.adxGuard} dup=${vtsEvalCounters.nullReasons.duplicatePosition} maxTrades=${vtsEvalCounters.nullReasons.maxOpenTrades} noRegimeStrats=${vtsEvalCounters.nullReasons.regimeNoStrategies}`);
 
