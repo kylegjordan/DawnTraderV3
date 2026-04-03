@@ -447,10 +447,11 @@ const REENTRY_COOLDOWN_MS = 5 * 60 * 1000; // 5 minute cooldown after close
 const lastSetupHash: Map<string, string> = new Map(); // key → "entry|stop|target" hash
 const SETUP_HASH_TOLERANCE = 0.001; // 0.1% tolerance for "same setup"
 
-function computeSetupHash(entry: number, stop: number, target: number): string {
-  // Round to tolerance level to treat near-identical setups as the same
+function computeSetupHash(entry: number, stop: number, _target: number): string {
+  // Hash only entry+stop (structural setup). Target varies with ATR each cycle
+  // so including it defeats the purpose. Same entry+stop = same trade thesis.
   const round = (v: number) => Math.round(v / (v * SETUP_HASH_TOLERANCE)) * (v * SETUP_HASH_TOLERANCE);
-  return `${round(entry).toFixed(4)}|${round(stop).toFixed(4)}|${round(target).toFixed(4)}`;
+  return `${round(entry).toFixed(4)}|${round(stop).toFixed(4)}`;
 }
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
