@@ -1906,6 +1906,36 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       })}
                     </>
                   )}
+                  {/* Batch 49: VTS Signal Funnel — Kyle requested full pipeline visibility */}
+                  {data?.vtsEvaluation && (
+                    <>
+                      <tr className="bg-muted/50 border-y">
+                        <td colSpan={3} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          VTS Signal Funnel <span className="font-normal">(what happens after pairs enter VTS — 24h rolling)</span>
+                        </td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Strategy Evaluations</td>
+                        <td className="p-2 text-right">{fmt(((data.vtsEvaluation as any).quantStrategyEvaluations ?? 0) + ((data.vtsEvaluation as any).patternStrategyEvaluations ?? 0))}</td>
+                        <td className="p-2 text-right text-xs text-muted-foreground">Per-strategy per-pair detect() calls</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30 text-xs">
+                        <td className="p-2 pl-6 text-muted-foreground">↳ Strategy Nulls (no setup found)</td>
+                        <td className="p-2 text-right text-red-400">{fmt(((data.vtsEvaluation as any).quantStrategyNulls ?? 0) + ((data.vtsEvaluation as any).patternStrategyNulls ?? 0))}</td>
+                        <td className="p-2 text-right text-muted-foreground">True nulls + post-signal rejections</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30 text-xs">
+                        <td className="p-2 pl-6 text-muted-foreground">↳ Signals Rejected (Net EV below floor)</td>
+                        <td className="p-2 text-right text-orange-400">{fmt((data.vtsEvaluation as any).signalsRejected ?? 0)}</td>
+                        <td className="p-2 text-right text-muted-foreground">Strategy found setup but economics negative</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30 font-semibold">
+                        <td className="p-2">Trades Opened</td>
+                        <td className="p-2 text-right text-green-600">{fmt(((data.vtsEvaluation as any).quantSignalsGenerated ?? 0) + ((data.vtsEvaluation as any).patternSignalsGenerated ?? 0))}</td>
+                        <td className="p-2 text-right text-xs text-muted-foreground font-normal">Passed all gates → became VTS trades</td>
+                      </tr>
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
