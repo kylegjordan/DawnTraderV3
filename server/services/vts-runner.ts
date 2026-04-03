@@ -438,10 +438,19 @@ const MAX_OPEN_TRADES = 500; // Batch 18L: Increased from 300 to accommodate VTS
 // which handles the vts-service side. Runner-side Map starts empty on module load.
 console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
 
-// Batch 45: Post-close re-entry cooldown — prevents same symbol+strategy from reopening
-// immediately after closing (fixes volatility_edge runaway re-entry loop)
+// Batch 45+47f15: Post-close re-entry suppression — prevents same symbol+strategy from reopening
+// with identical setup. Two layers: time cooldown + setup-hash matching.
 const recentCloses: Map<string, number> = new Map(); // key → close timestamp
 const REENTRY_COOLDOWN_MS = 5 * 60 * 1000; // 5 minute cooldown after close
+// Batch 47f15: Setup-hash suppression — block re-entry if entry/stop/target are unchanged
+const lastSetupHash: Map<string, string> = new Map(); // key → "entry|stop|target" hash
+const SETUP_HASH_TOLERANCE = 0.001; // 0.1% tolerance for "same setup"
+
+function computeSetupHash(entry: number, stop: number, target: number): string {
+  // Round to tolerance level to treat near-identical setups as the same
+  const round = (v: number) => Math.round(v / (v * SETUP_HASH_TOLERANCE)) * (v * SETUP_HASH_TOLERANCE);
+  return `${round(entry).toFixed(4)}|${round(stop).toFixed(4)}|${round(target).toFixed(4)}`;
+}
 const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
@@ -792,6 +801,16 @@ async function generatePhase10Signal(
   const entryPrice = strategySignal.entryPrice;
   const takeProfit = strategySignal.targetPrice;
   const stopLoss = strategySignal.stopPrice;
+
+  // Batch 47f15: Setup-hash suppression — block re-entry if same entry/stop/target
+  const setupKey = `${symbol}:${strategy}`;
+  const currentHash = computeSetupHash(entryPrice, stopLoss, takeProfit);
+  const prevHash = lastSetupHash.get(setupKey);
+  if (prevHash && prevHash === currentHash) {
+    setNullReason('identical_setup_suppressed');
+    return null;
+  }
+
   // Compute proportional target distance for downstream calcs (lines 653, 665)
   const dynamicTarget = Math.abs(takeProfit - entryPrice) / entryPrice;
   const spread = priceData.ask > 0 && priceData.bid > 0
@@ -1048,6 +1067,8 @@ async function generatePhase10Signal(
   };
 
   openVirtualTrades.set(tradeId, openTrade);
+  // Batch 47f15: Record setup hash to prevent identical re-entry
+  lastSetupHash.set(`${symbol}:${strategy}`, computeSetupHash(entryPrice, stopLoss, takeProfit));
   // Directive 11.8C: Enhanced entry logging with execution context
   console.log(`[11.8C][Entry] ${symbol} opened @ ${entryPrice.toFixed(6)} | stop=${stopLoss.toFixed(6)} target=${takeProfit.toFixed(6)} strategy=${strategy} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
   
