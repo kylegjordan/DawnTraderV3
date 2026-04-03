@@ -57,7 +57,15 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
 
   return (
     <>
-      <aside 
+      {/* Batch 47f15: Backdrop overlay for mobile — click to close sidebar */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
         className={cn(
           "sidebar sidebar-transition w-64 bg-card border-r border-border flex-shrink-0 overflow-y-auto scrollbar-thin",
           !isOpen && "lg:translate-x-0 -translate-x-full",
