@@ -21,9 +21,9 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
     });
 
     it('has cooldown configuration', () => {
-      expect(SCANNER_PARAMS.FAILURE_TRACKING.COOLDOWN_MS).toBe(600000); // 10 minutes
+      expect(SCANNER_PARAMS.FAILURE_TRACKING.COOLDOWN_MS).toBe(120000); // Batch 51: 2 minutes (reduced from 10)
       expect(SCANNER_PARAMS.FAILURE_TRACKING.MAX_FAILURES).toBe(3);
-      expect(SCANNER_PARAMS.FAILURE_TRACKING.EXTENDED_COOLDOWN_MS).toBe(1800000); // 30 minutes
+      expect(SCANNER_PARAMS.FAILURE_TRACKING.EXTENDED_COOLDOWN_MS).toBe(300000); // Batch 51: 5 minutes (reduced from 30)
     });
 
     it('has telemetry score weights summing to 1.0', () => {

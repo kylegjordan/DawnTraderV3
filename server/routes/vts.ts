@@ -1563,13 +1563,38 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
       console.warn('[19J][API] Could not get VTS eval counters:', err);
     }
 
+    // Batch 51: Include PairFailureTracker cooldown state for transparency
+    let cooldownState = null;
+    try {
+      const { getAdaptiveScanManager } = await import('../services/adaptive-scan-manager.js');
+      const manager = getAdaptiveScanManager();
+      const failedPairs = manager.getFailedPairs();
+      const { SCANNER_PARAMS } = await import('../config/system-guards.js');
+      cooldownState = {
+        pairsInCooldown: failedPairs.length,
+        cooldownDurationMs: SCANNER_PARAMS.FAILURE_TRACKING.COOLDOWN_MS,
+        extendedCooldownMs: SCANNER_PARAMS.FAILURE_TRACKING.EXTENDED_COOLDOWN_MS,
+        maxFailuresForExtended: SCANNER_PARAMS.FAILURE_TRACKING.MAX_FAILURES,
+        pairs: failedPairs.map(p => ({
+          symbol: p.symbol,
+          failCount: p.failCount,
+          lastFailedAt: new Date(p.failTime).toISOString(),
+          reason: p.reason || 'unknown',
+          isExtended: p.failCount >= 3,
+        })),
+      };
+    } catch (err) {
+      console.warn('[51][API] Could not get cooldown state:', err);
+    }
+
     res.json({
       ok: true,
       lastScan,
       rolling24h,
       signalRejections,
       vtsEvaluation,
-      schema: 'filter-diagnostics/v1.1',
+      cooldownState,
+      schema: 'filter-diagnostics/v1.2',
     });
   } catch (error) {
     console.error('[19H][API] Filter diagnostics failed:', error);

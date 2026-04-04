@@ -102,6 +102,10 @@ export interface VTSEvalSnapshot {
   timestamp: number;
   quantPairsEvaluated: number;
   patternPairsEvaluated: number;
+  // Batch 51: Pair-pool evaluations — counts pair+family combinations, not unique pairs
+  // If BTC qualifies for trend + breakout families, that's 2 pair-pool evaluations
+  quantPairPoolEvaluations?: number;
+  patternPairPoolEvaluations?: number;
   quantStrategyNulls: number;
   patternStrategyNulls?: number;  // Batch 25: Pattern pool null counter (was lumped into quantStrategyNulls)
   patternNoDetection: number;

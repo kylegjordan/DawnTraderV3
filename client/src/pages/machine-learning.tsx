@@ -2034,6 +2034,67 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         </CardContent>
       </Card>
 
+      {/* Batch 51: Cooldown Exclusions — PairFailureTracker transparency */}
+      {data?.cooldownState && (
+        <Card className="max-w-4xl">
+          <CardHeader className="py-3">
+            <CardTitle className="text-lg flex items-center justify-between">
+              <span>Cooldown Exclusions <span className="text-xs font-normal text-muted-foreground">(PairFailureTracker)</span></span>
+              <span className="text-sm font-normal text-muted-foreground">
+                {data.cooldownState.pairsInCooldown} pair{data.cooldownState.pairsInCooldown !== 1 ? 's' : ''} currently excluded
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="px-4 pb-2 text-xs text-muted-foreground">
+              Pairs that recently failed scanner filters are temporarily excluded from VTS evaluation.
+              Standard cooldown: {(data.cooldownState.cooldownDurationMs / 60000).toFixed(0)} min |
+              Extended ({'\u2265'}{data.cooldownState.maxFailuresForExtended} failures): {(data.cooldownState.extendedCooldownMs / 60000).toFixed(0)} min
+            </div>
+            {data.cooldownState.pairsInCooldown > 0 ? (
+              <div className="overflow-x-auto max-h-48 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-2 font-medium">Symbol</th>
+                      <th className="text-right p-2 font-medium">Failures</th>
+                      <th className="text-left p-2 font-medium">Reason</th>
+                      <th className="text-right p-2 font-medium">Cooldown Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.cooldownState.pairs
+                      .sort((a: any, b: any) => b.failCount - a.failCount)
+                      .slice(0, 20)
+                      .map((p: any, i: number) => (
+                        <tr key={i} className="border-b hover:bg-muted/30">
+                          <td className="p-2 font-mono text-xs">{p.symbol}</td>
+                          <td className="p-2 text-right">{p.failCount}</td>
+                          <td className="p-2 text-xs text-muted-foreground">{p.reason}</td>
+                          <td className="p-2 text-right">
+                            <span className={p.isExtended ? 'text-red-500 font-medium' : 'text-amber-500'}>
+                              {p.isExtended ? 'Extended (30m)' : 'Standard (10m)'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    {data.cooldownState.pairsInCooldown > 20 && (
+                      <tr className="border-b">
+                        <td colSpan={4} className="p-2 text-center text-xs text-muted-foreground">
+                          ...and {data.cooldownState.pairsInCooldown - 20} more
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-4 text-center text-muted-foreground text-sm">No pairs in cooldown</div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* TABLE 4: VTS Evaluation Breakdown (Batch 19I) */}
       <Card className="max-w-4xl">
         <CardHeader className="py-3">
@@ -2062,10 +2123,16 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     </thead>
                     <tbody>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Pairs Evaluated <span className="text-xs text-muted-foreground">(VTS-side, cumulative 24h — less than Batch Size due to cooldown/skips)</span></td>
+                        <td className="p-2">Unique Pairs Evaluated <span className="text-xs text-muted-foreground">(VTS-side, cumulative 24h)</span></td>
                         <td className="p-2 text-right">{fmt(ve.quantPairsEvaluated)}</td>
                         <td className="p-2 text-right">{fmt(ve.patternPairsEvaluated)}</td>
                         <td className="p-2 text-right font-semibold">{fmt(ve.quantPairsEvaluated + ve.patternPairsEvaluated)}</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                        <td className="p-2">Pair-Pool Evaluations <span className="text-xs text-muted-foreground">(pair+family combos — comparable to IMF Survivors)</span></td>
+                        <td className="p-2 text-right text-blue-600">{fmt(ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated)}</td>
+                        <td className="p-2 text-right text-blue-600">{fmt(ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated)}</td>
+                        <td className="p-2 text-right font-semibold text-blue-600">{fmt((ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated) + (ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated))}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30 text-xs text-muted-foreground">
                         <td className="p-2 pl-6">↳ Skipped: No Price Data</td>

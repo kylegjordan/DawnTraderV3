@@ -162,9 +162,9 @@ export const SCANNER_PARAMS = {
     ROTATIONAL_RATIO: 0.4,          // 40% of pairs from "Rotational" (exploration)
   },
   FAILURE_TRACKING: {
-    COOLDOWN_MS: 600000,            // 10-minute cooldown for failed pairs
+    COOLDOWN_MS: 120000,            // Batch 51: Reduced from 10min → 2min cooldown for failed pairs
     MAX_FAILURES: 3,                // Max failures before extended cooldown
-    EXTENDED_COOLDOWN_MS: 1800000,  // 30-minute extended cooldown
+    EXTENDED_COOLDOWN_MS: 300000,   // Batch 51: Reduced from 30min → 5min extended cooldown
   },
   TELEMETRY: {
     SCORE_WEIGHTS: {

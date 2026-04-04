@@ -239,6 +239,9 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
   for (const snap of vtsEvalHistory) {
     aggregated.quantPairsEvaluated += snap.quantPairsEvaluated;
     aggregated.patternPairsEvaluated += snap.patternPairsEvaluated;
+    // Batch 51: Aggregate pair-pool evaluations
+    aggregated.quantPairPoolEvaluations = (aggregated.quantPairPoolEvaluations ?? 0) + (snap.quantPairPoolEvaluations ?? 0);
+    aggregated.patternPairPoolEvaluations = (aggregated.patternPairPoolEvaluations ?? 0) + (snap.patternPairPoolEvaluations ?? 0);
     aggregated.quantStrategyNulls += snap.quantStrategyNulls;
     aggregated.patternStrategyNulls = (aggregated.patternStrategyNulls ?? 0) + (snap.patternStrategyNulls ?? 0);
     aggregated.patternNoDetection += snap.patternNoDetection;
@@ -1603,6 +1606,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   let vtsEvalCounters: Omit<VTSEvalSnapshot, 'timestamp'> = {
     quantPairsEvaluated: 0,
     patternPairsEvaluated: 0,
+    quantPairPoolEvaluations: 0,   // Batch 51: pair+family combinations (apples-to-apples with IMF survivors)
+    patternPairPoolEvaluations: 0, // Batch 51: pair+family combinations
     quantStrategyNulls: 0,
     patternStrategyNulls: 0,
     patternNoDetection: 0,
@@ -1752,6 +1757,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
       if (pair.sourcePool === 'pattern') {
         vtsEvalCounters.patternPairsEvaluated++;
+        // Batch 51: Pattern-pool pair = exactly 1 pair-pool evaluation (the 'pattern' pool entry)
+        // Do NOT use full vtsSymbolFamilies.size here — that includes quant families too
+        vtsEvalCounters.patternPairPoolEvaluations = (vtsEvalCounters.patternPairPoolEvaluations ?? 0) + 1;
         // Convert OHLC to Candle[] for scanPatterns
         const candles = ohlcData.map(o => ({
           timestamp: o.timestamp,
@@ -1802,6 +1810,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         console.log(`[19G_HF1][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=pattern | Pattern-driven: ${effectiveStrategies.map(s => `${s.strategyKey}(${s.patternType})`).join(', ')}`);
       } else {
         vtsEvalCounters.quantPairsEvaluated++;
+        // Batch 51: Count pair-pool combinations — only quant families (exclude 'pattern' if present)
+        const quantPairFamilies = vtsSymbolFamilies.get(pair.symbol);
+        const quantFamilyCount = quantPairFamilies
+          ? [...quantPairFamilies].filter(f => f !== 'pattern').length || 1  // at least 1 if all filtered out
+          : 1;
+        vtsEvalCounters.quantPairPoolEvaluations = (vtsEvalCounters.quantPairPoolEvaluations ?? 0) + quantFamilyCount;
         // Batch 44: Quant pairs — include QUANT strategies always.
         // PATTERN/HYBRID strategies only when a matching pattern was detected.
         // This prevents the massive null rate from evaluating quant pairs against
