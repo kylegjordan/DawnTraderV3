@@ -2106,6 +2106,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   vtsEvalHistory = vtsEvalHistory.filter(s => s.timestamp > evalCutoff);
   persistVtsEvalSnapshot(evalSnapshot); // Batch 22 HF7
   console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
+  // Batch 51: Log pair-pool evaluations for reconciliation tracing
+  console.log(`[51][PAIR_POOL] quantPairPool=${vtsEvalCounters.quantPairPoolEvaluations ?? 0} patternPairPool=${vtsEvalCounters.patternPairPoolEvaluations ?? 0} total=${(vtsEvalCounters.quantPairPoolEvaluations ?? 0) + (vtsEvalCounters.patternPairPoolEvaluations ?? 0)} | skippedNoPrice=${vtsEvalCounters.pairsSkippedNoPrice ?? 0} skippedOHLC=${vtsEvalCounters.pairsSkippedInsufficientOHLC ?? 0} familyMismatch=${vtsEvalCounters.nullReasons.familyFilterMismatch ?? 0}`);
   console.log(`[21][VTS_EVAL] totalStratEvals=${vtsEvalCounters.totalStrategyEvaluations} nullReasons: conditions=${vtsEvalCounters.nullReasons.conditionsNotMet} netEV=${vtsEvalCounters.rejectedReasons?.netEvBelowFloor ?? 0} adx=${vtsEvalCounters.nullReasons.adxGuard} dup=${vtsEvalCounters.nullReasons.duplicatePosition} maxTrades=${vtsEvalCounters.nullReasons.maxOpenTrades} noRegimeStrats=${vtsEvalCounters.nullReasons.regimeNoStrategies}`);
 
   // Batch 21: DI distribution logging — capture actual DI values for threshold calibration
