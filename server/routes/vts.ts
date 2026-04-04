@@ -1556,9 +1556,12 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
 
     // Batch 19J: Include VTS evaluation counters (24h rolling)
     let vtsEvaluation = null;
+    let lastCycleVtsEval = null;
     try {
-      const { getVTSEvalRolling24h } = await import('../services/vts-runner.js');
+      const { getVTSEvalRolling24h, getLastVTSCycleSnapshot } = await import('../services/vts-runner.js');
       vtsEvaluation = getVTSEvalRolling24h();
+      // Batch 51 HF2: Last cycle VTS evaluation for Last Scan pipeline display
+      lastCycleVtsEval = getLastVTSCycleSnapshot();
     } catch (err) {
       console.warn('[19J][API] Could not get VTS eval counters:', err);
     }
@@ -1593,8 +1596,9 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
       rolling24h,
       signalRejections,
       vtsEvaluation,
+      lastCycleVtsEval,
       cooldownState,
-      schema: 'filter-diagnostics/v1.2',
+      schema: 'filter-diagnostics/v1.3',
     });
   } catch (error) {
     console.error('[19H][API] Filter diagnostics failed:', error);

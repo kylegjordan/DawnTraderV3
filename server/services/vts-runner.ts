@@ -306,6 +306,12 @@ export function getLastVTSEvalCounters() {
   return getVTSEvalRolling24h();
 }
 
+// Batch 51 HF2: Get the most recent single VTS cycle snapshot (not 24h rollup)
+export function getLastVTSCycleSnapshot(): VTSEvalSnapshot | null {
+  if (vtsEvalHistory.length === 0) return null;
+  return vtsEvalHistory[vtsEvalHistory.length - 1];
+}
+
 // Phase 14 HF6: Strategy engine instance for detect function calls
 const strategyEngine = new StrategyEngine();
 

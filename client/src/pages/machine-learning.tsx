@@ -1902,8 +1902,49 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       })}
                     </>
                   )}
-                  {/* Batch 50: VTS Signal Funnel moved to Pipeline Summary (24h section) to fix time-base mixing.
-                     Last Scan should only show last-scan data. VTS evaluation data is 24h rolling. */}
+                  {/* Batch 51 HF2: Restored VTS Signal Funnel in Last Scan with last-cycle data (Kyle directive) */}
+                  {data?.lastCycleVtsEval && (() => {
+                    const lc = data.lastCycleVtsEval;
+                    const totalEvals = lc.totalStrategyEvaluations || 0;
+                    const totalNulls = (lc.quantStrategyNulls || 0) + (lc.patternStrategyNulls || 0);
+                    const signals = lc.signalsGenerated || 0;
+                    const rejected = lc.signalsRejected || 0;
+                    const trades = signals - rejected;
+                    return (
+                      <>
+                        <tr className="border-b bg-blue-500/5"><td colSpan={3} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Pair-Pool Evaluations</td>
+                          <td className="p-2 text-right">{fmt((lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0)}</td>
+                          <td className="p-2 text-right">{fmt((lc.patternPairPoolEvaluations ?? lc.patternPairsEvaluated) || 0)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Strategy Evaluations</td>
+                          <td className="p-2 text-right">{fmt(lc.quantStrategyEvaluations || 0)}</td>
+                          <td className="p-2 text-right">{fmt(lc.patternStrategyEvaluations || 0)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Strategy Nulls (no setup)</td>
+                          <td className="p-2 text-right text-amber-500">{fmt(lc.quantStrategyNulls || 0)}</td>
+                          <td className="p-2 text-right text-amber-500">{fmt(lc.patternStrategyNulls || 0)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Signals Produced</td>
+                          <td className="p-2 text-right text-green-600">{fmt(lc.quantSignalsGenerated || 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt(lc.patternSignalsGenerated || 0)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Post-Signal Rejections</td>
+                          <td className="p-2 text-right text-red-500">{fmt(lc.quantSignalsRejected || 0)}</td>
+                          <td className="p-2 text-right text-red-500">{fmt(lc.patternSignalsRejected || 0)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 font-semibold">
+                          <td className="p-2 pl-4">Trades Opened</td>
+                          <td colSpan={2} className="p-2 text-right text-green-700">{fmt(trades >= 0 ? trades : 0)}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
