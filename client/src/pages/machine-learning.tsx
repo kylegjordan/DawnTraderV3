@@ -1742,7 +1742,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-xs text-muted-foreground">Unique pairs passing ≥1 family IMF (before fan-out expansion)</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
-                    <td className="p-2 font-medium">Family Fan-Out (Quant Entries)</td>
+                    <td className="p-2 font-medium">Family Fan-Out (IMF Survivors)</td>
                     <td className="p-2 text-right text-orange-500">{fmt(r24.quant.survivors)}</td>
                     <td className="p-2 text-right text-orange-500">{fmt(r24.pattern.survivors)}</td>
                     <td className="p-2 text-right text-orange-500">{fmt(r24.quant.survivors + r24.pattern.survivors)}</td>
@@ -1750,9 +1750,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="border-b hover:bg-muted/30 font-semibold">
                     <td className="p-2">VTS Batch Size <span className="text-[10px] text-muted-foreground">(what VTS actually receives)</span></td>
-                    <td colSpan={2} className="p-2 text-right text-green-600">—</td>
+                    <td className="p-2 text-right text-green-600">{fmt(r24.quant.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(r24.pattern.survivors)}</td>
                     <td className="p-2 text-right text-green-600 font-semibold">{fmt((rolling24h as any).totalDestinationCount ?? 0)}</td>
-                    <td className="p-2 text-xs text-muted-foreground">Fan-out + pattern pool + dual-pool duplicates (cumulative 24h)</td>
+                    <td className="p-2 text-xs text-muted-foreground">Quant fan-out + pattern pool (cumulative 24h)</td>
                   </tr>
                   {ve && (
                     <>
@@ -1871,7 +1872,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="bg-muted/50 font-semibold">
                     <td className="p-2">Destination: {lastScan.destination === 'active_pool' ? 'Active Pool' : 'VTS Batch'}</td>
-                    <td colSpan={2} className="p-2 text-right text-primary">{fmt(lastScan.destinationCount)} pairs total</td>
+                    <td className="p-2 text-right text-primary">{fmt(lastScan.quant.survivors)}</td>
+                    <td className="p-2 text-right text-primary">{fmt(lastScan.pattern.survivors)} <span className="text-[10px] text-muted-foreground">= {fmt(lastScan.destinationCount)} total</span></td>
                   </tr>
                   {/* Batch 22: Family Path IMF Results */}
                   {data?.lastScan?.familyPaths && (
