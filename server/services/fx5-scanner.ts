@@ -1154,8 +1154,8 @@ export class Fx5ScannerService {
           return t && di >= t.DI_MIN && di <= t.DI_MAX;
         });
       });
-      // Batch 35: Compute pattern benchmark bypassed count
-      const patternBenchmarkBypassed = patternPoolSurvivors.filter((s: any) => s.isBenchmark || s.bypassVolatilityReject || s.bypassBoringReject).length;
+      // Batch 52 Fix: Pattern benchmark count — only actual benchmarks (was overcounting with bypass flags)
+      const patternBenchmarkBypassed = patternPoolSurvivors.filter((s: any) => s.isBenchmark).length;
       // Batch 43: Family-rejected count = classifiedSurvivors that didn't pass any family
       const familyRejectedCount = classifiedSurvivors.length - familyQualifiedUnion.length;
       if (familyRejectedCount > 0) {
@@ -1163,10 +1163,12 @@ export class Fx5ScannerService {
       }
 
       // Directive 11.4H.2: Log benchmark pair count for diagnostics
-      const benchmarkCount = familyQualifiedUnion.filter(s => s.isBenchmark).length;
-      if (benchmarkCount > 0) {
+      // Batch 52 Fix: Count benchmarks in fan-out (per-family) to match survivors units
+      const benchmarkCountUnique = familyQualifiedUnion.filter(s => s.isBenchmark).length;
+      const benchmarkCount = Object.values(familyPoolSurvivors).reduce((sum, arr) => sum + arr.filter((s: any) => s.isBenchmark).length, 0);
+      if (benchmarkCountUnique > 0) {
         const benchmarkSymbols = familyQualifiedUnion.filter(s => s.isBenchmark).map(s => s.symbol).slice(0, 5);
-        console.log(`[11.4H.2][BENCHMARK] ${benchmarkCount} benchmark pairs in family-qualified survivors: ${benchmarkSymbols.join(', ')}${benchmarkCount > 5 ? '...' : ''}`);
+        console.log(`[11.4H.2][BENCHMARK] ${benchmarkCountUnique} unique benchmark pairs (${benchmarkCount} fan-out entries) in family-qualified survivors: ${benchmarkSymbols.join(', ')}${benchmarkCountUnique > 5 ? '...' : ''}`);
       }
 
       // Batch 43: IMF metrics count from family-qualified union
@@ -1174,7 +1176,7 @@ export class Fx5ScannerService {
       console.log(`[43][IMF] Family-qualified survivors: ${familyQualifiedUnion.length}/${classifiedSurvivors.length} (tradingActive=${isEngineActive})`);
 
       const totalFamilySurvivors = Object.values(familyPoolSurvivors).reduce((sum, arr) => sum + arr.length, 0);
-      console.log(`[43][ScanFlow] Global: ${classifiedSurvivors.length} | Family-qualified (unique): ${familyQualifiedUnion.length} | Family-qualified (sum): ${totalFamilySurvivors} | Benchmarks: ${benchmarkCount}`);
+      console.log(`[43][ScanFlow] Global: ${classifiedSurvivors.length} | Family-qualified (unique): ${familyQualifiedUnion.length} | Family-qualified (sum): ${totalFamilySurvivors} | Benchmarks: ${benchmarkCountUnique} unique / ${benchmarkCount} fan-out`);
 
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE
       if (isEngineActive) {
