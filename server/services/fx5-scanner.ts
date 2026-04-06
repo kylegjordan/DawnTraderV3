@@ -412,6 +412,7 @@ export class Fx5ScannerService {
         aggPatternImf.failedDI += d.pattern.imf.failedDI;
         aggPatternImf.passed += d.pattern.imf.passed;
         aggPatternImf.total += d.pattern.imf.total;
+        aggPatternImf.benchmarkBypassed += d.pattern.imf.benchmarkBypassed ?? 0; // Batch 52: was missing
       }
       aggPatternSurvivors += d.pattern.survivors;
 

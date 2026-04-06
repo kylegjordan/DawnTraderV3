@@ -1757,8 +1757,9 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-xs text-muted-foreground">Benchmark pairs excluded before VTS (cumulative 24h)</td>
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
-                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark, what VTS receives)</span></td>
-                    <td colSpan={2} className="p-2 text-right text-green-700"></td>
+                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
+                    <td className="p-2 text-right text-green-700">{fmt(r24.quant.survivors - (r24.quant.imf.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-right text-green-700">{fmt(r24.pattern.survivors - (r24.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold">{fmt((rolling24h as any).totalDestinationCount ?? 0)}</td>
                     <td className="p-2 text-xs text-muted-foreground">Survivors minus benchmarks (cumulative 24h)</td>
                   </tr>
@@ -1897,7 +1898,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
                     <td className="p-2">→ VTS Destination (post-benchmark)</td>
-                    <td colSpan={2} className="p-2 text-right text-green-700"></td>
+                    <td className="p-2 text-right text-green-700">{fmt(lastScan.quant.survivors - lastScan.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-green-700">{fmt(lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold text-base">{fmt(lastScan.destinationCount)}</td>
                   </tr>
                   {/* Batch 22: Family Path IMF Results */}
