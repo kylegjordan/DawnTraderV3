@@ -243,27 +243,28 @@ export class AdaptiveScanManager {
       console.log(`[11.4H.5][Benchmark] Injected ${injectedBenchmarks.length} benchmark pairs: ${injectedBenchmarks.slice(0, 5).join(', ')}${injectedBenchmarks.length > 5 ? '...' : ''}`);
     }
     
-    // Combine and filter out failed pairs (benchmarks included)
+    // Batch 52: PairFailureTracker cooldown REMOVED (Kyle directive 2026-04-06)
+    // Cooldown was redundant — batch size is fixed at ~300 per cycle regardless.
+    // Adaptive ratio manager + ideal/rotational selection controls what gets scanned.
     const combined = [...idealPairs, ...rotationalPairs, ...injectedBenchmarks];
     const uniqueCombined = [...new Set(combined)]; // Deduplicate
-    const excludedPairs = uniqueCombined.filter(p => this.failureTracker.isInCooldown(p));
-    const filteredBatch = this.failureTracker.filterFailedPairs(uniqueCombined);
-    
+    const excludedPairs: string[] = []; // No cooldown exclusions
+
     // Directive 11.4C-R2: Initialization guard - retry if batch is underfilled
-    if (filteredBatch.length < batchSize && retryAttempt < MAX_RETRIES) {
-      console.warn(`[11.4C-R2][AdaptiveScan] Underfilled batch: ${filteredBatch.length}/${batchSize}. Retrying in 5s...`);
+    if (uniqueCombined.length < batchSize && retryAttempt < MAX_RETRIES) {
+      console.warn(`[11.4C-R2][AdaptiveScan] Underfilled batch: ${uniqueCombined.length}/${batchSize}. Retrying in 5s...`);
       await sleep(5000);
       return this.getNextScanBatch(allAvailablePairs, retryAttempt + 1);
     }
-    
+
     // Create batch result with ratio tracking (11.2 R1)
     // Directive 11.4H.5: Include benchmark pairs in batch for tracking
     const batch: AdaptiveScanBatch = {
-      idealPairs: idealPairs.filter(p => !this.failureTracker.isInCooldown(p)),
-      rotationalPairs: rotationalPairs.filter(p => !this.failureTracker.isInCooldown(p)),
-      benchmarkPairs: injectedBenchmarks.filter(p => !this.failureTracker.isInCooldown(p)),
+      idealPairs,
+      rotationalPairs,
+      benchmarkPairs: injectedBenchmarks,
       excludedPairs,
-      totalBatch: filteredBatch,
+      totalBatch: uniqueCombined,
       timestamp: Date.now(),
       ratioUsed: currentRatio,
       retryCount: retryAttempt, // Directive 11.4C-R2: Track retries
@@ -311,13 +312,9 @@ export class AdaptiveScanManager {
     failureReason?: string;
     pool?: PoolType; // Directive 11.2 R1: Track source pool
   }): void {
-    if (success) {
-      // Directive 11.4C-R2: Only track success for failure cooldown removal
-      // Do NOT record telemetry here - VTS is the single source of truth
-      this.failureTracker.recordSuccess(symbol);
-    } else {
-      this.failureTracker.recordFailure(symbol, data?.failureReason);
-    }
+    // Batch 52: PairFailureTracker recording disabled (cooldown removed)
+    // if (success) { this.failureTracker.recordSuccess(symbol); }
+    // else { this.failureTracker.recordFailure(symbol, data?.failureReason); }
   }
 
   /**

@@ -1,6 +1,6 @@
 # DawnTrader V3 — Running Issues List
 
-> **Last Updated:** 2026-04-04 (end of Batch 50-51 session)
+> **Last Updated:** 2026-04-06 (Batch 52 session — Fixes 1-4 complete)
 > **Status Key:** OPEN = not started, IN PROGRESS = work begun but not finalized, RESOLVED = done, DEFERRED = intentionally postponed
 
 ---
@@ -9,8 +9,8 @@
 
 | # | Issue | Status | Notes |
 |---|-------|--------|-------|
-| 1 | **Last Scan missing full pipeline** — survivors shown but pairs evaluated, nulls, signals, rejections, trades were removed in B50, partially restored in B51-HF2 | IN PROGRESS | B51-HF2 deployed but NOT verified or Langston-reviewed. Needs post-deploy audit. |
-| 2 | **Pipeline Summary missing combined VTS destination total** — shows quant family IMF passed but does not include pattern survivors + parity overlaps as explicit combined total | IN PROGRESS | Architecture understood (117 quant + 30 pattern = 147 VTS entries). Display fix needed. |
+| 1 | **Last Scan missing full pipeline** — survivors shown but pairs evaluated, nulls, signals, rejections, trades were removed in B50, partially restored in B51-HF2 | RESOLVED | **2026-04-06 — Kyle verified, Langston retroactively approved.** B51-HF2 verified working. VTS Signal Funnel renders correctly with last-cycle data. |
+| 2 | **Pipeline Summary missing combined VTS destination total** — shows quant family IMF passed but does not include pattern survivors + parity overlaps as explicit combined total | RESOLVED | **2026-04-06 — Kyle verified, Langston pre-approved.** Commit `9566e6c2`. VTS Batch Size row now shows quant/pattern breakdown. Label renamed to "IMF Survivors". |
 | 3 | **24h pair-pool data still accumulating** — new quantPairPoolEvaluations/patternPairPoolEvaluations fields only exist since B51 deploy (~4h). No historical backfill. | IN PROGRESS | Will have full 24h window by ~2026-04-05 16:15 UTC. |
 | 4 | **IMF survivors > IMF passed confusion** — row labels confusing because family fan-out multiplies the count | IN PROGRESS | Partially addressed in B43/B51 but Kyle still finding display unclear. |
 | 5 | **DI reconciliation mismatch** — IMF metrics shows DI=0 failures but Family Path shows DI=2300+ failures. Different scopes (global vs family) but UI makes them look contradictory. | OPEN | Not addressed in B50-51. |
@@ -62,12 +62,24 @@
 | # | Issue | Status | Notes |
 |---|-------|--------|-------|
 | 26 | **Governance catch-up batch** — BATCH_CATALOG, PHASE_HISTORY, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES all need updating for B48-B51 | OPEN | Kyle approved deferral but it needs to happen. |
-| 27 | **B51-HF2 missing Langston review** — pushed without code review, workflow violation | OPEN | Must be reviewed retroactively. |
+| 27 | **B51-HF2 missing Langston review** — pushed without code review, workflow violation | RESOLVED | **2026-04-06 — Langston retroactively reviewed and approved.** Code confirmed using last-cycle data via getLastVTSCycleSnapshot(). |
 | 28 | **Batch 51 Completion Report** — cannot be written yet, objectives not fully verified | OPEN | Depends on post-deploy audit and Kyle UI verification. |
+
+## Batch 52 — New Issues Discovered (2026-04-06)
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 29 | **LQ threshold at 47 may be too aggressive** — now the largest filter by far. Kyle reviewing. | IN PROGRESS | DB updated 20→47 in B52. Research showed 20 was no-op (~$100/day). 47 = ~$50K/day. Kyle wants consensus on right level. |
+| 30 | **IMF fallback defaults scattered across codebase** — LQ/VN/DI/CORR have hardcoded defaults in 6+ files. Dead code since DB always provides values, but creates governance risk. | IN PROGRESS | Partially cleaned in B52 (imf-metrics.ts). Remaining files: analysis-utils.ts, pattern-filter-profile.ts, fx5-scanner.ts, vts.ts, signal-orchestrator.ts. |
+| 31 | **Benchmark pairs were entering VTS** — quant benchmarkBypassed counter hardcoded to 0. Benchmarks not excluded from VTS batch. | RESOLVED | **2026-04-06 — Fixed in commit `a712f5c1`. Kyle directive.** Counter fixed. Benchmarks now removed before VTS batch. Verified in logs: 51 entries removed per cycle. |
+| 32 | **Pipeline flow visibility** — IMF passed → benchmarks bypassed → final survivors not shown clearly in UI | OPEN | Kyle wants explicit flow: remaining after IMF, benchmarks removed, total entering VTS. |
+| 33 | **Cooldown Exclusions interrupts pipeline flow** — card position in Filter Diagnostics tab breaks the logical flow | OPEN | Kyle wants it moved to bottom of tab. |
+| 34 | **Cooldown numbers seem too high** — 1318/1268 pairs in cooldown when Kraken has ~1400-1500 total | OPEN | May be cumulative 24h rolling count vs unique. Needs investigation. |
+| 35 | **Filter Diagnostics UI not in SYSTEM_IMPACT_MAP** — governance gap discovered during B52 audit | OPEN | Should be added as a component entry. |
 
 ---
 
 ## Summary Counts
-- **RESOLVED:** 4 (#10, #13, #14, #18)
-- **IN PROGRESS:** 14 (#1, #2, #3, #4, #8, #9, #11, #12e, #15, #17a, #19, #20, #21, #27 retroactive)
-- **OPEN:** 15 (#5, #6, #7, #12, #12a, #12b, #12c, #12d, #12f, #16, #17, #22, #23, #24, #25, #26, #28)
+- **RESOLVED:** 8 (#1, #2, #10, #13, #14, #18, #27, #31)
+- **IN PROGRESS:** 13 (#3, #4, #8, #9, #11, #12e, #15, #17a, #19, #20, #21, #29, #30)
+- **OPEN:** 18 (#5, #6, #7, #12, #12a, #12b, #12c, #12d, #12f, #16, #17, #22, #23, #24, #25, #26, #28, #32, #33, #34, #35)

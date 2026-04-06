@@ -2454,76 +2454,9 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
          Post-signal rejections are now shown in the VTS Evaluation Breakdown above
          with accurate counts from VTS counters. The old section used a separate
          logSkippedSignal tracker with conflicting numbers. */}
-      {/* Batch 52: Cooldown Exclusions moved to bottom (Kyle directive — was interrupting pipeline flow) */}
-      {data?.cooldownState && (() => {
-        const now = Date.now();
-        const stdMs = data.cooldownState.cooldownDurationMs;
-        const extMs = data.cooldownState.extendedCooldownMs;
-        // Fix 8: Filter to only show pairs whose cooldown has NOT expired
-        const activePairs = data.cooldownState.pairs.filter((p: any) => {
-          const elapsed = now - new Date(p.lastFailedAt).getTime();
-          return elapsed < (p.isExtended ? extMs : stdMs);
-        });
-        return (
-        <Card className="max-w-4xl">
-          <CardHeader className="py-3">
-            <CardTitle className="text-lg flex items-center justify-between">
-              <span>Cooldown Exclusions <span className="text-xs font-normal text-muted-foreground">(PairFailureTracker — pre-filter)</span></span>
-              <span className="text-sm font-normal text-muted-foreground">
-                {activePairs.length} pairs in active cooldown
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="px-4 pb-2 text-xs text-muted-foreground">
-              Pairs that recently failed scanner filters are temporarily excluded from batch selection.
-              Standard cooldown: {(stdMs / 60000).toFixed(0)} min |
-              Extended ({'\u2265'}{data.cooldownState.maxFailuresForExtended} failures): {(extMs / 60000).toFixed(0)} min
-            </div>
-            {activePairs.length > 0 ? (
-              <div className="overflow-x-auto max-h-48 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background">
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Symbol</th>
-                      <th className="text-right p-2 font-medium">Failures</th>
-                      <th className="text-left p-2 font-medium">Reason</th>
-                      <th className="text-right p-2 font-medium">Cooldown Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activePairs
-                      .sort((a: any, b: any) => b.failCount - a.failCount)
-                      .slice(0, 20)
-                      .map((p: any, i: number) => (
-                        <tr key={i} className="border-b hover:bg-muted/30">
-                          <td className="p-2 font-mono text-xs">{p.symbol}</td>
-                          <td className="p-2 text-right">{p.failCount}</td>
-                          <td className="p-2 text-xs text-muted-foreground">{p.reason}</td>
-                          <td className="p-2 text-right">
-                            <span className={p.isExtended ? 'text-red-500 font-medium' : 'text-amber-500'}>
-                              {p.isExtended ? `Extended (${(extMs / 60000).toFixed(0)}m)` : `Standard (${(stdMs / 60000).toFixed(0)}m)`}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    {activePairs.length > 20 && (
-                      <tr className="border-b">
-                        <td colSpan={4} className="p-2 text-center text-xs text-muted-foreground">
-                          ...and {activePairs.length - 20} more
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="p-4 text-center text-muted-foreground text-sm">No pairs currently in active cooldown</div>
-            )}
-          </CardContent>
-        </Card>
-        );
-      })()}
+      {/* Batch 52: Cooldown Exclusions card REMOVED (Kyle directive 2026-04-06)
+         PairFailureTracker cooldown was redundant — batch size fixed at ~300/cycle
+         regardless. Adaptive ratio manager handles pair selection. */}
 
       {/* Batch 34: Metric Distribution — moved to bottom, redesigned with plain language */}
       {(data?.lastScan as any)?.metricDistribution && (
