@@ -1758,8 +1758,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
                     <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
-                    <td className="p-2 text-right text-green-700">{fmt(r24.quant.survivors - (r24.quant.imf.benchmarkBypassed ?? 0))}</td>
-                    <td className="p-2 text-right text-green-700">{fmt(r24.pattern.survivors - (r24.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td colSpan={2} className="p-2 text-right text-[10px] text-muted-foreground">benchmark removal on combined fan-out batch</td>
                     <td className="p-2 text-right text-green-700 font-bold">{fmt((rolling24h as any).totalDestinationCount ?? 0)}</td>
                     <td className="p-2 text-xs text-muted-foreground">Survivors minus benchmarks (cumulative 24h)</td>
                   </tr>
@@ -1898,8 +1897,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
                     <td className="p-2">→ VTS Destination (post-benchmark)</td>
-                    <td className="p-2 text-right text-green-700">{fmt(lastScan.quant.survivors - lastScan.quant.imf.benchmarkBypassed)}</td>
-                    <td className="p-2 text-right text-green-700">{fmt(lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td colSpan={2} className="p-2 text-right text-[10px] text-muted-foreground">benchmark removal applied on combined fan-out batch</td>
                     <td className="p-2 text-right text-green-700 font-bold text-base">{fmt(lastScan.destinationCount)}</td>
                   </tr>
                   {/* Batch 22: Family Path IMF Results */}
@@ -2117,8 +2115,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
                     <td className="p-2">→ VTS Destination (post-benchmark)</td>
-                    <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
-                    <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td colSpan={2} className="p-2 text-right text-[10px] text-muted-foreground">benchmark removal on combined fan-out batch</td>
                     <td className="p-2 text-right text-green-700 font-bold">{fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                   </tr>
                 </tbody>
