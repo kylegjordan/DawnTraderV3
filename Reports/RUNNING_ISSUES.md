@@ -1,0 +1,73 @@
+# DawnTrader V3 — Running Issues List
+
+> **Last Updated:** 2026-04-04 (end of Batch 50-51 session)
+> **Status Key:** OPEN = not started, IN PROGRESS = work begun but not finalized, RESOLVED = done, DEFERRED = intentionally postponed
+
+---
+
+## Filter Diagnostics / UI Issues
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 1 | **Last Scan missing full pipeline** — survivors shown but pairs evaluated, nulls, signals, rejections, trades were removed in B50, partially restored in B51-HF2 | IN PROGRESS | B51-HF2 deployed but NOT verified or Langston-reviewed. Needs post-deploy audit. |
+| 2 | **Pipeline Summary missing combined VTS destination total** — shows quant family IMF passed but does not include pattern survivors + parity overlaps as explicit combined total | IN PROGRESS | Architecture understood (117 quant + 30 pattern = 147 VTS entries). Display fix needed. |
+| 3 | **24h pair-pool data still accumulating** — new quantPairPoolEvaluations/patternPairPoolEvaluations fields only exist since B51 deploy (~4h). No historical backfill. | IN PROGRESS | Will have full 24h window by ~2026-04-05 16:15 UTC. |
+| 4 | **IMF survivors > IMF passed confusion** — row labels confusing because family fan-out multiplies the count | IN PROGRESS | Partially addressed in B43/B51 but Kyle still finding display unclear. |
+| 5 | **DI reconciliation mismatch** — IMF metrics shows DI=0 failures but Family Path shows DI=2300+ failures. Different scopes (global vs family) but UI makes them look contradictory. | OPEN | Not addressed in B50-51. |
+| 6 | **Empty Guardrails tabs** — Telemetry Snapshot and Filter Performance show no data | OPEN | Not addressed. |
+| 7 | **Screeners tab missing family IMF thresholds** — only shows 4 base paths, not family-specific | OPEN | Partially done in B42 (values from DB) but not complete. |
+| 8 | **Cooldown Exclusions card deployed** — new card showing pairs in cooldown | IN PROGRESS | Deployed in B51. Not verified by Kyle on staging yet. |
+
+## Strategy / Signal Pipeline Issues
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 9 | **Zero-signal strategy audit** — 8 strategies with 0% signal rate categorized into 4 buckets | IN PROGRESS | Analysis sent to Kyle. abcd_long VWAP fix done (B50). Other 7 strategies NOT fixed — categorized as regime-gated, disabled, pattern-dependent, or needing threshold audit. No code changes for those. |
+| 10 | **abcd_long VWAP always undefined** — Kraken OHLC index [5] not mapped | RESOLVED | Fixed in B50. VWAP now mapped. Post-fix: strategy still has 84% pattern detection failure (structural, not a bug). |
+| 11 | **Pattern path 100% strategy null** — all pattern strategy evaluations return null | IN PROGRESS | Identified but not root-caused. Need specific investigation of what kills pattern strategies. |
+| 12 | **Additional strategies need threshold audit** — adaptive_flow, pivot_shift, liquidity_trap (10K+ evals, 0%) | OPEN | Identified in audit. No code changes made. |
+| 12a | **Strategy audit incomplete** — only 8 of 17 strategies audited (zero-signal only). 9 strategies NOT audited: vwap_pullback, morning_star, mean_reversion, reverse_impulse, range_trade, support_bounce, sma_trend_ride, breakout, vwap_bounce | OPEN | Need full health check on all 17. |
+| 12b | **dhma thresholds too strict** — DHMA_MIN_SEPARATION/LOOKBACK need relaxation for crypto. Zero signals. | OPEN | Recommendation made, no code change. Kyle decision needed. |
+| 12c | **volatility_edge still 0% after B47 relaxation** — A-point detection logic may need review | OPEN | Vol mult relaxed 2.0→1.5 but no improvement. |
+| 12d | **inside_bar_reversal still 0% after B47 relaxation** — pattern detection may be too strict | OPEN | Vol mult relaxed 1.5→1.3 but no improvement. |
+| 12e | **Regime-gated strategies dormant** — adaptive_flow, pivot_shift, liquidity_trap only eligible in specific regimes | IN PROGRESS | By design, not a bug. Kyle decision: accept dormancy or relax regime eligibility? |
+| 12f | **defensive_hedge inactive** — not active in current regime mapping | OPEN | Kyle decision: remove entirely or activate? |
+| 13 | **Strategy nulls inflated by post-signal rejections** — generatePhase10Signal returned null for both true nulls AND rejections | RESOLVED | Fixed in B50. setNullReason() calls added before return null. Caller now distinguishes true nulls from post-signal rejections. |
+| 14 | **Post-Signal Rejections pct() denominator bug** — used totalStratNulls instead of totalStrategyEvaluations | RESOLVED | Fixed in B50 with pctOfEvals() helper. |
+| 15 | **DI 12→8 threshold decision** — analysis sent recommending wait for VTS outcome data | IN PROGRESS | Waiting for trade outcome data (VTS in passive mode, no trades generated). Kyle to decide when data sufficient. |
+| 16 | **Fixed % thresholds → ATR-relative** — Langston Batch 18H finding | OPEN | Not addressed. |
+| 17 | **Duplicate scanPatterns() call** — deferred from Batch 41 | OPEN | Not addressed. |
+| 17a | **Zero-duration closed simulated trades** — many VTS trades showing 0m duration (opened and closed in same cycle or near-instant). Visible in Closed Simulated Trades table on staging. Previous fixes (B45 re-entry cooldown, B47 setup-hash suppression) have NOT resolved this. Needs deeper investigation — may be stop-loss/take-profit too tight, or price data resolution issue, or close logic triggering too quickly. | IN PROGRESS | Kyle flagged from staging screenshots 2026-04-06. Multiple TAO/USD volatility_edge trades and other pairs showing 0m duration with identical entry/exit. |
+
+## Architecture / Counting Issues
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 18 | **PairFailureTracker cooldown** — was hidden, now visible. Reduced from 10min/30min to 2min/5min. Pre-filter at batch selection. | RESOLVED | B51. Kyle approved keeping with reduced durations. |
+| 19 | **VTS Parity duplication (Directive 19F)** — pairs passing both quant+pattern get duplicated in VTS batch | IN PROGRESS | Architecture understood and explained to Kyle. The parity-added pattern entries explain why VTS evaluates MORE than single-scan family IMF survivors. Not a bug — intentional for sim-to-live parity. But needs to be properly reflected in Pipeline Summary display. |
+| 20 | **Pair-pool evaluation counting** — new counters track pair+family combinations | IN PROGRESS | Deployed in B51. Langston-reviewed counting logic (pattern=1 per pair, quant=non-pattern families). Data accumulating. |
+
+## Infrastructure / Comms Issues
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 21 | **Langston voice note transcription** — audio arrives but platform transcription doesn't fire for main agent | IN PROGRESS | Diagnosed as OpenClaw platform bug. CCDT workaround in place. Langston SOUL updated with instructions. Kyle says Langston should transcribe himself. |
+| 22 | **Non-fatal DB column errors** — Neon schema export missing columns from later batches | OPEN | Causes log noise, non-blocking. |
+| 23 | **ai-analyst.ts disabled** — OpenAI imports commented out, null stubs in place | OPEN | Full removal pending. |
+| 24 | **ML service not running** — python3 not in PATH | OPEN | Non-blocking, app runs in degraded mode. |
+| 25 | **Pattern path min_price rejecting 193 pairs** — threshold may be too strict | OPEN | Not investigated. |
+
+## Governance Debt
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 26 | **Governance catch-up batch** — BATCH_CATALOG, PHASE_HISTORY, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES all need updating for B48-B51 | OPEN | Kyle approved deferral but it needs to happen. |
+| 27 | **B51-HF2 missing Langston review** — pushed without code review, workflow violation | OPEN | Must be reviewed retroactively. |
+| 28 | **Batch 51 Completion Report** — cannot be written yet, objectives not fully verified | OPEN | Depends on post-deploy audit and Kyle UI verification. |
+
+---
+
+## Summary Counts
+- **RESOLVED:** 4 (#10, #13, #14, #18)
+- **IN PROGRESS:** 14 (#1, #2, #3, #4, #8, #9, #11, #12e, #15, #17a, #19, #20, #21, #27 retroactive)
+- **OPEN:** 15 (#5, #6, #7, #12, #12a, #12b, #12c, #12d, #12f, #16, #17, #22, #23, #24, #25, #26, #28)
