@@ -1816,9 +1816,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         console.log(`[19G_HF1][VTS] ${pair.symbol} | Regime=${pairRegime} | sourcePool=pattern | Pattern-driven: ${effectiveStrategies.map(s => `${s.strategyKey}(${s.patternType})`).join(', ')}`);
       } else {
         vtsEvalCounters.quantPairsEvaluated++;
-        // Batch 52 Fix: Count 1 per entry — FX5 already fanned out into family-tagged entries
-        // (was double-counting by re-expanding via vtsSymbolFamilies lookup)
-        vtsEvalCounters.quantPairPoolEvaluations = (vtsEvalCounters.quantPairPoolEvaluations ?? 0) + 1;
+        // Batch 51: Count pair-pool combinations — only quant families (exclude 'pattern' if present)
+        const quantPairFamilies = vtsSymbolFamilies.get(pair.symbol);
+        const quantFamilyCount = quantPairFamilies
+          ? [...quantPairFamilies].filter(f => f !== 'pattern').length || 1  // at least 1 if all filtered out
+          : 1;
+        vtsEvalCounters.quantPairPoolEvaluations = (vtsEvalCounters.quantPairPoolEvaluations ?? 0) + quantFamilyCount;
         // Batch 44: Quant pairs — include QUANT strategies always.
         // PATTERN/HYBRID strategies only when a matching pattern was detected.
         // This prevents the massive null rate from evaluating quant pairs against
