@@ -1748,12 +1748,19 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right text-orange-500">{fmt(r24.quant.survivors + r24.pattern.survivors)}</td>
                     <td className="p-2 text-xs text-muted-foreground">1 pair × N families = N entries (expansion for per-family evaluation)</td>
                   </tr>
-                  <tr className="border-b hover:bg-muted/30 font-semibold">
-                    <td className="p-2">VTS Batch Size <span className="text-[10px] text-muted-foreground">(what VTS actually receives)</span></td>
-                    <td className="p-2 text-right text-green-600">{fmt(r24.quant.survivors)}</td>
-                    <td className="p-2 text-right text-green-600">{fmt(r24.pattern.survivors)}</td>
-                    <td className="p-2 text-right text-green-600 font-semibold">{fmt((rolling24h as any).totalDestinationCount ?? 0)}</td>
-                    <td className="p-2 text-xs text-muted-foreground">Quant fan-out + pattern pool (cumulative 24h)</td>
+                  {/* Batch 52: Pipeline flow — survivors → benchmarks removed → VTS destination */}
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Benchmarks Removed</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(r24.quant.imf.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(r24.pattern.imf?.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt((r24.quant.imf.benchmarkBypassed ?? 0) + (r24.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-xs text-muted-foreground">Benchmark pairs excluded before VTS (cumulative 24h)</td>
+                  </tr>
+                  <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
+                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark, what VTS receives)</span></td>
+                    <td colSpan={2} className="p-2 text-right text-green-700"></td>
+                    <td className="p-2 text-right text-green-700 font-bold">{fmt((rolling24h as any).totalDestinationCount ?? 0)}</td>
+                    <td className="p-2 text-xs text-muted-foreground">Survivors minus benchmarks (cumulative 24h)</td>
                   </tr>
                   {ve && (
                     <>
