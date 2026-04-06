@@ -1811,6 +1811,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <th className="text-left p-2 font-medium">Filter</th>
                     <th className="text-right p-2 font-medium">Quant Global</th>
                     <th className="text-right p-2 font-medium">Pattern Global</th>
+                    <th className="text-right p-2 font-medium">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1825,11 +1826,16 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                           ? fmt((lastScan.pattern.global as Record<string, number>)[key])
                           : '—'}
                       </td>
+                      <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : ''}`}>
+                        {lastScan.pattern.global && key in (lastScan.pattern.global as Record<string, number>)
+                          ? fmt((value as number) + ((lastScan.pattern.global as Record<string, number>)[key] || 0))
+                          : fmt(value as number)}
+                      </td>
                     </tr>
                   ))}
                   {/* IMF Section Header */}
                   <tr className="border-b bg-muted/50">
-                    <td colSpan={3} className="p-2 font-medium text-xs uppercase tracking-wider">Family IMF Metrics (aggregate across 4 families)</td>
+                    <td colSpan={4} className="p-2 font-medium text-xs uppercase tracking-wider">Family IMF Metrics (aggregate across 4 families)</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed LQ</td>
@@ -1837,6 +1843,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedLQ, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
                       {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedLQ) : '—'}
                     </td>
+                    <td className="p-2 text-right">{fmt(lastScan.quant.imf.failedLQ + (lastScan.pattern.imf?.failedLQ ?? 0))}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed VN</td>
@@ -1844,6 +1851,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedVN, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
                       {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedVN) : '—'}
                     </td>
+                    <td className="p-2 text-right">{fmt(lastScan.quant.imf.failedVN + (lastScan.pattern.imf?.failedVN ?? 0))}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Failed DI</td>
@@ -1853,33 +1861,38 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedDI, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
                       {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedDI) : '—'}
                     </td>
+                    <td className="p-2 text-right">{fmt((lastScan.quant.imf.failedDI ?? 0) + (lastScan.pattern.imf?.failedDI ?? 0))}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2">Benchmark Bypassed</td>
                     <td className="p-2 text-right text-blue-500">{fmt(lastScan.quant.imf.benchmarkBypassed)}</td>
                     <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-right text-blue-500">{fmt(lastScan.quant.imf.benchmarkBypassed)}</td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30 font-semibold">
                     <td className="p-2">Family IMF Passed (fan-out total)</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed)}</td>
                     <td className="p-2 text-right text-green-600">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.passed) : '—'}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed + (lastScan.pattern.imf?.passed ?? 0))}</td>
                   </tr>
                   {/* Summary Row */}
                   <tr className="bg-muted/30 font-semibold">
                     <td className="p-2">Final Survivors</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors)}</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.pattern.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors + lastScan.pattern.survivors)}</td>
                   </tr>
                   <tr className="bg-muted/50 font-semibold">
                     <td className="p-2">Destination: {lastScan.destination === 'active_pool' ? 'Active Pool' : 'VTS Batch'}</td>
                     <td className="p-2 text-right text-primary">{fmt(lastScan.quant.survivors)}</td>
-                    <td className="p-2 text-right text-primary">{fmt(lastScan.pattern.survivors)} <span className="text-[10px] text-muted-foreground">= {fmt(lastScan.destinationCount)} total</span></td>
+                    <td className="p-2 text-right text-primary">{fmt(lastScan.pattern.survivors)}</td>
+                    <td className="p-2 text-right text-primary font-semibold">{fmt(lastScan.destinationCount)}</td>
                   </tr>
                   {/* Batch 22: Family Path IMF Results */}
                   {data?.lastScan?.familyPaths && (
                     <>
                       <tr className="bg-muted/30">
-                        <td colSpan={3} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        <td colSpan={4} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Family Path IMF Breakdown (per-family detail)
                         </td>
                       </tr>
@@ -1914,35 +1927,40 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     const trades = signals - rejected;
                     return (
                       <>
-                        <tr className="border-b bg-blue-500/5"><td colSpan={3} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
+                        <tr className="border-b bg-blue-500/5"><td colSpan={4} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Pair-Pool Evaluations</td>
                           <td className="p-2 text-right">{fmt((lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0)}</td>
                           <td className="p-2 text-right">{fmt((lc.patternPairPoolEvaluations ?? lc.patternPairsEvaluated) || 0)}</td>
+                          <td className="p-2 text-right">{fmt(((lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0) + ((lc.patternPairPoolEvaluations ?? lc.patternPairsEvaluated) || 0))}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Strategy Evaluations</td>
                           <td className="p-2 text-right">{fmt(lc.quantStrategyEvaluations || 0)}</td>
                           <td className="p-2 text-right">{fmt(lc.patternStrategyEvaluations || 0)}</td>
+                          <td className="p-2 text-right">{fmt(totalEvals)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Strategy Nulls (no setup)</td>
                           <td className="p-2 text-right text-amber-500">{fmt(lc.quantStrategyNulls || 0)}</td>
                           <td className="p-2 text-right text-amber-500">{fmt(lc.patternStrategyNulls || 0)}</td>
+                          <td className="p-2 text-right text-amber-500">{fmt(totalNulls)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Signals Produced</td>
                           <td className="p-2 text-right text-green-600">{fmt(lc.quantSignalsGenerated || 0)}</td>
                           <td className="p-2 text-right text-green-600">{fmt(lc.patternSignalsGenerated || 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt(signals)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Post-Signal Rejections</td>
                           <td className="p-2 text-right text-red-500">{fmt(lc.quantSignalsRejected || 0)}</td>
                           <td className="p-2 text-right text-red-500">{fmt(lc.patternSignalsRejected || 0)}</td>
+                          <td className="p-2 text-right text-red-500">{fmt(rejected)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30 font-semibold">
                           <td className="p-2 pl-4">Trades Opened</td>
-                          <td colSpan={2} className="p-2 text-right text-green-700">{fmt(trades >= 0 ? trades : 0)}</td>
+                          <td colSpan={3} className="p-2 text-right text-green-700">{fmt(trades >= 0 ? trades : 0)}</td>
                         </tr>
                       </>
                     );
