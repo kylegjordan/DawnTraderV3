@@ -2053,18 +2053,21 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedDI) : '—'}</td>
                     <td className="p-2 text-right font-medium">{fmt((rolling24h.aggregated.quant.imf.failedDI ?? 0) + (rolling24h.aggregated.pattern.imf?.failedDI ?? 0))}</td>
                   </tr>
-                  <tr className="border-b hover:bg-muted/30">
-                    <td className="p-2">Benchmark Bypassed</td>
-                    <td className="p-2 text-right text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
-                    <td className="p-2 text-right text-blue-500">{fmt(rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)}</td>
-                    <td className="p-2 text-right font-medium text-blue-500">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed + (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                  <tr className="border-b hover:bg-muted/30 font-semibold">
+                    <td className="p-2">IMF Passed (fan-out total)</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.imf.passed)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.pattern.imf?.passed ?? 0)}</td>
+                    <td className="p-2 text-right text-green-600 font-medium">{fmt(rolling24h.aggregated.quant.imf.passed + (rolling24h.aggregated.pattern.imf?.passed ?? 0))}</td>
                   </tr>
-                  {/* Batch 22 HF2: Family Path 24h Rolling Results */}
-                  {rolling24h.aggregated.familyPaths && (
+                  {/* Family Path IMF Results — quant only, should reconcile with quant IMF Passed above */}
+                  {rolling24h.aggregated.familyPaths && (() => {
+                    const familyTotal = ['trend', 'reversal', 'breakout', 'oscillator'].reduce((sum, f) =>
+                      sum + (rolling24h.aggregated.familyPaths?.[f]?.survivors ?? 0), 0);
+                    return (
                     <>
                       <tr className="bg-muted/30">
                         <td colSpan={4} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                          Family Path IMF Results (24h)
+                          Family Path IMF Results (24h — quant families)
                         </td>
                       </tr>
                       {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
@@ -2087,18 +2090,36 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                           </tr>
                         );
                       })}
+                      <tr className="border-b hover:bg-muted/30 font-semibold">
+                        <td className="p-2 pl-6 text-xs">↳ Family Total (quant fan-out)</td>
+                        <td className="p-2 text-right text-green-600">{fmt(familyTotal)}</td>
+                        <td className="p-2 text-right text-muted-foreground">—</td>
+                        <td className="p-2 text-right text-green-600">{fmt(familyTotal)}</td>
+                      </tr>
                     </>
-                  )}
-                  <tr className="bg-muted/30 font-semibold">
-                    <td className="p-2">
-                      Total Survivors (24h)
-                      <div className="text-[10px] font-normal text-muted-foreground">
-                        Fan-out: {fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors)} entries · Unique: {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)} pairs{rolling24h.totalScans > 0 && ` · ~${Math.round(((rolling24h as any).totalFamilyQualifiedUnique ?? 0) / rolling24h.totalScans)} unique/cycle`}
-                      </div>
-                    </td>
+                    );
+                  })()}
+                  {/* Pipeline flow: IMF Survivors → Benchmarks Removed → VTS Destination */}
+                  <tr className="bg-muted/50 border-y">
+                    <td colSpan={4} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pipeline Flow (24h cumulative)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30 font-semibold">
+                    <td className="p-2">IMF Survivors (incl. benchmarks)</td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.survivors)}</td>
                     <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.pattern.survivors)}</td>
                     <td className="p-2 text-right text-green-600 font-medium">{fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors)}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Benchmarks Removed</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed + (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                  </tr>
+                  <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
+                    <td className="p-2">→ VTS Destination (post-benchmark)</td>
+                    <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-right text-green-700 font-bold">{fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                   </tr>
                 </tbody>
               </table>
