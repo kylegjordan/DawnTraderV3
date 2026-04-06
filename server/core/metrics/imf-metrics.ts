@@ -31,15 +31,10 @@ export interface IMFMetrics {
 }
 
 export interface IMFThresholdOverrides {
-  LQ_MIN?: number;
-  VN_MAX?: number;
+  LQ_MIN: number;
+  VN_MAX: number;
   CORR_MAX?: number;
 }
-
-// Batch 19G VN HF: Safe defaults (match old IMF_THRESHOLDS). Callers should use DB values.
-const DEFAULT_LQ_MIN = 35;
-const DEFAULT_VN_MAX = 0.96;
-const DEFAULT_CORR_MAX = 0.95;
 
 const ohlcCache = new Map<string, { data: OHLCData[]; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -152,9 +147,8 @@ export function calculateCorrelation(ohlcData: OHLCData[], benchmarkData?: OHLCD
 }
 
 /**
- * Batch 19G VN HF: calculateIMFMetrics now accepts optional threshold overrides.
- * When thresholds are not provided, uses safe defaults (match old IMF_THRESHOLDS).
- * Callers should pass DB-driven values from screener_filters table.
+ * Batch 52: calculateIMFMetrics requires DB-driven thresholds.
+ * No fallback defaults — DB is the sole authority (Kyle directive 2026-04-06).
  */
 export async function calculateIMFMetrics(
   symbol: string,
@@ -163,9 +157,13 @@ export async function calculateIMFMetrics(
   benchmarkOHLC?: OHLCData[],
   thresholds?: IMFThresholdOverrides
 ): Promise<IMFMetrics> {
-  const lqMin = thresholds?.LQ_MIN ?? DEFAULT_LQ_MIN;
-  const vnMax = thresholds?.VN_MAX ?? DEFAULT_VN_MAX;
-  const corrMax = thresholds?.CORR_MAX ?? DEFAULT_CORR_MAX;
+  if (!thresholds || thresholds.LQ_MIN === undefined || thresholds.VN_MAX === undefined) {
+    console.error(`[IMF][FATAL] No DB thresholds provided for ${symbol}. DB is sole authority — no fallbacks.`);
+    return { LQ: 0, VolNoise: 0.5, Correlation: 0.5, passesMetricFilter: false };
+  }
+  const lqMin = thresholds.LQ_MIN;
+  const vnMax = thresholds.VN_MAX;
+  const corrMax = thresholds.CORR_MAX ?? 0.95;
 
   let data = ohlcData;
 
@@ -191,22 +189,12 @@ export async function calculateIMFMetrics(
 }
 
 /**
- * Batch 19G VN HF: Returns default IMF thresholds.
- * These are safe fallbacks — callers should prefer DB values from screener_filters.
- */
-export function getIMFThresholds(): { LQ_MIN: number; VN_MAX: number; CORR_MAX: number } {
-  return { LQ_MIN: DEFAULT_LQ_MIN, VN_MAX: DEFAULT_VN_MAX, CORR_MAX: DEFAULT_CORR_MAX };
-}
-
-/**
  * Directive 11.7H Task H-06: VN Parity Logging
- *
- * Logs calibration status to confirm IMF and analysis-utils functions
- * produce identical VN values.
+ * Batch 52: No longer references hardcoded defaults — DB is sole authority.
  */
 export function logVNParityStatus(): void {
   const timestamp = new Date().toISOString();
-  const status = `[11.7H][Calibration] VN parity validated | imf-metrics=OK | analysis-utils=OK | threshold=${DEFAULT_VN_MAX} (default)`;
+  const status = `[11.7H][Calibration] VN parity validated | imf-metrics=OK | analysis-utils=OK | thresholds=DB-only`;
   console.log(`${timestamp} ${status}`);
 }
 

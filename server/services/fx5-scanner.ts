@@ -1220,7 +1220,7 @@ export class Fx5ScannerService {
             failedDI: aggFamilyFailedDI,
             passed: totalFamilySurvivors,
             total: classifiedSurvivors.length * familyFilterPaths.length,
-            benchmarkBypassed: 0,
+            benchmarkBypassed: benchmarkCount,
           },
           survivors: totalFamilySurvivors,
         },
@@ -1405,12 +1405,22 @@ export class Fx5ScannerService {
       if (bothPoolsCount.count > 0) {
         console.log(`[19F][VTS_PARITY] ${bothPoolsCount.count} pairs duplicated in both quant+pattern pools for VTS parity`);
       }
-      scanDiag.destinationCount = taggedVtsSurvivors.length;
+
+      // Batch 52: Remove benchmark pairs from VTS batch (Kyle directive 2026-04-06)
+      // Benchmarks can pass filters but must not enter VTS for trade evaluation
+      const preBenchmarkCount = taggedVtsSurvivors.length;
+      const benchmarkSurvivors = taggedVtsSurvivors.filter(s => s.isBenchmark);
+      const nonBenchmarkVtsSurvivors = taggedVtsSurvivors.filter(s => !s.isBenchmark);
+      if (benchmarkSurvivors.length > 0) {
+        const benchmarkSyms = [...new Set(benchmarkSurvivors.map(s => s.symbol))].slice(0, 5);
+        console.log(`[52][BENCHMARK] Removed ${benchmarkSurvivors.length} benchmark entries from VTS batch (${benchmarkSyms.join(', ')}${benchmarkSurvivors.length > 5 ? '...' : ''}). Pre-benchmark: ${preBenchmarkCount}, post-benchmark: ${nonBenchmarkVtsSurvivors.length}`);
+      }
+      scanDiag.destinationCount = nonBenchmarkVtsSurvivors.length;
 
       // Directive 11.4C.1: FX5 does NOT write to telemetry (M70)
       // VTS is the sole source of telemetry writes - FX5 outputs raw data only
       // VTS gets pairs directly from FX5's current scan batch via getCurrentScanBatch()
-      this.updateCurrentBatch(mode, taggedVtsSurvivors);
+      this.updateCurrentBatch(mode, nonBenchmarkVtsSurvivors);
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;
