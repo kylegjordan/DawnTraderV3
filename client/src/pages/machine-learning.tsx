@@ -1875,18 +1875,23 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right text-green-600">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.passed) : '—'}</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed + (lastScan.pattern.imf?.passed ?? 0))}</td>
                   </tr>
-                  {/* Summary Row */}
+                  {/* Batch 52: Pipeline flow — survivors → benchmarks removed → VTS destination */}
                   <tr className="bg-muted/30 font-semibold">
-                    <td className="p-2">Final Survivors</td>
+                    <td className="p-2">IMF Survivors (incl. benchmarks)</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors)}</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.pattern.survivors)}</td>
                     <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors + lastScan.pattern.survivors)}</td>
                   </tr>
-                  <tr className="bg-muted/50 font-semibold">
-                    <td className="p-2">Destination: {lastScan.destination === 'active_pool' ? 'Active Pool' : 'VTS Batch'}</td>
-                    <td className="p-2 text-right text-primary">{fmt(lastScan.quant.survivors)}</td>
-                    <td className="p-2 text-right text-primary">{fmt(lastScan.pattern.survivors)}</td>
-                    <td className="p-2 text-right text-primary font-semibold">{fmt(lastScan.destinationCount)}</td>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Benchmarks Removed</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(lastScan.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.benchmarkBypassed) : '—'}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(lastScan.quant.imf.benchmarkBypassed + (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                  </tr>
+                  <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
+                    <td className="p-2">→ VTS Destination (post-benchmark)</td>
+                    <td colSpan={2} className="p-2 text-right text-green-700"></td>
+                    <td className="p-2 text-right text-green-700 font-bold text-base">{fmt(lastScan.destinationCount)}</td>
                   </tr>
                   {/* Batch 22: Family Path IMF Results */}
                   {data?.lastScan?.familyPaths && (
@@ -2456,9 +2461,9 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         <Card className="max-w-4xl">
           <CardHeader className="py-3">
             <CardTitle className="text-lg flex items-center justify-between">
-              <span>Cooldown Exclusions <span className="text-xs font-normal text-muted-foreground">(PairFailureTracker)</span></span>
+              <span>Cooldown Exclusions <span className="text-xs font-normal text-muted-foreground">(PairFailureTracker — pre-filter)</span></span>
               <span className="text-sm font-normal text-muted-foreground">
-                {activePairs.length} active / {data.cooldownState.pairsInCooldown} tracked
+                {activePairs.length} pairs in active cooldown
               </span>
             </CardTitle>
           </CardHeader>
