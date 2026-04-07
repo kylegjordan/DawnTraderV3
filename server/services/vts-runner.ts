@@ -283,11 +283,13 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
 
     for (const [strat, counts] of Object.entries(snap.byStrategy)) {
       if (!aggregated.byStrategy[strat]) {
-        aggregated.byStrategy[strat] = { evaluated: 0, nulls: 0, signals: 0 };
+        aggregated.byStrategy[strat] = { evaluated: 0, nulls: 0, signals: 0, preRejectionSignals: 0, rejected: 0 };
       }
       aggregated.byStrategy[strat].evaluated += counts.evaluated;
       aggregated.byStrategy[strat].nulls += counts.nulls;
       aggregated.byStrategy[strat].signals += counts.signals;
+      aggregated.byStrategy[strat].preRejectionSignals += counts.preRejectionSignals ?? 0;
+      aggregated.byStrategy[strat].rejected += counts.rejected ?? 0;
     }
     // Batch 31: Aggregate nullReasonDetail
     if (snap.nullReasonDetail) {
@@ -1655,7 +1657,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     rejectedReasons: {
       netEvBelowFloor: 0,
     },
-    byStrategy: {} as Record<string, { evaluated: number; nulls: number; signals: number }>,
+    byStrategy: {} as Record<string, { evaluated: number; nulls: number; signals: number; preRejectionSignals: number; rejected: number }>,
     nullReasonDetail: {} as Record<string, number>,
   };
   

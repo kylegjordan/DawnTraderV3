@@ -2339,8 +2339,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               <td className="p-2 text-right">{fmt(counts.evaluated)}</td>
                               <td className="p-2 text-right text-orange-500">{fmt(counts.nulls)}</td>
                               <td className="p-2 text-right text-muted-foreground">{counts.evaluated > 0 ? `${(counts.nulls / counts.evaluated * 100).toFixed(1)}%` : '—'}</td>
-                              <td className="p-2 text-right text-blue-600">{fmt((counts as any).preRejectionSignals || 0)}</td>
-                              <td className="p-2 text-right text-amber-600">{fmt((counts as any).rejected || 0)}</td>
+                              <td className="p-2 text-right text-blue-600">{fmt(counts.preRejectionSignals || 0)}</td>
+                              <td className="p-2 text-right text-amber-600">{fmt(counts.rejected || 0)}</td>
                               <td className="p-2 text-right text-green-600">{fmt(counts.signals)}</td>
                             </tr>
                           ))
