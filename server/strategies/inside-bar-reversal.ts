@@ -38,7 +38,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 // Strategy Constants
 // ============================================================================
 
-const IB_MAX_COMPRESSION    = 0.80;  // Maximum compression ratio — Crypto-calibrated (Batch 18H): 0.75 → 0.80
+const IB_MAX_COMPRESSION    = 0.85;  // Batch 53: 0.80→0.85. Crypto candles noisier. (B18H: 0.75→0.80)
 const IB_BREAKOUT_BUFFER    = 0.002; // 0.2% breakout buffer above/below parent
 const IB_VOL_MULT           = 1.3;   // Batch 47: 1.5→1.3, inside bar breakouts can occur on moderate volume
 const IB_STOP_BUFFER        = 0.003; // 0.3% buffer beyond parent extreme

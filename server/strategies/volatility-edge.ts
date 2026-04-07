@@ -36,10 +36,10 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 // Strategy Constants
 // ═══════════════════════════════════════════════════════════════
 
-const VE_A_VOL_MULT          = 1.5; // Batch 47: 2.0→1.5, valid ABCD patterns form without extreme A-point volume
+const VE_A_VOL_MULT          = 1.3; // Batch 53: 1.5→1.3. (B47: 2.0→1.5)
 const VE_MIN_VOL_PERCENTILE  = 70;   // Crypto-calibrated (Batch 18H): 80 → 70
 const VE_BREAKOUT_BUFFER     = 0.002;
-const VE_BREAKOUT_VOL_MULT   = 1.5;
+const VE_BREAKOUT_VOL_MULT   = 1.3; // Batch 53: 1.5→1.3, symmetric with A-point relaxation
 const VE_STOP_BUFFER         = 0.003;
 const VE_MEASURED_MOVE_MULT  = 0.85;
 const VE_TARGET_ATR_MULT     = 2.5;
@@ -129,9 +129,9 @@ export function detectVolatilityEdge(
     return null;
   }
 
-  // ── C-point above VWAP gate ────────────────────────────────
-  if (cPointLow <= vwap) {
-    console.log(`${LOG_PREFIX} C-point low (${cPointLow.toFixed(6)}) <= VWAP (${vwap.toFixed(6)})`);
+  // ── C-point above VWAP gate (Batch 53: 1% tolerance, crypto wicks dip below VWAP in valid patterns) ──
+  if (cPointLow < vwap * 0.99) {
+    console.log(`${LOG_PREFIX} C-point low (${cPointLow.toFixed(6)}) < VWAP*0.99 (${(vwap * 0.99).toFixed(6)})`);
     setNullReason('price_position');
     return null;
   }

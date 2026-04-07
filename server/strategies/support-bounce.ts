@@ -48,7 +48,7 @@ const SB_LOOKBACK_CANDLES       = 50;    // Candles to scan for local minima
 const SB_CLUSTER_TOLERANCE_BASE = 0.005; // 0.5% base cluster tolerance
 const SB_MIN_TOUCHES            = 2;     // Minimum touches — Crypto-calibrated (Batch 18H): 3 → 2
 const SB_MAX_DISTANCE           = 0.03;  // Support must be within 3% of price
-const SB_PROXIMITY              = 0.025; // Batch 41: 1.5% → 2.5% — support is a zone, not a line
+const SB_PROXIMITY              = 0.035; // Batch 53: 2.5%→3.5%. Crypto support zones wider. (B41: 1.5%→2.5%)
 const SB_VOL_MULT               = 1.2;   // Volume must be >= avgVol * this
 const SB_STOP_BELOW_SUPPORT     = 0.005; // 0.5% below support for stop
 const SB_TARGET_ATR_MULT        = 2.0;   // Target = entry + 2.0 * ATR

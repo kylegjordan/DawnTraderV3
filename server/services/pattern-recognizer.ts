@@ -358,7 +358,7 @@ function detectMorningStar(candles: Candle[], symbol: string): PatternSignal | n
  * Scans the last 15-50 candles for the A-B-C-D sequence
  */
 function detectABCD(candles: Candle[], symbol: string): PatternSignal | null {
-  if (candles.length < 15) return null;
+  if (candles.length < 12) return null; // Batch 53: 15→12, allow detection in shorter windows
 
   // Use last 50 candles (or less if not available)
   const lookback = Math.min(50, candles.length);
@@ -420,8 +420,8 @@ function detectABCD(candles: Candle[], symbol: string): PatternSignal | null {
     const abLeg = bPoint.price - aPoint.price;
     const bcRetrace = (bPoint.price - cPoint.price) / abLeg;
 
-    // BC retrace must be 38.2%-78.6% of AB leg (Fibonacci zone)
-    if (bcRetrace < 0.382 || bcRetrace > 0.786) continue;
+    // BC retrace must be 35.0%-82.0% of AB leg (Batch 53: widened from 0.382-0.786, crypto overshoots classical Fib)
+    if (bcRetrace < 0.350 || bcRetrace > 0.820) continue;
 
     // Check for D point (breakout above C's high in subsequent candles)
     const cHigh = window[cPoint.index].high;
