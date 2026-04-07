@@ -2461,8 +2461,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             </tbody>
                           </table>
 
-                          {/* SECTION 2: Routing / Path Failures */}
-                          <SectionHeader title="Routing / Path Failures" colorClass="border-yellow-500 bg-yellow-50/40 dark:bg-yellow-950/20 text-yellow-700 dark:text-yellow-400" />
+                          {/* SECTION 2: Pre-Evaluation Skips (pair skipped before strategy.detect() called) */}
+                          <SectionHeader title="Pre-Evaluation Skips" colorClass="border-yellow-500 bg-yellow-50/40 dark:bg-yellow-950/20 text-yellow-700 dark:text-yellow-400" />
                           <table className="w-full text-sm mb-2">
                             <thead>
                               <tr className="border-b bg-muted/30">
@@ -2472,6 +2472,16 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               </tr>
                             </thead>
                             <tbody>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Duplicate Position</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.duplicatePosition ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.duplicatePosition ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Max Open Trades</td>
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.maxOpenTrades ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.maxOpenTrades ?? 0)}%</td>
+                              </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Regime Has No Strategies</td>
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.regimeNoStrategies ?? 0)}</td>
@@ -2500,16 +2510,6 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                                 <td className="p-2">Net EV Below Floor</td>
                                 <td className="p-2 text-right text-red-500">{fmt(rejectedReasons?.netEvBelowFloor ?? 0)}</td>
                                 <td className="p-2 text-right">{pctOfEvals(rejectedReasons?.netEvBelowFloor ?? 0)}%</td>
-                              </tr>
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2">Duplicate Position</td>
-                                <td className="p-2 text-right text-red-500">{fmt(nr.duplicatePosition ?? 0)}</td>
-                                <td className="p-2 text-right">{pctOfEvals(nr.duplicatePosition ?? 0)}%</td>
-                              </tr>
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2">Max Open Trades</td>
-                                <td className="p-2 text-right text-red-500">{fmt(nr.maxOpenTrades ?? 0)}</td>
-                                <td className="p-2 text-right">{pctOfEvals(nr.maxOpenTrades ?? 0)}%</td>
                               </tr>
                             </tbody>
                           </table>
