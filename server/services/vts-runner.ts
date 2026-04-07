@@ -1583,8 +1583,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   // Use all pairs (quant + pattern) for the simulation loop
   const pairs = allPairs;
-  // Batch 52: Diagnostic trace — VTS loop entry count
-  const lastDiagForTrace = fx5Scanner.getLastScanDiagnostics();
+  // Batch 52 Fix 16A: Diagnostic trace — VTS loop entry count
+  // IMPORTANT: Use dynamic import to avoid circular dependency at boot time.
+  // The static fx5Scanner import (line 48) causes "Cannot access fx5Scanner2 before initialization"
+  // when boot_orchestrator calls startAutonomousSimulation() during startup.
+  const { fx5Scanner: fx5ScannerForDiag } = await import('./fx5-scanner.js');
+  const lastDiagForTrace = fx5ScannerForDiag.getLastScanDiagnostics();
   console.log(`[52][HANDOFF] VTS loop entry: ${pairs.length} pairs (quant=${quantPairs.length} pattern=${patternPairs.length}) | FX5 destinationCount=${lastDiagForTrace?.destinationCount ?? 'N/A'} | uniqueSymbols=${new Set(pairs.map(p => p.symbol)).size}`);
 
   if (pairs.length === 0) {
@@ -2164,15 +2168,25 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
     await initVTSRunner();
   }
   
-  isAutonomousRunning = true;
   sessionStartTime = Date.now();
   phase10SessionStartTime = Date.now();
   vtsService.resetSessionMetrics();
-  
+
   console.log(`[11.0E.1][VTS] Starting Phase-10 autonomous simulation (interval: ${vtsConfig.simulationIntervalSec}s, pairs: ${vtsConfig.pairsPerCycle})`);
-  
-  await runPhase10SimulationCycle();
-  
+
+  // Batch 52 Fix 16B: Run first cycle BEFORE setting isAutonomousRunning flag.
+  // Previously the flag was set before the cycle, so if the first cycle crashed,
+  // the flag stayed true and all subsequent startAutonomousSimulation() calls
+  // returned "already running" — making the Fix 15 fallback a no-op.
+  try {
+    await runPhase10SimulationCycle();
+  } catch (firstCycleError) {
+    console.error('[11.0E.1][VTS] First simulation cycle failed:', firstCycleError);
+    return { success: false, message: `First cycle failed: ${firstCycleError}` };
+  }
+
+  isAutonomousRunning = true;
+
   autonomousLoopInterval = setInterval(async () => {
     const sysConfig = await getSystemConfig();
     if (sysConfig.tradingActive) {
@@ -2180,10 +2194,10 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
       stopAutonomousSimulation();
       return;
     }
-    
+
     await runPhase10SimulationCycle();
   }, vtsConfig.simulationIntervalSec * 1000);
-  
+
   return { success: true, message: `Phase-10 autonomous simulation started (${vtsConfig.pairsPerCycle} pairs every ${vtsConfig.simulationIntervalSec}s)` };
 }
 
