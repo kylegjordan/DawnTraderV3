@@ -1222,6 +1222,11 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
         // Batch 19F Phase 2: Propagate sourcePool from FX5 scan batch
         validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier, sourcePool: p.sourcePool });
       }
+      // Batch 52: Diagnostic trace — handoff chain counts
+      const droppedByNormalization = tradablePairs.length - validPairs.length;
+      const validQuant = validPairs.filter(p => isQuantPool(p.sourcePool)).length;
+      const validPattern = validPairs.filter(p => p.sourcePool === 'pattern').length;
+      console.log(`[52][HANDOFF] FX5 batch: ${scanBatch.length} → benchmarks removed: ${benchmarkCount} → tradable: ${tradablePairs.length} → after normalization: ${validPairs.length} (dropped ${droppedByNormalization}) | quant=${validQuant} pattern=${validPattern}`);
       return validPairs;
     }
 
@@ -1578,6 +1583,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   // Use all pairs (quant + pattern) for the simulation loop
   const pairs = allPairs;
+  // Batch 52: Diagnostic trace — VTS loop entry count
+  const lastDiagForTrace = fx5Scanner.getLastScanDiagnostics();
+  console.log(`[52][HANDOFF] VTS loop entry: ${pairs.length} pairs (quant=${quantPairs.length} pattern=${patternPairs.length}) | FX5 destinationCount=${lastDiagForTrace?.destinationCount ?? 'N/A'} | uniqueSymbols=${new Set(pairs.map(p => p.symbol)).size}`);
 
   if (pairs.length === 0) {
     console.warn(`[11.0E.1][VTS] No pairs available for simulation cycle`);
@@ -2113,6 +2121,10 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   persistVtsEvalSnapshot(evalSnapshot); // Batch 22 HF7
   console.log(`[19I][VTS_EVAL] quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated} noDetect=${vtsEvalCounters.patternNoDetection} detected=${vtsEvalCounters.patternDetected} stratNulls=${vtsEvalCounters.quantStrategyNulls} signals=${vtsEvalCounters.signalsGenerated}`);
   // Batch 51: Log pair-pool evaluations for reconciliation tracing
+  // Batch 52: Full reconciliation trace
+  const totalSkips = (vtsEvalCounters.pairsSkippedNoPrice ?? 0) + (vtsEvalCounters.pairsSkippedInsufficientOHLC ?? 0) + (vtsEvalCounters.nullReasons.maxOpenTrades ?? 0);
+  const totalEvaluated = vtsEvalCounters.quantPairsEvaluated + vtsEvalCounters.patternPairsEvaluated;
+  console.log(`[52][RECONCILE] Loop entries: ${pairs.length} | Evaluated: ${totalEvaluated} (quant=${vtsEvalCounters.quantPairsEvaluated} pattern=${vtsEvalCounters.patternPairsEvaluated}) | Skipped: ${totalSkips} (noPrice=${vtsEvalCounters.pairsSkippedNoPrice ?? 0} ohlc=${vtsEvalCounters.pairsSkippedInsufficientOHLC ?? 0} maxTrades=${vtsEvalCounters.nullReasons.maxOpenTrades ?? 0}) | Unaccounted: ${pairs.length - totalEvaluated - totalSkips}`);
   console.log(`[51][PAIR_POOL] quantPairPool=${vtsEvalCounters.quantPairPoolEvaluations ?? 0} patternPairPool=${vtsEvalCounters.patternPairPoolEvaluations ?? 0} total=${(vtsEvalCounters.quantPairPoolEvaluations ?? 0) + (vtsEvalCounters.patternPairPoolEvaluations ?? 0)} | skippedNoPrice=${vtsEvalCounters.pairsSkippedNoPrice ?? 0} skippedOHLC=${vtsEvalCounters.pairsSkippedInsufficientOHLC ?? 0} familyMismatch=${vtsEvalCounters.nullReasons.familyFilterMismatch ?? 0}`);
   console.log(`[21][VTS_EVAL] totalStratEvals=${vtsEvalCounters.totalStrategyEvaluations} nullReasons: conditions=${vtsEvalCounters.nullReasons.conditionsNotMet} netEV=${vtsEvalCounters.rejectedReasons?.netEvBelowFloor ?? 0} adx=${vtsEvalCounters.nullReasons.adxGuard} dup=${vtsEvalCounters.nullReasons.duplicatePosition} maxTrades=${vtsEvalCounters.nullReasons.maxOpenTrades} noRegimeStrats=${vtsEvalCounters.nullReasons.regimeNoStrategies}`);
 

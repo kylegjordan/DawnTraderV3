@@ -1933,9 +1933,45 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     const signals = lc.signalsGenerated || 0;
                     const rejected = lc.signalsRejected || 0;
                     const trades = signals - rejected;
+                    const skippedNoPrice = lc.pairsSkippedNoPrice || 0;
+                    const skippedOHLC = lc.pairsSkippedInsufficientOHLC || 0;
+                    const skippedMaxTrades = lc.nullReasons?.maxOpenTrades || 0;
+                    const skippedNoRegime = lc.nullReasons?.regimeNoStrategies || 0;
+                    const totalPreEvalSkips = skippedNoPrice + skippedOHLC + skippedMaxTrades;
                     return (
                       <>
                         <tr className="border-b bg-blue-500/5"><td colSpan={4} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
+                        {/* Batch 52: Post-destination / pre-evaluation skip reconciliation */}
+                        {totalPreEvalSkips > 0 && (
+                          <>
+                            <tr className="border-b hover:bg-muted/30">
+                              <td className="p-2 pl-4 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
+                              <td colSpan={2} className="p-2 text-right text-xs text-muted-foreground">pairs sent to VTS but not evaluated</td>
+                              <td className="p-2 text-right text-xs text-orange-500">−{fmt(totalPreEvalSkips)}</td>
+                            </tr>
+                            {skippedNoPrice > 0 && (
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2 pl-8 text-xs text-muted-foreground">↳ No Price Data</td>
+                                <td colSpan={2}></td>
+                                <td className="p-2 text-right text-xs text-orange-400">−{fmt(skippedNoPrice)}</td>
+                              </tr>
+                            )}
+                            {skippedOHLC > 0 && (
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Insufficient OHLC</td>
+                                <td colSpan={2}></td>
+                                <td className="p-2 text-right text-xs text-orange-400">−{fmt(skippedOHLC)}</td>
+                              </tr>
+                            )}
+                            {skippedMaxTrades > 0 && (
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Max Open Trades</td>
+                                <td colSpan={2}></td>
+                                <td className="p-2 text-right text-xs text-orange-400">−{fmt(skippedMaxTrades)}</td>
+                              </tr>
+                            )}
+                          </>
+                        )}
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Pair-Pool Evaluations</td>
                           <td className="p-2 text-right">{fmt((lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0)}</td>
