@@ -1,8 +1,8 @@
 # Batch Report: Batch 52 — Filter Diagnostics Fixes
 
 > **Date:** 2026-04-06 to 2026-04-07
-> **Status:** Fixes 1-18 deployed. VTS running, pipeline numbers reconciling. 24h data converging.
-> **Commits:** `9566e6c2` (Fix 2), `01040658` (Fix 3), `a712f5c1` (Fix 4B+4C), `e0a328ab` (Fix 5-8), `3a14e021` (Fix 6 Last Scan), `c67c7364` (Fix 6 24h), `ed022b05` (Fix 9), `ffa4f753` (Fix 10A-10D), `7c0a1a29` (Fix 10E), `de7442f2` (Fix 11), `e8d3bd63` (Fix 12), `16baee96` (Fix 13 revert), `95acfc7e` (Fix 14), `f77b76d8` (Fix 15), `763da50c` (Fix 16), `39db69f9` (Fix 17), `1813e05b` (Fix 18)
+> **Status:** Fixes 1-19 deployed. VTS running, pipeline numbers reconciling. 24h data converging. Strategy counters fixed, By-Strategy table improved.
+> **Commits:** `9566e6c2` (Fix 2), `01040658` (Fix 3), `a712f5c1` (Fix 4B+4C), `e0a328ab` (Fix 5-8), `3a14e021` (Fix 6 Last Scan), `c67c7364` (Fix 6 24h), `ed022b05` (Fix 9), `ffa4f753` (Fix 10A-10D), `7c0a1a29` (Fix 10E), `de7442f2` (Fix 11), `e8d3bd63` (Fix 12), `16baee96` (Fix 13 revert), `95acfc7e` (Fix 14), `f77b76d8` (Fix 15), `763da50c` (Fix 16), `39db69f9` (Fix 17), `1813e05b` (Fix 18), `ee8b77e2` (Fix 19A), `26d6ab1e` (Fix 19B), `49dca020` (Fix 19C), `c5ea5aaa` (Fix 19D)
 > **DB Changes:** screener_filters lq_min updated 20→47→43 for all 24 rows
 > **Branch:** migration/aws-supabase
 > **Staging:** 188.245.193.8
@@ -158,6 +158,17 @@
 **Langston Review:** Approved approach — keep both handoff/input and evaluation/fan-out bases visible with explicit labels.
 **Verification:** 5 consecutive cycles verified: VTS Dest - Skips = Pair-Pool Evals, 0 unaccounted in all cycles.
 **Status:** CONFIRMED COMPLETE
+
+## Fix 19 — Strategy Counter Fixes + By-Strategy Table Improvements (`ee8b77e2`, `26d6ab1e`, `49dca020`, `c5ea5aaa`)
+**Trigger:** Kyle identified multiple issues in the By Strategy table: "Setups Found" column showed 0, "Hit Rate" showed 100%, Net EV Below Floor showed 0 despite threshold change.
+**Changes (4 sub-fixes):**
+- **19A (`ee8b77e2`):** Renamed columns "Setups Found" → "Signals", "Hit Rate" → "Null %". Added preRejectionSignals + rejected counter increments. Changed VTS_NET_EV_FLOOR from -0.02 to -0.01.
+- **19B (`26d6ab1e`):** Fixed 24h rolling aggregation — byStrategy loop only copied evaluated/nulls/signals, dropping preRejectionSignals + rejected fields. Updated type definition.
+- **19C (`49dca020`):** Fixed double-counting — preRejectionSignals and rejected were incremented BOTH inside generatePhase10Signal AND in the caller. Removed inner function counter increments; caller is now single source of truth.
+- **19D (`c5ea5aaa`):** Moved Duplicate Position + Max Open Trades from "Post-Signal Rejections" to new "Pre-Evaluation Skips" section. These fire before strategy.detect() is called, not after signal generation.
+**Langston Review:** 19A approved. 19B-D pending review (counter fixes + UI relabeling).
+**Verification:** Signals column now shows true signal count (no double-counting). Net EV Below Floor = 0 confirmed genuine (no signals have netEV ≤ -1%, verified in PM2 logs). Pre-Evaluation Skips section correctly shows Duplicate Position, Max Open Trades, Regime Has No Strategies, Family Filter Mismatch.
+**Status:** DEPLOYED
 
 ## Fix 18 — Merge 24h Rolling Aggregates + VTS Eval Breakdown (`1813e05b`)
 **Trigger:** Kyle directive — two separate cards (24h Rolling Aggregates stopping at VTS Destination, VTS Evaluation Breakdown starting with Pair-Pool) created a visual disconnect. Pipeline should flow continuously.

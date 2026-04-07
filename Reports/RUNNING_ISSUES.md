@@ -78,11 +78,12 @@
 | 35 | **Filter Diagnostics UI not in SYSTEM_IMPACT_MAP** — governance gap discovered during B52 audit | OPEN | Should be added as a component entry. |
 | 36 | **CRITICAL: VTS autonomous simulation not starting after PM2 restart** — Boot error: `Cannot access 'fx5Scanner2' before initialization`. Fix 14 added a static `fx5Scanner.getLastScanDiagnostics()` call that changed esbuild module ordering. Fix 15 fallback ineffective due to `isAutonomousRunning` flag stuck at true. | RESOLVED | **2026-04-07 — Fix 16 (`763da50c`).** 16A: Changed static import to dynamic import for diagnostic call. 16B: Moved `isAutonomousRunning` flag to after first cycle success. 16C: Improved error message in boot_orchestrator. VTS confirmed running, producing cycles with 0 unaccounted pairs. Langston approved. |
 | 37 | **VTS Destination vs Pair-Pool Evaluations gap** — Quant pair-pool counter was N×N overcounting: each fan-out loop entry added ALL families instead of +1. | RESOLVED | **2026-04-07 — Fix 17 (`39db69f9`).** Changed quant pair-pool counter to +1 per loop entry (VTS batch already contains fan-out entries). Verified across 5+ cycles: VTS Dest - Skips = Pair-Pool Evals, 0 unaccounted. Also added Pair-Pool + Skip rows to 24h Pipeline Summary, made skip rows permanent in Last Scan. Fix 18 (`1813e05b`) merged 24h Rolling Aggregates + VTS Eval Breakdown into one continuous card. Langston approved approach. |
+| 38 | **By Strategy table counters broken** — preRejectionSignals never incremented (always 0), rejected only counted Net EV, Hit Rate showed 100%, Signals column was double-counted. VTS_NET_EV_FLOOR at -2% too permissive. | RESOLVED | **2026-04-07 — Fix 19A-D.** 19A (`ee8b77e2`): Renamed columns, added counter increments, VTS_NET_EV_FLOOR -2%→-1%. 19B (`26d6ab1e`): Fixed 24h aggregation dropping preRejectionSignals+rejected fields. 19C (`49dca020`): Fixed double-counting — removed inner function counter increments, caller is single source of truth. 19D (`c5ea5aaa`): Moved Duplicate Position + Max Open Trades from "Post-Signal Rejections" to "Pre-Evaluation Skips" (they fire before strategy.detect()). Net EV=0 confirmed genuine (no signals ≤ -1%). |
 
 ---
 
 ## Summary Counts
-- **RESOLVED:** 15 (#1, #2, #8, #10, #13, #14, #18, #27, #31, #32, #33, #34, #36, #37)
+- **RESOLVED:** 16 (#1, #2, #8, #10, #13, #14, #18, #27, #31, #32, #33, #34, #36, #37, #38)
 - **CRITICAL:** 0
 - **IN PROGRESS:** 10 (#3, #4, #9, #11, #12e, #15, #17a, #19, #20, #21, #29, #30)
 - **OPEN:** 13 (#5, #6, #7, #12, #12a, #12b, #12c, #12d, #12f, #16, #17, #22, #23, #24, #25, #26, #28, #35)
