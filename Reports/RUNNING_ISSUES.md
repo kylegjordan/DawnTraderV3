@@ -1,6 +1,6 @@
 # DawnTrader V3 — Running Issues List
 
-> **Last Updated:** 2026-04-06 (Batch 52 session — Fixes 1-4 complete)
+> **Last Updated:** 2026-04-07 (Batch 52 session — Fixes 1-18 complete)
 > **Status Key:** OPEN = not started, IN PROGRESS = work begun but not finalized, RESOLVED = done, DEFERRED = intentionally postponed
 
 ---
@@ -16,7 +16,7 @@
 | 5 | **DI reconciliation mismatch** — IMF metrics shows DI=0 failures but Family Path shows DI=2300+ failures. Different scopes (global vs family) but UI makes them look contradictory. | OPEN | Not addressed in B50-51. |
 | 6 | **Empty Guardrails tabs** — Telemetry Snapshot and Filter Performance show no data | OPEN | Not addressed. |
 | 7 | **Screeners tab missing family IMF thresholds** — only shows 4 base paths, not family-specific | OPEN | Partially done in B42 (values from DB) but not complete. |
-| 8 | **Cooldown Exclusions card deployed** — new card showing pairs in cooldown | IN PROGRESS | Deployed in B51. Not verified by Kyle on staging yet. |
+| 8 | **Cooldown Exclusions card deployed** — new card showing pairs in cooldown | RESOLVED | **2026-04-07 — Cooldown functionality removed entirely (Fix 9).** Card removed from UI, cooldown filtering bypassed in adaptive-scan-manager.ts, cooldownState removed from API (schema v1.4). Redundant with fixed ~300 pair batch size. Kyle directive. |
 
 ## Strategy / Signal Pipeline Issues
 
@@ -43,7 +43,7 @@
 
 | # | Issue | Status | Notes |
 |---|-------|--------|-------|
-| 18 | **PairFailureTracker cooldown** — was hidden, now visible. Reduced from 10min/30min to 2min/5min. Pre-filter at batch selection. | RESOLVED | B51. Kyle approved keeping with reduced durations. |
+| 18 | **PairFailureTracker cooldown** — was hidden, now visible. Reduced from 10min/30min to 2min/5min. Pre-filter at batch selection. | RESOLVED | B51 reduced durations → B52 Fix 9 removed entirely. Cooldown bypassed in adaptive-scan-manager.ts, recording stopped. Kyle directive: redundant with fixed batch size. |
 | 19 | **VTS Parity duplication (Directive 19F)** — pairs passing both quant+pattern get duplicated in VTS batch | IN PROGRESS | Architecture understood and explained to Kyle. The parity-added pattern entries explain why VTS evaluates MORE than single-scan family IMF survivors. Not a bug — intentional for sim-to-live parity. But needs to be properly reflected in Pipeline Summary display. |
 | 20 | **Pair-pool evaluation counting** — new counters track pair+family combinations | IN PROGRESS | Deployed in B51. Langston-reviewed counting logic (pattern=1 per pair, quant=non-pattern families). Data accumulating. |
 
@@ -72,14 +72,17 @@
 | 29 | **LQ threshold at 47 may be too aggressive** — now the largest filter by far. Kyle reviewing. | IN PROGRESS | DB updated 20→47 in B52. Research showed 20 was no-op (~$100/day). 47 = ~$50K/day. Kyle wants consensus on right level. |
 | 30 | **IMF fallback defaults scattered across codebase** — LQ/VN/DI/CORR have hardcoded defaults in 6+ files. Dead code since DB always provides values, but creates governance risk. | IN PROGRESS | Partially cleaned in B52 (imf-metrics.ts). Remaining files: analysis-utils.ts, pattern-filter-profile.ts, fx5-scanner.ts, vts.ts, signal-orchestrator.ts. |
 | 31 | **Benchmark pairs were entering VTS** — quant benchmarkBypassed counter hardcoded to 0. Benchmarks not excluded from VTS batch. | RESOLVED | **2026-04-06 — Fixed in commit `a712f5c1`. Kyle directive.** Counter fixed. Benchmarks now removed before VTS batch. Verified in logs: 51 entries removed per cycle. |
-| 32 | **Pipeline flow visibility** — IMF passed → benchmarks bypassed → final survivors not shown clearly in UI | OPEN | Kyle wants explicit flow: remaining after IMF, benchmarks removed, total entering VTS. |
-| 33 | **Cooldown Exclusions interrupts pipeline flow** — card position in Filter Diagnostics tab breaks the logical flow | OPEN | Kyle wants it moved to bottom of tab. |
-| 34 | **Cooldown numbers seem too high** — 1318/1268 pairs in cooldown when Kraken has ~1400-1500 total | OPEN | May be cumulative 24h rolling count vs unique. Needs investigation. |
+| 32 | **Pipeline flow visibility** — IMF passed → benchmarks bypassed → final survivors not shown clearly in UI | RESOLVED | **2026-04-07 — Fixed in B52 Fixes 6+10.** Pipeline flow rows (IMF Survivors → Benchmarks Removed → VTS Destination) added to all 3 tables with quant/pattern/total columns. |
+| 33 | **Cooldown Exclusions interrupts pipeline flow** — card position in Filter Diagnostics tab breaks the logical flow | RESOLVED | **2026-04-07 — Cooldown card removed entirely (Fix 9).** No longer in UI. |
+| 34 | **Cooldown numbers seem too high** — 1318/1268 pairs in cooldown when Kraken has ~1400-1500 total | RESOLVED | **2026-04-07 — Moot. Cooldown removed entirely (Fix 9).** Investigation showed all pairs genuinely in perpetual cooldown. Functionality was redundant. |
 | 35 | **Filter Diagnostics UI not in SYSTEM_IMPACT_MAP** — governance gap discovered during B52 audit | OPEN | Should be added as a component entry. |
+| 36 | **CRITICAL: VTS autonomous simulation not starting after PM2 restart** — Boot error: `Cannot access 'fx5Scanner2' before initialization`. Fix 14 added a static `fx5Scanner.getLastScanDiagnostics()` call that changed esbuild module ordering. Fix 15 fallback ineffective due to `isAutonomousRunning` flag stuck at true. | RESOLVED | **2026-04-07 — Fix 16 (`763da50c`).** 16A: Changed static import to dynamic import for diagnostic call. 16B: Moved `isAutonomousRunning` flag to after first cycle success. 16C: Improved error message in boot_orchestrator. VTS confirmed running, producing cycles with 0 unaccounted pairs. Langston approved. |
+| 37 | **VTS Destination vs Pair-Pool Evaluations gap** — Quant pair-pool counter was N×N overcounting: each fan-out loop entry added ALL families instead of +1. | RESOLVED | **2026-04-07 — Fix 17 (`39db69f9`).** Changed quant pair-pool counter to +1 per loop entry (VTS batch already contains fan-out entries). Verified across 5+ cycles: VTS Dest - Skips = Pair-Pool Evals, 0 unaccounted. Also added Pair-Pool + Skip rows to 24h Pipeline Summary, made skip rows permanent in Last Scan. Fix 18 (`1813e05b`) merged 24h Rolling Aggregates + VTS Eval Breakdown into one continuous card. Langston approved approach. |
 
 ---
 
 ## Summary Counts
-- **RESOLVED:** 8 (#1, #2, #10, #13, #14, #18, #27, #31)
-- **IN PROGRESS:** 13 (#3, #4, #8, #9, #11, #12e, #15, #17a, #19, #20, #21, #29, #30)
-- **OPEN:** 18 (#5, #6, #7, #12, #12a, #12b, #12c, #12d, #12f, #16, #17, #22, #23, #24, #25, #26, #28, #32, #33, #34, #35)
+- **RESOLVED:** 15 (#1, #2, #8, #10, #13, #14, #18, #27, #31, #32, #33, #34, #36, #37)
+- **CRITICAL:** 0
+- **IN PROGRESS:** 10 (#3, #4, #9, #11, #12e, #15, #17a, #19, #20, #21, #29, #30)
+- **OPEN:** 13 (#5, #6, #7, #12, #12a, #12b, #12c, #12d, #12f, #16, #17, #22, #23, #24, #25, #26, #28, #35)
