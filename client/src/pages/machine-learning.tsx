@@ -1768,6 +1768,25 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       <tr className="bg-muted/50 border-y">
                         <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — pairs processed after cooldown/skip filters)</span></td>
                       </tr>
+                      {/* Batch 52 Fix 17: Pre-evaluation skips + Pair-Pool row in 24h summary */}
+                      {(() => {
+                        const totalSkips24h = ((ve as any).pairsSkippedNoPrice ?? 0) + ((ve as any).pairsSkippedInsufficientOHLC ?? 0);
+                        return (
+                          <tr className="border-b hover:bg-muted/30">
+                            <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
+                            <td className="p-2 text-right text-xs text-orange-500" colSpan={2}></td>
+                            <td className="p-2 text-right text-xs text-orange-500">{totalSkips24h > 0 ? `−${fmt(totalSkips24h)}` : '0'}</td>
+                            <td className="p-2 text-xs text-muted-foreground">noPrice={fmt((ve as any).pairsSkippedNoPrice ?? 0)}, insufficientOHLC={fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)} (24h cumulative)</td>
+                          </tr>
+                        );
+                      })()}
+                      <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                        <td className="p-2 font-medium">Pair-Pool Evaluations</td>
+                        <td className="p-2 text-right">{fmt((ve as any).quantPairPoolEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right">{fmt((ve as any).patternPairPoolEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold">{fmt(((ve as any).quantPairPoolEvaluations ?? 0) + ((ve as any).patternPairPoolEvaluations ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">VTS Destination minus skips (pair+family combos entering evaluation, 24h)</td>
+                      </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2 font-medium">Strategy Evaluations</td>
                         <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
@@ -1941,37 +1960,27 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     return (
                       <>
                         <tr className="border-b bg-blue-500/5"><td colSpan={4} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
-                        {/* Batch 52: Post-destination / pre-evaluation skip reconciliation */}
-                        {totalPreEvalSkips > 0 && (
-                          <>
-                            <tr className="border-b hover:bg-muted/30">
-                              <td className="p-2 pl-4 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
-                              <td colSpan={2} className="p-2 text-right text-xs text-muted-foreground">pairs sent to VTS but not evaluated</td>
-                              <td className="p-2 text-right text-xs text-orange-500">−{fmt(totalPreEvalSkips)}</td>
-                            </tr>
-                            {skippedNoPrice > 0 && (
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2 pl-8 text-xs text-muted-foreground">↳ No Price Data</td>
-                                <td colSpan={2}></td>
-                                <td className="p-2 text-right text-xs text-orange-400">−{fmt(skippedNoPrice)}</td>
-                              </tr>
-                            )}
-                            {skippedOHLC > 0 && (
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Insufficient OHLC</td>
-                                <td colSpan={2}></td>
-                                <td className="p-2 text-right text-xs text-orange-400">−{fmt(skippedOHLC)}</td>
-                              </tr>
-                            )}
-                            {skippedMaxTrades > 0 && (
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Max Open Trades</td>
-                                <td colSpan={2}></td>
-                                <td className="p-2 text-right text-xs text-orange-400">−{fmt(skippedMaxTrades)}</td>
-                              </tr>
-                            )}
-                          </>
-                        )}
+                        {/* Batch 52 Fix 17: Pre-evaluation skip rows — always shown (Kyle directive) */}
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
+                          <td colSpan={2} className="p-2 text-right text-xs text-muted-foreground">pairs sent to VTS but not evaluated</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{totalPreEvalSkips > 0 ? `−${fmt(totalPreEvalSkips)}` : '0'}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ No Price Data</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{skippedNoPrice > 0 ? `−${fmt(skippedNoPrice)}` : '0'}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Insufficient OHLC</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{skippedOHLC > 0 ? `−${fmt(skippedOHLC)}` : '0'}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Max Open Trades</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{skippedMaxTrades > 0 ? `−${fmt(skippedMaxTrades)}` : '0'}</td>
+                        </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Pair-Pool Evaluations</td>
                           <td className="p-2 text-right">{fmt((lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0)}</td>
