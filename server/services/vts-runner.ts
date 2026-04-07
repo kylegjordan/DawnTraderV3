@@ -930,13 +930,8 @@ async function generatePhase10Signal(
     DI
   });
   
-  // Batch 49: Count pre-rejection signal (strategy DID produce a setup, before EV check)
-  if (counters) {
-    if (!counters.byStrategy[strategy]) {
-      counters.byStrategy[strategy] = { evaluated: 0, nulls: 0, signals: 0, preRejectionSignals: 0, rejected: 0 };
-    }
-    counters.byStrategy[strategy].preRejectionSignals = (counters.byStrategy[strategy].preRejectionSignals ?? 0) + 1;
-  }
+  // Batch 52 Fix 19C: All byStrategy counter increments moved to caller (runPhase10SimulationCycle)
+  // to prevent double-counting. Inner function only sets nullReason for caller to classify.
 
   // Batch 18L Option A: VTS-specific relaxed Net EV gate
   // Active trading still uses strict netEV > 0 (in signal-orchestrator.ts)
@@ -952,20 +947,6 @@ async function generatePhase10Signal(
       source: 'VTS'
     });
     console.log(`[18L][NetEV] Skipping ${symbol}: Net EV=${kernelResult.netEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
-    if (counters) {
-      if (!counters.rejectedReasons) {
-        counters.rejectedReasons = { netEvBelowFloor: 0 };
-      }
-      counters.rejectedReasons.netEvBelowFloor++;
-      counters.signalsRejected = (counters.signalsRejected ?? 0) + 1;
-      // Batch 49: Track per-strategy rejection
-      counters.byStrategy[strategy].rejected = (counters.byStrategy[strategy].rejected ?? 0) + 1;
-      if (isQuantPool(sourcePool)) {
-        counters.quantSignalsRejected = (counters.quantSignalsRejected ?? 0) + 1;
-      } else {
-        counters.patternSignalsRejected = (counters.patternSignalsRejected ?? 0) + 1;
-      }
-    }
     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
     setNullReason('net_ev_rejected');
     return null;
@@ -1960,11 +1941,16 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
           if (isPostSignalRejection) {
             // Batch 52 Fix 19: Signal WAS produced but rejected after — count as rejection, not null
-            // Track in byStrategy.rejected and preRejectionSignals for accurate UI display
+            // Batch 52 Fix 19C: Caller is single source of truth for all post-signal rejection counters
             vtsEvalCounters.byStrategy[stratKey].preRejectionSignals = (vtsEvalCounters.byStrategy[stratKey].preRejectionSignals ?? 0) + 1;
             vtsEvalCounters.byStrategy[stratKey].rejected = (vtsEvalCounters.byStrategy[stratKey].rejected ?? 0) + 1;
             vtsEvalCounters.signalsRejected = (vtsEvalCounters.signalsRejected ?? 0) + 1;
             if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsRejected = (vtsEvalCounters.patternSignalsRejected ?? 0) + 1; } else { vtsEvalCounters.quantSignalsRejected = (vtsEvalCounters.quantSignalsRejected ?? 0) + 1; }
+            // Update reason-specific counters (previously done inside generatePhase10Signal, moved here)
+            if (detailReason === 'net_ev_rejected') {
+              if (!vtsEvalCounters.rejectedReasons) { vtsEvalCounters.rejectedReasons = { netEvBelowFloor: 0 }; }
+              vtsEvalCounters.rejectedReasons.netEvBelowFloor++;
+            }
             if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
             vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
           } else {
