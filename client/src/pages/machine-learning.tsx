@@ -2160,6 +2160,47 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold">{fmt((rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed) + (rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
                   </tr>
+                  {/* Batch 52 Fix 18: Merged VTS Evaluation Breakdown into this table (was separate card) */}
+                  {data?.vtsEvaluation && (() => {
+                    const ve = data.vtsEvaluation!;
+                    return (
+                      <>
+                        <tr className="bg-muted/50 border-y">
+                          <td colSpan={4} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation (24h rolling — VTS-side counters)</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt((ve as any).pairsSkippedNoPrice ?? 0)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(((ve as any).pairsSkippedNoPrice ?? 0) + ((ve as any).pairsSkippedInsufficientOHLC ?? 0))}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                          <td className="p-2 font-medium">Pair-Pool Evaluations</td>
+                          <td className="p-2 text-right text-blue-600">{fmt(ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated)}</td>
+                          <td className="p-2 text-right text-blue-600">{fmt(ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated)}</td>
+                          <td className="p-2 text-right font-semibold text-blue-600">{fmt((ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated) + (ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated))}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2">Strategy Evaluations</td>
+                          <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
+                          <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
+                          <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
+                        </tr>
+                        <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
+                          <td className="p-2">Signals Generated <span className="text-[10px] text-muted-foreground">(= trades opened)</span></td>
+                          <td className="p-2 text-right text-green-600">{fmt((ve as any).quantSignalsGenerated ?? 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt((ve as any).patternSignalsGenerated ?? 0)}</td>
+                          <td className="p-2 text-right font-semibold text-green-600">{fmt(ve.signalsGenerated)}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -2169,13 +2210,13 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
         </CardContent>
       </Card>
 
-      {/* TABLE 4: VTS Evaluation Breakdown (Batch 19I) */}
+      {/* TABLE 4: VTS Evaluation Detail (Batch 19I) — expanded breakdown */}
       <Card className="max-w-4xl">
         <CardHeader className="py-3">
           <CardTitle className="text-lg flex items-center justify-between">
-            <span>VTS Evaluation Breakdown</span>
+            <span>VTS Evaluation Detail</span>
             <span className="text-sm font-normal text-muted-foreground">
-              {data?.vtsEvaluation ? '24-Hour Rolling (disk-persisted, survives restart)' : 'No VTS data yet'}
+              {data?.vtsEvaluation ? '24-Hour Rolling — Strategy & Null Reason Breakdown' : 'No VTS data yet'}
             </span>
           </CardTitle>
         </CardHeader>
@@ -2196,30 +2237,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Unique Pairs Evaluated <span className="text-xs text-muted-foreground">(VTS-side, cumulative 24h)</span></td>
-                        <td className="p-2 text-right">{fmt(ve.quantPairsEvaluated)}</td>
-                        <td className="p-2 text-right">{fmt(ve.patternPairsEvaluated)}</td>
-                        <td className="p-2 text-right font-semibold">{fmt(ve.quantPairsEvaluated + ve.patternPairsEvaluated)}</td>
-                      </tr>
-                      <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
-                        <td className="p-2">Pair-Pool Evaluations <span className="text-xs text-muted-foreground">(pair+family combos — comparable to IMF Survivors)</span></td>
-                        <td className="p-2 text-right text-blue-600">{fmt(ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated)}</td>
-                        <td className="p-2 text-right text-blue-600">{fmt(ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated)}</td>
-                        <td className="p-2 text-right font-semibold text-blue-600">{fmt((ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated) + (ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated))}</td>
-                      </tr>
-                      <tr className="border-b hover:bg-muted/30 text-xs text-muted-foreground">
-                        <td className="p-2 pl-6">↳ Skipped: No Price Data</td>
-                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedNoPrice ?? 0)}</td>
-                        <td className="p-2 text-right">—</td>
-                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedNoPrice ?? 0)}</td>
-                      </tr>
-                      <tr className="border-b hover:bg-muted/30 text-xs text-muted-foreground">
-                        <td className="p-2 pl-6">↳ Skipped: Insufficient OHLC (&lt; 10 candles)</td>
-                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
-                        <td className="p-2 text-right">—</td>
-                        <td className="p-2 text-right">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
-                      </tr>
+                      {/* Pattern detection, strategy evals, nulls, signals — detail view */}
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2">Pattern Detection <span className="text-xs text-muted-foreground">(BUY pattern scan results)</span></td>
                         <td className="p-2 text-right">
