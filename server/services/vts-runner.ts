@@ -331,7 +331,7 @@ interface VTSConfig {
 // These constants control VTS-ONLY behavior. Active trading is NOT affected.
 // Purpose: Increase VTS simulated trade volume for ML learning data.
 // ══════════════════════════════════════════════════════════════════════════════
-const VTS_NET_EV_FLOOR = -0.02;        // Batch 48: Staged relaxation -0.5%→-2.0%. VTS learning benefits from boundary-case trades. Active trading unaffected (strict netEV>0).
+const VTS_NET_EV_FLOOR = -0.01;        // Batch 52 Fix 19: Tightened -2.0%→-1.0%. -2% was too permissive (zero rejections). -1% allows boundary-case learning while filtering truly negative-EV trades. Active trading unaffected (strict netEV>0).
 const VTS_MAX_CONCURRENT_PER_COMBO = 1; // Batch 19G HF1: Strict 1-per-combo (was 3). Only 1 open VTS trade per symbol+strategy.
 // Option C: ROI gate skipped entirely for VTS (see Edit 3)
 // Option D: simulationIntervalSec reduced to 30s (aligned with FX5 scan cycle)
@@ -1957,8 +1957,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           const isPostSignalRejection = detailReason === 'net_ev_rejected' || detailReason === 'duplicate_position' || detailReason === 'max_open_trades';
 
           if (isPostSignalRejection) {
-            // Signal WAS produced but rejected after — don't count as strategy null
-            // Net EV and duplicate counters already incremented inside generatePhase10Signal
+            // Batch 52 Fix 19: Signal WAS produced but rejected after — count as rejection, not null
+            // Track in byStrategy.rejected and preRejectionSignals for accurate UI display
+            vtsEvalCounters.byStrategy[stratKey].preRejectionSignals = (vtsEvalCounters.byStrategy[stratKey].preRejectionSignals ?? 0) + 1;
+            vtsEvalCounters.byStrategy[stratKey].rejected = (vtsEvalCounters.byStrategy[stratKey].rejected ?? 0) + 1;
+            vtsEvalCounters.signalsRejected = (vtsEvalCounters.signalsRejected ?? 0) + 1;
+            if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsRejected = (vtsEvalCounters.patternSignalsRejected ?? 0) + 1; } else { vtsEvalCounters.quantSignalsRejected = (vtsEvalCounters.quantSignalsRejected ?? 0) + 1; }
             if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
             vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
           } else {
@@ -1984,6 +1988,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           if (!vtsEvalCounters.rejectedReasons) { vtsEvalCounters.rejectedReasons = { netEvBelowFloor: 0 }; }
           vtsEvalCounters.rejectedReasons.netEvBelowFloor++;
           vtsEvalCounters.signalsRejected = (vtsEvalCounters.signalsRejected ?? 0) + 1;
+          vtsEvalCounters.byStrategy[stratKey].preRejectionSignals = (vtsEvalCounters.byStrategy[stratKey].preRejectionSignals ?? 0) + 1;
+          vtsEvalCounters.byStrategy[stratKey].rejected = (vtsEvalCounters.byStrategy[stratKey].rejected ?? 0) + 1;
           if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsRejected = (vtsEvalCounters.patternSignalsRejected ?? 0) + 1; } else { vtsEvalCounters.quantSignalsRejected = (vtsEvalCounters.quantSignalsRejected ?? 0) + 1; }
           logSkippedSignal({
             symbol: pair.symbol,
@@ -1997,6 +2003,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         }
 
         // Signal passed all post-generation guards — count as generated
+        vtsEvalCounters.byStrategy[stratKey].preRejectionSignals = (vtsEvalCounters.byStrategy[stratKey].preRejectionSignals ?? 0) + 1;
         vtsEvalCounters.byStrategy[stratKey].signals++;
         vtsEvalCounters.signalsGenerated++;
         if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsGenerated = (vtsEvalCounters.patternSignalsGenerated ?? 0) + 1; } else { vtsEvalCounters.quantSignalsGenerated = (vtsEvalCounters.quantSignalsGenerated ?? 0) + 1; }

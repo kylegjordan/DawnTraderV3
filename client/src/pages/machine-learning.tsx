@@ -2324,10 +2324,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                           <th className="text-left p-2 font-medium">Strategy</th>
                           <th className="text-right p-2 font-medium">Evaluated</th>
                           <th className="text-right p-2 font-medium">True Nulls</th>
-                          <th className="text-right p-2 font-medium">Setups Found</th>
+                          <th className="text-right p-2 font-medium">Null %</th>
+                          <th className="text-right p-2 font-medium">Signals</th>
                           <th className="text-right p-2 font-medium">Rejected</th>
                           <th className="text-right p-2 font-medium">Trades</th>
-                          <th className="text-right p-2 font-medium">Hit Rate</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2338,12 +2338,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               <td className="p-2 font-mono text-xs">{strategy}</td>
                               <td className="p-2 text-right">{fmt(counts.evaluated)}</td>
                               <td className="p-2 text-right text-orange-500">{fmt(counts.nulls)}</td>
+                              <td className="p-2 text-right text-muted-foreground">{counts.evaluated > 0 ? `${(counts.nulls / counts.evaluated * 100).toFixed(1)}%` : '—'}</td>
                               <td className="p-2 text-right text-blue-600">{fmt((counts as any).preRejectionSignals || 0)}</td>
                               <td className="p-2 text-right text-amber-600">{fmt((counts as any).rejected || 0)}</td>
                               <td className="p-2 text-right text-green-600">{fmt(counts.signals)}</td>
-                              <td className="p-2 text-right">
-                                {counts.evaluated > 0 ? `${((counts as any).preRejectionSignals || counts.signals) > 0 ? ((counts.signals / ((counts as any).preRejectionSignals || counts.signals) * 100).toFixed(1) + '% conv') : '0%'}` : '—'}
-                              </td>
                             </tr>
                           ))
                         }
@@ -2364,12 +2362,10 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               <td className="p-2">TOTAL</td>
                               <td className="p-2 text-right">{fmt(totals.evaluated)}</td>
                               <td className="p-2 text-right text-orange-500">{fmt(totals.nulls)}</td>
+                              <td className="p-2 text-right text-muted-foreground">{totals.evaluated > 0 ? `${(totals.nulls / totals.evaluated * 100).toFixed(1)}%` : '—'}</td>
                               <td className="p-2 text-right text-blue-600">{fmt(totals.preRejectionSignals)}</td>
                               <td className="p-2 text-right text-amber-600">{fmt(totals.rejected)}</td>
                               <td className="p-2 text-right text-green-600">{fmt(totals.signals)}</td>
-                              <td className="p-2 text-right">
-                                {totals.preRejectionSignals > 0 ? `${(totals.signals / totals.preRejectionSignals * 100).toFixed(1)}% conv` : '—'}
-                              </td>
                             </tr>
                           );
                         })()}
