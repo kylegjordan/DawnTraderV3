@@ -141,6 +141,18 @@ class BootOrchestrator extends EventEmitter {
       }
     } catch (error) {
       console.warn('[BOOT][VTS] Could not determine passive learning state:', error);
+      // Batch 52: Fallback — start autonomous simulation anyway since trading is STOPPED
+      console.log('[BOOT][VTS] Falling back to passive learning mode (config check failed, assuming passive)');
+      try {
+        const result = await startAutonomousSimulation();
+        if (result.success) {
+          console.log('[BOOT][VTS] Auto-start enabled (fallback passive mode)');
+        } else {
+          console.warn('[BOOT][VTS] Auto-start fallback failed:', result.message);
+        }
+      } catch (fallbackError) {
+        console.error('[BOOT][VTS] Auto-start fallback error:', fallbackError);
+      }
     }
   }
 
