@@ -223,39 +223,30 @@ export function calculateEfficiencyRatio(prices: number[], window: number = 20):
 
 /**
  * Directive 9.1.F: Filter thresholds for core metrics
- * Batch 19G VN HF: LQ_MIN and VOL_NOISE_MAX are now safe defaults only.
- * Real thresholds are DB-driven (screener_filters table).
- * Callers should pass DB values to passesCoreMetricFilters() when available.
+ * Batch 53: CORE_METRIC_THRESHOLDS removed — DB is sole authority (screener_filters table).
  * DI thresholds remain in SYSTEM_GUARDS (regime detection, NOT filtering).
  */
 export const CORE_METRIC_THRESHOLDS = {
-  /** @deprecated Batch 19G VN HF: Use DB screener_filters.lq_min instead. Default fallback only. */
-  LQ_MIN: 35,
-  /** @deprecated Batch 19G VN HF: Use DB screener_filters.vn_max instead. Default fallback only. */
-  VOL_NOISE_MAX: 0.93,
   DI_TRENDING: SYSTEM_GUARDS.DI_TRENDING,
   DI_CHOPPY: SYSTEM_GUARDS.DI_CHOPPY,
 };
 
 /**
  * Directive 9.1.F: Check if pair meets core metric filters
- * Batch 19G VN HF: Now accepts optional DB-driven thresholds.
- * When called without overrides, uses CORE_METRIC_THRESHOLDS defaults.
+ * Batch 53: DB-driven thresholds are now REQUIRED — no hardcoded fallbacks.
  * @param LQ - Log-Liquidity value
  * @param VolNoise - Volatility Noise value
- * @param lqMin - Override LQ minimum (from DB screener_filters.lq_min)
- * @param vnMax - Override VN maximum (from DB screener_filters.vn_max)
+ * @param lqMin - LQ minimum from DB screener_filters.lq_min (required)
+ * @param vnMax - VN maximum from DB screener_filters.vn_max (required)
  * @returns true if pair passes filters
  */
 export function passesCoreMetricFilters(
   LQ: number,
   VolNoise: number,
-  lqMin?: number,
-  vnMax?: number
+  lqMin: number,
+  vnMax: number
 ): boolean {
-  const effectiveLqMin = lqMin ?? CORE_METRIC_THRESHOLDS.LQ_MIN;
-  const effectiveVnMax = vnMax ?? CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX;
-  return LQ >= effectiveLqMin && VolNoise <= effectiveVnMax;
+  return LQ >= lqMin && VolNoise <= vnMax;
 }
 
 /**
@@ -286,7 +277,8 @@ export function computeCoreMetrics(
   const VolNoise = calculateVolNoise(prices);
   const Sigma = calculateSigma(prices);
   const ER = calculateEfficiencyRatio(prices);
-  const passesFilter = passesCoreMetricFilters(LQ, VolNoise);
+  // Batch 53: passesFilter removed — requires DB thresholds, use passesCoreMetricFilters() directly with DB values
+  const passesFilter = false; // Placeholder — callers must use passesCoreMetricFilters(LQ, VN, dbLqMin, dbVnMax)
 
   return { LQ, DI, VolNoise, Sigma, ER, passesFilter };
 }
