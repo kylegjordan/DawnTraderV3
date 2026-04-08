@@ -131,6 +131,18 @@
 
 | Batch 47 HF | 2026-04-03 | `490a018c` through `19afe0a1` (12 commits) | **Kyle review hotfixes.** PM2 memory 1GB→2GB. Pool/Source column separation. Session timeout 12h→7d. VE setup-hash suppression (entry+stop only). DI regime overrides disabled (DB sole authority). Ranking score in trade tables. Signals→Trades Opened label. FX5/VTS section separator in Pipeline Summary. Sidebar z-index + backdrop. Ecosystem.config.cjs env-file loading. Memory audit: pruneReentryMaps() + vtsEvalHistory write-prune. | — | `Batch_47f15_Changes_04.03.26.md` |
 
+| **Batch 48** | 2026-04-04 | — | **Range trade calibration + FX5 scan alignment.** Range_trade minBoundaryTouches 2→1, minRangeDurationHours 12→7 (aligned with strategy-engine defaults). FX5 scan timing aligned. | — | — |
+
+| **Batch 49** | 2026-04-04 | — | **Strategy counter infrastructure.** Added preRejectionSignals tracking, byStrategy counter framework in VTS eval snapshots. Foundation for Fix 19 counter accuracy work. | — | — |
+
+| **Batch 50** | 2026-04-05 | — | **Signal-null distinction + abcd_long VWAP fix.** setNullReason() calls added to distinguish true nulls from post-signal rejections. abcd_long VWAP mapping fixed (Kraken OHLC index [5]). pctOfEvals() helper for accurate denominator. | — | `Batch_50_51_HF_Report.md` |
+
+| **Batch 51** | 2026-04-06 | — | **Pipeline visibility + pair-pool counting.** VTS Signal Funnel restored with last-cycle data. Pair-pool evaluation counters (quant/pattern). 24h rolling aggregates pipeline flow. | — | `Batch_50_51_HF_Report.md` |
+
+| **Batch 52** | 2026-04-06 to 2026-04-07 | `9566e6c2` through `c5ea5aaa` (19 fixes) | **Filter Diagnostics overhaul.** 19 fixes deployed across 3 sessions. Key: LQ threshold 20→43 (DB), cooldown removed, benchmark exclusion, VTS boot circular dependency fixed (Fix 16), pair-pool N×N overcounting fixed (Fix 17), cards merged (Fix 18), byStrategy counter double-counting fixed + UI relabeling (Fix 19A-D). See `BATCH_52_RUNNING_FIXES.md` for full details. | — | `BATCH_52_RUNNING_FIXES.md` |
+
+| **Batch 53** | 2026-04-07 to 2026-04-08 | `6b2619e1`, `bdb2b89e` | **Strategy threshold relaxation + zero-duration trades fix.** Fix 1: 8 threshold relaxations (Langston consensus) — IB compression 0.80→0.85, ABCD retrace 0.382-0.786→0.350-0.820, ABCD min candles 15→12, support proximity 2.5%→3.5%, VWAP tolerance 1%, VE volume 1.5→1.3, RSI 38→40. Fix 2: Entry validation guard prevents zero-duration trades (market price already past stop/target), duration display shows seconds for sub-minute. Full 17-strategy audit completed — no additional non-regime threshold changes needed. 5 regime-map decisions deferred (not-yet-justified). | — | — |
+
 ---
 
 ## Notes

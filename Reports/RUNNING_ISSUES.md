@@ -37,7 +37,7 @@
 | 15 | **DI 12→8 threshold decision** — analysis sent recommending wait for VTS outcome data | IN PROGRESS | Waiting for trade outcome data (VTS in passive mode, no trades generated). Kyle to decide when data sufficient. |
 | 16 | **Fixed % thresholds → ATR-relative** — Langston Batch 18H finding | OPEN | Not addressed. |
 | 17 | **Duplicate scanPatterns() call** — deferred from Batch 41 | OPEN | Not addressed. |
-| 17a | **Zero-duration closed simulated trades** — many VTS trades showing 0m duration (opened and closed in same cycle or near-instant). Visible in Closed Simulated Trades table on staging. Previous fixes (B45 re-entry cooldown, B47 setup-hash suppression) have NOT resolved this. Needs deeper investigation — may be stop-loss/take-profit too tight, or price data resolution issue, or close logic triggering too quickly. | IN PROGRESS | Kyle flagged from staging screenshots 2026-04-06. Multiple TAO/USD volatility_edge trades and other pairs showing 0m duration with identical entry/exit. |
+| 17a | **Zero-duration closed simulated trades** — trades opening and closing in same/next cycle. Root cause: entry/stop/target calculated from OHLC but current market price already past stop or target. DEFENSIVE mode (×0.8 TP) compounds the issue. Duration display floored to minutes (0-59s = "0m"). | RESOLVED | **2026-04-08 — B53 Fix 2 (`bdb2b89e`).** Entry validation guard: before opening trade, verifies market price is above stop and below target with 2× friction minimum distance. Duration display now shows seconds for sub-minute ("45s" not "0m"). Langston approved A+C approach. Guard verified active in logs (catching ONDO/USD etc). |
 
 ## Architecture / Counting Issues
 
@@ -83,7 +83,7 @@
 ---
 
 ## Summary Counts
-- **RESOLVED:** 16 (#1, #2, #8, #10, #13, #14, #18, #27, #31, #32, #33, #34, #36, #37, #38)
+- **RESOLVED:** 17 (#1, #2, #8, #10, #13, #14, #17a, #18, #27, #31, #32, #33, #34, #36, #37, #38)
 - **CRITICAL:** 0
-- **IN PROGRESS:** 10 (#3, #4, #9, #11, #12e, #15, #17a, #19, #20, #21, #29, #30)
+- **IN PROGRESS:** 9 (#3, #4, #9, #11, #12e, #15, #19, #20, #21, #29, #30)
 - **OPEN:** 13 (#5, #6, #7, #12, #12a, #12b, #12c, #12d, #12f, #16, #17, #22, #23, #24, #25, #26, #28, #35)
