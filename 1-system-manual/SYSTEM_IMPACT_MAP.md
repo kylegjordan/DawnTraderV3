@@ -630,4 +630,17 @@
 | **vite.config.ts** | React plugin only. Replit plugins removed in Batch 40. | No longer depends on `REPL_ID` or `@replit/vite-plugin-*`. |
 | **screener_filters DB table** | Now 24 rows: 4 base paths + 4 family paths x 2 modes (paper/live). Columns include `filter_path`, `lq_min`, `vn_max`, `corr_max`, `di_min`, `di_max`. | Expanded from 8 rows (Batch 19G) to 24 rows (Batch 40 — family-specific profiles added). |
 
+---
+
+## Recent Additions (B52-B53)
+
+| Component | Location | Impact |
+|-----------|----------|--------|
+| **Filter Diagnostics UI** | `client/src/pages/machine-learning.tsx` | Machine Learning tab — displays VTS pipeline data: 24h Rolling Aggregates, Last Scan VTS Signal Funnel, By Strategy table (Evaluated/True Nulls/Null%/Signals/Rejected/Trades), Pre-Evaluation Skips, Post-Signal Rejections, Setup Nulls breakdown. Reads from `/api/vts/filter-diagnostics`. Blast radius: LOW (UI only). |
+| **VTS Entry Validation Guard** | `server/services/vts-runner.ts` (B53 Fix 2) | Before opening a trade, verifies current market price is above stop and below target with minimum viable distance (2× friction). Prevents zero-duration trades. Logs `[B53][ENTRY_GUARD]`. Blast radius: MEDIUM (affects signal→trade conversion rate). |
+| **VTS byStrategy Counters** | `server/services/vts-runner.ts`, `server/types/virtual-trade.interface.ts` | Per-strategy tracking of evaluated, nulls, signals, preRejectionSignals, rejected. Aggregated in 24h rolling window via `getVTSEvalRolling24h()`. Persisted to `logs/vts_eval_history/`. Blast radius: LOW (observability only). |
+| **Null Reason Tracker** | `server/utils/null-reason-tracker.ts` | Global state: `setNullReason()` / `getNullReason()` / `resetNullReason()`. Reset before each strategy call. Used by all 17 strategies to classify why detect() returned null. Blast radius: LOW (diagnostic only). |
+| **Pattern Recognizer** | `server/services/pattern-recognizer.ts` | Detects 6 pattern types: PINBAR, ENGULFING, INSIDE_BAR, THREE_SOLDIERS, MORNING_STAR, ABCD. Called by FX5 scanner (outer loop) and VTS (per-pair). ABCD detection: B53 widened Fibonacci zone 0.382-0.786→0.350-0.820, min candles 15→12. Blast radius: MEDIUM (upstream of all pattern strategies). |
+| **Strategy Threshold Constants** | `server/strategies/*.ts` | Each strategy file defines threshold constants at top. B53 relaxations: IB_MAX_COMPRESSION 0.80→0.85, SB_PROXIMITY 2.5%→3.5%, VE VWAP tolerance 1%, VE volume 1.5→1.3, RI_RSI_MAX 38→40. Blast radius: MEDIUM (affects signal generation rate). |
+
 *This map is a living document. Update it after any directive that changes component dependencies, adds new services, or removes legacy systems.*

@@ -1,7 +1,7 @@
 # Batch Report: Batch 52 — Filter Diagnostics Fixes
 
-> **Date:** 2026-04-06 to 2026-04-07
-> **Status:** Fixes 1-19 deployed. VTS running, pipeline numbers reconciling. 24h data converging. Strategy counters fixed, By-Strategy table improved.
+> **Date:** 2026-04-06 to 2026-04-08
+> **Status:** B52 Fixes 1-19 COMPLETE. B53 Fixes 1-2 COMPLETE. Full 17-strategy audit done. Zero-duration trades fixed.
 > **Commits:** `9566e6c2` (Fix 2), `01040658` (Fix 3), `a712f5c1` (Fix 4B+4C), `e0a328ab` (Fix 5-8), `3a14e021` (Fix 6 Last Scan), `c67c7364` (Fix 6 24h), `ed022b05` (Fix 9), `ffa4f753` (Fix 10A-10D), `7c0a1a29` (Fix 10E), `de7442f2` (Fix 11), `e8d3bd63` (Fix 12), `16baee96` (Fix 13 revert), `95acfc7e` (Fix 14), `f77b76d8` (Fix 15), `763da50c` (Fix 16), `39db69f9` (Fix 17), `1813e05b` (Fix 18), `ee8b77e2` (Fix 19A), `26d6ab1e` (Fix 19B), `49dca020` (Fix 19C), `c5ea5aaa` (Fix 19D)
 > **DB Changes:** screener_filters lq_min updated 20→47→43 for all 24 rows
 > **Branch:** migration/aws-supabase
@@ -183,6 +183,30 @@
 
 ## RESOLVED: VTS Destination vs Pair-Pool Reconciliation
 **Status:** RESOLVED — Fix 17 (`39db69f9`). Numbers reconcile perfectly at Last Scan level. 24h rolling will converge after stale data ages out (~24h from Fix 17 deploy at 10:23 UTC April 7).
+
+---
+
+## Batch 53 — Strategy Threshold Relaxation + Zero-Duration Fix
+
+### B53 Fix 1 — Strategy Threshold Relaxation (`6b2619e1`)
+**Trigger:** Full 17-strategy audit identified threshold strictness as dominant signal bottleneck. Langston consensus reached on 8 changes.
+**Changes (8 threshold adjustments across 5 files):**
+- inside-bar-reversal.ts: IB_MAX_COMPRESSION 0.80→0.85
+- pattern-recognizer.ts: ABCD BC retrace 0.382-0.786→0.350-0.820, min candles 15→12
+- support-bounce.ts: SB_PROXIMITY 2.5%→3.5%
+- volatility-edge.ts: VWAP C-point strict→1% tolerance (vwap×0.99), VE_A_VOL_MULT 1.5→1.3, VE_BREAKOUT_VOL_MULT 1.5→1.3
+- reverse-impulse.ts: RI_RSI_MAX 38→40
+**Langston Review:** Approved all 8. Modified 3 from original proposals (ABCD range narrower, VWAP 1% not 2%, RSI 40 not 42).
+**Status:** DEPLOYED
+
+### B53 Fix 2 — Zero-Duration Trades Entry Guard (`bdb2b89e`)
+**Trigger:** Kyle flagged many 0m duration trades. Root cause: entry/stop/target from OHLC but market price already past them. DEFENSIVE mode ×0.8 TP compounds.
+**Changes:**
+- Entry validation guard: verifies market price > stop AND < target with 2× friction minimum distance before opening trade
+- Duration display: formatHoldDuration() shows seconds for sub-minute ("45s" not "0m")
+**Langston Review:** Approved A+C approach. Rejected minimum hold period (B) as masking the problem.
+**Verification:** Guard active in logs, catching ONDO/USD and other pairs.
+**Status:** DEPLOYED
 
 ---
 

@@ -319,7 +319,7 @@ The pre-governance era established nearly all of DawnTrader’s core ambitions: 
 
 ## Current Historical Position
 
-As of Batch 39 (2026-03-27):
+As of Batch 53 (2026-04-08):
 - Phase 12 is complete.
 - Phase 13 is complete.
 - Phase 14.1 is complete.
@@ -327,8 +327,11 @@ As of Batch 39 (2026-03-27):
 - Phase 14.3 is deferred indefinitely.
 - Phase 14.4 is canceled.
 - Phase 14.5 is fully complete (Batches 19 through 19L).
-- **Phase 14.6 is COMPLETE** (Batches 20-39: Strategy-Family Filter Profiles, DI calibration, counter truth fixes, family-qualified identity model, 3-layer null taxonomy, pipeline summary table).
-- Next: Phase 15 (X Stocks + Perpetual Futures), then Phase 11 Finalization.
+- **Phase 14.6 is COMPLETE** (Batches 20-39).
+- **Phase 14.7 is COMPLETE** (Batches 48-53: Filter Diagnostics & Strategy Calibration).
+- Migration (Batch 40) complete.
+- Batches 41-47: Post-migration stabilization (pattern routing, execution integrity, state persistence, threshold audit Round 1).
+- Next: Phase 15 (X Stocks + Perpetual Futures), then Phase 11 Finalization. 5 regime-map decisions pending Kyle review.
 
 The system is now in a far more governable state than at any point in the pre-governance history.
 
@@ -343,3 +346,10 @@ The system is now in a far more governable state than at any point in the pre-go
 - Post-Replit workflow adopted (see POST_REPLIT_WORKFLOW.md)
 - Replit frozen as of 2026-03-30 — no further updates
 - Migration branch: `migration/aws-supabase`
+
+### Phase 14.7: Filter Diagnostics & Strategy Calibration (Batches 48-53, 2026-04-04 to 2026-04-08)
+**Filter pipeline diagnostics overhaul + full strategy audit.**
+- Batches 48-51: Pipeline visibility — VTS Signal Funnel, pair-pool counting, 24h rolling aggregates, null reason tracking
+- Batch 52 (19 fixes): VTS boot circular dependency fixed, pair-pool N×N overcounting fixed, byStrategy counter double-counting fixed, cooldown removed, LQ=43, benchmark exclusion, UI reorganized
+- Batch 53: 8 strategy threshold relaxations (Langston consensus), zero-duration trades entry guard, full 17-strategy audit
+- **Outcome**: All 17 strategies audited. Dominant constraint is regime eligibility. 5 regime-map decisions deferred. Canonical regime-strategy map (Directive 11.7F) confirmed as SSOT.

@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-03-31 (Governance sweep — Post-Replit workflow, Hetzner staging, Supabase migration, Batch 40)
+> **Last Updated**: 2026-04-08 (Governance sweep — B48-B53 updates, strategy audit complete, zero-duration fix)
 
 ---
 
@@ -102,24 +102,77 @@ ssh root@204.168.141.77
 
 **Message Prefix**: All Claude Code messages MUST start with `**CLAUDE CODE SPEAKING:**` (all caps, bold).
 
-**2-Step Send Process** (ensures Kyle sees the message AND Langston responds):
-1. Broadcast to Telegram: `ssh root@204.168.141.77 "openclaw message send --channel telegram --target '-1003575211453' --thread-id <THREAD_ID> --reply-to '-1003575211453:<THREAD_ID>' --message '**CLAUDE CODE SPEAKING:** <message>'"`
-2. Feed to Langston's brain: `ssh root@204.168.141.77 "openclaw agent --session-id '<UUID>' --message '**CLAUDE CODE SPEAKING:** <message>' --deliver"`
+#### How Claude Code Communicates via Telegram
+
+Claude Code communicates through the **CCDT Relay Agent** (@CCDTCommsBot), a dedicated OpenClaw agent running on Langston's server (204.168.141.77). This relay agent:
+- Monitors Topics 21 and 28 in the DawnTrader HQ Telegram group
+- Automatically copies all messages from Kyle and Langston to Claude Code's inbox (cc-inbox)
+- Runs on GPT-4.1-Mini (low cost, relay-only in groups, helpful assistant in Kyle's DM)
+
+**Sending messages (2 steps — BOTH required every message):**
+```bash
+# Step 1: Post to Telegram via CCDT (Kyle sees it in the group)
+ssh root@204.168.141.77 "openclaw message send --channel telegram --account ccdt-relay --target '-1003575211453' --thread-id <THREAD_ID> --message '**CLAUDE CODE SPEAKING:** <message>'"
+
+# Step 2: Deliver to Langston's brain (he cannot see bot messages in Telegram)
+ssh root@204.168.141.77 "openclaw agent --deliver --message '**CLAUDE CODE SPEAKING:** <message>
+
+[REMINDER: cc-inbox write ALL your responses in Topics 21/28 after posting in Telegram. Claude Code cannot see your Telegram messages.]'"
+```
+
+**Both steps are required every time.** Step 1 posts via CCDT so Kyle sees it. Step 2 delivers to Langston's brain because Telegram bots cannot see other bots' messages (permanent API limitation). If you skip step 2, Langston never sees your message.
 
 **Reading messages:**
+Messages reach cc-inbox from two sources:
+- **Kyle's messages:** CCDT Relay Agent automatically copies them to cc-inbox
+- **Langston's messages:** Langston writes to cc-inbox himself after every Telegram post (mandatory — see his SOUL.md)
+
+Read with:
 ```bash
-ssh root@204.168.141.77 "cc-inbox read"          # Read unread messages
-ssh root@204.168.141.77 "cc-inbox mark-read"      # Mark all as read
-ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"  # Combined
-ssh root@204.168.141.77 "cc-poll"                 # Alternative polling command
+ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
 ```
 
-**Background Inbox Monitoring (mandatory during three-way discussions):**
-Launch a repeating background check that notifies you every ~15 seconds:
+**Why this split:** Telegram bots cannot see other bots' messages (permanent API limitation). CCDT can see Kyle (human) but not Langston (bot). So Langston must cc-inbox write his own messages.
+
+**Automatic inbox polling (chained background tasks):**
+
+During active three-way discussions OR whenever Langston may be sending messages (e.g., after requesting a deployment), start the polling chain:
+
 ```bash
-ssh root@204.168.141.77 "sleep 15 && cc-inbox read && cc-inbox mark-read"   (run_in_background: true)
+# Launch this with run_in_background: true
+ssh root@204.168.141.77 "sleep 30 && cc-poll-once"
 ```
-When the task-notification arrives: read the output, process any new messages, then immediately relaunch the same command. If no messages, relaunch immediately anyway. Continue this cycle for the entire three-way discussion. Stop only after 10 minutes of silence or when someone declares the discussion over.
+
+**How the chain works:**
+1. The command sleeps 30 seconds, checks inbox, marks read, then **exits**
+2. The output ends with `[ACTION REQUIRED: Relaunch this polling command immediately]`
+3. When it exits, you receive a `<task-notification>`
+4. Read the output file — if there are messages, process them and respond
+5. **Relaunch immediately:** `ssh root@204.168.141.77 "sleep 30 && cc-poll-once"` with `run_in_background: true`
+6. Repeat this chain for the entire session — the chain dies if you don't relaunch
+
+**When to START the chain:** At the beginning of any three-way discussion, after sending a message to Langston that expects a reply, or whenever Kyle tells you to monitor the inbox.
+
+**When to STOP the chain:** After 10 minutes of consecutive empty checks with no active discussion, or when Kyle says the discussion is over. Do not run indefinitely when no discussion is active.
+
+**CRITICAL: Do NOT use `while true` loops in background.** They never exit, so you never get notified. Use single-shot commands that exit after one check.
+
+**CRITICAL: Do NOT use CronCreate for inbox polling.** The cron prompt text appears in Kyle's chat window every time it fires, which is disruptive.
+
+**CRITICAL: Do NOT use foreground polling.** It blocks you from doing other work. The chained background approach lets you continue working between checks.
+
+**CRITICAL: Do NOT respond only in the Claude Code chat window.** Kyle and Langston cannot see it. Every response must go through `openclaw message send` to appear in Telegram.
+
+#### CCDT Relay Agent Details
+- **Bot**: @CCDTCommsBot (separate from @LangstonDTBot)
+- **Agent**: telegram-relay on OpenClaw (GPT-4.1-Mini)
+- **Workspace**: /root/.openclaw/agents/telegram-relay/workspace/
+- **Always-on relay**: Copies ALL messages from Kyle and Langston in Topics 21 and 28 to cc-inbox — not just during three-way discussions
+- **Filters out Claude Code messages**: Messages prefixed with "CLAUDE CODE SPEAKING:" are NOT relayed back to cc-inbox
+- **Behavior in groups**: Silent relay only — copies messages to cc-inbox, never responds
+- **Behavior in Kyle's DM**: Helpful assistant, can do web searches, handle ad-hoc tasks
+- **Voice notes**: Automatically transcribed and relayed as text to cc-inbox
+- **Images**: When Kyle posts a screenshot/image in Topics 21/28, CCDT saves it to Google Drive and notifies cc-inbox with the path. cc-inbox will show: `[IMAGE] Saved to: Claude Comms and Packages/CCDT Relay/images/<filename>`. Read the image using: `G:\My Drive\Dawn Trader\Claude Comms and Packages\CCDT Relay\images\<filename>`
 
 ### Telegram Topic IDs
 | Topic | Thread ID | Purpose | Status |
@@ -130,9 +183,7 @@ When the task-notification arrives: read the output, process any new messages, t
 | Replit Operations | 22 | Langston <-> Replit interactions | INACTIVE |
 | Reports | 23 | Reports now filed directly as Markdown | INACTIVE |
 
-**Session ID for topic 21**: `dccc3974-18f4-4ae9-918a-9b2b709ef159`
-
-Session UUIDs change when sessions are cleared. Use `openclaw sessions --json` to get current values.
+**Session ID for topic 21**: Use `ssh root@204.168.141.77 "openclaw sessions --json"` to get current values. Session UUIDs change when sessions are cleared.
 
 ### Replit Interaction Rules — ARCHIVED
 
@@ -816,12 +867,13 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit (migration branch)**: `ae340c98` (Batch 40: Migration scaffolding + DB driver swap + Replit cleanup + sidebar fix)
+> **Last commit (migration branch)**: `8b180a96` (Governance: BATCH_CATALOG B48-B53 + RUNNING_ISSUES #17a resolved)
 > **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
-> **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS accumulating data
+> **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS producing signals
 > **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
-> **Next step**: Continue roadmap work under new Post-Replit workflow. Outstanding deferred items: pattern source pool investigation (#16), LQ strict threshold review (#11), ai-analyst.ts full removal, remaining DB column fixes. Then Phase 15 — X Stocks + Perpetual Futures Integration. Then Phase 11 Finalization.
-> **Note**: **POST-REPLIT WORKFLOW ACTIVE as of 2026-03-31.** Replit is frozen. All work on migration/aws-supabase branch, deployed to Hetzner staging. See POST_REPLIT_WORKFLOW.md for full workflow detail. **Phase 14.5 FULLY COMPLETE** (Batch 19 core + 19C deferred + 19E extension + 19G completion + HF1-HF3 + VN + VN HF). DB-driven 4-path filter architecture live (screener_filters table, 8 rows). Filter constants migrated from code to DB. VTS hybrid confluence buffer operational. Log-returns MAD/median VN formula deployed. **Filter Pipeline Diagnostics tab** deployed (Batch 19H). **Filter Diagnostics enhancement** deployed (Batch 19I — number formatting, VTS eval counters). **VTS Evaluation Breakdown** deployed (Batch 19J — 24-hour rolling aggregation). **Batch 20 COMPLETE** (Strategy-Family Filter Profiles audit — no code changes, Architecture B selected, 10 findings, 5 artifacts, DI threshold recalibration identified). **Whole-number batch numbering resumed** (Batch 20+). **Langston is GPT-5.4 permanently** (no more model switching). **Batch completion reports are Claude Code's responsibility** (Rule 24, Markdown format). **Claude Code drives deployment** via replit-cmd through Langston's server. Conditional push command replaces REPLIT_PUSH_SCRIPT.sh. Phase 14.1B ELIMINATED (HF8). Phase 14.2 EFFECTIVELY COMPLETE. Phase 14.3 DEFERRED INDEFINITELY. Phase 14.4 CANCELED.
+> **Active batch**: Batch 53 (Strategy threshold relaxation + zero-duration trades fix)
+> **Next step**: 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data. Governance catch-up in progress. Remaining open issues: #26 governance debt, #17 duplicate scanPatterns, #22-25 infrastructure items.
+> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 52** (19 fixes): VTS boot fixed, pipeline counters fixed, cooldown removed, LQ=43, benchmark exclusion, By Strategy table corrected. **Batch 53**: 8 strategy threshold relaxations (Langston consensus), zero-duration trades entry guard, full 17-strategy audit complete. **VTS_NET_EV_FLOOR**: -1% (confirmed 0 rejections — genuine). **Signal rate**: ~0.1%/eval (genuine after fixing double-counting). **Regime**: RANGE_BOUND_STABLE — only 4 strategies active (range_trade, support_bounce, abcd_long, adaptive_flow). 8 strategies dormant by regime design. **Canonical regime-strategy map (Directive 11.7F)** is SSOT — not modified without Kyle approval + research-backed justification. **Long-only constraint**: no short selling. liquidity_trap disabled (bearish-only). **Langston is GPT-5.4 permanently.**
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -1030,6 +1082,7 @@ Before doing ANY work, every Claude Code session must complete this checklist. N
 - [ ] Verify last commit in CCPI matches `git log --oneline -1`
 - [ ] Read BATCH_CATALOG.md for recent batch history
 - [ ] Check cc-inbox for unread messages from Langston
+- [ ] **Start inbox polling chain**: Run `ssh root@204.168.141.77 "sleep 30 && cc-inbox read && cc-inbox mark-read"` with `run_in_background: true`. Relaunch on every task-notification. Keep the chain running for the entire session.
 - [ ] Report own capacity status to conversation
 - [ ] Check Langston's capacity: `ssh root@204.168.141.77 "openclaw sessions --json"`
 - [ ] Report Langston's capacity status to Kyle
