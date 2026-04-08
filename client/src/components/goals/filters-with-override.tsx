@@ -88,24 +88,35 @@ function FilterColumn({ title, data, color, tagLabel }: { title: string; data: F
           <span className={`text-xs font-mono ${c.text}`}>{(data.ACTIVE_TIMEFRAMES || []).join(', ')}</span>
         </div>
         <div className="border-t border-dashed my-1 opacity-30" />
-        {/* IMF Section */}
-        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">IMF</div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">LQ Min</span>
-          <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.LQ_MIN}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">VN Max</span>
-          <span className={`text-sm font-mono font-bold ${c.text}`}>&le; {data.VN_MAX}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">Corr Max</span>
-          <span className={`text-sm font-mono font-bold ${c.text}`}>&rho; &le; {data.CORR_MAX}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">DI Min</span>
-          <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.DI_MIN}</span>
-        </div>
+        {/* Batch 53: Quant IMF is family-specific, not global. Pattern still uses global IMF. */}
+        {(title === 'Active Pattern' || title === 'VTS Pattern') ? (
+          <>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">IMF</div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground">LQ Min</span>
+              <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.LQ_MIN}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground">VN Max</span>
+              <span className={`text-sm font-mono font-bold ${c.text}`}>&le; {data.VN_MAX}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground">Corr Max</span>
+              <span className={`text-sm font-mono font-bold ${c.text}`}>&rho; &le; {data.CORR_MAX}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground">DI Min</span>
+              <span className={`text-sm font-mono font-bold ${c.text}`}>&ge; {data.DI_MIN}</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">IMF</div>
+            <div className="text-xs text-muted-foreground italic py-1">
+              Family-specific (see table below)
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
