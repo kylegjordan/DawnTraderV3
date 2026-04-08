@@ -1038,6 +1038,23 @@ async function generatePhase10Signal(
     return null;
   }
 
+  // Batch 53 Fix 2: Entry validation — verify current market price is viable for the trade
+  // Prevents zero-duration trades caused by opening at a calculated entry while market price
+  // has already moved past the stop or target. Direction-aware: for long trades, current price
+  // must be above stop and below target with enough room after friction.
+  const currentMarketPrice = priceData.price;
+  const minViableDistance = frictionCost * currentMarketPrice * 2; // At least 2× friction cost of room
+  if (currentMarketPrice <= adjustedStopLoss) {
+    console.log(`[B53][ENTRY_GUARD] ${symbol}/${strategy}: Market price ${currentMarketPrice.toFixed(6)} already at/below stop ${adjustedStopLoss.toFixed(6)} — trade not viable`);
+    setNullReason('price_past_stop');
+    return null;
+  }
+  if (currentMarketPrice >= adjustedTakeProfit - minViableDistance) {
+    console.log(`[B53][ENTRY_GUARD] ${symbol}/${strategy}: Market price ${currentMarketPrice.toFixed(6)} already near/past target ${adjustedTakeProfit.toFixed(6)} (minDist=${minViableDistance.toFixed(6)}) — trade not viable`);
+    setNullReason('price_past_target');
+    return null;
+  }
+
   // Directive 11.8C: Trade ID includes strategy for unique identification
   // Format: vts_{symbol}_{strategy}_{timestamp}
   const tradeId = `vts_${symbol.replace('/', '_')}_${strategy}_${Date.now()}`;
@@ -1467,9 +1484,14 @@ async function resolveOpenVirtualTrades(): Promise<{
 function formatHoldDuration(ms: number): string {
   const hours = Math.floor(ms / (1000 * 60 * 60));
   const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-  
+  const seconds = Math.floor((ms % (1000 * 60)) / 1000);
+
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
+  }
+  // Batch 53 Fix 2: Show seconds for sub-minute durations instead of misleading "0m"
+  if (minutes === 0) {
+    return `${seconds}s`;
   }
   return `${minutes}m`;
 }
