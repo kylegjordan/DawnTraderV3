@@ -1574,11 +1574,11 @@ Pattern recognition is the **detection service** — it identifies candlestick f
 
 | Pattern | Detection Logic | Direction | Base Strength |
 |---------|----------------|-----------|---------------|
-| **PINBAR** | Wick > 2× body, wick opposite direction | BUY or SELL | 0.6 + wick ratio |
+| **PINBAR** | Wick > 1.5× body (B54: relaxed from 2× for crypto), wick > 2× opposite wick | BUY or SELL | 0.6 + wick ratio |
 | **ENGULFING** | Body fully engulfs prior body | BUY or SELL | 0.65 + engulf ratio + volume bonus |
-| **MORNING_STAR** | Bear → Doji → Bull, close > midpoint of bear | BUY only | 0.7 + recovery + gap bonus |
-| **INSIDE_BAR** → mapped to ENGULFING | High < prevHigh AND Low > prevLow | Based on parent | 0.6 + compression |
-| **THREE_SOLDIERS** → mapped to MORNING_STAR | 3 consecutive bullish, each closing higher | BUY only | 0.75 + total gain |
+| **MORNING_STAR** | Bear (body/range > 0.3, B54: relaxed from 0.4) → Doji → Bull, close > midpoint of bear | BUY only | 0.7 + recovery + gap bonus |
+| **INSIDE_BAR** → mapped to ENGULFING | High < prevHigh AND Low > prevLow (B54: 0.1% tolerance) | Based on parent | 0.6 + compression |
+| **THREE_SOLDIERS** → mapped to MORNING_STAR | 3 consecutive bullish, each closing higher (B54: 0.25% opens-in-body tolerance) | BUY only | 0.75 + total gain |
 
 Timeframe weighting: 1h = 1.0, 15m = 0.8, 5m = 0.6.
 
