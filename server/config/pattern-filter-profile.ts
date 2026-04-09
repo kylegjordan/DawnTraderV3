@@ -20,14 +20,11 @@
 // These are intentionally relaxed to admit pairs where pattern/hybrid strategies can operate
 
 /**
- * @deprecated Batch 19G: Static defaults moved to DB (screener_filters, filterPath='active_pattern').
- * Retained only for guardrails/strategies export and RSI defaults not yet in DB.
+ * B54 Fix 4: All numeric filter thresholds (LQ_MIN, VN_MAX, DI_TRENDING_MIN, MIN_VOLUME_USD)
+ * removed — DB screener_filters is sole authority. Only RSI bounds retained (not yet in DB).
+ * No code anywhere imports the removed values; this object is kept only for RSI defaults.
  */
 export const PATTERN_POOL_THRESHOLDS = {
-  MIN_VOLUME_USD: 250_000,      // DB: screener_filters.min_volume where filterPath='active_pattern'
-  LQ_MIN: 20,                   // DB: screener_filters.lq_min where filterPath='active_pattern'
-  VN_MAX: 0.98,                 // DB: screener_filters.vn_max where filterPath='active_pattern'
-  DI_TRENDING_MIN: 5,           // DB: screener_filters.di_min where filterPath='active_pattern'
   RSI_MIN: 15,                  // Not yet in DB — stays hardcoded
   RSI_MAX: 85,                  // Not yet in DB — stays hardcoded
 };

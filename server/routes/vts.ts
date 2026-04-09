@@ -1459,21 +1459,22 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
       storage.getScreenerFilters({ mode, filterPath: 'vts_oscillator' }),
     ]);
 
-    // Helper to extract filter column data from DB row
+    // B54: Helper to extract filter column data from DB row — NO hardcoded fallbacks.
+    // DB (screener_filters) is sole authority. Missing values shown as null, not fabricated.
     const toFilterColumnData = (row: any) => ({
-      LQ_MIN: parseFloat(row?.lqMin ?? '35'),
-      VN_MAX: parseFloat(row?.vnMax ?? '0.93'),
-      CORR_MAX: parseFloat(row?.corrMax ?? '0.92'),
-      DI_MIN: parseFloat(row?.diMin ?? '55'),
-      MIN_VOLUME_USD: parseFloat(row?.minVolume ?? '500000'),
-      MAX_SPREAD: parseFloat(row?.maxBidAskSpread ?? '0.50'),
-      MIN_HISTORY_DAYS: row?.minHistoryDays ?? 30,
-      MIN_PRICE: parseFloat(row?.minPrice ?? '0.25'),
-      MAX_PRICE: parseFloat(row?.maxPrice ?? '100000'),
-      MIN_LIQUIDITY: parseFloat(row?.minLiquidity ?? '500000'),
-      MIN_MARKET_CAP: parseFloat(row?.minMarketCap ?? '250000000'),
-      EXCLUDE_STABLECOINS: row?.excludeStablecoins ?? true,
-      ACTIVE_TIMEFRAMES: row?.activeTimeframes ?? ['5m', '15m', '1h'],
+      LQ_MIN: row?.lqMin != null ? parseFloat(row.lqMin) : null,
+      VN_MAX: row?.vnMax != null ? parseFloat(row.vnMax) : null,
+      CORR_MAX: row?.corrMax != null ? parseFloat(row.corrMax) : null,
+      DI_MIN: row?.diMin != null ? parseFloat(row.diMin) : null,
+      MIN_VOLUME_USD: row?.minVolume != null ? parseFloat(row.minVolume) : null,
+      MAX_SPREAD: row?.maxBidAskSpread != null ? parseFloat(row.maxBidAskSpread) : null,
+      MIN_HISTORY_DAYS: row?.minHistoryDays ?? null,
+      MIN_PRICE: row?.minPrice != null ? parseFloat(row.minPrice) : null,
+      MAX_PRICE: row?.maxPrice != null ? parseFloat(row.maxPrice) : null,
+      MIN_LIQUIDITY: row?.minLiquidity != null ? parseFloat(row.minLiquidity) : null,
+      MIN_MARKET_CAP: row?.minMarketCap != null ? parseFloat(row.minMarketCap) : null,
+      EXCLUDE_STABLECOINS: row?.excludeStablecoins ?? null,
+      ACTIVE_TIMEFRAMES: row?.activeTimeframes ?? null,
     });
 
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
@@ -1512,19 +1513,19 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
         pattern: patternCount,
         total: totalCount,
       },
-      // Batch 42: Family-specific IMF thresholds from DB (quant path only)
+      // B54: Family-specific IMF thresholds from DB — NO hardcoded fallbacks. DB is sole authority.
       familyFilters: {
         active: {
-          trend: activeTrendRow ? { lqMin: parseFloat(activeTrendRow.lqMin ?? '20'), vnMax: parseFloat(activeTrendRow.vnMax ?? '0.85'), corrMax: parseFloat(activeTrendRow.corrMax ?? '0.92'), diMin: parseFloat(activeTrendRow.diMin ?? '12'), diMax: parseFloat(activeTrendRow.diMax ?? '100') } : null,
-          reversal: activeReversalRow ? { lqMin: parseFloat(activeReversalRow.lqMin ?? '20'), vnMax: parseFloat(activeReversalRow.vnMax ?? '0.85'), corrMax: parseFloat(activeReversalRow.corrMax ?? '0.92'), diMin: parseFloat(activeReversalRow.diMin ?? '0'), diMax: parseFloat(activeReversalRow.diMax ?? '35') } : null,
-          breakout: activeBreakoutRow ? { lqMin: parseFloat(activeBreakoutRow.lqMin ?? '20'), vnMax: parseFloat(activeBreakoutRow.vnMax ?? '0.85'), corrMax: parseFloat(activeBreakoutRow.corrMax ?? '0.92'), diMin: parseFloat(activeBreakoutRow.diMin ?? '10'), diMax: parseFloat(activeBreakoutRow.diMax ?? '100') } : null,
-          oscillator: activeOscillatorRow ? { lqMin: parseFloat(activeOscillatorRow.lqMin ?? '20'), vnMax: parseFloat(activeOscillatorRow.vnMax ?? '0.85'), corrMax: parseFloat(activeOscillatorRow.corrMax ?? '0.92'), diMin: parseFloat(activeOscillatorRow.diMin ?? '0'), diMax: parseFloat(activeOscillatorRow.diMax ?? '30') } : null,
+          trend: activeTrendRow ? { lqMin: parseFloat(activeTrendRow.lqMin), vnMax: parseFloat(activeTrendRow.vnMax), corrMax: parseFloat(activeTrendRow.corrMax), diMin: parseFloat(activeTrendRow.diMin), diMax: parseFloat(activeTrendRow.diMax) } : null,
+          reversal: activeReversalRow ? { lqMin: parseFloat(activeReversalRow.lqMin), vnMax: parseFloat(activeReversalRow.vnMax), corrMax: parseFloat(activeReversalRow.corrMax), diMin: parseFloat(activeReversalRow.diMin), diMax: parseFloat(activeReversalRow.diMax) } : null,
+          breakout: activeBreakoutRow ? { lqMin: parseFloat(activeBreakoutRow.lqMin), vnMax: parseFloat(activeBreakoutRow.vnMax), corrMax: parseFloat(activeBreakoutRow.corrMax), diMin: parseFloat(activeBreakoutRow.diMin), diMax: parseFloat(activeBreakoutRow.diMax) } : null,
+          oscillator: activeOscillatorRow ? { lqMin: parseFloat(activeOscillatorRow.lqMin), vnMax: parseFloat(activeOscillatorRow.vnMax), corrMax: parseFloat(activeOscillatorRow.corrMax), diMin: parseFloat(activeOscillatorRow.diMin), diMax: parseFloat(activeOscillatorRow.diMax) } : null,
         },
         vts: {
-          trend: vtsTrendRow ? { lqMin: parseFloat(vtsTrendRow.lqMin ?? '20'), vnMax: parseFloat(vtsTrendRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsTrendRow.corrMax ?? '0.92'), diMin: parseFloat(vtsTrendRow.diMin ?? '12'), diMax: parseFloat(vtsTrendRow.diMax ?? '100') } : null,
-          reversal: vtsReversalRow ? { lqMin: parseFloat(vtsReversalRow.lqMin ?? '20'), vnMax: parseFloat(vtsReversalRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsReversalRow.corrMax ?? '0.92'), diMin: parseFloat(vtsReversalRow.diMin ?? '0'), diMax: parseFloat(vtsReversalRow.diMax ?? '40') } : null,
-          breakout: vtsBreakoutRow ? { lqMin: parseFloat(vtsBreakoutRow.lqMin ?? '20'), vnMax: parseFloat(vtsBreakoutRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsBreakoutRow.corrMax ?? '0.92'), diMin: parseFloat(vtsBreakoutRow.diMin ?? '10'), diMax: parseFloat(vtsBreakoutRow.diMax ?? '100') } : null,
-          oscillator: vtsOscillatorRow ? { lqMin: parseFloat(vtsOscillatorRow.lqMin ?? '20'), vnMax: parseFloat(vtsOscillatorRow.vnMax ?? '0.95'), corrMax: parseFloat(vtsOscillatorRow.corrMax ?? '0.92'), diMin: parseFloat(vtsOscillatorRow.diMin ?? '0'), diMax: parseFloat(vtsOscillatorRow.diMax ?? '35') } : null,
+          trend: vtsTrendRow ? { lqMin: parseFloat(vtsTrendRow.lqMin), vnMax: parseFloat(vtsTrendRow.vnMax), corrMax: parseFloat(vtsTrendRow.corrMax), diMin: parseFloat(vtsTrendRow.diMin), diMax: parseFloat(vtsTrendRow.diMax) } : null,
+          reversal: vtsReversalRow ? { lqMin: parseFloat(vtsReversalRow.lqMin), vnMax: parseFloat(vtsReversalRow.vnMax), corrMax: parseFloat(vtsReversalRow.corrMax), diMin: parseFloat(vtsReversalRow.diMin), diMax: parseFloat(vtsReversalRow.diMax) } : null,
+          breakout: vtsBreakoutRow ? { lqMin: parseFloat(vtsBreakoutRow.lqMin), vnMax: parseFloat(vtsBreakoutRow.vnMax), corrMax: parseFloat(vtsBreakoutRow.corrMax), diMin: parseFloat(vtsBreakoutRow.diMin), diMax: parseFloat(vtsBreakoutRow.diMax) } : null,
+          oscillator: vtsOscillatorRow ? { lqMin: parseFloat(vtsOscillatorRow.lqMin), vnMax: parseFloat(vtsOscillatorRow.vnMax), corrMax: parseFloat(vtsOscillatorRow.corrMax), diMin: parseFloat(vtsOscillatorRow.diMin), diMax: parseFloat(vtsOscillatorRow.diMax) } : null,
         },
       },
       schema: 'vts-imf-status/v4.0' // Batch 42: added family filters

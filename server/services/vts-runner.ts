@@ -324,8 +324,8 @@ interface VTSConfig {
   strategies: string[];
   targetProfit: number;
   stopLoss: number;
-  minVolume24h: number;
-  minPrice: number;
+  // B54: minVolume24h and minPrice REMOVED — DB is sole authority (screener_filters).
+  // FX5 scanner already filters on DB-driven values before pairs reach VTS.
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -349,8 +349,7 @@ const DEFAULT_CONFIG: VTSConfig = {
   ],
   targetProfit: 0.015,
   stopLoss: 0.008,
-  minVolume24h: 50000,
-  minPrice: 0.5
+  // B54: minVolume24h and minPrice REMOVED — FX5 scanner applies DB-driven filtering upstream.
 };
 
 let vtsConfig: VTSConfig = { ...DEFAULT_CONFIG };
@@ -1238,9 +1237,9 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
       console.log(`[11.4C.1][VTS] Using Active Filter Pool: ${fx5Survivors.length} pairs`);
       const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; sourcePool: string }> = [];
       for (const p of fx5Survivors) {
-        if ((p.price ?? 0) < vtsConfig.minPrice || (p.volume24h ?? 0) < vtsConfig.minVolume24h) {
-          continue;
-        }
+        // B54: minPrice/minVolume24h filtering REMOVED — FX5 scanner already applies DB-driven
+        // screening (screener_filters table) before pairs reach the Active Filter Pool.
+        // No secondary hardcoded filtering here.
         const canonicalSymbol = normalizeToInternalSymbol(p.symbol);
         if (!canonicalSymbol) {
           console.warn(`[11.4H.1][Symbol Warning] Unmappable symbol in fallback: ${p.symbol}`);

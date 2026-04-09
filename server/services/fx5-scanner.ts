@@ -73,7 +73,7 @@ import {
   isBenchmarkSymbolStrict 
 } from '../config/benchmark-regex.js';
 // Phase 14.5: Pattern pool filter thresholds (Batch 48: regime overrides removed, DB-only)
-import { PATTERN_POOL_THRESHOLDS } from '../config/pattern-filter-profile.js';
+// B54 Fix 4: PATTERN_POOL_THRESHOLDS import removed — all filter thresholds from DB only
 // Batch 19G: PATTERN_GLOBAL_FILTERS and VTS_PATTERN_GLOBAL_FILTERS removed — now read from DB
 import { getMarketContextEngine } from './market-context-engine.js';
 
@@ -670,25 +670,20 @@ export class Fx5ScannerService {
       // Batch 19G HF2: Map ALL DB fields for pattern filter (not just 3)
       // Previously only volume/spread/history were mapped; minPrice, maxPrice,
       // excludeStablecoins, minLiquidity, minMarketCap fell back to quant values.
+      // B54: DB is sole authority — no hardcoded fallbacks. Missing DB row = critical config error.
+      if (!patternDbRow) {
+        console.error(`[B54][CRITICAL] Pattern filter DB row missing for '${patternFilterPath}'. Pattern path DISABLED this cycle.`);
+      }
       const activePatternGlobalFilters = patternDbRow ? {
-        MIN_VOLUME_USD: parseFloat(patternDbRow.minVolume ?? '250000'),
-        MAX_BID_ASK_SPREAD: parseFloat(patternDbRow.maxBidAskSpread ?? '1.0'),
-        MIN_HISTORY_DAYS: patternDbRow.minHistoryDays ?? 14,
-        MIN_PRICE: parseFloat(patternDbRow.minPrice ?? '0.25'),
-        MAX_PRICE: parseFloat(patternDbRow.maxPrice ?? '100000'),
-        EXCLUDE_STABLECOINS: patternDbRow.excludeStablecoins ?? true,
-        MIN_LIQUIDITY: parseFloat(patternDbRow.minLiquidity ?? '250000'),
-        MIN_MARKET_CAP: parseFloat(patternDbRow.minMarketCap ?? '100000000'),
-      } : {
-        MIN_VOLUME_USD: 250_000, // Fallback if DB row missing
-        MAX_BID_ASK_SPREAD: 1.0,
-        MIN_HISTORY_DAYS: 14,
-        MIN_PRICE: 0.25,
-        MAX_PRICE: 100_000,
-        EXCLUDE_STABLECOINS: true,
-        MIN_LIQUIDITY: 250_000,
-        MIN_MARKET_CAP: 100_000_000,
-      };
+        MIN_VOLUME_USD: parseFloat(patternDbRow.minVolume),
+        MAX_BID_ASK_SPREAD: parseFloat(patternDbRow.maxBidAskSpread),
+        MIN_HISTORY_DAYS: patternDbRow.minHistoryDays,
+        MIN_PRICE: parseFloat(patternDbRow.minPrice),
+        MAX_PRICE: parseFloat(patternDbRow.maxPrice),
+        EXCLUDE_STABLECOINS: patternDbRow.excludeStablecoins,
+        MIN_LIQUIDITY: parseFloat(patternDbRow.minLiquidity),
+        MIN_MARKET_CAP: parseFloat(patternDbRow.minMarketCap),
+      } : null;
       console.log(`[19G][FX5] Pattern global filters from DB (${patternFilterPath}):`, activePatternGlobalFilters);
 
       // Batch 19G: Also load quant IMF DB row for VTS relaxed thresholds
@@ -696,11 +691,15 @@ export class Fx5ScannerService {
       const quantDbRow = isPassiveLearningMode
         ? await storage.getScreenerFilters({ mode, filterPath: 'vts_quant' })
         : filters; // Active quant is already loaded as 'filters'
-      const dbVtsImfThresholds = {
-        LQ_MIN: parseFloat(quantDbRow?.lqMin ?? '25'),
-        VN_MAX: parseFloat(quantDbRow?.vnMax ?? '0.98'),
-        CORR_MAX: parseFloat(quantDbRow?.corrMax ?? '0.95'),
-      };
+      // B54: DB is sole authority — no hardcoded fallbacks for quant IMF.
+      if (!quantDbRow) {
+        console.error(`[B54][CRITICAL] Quant filter DB row missing for '${quantFilterPath}'. Quant IMF thresholds unavailable.`);
+      }
+      const dbVtsImfThresholds = quantDbRow ? {
+        LQ_MIN: parseFloat(quantDbRow.lqMin),
+        VN_MAX: parseFloat(quantDbRow.vnMax),
+        CORR_MAX: parseFloat(quantDbRow.corrMax),
+      } : null;
 
       // Batch 19G: Load pattern IMF thresholds from DB for pattern pool filtering
       let patternConfigValid = true;
@@ -860,6 +859,13 @@ export class Fx5ScannerService {
         console.log(`[19F][PATTERN_OHLC] Pre-fetched OHLC for ${patternOhlcFetched}/${patternGlobalSurvivorsForOhlc.length} pattern-only pairs`);
       }
 
+      // B54 Fix 4: Validate DB filter thresholds BEFORE processing pairs.
+      // These values are per-scan (same for all pairs), so check once up front.
+      if (filters.lqMin == null || filters.vnMax == null) {
+        console.error(`[B54][CRITICAL] Missing lqMin or vnMax in active_quant DB row — cannot run scan. lqMin=${filters.lqMin}, vnMax=${filters.vnMax}`);
+        return null;
+      }
+
       const classifiedSurvivors = survivors
         .filter(s => {
           // Directive 11.4H.1 Task 2: Skip pairs with incomplete metrics
@@ -948,8 +954,9 @@ export class Fx5ScannerService {
           : Math.min(100, Math.max(0, Math.log10(volumeUSD + 1) * 10));
         let VolNoise = calculateVolNoise(ohlcPrices);
         // Batch 19G VN HF: Pass DB-driven thresholds to passesCoreMetricFilters
-        const dbLqMin = parseFloat(filters.lqMin ?? '35');
-        const dbVnMax = parseFloat(filters.vnMax ?? '0.93');
+        // B54 Fix 4: No fallbacks — DB is sole authority. Null check done before .map()
+        const dbLqMin = parseFloat(filters.lqMin!);
+        const dbVnMax = parseFloat(filters.vnMax!);
         const passesMetricFilter = passesCoreMetricFilters(LQ, VolNoise, dbLqMin, dbVnMax);
 
         // Directive 11.7H Task H-04: Sanity clamp for out-of-range VN values
@@ -1112,6 +1119,13 @@ export class Fx5ScannerService {
 
     for (const family of familyFilterPaths) {
       const thresholds = familyImfThresholds[family];
+      // B54 Fix 4: If DB row was missing, thresholds is null — skip family entirely (fail loud)
+      if (!thresholds) {
+        console.error(`[B54][CRITICAL] Family '${family}' thresholds null (DB row missing) — entire family skipped from scan`);
+        familyPoolSurvivors[family] = [];
+        familyImfDiagnostics[family] = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: classifiedSurvivors.length };
+        continue;
+      }
       let failedLQ = 0, failedVN = 0, failedDI = 0, passed = 0;
       const survivors: typeof classifiedSurvivors = [];
 
