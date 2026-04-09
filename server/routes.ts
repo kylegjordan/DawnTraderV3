@@ -8,8 +8,8 @@ import { db } from "./db";
 import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
-// MIGRATION: ai-analyst disabled — legacy Walter/OpenAI dependency, will be fully removed
-// import { AIAnalyst } from "./services/ai-analyst";
+// B54: ai-analyst fully removed — legacy Walter/OpenAI dependency (Running Issue #23)
+// All ai-analyst route handlers now return 501. Service file retained for reference only.
 import { getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
 import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
@@ -84,9 +84,7 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// MIGRATION: ai-analyst disabled — legacy Walter/OpenAI dependency
-// const aiAnalyst = new AIAnalyst();
-const aiAnalyst: any = null;
+// B54: ai-analyst fully removed — legacy Walter/OpenAI dependency (Running Issue #23)
 
 // [41F-L.2] Trade test request schema
 const TradeTestSchema = z.object({
@@ -4713,44 +4711,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/ai/reports/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { type } = req.body; // 'daily', 'weekly', 'monthly'
-      
-      let report;
-      switch (type) {
-        case 'daily':
-          report = await aiAnalyst.generateDailyReport(userId);
-          break;
-        case 'weekly':
-          report = await aiAnalyst.generateWeeklyReport(userId);
-          break;
-        case 'monthly':
-          report = await aiAnalyst.generateMonthlyReport(userId);
-          break;
-        default:
-          return res.status(400).json({ error: 'Invalid report type' });
-      }
-      
-      res.json(report);
-    } catch (error) {
-      console.error('Error generating AI report:', error);
-      res.status(500).json({ error: 'Failed to generate AI report' });
-    }
+  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
+  apiRouter.post('/ai/reports/generate', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
-  apiRouter.post('/ai/analyze-symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { symbol } = req.body;
-      
-      const analysis = await aiAnalyst.analyzeSymbol(symbol, userId);
-      res.json(analysis);
-    } catch (error) {
-      console.error('Error analyzing symbol:', error);
-      res.status(500).json({ error: 'Failed to analyze symbol' });
-    }
+  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
+  apiRouter.post('/ai/analyze-symbol', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
   // Daily Briefs
@@ -11689,30 +11657,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/ai/chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { message, context } = req.body;
-      
-      const result = await aiAnalyst.chatWithAssistant(userId, message, context);
-      res.json(result);
-    } catch (error) {
-      console.error('Error in AI chat:', error);
-      res.status(500).json({ error: 'Failed to process AI chat' });
-    }
+  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
+  apiRouter.post('/ai/chat', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
-  apiRouter.post('/ai/settings/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { settingName, newValue, confirmation } = req.body;
-      
-      const result = await aiAnalyst.applySettingsChange(userId, settingName, newValue, confirmation);
-      res.json(result);
-    } catch (error) {
-      console.error('Error applying settings change:', error);
-      res.status(500).json({ error: 'Failed to apply settings change' });
-    }
+  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
+  apiRouter.post('/ai/settings/apply', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
   apiRouter.get('/ai/audit-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -11746,17 +11698,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/ai/diagnose-error', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { errorId } = req.body;
-      
-      const diagnosis = await aiAnalyst.diagnoseError(errorId, userId);
-      res.json(diagnosis);
-    } catch (error) {
-      console.error('Error diagnosing error:', error);
-      res.status(500).json({ error: 'Failed to diagnose error' });
-    }
+  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
+  apiRouter.post('/ai/diagnose-error', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
   // AI Conversations - Multiple chats management
@@ -11849,18 +11793,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/conversations/:id/message', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { id } = req.params;
-      const { message, context } = req.body;
-      
-      const result = await aiAnalyst.chatWithAssistant(userId, message, context, id);
-      res.json(result);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      res.status(500).json({ error: 'Failed to send message' });
-    }
+  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
+  apiRouter.post('/conversations/:id/message', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
   // Kill Switch Incident Analysis Conversation
