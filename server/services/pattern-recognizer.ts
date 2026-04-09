@@ -8,9 +8,9 @@
  * for integration with Signal Orchestrator and VTS pipeline.
  * 
  * Supported Patterns:
- * - PINBAR (Golden Pinbar): Wick > 2× Body, wick opposite trade direction
+ * - PINBAR (Golden Pinbar): Wick > 1.5× Body, wick opposite trade direction (B54: relaxed from 2× for crypto)
  * - ENGULFING (Momentum Engulfing): Body fully engulfs prior body, volume spike
- * - INSIDE_BAR: High < PrevHigh AND Low > PrevLow (compression setup)
+ * - INSIDE_BAR: High < PrevHigh AND Low > PrevLow (compression setup, B54: 0.1% tolerance)
  * - THREE_SOLDIERS: Three consecutive bullish candles, each closing higher
  * - MORNING_STAR: Bear → Doji/Small → Bull (closing > halfway into first)
  * 
@@ -99,7 +99,9 @@ function candleRange(candle: Candle): number {
 
 /**
  * Detect Golden Pinbar pattern
- * Wick > 2× Body; wick opposite trade direction
+ * Wick > 1.5× Body; wick opposite trade direction
+ * B54: Relaxed from 2× to 1.5× for crypto (wicky candles are normal).
+ * Directional dominance (wick > 2× opposite wick) retained as quality filter.
  */
 function detectPinbar(candles: Candle[], symbol: string, avgVolume: number): PatternSignal | null {
   if (candles.length < 2) return null;
@@ -114,8 +116,9 @@ function detectPinbar(candles: Candle[], symbol: string, avgVolume: number): Pat
   const upperW = upperWick(current);
   const lowerW = lowerWick(current);
   
-  // Bullish Pinbar: Long lower wick (> 2x body), small upper wick
-  if (lowerW > 2 * body && lowerW > upperW * 2) {
+  // Bullish Pinbar: Long lower wick (> 1.5x body), small upper wick
+  // B54: Relaxed from 2x to 1.5x for crypto. Directional dominance (2x opposite wick) retained.
+  if (lowerW > 1.5 * body && lowerW > upperW * 2) {
     const strength = Math.min(1.0, (lowerW / body) / 4); // Normalize strength
     return {
       symbol,
@@ -132,8 +135,9 @@ function detectPinbar(candles: Candle[], symbol: string, avgVolume: number): Pat
     };
   }
   
-  // Bearish Pinbar: Long upper wick (> 2x body), small lower wick
-  if (upperW > 2 * body && upperW > lowerW * 2) {
+  // Bearish Pinbar: Long upper wick (> 1.5x body), small lower wick
+  // B54: Relaxed from 2x to 1.5x for crypto. Directional dominance (2x opposite wick) retained.
+  if (upperW > 1.5 * body && upperW > lowerW * 2) {
     const strength = Math.min(1.0, (upperW / body) / 4);
     return {
       symbol,
@@ -221,15 +225,17 @@ function detectEngulfing(candles: Candle[], symbol: string, avgVolume: number): 
 /**
  * Detect Inside Bar pattern
  * High < PrevHigh AND Low > PrevLow (compression setup)
+ * B54: Added 0.1% tolerance — crypto bars often touch parent range by a fraction of a pip.
  */
 function detectInsideBar(candles: Candle[], symbol: string): PatternSignal | null {
   if (candles.length < 2) return null;
-  
+
   const current = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
-  
-  // Inside bar: Current range completely inside previous range
-  const isInside = current.high < prev.high && current.low > prev.low;
+
+  // Inside bar: Current range inside previous range (B54: 0.1% tolerance for near-inside bars)
+  const tolerance = 0.001; // 0.1%
+  const isInside = current.high < prev.high * (1 + tolerance) && current.low > prev.low * (1 - tolerance);
   
   if (isInside) {
     const prevRange = candleRange(prev);
@@ -274,9 +280,11 @@ function detectThreeSoldiers(candles: Candle[], symbol: string): PatternSignal |
   // Each must close higher than the previous
   if (c2.close <= c1.close || c3.close <= c2.close) return null;
   
-  // Each opens within the previous body
-  const opensInPrevBody1 = c2.open >= c1.open && c2.open <= c1.close;
-  const opensInPrevBody2 = c3.open >= c2.open && c3.open <= c2.close;
+  // Each opens within the previous body (B54: 0.25% tolerance for crypto micro-gaps, per Langston review)
+  const tol1 = bodySize(c1) * 0.0025; // 0.25% of body
+  const tol2 = bodySize(c2) * 0.0025;
+  const opensInPrevBody1 = c2.open >= (c1.open - tol1) && c2.open <= (c1.close + tol1);
+  const opensInPrevBody2 = c3.open >= (c2.open - tol2) && c3.open <= (c2.close + tol2);
   
   if (opensInPrevBody1 && opensInPrevBody2) {
     const totalGain = (c3.close - c1.open) / c1.open;
@@ -310,10 +318,11 @@ function detectMorningStar(candles: Candle[], symbol: string): PatternSignal | n
   const c3 = candles[candles.length - 1]; // Third: Bullish
   
   // First candle must be bearish with substantial body
+  // B54: Relaxed body/range from 0.4 to 0.3 — crypto bearish candles often carry more wick
   if (!isBearish(c1)) return null;
   const c1Body = bodySize(c1);
   const c1Range = candleRange(c1);
-  if (c1Range === 0 || c1Body / c1Range < 0.4) return null;
+  if (c1Range === 0 || c1Body / c1Range < 0.3) return null;
   
   // Second candle must have small body (doji-like)
   const c2Body = bodySize(c2);
