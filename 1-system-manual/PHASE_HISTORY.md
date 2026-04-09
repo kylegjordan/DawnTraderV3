@@ -28,9 +28,17 @@
 | Inter-phase | API Budget Optimization + routing/archive hotfixes | Batch 18, 18B, HF10, HF10B, HF11B, HF12, HF12B, HF12C, HF12D | COMPLETE |
 | 14.6 | Filter Diagnostics Data Truth + Family-Qualified Identity | Batches 20-39 (all deployed and verified on Replit) | COMPLETE |
 | Migration | Hetzner + Supabase Migration (Post-Replit) | Batch 40 | COMPLETE |
-| 14.7 | Strategy Filter Relaxation + Architecture Fixes + Execution Integrity | Batches 41-47 (deployed on Hetzner staging) | IN PROGRESS |
-| 15 | Strategy-family filter profiles / rules engine follow-on | — | PLANNED |
-| 19-22 | Paper-mode audit, production hardening, live activation, publication | — | PLANNED |
+| 14.7 | Filter Diagnostics & Strategy Calibration | Batches 48-54 (deployed on Hetzner staging) | COMPLETE |
+| Post-migration | Stabilization + architecture fixes + execution integrity | Batches 41-47 | COMPLETE |
+| 11.8 | Phase 11 Finalization: Adjustment Framework + Authority Baseline | — | NEXT |
+| 15+16 | Rules-Based Predictive Execution + DB & Legacy Cleanup (combined) | — | PLANNED |
+| 19 | Paper Mode Full Audit & Debug | — | PLANNED |
+| 20 | Production Hardening | — | PLANNED |
+| 21 | Live Mode Activation (Kraken real orders) | — | PLANNED |
+| 21.5 | Exchange Expansion: XStocks + Perpetual Futures (Kraken) | — | PLANNED (post-live) |
+| 17 | Machine Learning Design | — | PLANNED (post-live) |
+| 18 | Machine Learning Implementation | — | PLANNED (post-live) |
+| 22 | Publication & Monitoring | — | PLANNED |
 
 ---
 
@@ -319,7 +327,7 @@ The pre-governance era established nearly all of DawnTrader’s core ambitions: 
 
 ## Current Historical Position
 
-As of Batch 53 (2026-04-08):
+As of Batch 54 (2026-04-09):
 - Phase 12 is complete.
 - Phase 13 is complete.
 - Phase 14.1 is complete.
@@ -328,10 +336,12 @@ As of Batch 53 (2026-04-08):
 - Phase 14.4 is canceled.
 - Phase 14.5 is fully complete (Batches 19 through 19L).
 - **Phase 14.6 is COMPLETE** (Batches 20-39).
-- **Phase 14.7 is COMPLETE** (Batches 48-54: Filter Diagnostics, Strategy Calibration, Pattern Recognizer Optimization).
+- **Phase 14.7 is COMPLETE** (Batches 48-54: Filter Diagnostics, Strategy Calibration, Pattern Recognizer Optimization, Hardcoded Default Removal, ML Service).
 - Migration (Batch 40) complete.
-- Batches 41-47: Post-migration stabilization (pattern routing, execution integrity, state persistence, threshold audit Round 1).
-- Next: Phase 15 (X Stocks + Perpetual Futures), then Phase 11 Finalization. 5 regime-map decisions deferred (Langston: insufficient evidence).
+- Batches 41-47: Post-migration stabilization complete.
+- **Running Issues: 37 RESOLVED, 1 DEFERRED, 0 OPEN.**
+- **Next: Phase 11.8 Finalization** (Adjustment Framework 11.8B-E + Authority Baseline 11.8C).
+- **Revised roadmap (Kyle directive 2026-04-09):** 11.8 → 15+16 (combined) → 19 → 20 → 21 (go live) → XStocks/Perpetuals → ML Design → ML Implementation → Publication.
 
 The system is now in a far more governable state than at any point in the pre-governance history.
 
@@ -352,5 +362,5 @@ The system is now in a far more governable state than at any point in the pre-go
 - Batches 48-51: Pipeline visibility — VTS Signal Funnel, pair-pool counting, 24h rolling aggregates, null reason tracking
 - Batch 52 (19 fixes): VTS boot circular dependency fixed, pair-pool N×N overcounting fixed, byStrategy counter double-counting fixed, cooldown removed, LQ=43, benchmark exclusion, UI reorganized
 - Batch 53: 8 strategy threshold relaxations (Langston consensus), zero-duration trades entry guard, full 17-strategy audit, IMF fallback removal, Screeners UI fix
-- Batch 54: Pattern recognizer relaxed for crypto (PINBAR, INSIDE_BAR, THREE_SOLDIERS, MORNING_STAR), DI threshold 12→10 for trend family, ai-analyst legacy service removed
-- **Outcome**: All 17 strategies audited. Pattern detection rate improved. Trend family gained 5 pairs. Dominant constraint is regime eligibility. 5 regime-map decisions deferred (Langston: insufficient evidence). Canonical regime-strategy map (Directive 11.7F) confirmed as SSOT.
+- Batch 54: Pattern recognizer relaxed for crypto (PINBAR, INSIDE_BAR, THREE_SOLDIERS, MORNING_STAR), DI threshold 12→10 for trend family, ai-analyst legacy service removed, ALL hardcoded filter defaults removed (60+ across 4 files, DB sole authority), ML service installed on staging
+- **Outcome**: All 17 strategies audited. Pattern detection rate improved. Trend family gained 5 pairs. Dominant constraint is regime eligibility. 5 regime-map decisions deferred (Langston: insufficient evidence). Canonical regime-strategy map (Directive 11.7F) confirmed as SSOT. Running Issues fully cleared (37 resolved, 1 deferred, 0 open).

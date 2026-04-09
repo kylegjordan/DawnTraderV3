@@ -2,24 +2,29 @@
 
 > **Author**: Claude Code (System Cartographer & Lead Architect)
 > **Created**: 2026-02-17
-> **Revised**: 2026-03-10 (v4 — Comprehensive governance catch-up. Current State Assessment updated (MCE installed, DSS deleted, DBS implemented, regime archive fixed). Risk Assessment updated (completed items removed). Dependency chain updated (14.2 SKIP, 14.3 DEFERRED, 14.4 CANCELED, 14.5 NEXT). Phase 16 absorbed into Phase 13.)
+> **Revised**: 2026-04-09 (v5 — Phase 14.7 complete. All Running Issues cleared. Kyle directive: reorder phases — go live before ML. XStocks + Perpetual Futures added post-live. Phase 15+16 combined. ML deferred to post-live.)
 > **Purpose**: Complete roadmap from current state (Phase 11.8B-D1) through live mode trading and publication. Uses formal DawnTrader phase numbering.
 > **Companion Documents**: SYSTEM_MANUAL.md (what the system IS), CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves)
 > **Source Documents Incorporated**: "Dawn Trader Next Steps After MCE Build" (2.14.26), "DT Phase 11.8 Final Steps" (2.6.26), "DT Predictive Learning Calibration" (2.2.26), "The Plan to Create A Plan for Machine Learning" (1.17.26)
 
 ---
 
-## Where We Are
+## Where We Are (as of 2026-04-09, Batch 54)
 
-**Last completed phase**: Phase 14.1 (VTS Real Calculations — Batches 15-18, HF6-HF9)
-**Phase 11 status**: Open — 11.8B-E and 11.8C remain to be completed after VTS real calculations
-**Phase 12 status**: COMPLETE — 17/18 directives done (only 12.1.6 LSP Error Triage remains, LOW priority, deferred)
-**Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed (29 files, ~8,200 lines). Batch 14 + hotfix + Batch 14B governance.
-**Phase 14.1 status**: COMPLETE — VTS wired to real detect functions, regime recalibrated, DSS deleted, IMF relaxed, OHLC cache, 300 pairs. Batches 15-18.
-**Phase 14.2 status**: EFFECTIVELY COMPLETE — DBS implemented (Batch 15). Regime rename, DBS backfill, and Global Structural Regime all SKIPPED per Kyle decision.
-**Phase 14.4 status**: CANCELED — Kyle decision 2026-03-08
-**Phase 14.3 status**: DEFERRED INDEFINITELY — requires capital not available. Replaced by Exchange Expansion (post-launch).
-**Next phase**: Phase 14.5 (Parallel Pattern Scanning + Signal Ranking Overhaul + Global Regime Pre-Filter) — Block 3, Batch 19
+**Last completed phase**: Phase 14.7 (Filter Diagnostics & Strategy Calibration — Batches 48-54)
+**Phase 11 status**: Open — 11.8B-E and 11.8C remain. This is the NEXT phase.
+**Phase 12 status**: COMPLETE
+**Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed.
+**Phase 14.1 status**: COMPLETE — VTS wired to real detect functions.
+**Phase 14.2 status**: EFFECTIVELY COMPLETE — DBS implemented (Batch 15).
+**Phase 14.3 status**: DEFERRED INDEFINITELY — replaced by Exchange Expansion (post-live).
+**Phase 14.4 status**: CANCELED
+**Phase 14.5 status**: COMPLETE — Dual-path pattern scanning, merit-based ranking, filter diagnostics (Batches 19-19K).
+**Phase 14.6 status**: COMPLETE — Family-qualified identity, filter diagnostics data truth (Batches 20-39).
+**Phase 14.7 status**: COMPLETE — Strategy calibration, pattern recognizer optimization, hardcoded default removal, ML service (Batches 48-54).
+**Migration status**: COMPLETE — Hetzner + Supabase (Batch 40). Post-migration stabilization (Batches 41-47) complete.
+**Running Issues**: 37 RESOLVED, 1 DEFERRED, 0 OPEN, 0 IN PROGRESS.
+**Next phase**: Phase 11 Finalization (11.8B-E Adjustment Framework + 11.8C Authority Baseline)
 
 ---
 
@@ -56,24 +61,28 @@ Kyle's Next Steps document (2.14.26) lists the full scope of work from current s
 
 These items are now placed in the roadmap at their correct dependency points. The sequencing logic from v1 still holds — you can't install MCE into a contaminated pipeline, and you can't wire VTS without MCE — but the post-MCE scope is significantly larger than v1 captured.
 
-**Revised recommended order**:
-1. Fix active pipeline contamination (math errors, security)
-2. Remove dead code (can't build on dead infrastructure)
-3. Unify pipeline (clean foundation for MCE)
-4. Install MCE (authoritative data provider)
-5. Wire VTS to real calculations (MCE-powered)
-6. Add Directional Bias & Structural Regime (richer signal model)
-7. Add Short Trading (expanded strategy coverage)
-8. Clear VTS simulated data & backfill with real calculations
-9. Finalize Phase 11: Adjustment Framework (11.8B-E) + Authority Baseline (11.8C)
-10. Enable rules-based Predictive Execution (pre-ML adaptive filters)
-11. Remove L-Series & remaining legacy infrastructure
-12. Design Machine Learning architecture (the "Plan to Create a Plan")
-13. Implement Machine Learning
-14. Run, audit, and debug Paper Mode
-15. Production hardening
-16. Create Live Mode
-17. Publication
+**Revised recommended order (Kyle directive 2026-04-09)**:
+
+Steps 1-8 are COMPLETE (Phases 12-14.7, Batches 1-54).
+
+9. ✅ ~~Fix active pipeline contamination~~ — COMPLETE (Phase 12)
+10. ✅ ~~Remove dead code~~ — COMPLETE (Phase 12)
+11. ✅ ~~Unify pipeline~~ — COMPLETE (Phase 12)
+12. ✅ ~~Install MCE~~ — COMPLETE (Phase 13)
+13. ✅ ~~Wire VTS to real calculations~~ — COMPLETE (Phase 14.1)
+14. ✅ ~~Directional Bias & Structural Regime~~ — COMPLETE (Phase 14.2)
+15. ✅ ~~Dual-path pattern scanning + strategy calibration~~ — COMPLETE (Phases 14.5-14.7)
+
+**Remaining phases (current order):**
+1. Finalize Phase 11: Adjustment Framework (11.8B-E) + Authority Baseline (11.8C)
+2. Rules-Based Predictive Execution + DB/Legacy Cleanup (Phase 15+16 combined)
+3. Paper Mode Full Audit & Debug (Phase 19)
+4. Production Hardening (Phase 20)
+5. Live Mode Activation — real Kraken orders (Phase 21)
+6. Exchange Expansion: XStocks + Perpetual Futures from Kraken (Phase 21.5, post-live)
+7. Machine Learning Design (Phase 17, post-live)
+8. Machine Learning Implementation (Phase 18, post-live)
+9. Publication & Monitoring (Phase 22)
 
 
 ### Batch Approach
@@ -703,24 +712,35 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 
 ---
 
+## Phase 21.5: Exchange Expansion — XStocks + Perpetual Futures (Post-Live)
+
+**Goal**: Expand tradeable asset classes by adding Kraken XStocks (tokenized stocks/ETFs) and Perpetual Futures to the scanning and trading pipeline. This is the first major feature addition after going live.
+
+**Why post-live**: The system needs to be proven with live crypto spot trading before expanding to new asset classes. Live trade data and operational experience inform how new asset types are integrated.
+
+### 21.5.1 Kraken XStocks Integration
+- Add Kraken XStocks API endpoints (tokenized stocks, ETFs)
+- Asset-class-specific filter profiles in screener_filters DB
+- Strategy eligibility per asset class (some strategies may not apply to stocks)
+- UI: asset class selector/filter in trading and analytics views
+
+### 21.5.2 Perpetual Futures Integration
+- Add Kraken Futures API endpoints
+- Funding rate awareness in cost model
+- Leverage-aware position sizing in guardrails
+- Short trading capability (futures enable shorts without capital constraints)
+- Futures-specific risk management (liquidation prevention, margin monitoring)
+
+### 21.5.3 Cross-Asset Infrastructure
+- Unified portfolio view across asset classes
+- Asset-class-aware regime classification (crypto, equity, futures may have different regime characteristics)
+- Performance tracking per asset class
+
+---
+
 ## Post-Launch Enhancement Priorities
 
-These items are deferred to after live mode activation (Phase 21). Listed in Kyle's priority order:
-
-### Exchange Expansion (replaces Short Trading)
-- Add exchange supporting stocks, ETFs, tokenized stocks, futures, or commodities
-- Expands tradeable asset classes with limited portfolio
-- Requires exchange API integration, asset-type-specific strategies, and cross-exchange risk management
-
-### Machine Learning (Phases 17-18)
-- Phase 17: Design — XGBoost/LightGBM for confidence filtering, HMM for regime prediction, local LLM advisor
-- Phase 18: Implementation — ML service (Python) + Ollama advisor + monitoring dashboard
-- Needs live trade data to train on; most value from selective execution (trade only high-confidence signals)
-
-### AWS/Supabase Migration
-- Move from Replit production servers to AWS cloud + Supabase database
-- Improves latency, reliability, and scalability
-- Timing depends on when Replit constraints become limiting
+These items are deferred and not currently sequenced. Listed for reference:
 
 ### WebSocket Event Triggers
 - Real-time Kraken WebSocket feeds for time-sensitive opportunity detection between scan cycles
@@ -728,24 +748,30 @@ These items are deferred to after live mode activation (Phase 21). Listed in Kyl
 
 ### Parallel Signal Generation
 - Promise.all batching in evaluateMarket() for concurrent pair evaluation
-- Only if Phase 14.5 creates throughput demand
+- Only if throughput becomes a constraint
 
 ---
 
-## Timeline Summary
+## Timeline Summary (Revised 2026-04-09)
 
-| Phase | Weeks | Key Milestone |
-|-------|-------|---------------|
-| **Phase 12: Cleanup & Foundation** | 1-6 | Math fixed, ~200+ dead files removed, pipeline unified |
-| **Phase 13: MCE Installation** | 6-10 | MCE as authoritative data provider |
-| **Phase 14.1: VTS Real Calculations** | 10-12 | Real signals, regime recalibration, DSS deletion — COMPLETE |
-| **Phase 14.5: Pattern Scanning + Ranking** | 12-14 | Dual-path scanning, return magnitude ranking, global regime pre-filter |
-| **Phase 11 Finalization (11.8B-E, 11.8C)** | 16-18 | Adjustment Framework + Authority Baseline. Phase 11 closed. |
-| **Phase 15: Rules-Based Predictive Execution** | 18-20 | "Smart Thermostat" — adaptive pre-ML filters |
-| **Phase 16: L-Series Removal & Legacy Cleanup** | 20-23 | All legacy infrastructure permanently removed |
-| **Phase 17: Machine Learning Design** | 23-28 | ML architecture blueprint (Directive 18.0) |
-| **Phase 18: Machine Learning Implementation** | 28-34 | ML system built and deployed |
-| **Phase 19: Paper Mode Audit & Debug** | 34-37 | Full system validated in paper trading |
+| Phase | Status | Key Milestone |
+|-------|--------|---------------|
+| **Phase 12: Cleanup & Foundation** | ✅ COMPLETE | Math fixed, ~200+ dead files removed, pipeline unified |
+| **Phase 13: MCE Installation** | ✅ COMPLETE | MCE as authoritative data provider |
+| **Phase 14.1-14.2: VTS + DBS** | ✅ COMPLETE | Real signals, regime, directional bias |
+| **Phase 14.5: Pattern Scanning + Ranking** | ✅ COMPLETE | Dual-path scanning, merit-based ranking, filter diagnostics |
+| **Phase 14.6: Family-Qualified Identity** | ✅ COMPLETE | Family IMF, data truth, pipeline metrics |
+| **Phase 14.7: Strategy Calibration** | ✅ COMPLETE | 17-strategy audit, pattern recognizer, hardcoded defaults removed |
+| **Migration (Batch 40-47)** | ✅ COMPLETE | Hetzner + Supabase, post-migration stabilization |
+| **Phase 11.8: Adjustment Framework + Baseline** | **NEXT** | Defines adjustment bounds, establishes authority baseline |
+| **Phase 15+16: Smart Thermostat + DB Cleanup** | PLANNED | Rules-based adaptive filters + legacy table/schema cleanup |
+| **Phase 19: Paper Mode Audit & Debug** | PLANNED | Full system validated in paper trading |
+| **Phase 20: Production Hardening** | PLANNED | Testing, security, RBAC, deployment pipeline |
+| **Phase 21: Live Mode Activation** | PLANNED | Real Kraken orders, paper-to-live validation |
+| **Phase 21.5: XStocks + Perpetual Futures** | PLANNED (post-live) | Kraken tokenized stocks + futures integration |
+| **Phase 17: Machine Learning Design** | PLANNED (post-live) | ML architecture blueprint (Directive 18.0) |
+| **Phase 18: Machine Learning Implementation** | PLANNED (post-live) | ML system built, Crawl/Walk/Run/Fly |
+| **Phase 22: Publication & Monitoring** | PLANNED | Production deploy, observability, structured logging |
 | **Phase 20: Production Hardening** | 37-40 | Tests, security, database, architecture finalized |
 | **Phase 21: Live Mode Activation** | 40-43 | Live trading validated on Kraken |
 | **Phase 22: Publication** | 43+ | Production deployment |

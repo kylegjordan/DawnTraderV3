@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-04-09 (B54 — Pattern recognizer relaxation, DI 12→10, ai-analyst removed, governance sweep)
+> **Last Updated**: 2026-04-09 (B54 — Pattern recognizer, DI 12→10, ai-analyst removed, hardcoded defaults removed, ML service, all Running Issues cleared, roadmap reordered)
 
 ---
 

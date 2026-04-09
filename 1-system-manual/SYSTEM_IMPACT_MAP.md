@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-03-31 (Batch 40 — Migration to Hetzner + Supabase, Post-Replit workflow)
+> **Last Updated**: 2026-04-09 (Batch 54 — Hardcoded defaults removed, DB sole authority for filter thresholds)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
