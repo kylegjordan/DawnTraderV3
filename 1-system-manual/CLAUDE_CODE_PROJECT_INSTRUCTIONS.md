@@ -867,14 +867,14 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last Updated**: 2026-04-10 (B55)
-> **Last commit (migration branch)**: `f52c87e1` (B55: Full Walter/CWQI/NGC Purge)
+> **Last Updated**: 2026-04-10 (B56)
+> **Last commit (migration branch)**: `753ac837` (B56: CI Green — dead file purge + test/TS fixes)
 > **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
 > **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS producing signals
 > **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
-> **Active batch**: Batch 55 COMPLETE (Full Walter/CWQI/NGC Purge — 116 files, -8,261 lines)
-> **Next step**: B56 planning. 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data. Remaining open issues: #26 governance debt, #17 duplicate scanPatterns, #22-25 infrastructure items.
-> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 54**: Pattern recognizer relaxed, DI threshold 12→10, ai-analyst removed. **Batch 55**: Full Walter/CWQI/NGC purge — 14 files deleted, schema tables/enums removed, storage methods removed, quality_index.ts gutted (835→265 lines), zero Walter/CWQI/NGC references remain. **Langston is GPT-5.4 permanently.**
+> **Active batch**: Batch 56 COMPLETE (CI Green — 23 dead files deleted, 77 test failures fixed, 314 TS errors resolved, all 4 CI checks green)
+> **Next step**: Phase 11.8 Finalization planning. 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data.
+> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 55**: Full Walter/CWQI/NGC purge — 116 files, -8261 lines. **Batch 56**: CI Green — 23 dead files deleted, 77→0 test failures, 314→2 TS errors (remaining 2 local npm issue), 821 tests passing, all 4 CI checks green for first time. **Langston is GPT-5.4 permanently.**
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
