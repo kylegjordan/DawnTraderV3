@@ -29,6 +29,7 @@
 | 14.6 | Filter Diagnostics Data Truth + Family-Qualified Identity | Batches 20-39 (all deployed and verified on Replit) | COMPLETE |
 | Migration | Hetzner + Supabase Migration (Post-Replit) | Batch 40 | COMPLETE |
 | 14.7 | Filter Diagnostics & Strategy Calibration | Batches 48-54 (deployed on Hetzner staging) | COMPLETE |
+| 12.2 (completion) | Legacy Code Purge — Walter/CWQI/NGC final removal | Batch 55 | COMPLETE |
 | Post-migration | Stabilization + architecture fixes + execution integrity | Batches 41-47 | COMPLETE |
 | 11.8 | Phase 11 Finalization: Adjustment Framework + Authority Baseline | — | NEXT |
 | 15+16 | Rules-Based Predictive Execution + DB & Legacy Cleanup (combined) | — | PLANNED |
@@ -327,7 +328,7 @@ The pre-governance era established nearly all of DawnTrader’s core ambitions: 
 
 ## Current Historical Position
 
-As of Batch 54 (2026-04-09):
+As of Batch 55 (2026-04-10):
 - Phase 12 is complete.
 - Phase 13 is complete.
 - Phase 14.1 is complete.
@@ -340,6 +341,7 @@ As of Batch 54 (2026-04-09):
 - Migration (Batch 40) complete.
 - Batches 41-47: Post-migration stabilization complete.
 - **Running Issues: 37 RESOLVED, 1 DEFERRED, 0 OPEN.**
+- **Batch 55 (2026-04-10):** Full Walter/CWQI/NGC purge — 116 files changed, 8261 lines removed. Completes Directive 12.2.3 (Walter legacy code) and UNIFY-002 (CWQI/NGC metric removal). quality_index.ts gutted to active signal metric helpers only. This is the final legacy code purge originally scoped under Phase 12 Directive 12.2.3 and UNIFY-002.
 - **Next: Phase 11.8 Finalization** (Adjustment Framework 11.8B-E + Authority Baseline 11.8C).
 - **Revised roadmap (Kyle directive 2026-04-09):** 11.8 → 15+16 (combined) → 19 → 20 → 21 (go live) → XStocks/Perpetuals → ML Design → ML Implementation → Publication.
 

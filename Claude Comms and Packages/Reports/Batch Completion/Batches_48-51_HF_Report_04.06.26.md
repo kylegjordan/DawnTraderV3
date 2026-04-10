@@ -158,3 +158,57 @@ Priority items:
 5. Pipeline Summary combined total (quant families + pattern + parity)
 6. Governance catch-up (BATCH_CATALOG, SYSTEM_IMPACT_MAP, etc.)
 7. Pending Kyle decisions: DI 12→8, regime-gated strategy dormancy, dhma thresholds, defensive_hedge
+
+---
+
+## 2026-04-07 Addendum — Kyle Verification + Next Change Direction
+
+### Verified by Kyle
+- Kyle confirmed the recent Filter Diagnostics changes are now visible and working in both:
+  - Last Scan view
+  - 24-hour aggregated metrics view
+- Most important behavioral change observed: **LQ is no longer a non-factor**. It is now the dominant pre-IMF blocker, which suggests the current threshold of **47** may now be too aggressive for the intended survivor flow.
+
+### Kyle Direction on LQ Threshold
+- Current threshold under discussion: **LQ = 47**
+- Kyle's direction is **not** to blindly lower it, but to review whether 47 is genuinely protective or simply over-killing the pool.
+- Working question for next audit: determine a justified lower range that preserves protection without making LQ the oversized choke point.
+- Immediate recommendation for audit framing: treat this as a **threshold calibration review**, not a cosmetic UI change.
+
+### Kyle-Requested Pipeline Summary Order (apply to both Last Scan and 24h)
+Kyle requested the rows flow in this order:
+1. **Family IMF Passed** (trend, reversal, breakout, oscillator breakdown)
+2. **Pairs Remaining After IMF Filters**
+3. **Benchmarks Bypassed / Removed**
+4. **Final Survivors**
+
+Additional UI direction:
+- The new **Pairs Remaining After IMF Filters** row should sit **below** the family IMF breakdown and **above** benchmarks and final survivors.
+- **Cooldown Exclusions** should move to the **bottom of the tab** because cooldown happens before the filter pipeline and currently interrupts the narrative flow.
+
+### New Audit Concern — Cooldown Exclusion Count
+Kyle flagged the cooldown table as potentially incorrect:
+- Previously observed: **1,318 pairs currently excluded**
+- Later observed: **1,268 pairs currently excluded**
+- With Kraken universe size around **1,400 to 1,500 pairs**, this implies an extremely large share of the exchange is being excluded at once.
+
+This requires explicit audit before any threshold decision is trusted.
+
+### Assessment Added to Open Batch Record
+Based on code review of the current implementation state:
+- The requested **row reordering** is architecturally consistent with the intended pipeline story.
+- The **cooldown count concern is legitimate** and should be treated as a correctness audit item, not assumed to be a display quirk.
+- The cooldown mechanism was surfaced in Batch 51 as a hidden pre-filter exclusion, so any inflated count can distort how Kyle interprets the whole funnel.
+- Before further survivor-threshold tuning, we should confirm whether the cooldown table is:
+  - showing unique pairs vs pair-family entries,
+  - showing active cooldown only vs cumulative failures,
+  - including benchmark or non-tradable universe artifacts,
+  - or reflecting stale state rather than current exclusion truth.
+
+### Next Planning / Audit Scope
+Before spec approval for the next code pass, audit should cover:
+1. **LQ threshold calibration** — determine whether 47 should remain, or be reduced to a more balanced operating range.
+2. **Pipeline Summary reorder** — Last Scan + 24h must present IMF survivors, then post-IMF remaining pairs, then benchmark removal, then final survivors.
+3. **Cooldown Exclusions repositioning** — move to bottom of tab.
+4. **Cooldown truth audit** — verify whether the displayed excluded-pair count is mathematically correct and using the right counting basis.
+5. **Counting-basis audit** — ensure all rows in the revised summary use clearly labeled units and do not mix unique pairs, pair-family entries, and bypass counts without explicit labeling.

@@ -144,12 +144,12 @@
 - **Impact of fix**: The old code underestimated friction by 72× (0.01% vs 0.72% for default cost metrics). The DSS NetEV gate now correctly accounts for real trading costs.
 - **Phase Found**: Phase 1 (ChatGPT review, Kyle-confirmed)
 
-### RISK-010: Rolling Normalization Is Legacy Infrastructure
+### RISK-010: Rolling Normalization Is Legacy Infrastructure — **RESOLVED**
+- **Status**: **RESOLVED** — Batch 55, commit `f52c87e1` (2026-04-10)
+- **Resolution**: RollingNormalizer class and all 3 instances removed from quality_index.ts as part of full CWQI/NGC purge. AdaptiveRelevance linkage removed. All rolling normalization infrastructure eliminated.
 - **Severity**: MEDIUM
 - **Location**: `quality_index.ts` — RollingNormalizer class (lines 108-205), 3 instances (lines 207-209)
 - **Problem**: Since NGC is legacy (Kyle-confirmed), the rolling normalization infrastructure serving NGC is also legacy. Three RollingNormalizer instances exist (NGC, ProfitRate, ExpectedReturn) with 500-sample/60-minute sliding windows. The smoothing factor is driven by VTS learning parameters via adaptive relevance — unnecessary coupling.
-- **Impact**: Stateful normalization introduces temporal drift, distribution compression, and reproducibility challenges. Same raw inputs produce different normalized outputs at different times. Backtesting cannot match forward testing.
-- **Timing**: During MCE — remove alongside NGC replacement. If ProfitRate/ExpectedReturn normalization is still needed, use deterministic fixed boundaries instead.
 - **Phase Found**: Phase 1 (ChatGPT review, Kyle-confirmed as legacy)
 
 ---
@@ -167,17 +167,12 @@
 - **Remaining work**: costFactor sizing path (separate concern, tracked independently)
 - **Phase Found**: Phase 1
 
-### UNIFY-002: Confidence Authority Consolidation (NGC Is Legacy — Kyle Confirmed)
-- **Current State**: NGC is a legacy metric that was not fully removed. Kyle confirmed: "Anywhere where we have NGC in the code is a mistake. NGC is not a calculation that we want to be using anymore." Despite this, NGC still flows through as the confidence carrier in the active pipeline.
+### UNIFY-002: Confidence Authority Consolidation (NGC Is Legacy — Kyle Confirmed) — **RESOLVED**
+- **Status**: **RESOLVED** — Batch 55, commit `f52c87e1` (2026-04-10)
+- **Resolution**: All CWQI/NGC computation, rolling normalization, AdaptiveRelevance linkage, NGC confidence carrier paths, and exported SQE thresholds (MIN_NGC, MIN_CWQI, MAX_RISK, MIN_PROFIT_RATE) removed. quality_index.ts gutted to retain only active signal metric helpers. 116 files changed, 8261 lines removed in full Walter/CWQI/NGC purge.
+- **Original State**: NGC was a legacy metric that was not fully removed. Kyle confirmed: "Anywhere where we have NGC in the code is a mistake. NGC is not a calculation that we want to be using anymore."
   - **NGC** (Phase 8.8): Blended from base confidence, volatility, risk, profitRate via rolling normalization. Stateful, adaptive. **LEGACY — should not be active.**
   - **PredictiveConfidence** (Phase 11): Planned as sole confidence authority. Deterministic. **TARGET state.**
-- **Recommendation**: PredictiveConfidence becomes the sole confidence signal. Remove:
-  - `quality_index.ts` NGC computation and all rolling normalization
-  - AdaptiveRelevance linkage to VTS
-  - NGC as confidence carrier in signal-orchestrator.ts (line 497)
-  - NGC-to-DI conversion (BUG-004, line 1128)
-  - Exported but unused SQE thresholds (MIN_NGC, MIN_CWQI, MAX_RISK, MIN_PROFIT_RATE)
-- **Timing**: During MCE — this is a core architectural change
 - **Phase Found**: Phase 1 (Kyle-confirmed 2026-02-15)
 
 ### UNIFY-003: DI Source Consolidation — **RESOLVED**
@@ -192,12 +187,12 @@
 
 ## PHASE 2 FINDINGS
 
-### RISK-011: Strategy Signal Audit Engine Uses Stale Metric Definitions
+### RISK-011: Strategy Signal Audit Engine Uses Stale Metric Definitions — **RESOLVED**
+- **Status**: **RESOLVED** — Batch 55, commit `f52c87e1` (2026-04-10)
+- **Resolution**: strategy-signal-audit-engine.ts removed as part of full Walter/CWQI/NGC purge. All stale NGC/CWQI recomputation eliminated.
 - **Severity**: MEDIUM
 - **Location**: `server/services/strategy-signal-audit-engine.ts`
-- **Problem**: Recomputes NGC, CWQI, and DI using simplified formulas that do not match actual pipeline computations. CWQI in audit = `0.4×confidence + 0.3×volatility + 0.2×pnl + 0.1×age`, but actual quality_index.ts CWQI uses multi-factor blend with rolling normalization. Mismatch detection is therefore unreliable.
-- **Impact**: Audit reports may flag false mismatches or miss real ones. Since NGC is legacy (Kyle-confirmed), the entire audit engine's purpose is questionable.
-- **Timing**: During MCE — remove or rebuild to validate PredictiveConfidence instead
+- **Problem**: Recomputed NGC, CWQI, and DI using simplified formulas that did not match actual pipeline computations. Since NGC was legacy (Kyle-confirmed), the entire audit engine's purpose was questionable.
 - **Phase Found**: Phase 2
 
 ### RISK-012: Static Confidence Values Reduce FinalScore Discrimination
@@ -553,14 +548,12 @@
 - **Timing**: Post-MCE (architecture decision, low priority)
 - **Phase Found**: Phase 6
 
-### RISK-040: Five Walter-Era Learning Services — CONFIRMED LEGACY
+### RISK-040: Five Walter-Era Learning Services — CONFIRMED LEGACY — **RESOLVED**
+- **Status**: **RESOLVED** — Batch 55, commit `f52c87e1` (2026-04-10)
+- **Resolution**: All remaining Walter-era learning services removed as part of full Walter/CWQI/NGC purge (116 files changed, 8261 lines removed). continuous-learning.ts, learning-coordinator.ts, learning-bridge.ts, learning-gate-validator.ts all deleted. All consuming service references cleaned.
 - **Severity**: MEDIUM → **CONFIRMED LEGACY** (Kyle, Phase 6 Addendum)
 - **Location**: `server/services/continuous-learning.ts`, `learning-cycle-service.ts`, `learning-coordinator.ts`, `learning-bridge.ts`, `learning-gate-validator.ts`
-- **Problem**: These 5 services form a complete learning subsystem that manages AI agent behavioral weights (CognitiveWeights: reasoning, exploration, exploitation, riskAversion, adaptability), agent feedback, cluster learning deltas, and ethical gate validation. They were built for the Walter/Bob AI ecosystem and have **zero connection** to the canonical VTS/ML pipeline, strategy weights, telemetry aggregator, or calibration utilities.
-- **Evidence**: No imports from any canonical trading module. Imports only from Walter-era services (learning-bob, cluster-bus, phase-8.6.5-enhancements — all now deleted). Database tables used are agent-specific (agentLearningDelta, agentLearningFeedback, learningWeightProfile).
-- **Batch 10 Update (2026-02-27)**: `learning-cycle-service.ts` deleted in Batch 7B-hotfix. `cognitive-interpreter.ts` and `phase-8.6.5-enhancements.ts` deleted in Batch 10 (Directive 12.2.8). Remaining files (`continuous-learning.ts`, `learning-coordinator.ts`, `learning-bridge.ts`, `learning-gate-validator.ts`) are still ACTIVE — imported by autonomy-controller and other services.
-- **Kyle Decision (Phase 6 Addendum)**: "Legacy autonomy-era artifacts. Mark for removal in cleanup wave." These do not feed VTS, TelemetryAggregator, MLCalibrationService, StrategyEngine, or PaperExecutionEngine.
-- **Timing**: Pre-MCE or during MCE (removal is EASY to MODERATE)
+- **Problem**: These 5 services formed a complete learning subsystem built for the Walter/Bob AI ecosystem with zero connection to the canonical VTS/ML pipeline.
 - **Phase Found**: Phase 6 (confirmed by Phase 6 Addendum)
 
 ### RISK-041: Calibration β Coefficient Clamped to Conservative Range

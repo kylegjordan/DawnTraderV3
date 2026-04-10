@@ -867,13 +867,14 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last commit (migration branch)**: `8b180a96` (Governance: BATCH_CATALOG B48-B53 + RUNNING_ISSUES #17a resolved)
+> **Last Updated**: 2026-04-10 (B55)
+> **Last commit (migration branch)**: `f52c87e1` (B55: Full Walter/CWQI/NGC Purge)
 > **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
 > **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS producing signals
 > **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
-> **Active batch**: Batch 53 (Strategy threshold relaxation + zero-duration trades fix)
-> **Next step**: 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data. Governance catch-up in progress. Remaining open issues: #26 governance debt, #17 duplicate scanPatterns, #22-25 infrastructure items.
-> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 52** (19 fixes): VTS boot fixed, pipeline counters fixed, cooldown removed, LQ=43, benchmark exclusion, By Strategy table corrected. **Batch 53**: 8 strategy threshold relaxations (Langston consensus), zero-duration trades entry guard, full 17-strategy audit complete. **VTS_NET_EV_FLOOR**: -1% (confirmed 0 rejections — genuine). **Signal rate**: ~0.1%/eval (genuine after fixing double-counting). **Regime**: RANGE_BOUND_STABLE — only 4 strategies active (range_trade, support_bounce, abcd_long, adaptive_flow). 8 strategies dormant by regime design. **Canonical regime-strategy map (Directive 11.7F)** is SSOT — not modified without Kyle approval + research-backed justification. **Long-only constraint**: no short selling. liquidity_trap disabled (bearish-only). **Langston is GPT-5.4 permanently.**
+> **Active batch**: Batch 55 COMPLETE (Full Walter/CWQI/NGC Purge — 116 files, -8,261 lines)
+> **Next step**: B56 planning. 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data. Remaining open issues: #26 governance debt, #17 duplicate scanPatterns, #22-25 infrastructure items.
+> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 54**: Pattern recognizer relaxed, DI threshold 12→10, ai-analyst removed. **Batch 55**: Full Walter/CWQI/NGC purge — 14 files deleted, schema tables/enums removed, storage methods removed, quality_index.ts gutted (835→265 lines), zero Walter/CWQI/NGC references remain. **Langston is GPT-5.4 permanently.**
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
@@ -923,7 +924,7 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 COMPLETE. Phase 1
 - **13.1**: ~~MCE Installation + L12-L20 Removal~~ **COMPLETE** (Batch 14 + hotfix). MCE installed as centralized VWAP/SMA/ATR/regime service. Signal orchestrator + VTS runner wired to MCE. 29 legacy files deleted (entire L12-L20 cluster). strategy_type enum expanded 9->18. BUG-002, BUG-003, BUG-008, RISK-002, RISK-016, RISK-019, RISK-020 RESOLVED. Net ~-8,200 lines.
 - **12.1.6 (LSP Error Triage)** — ~620 errors from Replit audit are LOW severity. Most are type annotation gaps, not logic bugs. Not recommended for near-term batches.
 - **RISK-028 / BUG-012 (Phase 4 Goal Alignment)**: pre-execution-validator.ts goal alignment gate and trading-engine.ts calculateGoalAlignmentScore() are formally deprecated but NOT yet removed. Separate from the Phase 9.0 system removed in Batch 11. Kyle decision needed on timing.
-- **Walter peripheral references**: 2 read-only DB references remain in routes.ts (walterActions table in health-summary, getWalterActivity in diagnostics export). Return empty data. Storage method implementations removed in Batch 10.
+- **B55: All Walter references fully removed from codebase.** Zero Walter/CWQI/NGC references remain in active source code.
 - **LATTi remaining residuals**: DB column names (`tunedByLatti`, `managedByLottie`) preserved — renaming requires migration. `adaptive-guardrails.ts` still active (LATTI adaptive tuning system, not dead code). Lazy-loader stub removed (RISK-044 RESOLVED, Batch 10).
 - **Batch 18 (Inter-Phase Optimization)**: OHLC cache (5-min TTL wrapping KrakenService.getOHLCData()), orchestrator priceCache migration (per-symbol getTicker to getCachedPrice), BATCH_SIZE 100 to 300, filterTier fix. Net API budget: ~18,200 to ~7,520 calls/hr (58% reduction despite 3x pair increase). Commit `4b6b2fa9` (code), `ed9bb0a7` (governance).
 - **Batch 18C (Regime Archive Fix)**: `clearArchiveForFreshStart()` called on every server startup, wiping weekly archive data. Debug UI scaffolding left in machine-learning.tsx. Regime-archive routes double-mounted in index.ts and routes.ts. All fixed — 11 surgical edits across 2 files. Commit `c42283f1`.
@@ -943,22 +944,22 @@ Note: ALL Phase 12 sub-phases complete except 12.1.6. Phase 13 COMPLETE. Phase 1
 
 ## Rules
 
-1. **The local clone is READ ONLY.** Never modify files in `DT_Clone_Repo/DawnTraderV3/` for changes intended to reach GitHub. Read from the clone, write to `DT_Staged_Changes/`. This prevents sync conflicts.
+1. **The local clone is the working copy — edit directly on the migration branch, push to GitHub.** No more DT_Staged_Changes or zip packages.
 2. **Always agree on batch scope with Kyle before writing code.**
 3. **Code changes and governance doc updates are separate batches.** Don't mark bugs RESOLVED until the code fix is verified.
 4. **Always update the snapshot log** before and after each batch.
 5. **Read the actual source code** before writing any changes. Never write changes based on memory or assumptions about file contents.
 6. **Consult SYSTEM_IMPACT_MAP.md** before every directive to understand blast radius.
 7. **`CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` is always updated in every governance batch.** It captures current state so the next session starts with accurate context. This is not optional.
-8. **Replit's platform creates automatic checkpoint commits between batches.** After every sync, check `git log` for unexpected commits. Checkpoint commits are normal — identify the official batch commit by its message format. See Checkpoint Commits section.
-9. **Zip naming must include batch identifiers.** Format: `BATCH_N-DESCRIPTION.zip`. This makes batches self-documenting.
-10. **Zips go to `Claude Comms and Packages/`** (Batch Zips/ or Governance Zips/), not the Desktop.
-11. **Every INSTRUCTIONS.md sent to Replit must include the Replit Autonomy Reminder** at the top. This reminds Replit of its constraints on every batch, not just in `replit.md`.
+8. **[DEPRECATED — Replit frozen]** ~~Replit checkpoint commits~~ No longer applicable. All work is direct on the clone repo.
+9. **[DEPRECATED — Replit frozen]** ~~Zip naming~~ No longer applicable. No zips produced post-Replit.
+10. **[DEPRECATED — Replit frozen]** ~~Zips go to Claude Comms~~ No longer applicable.
+11. **[DEPRECATED — Replit frozen]** ~~INSTRUCTIONS.md Replit Autonomy Reminder~~ No longer applicable.
 12. **Scope files go to `Claude Comms and Packages/Scope Files/`** before implementation begins. Each scope document is named `BATCH_N_SCOPE.md`.
-13. **For pushing to GitHub**, all INSTRUCTIONS.md files must include the conditional push command (see Push Command section). The old `REPLIT_PUSH_SCRIPT.sh` and `github-push.sh` are both deprecated.
+13. **[DEPRECATED — Replit frozen]** ~~INSTRUCTIONS.md push command~~ Push directly via `git push origin migration/aws-supabase`.
 14. **Google Drive cache warning**: Do not clear Google Drive for Desktop's application cache while the clone repo is on Google Drive. If the cache must be cleared, back up `.git/objects/pack/` first. See Google Drive Cache Warning section for recovery procedure.
-15. **One mega-batch per phase.** Don't break phases into sub-batches. Each roadmap phase is one scope document, one code batch, one governance batch. Discuss with Kyle before splitting.
-16. **Every batch produces a zip.** No exceptions. The zip contains modified files in repo-relative paths, INSTRUCTIONS.md, and README.md. Without a zip, the work can't reach Replit.
+15. **[DEPRECATED — Replit frozen]** ~~One mega-batch per phase~~ Batches are now scoped per task, not forced to match phases.
+16. **[DEPRECATED — Replit frozen]** ~~Every batch produces a zip~~ No zips post-Replit. Code changes are committed and pushed directly.
 17. **Pre-implementation audit before every phase.** Read every source file that will be touched. Verify all assumptions about imports, consumers, and dependencies. Kyle catches oversights — be thorough.
 18. **Communicate deviations clearly.** When troubleshooting or changing architecture, any deviation from the established setup must be explicitly called out in plain English before implementation. Technical changes cannot be buried in technical speak — Kyle must understand what's changing and why. If the change alters which systems are active, which tools are available, or how actors interact, it requires Kyle's explicit approval first.
 19. **Don't confabulate when context is degraded.** When context has been compacted or is approaching limits, flag uncertainty explicitly. Never state information confidently that may have been lost or compressed during compaction. If unsure, say "I'm not certain — my context has been compacted" rather than guessing. Wrong information delivered confidently is worse than admitting uncertainty.
