@@ -1166,6 +1166,14 @@ Total: 21 bugs, 65 risks.
 - **Resolution**: Moved timeout check (`holdDurationMs > MAX_HOLD_MS`) BEFORE the price availability check. Trades older than 24 hours are force-closed using live price if available, or entry price as fallback (0% gross P&L minus friction).
 - **Phase Found**: Post-Batch 18H monitoring (2026-03-11)
 
+### BUG-029: Pattern-Strategy Mismatch — Global Best Pattern Sent to All Strategies — **RESOLVED**
+- **Severity**: ~~HIGH~~ **RESOLVED** (Batch 57, commits `fb15bd34`, `b2822a3f`, 2026-04-10 to 2026-04-11)
+- **Location**: `server/services/vts-runner.ts`, `server/services/signal-orchestrator.ts`, `server/services/strategies/adaptive-flow.ts`
+- **Problem**: Both VTS and active trading path sent the single globally-strongest detected pattern to ALL strategies during signal generation. Each strategy received the same `patternInput` regardless of whether the pattern matched that strategy. Result: strategies that required a specific pattern (e.g., adaptive-flow needs THREE_SOLDIERS/MORNING_STAR) received mismatched patterns and returned "No Pattern Detected" nulls. Active trading path was worse — no strategy filtering at all. Additionally, adaptive-flow.ts had a pre-existing canonicalization bug: THREE_SOLDIERS canonicalizes to MORNING_STAR but the strategy only accepted THREE_SOLDIERS.
+- **Impact**: ~125K "No Pattern Detected" nulls per 24h. "No Pattern Detected" was the #1 null reason at 38% of all pattern-path nulls. After fix, dropped to negligible. Post-fix, "Volume Confirmation Failed" became #1 pattern-path null reason (302 pattern vs 42 quant).
+- **Resolution**: Batch 57 introduced `buildPatternInputForStrategy()` in signal-orchestrator.ts — each strategy now receives only its matching pattern. VTS runner updated with same per-strategy pattern routing. adaptive-flow.ts updated to accept both THREE_SOLDIERS and MORNING_STAR.
+- **Phase Found**: Batch 57 investigation (2026-04-10)
+
 ### BUG-028: Fee Constants Fragmented — 4 Files Using Hardcoded Pre-Unification Values — **RESOLVED**
 - **Severity**: ~~MEDIUM~~ **RESOLVED** (Batch 18J, commit `5eae1601`, 2026-03-11)
 - **Location**: `paper-execution-engine.ts`, `routes.ts` (2 locations), `adaptive-thresholds.ts`, `cost-metrics.ts`

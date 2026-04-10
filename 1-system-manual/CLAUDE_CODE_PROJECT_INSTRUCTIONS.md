@@ -867,14 +867,14 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last Updated**: 2026-04-10 (B56)
-> **Last commit (migration branch)**: `753ac837` (B56: CI Green — dead file purge + test/TS fixes)
+> **Last Updated**: 2026-04-11 (B57)
+> **Last commit (migration branch)**: `b2822a3f` (B57: Pattern-strategy mismatch fix + pool-split null reasons)
 > **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
 > **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS producing signals
 > **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
-> **Active batch**: Batch 56 COMPLETE (CI Green — 23 dead files deleted, 77 test failures fixed, 314 TS errors resolved, all 4 CI checks green)
+> **Active batch**: Batch 57 COMPLETE (Pattern-strategy mismatch fix in VTS + active path, pool-split null reasons, adaptive-flow canonicalization fix)
 > **Next step**: Phase 11.8 Finalization planning. 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data.
-> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 55**: Full Walter/CWQI/NGC purge — 116 files, -8261 lines. **Batch 56**: CI Green — 23 dead files deleted, 77→0 test failures, 314→2 TS errors (remaining 2 local npm issue), 821 tests passing, all 4 CI checks green for first time. **Langston is GPT-5.4 permanently.**
+> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 57**: Pattern-strategy mismatch fix — each strategy now receives its matching pattern instead of global best. "No Pattern Detected" null reason dropped from 38% to negligible. Pool-split null reasons added. **Langston is GPT-5.4 permanently.**
 
 ### Snapshot Log
 | Snapshot | Commit | Description |

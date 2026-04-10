@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-04-09 (Batch 54 — Hardcoded defaults removed, DB sole authority for filter thresholds)
+> **Last Updated**: 2026-04-11 (Batch 57 — Pattern-strategy mismatch fix, pool-split null reasons)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -230,6 +230,7 @@
 - **Blast Radius**: **CRITICAL** — every signal in the system flows through here
 - **Contamination**: ~~NGC→DI (BUG-004)~~ **RESOLVED**, ~~dual friction (RISK-009)~~ **RESOLVED**, ~~legacy DSS routing (BUG-006)~~ **RESOLVED** (Directive 12.3.1)
 - **Tests**: `signal-scoring.test.ts`, `runtime_signal_consistency.test.ts`, `finalScore-kernel.test.ts`
+- **Batch 57**: Pattern-strategy mismatch fixed — `buildPatternInputForStrategy()` ensures each strategy receives only its matching pattern instead of the global best. Previously all strategies received the single globally-strongest pattern, causing massive "No Pattern Detected" nulls.
 
 ### 4.2 Signal Quality Evaluator (SQE)
 - **File**: `server/core/filters/signal_quality_evaluator.ts`
@@ -370,6 +371,7 @@
 - **Batch 44**: Quant-pool pairs no longer sprayed against pattern strategies. Pattern routing uses normalizePatternToCanonical() as single source of truth. Duplicate scanPatterns() removed for pattern-pool pairs. FX5 scan diagnostics persist to `logs/fx5_diagnostics/`.
 - **Batch 45**: Bearish strategies disabled in long-only VTS: `liquidity_trap` (bearish by design), `DHMA` short branch, `inside_bar_reversal` SELL path. 5-min post-close re-entry cooldown prevents runaway loops. `sourcePool` propagated to closed trades. `expectedEdge` stored on open trade and used in API (replaces `predictiveConfidence` default).
 - **Batch 46**: Governance state persistence loaded via import (`governance-persistence.ts`).
+- **Batch 57**: Pattern-strategy mismatch fixed — per-strategy pattern routing matches VTS behavior to signal-orchestrator fix. Pool-split null reason tracking added (quant pool vs pattern pool breakdown in null reason counters). adaptive-flow.ts THREE_SOLDIERS/MORNING_STAR canonicalization bug fixed.
 - **Tests**: `vts-modernization.test.ts`, `vts-signal-generation.test.ts`
 
 ### 7.2 VTS Service

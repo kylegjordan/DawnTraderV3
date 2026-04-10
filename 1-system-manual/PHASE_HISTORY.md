@@ -343,6 +343,7 @@ As of Batch 55 (2026-04-10):
 - **Running Issues: 37 RESOLVED, 1 DEFERRED, 0 OPEN.**
 - **Batch 55 (2026-04-10):** Full Walter/CWQI/NGC purge — 116 files changed, 8261 lines removed. Completes Directive 12.2.3 (Walter legacy code) and UNIFY-002 (CWQI/NGC metric removal). quality_index.ts gutted to active signal metric helpers only. This is the final legacy code purge originally scoped under Phase 12 Directive 12.2.3 and UNIFY-002.
 - **Batch 56 (2026-04-10):** CI Green — deleted 23 dead files, fixed 77 test failures, resolved 314 TS errors. All 4 CI checks green (TypeScript, Tests 821 pass, Build, Docker) for the first time in project history. Langston file-by-file importer audit approved all deletions.
+- **Batch 57 (2026-04-10 to 2026-04-11):** Pattern-strategy mismatch fix + pool-split null reasons. Fixed pattern-strategy mismatch in both VTS and active trading path — each strategy now receives its matching pattern instead of the global best. Added quant/pattern pool-level breakdown to null reason tracking. Fixed adaptive-flow.ts THREE_SOLDIERS/MORNING_STAR canonicalization. "No Pattern Detected" dropped from 38% to negligible.
 - **Next: Phase 11.8 Finalization** (Adjustment Framework 11.8B-E + Authority Baseline 11.8C).
 - **Revised roadmap (Kyle directive 2026-04-09):** 11.8 → 15+16 (combined) → 19 → 20 → 21 (go live) → XStocks/Perpetuals → ML Design → ML Implementation → Publication.
 
