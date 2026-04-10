@@ -2390,6 +2390,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       const patternEvals = (ve as any).patternStrategyEvaluations ?? 0;
                       const pct = (n: number) => totalStratNulls > 0 ? Math.round(n / totalStratNulls * 100) : 0;
                       const poolFmt = (count: number, evals: number) => evals > 0 ? `${fmt(count)} / ${fmt(evals)}` : fmt(count);
+                      const poolCount = (count: number) => fmt(count);
                       const pctOfEvals = (n: number) => totalEvals > 0 ? Math.round(n / totalEvals * 100) : 0;
                       const reasonLabels: Record<string, string> = {
                         'unknown': 'Not Yet Instrumented',
@@ -2429,8 +2430,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2 font-medium">Category</th>
-                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant (null / evals)</th>}
-                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern (null / evals)</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant Pool</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern Pool</th>}
                                 <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
                                 <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
                               </tr>
@@ -2456,8 +2457,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                                     {groupEntries.map(({ key, count }) => (
                                       <tr key={key} className="border-b hover:bg-muted/20">
                                         <td className="p-2 pl-10 text-xs text-muted-foreground">↳ {reasonLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
-                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{poolFmt(quantDetail?.[key] ?? 0, quantEvals)}</td>}
-                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{poolFmt(patternDetail?.[key] ?? 0, patternEvals)}</td>}
+                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{poolCount(quantDetail?.[key] ?? 0)}</td>}
+                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{poolCount(patternDetail?.[key] ?? 0)}</td>}
                                         <td className="p-2 text-right text-xs text-orange-400">{fmt(count)}</td>
                                         <td className="p-2 text-right text-xs text-muted-foreground">{pct(count)}%</td>
                                       </tr>
@@ -2481,8 +2482,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2 font-medium">Category</th>
-                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant (null / evals)</th>}
-                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern (null / evals)</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant Pool</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern Pool</th>}
                                 <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
                                 <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
                               </tr>
@@ -2490,29 +2491,29 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <tbody>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Duplicate Position</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(quantDetail?.['duplicate_position'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(patternDetail?.['duplicate_position'] ?? 0, patternEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(quantDetail?.['duplicate_position'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(patternDetail?.['duplicate_position'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.duplicatePosition ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.duplicatePosition ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Max Open Trades</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(quantDetail?.['max_open_trades'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(patternDetail?.['max_open_trades'] ?? 0, patternEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(quantDetail?.['max_open_trades'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(patternDetail?.['max_open_trades'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.maxOpenTrades ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.maxOpenTrades ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Regime Has No Strategies</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(quantDetail?.['regime_no_strategies'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(patternDetail?.['regime_no_strategies'] ?? 0, patternEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(quantDetail?.['regime_no_strategies'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(patternDetail?.['regime_no_strategies'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.regimeNoStrategies ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.regimeNoStrategies ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Family Filter Mismatch</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(quantDetail?.['family_filter_mismatch'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(patternDetail?.['family_filter_mismatch'] ?? 0, patternEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(quantDetail?.['family_filter_mismatch'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCount(patternDetail?.['family_filter_mismatch'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.familyFilterMismatch ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.familyFilterMismatch ?? 0)}%</td>
                               </tr>
@@ -2525,8 +2526,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2 font-medium">Category</th>
-                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant (null / evals)</th>}
-                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern (null / evals)</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant Pool</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern Pool</th>}
                                 <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
                                 <th className="text-right p-2 font-medium">% of Evaluations</th>
                               </tr>
@@ -2534,8 +2535,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <tbody>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Net EV Below Floor</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{poolFmt(quantDetail?.['net_ev_rejected'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{poolFmt(patternDetail?.['net_ev_rejected'] ?? 0, patternEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{poolCount(quantDetail?.['net_ev_rejected'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{poolCount(patternDetail?.['net_ev_rejected'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-red-500">{fmt(rejectedReasons?.netEvBelowFloor ?? 0)}</td>
                                 <td className="p-2 text-right">{pctOfEvals(rejectedReasons?.netEvBelowFloor ?? 0)}%</td>
                               </tr>
