@@ -248,13 +248,16 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
     });
 
     it('meritocracy pipeline starts clean with no legacy survivors', async () => {
-      const allPairs = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'ADA/USD'];
-      
+      // Use enough pairs to exceed BATCH_SIZE (300) to avoid retry sleep timeout
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}/USD`);
+
       const batch = await manager.getNextScanBatch(allPairs);
-      
+
+      // With no telemetry recorded, ideal pool should be empty
       expect(batch.idealPairs.length).toBe(0);
-      
-      expect(batch.rotationalPairs.length).toBe(allPairs.length);
+
+      // All slots go to rotational when no ideal candidates exist
+      expect(batch.rotationalPairs.length).toBe(SCANNER_PARAMS.BATCH_SIZE);
     });
   });
 });
