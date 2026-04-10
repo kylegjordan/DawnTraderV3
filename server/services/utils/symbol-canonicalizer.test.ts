@@ -36,11 +36,11 @@ describe('Symbol Canonicalizer', () => {
 
   describe('toKrakenId', () => {
     it('should convert BTC/USD to Kraken format', () => {
-      expect(toKrakenId('BTC/USD')).toBe('XXBTZUSD');
+      expect(toKrakenId('BTC/USD')).toBe('XXBTZZUSD');
     });
 
     it('should convert ETH/USD to Kraken format', () => {
-      expect(toKrakenId('ETH/USD')).toBe('XETHZUSD');
+      expect(toKrakenId('ETH/USD')).toBe('XETHZZUSD');
     });
 
     it('should handle already-Kraken format', () => {

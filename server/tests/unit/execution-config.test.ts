@@ -41,8 +41,8 @@ describe('[11.0D] EXECUTION_CONFIG Validation', () => {
   it('correctly calculates adaptive position size expansion', () => {
     const baseSize = 100;
     const expandedSize = baseSize * EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR;
-    
-    expect(expandedSize).toBe(110);
+
+    expect(expandedSize).toBeCloseTo(110, 5);
   });
 
   it('correctly calculates adaptive position size contraction', () => {

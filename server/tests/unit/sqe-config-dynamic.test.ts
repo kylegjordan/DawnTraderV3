@@ -95,16 +95,18 @@ describe('[11.0D] SQE Dynamic Configuration', () => {
         confidence: 1.5,
         regimeWeight: 1.5
       };
-      
+
       expect(calculateFinalScore(highMetrics)).toBeLessThanOrEqual(1);
-      
+
+      // Directive 11.0E: Negative FinalScore throws (safety hook),
+      // so use low-but-positive inputs that won't go negative
       const lowMetrics = {
-        hybridScore: 0,
-        confidence: 0,
-        regimeWeight: 0,
-        decayPenalty: 1
+        hybridScore: 0.01,
+        confidence: 0.01,
+        regimeWeight: 0.01,
+        decayPenalty: 0.05
       };
-      
+
       expect(calculateFinalScore(lowMetrics)).toBeGreaterThanOrEqual(0);
     });
   });

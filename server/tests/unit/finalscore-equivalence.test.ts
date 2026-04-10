@@ -87,15 +87,18 @@ describe('Directive 11.0E — FinalScore Equivalence Tests', () => {
         regimeWeight: 1.5,
         decayPenalty: 0,
       };
-      
-      const lowMetrics: SignalMetrics = {
-        hybridScore: -0.5,
-        confidence: -0.5,
-        regimeWeight: -0.5,
-        decayPenalty: 2.0,
-      };
-      
+
       expect(calculateFinalScore(highMetrics)).toBeLessThanOrEqual(1);
+
+      // Directive 11.0E: Negative FinalScore throws (safety hook),
+      // so use low-but-positive inputs to verify lower clamp
+      const lowMetrics: SignalMetrics = {
+        hybridScore: 0.01,
+        confidence: 0.01,
+        regimeWeight: 0.01,
+        decayPenalty: 0.05,
+      };
+
       expect(calculateFinalScore(lowMetrics)).toBeGreaterThanOrEqual(0);
     });
     

@@ -22,6 +22,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
         hybridScore: 0.75,
         regimeWeight: 0.6,
         predictiveConfidence: 0.7,
+        caller: 'vts',
       });
 
       const stats = telemetry.getAllPairStats();
@@ -32,6 +33,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
       for (let i = 0; i < 5; i++) {
         telemetry.recordPairTelemetry('ETHUSD', {
           finalScore: 0.7 + i * 0.05,
+          caller: 'vts',
         });
       }
 
@@ -42,13 +44,12 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
   });
 
   describe('getCompositeScore', () => {
-    it('returns 0 for pairs with insufficient samples', () => {
-      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.9 });
-      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.85 });
-      // Only 2 samples, less than MIN_SAMPLES (3)
+    it('returns score even with few samples (Directive 11.4B.2-R1: minSamples removed)', () => {
+      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.9, caller: 'vts' });
+      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.85, caller: 'vts' });
 
       const score = telemetry.getCompositeScore('BTCUSD');
-      expect(score).toBe(0);
+      expect(score).toBeGreaterThan(0);
     });
 
     it('calculates weighted composite score with enough samples', () => {
@@ -58,6 +59,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
           hybridScore: 0.7,
           regimeWeight: 0.6,
           predictiveConfidence: 0.5,
+          caller: 'vts',
         });
       }
 
@@ -73,6 +75,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
           hybridScore: 1.0,
           regimeWeight: 1.0,
           predictiveConfidence: 1.0,
+          caller: 'vts',
         });
       }
 
@@ -109,6 +112,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
             hybridScore: pair.score * 0.8,
             regimeWeight: pair.score * 0.6,
             predictiveConfidence: 0.5,
+            caller: 'vts',
           });
         }
       }
@@ -123,7 +127,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
     it('returns undersampled pairs for exploration', () => {
       // Only add telemetry for some pairs
       for (let i = 0; i < 5; i++) {
-        telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.8 });
+        telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.8, caller: 'vts' });
       }
 
       const allPairs = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD'];
@@ -177,12 +181,14 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
         finalScore: 0.8,
         decayedStrength: 0.7,
         timeframe: '1h',
+        caller: 'vts',
       });
 
       telemetry.recordPairTelemetry('ETHUSD', {
         finalScore: 0.75,
         decayedStrength: 0.5,
         timeframe: '1h',
+        caller: 'vts',
       });
 
       const report = telemetry.getTimeframeEfficiencyReport();
@@ -195,7 +201,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
 
   describe('clear', () => {
     it('clears all telemetry data', () => {
-      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.8 });
+      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.8, caller: 'vts' });
       telemetry.recordCascadeEfficiency(100, 20, 5);
 
       telemetry.clear();

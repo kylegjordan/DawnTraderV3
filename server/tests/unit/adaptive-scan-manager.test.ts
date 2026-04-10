@@ -102,13 +102,14 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
       telemetry = new TelemetryAggregatorService();
       failureTracker = new PairFailureTracker();
       manager = new AdaptiveScanManager(telemetry, failureTracker);
+      manager.setAdaptiveRatioEnabled(false); // Use static ratios in tests (no DB)
     });
 
     it('returns batch with ideal and rotational pairs', async () => {
-      const allPairs = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD', 'DOGEUSD'];
-      
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
+
       const batch = await manager.getNextScanBatch(allPairs);
-      
+
       expect(batch).toBeDefined();
       expect(batch.idealPairs).toBeDefined();
       expect(batch.rotationalPairs).toBeDefined();
@@ -116,33 +117,36 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
       expect(batch.totalBatch.length).toBeGreaterThan(0);
     });
 
-    it('excludes failed pairs from batch', async () => {
+    it('does not exclude failed pairs (Batch 52: cooldown removed)', async () => {
       failureTracker.recordFailure('BTCUSD', 'error');
-      
-      const allPairs = ['BTCUSD', 'ETHUSD', 'SOLUSD'];
+
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       const batch = await manager.getNextScanBatch(allPairs);
-      
-      expect(batch.excludedPairs).toContain('BTCUSD');
-      expect(batch.totalBatch).not.toContain('BTCUSD');
+
+      // Batch 52: PairFailureTracker cooldown removed from scan batch selection
+      expect(batch.excludedPairs).toHaveLength(0);
     });
 
-    it('records scan results to telemetry', () => {
+    it('recordScanResult is no-op (Batch 52: cooldown removed, Directive 11.4C-R2: VTS is sole writer)', () => {
+      // Batch 52 disabled PairFailureTracker recording in recordScanResult
+      // Directive 11.4C-R2: Only VTS writes telemetry directly
       manager.recordScanResult('BTCUSD', true, {
         finalScore: 0.85,
         hybridScore: 0.75,
         regimeWeight: 0.6,
         predictiveConfidence: 0.7,
       });
-      
-      // Verify telemetry has the data
+
+      // recordScanResult no longer writes to telemetry
       const stats = telemetry.getAllPairStats();
-      expect(stats.has('BTCUSD')).toBe(true);
+      expect(stats.has('BTCUSD')).toBe(false);
     });
 
-    it('records failures to failure tracker', () => {
+    it('recordScanResult does not record failures (Batch 52: cooldown removed)', () => {
       manager.recordScanResult('ETHUSD', false, { failureReason: 'timeout' });
-      
-      expect(failureTracker.isInCooldown('ETHUSD')).toBe(true);
+
+      // Batch 52: PairFailureTracker recording disabled
+      expect(failureTracker.isInCooldown('ETHUSD')).toBe(false);
     });
 
     it('isAdaptiveEnabled returns config value', () => {
@@ -160,11 +164,11 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
     });
 
     it('stores last batch for retrieval', async () => {
-      const allPairs = ['BTCUSD', 'ETHUSD'];
-      
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
+
       await manager.getNextScanBatch(allPairs);
       const lastBatch = manager.getLastBatch();
-      
+
       expect(lastBatch).not.toBeNull();
       expect(lastBatch?.timestamp).toBeDefined();
     });
@@ -175,6 +179,7 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
       const telemetry = new TelemetryAggregatorService();
       const failureTracker = new PairFailureTracker();
       const manager = new AdaptiveScanManager(telemetry, failureTracker);
+      manager.setAdaptiveRatioEnabled(false);
       
       // Seed telemetry with enough data for reliable ranking
       for (let i = 0; i < 20; i++) {
@@ -185,15 +190,15 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
             hybridScore: Math.random() * 0.5,
             regimeWeight: Math.random() * 0.3,
             predictiveConfidence: 0.5,
+            caller: 'vts',
           });
         }
       }
       
-      const allPairs = Array.from({ length: 100 }, (_, i) => `PAIR${i}USD`);
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       const batch = await manager.getNextScanBatch(allPairs);
-      
-      // With 100 pairs and 60/40 split, we expect approximately 60 ideal and 40 rotational
-      // But since rotational excludes ideal pairs, actual counts may vary
+
+      // With 400 pairs and 60/40 split, ideal comes from telemetry and rotational from allPairs
       expect(batch.idealPairs.length + batch.rotationalPairs.length).toBeLessThanOrEqual(SCANNER_PARAMS.BATCH_SIZE);
     });
   });

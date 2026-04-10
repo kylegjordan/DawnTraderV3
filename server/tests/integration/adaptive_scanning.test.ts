@@ -123,9 +123,10 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
     it('should include ratioUsed in scan batch', async () => {
       const { AdaptiveScanManager } = await import('../../services/adaptive-scan-manager.js');
       const scanManager = new AdaptiveScanManager();
-      
-      const batch = await scanManager.getNextScanBatch(['BTC/USD', 'ETH/USD', 'XRP/USD']);
-      
+
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
+      const batch = await scanManager.getNextScanBatch(allPairs);
+
       expect(batch).toHaveProperty('idealPairs');
       expect(batch).toHaveProperty('rotationalPairs');
       expect(batch).toHaveProperty('totalBatch');
@@ -145,10 +146,11 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
     it('should toggle adaptive ratio enabled/disabled', async () => {
       const { AdaptiveScanManager } = await import('../../services/adaptive-scan-manager.js');
       const scanManager = new AdaptiveScanManager();
-      
+
       scanManager.setAdaptiveRatioEnabled(false);
-      const batch = await scanManager.getNextScanBatch(['BTC/USD', 'ETH/USD']);
-      
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
+      const batch = await scanManager.getNextScanBatch(allPairs);
+
       expect(batch.ratioUsed).toBeUndefined();
     });
   });
@@ -159,11 +161,11 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
       const aggregator = new TelemetryAggregatorService();
       
       // Record ideal pool telemetry
-      aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, success: true, pool: 'ideal' });
-      aggregator.recordPairTelemetry('ETH/USD', { finalScore: 0.7, success: true, pool: 'ideal' });
+      aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, success: true, pool: 'ideal', caller: 'vts' });
+      aggregator.recordPairTelemetry('ETH/USD', { finalScore: 0.7, success: true, pool: 'ideal', caller: 'vts' });
       
       // Record rotational pool telemetry  
-      aggregator.recordPairTelemetry('XRP/USD', { finalScore: 0.5, success: false, pool: 'rotational' });
+      aggregator.recordPairTelemetry('XRP/USD', { finalScore: 0.5, success: false, pool: 'rotational', caller: 'vts' });
       
       const comparison = aggregator.getPoolPerformanceComparison();
       
@@ -178,7 +180,7 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
       
       // Seed some data
       for (let i = 0; i < 5; i++) {
-        aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, pool: 'ideal' });
+        aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, pool: 'ideal', caller: 'vts' });
       }
       
       const topPairs = aggregator.getTopPairsWithPool(0.7);
@@ -194,8 +196,8 @@ describe('Directive 11.2 R1: Adaptive Scanning Fairness', () => {
       const { TelemetryAggregatorService } = await import('../../services/telemetry-aggregator.js');
       const aggregator = new TelemetryAggregatorService();
       
-      aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, success: true, pool: 'ideal' });
-      
+      aggregator.recordPairTelemetry('BTC/USD', { finalScore: 0.8, success: true, pool: 'ideal', caller: 'vts' });
+
       const before = aggregator.getPoolPerformanceComparison();
       expect(before.ideal.sampleCount).toBeGreaterThan(0);
       

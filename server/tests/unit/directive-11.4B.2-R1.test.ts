@@ -31,6 +31,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
         predictiveConfidence: 0.5,
         success: true,
         pool: 'ideal',
+        caller: 'vts',
       });
       
       const idealPairs = telemetry.getTopPairs(10);
@@ -45,6 +46,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
         predictiveConfidence: 0,
         success: false,
         pool: 'ideal',
+        caller: 'vts',
       });
       
       const idealPairs = telemetry.getTopPairs(10);
@@ -59,6 +61,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
         predictiveConfidence: 0.6,
         success: true,
         pool: 'ideal',
+        caller: 'vts',
       });
       
       const idealPairs = telemetry.getTopPairs(10);
@@ -73,6 +76,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
         predictiveConfidence: 0.5,
         success: true,
         pool: 'ideal',
+        caller: 'vts',
       });
       
       const idealPairs = telemetry.getTopPairs(10);
@@ -80,15 +84,15 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
     });
 
     it('getAvailableIdealPoolCount returns correct count (M63)', () => {
-      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.8, hybridScore: 0.7, regimeWeight: 0.9, predictiveConfidence: 0.6, success: true, pool: 'ideal' });
-      telemetry.recordPairTelemetry('ETHUSD', { finalScore: 0.7, hybridScore: 0.6, regimeWeight: 0.8, predictiveConfidence: 0.5, success: true, pool: 'ideal' });
+      telemetry.recordPairTelemetry('BTCUSD', { finalScore: 0.8, hybridScore: 0.7, regimeWeight: 0.9, predictiveConfidence: 0.6, success: true, pool: 'ideal', caller: 'vts' });
+      telemetry.recordPairTelemetry('ETHUSD', { finalScore: 0.7, hybridScore: 0.6, regimeWeight: 0.8, predictiveConfidence: 0.5, success: true, pool: 'ideal', caller: 'vts' });
       
       const count = telemetry.getAvailableIdealPoolCount();
       expect(count).toBe(2);
     });
 
     it('rotational pool includes pairs with no entries (M63)', () => {
-      telemetry.recordPairTelemetry('ETHUSD', { finalScore: 0.8, hybridScore: 0.7, regimeWeight: 0.9, predictiveConfidence: 0.6, success: true, pool: 'ideal' });
+      telemetry.recordPairTelemetry('ETHUSD', { finalScore: 0.8, hybridScore: 0.7, regimeWeight: 0.9, predictiveConfidence: 0.6, success: true, pool: 'ideal', caller: 'vts' });
       
       const allPairs = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD', 'ADAUSD'];
       const rotationalPairs = telemetry.getRotationalPairs(10, allPairs);
@@ -126,6 +130,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
           predictiveConfidence: 0.5,
           success: true,
           pool: 'ideal',
+          caller: 'vts',
         });
       }
       
@@ -149,6 +154,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
           predictiveConfidence: 0.6,
           success: true,
           pool: 'ideal',
+          caller: 'vts',
         });
       }
       
@@ -185,6 +191,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
           predictiveConfidence: 0.6,
           success: true,
           pool: 'ideal',
+          caller: 'vts',
         });
       }
       
@@ -221,6 +228,7 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
           predictiveConfidence: 0.6,
           success: true,
           pool: 'ideal',
+          caller: 'vts',
         });
       }
       

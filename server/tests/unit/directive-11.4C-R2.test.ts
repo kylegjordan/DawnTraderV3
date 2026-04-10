@@ -22,8 +22,9 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
       telemetry = new TelemetryAggregatorService();
       failureTracker = new PairFailureTracker();
       manager = new AdaptiveScanManager(telemetry, failureTracker);
+      manager.setAdaptiveRatioEnabled(false); // Use static ratios in tests (no DB)
     });
-    
+
     it('should include retryCount in batch result', async () => {
       const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       
@@ -79,6 +80,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
         hybridScore: 0.75,
         regimeWeight: 0.6,
         predictiveConfidence: 0.7,
+        caller: 'vts',
       });
       
       const ranked = telemetry.getRankedPairs(100);
@@ -98,14 +100,17 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
       telemetry.recordPairTelemetry('LOWPAIR', {
         finalScore: 0.3,
         hybridScore: 0.2,
+        caller: 'vts',
       });
       telemetry.recordPairTelemetry('HIGHPAIR', {
         finalScore: 0.9,
         hybridScore: 0.85,
+        caller: 'vts',
       });
       telemetry.recordPairTelemetry('MIDPAIR', {
         finalScore: 0.6,
         hybridScore: 0.5,
+        caller: 'vts',
       });
       
       const ranked = telemetry.getRankedPairs(100);
@@ -124,6 +129,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
         telemetry.recordPairTelemetry(`PAIR${i}USD`, {
           finalScore: 0.5 + (i * 0.01),
           hybridScore: 0.4,
+          caller: 'vts',
         });
       }
       
@@ -139,27 +145,33 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
         finalScore: 0.85,
         hybridScore: 0.7,
         predictiveConfidence: 0.6,
+        signalType: 'HYBRID',
+        caller: 'vts',
       });
       telemetry.recordPairTelemetry('QUANTPAIR', {
         finalScore: 0.75,
         hybridScore: 0.4,
         predictiveConfidence: 0.3,
+        signalType: 'QUANT',
+        caller: 'vts',
       });
-      
+
       const ranked = telemetry.getRankedPairs(100);
-      
+
       const signalTypes = ranked.map(p => p.signalType);
-      expect(signalTypes).toContain('Hybrid');
+      expect(signalTypes).toContain('HYBRID');
     });
     
     it('should include source field with live or simulation value', () => {
       telemetry.recordPairTelemetry('LIVEPAIR', {
         finalScore: 0.8,
         source: 'live',
+        caller: 'vts',
       });
       telemetry.recordPairTelemetry('SIMPAIR', {
         finalScore: 0.7,
         source: 'simulation',
+        caller: 'vts',
       });
       
       const ranked = telemetry.getRankedPairs(100);
@@ -176,6 +188,7 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
       telemetry.recordPairTelemetry('TESTPAIR', {
         finalScore: 0.7,
         pool: 'ideal',
+        caller: 'vts',
       });
       
       const pools = telemetry.getPoolPerformanceComparison();
@@ -189,25 +202,27 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
       const telemetry = new TelemetryAggregatorService();
       const failureTracker = new PairFailureTracker();
       const manager = new AdaptiveScanManager(telemetry, failureTracker);
-      
-      const allPairs = Array.from({ length: 20 }, (_, i) => `PAIR${i}USD`);
+      manager.setAdaptiveRatioEnabled(false);
+
+      const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       const batch = await manager.getNextScanBatch(allPairs);
-      
+
       expect(batch).toHaveProperty('idealPairs');
       expect(batch).toHaveProperty('rotationalPairs');
       expect(Array.isArray(batch.idealPairs)).toBe(true);
       expect(Array.isArray(batch.rotationalPairs)).toBe(true);
-    }, 15000);
+    });
   });
   
   describe('Enhanced Diagnostics Logging', () => {
     it('should include retry count in console logs', async () => {
       const consoleSpy = vi.spyOn(console, 'log');
-      
+
       const telemetry = new TelemetryAggregatorService();
       const failureTracker = new PairFailureTracker();
       const manager = new AdaptiveScanManager(telemetry, failureTracker);
-      
+      manager.setAdaptiveRatioEnabled(false);
+
       const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       await manager.getNextScanBatch(allPairs);
       

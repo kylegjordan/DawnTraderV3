@@ -141,7 +141,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
       expect(result.targetLatched).toBe(true);
       expect(result.modeChanged).toBe(true);
       expect(result.newMode).toBe('TRAILING_TAKE');
-      expect(result.newStopPrice).toBeGreaterThanOrEqual(110);
+      // Directive 11.3A: Stop floor is netTargetFloor (cost-adjusted), slightly below gross target
+      expect(result.newStopPrice).toBeGreaterThanOrEqual(109);
     });
 
     it('should not regress stop price once latched', () => {
