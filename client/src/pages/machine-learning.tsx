@@ -2380,6 +2380,9 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     {(() => {
                       const nr = ve.nullReasons as any;
                       const detail = (ve as any).nullReasonDetail as Record<string, number> | undefined;
+                      const quantDetail = (ve as any).quantNullReasonDetail as Record<string, number> | undefined;
+                      const patternDetail = (ve as any).patternNullReasonDetail as Record<string, number> | undefined;
+                      const hasPoolDetail = !!(quantDetail && Object.keys(quantDetail).length > 0) || !!(patternDetail && Object.keys(patternDetail).length > 0);
                       const rejectedReasons = (ve as any).rejectedReasons as Record<string, number> | undefined;
                       const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
                       const totalEvals = ve.totalStrategyEvaluations || 1;
@@ -2423,13 +2426,17 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2 font-medium">Category</th>
-                                <th className="text-right p-2 font-medium">Count</th>
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant Pool</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern Pool</th>}
+                                <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
                                 <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
                               </tr>
                             </thead>
                             <tbody>
                               <tr className="border-b hover:bg-muted/30 font-medium">
                                 <td className="p-2">Strategy Conditions Not Met</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt((ve.quantStrategyNulls ?? 0))}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(((ve as any).patternStrategyNulls ?? 0))}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.conditionsNotMet ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.conditionsNotMet ?? 0)}%</td>
                               </tr>
@@ -2441,11 +2448,13 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                                 return (
                                   <React.Fragment key={group.label}>
                                     <tr className="bg-muted/10">
-                                      <td colSpan={3} className="p-1.5 pl-6 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</td>
+                                      <td colSpan={hasPoolDetail ? 5 : 3} className="p-1.5 pl-6 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</td>
                                     </tr>
                                     {groupEntries.map(({ key, count }) => (
                                       <tr key={key} className="border-b hover:bg-muted/20">
                                         <td className="p-2 pl-10 text-xs text-muted-foreground">↳ {reasonLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{fmt(quantDetail?.[key] ?? 0)}</td>}
+                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{fmt(patternDetail?.[key] ?? 0)}</td>}
                                         <td className="p-2 text-right text-xs text-orange-400">{fmt(count)}</td>
                                         <td className="p-2 text-right text-xs text-muted-foreground">{pct(count)}%</td>
                                       </tr>
@@ -2455,6 +2464,8 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                               })}
                               <tr className="border-b hover:bg-muted/30 font-medium">
                                 <td className="p-2">ADX Guard</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(nr.adxGuard ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">—</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.adxGuard ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.adxGuard ?? 0)}%</td>
                               </tr>
@@ -2467,28 +2478,38 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2 font-medium">Category</th>
-                                <th className="text-right p-2 font-medium">Count</th>
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant Pool</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern Pool</th>}
+                                <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
                                 <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
                               </tr>
                             </thead>
                             <tbody>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Duplicate Position</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(quantDetail?.['duplicate_position'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(patternDetail?.['duplicate_position'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.duplicatePosition ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.duplicatePosition ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Max Open Trades</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(quantDetail?.['max_open_trades'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(patternDetail?.['max_open_trades'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.maxOpenTrades ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.maxOpenTrades ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Regime Has No Strategies</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(quantDetail?.['regime_no_strategies'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(patternDetail?.['regime_no_strategies'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.regimeNoStrategies ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.regimeNoStrategies ?? 0)}%</td>
                               </tr>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Family Filter Mismatch</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(quantDetail?.['family_filter_mismatch'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(patternDetail?.['family_filter_mismatch'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.familyFilterMismatch ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.familyFilterMismatch ?? 0)}%</td>
                               </tr>
@@ -2501,13 +2522,17 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                             <thead>
                               <tr className="border-b bg-muted/30">
                                 <th className="text-left p-2 font-medium">Category</th>
-                                <th className="text-right p-2 font-medium">Count</th>
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant Pool</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern Pool</th>}
+                                <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
                                 <th className="text-right p-2 font-medium">% of Evaluations</th>
                               </tr>
                             </thead>
                             <tbody>
                               <tr className="border-b hover:bg-muted/30">
                                 <td className="p-2">Net EV Below Floor</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{fmt(quantDetail?.['net_ev_rejected'] ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{fmt(patternDetail?.['net_ev_rejected'] ?? 0)}</td>}
                                 <td className="p-2 text-right text-red-500">{fmt(rejectedReasons?.netEvBelowFloor ?? 0)}</td>
                                 <td className="p-2 text-right">{pctOfEvals(rejectedReasons?.netEvBelowFloor ?? 0)}%</td>
                               </tr>

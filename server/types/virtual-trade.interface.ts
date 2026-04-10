@@ -126,4 +126,6 @@ export interface VTSEvalSnapshot {
   rejectedReasons?: RejectedReasonBreakdown;  // Batch 26: post-generation guard rejections (NOT nulls)
   byStrategy: Record<string, { evaluated: number; nulls: number; signals: number; preRejectionSignals: number; rejected: number }>;
   nullReasonDetail?: Record<string, number>;  // Batch 31: granular strategy null reason counts
+  quantNullReasonDetail?: Record<string, number>;  // Batch 57: pool-level null reason breakdown
+  patternNullReasonDetail?: Record<string, number>;  // Batch 57: pool-level null reason breakdown
 }

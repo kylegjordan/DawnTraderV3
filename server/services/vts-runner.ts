@@ -234,6 +234,8 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     },
     byStrategy: {},
     nullReasonDetail: {},
+    quantNullReasonDetail: {},
+    patternNullReasonDetail: {},
   };
 
   for (const snap of vtsEvalHistory) {
@@ -296,6 +298,19 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
       if (!aggregated.nullReasonDetail) { aggregated.nullReasonDetail = {}; }
       for (const [reason, count] of Object.entries(snap.nullReasonDetail)) {
         aggregated.nullReasonDetail![reason] = (aggregated.nullReasonDetail![reason] ?? 0) + count;
+      }
+    }
+    // Batch 57: Aggregate pool-keyed null reason detail
+    if (snap.quantNullReasonDetail) {
+      if (!aggregated.quantNullReasonDetail) { aggregated.quantNullReasonDetail = {}; }
+      for (const [reason, count] of Object.entries(snap.quantNullReasonDetail)) {
+        aggregated.quantNullReasonDetail![reason] = (aggregated.quantNullReasonDetail![reason] ?? 0) + count;
+      }
+    }
+    if (snap.patternNullReasonDetail) {
+      if (!aggregated.patternNullReasonDetail) { aggregated.patternNullReasonDetail = {}; }
+      for (const [reason, count] of Object.entries(snap.patternNullReasonDetail)) {
+        aggregated.patternNullReasonDetail![reason] = (aggregated.patternNullReasonDetail![reason] ?? 0) + count;
       }
     }
   }
@@ -1661,6 +1676,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     },
     byStrategy: {} as Record<string, { evaluated: number; nulls: number; signals: number; preRejectionSignals: number; rejected: number }>,
     nullReasonDetail: {} as Record<string, number>,
+    quantNullReasonDetail: {} as Record<string, number>,
+    patternNullReasonDetail: {} as Record<string, number>,
   };
   
   // Directive 11.0E.2: Use isolated VTS cache bucket for sandboxing
@@ -1735,6 +1752,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       // Batch 23: Max open trades check
       if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
         vtsEvalCounters.nullReasons.maxOpenTrades++;
+        // Batch 57: Pool-keyed pre-eval skip
+        if (pair.sourcePool === 'pattern') {
+          if (!vtsEvalCounters.patternNullReasonDetail) { vtsEvalCounters.patternNullReasonDetail = {}; }
+          vtsEvalCounters.patternNullReasonDetail['max_open_trades'] = (vtsEvalCounters.patternNullReasonDetail['max_open_trades'] ?? 0) + 1;
+        } else {
+          if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
+          vtsEvalCounters.quantNullReasonDetail['max_open_trades'] = (vtsEvalCounters.quantNullReasonDetail['max_open_trades'] ?? 0) + 1;
+        }
         continue; // Skip this pair — portfolio full
       }
       const priceData = priceDataMap.get(pair.symbol);
@@ -1826,6 +1851,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         if (effectiveStrategies.length === 0) {
           vtsEvalCounters.nullReasons.regimeNoStrategies++;
+          // Batch 57: Pool-keyed pre-eval skip (pattern branch)
+          if (!vtsEvalCounters.patternNullReasonDetail) { vtsEvalCounters.patternNullReasonDetail = {}; }
+          vtsEvalCounters.patternNullReasonDetail['regime_no_strategies'] = (vtsEvalCounters.patternNullReasonDetail['regime_no_strategies'] ?? 0) + 1;
           continue;
         }
 
@@ -1872,6 +1900,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         if (effectiveStrategies.length === 0) {
           vtsEvalCounters.nullReasons.regimeNoStrategies++;
+          // Batch 57: Pool-keyed pre-eval skip (quant branch)
+          if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
+          vtsEvalCounters.quantNullReasonDetail['regime_no_strategies'] = (vtsEvalCounters.quantNullReasonDetail['regime_no_strategies'] ?? 0) + 1;
           continue;
         }
 
@@ -1892,6 +1923,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           // Do NOT count it in totalStrategyEvaluations, byStrategy, or null counters.
           // This keeps the detect()-level null rate honest.
           vtsEvalCounters.nullReasons.familyFilterMismatch++;
+          // Batch 57: Pool-keyed pre-eval skip
+          if (pair.sourcePool === 'pattern') {
+            if (!vtsEvalCounters.patternNullReasonDetail) { vtsEvalCounters.patternNullReasonDetail = {}; }
+            vtsEvalCounters.patternNullReasonDetail['family_filter_mismatch'] = (vtsEvalCounters.patternNullReasonDetail['family_filter_mismatch'] ?? 0) + 1;
+          } else {
+            if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
+            vtsEvalCounters.quantNullReasonDetail['family_filter_mismatch'] = (vtsEvalCounters.quantNullReasonDetail['family_filter_mismatch'] ?? 0) + 1;
+          }
           continue; // Skip strategy — pair didn't survive this family's filter path
         }
         if (stratFamily === 'hybrid') {
@@ -1906,6 +1945,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             vtsEvalCounters.byStrategy[hybStratKey].evaluated++;
             vtsEvalCounters.byStrategy[hybStratKey].nulls++;
             vtsEvalCounters.nullReasons.familyFilterMismatch++;
+            // Batch 57: Pool-keyed pre-eval skip (hybrid family)
+            if (pair.sourcePool === 'pattern') {
+              if (!vtsEvalCounters.patternNullReasonDetail) { vtsEvalCounters.patternNullReasonDetail = {}; }
+              vtsEvalCounters.patternNullReasonDetail['family_filter_mismatch'] = (vtsEvalCounters.patternNullReasonDetail['family_filter_mismatch'] ?? 0) + 1;
+            } else {
+              if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
+              vtsEvalCounters.quantNullReasonDetail['family_filter_mismatch'] = (vtsEvalCounters.quantNullReasonDetail['family_filter_mismatch'] ?? 0) + 1;
+            }
             continue;
           }
         }
@@ -1927,6 +1974,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           vtsEvalCounters.byStrategy[dupStratKey].evaluated++;
           vtsEvalCounters.byStrategy[dupStratKey].nulls++;
           vtsEvalCounters.nullReasons.duplicatePosition++;
+          // Batch 57: Pool-keyed pre-eval skip
+          if (pair.sourcePool === 'pattern') {
+            if (!vtsEvalCounters.patternNullReasonDetail) { vtsEvalCounters.patternNullReasonDetail = {}; }
+            vtsEvalCounters.patternNullReasonDetail['duplicate_position'] = (vtsEvalCounters.patternNullReasonDetail['duplicate_position'] ?? 0) + 1;
+          } else {
+            if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
+            vtsEvalCounters.quantNullReasonDetail['duplicate_position'] = (vtsEvalCounters.quantNullReasonDetail['duplicate_position'] ?? 0) + 1;
+          }
           blockedDupCombos.add(`${pair.symbol}:${stratDef.strategyKey}`);
           continue;
         }
@@ -1974,6 +2029,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             }
             if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
             vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
+            // Batch 57: Pool-keyed null reason detail
+            if (pair.sourcePool === 'pattern') {
+              if (!vtsEvalCounters.patternNullReasonDetail) { vtsEvalCounters.patternNullReasonDetail = {}; }
+              vtsEvalCounters.patternNullReasonDetail[detailReason] = (vtsEvalCounters.patternNullReasonDetail[detailReason] ?? 0) + 1;
+            } else {
+              if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
+              vtsEvalCounters.quantNullReasonDetail[detailReason] = (vtsEvalCounters.quantNullReasonDetail[detailReason] ?? 0) + 1;
+            }
           } else {
             // True strategy null — no setup found
             vtsEvalCounters.byStrategy[stratKey].nulls++;
@@ -1985,6 +2048,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             vtsEvalCounters.nullReasons.conditionsNotMet++;
             if (!vtsEvalCounters.nullReasonDetail) { vtsEvalCounters.nullReasonDetail = {}; }
             vtsEvalCounters.nullReasonDetail[detailReason] = (vtsEvalCounters.nullReasonDetail[detailReason] ?? 0) + 1;
+            // Batch 57: Pool-keyed null reason detail
+            if (pair.sourcePool === 'pattern') {
+              if (!vtsEvalCounters.patternNullReasonDetail) { vtsEvalCounters.patternNullReasonDetail = {}; }
+              vtsEvalCounters.patternNullReasonDetail[detailReason] = (vtsEvalCounters.patternNullReasonDetail[detailReason] ?? 0) + 1;
+            } else {
+              if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
+              vtsEvalCounters.quantNullReasonDetail[detailReason] = (vtsEvalCounters.quantNullReasonDetail[detailReason] ?? 0) + 1;
+            }
           }
           continue;
         }
