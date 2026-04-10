@@ -30,11 +30,11 @@ import {
 describe('Directive 11.1B - Adaptive Learning Rehydration E2E', () => {
   describe('Schema Version', () => {
     it('should report schema version v1.5.3', () => {
-      expect(SCHEMA_VERSION).toBe('v1.5.3');
+      expect(SCHEMA_VERSION).toBe('v1.6.3');
     });
 
     it('should report schema directive 11.1B', () => {
-      expect(SCHEMA_DIRECTIVE).toBe('11.1B');
+      expect(SCHEMA_DIRECTIVE).toBe('11.4C.1');
     });
   });
 

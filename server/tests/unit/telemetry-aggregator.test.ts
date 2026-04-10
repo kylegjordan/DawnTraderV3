@@ -89,7 +89,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
 
   describe('getTopPairs', () => {
     it('returns empty array when no telemetry data', () => {
-      const topPairs = telemetry.getTopPairs(0.6);
+      const topPairs = telemetry.getTopPairs(10);
       expect(topPairs).toHaveLength(0);
     });
 
@@ -113,7 +113,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
         }
       }
 
-      const topPairs = telemetry.getTopPairs(0.5);
+      const topPairs = telemetry.getTopPairs(10);
       expect(topPairs).toContain('BTCUSD');
       expect(topPairs).toContain('ETHUSD');
     });
@@ -127,7 +127,7 @@ describe('Directive 10.8 — Telemetry Aggregator', () => {
       }
 
       const allPairs = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD'];
-      const rotational = telemetry.getRotationalPairs(0.4, allPairs);
+      const rotational = telemetry.getRotationalPairs(4, allPairs);
 
       // ETHUSD, SOLUSD, XRPUSD should be in rotational (no samples)
       expect(rotational).not.toContain('BTCUSD');

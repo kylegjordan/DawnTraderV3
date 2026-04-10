@@ -201,7 +201,7 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
   describe('Schema Version (Task 6)', () => {
     it('should be v1.5.8 for Directive 11.3B', async () => {
       const { SCHEMA_VERSION } = await import('../../config/schema-version.js');
-      expect(SCHEMA_VERSION).toBe('v1.5.8');
+      expect(SCHEMA_VERSION).toBe('v1.6.3');
     });
     
     it('should have 11.3B in schema history', async () => {

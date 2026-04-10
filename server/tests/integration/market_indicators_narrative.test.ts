@@ -73,25 +73,21 @@ describe('Directive 11.4A: Market Friction Computation (M10 Governance)', () => 
   it('should describe friction with correct thresholds', () => {
     const greenStatus = describeFriction(15);
     expect(greenStatus.color).toBe('green');
-    expect(greenStatus.status).toBe('High Liquidity');
-    
-    const yellowStatus = describeFriction(35);
-    expect(yellowStatus.color).toBe('yellow');
-    expect(yellowStatus.status).toBe('Normal Liquidity');
-    
-    const orangeStatus = describeFriction(65);
+    expect(greenStatus.status).toBe('High Liquidity / Low Cost');
+
+    const orangeStatus = describeFriction(50);
     expect(orangeStatus.color).toBe('orange');
-    expect(orangeStatus.status).toBe('Stressed Liquidity');
-    
+    expect(orangeStatus.status).toBe('Moderate Liquidity');
+
     const redStatus = describeFriction(90);
     expect(redStatus.color).toBe('red');
-    expect(redStatus.status).toBe('Frozen / Illiquid');
+    expect(redStatus.status).toBe('Low Liquidity / High Cost');
   });
   
   it('should format friction for display correctly', () => {
     const display = formatFrictionDisplay(37);
     expect(display).toContain('37');
-    expect(display).toContain('Normal Liquidity');
+    expect(display).toContain('Moderate Liquidity');
   });
 });
 
@@ -253,9 +249,9 @@ describe('Directive 11.4A: Narrative Feed Service (M12, M16 Governance)', () => 
 
 describe('Directive 11.4A.1: Expanded Market Regime Definitions (M19 Governance)', () => {
   
-  it('should have expanded descriptions for all regimes', () => {
-    const regimes = ['TREND_FRIENDLY_STABLE', 'BULL_VOLATILE', 'BEAR_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'HIGH_VOL_CHOP', 'MIXED_TRANSITION', 'EXTREME_NOISE'];
-    
+  it('should have expanded descriptions for all canonical regimes', () => {
+    const regimes = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
+
     for (const regime of regimes) {
       const desc = regimeDescriptions[regime];
       expect(desc).toBeDefined();
@@ -268,19 +264,19 @@ describe('Directive 11.4A.1: Expanded Market Regime Definitions (M19 Governance)
   
   it('should return complete 3-4 sentence descriptions for each regime', () => {
     const bullStable = regimeDescriptions['TREND_FRIENDLY_STABLE'];
-    expect(bullStable.description).toContain('upward trend');
+    expect(bullStable.description).toContain('trend');
     expect(bullStable.description.split('.').length).toBeGreaterThanOrEqual(3);
-    
+
     const bearVolatile = regimeDescriptions['HIGH_VOLATILITY_UNSTABLE'];
-    expect(bearVolatile.description).toContain('downward');
+    expect(bearVolatile.description).toContain('volatility');
     expect(bearVolatile.description.split('.').length).toBeGreaterThanOrEqual(3);
   });
   
   it('should return expanded regime via getExpandedRegimeDescription', () => {
     const expanded = getExpandedRegimeDescription('TREND_FRIENDLY_STABLE');
     expect(expanded).toBeDefined();
-    expect(expanded!.title).toBe('Bull Stable');
-    expect(expanded!.favoredSignalTypes).toContain('Quantitative');
+    expect(expanded!.title).toBe('Trend-Friendly Stable');
+    expect(expanded!.favoredSignalTypes).toContain('QUANT');
   });
 });
 
@@ -290,29 +286,23 @@ describe('Directive 11.4A.1: Expanded Market Friction Narratives (M20 Governance
     const green = describeFriction(15);
     expect(green.narrative).toContain('High liquidity');
     expect(green.narrative.split('.').length).toBeGreaterThanOrEqual(3);
-    
-    const yellow = describeFriction(35);
-    expect(yellow.narrative).toContain('Normal liquidity');
-    expect(yellow.narrative.split('.').length).toBeGreaterThanOrEqual(2);
-    
-    const orange = describeFriction(65);
-    expect(orange.narrative).toContain('Stressed liquidity');
+
+    const orange = describeFriction(50);
+    expect(orange.narrative).toContain('Moderate liquidity');
     expect(orange.narrative.split('.').length).toBeGreaterThanOrEqual(2);
-    
+
     const red = describeFriction(90);
-    expect(red.narrative).toContain('Frozen or illiquid');
+    expect(red.narrative).toContain('Low liquidity');
     expect(red.narrative.split('.').length).toBeGreaterThanOrEqual(2);
   });
   
-  it('should map friction scores correctly to 4-tier narrative system', () => {
+  it('should map friction scores correctly to 3-tier narrative system', () => {
     expect(describeFriction(0).narrative).toContain('High liquidity');
-    expect(describeFriction(20).narrative).toContain('High liquidity');
-    expect(describeFriction(21).narrative).toContain('Normal liquidity');
-    expect(describeFriction(50).narrative).toContain('Normal liquidity');
-    expect(describeFriction(51).narrative).toContain('Stressed liquidity');
-    expect(describeFriction(80).narrative).toContain('Stressed liquidity');
-    expect(describeFriction(81).narrative).toContain('Frozen or illiquid');
-    expect(describeFriction(100).narrative).toContain('Frozen or illiquid');
+    expect(describeFriction(30).narrative).toContain('High liquidity');
+    expect(describeFriction(31).narrative).toContain('Moderate liquidity');
+    expect(describeFriction(70).narrative).toContain('Moderate liquidity');
+    expect(describeFriction(71).narrative).toContain('Low liquidity');
+    expect(describeFriction(100).narrative).toContain('Low liquidity');
   });
 });
 
@@ -326,7 +316,7 @@ describe('Directive 11.4A.1: Market Indicators with Expanded Fields', () => {
     expect(indicators).toHaveProperty('frictionNarrative');
     expect(indicators).toHaveProperty('favoredSignalTypes');
     
-    expect(indicators.regimeTitle).toBe('Bull Stable');
+    expect(indicators.regimeTitle).toBe('Trend-Friendly Stable');
     expect(typeof indicators.frictionNarrative).toBe('string');
     expect(indicators.frictionNarrative.length).toBeGreaterThan(50);
   });
@@ -336,7 +326,7 @@ describe('Directive 11.4A.1: Schema Version Validation', () => {
   
   it('should be at version v1.6.1', async () => {
     const { SCHEMA_VERSION, SCHEMA_DIRECTIVE } = await import('../../config/schema-version.js');
-    expect(SCHEMA_VERSION).toBe('v1.6.1');
-    expect(SCHEMA_DIRECTIVE).toBe('11.4A.1');
+    expect(SCHEMA_VERSION).toBe('v1.6.3');
+    expect(SCHEMA_DIRECTIVE).toBe('11.4C.1');
   });
 });

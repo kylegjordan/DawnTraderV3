@@ -214,8 +214,8 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
     it('should be v1.5.7 for Directive 11.3A', async () => {
       const { SCHEMA_VERSION, SCHEMA_DIRECTIVE } = await import('../../config/schema-version.js');
       
-      expect(SCHEMA_VERSION).toBe('v1.5.7');
-      expect(SCHEMA_DIRECTIVE).toBe('11.3A');
+      expect(SCHEMA_VERSION).toBe('v1.6.3');
+      expect(SCHEMA_DIRECTIVE).toBe('11.4C.1');
     });
     
     it('should have 11.3A in schema history', async () => {

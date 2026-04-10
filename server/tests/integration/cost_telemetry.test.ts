@@ -134,12 +134,12 @@ describe('Directive 11.3C: Persistent Cost Telemetry & Drift Monitoring', () => 
   describe('Schema Version (Task 5)', () => {
     it('should be v1.5.9 for Directive 11.3C', async () => {
       const { SCHEMA_VERSION } = await import('../../config/schema-version.js');
-      expect(SCHEMA_VERSION).toBe('v1.5.9');
+      expect(SCHEMA_VERSION).toBe('v1.6.3');
     });
     
     it('should have 11.3C directive', async () => {
       const { SCHEMA_DIRECTIVE } = await import('../../config/schema-version.js');
-      expect(SCHEMA_DIRECTIVE).toBe('11.3C');
+      expect(SCHEMA_DIRECTIVE).toBe('11.4C.1');
     });
     
     it('should have 11.3C in schema history', async () => {

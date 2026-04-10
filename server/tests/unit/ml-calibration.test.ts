@@ -28,12 +28,12 @@ describe('MLCalibrationService', () => {
     
     const report = await MLCalibrationService.analyzePerformance();
     expect(report.success).toBe(false);
-    expect(report.reason).toContain('No Hybrid trades found');
+    expect(report.reason).toContain('No HYBRID trades found');
   });
 
   test('Increases weight for consistently winning pattern', async () => {
     const trades: TradeRecord[] = Array(10).fill(null).map(() => ({
-      signalType: 'Hybrid',
+      signalType: 'HYBRID',
       patternType: 'PINBAR',
       pnl: 10,
       finalScore: 0.8,
@@ -56,7 +56,7 @@ describe('MLCalibrationService', () => {
 
   test('Decreases weight for consistently losing pattern', async () => {
     const trades: TradeRecord[] = Array(10).fill(null).map(() => ({
-      signalType: 'Hybrid',
+      signalType: 'HYBRID',
       patternType: 'ENGULFING',
       pnl: -10,
       finalScore: 0.4,

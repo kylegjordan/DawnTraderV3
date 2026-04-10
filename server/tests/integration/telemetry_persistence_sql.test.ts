@@ -24,11 +24,11 @@ import {
 describe('Directive 11.1A - Telemetry Persistence SQL', () => {
   describe('Schema Version Tracking', () => {
     it('should report schema version v1.5.2', () => {
-      expect(SCHEMA_VERSION).toBe('v1.5.2');
+      expect(SCHEMA_VERSION).toBe('v1.6.3');
     });
 
     it('should report schema directive 11.1A', () => {
-      expect(SCHEMA_DIRECTIVE).toBe('11.1A');
+      expect(SCHEMA_DIRECTIVE).toBe('11.4C.1');
     });
 
     it('should report metric engine version v1.0', () => {

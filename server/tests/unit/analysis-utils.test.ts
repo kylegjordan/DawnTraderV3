@@ -20,8 +20,7 @@ import {
   calculateSigma,
   passesCoreMetricFilters,
   computeCoreMetrics,
-  classifyVolume,
-  CORE_METRIC_THRESHOLDS
+  classifyVolume
 } from '../../utils/analysis-utils';
 
 describe('Directive 9.1 - Analysis Utils Core Tests', () => {
@@ -181,28 +180,35 @@ describe('Directive 9.1 - Analysis Utils Core Tests', () => {
     });
   });
 
-  describe('9.1.F - Filter Thresholds', () => {
-    test('passesCoreMetricFilters accepts high LQ and low VolNoise', () => {
-      expect(passesCoreMetricFilters(80, 0.3)).toBe(true);
+  describe('9.1.F - Filter Thresholds (Batch 53: DB-driven, no defaults)', () => {
+    // Batch 53: passesCoreMetricFilters requires all 4 args (LQ, VN, lqMin, vnMax)
+    // DB is sole authority for thresholds — no hardcoded defaults
+
+    test('passesCoreMetricFilters accepts high LQ and low VolNoise with explicit thresholds', () => {
+      expect(passesCoreMetricFilters(80, 0.3, 50, 0.7)).toBe(true);
     });
 
-    test('passesCoreMetricFilters rejects low LQ', () => {
-      expect(passesCoreMetricFilters(30, 0.3)).toBe(false);
+    test('passesCoreMetricFilters rejects low LQ below threshold', () => {
+      expect(passesCoreMetricFilters(30, 0.3, 50, 0.7)).toBe(false);
     });
 
-    test('passesCoreMetricFilters rejects high VolNoise', () => {
-      expect(passesCoreMetricFilters(80, 0.8)).toBe(false);
+    test('passesCoreMetricFilters rejects high VolNoise above threshold', () => {
+      expect(passesCoreMetricFilters(80, 0.8, 50, 0.7)).toBe(false);
     });
 
-    test('passesCoreMetricFilters uses correct default thresholds', () => {
-      expect(passesCoreMetricFilters(CORE_METRIC_THRESHOLDS.LQ_MIN, CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX)).toBe(true);
-      expect(passesCoreMetricFilters(CORE_METRIC_THRESHOLDS.LQ_MIN - 1, CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX)).toBe(false);
-      expect(passesCoreMetricFilters(CORE_METRIC_THRESHOLDS.LQ_MIN, CORE_METRIC_THRESHOLDS.VOL_NOISE_MAX + 0.1)).toBe(false);
+    test('passesCoreMetricFilters boundary: LQ exactly at threshold passes', () => {
+      expect(passesCoreMetricFilters(50, 0.7, 50, 0.7)).toBe(true);
     });
 
-    // Batch 19G VN HF: Test DB-driven threshold overrides
+    test('passesCoreMetricFilters boundary: LQ just below threshold fails', () => {
+      expect(passesCoreMetricFilters(49, 0.7, 50, 0.7)).toBe(false);
+    });
+
+    test('passesCoreMetricFilters boundary: VN just above threshold fails', () => {
+      expect(passesCoreMetricFilters(50, 0.71, 50, 0.7)).toBe(false);
+    });
+
     test('passesCoreMetricFilters accepts DB-driven threshold overrides', () => {
-      // With relaxed overrides, a pair that fails defaults should pass
       expect(passesCoreMetricFilters(30, 0.3, 25, 0.98)).toBe(true);  // LQ=30 passes lqMin=25
       expect(passesCoreMetricFilters(30, 0.3, 35, 0.98)).toBe(false); // LQ=30 fails lqMin=35
       expect(passesCoreMetricFilters(80, 0.95, 35, 0.96)).toBe(true); // VN=0.95 passes vnMax=0.96

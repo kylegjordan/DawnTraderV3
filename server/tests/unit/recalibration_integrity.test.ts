@@ -57,7 +57,7 @@ describe('Directive 11.7D.1 — Recalibration Integrity', () => {
     });
 
     it('should have correct schema version format', () => {
-      expect(PREDICTIVE_ADJUSTMENTS_SCHEMA).toBe('predictive-adjustments/v1.0');
+      expect(PREDICTIVE_ADJUSTMENTS_SCHEMA).toBe('predictive-adjustments/v1.1');
     });
   });
 

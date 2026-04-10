@@ -21,17 +21,17 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
     it('validates canonical trade data correctly', () => {
       const input: TradeValidationInput = {
         regime: 'TREND_FRIENDLY_STABLE',
-        strategy: 'sma_trend_ride',
+        strategy: 'vwap_pullback',
         signalType: 'QUANT',
         symbol: 'BTC/USD'
       };
-      
+
       const result = validateAndNormalizeTrade(input, 'test');
-      
+
       expect(result.valid).toBe(true);
       expect(result.violations).toHaveLength(0);
       expect(result.normalized.regime).toBe('TREND_FRIENDLY_STABLE');
-      expect(result.normalized.strategy).toBe('sma_trend_ride');
+      expect(result.normalized.strategy).toBe('vwap_pullback');
       expect(result.normalized.signalType).toBe('QUANT');
     });
 
@@ -53,22 +53,22 @@ describe('Directive 11.4F.1 — Canonical Validation Middleware', () => {
     it('normalizes legacy strategies with WARN violation', () => {
       const input: TradeValidationInput = {
         regime: 'TREND_FRIENDLY_STABLE',
-        strategy: 'TrendFlow',
+        strategy: 'MomentumPulse',
         signalType: 'QUANT',
         symbol: 'SOL/USD'
       };
-      
+
       const result = validateAndNormalizeTrade(input, 'test');
-      
+
       expect(result.valid).toBe(true);
-      expect(result.normalized.strategy).toBe('sma_trend_ride');
+      expect(result.normalized.strategy).toBe('vwap_pullback');
       expect(result.violations.some(v => v.level === 'WARN' && v.message.includes('Legacy strategy normalized'))).toBe(true);
     });
 
     it('fails validation with ERROR for signalType mismatch', () => {
       const input: TradeValidationInput = {
         regime: 'TREND_FRIENDLY_STABLE',
-        strategy: 'sma_trend_ride',
+        strategy: 'vwap_pullback',
         signalType: 'PATTERN',
         symbol: 'BTC/USD'
       };
