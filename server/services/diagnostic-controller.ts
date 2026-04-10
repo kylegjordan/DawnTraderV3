@@ -125,65 +125,10 @@ export class DiagnosticController {
     return report;
   }
 
-  /**
-   * Trigger Walter-initiated diagnostic
-   * Autonomously triggered by Walter when anomalies detected
-   */
-  async triggerWalterDiagnostic(
-    userId: string,
-    reason: string,
-    inspectionType: InspectionType,
-    searchScope?: BobInspectionCommand['searchScope']
-  ): Promise<BobInspectionReport> {
-    console.log(`[DiagnosticController] 🤖 Walter-initiated diagnostic: ${reason}`);
 
-    await this.logDiagnosticEvent({
-      eventId: uuidv4(),
-      timestamp: new Date().toISOString(),
-      eventType: 'trigger',
-      triggerType: 'walter_initiated',
-      userId,
-      component: 'walter',
-      action: `Walter detected anomaly: ${reason}`,
-      status: 'initiated',
-      metadata: { reason, inspectionType, searchScope }
-    });
-
-    const command: BobInspectionCommand = {
-      commandId: uuidv4(),
-      triggerType: 'walter_initiated',
-      triggerSource: `walter:${reason}`,
-      inspectionType,
-      searchScope,
-      priority: 'normal'
-    };
-
-    // Directive 12.2.3: bobInspector removed — return empty report
-    const report: BobInspectionReport = { status: 'completed', findings: [], commandId: command.commandId, timestamp: new Date().toISOString() };
-
-    await this.logDiagnosticEvent({
-      eventId: uuidv4(),
-      timestamp: new Date().toISOString(),
-      eventType: 'inspection',
-      triggerType: 'walter_initiated',
-      userId,
-      component: 'bob',
-      action: `Autonomous inspection completed: ${inspectionType}`,
-      status: report.status === 'completed' ? 'completed' : 'failed',
-      metadata: { 
-        reason,
-        inspectionType,
-        findingsCount: report.findings.length,
-        severities: this.summarizeSeverities(report.findings)
-      }
-    });
-
-    return report;
-  }
 
   /**
    * Create a patch proposal from Bob's inspection report
-   * Walter analyzes findings and generates structured fix proposals
    */
   async createPatchProposal(
     reportId: string,
@@ -211,7 +156,7 @@ export class DiagnosticController {
       timestamp: new Date().toISOString(),
       eventType: 'proposal',
       userId,
-      component: 'walter',
+      component: 'diagnostics',
       action: 'Patch proposal created',
       status: 'completed',
       metadata: {

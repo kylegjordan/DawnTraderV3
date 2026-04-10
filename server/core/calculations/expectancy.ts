@@ -4,7 +4,7 @@
  * Directive 11.7A — Unified Signal Filter Integration (VTS + SQE Parity)
  * Directive 11.7B — Predictive Learning Telemetry Enhancement
  * Directive 11.7C — Dynamic ROI Thresholding via PredictiveConfidence
- * Directive 11.8B — Trade Expectancy Gate (Migrated from CWQI Service)
+ * Directive 11.8B — Trade Expectancy Gate
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Prevents low-expectancy (fee-negative) signals from entering 
@@ -22,7 +22,7 @@
  * - Unified logic for VTS, SQE, DSS, and RTB
  * 
  * Directive 11.8B adds:
- * - Trade Expectancy Gate (evaluateTradeExpectancy) - migrated from cwqi-service.ts
+ * - Trade Expectancy Gate (evaluateTradeExpectancy)
  * - Single authority for EV > 0 trade blocking in execution engines
  * 
  * No trade—real or simulated—proceeds if its math doesn't justify the risk.
@@ -58,7 +58,7 @@ export interface ExpectancyParams {
 
 /**
  * Directive 11.8B: Trade Metadata for expectancy calculation
- * Migrated from cwqi-service.ts TradeMeta interface
+ * Trade metadata for expectancy calculation
  */
 export interface TradeMeta {
   entryPrice: number;
@@ -71,8 +71,7 @@ export interface TradeMeta {
 
 /**
  * Directive 11.8B: Trade Expectancy Result
- * Migrated from cwqi-service.ts CWQIResult interface
- * Renamed to neutral terminology (no CWQI references)
+ * Trade expectancy evaluation result
  */
 export interface TradeExpectancyResult {
   isTradeable: boolean;
@@ -495,8 +494,6 @@ function calculateQualityScore(
  * 
  * Evaluates whether a trade has positive mathematical expectancy after fees & slippage.
  * This is the single authority for EV > 0 trade blocking in execution engines.
- * 
- * Migrated from cwqi-service.ts calculateTradeExpectancy
  * 
  * @param symbol - Trading pair symbol (internal format)
  * @param tradeMeta - Trade metadata (entry, target, stop prices + optional DI/VolNoise)

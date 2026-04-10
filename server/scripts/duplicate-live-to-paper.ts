@@ -14,13 +14,12 @@
  */
 
 import { db } from '../db';
-import { 
-  userGoalsLive, 
+import {
+  userGoalsLive,
   userGoalsPaper,
   guardrails,
   screenerFilters,
   strategySettings,
-  walterPurpose
 } from '../../shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
 
@@ -40,7 +39,6 @@ async function duplicateLiveToPaper(): Promise<void> {
     guardrails: { duplicated: 0, skipped: 0 },
     screeners: { duplicated: 0, skipped: 0 },
     strategies: { duplicated: 0, skipped: 0 },
-    purpose: { duplicated: 0, skipped: 0 },
   };
 
   try {
@@ -177,35 +175,6 @@ async function duplicateLiveToPaper(): Promise<void> {
       }
     }
 
-    // 5. Duplicate Purpose (mode='live' → mode='paper')
-    console.log('\n💡 Duplicating Walter Purpose...');
-    const livePurposes = await db.select()
-      .from(walterPurpose)
-      .where(eq(walterPurpose.mode, 'live'));
-    
-    for (const livePurpose of livePurposes) {
-      const paperExists = await db.select()
-        .from(walterPurpose)
-        .where(and(
-          eq(walterPurpose.userId, livePurpose.userId),
-          eq(walterPurpose.mode, 'paper')
-        ))
-        .limit(1);
-      
-      if (paperExists.length === 0) {
-        await db.insert(walterPurpose).values({
-          userId: livePurpose.userId,
-          mode: 'paper',
-          content: livePurpose.content,
-          updatedBy: livePurpose.updatedBy,
-        });
-        stats.purpose.duplicated++;
-        console.log(`  ✅ Duplicated purpose for user ${livePurpose.userId}`);
-      } else {
-        stats.purpose.skipped++;
-      }
-    }
-
     // Print summary
     console.log('\n' + '='.repeat(70));
     console.log('📋 DUPLICATION SUMMARY');
@@ -214,15 +183,13 @@ async function duplicateLiveToPaper(): Promise<void> {
     console.log(`Guardrails:  ${stats.guardrails.duplicated} duplicated, ${stats.guardrails.skipped} skipped`);
     console.log(`Screeners:   ${stats.screeners.duplicated} duplicated, ${stats.screeners.skipped} skipped`);
     console.log(`Strategies:  ${stats.strategies.duplicated} duplicated, ${stats.strategies.skipped} skipped`);
-    console.log(`Purpose:     ${stats.purpose.duplicated} duplicated, ${stats.purpose.skipped} skipped`);
     console.log('='.repeat(70));
     
     const totalDuplicated = 
       stats.goals.duplicated + 
       stats.guardrails.duplicated + 
       stats.screeners.duplicated + 
-      stats.strategies.duplicated + 
-      stats.purpose.duplicated;
+      stats.strategies.duplicated;
     
     console.log(`\n✅ Successfully duplicated ${totalDuplicated} records from LIVE to PAPER mode!`);
     

@@ -143,7 +143,7 @@ export class PreExecutionValidator {
       await provenanceLogger.logLineage({
         traceId,
         originatingService: 'bob',
-        targetService: 'walter',
+        targetService: 'ui',
         sourceTable: 'pre_execution_validation',
         mode: request.mode,
         operation: 'write',

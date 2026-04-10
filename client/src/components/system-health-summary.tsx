@@ -34,7 +34,7 @@ export default function SystemHealthSummary() {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
           <Activity className="h-4 w-4" />
-          Walter System Activity (Today)
+          System Activity (Today)
         </h3>
       </div>
 

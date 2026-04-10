@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { FormulaAuditService } from '../services/formula-audit';
 import { AlertsService } from '../services/alerts-service';
-// Directive 12.2.3: walter-ops-engine import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -115,7 +114,6 @@ async function createAlertNotification(formulaName: string, deviation: number, s
     
     console.log(`[ALERT] Formula ${status.toLowerCase()} detected in ${formulaName} (${deviation.toFixed(2)}%)`);
     
-    // Directive 12.2.3: Walter autonomous maintenance trigger removed (Batch 6)
   } catch (error: any) {
     console.error('[FORMULA-AUDIT] ❌ Alert creation error:', error.message);
   }

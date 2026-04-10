@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { storage } from '../storage.js';
-import { getSystemMetrics, getTradingEngineStatus, getWalterActivity, getDatabaseHealth } from './metrics.js';
+import { getSystemMetrics, getTradingEngineStatus, getDatabaseHealth } from './metrics.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -8,7 +8,6 @@ export interface MetricsSnapshot {
   timestamp: Date;
   system: any;
   tradingEngine: any;
-  walter: any;
   database: any;
 }
 
@@ -52,10 +51,9 @@ class DiagnosticsAnalyzer {
   };
 
   async collectMetricsSnapshot(): Promise<MetricsSnapshot> {
-    const [system, tradingEngine, walter, database] = await Promise.all([
+    const [system, tradingEngine, database] = await Promise.all([
       getSystemMetrics(),
       getTradingEngineStatus(),
-      getWalterActivity(),
       getDatabaseHealth()
     ]);
 
@@ -63,7 +61,6 @@ class DiagnosticsAnalyzer {
       timestamp: new Date(),
       system,
       tradingEngine,
-      walter,
       database
     };
 
@@ -189,7 +186,6 @@ Current System Metrics:
 - Database Latency: ${snapshot.system.latency.database}ms
 - API Latency: ${snapshot.system.latency.api}ms
 - Trading Engine: ${snapshot.tradingEngine.activeMode}, ${snapshot.tradingEngine.ordersQueue} orders queued
-- Walter Activity: ${snapshot.walter.totalRequests24h} requests (24h), ${snapshot.walter.pendingApprovals} pending approvals
 - Database: ${snapshot.database.errorRate} errors/hour, ${snapshot.database.recordCounts.trades} trades, ${snapshot.database.recordCounts.users} users
 
 Detected Anomalies:

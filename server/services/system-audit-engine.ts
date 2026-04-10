@@ -3,8 +3,6 @@
  * 
  * Validates the correctness, consistency, and data flow integrity of all
  * quantitative modules introduced in Series L and related dependencies:
- * - CWQI (Confidence-Weighted Quality Index)
- * - NGC (Normalized Global Confidence)
  * - DCE (Decision Confidence Engine)
  * - MACO (Multi-Agent Cooperative Optimizer)
  * - MOF (Meta-Optimization Framework)
@@ -17,7 +15,6 @@
 import fs from "fs";
 import path from "path";
 import axios, { AxiosInstance } from "axios";
-import { getRollingNormalizerStats, SQE_THRESHOLDS, calculateCWQI, calculateNGC } from "../core/metrics/quality_index";
 import { signalQualityEvaluator } from "../core/filters/signal_quality_evaluator";
 import { readyToBuyService } from "../core/rtb/ready_to_buy_service";
 
@@ -34,10 +31,6 @@ interface AuditReport {
   timestamp: string;
   mode: "standard" | "deep";
   modules: Record<string, AuditModuleResult>;
-  metrics: {
-    cwqi: { values: number[]; variance: number; average: number; min: number; max: number };
-    ngc: { values: number[]; variance: number; average: number; min: number; max: number };
-  };
   normalizerStats: any;
   sqeStats: any;
   rtbStats: any;
@@ -73,10 +66,7 @@ export class SystemAuditEngine {
       timestamp: new Date().toISOString(),
       mode: "standard",
       modules: {},
-      metrics: {
-        cwqi: { values: [], variance: 0, average: 0, min: 0, max: 0 },
-        ngc: { values: [], variance: 0, average: 0, min: 0, max: 0 },
-      },
+
       normalizerStats: null,
       sqeStats: null,
       rtbStats: null,
@@ -113,8 +103,6 @@ export class SystemAuditEngine {
         this.auditModule("apr", "/api/apr-sle/status", headers),
       ]);
 
-      this.auditCWQINGC();
-      this.auditNormalizerStats();
       this.auditSQEStats();
       await this.auditRTBStats();
 
@@ -172,65 +160,6 @@ export class SystemAuditEngine {
     }
   }
 
-  private auditCWQINGC(): void {
-    console.log("[CSAV] Generating CWQI/NGC test samples...");
-
-    const testCases = [
-      { confidence: 0.9, riskScore: 0.1, expectedReturn: 0.8, volatility: 0.2 },
-      { confidence: 0.8, riskScore: 0.2, expectedReturn: 0.6, volatility: 0.3 },
-      { confidence: 0.7, riskScore: 0.3, expectedReturn: 0.5, volatility: 0.4 },
-      { confidence: 0.6, riskScore: 0.4, expectedReturn: 0.4, volatility: 0.5 },
-      { confidence: 0.5, riskScore: 0.5, expectedReturn: 0.3, volatility: 0.6 },
-      { confidence: 0.4, riskScore: 0.6, expectedReturn: 0.2, volatility: 0.7 },
-      { confidence: 0.3, riskScore: 0.7, expectedReturn: 0.1, volatility: 0.8 },
-      { confidence: 0.2, riskScore: 0.8, expectedReturn: 0.05, volatility: 0.9 },
-      { confidence: 0.85, riskScore: 0.15, expectedReturn: 0.7, volatility: 0.25 },
-      { confidence: 0.75, riskScore: 0.25, expectedReturn: 0.55, volatility: 0.35 },
-      { confidence: 0.65, riskScore: 0.35, expectedReturn: 0.45, volatility: 0.45 },
-      { confidence: 0.55, riskScore: 0.45, expectedReturn: 0.35, volatility: 0.55 },
-    ];
-
-    const cwqiValues: number[] = [];
-    const ngcValues: number[] = [];
-
-    for (const tc of testCases) {
-      const result = calculateCWQI(tc);
-      cwqiValues.push(result.cwqi);
-      ngcValues.push(result.ngc);
-    }
-
-    const cwqiStats = this.calculateStats(cwqiValues);
-    const ngcStats = this.calculateStats(ngcValues);
-
-    this.report.metrics.cwqi = { values: cwqiValues, ...cwqiStats };
-    this.report.metrics.ngc = { values: ngcValues, ...ngcStats };
-
-    this.report.modules["cwqi"] = {
-      status: cwqiStats.variance >= 0.01 ? "OK" : "WARN",
-      data: { 
-        sampleCount: cwqiValues.length,
-        ...cwqiStats,
-        thresholds: { minRequired: SQE_THRESHOLDS.MIN_CWQI }
-      },
-      variance: cwqiStats.variance,
-      average: cwqiStats.average,
-    };
-
-    this.report.modules["ngc"] = {
-      status: ngcStats.average <= 0.85 ? "OK" : "WARN",
-      data: { 
-        sampleCount: ngcValues.length,
-        ...ngcStats,
-        thresholds: { minRequired: SQE_THRESHOLDS.MIN_NGC }
-      },
-      variance: ngcStats.variance,
-      average: ngcStats.average,
-    };
-
-    console.log(`[CSAV] CWQI: avg=${cwqiStats.average.toFixed(4)}, var=${cwqiStats.variance.toFixed(4)}, range=[${cwqiStats.min.toFixed(4)}, ${cwqiStats.max.toFixed(4)}]`);
-    console.log(`[CSAV] NGC: avg=${ngcStats.average.toFixed(4)}, var=${ngcStats.variance.toFixed(4)}, range=[${ngcStats.min.toFixed(4)}, ${ngcStats.max.toFixed(4)}]`);
-  }
-
   private calculateStats(values: number[]): { variance: number; average: number; min: number; max: number } {
     if (values.length === 0) {
       return { variance: 0, average: 0, min: 0, max: 0 };
@@ -242,16 +171,7 @@ export class SystemAuditEngine {
     return { variance, average: avg, min, max };
   }
 
-  private auditNormalizerStats(): void {
-    console.log("[CSAV] Checking Rolling Normalizer stats...");
-    try {
-      const stats = getRollingNormalizerStats();
-      this.report.normalizerStats = stats;
-      console.log(`[CSAV] Normalizer: NGC samples=${stats.ngc.sampleCount}, ProfitRate samples=${stats.profitRate.sampleCount}`);
-    } catch (err: any) {
-      this.report.warnings.push(`Could not get normalizer stats: ${err.message}`);
-    }
-  }
+  // B55: auditNormalizerStats removed — getRollingNormalizerStats no longer exists
 
   private auditSQEStats(): void {
     console.log("[CSAV] Checking SQE stats...");
@@ -278,35 +198,6 @@ export class SystemAuditEngine {
 
   private validateFormulas(): void {
     console.log("[CSAV] Validating formula outputs...");
-
-    const cwqi = this.report.metrics.cwqi;
-    const ngc = this.report.metrics.ngc;
-
-    if (cwqi.variance < 0.01) {
-      this.report.errors.push(`CWQI variance too low (${cwqi.variance.toFixed(4)}) – potential normalization lock.`);
-    }
-
-    if (cwqi.variance < 0.02) {
-      this.report.warnings.push(`CWQI variance is low (${cwqi.variance.toFixed(4)}) – signals may cluster.`);
-    }
-
-    if (ngc.average > 0.85) {
-      this.report.errors.push(`NGC average too high (${ngc.average.toFixed(4)}) – potential compression or bias.`);
-    }
-
-    if (ngc.average > 0.75) {
-      this.report.warnings.push(`NGC average is elevated (${ngc.average.toFixed(4)}) – may reduce differentiation.`);
-    }
-
-    const cwqiRange = cwqi.max - cwqi.min;
-    if (cwqiRange < 0.2) {
-      this.report.warnings.push(`CWQI range is narrow (${cwqiRange.toFixed(4)}) – limited signal differentiation.`);
-    }
-
-    const ngcRange = ngc.max - ngc.min;
-    if (ngcRange < 0.15) {
-      this.report.warnings.push(`NGC range is narrow (${ngcRange.toFixed(4)}) – limited signal differentiation.`);
-    }
   }
 
   private validateConsistency(): void {

@@ -54,9 +54,5 @@ export async function initializeServices() {
 export function getInitializedServices(): string[] {
   const services = ['PredictiveLearning', 'TradingEngine'];
   
-  if (env.WALTER_DISABLED) {
-    return services;
-  }
-  
-  return [...services, 'AIOpportunities', 'DailyBrief', 'MarketAnalysis'];
+  return services;
 }

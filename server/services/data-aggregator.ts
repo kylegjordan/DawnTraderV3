@@ -40,8 +40,6 @@ interface AggregateRecord {
   symbol: string;
   strategy: string;
   period: string;
-  avgNGC: number;
-  avgCWQI: number;
   avgRisk: number;
   avgProfitRate: number;
   reconfirmRate: number;
@@ -65,8 +63,6 @@ interface AggregateRecord {
  */
 interface GlobalRollup {
   timestamp: string;
-  avgNGC: number;
-  avgCWQI: number;
   avgRisk: number;
   avgProfitRate: number;
   totalSignals: number;
@@ -223,8 +219,6 @@ export class DataAggregator extends EventEmitter {
           symbol,
           strategy,
           period: periodKey,
-          avgNGC: avg('ngc'),
-          avgCWQI: avg('cwqi'),
           avgRisk: avg('risk'),
           avgProfitRate: avg('profitRate'),
           reconfirmRate: rate('reconfirmed'),
@@ -241,8 +235,6 @@ export class DataAggregator extends EventEmitter {
       // Global roll-up (Directive 10.0.B: Added Phase 9 Math fields)
       const global: GlobalRollup = {
         timestamp: now.toISOString(),
-        avgNGC: this.arrayAvg(aggregates, 'avgNGC'),
-        avgCWQI: this.arrayAvg(aggregates, 'avgCWQI'),
         avgRisk: this.arrayAvg(aggregates, 'avgRisk'),
         avgProfitRate: this.arrayAvg(aggregates, 'avgProfitRate'),
         totalSignals: aggregates.reduce((a, r) => a + r.sampleCount, 0),

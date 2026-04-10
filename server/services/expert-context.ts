@@ -1,7 +1,7 @@
 /**
  * Expert Context Service - Phase 5.8
  * 
- * Selects and injects relevant trading principles into Walter's responses
+ * Selects and injects relevant trading principles into system responses
  * based on conversation context and topic.
  */
 
@@ -257,7 +257,7 @@ export class ExpertContextService {
     try {
       await db.insert(expertResponseLogs).values({
         userId,
-        chatId, // Now references walter_chats.id
+        chatId,
         chatLogId: null, // Optional - could be set if we had message ID
         principlesInjected: principles,
         expertContextUsed: true,

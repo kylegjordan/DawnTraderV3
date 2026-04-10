@@ -1,7 +1,7 @@
 /**
  * System Health Service
- * Provides system health information to AI assistants (Walter & Bob)
- * This allows them to check system status without HTTP/auth overhead
+ * Provides system health information for diagnostics and monitoring.
+ * Allows checking system status without HTTP/auth overhead.
  */
 
 import { storage } from '../storage';
@@ -31,7 +31,7 @@ export interface SystemHealthStatus {
 export class SystemHealthService {
   /**
    * Get comprehensive system health status for AI analysis
-   * This is used by Walter & Bob for diagnostics and alerts
+   * Used for diagnostics and alerts
    * 
    * Phase 3: Removed userId parameter (single-tenant architecture)
    */
@@ -101,7 +101,7 @@ export class SystemHealthService {
 
   /**
    * Generate natural language alert message based on health status
-   * Used by Walter to communicate health issues to users
+   * Used to communicate health issues to users
    */
   generateHealthAlert(health: SystemHealthStatus): string | null {
     const issues: string[] = [];

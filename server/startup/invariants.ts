@@ -12,7 +12,7 @@ export async function assertSingleTenantDB() {
   
   try {
     // Only check the 5 operational tables that were migrated in Phase 2C
-    // AI, Walter, audit, and backup tables intentionally KEEP user_id for historical data
+    // AI, audit, and backup tables intentionally KEEP user_id for historical data
     const operationalTables = [
       'portfolio_state',
       'strategy_settings',

@@ -56,7 +56,6 @@ statusRouter.get('/health', async (req, res) => {
         'ContextBridge',
       ],
       features: {
-        walterDisabled: env.WALTER_DISABLED,
         lattiEnabled: env.LATTI_ENABLED,
         passiveLearning: env.PASSIVE_LEARNING_ENABLED,
       },

@@ -8,20 +8,12 @@ import { db } from "./db";
 import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
-// B54: ai-analyst fully removed — legacy Walter/OpenAI dependency (Running Issue #23)
-// All ai-analyst route handlers now return 501. Service file retained for reference only.
 import { getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
 import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
-// MIGRATION: ai-opportunities disabled — depends on OpenAI, legacy feature
-// import { aiOpportunitiesService } from "./services/ai-opportunities";
-const aiOpportunitiesService: any = null;
-// MIGRATION: daily-brief disabled — depends on OpenAI, legacy feature
-// import { dailyBriefService } from "./services/daily-brief";
-const dailyBriefService: any = null;
 import { formulaAuditService } from "./services/formula-audit";
 import { AlertsService } from "./services/alerts-service";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent, strategyParamSchema } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent, strategyParamSchema } from "@shared/schema";
 import { z } from 'zod';
 import { validateGuardrails, validateFilters, validateNoLegacyKeys, LegacyFieldError } from "../types/config";
 import { databaseMonitor } from "./services/database-monitor";
@@ -29,8 +21,6 @@ import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
 import { actuationPolicyService } from "./services/actuation-policy";
 import { assetCapabilitiesService } from "./services/asset-capabilities";
-// Directive 12.2.3: Walter service imports removed (Batch 6)
-// walter-chat-lifecycle, walter-response, chat-logging, walter-tts, walter-ingest
 import { parseIntent } from "./services/intent-parser";
 import { CommandRouter } from "./services/command-router";
 import { commandLogger } from "./services/command-logger";
@@ -83,8 +73,6 @@ export const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// B54: ai-analyst fully removed — legacy Walter/OpenAI dependency (Running Issue #23)
 
 // [41F-L.2] Trade test request schema
 const TradeTestSchema = z.object({
@@ -4646,13 +4634,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // L9: Strategy weight from metadata (computed via strategyWeights.ts)
         const strategyWeight = metadata.strategyWeight ?? 0.5;
         
-        // L9: FinalRank = (NGC × 0.30) + (CWQI × 0.25) + (MLConfidence × 0.25) + (StrategyWeight × 0.20)
+        // L9: FinalRank = (NGC × 0.40) + (MLConfidence × 0.35) + (StrategyWeight × 0.25)
         const ngcValue = signal.ngc ? parseFloat(String(signal.ngc)) : 0;
-        const cwqiValue = signal.cwqi ? parseFloat(String(signal.cwqi)) : 0;
         const mlConfValue = mlConfidence ?? 0.5;
-        const finalRank = (ngcValue * 0.30) + (cwqiValue * 0.25) + (mlConfValue * 0.25) + (strategyWeight * 0.20);
-        
-        console.log(`[L9][RTB][FINAL_RANK] ${signal.symbol}: NGC=${ngcValue.toFixed(3)}, CWQI=${cwqiValue.toFixed(3)}, ML=${mlConfValue.toFixed(3)}, SW=${strategyWeight.toFixed(3)}, FinalRank=${finalRank.toFixed(4)}`);
+        const finalRank = (ngcValue * 0.40) + (mlConfValue * 0.35) + (strategyWeight * 0.25);
+
+        console.log(`[L9][RTB][FINAL_RANK] ${signal.symbol}: NGC=${ngcValue.toFixed(3)}, ML=${mlConfValue.toFixed(3)}, SW=${strategyWeight.toFixed(3)}, FinalRank=${finalRank.toFixed(4)}`);
         
         return {
           ...signal,
@@ -4709,16 +4696,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.error('Error fetching AI reports:', error);
       res.status(500).json({ error: 'Failed to fetch AI reports' });
     }
-  });
-
-  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
-  apiRouter.post('/ai/reports/generate', authenticateToken, async (_req: AuthenticatedRequest, res) => {
-    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
-  });
-
-  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
-  apiRouter.post('/ai/analyze-symbol', authenticateToken, async (_req: AuthenticatedRequest, res) => {
-    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
   // Daily Briefs
@@ -7618,7 +7595,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           confidence: parseFloat(s.confidence),
           riskScore: parseFloat(s.riskScore),
           expectedReturn: parseFloat(s.expectedReturn),
-          cwqi: parseFloat(s.cwqi),
           status: s.status,
           blockReason: s.blockReason,
           queuedAt: s.queuedAt,
@@ -10443,15 +10419,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           distanceToSLDollars = stopLoss > 0 ? (stopLoss - currentPrice) * quantity : 0;
         }
         
-        // CR-001: Extract CWQI from metadata (stored at trade creation from RTB signal)
-        const posMetadata = (pos.metadata || {}) as Record<string, any>;
-        const cwqi = parseFloat(
-          posMetadata.cwqi?.toString() || 
-          posMetadata.sqe?.cwqi?.toString() || 
-          posMetadata.signal?.cwqi?.toString() || 
-          '0'
-        );
-        
         // Health indicator: green (profitable), yellow (near breakeven), red (losing)
         let health: 'green' | 'yellow' | 'red' = 'yellow';
         if (unrealizedPnlPercent >= 0.5) health = 'green';
@@ -10512,7 +10479,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           distanceToSL,
           distanceToTPDollars, // CR-001: Dollar-based distance
           distanceToSLDollars, // CR-001: Dollar-based distance
-          cwqi, // CR-001: CWQI from metadata
           holdingDurationMs,
           slotNumber: index + 1,
           maxSlots: maxOpenTrades,
@@ -11657,16 +11623,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
-  apiRouter.post('/ai/chat', authenticateToken, async (_req: AuthenticatedRequest, res) => {
-    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
-  });
-
-  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
-  apiRouter.post('/ai/settings/apply', authenticateToken, async (_req: AuthenticatedRequest, res) => {
-    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
-  });
-
   apiRouter.get('/ai/audit-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -11696,11 +11652,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.error('Error fetching error logs:', error);
       res.status(500).json({ error: 'Failed to fetch error logs' });
     }
-  });
-
-  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
-  apiRouter.post('/ai/diagnose-error', authenticateToken, async (_req: AuthenticatedRequest, res) => {
-    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
   // AI Conversations - Multiple chats management
@@ -11791,11 +11742,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.error('Error fetching conversation summaries:', error);
       res.status(500).json({ error: 'Failed to fetch summaries' });
     }
-  });
-
-  // B54: ai-analyst removed — legacy Walter/OpenAI dependency
-  apiRouter.post('/conversations/:id/message', authenticateToken, async (_req: AuthenticatedRequest, res) => {
-    res.status(501).json({ error: 'AI analyst service removed (legacy OpenAI dependency)' });
   });
 
   // Kill Switch Incident Analysis Conversation
@@ -11988,8 +11934,6 @@ Provide specific, actionable recommendations.`,
       res.status(500).json({ error: 'Failed to transcribe audio. Please try again.' });
     }
   });
-
-  // Directive 12.2.3: Walter TTS + Ingest routes removed (Batch 6)
 
   // Phase 27: Context ingestion endpoint (manual trigger)
   apiRouter.post('/context/ingest', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -13503,8 +13447,6 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // Directive 12.2.3: Walter health-summary route removed (Batch 7B) — depended on walterActions table
-
   // One-time cleanup: Acknowledge all feed_health and formula_audit alerts
   apiRouter.post('/system/cleanup-health-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
@@ -13536,8 +13478,6 @@ Provide specific, actionable recommendations.`,
       res.status(500).json({ error: error.message });
     }
   });
-
-  // Directive 12.2.3: Walter actions routes + schemas removed (Batch 6)
 
   // ============================================
   // Phase 27.F.20: Execution Config (Auto-Execution Settings)
@@ -13695,8 +13635,6 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // Directive 12.2.3: Walter activity diagnostics route removed (Batch 6)
-
   // Database Health Metrics
   apiRouter.get('/diagnostics/database-health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
@@ -13737,7 +13675,6 @@ Provide specific, actionable recommendations.`,
   apiRouter.get('/diagnostics/export-report', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getSystemMetrics, getTradingEngineStatus, getDatabaseHealth } = await import('./diagnostics/metrics.js');
-      // Directive 12.2.3: getWalterActivity removed (Batch 7B)
       const { getExpertInsightsMetrics } = await import('./diagnostics/expert-insights-metrics.js');
 
       const [systemMetrics, tradingEngine, databaseHealth, expertInsights] = await Promise.all([
@@ -13751,7 +13688,6 @@ Provide specific, actionable recommendations.`,
         timestamp: new Date().toISOString(),
         systemMetrics,
         tradingEngine,
-        // Directive 12.2.3: walterActivity field removed (Batch 7B)
         databaseHealth,
         expertInsights
       };
@@ -15898,84 +15834,18 @@ Please:
       const newRisk = (newParams.maxConcurrentPositions || 0) * (newParams.riskPerTrade || 0);
       const projectedRisk = newRisk; // Total portfolio exposure
       
-      // Get risk threshold from user's approval matrix settings (configurable in Walter Approvals)
+      // Get risk threshold from user's approval matrix settings
       const userProfile = await storage.getUser(userId);
       const approvalMatrix = userProfile?.approvalMatrix as any;
       const riskThreshold = approvalMatrix?.policyConstraints?.maxPortfolioRiskPercent || 20.0;
-      
+
+      // Risk threshold check still blocks high-risk changes
       if (projectedRisk >= riskThreshold) {
-        // Create approval record instead of executing immediately
-        const approval = await storage.createWalterPendingApproval({
-          userId,
-          mode, // Include the trading mode
-          strategyName: strategy,
-          parameterName: 'strategy_parameters',
-          currentValue: oldParams,
-          proposedValue: newParams,
-          projectedRisk: String(projectedRisk),
-          riskDetails: {
-            oldMaxPositions: oldParams.maxConcurrentPositions || 0,
-            newMaxPositions: newParams.maxConcurrentPositions || 0,
-            oldRiskPerTrade: oldParams.riskPerTrade || 0,
-            newRiskPerTrade: newParams.riskPerTrade || 0,
-            oldTotalRisk: oldRisk,
-            newTotalRisk: newRisk,
-            threshold: riskThreshold,
-          },
-          status: 'pending',
-        });
-        
-        console.log(`[Walter Approval] Created approval ${approval.id} for ${strategy} (risk: ${projectedRisk}%)`);
-        
-        // Auto-create Walter chat session for this approval
-        const chatTitle = `Approval Required: ${strategy} - ${mode} mode (${projectedRisk}% risk)`;
-        const chat = await storage.createWalterChat({
-          userId,
-          title: chatTitle,
-          status: 'active',
-          isApprovalThread: true,
-          approvalId: approval.id,
-          messageCount: 1,
-          lastMessageAt: new Date(),
-        });
-        
-        // Create initial message explaining the approval
-        const initialMessage = `⚠️ **Approval Required**\n\n` +
-          `Strategy ${strategy} change requires your approval because the projected portfolio risk (${projectedRisk}%) exceeds the ${riskThreshold}% threshold.\n\n` +
-          `**Risk Breakdown:**\n` +
-          `- Max Concurrent Positions: ${newParams.maxConcurrentPositions || 0} (was ${oldParams.maxConcurrentPositions || 0})\n` +
-          `- Risk Per Trade: ${newParams.riskPerTrade || 0}% (was ${oldParams.riskPerTrade || 0}%)\n` +
-          `- Total Portfolio Risk: ${newRisk}% (was ${oldRisk}%)\n` +
-          `- Trading Mode: ${mode}\n\n` +
-          `Please review the proposed changes and approve or reject this request.`;
-        
-        await storage.createWalterChatLog({
-          chatSessionId: chat.id,
-          userId,
-          role: 'assistant',
-          content: initialMessage,
-          metadata: {
-            approvalId: approval.id,
-            strategyName: strategy,
-            projectedRisk,
-            type: 'approval_request'
-          },
-        });
-        
-        // Update approval with chat session ID
-        await storage.updateApprovalStatus(approval.id, 'pending', {
-          chatSessionId: chat.id as any,
-        });
-        
-        console.log(`[Walter Approval] Created chat session ${chat.id} for approval ${approval.id}`);
-        
-        return res.json({ 
-          ok: true, 
+        return res.json({
+          ok: true,
           approvalRequired: true,
-          approvalId: approval.id,
-          chatSessionId: chat.id,
           projectedRisk,
-          message: `Change requires approval: projected portfolio risk is ${projectedRisk}% (threshold: ${RISK_APPROVAL_THRESHOLD}%)`,
+          message: `Change requires approval: projected portfolio risk is ${projectedRisk}% (threshold: ${riskThreshold}%)`,
         });
       }
       
@@ -16019,8 +15889,6 @@ Please:
   // Directive 11.8B-C2: Strategy presets routes removed - presets were UI-only artifacts
   // Strategy behavior is governed by Guardrails, Filters, and Predictive Learning
   console.log('[11.8B-C2] Strategy presets routes removed - behavior governed by Guardrails & Predictive Learning');
-
-  // Directive 12.2.3: Walter approvals routes removed (Batch 6)
 
   // ==================== Phase 27.2: Inline Approvals + Interactive Notifications ====================
   
@@ -16116,23 +15984,6 @@ Please:
         approvedBy: userId,
       });
       
-      // Create audit log with execution results
-      await storage.createWalterApprovalsAudit({
-        approvalId: approval.id,
-        userId,
-        decision: 'approved',
-        decisionMethod: 'inline_approval',
-        notes: null,
-        executionResult: { 
-          success: executionResult.success, 
-          appliedAt: new Date(), 
-          mode: approval.mode, 
-          traceId,
-          message: executionResult.message,
-          data: executionResult.data 
-        },
-      });
-      
       // Emit WebSocket event for real-time sync
       const { contextBridge } = await import('./services/context-bridge');
       await contextBridge.broadcast('approval_update', { traceId, status: 'approved' }, userId);
@@ -16180,16 +16031,6 @@ Please:
       // Update approval status (do NOT set clearedAt - that's for explicit clearing only)
       const updated = await storage.updateApprovalStatus(approval.id, 'rejected', {
         rejectedAt: new Date() as any,
-      });
-      
-      // Create audit log
-      await storage.createWalterApprovalsAudit({
-        approvalId: approval.id,
-        userId,
-        decision: 'rejected',
-        decisionMethod: 'inline_rejection',
-        notes: null,
-        executionResult: { success: false, reason: 'User rejected', mode: approval.mode, traceId },
       });
       
       // Emit WebSocket event
@@ -16322,8 +16163,6 @@ Please:
     }
   });
   
-  // Directive 12.2.3: Walter chats, purpose, memory, preferences, file analysis routes removed (Batch 6)
-
   // ==================== Reasoning Orchestrator API (Phase 8.8.3) ====================
   
   // POST enqueue a new reasoning task
@@ -17472,8 +17311,6 @@ Please:
     }
   });
 
-  // Directive 12.2.3: Walter interpret-command route removed (Batch 6)
-
   // ========================================
   // SYSTEM ALERTS API
   // ========================================
@@ -17642,7 +17479,7 @@ Please:
   });
 
   // ==============================================================================
-  // DIAGNOSTIC API ROUTES - Phase 5.9 (Bob + Walter refs removed in Batch 7B)
+  // DIAGNOSTIC API ROUTES - Phase 5.9
   // ==============================================================================
 
   // Trigger user-initiated diagnostic
@@ -17682,8 +17519,6 @@ Please:
       res.status(500).json({ error: error.message });
     }
   });
-
-  // Directive 12.2.3: Patch analysis route removed — walterPatchAnalyst deleted (Batch 6)
 
   // Approve or reject a patch proposal
   apiRouter.post('/diagnostics/patch/:proposalId/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {

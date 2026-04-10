@@ -365,45 +365,6 @@ app.use((req, res, next) => {
   //   console.error('[Server] Failed to start Market Data Health Check service:', error);
   // });
 
-  // Phase 27.F.14.B: Walter Full Shutdown
-  // When WALTER_DISABLED=true, skip all AI Opportunities, Daily Brief, Market Analysis, AI Orchestrator, and Walter Health Monitor
-  const WALTER_DISABLED = process.env.WALTER_DISABLED === 'true';
-  
-  if (!WALTER_DISABLED) {
-    // Start AI Opportunities service (async, non-blocking)
-    import('./services/ai-opportunities').then(({ aiOpportunitiesService }) => {
-      aiOpportunitiesService.startHourlyOpportunityGeneration().catch((error) => {
-        console.error('[Server] Failed to start AI Opportunities service:', error);
-      });
-    });
-
-    // Start Daily Brief service (async, non-blocking)
-    import('./services/daily-brief').then(({ dailyBriefService }) => {
-      dailyBriefService.startDailyBriefScheduler().catch((error) => {
-        console.error('[Server] Failed to start Daily Brief service:', error);
-      });
-    });
-
-    // Start Market Analysis scheduler (async, non-blocking)
-    import('./services/market-analysis-scheduler').then(({ marketAnalysisScheduler }) => {
-      marketAnalysisScheduler.startDailyAnalysisScheduler().catch((error) => {
-        console.error('[Server] Failed to start Market Analysis Scheduler:', error);
-      });
-    });
-
-    // Phase 0: Removed AI Orchestrator (legacy module)
-    // import('./orchestrator/orchestrator').then(({ aiOrchestrator }) => {
-    //   aiOrchestrator.start().catch((error) => {
-    //     console.error('[Server] Failed to start AI Orchestrator:', error);
-    //   });
-    // });
-
-    // Directive 12.2.3: Walter Health Monitor startup removed (file deleted in Batch 6)
-  } else {
-    console.log('[Server] Standby mode – AI services disabled');
-  }
-
-
   // Phase 8.8.2: Initialize Memory Lifecycle Manager (async, non-blocking)
   import('./services/memory-lifecycle').then(({ memoryLifecycle }) => {
     memoryLifecycle.initialize().catch((error) => {

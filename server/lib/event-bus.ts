@@ -36,7 +36,6 @@ export interface PromotionEvent {
   strategy: string;
   signalId: string;
   tradeId: string;
-  cwqi: number;
   timestamp: string;
 }
 
@@ -164,7 +163,7 @@ class EventBus extends EventEmitter {
   }
 
   emitPromotion(event: PromotionEvent): void {
-    console.log(`[A3.R7][PROMOTION] symbol=${event.symbol} strategy=${event.strategy} cwqi=${event.cwqi.toFixed(4)} tradeId=${event.tradeId} mode=${event.mode}`);
+    console.log(`[A3.R7][PROMOTION] symbol=${event.symbol} strategy=${event.strategy} tradeId=${event.tradeId} mode=${event.mode}`);
     this.logTclTrace('PROMOTION', event);
     this.emit('PROMOTION', event);
   }

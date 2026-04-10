@@ -165,7 +165,7 @@ class ReasoningOrchestrator {
       await db.insert(dataLineage).values({
         traceId,
         originatingService: 'reasoning_orchestrator',
-        targetService: 'walter',
+        targetService: 'ui',
         sourceTable: 'reasoning_trace',
         operation: 'write',
         metadata: {
@@ -358,7 +358,7 @@ class ReasoningOrchestrator {
       await db.insert(dataLineage).values({
         traceId,
         originatingService: 'reasoning_orchestrator',
-        targetService: 'walter',
+        targetService: 'ui',
         sourceTable: 'reasoning_trace',
         operation: 'write',
         metadata: {

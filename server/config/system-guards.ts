@@ -2,7 +2,7 @@
  * Directive 9.6.A - Configuration Lock
  * 
  * Single source of truth for all Phase 9 threshold constants.
- * All Phase 9 modules (filter-engine, cwqi-service, analysis-utils, etc.)
+ * All Phase 9 modules (filter-engine, analysis-utils, etc.)
  * MUST import from this file to prevent configuration drift.
  * 
  * Tags: [9.6][CONFIG]
@@ -149,7 +149,7 @@ export const FILTER_FLAGS = {
  * 
  * Tracks filter telemetry schema for auditability.
  * v1.1.0 - Initial 10.9B release
- * v1.2.0 - 10.9C: Rolling 24h window, deprecated RSI/Risk/CWQI, added ρ guard
+ * v1.2.0 - 10.9C: Rolling 24h window, deprecated RSI/Risk, added ρ guard
  * v1.3.0 - 10.9E: Full RSI/Risk/Volatility removal, telemetry expansion
  * v1.3.1 - 10.9F: Quote Currency filter removed, "Execution Quality" rename
  */

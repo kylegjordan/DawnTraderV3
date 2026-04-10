@@ -26,11 +26,8 @@ interface M5DMetricsSnapshot {
   feedLatencyMs: number;
   vtsTradeCount: number;
   paperTradeCount: number;
-  avgCWQI: number;
-  avgNGC: number;
   avgDI: number;
   avgGSI: number;
-  adaptiveRelevanceVariance: number;
   cacheHitRate: number;
 }
 
@@ -61,12 +58,6 @@ function calculateAverage(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-function calculateVariance(values: number[]): number {
-  if (values.length < 2) return 0;
-  const mean = calculateAverage(values);
-  const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
-  return calculateAverage(squaredDiffs);
-}
 
 function computeRealFeedLatency(): number {
   try {
@@ -98,12 +89,8 @@ async function captureMetricsSnapshot(): Promise<M5DMetricsSnapshot | null> {
   const vtsTrades = getM5CSessionTrades();
   const paperTrades = getPaperSessionTrades();
   
-  const cwqiValues = vtsTrades.map(t => t.cwqi).filter(v => v > 0);
-  const ngcValues = vtsTrades.map(t => t.ngc).filter(v => v > 0);
   const diValues = vtsTrades.map(t => t.di).filter(v => v > 0);
   const gsiValues = vtsTrades.map(t => t.gsi).filter(v => v > 0);
-  
-  const adaptiveRelevanceValues = vtsTrades.map(t => (t.cwqi + t.ngc) / 2);
   
   const snapshot: M5DMetricsSnapshot = {
     timestamp: new Date().toISOString(),
@@ -111,17 +98,14 @@ async function captureMetricsSnapshot(): Promise<M5DMetricsSnapshot | null> {
     feedLatencyMs: Math.round(feedLatency),
     vtsTradeCount: vtsTrades.length,
     paperTradeCount: paperTrades.length,
-    avgCWQI: Math.round(calculateAverage(cwqiValues) * 1000) / 1000,
-    avgNGC: Math.round(calculateAverage(ngcValues) * 1000) / 1000,
     avgDI: Math.round(calculateAverage(diValues) * 1000) / 1000,
     avgGSI: Math.round(calculateAverage(gsiValues) * 1000) / 1000,
-    adaptiveRelevanceVariance: Math.round(calculateVariance(adaptiveRelevanceValues) * 10000) / 10000,
     cacheHitRate: 0.85
   };
   
   activeSession.metricsSnapshots.push(snapshot);
   
-  console.log(`[M5D][METRICS] t=${snapshot.elapsedMinutes}m | VTS=${snapshot.vtsTradeCount} | Paper=${snapshot.paperTradeCount} | CWQI=${snapshot.avgCWQI} | NGC=${snapshot.avgNGC} | latency=${snapshot.feedLatencyMs}ms`);
+  console.log(`[M5D][METRICS] t=${snapshot.elapsedMinutes}m | VTS=${snapshot.vtsTradeCount} | Paper=${snapshot.paperTradeCount} | DI=${snapshot.avgDI} | GSI=${snapshot.avgGSI} | latency=${snapshot.feedLatencyMs}ms`);
   
   return snapshot;
 }
@@ -233,25 +217,18 @@ async function generateValidationSummary(comparisonReport: any): Promise<string>
   
   const avgFeedLatency = calculateAverage(snapshots.map(s => s.feedLatencyMs));
   
-  const validCWQISnapshots = snapshots.filter(s => s.avgCWQI > 0);
-  const validNGCSnapshots = snapshots.filter(s => s.avgNGC > 0);
-  
-  const cwqiDrift = validCWQISnapshots.length > 1 
-    ? Math.abs(validCWQISnapshots[validCWQISnapshots.length - 1].avgCWQI - validCWQISnapshots[0].avgCWQI) / validCWQISnapshots[0].avgCWQI
+  const validDISnapshots = snapshots.filter(s => s.avgDI > 0);
+
+  const diDrift = validDISnapshots.length > 1
+    ? Math.abs(validDISnapshots[validDISnapshots.length - 1].avgDI - validDISnapshots[0].avgDI) / (validDISnapshots[0].avgDI || 1)
     : 0;
-  const ngcDrift = validNGCSnapshots.length > 1 
-    ? Math.abs(validNGCSnapshots[validNGCSnapshots.length - 1].avgNGC - validNGCSnapshots[0].avgNGC) / validNGCSnapshots[0].avgNGC
-    : 0;
-  const avgAdaptiveVariance = calculateAverage(snapshots.map(s => s.adaptiveRelevanceVariance));
   
   const validationCriteria = {
     feedLatency: { value: avgFeedLatency, threshold: 100, passed: avgFeedLatency < 100 },
-    cwqiDrift: { value: cwqiDrift * 100, threshold: 10, passed: cwqiDrift < 0.10 },
-    ngcDrift: { value: ngcDrift * 100, threshold: 10, passed: ngcDrift < 0.10 },
+    diDrift: { value: diDrift * 100, threshold: 10, passed: diDrift < 0.10 },
     matchRate: { value: comparisonReport?.matchRate || 0, threshold: 0.50, passed: (comparisonReport?.matchRate || 0) >= 0.50 },
     calibrationError: { value: comparisonReport?.calibrationError || 0, threshold: 0.15, passed: (comparisonReport?.calibrationError || 0) < 0.15 },
     correlation: { value: comparisonReport?.correlation || 0, threshold: 0.50, passed: (comparisonReport?.correlation || 0) > 0.50 },
-    adaptiveVariance: { value: avgAdaptiveVariance, threshold: 0.01, passed: avgAdaptiveVariance > 0.01 }
   };
   
   const allPassed = Object.values(validationCriteria).every(c => c.passed);
@@ -276,27 +253,23 @@ async function generateValidationSummary(comparisonReport: any): Promise<string>
 | Metric | Value | Threshold | Status |
 |--------|-------|-----------|--------|
 | Feed Latency | ${validationCriteria.feedLatency.value.toFixed(1)} ms | < 100 ms | ${validationCriteria.feedLatency.passed ? '✅' : '❌'} |
-| CWQI Drift | ${validationCriteria.cwqiDrift.value.toFixed(2)}% | < 10% | ${validationCriteria.cwqiDrift.passed ? '✅' : '❌'} |
-| NGC Drift | ${validationCriteria.ngcDrift.value.toFixed(2)}% | < 10% | ${validationCriteria.ngcDrift.passed ? '✅' : '❌'} |
+| DI Drift | ${validationCriteria.diDrift.value.toFixed(2)}% | < 10% | ${validationCriteria.diDrift.passed ? '✅' : '❌'} |
 | Match Rate | ${(validationCriteria.matchRate.value * 100).toFixed(1)}% | ≥ 50% | ${validationCriteria.matchRate.passed ? '✅' : '❌'} |
 | Calibration Error | ${validationCriteria.calibrationError.value.toFixed(3)} | < 0.15 | ${validationCriteria.calibrationError.passed ? '✅' : '❌'} |
 | Correlation | ${validationCriteria.correlation.value.toFixed(3)} | > 0.50 | ${validationCriteria.correlation.passed ? '✅' : '❌'} |
-| Adaptive Variance | ${validationCriteria.adaptiveVariance.value.toFixed(4)} | > 0.01 | ${validationCriteria.adaptiveVariance.passed ? '✅' : '❌'} |
 
 ## Quality Metrics (Final Snapshot)
 | Metric | Value |
 |--------|-------|
-| Average CWQI | ${lastSnapshot.avgCWQI || 0} |
-| Average NGC | ${lastSnapshot.avgNGC || 0} |
 | Average DI | ${lastSnapshot.avgDI || 0} |
 | Average GSI | ${lastSnapshot.avgGSI || 0} |
 
 ## Metrics Timeline
 ${snapshots.length > 0 ? `
-| Time (min) | VTS Trades | Paper Trades | CWQI | NGC | Latency (ms) |
-|------------|------------|--------------|------|-----|--------------|
-${snapshots.slice(-10).map(s => 
-  `| ${s.elapsedMinutes} | ${s.vtsTradeCount} | ${s.paperTradeCount} | ${s.avgCWQI} | ${s.avgNGC} | ${s.feedLatencyMs} |`
+| Time (min) | VTS Trades | Paper Trades | DI | GSI | Latency (ms) |
+|------------|------------|--------------|-----|-----|--------------|
+${snapshots.slice(-10).map(s =>
+  `| ${s.elapsedMinutes} | ${s.vtsTradeCount} | ${s.paperTradeCount} | ${s.avgDI} | ${s.avgGSI} | ${s.feedLatencyMs} |`
 ).join('\n')}
 ` : 'No metrics captured'}
 
@@ -324,9 +297,9 @@ ${allPassed
   console.log(`[M5D][SUMMARY] Validation summary saved: ${summaryPath}`);
   
   // Generate Metrics_Trend_Correlation CSV per Directive 8.8.4-M5D.1
-  const csvHeader = 'timestamp,elapsedMinutes,feedLatencyMs,vtsTradeCount,paperTradeCount,avgCWQI,avgNGC,avgDI,avgGSI,adaptiveRelevanceVariance,cacheHitRate';
-  const csvRows = snapshots.map(s => 
-    `${s.timestamp},${s.elapsedMinutes},${s.feedLatencyMs},${s.vtsTradeCount},${s.paperTradeCount},${s.avgCWQI},${s.avgNGC},${s.avgDI},${s.avgGSI},${s.adaptiveRelevanceVariance},${s.cacheHitRate}`
+  const csvHeader = 'timestamp,elapsedMinutes,feedLatencyMs,vtsTradeCount,paperTradeCount,avgDI,avgGSI,cacheHitRate';
+  const csvRows = snapshots.map(s =>
+    `${s.timestamp},${s.elapsedMinutes},${s.feedLatencyMs},${s.vtsTradeCount},${s.paperTradeCount},${s.avgDI},${s.avgGSI},${s.cacheHitRate}`
   );
   const csvContent = [csvHeader, ...csvRows].join('\n');
   

@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { getFeedIntegrityMonitor } from '../services/feed-integrity-monitor';
 import { AlertsService } from '../services/alerts-service';
-// Directive 12.2.3: walter-ops-engine import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 import { tradingStateSync } from '../services/trading-state-sync';
 import { clusterBus } from '../services/cluster-bus';
@@ -92,7 +91,6 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     // Check if feed recovered to healthy (auto-resolve independent of alert throttling)
     if (metrics.status === 'healthy' && monitor.getActiveAlertId()) {
       console.log(`[FeedIntegrity] Feed recovered - auto-resolving incident`);
-      // Directive 12.2.3: Walter auto-resolve recording removed (Batch 6)
       monitor.updateAlertState(metrics.status, overallGrade, null);
     }
     
@@ -127,7 +125,6 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
         
         // PHASE 27.F.21: Dormant Mode Handling
         // In dormant mode: Skip user-facing alerts (trading inactive, no active stream to monitor)
-        // Directive 12.2.3: Walter anomaly object and dormant logging removed (Batch 6)
         if (isDormantMode) {
           console.log(`[FeedIntegrity-Alert] Dormant mode: Suppressing user-facing alerts (trading inactive)`);
         } else {
@@ -175,8 +172,6 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
               },
             });
           }
-          
-          // Directive 12.2.3: Walter active anomaly processing removed (Batch 6)
         }
         
         monitor.updateAlertState(metrics.status, overallGrade, null);
@@ -354,8 +349,6 @@ export async function clearFeedHealthAlertsOnStop(userId: string): Promise<void>
       const paperFeedAlerts = clearedAlerts.filter(a => a.mode === 'paper');
       
       console.log(`[FeedIntegrity] ✅ Cleared ${totalCleared} feed-health alerts (${liveFeedAlerts.length} live, ${paperFeedAlerts.length} paper)`);
-      
-      // Directive 12.2.3: Walter action logging removed (Batch 6)
       
       // Broadcast state update to refresh UI
       try {

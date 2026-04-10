@@ -8,7 +8,7 @@
  * 
  * 10.9C Changes:
  * - Rolling 24-hour window aggregation (continuous, not daily reset)
- * - Deprecated: RSI, Risk/Volatility, CWQI Gate (removed from backend)
+ * - Deprecated: RSI, Risk/Volatility (removed from backend)
  * - Active Institutional Math Guards: LQ, VolNoise, Correlation (ρ)
  * 
  * Pre-Signal Filters Tracked (10 active):
@@ -81,7 +81,7 @@ export interface PreSignalFilterInput {
 
 /**
  * 10.9F: Active filter names (9 filters)
- * Deprecated: RSI, Risk/Volatility, CWQI Gate, QuoteCurrency (10.9F)
+ * Deprecated: RSI, Risk/Volatility, QuoteCurrency (10.9F)
  */
 export const ACTIVE_FILTER_NAMES = [
   'Volume',
@@ -456,7 +456,7 @@ class FilterInsightsService {
       schemaVersion: FILTER_SCHEMA_VERSION,
       phaseDirective: '10.9F',
       activeFilters: ACTIVE_FILTER_NAMES,
-      deprecatedFilters: ['RSI', 'Risk/Volatility', 'CWQI Gate'],
+      deprecatedFilters: ['RSI', 'Risk/Volatility'],
     };
   }
 

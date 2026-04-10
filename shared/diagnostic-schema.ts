@@ -1,10 +1,10 @@
 /**
  * Diagnostic Schema - Phase 5.9
- * Defines types and structures for Walter↔Bob communication protocol
+ * Defines types and structures for diagnostic communication protocol
  */
 
 // Diagnostic trigger types
-export type DiagnosticTriggerType = 'error_based' | 'user_initiated' | 'walter_initiated';
+export type DiagnosticTriggerType = 'error_based' | 'user_initiated';
 
 // Bob inspection types
 export type InspectionType = 
@@ -21,7 +21,7 @@ export type InspectionType =
 // Severity levels for findings
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
-// Bob → Walter: Inspection Report
+// Inspection Report
 export interface BobInspectionReport {
   timestamp: string;
   triggerType: DiagnosticTriggerType;
@@ -48,7 +48,7 @@ export interface Finding {
   suggestedAction?: string;
 }
 
-// Walter → Bob: Inspection Command
+// Inspection Command
 export interface BobInspectionCommand {
   commandId: string;
   triggerType: DiagnosticTriggerType;
@@ -70,7 +70,7 @@ export interface BobInspectionCommand {
   priority: 'urgent' | 'normal' | 'low';
 }
 
-// Walter: Patch Proposal
+// Patch Proposal
 export interface PatchProposal {
   proposalId: string;
   timestamp: string;
@@ -94,7 +94,7 @@ export interface DiagnosticEvent {
   eventType: 'trigger' | 'inspection' | 'analysis' | 'proposal' | 'approval' | 'application';
   triggerType?: DiagnosticTriggerType;
   userId?: string;
-  component: 'bob' | 'walter' | 'controller' | 'system';
+  component: 'bob' | 'controller' | 'system';
   action: string;
   status: 'initiated' | 'in_progress' | 'completed' | 'failed';
   metadata?: Record<string, any>;
@@ -148,7 +148,7 @@ export interface UIError {
   severity: FindingSeverity;
 }
 
-// UX Analysis Request - For Walter's design review capabilities
+// UX Analysis Request
 export interface UXAnalysisRequest {
   requestId: string;
   analysisType: 'design_review' | 'aesthetic_evaluation' | 'accessibility_check' | 'user_flow_analysis';
@@ -158,7 +158,7 @@ export interface UXAnalysisRequest {
   metrics?: FrontendHealthReport;
 }
 
-// UX Analysis Response - Walter's design recommendations
+// UX Analysis Response
 export interface UXAnalysisResponse {
   requestId: string;
   timestamp: string;

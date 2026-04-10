@@ -6,7 +6,6 @@
  * Compares VTS simulated trades against live paper trades to validate:
  * - Strategy matching and overlap
  * - Entry/exit variance
- * - CWQI/NGC correlation
  * - Calibration error measurement
  * 
  * Produces comprehensive comparison reports for system validation.
@@ -21,8 +20,6 @@ interface VTSTradeRecord {
   strategy: string;
   entry: number;
   exit: number;
-  cwqi: number;
-  ngc: number;
   di: number;
   gsi: number;
   profit: number;
@@ -37,8 +34,6 @@ export interface PaperTradeRecord {
   strategy: string;
   entryPrice: number;
   exitPrice: number;
-  cwqi: number;
-  ngc: number;
   di?: number;
   gsi?: number;
   profit: number;
@@ -52,8 +47,6 @@ interface TradeComparison {
   strategy: string;
   vts_profit: number;
   live_profit: number;
-  cwqi_diff: number;
-  ngc_diff: number;
   position_diff: number;
   entry_diff: number;
   exit_diff: number;
@@ -69,8 +62,6 @@ interface ComparisonReport {
   matchedPairs: number;
   matchRate: number;
   calibrationError: number;
-  avgCWQIDiff: number;
-  avgNGCDiff: number;
   avgPositionDiff: number;
   avgProfitDelta: number;
   correlation: number;
@@ -135,8 +126,6 @@ function matchTrades(vtsTrades: VTSTradeRecord[], paperTrades: PaperTradeRecord[
         strategy: vts.strategy,
         vts_profit: vts.profit - vts.loss,
         live_profit: bestMatch.profit - bestMatch.loss,
-        cwqi_diff: Math.abs(vts.cwqi - bestMatch.cwqi),
-        ngc_diff: Math.abs(vts.ngc - bestMatch.ngc),
         position_diff: Math.abs(vts.positionSize - bestMatch.positionSize) / Math.max(vts.positionSize, 1),
         entry_diff: Math.abs(vts.entry - bestMatch.entryPrice) / vts.entry,
         exit_diff: Math.abs(vts.exit - bestMatch.exitPrice) / vts.exit,
@@ -148,8 +137,6 @@ function matchTrades(vtsTrades: VTSTradeRecord[], paperTrades: PaperTradeRecord[
         strategy: vts.strategy,
         vts_profit: vts.profit - vts.loss,
         live_profit: 0,
-        cwqi_diff: 0,
-        ngc_diff: 0,
         position_diff: 0,
         entry_diff: 0,
         exit_diff: 0,
@@ -184,14 +171,6 @@ export async function runComparisonAudit(vtsFilePath: string, paperFilePath: str
   
   const matchRate = vtsTrades.length > 0 ? matchedComparisons.length / vtsTrades.length : 0;
   
-  const avgCWQIDiff = matchedComparisons.length > 0
-    ? matchedComparisons.reduce((sum, c) => sum + c.cwqi_diff, 0) / matchedComparisons.length
-    : 0;
-  
-  const avgNGCDiff = matchedComparisons.length > 0
-    ? matchedComparisons.reduce((sum, c) => sum + c.ngc_diff, 0) / matchedComparisons.length
-    : 0;
-  
   const avgPositionDiff = matchedComparisons.length > 0
     ? matchedComparisons.reduce((sum, c) => sum + c.position_diff, 0) / matchedComparisons.length
     : 0;
@@ -200,7 +179,7 @@ export async function runComparisonAudit(vtsFilePath: string, paperFilePath: str
     ? matchedComparisons.reduce((sum, c) => sum + Math.abs(c.vts_profit - c.live_profit), 0) / matchedComparisons.length
     : 0;
   
-  const calibrationError = avgCWQIDiff + avgNGCDiff + avgPositionDiff * 0.5;
+  const calibrationError = avgPositionDiff * 0.5;
   
   const vtsStrategies = new Set(vtsTrades.map(t => t.strategy));
   const paperStrategies = new Set(paperTrades.map(t => t.strategy));
@@ -221,8 +200,6 @@ export async function runComparisonAudit(vtsFilePath: string, paperFilePath: str
     matchedPairs: matchedComparisons.length,
     matchRate: Math.round(matchRate * 100) / 100,
     calibrationError: Math.round(calibrationError * 100) / 100,
-    avgCWQIDiff: Math.round(avgCWQIDiff * 1000) / 1000,
-    avgNGCDiff: Math.round(avgNGCDiff * 1000) / 1000,
     avgPositionDiff: Math.round(avgPositionDiff * 1000) / 1000,
     avgProfitDelta: Math.round(avgProfitDelta * 100) / 100,
     correlation: Math.round(correlation * 100) / 100,

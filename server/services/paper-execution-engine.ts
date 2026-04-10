@@ -4,9 +4,8 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * DIRECTIVE 11.0E: FinalScore Unification
- * - Signal quality checks now use FinalScore (replaces NGC/CWQI)
- * - CWQI service retained for Net Expectancy (EV) calculation only
- * - MIN_FINAL_SCORE threshold replaces MIN_NGC and MIN_CWQI
+ * - Signal quality checks use FinalScore exclusively
+ * - MIN_FINAL_SCORE threshold is the canonical quality gate
  * 
  * ============================================================================
  * PRICE PIPELINE DOCUMENTATION (Goal A1)
@@ -1122,8 +1121,6 @@ export class PaperExecutionEngine {
           strategy: position.strategyName || 'unknown',
           entryPrice: avgPrice,
           exitPrice: actualExitPrice,
-          cwqi: parseFloat((trade as any).cwqi || '0'),
-          ngc: parseFloat((trade as any).ngc || '0'),
           di: parseFloat((trade as any).di || '0'),
           gsi: parseFloat((trade as any).gsi || '0.5'),
           profit: netPnl > 0 ? netPnl : 0,
@@ -1333,7 +1330,7 @@ export class PaperExecutionEngine {
 
         // Phase 14.1 HF8 (B1): Duplicate FinalScore check REMOVED — SQE already enforces FinalScore >= 0.35
         // (signal_quality_evaluator.ts line 130). Signals reaching this point have already passed SQE.
-        const finalScore = parseFloat(signal.finalScore || signal.cwqi || '0');
+        const finalScore = parseFloat(signal.finalScore || '0');
         console.log(`[11.0E][TCL_PROMOTE] ${signal.symbol}/${signal.strategy} with FinalScore ${finalScore.toFixed(4)}`);
 
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
@@ -1355,7 +1352,6 @@ export class PaperExecutionEngine {
             strategy: signal.strategy,
             signalId: signal.signalId,
             tradeId: tradeResult.tradeId,
-            cwqi: finalScore, // Directive 11.0E: FinalScore stored as cwqi for compatibility
             timestamp: new Date().toISOString(),
           });
           
@@ -1401,7 +1397,7 @@ export class PaperExecutionEngine {
         targetPrice: targetPrice,
         confidence: parseFloat(signal.confidence),
         timestamp: new Date(),
-        reason: `RTB Promoted (FinalScore: ${signal.finalScore || signal.cwqi})`,
+        reason: `RTB Promoted (FinalScore: ${signal.finalScore || '0'})`,
         signalId: signal.signalId,
         quantity: quantity,
         estimatedValue: notional,
@@ -1410,7 +1406,6 @@ export class PaperExecutionEngine {
           source: 'RTB_PROMOTION',
           originalSignalId: signal.signalId,
           rtbQueueId: signal.id,
-          cwqi: signal.cwqi,
           queuedAt: signal.queuedAt,
         }
       } as any;
@@ -1581,7 +1576,7 @@ export class PaperExecutionEngine {
       return;
     }
 
-    // Directive 11.8B: Net Expectancy Gate (migrated from CWQI v4)
+    // Directive 11.8B: Net Expectancy Gate
     // Check if trade has positive mathematical expectancy after fees & slippage
     const expectancyResult = evaluateTradeExpectancy(signal.symbol, {
       entryPrice: signal.entryPrice,

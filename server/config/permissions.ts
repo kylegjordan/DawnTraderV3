@@ -22,15 +22,12 @@ export type Permission =
   // Approval permissions
   | 'approve_actions'
   | 'bypass_approval'
-  | 'approve_walter_action_live'
-  | 'approve_walter_action_paper'
-  
+
   // System permissions
   | 'view_reports'
   | 'view_analytics'
   | 'manage_users'
   | 'manage_system'
-  | 'access_walter'
   
   // Data permissions
   | 'view_portfolio'
@@ -68,23 +65,20 @@ export const PERMISSION_MATRIX: Record<UserRole, RolePermissions> = {
       // All approval permissions
       'approve_actions',
       'bypass_approval',
-      'approve_walter_action_live',
-      'approve_walter_action_paper',
-      
+
       // All system permissions
       'view_reports',
       'view_analytics',
       'manage_users',
       'manage_system',
-      'access_walter',
-      
+
       // All data permissions
       'view_portfolio',
       'view_trades',
       'export_data',
     ],
   },
-  
+
   // Editor: Same as owner for backward compatibility
   editor: {
     role: 'editor',
@@ -96,25 +90,22 @@ export const PERMISSION_MATRIX: Record<UserRole, RolePermissions> = {
       'start_trading',
       'stop_trading',
       'modify_strategies',
-      
+
       // All settings permissions
       'modify_risk_settings',
       'modify_goals',
       'modify_filters',
       'modify_guardrails',
-      
+
       // All approval permissions
       'approve_actions',
       'bypass_approval',
-      'approve_walter_action_live',
-      'approve_walter_action_paper',
-      
+
       // All system permissions
       'view_reports',
       'view_analytics',
       'manage_users',
       'manage_system',
-      'access_walter',
       
       // All data permissions
       'view_portfolio',
@@ -140,12 +131,10 @@ export const PERMISSION_MATRIX: Record<UserRole, RolePermissions> = {
       
       // Approval permissions
       'approve_actions',
-      'approve_walter_action_paper',
-      
+
       // System viewing
       'view_reports',
       'view_analytics',
-      'access_walter',
       
       // Data access
       'view_portfolio',
@@ -170,7 +159,6 @@ export const PERMISSION_MATRIX: Record<UserRole, RolePermissions> = {
       // Basic system access
       'view_reports',
       'view_analytics',
-      'access_walter',
       
       // Data viewing
       'view_portfolio',

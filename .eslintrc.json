@@ -15,19 +15,6 @@
       {
         "selector": "Literal[value=/\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b/i]",
         "message": "❌ Phase 31.I: Do not hardcode UUIDs (including userId). Use resolvers/env/config instead."
-      },
-      {
-        "selector": "ImportDeclaration[source.value=/calculateCWQI|calculateNGC|computeProfitRate/]",
-        "message": "❌ Directive 11.0E: Legacy metrics (CWQI/NGC/ProfitRate) are deprecated. Use calculateFinalScore from score-calculator.ts instead."
-      }
-    ],
-    "no-restricted-imports": [
-      "warn",
-      {
-        "patterns": [{
-          "group": ["**/quality_index*"],
-          "message": "⚠️ Directive 11.0E: Consider using score-calculator.ts for FinalScore calculations instead of quality_index.ts (which contains legacy CWQI/NGC)."
-        }]
       }
     ]
   }

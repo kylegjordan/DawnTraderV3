@@ -26,11 +26,6 @@ export interface ExpertInsightsMetrics {
     consecutiveFailures: number;
     totalExecutions: number;
   };
-  walterUsageStats: {
-    conversationsReferencingInsights: number;
-    averageInsightsPerResponse: number;
-    totalReferences24h: number;
-  };
 }
 
 /**
@@ -88,9 +83,6 @@ export async function getExpertInsightsMetrics(): Promise<ExpertInsightsMetrics>
     // Task execution stats
     const taskExecutionStats = await getTaskExecutionStats();
 
-    // Walter usage stats
-    const walterUsageStats = await getWalterUsageStats();
-
     return {
       totalInsights,
       insightsThisWeek,
@@ -101,7 +93,6 @@ export async function getExpertInsightsMetrics(): Promise<ExpertInsightsMetrics>
       sourceCount,
       duplicateBlockCount,
       taskExecutionStats,
-      walterUsageStats
     };
   } catch (error) {
     console.error('[ExpertInsightsMetrics] Error fetching metrics:', error);
@@ -218,45 +209,7 @@ async function getTaskExecutionStats() {
   }
 }
 
-/**
- * Get Walter usage statistics
- */
-async function getWalterUsageStats() {
-  try {
-    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // Count conversations that might reference expert insights
-    // (This is a proxy - in production, you'd track actual references)
-    const conversationsResult = await db.execute(sql`
-      SELECT COUNT(*) as count 
-      FROM ai_conversations 
-      WHERE created_at >= ${last24h.toISOString()}
-      AND (user_message LIKE '%expert%' OR response LIKE '%expert%')
-    `);
-
-    const conversationsReferencingInsights = parseInt(
-      (conversationsResult.rows[0] as any)?.count || '0'
-    );
-
-    // Estimate average insights per response (based on recent conversations)
-    const averageInsightsPerResponse = conversationsReferencingInsights > 0 ? 1.5 : 0;
-
-    // Total references in 24h (estimated)
-    const totalReferences24h = Math.round(conversationsReferencingInsights * averageInsightsPerResponse);
-
-    return {
-      conversationsReferencingInsights,
-      averageInsightsPerResponse,
-      totalReferences24h
-    };
-  } catch (error) {
-    return {
-      conversationsReferencingInsights: 0,
-      averageInsightsPerResponse: 0,
-      totalReferences24h: 0
-    };
-  }
-}
 
 /**
  * Get current week Monday date (YYYY-MM-DD)

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { db } from "../db";
-import { knowledgeRetrievalLog, walterMemory } from "@shared/schema";
+import { knowledgeRetrievalLog } from "@shared/schema";
 import { eq, sql, desc, and } from "drizzle-orm";
 
 const openai = new OpenAI({
@@ -34,62 +34,7 @@ export class SemanticCorrelationEngine {
     }
   }
 
-  /**
-   * Relate new knowledge to existing knowledge graph
-   * Links retrieved data with Walter's semantic memory
-   */
-  async relateToKnowledgeGraph(
-    retrievedData: string,
-    userId: string,
-    context?: string
-  ): Promise<{
-    relatedMemories: any[];
-    connectionStrength: number;
-    suggestedLinks: string[];
-  }> {
-    // Generate embedding for retrieved data
-    const dataEmbedding = await this.embedText(retrievedData);
-    
-    // Find related memories in Walter's semantic memory
-    // Note: This is a simplified approach - in production would use vector similarity search
-    const recentMemories = await db
-      .select()
-      .from(walterMemory)
-      .where(eq(walterMemory.userId, userId))
-      .orderBy(desc(walterMemory.timestamp))
-      .limit(20);
-    
-    const relatedMemories: any[] = [];
-    let maxSimilarity = 0;
-    
-    // Simple keyword-based matching (in production would use vector similarity)
-    const keywords = this.extractKeywords(retrievedData);
-    
-    for (const memory of recentMemories) {
-      const memoryText = memory.content || "";
-      const matchCount = keywords.filter(kw => 
-        memoryText.toLowerCase().includes(kw.toLowerCase())
-      ).length;
-      
-      if (matchCount > 0) {
-        const similarity = matchCount / keywords.length;
-        relatedMemories.push({
-          ...memory,
-          similarity,
-        });
-        maxSimilarity = Math.max(maxSimilarity, similarity);
-      }
-    }
-    
-    // Generate suggested links based on analysis
-    const suggestedLinks = this.generateSuggestedLinks(retrievedData, relatedMemories);
-    
-    return {
-      relatedMemories: relatedMemories.slice(0, 5), // Top 5 most related
-      connectionStrength: maxSimilarity,
-      suggestedLinks,
-    };
-  }
+
 
   /**
    * Compute relevance score between query and retrieved data
@@ -206,14 +151,6 @@ export class SemanticCorrelationEngine {
     userId: string,
     threshold: number = 0.3
   ): Promise<{ hasGap: boolean; confidence: number; reason: string }> {
-    // Check if Walter has recent relevant memories
-    const recentMemories = await db
-      .select()
-      .from(walterMemory)
-      .where(eq(walterMemory.userId, userId))
-      .orderBy(desc(walterMemory.timestamp))
-      .limit(50);
-    
     // Check recent retrievals
     const recentRetrievals = await db
       .select()
@@ -221,37 +158,27 @@ export class SemanticCorrelationEngine {
       .where(eq(knowledgeRetrievalLog.userId, userId))
       .orderBy(desc(knowledgeRetrievalLog.createdAt))
       .limit(20);
-    
+
     // Simple keyword matching to assess if knowledge exists
     const queryKeywords = this.extractKeywords(query);
-    
-    let memoryMatches = 0;
-    for (const memory of recentMemories) {
-      const content = memory.content || "";
-      const matches = queryKeywords.filter(kw => 
-        content.toLowerCase().includes(kw.toLowerCase())
-      ).length;
-      memoryMatches += matches;
-    }
-    
+
     let retrievalMatches = 0;
     for (const retrieval of recentRetrievals) {
       const data = retrieval.retrievedData || "";
-      const matches = queryKeywords.filter(kw => 
+      const matches = queryKeywords.filter(kw =>
         data.toLowerCase().includes(kw.toLowerCase())
       ).length;
       retrievalMatches += matches;
     }
-    
-    const totalMatches = memoryMatches + retrievalMatches;
-    const confidence = Math.min(1.0, totalMatches / (queryKeywords.length * 3));
-    
+
+    const confidence = Math.min(1.0, retrievalMatches / (queryKeywords.length * 3));
+
     const hasGap = confidence < threshold;
-    
-    const reason = hasGap 
+
+    const reason = hasGap
       ? `Low knowledge confidence (${(confidence * 100).toFixed(1)}%) - external retrieval recommended`
       : `Sufficient knowledge exists (${(confidence * 100).toFixed(1)}%) - retrieval may not be needed`;
-    
+
     return { hasGap, confidence, reason };
   }
 }

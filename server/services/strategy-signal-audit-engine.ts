@@ -50,60 +50,27 @@ export class StrategySignalAuditEngine {
   }
 
   private recalculate(sig: any) {
-    const { 
-      volatility = 0, 
-      confidence = 0.5, 
-      profit_pred = 0, 
-      loss_pred = 0, 
-      ageMinutes = 0,
-      profitRate = 0,
-      riskScore = 0.22,
-      ngc: originalNgc = 0,
-      cwqi: originalCwqi = 0
-    } = sig;
-
-    const safeConfidence = Number(confidence) || 0.5;
-    const safeVolatility = Math.min(Number(volatility) || 0, 1);
-    const safeProfitPred = Number(profit_pred) || Number(profitRate) || 0;
-    const safeLossPred = Number(loss_pred) || 0;
-    const safeAgeMinutes = Number(ageMinutes) || 0;
-
-    const cwqi =
-      0.4 * safeConfidence +
-      0.3 * (1 - safeVolatility) +
-      0.2 * Math.max(0, Math.min(1, safeProfitPred - safeLossPred)) +
-      0.1 * Math.max(0, 1 - safeAgeMinutes / 600);
-
-    const denominator = Math.abs(safeProfitPred) + Math.abs(safeLossPred) + 1e-6;
-    const ngc = (safeProfitPred - safeLossPred) / denominator;
-
     const strategyWeight = sig.strategyWeight || sig.strategy_weight || 0.5;
     const exposureMult = sig.exposureMult || sig.exposure_mult || 1;
-    
-    const di = 0.25 * Math.max(0, Math.min(1, cwqi)) + 
-               0.25 * Math.max(0, Math.min(1, ngc)) + 
-               0.25 * Math.max(0, Math.min(1, strategyWeight)) + 
-               0.25 * Math.max(0, Math.min(1, exposureMult));
 
-    return { cwqi, ngc, di };
+    const di = 0.5 * Math.max(0, Math.min(1, strategyWeight)) +
+               0.5 * Math.max(0, Math.min(1, exposureMult));
+
+    return { di };
   }
 
   private compare(original: any, recomputed: any) {
     const tolerance = 0.05;
-    
-    const originalCwqi = Number(original.cwqi) || 0;
-    const originalNgc = Number(original.ngc) || 0;
+
     const originalDi = Number(original.di) || Number(original.decisionIndex) || 0;
-    
+
     const comparisons = [
-      { key: 'cwqi', original: originalCwqi, recomputed: recomputed.cwqi },
-      { key: 'ngc', original: originalNgc, recomputed: recomputed.ngc },
       { key: 'di', original: originalDi, recomputed: recomputed.di }
     ];
-    
+
     for (const { key, original: o, recomputed: r } of comparisons) {
       if (o === 0 && r !== 0) continue;
-      
+
       const diff = Math.abs(o - r);
       if (diff > tolerance) {
         this.report.mismatches.push({
@@ -132,7 +99,7 @@ export class StrategySignalAuditEngine {
       };
     }
     
-    const mismatchRate = (mismatches.length / (total * 3)) * 100;
+    const mismatchRate = (mismatches.length / total) * 100; // B55: only DI checked now
     
     const byMetric: Record<string, number> = {};
     const byStrategy: Record<string, number> = {};
@@ -146,7 +113,7 @@ export class StrategySignalAuditEngine {
     
     return {
       total,
-      metricsChecked: total * 3,
+      metricsChecked: total, // B55: only DI checked
       mismatches: mismatches.length,
       mismatchRate: `${mismatchRate.toFixed(2)}%`,
       ok: mismatchRate < 10,

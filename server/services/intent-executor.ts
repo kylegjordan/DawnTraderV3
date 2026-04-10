@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 // ============================================================================
 // Phase 8.7.2: Intent Execution Framework
 // ============================================================================
-// Provides safe execution of validated intents from Walter AI or manual actions
+// Provides safe execution of validated intents from AI or manual actions
 // with full RBAC, state validation, audit logging, and provenance tracking
 
 interface IntentPayload {

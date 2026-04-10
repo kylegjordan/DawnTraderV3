@@ -21,8 +21,8 @@ interface C14Snapshot {
   intervalLabel: string;
   rtbQueueSize: number;
   rtbRefreshDelta: number;
-  avgCwqi: number;
-  avgNgc: number;
+  avgFinalScore: number;
+  avgConfidence: number;
   tclState: 'WARMING' | 'ACTIVE' | 'IDLE';
   openTradesCount: number;
   openTradesSymbols: string[];
@@ -31,7 +31,7 @@ interface C14Snapshot {
   avgTradeDuration: number;
   filterRejections: Record<string, number>;
   avgVolumeUSD: number;
-  cwqiRankSpread: { min: number; max: number };
+  scoreRankSpread: { min: number; max: number };
   promotionsThisInterval: number;
   tclEventsThisInterval: number;
 }
@@ -129,7 +129,7 @@ class C14ValidationService {
     this.promotionHandler = (event: PromotionEvent) => {
       if (!this.session || event.mode !== this.session.mode) return;
       this.session.promotions.push(event);
-      console.log(`[8.8.4-C.14][PROMOTION] symbol=${event.symbol}, strategy=${event.strategy}, cwqi=${event.cwqi?.toFixed(3)}`);
+      console.log(`[8.8.4-C.14][PROMOTION] symbol=${event.symbol}, strategy=${event.strategy}`);
     };
 
     eventBus.onTCLActivated(this.tclHandler);
@@ -209,18 +209,18 @@ class C14ValidationService {
       : 0;
     this.session.previousRtbSignalIds = currentRtbIds;
 
-    const rtbWithMetrics = rtbQueue.filter(s => s.cwqi && s.confidence);
-    const avgCwqi = rtbWithMetrics.length > 0 
-      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.cwqi || '0'), 0) / rtbWithMetrics.length 
+    const rtbWithMetrics = rtbQueue.filter(s => s.finalScore && s.confidence);
+    const avgFinalScore = rtbWithMetrics.length > 0
+      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.finalScore || '0'), 0) / rtbWithMetrics.length
       : 0;
-    const avgNgc = rtbWithMetrics.length > 0 
-      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.confidence || '0'), 0) / rtbWithMetrics.length 
+    const avgConfidence = rtbWithMetrics.length > 0
+      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.confidence || '0'), 0) / rtbWithMetrics.length
       : 0;
 
-    const cwqiValues = rtbWithMetrics.map(s => parseFloat(s.cwqi || '0')).sort((a, b) => a - b);
-    const cwqiRankSpread = {
-      min: cwqiValues.length > 0 ? cwqiValues[0] : 0,
-      max: cwqiValues.length > 0 ? cwqiValues[cwqiValues.length - 1] : 0,
+    const scoreValues = rtbWithMetrics.map(s => parseFloat(s.finalScore || '0')).sort((a, b) => a - b);
+    const scoreRankSpread = {
+      min: scoreValues.length > 0 ? scoreValues[0] : 0,
+      max: scoreValues.length > 0 ? scoreValues[scoreValues.length - 1] : 0,
     };
 
     const closedTradesPnL = closedTrades.reduce((sum, t) => sum + parseFloat(String(t.netPnl || t.pnl || 0)), 0);
@@ -269,8 +269,8 @@ class C14ValidationService {
       intervalLabel: label,
       rtbQueueSize: rtbQueue.length,
       rtbRefreshDelta,
-      avgCwqi,
-      avgNgc,
+      avgFinalScore,
+      avgConfidence,
       tclState,
       openTradesCount: openPositions.length,
       openTradesSymbols: openPositions.map(p => p.symbol),
@@ -279,7 +279,7 @@ class C14ValidationService {
       avgTradeDuration,
       filterRejections: { ...this.session.filterRejectionCounts },
       avgVolumeUSD,
-      cwqiRankSpread,
+      scoreRankSpread,
       promotionsThisInterval,
       tclEventsThisInterval,
     };
@@ -303,8 +303,8 @@ class C14ValidationService {
 | Timestamp | ${snapshot.timestamp} |
 | RTB Queue Size | ${snapshot.rtbQueueSize} |
 | RTB Refresh Delta | ${snapshot.rtbRefreshDelta.toFixed(1)}% |
-| Avg CWQI | ${snapshot.avgCwqi.toFixed(4)} |
-| Avg NGC | ${snapshot.avgNgc.toFixed(4)} |
+| Avg FinalScore | ${snapshot.avgFinalScore.toFixed(4)} |
+| Avg Confidence | ${snapshot.avgConfidence.toFixed(4)} |
 | TCL State | ${snapshot.tclState} |
 | Open Trades | ${snapshot.openTradesCount} |
 | Open Trade Symbols | ${snapshot.openTradesSymbols.join(', ') || 'None'} |
@@ -312,7 +312,7 @@ class C14ValidationService {
 | Closed Trades P&L | $${snapshot.closedTradesPnL.toFixed(2)} |
 | Avg Trade Duration | ${snapshot.avgTradeDuration.toFixed(1)} min |
 | Avg Volume USD | $${snapshot.avgVolumeUSD.toFixed(0)} |
-| CWQI Rank Spread | ${snapshot.cwqiRankSpread.min.toFixed(4)} - ${snapshot.cwqiRankSpread.max.toFixed(4)} |
+| Score Rank Spread | ${snapshot.scoreRankSpread.min.toFixed(4)} - ${snapshot.scoreRankSpread.max.toFixed(4)} |
 | Promotions (interval) | ${snapshot.promotionsThisInterval} |
 | TCL Events (interval) | ${snapshot.tclEventsThisInterval} |
 
@@ -428,11 +428,11 @@ ${Object.entries(this.session.filterRejectionCounts).length > 0
       .join('\n')
   : 'No rejections recorded'}
 
-## CWQI / NGC → P&L Correlation
+## FinalScore / Confidence → P&L Correlation
 | Metric | Value |
 |--------|-------|
-| Avg CWQI (All Signals) | ${this.session.snapshots.length > 0 ? (this.session.snapshots.reduce((sum, s) => sum + s.avgCwqi, 0) / this.session.snapshots.length).toFixed(4) : 'N/A'} |
-| Avg NGC (All Signals) | ${this.session.snapshots.length > 0 ? (this.session.snapshots.reduce((sum, s) => sum + s.avgNgc, 0) / this.session.snapshots.length).toFixed(4) : 'N/A'} |
+| Avg FinalScore (All Signals) | ${this.session.snapshots.length > 0 ? (this.session.snapshots.reduce((sum, s) => sum + s.avgFinalScore, 0) / this.session.snapshots.length).toFixed(4) : 'N/A'} |
+| Avg Confidence (All Signals) | ${this.session.snapshots.length > 0 ? (this.session.snapshots.reduce((sum, s) => sum + s.avgConfidence, 0) / this.session.snapshots.length).toFixed(4) : 'N/A'} |
 | Profitable Trade Count | ${profitableTrades.length} |
 | Losing Trade Count | ${losingTrades.length} |
 

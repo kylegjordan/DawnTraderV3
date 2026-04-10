@@ -15,8 +15,7 @@ interface TradingSignal {
   quoteCurrency: string;
   strategy: string;
   confidence: number;
-  cwqi: number | null;
-  ngc: number | null;
+  finalScore: number | null;
   mlConfidence: number | null;
   finalRank: number | null;
   strategyWeight: number | null;
@@ -39,12 +38,12 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'rank' | 'symbol' | 'cwqi' | 'ngc' | 'mlConfidence' | 'finalRank' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status' | 'marketRegime' | 'marketFriction';
+type SortField = 'rank' | 'symbol' | 'finalScore' | 'mlConfidence' | 'finalRank' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status' | 'marketRegime' | 'marketFriction';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [sortField, setSortField] = useState<SortField>('cwqi');
+  const [sortField, setSortField] = useState<SortField>('finalScore');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const queryClient = useQueryClient();
   const { messages } = useWebSocket();
@@ -122,13 +121,9 @@ export default function ReadyToBuyTable() {
 
     switch (sortField) {
       case 'rank':
-      case 'cwqi':
-        aValue = a.cwqi ?? a.confidence ?? 0;
-        bValue = b.cwqi ?? b.confidence ?? 0;
-        break;
-      case 'ngc':
-        aValue = a.ngc ?? 0;
-        bValue = b.ngc ?? 0;
+      case 'finalScore':
+        aValue = a.finalScore ?? a.confidence ?? 0;
+        bValue = b.finalScore ?? b.confidence ?? 0;
         break;
       case 'mlConfidence':
         aValue = a.mlConfidence ?? 0;
@@ -266,9 +261,9 @@ export default function ReadyToBuyTable() {
         {/* Phase 8.8.4-C.7: Unified RTB pool description */}
         <div className="mb-4 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
           <p>
-            <strong>Ready-to-Buy Signals:</strong> Displays all SQE-qualified signals ranked by CWQI 
+            <strong>Ready-to-Buy Signals:</strong> Displays all SQE-qualified signals ranked by FinalScore 
             (Confidence-Weighted Quality Index). Signals remain in this pool until expiration or 
-            promotion to active trades. CWQI combines Confidence, Risk, Expected Return, and Profit Rate.
+            promotion to active trades. FinalScore combines Confidence, Risk, Expected Return, and Profit Rate.
           </p>
         </div>
         
@@ -297,8 +292,7 @@ export default function ReadyToBuyTable() {
                 <tr className="border-b">
                   <SortHeader field="finalRank" label="Rank" />
                   <SortHeader field="symbol" label="Symbol" />
-                  <SortHeader field="cwqi" label="CWQI" />
-                  <SortHeader field="ngc" label="NGC" />
+                  <SortHeader field="score" label="FinalScore" />
                   <SortHeader field="mlConfidence" label="ML Conf" />
                   <SortHeader field="strategyWeight" label="S.Wgt" />
                   <SortHeader field="price" label="Price" />
@@ -319,8 +313,7 @@ export default function ReadyToBuyTable() {
                   const targetPrice = Number(signal.targetPrice);
                   const stopPrice = Number(signal.stopPrice);
                   const currentPrice = Number(signal.currentPrice);
-                  const cwqi = signal.cwqi !== null ? Number(signal.cwqi) : (signal.confidence ?? 0);
-                  const ngc = signal.ngc !== null ? Number(signal.ngc) : null;
+                  const score = signal.finalScore !== null ? Number(signal.finalScore) : (signal.confidence ?? 0);
                   const mlConfidence = signal.mlConfidence !== null ? Number(signal.mlConfidence) : null;
                   const finalRank = signal.finalRank !== null ? Number(signal.finalRank) : null;
                   const volume24h = signal.volume24h !== null ? Number(signal.volume24h) : null;
@@ -346,20 +339,12 @@ export default function ReadyToBuyTable() {
                       <td className="py-3 px-3 font-semibold" data-testid={`text-symbol-${index}`}>
                         {signal.symbol}
                       </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-cwqi-${index}`}>
+                      <td className="text-right py-3 px-3" data-testid={`text-score-${index}`}>
                         <span className={cn(
                           "font-semibold",
-                          cwqi >= 0.8 ? "text-success" : cwqi >= 0.5 ? "text-primary" : "text-muted-foreground"
+                          score >= 0.8 ? "text-success" : score >= 0.5 ? "text-primary" : "text-muted-foreground"
                         )}>
-                          {!isNaN(cwqi) ? cwqi.toFixed(4) : '—'}
-                        </span>
-                      </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-ngc-${index}`}>
-                        <span className={cn(
-                          "font-semibold",
-                          (ngc ?? 0) >= 0.8 ? "text-success" : (ngc ?? 0) >= 0.5 ? "text-primary" : "text-muted-foreground"
-                        )}>
-                          {ngc !== null && !isNaN(ngc) ? ngc.toFixed(4) : '—'}
+                          {!isNaN(score) ? score.toFixed(4) : '—'}
                         </span>
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-ml-confidence-${index}`}>

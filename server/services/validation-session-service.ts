@@ -4,7 +4,7 @@
  * Manages 3-hour validation sessions with:
  * - 30-minute periodic status reports
  * - Post-session summary with correlations
- * - Metrics tracking for RTB queue, trades, NGC, CWQI, PnL
+ * - Metrics tracking for RTB queue, trades, PnL
  */
 
 import { storage } from '../storage.js';
@@ -17,8 +17,6 @@ interface SessionMetrics {
   rtbQueueSize: number;
   openTrades: number;
   closedTrades: number;
-  avgNGC: number;
-  avgCWQI: number;
   avgPnL: number;
   winRate: number;
 }
@@ -82,12 +80,6 @@ class ValidationSessionService {
         storage.getPaperSimTrades(mode, { limit: 1000, closedOnly: true }),
       ]);
 
-      const ngcValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.confidence || 0))).filter((v: number) => !isNaN(v) && v > 0);
-      const avgNGC = ngcValues.length > 0 ? ngcValues.reduce((a: number, b: number) => a + b, 0) / ngcValues.length : 0;
-
-      const cwqiValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.cwqi || 0))).filter((v: number) => !isNaN(v) && v > 0);
-      const avgCWQI = cwqiValues.length > 0 ? cwqiValues.reduce((a: number, b: number) => a + b, 0) / cwqiValues.length : 0;
-
       const pnlValues = closedTrades.map((t: PaperSimTrade) => parseFloat(String(t.netPnl || t.pnl || 0)));
       const avgPnL = pnlValues.length > 0 ? pnlValues.reduce((a: number, b: number) => a + b, 0) / pnlValues.length : 0;
 
@@ -99,15 +91,13 @@ class ValidationSessionService {
         rtbQueueSize: rtbSignals.length,
         openTrades: openPositions.length,
         closedTrades: closedTrades.length,
-        avgNGC: Math.round(avgNGC * 10000) / 10000,
-        avgCWQI: Math.round(avgCWQI * 10000) / 10000,
         avgPnL: Math.round(avgPnL * 100) / 100,
         winRate: Math.round(winRate * 100) / 100,
       };
 
       this.currentSession.reports.push(metrics);
 
-      console.log(`[8.8.4-C.11][STATUS_REPORT] RTB=${metrics.rtbQueueSize} open=${metrics.openTrades} closed=${metrics.closedTrades} avgNGC=${metrics.avgNGC} avgCWQI=${metrics.avgCWQI} avgPnL=$${metrics.avgPnL} winRate=${metrics.winRate}%`);
+      console.log(`[8.8.4-C.11][STATUS_REPORT] RTB=${metrics.rtbQueueSize} open=${metrics.openTrades} closed=${metrics.closedTrades} avgPnL=$${metrics.avgPnL} winRate=${metrics.winRate}%`);
 
       return metrics;
     } catch (err) {
@@ -140,52 +130,18 @@ class ValidationSessionService {
     const closedTrades = await storage.getPaperSimTrades(mode, { limit: 1000, closedOnly: true });
     const rtbSignals = await storage.getRtbSignals({ mode });
 
-    interface TradeMetric {
-      symbol: string;
-      cwqi: number;
-      ngc: number;
-      pnl: number;
-    }
 
-    const signalsBySymbol = new Map<string, RtbSignal>();
-    for (const signal of rtbSignals) {
-      signalsBySymbol.set(signal.symbol, signal);
-    }
 
-    const tradesWithMetrics: TradeMetric[] = closedTrades.map((t: PaperSimTrade) => {
-      const signal = signalsBySymbol.get(t.symbol);
-      return {
-        symbol: t.symbol,
-        cwqi: signal ? parseFloat(String(signal.cwqi || 0)) : parseFloat(String(t.confidence || 0)),
-        ngc: signal ? parseFloat(String(signal.confidence || 0)) : parseFloat(String(t.confidence || 0)),
-        pnl: parseFloat(String(t.netPnl || t.pnl || 0)),
-      };
-    });
-
-    const cwqiPnlCorrelation = this.calculateCorrelation(
-      tradesWithMetrics.map((t: TradeMetric) => t.cwqi),
-      tradesWithMetrics.map((t: TradeMetric) => t.pnl)
-    );
-
-    const ngcPnlCorrelation = this.calculateCorrelation(
-      tradesWithMetrics.map((t: TradeMetric) => t.ngc),
-      tradesWithMetrics.map((t: TradeMetric) => t.pnl)
-    );
-
-    const sortedByCWQI = [...tradesWithMetrics].sort((a: TradeMetric, b: TradeMetric) => b.cwqi - a.cwqi);
-    const top5 = sortedByCWQI.slice(0, 5);
-    const bottom5 = sortedByCWQI.slice(-5);
+    const pnlValues = closedTrades.map((t: PaperSimTrade) => parseFloat(String(t.netPnl || t.pnl || 0)));
+    const totalPnL = pnlValues.reduce((a: number, b: number) => a + b, 0);
+    const wins = pnlValues.filter((p: number) => p > 0).length;
+    const winRate = pnlValues.length > 0 ? (wins / pnlValues.length) * 100 : 0;
 
     console.log(`[8.8.4-C.11][SUMMARY] ======================================`);
     console.log(`[8.8.4-C.11][SUMMARY] Session Duration: ${this.currentSession.duration}h`);
     console.log(`[8.8.4-C.11][SUMMARY] Mode: ${mode}`);
     console.log(`[8.8.4-C.11][SUMMARY] Total Reports: ${this.currentSession.reports.length}`);
-    console.log(`[8.8.4-C.11][SUMMARY] Correlation(CWQI, PnL)=${cwqiPnlCorrelation.toFixed(4)}`);
-    console.log(`[8.8.4-C.11][SUMMARY] Correlation(NGC, PnL)=${ngcPnlCorrelation.toFixed(4)}`);
-    console.log(`[8.8.4-C.11][SUMMARY] Top 5 by CWQI:`);
-    top5.forEach((t: TradeMetric) => console.log(`  ${t.symbol}: CWQI=${t.cwqi.toFixed(4)} PnL=$${t.pnl.toFixed(2)}`));
-    console.log(`[8.8.4-C.11][SUMMARY] Bottom 5 by CWQI:`);
-    bottom5.forEach((t: TradeMetric) => console.log(`  ${t.symbol}: CWQI=${t.cwqi.toFixed(4)} PnL=$${t.pnl.toFixed(2)}`));
+    console.log(`[8.8.4-C.11][SUMMARY] Trades: ${closedTrades.length}, WinRate: ${winRate.toFixed(1)}%, TotalPnL: $${totalPnL.toFixed(2)}`);
     console.log(`[8.8.4-C.11][SUMMARY] ======================================`);
   }
 
@@ -257,10 +213,9 @@ class ValidationSessionService {
         return;
       }
 
-      const ngcValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.confidence || 0))).filter((v: number) => !isNaN(v));
-      const cwqiValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.cwqi || 0))).filter((v: number) => !isNaN(v));
       const riskValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.riskScore || 0))).filter((v: number) => !isNaN(v));
       const expectedReturnValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.expectedReturn || 0))).filter((v: number) => !isNaN(v));
+      const confidenceValues = rtbSignals.map((s: RtbSignal) => parseFloat(String(s.confidence || 0))).filter((v: number) => !isNaN(v));
 
       const stats = (arr: number[]) => {
         if (arr.length === 0) return { avg: 0, min: 0, max: 0 };
@@ -271,14 +226,12 @@ class ValidationSessionService {
         };
       };
 
-      const ngcStats = stats(ngcValues);
-      const cwqiStats = stats(cwqiValues);
+      const confidenceStats = stats(confidenceValues);
       const riskStats = stats(riskValues);
       const profitRateStats = stats(expectedReturnValues);
 
       console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] Signals: ${rtbSignals.length}`);
-      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] NGC: avg=${ngcStats.avg.toFixed(4)}, min=${ngcStats.min.toFixed(4)}, max=${ngcStats.max.toFixed(4)}`);
-      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] CWQI: avg=${cwqiStats.avg.toFixed(4)}, min=${cwqiStats.min.toFixed(4)}, max=${cwqiStats.max.toFixed(4)}`);
+      console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] Confidence: avg=${confidenceStats.avg.toFixed(4)}, min=${confidenceStats.min.toFixed(4)}, max=${confidenceStats.max.toFixed(4)}`);
       console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] ProfitRate: avg=${profitRateStats.avg.toFixed(4)}, min=${profitRateStats.min.toFixed(4)}, max=${profitRateStats.max.toFixed(4)}`);
       console.log(`[8.8.4-C.11][SQE_DISTRIBUTION] Risk: avg=${riskStats.avg.toFixed(4)}, min=${riskStats.min.toFixed(4)}, max=${riskStats.max.toFixed(4)}`);
     } catch (err) {

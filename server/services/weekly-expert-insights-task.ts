@@ -2,7 +2,7 @@
  * Weekly Expert Insights Update Task - Phase 5.8
  * 
  * Fetches fresh expert trading insights from credible sources weekly
- * and stores them in the expert_updates table for Walter's knowledge base.
+ * and stores them in the expert_updates table.
  */
 
 import { storage } from '../storage';

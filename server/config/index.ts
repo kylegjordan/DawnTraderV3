@@ -9,7 +9,6 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET || 'development-temp-secret',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   
-  WALTER_DISABLED: process.env.WALTER_DISABLED === 'true',
   LATTI_ENABLED: process.env.LATTI_ENABLED !== 'false',
   PASSIVE_LEARNING_ENABLED: process.env.PASSIVE_LEARNING_ENABLED !== 'false',
   

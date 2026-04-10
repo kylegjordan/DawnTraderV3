@@ -7,7 +7,7 @@
  * This service provides market evaluation for UI analytics ONLY:
  * - Filtered Pairs tab (UI display)
  * - Filtered Insights tab (UI display)
- * - Walter analytics (AI analysis display)
+ * - AI analytics display
  * - Health monitor (diagnostics)
  * 
  * NOTE: Signal generation uses activeFilterPool.getActivePool() directly,

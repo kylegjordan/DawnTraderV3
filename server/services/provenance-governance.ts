@@ -2,7 +2,7 @@
  * Phase 8.6.3: Provenance Governance & Reporting
  * 
  * Daily reports on:
- * - Freshness by layer (BoB/Cortex/Walter)
+ * - Freshness by layer (BoB/Cortex)
  * - Provenance coverage percentage
  * - Learning fragment capture stats
  * - SSOT compliance metrics
@@ -19,7 +19,6 @@ export interface GovernanceReport {
   freshness: {
     bob: { avgAgeMs: number; count: number; status: 'healthy' | 'stale' };
     cortex: { avgAgeMs: number; count: number; status: 'healthy' | 'stale' };
-    walter: { avgAgeMs: number; count: number; status: 'healthy' | 'stale' };
   };
   provenanceCoverage: number; // percentage
   learningFragments: {
@@ -226,7 +225,7 @@ class ProvenanceGovernanceService {
       ];
       
       const legacyReferences = Array.from(referencedTables).filter(
-        t => !allAuthoritativeTables.includes(t) && !t.startsWith('cortex_') && !t.startsWith('walter_')
+        t => !allAuthoritativeTables.includes(t) && !t.startsWith('cortex_')
       );
       
       const overallStatus: 'valid' | 'invalid' = 
@@ -364,7 +363,7 @@ class ProvenanceGovernanceService {
       let legacyCount = 0;
       
       [...recentTraces, ...recentBobTraces].forEach(trace => {
-        if (trace.sourceTable && !trace.sourceTable.startsWith('cortex_') && !trace.sourceTable.startsWith('walter_')) {
+        if (trace.sourceTable && !trace.sourceTable.startsWith('cortex_')) {
           totalCount++;
           if (authoritativeTables.includes(trace.sourceTable)) {
             validatedCount++;
@@ -442,10 +441,6 @@ class ProvenanceGovernanceService {
           ...freshnessStats.cortex,
           status: this.getFreshnessStatus(freshnessStats.cortex.avgAgeMs),
         },
-        walter: {
-          ...freshnessStats.walter,
-          status: this.getFreshnessStatus(freshnessStats.walter.avgAgeMs),
-        },
       },
       provenanceCoverage,
       learningFragments: learningStats,
@@ -463,7 +458,6 @@ class ProvenanceGovernanceService {
     const staleComponents = [
       report.freshness.bob.status === 'stale' ? 'BoB' : null,
       report.freshness.cortex.status === 'stale' ? 'Cortex' : null,
-      report.freshness.walter.status === 'stale' ? 'Walter' : null,
     ].filter(Boolean);
     
     report.summary = staleComponents.length > 0
@@ -510,7 +504,7 @@ class ProvenanceGovernanceService {
     }
     
     console.log('[ProvenanceGovernance] ✅ Report generated:');
-    console.log(`  Freshness: BoB=${report.freshness.bob.status}, Cortex=${report.freshness.cortex.status}, Walter=${report.freshness.walter.status}`);
+    console.log(`  Freshness: BoB=${report.freshness.bob.status}, Cortex=${report.freshness.cortex.status}`);
     console.log(`  Provenance Coverage: ${report.provenanceCoverage.toFixed(1)}%`);
     console.log(`  Learning Fragments (24h): ${report.learningFragments.total24h} (${report.learningFragments.byMode.live} live, ${report.learningFragments.byMode.paper} paper)`);
     console.log(`  SSOT Compliance: ${report.ssotCompliance.compliancePercentage.toFixed(1)}%`);
@@ -552,7 +546,6 @@ class ProvenanceGovernanceService {
     
     if (report.freshness.bob.status === 'stale') outOfSync.push('BoB');
     if (report.freshness.cortex.status === 'stale') outOfSync.push('Cortex');
-    if (report.freshness.walter.status === 'stale') outOfSync.push('Walter');
     
     return outOfSync;
   }

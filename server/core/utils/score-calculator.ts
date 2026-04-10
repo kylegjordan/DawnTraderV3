@@ -5,7 +5,6 @@
  * Centralized FinalScore and RegimeWeight calculation functions.
  * Used by SQE backfill for dynamic recalculation when values are missing.
  * 
- * DIRECTIVE 11.0E: All legacy metrics (NGC, CWQI, ProfitRate) have been REMOVED.
  * FinalScore and RegimeWeight are the sole determinants for signal quality.
  * 
  * DIRECTIVE 11.7C: Adds PredictiveConfidence derived from VTS telemetry

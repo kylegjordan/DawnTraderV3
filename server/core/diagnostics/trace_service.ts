@@ -22,8 +22,7 @@ export interface TraceEntry {
   phase: TracePhase;
   symbol: string;
   strategy: string;
-  ngcRaw: number | null;
-  cwqiRaw: number | null;
+  finalScoreRaw: number | null;
   profit: number | null;
   risk: number | null;
   normalized: boolean;
@@ -161,15 +160,14 @@ class DiagnosticTraceService {
   traceOrchestrator(
     symbol: string, 
     strategy: string, 
-    rawMetrics: { ngc?: number; cwqi?: number; profit?: number; risk?: number },
+    rawMetrics: { finalScore?: number; profit?: number; risk?: number },
     normalized: boolean = false
   ): void {
     this.trace({
       phase: 'orchestrator',
       symbol,
       strategy,
-      ngcRaw: rawMetrics.ngc ?? null,
-      cwqiRaw: rawMetrics.cwqi ?? null,
+      finalScoreRaw: rawMetrics.finalScore ?? null,
       profit: rawMetrics.profit ?? null,
       risk: rawMetrics.risk ?? null,
       normalized,
@@ -183,7 +181,7 @@ class DiagnosticTraceService {
   traceSQE(
     symbol: string,
     strategy: string,
-    metrics: { finalScore?: number; regimeWeight?: number; ngc?: number; cwqi?: number; profit?: number; risk?: number },
+    metrics: { finalScore?: number; regimeWeight?: number; profit?: number; risk?: number },
     passed: boolean,
     normalized: boolean = true
   ): void {
@@ -191,8 +189,7 @@ class DiagnosticTraceService {
       phase: 'sqe',
       symbol,
       strategy,
-      ngcRaw: metrics.ngc ?? metrics.finalScore ?? null,
-      cwqiRaw: metrics.cwqi ?? metrics.regimeWeight ?? null,
+      finalScoreRaw: metrics.finalScore ?? metrics.regimeWeight ?? null,
       profit: metrics.profit ?? null,
       risk: metrics.risk ?? null,
       normalized,
@@ -206,7 +203,6 @@ class DiagnosticTraceService {
   traceRTB(
     symbol: string,
     strategy: string,
-    metrics: { ngc?: number; cwqi?: number },
     inserted: boolean,
     extra?: Record<string, unknown>
   ): void {
@@ -214,8 +210,7 @@ class DiagnosticTraceService {
       phase: 'rtb',
       symbol,
       strategy,
-      ngcRaw: metrics.ngc ?? null,
-      cwqiRaw: metrics.cwqi ?? null,
+      finalScoreRaw: null,
       profit: null,
       risk: null,
       normalized: true,

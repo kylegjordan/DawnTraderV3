@@ -23,6 +23,6 @@ export class AgentEventBridge implements AgentEventHandler {
   emit(event: AgentEvent): void {
     const handlers = this.handlers.get(event.type) || [];
     handlers.forEach(handler => handler(event.payload));
-    console.log(`[AgentEvents] Emitted ${event.type} - stub placeholder for future Walter integration`);
+    console.log(`[AgentEvents] Emitted ${event.type} - stub placeholder for future agent integration`);
   }
 }

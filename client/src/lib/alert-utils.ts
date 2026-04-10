@@ -44,7 +44,6 @@ export function categorizeAlert(alert: SystemAlert): AlertCategory {
   const actionableTypes = [
     'approval_required',
     'confirmation_needed',
-    'walter_approval',
     'risk_adjustment',
     'parameter_change',
     'strategy_activation',

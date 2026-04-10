@@ -76,13 +76,6 @@ interface TradingEngineStatus {
   lastActivity: string | null;
 }
 
-interface WalterActivity {
-  requestsPerMinute: number;
-  successRate: number;
-  pendingApprovals: number;
-  totalRequests24h: number;
-}
-
 interface DatabaseHealth {
   connectionStatus: string;
   recordCounts: {
@@ -227,12 +220,6 @@ export default function EnhancedSystemMonitoring() {
     refetchInterval,
   });
 
-  // Fetch Walter activity
-  const { data: walterData, isLoading: walterLoading } = useQuery<{ ok: boolean; activity: WalterActivity }>({
-    queryKey: ['/api/diagnostics/walter-activity'],
-    refetchInterval,
-  });
-
   // Fetch database health
   const { data: dbHealthData, isLoading: dbHealthLoading } = useQuery<{ ok: boolean; health: DatabaseHealth }>({
     queryKey: ['/api/diagnostics/database-health'],
@@ -293,7 +280,6 @@ export default function EnhancedSystemMonitoring() {
 
   const metrics = metricsData?.metrics;
   const engineStatus = engineData?.status;
-  const walterActivity = walterData?.activity;
   const dbHealth = dbHealthData?.health;
   const errors = errorData?.errors || [];
   const analyses = analysisData?.analyses || [];
@@ -368,10 +354,6 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="trading-engine" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-trading-engine" title="Trading Engine">
             <TrendingUp className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Trading Engine</span>
-          </TabsTrigger>
-          <TabsTrigger value="walter" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-walter" title="Walter Activity">
-            <Bot className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Walter Activity</span>
           </TabsTrigger>
           <TabsTrigger value="database" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-database" title="Database">
             <Database className="w-4 h-4 sm:mr-2" />
@@ -747,51 +729,7 @@ export default function EnhancedSystemMonitoring() {
           </Card>
         </TabsContent>
 
-        {/* Tab 3: Walter Activity */}
-        <TabsContent value="walter" className="space-y-6 mt-6">
-          <Card data-testid="card-walter-activity">
-            <CardHeader>
-              <CardTitle>Walter Activity Metrics</CardTitle>
-              <CardDescription>AI assistant usage and performance</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {walterLoading ? (
-                <Skeleton className="h-32 w-full" />
-              ) : walterActivity ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-muted-foreground">Requests per Minute</div>
-                    <div className="text-2xl font-bold mt-1" data-testid="text-requests-per-min">
-                      {walterActivity.requestsPerMinute.toFixed(2)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">Success Rate</div>
-                    <div className="text-2xl font-bold mt-1" data-testid="text-success-rate">
-                      {walterActivity.successRate}%
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">Pending Approvals</div>
-                    <div className="text-2xl font-bold mt-1" data-testid="text-pending-approvals">
-                      {walterActivity.pendingApprovals}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">Total Requests (24h)</div>
-                    <div className="text-2xl font-bold mt-1" data-testid="text-total-requests">
-                      {walterActivity.totalRequests24h}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-muted-foreground">No data available</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab 4: Database Health */}
+        {/* Tab 3: Database Health */}
         <TabsContent value="database" className="space-y-6 mt-6">
           <Card data-testid="card-database-health">
             <CardHeader>
@@ -1094,7 +1032,7 @@ export default function EnhancedSystemMonitoring() {
           <div className="space-y-6">
             <h3 className="text-xl font-bold text-foreground">System Diagnostics & Telemetry</h3>
             <p className="text-sm text-muted-foreground">
-              Real-time system truth synchronization, data flow diagnostics, and Walter activity monitoring
+              Real-time system truth synchronization and data flow diagnostics
             </p>
             
             {/* Directive 12.2.3: SystemTruthPanel removed (file deleted in Batch 7A) */}
@@ -1102,7 +1040,7 @@ export default function EnhancedSystemMonitoring() {
             {/* Developer-Only Data Flow Trace */}
             <DataFlowTracePanel />
             
-            {/* System Health Summary - Walter Activity (Feed/Formula Monitoring) */}
+            {/* System Health Summary (Feed/Formula Monitoring) */}
             <SystemHealthSummary />
           </div>
         </TabsContent>

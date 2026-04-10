@@ -1,15 +1,12 @@
 /**
  * Diagnostic System Tests - Phase 5.9
  * 
- * Tests all three trigger types:
+ * Tests diagnostic trigger types:
  * 1. Error-based diagnostic
  * 2. User-initiated diagnostic
- * 3. Walter-initiated diagnostic
  */
 
 import { diagnosticController } from '../services/diagnostic-controller';
-// Directive 12.2.3: bobInspector import removed (file deleted in Batch 7A)
-// Directive 12.2.3: walterPatchAnalyst import removed (file deleted in Batch 6)
 import { storage } from '../storage';
 
 // Test suite
@@ -92,40 +89,6 @@ async function runDiagnosticTests() {
     console.error('❌ Test 2 FAILED:', error);
     console.log('');
   }
-
-  // Test 3: Walter-initiated Diagnostic
-  try {
-    console.log('Test 3: Walter-Initiated Diagnostic');
-    console.log('------------------------------------');
-    
-    const report = await diagnosticController.triggerWalterDiagnostic(
-      testUserId,
-      'Anomaly detected in trading metrics',
-      'data_consistency',
-      {}
-    );
-    
-    console.log(`✅ Walter diagnostic executed successfully`);
-    console.log(`   - Reason: Anomaly detected`);
-    console.log(`   - Report status: ${report.status}`);
-    console.log(`   - Findings: ${report.findings.length}`);
-    
-    if (report.status === 'completed' && report.triggerType === 'walter_initiated') {
-      testsPassed++;
-      console.log('✅ Test 3 PASSED\n');
-    } else {
-      testsFailed++;
-      console.log('❌ Test 3 FAILED\n');
-    }
-  } catch (error) {
-    testsFailed++;
-    console.error('❌ Test 3 FAILED:', error);
-    console.log('');
-  }
-
-  // Directive 12.2.3: Tests 4-7 (Bob Code Analysis, Log Search, Data Consistency, Schema Verification)
-  // removed — bobInspector deleted in Batch 7A
-  // Directive 12.2.3: Test 8 (Patch Proposal Generation) removed — walterPatchAnalyst deleted in Batch 6
 
   // Test 9: Transparency Logging
   try {

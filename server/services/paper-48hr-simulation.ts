@@ -249,7 +249,7 @@ export class Paper48HrSimulation {
       const pnlPercent = (pnl / this.startingBalance) * 100;
       const pnlSign = pnl >= 0 ? '+' : '';
 
-      console.log(`[Walter Paper Trade] ⏱️  ${elapsedHours.toFixed(1)}h | 💰 Balance: $${summary.currentBalance.toFixed(2)} | 📊 Open Positions: ${summary.openPositions} | 📈 PnL: ${pnlSign}${pnlPercent.toFixed(2)}% | 🎯 Trades: ${summary.totalTrades}`);
+      console.log(`[Paper Trade] ${elapsedHours.toFixed(1)}h | Balance: $${summary.currentBalance.toFixed(2)} | Open Positions: ${summary.openPositions} | PnL: ${pnlSign}${pnlPercent.toFixed(2)}% | Trades: ${summary.totalTrades}`);
 
       // Update session log with latest data
       await this.updateSessionLog(summary);

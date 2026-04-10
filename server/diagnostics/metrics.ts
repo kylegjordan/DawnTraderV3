@@ -32,13 +32,6 @@ export interface TradingEngineStatus {
   lastActivity: Date | null;
 }
 
-export interface WalterActivity {
-  requestsPerMinute: number;
-  successRate: number;
-  pendingApprovals: number;
-  totalRequests24h: number;
-}
-
 export interface DatabaseHealth {
   connectionStatus: string;
   recordCounts: {
@@ -166,37 +159,7 @@ export async function getTradingEngineStatus(): Promise<TradingEngineStatus> {
   };
 }
 
-/**
- * Get Walter activity metrics
- */
-export async function getWalterActivity(): Promise<WalterActivity> {
-  // Count AI conversations in last 24 hours as proxy for Walter requests
-  const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  
-  const conversations = await db.execute(sql`
-    SELECT COUNT(*) as count 
-    FROM ai_conversations 
-    WHERE created_at >= ${last24h.toISOString()}
-  `);
-  
-  const totalRequests24h = parseInt((conversations.rows[0] as any)?.count || '0');
-  
-  // Count pending AI orchestrator recommendations
-  const pendingRecs = await db.execute(sql`
-    SELECT COUNT(*) as count 
-    FROM ai_orchestrator_logs 
-    WHERE status = 'pending'
-  `);
-  
-  const pendingApprovals = parseInt((pendingRecs.rows[0] as any)?.count || '0');
-  
-  return {
-    requestsPerMinute: totalRequests24h / (24 * 60), // Average over 24 hours
-    successRate: 95, // Placeholder - would track actual success/failure
-    pendingApprovals,
-    totalRequests24h
-  };
-}
+
 
 /**
  * Get database health metrics

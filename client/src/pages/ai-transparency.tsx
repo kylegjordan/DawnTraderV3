@@ -19,8 +19,6 @@ const getCategoryLabel = (category: string): string => {
     'trading': 'Trading Strategy',
     'optimization': 'Performance Optimization',
     'ai_analysis': 'AI Analysis',
-    'walter_command': 'Walter Command',
-    'walter_action': 'Walter Action',
     'risk_management': 'Risk Management',
     'market_analysis': 'Market Analysis'
   };
@@ -1148,9 +1146,6 @@ export default function AITransparencyPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm mb-3" data-testid={`text-recommendation-${log.id}`}>
-                      {(log.metadata as any)?.source === 'Walter' && (
-                        <span className="font-semibold text-primary">Walter Recommends: </span>
-                      )}
                       {log.recommendation}
                     </p>
                     {log.actionTaken && (

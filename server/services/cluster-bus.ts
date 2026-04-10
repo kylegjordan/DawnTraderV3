@@ -23,7 +23,7 @@ export class ClusterBus extends EventEmitter {
     "health_alert",
     "learning_delta", // Phase 18: Multi-domain learning
     "model_sync", // Phase 18: Model synchronization
-    "task_completed", // Phase 22: Walter autonomous execution audit trail
+    "task_completed", // Phase 22: Autonomous execution audit trail
   ]);
 
   constructor() {

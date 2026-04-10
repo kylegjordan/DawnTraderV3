@@ -299,18 +299,7 @@ class ContextLoader {
     
     for (const record of records) {
       try {
-        await storage.createWalterMemory({
-          userId,
-          type: record.type as any,
-          content: `[${record.title}] ${record.summary}`,
-          importance: 4, // High importance for context
-          metadata: {
-            source: record.source,
-            actionable: false,
-            policy: 'no-execution',
-            title: record.title
-          }
-        });
+        console.log(`[ContextLoader] Context record: [${record.title}] (source: ${record.source})`);
       } catch (error: any) {
         console.error(`[ContextLoader] Failed to persist record "${record.title}":`, error.message);
       }

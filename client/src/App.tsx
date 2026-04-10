@@ -14,12 +14,10 @@ import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { RequestTraceProvider } from "@/hooks/use-request-trace";
 import { ensureValidToken } from "@/lib/auth";
-// Directive 12.2.3: WalterFloatingAssistant import removed (file deleted in Batch 6)
 import { ProfiledRoute } from "@/components/profiled-route";
 import { AlertTriangle, X } from "lucide-react";
 
 const Settings = lazy(() => import("@/pages/settings"));
-// Directive 12.2.3: WalterPage lazy import removed (file deleted in Batch 6)
 const WatchlistPage = lazy(() => import("@/pages/watchlist"));
 const ActiveTradesPage = lazy(() => import("@/pages/active-trades"));
 const ReportsPage = lazy(() => import("@/pages/reports"));
@@ -143,7 +141,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Directive 12.2.3: getPageContext function removed — was Walter-only (Batch 6)
+
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -222,7 +220,6 @@ function Router() {
               </Route>
               
               {/* Standard Routes (no profiling) */}
-              {/* Directive 12.2.3: /walter route removed (Batch 6) */}
               <Route path="/watchlist" component={WatchlistPage} />
               <Route path="/reports" component={ReportsPage} />
               <Route path="/daily-brief" component={DailyBriefPage} />
@@ -249,7 +246,6 @@ function Router() {
           />
         )}
         
-        {/* Directive 12.2.3: Floating Walter Assistant removed (Batch 6) */}
       </div>
     </RequireAuth>
   );

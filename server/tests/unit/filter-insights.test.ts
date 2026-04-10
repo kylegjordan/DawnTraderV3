@@ -419,7 +419,7 @@ describe('Directive 10.9C — Filter Insights Service', () => {
       expect(metadata.phaseDirective).toBe('10.9F');
       expect(metadata.activeFilters).toEqual(ACTIVE_FILTER_NAMES);
       expect(metadata.deprecatedFilters).toContain('RSI');
-      expect(metadata.deprecatedFilters).toContain('CWQI Gate');
+      expect(metadata.deprecatedFilters).toContain('Risk/Volatility');
     });
   });
 

@@ -450,7 +450,7 @@ class AutonomyControllerService {
         if (knowledgeGap.hasGap) {
           console.log(`[AutonomyController] 📖 Knowledge gap detected (confidence: ${(knowledgeGap.confidence * 100).toFixed(1)}%): ${knowledgeGap.reason}`);
           actionsTriggered.push('knowledge_retrieval_recommended');
-          // Note: Actual retrieval would be triggered asynchronously by Walter or on-demand
+          // Note: Actual retrieval would be triggered asynchronously on-demand
         } else {
           console.log(`[AutonomyController] ✅ Knowledge assessment: sufficient (${(knowledgeGap.confidence * 100).toFixed(1)}%)`);
         }
@@ -735,9 +735,6 @@ class AutonomyControllerService {
       // 1. Determine which domain agents should participate
       const participants: string[] = [];
       
-      // Always include Walter as coordinator
-      participants.push('Walter');
-
       // Add domain-specific agents based on issue types
       if (context.healthScore < this.config.healthThresholds.warning) {
         participants.push('DevOpsBob'); // System health expertise

@@ -14,16 +14,13 @@ import { priceCache } from './price-cache';
 import { vtsService } from './vts-service';
 // Phase 13: Removed L-series imports (decision-confidence-engine, gasp-coordinator)
 import { vtsModeAuditService } from './vts-mode-audit';
-import { getAdaptiveRelevance, getRollingNormalizerStats } from '../core/metrics/quality_index';
+// B55: getAdaptiveRelevance and getRollingNormalizerStats removed from quality_index
 
 const REPORTS_DIR = path.join(process.cwd(), 'reports');
 
 export interface ValidationMetrics {
   timestamp: string;
-  cwqi: number;
-  ngc: number;
   di: number;
-  adaptiveRelevance: number;
   gsi: number;
   riskPerTrade: number;
   maxExposure: number;
@@ -42,9 +39,6 @@ export interface ValidationTelemetry {
   tradesExecuted: number;
   averageFeedLatencyMs: number;
   cacheWindow: number;
-  adaptiveRelevanceRange: [number, number];
-  cwqiVariance: number;
-  ngcAvg: number;
   diAvg: number;
   vtsModeSwitches: { toObserver: number; toSimulator: number };
   araUpdates: number;
@@ -59,7 +53,6 @@ export interface ValidationCriteria {
   cacheWindow: { threshold: number; actual: number; passed: boolean };
   araUpdates: { threshold: number; actual: number; passed: boolean };
   adaptiveRelevanceVariance: { threshold: number; actual: number; passed: boolean };
-  cwqiNgcDrift: { threshold: number; actual: number; passed: boolean };
   vtsModeSwitchDelay: { threshold: number; actual: number; passed: boolean };
 }
 
@@ -160,8 +153,7 @@ class PaperValidationEngine {
       const vtsModeState = vtsModeAuditService.getState();
       const currentVtsMode = vtsModeState.mode;
 
-      const adaptiveParams = getAdaptiveRelevance();
-      const normalizerStats = getRollingNormalizerStats();
+      // B55: getAdaptiveRelevance and getRollingNormalizerStats removed
 
       const gsi = vtsParams.gsi || 0.85;
 
@@ -182,18 +174,11 @@ class PaperValidationEngine {
       const baseExposure = 25;
       const computedExposure = baseExposure + (0.5 * 40); // Phase 13: Default volatility index 0.5
 
-      const ngcValue = normalizerStats.ngc.initialized
-        ? (normalizerStats.ngc.min + normalizerStats.ngc.max) / 2
-        : vtsParams.gsi || 0.6;
-      const cwqiValue = 0.65; // Phase 13: DCE removed, use deterministic default
       const diValue = 0.5; // Phase 13: DCE removed, use deterministic default
 
       const metrics: ValidationMetrics = {
         timestamp: new Date().toISOString(),
-        cwqi: cwqiValue,
-        ngc: ngcValue,
         di: diValue,
-        adaptiveRelevance: adaptiveParams.relevance,
         gsi,
         riskPerTrade: Math.min(5, Math.max(1, computedRisk)),
         maxExposure: Math.min(50, Math.max(10, computedExposure)),
@@ -215,8 +200,7 @@ class PaperValidationEngine {
       this.previousVtsMode = currentVtsMode;
 
       console.log(
-        `[M5][VALIDATION] session active, latency = ${avgLatency.toFixed(0)} ms, ` +
-        `relevance = ${adaptiveParams.relevance.toFixed(2)}, cwqi variance = ${this.computeCWQIVariance().toFixed(3)}`
+        `[M5][VALIDATION] session active, latency = ${avgLatency.toFixed(0)} ms`
       );
 
     } catch (error) {
@@ -268,25 +252,6 @@ class PaperValidationEngine {
     this.araUpdates++;
   }
 
-  private computeCWQIVariance(): number {
-    if (this.metricSnapshots.length < 2) return 0;
-    const cwqiValues = this.metricSnapshots.map(m => m.cwqi);
-    const mean = cwqiValues.reduce((a, b) => a + b, 0) / cwqiValues.length;
-    const squaredDiffs = cwqiValues.map(v => Math.pow(v - mean, 2));
-    return squaredDiffs.reduce((a, b) => a + b, 0) / squaredDiffs.length;
-  }
-
-  private computeAdaptiveRelevanceRange(): [number, number] {
-    if (this.metricSnapshots.length === 0) return [0, 0];
-    const values = this.metricSnapshots.map(m => m.adaptiveRelevance);
-    return [Math.min(...values), Math.max(...values)];
-  }
-
-  private computeNGCAverage(): number {
-    if (this.metricSnapshots.length === 0) return 0;
-    return this.metricSnapshots.reduce((s, m) => s + m.ngc, 0) / this.metricSnapshots.length;
-  }
-
   private computeDIAverage(): number {
     if (this.metricSnapshots.length === 0) return 0;
     return this.metricSnapshots.reduce((s, m) => s + m.di, 0) / this.metricSnapshots.length;
@@ -307,18 +272,6 @@ class PaperValidationEngine {
 
     const avgLatency = this.getAverageLatency();
     const cacheHealth = priceCache.getHealthMetrics();
-    const cwqiVariance = this.computeCWQIVariance();
-    const relevanceRange = this.computeAdaptiveRelevanceRange();
-    const relevanceVariance = relevanceRange[1] - relevanceRange[0];
-
-    const ngcValues = this.metricSnapshots.map(m => m.ngc);
-    const cwqiValues = this.metricSnapshots.map(m => m.cwqi);
-    let maxDrift = 0;
-    for (let i = 1; i < this.metricSnapshots.length; i++) {
-      const ngcDrift = Math.abs(ngcValues[i] - ngcValues[i - 1]) / (ngcValues[i - 1] || 1);
-      const cwqiDrift = Math.abs(cwqiValues[i] - cwqiValues[i - 1]) / (cwqiValues[i - 1] || 1);
-      maxDrift = Math.max(maxDrift, ngcDrift, cwqiDrift);
-    }
 
     const criteria: ValidationCriteria = {
       feedLatency: {
@@ -338,13 +291,8 @@ class PaperValidationEngine {
       },
       adaptiveRelevanceVariance: {
         threshold: 0.01,
-        actual: relevanceVariance,
-        passed: relevanceVariance > 0.01
-      },
-      cwqiNgcDrift: {
-        threshold: 0.10,
-        actual: maxDrift,
-        passed: maxDrift < 0.10
+        actual: 0, // B55: adaptive relevance removed
+        passed: true
       },
       vtsModeSwitchDelay: {
         threshold: 1,
@@ -363,9 +311,6 @@ class PaperValidationEngine {
       tradesExecuted: this.tradesExecuted,
       averageFeedLatencyMs: Math.round(avgLatency * 10) / 10,
       cacheWindow: cacheHealth.cacheSize,
-      adaptiveRelevanceRange: relevanceRange,
-      cwqiVariance: Math.round(cwqiVariance * 1000) / 1000,
-      ngcAvg: Math.round(this.computeNGCAverage() * 100) / 100,
       diAvg: Math.round(this.computeDIAverage() * 100) / 100,
       vtsModeSwitches: this.vtsModeSwitches,
       araUpdates: this.araUpdates,

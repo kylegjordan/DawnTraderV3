@@ -4,11 +4,10 @@
  * ══════════════════════════════════════════════════════════════════════════════
  * 
  * Purpose: Defines the canonical VirtualTrade interface for the modernized VTS.
- * Replaces all legacy CWQI/NGC/DI/GSI fields with Phase-10 metrics.
- * 
+ * Uses Phase-10 metrics exclusively.
+ *
  * Schema: v1.6.7
  * Governance: M45 (All VirtualTrades include regime, signalType, strategy)
- *             M47 (CWQI/NGC/DI/GSI permanently removed)
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════

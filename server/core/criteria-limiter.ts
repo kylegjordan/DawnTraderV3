@@ -16,7 +16,6 @@
  * - Volatility adjustments
  * 
  * Directive 11.0B: Ranking is exclusively by FinalScore.
- * Legacy metrics (CWQI, NGC, profitRate, riskCalc) are NOT used.
  */
 
 import { storage } from '../storage.js';

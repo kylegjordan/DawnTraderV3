@@ -244,7 +244,7 @@ export const ADAPTIVE_SCANNING_ENABLED = true;
 
 /**
  * Directive 10.9: Feature flag to disable legacy metrics
- * When enabled, legacy CWQI, NGC, and RiskCalc filters are hidden
+ * When enabled, legacy filters are hidden
  * and replaced with unified FinalScore filtering
  */
 export const LEGACY_METRICS_ENABLED = false;

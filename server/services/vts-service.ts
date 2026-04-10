@@ -31,7 +31,6 @@ import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
 /**
  * Phase-10 VirtualSignal - Directive 11.4C.3
- * All legacy CWQI/NGC/DI/GSI fields removed
  * M50: Full Phase-10 field parity with VirtualTrade
  * Signal types use uppercase canonical format: 'QUANT' | 'PATTERN' | 'HYBRID'
  */
@@ -153,12 +152,12 @@ const CALIBRATION_TRIGGER_INTERVAL = 10; // Directive 10.6: Trigger calibration 
 
 /**
  * M5B: Session metrics for autonomous simulation tracking
- * Directive 11.0E.2: Phase-10 metrics replace legacy CWQI/NGC
+ * Directive 11.0E.2: Phase-10 session metrics
  */
 interface SessionMetrics {
   simulatedTradesThisSession: number;
   sessionStartTime: number | null;
-  // Phase-10 rolling averages (M51: Legacy CWQI/NGC removed)
+  // Phase-10 rolling averages
   avgFinalScore: number;
   avgExpectedEdge: number;
   avgRealizedPnL: number;

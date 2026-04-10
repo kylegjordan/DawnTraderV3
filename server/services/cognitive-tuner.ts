@@ -9,7 +9,7 @@ import { eq, desc, sql } from 'drizzle-orm';
 
 /**
  * Phase 8.8.4: Cognitive Tuning & Testing Service
- * Validates and optimizes Walter's reasoning accuracy, timing, concurrency, and cross-domain coherence
+ * Validates and optimizes AI reasoning accuracy, timing, concurrency, and cross-domain coherence
  */
 
 export interface BenchmarkResult {

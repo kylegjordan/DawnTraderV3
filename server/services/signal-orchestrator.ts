@@ -7,7 +7,6 @@
  * Periodically scans filtered symbols and evaluates trading strategies to generate signals.
  * 
  * DIRECTIVE 11.0E: FinalScore Unification
- * - ALL legacy metrics (NGC, CWQI, ProfitRate) references preserved for backward compatibility
  * - FinalScore is the PRIMARY ranking metric
  * - SQE evaluates FinalScore + RegimeWeight only
  * 
@@ -117,11 +116,9 @@ interface SizedStrategySignal extends StrategySignal {
   preComputedNotional?: number;
   signalId?: string; // Phase 8.8.4-A: SLAL lifecycle tracking ID
   // Phase 8.8.4-B.1: Extended metrics
-  ngc?: number;           // Normalized Global Confidence
   riskScore?: number;     // Computed risk score
   volatility?: number;    // Estimated volatility
   profitRate?: number;    // Profit per time unit
-  cwqi?: number;          // Confidence-Weighted Quality Index
   // Directive 11.3A: Net Expectancy fields
   netExpectedEdge?: number;    // Net profit after costs
   netRewardToRisk?: number;    // Net R:R after costs
@@ -337,7 +334,7 @@ export class SignalOrchestrator {
    * B6 + B.1 + B.3: Build a sized signal from a raw strategy signal
    * Routes all strategies through the centralized sizing helper
    * Phase 8.8.4-A: SLAL instrumentation for GENERATION and SIZING stages
-   * Phase 8.8.4-B.1: Compute NGC, ExpectedDuration, ProfitRate, CWQI
+   * Phase 8.8.4-B.1: Compute ExpectedDuration, ProfitRate
    * Phase 8.8.4-B.1: Apply SQE quality filter
    * Phase 8.8.4-B.3: Correct flow order - Sizing → Metrics → SQE
    * Directive 11.4H.1 Task 6: Symbol validation before event dispatch
@@ -470,12 +467,10 @@ export class SignalOrchestrator {
     }
 
     // Directive 11.0E: ML-enhanced predictions (non-blocking fire-and-forget)
-    // Note: ML service still accepts ngc/cwqi for backward compatibility during transition
     const mlInput: PredictionInput = {
       symbol: rawSignal.symbol,
       strategy: strategyId,
-      ngc: extendedMetrics.confidence, // Phase 14: ML interface keeps ngc field name for compat
-      cwqi: extendedMetrics.cwqi, // Directive 11.0E: transitional - kept for ML backward compat
+      confidence: extendedMetrics.confidence,
       riskRatio: extendedMetrics.riskScore,
       profitTarget: extendedMetrics.profitRate,
       signalAge: 0,
@@ -1408,7 +1403,7 @@ export class SignalOrchestrator {
           confidence: s.confidence || 0,
           direction: 'BUY' as const, // Long-only trading system: all quant signals are BUY
           timestamp: latestCandleTimestamp, // Use candle timestamp for clock-synchronized confluence
-          expectancy: s.ngc || (s.confidence && s.confidence <= 1 ? s.confidence : (s.confidence || 0) / 100),
+          expectancy: (s.confidence && s.confidence <= 1 ? s.confidence : (s.confidence || 0) / 100),
           metadata: s.metadata,
         }));
       

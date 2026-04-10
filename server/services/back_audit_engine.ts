@@ -86,12 +86,6 @@ class BackAuditEngine {
       const deprecatedCheck = await this.checkDeprecatedConstants();
       deprecatedConstants.push(...deprecatedCheck);
 
-      const cwqiResult = await this.checkCWQI();
-      moduleResults.push(cwqiResult);
-
-      const ngcResult = await this.checkNGC();
-      moduleResults.push(ngcResult);
-
       const dceResult = await this.checkDCE();
       moduleResults.push(dceResult);
 
@@ -215,128 +209,6 @@ class BackAuditEngine {
     return deprecated;
   }
 
-  private async checkCWQI(): Promise<ModuleCheckResult> {
-    const checks: ModuleCheckResult['checks'] = [];
-    
-    try {
-      const content = await fs.readFile(
-        path.join(process.cwd(), 'server/core/metrics/quality_index.ts'),
-        'utf-8'
-      );
-
-      const hasNGCWeight = /NGC_WEIGHT\s*=\s*0\.40/.test(content);
-      checks.push({
-        name: 'NGC_WEIGHT = 0.40',
-        passed: hasNGCWeight,
-        message: hasNGCWeight ? 'Correct' : 'NGC weight incorrect'
-      });
-
-      const hasRiskWeight = /RISK_WEIGHT\s*=\s*0\.25/.test(content);
-      checks.push({
-        name: 'RISK_WEIGHT = 0.25',
-        passed: hasRiskWeight,
-        message: hasRiskWeight ? 'Correct' : 'Risk weight incorrect'
-      });
-
-      const hasReturnWeight = /RETURN_WEIGHT\s*=\s*0\.20/.test(content);
-      checks.push({
-        name: 'RETURN_WEIGHT = 0.20',
-        passed: hasReturnWeight,
-        message: hasReturnWeight ? 'Correct' : 'Return weight incorrect'
-      });
-
-      const hasProfitRateWeight = /PROFIT_RATE_WEIGHT\s*=\s*0\.15/.test(content);
-      checks.push({
-        name: 'PROFIT_RATE_WEIGHT = 0.15',
-        passed: hasProfitRateWeight,
-        message: hasProfitRateWeight ? 'Correct' : 'ProfitRate weight incorrect'
-      });
-
-      const hasAdaptiveRelevance = /updateAdaptiveRelevance/.test(content) &&
-        /relevance\s*=\s*learningRate\s*\*\s*\(.*gsi.*\+.*0\.15/.test(content);
-      checks.push({
-        name: 'M3B Adaptive Relevance',
-        passed: hasAdaptiveRelevance,
-        message: hasAdaptiveRelevance ? 'Correct' : 'M3B formula missing or incorrect'
-      });
-
-      const hasRollingNormalizer = /class\s+RollingNormalizer/.test(content);
-      checks.push({
-        name: 'Rolling Normalizer',
-        passed: hasRollingNormalizer,
-        message: hasRollingNormalizer ? 'Present' : 'RollingNormalizer class missing'
-      });
-
-      const hasVarianceCheck = /variance.*>=?\s*0\.01|0\.001/.test(content) || 
-                               /range\s*<=\s*0\.001/.test(content);
-      checks.push({
-        name: 'Variance threshold',
-        passed: hasVarianceCheck,
-        message: hasVarianceCheck ? 'Correct' : 'Variance threshold check missing'
-      });
-
-    } catch (error) {
-      checks.push({
-        name: 'File access',
-        passed: false,
-        message: `Error reading quality_index.ts: ${error}`
-      });
-    }
-
-    return {
-      module: 'CWQI',
-      passed: checks.every(c => c.passed),
-      checks,
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  private async checkNGC(): Promise<ModuleCheckResult> {
-    const checks: ModuleCheckResult['checks'] = [];
-    
-    try {
-      const content = await fs.readFile(
-        path.join(process.cwd(), 'server/core/metrics/quality_index.ts'),
-        'utf-8'
-      );
-
-      const hasNGCFormula = /calculateNGC/.test(content);
-      checks.push({
-        name: 'NGC calculation function',
-        passed: hasNGCFormula,
-        message: hasNGCFormula ? 'Present' : 'calculateNGC function missing'
-      });
-
-      const hasNormalization = /ngcNormalizer\.normalize/.test(content);
-      checks.push({
-        name: 'NGC normalization',
-        passed: hasNormalization,
-        message: hasNormalization ? 'Active' : 'Normalization not applied'
-      });
-
-      const hasVolatilityDamping = /1\s*-\s*vol|1\s*-\s*volatility/.test(content);
-      checks.push({
-        name: 'Volatility dampening',
-        passed: hasVolatilityDamping,
-        message: hasVolatilityDamping ? 'Applied' : 'Volatility not dampening confidence'
-      });
-
-    } catch (error) {
-      checks.push({
-        name: 'File access',
-        passed: false,
-        message: `Error: ${error}`
-      });
-    }
-
-    return {
-      module: 'NGC',
-      passed: checks.every(c => c.passed),
-      checks,
-      timestamp: new Date().toISOString()
-    };
-  }
-
   private async checkDCE(): Promise<ModuleCheckResult> {
     const checks: ModuleCheckResult['checks'] = [];
     
@@ -346,9 +218,8 @@ class BackAuditEngine {
         const data = await response.json();
         
         const weights = data.weights || {};
-        const sum = (weights.cwqi || 0) + (weights.ngc || 0) + 
-                    (weights.mlConfidence || 0) + (weights.regimeConfidence || 0) + 
-                    (weights.macoConsensus || 0);
+        const sum = (weights.mlConfidence || 0) + (weights.regimeConfidence || 0) +
+                    (weights.macoConsensus || 0) + (weights.finalScore || 0);
         
         const weightsValid = Math.abs(sum - 1.0) < 0.01;
         checks.push({

@@ -56,11 +56,6 @@ class ReasoningBus {
         capabilities: ['code_analysis', 'architecture', 'api_design', 'database_optimization'],
         priority: 8,
       },
-      {
-        agentId: 'Walter',
-        capabilities: ['coordination', 'decision_making', 'natural_language', 'meta_reasoning'],
-        priority: 9,
-      },
     ];
 
     defaultAgents.forEach(agent => {

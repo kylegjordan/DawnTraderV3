@@ -84,7 +84,7 @@
  * - Enforced ExecutionConfig read-only lock
  * 
  * v1.5.0: Legacy Data Purge & Schema Finalization (Directive 11.0F)
- * - Removed cwqi, ngc, profitRate columns from RTB signals
+ * - Removed legacy columns from RTB signals
  * - FinalScore is now the sole operational metric
  * - Metric Engine v1.0 (Canonical)
  */

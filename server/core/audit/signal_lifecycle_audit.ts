@@ -16,7 +16,7 @@ export type SignalStage =
   | 'GENERATION'      // Strategy produced a raw signal
   | 'SIZING'          // Signal sized with qty/notional
   | 'VALIDATION'      // Guardrails check
-  | 'QUEUED'          // Phase 8.8.4-B: Signal queued (capacity block, high CWQI)
+  | 'QUEUED'          // Phase 8.8.4-B: Signal queued (high FinalScore)
   | 'PROMOTED'        // Phase 8.8.4-B: Signal promoted from queue to execution
   | 'EXECUTION'       // Trade execution attempt
   | 'COMPLETED'       // Trade successfully opened
@@ -275,7 +275,7 @@ class SignalLifecycleAuditService {
   }
 
   /**
-   * Phase 8.8.4-B: Record a signal being queued (capacity blocked but high CWQI)
+   * Phase 8.8.4-B: Record a signal being queued
    */
   recordQueued(
     signalId: string,
@@ -302,7 +302,7 @@ class SignalLifecycleAuditService {
     this.addEvent(event);
     this.addEventToJourney(signalId, event);
 
-    console.log(`[SLAL][${mode}] QUEUED: ${symbol}/${strategy} cwqi=${(details as any)?.cwqi?.toFixed(4) || 'N/A'} (${signalId})`);
+    console.log(`[SLAL][${mode}] QUEUED: ${symbol}/${strategy} finalScore=${(details as any)?.finalScore?.toFixed(4) || 'N/A'} (${signalId})`);
   }
 
   /**

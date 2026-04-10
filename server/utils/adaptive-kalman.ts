@@ -8,7 +8,7 @@
  * Purpose:
  * - Suppress false signals during "chop" regimes
  * - Amplify responsiveness during sustained directional integrity
- * - Provide smoothed, latency-controlled prices to Orchestrator and CWQI evaluators
+ * - Provide smoothed, latency-controlled prices to Orchestrator and signal evaluators
  */
 
 export interface KalmanState {

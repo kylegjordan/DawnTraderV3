@@ -4,7 +4,6 @@
  * Final gatekeeper that evaluates signal quality based on FinalScore and RegimeWeight.
  * Thresholds are read from the screener_filters table (configurable via UI screeners tab).
  * 
- * DIRECTIVE 11.0E: ALL legacy metrics (NGC, CWQI, Risk, ProfitRate) have been PURGED.
  * FinalScore and RegimeWeight are the SOLE determinants for signal quality.
  * 
  * Exposure, correlation, and cooldown checks are handled by the Signal Orchestrator.

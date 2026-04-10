@@ -11,7 +11,7 @@ const testCases = [
   "close ETHUSD position",
   "enable vwap_pullback strategy",
   "what are my open positions",
-  "Hey Walter, how's it going?", // Should be conversation
+  "Hey, how's it going?", // Should be conversation
   "analyze BTCUSD",
   "set max exposure to 75%",
   "resume trading",

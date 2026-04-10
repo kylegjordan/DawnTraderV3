@@ -20,8 +20,8 @@ interface ValidationSnapshot {
   rtbQueueCount: number;
   openTradesCount: number;
   closedTradesCount: number;
-  avgCwqi: number;
-  avgNgc: number;
+  avgFinalScore: number;
+  avgConfidence: number;
   avgProfitRate: number;
   avgPnl: number;
   promotionsThisInterval: number;
@@ -109,7 +109,7 @@ class C13ValidationService {
     this.promotionHandler = (event: PromotionEvent) => {
       if (!this.session || event.mode !== this.session.mode) return;
       this.session.promotions.push(event);
-      console.log(`[8.8.4-C.13][PROMOTION] symbol=${event.symbol}, strategy=${event.strategy}, cwqi=${event.cwqi?.toFixed(3)}`);
+      console.log(`[8.8.4-C.13][PROMOTION] symbol=${event.symbol}, strategy=${event.strategy}`);
     };
 
     eventBus.onTCLActivated(this.tclHandler);
@@ -138,12 +138,12 @@ class C13ValidationService {
     const trades = await storage.getPaperSimTrades(mode);
     const closedTrades = trades.filter(t => t.closeReason !== null);
 
-    const rtbWithMetrics = rtbQueue.filter(s => s.cwqi && s.confidence);
-    const avgCwqi = rtbWithMetrics.length > 0 
-      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.cwqi || '0'), 0) / rtbWithMetrics.length 
+    const rtbWithMetrics = rtbQueue.filter(s => s.finalScore && s.confidence);
+    const avgFinalScore = rtbWithMetrics.length > 0
+      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.finalScore || '0'), 0) / rtbWithMetrics.length
       : 0;
-    const avgNgc = rtbWithMetrics.length > 0 
-      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.confidence || '0'), 0) / rtbWithMetrics.length 
+    const avgConfidence = rtbWithMetrics.length > 0
+      ? rtbWithMetrics.reduce((sum, s) => sum + parseFloat(s.confidence || '0'), 0) / rtbWithMetrics.length
       : 0;
     const avgProfitRate = 0;
 
@@ -165,8 +165,8 @@ class C13ValidationService {
       rtbQueueCount: rtbQueue.length,
       openTradesCount: openPositions.length,
       closedTradesCount: closedTrades.length,
-      avgCwqi,
-      avgNgc,
+      avgFinalScore,
+      avgConfidence,
       avgProfitRate,
       avgPnl,
       promotionsThisInterval,
@@ -183,8 +183,8 @@ class C13ValidationService {
 - **RTB_Queue**: ${snapshot.rtbQueueCount}
 - **Open_Trades**: ${snapshot.openTradesCount}
 - **Closed_Trades**: ${snapshot.closedTradesCount}
-- **Avg_CWQI**: ${snapshot.avgCwqi.toFixed(4)}
-- **Avg_NGC**: ${snapshot.avgNgc.toFixed(4)}
+- **Avg_FinalScore**: ${snapshot.avgFinalScore.toFixed(4)}
+- **Avg_Confidence**: ${snapshot.avgConfidence.toFixed(4)}
 - **Avg_ProfitRate**: ${snapshot.avgProfitRate.toFixed(4)}
 - **Avg_PnL**: $${snapshot.avgPnl.toFixed(2)}
 - **Promotions (interval)**: ${snapshot.promotionsThisInterval}
@@ -237,16 +237,16 @@ class C13ValidationService {
     const totalPromotions = this.session.promotions.length;
     const totalPnl = closedTrades.reduce((sum, t) => sum + parseFloat(String(t.netPnl || t.pnl || 0)), 0);
 
-    const avgCwqiProfitable = profitableTrades.length > 0
+    const avgScoreProfitable = profitableTrades.length > 0
       ? this.session.promotions
           .filter(p => profitableTrades.some(t => t.symbol === p.symbol))
-          .reduce((sum, p) => sum + (p.cwqi || 0), 0) / profitableTrades.length
+          .reduce((sum, p) => sum + (p.finalScore || 0), 0) / profitableTrades.length
       : 0;
 
-    const avgCwqiLosing = losingTrades.length > 0
+    const avgScoreLosing = losingTrades.length > 0
       ? this.session.promotions
           .filter(p => losingTrades.some(t => t.symbol === p.symbol))
-          .reduce((sum, p) => sum + (p.cwqi || 0), 0) / losingTrades.length
+          .reduce((sum, p) => sum + (p.finalScore || 0), 0) / losingTrades.length
       : 0;
 
     const duplicateTclEvents = this.session.tclEvents.length > 1;
@@ -285,8 +285,8 @@ class C13ValidationService {
 - **Average P/L**: $${closedTrades.length > 0 ? (totalPnl / closedTrades.length).toFixed(2) : '0.00'}
 
 ## Quality Metrics
-- **Avg CWQI (Profitable Trades)**: ${avgCwqiProfitable.toFixed(4)}
-- **Avg CWQI (Losing Trades)**: ${avgCwqiLosing.toFixed(4)}
+- **Avg FinalScore (Profitable Trades)**: ${avgScoreProfitable.toFixed(4)}
+- **Avg FinalScore (Losing Trades)**: ${avgScoreLosing.toFixed(4)}
 
 ## Anomaly Detection
 | Check | Status |
@@ -298,10 +298,10 @@ class C13ValidationService {
 
 ## Snapshots Summary
 
-| Time | TCL | RTB Queue | Open | Closed | Avg CWQI | Avg P/L |
-|------|-----|-----------|------|--------|----------|---------|
-${this.session.snapshots.map(s => 
-  `| ${new Date(s.timestamp).toLocaleTimeString()} | ${s.tclState} | ${s.rtbQueueCount} | ${s.openTradesCount} | ${s.closedTradesCount} | ${s.avgCwqi.toFixed(3)} | $${s.avgPnl.toFixed(2)} |`
+| Time | TCL | RTB Queue | Open | Closed | Avg FinalScore | Avg P/L |
+|------|-----|-----------|------|--------|----------------|---------|
+${this.session.snapshots.map(s =>
+  `| ${new Date(s.timestamp).toLocaleTimeString()} | ${s.tclState} | ${s.rtbQueueCount} | ${s.openTradesCount} | ${s.closedTradesCount} | ${s.avgFinalScore.toFixed(3)} | $${s.avgPnl.toFixed(2)} |`
 ).join('\n')}
 
 ## Success Criteria Evaluation

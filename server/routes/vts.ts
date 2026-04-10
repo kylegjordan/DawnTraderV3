@@ -757,8 +757,7 @@ router.get('/validation/latest-comparison', requireAuth, async (req: Authenticat
       return res.json({
         matchRate: 0,
         calibrationError: 0,
-        avgCWQIDiff: 0,
-        avgNGCDiff: 0,
+        avgPositionDiff: 0,
         validationPassed: false,
         message: 'No comparison report available. Run compare-vts-live first.'
       });
@@ -767,8 +766,7 @@ router.get('/validation/latest-comparison', requireAuth, async (req: Authenticat
     res.json({
       matchRate: report.matchRate,
       calibrationError: report.calibrationError,
-      avgCWQIDiff: report.avgCWQIDiff,
-      avgNGCDiff: report.avgNGCDiff,
+      avgPositionDiff: report.avgPositionDiff,
       validationPassed: report.validationPassed,
       correlation: report.correlation,
       vtsTradeCount: report.vtsTradeCount,

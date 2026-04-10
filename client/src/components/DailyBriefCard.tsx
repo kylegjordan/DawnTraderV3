@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, Clock, TrendingUp, TrendingDown, Minus, AlertCircle, ChevronRight, Beaker, Brain, CheckCircle2 } from 'lucide-react';
+import { Calendar, Clock, TrendingUp, TrendingDown, Minus, AlertCircle, ChevronRight, Beaker, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -8,6 +8,8 @@ import { Separator } from '@/components/ui/separator';
 import { Link } from 'wouter';
 import { useTradingMode } from '@/contexts/trading-mode-context';
 import { cn } from '@/lib/utils';
+
+
 
 interface DailyBrief {
   id: string;
@@ -71,10 +73,6 @@ export default function DailyBriefCard() {
     queryKey: [`/api/market-context/latest?mode=${mode}`],
   });
   
-  const { data: autoResolvedStats } = useQuery<{ total: number; feed: number; formula: number }>({
-    queryKey: ['/api/walter/auto-resolved-today'],
-  });
-
   if (isLoading) {
     return (
       <Card data-testid="card-daily-brief">
@@ -206,45 +204,6 @@ export default function DailyBriefCard() {
                   ))}
                 </ul>
               )}
-            </div>
-          </>
-        )}
-
-        {/* Walter Auto-Resolutions Section */}
-        {autoResolvedStats && autoResolvedStats.total > 0 && (
-          <>
-            <Separator />
-            <div className="border-l-4 border-green-500/50 pl-4 bg-green-500/5 dark:bg-green-500/10 p-3 rounded-r-lg" data-testid="section-auto-resolved">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                <h3 className="text-sm font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">
-                  Walter Auto-Maintenance
-                </h3>
-              </div>
-              <p className="text-sm text-foreground/90 mb-2">
-                Walter autonomously resolved <strong>{autoResolvedStats.total}</strong> system issue{autoResolvedStats.total !== 1 ? 's' : ''} today:
-              </p>
-              <div className="flex items-center gap-3 text-xs text-foreground/80">
-                {autoResolvedStats.feed > 0 && (
-                  <span data-testid="text-feed-resolved">
-                    <span className="text-green-600 dark:text-green-400 font-semibold">{autoResolvedStats.feed}</span> feed health
-                  </span>
-                )}
-                {autoResolvedStats.formula > 0 && (
-                  <>
-                    {autoResolvedStats.feed > 0 && <span className="text-muted-foreground">•</span>}
-                    <span data-testid="text-formula-resolved">
-                      <span className="text-green-600 dark:text-green-400 font-semibold">{autoResolvedStats.formula}</span> formula validations
-                    </span>
-                  </>
-                )}
-              </div>
-              <Link href="/ai-transparency">
-                <Button variant="ghost" size="sm" className="mt-2 h-8 text-xs" data-testid="button-view-actions">
-                  View Details
-                  <ChevronRight className="h-3 w-3 ml-1" />
-                </Button>
-              </Link>
             </div>
           </>
         )}

@@ -51,13 +51,8 @@ export const opportunityStatusEnum = pgEnum("opportunity_status", ["new", "watch
 export const dailyBriefStatusEnum = pgEnum("daily_brief_status", ["in_progress", "final"]);
 export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected", "cancelled", "dismissed"]);
 export const approvalDisplayModeEnum = pgEnum("approval_display_mode", ["inline", "notification"]);
-export const walterChatStatusEnum = pgEnum("walter_chat_status", ["active", "archived"]);
-export const walterMemoryTypeEnum = pgEnum("walter_memory_type", ["observation", "decision", "result", "goal", "lesson", "purpose", "system_state", "development_history", "contextual_reference"]);
 export const patchSeverityEnum = pgEnum("patch_severity", ["critical", "high", "medium", "low", "info"]);
 export const patchStatusEnum = pgEnum("patch_status", ["pending", "approved", "rejected", "applied"]);
-export const walterThemeEnum = pgEnum("walter_theme", ["light", "dark", "system"]);
-export const walterToneEnum = pgEnum("walter_tone", ["professional", "analytical", "warm", "concise"]);
-export const walterViewModeEnum = pgEnum("walter_view_mode", ["compact", "expanded"]);
 export const userRoleEnum = pgEnum("user_role", ["owner", "editor", "viewer"]);
 export const eventSignificanceEnum = pgEnum("event_significance", ["minor", "significant", "critical"]);
 export const executionEventTypeEnum = pgEnum("execution_event_type", ["trade", "balance_update", "risk_report", "engine_event", "anomaly", "strategy_signal"]);
@@ -129,11 +124,6 @@ export const retrievalTrustLevelEnum = pgEnum("retrieval_trust_level", ["low", "
 export const tuningApprovalTypeEnum = pgEnum("tuning_approval_type", ["auto", "manual"]);
 export const tuningStatusEnum = pgEnum("tuning_status", ["success", "failed", "reverted"]);
 export const tuningAggressivenessEnum = pgEnum("tuning_aggressiveness", ["conservative", "balanced", "aggressive"]);
-
-// Phase 27.F.19-20 enums (Walter Autonomous Maintenance)
-export const walterActionTypeEnum = pgEnum("walter_action_type", ["feed_reconnect", "feed_pause", "formula_recalc", "cache_refresh", "health_check", "threshold_adjust", "auto_suppress", "escalate"]);
-export const walterActionStatusEnum = pgEnum("walter_action_status", ["pending", "in_progress", "completed", "failed", "acknowledged", "approved", "rejected"]);
-export const walterActionCategoryEnum = pgEnum("walter_action_category", ["feed", "formula", "system", "risk", "performance"]);
 
 // Phase 4: Goals Presets enums
 export const goalsPresetNameEnum = pgEnum("goals_preset_name", ["conservative", "baseline", "optimistic", "maximum", "custom"]);
@@ -262,11 +252,6 @@ export const tradingSettings = pgTable("trading_settings", {
   // Phase 2: Partial Fill Recovery
   partialFillThreshold: decimal("partial_fill_threshold", { precision: 5, scale: 2 }).default("90.00"), // % threshold
   partialFillAction: varchar("partial_fill_action", { length: 20 }).default("scale"), // 'scale' or 'catchup'
-  
-  // Walter AI Assistant Settings
-  walterMemoryDepth: integer("walter_memory_depth").default(20), // Number of messages to keep in context window
-  walterMemoryLimit: integer("walter_memory_limit").default(500), // Max persistent memories (-1 for unlimited)
-  walterAutoSummarize: boolean("walter_auto_summarize").default(true), // Auto-summarize chats every 50 messages
   
   // AI Opportunities Settings
   aiOpportunitiesEnabled: boolean("ai_opportunities_enabled").default(true),
@@ -967,230 +952,6 @@ export const dailyBriefs = pgTable("daily_briefs", {
   emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
 });
 
-// ===== WALTER AI ASSISTANT TABLES =====
-
-// Walter chats (multi-chat session management)
-export const walterChats = pgTable("walter_chats", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
-  userId: varchar("user_id").references(() => users.id),
-  title: text("title").default("New Chat"), // Chat session title
-  status: walterChatStatusEnum("status").default("active"),
-  isApprovalThread: boolean("is_approval_thread").default(false), // True if auto-created for approval
-  approvalId: varchar("approval_id"), // Added without reference to avoid circular inference
-  messageCount: integer("message_count").default(0), // Total messages in session
-  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
-  pinned: boolean("pinned").default(false).notNull(), // Phase 8.4 Addendum B: Pin chat to top
-  pinnedAt: timestamp("pinned_at", { withTimezone: true }), // Phase 8.4 Addendum B: When pinned
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  archivedAt: timestamp("archived_at", { withTimezone: true }),
-});
-
-// Walter pending approvals (tracks parameter changes requiring approval)
-export const walterPendingApprovals = pgTable("walter_pending_approvals", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  mode: tradingModeEnum("mode").notNull(), // Trading mode (live/paper)
-  strategyName: varchar("strategy_name", { length: 100 }), // Strategy being modified (if applicable)
-  parameterName: varchar("parameter_name", { length: 100 }).notNull(), // Parameter being changed
-  currentValue: jsonb("current_value").notNull(), // Current value
-  proposedValue: jsonb("proposed_value").notNull(), // Proposed new value
-  projectedRisk: decimal("projected_risk", { precision: 5, scale: 2 }).notNull(), // Risk percentage
-  riskDetails: jsonb("risk_details"), // Additional risk breakdown
-  status: approvalStatusEnum("status").default("pending"),
-  chatSessionId: varchar("chat_session_id").references(() => walterChats.id, { onDelete: 'set null' }), // Links to walter chat session if auto-created
-  approvedAt: timestamp("approved_at", { withTimezone: true }),
-  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
-  approvedBy: varchar("approved_by").references(() => users.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  // Phase 27.2: Inline Approvals + Interactive Notifications
-  traceId: varchar("trace_id", { length: 100 }).unique(), // Unique trace ID for approval request
-  action: varchar("action", { length: 100 }), // Action type (e.g., "start_live_trading")
-  displayMode: approvalDisplayModeEnum("display_mode").default("inline"), // Where to show: inline chat or notification
-  expiresAt: timestamp("expires_at", { withTimezone: true }), // When approval request expires
-  dismissedAt: timestamp("dismissed_at", { withTimezone: true }), // When user dismissed (no action)
-  clearedAt: timestamp("cleared_at", { withTimezone: true }), // When removed from notification list
-});
-
-// Walter chat logs (all messages and interactions)
-export const walterChatLogs = pgTable("walter_chat_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  chatSessionId: varchar("chat_session_id").references(() => walterChats.id, { onDelete: 'cascade' }).notNull(),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  role: varchar("role", { length: 20 }).notNull(), // 'user', 'assistant', 'system'
-  content: text("content").notNull(), // Message content
-  metadata: jsonb("metadata"), // Additional data (buttons, actions, etc.)
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
-}, (table) => ({
-  chatSessionIdx: index("walter_chat_logs_session_idx").on(table.chatSessionId),
-  timestampIdx: index("walter_chat_logs_timestamp_idx").on(table.timestamp),
-}));
-
-// Walter approvals audit (tracks all approval decisions)
-export const walterApprovalsAudit = pgTable("walter_approvals_audit", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  approvalId: varchar("approval_id").references(() => walterPendingApprovals.id).notNull(),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  decision: varchar("decision", { length: 20 }).notNull(), // 'approved', 'rejected'
-  decisionMethod: varchar("decision_method", { length: 50 }), // 'ui_button', 'voice_command', 'chat_command'
-  notes: text("notes"), // Optional user notes
-  executionResult: jsonb("execution_result"), // Results of the approved action (if executed)
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
-}, (table) => ({
-  approvalIdx: index("walter_approvals_audit_approval_idx").on(table.approvalId),
-  userIdx: index("walter_approvals_audit_user_idx").on(table.userId),
-  timestampIdx: index("walter_approvals_audit_timestamp_idx").on(table.timestamp),
-}));
-
-// Walter execution log (Phase 22 - tracks all autonomous command executions)
-export const walterExecutionLog = pgTable("walter_execution_log", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  mode: tradingModeEnum("mode").notNull(), // Trading mode (live/paper)
-  commandText: text("command_text").notNull(), // Original natural language command
-  actionType: varchar("action_type", { length: 100 }).notNull(), // NLAI action ID
-  source: varchar("source", { length: 50 }).notNull(), // 'nlai', 'orchestrator', 'api', 'manual'
-  approvalStatus: varchar("approval_status", { length: 30 }).notNull(), // 'auto_approved', 'manual_approved', 'not_required', 'rejected'
-  approvalReason: text("approval_reason"), // Why it was auto-approved or rejected
-  executionStatus: varchar("execution_status", { length: 20 }).notNull(), // 'success', 'failed', 'pending'
-  resultMessage: text("result_message"), // Human-readable result
-  resultDetails: jsonb("result_details"), // Structured execution results
-  projectedRisk: decimal("projected_risk", { precision: 5, scale: 2 }), // Estimated risk %
-  actualRisk: decimal("actual_risk", { precision: 5, scale: 2 }), // Actual risk after execution %
-  executionTimeMs: integer("execution_time_ms"), // Duration in milliseconds
-  chatSessionId: varchar("chat_session_id").references(() => walterChats.id, { onDelete: 'set null' }), // Link to chat if from Walter
-  approvalId: varchar("approval_id").references(() => walterPendingApprovals.id, { onDelete: 'set null' }), // Link to approval if required
-  clusterEventId: varchar("cluster_event_id"), // Link to cluster_bus_event if emitted
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  executedAt: timestamp("executed_at", { withTimezone: true }),
-}, (table) => ({
-  userIdx: index("walter_execution_log_user_idx").on(table.userId),
-  modeIdx: index("walter_execution_log_mode_idx").on(table.mode),
-  actionTypeIdx: index("walter_execution_log_action_type_idx").on(table.actionType),
-  createdAtIdx: index("walter_execution_log_created_at_idx").on(table.createdAt),
-  executionStatusIdx: index("walter_execution_log_status_idx").on(table.executionStatus),
-}));
-
-// Walter purpose (Phase 5.5 - stores Walter's guiding purpose statement, mode-aware as of Phase 6.13)
-export const walterPurpose = pgTable("walter_purpose", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  mode: tradingModeEnum("mode").notNull(), // 'live' or 'paper' - separate purpose per mode
-  content: text("content").notNull(), // The purpose statement
-  updatedBy: varchar("updated_by").references(() => users.id), // Who last updated it
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-}, (table) => ({
-  uniqueUserMode: uniqueIndex("walter_purpose_user_mode_idx").on(table.userId, table.mode),
-}));
-
-// Walter memory (Phase 5.5 - persistent memory for continuity across sessions)
-export const walterMemory = pgTable("walter_memory", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  type: walterMemoryTypeEnum("type").notNull(), // observation, decision, result, goal, lesson
-  content: text("content").notNull(), // Memory content
-  importance: integer("importance").default(3).notNull(), // 1-5 scale for recall weighting
-  chatId: varchar("chat_id").references(() => walterChats.id, { onDelete: 'set null' }), // Optional link to source chat
-  metadata: jsonb("metadata"), // Additional context (strategy name, symbols, etc.)
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
-}, (table) => ({
-  userTypeIdx: index("walter_memory_user_type_idx").on(table.userId, table.type),
-  importanceIdx: index("walter_memory_importance_idx").on(table.importance),
-  timestampIdx: index("walter_memory_timestamp_idx").on(table.timestamp),
-  // Check constraint for importance range 1-5
-  importanceCheck: sql`CHECK (importance >= 1 AND importance <= 5)`,
-}));
-
-// Walter user preferences (Phase 8.4 Addendum B - UI and behavior settings)
-export const walterUserPreferences = pgTable("walter_user_preferences", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull().unique(),
-  viewMode: walterViewModeEnum("view_mode").default("compact").notNull(), // Compact or Expanded layout
-  theme: walterThemeEnum("theme").default("system").notNull(), // Light, Dark, or System
-  tone: walterToneEnum("tone").default("professional").notNull(), // Assistant tone: Professional, Analytical, Warm, Concise
-  sendKeyPreference: varchar("send_key_preference", { length: 20 }).default("enter").notNull(), // 'enter' or 'shift_enter'
-  sidebarCollapsed: boolean("sidebar_collapsed").default(false).notNull(), // Sidebar collapse state
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
-// Walter autonomous actions (Phase 27.F.19-20 - Maintenance & Intelligence)
-// Production TODO: Add unique constraint on (incidentKey, status) for race-safe dedup:
-// UNIQUE INDEX CONCURRENTLY ON walter_actions(incident_key) WHERE status IN ('pending', 'in_progress')
-export const walterActions = pgTable("walter_actions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  mode: tradingModeEnum("mode").notNull(), // Trading mode (live/paper)
-  actionType: walterActionTypeEnum("action_type").notNull(), // Type of action Walter took
-  category: walterActionCategoryEnum("category").notNull(), // feed, formula, system, risk, performance
-  status: walterActionStatusEnum("status").notNull().default("pending"), // pending, in_progress, completed, failed, acknowledged, approved, rejected
-  
-  // Impact & Context
-  impactScore: decimal("impact_score", { precision: 5, scale: 2 }).notNull(), // 0-100 impact score
-  affectedComponent: text("affected_component").notNull(), // e.g., "Kraken WebSocket", "RSI Formula"
-  detectedAnomaly: text("detected_anomaly").notNull(), // Description of what was wrong
-  contextData: jsonb("context_data"), // Additional context (latency, deviation %, etc.)
-  
-  // Action & Resolution
-  suggestedFix: text("suggested_fix").notNull(), // What Walter recommends/did
-  executedAction: text("executed_action"), // What Walter actually executed (if auto-resolved)
-  resolutionStatus: varchar("resolution_status", { length: 50 }), // 'fixed', 'monitored', 'pending', 'escalated'
-  resolutionNotes: text("resolution_notes"), // Outcome details
-  confidenceScore: decimal("confidence_score", { precision: 3, scale: 2 }), // 0-1 confidence in action
-  
-  // Deduplication & Safety (Architect feedback)
-  incidentKey: varchar("incident_key", { length: 255 }).notNull(), // Hash of (userId+mode+component+anomaly_type+metric_bucket) for deduplication
-  retryCount: integer("retry_count").default(0).notNull(), // Number of retry attempts for this incident
-  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }), // Last retry timestamp
-  cooldownUntil: timestamp("cooldown_until", { withTimezone: true }), // Cooldown expiry for this action
-  parentActionId: varchar("parent_action_id"), // Link to parent action if this is a chained action
-  tradingPaused: boolean("trading_paused").default(false).notNull(), // Whether trading was paused due to this action
-  
-  // Timestamps
-  detectedAt: timestamp("detected_at", { withTimezone: true }).defaultNow(),
-  actionedAt: timestamp("action_at", { withTimezone: true }), // When action was taken
-  resolvedAt: timestamp("resolved_at", { withTimezone: true }), // When issue was resolved
-  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }), // When user acknowledged
-  
-  // Learning & Escalation
-  requiresApproval: boolean("requires_approval").default(false).notNull(), // Whether user approval needed
-  escalated: boolean("escalated").default(false).notNull(), // Whether escalated to user
-  suppressReason: text("suppress_reason"), // Why action was suppressed (if applicable)
-  userFeedback: text("user_feedback"), // User's feedback on Walter's action
-  
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-}, (table) => ({
-  userModeIdx: index("walter_actions_user_mode_idx").on(table.userId, table.mode),
-  statusIdx: index("walter_actions_status_idx").on(table.status),
-  categoryIdx: index("walter_actions_category_idx").on(table.category),
-  impactIdx: index("walter_actions_impact_idx").on(table.impactScore),
-  detectedAtIdx: index("walter_actions_detected_at_idx").on(table.detectedAt),
-  escalatedIdx: index("walter_actions_escalated_idx").on(table.escalated),
-  incidentKeyIdx: index("walter_actions_incident_key_idx").on(table.incidentKey), // For deduplication
-  parentActionIdx: index("walter_actions_parent_action_idx").on(table.parentActionId), // For chained actions
-}));
-
-// Phase 27.F.20: Execution Config Table (Auto-Execution Settings)
-export const executionConfig = pgTable("execution_config", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  mode: tradingModeEnum("mode").notNull(), // paper or live
-  actionType: walterActionTypeEnum("action_type").notNull(), // Which action type this config applies to
-  autoExecuteEnabled: boolean("auto_execute_enabled").default(false).notNull(), // Whether to auto-execute without approval
-  requiresApproval: boolean("requires_approval").default(true).notNull(), // Whether user approval is required
-  maxImpactThreshold: decimal("max_impact_threshold", { precision: 5, scale: 2 }).default("50.00"), // Max impact score for auto-execution
-  notes: text("notes"), // User notes about this configuration
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-}, (table) => ({
-  // Unique constraint: one config per user, mode, and action type
-  uniqueConfig: unique("execution_config_unique").on(table.userId, table.mode, table.actionType),
-  userModeIdx: index("execution_config_user_mode_idx").on(table.userId, table.mode),
-  actionTypeIdx: index("execution_config_action_type_idx").on(table.actionType),
-}));
-
 // Learning Fragments (Phase 8.6.1 - cognitive layer learning and improvement)
 export const learningFragments = pgTable("learning_fragments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1281,7 +1042,6 @@ export const paperTrades = pgTable("paper_trades", {
   mfe: decimal("mfe", { precision: 10, scale: 2 }), // Maximum Favorable Excursion (max profit while open)
   mae: decimal("mae", { precision: 10, scale: 2 }), // Maximum Adverse Excursion (max loss while open)
   ngc: decimal("ngc", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Normalized Global Confidence
-  cwqi: decimal("cwqi", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Confidence-Weighted Quality Index
   confidence: decimal("confidence", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Raw signal confidence
   profitRate: decimal("profit_rate", { precision: 6, scale: 4 }), // Phase 8.8.4-C: Expected profit per time unit
   entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
@@ -1653,7 +1413,7 @@ export const aiTransparencyLog = pgTable("ai_transparency_log", {
   taskExecutedIdx: uniqueIndex("ai_transparency_log_task_executed_idx").on(table.taskName, table.executedAt),
 }));
 
-// Phase 5.9: Diagnostic Patch Proposals (Bob/Walter fix proposals requiring approval)
+// Phase 5.9: Diagnostic Patch Proposals (Bob fix proposals requiring approval)
 export const patchProposals = pgTable("patch_proposals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   proposalId: varchar("proposal_id", { length: 100 }).notNull().unique(),
@@ -1886,7 +1646,7 @@ export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promo
 
 // Phase 8.8.4-B: Ready-to-Buy (RTB) Signals Queue
 // Stores high-quality signals that pass quality guardrails but are blocked by capacity constraints
-// Directive 11.0F: Signals ranked exclusively by FinalScore (legacy CWQI/NGC columns removed)
+// Directive 11.0F: Signals ranked exclusively by FinalScore
 export const rtbSignals = pgTable("rtb_signals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   mode: tradingModeEnum("mode").notNull(),
@@ -1939,7 +1699,7 @@ export const tradingAuditLog = pgTable("trading_audit_log", {
   userId: varchar("user_id").references(() => users.id).notNull(),
   action: varchar("action", { length: 50 }).notNull(), // 'start', 'stop'
   mode: varchar("mode", { length: 10 }).notNull(), // 'live', 'paper'
-  triggeredBy: varchar("triggered_by", { length: 50 }).default("manual"), // 'manual', 'walter', 'api', 'scheduled'
+  triggeredBy: varchar("triggered_by", { length: 50 }).default("manual"), // 'manual', 'api', 'scheduled'
   metadata: jsonb("metadata"), // Additional context (e.g., confirmation details, reason)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
@@ -2000,10 +1760,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   learningSources: many(learningSources),
   signalWeights: many(signalWeights),
   predictionOutcomes: many(predictionOutcomes),
-  walterPendingApprovals: many(walterPendingApprovals),
-  walterChats: many(walterChats),
-  walterChatLogs: many(walterChatLogs),
-  walterApprovalsAudit: many(walterApprovalsAudit),
 }));
 
 export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => ({
@@ -2090,67 +1846,6 @@ export const paperAIReportsRelations = relations(paperAIReports, ({ one }) => ({
   user: one(users, {
     fields: [paperAIReports.userId],
     references: [users.id],
-  }),
-}));
-
-export const walterPendingApprovalsRelations = relations(walterPendingApprovals, ({ one, many }) => ({
-  user: one(users, {
-    fields: [walterPendingApprovals.userId],
-    references: [users.id],
-  }),
-  chatSession: one(walterChats, {
-    fields: [walterPendingApprovals.chatSessionId],
-    references: [walterChats.id],
-  }),
-  auditEntries: many(walterApprovalsAudit),
-}));
-
-export const walterChatsRelations = relations(walterChats, ({ one, many }) => ({
-  user: one(users, {
-    fields: [walterChats.userId],
-    references: [users.id],
-  }),
-  approval: one(walterPendingApprovals, {
-    fields: [walterChats.approvalId],
-    references: [walterPendingApprovals.id],
-  }),
-  chatLogs: many(walterChatLogs),
-}));
-
-export const walterChatLogsRelations = relations(walterChatLogs, ({ one }) => ({
-  user: one(users, {
-    fields: [walterChatLogs.userId],
-    references: [users.id],
-  }),
-  chatSession: one(walterChats, {
-    fields: [walterChatLogs.chatSessionId],
-    references: [walterChats.id],
-  }),
-}));
-
-export const walterApprovalsAuditRelations = relations(walterApprovalsAudit, ({ one }) => ({
-  user: one(users, {
-    fields: [walterApprovalsAudit.userId],
-    references: [users.id],
-  }),
-  approval: one(walterPendingApprovals, {
-    fields: [walterApprovalsAudit.approvalId],
-    references: [walterPendingApprovals.id],
-  }),
-}));
-
-export const walterExecutionLogRelations = relations(walterExecutionLog, ({ one }) => ({
-  user: one(users, {
-    fields: [walterExecutionLog.userId],
-    references: [users.id],
-  }),
-  chatSession: one(walterChats, {
-    fields: [walterExecutionLog.chatSessionId],
-    references: [walterChats.id],
-  }),
-  approval: one(walterPendingApprovals, {
-    fields: [walterExecutionLog.approvalId],
-    references: [walterPendingApprovals.id],
   }),
 }));
 
@@ -2549,60 +2244,6 @@ export const insertExecutionAttemptAuditSchema = createInsertSchema(executionAtt
   createdAt: true,
 });
 
-// Walter insert schemas
-export const insertWalterPendingApprovalSchema = createInsertSchema(walterPendingApprovals).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertWalterChatSchema = createInsertSchema(walterChats).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertWalterChatLogSchema = createInsertSchema(walterChatLogs).omit({
-  id: true,
-  timestamp: true,
-});
-
-export const insertWalterApprovalsAuditSchema = createInsertSchema(walterApprovalsAudit).omit({
-  id: true,
-  timestamp: true,
-});
-
-export const insertWalterExecutionLogSchema = createInsertSchema(walterExecutionLog).omit({
-  id: true,
-  createdAt: true,
-  executedAt: true,
-});
-
-export const insertWalterPurposeSchema = createInsertSchema(walterPurpose).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertWalterMemorySchema = createInsertSchema(walterMemory).omit({
-  id: true,
-  timestamp: true,
-});
-
-export const insertWalterUserPreferencesSchema = createInsertSchema(walterUserPreferences).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertWalterActionSchema = createInsertSchema(walterActions).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  detectedAt: true,
-  actionedAt: true,
-  resolvedAt: true,
-  acknowledgedAt: true,
-});
-
 export const insertLearningFragmentSchema = createInsertSchema(learningFragments).omit({
   id: true,
   timestamp: true,
@@ -2898,7 +2539,7 @@ export const expertUpdates = pgTable("expert_updates", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
-// Expert compliance reports - Walter's self-evaluation
+// Expert compliance reports - system self-evaluation
 export const expertComplianceReports = pgTable("expert_compliance_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
@@ -2929,11 +2570,11 @@ export const expertComplianceReports = pgTable("expert_compliance_reports", {
   metadata: jsonb("metadata"),
 });
 
-// Expert response logs - Track principle usage in Walter responses
+// Expert response logs - Track principle usage in AI responses
 export const expertResponseLogs = pgTable("expert_response_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  chatId: varchar("chat_id").references(() => walterChats.id), // Reference to chat session
+  chatId: varchar("chat_id"),
   chatLogId: varchar("chat_log_id"), // Optional message ID (no FK to avoid constraint issues)
   principlesInjected: jsonb("principles_injected").notNull(), // Array of {principleId, principle, category}
   responseType: varchar("response_type", { length: 50 }), // 'trade_analysis', 'risk_assessment', 'strategy_explanation', etc.
@@ -2947,7 +2588,7 @@ export const dataLineage = pgTable("data_lineage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   traceId: varchar("trace_id", { length: 50 }).notNull(),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
-  originatingService: varchar("originating_service", { length: 50 }).notNull(), // 'bob', 'cortex', 'walter', 'ui'
+  originatingService: varchar("originating_service", { length: 50 }).notNull(), // 'bob', 'cortex', 'ui'
   targetService: varchar("target_service", { length: 50 }), // Destination service (if applicable)
   sourceTable: varchar("source_table", { length: 100 }), // Database table or API endpoint
   mode: tradingModeEnum("mode"),
@@ -4055,34 +3696,6 @@ export type OrchestratorUpdateGoal = z.infer<typeof orchestratorUpdateGoalSchema
 export type OrchestratorUpdateGuardrail = z.infer<typeof orchestratorUpdateGuardrailSchema>;
 export type OrchestratorUpdateStrategy = z.infer<typeof orchestratorUpdateStrategySchema>;
 
-// Walter types
-export type InsertWalterPendingApproval = z.infer<typeof insertWalterPendingApprovalSchema>;
-export type WalterPendingApproval = typeof walterPendingApprovals.$inferSelect;
-
-export type InsertWalterChat = z.infer<typeof insertWalterChatSchema>;
-export type WalterChat = typeof walterChats.$inferSelect;
-
-export type InsertWalterChatLog = z.infer<typeof insertWalterChatLogSchema>;
-export type WalterChatLog = typeof walterChatLogs.$inferSelect;
-
-export type InsertWalterApprovalsAudit = z.infer<typeof insertWalterApprovalsAuditSchema>;
-export type WalterApprovalsAudit = typeof walterApprovalsAudit.$inferSelect;
-
-export type InsertWalterExecutionLog = z.infer<typeof insertWalterExecutionLogSchema>;
-export type WalterExecutionLog = typeof walterExecutionLog.$inferSelect;
-
-export type InsertWalterPurpose = z.infer<typeof insertWalterPurposeSchema>;
-export type WalterPurpose = typeof walterPurpose.$inferSelect;
-
-export type InsertWalterMemory = z.infer<typeof insertWalterMemorySchema>;
-export type WalterMemory = typeof walterMemory.$inferSelect;
-
-export type InsertWalterUserPreferences = z.infer<typeof insertWalterUserPreferencesSchema>;
-export type WalterUserPreferences = typeof walterUserPreferences.$inferSelect;
-
-export type InsertWalterAction = z.infer<typeof insertWalterActionSchema>;
-export type WalterAction = typeof walterActions.$inferSelect;
-
 export type InsertLearningFragment = z.infer<typeof insertLearningFragmentSchema>;
 export type LearningFragment = typeof learningFragments.$inferSelect;
 
@@ -4335,7 +3948,7 @@ export const tuningEvent = pgTable("tuning_event", {
   approvalType: tuningApprovalTypeEnum("approval_type").notNull(),
   status: tuningStatusEnum("status").notNull(),
   reverted: boolean("reverted").default(false).notNull(),
-  executionLogId: varchar("execution_log_id"), // Link to walter_execution_log if applicable
+  executionLogId: varchar("execution_log_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   userIdModeIdx: index("tuning_event_user_id_mode_idx").on(table.userId, table.mode),
@@ -4368,7 +3981,7 @@ export const systemContext = pgTable("system_context", {
   lastSafeState: jsonb("last_safe_state").notNull().default(sql`'{}'`),
   isEngineActive: boolean("is_engine_active").notNull().default(false),
   lastModeChange: timestamp("last_mode_change", { withTimezone: true }),
-  changedBy: varchar("changed_by", { length: 50 }), // 'user', 'walter', 'recovery', 'admin'
+  changedBy: varchar("changed_by", { length: 50 }), // 'user', 'recovery', 'admin'
   changeReason: text("change_reason"),
   // Phase 27.F.13.O: New audit columns for global engine
   lastStartedBy: varchar("last_started_by"), // UUID of user who started engine
@@ -4527,20 +4140,6 @@ export const insertSystemContextSchema = createInsertSchema(systemContext).omit(
 // Types for Phase 27.4
 export type InsertSystemContext = z.infer<typeof insertSystemContextSchema>;
 export type SystemContext = typeof systemContext.$inferSelect;
-
-// Insert schemas for Phase 27.F.20
-export const insertExecutionConfigSchema = createInsertSchema(executionConfig).omit({ 
-  id: true, 
-  createdAt: true,
-  updatedAt: true 
-});
-
-// Types for Phase 27.F.20
-export type InsertExecutionConfig = z.infer<typeof insertExecutionConfigSchema>;
-export type ExecutionConfig = typeof executionConfig.$inferSelect;
-export type WalterActionType = typeof walterActionTypeEnum.enumValues[number];
-export type WalterActionStatus = typeof walterActionStatusEnum.enumValues[number];
-export type WalterActionCategory = typeof walterActionCategoryEnum.enumValues[number];
 
 // Phase 27.F.13.L.1: System Settings for Canonical Engine Operator
 export const systemSettings = pgTable("system_settings", {

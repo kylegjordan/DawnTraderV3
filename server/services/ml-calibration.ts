@@ -10,7 +10,7 @@
  * - Consumes Phase-10 metrics: finalScore, predictiveConfidence, regimeWeight
  * - Computes performance score using Phase-10 formula
  * - Uses expectedEdge vs realizedPnL delta for learning weights
- * - All legacy CWQI/NGC/DI/GSI references removed (M51)
+ * - Uses Phase-10 metrics exclusively
  * 
  * Schema Version: 1.6.7
  * ══════════════════════════════════════════════════════════════════════════════

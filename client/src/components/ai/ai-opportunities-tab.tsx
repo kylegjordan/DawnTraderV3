@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +53,6 @@ interface LatestRun {
 
 export function AIOpportunitiesTab() {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [minProbability, setMinProbability] = useState<string>("0");
@@ -164,10 +162,9 @@ export function AIOpportunitiesTab() {
       });
     },
     onSuccess: (conversation) => {
-      setLocation(`/walter?conversation_id=${conversation.id}`);
       toast({
         title: "Chat opened",
-        description: "Opening Walter to discuss this opportunity",
+        description: "Conversation created for this opportunity",
       });
     },
     onError: () => {

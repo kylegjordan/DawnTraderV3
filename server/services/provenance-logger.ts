@@ -3,8 +3,7 @@
  * 
  * Tracks every data transaction between:
  * - BoB → Cortex
- * - Cortex → Walter  
- * - Walter → UI
+ * - Cortex → UI
  * 
  * Provides complete data lineage with trace ID correlation
  */
@@ -16,7 +15,7 @@ import { dataLineage, bobTraceLog } from '@shared/schema';
 import type { InsertDataLineage, InsertBobTraceLog } from '@shared/schema';
 import { eq, gte } from 'drizzle-orm';
 
-export type ServiceLayer = 'bob' | 'cortex' | 'walter' | 'ui';
+export type ServiceLayer = 'bob' | 'cortex' | 'ui';
 export type OperationType = 'read' | 'write' | 'aggregate';
 export type TradingMode = 'live' | 'paper';
 
@@ -166,53 +165,7 @@ class ProvenanceLogger {
     });
   }
 
-  /**
-   * Log a Cortex → Walter data flow
-   */
-  async logCortexToWalter(params: {
-    traceId: string;
-    sourceTable?: string;
-    mode?: TradingMode;
-    globalContextId?: string;
-    data?: any;
-    contextType?: string;
-  }): Promise<void> {
-    await this.logLineage({
-      traceId: params.traceId,
-      originatingService: 'cortex',
-      targetService: 'walter',
-      sourceTable: params.sourceTable,
-      mode: params.mode,
-      globalContextId: params.globalContextId,
-      operation: 'read',
-      data: params.data,
-      metadata: { contextType: params.contextType },
-    });
-  }
 
-  /**
-   * Log a Walter → UI data flow
-   */
-  async logWalterToUI(params: {
-    traceId: string;
-    endpoint?: string;
-    mode?: TradingMode;
-    globalContextId?: string;
-    data?: any;
-    userId?: string;
-  }): Promise<void> {
-    await this.logLineage({
-      traceId: params.traceId,
-      originatingService: 'walter',
-      targetService: 'ui',
-      sourceTable: params.endpoint,
-      mode: params.mode,
-      globalContextId: params.globalContextId,
-      operation: 'read',
-      data: params.data,
-      metadata: { userId: params.userId },
-    });
-  }
 
   /**
    * Get recent lineage for a trace ID
@@ -238,7 +191,6 @@ class ProvenanceLogger {
   async getFreshnessStats(): Promise<{
     bob: { avgAgeMs: number; count: number };
     cortex: { avgAgeMs: number; count: number };
-    walter: { avgAgeMs: number; count: number };
   }> {
     const now = new Date();
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
@@ -254,7 +206,6 @@ class ProvenanceLogger {
       const stats = {
         bob: { avgAgeMs: 0, count: 0 },
         cortex: { avgAgeMs: 0, count: 0 },
-        walter: { avgAgeMs: 0, count: 0 },
       };
 
       for (const record of recentLineage) {
@@ -273,7 +224,6 @@ class ProvenanceLogger {
       return {
         bob: { avgAgeMs: 0, count: 0 },
         cortex: { avgAgeMs: 0, count: 0 },
-        walter: { avgAgeMs: 0, count: 0 },
       };
     }
   }

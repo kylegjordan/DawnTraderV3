@@ -329,7 +329,7 @@ function getTemplatesForIntent(intent: IntentType): string {
       return `
 **Risk Management Reassurance Template** (From Task 9 Behavioral QA):
 
-Walter's 4-Layer Protection System:
+4-Layer Protection System:
 
 1. **Per-Trade Stop Loss**: Limits each trade's loss
 2. **Position Size Cap (10%)**: Prevents oversized positions

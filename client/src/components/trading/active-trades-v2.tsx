@@ -101,7 +101,7 @@ interface ActiveTrade {
   distanceToSL: number;
   distanceToTPDollars: number; // CR-001: Dollar-based distance
   distanceToSLDollars: number; // CR-001: Dollar-based distance
-  cwqi: number; // CR-001: CWQI from SQE
+  finalScore: number;
   holdingDurationMs: number;
   slotNumber: number;
   maxSlots: number;
@@ -155,7 +155,7 @@ type SortField = 'symbol' | 'strategy' | 'intendedEntryPrice' | 'entryPrice' | '
                   'grossPnl' | 'grossPnlPercent' | 'netPnl' | 'netPnlPercent' | 
                   'entryFee' | 'entrySlippage' | 'estExitFee' | 'estExitSlippage' | 'estTotalCost' |
                   'holdingDurationMs' | 'distanceToTP' | 'distanceToSL' | 'distanceToTPDollars' | 'distanceToSLDollars' | 'slotNumber' | 
-                  'health' | 'confidence' | 'cwqi' | 'quantity' | 'volume24h' | 'takeProfit' | 'stopLoss' | 'positionValue' |
+                  'health' | 'confidence' | 'finalScore' | 'quantity' | 'volume24h' | 'takeProfit' | 'stopLoss' | 'positionValue' |
                   'marketRegime' | 'marketFriction';
 type SortDirection = 'asc' | 'desc';
 
@@ -504,16 +504,16 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 16. CWQI - CR-001: Added before Confidence */}
+      {/* 16. FinalScore - CR-001: Added before Confidence */}
       <td className="px-3 py-3">
-        {(trade.cwqi && trade.cwqi > 0) ? (
+        {(trade.finalScore && trade.finalScore > 0) ? (
           <div className={cn(
             "font-mono text-sm font-medium",
-            trade.cwqi >= 0.7 ? "text-green-600" :
-            trade.cwqi >= 0.5 ? "text-blue-600" :
-            trade.cwqi >= 0.3 ? "text-orange-600" : "text-red-600"
+            trade.finalScore >= 0.7 ? "text-green-600" :
+            trade.finalScore >= 0.5 ? "text-blue-600" :
+            trade.finalScore >= 0.3 ? "text-orange-600" : "text-red-600"
           )}>
-            {(trade.cwqi * 100).toFixed(1)}%
+            {(trade.finalScore * 100).toFixed(1)}%
           </div>
         ) : (
           <div className="font-mono text-sm text-muted-foreground">N/A</div>
@@ -1233,7 +1233,7 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="estExitSlippage" label="Exit Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="estTotalCost" label="Total Cost" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="netPnl" label="Net P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="cwqi" label="CWQI" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="finalScore" label="FinalScore" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="volume24h" label="Volume" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>

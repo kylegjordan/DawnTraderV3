@@ -174,38 +174,12 @@ import {
   type ExecutionAttemptAudit,
   type InsertExecutionAttemptAudit,
   executionAttemptAudit,
-  type WalterPendingApproval,
-  type InsertWalterPendingApproval,
-  walterPendingApprovals,
-  type WalterChat,
-  type InsertWalterChat,
-  walterChats,
-  type WalterChatLog,
-  type InsertWalterChatLog,
-  walterChatLogs,
-  type WalterApprovalsAudit,
-  type InsertWalterApprovalsAudit,
-  walterApprovalsAudit,
-  type WalterExecutionLog,
-  type InsertWalterExecutionLog,
-  walterExecutionLog,
-  type WalterMemory,
-  type InsertWalterMemory,
-  walterMemory,
-  type WalterUserPreferences,
-  type InsertWalterUserPreferences,
-  walterUserPreferences,
   type PortfolioState,
   type InsertPortfolioState,
   portfolioState,
   type SystemContext,
   type InsertSystemContext,
   systemContext,
-  type WalterAction,
-  walterActions,
-  type ExecutionConfig,
-  type InsertExecutionConfig,
-  executionConfig,
   type SystemAlert,
   type InsertSystemAlert,
   systemAlerts,
@@ -623,45 +597,7 @@ export interface IStorage {
     last24hBlocked: number;
   }>;
   
-  // Walter AI Assistant methods
-  createWalterPendingApproval(data: InsertWalterPendingApproval): Promise<WalterPendingApproval>;
-  getPendingApprovals(userId: string, status?: string): Promise<WalterPendingApproval[]>;
-  updateApprovalStatus(id: string, status: string, updates: Partial<WalterPendingApproval>): Promise<WalterPendingApproval>;
-  
-  createWalterChat(data: InsertWalterChat): Promise<WalterChat>;
-  getWalterChats(userId: string, status?: string): Promise<WalterChat[]>;
-  getWalterChatById(id: string): Promise<WalterChat | undefined>;
-  updateWalterChat(id: string, updates: Partial<WalterChat>): Promise<WalterChat>;
-  deleteWalterChat(id: string): Promise<void>;
-  
-  createWalterChatLog(log: InsertWalterChatLog): Promise<WalterChatLog>;
-  getWalterChatLogs(chatSessionId: string, limit?: number): Promise<WalterChatLog[]>;
-  deleteWalterChatMessages(chatSessionId: string): Promise<void>;
-  
-  createWalterApprovalsAudit(audit: InsertWalterApprovalsAudit): Promise<WalterApprovalsAudit>;
-  getWalterApprovalsAudit(approvalId: string): Promise<WalterApprovalsAudit[]>;
-  
-  // Walter Memory methods
-  createWalterMemory(memory: InsertWalterMemory): Promise<WalterMemory>;
-  getWalterMemories(userId: string): Promise<WalterMemory[]>;
-  getWalterMemory(id: string): Promise<WalterMemory | undefined>;
-  updateWalterMemory(id: string, updates: Partial<WalterMemory>): Promise<WalterMemory>;
-  deleteWalterMemory(id: string): Promise<void>;
-  
-  // Walter Execution Log methods (Phase 22)
-  createWalterExecutionLog(data: InsertWalterExecutionLog): Promise<WalterExecutionLog>;
-  updateWalterExecutionLog(id: string, updates: Partial<WalterExecutionLog>): Promise<WalterExecutionLog>;
-  getWalterExecutionLog(id: string): Promise<WalterExecutionLog | undefined>;
-  getWalterExecutionLogs(userId: string, options?: { limit?: number; mode?: 'live' | 'paper' }): Promise<WalterExecutionLog[]>;
-  
-  // Walter User Preferences methods (Phase 8.4 Addendum B)
-  getWalterUserPreferences(userId: string): Promise<WalterUserPreferences | undefined>;
-  upsertWalterUserPreferences(userId: string, preferences: Partial<InsertWalterUserPreferences>): Promise<WalterUserPreferences>;
-  
-  // Chat Pin methods (Phase 8.4 Addendum B)
-  pinWalterChat(chatId: string): Promise<WalterChat>;
-  unpinWalterChat(chatId: string): Promise<WalterChat>;
-  
+
   // Portfolio State methods (Phase 8.5 Addendum F)
   getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined>;
   upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState>;
@@ -679,17 +615,9 @@ export interface IStorage {
   upsertSystemContext(data: Partial<InsertSystemContext> & { tradingMode: 'live' | 'paper' }): Promise<SystemContext>;
   updateSystemContext(mode: 'live' | 'paper', updates: Partial<SystemContext>): Promise<SystemContext>;
   
-  // Directive 12.2.8: Walter Actions methods removed (Batch 10) — zero callers after Walter removal
-  
-  // Execution Config methods (Phase 27.F.20)
-  getExecutionConfigs(userId: string, mode: 'live' | 'paper'): Promise<ExecutionConfig[]>;
-  getExecutionConfig(userId: string, mode: 'live' | 'paper', actionType: string): Promise<ExecutionConfig | undefined>;
-  upsertExecutionConfig(config: InsertExecutionConfig): Promise<ExecutionConfig>;
-  deleteExecutionConfig(id: string): Promise<void>;
-  
   // System Alert methods (OpenAI Rate Limiter)
   createSystemAlert(alert: InsertSystemAlert): Promise<SystemAlert>;
-  
+
   // Phase 28.C: Override Audit History methods
   addAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number; since?: Date }): Promise<AuditLog[]>;
@@ -3775,204 +3703,6 @@ export class DatabaseStorage implements IStorage {
     };
   }
   
-  // Walter AI Assistant methods
-  async createWalterPendingApproval(data: InsertWalterPendingApproval): Promise<WalterPendingApproval> {
-    const [approval] = await db.insert(walterPendingApprovals).values(data).returning() as any;
-    return approval;
-  }
-  
-  async getPendingApprovals(userId: string, status?: string): Promise<WalterPendingApproval[]> {
-    if (status) {
-      return await db.select().from(walterPendingApprovals)
-        .where(and(
-          eq(walterPendingApprovals.userId, userId),
-          eq(walterPendingApprovals.status, status as any)
-        ))
-        .orderBy(desc(walterPendingApprovals.createdAt));
-    }
-    return await db.select().from(walterPendingApprovals)
-      .where(eq(walterPendingApprovals.userId, userId))
-      .orderBy(desc(walterPendingApprovals.createdAt));
-  }
-  
-  async updateApprovalStatus(id: string, status: string, updates: Partial<WalterPendingApproval>): Promise<WalterPendingApproval> {
-    const [approval] = await db.update(walterPendingApprovals)
-      .set({ ...updates, status: status as any })
-      .where(eq(walterPendingApprovals.id, id))
-      .returning();
-    return approval;
-  }
-  
-  async createWalterChat(data: InsertWalterChat): Promise<WalterChat> {
-    const [chat] = await db.insert(walterChats).values(data).returning() as any;
-    return chat;
-  }
-  
-  async getWalterChats(userId: string, status?: string): Promise<WalterChat[]> {
-    // Phase 8.4 Addendum B: Sort pinned chats first, then by lastMessageAt
-    if (status) {
-      return await db.select().from(walterChats)
-        .where(and(
-          eq(walterChats.userId, userId),
-          eq(walterChats.status, status as any)
-        ))
-        .orderBy(desc(walterChats.pinned), desc(walterChats.lastMessageAt));
-    }
-    return await db.select().from(walterChats)
-      .where(eq(walterChats.userId, userId))
-      .orderBy(desc(walterChats.pinned), desc(walterChats.lastMessageAt));
-  }
-  
-  async getWalterChatById(id: string): Promise<WalterChat | undefined> {
-    const [chat] = await db.select().from(walterChats).where(eq(walterChats.id, id));
-    return chat || undefined;
-  }
-  
-  async updateWalterChat(id: string, updates: Partial<WalterChat>): Promise<WalterChat> {
-    const [chat] = await db.update(walterChats)
-      .set(updates)
-      .where(eq(walterChats.id, id))
-      .returning();
-    return chat;
-  }
-
-  async deleteWalterChat(id: string): Promise<void> {
-    await db.delete(walterChats).where(eq(walterChats.id, id));
-  }
-  
-  async createWalterChatLog(log: InsertWalterChatLog): Promise<WalterChatLog> {
-    const [chatLog] = await db.insert(walterChatLogs).values(log).returning();
-    return chatLog;
-  }
-  
-  async getWalterChatLogs(chatSessionId: string, limit: number = 50): Promise<WalterChatLog[]> {
-    return await db.select().from(walterChatLogs)
-      .where(eq(walterChatLogs.chatSessionId, chatSessionId))
-      .orderBy(asc(walterChatLogs.timestamp))
-      .limit(limit);
-  }
-
-  async deleteWalterChatMessages(chatSessionId: string): Promise<void> {
-    await db.delete(walterChatLogs).where(eq(walterChatLogs.chatSessionId, chatSessionId));
-  }
-  
-  async createWalterApprovalsAudit(audit: InsertWalterApprovalsAudit): Promise<WalterApprovalsAudit> {
-    const [auditEntry] = await db.insert(walterApprovalsAudit).values(audit).returning();
-    return auditEntry;
-  }
-  
-  async getWalterApprovalsAudit(approvalId: string): Promise<WalterApprovalsAudit[]> {
-    return await db.select().from(walterApprovalsAudit)
-      .where(eq(walterApprovalsAudit.approvalId, approvalId))
-      .orderBy(desc(walterApprovalsAudit.timestamp));
-  }
-  
-  // Walter Memory methods
-  async createWalterMemory(memory: InsertWalterMemory): Promise<WalterMemory> {
-    const [created] = await db.insert(walterMemory).values(memory).returning();
-    return created;
-  }
-  
-  async getWalterMemories(userId: string): Promise<WalterMemory[]> {
-    return await db.select().from(walterMemory)
-      .where(eq(walterMemory.userId, userId))
-      .orderBy(desc(walterMemory.timestamp));
-  }
-  
-  async getWalterMemory(id: string): Promise<WalterMemory | undefined> {
-    const [memory] = await db.select().from(walterMemory).where(eq(walterMemory.id, id));
-    return memory || undefined;
-  }
-  
-  async updateWalterMemory(id: string, updates: Partial<WalterMemory>): Promise<WalterMemory> {
-    const [memory] = await db.update(walterMemory)
-      .set(updates)
-      .where(eq(walterMemory.id, id))
-      .returning();
-    return memory;
-  }
-  
-  async deleteWalterMemory(id: string): Promise<void> {
-    await db.delete(walterMemory).where(eq(walterMemory.id, id));
-  }
-  
-  // Walter Execution Log methods (Phase 22)
-  async createWalterExecutionLog(data: InsertWalterExecutionLog): Promise<WalterExecutionLog> {
-    const [log] = await db.insert(walterExecutionLog).values(data).returning();
-    return log;
-  }
-  
-  async updateWalterExecutionLog(id: string, updates: Partial<WalterExecutionLog>): Promise<WalterExecutionLog> {
-    const [log] = await db.update(walterExecutionLog)
-      .set(updates)
-      .where(eq(walterExecutionLog.id, id))
-      .returning();
-    return log;
-  }
-  
-  async getWalterExecutionLog(id: string): Promise<WalterExecutionLog | undefined> {
-    const [log] = await db.select().from(walterExecutionLog).where(eq(walterExecutionLog.id, id));
-    return log || undefined;
-  }
-  
-  async getWalterExecutionLogs(
-    userId: string,
-    options?: { limit?: number; mode?: 'live' | 'paper' }
-  ): Promise<WalterExecutionLog[]> {
-    const limit = options?.limit || 50;
-    const conditions = [eq(walterExecutionLog.userId, userId)];
-    
-    if (options?.mode) {
-      conditions.push(eq(walterExecutionLog.mode, options.mode));
-    }
-    
-    return await db.select().from(walterExecutionLog)
-      .where(and(...conditions))
-      .orderBy(desc(walterExecutionLog.createdAt))
-      .limit(limit);
-  }
-  
-  // Walter User Preferences methods (Phase 8.4 Addendum B)
-  async getWalterUserPreferences(userId: string): Promise<WalterUserPreferences | undefined> {
-    const [prefs] = await db.select().from(walterUserPreferences)
-      .where(eq(walterUserPreferences.userId, userId));
-    return prefs || undefined;
-  }
-  
-  async upsertWalterUserPreferences(userId: string, preferences: Partial<InsertWalterUserPreferences>): Promise<WalterUserPreferences> {
-    const existing = await this.getWalterUserPreferences(userId);
-    
-    if (existing) {
-      const [updated] = await db.update(walterUserPreferences)
-        .set({ ...preferences, updatedAt: new Date() })
-        .where(eq(walterUserPreferences.userId, userId))
-        .returning();
-      return updated;
-    } else {
-      const [created] = await db.insert(walterUserPreferences)
-        .values({ userId, ...preferences })
-        .returning();
-      return created;
-    }
-  }
-  
-  // Chat Pin methods (Phase 8.4 Addendum B)
-  async pinWalterChat(chatId: string): Promise<WalterChat> {
-    const [chat] = await db.update(walterChats)
-      .set({ pinned: true, pinnedAt: new Date() })
-      .where(eq(walterChats.id, chatId))
-      .returning();
-    return chat;
-  }
-  
-  async unpinWalterChat(chatId: string): Promise<WalterChat> {
-    const [chat] = await db.update(walterChats)
-      .set({ pinned: false, pinnedAt: null })
-      .where(eq(walterChats.id, chatId))
-      .returning();
-    return chat;
-  }
-  
   // Portfolio State methods (Phase 8.5 Addendum K.3 - Global Context)
   async getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined> {
     const contextId = params.globalContextId || 'default';
@@ -4166,70 +3896,6 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
   
-  // Directive 12.2.8: Walter Actions methods removed (Batch 10) — zero callers after Walter removal
-  
-  // Execution Config methods (Phase 27.F.20: Auto-Execution Settings)
-  async getExecutionConfigs(userId: string, mode: 'live' | 'paper'): Promise<ExecutionConfig[]> {
-    const configs = await db
-      .select()
-      .from(executionConfig)
-      .where(and(
-        eq(executionConfig.userId, userId),
-        eq(executionConfig.mode, mode)
-      ))
-      .orderBy(asc(executionConfig.actionType));
-    
-    return configs;
-  }
-  
-  async getExecutionConfig(userId: string, mode: 'live' | 'paper', actionType: string): Promise<ExecutionConfig | undefined> {
-    const [config] = await db
-      .select()
-      .from(executionConfig)
-      .where(and(
-        eq(executionConfig.userId, userId),
-        eq(executionConfig.mode, mode),
-        eq(executionConfig.actionType, actionType)
-      ));
-    
-    return config || undefined;
-  }
-  
-  async upsertExecutionConfig(config: InsertExecutionConfig): Promise<ExecutionConfig> {
-    const existing = await this.getExecutionConfig(config.userId, config.mode, config.actionType);
-    
-    if (existing) {
-      const [updated] = await db
-        .update(executionConfig)
-        .set({ ...config, updatedAt: new Date() })
-        .where(and(
-          eq(executionConfig.userId, config.userId),
-          eq(executionConfig.mode, config.mode),
-          eq(executionConfig.actionType, config.actionType)
-        ))
-        .returning();
-      
-      console.log(`[ExecutionConfig] Updated ${config.mode} config for ${config.actionType}: autoExecute=${config.autoExecuteEnabled}`);
-      return updated;
-    }
-    
-    const [created] = await db
-      .insert(executionConfig)
-      .values(config)
-      .returning();
-    
-    console.log(`[ExecutionConfig] Created ${config.mode} config for ${config.actionType}: autoExecute=${config.autoExecuteEnabled}`);
-    return created;
-  }
-  
-  async deleteExecutionConfig(id: string): Promise<void> {
-    await db
-      .delete(executionConfig)
-      .where(eq(executionConfig.id, id));
-    
-    console.log(`[ExecutionConfig] Deleted config ${id}`);
-  }
-  
   // System Alert methods (OpenAI Rate Limiter)
   async createSystemAlert(alert: InsertSystemAlert): Promise<SystemAlert> {
     const [created] = await db
@@ -4354,7 +4020,7 @@ export class DatabaseStorage implements IStorage {
       .from(rtbSignals)
       .where(and(...conditions));
     
-    // Directive 11.0F: finalScore is the ONLY ranking metric (CWQI removed)
+    // Directive 11.0F: finalScore is the ONLY ranking metric
     if (orderBy === 'finalScore') {
       query = query.orderBy(orderDir === 'asc' ? asc(rtbSignals.finalScore) : desc(rtbSignals.finalScore)) as any;
     } else {

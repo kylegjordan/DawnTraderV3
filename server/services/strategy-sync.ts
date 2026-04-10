@@ -5,7 +5,7 @@ import { storage } from '../storage';
  *
  * Directive 12.3.2: Updated to include all 17 canonical strategies.
  * Ensures all strategies exist in strategy_settings for the global context.
- * Runs on application startup to maintain data integrity across Dashboard, Walter, and Cortex.
+ * Runs on application startup to maintain data integrity across Dashboard and Cortex.
  * Uses global context instead of per-user strategies (shared workspace).
  *
  * Original 9: vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion,

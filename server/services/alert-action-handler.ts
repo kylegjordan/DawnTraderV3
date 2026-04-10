@@ -31,7 +31,6 @@ export class AlertActionHandler {
 
     // Route to appropriate handler based on alert type
     switch (alert.alertType) {
-      case 'walter_approval':
       case 'approval_required':
         return await this.handleApprovalAction(alert, action, userId);
       

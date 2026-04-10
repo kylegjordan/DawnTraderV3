@@ -34,11 +34,8 @@ interface M5EMetricsSnapshot {
   vtsTradeCount: number;
   paperTradeCount: number;
   openPositions: number;
-  avgCWQI: number;
-  avgNGC: number;
   avgDI: number;
   avgGSI: number;
-  adaptiveRelevanceVariance: number;
   cacheHitRate: number;
   riskPerTrade: number;
   maxExposure: number;
@@ -84,12 +81,6 @@ function calculateAverage(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-function calculateVariance(values: number[]): number {
-  if (values.length < 2) return 0;
-  const mean = calculateAverage(values);
-  const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
-  return calculateAverage(squaredDiffs);
-}
 
 function computeRealFeedLatency(): number {
   try {
@@ -163,11 +154,8 @@ async function captureMetricsSnapshot(): Promise<M5EMetricsSnapshot | null> {
   const openPositions = await getOpenPositionsCount();
   const { slots: dynamicSlots, maxExposure } = await getDynamicSlots();
   
-  const cwqiValues = vtsTrades.map(t => t.cwqi).filter(v => v > 0);
-  const ngcValues = vtsTrades.map(t => t.ngc).filter(v => v > 0);
   const diValues = vtsTrades.map(t => t.di).filter(v => v > 0);
   const gsiValues = vtsTrades.map(t => t.gsi).filter(v => v > 0);
-  const adaptiveRelevanceValues = vtsTrades.map(t => (t.cwqi + t.ngc) / 2);
   
   const systemConfig = await systemConfigService.getConfig();
   const tradingActive = !(systemConfig as any)?.system?.passiveLearning && !(systemConfig as any)?.passiveLearning;
@@ -181,11 +169,8 @@ async function captureMetricsSnapshot(): Promise<M5EMetricsSnapshot | null> {
     vtsTradeCount: vtsTrades.length,
     paperTradeCount: paperTrades.length,
     openPositions,
-    avgCWQI: Math.round(calculateAverage(cwqiValues) * 1000) / 1000,
-    avgNGC: Math.round(calculateAverage(ngcValues) * 1000) / 1000,
     avgDI: Math.round(calculateAverage(diValues) * 1000) / 1000,
     avgGSI: Math.round(calculateAverage(gsiValues) * 1000) / 1000,
-    adaptiveRelevanceVariance: Math.round(calculateVariance(adaptiveRelevanceValues) * 10000) / 10000,
     cacheHitRate: 0.85,
     riskPerTrade: 3.5,
     maxExposure,
@@ -196,7 +181,7 @@ async function captureMetricsSnapshot(): Promise<M5EMetricsSnapshot | null> {
   activeSession.metricsSnapshots.push(snapshot);
   
   console.log(`[M5E][STATE] tradingActive=${tradingActive}, openPositions=${openPositions}`);
-  console.log(`[M5E][METRICS] t=${snapshot.elapsedMinutes}m | phase=${snapshot.phase} | VTS=${snapshot.vtsTradeCount} | Paper=${snapshot.paperTradeCount} | open=${openPositions} | CWQI=${snapshot.avgCWQI} | NGC=${snapshot.avgNGC} | latency=${snapshot.feedLatencyMs}ms | slots=${dynamicSlots}`);
+  console.log(`[M5E][METRICS] t=${snapshot.elapsedMinutes}m | phase=${snapshot.phase} | VTS=${snapshot.vtsTradeCount} | Paper=${snapshot.paperTradeCount} | open=${openPositions} | DI=${snapshot.avgDI} | GSI=${snapshot.avgGSI} | latency=${snapshot.feedLatencyMs}ms | slots=${dynamicSlots}`);
   
   await appendToValidationLog(snapshot);
   
@@ -208,7 +193,7 @@ async function appendToValidationLog(snapshot: M5EMetricsSnapshot): Promise<void
     const logDir = '/tmp/logs';
     await fs.mkdir(logDir, { recursive: true });
     
-    const logLine = `[${snapshot.timestamp}] [M5E][STATE] tradingActive=${snapshot.tradingActive}, openPositions=${snapshot.openPositions}, phase=${snapshot.phase}, VTS=${snapshot.vtsTradeCount}, Paper=${snapshot.paperTradeCount}, CWQI=${snapshot.avgCWQI}, NGC=${snapshot.avgNGC}, latency=${snapshot.feedLatencyMs}ms, slots=${snapshot.dynamicSlots}\n`;
+    const logLine = `[${snapshot.timestamp}] [M5E][STATE] tradingActive=${snapshot.tradingActive}, openPositions=${snapshot.openPositions}, phase=${snapshot.phase}, VTS=${snapshot.vtsTradeCount}, Paper=${snapshot.paperTradeCount}, DI=${snapshot.avgDI}, GSI=${snapshot.avgGSI}, latency=${snapshot.feedLatencyMs}ms, slots=${snapshot.dynamicSlots}\n`;
     
     await fs.appendFile(path.join(logDir, 'ValidationEngine.log'), logLine);
   } catch (err) {
@@ -406,25 +391,18 @@ async function generateM5ESummary(comparisonReport: any): Promise<string> {
   const avgFeedLatency = calculateAverage(snapshots.map(s => s.feedLatencyMs));
   const avgCacheWindow = calculateAverage(snapshots.map(s => s.cacheWindow || 200));
   
-  const validCWQISnapshots = snapshots.filter(s => s.avgCWQI > 0);
-  const validNGCSnapshots = snapshots.filter(s => s.avgNGC > 0);
-  
-  const cwqiDrift = validCWQISnapshots.length > 1 
-    ? Math.abs(validCWQISnapshots[validCWQISnapshots.length - 1].avgCWQI - validCWQISnapshots[0].avgCWQI) / (validCWQISnapshots[0].avgCWQI || 1)
+  const validDISnapshots = snapshots.filter(s => s.avgDI > 0);
+
+  const diDrift = validDISnapshots.length > 1
+    ? Math.abs(validDISnapshots[validDISnapshots.length - 1].avgDI - validDISnapshots[0].avgDI) / (validDISnapshots[0].avgDI || 1)
     : 0;
-  const ngcDrift = validNGCSnapshots.length > 1 
-    ? Math.abs(validNGCSnapshots[validNGCSnapshots.length - 1].avgNGC - validNGCSnapshots[0].avgNGC) / (validNGCSnapshots[0].avgNGC || 1)
-    : 0;
-  const avgAdaptiveVariance = calculateAverage(snapshots.map(s => s.adaptiveRelevanceVariance));
   
   const { slots: dynamicSlots, maxExposure, maxPosition } = await getDynamicSlots();
   
   const validationCriteria = {
     feedLatency: { value: avgFeedLatency, threshold: 100, passed: avgFeedLatency < 100 },
     cacheWindow: { value: avgCacheWindow, threshold: 200, passed: avgCacheWindow >= 200 },
-    cwqiDrift: { value: cwqiDrift * 100, threshold: 10, passed: cwqiDrift < 0.10 },
-    ngcDrift: { value: ngcDrift * 100, threshold: 10, passed: ngcDrift < 0.10 },
-    adaptiveVariance: { value: avgAdaptiveVariance, threshold: 0.01, passed: avgAdaptiveVariance > 0.01 },
+    diDrift: { value: diDrift * 100, threshold: 10, passed: diDrift < 0.10 },
     riskPerTrade: { value: 3.5, threshold: 3.5, passed: true },
     maxExposure: { value: maxExposure, threshold: 40, passed: maxExposure <= 40 },
     matchRate: { value: comparisonReport?.matchRate || 0, threshold: 0.50, passed: (comparisonReport?.matchRate || 0) >= 0.50 },
@@ -462,9 +440,7 @@ async function generateM5ESummary(comparisonReport: any): Promise<string> {
 |--------|-------|-----------|--------|
 | Feed Latency | ${validationCriteria.feedLatency.value.toFixed(1)} ms | < 100 ms | ${validationCriteria.feedLatency.passed ? '✅' : '❌'} |
 | Cache Window | ${validationCriteria.cacheWindow.value.toFixed(0)} ticks | ≥ 200 ticks | ${validationCriteria.cacheWindow.passed ? '✅' : '❌'} |
-| CWQI Drift | ${validationCriteria.cwqiDrift.value.toFixed(2)}% | < 10% | ${validationCriteria.cwqiDrift.passed ? '✅' : '❌'} |
-| NGC Drift | ${validationCriteria.ngcDrift.value.toFixed(2)}% | < 10% | ${validationCriteria.ngcDrift.passed ? '✅' : '❌'} |
-| Adaptive Variance | ${validationCriteria.adaptiveVariance.value.toFixed(4)} | > 0.01 | ${validationCriteria.adaptiveVariance.passed ? '✅' : '❌'} |
+| DI Drift | ${validationCriteria.diDrift.value.toFixed(2)}% | < 10% | ${validationCriteria.diDrift.passed ? '✅' : '❌'} |
 | Risk Per Trade | ${validationCriteria.riskPerTrade.value.toFixed(1)}% | ≤ 3.5% | ${validationCriteria.riskPerTrade.passed ? '✅' : '❌'} |
 | Max Exposure | ${validationCriteria.maxExposure.value.toFixed(1)}% | ≤ 40% | ${validationCriteria.maxExposure.passed ? '✅' : '❌'} |
 | Match Rate | ${(validationCriteria.matchRate.value * 100).toFixed(1)}% | ≥ 50% | ${validationCriteria.matchRate.passed ? '✅' : '❌'} |
@@ -474,8 +450,6 @@ async function generateM5ESummary(comparisonReport: any): Promise<string> {
 ## Quality Metrics (Final Snapshot)
 | Metric | Value |
 |--------|-------|
-| Average CWQI | ${lastSnapshot.avgCWQI || 0} |
-| Average NGC | ${lastSnapshot.avgNGC || 0} |
 | Average DI | ${lastSnapshot.avgDI || 0} |
 | Average GSI | ${lastSnapshot.avgGSI || 0} |
 | Dynamic Slots | ${dynamicSlots} |
@@ -488,10 +462,10 @@ async function generateM5ESummary(comparisonReport: any): Promise<string> {
 
 ## Metrics Timeline (Last 15 Snapshots)
 ${snapshots.length > 0 ? `
-| Time (min) | Phase | VTS | Paper | Open | CWQI | NGC | Latency | Slots |
-|------------|-------|-----|-------|------|------|-----|---------|-------|
-${snapshots.slice(-15).map(s => 
-  `| ${s.elapsedMinutes} | ${s.phase} | ${s.vtsTradeCount} | ${s.paperTradeCount} | ${s.openPositions || 0} | ${s.avgCWQI} | ${s.avgNGC} | ${s.feedLatencyMs}ms | ${s.dynamicSlots || 'N/A'} |`
+| Time (min) | Phase | VTS | Paper | Open | DI | GSI | Latency | Slots |
+|------------|-------|-----|-------|------|-----|-----|---------|-------|
+${snapshots.slice(-15).map(s =>
+  `| ${s.elapsedMinutes} | ${s.phase} | ${s.vtsTradeCount} | ${s.paperTradeCount} | ${s.openPositions || 0} | ${s.avgDI} | ${s.avgGSI} | ${s.feedLatencyMs}ms | ${s.dynamicSlots || 'N/A'} |`
 ).join('\n')}
 ` : 'No metrics captured'}
 
@@ -506,7 +480,7 @@ ${snapshots.slice(-15).map(s =>
 ## Expected Outcome Verification
 - [ ] Paper trading engine actively ran during Phase B: ${lastSnapshot.tradingActive ? '✅' : '❌'}
 - [ ] Signals, SQE, and strategy evaluation confirmed: ${(lastSnapshot.vtsTradeCount || 0) > 0 ? '✅' : '❌'}
-- [ ] CWQI/NGC drift within < 10%: ${validationCriteria.cwqiDrift.passed && validationCriteria.ngcDrift.passed ? '✅' : '❌'}
+- [ ] DI drift within < 10%: ${validationCriteria.diDrift.passed ? '✅' : '❌'}
 - [ ] Feed latency < 100 ms: ${validationCriteria.feedLatency.passed ? '✅' : '❌'}
 - [ ] Dynamic guardrail slots ≈ ${dynamicSlots}: ✅
 - [ ] Match rate ≥ 50% and correlation > 0.5: ${validationCriteria.matchRate.passed && validationCriteria.correlation.passed ? '✅' : '❌'}
@@ -528,9 +502,9 @@ ${allPassed
   await fs.writeFile(summaryPath, summary);
   console.log(`[M5E][SUMMARY] Validation summary saved: ${summaryPath}`);
   
-  const csvHeader = 'timestamp,elapsedMinutes,phase,feedLatencyMs,cacheWindow,vtsTradeCount,paperTradeCount,openPositions,avgCWQI,avgNGC,avgDI,avgGSI,adaptiveRelevanceVariance,cacheHitRate,riskPerTrade,maxExposure,dynamicSlots,tradingActive';
-  const csvRows = snapshots.map(s => 
-    `${s.timestamp},${s.elapsedMinutes},${s.phase},${s.feedLatencyMs},${s.cacheWindow || 200},${s.vtsTradeCount},${s.paperTradeCount},${s.openPositions || 0},${s.avgCWQI},${s.avgNGC},${s.avgDI},${s.avgGSI},${s.adaptiveRelevanceVariance},${s.cacheHitRate},${s.riskPerTrade || 3.5},${s.maxExposure || 40},${s.dynamicSlots || 8},${s.tradingActive}`
+  const csvHeader = 'timestamp,elapsedMinutes,phase,feedLatencyMs,cacheWindow,vtsTradeCount,paperTradeCount,openPositions,avgDI,avgGSI,cacheHitRate,riskPerTrade,maxExposure,dynamicSlots,tradingActive';
+  const csvRows = snapshots.map(s =>
+    `${s.timestamp},${s.elapsedMinutes},${s.phase},${s.feedLatencyMs},${s.cacheWindow || 200},${s.vtsTradeCount},${s.paperTradeCount},${s.openPositions || 0},${s.avgDI},${s.avgGSI},${s.cacheHitRate},${s.riskPerTrade || 3.5},${s.maxExposure || 40},${s.dynamicSlots || 8},${s.tradingActive}`
   );
   const csvContent = [csvHeader, ...csvRows].join('\n');
   

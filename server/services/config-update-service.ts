@@ -82,7 +82,7 @@ export async function updateGuardrailsV2(
     
     console.info(`[ConfigUpdateService][9.7] User ${userId} updated guardrails_v2 for ${mode} mode`);
     
-    // Invalidate caches and refresh context for Walter AI
+    // Invalidate caches and refresh context
     const { configChangeHandler } = await import('./config-change-handler');
     await configChangeHandler.handleConfigChange({
       userId,
@@ -144,7 +144,7 @@ export async function updateGoals(
       updatedGoals.push(result);
     }
     
-    // Invalidate caches and refresh context for Walter AI
+    // Invalidate caches and refresh context
     const { configChangeHandler } = await import('./config-change-handler');
     await configChangeHandler.handleConfigChange({
       userId,

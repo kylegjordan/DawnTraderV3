@@ -6,10 +6,9 @@
  * Manages the unified pool of high-quality, SQE-qualified signals.
  * 
  * DIRECTIVE 11.0E: FinalScore Unification
- * - ALL legacy metrics (CWQI, NGC, ProfitRate) have been PURGED
- * - Signals are ranked by FinalScore only
- * - FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)
- * 
+ * Signals are ranked by FinalScore only.
+ * FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)
+ *
  * Key Features:
  * 1. Accepts ALL SQE-qualified signals into unified pool
  * 2. Ranks signals by FinalScore (descending)
@@ -22,8 +21,6 @@
  * 9. TCL synchronization barrier for atomic operations
  * 10. Enhanced deduplication via (symbol, strategy, createdAt)
  * 11. Central Clock synchronized refresh (every 30 ticks)
- * 
- * See: server/legacy/metrics_archive.ts for historical CWQI/NGC formulas
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
@@ -82,7 +79,7 @@ export interface RTBSignalInput {
  * Phase 8.8.4-C.5: SQE-qualified signal input for unified RTB pool
  * All signals that pass SQE go directly into the pool regardless of capacity
  * 
- * DIRECTIVE 11.0E: Legacy metrics (ngc, cwqi, profitRate) are DEPRECATED
+ * DIRECTIVE 11.0E: Signals ranked by FinalScore
  * Use finalScore, confidence, regimeWeight, decayPenalty instead
  */
 export interface SQESignalInput {
@@ -98,7 +95,7 @@ export interface SQESignalInput {
   confidence: number;
   finalScore: number; // Directive 11.0E: PRIMARY ranking metric
   regimeWeight?: number; // Directive 11.0E: Market regime alignment
-  decayPenalty?: number; // Directive 11.0E: Freshness penalty (replaces CWQI decay)
+  decayPenalty?: number; // Freshness penalty
   hybridScore?: number; // Directive 11.0E: Combined quant+pattern score
   trendStrength?: number; // Directive 11.0E: For regime calculation
   volatility?: number; // Directive 11.0E: For regime calculation
@@ -116,7 +113,7 @@ export interface SQESignalInput {
 export interface RTBQueueStats {
   mode: TradingMode;
   totalQueued: number;
-  avgFinalScore: number; // Directive 11.0E: Replaced avgCWQI
+  avgFinalScore: number;
   oldestSignalAge: number; // seconds
   byStrategy: Record<string, number>;
   byBlockReason: Record<string, number>;
@@ -141,7 +138,7 @@ const TCL_WARMUP_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 
 // Directive 8.8.4-A3.R2: TCL failsafe (reduced to 2 minutes)
 const TCL_FAILSAFE_MS = 2 * 60 * 1000; // 2 minutes
 
-// Directive 11.0E: FinalScore decay configuration (replaces legacy CWQI decay)
+// FinalScore decay configuration
 // Decay rate λ = 0.03/min means a signal loses ~3% of its freshness bonus per minute
 const FINALSCORE_DECAY_LAMBDA = parseFloat(process.env.FINALSCORE_DECAY_RATE || '0.03');
 console.log(`[11.0E][CONFIG] FINALSCORE_DECAY_LAMBDA=${FINALSCORE_DECAY_LAMBDA} (per minute)`);
@@ -572,7 +569,7 @@ class ReadyToBuyService {
   /**
    * Directive 11.0E: Refresh a single signal using FinalScore-native logic
    * Directive 11.3A: Enhanced with conditional geometry refresh
-   * Legacy CWQI/NGC metrics removed, replaced with FinalScore/decayPenalty
+   * Signals ranked by FinalScore with decayPenalty
    */
   private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
     const normalizedSymbol = normalizePairKey(signal.symbol);
@@ -691,7 +688,7 @@ class ReadyToBuyService {
     // Step 2: Re-evaluate remaining signals
     const { removed, remaining } = await this.reEvaluateQueue(mode);
     
-    // Step 3: Directive 8.8.4-A1-Extended: Refresh and re-rank signals by CWQI
+    // Step 3: Refresh and re-rank signals by FinalScore
     await this.refreshAndRank(mode);
     
     // Step 4: Get TCL status
@@ -823,7 +820,7 @@ class ReadyToBuyService {
               const queuedAt = signal.queuedAt;
               const oldStatus = signal.status || 'active';
               
-              // Directive 11.0E: Calculate decay penalty (replaces CWQI decay)
+              // Calculate decay penalty
               const decayPenalty = calculateDecayPenalty(queuedAt, normalizedSymbol);
               
               // Directive 11.0E: Recalculate FinalScore with decay applied
@@ -853,7 +850,7 @@ class ReadyToBuyService {
               if (!sqeResult.passed) {
                 console.log(`[11.0E][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
                 this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
-                this.logSqeRejection(signal, sqeResult.reason || 'unknown', confidence, refreshedFinalScore);
+                this.logSqeRejection(signal, sqeResult.reason || 'unknown', refreshedFinalScore);
                 bulkDeletes.push(signal.id);
                 expiredCount++;
                 return;
@@ -998,26 +995,25 @@ class ReadyToBuyService {
   /**
    * Directive 8.8.4-A3.R2: Log SQE rejection to diagnostic file
    */
-  private logSqeRejection(signal: RtbSignal, reason: string, ngc: number, cwqi: number): void {
+  private logSqeRejection(signal: RtbSignal, reason: string, finalScore: number): void {
     try {
       const fs = require('fs');
       const path = require('path');
       const logDir = path.join(process.cwd(), 'logs', 'diagnostics');
-      
+
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
       }
-      
+
       const logEntry = {
         timestamp: new Date().toISOString(),
         symbol: signal.symbol,
         strategy: signal.strategy,
-        ngc: ngc.toFixed(4),
-        cwqi: cwqi.toFixed(4),
+        finalScore: finalScore.toFixed(4),
         reason,
         signalId: signal.signalId
       };
-      
+
       const logPath = path.join(logDir, 'sqe_rejections.log');
       fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
     } catch (err) {
@@ -1051,7 +1047,7 @@ class ReadyToBuyService {
       return null;
     }
 
-    // Directive 11.0E: Calculate FinalScore instead of CWQI
+    // Calculate FinalScore
     const finalScore = calculateFinalScore({
       confidence: input.confidence,
       hybridScore: input.confidence, // Use confidence as hybrid score for capacity-blocked signals
@@ -1070,8 +1066,7 @@ class ReadyToBuyService {
     const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
     
     if (existingSignal) {
-      // Directive 11.0E: Compare by FinalScore instead of CWQI
-      const existingFinalScore = parseFloat(existingSignal.finalScore || existingSignal.cwqi || '0');
+      const existingFinalScore = parseFloat(existingSignal.finalScore || '0');
       if (existingFinalScore >= finalScore) {
         console.log(`[11.0E][RTB] Keeping existing signal ${input.symbol}/${input.strategy} with FinalScore ${existingFinalScore.toFixed(4)} >= new ${finalScore.toFixed(4)}`);
         return existingSignal;
@@ -1100,8 +1095,7 @@ class ReadyToBuyService {
       confidence: input.confidence.toString(),
       riskScore: riskScore.toString(),
       expectedReturn: '0.15', // Default expected return
-      cwqi: finalScore.toString(), // Directive 11.0E: Store FinalScore in cwqi field for compatibility
-      finalScore: finalScore.toString(), // Directive 11.0E: New field
+      finalScore: finalScore.toString(),
       status: 'queued',
       queuedAt: now,
       // R9.3-C: expiresAt removed - lifecycle governed by SQE
@@ -1119,7 +1113,6 @@ class ReadyToBuyService {
       input.symbol,
       input.strategy,
       {
-        cwqi: finalScore, // Directive 11.0E: FinalScore stored for compatibility
         finalScore,
         blockReason: input.blockReason,
       }
@@ -1132,7 +1125,7 @@ class ReadyToBuyService {
 
   /**
    * Directive 11.0E: Get the highest-FinalScore queued signal for a mode
-   * Uses FinalScore as primary ranking metric (replaces CWQI)
+   * Uses FinalScore as primary ranking metric
    */
   async getTopSignal(mode: TradingMode): Promise<RtbSignal | null> {
     const signals = await storage.getRtbSignals({ mode, status: 'queued' });
@@ -1142,7 +1135,7 @@ class ReadyToBuyService {
     let bestRankingScore = -1;
 
     for (const signal of signals) {
-      const signalFinalScore = parseFloat(signal.finalScore || signal.cwqi || '0');
+      const signalFinalScore = parseFloat(signal.finalScore || '0');
 
       // Phase 14.5: Use rankingScore from metadata if available, otherwise fall back to FinalScore
       const metadata = signal.metadata as Record<string, unknown> | null;
@@ -1151,7 +1144,7 @@ class ReadyToBuyService {
       // Phase 14.5: FinalScore gap safety rule
       // If gap > 0.10, FinalScore always wins (prevents return-magnitude gaming)
       if (bestSignal) {
-        const bestFinalScore = parseFloat(bestSignal.finalScore || bestSignal.cwqi || '0');
+        const bestFinalScore = parseFloat(bestSignal.finalScore || '0');
         const gap = Math.abs(signalFinalScore - bestFinalScore);
         if (gap > FINAL_SCORE_GAP_OVERRIDE) {
           // Large quality gap — use FinalScore directly
@@ -1173,88 +1166,6 @@ class ReadyToBuyService {
     }
 
     return bestSignal;
-  }
-
-  /**
-   * Directive 11.0E: Shadow Mode Ranking Test
-   * Compares FinalScore and CWQI rankings to verify correlation
-   * This is a guardrail to ensure ranking consistency before full CWQI removal
-   * 
-   * @returns Correlation coefficient (-1 to 1) and detailed comparison
-   */
-  async runShadowRankingTest(mode: TradingMode): Promise<{
-    correlation: number;
-    totalSignals: number;
-    rankingMatches: number;
-    mismatchDetails: Array<{ symbol: string; cwqiRank: number; finalScoreRank: number }>;
-    verdict: 'PASS' | 'WARN' | 'FAIL';
-  }> {
-    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
-    
-    if (signals.length < 3) {
-      return { 
-        correlation: 1, 
-        totalSignals: signals.length, 
-        rankingMatches: signals.length,
-        mismatchDetails: [],
-        verdict: 'PASS'
-      };
-    }
-
-    // Rank by CWQI (legacy)
-    const cwqiRanked = [...signals].sort((a, b) => 
-      parseFloat(b.cwqi || '0') - parseFloat(a.cwqi || '0')
-    );
-    
-    // Rank by FinalScore (new)
-    const finalScoreRanked = [...signals].sort((a, b) => 
-      parseFloat(b.finalScore || b.cwqi || '0') - parseFloat(a.finalScore || a.cwqi || '0')
-    );
-
-    // Build rank maps
-    const cwqiRankMap = new Map<string, number>();
-    const finalScoreRankMap = new Map<string, number>();
-    
-    cwqiRanked.forEach((s, i) => cwqiRankMap.set(s.signalId, i + 1));
-    finalScoreRanked.forEach((s, i) => finalScoreRankMap.set(s.signalId, i + 1));
-
-    // Calculate Spearman rank correlation
-    let sumDiffSquared = 0;
-    const mismatchDetails: Array<{ symbol: string; cwqiRank: number; finalScoreRank: number }> = [];
-    let rankingMatches = 0;
-
-    for (const signal of signals) {
-      const cwqiRank = cwqiRankMap.get(signal.signalId) || 0;
-      const finalScoreRank = finalScoreRankMap.get(signal.signalId) || 0;
-      const diff = cwqiRank - finalScoreRank;
-      sumDiffSquared += diff * diff;
-      
-      if (cwqiRank === finalScoreRank) {
-        rankingMatches++;
-      } else if (Math.abs(diff) > 2) {
-        mismatchDetails.push({ symbol: signal.symbol, cwqiRank, finalScoreRank });
-      }
-    }
-
-    const n = signals.length;
-    const correlation = 1 - (6 * sumDiffSquared) / (n * (n * n - 1));
-
-    // Verdict based on correlation threshold
-    let verdict: 'PASS' | 'WARN' | 'FAIL';
-    if (correlation >= 0.85) {
-      verdict = 'PASS';
-    } else if (correlation >= 0.70) {
-      verdict = 'WARN';
-    } else {
-      verdict = 'FAIL';
-    }
-
-    console.log(
-      `[11.0E][SHADOW_RANKING_TEST] mode=${mode} signals=${n} correlation=${correlation.toFixed(4)} ` +
-      `matches=${rankingMatches}/${n} mismatches=${mismatchDetails.length} verdict=${verdict}`
-    );
-
-    return { correlation, totalSignals: n, rankingMatches, mismatchDetails, verdict };
   }
 
   /**
@@ -1281,7 +1192,7 @@ class ReadyToBuyService {
     const activeSignals = await storage.getRtbSignals({
       mode,
       status: 'active',
-      orderBy: 'cwqi',
+      orderBy: 'finalScore',
       orderDir: 'desc',
     });
     
@@ -1289,7 +1200,7 @@ class ReadyToBuyService {
     const reconfirmedSignals = await storage.getRtbSignals({
       mode,
       status: 'reconfirmed',
-      orderBy: 'cwqi',
+      orderBy: 'finalScore',
       orderDir: 'desc',
     });
     
@@ -1297,17 +1208,14 @@ class ReadyToBuyService {
     const queuedSignals = await storage.getRtbSignals({
       mode,
       status: 'queued',
-      orderBy: 'cwqi',
+      orderBy: 'finalScore',
       orderDir: 'desc',
     });
     
-    // Directive 10.9: Sort by finalScore (if available), fallback to CWQI
     const allSignals = [...activeSignals, ...reconfirmedSignals, ...queuedSignals];
     allSignals.sort((a, b) => {
-      const aMetadata = (a.metadata as Record<string, any>) || {};
-      const bMetadata = (b.metadata as Record<string, any>) || {};
-      const aFinalScore = aMetadata.finalScore ?? parseFloat(a.cwqi || '0');
-      const bFinalScore = bMetadata.finalScore ?? parseFloat(b.cwqi || '0');
+      const aFinalScore = parseFloat(a.finalScore || '0');
+      const bFinalScore = parseFloat(b.finalScore || '0');
       return bFinalScore - aFinalScore;
     });
     
@@ -1322,19 +1230,19 @@ class ReadyToBuyService {
     
     const byStrategy: Record<string, number> = {};
     const byBlockReason: Record<string, number> = {};
-    let totalCWQI = 0;
+    let totalFinalScore = 0;
     let oldestAge = 0;
     const now = Date.now();
 
     for (const signal of signals) {
       const strategy = signal.strategy;
       byStrategy[strategy] = (byStrategy[strategy] || 0) + 1;
-      
+
       const blockReason = signal.blockReason || 'UNKNOWN';
       byBlockReason[blockReason] = (byBlockReason[blockReason] || 0) + 1;
-      
-      totalCWQI += parseFloat(signal.cwqi);
-      
+
+      totalFinalScore += parseFloat(signal.finalScore || '0');
+
       const age = (now - new Date(signal.queuedAt).getTime()) / 1000;
       if (age > oldestAge) {
         oldestAge = age;
@@ -1344,7 +1252,7 @@ class ReadyToBuyService {
     return {
       mode,
       totalQueued: signals.length,
-      avgCWQI: signals.length > 0 ? totalCWQI / signals.length : 0,
+      avgFinalScore: signals.length > 0 ? totalFinalScore / signals.length : 0,
       oldestSignalAge: Math.round(oldestAge),
       byStrategy,
       byBlockReason,
@@ -1416,7 +1324,7 @@ class ReadyToBuyService {
       signal.strategy,
       {
         tradeId,
-        cwqi: parseFloat(signal.cwqi),
+        finalScore: parseFloat(signal.finalScore || '0'),
         queueDurationMs: Date.now() - new Date(signal.queuedAt).getTime(),
       }
     );
@@ -1497,7 +1405,6 @@ class ReadyToBuyService {
 
     for (const signal of signals) {
       const confidence = parseFloat(signal.confidence);
-      const cwqi = parseFloat(signal.cwqi);
       const age = (Date.now() - new Date(signal.queuedAt).getTime()) / 1000;
 
       // R9.3-C: TTL check removed - lifecycle governed by SQE only
@@ -1551,7 +1458,7 @@ class ReadyToBuyService {
 
   /**
    * Phase 8.8.4-C.14.B: Get ranked signals for multi-signal promotion
-   * Returns top N signals sorted by CWQI descending
+   * Returns top N signals sorted by FinalScore descending
    * R9.3-C: expiresAt filter removed - lifecycle governed by SQE only
    */
   async getRankedSignals(mode: TradingMode, limit: number = 15): Promise<RtbSignal[]> {
@@ -1580,11 +1487,11 @@ class ReadyToBuyService {
       console.warn(`[19F][RTB] Pair-level guard check failed in getRankedSignals:`, err);
     }
 
-    // Sort by CWQI descending (highest quality first)
+    // Sort by FinalScore descending (highest quality first)
     validSignals.sort((a, b) => {
-      const cwqiA = parseFloat(a.cwqi || '0');
-      const cwqiB = parseFloat(b.cwqi || '0');
-      return cwqiB - cwqiA;
+      const scoreA = parseFloat(a.finalScore || '0');
+      const scoreB = parseFloat(b.finalScore || '0');
+      return scoreB - scoreA;
     });
 
     console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, total=${signals.length}, valid=${validSignals.length}, returning top ${Math.min(limit, validSignals.length)}`);
@@ -1615,7 +1522,7 @@ class ReadyToBuyService {
    * 
    * Unlike queueSignal(), this method:
    * - Accepts ALL SQE-qualified signals regardless of capacity blocks
-   * - Uses pre-computed CWQI from SQE instead of re-calculating
+   * - Uses pre-computed FinalScore from SQE instead of re-calculating
    * - Supports TCL warm-up tracking
    * 
    * Directive 8.8.4-A3.R2: Supports skipSelfCheck flag for reconfirmation
@@ -1638,7 +1545,7 @@ class ReadyToBuyService {
     // Directive 8.8.4-A3.R8.5: Trust upstream SQE result
     // SQE evaluation already happened upstream before calling queueSQESignal
     // Log trace for audit trail without re-running evaluation
-    console.log(`[A3.R8.5][SQE][GATE] pair=${normalizedSymbol} TRUSTED NGC=${input.ngc.toFixed(4)} CWQI=${input.cwqi.toFixed(4)}`);
+    console.log(`[A3.R8.5][SQE][GATE] pair=${normalizedSymbol} TRUSTED NGC=${input.ngc.toFixed(4)} FinalScore=${(input.finalScore).toFixed?.(4) || '0'}`);
 
     // Directive 8.8.4-A3: Pair-level duplicate validation
     // Check if this pair already exists in active trades (duplicate_pair_active)
@@ -1661,15 +1568,16 @@ class ReadyToBuyService {
       : await this.getQueuedSignal(input.mode, normalizedSymbol, input.strategy);
     
     if (existingSignal) {
-      // If existing signal has higher CWQI, keep it
-      const existingCWQI = parseFloat(existingSignal.cwqi);
-      if (existingCWQI >= input.cwqi) {
-        console.log(`[8.8.4-C.5][RTB_SKIP] Keeping existing ${normalizedSymbol}/${input.strategy} with CWQI ${existingCWQI.toFixed(4)} >= new ${input.cwqi.toFixed(4)}`);
+      // If existing signal has higher FinalScore, keep it
+      const existingScore = parseFloat(existingSignal.finalScore || '0');
+      const newScore = input.finalScore;
+      if (existingScore >= newScore) {
+        console.log(`[8.8.4-C.5][RTB_SKIP] Keeping existing ${normalizedSymbol}/${input.strategy} with FinalScore ${existingScore.toFixed(4)} >= new ${newScore.toFixed(4)}`);
         return existingSignal;
       }
-      
+
       // New signal is better - expire the old one
-      await this.expireSignal(existingSignal.id, 'Replaced by higher-CWQI SQE signal');
+      await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore SQE signal');
     }
 
     // Phase 14.5: Persist routing and ranking metadata for auditability
@@ -1697,8 +1605,8 @@ class ReadyToBuyService {
       confidence: input.ngc.toString(), // Use NGC as confidence
       riskScore: input.riskScore.toString(),
       expectedReturn: input.profitRate.toString(),
-      cwqi: input.cwqi.toString(),
-      ngc: input.ngc.toString(), // Directive 8.8.4-C.14.A
+      finalScore: (input.finalScore).toString(),
+      ngc: input.ngc.toString(),
       currentPrice: input.currentPrice?.toString(), // Directive 8.8.4-C.14.A
       volume24h: input.volume24h?.toString(), // Directive 8.8.4-C.14.A
       status: 'active', // Directive 8.8.4-A3.R8: Use 'active' for new signals pending first refresh
@@ -1721,7 +1629,6 @@ class ReadyToBuyService {
     diagnosticTrace.traceRTB(
       normalizedSymbol,
       input.strategy,
-      { ngc: input.ngc, cwqi: input.cwqi },
       true, // inserted
       { mode: input.mode, signalId: input.signalId }
     );
@@ -1734,7 +1641,7 @@ class ReadyToBuyService {
       normalizedSymbol,
       input.strategy,
       {
-        cwqi: input.cwqi,
+        finalScore: input.finalScore,
         ngc: input.ngc,
         profitRate: input.profitRate,
         blockReason: 'SQE_QUALIFIED',
@@ -1744,7 +1651,7 @@ class ReadyToBuyService {
     // Get current pool size for warm-up tracking
     const poolSize = await this.getPoolSize(input.mode);
 
-    console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: CWQI=${input.cwqi.toFixed(4)}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
+    console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: FinalScore=${(input.finalScore).toFixed?.(4) || '0'}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
     
     // Directive 8.8.4-A3.R9.3-D: Simplified TCL - always check threshold on enqueue
     // Global barrier removed per R9.3-A (per-signal refresh model)

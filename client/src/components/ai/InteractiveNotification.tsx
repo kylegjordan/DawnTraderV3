@@ -43,8 +43,6 @@ interface InteractiveNotificationProps {
     mode?: string;  // Made optional
     status: string;
     risk_pct?: number;  // Phase 27.2 field
-    projectedRisk?: number;  // Legacy field
-    strategyName?: string;
     parameterName?: string;
     approvedAt?: string;
     rejectedAt?: string;
@@ -65,11 +63,9 @@ export function InteractiveNotification({
     return null;
   }
 
-  // Use new fields (action, risk_pct) or fall back to old fields (strategyName, projectedRisk)
-  const displayName = approval.action || approval.strategyName || approval.parameterName || 'Unknown Action';
-  const traceId = approval.traceId || approval.id || 'unknown'; // Fall back to approval.id if traceId not set
-  // Parse risk to number - projectedRisk comes from database as string
-  const risk = Number(approval.risk_pct ?? approval.projectedRisk ?? 0);
+  const displayName = approval.action || approval.parameterName || 'Unknown Action';
+  const traceId = approval.traceId || approval.id || 'unknown';
+  const risk = Number(approval.risk_pct ?? 0);
   const mode = approval.mode || 'unknown';
 
   const handleApprove = async (e: React.MouseEvent) => {
@@ -85,7 +81,7 @@ export function InteractiveNotification({
           description: response.message || `${displayName} executed successfully`,
         });
         // Invalidate queries to refresh the notifications
-        await queryClient.invalidateQueries({ queryKey: ['/api/walter/pending-approvals'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/intent/pending'] });
         onClose?.();
       } else {
         throw new Error(response.error || "Approval failed");
@@ -114,7 +110,7 @@ export function InteractiveNotification({
           description: response.message || "No changes made",
         });
         // Invalidate queries to refresh the notifications
-        await queryClient.invalidateQueries({ queryKey: ['/api/walter/pending-approvals'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/intent/pending'] });
         onClose?.();
       } else {
         throw new Error(response.error || "Rejection failed");
@@ -143,7 +139,7 @@ export function InteractiveNotification({
           description: response.message || "You can act later",
         });
         // Invalidate queries to refresh the notifications
-        await queryClient.invalidateQueries({ queryKey: ['/api/walter/pending-approvals'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/intent/pending'] });
         onClose?.();
       } else {
         throw new Error(response.error || "Dismiss failed");
@@ -172,7 +168,7 @@ export function InteractiveNotification({
           description: "Notification removed",
         });
         // Invalidate queries to refresh the notifications
-        await queryClient.invalidateQueries({ queryKey: ['/api/walter/pending-approvals'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/intent/pending'] });
         onClose?.();
       } else {
         throw new Error(response.error || "Clear failed");

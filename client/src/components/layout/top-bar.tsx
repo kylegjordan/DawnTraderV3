@@ -1,8 +1,7 @@
-import { Menu, Bell, Clock, Globe, AlertTriangle, MoreVertical, RotateCcw, RefreshCw } from "lucide-react";
+import { Menu, Clock, Globe, AlertTriangle, MoreVertical, RotateCcw, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { SafeInteractiveNotification } from "@/components/ai/InteractiveNotification";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,22 +73,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     queryKey: ['/api/settings'],
   });
 
-  // Fetch Walter approvals (recent 20, including resolved ones)
-  const { data: approvalsData } = useQuery({
-    queryKey: ['/api/walter/pending-approvals'],
-    queryFn: async () => {
-      try {
-        const response = await apiRequest('GET', '/api/walter/pending-approvals');
-        // Get all approvals, sort by most recent first, take last 20
-        const allApprovals = response.approvals || [];
-        return allApprovals.slice(0, 20); // Show recent 20 approvals
-      } catch (error) {
-        return [];
-      }
-    },
-    refetchInterval: 30000, // Refetch every 30 seconds
-  });
-
   // Phase 31.H: Fetch system config for passive learning status
   const { data: systemConfigData } = useQuery({
     queryKey: ['/api/system/config'],
@@ -151,19 +134,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, [settings?.timezone, settings?.timeFormat]);
-
-  // Listen for approval_update WebSocket events to refresh notifications in real-time
-  useEffect(() => {
-    const approvalUpdates = wsMessages.filter((msg: any) => msg.type === 'approval_update');
-    if (approvalUpdates.length > 0) {
-      // Get the latest approval update
-      const latestUpdate = approvalUpdates[approvalUpdates.length - 1];
-      console.log('[TopBar] Received approval_update event:', latestUpdate);
-      
-      // Invalidate approvals query to refresh the notification bell
-      queryClient.invalidateQueries({ queryKey: ['/api/walter/pending-approvals'] });
-    }
-  }, [wsMessages, queryClient]);
 
   // Listen for trading_state_changed WebSocket events to sync UI
   useEffect(() => {
@@ -895,72 +865,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             </div>
           </div>
           
-          {/* Walter Approvals Notifications */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="relative p-2 hover:bg-muted"
-                data-testid="button-notifications"
-              >
-                <Bell className="w-5 h-5 text-foreground" />
-                {approvalsData && approvalsData.filter((a: any) => a.status === 'pending').length > 0 && (
-                  <Badge 
-                    variant="destructive" 
-                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] p-0 px-1 text-[10px] font-semibold flex items-center justify-center rounded-full"
-                  >
-                    {approvalsData.filter((a: any) => a.status === 'pending').length}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-96 max-h-96 overflow-y-auto">
-              <DropdownMenuLabel>Walter Approvals (Recent 20)</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {approvalsData && approvalsData.length > 0 ? (
-                <>
-                  {/* Pending approvals first */}
-                  {approvalsData.filter((a: any) => a.status === 'pending').map((approval: any) => (
-                    <DropdownMenuItem
-                      key={approval.id}
-                      className="p-2 focus:bg-transparent hover:bg-transparent"
-                      data-testid={`approval-${approval.id}`}
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      <SafeInteractiveNotification
-                        approval={approval}
-                        onClose={() => {
-                          // Dropdown will auto-close if needed, or user can continue reviewing
-                        }}
-                      />
-                    </DropdownMenuItem>
-                  ))}
-                  
-                  {/* Then show recent resolved approvals */}
-                  {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => (
-                    <DropdownMenuItem
-                      key={approval.id}
-                      className="p-2 focus:bg-transparent hover:bg-transparent"
-                      data-testid={`approval-resolved-${approval.id}`}
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      <SafeInteractiveNotification
-                        approval={approval}
-                        onClose={() => {
-                          // Dropdown will auto-close if needed
-                        }}
-                      />
-                    </DropdownMenuItem>
-                  ))}
-                </>
-              ) : (
-                <div className="px-2 py-6 text-center">
-                  <p className="text-sm text-muted-foreground">No approvals</p>
-                </div>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
       

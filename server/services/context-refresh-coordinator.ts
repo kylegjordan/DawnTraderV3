@@ -1,7 +1,7 @@
 /**
  * Phase 8.5 Addendum H - Context Refresh Coordinator
  * 
- * Fetches live data from backend and synchronizes Cortex + Walter contexts.
+ * Fetches live data from backend and synchronizes Cortex contexts.
  * Emits WebSocket events for real-time UI updates.
  */
 
@@ -11,8 +11,6 @@ import { strategyAnalytics } from './strategy-analytics';
 import { portfolioAggregator } from './portfolio-aggregator';
 import { systemHealthMonitor } from './system-health-monitor';
 import { EventEmitter } from 'events';
-// Directive 12.2.3: walter-memory import removed (file deleted in Batch 6)
-// Directive 12.2.3: systemTruthDiagnostic import removed (file deleted in Batch 7A)
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.3: Provenance tracking
 
 const MODULE_NAME = 'ContextRefresh';
@@ -85,8 +83,7 @@ class ContextRefreshCoordinator extends EventEmitter {
   private latencyHistory: number[] = [];
   private readonly MAX_LATENCY_SAMPLES = 100;
   
-  // Phase 8.5 Addendum J: Track last context to prevent duplicate memory entries
-  // Phase 3: Refactored to mode-based tracking (single-tenant)
+  // Track last context to prevent duplicate event emissions (single-tenant)
   private lastContextByMode: Map<'live' | 'paper', string> = new Map();
 
   /**
@@ -106,9 +103,6 @@ class ContextRefreshCoordinator extends EventEmitter {
 
       // Update Cortex cache with fresh data
       await this.updateCortex(mode, freshData, traceId);
-
-      // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
-      await this.updateWalterMemory(mode, freshData, traceId);
 
       // Directive 12.2.3: systemTruthDiagnostic truth check removed (file deleted in Batch 7A)
 
@@ -130,7 +124,7 @@ class ContextRefreshCoordinator extends EventEmitter {
         discrepanciesFound
       });
 
-      // Phase 8.5 Addendum J: Emit contextUpdated event for Walter rehydration
+      // Emit contextUpdated event for UI rehydration
       this.emit('contextUpdated', mode);
 
       console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${latencyMs}ms (${discrepanciesFound} discrepancies detected)`);
@@ -268,7 +262,7 @@ class ContextRefreshCoordinator extends EventEmitter {
 
   /**
    * Phase 8.5 Addendum K.4: Fetch BOTH live and paper mode data simultaneously
-   * This ensures Walter and dashboard always have complete visibility regardless of engine status
+   * This ensures dashboard always has complete visibility regardless of engine status
    * Phase 8.6.3: Added traceId for provenance tracking
    * Phase 3: Removed userId parameter (single-tenant architecture)
    */
@@ -477,50 +471,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       refreshed_by: 'ContextRefreshCoordinator'
     };
     
-    // Directive 12.2.3: cortexCore.set() and Cortex→Walter provenance logging removed (files deleted in Batch 7A)
-
     console.log(`[${this.MODULE_NAME}] ✅ Analytics data computed (key: ${cacheKey})`);
-  }
-
-  /**
-   * Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H + J)
-   * Phase 8.5 Addendum J: Only creates memory if context has changed (prevents duplicate entries)
-   * Phase 3: Removed userId parameter, mode-based tracking (single-tenant)
-   */
-  private async updateWalterMemory(mode: 'live' | 'paper', freshData: any, traceId?: string) {
-    console.log(`[${this.MODULE_NAME}] 🧠 Checking Walter memory (${mode})${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
-
-    // Phase 3: Use canonical user ID for memory creation
-    const userId = CANONICAL_USER_ID;
-
-    const memoryContent = `Context refreshed: Portfolio balance $${freshData.portfolioBalance}, ${freshData.activeStrategiesCount} strategies active (${freshData.activeStrategies.join(', ')}), engine ${freshData.engineActive ? 'running' : 'stopped'}, mode: ${mode}`;
-
-    // Phase 8.5 Addendum J: Check if context has changed
-    // Phase 3: Mode-based tracking instead of user+mode
-    const lastContext = this.lastContextByMode.get(mode);
-    
-    if (lastContext === memoryContent) {
-      console.log(`[${this.MODULE_NAME}] ⏭️  Context unchanged, skipping duplicate memory entry`);
-      return;
-    }
-
-    // Directive 12.2.3: Walter memory creation removed (Batch 6)
-    // Context change still tracked for deduplication
-    this.lastContextByMode.set(mode, memoryContent);
-
-    // Phase 8.6.3: Log provenance data flow
-    if (traceId) {
-      await provenanceLogger.logWalterToUI({
-        traceId,
-        endpoint: '/api/context-refresh',
-        mode,
-        globalContextId: 'default',
-        data: { memoryContent, ...freshData },
-        userId,
-      });
-    }
-
-    console.log(`[${this.MODULE_NAME}] ✅ Context refresh completed (context changed)`);
   }
 
   /**
@@ -625,7 +576,7 @@ class ContextRefreshCoordinator extends EventEmitter {
 
   /**
    * Phase 8.5 Addendum K.4: Ensure fresh dual-mode context (BOTH live and paper)
-   * This guarantees Walter and UI always see complete system state regardless of engine status
+   * This guarantees UI always sees complete system state regardless of engine status
    * Phase 3: Removed userId parameter (single-tenant)
    */
   async ensureFreshDualContext(): Promise<{ dualModeData: DualModeData; latencyMs: number }> {
@@ -663,28 +614,10 @@ class ContextRefreshCoordinator extends EventEmitter {
         }, traceId)
       ]);
       
-      // Update Walter's memory for both modes (Phase 8.6.3: with traceId)
-      await Promise.all([
-        this.updateWalterMemory('live', {
-          portfolioBalance: dualModeData.live.portfolioBalance,
-          activeStrategies: dualModeData.live.activeStrategies,
-          activeStrategiesCount: dualModeData.live.activeStrategiesCount,
-          engineActive: dualModeData.live.engineActive,
-          mode: 'live'
-        }, traceId),
-        this.updateWalterMemory('paper', {
-          portfolioBalance: dualModeData.paper.portfolioBalance,
-          activeStrategies: dualModeData.paper.activeStrategies,
-          activeStrategiesCount: dualModeData.paper.activeStrategiesCount,
-          engineActive: dualModeData.paper.engineActive,
-          mode: 'paper'
-        }, traceId)
-      ]);
-      
       const latencyMs = Date.now() - start;
       this.updateMetrics(latencyMs, true);
       
-      // Emit contextUpdated event for Walter rehydration
+      // Emit contextUpdated event for UI rehydration
       this.emit('contextUpdated', 'dual');
       
       console.log(`[${this.MODULE_NAME}] ✅ Dual-mode context refreshed in ${latencyMs}ms`);
@@ -712,9 +645,6 @@ class ContextRefreshCoordinator extends EventEmitter {
       // Update Cortex cache with fresh data
       await this.updateCortex(mode, freshData, finalTraceId);
 
-      // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
-      await this.updateWalterMemory(mode, freshData, finalTraceId);
-
       // Directive 12.2.3: systemTruthDiagnostic truth check removed (file deleted in Batch 7A)
 
       // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
@@ -735,7 +665,7 @@ class ContextRefreshCoordinator extends EventEmitter {
         discrepanciesFound
       });
 
-      // Phase 8.5 Addendum J: Emit contextUpdated event for Walter rehydration
+      // Emit contextUpdated event for UI rehydration
       this.emit('contextUpdated', mode);
 
       console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${latencyMs}ms (${discrepanciesFound} discrepancies detected)`);

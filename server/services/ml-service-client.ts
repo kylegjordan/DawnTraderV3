@@ -27,8 +27,6 @@ export interface ProfitPrediction {
 export interface PredictionInput {
   symbol: string;
   strategy: string;
-  ngc: number;
-  cwqi: number;
   riskRatio: number;
   profitTarget: number;
   signalAge?: number;
@@ -41,7 +39,7 @@ const predictionCache = new Map<string, { value: PromotionPrediction | ProfitPre
 const CACHE_TTL = 30000;
 
 function getCacheKey(type: 'promotion' | 'profit', input: PredictionInput): string {
-  return `${type}:${input.symbol}:${input.strategy}:${input.ngc.toFixed(3)}:${input.cwqi.toFixed(3)}`;
+  return `${type}:${input.symbol}:${input.strategy}:${input.riskRatio.toFixed(3)}:${input.profitTarget.toFixed(3)}`;
 }
 
 function getFromCache<T>(key: string): T | null {
