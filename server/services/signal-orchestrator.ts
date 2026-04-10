@@ -1249,35 +1249,54 @@ export class SignalOrchestrator {
       // These strategies require pattern signals as input.
       // Convert detected patterns to PatternInput format for strategy modules.
       // ═══════════════════════════════════════════════════════════════
-      const bestPattern = patternSignals.length > 0 ? patternSignals.reduce((best, p) =>
-        p.strength > best.strength ? p : best, patternSignals[0]) : null;
+      // B57 Fix: Build per-strategy pattern input instead of single global best
+      // Each strategy expects a specific pattern type — pass the matching one
+      const STRATEGY_PATTERN_MAP: Record<string, string> = {
+        'morning_star': 'MORNING_STAR',
+        'inside_bar_reversal': 'INSIDE_BAR',
+        'support_bounce': 'PINBAR',
+        'pivot_shift': 'MORNING_STAR',
+        'reverse_impulse': 'PINBAR',
+        'defensive_hedge': 'ENGULFING',
+        'adaptive_flow': 'MORNING_STAR', // THREE_SOLDIERS canonicalizes to MORNING_STAR
+        'volatility_edge': 'ABCD',
+      };
 
-      const patternInput = bestPattern ? {
-        pattern: normalizePatternToCanonical(bestPattern.pattern) ?? bestPattern.pattern,
-        direction: bestPattern.direction as 'BUY' | 'SELL',
-        strength: bestPattern.strength,
-        metadata: {
-          ...bestPattern,
-          // Support-bounce needs low values
-          parentHigh: bestPattern.metadata?.parentHigh ?? (candles.length >= 2 ? candles[candles.length - 2].high : 0),
-          parentLow: bestPattern.metadata?.parentLow ?? (candles.length >= 2 ? candles[candles.length - 2].low : 0),
-          compressionRatio: bestPattern.metadata?.compressionRatio ?? 0.5,
-          pinbarLow: bestPattern.metadata?.pinbarLow ?? (candles.length > 0 ? candles[candles.length - 1].low : 0),
-          engulfingLow: bestPattern.metadata?.engulfingLow ??
-            (candles.length >= 2 ? Math.min(candles[candles.length - 1].low, candles[candles.length - 2].low) : 0),
-          engulfRatio: bestPattern.metadata?.engulfRatio ?? 1.0,
-          hasGap: bestPattern.metadata?.hasGap ?? false,
-          recoveryRatio: bestPattern.metadata?.recoveryRatio ?? 0,
-          // ABCD metadata for volatility_edge
-          aPointLow: bestPattern.metadata?.aPointLow,
-          bPointHigh: bestPattern.metadata?.bPointHigh,
-          cPointLow: bestPattern.metadata?.cPointLow,
-          cPointHigh: bestPattern.metadata?.cPointHigh,
-        }
-      } : null;
+      const buildPatternInputForStrategy = (strategyKey: string) => {
+        const expectedPattern = STRATEGY_PATTERN_MAP[strategyKey];
+        const candidates = expectedPattern
+          ? patternSignals.filter(p => normalizePatternToCanonical(p.pattern) === expectedPattern)
+          : patternSignals;
+        const bp = candidates.length > 0
+          ? candidates.reduce((best, p) => p.strength > best.strength ? p : best, candidates[0])
+          : null;
+        if (!bp) return null;
+        return {
+          pattern: normalizePatternToCanonical(bp.pattern) ?? bp.pattern,
+          direction: bp.direction as 'BUY' | 'SELL',
+          strength: bp.strength,
+          metadata: {
+            ...bp,
+            parentHigh: bp.metadata?.parentHigh ?? (candles.length >= 2 ? candles[candles.length - 2].high : 0),
+            parentLow: bp.metadata?.parentLow ?? (candles.length >= 2 ? candles[candles.length - 2].low : 0),
+            compressionRatio: bp.metadata?.compressionRatio ?? 0.5,
+            pinbarLow: bp.metadata?.pinbarLow ?? (candles.length > 0 ? candles[candles.length - 1].low : 0),
+            engulfingLow: bp.metadata?.engulfingLow ??
+              (candles.length >= 2 ? Math.min(candles[candles.length - 1].low, candles[candles.length - 2].low) : 0),
+            engulfRatio: bp.metadata?.engulfRatio ?? 1.0,
+            hasGap: bp.metadata?.hasGap ?? false,
+            recoveryRatio: bp.metadata?.recoveryRatio ?? 0,
+            aPointLow: bp.metadata?.aPointLow,
+            bPointHigh: bp.metadata?.bPointHigh,
+            cPointLow: bp.metadata?.cPointLow,
+            cPointHigh: bp.metadata?.cPointHigh,
+          }
+        };
+      };
+      const bestPattern = patternSignals.length > 0 ? patternSignals[0] : null; // kept for log line below
 
       if (activeStrategies.has('morning_star')) {
-        const rawSignal = this.strategyEngine.detectMorningStar(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectMorningStar(indicators, ohlcAsAny, buildPatternInputForStrategy('morning_star'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'morning_star' as any, sizingContext);
@@ -1286,7 +1305,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('inside_bar_reversal')) {
-        const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, buildPatternInputForStrategy('inside_bar_reversal'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'inside_bar_reversal' as any, sizingContext);
@@ -1295,7 +1314,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('support_bounce')) {
-        const rawSignal = this.strategyEngine.detectSupportBounce(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectSupportBounce(indicators, ohlcAsAny, buildPatternInputForStrategy('support_bounce'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'support_bounce' as any, sizingContext);
@@ -1304,7 +1323,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('pivot_shift')) {
-        const rawSignal = this.strategyEngine.detectPivotShift(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectPivotShift(indicators, ohlcAsAny, buildPatternInputForStrategy('pivot_shift'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'pivot_shift' as any, sizingContext);
@@ -1313,7 +1332,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('reverse_impulse')) {
-        const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, buildPatternInputForStrategy('reverse_impulse'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'reverse_impulse' as any, sizingContext);
@@ -1324,7 +1343,7 @@ export class SignalOrchestrator {
       if (activeStrategies.has('defensive_hedge')) {
         // Defensive hedge requires BTC candle data for correlation calculation
         // TODO: Pass BTC OHLC from pricing service cache when available
-        const rawSignal = this.strategyEngine.detectDefensiveHedge(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectDefensiveHedge(indicators, ohlcAsAny, buildPatternInputForStrategy('defensive_hedge'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'defensive_hedge' as any, sizingContext);
@@ -1333,7 +1352,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('adaptive_flow')) {
-        const rawSignal = this.strategyEngine.detectAdaptiveFlow(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectAdaptiveFlow(indicators, ohlcAsAny, buildPatternInputForStrategy('adaptive_flow'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'adaptive_flow' as any, sizingContext);
@@ -1342,7 +1361,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('volatility_edge')) {
-        const rawSignal = this.strategyEngine.detectVolatilityEdge(indicators, ohlcAsAny, patternInput);
+        const rawSignal = this.strategyEngine.detectVolatilityEdge(indicators, ohlcAsAny, buildPatternInputForStrategy('volatility_edge'));
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'volatility_edge' as any, sizingContext);

@@ -803,8 +803,14 @@ async function generatePhase10Signal(
   // Batch 44: Always normalize detected pattern name through normalizePatternToCanonical()
   // before passing to strategy detect(). This is the single source of truth for pattern
   // name mapping (PATTERN_TO_CANONICAL in canonical-regime-strategy-map.ts).
-  const bestDetectedPattern = detectedPatterns.length > 0 ? detectedPatterns.reduce((best: any, p: any) =>
-    p.strength > best.strength ? p : best, detectedPatterns[0]) : null;
+  // B57 Fix: Match pattern to strategy's expected patternType instead of global best
+  // When canonicalPatternType is set (from strategyOverride), filter to matching patterns first
+  const matchingPatterns = canonicalPatternType
+    ? detectedPatterns.filter((p: any) => normalizePatternToCanonical(p.pattern) === canonicalPatternType)
+    : detectedPatterns;
+  const bestDetectedPattern = matchingPatterns.length > 0
+    ? matchingPatterns.reduce((best: any, p: any) => p.strength > best.strength ? p : best, matchingPatterns[0])
+    : null;
 
   const canonicalPatternName = bestDetectedPattern
     ? normalizePatternToCanonical(bestDetectedPattern.pattern)

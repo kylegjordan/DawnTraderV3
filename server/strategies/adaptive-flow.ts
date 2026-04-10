@@ -87,7 +87,8 @@ export function detectAdaptiveFlow(
     setNullReason('no_pattern');
     return null;
   }
-  if (patternSignal.pattern !== 'THREE_SOLDIERS' || patternSignal.direction !== 'BUY') {
+  // B57: THREE_SOLDIERS canonicalizes to MORNING_STAR — accept both names
+  if ((patternSignal.pattern !== 'THREE_SOLDIERS' && patternSignal.pattern !== 'MORNING_STAR') || patternSignal.direction !== 'BUY') {
     console.log(`${LOG_PREFIX} Pattern mismatch: ${patternSignal.pattern}/${patternSignal.direction}`);
     setNullReason('no_pattern');
     return null;
