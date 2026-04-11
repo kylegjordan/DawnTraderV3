@@ -1172,6 +1172,13 @@ Total: 21 bugs, 65 risks.
 - **Problem**: All 8 pattern strategies had hard volume gates requiring 1.2-1.3x mean volume per candle. Quant strategies (mean_reversion, range_trading) had no such gate. Pattern pool admits lower-liquidity pairs via relaxed FX5 filters, which then hit the per-candle volume gate. In crypto's spiky volume environment, legitimate reversal setups were blocked by the strict threshold. "Volume Confirmation Failed" was the #1 pattern-path null reason (1,460 pattern vs 304 quant).
 - **Impact**: Valid reversal signals on support_bounce and reverse_impulse blocked despite otherwise qualifying setups. Pattern-path signal generation suppressed disproportionately vs quant path.
 - **Resolution**: Converted hard volume gate to graduated confidence factor for support_bounce and reverse_impulse. Scale: >=2.0x mean volume: bonus, >=1.2x: small bonus, >=0.8x: neutral, <0.8x: penalty. Breakout strategies (volume_expansion, breakout_fade, etc.) retain hard gates where volume confirmation is structurally essential.
+
+### PERF-002: support_bounce Cluster Tolerance Too Strict for Crypto Support Zones — **RESOLVED**
+- **Severity**: ~~MEDIUM~~ **RESOLVED** (Batch 57, commit `544955f0`, 2026-04-11)
+- **Location**: `server/services/strategies/support-bounce.ts`
+- **Problem**: SB_CLUSTER_TOLERANCE_BASE was set to 0.5%, which is too tight for crypto's wider support zones. Legitimate support bounces were rejected because nearby lows didn't cluster within the narrow tolerance, producing "No Valid Range" null reasons. Crypto pairs exhibit wider price dispersion around support levels than forex, requiring a more permissive clustering threshold.
+- **Impact**: Valid support_bounce signals rejected at the cluster-detection stage. Contributed to the 10K "No Valid Range" null reasons observed in quant-pool diagnostics.
+- **Resolution**: Widened SB_CLUSTER_TOLERANCE_BASE from 0.5% to 0.7%. Also added separate abcd_structure_not_found null reason for abcd_long to distinguish structural failures from generic "No Pattern Detected".
 - **Phase Found**: Batch 57 pool-split null reason analysis (2026-04-11)
 
 ### BUG-029: Pattern-Strategy Mismatch — Global Best Pattern Sent to All Strategies — **RESOLVED**
