@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 // --- Types ---
 
@@ -82,12 +83,23 @@ export function loadBaseline(): { loaded: boolean; version?: string; error?: str
     return { loaded: true, version: baseline.version };
   }
 
-  // Try multiple paths — repo root (dev) and dist-relative (production)
+  // Try multiple paths — ESM-compatible (no __dirname in ESM bundles)
   const candidates = [
-    path.resolve(__dirname, '../../1-system-manual/authority-baseline-v1.json'),
-    path.resolve(__dirname, '../1-system-manual/authority-baseline-v1.json'),
     path.resolve(process.cwd(), '1-system-manual/authority-baseline-v1.json'),
   ];
+
+  // Try __dirname-based paths if available (CommonJS environments)
+  try {
+    const currentDir = typeof __dirname !== 'undefined'
+      ? __dirname
+      : path.dirname(fileURLToPath(import.meta.url));
+    candidates.unshift(
+      path.resolve(currentDir, '../../1-system-manual/authority-baseline-v1.json'),
+      path.resolve(currentDir, '../1-system-manual/authority-baseline-v1.json')
+    );
+  } catch {
+    // ESM bundle without import.meta.url — rely on process.cwd() candidate
+  }
 
   for (const filePath of candidates) {
     try {
