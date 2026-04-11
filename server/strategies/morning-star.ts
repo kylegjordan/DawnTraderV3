@@ -99,16 +99,18 @@ export function detectMorningStar(
   const belowSMA = sma20 > 0 && currentPrice < sma20;
   // Confidence bonus/penalty applied in confidence calculation below
 
-  // ── Condition 4: Volume confirmation on the third candle ─────────────────
+  // ── Condition 4: Volume assessment (soft factor, not hard gate) ──────────
+  // B57: Converted from hard gate to confidence factor. Morning star reversals
+  // are driven by the 3-candle structure, not volume spikes. Volume now
+  // influences confidence score instead of blocking the trade.
   const avgVolume = calculateAvgVolume(ohlc, 20);
   const c3Volume = ohlc[ohlc.length - 1].volume; // Last candle = recovery candle
-  if (avgVolume === 0 || c3Volume < avgVolume * MS_VOL_MULT) {
+  const volumeRatio = avgVolume > 0 ? c3Volume / avgVolume : 0;
+  if (avgVolume > 0) {
     console.log(
-      `${LOG_PREFIX} Volume check failed: c3Vol=${c3Volume.toFixed(2)}, ` +
-      `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * MS_VOL_MULT).toFixed(2)}. Skipping.`
+      `${LOG_PREFIX} Volume ratio: c3Vol=${c3Volume.toFixed(2)}, ` +
+      `avgVol=${avgVolume.toFixed(2)}, ratio=${volumeRatio.toFixed(2)}x (soft factor)`
     );
-    setNullReason('volume_insufficient');
-    return null;
   }
 
   // ── Compute effective ATR ────────────────────────────────────────────────
@@ -138,7 +140,11 @@ export function detectMorningStar(
 
   // ── Confidence calculation ───────────────────────────────────────────────
   const baseConfidence = patternSignal.strength * MS_STRENGTH_WEIGHT;
-  const volumeBonus = (c3Volume >= avgVolume * 2.0) ? MS_HIGH_VOL_BONUS : 0;
+  // B57: Graduated volume factor
+  const volumeBonus = volumeRatio >= 2.0 ? MS_HIGH_VOL_BONUS
+    : volumeRatio >= 1.2 ? 0.04
+    : volumeRatio >= 0.8 ? 0
+    : -0.04;
   const gapBonus = patternSignal.metadata?.hasGap ? MS_GAP_BONUS : 0;
   const recoveryRatio = patternSignal.metadata?.recoveryRatio || 0;
   const recoveryBonus = Math.min(MS_MAX_RECOVERY_BONUS, recoveryRatio * 0.05);

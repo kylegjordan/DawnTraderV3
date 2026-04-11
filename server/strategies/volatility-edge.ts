@@ -108,17 +108,15 @@ export function detectVolatilityEdge(
 
   const { aPointLow, bPointHigh, cPointLow, cPointHigh } = meta;
 
-  // ── Volume at A-point gate ─────────────────────────────────
+  // ── Volume at A-point assessment (soft factor, not hard gate) ────────────
+  // B57: Converted A-point volume from hard gate to confidence factor.
+  // The A-point spike is setup context — the breakout candle volume (below)
+  // remains a hard gate because actual breakout participation matters.
   const avgVol = calculateAvgVolume(ohlc, GLOBAL_CONSTANTS.VOLUME_BASELINE_PERIOD);
-  // Use metadata aPointVolume if available, otherwise approximate with a
-  // candle near the A-point (the caller's pattern detector typically stores
-  // the volume). Fallback: use the last candle volume as a proxy.
   const aPointVolume: number = meta.aPointVolume ?? ohlc[ohlc.length - 1].volume;
-
-  if (avgVol <= 0 || aPointVolume < avgVol * VE_A_VOL_MULT) {
-    console.log(`${LOG_PREFIX} A-point volume too low: ${aPointVolume.toFixed(2)} < ${(avgVol * VE_A_VOL_MULT).toFixed(2)}`);
-    setNullReason('volume_insufficient');
-    return null;
+  const aPointVolumeRatio = avgVol > 0 ? aPointVolume / avgVol : 0;
+  if (avgVol > 0) {
+    console.log(`${LOG_PREFIX} A-point volume ratio: ${aPointVolume.toFixed(2)} / ${avgVol.toFixed(2)} = ${aPointVolumeRatio.toFixed(2)}x (soft factor)`);
   }
 
   // ── Volatility percentile gate ─────────────────────────────
