@@ -1,7 +1,7 @@
 # Batch 57 Completion Report — Pattern-Strategy Fix + Pool-Split Null Reasons
 
 > **Date:** 2026-04-10 to 2026-04-11
-> **Commits:** fb15bd34, 442115f6, 1992d5de, b2822a3f, ce5378f6, 544955f0
+> **Commits:** fb15bd34, 442115f6, 1992d5de, b2822a3f, ce5378f6, 544955f0, dc45e852
 > **Branch:** migration/aws-supabase
 > **Langston Review:** Logic/design approved for all changes. Stale Google Drive mount prevented direct file verification.
 
@@ -17,9 +17,10 @@
 | 4 | Fix adaptive-flow.ts THREE_SOLDIERS canonicalization | YES | Now accepts both THREE_SOLDIERS and MORNING_STAR |
 | 5 | Convert volume gate to soft confidence factor for support_bounce + reverse_impulse | YES | Graduated factor: >=2.0x: bonus, >=1.2x: small bonus, >=0.8x: neutral, <0.8x: penalty |
 | 6 | Widen support_bounce cluster tolerance 0.5→0.7% + separate abcd_long null reason | YES | SB_CLUSTER_TOLERANCE_BASE updated, abcd_structure_not_found null reason added |
+| 7 | Extend soft volume gates to morning_star + volatility_edge A-point | YES | Live logs showed pattern-pool blocked by remaining hard gates. Breakout volume stays hard. |
 
 ## Stats
-- Files changed: 8 (vts-runner.ts, signal-orchestrator.ts, adaptive-flow.ts, virtual-trade.interface.ts, machine-learning.tsx, support-bounce.ts, reverse-impulse.ts, abcd-long.ts)
+- Files changed: 10 (vts-runner.ts, signal-orchestrator.ts, adaptive-flow.ts, virtual-trade.interface.ts, machine-learning.tsx, support-bounce.ts, reverse-impulse.ts, abcd-long.ts, morning-star.ts, volatility-edge.ts)
 - Pattern fix impact: "No Pattern Detected" null reason dropped from #1 cause (38%) to negligible in new post-fix data
 
 ## Key Findings
@@ -29,6 +30,7 @@
 4. Pool-split null reasons revealed that "Volume Confirmation Failed" is the #1 pattern-path null reason post-fix (302 pattern vs 42 quant)
 5. Volume Confirmation Failed was #1 pattern-path null reason (1,460 vs 304 quant). Root cause: all 8 pattern strategies had hard volume gates while quant strategies (mean_reversion, range_trading) had none. Pattern pool admits lower-liquidity pairs via relaxed FX5 filters, which then hit the 1.2-1.3x per-candle volume gate. Consensus with Langston: breakout strategies keep hard gates, reversal strategies use soft graduated factor.
 6. Investigation of quant-pool null reasons with Langston consensus: No Pattern Detected (28K) is mostly abcd_long structural failures + Batch 44 cross-eval — working as designed. No Valid Range (10K) partly from support_bounce strict clustering. Indicator Out of Range (4.7K) is healthy rejection rate — no change needed.
+7. Pattern-pool trades were still blocked by remaining hard volume gates on morning_star and volatility_edge A-point after Fix 4 only converted support_bounce and reverse_impulse. Extended soft graduated volume factor to these two strategies; breakout volume confirmation stays as a hard gate.
 
 ## Governance Updates
 Files modified in this governance batch:

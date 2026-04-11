@@ -868,7 +868,7 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 | (none currently in progress) | | | |
 
 > **Last Updated**: 2026-04-11 (B57)
-> **Last commit (migration branch)**: `544955f0` (B57 Fix 5: support_bounce cluster tolerance 0.5→0.7% + abcd_long separate null reason)
+> **Last commit (migration branch)**: `dc45e852` (B57 Fix 6: morning_star + volatility_edge A-point volume soft gates extended)
 > **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
 > **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS producing signals
 > **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
