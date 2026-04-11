@@ -220,16 +220,18 @@ export function detectSupportBounce(
     return null;
   }
 
-  // ── Condition 5: Volume confirmation (bounce candle) ─────────────────────
+  // ── Condition 5: Volume assessment (soft factor, not hard gate) ──────────
+  // B57: Converted from hard gate to confidence factor. Support bounces are
+  // driven by price level and pattern, not volume. Volume now influences
+  // confidence score instead of blocking the trade.
   const avgVolume = calculateAvgVolume(ohlc, 20);
   const bounceVolume = ohlc[ohlc.length - 1].volume;
-  if (avgVolume === 0 || bounceVolume < avgVolume * SB_VOL_MULT) {
+  const volumeRatio = avgVolume > 0 ? bounceVolume / avgVolume : 0;
+  if (avgVolume > 0) {
     console.log(
-      `${LOG_PREFIX} Volume check failed: bounceVol=${bounceVolume.toFixed(2)}, ` +
-      `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * SB_VOL_MULT).toFixed(2)}. Skipping.`
+      `${LOG_PREFIX} Volume ratio: bounceVol=${bounceVolume.toFixed(2)}, ` +
+      `avgVol=${avgVolume.toFixed(2)}, ratio=${volumeRatio.toFixed(2)}x (soft factor)`
     );
-    setNullReason('volume_insufficient');
-    return null;
   }
 
   // ── Price calculations ───────────────────────────────────────────────────
@@ -252,7 +254,15 @@ export function detectSupportBounce(
   const proximityScore = proximityDenom > 0
     ? Math.max(0, (1 - (currentPrice - supportLevel) / proximityDenom)) * SB_PROXIMITY_WEIGHT
     : 0;
-  const volumeBonus = (bounceVolume >= avgVolume * 2.0) ? SB_HIGH_VOL_BONUS : 0;
+  // B57: Graduated volume factor — boosts confidence for high volume, penalizes for low
+  // >= 2.0x avg: +0.08 bonus (unchanged)
+  // >= 1.2x avg: +0.04 bonus (above-average, good confirmation)
+  // >= 0.8x avg: +0.00 (normal volume, neutral)
+  // < 0.8x avg:  -0.04 penalty (below-average, weaker signal)
+  const volumeBonus = volumeRatio >= 2.0 ? SB_HIGH_VOL_BONUS
+    : volumeRatio >= 1.2 ? 0.04
+    : volumeRatio >= 0.8 ? 0
+    : -0.04;
 
   // Cap confidence at 0.93 for support bounce (spec constraint)
   const rawConfidence = patternScore + supportScore + proximityScore + volumeBonus + pinbarBonus;

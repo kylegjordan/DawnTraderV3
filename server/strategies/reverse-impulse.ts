@@ -102,14 +102,16 @@ export function detectReverseImpulse(
     return null;
   }
 
-  // ── Volume gate ────────────────────────────────────────────
+  // ── Volume assessment (soft factor, not hard gate) ─────────
+  // B57: Converted from hard gate to confidence factor. Reverse impulse
+  // signals are driven by RSI oversold + momentum, not volume. Volume
+  // now influences confidence score instead of blocking the trade.
   const avgVol = calculateAvgVolume(ohlc, GLOBAL_CONSTANTS.VOLUME_BASELINE_PERIOD);
   const lastCandle = ohlc[ohlc.length - 1];
   const pinbarVolume = lastCandle.volume;
-  if (avgVol <= 0 || pinbarVolume < avgVol * RI_VOL_MULT) {
-    console.log(`${LOG_PREFIX} Volume too low: ${pinbarVolume.toFixed(2)} < ${(avgVol * RI_VOL_MULT).toFixed(2)}`);
-    setNullReason('volume_insufficient');
-    return null;
+  const volumeRatio = avgVol > 0 ? pinbarVolume / avgVol : 0;
+  if (avgVol > 0) {
+    console.log(`${LOG_PREFIX} Volume ratio: ${pinbarVolume.toFixed(2)} / ${avgVol.toFixed(2)} = ${volumeRatio.toFixed(2)}x (soft factor)`);
   }
 
   // ── RSI gate ───────────────────────────────────────────────
@@ -145,7 +147,11 @@ export function detectReverseImpulse(
   const patternScore   = patternSignal.strength * RI_PATTERN_WEIGHT;
   const momentumScore  = Math.min(RI_MAX_MOMENTUM_BONUS, Math.abs(momMin - RI_MOMENTUM_THRESHOLD) * RI_MOMENTUM_RATE);
   const rsiScore       = (1 - rsi / 100) * RI_RSI_WEIGHT;
-  const volumeBonus    = (pinbarVolume >= avgVol * 2.5) ? RI_EXTREME_VOL_BONUS : 0;
+  // B57: Graduated volume factor — boosts for high volume, penalizes for low
+  const volumeBonus = volumeRatio >= 2.5 ? RI_EXTREME_VOL_BONUS
+    : volumeRatio >= 1.2 ? 0.04
+    : volumeRatio >= 0.8 ? 0
+    : -0.04;
   const rawConfidence  = patternScore + momentumScore + rsiScore + volumeBonus;
   const confidence     = clampConfidence(Math.min(rawConfidence, 0.95));
 
