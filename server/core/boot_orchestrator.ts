@@ -18,6 +18,10 @@ import { EventEmitter } from 'events';
 import { initVTSRunner, stopVTSRunner, startAutonomousSimulation } from '../services/vts-runner';
 import { preloadPatternHistory } from './pattern-recognition';
 import { systemConfigService } from '../services/system-config';
+import { loadBaseline } from '../config/authority-baseline';
+import { validateStartupConfig } from '../config/adjustment-registry';
+import { SCORE_WEIGHTS } from '../config/score-weights.config';
+import { EXECUTION_CONFIG } from '../config/execution-config';
 
 const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || 'http://localhost:5001';
 const ML_SERVICE_AUTO_START = process.env.ML_SERVICE_AUTO_START !== 'false';
@@ -74,7 +78,22 @@ class BootOrchestrator extends EventEmitter {
 
   async initialize(): Promise<boolean> {
     console.log('[L3][BOOT_ORCHESTRATOR] Initializing boot sequence...');
-    
+
+    // Batch 58b: Load authority baseline and validate startup config (non-blocking, log-only)
+    const baselineResult = loadBaseline();
+    if (baselineResult.loaded) {
+      console.log(`[L3][BOOT_ORCHESTRATOR] Authority Baseline v${baselineResult.version} loaded`);
+    } else {
+      console.warn(`[L3][BOOT_ORCHESTRATOR] Authority Baseline not loaded: ${baselineResult.error}`);
+    }
+    const startupValidation = validateStartupConfig({
+      scoreWeights: SCORE_WEIGHTS?.FINAL_SCORE,
+      executionConfig: EXECUTION_CONFIG as unknown as Record<string, number | string | boolean>,
+    });
+    if (startupValidation.warnings.length > 0) {
+      console.warn(`[L3][BOOT_ORCHESTRATOR] Startup validation: ${startupValidation.warnings.length} warning(s)`);
+    }
+
     if (!ML_SERVICE_AUTO_START) {
       console.log('[L3][BOOT_ORCHESTRATOR] ML Service auto-start disabled, running in degraded mode');
       this.mlServiceStatus = { status: 'DEGRADED', error: 'Auto-start disabled' };

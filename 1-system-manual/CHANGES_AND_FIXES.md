@@ -1221,6 +1221,19 @@ Total: 21 bugs, 65 risks.
 
 ---
 
+## Batch 58 — Phase 11 Finalization (2026-04-11)
+
+### INFRA-001: Adjustment Registry + Authority Baseline — **IMPLEMENTED**
+- **Severity**: MEDIUM (governance infrastructure)
+- **Location**: `server/config/adjustment-registry.ts` (new), `server/config/authority-baseline.ts` (new), `server/core/boot_orchestrator.ts` (modified), `server/routes.ts` (modified)
+- **What**: Phase 11 Finalization (Directives 11.8B-E + 11.8C). Created the Adjustment Framework governance document defining three tiers (evidence-adjustable / supervised / constitutional), parameter hierarchy, evidence-gating with three-mode hierarchy (Live > Paper > VTS), and safety guarantees. Created Authority Baseline V1.0 snapshot of all adjustable parameters (24 screener_filters rows, 150+ strategy constants, shared config). Implemented code-level parameter registry with bounds validation (log-only mode) and audit logging.
+- **Files created**: `adjustment-registry.ts` (parameter bounds, validation, audit logging), `authority-baseline.ts` (baseline loader, drift detection), `ADJUSTMENT_FRAMEWORK.md`, `AUTHORITY_BASELINE.md`, `authority-baseline-v1.json`
+- **Files modified**: `boot_orchestrator.ts` (startup validation + baseline load), `routes.ts` (log-only validation on `/api/filters-v2` PUT)
+- **Impact**: No trading logic changes. No threshold changes. Validation is log-only (warns but never blocks). Startup validation is non-blocking. Baseline loader degrades gracefully if file missing.
+- **Phase Found**: Phase 11.8B-E/11.8C (Batch 58)
+
+---
+
 ## REGISTRY METADATA
 
 | Metric | Count |

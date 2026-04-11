@@ -1,0 +1,413 @@
+{
+  "version": "1.0",
+  "snapshotDate": "2026-04-11",
+  "lastCommit": "6a8badd6",
+  "batch": "B58a",
+  "phase": "11.8C",
+
+  "db_thresholds": {
+    "screener_filters": {
+      "uniform": {
+        "lq_min": 43,
+        "corr_max": 0.92,
+        "min_price": 0.01,
+        "min_liquidity": 500000,
+        "min_market_cap": 100000000,
+        "rsi_min": 30,
+        "rsi_max": 70,
+        "volatility_min": 0.50,
+        "volatility_max": 5.00,
+        "max_bid_ask_spread": 1.00,
+        "final_score_min": 0.35,
+        "regime_weight_min": 0.30,
+        "min_history_days": 30,
+        "universe_size": 100,
+        "confidence_threshold": 60
+      },
+      "differentiating": {
+        "active_quant":      { "vn_max": 0.85, "di_min": 25, "di_max": 100, "min_volume": 500000, "volume_24h_min": 50000 },
+        "active_trend":      { "vn_max": 0.85, "di_min": 10, "di_max": 100, "min_volume": 500000, "volume_24h_min": null },
+        "active_breakout":   { "vn_max": 0.85, "di_min": 10, "di_max": 100, "min_volume": 400000, "volume_24h_min": null },
+        "active_oscillator": { "vn_max": 0.85, "di_min": 0,  "di_max": 30,  "min_volume": 250000, "volume_24h_min": null },
+        "active_reversal":   { "vn_max": 0.85, "di_min": 0,  "di_max": 35,  "min_volume": 250000, "volume_24h_min": null },
+        "active_pattern":    { "vn_max": 0.98, "di_min": 5,  "di_max": 100, "min_volume": 250000, "volume_24h_min": 50000 },
+        "vts_quant":         { "vn_max": 0.95, "di_min": 15, "di_max": 100, "min_volume": 250000, "volume_24h_min": 50000 },
+        "vts_trend":         { "vn_max": 0.95, "di_min": 10, "di_max": 100, "min_volume": 250000, "volume_24h_min": null },
+        "vts_breakout":      { "vn_max": 0.95, "di_min": 10, "di_max": 100, "min_volume": 200000, "volume_24h_min": null },
+        "vts_oscillator":    { "vn_max": 0.95, "di_min": 0,  "di_max": 35,  "min_volume": 150000, "volume_24h_min": null },
+        "vts_reversal":      { "vn_max": 0.95, "di_min": 0,  "di_max": 40,  "min_volume": 150000, "volume_24h_min": null },
+        "vts_pattern":       { "vn_max": 0.98, "di_min": 3,  "di_max": 100, "min_volume": 150000, "volume_24h_min": 50000 }
+      }
+    }
+  },
+
+  "strategy_constants": {
+    "vwap_pullback": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-trend",
+      "volumeGate": "none",
+      "params": {
+        "pullbackThreshold": 0.03,
+        "volumeMultiplier": 1.5,
+        "maxHoldingPeriod": 24,
+        "stopMultiplier": 0.5,
+        "targetOffset": 0.25,
+        "baseConfidence": 0.7,
+        "reversalBonus": 0.2
+      }
+    },
+    "abcd_long": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-breakout",
+      "volumeGate": "none",
+      "params": {
+        "minConsolidation": 10,
+        "breakoutThreshold": 0.015,
+        "volumeMultiplier": 1.5,
+        "targetPercent": 0.03,
+        "trailingStopPercent": 0.02,
+        "atrPeriod": 14,
+        "entryAtrMult": 0.3,
+        "stopAtrMult": 0.5,
+        "baseConfidence": 0.75
+      }
+    },
+    "sma_trend_ride": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-trend",
+      "volumeGate": "none",
+      "params": {
+        "smaLength": 20,
+        "trailingStopPercent": 0.02,
+        "entryPremium": 0.002,
+        "baseConfidence": 0.65
+      }
+    },
+    "breakout": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-breakout",
+      "volumeGate": "none",
+      "params": {
+        "minConsolidationBars": 10,
+        "breakoutBuffer": 0.01,
+        "volumeMultiplier": 1.5,
+        "maxHoldingHours": 12,
+        "dynamicRangeMin": 0.07,
+        "dynamicRangeAtrMult": 5.0,
+        "minTouches": 2,
+        "baseConfidence": 0.75
+      }
+    },
+    "mean_reversion": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-reversal",
+      "volumeGate": "none",
+      "params": {
+        "deviationThresholdMin": 0.03,
+        "deviationAtrMult": 1.5,
+        "partialExitPercent": 50,
+        "stopLossBuffer": 0.01,
+        "minHistory": 20,
+        "baseConfidence": 0.7
+      }
+    },
+    "range_trading": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-oscillation",
+      "volumeGate": "none",
+      "params": {
+        "minRangeDurationHours": 7,
+        "minBoundaryTouches": 1,
+        "entryZoneWidth": 0.015,
+        "stopLossBeyond": 0.01,
+        "minRangeWidthMin": 0.015,
+        "minRangeWidthAtrMult": 2.0,
+        "baseConfidence": 0.72
+      }
+    },
+    "vwap_bounce": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-reversal",
+      "volumeGate": "none",
+      "params": {
+        "vwapProximity": 0.015,
+        "minVWAPSlope": 0.003,
+        "volumeMultiplier": 1.3,
+        "maxPullbackBars": 5,
+        "partialExitR": 1.5,
+        "baseConfidence": 0.73
+      }
+    },
+    "liquidity_trap": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-oscillation",
+      "volumeGate": "none",
+      "params": {
+        "maxTrapExtension": 0.012,
+        "trapReturnBars": 2,
+        "minLevelTouches": 2,
+        "volumeRatio": 1.5,
+        "rangeMaxWidth": 0.05,
+        "baseConfidence": 0.68
+      }
+    },
+    "morning_star": {
+      "file": "server/strategies/morning-star.ts",
+      "family": "pattern",
+      "volumeGate": "soft",
+      "params": {
+        "MS_MIN_STRENGTH": 0.55,
+        "MS_VOL_MULT": 1.2,
+        "MS_STOP_BUFFER": 0.003,
+        "MS_TARGET_ATR_MULT": 2.5,
+        "MS_STRENGTH_WEIGHT": 0.80,
+        "MS_HIGH_VOL_BONUS": 0.08,
+        "MS_GAP_BONUS": 0.07,
+        "MS_MAX_RECOVERY_BONUS": 0.05,
+        "confidenceCap": 0.93
+      }
+    },
+    "inside_bar_reversal": {
+      "file": "server/strategies/inside-bar-reversal.ts",
+      "family": "pattern",
+      "volumeGate": "hard",
+      "params": {
+        "IB_MAX_COMPRESSION": 0.85,
+        "IB_BREAKOUT_BUFFER": 0.002,
+        "IB_VOL_MULT": 1.3,
+        "IB_STOP_BUFFER": 0.003,
+        "IB_TARGET_ATR_MULT": 2.0,
+        "IB_COMPRESSION_WEIGHT": 0.35,
+        "IB_STRENGTH_WEIGHT": 0.45,
+        "IB_VOL_SCORE_RATE": 0.10,
+        "IB_MAX_VOL_BONUS": 0.20,
+        "IB_SELL_RSI_MIN": 45,
+        "confidenceCap": 0.93
+      }
+    },
+    "support_bounce": {
+      "file": "server/strategies/support-bounce.ts",
+      "family": "pattern",
+      "volumeGate": "soft",
+      "params": {
+        "SB_LOOKBACK_CANDLES": 50,
+        "SB_CLUSTER_TOLERANCE_BASE": 0.007,
+        "SB_MIN_TOUCHES": 2,
+        "SB_MAX_DISTANCE": 0.03,
+        "SB_PROXIMITY": 0.035,
+        "SB_VOL_MULT": 1.2,
+        "SB_STOP_BELOW_SUPPORT": 0.005,
+        "SB_TARGET_ATR_MULT": 2.0,
+        "SB_PATTERN_WEIGHT": 0.40,
+        "SB_SUPPORT_WEIGHT": 0.30,
+        "SB_PROXIMITY_WEIGHT": 0.15,
+        "SB_HIGH_VOL_BONUS": 0.08,
+        "confidenceCap": 0.93
+      }
+    },
+    "pivot_shift": {
+      "file": "server/strategies/pivot-shift.ts",
+      "family": "hybrid",
+      "volumeGate": "hard",
+      "params": {
+        "PS_RSI_LOW": 35,
+        "PS_RSI_HIGH": 65,
+        "PS_ADX_SLOPE_MIN": 0.5,
+        "PS_VOL_MULT": 1.3,
+        "PS_STOP_ATR_MULT": 1.5,
+        "PS_TARGET_ATR_MULT": 3.0,
+        "PS_PATTERN_WEIGHT": 0.40,
+        "PS_RSI_WEIGHT": 0.25,
+        "PS_ADX_SCORE_RATE": 0.05,
+        "PS_MAX_ADX_BONUS": 0.20,
+        "PS_HIGH_VOL_BONUS": 0.08,
+        "confidenceCap": 0.93
+      }
+    },
+    "reverse_impulse": {
+      "file": "server/strategies/reverse-impulse.ts",
+      "family": "hybrid",
+      "volumeGate": "soft",
+      "params": {
+        "RI_MIN_STRENGTH": 0.58,
+        "RI_MOMENTUM_THRESHOLD": -0.01,
+        "RI_LOOKBACK": 5,
+        "RI_VOL_MULT": 1.2,
+        "RI_RSI_MAX": 40,
+        "RI_STOP_BUFFER": 0.005,
+        "RI_TARGET_ATR_MULT": 2.0,
+        "RI_PATTERN_WEIGHT": 0.40,
+        "RI_MOMENTUM_RATE": 10.0,
+        "RI_MAX_MOMENTUM_BONUS": 0.20,
+        "RI_RSI_WEIGHT": 0.25,
+        "RI_EXTREME_VOL_BONUS": 0.10,
+        "confidenceCap": 0.95
+      }
+    },
+    "defensive_hedge": {
+      "file": "server/strategies/defensive-hedge.ts",
+      "family": "hybrid",
+      "volumeGate": "hard",
+      "params": {
+        "DH_CORR_WINDOW": 30,
+        "DH_MAX_CORRELATION": 0.45,
+        "DH_MIN_VOL_OFFSET": 0.10,
+        "DH_VOL_MULT": 1.3,
+        "DH_STOP_BUFFER": 0.005,
+        "DH_TARGET_ATR_MULT": 1.8,
+        "DH_PATTERN_WEIGHT": 0.45,
+        "DH_DECORR_WEIGHT": 0.25,
+        "DH_VOL_OFFSET_RATE": 0.15,
+        "DH_MAX_VOL_BONUS": 0.15,
+        "DH_STRONG_ENGULF_BONUS": 0.08,
+        "confidenceCap": 0.88
+      }
+    },
+    "adaptive_flow": {
+      "file": "server/strategies/adaptive-flow.ts",
+      "family": "hybrid",
+      "volumeGate": "hard",
+      "params": {
+        "AF_LOOKBACK": 20,
+        "AF_MIN_INVERSIONS": 3,
+        "AF_MIN_VOL_PERCENTILE": 60,
+        "AF_VOL_MULT": 1.3,
+        "AF_ADX_MAX": 30,
+        "AF_STOP_ATR_MULT": 1.5,
+        "AF_STOP_BUFFER": 0.003,
+        "AF_TARGET_ATR_MULT": 3.0,
+        "AF_PATTERN_WEIGHT": 0.35,
+        "AF_INVERSION_RATE": 0.05,
+        "AF_MAX_INVERSION_BONUS": 0.20,
+        "AF_VOL_PCT_WEIGHT": 0.25,
+        "AF_HIGH_VOL_BONUS": 0.08,
+        "confidenceCap": 0.88
+      }
+    },
+    "volatility_edge": {
+      "file": "server/strategies/volatility-edge.ts",
+      "family": "hybrid",
+      "volumeGate": "mixed",
+      "volumeGateDetail": "A-point: soft, breakout candle: hard",
+      "params": {
+        "VE_A_VOL_MULT": 1.3,
+        "VE_MIN_VOL_PERCENTILE": 70,
+        "VE_BREAKOUT_BUFFER": 0.002,
+        "VE_BREAKOUT_VOL_MULT": 1.3,
+        "VE_STOP_BUFFER": 0.003,
+        "VE_MEASURED_MOVE_MULT": 0.85,
+        "VE_TARGET_ATR_MULT": 2.5,
+        "VE_BASE_CONFIDENCE": 0.40,
+        "VE_VOL_PCT_WEIGHT": 0.20,
+        "VE_FIB_WEIGHT": 0.20,
+        "VE_VOL_SCORE_RATE": 0.05,
+        "VE_MAX_VOL_BONUS": 0.15,
+        "VE_C_POINT_TOLERANCE": 0.01,
+        "confidenceCap": 0.95
+      }
+    },
+    "dhma": {
+      "file": "server/services/strategy-engine.ts",
+      "family": "quant-trend",
+      "familyNote": "Uses OBI/microprice not HMA — classification may be revisited",
+      "volumeGate": "none",
+      "regimeGated": "IMPULSE_EXPANSION",
+      "params": {
+        "theta_OBI": 0.3,
+        "epsilon_micro": 0.2,
+        "tau_toxicity": 0.7,
+        "maxSpread": 5,
+        "k_tp": 1.5,
+        "N_flow": 50,
+        "N_burst": 10,
+        "baseConfidence": 0.6,
+        "maxConfidence": 0.95
+      }
+    }
+  },
+
+  "shared_config": {
+    "score_weights": {
+      "file": "server/config/score-weights.config.ts",
+      "tier": 3,
+      "HYBRID": 0.4,
+      "CONFIDENCE": 0.3,
+      "REGIME": 0.2,
+      "DECAY": 0.1
+    },
+    "ranking_weights": {
+      "file": "server/config/ranking-weights.ts",
+      "tier": 2,
+      "formula": "rankingScore = FinalScore * qualityWeight + netReturn * returnWeight - frictionPenalty * frictionWeight + contextBonus",
+      "profiles": {
+        "QUANT": { "qualityWeight": 0.45, "returnWeight": 0.35, "frictionWeight": 0.10, "contextBonusMax": 0.10 },
+        "PATTERN": { "qualityWeight": 0.30, "returnWeight": 0.25, "frictionWeight": 0.20, "contextBonusMax": 0.25 },
+        "HYBRID": { "qualityWeight": 0.35, "returnWeight": 0.30, "frictionWeight": 0.15, "contextBonusMax": 0.20 }
+      },
+      "netReturnNormalization": { "ceiling": 0.05, "floor": 0.002 },
+      "contextBonus": {
+        "PAIR_GLOBAL_AGREE": 0.06,
+        "PAIR_GLOBAL_DISAGREE": -0.04,
+        "BTC_CONFIRMS_GLOBAL": 0.03,
+        "BTC_DISAGREES_GLOBAL": -0.02
+      },
+      "FINAL_SCORE_GAP_OVERRIDE": 0.10
+    },
+    "hybrid_params": {
+      "file": "server/config/system-guards.ts",
+      "tier": 2,
+      "WEIGHTS_QUANT": 0.4,
+      "WEIGHTS_PATTERN": 0.4,
+      "WEIGHTS_PREDICTIVE": 0.2,
+      "DECAY_LAMBDA": 0.15,
+      "DECAY_FLOOR": 0.3,
+      "MIN_SCORE": 0.65,
+      "MAX_CONFLUENCE_WINDOW": 5
+    },
+    "scanner": {
+      "file": "server/config/system-guards.ts",
+      "tier": 2,
+      "BATCH_SIZE": 300,
+      "IDEAL_RATIO": 0.6,
+      "ROTATIONAL_RATIO": 0.4
+    },
+    "ev_gate": {
+      "file": "server/config/system-guards.ts",
+      "tier": 3,
+      "MIN_PWIN": 0.40,
+      "MAX_PWIN": 0.60,
+      "DI_PWIN_FACTOR": 200,
+      "BASE_FEE_SLIPPAGE": 0.006
+    },
+    "vts": {
+      "VTS_NET_EV_FLOOR": -0.01,
+      "VTS_NET_EV_FLOOR_file": "server/services/vts-runner.ts:351",
+      "tier": 1,
+      "cycleIntervalSeconds": 60
+    },
+    "execution_config": {
+      "file": "server/config/execution-config.ts",
+      "tier": 3,
+      "frozen": true,
+      "ADAPTIVE_EXPAND_FACTOR": 1.10,
+      "ADAPTIVE_CONTRACT_FACTOR": 0.90,
+      "TRAILING_STOP_BASE": 0.015,
+      "TRAILING_STOP_ACCELERATION": 0.002,
+      "MAX_POSITION_RISK": 0.02,
+      "TRAILING_STOP_ACTIVATION_PCT": 1.0,
+      "TRAILING_STOP_DISTANCE_PCT": 0.5,
+      "MAX_HOLDING_PERIOD_MS": 86400000,
+      "VERSION": "v1.0.0"
+    },
+    "regime_model": {
+      "tier": 3,
+      "regimes": [
+        "TREND_FRIENDLY_STABLE",
+        "HIGH_VOLATILITY_UNSTABLE",
+        "RANGE_BOUND_STABLE",
+        "IMPULSE_EXPANSION",
+        "STRUCTURAL_TRANSITION"
+      ]
+    }
+  }
+}

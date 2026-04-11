@@ -64,6 +64,8 @@ import { verificationTestProtocol } from './services/verification-test-protocol.
 import { miniBookIntegrityMonitor } from './services/monitoring/mini-book-integrity-monitor.js';
 import os from 'os';
 import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from './config/exchange-defaults.js';
+import { validateFilterChange, logAdjustmentEvent } from './config/adjustment-registry.js';
+import { getBaselineVersion } from './config/authority-baseline.js';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -2362,6 +2364,38 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         manualOverrideEnabled: true,
         lastUpdatedBy: userId
       };
+
+      // Batch 58b: Adjustment Registry validation (log-only mode)
+      if (filterName !== undefined && value !== undefined) {
+        const dbColumnMap: Record<string, string> = {
+          lqMin: 'lq_min', vnMax: 'vn_max', corrMax: 'corr_max',
+          diMin: 'di_min', diMax: 'di_max',
+          minVolume: 'min_volume', minPrice: 'min_price',
+          minLiquidity: 'min_liquidity', minMarketCap: 'min_market_cap',
+          rsiMin: 'rsi_min', rsiMax: 'rsi_max',
+          volatilityMin: 'volatility_min', volatilityMax: 'volatility_max',
+          maxBidAskSpread: 'max_bid_ask_spread',
+          finalScoreMin: 'final_score_min', regimeWeightMin: 'regime_weight_min',
+          volume24hMin: 'volume_24h_min',
+        };
+        const dbColumn = dbColumnMap[filterName];
+        if (dbColumn && typeof updatedFilterValues[filterName] === 'number') {
+          const oldVal = (current as any)[filterName] ?? 0;
+          const validation = validateFilterChange(dbColumn, oldVal, updatedFilterValues[filterName], filterPath);
+          if (validation.violation) {
+            console.warn(`[FiltersV2:${requestId}] Registry validation: ${validation.violation}`);
+          }
+          logAdjustmentEvent({
+            parameter: dbColumn,
+            filterPath,
+            oldValue: oldVal,
+            newValue: updatedFilterValues[filterName],
+            mode: mode === 'paper' ? 'paper' : 'live',
+            approver: 'system',
+            baselineVersion: getBaselineVersion(),
+          });
+        }
+      }
 
       // Batch 19G: Upsert by (mode, filterPath) composite key
       const updated = await storage.upsertScreenerFilters(updatePayload);

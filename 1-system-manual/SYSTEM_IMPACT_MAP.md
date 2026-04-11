@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-04-11 (Batch 57 — Pattern-strategy mismatch fix, pool-split null reasons)
+> **Last Updated**: 2026-04-11 (Batch 58b — Adjustment Registry + Authority Baseline Loader added to Layer 9)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -507,6 +507,22 @@
 - **What**: WebSocket events during scanning: `scan_tick`, `scanner_breakdown`.
 - **Downstream**: Frontend (Filter Insights widget)
 - **Blast Radius**: **LOW** — diagnostic/display only
+
+### 9.10 Adjustment Registry (Batch 58b)
+- **File**: `server/config/adjustment-registry.ts`
+- **What**: Parameter bounds definitions, validation functions, audit logging for all Tier 1/2 adjustable parameters per ADJUSTMENT_FRAMEWORK.md.
+- **Upstream**: Boot Orchestrator (startup validation), SCORE_WEIGHTS, EXECUTION_CONFIG
+- **Downstream**: routes.ts `/api/filters-v2` PUT handler (log-only validation on filter writes)
+- **Mode**: Log-only (warn but don't block). Switch to enforce mode via `setValidationMode('enforce')` after verification.
+- **Blast Radius**: **LOW** — read-only validation, never blocks in log-only mode
+
+### 9.11 Authority Baseline Loader (Batch 58b)
+- **File**: `server/config/authority-baseline.ts`
+- **What**: Loads V1.0 authority baseline from `1-system-manual/authority-baseline-v1.json`. Provides comparison utilities for drift detection.
+- **Upstream**: `authority-baseline-v1.json` (file read at startup)
+- **Downstream**: Boot Orchestrator (loaded during initialize()), drift comparison utilities (available to any consumer)
+- **Read-only**: Never modifies any values. Provides getBaselineFilterValue(), getBaselineStrategyParam(), compareFiltersToBaseline().
+- **Blast Radius**: **LOW** — read-only, non-blocking, graceful degradation if file missing
 
 ---
 
