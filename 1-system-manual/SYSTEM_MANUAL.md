@@ -2,8 +2,9 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Consolidated**: 2026-02-17
+> **Last Updated**: 2026-04-12 (B58 — Adjustment Framework + Authority Baseline added to authority hierarchy)
 > **Source**: Systematic 11-phase repository audit
-> **Companion Documents**: CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves), POST_AUDIT_ROADMAP.md (implementation roadmap)
+> **Companion Documents**: CHANGES_AND_FIXES.md, LEGACY_DEPRECATION_PLAN.md, POST_AUDIT_ROADMAP.md, ADJUSTMENT_FRAMEWORK.md (parameter governance), AUTHORITY_BASELINE.md (V1.0 snapshot)
 > **Status**: Complete (all 11 phases consolidated)
 
 ---
@@ -90,6 +91,9 @@ Quick reference: which components are authoritative, which are contaminated, and
 | **Guardrails V2** | `guardrails-v2.ts` | Risk gate authority. 10 named guardrails + kill switch. |
 | **Pre-Execution Validator** | `pre-execution-validator.ts` | Final gate before trade execution. Two-gate system (post goal-alignment removal). |
 | **FinalScore Kernel** | `signal-orchestrator.ts` | Score authority. Adaptive weighting with volatility adjustment. |
+| **Adjustment Framework** | `ADJUSTMENT_FRAMEWORK.md`, `server/config/adjustment-registry.ts` | Decision constitution for all parameter adjustments. Three-tier governance (Evidence-Adjustable / Supervised / Constitutional). Per-parameter bounds, evidence-gating (Live > Paper > VTS). Log-only validation on filter writes. (Batch 58) |
+| **Authority Baseline V1.0** | `AUTHORITY_BASELINE.md`, `authority-baseline-v1.json`, `server/config/authority-baseline.ts` | Known-good parameter snapshot. 24 screener_filters rows, 150+ strategy constants, shared config. Rollback target if performance degrades. (Batch 58) |
+| **screener_filters DB** | Supabase PostgreSQL | Sole authority for filter thresholds (Batch 19G onward). 24 rows (12 paths x 2 modes). DB-as-authority principle — no hardcoded fallbacks. |
 
 ### Contaminated / Legacy (Do Not Build On)
 | Component | Status | Problem |
@@ -109,7 +113,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 |-----------|--------|-------|
 | **PaperExecutionEngine** | PRIMARY, AUTHORITATIVE | ~2,308 lines. The active development and execution authority. |
 | **TradingEngine (live)** | SECONDARY, DORMANT | ~766 lines. Contains placeholder code, simulated fills (Math.random), goal alignment. Defer rebuild until paper mode is fully stable. Strategic fork pending: refactor to mirror paper core, or delete and rebuild from paper core. |
-| **VTS Runner** | ACTIVE (needs signal fix) | Real price data, real regime, real governance — but simulated scoring inputs. BUG-001 must be fixed before VTS output is trustworthy for calibration. |
+| **VTS Runner** | ACTIVE, AUTHORITATIVE | Real price data, real regime, real governance, real scoring (BUG-001 resolved B15-17). Dual-path (quant + pattern), 60s cycles, pool-split null tracking. Pattern-strategy canonical routing (B57). |
 
 ---
 
