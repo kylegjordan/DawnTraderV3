@@ -1166,6 +1166,14 @@ Total: 21 bugs, 65 risks.
 - **Resolution**: Moved timeout check (`holdDurationMs > MAX_HOLD_MS`) BEFORE the price availability check. Trades older than 24 hours are force-closed using live price if available, or entry price as fallback (0% gross P&L minus friction).
 - **Phase Found**: Post-Batch 18H monitoring (2026-03-11)
 
+### PERF-001: Pattern-Path Volume Confirmation Too Strict — Hard Gate Blocking Reversal Signals — **RESOLVED**
+- **Severity**: ~~MEDIUM~~ **RESOLVED** (Batch 57, commit `ce5378f6`, 2026-04-11)
+- **Location**: `server/services/strategies/support-bounce.ts`, `server/services/strategies/reverse-impulse.ts`
+- **Problem**: All 8 pattern strategies had hard volume gates requiring 1.2-1.3x mean volume per candle. Quant strategies (mean_reversion, range_trading) had no such gate. Pattern pool admits lower-liquidity pairs via relaxed FX5 filters, which then hit the per-candle volume gate. In crypto's spiky volume environment, legitimate reversal setups were blocked by the strict threshold. "Volume Confirmation Failed" was the #1 pattern-path null reason (1,460 pattern vs 304 quant).
+- **Impact**: Valid reversal signals on support_bounce and reverse_impulse blocked despite otherwise qualifying setups. Pattern-path signal generation suppressed disproportionately vs quant path.
+- **Resolution**: Converted hard volume gate to graduated confidence factor for support_bounce and reverse_impulse. Scale: >=2.0x mean volume: bonus, >=1.2x: small bonus, >=0.8x: neutral, <0.8x: penalty. Breakout strategies (volume_expansion, breakout_fade, etc.) retain hard gates where volume confirmation is structurally essential.
+- **Phase Found**: Batch 57 pool-split null reason analysis (2026-04-11)
+
 ### BUG-029: Pattern-Strategy Mismatch — Global Best Pattern Sent to All Strategies — **RESOLVED**
 - **Severity**: ~~HIGH~~ **RESOLVED** (Batch 57, commits `fb15bd34`, `b2822a3f`, 2026-04-10 to 2026-04-11)
 - **Location**: `server/services/vts-runner.ts`, `server/services/signal-orchestrator.ts`, `server/services/strategies/adaptive-flow.ts`
