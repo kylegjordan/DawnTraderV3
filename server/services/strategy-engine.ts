@@ -196,10 +196,10 @@ export class StrategyEngine {
     // A = spike, B = pullback, C = higher low above VWAP, D = breakout
     
     const aPoint = this.findSpike(recent.slice(0, 10));
-    if (!aPoint) { setNullReason('no_pattern'); return null; }
-    
+    if (!aPoint) { setNullReason('abcd_structure_not_found'); return null; }
+
     const bPoint = this.findPullback(recent.slice(5, 15), aPoint);
-    if (!bPoint) { setNullReason('no_pattern'); return null; }
+    if (!bPoint) { setNullReason('abcd_structure_not_found'); return null; }
     
     // ✅ Using user-configured consolidation period
     const cPoint = this.findHigherLow(recent.slice(10, 10 + minConsolidation), bPoint);

@@ -45,7 +45,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 // ============================================================================
 
 const SB_LOOKBACK_CANDLES       = 50;    // Candles to scan for local minima
-const SB_CLUSTER_TOLERANCE_BASE = 0.005; // 0.5% base cluster tolerance
+const SB_CLUSTER_TOLERANCE_BASE = 0.007; // 0.7% base cluster tolerance (B57: widened from 0.5% for broader crypto support zones)
 const SB_MIN_TOUCHES            = 2;     // Minimum touches — Crypto-calibrated (Batch 18H): 3 → 2
 const SB_MAX_DISTANCE           = 0.03;  // Support must be within 3% of price
 const SB_PROXIMITY              = 0.035; // Batch 53: 2.5%→3.5%. Crypto support zones wider. (B41: 1.5%→2.5%)

@@ -2396,6 +2396,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                         'unknown': 'Not Yet Instrumented',
                         'insufficient_data': 'Insufficient Price Data / Candles',
                         'no_pattern': 'No Pattern Detected',
+                        'abcd_structure_not_found': 'ABCD Structure Not Found',
                         'weak_pattern': 'Pattern Too Weak (below strength threshold)',
                         'indicator_filter': 'Indicator Out of Range (RSI/ADX/momentum)',
                         'volume_insufficient': 'Volume Confirmation Failed',
@@ -2411,7 +2412,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                       };
                       const groupDefs: { label: string; keys: string[] }[] = [
                         { label: 'A — Data & Setup', keys: ['insufficient_data', 'unknown'] },
-                        { label: 'B — Pattern Detection', keys: ['no_pattern', 'weak_pattern', 'breakout_fail'] },
+                        { label: 'B — Pattern Detection', keys: ['no_pattern', 'abcd_structure_not_found', 'weak_pattern', 'breakout_fail'] },
                         { label: 'C — Indicator & Volatility', keys: ['indicator_filter', 'volatility_filter'] },
                         { label: 'D — Volume & Price', keys: ['volume_insufficient', 'price_position', 'range_not_found'] },
                         { label: 'E — Risk Guards', keys: ['guard_fail', 'correlation_fail'] },
