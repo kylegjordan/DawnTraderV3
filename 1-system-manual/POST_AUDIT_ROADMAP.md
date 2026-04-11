@@ -2,17 +2,17 @@
 
 > **Author**: Claude Code (System Cartographer & Lead Architect)
 > **Created**: 2026-02-17
-> **Revised**: 2026-04-09 (v5 — Phase 14.7 complete. All Running Issues cleared. Kyle directive: reorder phases — go live before ML. XStocks + Perpetual Futures added post-live. Phase 15+16 combined. ML deferred to post-live.)
-> **Purpose**: Complete roadmap from current state (Phase 11.8B-D1) through live mode trading and publication. Uses formal DawnTrader phase numbering.
-> **Companion Documents**: SYSTEM_MANUAL.md (what the system IS), CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves)
+> **Revised**: 2026-04-12 (v6 — Phase 11 Finalization governance + code complete (B58). Adjustment Framework + Authority Baseline deployed. CI TS issue #39 flagged.)
+> **Purpose**: Complete roadmap from current state through live mode trading and publication. Uses formal DawnTrader phase numbering.
+> **Companion Documents**: SYSTEM_MANUAL.md (what the system IS), CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves), ADJUSTMENT_FRAMEWORK.md (parameter governance), AUTHORITY_BASELINE.md (V1.0 snapshot)
 > **Source Documents Incorporated**: "Dawn Trader Next Steps After MCE Build" (2.14.26), "DT Phase 11.8 Final Steps" (2.6.26), "DT Predictive Learning Calibration" (2.2.26), "The Plan to Create A Plan for Machine Learning" (1.17.26)
 
 ---
 
-## Where We Are (as of 2026-04-09, Batch 54)
+## Where We Are (as of 2026-04-12, Batch 58)
 
-**Last completed phase**: Phase 14.7 (Filter Diagnostics & Strategy Calibration — Batches 48-54)
-**Phase 11 status**: Open — 11.8B-E and 11.8C remain. This is the NEXT phase.
+**Last completed batch**: Batch 58 (Phase 11 Finalization — Adjustment Framework + Authority Baseline)
+**Phase 11 status**: Governance + code deployed (B58). Pending final closure verification across multiple deploy cycles.
 **Phase 12 status**: COMPLETE
 **Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed.
 **Phase 14.1 status**: COMPLETE — VTS wired to real detect functions.
@@ -23,8 +23,8 @@
 **Phase 14.6 status**: COMPLETE — Family-qualified identity, filter diagnostics data truth (Batches 20-39).
 **Phase 14.7 status**: COMPLETE — Strategy calibration, pattern recognizer optimization, hardcoded default removal, ML service (Batches 48-54).
 **Migration status**: COMPLETE — Hetzner + Supabase (Batch 40). Post-migration stabilization (Batches 41-47) complete.
-**Running Issues**: 37 RESOLVED, 1 DEFERRED, 0 OPEN, 0 IN PROGRESS.
-**Next phase**: Phase 11 Finalization (11.8B-E Adjustment Framework + 11.8C Authority Baseline)
+**Running Issues**: 37 RESOLVED, 1 DEFERRED, 1 OPEN (#39 CI TS Check).
+**Next phase**: Phase 15+16 (Rules-Based Predictive Execution + DB/Legacy Cleanup)
 
 ---
 

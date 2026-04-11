@@ -82,9 +82,17 @@
 
 ---
 
+## CI / Build Issues
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 39 | **TypeScript Check CI job failing** — `storage.ts` has pre-existing TS errors (TradingMode type not found, cash/cryptoValue properties, enum narrowing). Also `inside-bar-reversal.ts` comparison warning, `market-events.ts` EXTREME_NOISE enum, `validate-canonical.ts` JSON module resolution. These errors are in the CI environment `tsc` check — Build, Tests, and Docker all pass. The overall CI workflow passes due to `continue-on-error: true` on the TypeScript Check job. | OPEN | Discovered during B58 push. These errors are NOT from B58 files — verified zero TS errors in adjustment-registry.ts, authority-baseline.ts, routes.ts, boot_orchestrator.ts. The TS check may have been failing since B57 (all historical CI runs accessible show TS Check as failure). Needs investigation: either fix storage.ts types or determine when the regression occurred. |
+
+---
+
 ## Summary Counts
 - **RESOLVED:** 37 (#1-5, #6-8, #9-11, #12, #12a-12d, #12f, #13-17, #17a, #18-21, #22-28, #29-38)
 - **DEFERRED:** 1 (#12e — regime-gated strategy dormancy, awaiting evidence)
 - **CRITICAL:** 0
 - **IN PROGRESS:** 0
-- **OPEN:** 0
+- **OPEN:** 1 (#39 — CI TypeScript Check failing)
