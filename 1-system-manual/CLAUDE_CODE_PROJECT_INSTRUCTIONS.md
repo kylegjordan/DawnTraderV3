@@ -868,13 +868,13 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 | (none currently in progress) | | | |
 
 > **Last Updated**: 2026-04-11 (B57)
-> **Last commit (migration branch)**: `dc45e852` (B57 Fix 6: morning_star + volatility_edge A-point volume soft gates extended)
+> **Last commit (migration branch)**: `1aed1bff` (B57 Fix 7: nulls/evals (%) format in pool columns)
 > **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
 > **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS producing signals
 > **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
 > **Active batch**: Batch 57 COMPLETE (Pattern-strategy mismatch fix in VTS + active path, pool-split null reasons, adaptive-flow canonicalization fix)
 > **Next step**: Phase 11.8 Finalization planning. 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data.
-> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 57**: Pattern-strategy mismatch fix — each strategy now receives its matching pattern instead of global best. "No Pattern Detected" null reason dropped from 38% to negligible. Pool-split null reasons added. **Langston is GPT-5.4 permanently.**
+> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 57 COMPLETE (8 fixes)**: Pattern-strategy mismatch fix, pool-split null reasons, volume soft gates for 4 reversal strategies, support_bounce cluster tolerance, abcd_long null reason separation, nulls/evals (%) format in pool columns. **Langston is GPT-5.4 permanently.**
 
 ### Snapshot Log
 | Snapshot | Commit | Description |

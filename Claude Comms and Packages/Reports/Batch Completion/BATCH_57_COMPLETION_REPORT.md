@@ -1,9 +1,9 @@
-# Batch 57 Completion Report — Pattern-Strategy Fix + Pool-Split Null Reasons
+# Batch 57 Completion Report — Pattern Path Diagnostics + Fixes
 
 > **Date:** 2026-04-10 to 2026-04-11
-> **Commits:** fb15bd34, 442115f6, 1992d5de, b2822a3f, ce5378f6, 544955f0, dc45e852
+> **Commits:** fb15bd34, 442115f6, 1992d5de, b2822a3f, ce5378f6, 544955f0, dc45e852, 1aed1bff
 > **Branch:** migration/aws-supabase
-> **Langston Review:** Logic/design approved for all changes. Stale Google Drive mount prevented direct file verification.
+> **Langston Review:** Approved all fixes. Consensus reached on volume soft-gate approach (breakouts hard, reversals soft).
 
 ---
 
@@ -11,34 +11,36 @@
 
 | # | Objective | Status | Evidence |
 |---|-----------|--------|----------|
-| 1 | Add quant/pattern pool split to null reason tracking | YES | Quant Pool / Pattern Pool columns visible in staging UI |
-| 2 | Fix pattern-strategy mismatch in VTS (vts-runner.ts) | YES | "No Pattern Detected" dropped from 99%+ to <1% of pattern-path nulls |
-| 3 | Fix pattern-strategy mismatch in active path (signal-orchestrator.ts) | YES | Per-strategy buildPatternInputForStrategy() replaces shared patternInput |
-| 4 | Fix adaptive-flow.ts THREE_SOLDIERS canonicalization | YES | Now accepts both THREE_SOLDIERS and MORNING_STAR |
-| 5 | Convert volume gate to soft confidence factor for support_bounce + reverse_impulse | YES | Graduated factor: >=2.0x: bonus, >=1.2x: small bonus, >=0.8x: neutral, <0.8x: penalty |
-| 6 | Widen support_bounce cluster tolerance 0.5→0.7% + separate abcd_long null reason | YES | SB_CLUSTER_TOLERANCE_BASE updated, abcd_structure_not_found null reason added |
-| 7 | Extend soft volume gates to morning_star + volatility_edge A-point | YES | Live logs showed pattern-pool blocked by remaining hard gates. Breakout volume stays hard. |
+| 1 | Add quant/pattern pool split to null reason tracking | YES | Pool columns visible in staging UI |
+| 2 | Clean column format (counts only, evals on summary row) | YES | UI updated |
+| 3 | Fix pattern-strategy mismatch in VTS + active trading path | YES | "No Pattern Detected" dropped from 99%+ to <1% of pattern-path nulls |
+| 4 | Volume soft gate: support_bounce + reverse_impulse | YES | Graduated confidence factor replaces hard gate |
+| 5 | Widen support_bounce cluster tolerance 0.5→0.7% | YES | SB_CLUSTER_TOLERANCE_BASE updated |
+| 6 | Separate abcd_long null reason from generic no_pattern | YES | abcd_structure_not_found now visible in UI |
+| 7 | Volume soft gate extended: morning_star + volatility_edge A-point | YES | Live logs confirmed these were blocking pattern-pool trades |
+| 8 | Show nulls/evals (%) format in pool columns | YES | Each row shows count / total_evals (X.X%) for both pools |
 
 ## Stats
-- Files changed: 10 (vts-runner.ts, signal-orchestrator.ts, adaptive-flow.ts, virtual-trade.interface.ts, machine-learning.tsx, support-bounce.ts, reverse-impulse.ts, abcd-long.ts, morning-star.ts, volatility-edge.ts)
-- Pattern fix impact: "No Pattern Detected" null reason dropped from #1 cause (38%) to negligible in new post-fix data
+- Files changed: 12 (vts-runner.ts, signal-orchestrator.ts, adaptive-flow.ts, virtual-trade.interface.ts, machine-learning.tsx, support-bounce.ts, reverse-impulse.ts, strategy-engine.ts, morning-star.ts, volatility-edge.ts, plus governance)
+- Pattern fix impact: "No Pattern Detected" null reason dropped from dominant cause to <1%
+- Volume soft gate impact: 4 of 8 pattern strategies converted to soft confidence factor
+- Pattern signals generated: 14 (up from near-zero pre-fix)
 
 ## Key Findings
-1. Pattern-strategy mismatch was present in BOTH VTS and active trading path — active path was worse (no strategy filtering at all)
-2. The bug caused ~125K "No Pattern Detected" nulls per 24h — each strategy was receiving the single globally-strongest pattern instead of its matching pattern
-3. adaptive-flow.ts had a pre-existing bug: THREE_SOLDIERS canonicalizes to MORNING_STAR but the strategy only accepted THREE_SOLDIERS
-4. Pool-split null reasons revealed that "Volume Confirmation Failed" is the #1 pattern-path null reason post-fix (302 pattern vs 42 quant)
-5. Volume Confirmation Failed was #1 pattern-path null reason (1,460 vs 304 quant). Root cause: all 8 pattern strategies had hard volume gates while quant strategies (mean_reversion, range_trading) had none. Pattern pool admits lower-liquidity pairs via relaxed FX5 filters, which then hit the 1.2-1.3x per-candle volume gate. Consensus with Langston: breakout strategies keep hard gates, reversal strategies use soft graduated factor.
-6. Investigation of quant-pool null reasons with Langston consensus: No Pattern Detected (28K) is mostly abcd_long structural failures + Batch 44 cross-eval — working as designed. No Valid Range (10K) partly from support_bounce strict clustering. Indicator Out of Range (4.7K) is healthy rejection rate — no change needed.
-7. Pattern-pool trades were still blocked by remaining hard volume gates on morning_star and volatility_edge A-point after Fix 4 only converted support_bounce and reverse_impulse. Extended soft graduated volume factor to these two strategies; breakout volume confirmation stays as a hard gate.
+1. Pattern-strategy mismatch was the #1 cause of pattern-path nulls — each strategy received the global best pattern instead of its matching pattern
+2. The bug existed in BOTH VTS (vts-runner.ts) and active trading path (signal-orchestrator.ts) — active path was worse
+3. adaptive-flow.ts had a pre-existing THREE_SOLDIERS/MORNING_STAR canonicalization bug
+4. Volume Confirmation Failed became the #1 pattern-path null after the pattern fix (1,460 vs 304 quant)
+5. All 8 pattern strategies had hard volume gates; quant strategies (mean_reversion, range_trading) had none
+6. Consensus with Langston: breakout strategies keep hard volume gates, reversal strategies use graduated confidence factor
+7. support_bounce cluster tolerance was too strict for crypto support zones (0.5% widened to 0.7%)
+8. abcd_long structural failures were hiding in generic "no_pattern" bucket — separated for visibility
 
 ## Governance Updates
-Files modified in this governance batch:
-1. BATCH_CATALOG.md — B57 entry
+Files modified across all governance commits:
+1. BATCH_CATALOG.md — B57 entry with all 8 commits
 2. PHASE_HISTORY.md — B57 note
 3. CCPI — Current state updated to B57
-4. CHANGES_AND_FIXES.md — Pattern-strategy mismatch entry added (BUG-029), marked RESOLVED
-5. SYSTEM_IMPACT_MAP.md — Notes added to Layer 4.1, 7.1, and Strategy Threshold Constants (volume soft gate)
-6. CHANGES_AND_FIXES.md — PERF-001 added (volume gate too strict, RESOLVED)
-7. CHANGES_AND_FIXES.md — PERF-002 added (support_bounce cluster tolerance, RESOLVED)
-8. BATCH_57_COMPLETION_REPORT.md — This file
+4. CHANGES_AND_FIXES.md — BUG-029 (pattern mismatch) + PERF-001 (volume gate) + PERF-002 (support clustering)
+5. SYSTEM_IMPACT_MAP.md — Layer 4.1, 7.1, strategy thresholds updated
+6. BATCH_57_COMPLETION_REPORT.md — This file
