@@ -999,7 +999,15 @@ export async function initAutonomyScheduler() {
     
     // Start trust audit (run after 12 hour delay) - Phase 16.0
     await schedulerRegistry.startTask('trust_audit', false);
-    
+
+    // B59-fix: These tasks were registered but never started because startAllTasks()
+    // in index.ts runs BEFORE this module is imported. Must be explicitly started here.
+    await schedulerRegistry.startTask('vts_telemetry_aggregation', true);  // Run immediately — 6h interval
+    await schedulerRegistry.startTask('canonical_bridge_sync', false);     // Daily — B59
+    await schedulerRegistry.startTask('predictive_weight_recalibration', false); // Weekly
+    await schedulerRegistry.startTask('cluster_heartbeat', false);
+    await schedulerRegistry.startTask('cluster_rebalance', false);
+
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -1021,6 +1029,9 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Bias mitigation cycle: Every 8 hours');
     console.log('[AutonomyScheduler] - Knowledge sync: Every 2 hours');
     console.log('[AutonomyScheduler] - Trust audit: Every 12 hours');
+    console.log('[AutonomyScheduler] - VTS telemetry aggregation: Every 6 hours (run immediately)');
+    console.log('[AutonomyScheduler] - Canonical bridge sync: Daily');
+    console.log('[AutonomyScheduler] - Predictive weight recalibration: Weekly');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
