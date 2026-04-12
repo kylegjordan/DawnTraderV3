@@ -1520,6 +1520,14 @@ function PredictiveDiagnosticsSection() {
         </Card>
       </div>
 
+      {/* B59: Placeholder data warning — Model Diagnostics and Filter Logic show hardcoded defaults, not real telemetry */}
+      <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 p-3 text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+        <div>
+          <span className="font-medium">Placeholder Data</span> — Model Diagnostics (accuracy, confidence, drift, weight contributions) and Filter Logic values below are default seed values, not computed from real trading telemetry. These will be wired to live pipeline data in a future batch.
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

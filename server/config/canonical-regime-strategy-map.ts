@@ -35,7 +35,7 @@
 
 export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v2.0.0';
 export const CANONICAL_SCHEMA_METADATA = {
-  updatedAt: '2026-03-05T00:00:00Z',
+  updatedAt: '2026-04-12T00:00:00Z',  // B59: Updated from 2026-03-05. Sync script now uses fresh timestamps.
   source: 'VTS',
   canonical: true,
   includesDriftScore: true,

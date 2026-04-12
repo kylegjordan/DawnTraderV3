@@ -65,6 +65,7 @@ function generateBridgeJSON(): string {
     _schema: CANONICAL_SCHEMA_VERSION,
     _metadata: {
       ...CANONICAL_SCHEMA_METADATA,
+      updatedAt: new Date().toISOString(),  // B59: Override hard-coded updatedAt with fresh timestamp
       generatedAt: new Date().toISOString(),
       generator: 'sync-canonical-bridge.ts'
     }

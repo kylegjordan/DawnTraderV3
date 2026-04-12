@@ -145,14 +145,17 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
         
         for (const t of data) {
           const { regime, strategy } = t;
-          const netProfitPercent = Number(t.netProfitPercent ?? t.pnlPercent ?? t.profitPct ?? 0);
+          const netProfitPercent = Number(
+            t.netProfitPercent ?? t.pnlPercent ?? t.profitPct ??
+            (t.netProfit !== undefined ? t.netProfit * 100 : 0)  // B59: netProfit is decimal (0.02 = 2%), convert to percent
+          );
           if (!regime || !strategy) continue;
           
           metrics[regime] = metrics[regime] ?? {};
           metrics[regime][strategy] = metrics[regime][strategy] ?? { wins: 0, total: 0, pnl: 0 };
           metrics[regime][strategy].total++;
           if (netProfitPercent > 0) metrics[regime][strategy].wins++;
-          metrics[regime][strategy].pnl += netProfitPercent * 100;
+          metrics[regime][strategy].pnl += netProfitPercent;  // B59: Removed * 100 — netProfitPercent is already in percent units (Langston review catch)
           totalProcessed++;
         }
       } catch (err) {

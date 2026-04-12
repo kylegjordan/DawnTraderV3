@@ -447,7 +447,7 @@ export class TelemetryAggregatorService {
     hasZScoreData: boolean; // Directive 11.7F-B: Indicates if real Z-score data available
     schema: string; // Directive 11.7F-B: Current schema version
   } {
-    const MIN_SAMPLES = 30; // Minimum pairs needed for reliable drift detection
+    const MIN_SAMPLES = 10; // B59: Lowered from 30. VTS populates Z-score histories slowly; 30 was unreachable. 10 is pragmatic.
     const SCHEMA = 'regime-mapping/v1.4c';
     
     const CANONICAL_SET = new Set([

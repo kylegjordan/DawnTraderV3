@@ -553,6 +553,34 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Daily - Canonical Bridge Sync (B59: Keeps mapping drift metadata current)
+schedulerRegistry.registerTask({
+  name: 'canonical_bridge_sync',
+  description: 'B59: Auto-sync canonical bridge documents to keep mapping drift metadata current',
+  frequency: 'custom',
+  intervalMs: 24 * 60 * 60 * 1000, // Daily
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[B59][SCHEDULER] 🔄 Running canonical bridge sync...');
+
+    try {
+      const { syncCanonicalBridge } = await import('../scripts/sync-canonical-bridge');
+      const result = await syncCanonicalBridge();
+
+      if (result.success) {
+        console.log(`[B59][SCHEDULER] ✅ Canonical bridge sync complete — ${result.filesUpdated} files updated`);
+      } else {
+        console.log(`[B59][SCHEDULER] ⚠️ Canonical bridge sync had errors: ${result.errors?.join(', ')}`);
+      }
+    } catch (error) {
+      console.error('[B59][SCHEDULER] ❌ Canonical bridge sync failed:', error);
+      throw error;
+    }
+  },
+});
+
 // Weekly Sunday 00:30 UTC - Predictive Weight Recalibration (Directive 11.7D)
 schedulerRegistry.registerTask({
   name: 'predictive_weight_recalibration',
