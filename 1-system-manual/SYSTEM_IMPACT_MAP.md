@@ -441,9 +441,10 @@
 
 ### 8.3 Regime Archive (Long-Horizon Memory)
 - **What**: Historical regime × strategy × outcome snapshots. Immutable (checksummed). Does not change anything directly.
-- **Upstream**: VTS trade outcomes per regime/strategy
-- **Downstream**: Future ML training data, drift analysis, rollback checkpoints
+- **Upstream**: VTS trade outcomes per regime/strategy (via VTS Telemetry Aggregator — `vts-telemetry.ts`)
+- **Downstream**: Future ML training data, drift analysis, rollback checkpoints, B60 Evidence Collector
 - **Execution**: Weekly archive (scheduled), manual archive (on-demand)
+- **B59 Fix**: `vts-telemetry.ts:148` field name mismatch fixed (netProfit → netProfitPercent conversion). Pre-existing pnl double-scaling at line 158 also fixed (Langston catch). Archive now receives real VTS win rates and P&L.
 - **Blast Radius**: **LOW** — memory and audit, not action
 
 ### 8.4 Canonical Weights (Bridge Artifact)
@@ -508,7 +509,14 @@
 - **Downstream**: Frontend (Filter Insights widget)
 - **Blast Radius**: **LOW** — diagnostic/display only
 
-### 9.10 Adjustment Registry (Batch 58b)
+### 9.10 Canonical Bridge Sync (Batch 59)
+- **File**: `server/scripts/sync-canonical-bridge.ts` + `server/services/autonomy-scheduler.ts` (daily task)
+- **What**: Regenerates canonical bridge JSON and Markdown files from TypeScript source. **B59**: Added daily auto-sync scheduler task. Fixed ESM compatibility (`require.main === module` → typeof guard). Fixed hard-coded `updatedAt` timestamp — now uses fresh date on every sync.
+- **Upstream**: `canonical-regime-strategy-map.ts` (TypeScript source of truth)
+- **Downstream**: Mapping Drift UI tab (reads bridge JSON metadata), regime-strategy documentation
+- **Blast Radius**: **LOW** — documentation/metadata sync only
+
+### 9.11 Adjustment Registry (Batch 58b, updated B59)
 - **File**: `server/config/adjustment-registry.ts`
 - **What**: Parameter bounds definitions, validation functions, audit logging for all Tier 1/2 adjustable parameters per ADJUSTMENT_FRAMEWORK.md.
 - **Upstream**: Boot Orchestrator (startup validation), SCORE_WEIGHTS, EXECUTION_CONFIG
@@ -516,7 +524,7 @@
 - **Mode**: Log-only (warn but don't block). Switch to enforce mode via `setValidationMode('enforce')` after verification.
 - **Blast Radius**: **LOW** — read-only validation, never blocks in log-only mode
 
-### 9.11 Authority Baseline Loader (Batch 58b)
+### 9.12 Authority Baseline Loader (Batch 58b)
 - **File**: `server/config/authority-baseline.ts`
 - **What**: Loads V1.0 authority baseline from `1-system-manual/authority-baseline-v1.json`. Provides comparison utilities for drift detection.
 - **Upstream**: `authority-baseline-v1.json` (file read at startup)

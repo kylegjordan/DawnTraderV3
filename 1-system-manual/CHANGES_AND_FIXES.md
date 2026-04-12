@@ -1526,3 +1526,39 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - Non-fatal DB column errors (some tables missing columns added in later batches)
 - ML service not running on staging (python3 PATH issue)
 - Sidebar toggle z-index fix needs testing across screen sizes
+
+---
+
+## PHASE 15a FIXES (Batch 59, 2026-04-12)
+
+### FIX-B59-001: Regime Archive Field Name Mismatch
+- **Severity**: HIGH (data correctness)
+- **Location**: `server/core/logging/vts-telemetry.ts:148`
+- **Problem**: Telemetry aggregator looked for `netProfitPercent`/`pnlPercent`/`profitPct` but VTS trades store `netProfit` (decimal). Fell through to 0 — 0% win rate and $0 P&L in all 39 regime archive entries despite 449+ trades being read.
+- **Fix**: Added `netProfit` to fallback chain with `* 100` decimal-to-percent conversion.
+- **Found by**: Claude Code pre-implementation audit (staging UI review)
+
+### FIX-B59-002: Regime Archive PnL Double-Scaling (Langston Catch)
+- **Severity**: HIGH (latent — activated by FIX-B59-001)
+- **Location**: `server/core/logging/vts-telemetry.ts:158`
+- **Problem**: `pnl += netProfitPercent * 100` — double-scaled percent to basis points. Harmless when always 0, 100x inflated once real data flows.
+- **Fix**: `pnl += netProfitPercent` — removed redundant `* 100`.
+- **Found by**: Langston code-level review
+
+### FIX-B59-003: Mapping Drift Stale Sync Timestamp
+- **Severity**: LOW (diagnostic display)
+- **Location**: `canonical-regime-strategy-map.ts:38`, `sync-canonical-bridge.ts:67`
+- **Problem**: Hard-coded `updatedAt: '2026-03-05T00:00:00Z'`, never refreshed. No automatic sync scheduler.
+- **Fix**: Updated metadata, added `updatedAt` override in sync script, added daily `canonical_bridge_sync` scheduler task, MIN_SAMPLES 30→10.
+
+### FIX-B59-004: ESM Compatibility — sync-canonical-bridge.ts
+- **Severity**: MEDIUM (blocked force-sync API + scheduler task)
+- **Location**: `server/scripts/sync-canonical-bridge.ts:201`
+- **Problem**: `require.main === module` throws in ESM. Same pattern as B58 `__dirname` fix.
+- **Fix**: `typeof require/module` guard with try/catch.
+
+### INFRA-B59-001: Predictive Diagnostics Placeholder Data
+- **Severity**: INFORMATIONAL
+- **Location**: `predictive-diagnostics.service.ts`, `analytics.tsx`
+- **Problem**: Model Diagnostics values are hardcoded constructor defaults, never fed real data.
+- **Fix**: Added amber placeholder warning banner. Full wiring deferred to B60.

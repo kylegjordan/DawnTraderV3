@@ -5570,6 +5570,7 @@ Uses the `adaptive_learning` table with columns: strategyId, mode, regime, weigh
 **File**: `server/core/archival/regime-archiver.ts` (~250+ lines)
 **Directive**: 11.7E
 **Status**: Active
+**B59 Fix**: Upstream `vts-telemetry.ts` field name mismatch fixed — archive now receives real VTS win rates and P&L (was all zeros due to `netProfit` field not being read). Pre-existing pnl double-scaling also fixed.
 
 ### Purpose
 

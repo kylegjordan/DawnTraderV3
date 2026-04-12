@@ -153,6 +153,8 @@
 
 | **Batch 58a** | 2026-04-11 | — (governance only, no code commits) | **Phase 11 Finalization — Adjustment Framework (11.8B-E) + Authority Baseline (11.8C).** Created ADJUSTMENT_FRAMEWORK.md (decision constitution: three governance tiers, parameter hierarchy, per-parameter specs with 7 fields, evidence-gating framework with three-mode hierarchy Live>Paper>VTS, safety guarantees). Created AUTHORITY_BASELINE.md (V1.0 known-good snapshot of all adjustable params — 24 screener_filters rows, 150+ strategy constants across 17 strategies, shared config). Created authority-baseline-v1.json (machine-readable baseline). Pre-audit: 26 system components flagged, 150+ params cataloged, DB snapshot captured. Langston consensus on all design decisions (#723-730). | `BATCH_58_SCOPE.md`, `BATCH_58_PRE_AUDIT.md` | — |
 
+| **Batch 59** | 2026-04-12 | `dbd8b3fc`, `d68dd892` | **Phase 15a: Predictive Learning UI Audit & Data Path Fixes.** Fixed Regime Archive 0% win rate (field name mismatch in vts-telemetry.ts — looked for netProfitPercent but VTS writes netProfit as decimal). Fixed pre-existing pnl double-scaling bug (Langston catch). Fixed Mapping Drift stuck at 2026-03-05 (hard-coded timestamp + no auto sync + MIN_SAMPLES 30→10). Added daily canonical_bridge_sync scheduler task. Fixed ESM compatibility for sync-canonical-bridge.ts. Added placeholder data warning banner to Predictive tab. Decision Traceback confirmed as real VTS data. Phase 15 split into B59 (data fixes) + B60 (Policy Engine). Langston + prior CC session code-level reviews. | `BATCH_59_SCOPE.md`, `BATCH_59_PRE_AUDIT.md` | `BATCH_59_COMPLETION_REPORT.md` |
+
 ---
 
 ## Notes

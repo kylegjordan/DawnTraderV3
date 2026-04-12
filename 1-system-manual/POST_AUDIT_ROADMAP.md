@@ -9,10 +9,10 @@
 
 ---
 
-## Where We Are (as of 2026-04-12, Batch 58)
+## Where We Are (as of 2026-04-12, Batch 59)
 
-**Last completed batch**: Batch 58 (Phase 11 Finalization — Adjustment Framework + Authority Baseline)
-**Phase 11 status**: Governance + code deployed (B58). Pending final closure verification across multiple deploy cycles.
+**Last completed batch**: Batch 59 (Phase 15a — Predictive Learning UI Audit & Data Path Fixes)
+**Phase 11 status**: COMPLETE — Governance + code deployed (B58). Phase 11 CLOSED.
 **Phase 12 status**: COMPLETE
 **Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed.
 **Phase 14.1 status**: COMPLETE — VTS wired to real detect functions.
@@ -23,8 +23,9 @@
 **Phase 14.6 status**: COMPLETE — Family-qualified identity, filter diagnostics data truth (Batches 20-39).
 **Phase 14.7 status**: COMPLETE — Strategy calibration, pattern recognizer optimization, hardcoded default removal, ML service (Batches 48-54).
 **Migration status**: COMPLETE — Hetzner + Supabase (Batch 40). Post-migration stabilization (Batches 41-47) complete.
+**Phase 15a status**: DEPLOYED — Predictive learning data path fixes (B59). Regime Archive verification pending next telemetry cycle.
 **Running Issues**: 37 RESOLVED, 1 DEFERRED, 1 OPEN (#39 CI TS Check).
-**Next phase**: Phase 15+16 (Rules-Based Predictive Execution + DB/Legacy Cleanup)
+**Next phase**: Phase 15b (B60 — Rules-Based Predictive Execution / Smart Thermostat), then Phase 16 (DB/Legacy Cleanup)
 
 ---
 
