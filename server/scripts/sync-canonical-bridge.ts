@@ -198,19 +198,22 @@ export async function syncCanonicalBridge(): Promise<{
   }
 }
 
-if (require.main === module) {
-  syncCanonicalBridge()
-    .then(result => {
-      if (result.success) {
-        console.log('✅ Canonical bridge sync complete');
-        console.log('Files updated:', result.filesUpdated);
-      } else {
-        console.error('❌ Sync failed:', result.errors);
+// B59: Guard CLI entry point for ESM compatibility (require.main/module don't exist in esbuild ESM bundles)
+try {
+  if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+    syncCanonicalBridge()
+      .then(result => {
+        if (result.success) {
+          console.log('✅ Canonical bridge sync complete');
+          console.log('Files updated:', result.filesUpdated);
+        } else {
+          console.error('❌ Sync failed:', result.errors);
+          process.exit(1);
+        }
+      })
+      .catch(err => {
+        console.error('❌ Fatal error:', err);
         process.exit(1);
-      }
-    })
-    .catch(err => {
-      console.error('❌ Fatal error:', err);
-      process.exit(1);
-    });
-}
+      });
+  }
+} catch { /* ESM environment — CLI entry point not applicable */ }
