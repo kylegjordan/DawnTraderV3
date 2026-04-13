@@ -430,6 +430,16 @@ export class VTSService extends EventEmitter {
       signalType: t.signal.signalType,
       patternType: t.signal.patternType ?? undefined,
       pnl: t.netProfit || 0,
+      // B59-fix: Include Phase-10 metrics for ML calibration (were dropped, causing constant 0.025 adjustments)
+      finalScore: t.finalScore ?? t.signal.finalScore ?? undefined,
+      hybridScore: t.hybridScore ?? t.signal.hybridScore ?? undefined,
+      predictiveConfidence: t.predictiveConfidence ?? t.signal.predictiveConfidence ?? undefined,
+      regimeWeight: t.regimeWeight ?? t.signal.regimeWeight ?? undefined,
+      decayPenalty: t.decayPenalty ?? t.signal.decayPenalty ?? undefined,
+      expectedEdge: t.expectedEdge ?? t.signal.expectedEdge ?? undefined,
+      frictionCost: t.frictionCost ?? t.signal.frictionCost ?? undefined,
+      regime: t.regime ?? t.signal.regime ?? undefined,
+      strategy: t.strategy ?? t.signal.strategy ?? undefined,
     }));
   }
 

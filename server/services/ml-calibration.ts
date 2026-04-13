@@ -21,6 +21,23 @@ import type { CalibrationReport, CalibrationRecommendation, PatternType } from '
 import { logPredictiveAdjustment, AdjustmentCategory } from '../core/logging/predictive-adjustments';
 
 /**
+ * B59-fix: In-memory cumulative weight tracker.
+ * Tracks the current adjusted weight for each parameter so that subsequent
+ * calibrations build on prior adjustments instead of always using baseline=1.0.
+ * Persists in memory across calibration cycles; resets on PM2 restart (by design —
+ * weights restart from baseline 1.0 on deploy, matching the Authority Baseline).
+ */
+const weightTracker = new Map<string, number>();
+
+function getCurrentWeight(paramKey: string): number {
+  return weightTracker.get(paramKey) ?? 1.0; // Authority Baseline V1.0 default
+}
+
+function setCurrentWeight(paramKey: string, value: number): void {
+  weightTracker.set(paramKey, value);
+}
+
+/**
  * Phase-10 TradeRecord interface - Directive 11.0E.2 (M52: Schema Parity)
  */
 export interface TradeRecord {
@@ -61,6 +78,7 @@ interface Phase10Aggregate {
   totalExpectedEdge: number;
   totalRealizedPnL: number;
   edgeDeltaSum: number; // expectedEdge - realizedPnL
+  regimeCounts: Record<string, number>; // B59-fix: Track dominant regime per pattern
 }
 
 export class MLCalibrationService {
@@ -109,16 +127,17 @@ export class MLCalibrationService {
     for (const t of trades) {
       const pattern = t.patternType || t.strategy || 'UNKNOWN';
       if (!grouped[pattern]) {
-        grouped[pattern] = { 
-          wins: 0, 
-          losses: 0, 
+        grouped[pattern] = {
+          wins: 0,
+          losses: 0,
           expectancy: 0,
           totalFinalScore: 0,
           totalPredictiveConfidence: 0,
           totalRegimeWeight: 0,
           totalExpectedEdge: 0,
           totalRealizedPnL: 0,
-          edgeDeltaSum: 0
+          edgeDeltaSum: 0,
+          regimeCounts: {},
         };
       }
       
@@ -139,6 +158,11 @@ export class MLCalibrationService {
       // Edge delta: how well did expectedEdge predict realizedPnL?
       const edgeDelta = (t.expectedEdge ?? 0) - t.pnl;
       g.edgeDeltaSum += edgeDelta;
+
+      // B59-fix: Track regime frequency for dominant regime detection
+      if (t.regime) {
+        g.regimeCounts[t.regime] = (g.regimeCounts[t.regime] || 0) + 1;
+      }
     }
 
     const recommendations: CalibrationRecommendation[] = [];
@@ -171,6 +195,10 @@ export class MLCalibrationService {
         adjustment = -this.ADJUSTMENT_STEP * performanceMultiplier;
       }
 
+      // B59-fix: Find dominant regime for this pattern (most frequent)
+      const dominantRegime = Object.entries(stats.regimeCounts)
+        .sort(([, a], [, b]) => b - a)[0]?.[0] ?? undefined;
+
       recommendations.push({
         pattern: pattern as PatternType | 'UNKNOWN',
         winRate: parseFloat(winRate.toFixed(1)),
@@ -183,7 +211,8 @@ export class MLCalibrationService {
           avgEdgeDelta: parseFloat(avgEdgeDelta.toFixed(6)),
           performanceScore: parseFloat(performanceScore.toFixed(4)),
           sampleCount: total
-        }
+        },
+        regime: dominantRegime, // B59-fix: Populate regime field
       });
     }
 
@@ -213,17 +242,27 @@ export class MLCalibrationService {
         `[11.0E.2] ML Suggestion: ${rec.suggestion} ${rec.pattern} weight by ${rec.adjustment.toFixed(4)}${phase10Info}`
       );
 
-      // Wire to centralized predictive adjustment logger for unified observability
-      const currentWeight = 1.0; // Default baseline weight
-      const newWeight = rec.suggestion === 'INCREASE' 
-        ? currentWeight + rec.adjustment 
-        : currentWeight - rec.adjustment;
+      // B59-fix: Read actual current weight from cumulative tracker (not hardcoded 1.0)
+      const paramKey = `ml.${rec.pattern}_weight`;
+      const currentWeight = getCurrentWeight(paramKey);
+      const newWeight = rec.suggestion === 'INCREASE'
+        ? currentWeight + rec.adjustment
+        : rec.suggestion === 'DECREASE'
+          ? currentWeight - rec.adjustment
+          : currentWeight; // HOLD — no change
+
+      // B59-fix: Update cumulative tracker so next calibration builds on this value
+      if (rec.suggestion !== 'HOLD') {
+        setCurrentWeight(paramKey, newWeight);
+      }
+
       logPredictiveAdjustment({
         category: 'Weight',
-        parameter: `ml.${rec.pattern}_weight`,
+        parameter: paramKey,
         oldValue: currentWeight,
         newValue: newWeight,
         strategy: rec.pattern,
+        regime: rec.regime, // B59-fix: Pass dominant regime
         reason: `MLCalibration: ${rec.suggestion} by ${rec.adjustment.toFixed(4)}${phase10Info}`
       });
     }

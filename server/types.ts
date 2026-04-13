@@ -187,6 +187,7 @@ export interface CalibrationRecommendation {
   suggestion: 'INCREASE' | 'DECREASE' | 'HOLD';
   adjustment: number;                           // Suggested weight adjustment (+/-0.05)
   phase10Metrics?: Phase10CalibrationMetrics;   // Directive 11.0E.2: Extended metrics
+  regime?: string;                              // B59-fix: Dominant regime for this pattern
 }
 
 /**
