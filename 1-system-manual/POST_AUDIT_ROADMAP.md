@@ -2,6 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer & Lead Architect)
 > **Created**: 2026-02-17
+> **Revised**: 2026-04-14 (v7 — Phase 15b restructured: B60 Smart Thermostat DEFERRED to post-live. New Phase 15b = Regime/DBS/Strategy/Filter Restructure (B61-B65). Locked via three-way consensus 2026-04-14.)
 > **Revised**: 2026-04-12 (v6 — Phase 11 Finalization governance + code complete (B58). Adjustment Framework + Authority Baseline deployed. CI TS issue #39 flagged.)
 > **Purpose**: Complete roadmap from current state through live mode trading and publication. Uses formal DawnTrader phase numbering.
 > **Companion Documents**: SYSTEM_MANUAL.md (what the system IS), CHANGES_AND_FIXES.md (22 bugs, 85 risks), LEGACY_DEPRECATION_PLAN.md (removal waves), ADJUSTMENT_FRAMEWORK.md (parameter governance), AUTHORITY_BASELINE.md (V1.0 snapshot)
@@ -9,14 +10,14 @@
 
 ---
 
-## Where We Are (as of 2026-04-12, Batch 59)
+## Where We Are (as of 2026-04-14, Phase 15b Locked)
 
 **Last completed batch**: Batch 59 (Phase 15a — Predictive Learning UI Audit & Data Path Fixes)
 **Phase 11 status**: COMPLETE — Governance + code deployed (B58). Phase 11 CLOSED.
 **Phase 12 status**: COMPLETE
 **Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed.
 **Phase 14.1 status**: COMPLETE — VTS wired to real detect functions.
-**Phase 14.2 status**: EFFECTIVELY COMPLETE — DBS implemented (Batch 15).
+**Phase 14.2 status**: EFFECTIVELY COMPLETE — DBS implemented (Batch 15). NOTE: DBS discovered to be ORPHANED (computed but never consumed by classifier or strategy gates) — addressed in new Phase 15b.
 **Phase 14.3 status**: DEFERRED INDEFINITELY — replaced by Exchange Expansion (post-live).
 **Phase 14.4 status**: CANCELED
 **Phase 14.5 status**: COMPLETE — Dual-path pattern scanning, merit-based ranking, filter diagnostics (Batches 19-19K).
@@ -24,8 +25,11 @@
 **Phase 14.7 status**: COMPLETE — Strategy calibration, pattern recognizer optimization, hardcoded default removal, ML service (Batches 48-54).
 **Migration status**: COMPLETE — Hetzner + Supabase (Batch 40). Post-migration stabilization (Batches 41-47) complete.
 **Phase 15a status**: DEPLOYED — Predictive learning data path fixes (B59). Regime Archive verification pending next telemetry cycle.
+**Phase 15b OLD (Smart Thermostat) status**: DEFERRED to post-live (renumbered to a post-live phase, e.g. Phase 17.5). Decision: cannot tune adaptive policy on top of a misclassified state model.
+**Phase 15b NEW status**: LOCKED 2026-04-14 — Regime/DBS/Strategy/Filter Restructure. Five sub-phases (A-E), five batches (B61-B65). Three-way consensus reached.
 **Running Issues**: 37 RESOLVED, 1 DEFERRED, 1 OPEN (#39 CI TS Check).
-**Next phase**: Phase 15b (B60 — Rules-Based Predictive Execution / Smart Thermostat), then Phase 16 (DB/Legacy Cleanup)
+**Next phase**: Phase 15b (NEW — Regime/DBS/Strategy/Filter Restructure, B61-B65), then Phase 16 (DB/Legacy Cleanup)
+**Code freeze in effect**: Regime classifier (`server/core/metrics/market-regime.ts`) and DBS module (`server/core/metrics/directional-bias.ts`) are FROZEN during Phase 15b audit, EXCEPT instrumentation needed to collect evidence. No threshold or formula changes permitted until Phase 15b completes.
 
 ---
 
@@ -74,16 +78,44 @@ Steps 1-8 are COMPLETE (Phases 12-14.7, Batches 1-54).
 14. ✅ ~~Directional Bias & Structural Regime~~ — COMPLETE (Phase 14.2)
 15. ✅ ~~Dual-path pattern scanning + strategy calibration~~ — COMPLETE (Phases 14.5-14.7)
 
-**Remaining phases (current order):**
-1. Finalize Phase 11: Adjustment Framework (11.8B-E) + Authority Baseline (11.8C)
-2. Rules-Based Predictive Execution + DB/Legacy Cleanup (Phase 15+16 combined)
-3. Paper Mode Full Audit & Debug (Phase 19)
-4. Production Hardening (Phase 20)
-5. Live Mode Activation — real Kraken orders (Phase 21)
-6. Exchange Expansion: XStocks + Perpetual Futures from Kraken (Phase 21.5, post-live)
-7. Machine Learning Design (Phase 17, post-live)
-8. Machine Learning Implementation (Phase 18, post-live)
-9. Publication & Monitoring (Phase 22)
+**Remaining phases (locked order, 2026-04-14):**
+
+**Pre-Live (in order):**
+1. ✅ Phase 11 Finalization — Adjustment Framework + Authority Baseline (COMPLETE, B58)
+2. ✅ Phase 15a — Predictive Learning UI Audit & Data Path Fixes (COMPLETE, B59)
+3. **Phase 15b NEW — Regime/DBS/Strategy/Filter Restructure (B61-B65) ← NEXT**
+4. Phase 16 — DB/Legacy Cleanup
+5. Phase 19 — Paper Mode Full Audit & Debug
+6. Phase 20 — Production Hardening
+7. Phase 21 — Live Mode Activation (real Kraken orders)
+
+**Pre-Live tracked work items (folded into the phases above):**
+- **Archive minimum-viable capture** — establish regime/DBS/trade archive DB schema + fields. Capture only; defer aggregation/analytics. Folded into Phase 15b instrumentation track and Phase 16 DB schema work.
+- **Paper trading pipeline readiness** — verify the full paper pipeline works under the new math, new filters, and dual-path (quant + pattern) end-to-end. Folded into Phase 19.
+- **Live trading pipeline readiness** — verify the live execution pipeline is sound. May require rebuild from paper if structural divergence is found. Folded into Phase 20 + Phase 21 kickoff.
+
+**Post-Live (in order):**
+8. Phase 21.5 — Exchange Expansion (XStocks + Perpetual Futures from Kraken)
+9. Phase 17 — Machine Learning Design
+10. Phase 18 — Machine Learning Implementation (ML Adaptive Intelligence Layer)
+11. Phase 17.5 (formerly Phase 15b) — Smart Thermostat / Rules-Based Predictive Execution (DEFERRED here from pre-live 2026-04-14)
+12. Phase 22 — Publication & Monitoring
+
+**Post-Live tracked work items (additional backlog, to be slotted into post-live phases):**
+- **Predictive learning full teardown** — remove the cosmetic predictive learning services that B59 labeled as placeholders. Deferred because services are inert, not actively harming.
+- **UI redesign** — Predictive Adjustments tab redesign, Events tab redesign as a news-report-style feed, broader UI cleanup.
+- **Modular filter/strategy architecture** — refactor SQE/RTB/strategy filter layer into pluggable modular architecture so new strategies and filters can be added without touching core orchestration.
+- **`liquidity_trap` strategy redesign** — current implementation flagged for redesign post-live.
+- **`THREE_SOLDIERS` legacy cleanup** — remove residual legacy code paths around the THREE_SOLDIERS pattern after the new dual-path canonicalization is live.
+- **X-stocks / perpetual futures integration** — covered by Phase 21.5 above.
+- **ML Adaptive Intelligence Layer** — covered by Phases 17, 18 above.
+- **VTS always-on** — only adopted if the effort is genuinely simple AFTER Kraken rate-limit research confirms it does not blow the API budget. Conditional, not committed.
+
+**Key 2026-04-14 decisions:**
+- B60 Smart Thermostat removed from pre-live and renumbered post-live. Reason: cannot tune adaptive policy on top of a misclassified state model.
+- All DBS + regime + strategy + filter restructure work consolidated into a single pre-live phase (15b), NOT split across pre-live and post-live.
+- Predictive learning service teardown also deferred to post-live (services are inert, not actively harming).
+- Pre-live and post-live tracked work items above are now part of the locked roadmap.
 
 
 ### Batch Approach
@@ -415,38 +447,137 @@ This is the authoritative "Version 1.0" of the system's learned knowledge, estab
 
 ---
 
-## Phase 15: Rules-Based Predictive Execution (Weeks 18-20)
+## Phase 15a: Predictive Learning UI Audit & Data Path Fixes — ✅ COMPLETE (B59)
 
-**Goal**: Enable the "Smart Thermostat" — allow the predictive learning system to make bounded, rules-based filter adjustments. This is the pre-ML adaptive layer.
+**Status**: DEPLOYED. Predictive learning data path fixes shipped. Regime Archive verification pending next telemetry cycle.
 
-**Analogy from Kyle's 11.8 document**: This is Version 2 (Smart Thermostat) — rules + sensors, no AI. Not Version 1 (static manual settings) and not Version 3 (AI/ML optimization). Version 2 is what you want before going live.
+**Key outcome**: Discovered three broken data paths in predictive learning UI (telemetry aggregator never running, hardcoded weight defaults, dropped Phase-10 metrics in VTS getRecentTrades). Fixed all three. Discovered predictive learning services are largely cosmetic — they record but cannot execute filter changes. Discovered DBS is fully implemented but ORPHANED (computed every MCE cycle but consumed nowhere — not in classifier, not in strategy gates, not in SQE/RTB/TEC). DBS discovery triggered Phase 15b restructure.
 
-### 15.1 Rules-Based Policy Engine
-- Implement the policy execution layer defined by 11.8B-E
-- Policies are deterministic, explainable, reversible
-- Example policy: "In LOW_VOL_CHOP regime, increase minVolume by 15%"
-- Example policy: "When signal density exceeds threshold, raise FinalScore threshold by +0.05"
-- All adjustments logged, auditable, and bounded by 11.8B-E constraints
+---
 
-### 15.2 Predictive Adjustment Execution
-- Wire Predictive Adjustments (currently observational-only) to execute bounded changes
-- Pattern confidence multipliers can now modify behavior (within 11.8B-E bounds)
-- Strategy weighting influenced by recent performance data
-- Hybrid score contributions dampened/boosted based on pattern outcomes
+## Phase 15b: Regime / DBS / Strategy / Filter Restructure (B61-B65) — LOCKED 2026-04-14
 
-### 15.3 Calibration Execution
-- Learning Calibration can now update canonical weights (within 11.8B-E bounds)
-- Recommendations become executable (not just observational)
-- Canonical strategy weights per regime adjusted based on real performance
-- All mutations logged against Authority Baseline for comparison
+**Goal**: Audit and restructure the regime classifier, DBS integration, strategy-regime mapping, and filter layer as a single coherent change. Replaces the old Phase 15b (Smart Thermostat / B60), which has been DEFERRED to post-live.
 
-### 15.4 Regime-Aware Adaptation
-- Structural Regime (Global + Pair-level) drives filter adjustments
-- Directional Bias feeds into strategy selection weighting
-- Friction data feeds into risk parameter adjustments
-- All three dimensions (Structural Regime, Directional Bias, Friction) at both levels feeding into predictive learning for correlation analysis
+**Source documents**:
+- `Claude Comms and Packages/Design Discussions/REGIME_DBS_STRATEGY_AUDIT_SCOPE_2026-04-14.md` (audit scope)
+- `Claude Comms and Packages/Design Discussions/PHASE_15B_REGIME_DBS_STRATEGY_FILTER_RESTRUCTURE_ROADMAP_2026-04-14.md` (roadmap lock)
 
-**Expected outcome**: System adapts to market conditions using rules + statistics. Not static, not ML. The intelligent middle ground.
+**Why this exists**: A B59 investigation into range_trade's 76% loss rate exposed three layered problems:
+1. Regime classifier labels 54.5% of pairs as `RANGE_BOUND_STABLE` based on vol+ADX thresholds with NO directional drift check, while only 8% of pairs actually have neutral momentum. The other ~47% are drift-contaminated false ranges.
+2. DBS exists fully implemented (`server/core/metrics/directional-bias.ts`) but is orphaned — never consumed by classifier, strategy gates, filters, or any decision layer.
+3. 7 of 17 strategies are dormant (zero trades over a 7-day window). 4 are starved by regime scarcity (`IMPULSE_EXPANSION` only 2.4%). 3 have detection logic too strict for current conditions.
+
+These are not independent bugs. They are downstream symptoms of a regime taxonomy that does not match the market state. Patching the classifier without auditing DBS, filters, and strategy mapping would produce more breakage. Hence: structural audit, not patch.
+
+**Decisions locked 2026-04-14 (three-way consensus):**
+1. B60 Smart Thermostat → DEFERRED to post-live (renumbered to Phase 17.5 below). Cannot tune adaptive policy on top of a misclassified state model.
+2. Predictive learning service teardown → DEFERRED to post-live. Services are inert, not actively harming.
+3. DBS + regime + strategy + filter restructure → consolidated into THIS phase. Strategies and filters are NOT split off to post-live — they are downstream of the regime taxonomy and must move with it.
+4. Filters explicitly in scope (entry gates, Net_EV thresholds, RTB rankingScore, TEC exits — wherever DBS could become first-class).
+5. **Regime/DBS code FROZEN during audit** except instrumentation needed to collect evidence. No threshold or formula changes permitted until Phase 15b completes.
+6. B58 Adjustment Framework + Authority Baseline remain in force for any change made during this phase.
+7. Both sessions reset BEFORE B61 begins. Audit will not start in current stretched contexts.
+8. Sub-Phase D core proof is BLOCKING for go-live. Full per-strategy/per-bucket optimization matrix is NON-blocking and may defer post-live.
+
+### Sub-Phase A — DBS Validation (B61) [BLOCKING]
+**Owner**: Claude Code (A.1, A.2, A.4) + Langston (A.3)
+- A.1 Formula review: validate `0.40×slope + 0.35×return + 0.25×EMA_alignment` weights, ATR normalization, edge cases (CC)
+- A.2 Threshold review: validate `UP_STRONG ≥ 0.60`, `UP_MODERATE ≥ 0.30`, `NEUTRAL ±0.10` against actual live distribution. Consider rolling-percentile thresholds. (CC)
+- A.3 Global DBS methodology: validate weighted-median-by-volume approach. Cross-reference industry standards (Crypto Fear & Greed, BTC dominance, aggregate altcoin momentum). (Langston)
+- A.4 Data quality: stability across MCE cycles, latency, edge cases (thin volume, gaps, reporting pauses). (CC)
+- **Deliverable**: DBS Validation Report
+
+### Sub-Phase B — Regime Taxonomy Redesign (B62) [BLOCKING]
+**Owner**: Claude Code (B.1-B.3) + Langston (B.4)
+- B.1 Regime definition review of all 5 current regimes. Identify gaps. (CC)
+- B.2 Classifier redesign with DBS as primary input + 30+ day historical validation. (CC)
+- B.3 Strategy-regime alignment validation against canonical map. (CC)
+- B.4 Missing regimes evaluation: should we add `LOW_VOL_UPTREND`, `LOW_VOL_DOWNTREND`, `CHOPPY_NO_BIAS`, `TRUE_RANGE`? High burden — only add if behaviorally distinct AND decision-relevant. (Langston)
+- **Validation gate**: Must improve downstream trade-selection economics, not just classification accuracy (Langston's recommendation).
+- **Deliverable**: Regime Taxonomy & Classifier Redesign Document
+
+### Sub-Phase C — DBS Integration Inventory (folded into B63) [INVENTORY ONLY]
+**Owner**: Langston (conceptual review) + Claude Code (codebase mapping)
+
+Per Langston's directive: this is design inventory + opportunity mapping, NOT a parallel implementation agenda. Prevents "redesign-by-enthusiasm" sprawl.
+
+- C.1 `biasConfidenceModifier` application (already defined but never imported)
+- C.2 Net_EV gate enhancement — DBS-aware bullish vs bearish thresholds?
+- C.3 Position sizing within risk limits
+- C.4 TP/SL ratios in trending vs neutral markets
+- C.5 Entry filter — reject signals opposing global DBS during extreme conditions?
+- C.6 RTB rankingScore — DBS alignment boost?
+- C.7 TEC early-exit on DBS flip while trade is open
+- C.8 Events feed — show DBS transitions as observable events
+- **Decision gate**: Three-way consensus on which items are pulled into Sub-Phase E for pre-live implementation. Items not selected become post-live work items.
+- **Deliverable**: DBS Integration Priority Matrix
+
+### Sub-Phase D — Strategy Re-Audit Under New Classifier (B63) [Core BLOCKING, full matrix non-blocking]
+**Owner**: Claude Code (data) + Langston (review)
+
+**Core proof (BLOCKING for go-live):**
+- D.1 Does the new classifier materially reduce range_trade false-range bleeding?
+- D.2 Do the 7 currently dormant strategies receive legitimate opportunity flow?
+- D.3 Do downstream trade-selection economics improve, not just classification accuracy?
+
+**Full matrix (NON-BLOCKING — may defer post-live):**
+- D.4 Per-strategy, per-regime, per-DBS-bucket performance matrix
+- D.5 Strategy-level DBS integration recommendations
+
+- **Deliverable**: Strategy Performance Under New Regime Classifier — empirical report
+
+### Sub-Phase E — Restructure Implementation (B64 + B65) [CONDITIONAL on Audit Findings]
+**Owner**: Claude Code (implementation) + Langston (code review)
+
+**Implementation is NOT pre-committed.** B64 and B65 implement ONLY the changes that:
+1. Are supported by the evidence collected in Sub-Phases A, B, C, D, AND
+2. Have received explicit three-way approval as part of the chosen pre-live subset.
+
+If the audit concludes no pre-live changes are warranted, Sub-Phase E may collapse to a no-op (or instrumentation-only) and Phase 15b closes with the audit deliverables alone.
+
+- B64: E.1-E.3 — Classifier + canonical map deployment (IF approved)
+- B65: E.4 — Filter/strategy/DBS integration items in approved pre-live subset (IF approved)
+- E.5 — VTS data migration plan: does old VTS data need replay under new classifier before strategy decisions? (IF E.1-E.3 execute)
+
+### Pre-Audit Lock-In Checklist (11 items, before B61 kickoff)
+
+**Governance & Roadmap Updates (current session, before reset):**
+1. Three-way written approval of Phase 15b roadmap (Kyle + CC + Langston)
+2. POST_AUDIT_ROADMAP.md updated (this section)
+3. CCPI updated with Phase 15b context, freeze policy, B61-B65 batch sequence
+4. BATCH_CATALOG.md updated with B61-B65 placeholders
+5. PHASE_HISTORY.md updated with Phase 15a closure + Phase 15b open
+6. MEMORY.md updated with audit context block
+7. Langston governance updated (SOUL.md, MEMORY.md, BOOTSTRAP.md) with full audit context
+8. Regime/DBS code freeze enacted in writing
+
+**Prerequisite Evidence Check (current session — feasibility check, NOT audit starting early):**
+9. Historical data availability assessed — count of days of VTS trades with `pairDirectionalBias` field, count of days of regime archive entries
+
+**Reset & Kickoff:**
+10. Both sessions reset — Langston transcript archived, new CC session spun up with fresh full context
+11. B61 scope doc drafted in the fresh CC session as the first audit deliverable
+
+### Batch Mapping
+
+| Batch | Sub-Phase | Owner | Blocking |
+|---|---|---|---|
+| **B61** | A — DBS Validation | CC + Langston (A.3) | YES |
+| **B62** | B — Regime Taxonomy Redesign | CC + Langston (B.4) | YES |
+| **B63** | C inventory + D core proof | CC + Langston | Core proof YES, full matrix NO |
+| **B64** | E.1-E.3 — Classifier + map deploy | CC implementation, Langston review | YES (IF approved) |
+| **B65** | E.4 — Filter/DBS integration deploy | CC implementation, Langston review | Selected items YES (IF approved) |
+
+### Out of Scope for Phase 15b (Explicit)
+- B60 Smart Thermostat / Rules-Based Predictive Execution (now Phase 17.5, post-live)
+- Predictive learning service teardown (post-live)
+- Machine learning design or implementation (Phases 17, 18 — post-live)
+- DB/Legacy cleanup (Phase 16 — pre-live but separate)
+- Strategy logic rewrites unless directly required by new regime mapping
+- Any change to the Adjustment Framework or Authority Baseline (constitutional, separate process)
+
+**Expected outcome**: Regime classifier accurately reflects market state with DBS as first-class input. Strategy-regime mapping aligned with new taxonomy. Filter layer DBS-aware where decided. False-range bleeding stopped. Dormant strategies awakened where appropriate. System is ready for paper mode audit (Phase 19) on a sound regime foundation.
 
 ---
 
@@ -594,6 +725,39 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 - Authority Baseline (11.8C) is the floor — ML cannot violate the bounds defined by 11.8B-E
 
 **Expected outcome**: ML system operational, producing real adaptive intelligence. Rules-based system retained as Safe Mode fallback.
+
+---
+
+## Phase 17.5: Smart Thermostat / Rules-Based Predictive Execution (Post-Live, Deferred from Phase 15b)
+
+**Status**: DEFERRED here from pre-live on 2026-04-14. Originally planned as B60 / Phase 15b. Decision: cannot tune adaptive policy on top of a misclassified state model. Now sequenced after the new Phase 15b regime restructure has been validated in live mode and after ML design+implementation (Phases 17, 18).
+
+**Goal**: Enable the "Smart Thermostat" — allow the predictive learning system to make bounded, rules-based filter adjustments. This is the pre-ML adaptive layer (Version 2 from Kyle's 11.8 document — rules + sensors, no AI).
+
+### 17.5.1 Rules-Based Policy Engine
+- Implement the policy execution layer defined by 11.8B-E
+- Policies are deterministic, explainable, reversible
+- Example policy: "In LOW_VOL_CHOP regime, increase minVolume by 15%"
+- All adjustments logged, auditable, and bounded by 11.8B-E constraints
+
+### 17.5.2 Predictive Adjustment Execution
+- Wire Predictive Adjustments (currently observational-only) to execute bounded changes
+- Pattern confidence multipliers can now modify behavior (within 11.8B-E bounds)
+- Strategy weighting influenced by recent performance data
+
+### 17.5.3 Calibration Execution
+- Learning Calibration can now update canonical weights (within 11.8B-E bounds)
+- Recommendations become executable (not just observational)
+- All mutations logged against Authority Baseline for comparison
+
+### 17.5.4 Regime-Aware Adaptation
+- Structural Regime (Global + Pair-level) drives filter adjustments
+- Directional Bias feeds into strategy selection weighting
+- All three dimensions (Structural Regime, Directional Bias, Friction) feeding into predictive learning for correlation analysis
+
+**Why deferred to post-live**: The new Phase 15b restructure changes the regime taxonomy and DBS integration. Smart Thermostat policies would need to be rewritten to match the new state model — so building the thermostat first and then redesigning the model would waste the work. Post-live ordering also lets ML (Phases 17, 18) inform whether a separate rules-based layer is even needed.
+
+**Expected outcome**: System adapts to market conditions using rules + statistics. Not static, not ML. The intelligent middle ground.
 
 ---
 

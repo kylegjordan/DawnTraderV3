@@ -31,13 +31,19 @@
 | 14.7 | Filter Diagnostics & Strategy Calibration | Batches 48-54 (deployed on Hetzner staging) | COMPLETE |
 | 12.2 (completion) | Legacy Code Purge — Walter/CWQI/NGC final removal | Batch 55 | COMPLETE |
 | Post-migration | Stabilization + architecture fixes + execution integrity | Batches 41-47 | COMPLETE |
-| 11.8 | Phase 11 Finalization: Adjustment Framework + Authority Baseline | — | NEXT |
-| 15+16 | Rules-Based Predictive Execution + DB & Legacy Cleanup (combined) | — | PLANNED |
+| 11.8 | Phase 11 Finalization: Adjustment Framework + Authority Baseline | Batch 58 | COMPLETE |
+| 15a | Predictive Learning UI Audit & Data Path Fixes | Batch 59 | COMPLETE (Regime Archive verification pending next telemetry cycle) |
+| 15b (OLD) | ~~Rules-Based Predictive Execution / Smart Thermostat~~ | ~~B60~~ | **DEFERRED post-live → renumbered Phase 17.5** (2026-04-14). Cannot tune adaptive policy on top of a misclassified state model. |
+| **15b (NEW)** | **Regime / DBS / Strategy / Filter Restructure** — DBS validation, regime taxonomy redesign, DBS integration inventory, strategy re-audit, conditional implementation | **B61, B62, B63, B64, B65** | **LOCKED 2026-04-14 — NEXT.** Sub-phases A–E. Code freeze on regime/DBS during audit. Sub-Phase E conditional on audit findings. |
+| 16 | DB & Legacy Cleanup | — | PLANNED |
 | 19 | Paper Mode Full Audit & Debug | — | PLANNED |
 | 20 | Production Hardening | — | PLANNED |
 | 21 | Live Mode Activation (Kraken real orders) | — | PLANNED |
 | 21.5 | Exchange Expansion: XStocks + Perpetual Futures (Kraken) | — | PLANNED (post-live) |
 | 17 | Machine Learning Design | — | PLANNED (post-live) |
+| 18 | Machine Learning Implementation (ML Adaptive Intelligence Layer) | — | PLANNED (post-live) |
+| 17.5 | Smart Thermostat / Rules-Based Predictive Execution (formerly Phase 15b) | — | PLANNED (post-live, deferred from pre-live 2026-04-14) |
+| 22 | Publication & Monitoring | — | PLANNED (post-live) |
 | 18 | Machine Learning Implementation | — | PLANNED (post-live) |
 | 22 | Publication & Monitoring | — | PLANNED |
 

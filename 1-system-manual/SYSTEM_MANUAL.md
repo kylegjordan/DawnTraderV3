@@ -1287,10 +1287,26 @@ DawnTrader contains **four** independent regime classification systems operating
 | Engine #4 uses stubbed metrics | `volume_z = 0` and `correlation = 0.5` are hardcoded — never computed from market data. System was locked before implementation was finished (RISK-019) |
 | Two systems generating signals and adjustments simultaneously | Kyle confirmed this was never the intention. Canonical map and DSS were built to replace MCP/ARE, not coexist with it |
 
-### Current Regime Architecture (Post-Batch 14)
+### Current Regime Architecture (Post-Batch 14, Pre-Phase-15b-Restructure)
 
-**Layer 1 — Pair-Level Regime Authority (Strategy Routing) — ACTIVE:**
+**Layer 1 — Pair-Level Regime Authority (Strategy Routing) — ACTIVE (FROZEN during Phase 15b audit):**
 Market Context Engine (MCE) calls `calculatePairRegime()` from `market-regime.ts` → 5 canonical regime names → `CANONICAL_REGIME_STRATEGY_MAP` lookup → allowed strategies. Both signal orchestrator (active trading) and VTS runner (passive learning) call `MCE.computeContext()`. ~~BUG-006~~ RESOLVED (Batch 13). ~~BUG-002, BUG-003~~ RESOLVED (Batch 14).
+
+> **⚠ Phase 15b audit finding (2026-04-14):** The classifier uses volatility + ADX + momentum thresholds but has **no directional drift check**. It labels 54.5% of pairs as `RANGE_BOUND_STABLE` while only ~8% of pairs actually have truly neutral momentum. The other ~47% are drift-contaminated false ranges, which explains why `range_trade` has a 76% loss rate (77.5% stop-hit) despite having sound R:R 2.31 strategy logic. The classifier is being audited and redesigned in Phase 15b (batches B61–B65). **Code is FROZEN during the audit** — no threshold or formula changes permitted except instrumentation needed to collect evidence. See `POST_AUDIT_ROADMAP.md` Phase 15b body and `Claude Comms and Packages/Scope Files/REGIME_DBS_STRATEGY_AUDIT_SCOPE_2026-04-14.md`.
+
+**Layer 1b — Directional Bias Score (DBS) — IMPLEMENTED BUT ORPHANED (FROZEN during Phase 15b audit):**
+`server/core/metrics/directional-bias.ts` implements the Directional Bias Score: composite formula `0.40×slope + 0.35×return + 0.25×EMA_alignment`, all ATR-normalized. 7 categories (UP_STRONG through DOWN_STRONG). Per-pair DBS plus global DBS (weighted median of per-pair DBS by 24h volume). File comment states: *"Regime answers how the market behaves mechanically. Directional Bias answers: is price going up or down, and how strongly?"*
+
+**As of 2026-04-14, DBS is ORPHANED.** It is:
+- Fully implemented
+- Actively computed every MCE cycle
+- Emitted to logs and VTS trade metadata as `pairDirectionalBias` / `globalDirectionalBias`
+- **NOT consumed by any decision layer** — not by the regime classifier (Layer 1), not by strategy detection gates, not by SQE filters, not by RTB ranking, not by TEC exits, not by the Net_EV gate
+- `biasConfidenceModifier` is defined in `directional-bias.types.ts` (aligned 1.05–1.15×, opposing 0.70–0.85×, neutral 1.0×) but **never imported anywhere**
+
+**This orphan state is the governance failure that Phase 15b exists to correct.** DBS existed long before anyone noticed it was unwired, because no governance doc surfaced its status as unconsumed. Phase 15b validates DBS (formula, thresholds, global methodology, data quality) and determines optimal integration into the regime classifier + filter layer. Simulation using DBS in the classifier produces `TREND_FRIENDLY_STABLE` 19.3% → 55.7%, `RANGE_BOUND_STABLE` 54.5% → 3.4%.
+
+**Rule going forward:** any computed metric must have an explicit consumer documented in this manual and in `SYSTEM_IMPACT_MAP.md`. Metrics written but never read are governance failures. Reviews must check for burial.
 
 **Layer 2 — Z-Score Normalized Regime (ML Advisory) — ACTIVE:**
 `getNormalizedRegime()` from `market-regime.ts`. Advisory only. Preserved for Phase 12 ML retraining. Not used for routing. VTS uses MCE's `raw` output for Z-score normalization.

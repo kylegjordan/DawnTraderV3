@@ -1,7 +1,11 @@
 # DawnTrader V3 — Running Issues List
 
-> **Last Updated:** 2026-04-09 (Batch 54 session — Pattern recognizer relaxations, DI 12→10, ai-analyst removed, hardcoded defaults removed, ML service installed)
+> **Last Updated:** 2026-04-14 (Phase 15b transition — governance cleanup, folder reorg, roadmap lock)
 > **Status Key:** OPEN = not started, IN PROGRESS = work begun but not finalized, RESOLVED = done, DEFERRED = intentionally postponed
+>
+> **Location note:** This file was relocated from `Reports/RUNNING_ISSUES.md` to `1-system-manual/RUNNING_ISSUES.md` on 2026-04-14 as part of the folder reorganization. The old `Reports/` folder was renamed to `Archived Reports - Pre-Phase 12 Governance Implementation/`. `RUNNING_ISSUES.md` is an active tracker, not archival, so it now lives alongside `CHANGES_AND_FIXES.md` in `1-system-manual/`.
+>
+> **Active open issue:** #39 (CI TypeScript Check failing — pre-existing storage.ts errors). Non-blocking for Phase 15b audit work but must be fixed before B65 deploy. All other issues #1–#38 are RESOLVED or DEFERRED.
 
 ---
 

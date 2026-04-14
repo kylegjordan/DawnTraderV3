@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-04-11 (Batch 58b — Adjustment Registry + Authority Baseline Loader added to Layer 9)
+> **Last Updated**: 2026-04-14 (Phase 15b lock — DBS orphan status surfaced in Layer 5, regime/DBS code freeze noted)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -260,7 +260,7 @@
 
 ## Layer 5: Regime Classification
 
-### 5.1 calculatePairRegime() — CANONICAL (ACTIVE)
+### 5.1 calculatePairRegime() — CANONICAL (ACTIVE, CODE FROZEN during Phase 15b audit)
 - **File**: `server/core/metrics/market-regime.ts`
 - **What**: Canonical pair-level regime classification. 5 regimes (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION). Uses volatility, momentum, DX (raw, not smoothed ADX). DX thresholds recalibrated for crypto in HF7 (25 to 45/50/55/60).
 - **Upstream**: OHLC price data (60-min candles from both VTS and orchestrator — aligned in HF8)
@@ -268,6 +268,26 @@
 - **Execution**: Synchronous — called per pair via MCE
 - **Blast Radius**: **HIGH** — regime determines strategy selection
 - **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13). DX thresholds recalibrated for crypto in HF7 (`64014bd2`).
+- **⚠ Phase 15b audit finding (2026-04-14):** The classifier uses vol + ADX + momentum thresholds but has **no directional drift check**. Result: 54.5% of pairs labeled `RANGE_BOUND_STABLE` while only ~8% have truly neutral momentum — the other 47% are drift-contaminated false ranges, bleeding `range_trade` (76% loss rate). The classifier is being audited and redesigned in Phase 15b (B61–B65). **Code is FROZEN during the audit** — no threshold/formula changes except instrumentation for evidence collection.
+
+### 5.1b calculateDBS() / getPairDirectionalBias() / getGlobalDirectionalBias() — ORPHAN (CODE FROZEN during Phase 15b audit)
+- **File**: `server/core/metrics/directional-bias.ts`, `server/types/directional-bias.types.ts`
+- **What**: Directional Bias Score (DBS) — composite formula `0.40×slope + 0.35×return + 0.25×EMA_alignment`, ATR-normalized. 7 categories (UP_STRONG through DOWN_STRONG). Per-pair DBS plus global DBS (weighted median of pair DBS by 24h volume). `biasConfidenceModifier` defined in types file (aligned 1.05–1.15×, opposing 0.70–0.85×, neutral 1.0×).
+- **Upstream**: OHLC candles (60-min), ATR (from MCE), EMA chain (from MCE)
+- **Downstream**: **⚠ NONE. Metric is ORPHANED.** Computed every MCE cycle, emitted to logs and VTS trade metadata as `pairDirectionalBias` / `globalDirectionalBias`, but **NOT consumed by:**
+   - Regime classifier (`calculatePairRegime`) — 5.1
+   - Strategy detection gates (`StrategyEngine`)
+   - SQE filters
+   - RTB ranking
+   - TEC trade execution / early exits
+   - Net_EV gate
+   - `biasConfidenceModifier` is defined but **never imported anywhere**
+- **Execution**: Synchronous — called per pair per MCE cycle (60s)
+- **Blast Radius**: **CURRENTLY ZERO** (orphaned). **POTENTIALLY HIGH** — once wired, touches regime classification, strategy selection, filter layer, entry gates, exit triggers.
+- **Status**: **ORPHAN METRIC.** Fully implemented, actively computed, logged to VTS telemetry, but never consumed by any decision layer. Discovered 2026-04-14 during `range_trade` root-cause investigation. Phase 15b exists to audit DBS (formula, thresholds, global methodology, data quality) and determine optimal integration into regime classification + filter layer.
+- **⚠ Governance framing:** This is the canonical example of a **governance failure via burial** — a fully implemented asset that no governance doc surfaced and no review caught as being unconsumed. Every future review must check whether computed metrics have consumers. Fields that are written but never read are governance-failure candidates.
+- **Code freeze:** FROZEN during Phase 15b audit. No formula, weight, or threshold changes. Instrumentation-only exception.
+- **Simulation evidence (2026-04-14):** DBS-based classifier redesign produces `TREND_FRIENDLY_STABLE` 19.3% → 55.7%, `RANGE_BOUND_STABLE` 54.5% → 3.4%. Live DBS distribution: 55.7% of pairs UP_MODERATE or stronger, only 4.5% NEUTRAL. See `Claude Comms and Packages/Scope Files/REGIME_DBS_STRATEGY_AUDIT_SCOPE_2026-04-14.md`.
 
 ### ~~5.2 DSS~~ — **DELETED** (Batch 17, HF9 `f9fa56c6`)
 - **File**: ~~`server/services/dynamic-strategy-selector.ts`~~ **FILE DELETED**

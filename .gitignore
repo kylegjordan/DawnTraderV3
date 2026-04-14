@@ -67,3 +67,6 @@ docs/backup/
 # ---- OS / Misc ----
 Thumbs.db
 desktop.ini
+
+# Langston infrastructure credentials — never commit
+Claude Comms and Packages/Langston/LANGSTON_SETUP_REFERENCE.md

@@ -3,7 +3,7 @@
 > **Purpose**: Persistent context for every Claude Code session working on DawnTrader.
 > **Location**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`
 > **Usage**: Read this file at the start of every new Claude Code session. It provides the identity, context, and operating procedures you need to continue work seamlessly.
-> **Last Updated**: 2026-04-12 (B59 — Phase 15a: Predictive Learning UI Audit & Data Path Fixes. Regime Archive field mapping fix, Mapping Drift sync fix + auto scheduler, Predictive tab placeholder labeling, ESM compatibility fix. Phase 15 split into B59 data fixes + B60 Policy Engine.)
+> **Last Updated**: 2026-04-14 (Phase 15b lock + folder reorganization + governance transition. B59 closed. B60 Smart Thermostat DEFERRED post-live → Phase 17.5. New Phase 15b = Regime/DBS/Strategy/Filter Restructure, batches B61–B65. Code freeze on regime/DBS during audit. Folder reorg: canonical CCP consolidated to single location inside DawnTraderV3, Reports → Archived Reports - Pre-Phase 12 Governance Implementation, RUNNING_ISSUES relocated to 1-system-manual/. New `CLAUDE.md` at repo root auto-loads stable project instructions. See POST_AUDIT_ROADMAP.md for Phase 15b body.)
 
 ---
 
@@ -867,14 +867,15 @@ See `1-system-manual/PHASE_HISTORY.md` for phase-to-batch mapping and chronology
 |-----------|-------|-------|--------|
 | (none currently in progress) | | | |
 
-> **Last Updated**: 2026-04-11 (B57)
-> **Last commit (migration branch)**: `1aed1bff` (B57 Fix 7: nulls/evals (%) format in pool columns)
-> **Last commit (dawntrader-v4, frozen)**: `892d7f24` (Batch 39)
-> **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, FX5 scanner active, VTS producing signals
-> **Database**: Supabase PostgreSQL 17.6 (Frankfurt) — full schema and data migrated from Neon
-> **Active batch**: Batch 57 COMPLETE (Pattern-strategy mismatch fix in VTS + active path, pool-split null reasons, adaptive-flow canonicalization fix)
-> **Next step**: Phase 11.8 Finalization planning. 5 regime-map decisions deferred (adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma) — need trade outcome data.
-> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on migration/aws-supabase branch, deployed to Hetzner staging. **Batch 57 COMPLETE (8 fixes)**: Pattern-strategy mismatch fix, pool-split null reasons, volume soft gates for 4 reversal strategies, support_bounce cluster tolerance, abcd_long null reason separation, nulls/evals (%) format in pool columns. **Langston is GPT-5.4 permanently.**
+> **Last Updated**: 2026-04-14 (Phase 15b lock + governance transition)
+> **Last commit (migration branch)**: `49347cd6` (B58 Governance — Phase 11 Finalization System Manual update) + uncommitted B59 code changes + uncommitted Phase 15b governance transition changes (this session)
+> **Staging server**: 188.245.193.8 (Hetzner, Falkenstein) — running, B59 deployed, HTTP 200
+> **Database**: Supabase PostgreSQL 17.6 (Frankfurt)
+> **Current phase**: **Phase 15b — Regime / DBS / Strategy / Filter Restructure. LOCKED 2026-04-14.** Sub-phases A–E, batches B61–B65. Old B60 Smart Thermostat DEFERRED post-live as Phase 17.5.
+> **Current batch**: **Next = B61 (Sub-Phase A, DBS Validation).** Not yet started. Begins in a fresh CC session after governance transition + Langston reset.
+> **Code freeze in effect**: `server/core/metrics/market-regime.ts` and `server/core/metrics/directional-bias.ts` are FROZEN during Phase 15b. Instrumentation-only exception.
+> **Next step**: Apply Langston BOOTSTRAP + MEMORY updates, reset both sessions, fresh CC session drafts BATCH_61_SCOPE.md. Before kickoff: assess historical data availability (days of VTS trades with `pairDirectionalBias`, days of regime archive entries).
+> **Note**: **POST-REPLIT WORKFLOW ACTIVE.** Replit frozen since 2026-03-30. All work on `migration/aws-supabase` branch. **Langston is GPT-5.4 permanently.** **Stable project instructions now live in `CLAUDE.md` at the repo root** — auto-loaded every CC session. This CCPI file is the long-form canonical reference; `CLAUDE.md` is the always-in-context summary.
 
 ### Snapshot Log
 | Snapshot | Commit | Description |
