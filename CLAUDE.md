@@ -137,33 +137,44 @@
 
 **Reliable multi-line pattern (use this for anything over 3 lines):**
 
-Write the message body to a local temp file first, then use `cat` substitution in the ssh command. This preserves newlines literally and avoids shell escape hell:
+Write the message body to a local temp file, **scp it to the remote server**, then assign it to a variable on the remote side. This preserves newlines and — critically — does NOT re-expand any `$(...)`, backticks, or `$VAR` literals that happen to be inside the message body (which review documents, code snippets, and shell examples all contain).
 
 ```bash
-# Step 0 — Write the message body to a temp file locally (preserves newlines):
+# Step 0 — Write the message body to a local temp file with a quoted heredoc.
+#          The quoted 'BODY_EOF' prevents local shell expansion of $(...) etc.
 cat > /tmp/cc_msg.txt <<'BODY_EOF'
-**CLAUDE CODE SPEAKING:** Short summary line.
+**CLAUDE CODE SPEAKING:** Body can contain literal $(shell), `backticks`, and $VAR references.
 
 ## Section header
 
-Body paragraph.
-
-**Sub-heading:**
 - Bullet one
 - Bullet two
-- Bullet three
-
-Closing line.
 BODY_EOF
 
-# Step 1 — Telegram (so Kyle sees it):
-ssh root@204.168.141.77 "openclaw message send --channel telegram --account ccdt-relay --target '-1003575211453' --thread-id 21 --message \"$(cat /tmp/cc_msg.txt)\""
+# Step 0.5 — Ship the file to the remote server
+scp /tmp/cc_msg.txt root@204.168.141.77:/tmp/cc_msg.txt
 
-# Step 2 — Brain delivery (so Langston receives and can respond):
-ssh root@204.168.141.77 "openclaw agent --deliver --session-id <UUID> --message \"$(cat /tmp/cc_msg.txt)\""
+# Step 1 — Telegram send (Kyle sees it in the group)
+ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "$MSG"'
+
+# Step 2 — Brain delivery (Langston receives and can respond)
+ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw agent --deliver --session-id <UUID> --message "$MSG"'
 ```
 
-The `<<'BODY_EOF'` heredoc with quoted delimiter prevents local shell expansion. The `"$(cat ...)"` interpolation expands to the literal file contents including newlines when the SSH command is built. Both steps reference the same temp file so the message is consistent.
+**Why this works — the double-expansion trap and how to avoid it:**
+1. **Local heredoc with quoted delimiter** `<<'BODY_EOF'` prevents the local shell from expanding anything inside the heredoc body. Literal `$(...)` stays literal.
+2. **Outer single quotes around the SSH argument** `ssh root@... '...'` prevent the local shell from expanding the SSH command string. The entire `MSG=$(cat /tmp/cc_msg.txt); openclaw ... --message "$MSG"` is passed to the remote shell as raw text.
+3. **Remote `MSG=$(cat /tmp/cc_msg.txt)`** reads the file ONCE on the remote side. Bash assignment stores the contents as a raw string without re-scanning for expansions.
+4. **Remote `"$MSG"`** expands the variable. Double-quoted variable expansion substitutes the stored string *without* re-running command substitution on whatever is inside it. Literal `$(...)`, backticks, and `$VAR` in the file contents come out as themselves.
+
+**The trap the OLD pattern fell into** (and what NOT to do):
+```bash
+# BROKEN — do NOT use this pattern for bodies containing shell metacharacters:
+ssh root@204.168.141.77 "openclaw message send ... --message \"$(cat /tmp/cc_msg.txt)\""
+```
+The `"$(cat /tmp/cc_msg.txt)"` runs on the LOCAL shell during SSH command construction, interpolating the file contents directly into the SSH command string. If the file contained `$(foo)`, it was then re-expanded a SECOND time by the remote shell when the SSH command executed. Double expansion breaks on any unbalanced quote, undefined variable, or shell special character. This is the pattern the first version of this doc had; it's now obsolete.
+
+**Short messages (under 3 lines) — the inline pattern still works:**
 
 **Short messages (under 3 lines) — the inline pattern still works:**
 
