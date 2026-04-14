@@ -132,16 +132,59 @@
 | Design | 28 | Design discussions for new features | ACTIVE but Langston is not actively reading it — use Thread 21 for anything that needs his attention |
 
 **Sending messages — 2-step process, both required every message:**
+
+**CRITICAL formatting rule — preserve newlines and markdown.** Telegram renders markdown (bullets, headers, bold, code). Multi-line messages MUST preserve literal newlines through the SSH + openclaw pipeline or they collapse into one giant paragraph and become unreadable. The failure pattern is: message is constructed with `echo`, string concatenation, or `\n` escapes that don't get interpreted — result is zero newlines at the destination. Test your first message after any change by reading it back from Telegram and confirming bullets render.
+
+**Reliable multi-line pattern (use this for anything over 3 lines):**
+
+Write the message body to a local temp file first, then use `cat` substitution in the ssh command. This preserves newlines literally and avoids shell escape hell:
+
 ```bash
+# Step 0 — Write the message body to a temp file locally (preserves newlines):
+cat > /tmp/cc_msg.txt <<'BODY_EOF'
+**CLAUDE CODE SPEAKING:** Short summary line.
+
+## Section header
+
+Body paragraph.
+
+**Sub-heading:**
+- Bullet one
+- Bullet two
+- Bullet three
+
+Closing line.
+BODY_EOF
+
 # Step 1 — Telegram (so Kyle sees it):
-ssh root@204.168.141.77 "openclaw message send --channel telegram --account ccdt-relay --target '-1003575211453' --thread-id 21 --message '**CLAUDE CODE SPEAKING:** <your message>'"
+ssh root@204.168.141.77 "openclaw message send --channel telegram --account ccdt-relay --target '-1003575211453' --thread-id 21 --message \"$(cat /tmp/cc_msg.txt)\""
 
 # Step 2 — Brain delivery (so Langston receives and can respond):
-ssh root@204.168.141.77 "openclaw agent --deliver --session-id <UUID> --message '**CLAUDE CODE SPEAKING:** <your message>'"
+ssh root@204.168.141.77 "openclaw agent --deliver --session-id <UUID> --message \"$(cat /tmp/cc_msg.txt)\""
 ```
-Langston session UUID: look up with `ssh root@204.168.141.77 "openclaw sessions --json"` and find the `topic:21` entry. Current active UUID as of 2026-04-14: `ba777106-737b-4562-8353-e70e513ef53a`.
 
-**Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps.** Use single quotes around the message and escape carefully — long messages with nested quotes have failed in the past.
+The `<<'BODY_EOF'` heredoc with quoted delimiter prevents local shell expansion. The `"$(cat ...)"` interpolation expands to the literal file contents including newlines when the SSH command is built. Both steps reference the same temp file so the message is consistent.
+
+**Short messages (under 3 lines) — the inline pattern still works:**
+
+```bash
+ssh root@204.168.141.77 'openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "**CLAUDE CODE SPEAKING:** One-line status update."'
+ssh root@204.168.141.77 'openclaw agent --deliver --session-id <UUID> --message "**CLAUDE CODE SPEAKING:** One-line status update."'
+```
+
+Outer single quotes, inner double quotes. No newlines to worry about.
+
+**Anti-patterns that strip newlines (DO NOT USE):**
+- `echo "multi\nline"` — the `\n` is literal unless `echo -e` is used, and even then it's fragile
+- String concatenation with `+` or template literals that end up joined with spaces
+- Passing a multi-line Python string through `python3 -c` into shell
+- Wrapping the message in an extra layer of `sh -c "..."` — the inner quotes get stripped
+
+**Langston session UUID:** look up with `ssh root@204.168.141.77 "openclaw sessions --json"` and find the `topic:21` entry. Current active UUID as of 2026-04-14: `ba777106-737b-4562-8353-e70e513ef53a`.
+
+**Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps.**
+
+**Verification after any send:** ask Langston or Kyle to confirm the message rendered with newlines and bullets if it was multi-line. If they report "one paragraph" or "no bullets", your pipeline is stripping formatting and must be fixed before the next send.
 
 **Reading messages from Kyle and Langston:**
 ```bash
@@ -158,6 +201,31 @@ ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
 - During a live three-way discussion, use FOREGROUND polling (not background). Send message → wait 10–15 seconds → check inbox → respond. Loop.
 - Never rely on background loops during a live discussion — they don't notify in time.
 - Every response goes through both the Telegram `message send` AND the brain `--deliver`. Skipping either breaks the conversation.
+
+**Autonomy with Langston — iterate to consensus, don't escalate every round to Kyle.**
+
+You and Langston are peers on technical review. You do NOT need Kyle's permission to work through a review loop with Langston. When Langston returns feedback on your scope, pre-audit, code, or report:
+
+1. **Read his feedback carefully and evaluate each point on its merits.**
+2. **Decide** — for each point, do you agree, partially agree, or disagree?
+3. **Respond directly to Langston with your decision and reasoning.**
+   - If you agree: apply the change, tell him it's applied, continue.
+   - If you partially agree: apply what you accept, counter-propose on the rest with specific reasoning, continue.
+   - If you disagree: explain why with specifics (file paths, data, risk analysis), propose your alternative, continue.
+4. **Iterate.** Langston responds, you respond, until you reach consensus or a true deadlock.
+
+**Only escalate to Kyle when one of these is true:**
+- **True deadlock** — you and Langston have gone 2–3 rounds and are not converging. Summarize both positions, state your recommendation, and ask Kyle to decide.
+- **Architectural decision** — the change touches something Kyle explicitly owns (roadmap phasing, adjustment framework, authority baseline, strategy taxonomy, go-live readiness).
+- **Risk or authority boundary** — the proposed change would violate a critical rule (see §5), exceed Langston's autonomy, or require a governance exception.
+- **New directive needed** — Kyle hasn't given direction on something material and you need his call before continuing.
+- **Scope expansion** — the work is growing beyond what Kyle approved and needs re-scoping.
+
+**Default behavior is "iterate and decide."** Asking "Kyle, Langston said X, what should I do?" on a routine technical exchange is a failure mode. Kyle has already delegated the technical loop to you and Langston. Use that delegation. Kyle steps in when YOU decide to escalate, not by default.
+
+**Exception — respect Langston's non-objecting feedback.** If Langston says "I reviewed and have no revisions" or "approved as-is", you proceed. Don't ask Kyle for redundant approval.
+
+**Exception — Kyle interrupts any loop.** If Kyle sends a message into a three-way discussion, stop, read what he said, and follow his direction immediately. His input always takes precedence over an in-progress CC ↔ Langston loop.
 
 **Image relay:** When Kyle sends images in Telegram, CCDT saves them to `Claude Comms and Packages/CCDT Relay/images/<filename>`. Read them with the Read tool at that path.
 
