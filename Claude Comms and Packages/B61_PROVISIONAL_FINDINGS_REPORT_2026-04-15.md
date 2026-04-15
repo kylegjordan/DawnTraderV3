@@ -25,6 +25,8 @@ This is a mid-batch synthesis of what we've learned so far in the DBS (Direction
 
 The DBS formula is mechanically sound (score reconstructs exactly from the three components, no hidden math bugs). The formula has three known imperfections — slope and EMA components overlap more than their weights suggest, ATR normalization is borderline failing on high-volatility pairs, and an internal clamp on the slope component means heavy slope-weighting paradoxically collapses the extreme categories — but none of these block B62 from using DBS as a classifier input. The big finding isn't about DBS itself; it's about what the current regime classifier is doing with the signal it should be using. **72.59% of pairs labeled RANGE_BOUND_STABLE by the current vol+ADX+momentum classifier have non-NEUTRAL DBS — they have measurable directional bias the classifier is ignoring. 54% of strongly directional pair-cycles are being routed to range strategies because the classifier mislabels them as range-bound. IMPULSE_EXPANSION — the regime that wakes up four trend strategies — is empirically 0.12% of cycles, which means those four strategies are starving. The case for DBS-integrated classifier redesign in B62 is stronger than B59 suggested, not weaker.**
 
+> **📦 Boxed headline metric.** Of the ~3,864 strong-DBS pair-cycles observed across the 58-pair universe in a 12-hour window, **only 7.35% actually reached trend-permissive regimes** (TREND_FRIENDLY_STABLE or IMPULSE_EXPANSION). The remaining 92.65% were routed away from trend strategies by the current classifier — 54.48% to RANGE_BOUND_STABLE, 38.17% to HIGH_VOLATILITY_UNSTABLE or STRUCTURAL_TRANSITION. **B62's explicit success metric should be "raise 7.35% to >X%"** where X is chosen based on the replay analysis in §7.6. This single number is the cleanest expression of the size of the opportunity gap the audit is measuring.
+
 ---
 
 ## 2. Background context for the outside reader
@@ -76,6 +78,10 @@ B61 produces 8 deliverables, split across 4 sub-analyses run in two passes each:
 - **A.4 Data Quality** — is DBS stable cycle-to-cycle, does it respond appropriately to shocks, are the components individually sane? Provisional complete (sanity portion). Final deferred to after mature window + shock-injection test.
 
 Finals are gated behind a maturity test (2-of-3 conditions on the forward cycle-sampled window, scope §3) that Langston confirms in writing before any Final pass runs.
+
+### 2.5a A note on the A.3 ownership transfer
+
+A.3 ownership transferred from Langston to Claude Code by Kyle directive after a status check found no A.3 deliverable file yet committed to disk. A.3 (Global DBS Methodology) is now owned by CC and will be delivered in the next session alongside A.0 Baseline.
 
 ### 2.6 A note on the data-source reroute
 Scope §4 assumed A.1 Provisional and A.4 Provisional would run on the 15-day VTS trade window, which was expected to carry DBS component breakdowns alongside the trade records. **That assumption was wrong**: VTS trade records carry only the DBS category string (`'UP_MODERATE'`, etc.), no numeric score, no slope/return/EMA breakdown. The analyses were rerouted to the cycle-sampled MCE telemetry, which is actually a strictly better data source (not selection-biased, captures the full pair universe, carries both the components and the real `sentinelZero` flag instead of a NEUTRAL-category proxy). Reroute GREEN'd by Langston on Thread 21 without a scope edit.
@@ -235,7 +241,7 @@ A.2 Final will produce specific threshold recommendations once the mature cycle-
 | TREND_FRIENDLY_STABLE | 3.11% | Very thin — 5 strategies compete for 3% of cycles |
 | IMPULSE_EXPANSION | 0.12% | **Effectively empty** — 4 strategies get essentially no opportunities |
 | HIGH_VOLATILITY_UNSTABLE | 15.51% | Reasonable share |
-| STRUCTURAL_TRANSITION | 21.81% | Substantial. **Worth a B62 investigation** — is it a legitimate regime, or a dumping ground for pairs the classifier can't confidently label? |
+| STRUCTURAL_TRANSITION | 21.81% | **Strongly suspicious.** 22% is too large for a regime that is supposed to represent a transient state. The most likely explanation is that STRUCTURAL_TRANSITION is a default fallback catching everything not confidently labeled elsewhere, making it 22% by accident rather than by design. B62 should treat ST's definition as a separate design question, not tacitly inherit it. If it really is a "transition zone," it should be small and time-limited; 22% of cycles is inconsistent with that semantics. |
 | RANGE_BOUND_STABLE | 59.45% | **Dominant, and 72.59% of it is drift-contaminated fake range** — so roughly 43% of total pair-cycles are mislabeled |
 
 The independent "Mapping Drift" tab in the Analytics & Diagnostics UI on staging independently shows the same regime distribution (I read the backend code to confirm it's sourced from `calculatePairRegime()`, the same classifier we're auditing). The UI displays "Drift Score: 0.968" and "Drift Detected" — it already knows the system is misaligned, it just measures misalignment differently than we do (it's a weighted Euclidean distance between smoothed (volZ, trendZ) and hard-coded per-regime ideal targets). **The regime distribution portion of that tab is corroborating evidence for B61's findings; the Drift Score portion is measuring a different question.**
@@ -263,9 +269,59 @@ After A.2 Final (mature cycle-sampled window, ~3–5 days from now), B62 scoping
 
 The survival ratio is the number that determines whether Kyle's Path D question becomes live or stays dormant. Which brings me to the strategic question I want the previous CC session to weigh in on.
 
+### 6.4 IMPULSE_EXPANSION as an empirically vestigial regime — a B62 design decision
+
+At 0.12% observed share, IMPULSE_EXPANSION is **two orders of magnitude smaller** than the original 2–5% taxonomy assumption. The 4 strategies mapped to IE (`momentum_burst`, `breakout_pull`, `continuation_push`, `adx_ignition`) are starving not because IE is "rare" but because IE is "essentially never observed" in current market conditions. This raises a regime-taxonomy design question that B62 must explicitly resolve:
+
+1. **Delete IE entirely** and redistribute its 4 strategies to TFS / HVU / STRUCTURAL_TRANSITION based on where each strategy actually wants to fire.
+2. **Redefine IE** with a less-restrictive criterion that matches observed behavior — e.g. drop the ADX > 55 requirement and use DBS magnitude + a volatility envelope instead.
+3. **Keep IE as a genuine rare-event regime** (0.1% is its real rate) and repurpose the 4 starving strategies for a different regime, reserving IE for actual rare events.
+
+**Recommended B62 sequencing (CC + Langston consensus 2026-04-15):**
+- **Step 1:** Redefine IE with a less-restrictive criterion based on observed DBS + volatility behavior. This is the least-destructive change and the most reversible.
+- **Step 2:** Measure the redefined IE share over at least 72 hours of cycle-sampled data.
+- **Step 3:** If the redefined IE is still < 1% of cycles or is behaviorally indistinct from TFS / HVU, then delete IE and redistribute the 4 strategies. If > 1% and behaviorally distinct, keep the redefined version.
+
+No pre-commitment to delete or keep. A clear decision tree B62 can execute against.
+
+### 6.5 Strategy capacity planning — consequence of the corrected drift-contamination number
+
+The B59-era simulation showing "RBS drops from 54.5% to 3.4% under DBS-based classifier" was using the B59 drift-contamination estimate of ~47%. B61 measures 72.59%. That means the real regime distribution shift under a DBS-integrated classifier will be **more dramatic than the simulation predicted**. Specifically:
+
+- The 5 strategies currently routed to TREND_FRIENDLY_STABLE will see significantly more flow than the simulation projected. B62 should audit their individual capacity, concurrency limits, and RTB ranking behavior to confirm they can handle a ~7–8× increase in candidate signal volume without ranking-queue starvation or confluence-buffer overflow.
+- The newly redefined or reallocated IE strategies (per §6.4) will absorb some of the new flow. B62 should plan the redistribution explicitly.
+- The existing dormant strategies (all currently starving because of IE's 0.12% share) will need a concurrency-limit review before they can absorb their fair share of the new routing.
+
+**Strategy capacity planning is an explicit B62 scoping input**, not a footnote. B62 should produce a per-strategy capacity review as part of its scope doc.
+
 ---
 
 ## 7. Strategic question — the DBS-native strategy path
+
+### 7.0 Failure-mode decomposition: regime scarcity vs gate rejection
+
+**This section was added 2026-04-15 in response to a Langston observation during CC + Langston consensus review of the prior CC session's cross-review.** It is load-bearing for the rest of §7 and should be read before the four paths.
+
+The 54.48% strategy-lockout number reported in A.2 can be produced by **two distinct failure modes** which require **different fixes**. Distinguishing them is the primary purpose of the replay analysis in §7.6.
+
+**Failure mode A — regime-scarcity lockout.** The classifier mislabels a strong-DBS pair as RBS / HVU / ST, so the pair never reaches the regime → strategy lookup for trend strategies. The lockout happens *before* any strategy-level gate runs. The pair is lost at the routing stage.
+- **Fix:** Paths A (classifier redesign) / B (regime override) / C (mixed) — change the routing itself. Existing trend strategies wake up naturally once the pair reaches them.
+- **Observable signature in the replay:** a pair-cycle that flips from RBS to TFS/IE under the counterfactual classifier AND has at least one trend strategy eligible under the canonical map AND the strategy's detect function fires a signal AND the signal survives SQE/RTB/NetEV gates. If this happens for a large fraction of the flipped cycles, the failure mode is scarcity-dominant.
+
+**Failure mode B — post-eligibility gate rejection.** The classifier correctly routes a strong-DBS pair to TFS/IE (or would, under the counterfactual classifier), the regime → strategy lookup admits it, and one or more trend strategies evaluate it — but then:
+- The strategy's detect function rejects the setup (pattern-pool guardrail, confidence floor, pattern-type mismatch, etc.), OR
+- The detect function fires a signal but the signal fails the SQE confidence floor, RTB ranking cutoff, or Net EV threshold downstream.
+
+Either way, the pair was routed correctly but still didn't become a trade. The failure is not in the classifier; it is in the gates after the classifier.
+- **Fix:** Path D (dedicated trend-rider with filter thresholds tuned for trend-following entries) OR re-tuning the existing gates OR both.
+- **Observable signature in the replay:** a pair-cycle that flips from RBS to TFS/IE AND reaches at least one trend strategy's detect function AND either the detect rejects OR the resulting signal fails a downstream gate. If this happens for a large fraction of the flipped cycles, the failure mode is gate-rejection-dominant.
+
+**Why this distinction drives the Path D decision:**
+- If the replay shows mostly Failure Mode A across the trend strategies, Paths A/B/C alone will recover most of the opportunity. Path D is redundant.
+- If the replay shows mostly Failure Mode B, the classifier fix alone will not help — the gates are filtering out the opportunities and the only way to capture them is either re-tuning the gates (bad, affects all strategies) or adding a dedicated trend-rider path with gates tuned for trend-following (Path D, targeted).
+- If the mix is roughly even or varies by strategy, Path D becomes a targeted addition for the gate-rejection-heavy strategies, not a wholesale parallel pipeline.
+
+The replay's primary deliverable is the **x/y split** per strategy, where **x = Failure Mode A percentage** and **y = Failure Mode B percentage** for that strategy's newly-eligible pair-cycles.
 
 ### 7.1 Kyle's original framing (2026-04-15)
 > *"When we see very strong bullish trending pairs, is that in itself an opportunity for a strategy that we don't have in our bag of strategies? Is that something that if we looked at it earlier, perhaps in the filtering process, and we identify pairs that are trading on such a strong bullish trend that there's a strategy out there that can pick up on this and make strong signals that have a likelihood of opening and closing with a profitable trade, and that that strategy may look at a completely different set of filters. Maybe volume or liquidity is as important as it would be for the other signal types..."*
@@ -307,6 +363,59 @@ The earliest defensible decision point is **after B62 deploys to staging and run
 
 B61 can't generate any of these numbers because they all require the classifier change to have happened.
 
+### 7.5a Replay analysis methodology (added 2026-04-15 after CC + Langston consensus)
+
+**What the replay replaces.** Originally §7.4 proposed a 3-week wait for live B62 data to answer the Path D question. That timeline was a false constraint — the answer can be produced in ~4 days via counterfactual replay on existing cycle-sampled telemetry. The prior CC session proposed this, Langston confirmed, and the replay is now the canonical mechanism for making the Path D decision.
+
+**When the replay runs.** After A.2 Final's mature cycle-sampled window is confirmed by Langston's written maturity check (scope §3). **Not on the 12-hour early window.** The replay is too strategic to base on underpowered data.
+
+**Packaging.** Fold into **B62 Phase 0** as the first analytic before any code changes. No formal B61.5 batch needed (CC lean; Langston concurs). B62 scoping cannot proceed without the replay output, which enforces the sequencing naturally.
+
+**Replay design (5 steps):**
+
+1. **Counterfactual regime labeling.** Apply a candidate DBS-integrated classifier to each MCE cycle-sample in the mature window. Produce a `counterfactual_regime` column per pair-cycle. The candidate classifier is whichever design B62 is testing (Path A, Path B, or a Mixed variant).
+2. **Counterfactual eligibility.** For each pair-cycle that flips from its actual regime to TFS / IE / HVU under the counterfactual, compute which trend strategies become newly eligible via the canonical regime → strategy map. Pure lookup, zero fidelity concerns.
+3. **Counterfactual signal generation.** For each newly-eligible (pair, cycle, strategy) tuple, replay the strategy's `detect` function against the actual OHLC at that cycle. Strategy detect functions are deterministic given OHLC + indicators, both of which are recorded in the cycle snapshot.
+4. **Counterfactual gate survival.** For each generated signal, replay the SQE confidence floor, RTB ranking, Net EV gate, pattern-pool guardrail, and any other gate logic deterministically.
+5. **Output.** A per-strategy table with columns:
+
+| Strategy | Currently eligible per cycle | Newly eligible under counterfactual | % that detect a signal | % of signals that survive gates | Failure Mode A share | Failure Mode B share |
+
+### 7.5b Replay fidelity: non-OHLC dependencies frozen / approximated
+
+**Critical honesty check.** The replay is only as trustworthy as its accounting for dependencies that are NOT just OHLC. The deliverable MUST include a subsection enumerating every non-OHLC input and stating how it is held constant or approximated. At minimum:
+
+- **MCE 60s TTL cache.** Cycle-sampled snapshots may not align exactly with cache-write timestamps. A small fraction of replays will hit different cached values than the live system would have. Bounded noise, not a fidelity wall. Report should say results may differ ~3–5% from forward-live measurement due to MCE cache timing.
+- **Global friction cache.** Need either frozen snapshot (use the recorded value at cycle time) or an approximation rule (e.g. EMA of recent values). Document which.
+- **Global DBS cache.** Same treatment as global friction. The MCE telemetry already records global DBS per cycle, so a frozen snapshot is straightforward.
+- **Active pair-pool / filter-pool state.** The FX5 scanner output at cycle time determines which pairs are eligible at all. Needs to be reconstructed from FX5 scanner logs or frozen from a recorded pool snapshot.
+- **Telemetry-aggregator-derived regime context.** Some strategy logic consults the telemetry aggregator for derived context (dominant regime, regime transition, etc.). Needs either reconstruction or a frozen snapshot.
+- **Time-of-call branching inside strategy detect or gate logic.** Any code path that branches on `new Date()`, session timers, or cooldown windows needs explicit handling.
+- **Double-count / path-collision effects.** If a pair would qualify both through the normal regime path and the trend-rider path in the counterfactual, the replay must apply a canonical ownership tag (`regime_gated` or `trend_rider_routed`) to prevent double-counting. Downstream telemetry / ML / audit code must respect the tag exclusively.
+
+**Replay deliverable rule:** the report MUST include a "Non-OHLC dependencies frozen / approximated" section that enumerates every non-OHLC input used and states how it was held constant or approximated. This is the honesty check that prevents over-claiming. A replay report without this subsection is rejected.
+
+### 7.5c Architectural risk framing for Path D (corrected from §7.2)
+
+The prior CC session + Langston pointed out that my "two parallel pipelines" framing for Path D in §7.2 overstates the cost. A more accurate framing is **"one pipeline with an additional entry point."** Shared infrastructure (OHLC fetching, MCE, base SQE, RTB, Net EV gate, paper execution engine, telemetry) does not duplicate. What actually gets added:
+
+- A routing branch in the pre-strategy stage that reads "if DBS magnitude ≥ threshold, route this pair-cycle through the trend-rider eligibility path in addition to the regime-gated path." Tens of lines of code.
+- A separate filter chain for the trend-rider path — a parallel SQE/RTB-equivalent with different thresholds tuned for trend-following entries. This is the actual additional surface area.
+- One or more new strategy files implementing the trend-rider entry/exit logic. Comparable to adding a new strategy to the existing 17-strategy bag.
+- Separate telemetry for the trend-rider pipeline, so it can be measured independently of the main pipeline.
+
+**Cost estimate:** 1–2 weeks of implementation, 500–1000 lines of new code, **if the trend-rider path is kept narrow**. Sprawls if it becomes a generic parallel-framework exercise. **The real cost is governance and verification overhead, not raw LOC.** Comparable in scope to Phase 14.5's dual quant+pattern path, which DawnTrader already absorbed cleanly.
+
+**Five real architectural risks (expanded from the three I originally noted):**
+
+1. **Governance burial surface area increases.** New filter chain + thresholds + routing rules creates new places for drift from System Manual docs. Mitigation: document the trend-rider path as a first-class SIM + System Manual citizen from day one. No half-measures.
+2. **Phase 16 DB cleanup scope grows.** New strategy + new filter chain + new telemetry stream means new tables or new columns. Mitigation: minimal DB footprint, prefer column additions over new tables.
+3. **Phase 19 paper audit scope grows.** Two code paths (not two pipelines) to verify in paper mode before live mode. Mitigation: same audit checklist applies to both paths; unavoidable but bounded.
+4. **ML adaptive layer (Phase 17/18 post-live) gets more complex.** Two state spaces, two reward signals, potentially competing optimizations. Mitigation: defer this concern; post-live ML is a year+ away. The architectural decision today should optimize for pre-live data quality, not post-live ML simplicity.
+5. **Attribution ambiguity / double-credit risk** (added by Langston 2026-04-15). If the same market opportunity can be surfaced by both the regime-gated path and the trend-rider path, telemetry, ML reward signals, and post-hoc audits can get muddy fast unless identity and ownership rules are explicit from day one. Mitigation: at the routing branch, each pair-cycle gets a single canonical ownership tag — `regime_gated` or `trend_rider_routed` — and downstream telemetry / ML / audit code respects that tag exclusively. No double-counting even if both paths would have generated a signal for the same pair-cycle.
+
+**Asymmetric-reversibility bias.** Building Path D and later finding it is unnecessary is cheaper to undo (delete the routing branch, keep the strategy file in the bag) than NOT building Path D and later finding it was needed (another batch cycle to retrofit). Slight bias toward **"don't build Path D unless the replay data demands it"** — deletion is cheaper than addition once the gate logic settles. This is the default going into B62 Phase 0.
+
 ### 7.5 What I'd like the previous CC session's take on
 Specifically three things:
 
@@ -343,6 +452,84 @@ Specifically three things:
 - `Scope Files/BATCH_61_A2_THRESHOLD_REVIEW_PROVISIONAL.md`
 - `B61_PROVISIONAL_FINDINGS_REPORT_2026-04-15.md` (this document)
 - Analysis scripts: `scripts/phase15b/*.py` (re-runnable on staging data)
+
+---
+
+---
+
+## 9. Addendum — CC + Langston consensus response to the prior CC cross-review (2026-04-15)
+
+Kyle shared an earlier draft of this report with a prior Claude Code session for independent review. The prior CC returned a substantive cross-review with three strategic answers, six "things the report doesn't address" items, and six procedural recommendations. Langston and I iterated to consensus on incorporation. This appendix records what was folded in and where.
+
+### 9.1 Methodological note — B59 47% → B61 72.59% delta
+
+**What B59 reported:** 47% drift contamination in RANGE_BOUND_STABLE labels, based on a single 88-pair point-in-time snapshot taken 2026-04-14 during the `range_trade` root-cause investigation.
+
+**What B61 measures:** 72.59% drift contamination in RANGE_BOUND_STABLE labels, based on 13,954 cycle-samples across 58 pairs spanning a 12-hour rolling window on staging.
+
+**Why the delta (hypothesis, not confirmed):** The most plausible explanation is that the B59 snapshot caught a moment of less-than-average drift contamination, while the B61 rolling window captures the mean. Single-point snapshots of drift contamination are inherently noisy — they sample a single instant in a time series with non-trivial variance. Cycle-sampled rolling windows are the appropriate instrument.
+
+**Methodological lesson:** point-in-time snapshots of drift metrics should NOT be used as a basis for decisions. Cycle-sampled rolling windows are authoritative, point-in-time snapshots are indicative at best. This rule should carry forward into B62 and beyond.
+
+**Caveat:** the "snapshot caught a low-drift moment" hypothesis is plausible but unverified. Definitive root-cause analysis would require comparing the B59 snapshot's exact timestamps against the B61 cycle-sampled window to see where the B59 observation lands in the distribution. That cross-reference is deferred — the lesson stands regardless of which exact moment the snapshot caught.
+
+### 9.2 Freeze-envelope compliance for the DBS numeric score capture
+
+The Phase 15b code freeze covers `server/core/metrics/directional-bias.ts` and `server/core/metrics/market-regime.ts`. The numeric DBS score capture change implemented during this session (commit `62a7e358`, signature patch `22730c96`, rollback `82b601cb`) touched several adjacent files but NOT the two frozen files. Compliance accounting:
+
+**Touched (all outside the freeze envelope):**
+- `server/services/market-indicators.ts` — new `cachedGlobalDBSScore` state + `getLastGlobalDBSScore()` exported getter. Adjacent to the freeze but not frozen. No behavior change.
+- `server/services/vts-runner.ts` — interface additions + write-site capture + passthrough sites. Not frozen. No behavior change beyond the new telemetry field.
+- `server/services/vts-service.ts` — `VirtualTrade` interface + `persistRealPriceTrade` parameter signature + trade object construction. Not frozen. No behavior change.
+- `server/utils/export-csv.ts` — export interface + return value. Not frozen.
+
+**Touched then rolled back (out-of-scope, corrected per Kyle directive):**
+- `shared/schema.ts` — two decimal columns added to `telemetry_history`, then removed when Kyle clarified scope. Adjacent to the freeze but not frozen.
+- `server/services/telemetry-repository.ts` — TelemetryEntry interface + two insert passthroughs, then reverted. Not frozen.
+
+**Production DB action (executed then reversed):** `ALTER TABLE telemetry_history ADD COLUMN` for two columns, then `DROP COLUMN` once scope was corrected. Zero data affected — the table had zero rows throughout.
+
+**Not touched:**
+- `server/core/metrics/directional-bias.ts` — frozen, untouched
+- `server/core/metrics/market-regime.ts` — frozen, untouched
+
+**Freeze compliance: GREEN.** All modifications were outside the frozen envelope. The score-capture change is strictly additive (new fields populated alongside existing fields), feature-compatible (old code paths that don't set the new fields still work), and no behavior downstream of the writers was changed (nothing reads the new fields yet except future B62 consumers).
+
+A future audit will be able to verify compliance by checking the git history of `directional-bias.ts` and `market-regime.ts` from 2026-04-14 (Phase 15b lock) through B61 close. Both files will show zero commits in that window.
+
+### 9.3 Consensus log with Langston (2026-04-15)
+
+The prior CC session's cross-review was forwarded to Langston on Thread 21 in four parts. Langston responded with full agreement on all six recommendations plus three substantive additions. The convergence produced this appendix and the inline edits to §1, §2.5a, §5.4, §6.4, §6.5, §7.0, and §7.5a–7.5c.
+
+**Accepted additions from Langston beyond the prior CC's scope:**
+
+1. **Replay fidelity — "non-OHLC dependencies frozen / approximated" subsection** (§7.5b above). Langston flagged that the replay must enumerate every non-OHLC input and document how it is held constant or approximated. This is the honesty check that prevents over-claiming.
+2. **A.2 Final mature window gate.** Replay must wait for A.2 Final's mature cycle-sampled window per scope §3. No running Path D decision analysis on the 12-hour early window. The Path D decision sits behind the maturity gate, not in front of it.
+3. **Attribution ambiguity / double-credit as the fifth architectural risk** (§7.5c above). If the same opportunity can be surfaced by both paths, telemetry / ML / audit get muddy unless ownership rules are explicit. Mitigation via a canonical ownership tag (`regime_gated` or `trend_rider_routed`) at the routing branch.
+4. **Cost caveat: the real cost is governance and verification overhead, not raw LOC.** (§7.5c) The 1–2 week / 500–1000 LOC estimate is plausible only if the trend-rider path is kept narrow. Sprawls if it becomes a generic parallel-framework exercise.
+5. **IE redefine-first sequencing** (§6.4). Step 1 redefine, Step 2 measure, Step 3 delete/keep. No pre-commitment to delete or keep.
+6. **Neutral wording on the A.3 ownership transfer** (§2.5a). Factual, no pattern-recognition language.
+7. **Scarcity vs gate-rejection failure mode decomposition** (§7.0). The biggest substantive addition from Langston. The replay's primary deliverable is now defined as the x/y split per strategy: x = Failure Mode A (regime-scarcity lockout), y = Failure Mode B (post-eligibility gate rejection). This decomposition sharpens the Path D decision from a vibe question into a measurable one.
+
+**Accepted from prior CC verbatim (no modification):**
+- Replay analysis in ~4 days instead of 3-week live wait
+- B62 Phase 0 packaging (CC lean; Langston concurs) rather than formalized B61.5
+- "One pipeline + entry point" framing correction for Path D
+- B59→B61 methodological lesson on single-point snapshots (§9.1 above)
+- Three B62-design-material findings: drift contamination magnitude, IE vestigial, slope-clamp constraint
+- Six addendums (1–6 above, inlined in §2.5a, §5.4, §6.4, §6.5, §7.0, §7.5a–7.5c, §9.1, §9.2)
+- Six procedural recommendations (all executed in this appendix cycle)
+
+**B61 close-out governance action:** the slope-clamp constraint from A.1 §3.3 will be recorded in `1-system-manual/SYSTEM_MANUAL.md` Layer 1b during the B61 close-out Phase 10 pass. Language: "design constraint: `slopeComponent` has an internal ±0.40 clamp; raising the slope weight alone cannot produce extreme-category readings because the clamp binds before the ±0.60 threshold. Heavy-slope weighting produces the paradoxical effect of collapsing UP_STRONG / DOWN_STRONG shares to zero."
+
+### 9.4 Outstanding items (deferred to next session and beyond)
+
+- **A.3 Global DBS Methodology** — CC owned, delivered next session. Weighted-median-by-volume review, pair-universe stability analysis, external cross-reference against Crypto Fear & Greed / BTC dominance / altcoin momentum.
+- **A.0 Baseline** — legacy classifier flicker rate with Langston's adjustments: matched-symbol-matched-timestamp comparison, report both category-boundary and family-level sign flip rates, separate stablecoin / ultra-low-vol side bucket.
+- **Maturity gate** — post 2-of-3 values to Thread 21, wait for Langston written confirmation, then run Finals.
+- **A.1 / A.2 / A.4 Finals** — on mature cycle-sampled telemetry. A.1 Final includes the responsiveness injection that will give the definitive ATR normalization verdict. A.2 Final includes non-overlapping forward-return behavioral validation and rolling-percentile threshold simulation.
+- **B61 completion report** — YES/NO/PARTIAL on each gate condition from scope §6, governance-files-changed list, and the Phase 10 updates to SIM, System Manual Layer 1b (slope-clamp constraint), and CHANGES_AND_FIXES.
+- **B62 Phase 0 replay analysis** — first analytic in B62, uses A.2 Final's mature cycle-sampled window, produces the failure-mode x/y split per trend strategy, and locks the Path D decision before any B62 code changes.
 
 ---
 
