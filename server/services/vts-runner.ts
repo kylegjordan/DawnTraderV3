@@ -65,6 +65,8 @@ import { getGlobalFriction, getLastGlobalDBSCategory } from './market-indicators
 // Phase 14: Real score calculator replaces simulation stubs
 import { computeRealHybridScore, computeRealDecayPenalty } from '../core/utils/vts-real-score.js';
 import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
+// Phase 15b B61: DBS telemetry emitter (observational, feature-flagged, no behavior change)
+import { emitConsumerTelemetry } from './phase15b-dbs-telemetry.js';
 import {
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
   selectContextAwareStrategy,
@@ -873,8 +875,38 @@ async function generatePhase10Signal(
   const predictiveConfidence = getPredictiveConfidence(symbol, regime, strategy);
 
   // Phase 14: Apply Directional Bias confidence modifier
+  //
+  // ⚠ Phase 15b B61 finding (2026-04-15): this site is HALF-WIRED DEAD CODE.
+  // The `biasModifier` value is computed but never referenced again anywhere in this
+  // file — every VTS-emitted trade has biasModifier computed and immediately discarded.
+  // The "Apply..." comment above is misleading; no application occurs. The signal
+  // -orchestrator sibling path's "(parity with VTS path)" comment is a FALSE PARITY
+  // CLAIM because there is no applying sibling here. The 15-day VTS audit window
+  // (2026-03-31 → 2026-04-14, ~960 trades) is therefore DBS-clean. Fix is deferred
+  // to B62 disposition decision per scope §8.1 implementation-bug exception clause.
+  // Rationale: fixing this mid-audit would introduce a new confounder into the
+  // forward cycle-sampled measurement window. Preserve baseline now, decide later.
   const biasCategory = mceContext.directionalBias?.category ?? 'NEUTRAL';
   const biasModifier = computeBiasConfidenceModifier(biasCategory);
+
+  // Phase 15b B61: observational telemetry emit (no-op unless DT_PHASE15B_DBS_TELEMETRY=1).
+  // Fires once per VTS strategy evaluation. dbsApplied is ALWAYS false — the empirical
+  // confirmation that biasModifier is discarded. confidencePreDBS === confidencePostDBS
+  // and finalScorePreDBS === finalScorePostDBS because no mutation occurs. See
+  // BATCH_61_PRE_AUDIT.md §6.9.
+  emitConsumerTelemetry({
+    cycleId: Date.now(),
+    site: 'vts-runner.ts:877',
+    symbol,
+    strategy,
+    dbsCategory: biasCategory,
+    dbsModifier: biasModifier,
+    confidencePreDBS: predictiveConfidence,
+    confidencePostDBS: predictiveConfidence,
+    finalScorePreDBS: hybridScore,
+    finalScorePostDBS: hybridScore,
+    dbsApplied: false,
+  });
   
   // ══════════════════════════════════════════════════════════════════════════════
   // Directive 11.7R-E: HARD GOVERNANCE FILTER (BEFORE SCORING)

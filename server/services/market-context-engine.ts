@@ -50,6 +50,8 @@ import {
 } from '../config/canonical-regime-strategy-map.js';
 import { computeDirectionalBias, computeGlobalDirectionalBias } from '../core/metrics/directional-bias.js';
 import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
+// Phase 15b B61: DBS telemetry emitter (observational, feature-flagged)
+import { emitMceTelemetry } from './phase15b-dbs-telemetry.js';
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -64,6 +66,8 @@ export class MarketContextEngine {
   private cache: Map<string, CacheEntry> = new Map();
   private config: MCEConfig;
   private running: boolean = false;
+  // Phase 15b B61: monotonic cycle counter for DBS telemetry correlation
+  private cycleCounter: number = 0;
 
   constructor(config: Partial<MCEConfig> = {}) {
     this.config = { ...DEFAULT_MCE_CONFIG, ...config };
@@ -173,6 +177,24 @@ export class MarketContextEngine {
       `vol=${regimeResult.volatility.toFixed(4)} mom=${regimeResult.momentum.toFixed(4)} adx=${regimeResult.adx.toFixed(1)} ` +
       `dbs=${directionalBias.score.toFixed(3)} bias=${directionalBias.category}`
     );
+
+    // Phase 15b B61: observational telemetry (no-op unless DT_PHASE15B_DBS_TELEMETRY=1)
+    this.cycleCounter += 1;
+    emitMceTelemetry({
+      cycleId: this.cycleCounter,
+      symbol,
+      dbsScore: directionalBias.score,
+      dbsCategory: directionalBias.category,
+      slopeComponent: directionalBias.components.slopeComponent,
+      returnComponent: directionalBias.components.returnComponent,
+      emaComponent: directionalBias.components.emaComponent,
+      ohlcLen: ohlcData.length,
+      atr,
+      vol: regimeResult.volatility,
+      adx: regimeResult.adx,
+      mom: regimeResult.momentum,
+      regime: regimeResult.regime,
+    });
 
     return context;
   }

@@ -87,6 +87,8 @@ import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js'
 // Phase 13: Market Context Engine for centralized indicator + regime computation
 import { getMarketContextEngine } from './market-context-engine.js';
 import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
+// Phase 15b B61: DBS telemetry emitter (observational, feature-flagged, no behavior change)
+import { emitConsumerTelemetry } from './phase15b-dbs-telemetry.js';
 // Phase 14.5: Pattern pool configuration
 import { PATTERN_POOL_STRATEGIES, PATTERN_POOL_GUARDRAILS, DEFAULT_ASSET_CLASS } from '../config/pattern-filter-profile.js';
 import { computeRankingScore, normalizeNetReturn, CONTEXT_BONUS } from '../config/ranking-weights.js';
@@ -447,13 +449,31 @@ export class SignalOrchestrator {
 
     // Phase 14: Apply DBS confidence modifier BEFORE SQE evaluation (parity with VTS path)
     // Adjusts confidence and recomputes FinalScore since it depends on confidence.
+    //
+    // ⚠ Phase 15b B61 finding (2026-04-15): this site is a DORMANT CONSUMER WIRE. The
+    // "(parity with VTS path)" comment above is a FALSE PARITY CLAIM — vts-runner.ts:877
+    // computes the modifier and discards the result (no-op half-wire), so there is no
+    // applying sibling to achieve parity with. This call has not executed against any
+    // captured cycle because active trading has been OFF since at least 2026-01-12
+    // (seven weeks before DBS integration on 2026-03-05). Telemetry emitter below
+    // empirically confirms this — expected firing rate during B61: zero.
+    //
+    // Phase 15b B61: capture pre-DBS state BEFORE any potential mutation so the emitter
+    // can report pre/post values even when the if-branch is taken.
+    const _phase15bConfidencePre = extendedMetrics.confidence;
+    const _phase15bFinalScorePre = extendedMetrics.finalScore;
+    let _phase15bDbsCategory: string = 'UNKNOWN';
+
     let dbsModifier = 1.0;
     try {
       const mce = getMarketContextEngine();
       const mceCtx = mce.computeContext(rawSignal.symbol);
+      _phase15bDbsCategory = mceCtx.directionalBias?.category ?? 'UNKNOWN';
       dbsModifier = computeBiasConfidenceModifier(mceCtx.directionalBias?.category);
     } catch { /* MCE not ready — use neutral modifier */ }
+    let _phase15bDbsApplied = false;
     if (dbsModifier !== 1.0) {
+      _phase15bDbsApplied = true;
       const rawConfidenceBeforeDBS = extendedMetrics.confidence;
       extendedMetrics.confidence = rawConfidenceBeforeDBS * dbsModifier;
       // Recompute FinalScore with DBS-adjusted confidence
@@ -465,6 +485,25 @@ export class SignalOrchestrator {
       ));
       console.log(`[Phase14][DBS] ${rawSignal.symbol}/${strategyId}: dbsMod=${dbsModifier.toFixed(3)} adjConf=${extendedMetrics.confidence.toFixed(3)} adjFinalScore=${extendedMetrics.finalScore.toFixed(4)}`);
     }
+
+    // Phase 15b B61: observational telemetry emit (no-op unless DT_PHASE15B_DBS_TELEMETRY=1).
+    // Expected firing rate during B61: ZERO — this code path does not execute while
+    // active trading is off. The emitter is present so that if active trading resumes,
+    // the same 6-field schema used at vts-runner.ts:877 will capture the dormant wire's
+    // actual behavior for the next audit cycle. See BATCH_61_PRE_AUDIT.md §6.9.
+    emitConsumerTelemetry({
+      cycleId: Date.now(),
+      site: 'signal-orchestrator.ts:454',
+      symbol: rawSignal.symbol,
+      strategy: strategyId ?? null,
+      dbsCategory: _phase15bDbsCategory,
+      dbsModifier,
+      confidencePreDBS: _phase15bConfidencePre,
+      confidencePostDBS: extendedMetrics.confidence,
+      finalScorePreDBS: _phase15bFinalScorePre,
+      finalScorePostDBS: extendedMetrics.finalScore,
+      dbsApplied: _phase15bDbsApplied,
+    });
 
     // Directive 11.0E: ML-enhanced predictions (non-blocking fire-and-forget)
     const mlInput: PredictionInput = {
