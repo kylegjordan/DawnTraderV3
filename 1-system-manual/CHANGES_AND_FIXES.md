@@ -1562,3 +1562,71 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - **Location**: `predictive-diagnostics.service.ts`, `analytics.tsx`
 - **Problem**: Model Diagnostics values are hardcoded constructor defaults, never fed real data.
 - **Fix**: Added amber placeholder warning banner. Full wiring deferred to B60.
+
+---
+
+## PHASE 15B INFRASTRUCTURE FIXES (2026-04-14 → 2026-04-15)
+
+### INFRA-15B-001: CCDT Relay Stopped Copying Messages to cc-inbox (Six Root Causes)
+- **Severity**: HIGH (broke the Kyle → Claude Code message relay pipeline, forcing manual workaround sends that masked the real issue for ~14 hours)
+- **Discovered**: 2026-04-15 00:30 by the new CC session during B61 Phase 3a — "CCDT is posting fake acks in the group and not relaying Kyle's messages to cc-inbox"
+- **Diagnosed**: 2026-04-15 00:45 (previous governance CC session, three root causes) + 2026-04-15 01:30 (Langston infrastructure session, three additional root causes)
+- **Symptom**: Messages Kyle posted in Topic 21 were NOT appearing in `cc-inbox`. The new CC session's polling chain returned "no unread messages" even when Kyle posted. Simultaneously, messages attributed to "CCDT Communicator" were appearing in the group that looked like automated acks not originated by CC.
+- **Six root causes identified (all fixed)**:
+  1. **`channels.telegram.accounts.ccdt-relay.enabled: false`** in `openclaw.json` — had been disabled in every config backup going back weeks. Inbound path to the relay agent blocked at the account level. Outbound sends via `openclaw message send --account ccdt-relay` still worked (masking the disable), which is why CC's workaround posts were succeeding.
+  2. **Legacy streaming config keys** (`channels.telegram.*.streamMode`, `streaming` scalar, `chunkMode`, `blockStreaming`, `draftChunk`, `blockStreamingCoalesce`) were incompatible with the OpenClaw 2026.4.14 schema after today's 2026.4.5 → 2026.4.14 upgrade. Even with `enabled: true`, the ccdt-relay account couldn't load cleanly. Fixed via `openclaw doctor --fix` which migrated them to the nested `streaming.{mode,chunkMode,preview.chunk,block.enabled,block.coalesce}` structure.
+  3. **Duplicate gateway — leftover `openclaw-ccdt` systemd service** was running in parallel to the main gateway, fighting for the `@CCDTCommsBot` token. Either gateway could handle any given inbound, each with stale config, producing intermittent behavior. Stopped and disabled the leftover service.
+  4. **Missing `openclaw agents bind` routing** — the `telegram-relay ← telegram accountId=ccdt-relay` binding had been wiped at some point. `enabled: true` in config is necessary but not sufficient; the runtime bind is a separate wire. Re-added via `openclaw agents bind`.
+  5. **Stale `SOUL.md` at obsolete profile path** — the silent-relay instructions had been maintained at `/root/.openclaw-ccdt/workspace/SOUL.md` (an obsolete separate OpenClaw profile), but the main gateway's `telegram-relay` agent actually reads from `/root/.openclaw/agents/telegram-relay/workspace/SOUL.md`, which still held an old verbose version. Wrote the correct silent-relay version there.
+  6. **Wrong model on `telegram-relay` agent** — was `openai/gpt-4.1-mini`, which cannot reliably invoke shell tools. Instead of calling `cc-inbox write "..."`, the mini model was outputting the literal text `cc-inbox write "..."` directly into the group chat. This was misdiagnosed as "chatty ack posts" when it was actually failed tool-call fallbacks leaking as text. Switched to `openai/gpt-4.1` (full) — slower and slightly more expensive but actually calls tools.
+- **Secondary fix**: `agents.defaults.bootstrapMaxChars` raised from 20,000 to 40,000 so Langston's BOOTSTRAP.md (at 19,952 chars after Phase 15b additions) doesn't silently truncate on next session reset.
+- **End-to-end verification**: Kyle posted `test relay 3` in Topic 21 → CCDT silently executed `cc-inbox write` → `cc-inbox` showed `#774 [FROM: Kyle Jordan] [TOPIC: 21] test relay 3` with no text output in the group. Relay agent behaving as specified.
+- **Operational rules added as a result** (see `SYSTEM_MANUAL.md` Telegram Infrastructure section and CLAUDE.md §8):
+  - **Model rule**: Never use `gpt-4.1-mini` for OpenClaw agents that need to invoke shell tools (relay, conductor, or similar). Use `gpt-4.1` full minimum. Mini is fine for text-generation-only jobs.
+  - **Binding rule**: `enabled: true` in `openclaw.json` is necessary but NOT sufficient for an agent↔account wire. The runtime `openclaw agents bind` is separate state and can be wiped independently.
+  - **Duplicate-gateway check**: When an OpenClaw agent is misbehaving, always check `systemctl list-units --type=service | grep openclaw` AND `ps aux | grep openclaw-gateway` for leftover/duplicate processes fighting for the same bot token.
+  - **Workspace path verification**: If behavior contradicts documented workspace rules (e.g. SOUL.md says "silent in group topics" but agent is chatty), verify the agent is actually loading the file you think it is. OpenClaw profiles can have multiple workspace paths. Confirm with `openclaw health` and the registered `agentDir` in `openclaw.json`.
+- **Masking effect**: For ~14 hours (April 14 10:28 UTC → April 15 00:30 UTC), the broken relay was masked by Langston writing to cc-inbox directly via his BOOTSTRAP additions ("Always copy your messages to cc-inbox so Claude Code's polling picks them up"). This made it look like the relay was working when it wasn't. The real breakage was only discovered when the new CC session expected relay-formatted messages in its polling loop and they weren't arriving.
+- **Follow-up cleanup** (tracked, not blocking): delete or rename `/root/.openclaw-ccdt/` obsolete profile path so future sessions don't accidentally edit workspace files that aren't the live ones.
+
+### INFRA-15B-002: OpenClaw Gateway Upgrade 2026.4.5 → 2026.4.14 (1M Context Override Deferred)
+- **Severity**: INFORMATIONAL (operational improvement; one regression addressed by INFRA-15B-001)
+- **Location**: `/usr/lib/node_modules/openclaw` (global npm install) + `/root/.openclaw/openclaw.json`
+- **Trigger**: Upstream bug [openclaw/openclaw#42225](https://github.com/openclaw/openclaw/issues/42225) — GPT-5.4 runtime context-engineering path uses hardcoded 272,000-token cap instead of the model's real 1,050,000-token capacity, causing premature compaction on Langston's topic-21 session. Related PR [#44475](https://github.com/openclaw/openclaw/pull/44475) proposes `agents.defaults.models` passthrough override to fix.
+- **Action taken**: Upgraded via `openclaw update` (2026.4.5 → 2026.4.14, latest as of 2026-04-14). Attempted both documented override patterns:
+  1. `agents.defaults.models.openai/gpt-5.4.contextWindow = 1050000` — REJECTED, schema still `.strict()`, PR #44475 not merged in 2026.4.14.
+  2. `models.providers.openai.models[].contextWindow = 1050000` — schema-accepted after adding required `baseUrl` and `name` fields, but the override did not propagate to runtime session telemetry (session still reported `contextTokens: 272000`). Matches the #42225 "catalog lookup wins before forward-compat patch" caveat.
+- **Status**: **272K cap deferred** until OpenClaw ships a newer release containing PR #44475. Langston workspace files (BOOTSTRAP, MEMORY, SOUL) were already structured for the 272K constraint as part of the Phase 15b governance transition. Monitor [openclaw/openclaw releases](https://github.com/openclaw/openclaw/releases) and retry the override when PR #44475 lands.
+- **Side effect**: The upgrade surfaced the legacy streaming config keys that broke the CCDT relay, which was the trigger chain for INFRA-15B-001.
+- **Post-upgrade verification**: `openclaw health` reports `telegram: ok (@LangstonDTBot, @CCDTCommsBot)`, both accounts healthy after INFRA-15B-001 fixes applied.
+
+### INFRA-15B-003: `.claude/settings.json` Invalid JSON (Missing Comma)
+- **Severity**: MEDIUM (silently broke Claude Code project hooks)
+- **Location**: `.claude/settings.json` (line 10-11)
+- **Problem**: Missing comma between `"_notificationPing"` and `"_test"` keys. Claude Code silently failed to parse the file, which meant the `ConfigChange` hook (which runs `cc-inbox read && cc-inbox mark-read` on config change) was not loading. Hooks had been broken for an unknown period.
+- **Fix**: Added the missing comma. File now parses as valid JSON.
+
+### INFRA-15B-004: `.claude/settings.local.json` Wrong Permission Wildcard Syntax
+- **Severity**: HIGH (caused aggressive permission prompts that blocked the new CC session's B61 work and led to manual allow-list accumulation)
+- **Location**: `.claude/settings.local.json` permissions.allow list
+- **Problem**: Every entry used `Bash(*)`, `Read(*)`, `Write(*)`, etc. Per the official Claude Code settings documentation, these are interpreted as "bash with the specific literal argument `*`" — which never matches any real command. The wildcard syntax for "all bash commands" is the bare tool name `Bash` (no parentheses). Because the wildcards were non-functional, the new CC session was prompted on every `Bash` invocation and had been accumulating specific command entries like `Bash(cp ".claude/tmp_cc_msg.txt" /tmp/cc_msg.txt)` each time Kyle clicked "Always allow", bloating the file and not solving the underlying problem.
+- **Fix**: Rewrote the allow list with bare tool names per the documented syntax: `"Bash"`, `"Read"`, `"Write"`, `"Edit"`, `"Grep"`, `"Glob"`, `"WebFetch"`, `"WebSearch"`, `"Task"`, `"TodoWrite"`, `"NotebookEdit"`, plus `"mcp__plugin_telegram_telegram__reply"`. Added `$schema` reference. Session restart required because Claude Code loads settings at session startup only — no hot-reload for `permissions.allow`.
+- **Reference**: [Claude Code settings docs — permission rule syntax](https://code.claude.com/docs/en/settings)
+- **Lesson**: When pattern-matching settings don't behave as expected, consult the official docs for the exact syntax before hacking around. Wildcard conventions vary across tools and Claude Code specifically uses bare tool names for "match all", not `(*)` patterns.
+
+### INFRA-15B-005: CLAUDE.md Multi-Line Telegram Send Pattern — Double-Expansion Trap
+- **Severity**: MEDIUM (every multi-line Telegram send from CC sessions landed in Telegram as one collapsed paragraph with no bullets or newlines)
+- **Location**: `CLAUDE.md` §6 "Reliable multi-line pattern" subsection
+- **Problem (first version)**: Original pattern used `"$(cat /tmp/cc_msg.txt)"` inside an SSH command with outer double quotes. The local shell expanded the file contents during SSH command construction, inserting them directly into the SSH command string. Any `$(...)`, backticks, or `$VAR` literals in the body were then re-expanded a SECOND time by the remote shell, breaking on unbalanced quotes. The newline-preservation also failed in some send paths.
+- **Problem (first fix version)**: The new CC session hit the double-expansion trap trying to send the B61 scope review to Langston — the review itself documented the `"$(cat /tmp/cc_msg.txt)"` pattern, which then got re-expanded on the remote side and failed.
+- **Final fix**: Rewrote CLAUDE.md §6 with the correct pattern: (a) write body to local `/tmp/cc_msg.txt` via heredoc with quoted delimiter `<<'BODY_EOF'`, (b) `scp` file to remote server, (c) wrap ssh command in outer SINGLE quotes, (d) on remote side use `MSG=$(cat /tmp/cc_msg.txt); openclaw ... --message "$MSG"`. The double-quoted variable expansion `"$MSG"` substitutes the stored string without re-running command substitution on its contents. Metacharacters come through as literals. Added explicit "what NOT to do" block showing the obsolete pattern.
+- **Reference**: CLAUDE.md §6 "Reliable multi-line pattern" after commit `30e4d19c`.
+- **Lesson**: Any time a shell command chain crosses an SSH boundary with potentially-unsafe content, think carefully about where each expansion happens (local shell vs remote shell) and use variable assignment on the target side to prevent double-expansion.
+
+### INFRA-15B-006: CLAUDE.md Autonomy-With-Langston Rule Missing
+- **Severity**: MEDIUM (caused the new CC session to escalate every routine Langston exchange to Kyle instead of iterating to consensus directly)
+- **Location**: `CLAUDE.md` §6 Three-Way Communication Protocol
+- **Problem**: The original CLAUDE.md §6 documented the three-way roles and the 2-step send pattern, but did NOT explicitly state that CC and Langston can iterate on technical review without looping Kyle in for every exchange. Without that explicit rule, the fresh CC session defaulted to the conservative "ask the user when uncertain" pattern, which manifested as escalating every round of Langston feedback to Kyle — exactly the failure mode Kyle called out as "passive behavior" in the screenshot of the B61 scope exchange.
+- **Fix**: Added a full "Autonomy with Langston — iterate to consensus, don't escalate every round to Kyle" subsection in §6 with: iterate-decide-respond loop, 5 explicit escalation triggers (true deadlock 2-3 rounds, architectural decision, risk/authority boundary, new directive needed, scope expansion), explicit default behavior statement, and exceptions for Langston's no-objection feedback and Kyle interruptions.
+- **Reference**: CLAUDE.md §6 "Autonomy with Langston" after commit `6f667570`.
+- **Lesson**: Stable content in instant-context files (CLAUDE.md / BOOTSTRAP.md) must explicitly describe the DEFAULT behavior, not just the exceptions. Omission reads as "escalate when in doubt" to fresh sessions. If you want the default to be "iterate with peer and decide," say so explicitly.

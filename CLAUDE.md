@@ -271,11 +271,26 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
 ## 8. Langston Operations Reference
 
 - **Server:** Hetzner CPX22 at `204.168.141.77` (Helsinki). Ubuntu 24.04.
-- **Brain:** OpenClaw gateway running OpenAI GPT-5.4 permanently (272K tokens/topic, pending 1M upgrade).
-- **Workspace:** `/root/.openclaw/workspace/` — contains BOOTSTRAP.md, MEMORY.md, SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md, GOVERNANCE_RULES.md.
+- **Brain:** OpenClaw gateway running OpenAI GPT-5.4 permanently (272K tokens/topic, 1M override blocked on upstream openclaw/openclaw#42225 + PR #44475 — monitor for merge and retry).
+- **OpenClaw version:** 2026.4.14 (upgraded from 2026.4.5 on 2026-04-14 via `openclaw update`).
+- **Workspace:** `/root/.openclaw/workspace/` (main agent / Langston) and `/root/.openclaw/agents/telegram-relay/workspace/` (CCDT Relay agent). Each contains BOOTSTRAP.md, MEMORY.md, SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md.
+- **Bot identities:** `@LangstonDTBot` (default account, `main` agent, conversational) and `@CCDTCommsBot` (ccdt-relay account, `telegram-relay` agent, silent message relay to cc-inbox). CC-initiated sends via `openclaw message send --account ccdt-relay` show in Telegram as "CCDT Communicator" — that is CC, not the relay agent.
 - **Session reset:** Archive transcript at `/root/.openclaw/agents/main/sessions/<session-id>-topic-21.jsonl` by renaming with `.reset.<date>` suffix. New session spawns fresh.
 - **If Langston says he's working but not delivering:** reset his context session. His SOUL.md has a Task Completion Honesty rule — if he's drifting from it, reset.
-- **Web search:** Fixed 2026-04-14. The missing credential was `plugins.entries.google.config.webSearch.apiKey` in `/root/.openclaw/openclaw.json`. Don't re-investigate — it works.
+- **Web search:** Fixed 2026-04-14. Missing credential was `plugins.entries.google.config.webSearch.apiKey` in `/root/.openclaw/openclaw.json`. Don't re-investigate — it works.
+- **Obsolete path to avoid:** `/root/.openclaw-ccdt/` — leftover from a previous separate profile, not the live workspace. Editing files there has zero effect on the running CCDT Relay agent.
+
+### 8.1 Diagnostic Runbook — "Agent Is Misbehaving"
+
+When an OpenClaw agent (Langston, CCDT Relay, or any other) is not responding as expected, run this check order before changing config. These steps come from the 2026-04-15 CCDT relay postmortem (six compounding root causes) and are captured in full at `SYSTEM_MANUAL.md` §27 and `CHANGES_AND_FIXES.md` INFRA-15B-001.
+
+1. **`openclaw health`** — are both expected bots listed as ok? If only one bot shows, the other account is unhealthy (disabled, unbound, or token conflict).
+2. **Duplicate gateway check** — `systemctl list-units --type=service | grep openclaw` AND `ps aux | grep openclaw-gateway`. A leftover unit (e.g. `openclaw-ccdt.service`) fighting for the same bot token produces intermittent behavior. Stop and disable any duplicates.
+3. **Config declaration** — `/root/.openclaw/openclaw.json` → `channels.telegram.accounts.<accountId>` — does the account exist and is `enabled: true`? `enabled: true` is necessary but not sufficient.
+4. **Runtime binding** — `openclaw agents bind` is a separate runtime wire that can be wiped independently of config. If config looks right but the agent still isn't receiving messages, re-bind with `openclaw agents bind <agentId> ← telegram accountId=<accountId>`.
+5. **Workspace file path** — if agent behavior contradicts its SOUL.md / BOOTSTRAP.md rules, verify the agent is actually loading the file you are editing. Multiple profiles can have multiple workspace paths; use `openclaw health` output and the registered `agentDir` in `openclaw.json` to confirm the live path. The obsolete `/root/.openclaw-ccdt/` path specifically traps sessions that edit the wrong SOUL.md.
+6. **Model tier** — if an agent is outputting tool-call text (e.g. `cc-inbox write "..."`) directly into a chat instead of executing it, the model is `gpt-4.1-mini` or similar and cannot reliably invoke tools. Upgrade to `openai/gpt-4.1` full minimum. **Never use `gpt-4.1-mini` for tool-calling agents.**
+7. **Legacy config key check** — `openclaw doctor` flags any legacy config keys that the current OpenClaw version no longer accepts. After any `openclaw update`, run `openclaw doctor --fix` to migrate legacy keys before debugging further. Today's 2026.4.5 → 2026.4.14 upgrade broke the CCDT relay's streaming config this exact way.
 
 ---
 

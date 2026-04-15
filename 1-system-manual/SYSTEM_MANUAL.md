@@ -7017,6 +7017,79 @@ Any service not directly tied to signal generation, risk management, execution, 
 | 1.0 | 2026-02-16 | Claude Code | Initial audit: 22 files deep-read, 1 bug, 4 risks, 3 potential legacy systems identified |
 | 1.1 | 2026-02-16 | Claude Code | Phase 7 Addendum applied: Kyle's executive position added. All potential legacy systems reclassified from "AWAITING KYLE CONFIRMATION" to "POST-AUDIT CLEANUP INVESTIGATION REQUIRED". 9 systems added to Post-Audit Infrastructure Review list. MicroExecutionService, AutonomyScheduler, AwarenessScheduler, LearningCycleService, LATTI/coherence residual flags added as investigation items per Kyle's directives. New Section 26 (Post-Audit Infrastructure Review) added. Required Corrections updated from deprecation actions to post-audit investigation items. |
 
+---
+
+## 27. Telegram / OpenClaw Agent Infrastructure (Post-B15b Operational Rules)
+
+**Added 2026-04-15** after a 14-hour CCDT relay outage traced to six compounding root causes. See `CHANGES_AND_FIXES.md` INFRA-15B-001 for the full postmortem. This section captures the operational rules that came out of that incident so they are surfaced in the System Manual rather than buried in a fix log.
+
+### 27.1 Agent-to-Account Bindings Are Two-Part State
+
+An OpenClaw agent (e.g. `telegram-relay`, `main`, `conductor`) must be wired to a Telegram channel account via BOTH:
+
+1. **Config declaration** in `/root/.openclaw/openclaw.json` — `channels.telegram.accounts.<accountId>` must exist and `enabled: true`. The account declares the bot token and the groups/topics it subscribes to.
+2. **Runtime binding** via `openclaw agents bind telegram-relay ← telegram accountId=<accountId>`. This is separate runtime state that can be wiped independently of the config. `enabled: true` alone is **not sufficient** — the runtime bind is a separate wire.
+
+**Diagnostic:** `openclaw health` reports healthy bots with their bot handles (e.g. `telegram: ok (@LangstonDTBot, @CCDTCommsBot)`). If an expected bot is missing from the health output, the binding is broken. Check config first, then re-bind.
+
+### 27.2 Model Choice for Tool-Calling Agents
+
+**Never use `openai/gpt-4.1-mini` for OpenClaw agents that need to invoke shell tools** (CCDT Relay, Conductor, or any agent whose workspace instructions include `cc-inbox write`, `curl`, `ssh`, or other shell-tool invocations). The mini variant cannot reliably call tools — instead of executing the tool, it will output the command as literal text (e.g. emitting `cc-inbox write "..."` as a chat message), which leaks into whatever channel the agent responds to. This was the root cause of the "CCDT posting fake acks" symptom in INFRA-15B-001.
+
+**Rule**: Tool-calling agents require `openai/gpt-4.1` (full) minimum. `openai/gpt-4.1-mini` is acceptable for text-generation-only jobs (summarization, transcription relay, conversational responses) where no shell tool invocation is expected.
+
+### 27.3 Duplicate Gateway Check
+
+When an OpenClaw agent is misbehaving — intermittent responses, missing messages, responses showing as the wrong bot — always check for duplicate gateway processes before touching config:
+
+```bash
+systemctl list-units --type=service | grep openclaw
+ps aux | grep openclaw-gateway
+```
+
+A leftover systemd unit from an older deployment (e.g. `openclaw-ccdt.service`) can run in parallel with the main gateway, fighting for the same bot token. Either gateway can handle any given inbound message, each with stale config, producing intermittent and confusing behavior. Stop and disable any leftover units with `systemctl stop <unit> && systemctl disable <unit>`.
+
+### 27.4 Workspace File Path Verification
+
+OpenClaw profiles can have multiple workspace paths. If an agent's behavior contradicts its documented workspace rules (e.g. its SOUL.md says "silent in group topics" but the agent is chatty), the agent may be loading a **different file** from what you are editing.
+
+**Canonical workspace paths** for the main OpenClaw profile (as of 2026-04-15):
+- **`main` agent (Langston)**: `/root/.openclaw/workspace/` — contains BOOTSTRAP.md, SOUL.md, IDENTITY.md, USER.md, AGENTS.md, MEMORY.md, TOOLS.md, GOVERNANCE_RULES.md, HEARTBEAT.md
+- **`telegram-relay` agent (CCDT)**: `/root/.openclaw/agents/telegram-relay/workspace/` — contains its own BOOTSTRAP.md, SOUL.md, IDENTITY.md, USER.md, AGENTS.md, MEMORY.md, TOOLS.md
+
+**Obsolete profile path** (do NOT edit — this is not the live workspace):
+- `/root/.openclaw-ccdt/workspace/` — leftover from a previous separate OpenClaw profile that was decommissioned. Should be deleted or renamed `.obsolete` to prevent future confusion.
+
+**Verification**: `openclaw health` output lists registered agent names. `openclaw.json` → `agents.list[].workspace` shows the canonical workspace path. If you edit a workspace file and the agent's behavior doesn't change on next session spawn, you are editing the wrong path.
+
+### 27.5 Bot Identity Reference
+
+| Bot handle | Token prefix | OpenClaw account | Agent | Purpose |
+|---|---|---|---|---|
+| `@LangstonDTBot` (display "Langston DT") | `7953472847:...` | `default` | `main` | Langston conversational agent, Thread 21 (Batch Implementation) and Thread 28 (Design) |
+| `@CCDTCommsBot` (display "CCDT Communicator") | `8758978168:...` | `ccdt-relay` | `telegram-relay` | Silent message relay from Topic 21/28 to `cc-inbox`; image saving to `Claude Comms and Packages/CCDT Relay/images/` |
+
+**Outbound send attribution**: a Telegram message posted via `openclaw message send --account <accountId>` appears in Telegram under the display name of that account's bot. Confusingly, this means CC-initiated sends via `--account ccdt-relay` show as "CCDT Communicator" in the group even though they are explicit CC sends, not autonomous relay activity. Don't confuse the two. The relay agent should be SILENT in group topics — any text output from it in a group is a regression (see §27.2 above for the root cause).
+
+### 27.6 cc-inbox Write Format (Relay Contract)
+
+The relay agent's contract is to write to `/root/claude-code-inbox.json` via `cc-inbox write` with this exact format:
+
+```
+[FROM: <sender_name>] [TOPIC: <topic_id>] <message_text>
+```
+
+For images: `[FROM: <sender_name>] [TOPIC: <topic_id>] [IMAGE] Saved to: Claude Comms and Packages/CCDT Relay/images/<filename>`
+
+For voice notes: `[FROM: <sender_name>] [TOPIC: <topic_id>] [VOICE NOTE] <transcription>`
+
+**Regression signal**: if `cc-inbox write` literal text ever appears in a Telegram group topic (instead of being silently executed), the relay agent's model tier has been downgraded below the tool-calling threshold, or the binding has been wiped again. Alert immediately and re-check §27.1–§27.2.
+
+### 27.7 Post-Incident Cleanup Items (Open)
+
+- [ ] Delete or rename `/root/.openclaw-ccdt/` (obsolete profile path) to prevent future workspace-file-path confusion.
+- [ ] Monitor [openclaw/openclaw#42225](https://github.com/openclaw/openclaw/issues/42225) and [PR #44475](https://github.com/openclaw/openclaw/pull/44475) for the 1M context override fix; re-apply `models.providers.openai.models[].contextWindow = 1050000` once the passthrough fix ships.
+- [ ] `openclaw-ccdt.service` systemd unit has been stopped and disabled, but the unit file may still exist at `/etc/systemd/system/openclaw-ccdt.service`. Consider removing the file entirely.
 
 ---
 
