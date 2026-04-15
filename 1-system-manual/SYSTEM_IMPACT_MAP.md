@@ -305,6 +305,7 @@
 - **Blast Radius**: **HIGH** — all regime classification and indicator data flows through MCE. Global regime now derived from MCE cache population.
 - **Status**: **ACTIVE** — installed Batch 14 (`8f26369a`), extended Batch 19 (`getDominantRegime()`). Resolves RISK-002 (indicator duplication).
 - **Tests**: Zero direct MCE test files yet. Validated via integration through signal-orchestrator and VTS.
+- **B61 Instrumentation (2026-04-15):** Three observational telemetry emitters added, feature-flagged on `DT_PHASE15B_DBS_TELEMETRY=1`: (1) MCE cycle-sampled emitter writes per-pair DBS + regime + indicators to `logs/phase15b_dbs_telemetry/YYYY-MM-DD.jsonl` every 60s cycle. (2) Signal-orchestrator dormant-wire emitter at L454 logs DBS modifier computation when active trading runs (currently never — active trading OFF). (3) VTS half-wire emitter at `vts-runner.ts:877` logs discarded `biasModifier` to `logs/phase15b_dbs_telemetry/consumer_sites/YYYY-MM-DD.jsonl`. All three are read-only instrumentation — no behavior change, no formula/threshold modification. Disk budget ~12 MB/day. Will be removed or converted to permanent telemetry in B62+.
 
 ### 5.3 ~~MCP/ARE~~ — **REMOVED** (Phase 13, Batch 14, commit `8f26369a`)
 - **Files**: ~~`server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`~~ DELETED

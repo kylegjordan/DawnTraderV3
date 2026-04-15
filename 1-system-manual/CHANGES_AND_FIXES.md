@@ -1623,6 +1623,14 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - **Reference**: CLAUDE.md §6 "Reliable multi-line pattern" after commit `30e4d19c`.
 - **Lesson**: Any time a shell command chain crosses an SSH boundary with potentially-unsafe content, think carefully about where each expansion happens (local shell vs remote shell) and use variable assignment on the target side to prevent double-expansion.
 
+### DBS-B61-001: Dormant Wire + Half-Wire Discovery at DBS Consumer Sites
+- **Severity**: MEDIUM (governance framing was wrong — SIM said "NONE" and "never imported anywhere" but two consumer sites existed in source)
+- **Type**: DISCOVERY
+- **Location**: `server/services/signal-orchestrator.ts:454` (dormant wire), `server/services/vts-runner.ts:877` (half-wire)
+- **Summary**: Two DBS consumer sites found that governance docs had classified as "orphan": signal-orchestrator.ts:454 (dormant wire — imports `computeBiasConfidenceModifier`, computes `dbsModifier`, multiplies confidence, but active trading has been OFF since at least 2026-01-12, so this code has never executed against a captured cycle) and vts-runner.ts:877 (half-wire — computes `biasModifier = computeBiasConfidenceModifier(biasCategory)` then the result is never referenced again, discarded every VTS cycle). Corrected framing from "orphan" to "dormant wire + half-wire" in SIM §5.1b and System Manual Layer 1b. Both carried as discovered, not fixed during B61 — fixing is deferred to B62+ when the DBS integration path is designed.
+- **Governance lesson**: The prior SIM entry said "NONE" for downstream consumers. This was operationally true for captured decisions during the DBS era, but false as a code-path inventory claim. Every future review must check both runtime consumer behavior AND source-level imports, not conflate them. See SIM §5.1b burial-pattern case study (false parity claim between two broken paths).
+- **Reference**: `BATCH_61_SCOPE.md` §2, `BATCH_61_PRE_AUDIT.md` §2.2.1, SIM §5.1b (updated 2026-04-15).
+
 ### INFRA-15B-006: CLAUDE.md Autonomy-With-Langston Rule Missing
 - **Severity**: MEDIUM (caused the new CC session to escalate every routine Langston exchange to Kyle instead of iterating to consensus directly)
 - **Location**: `CLAUDE.md` §6 Three-Way Communication Protocol
