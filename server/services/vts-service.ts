@@ -718,6 +718,9 @@ export class VTSService extends EventEmitter {
     globalFriction?: number;
     pairDirectionalBias?: string;
     globalDirectionalBias?: string;
+    // B61 (2026-04-15): numeric DBS scores alongside categories
+    pairDirectionalBiasScore?: number | null;
+    globalDirectionalBiasScore?: number | null;
     filterTier?: 'standard' | 'relaxed';
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
