@@ -851,6 +851,12 @@ export const telemetryHistory = pgTable("telemetry_history", {
   globalFriction: decimal("global_friction", { precision: 5, scale: 2 }),
   pairDirectionalBias: varchar("pair_directional_bias", { length: 20 }),
   globalDirectionalBias: varchar("global_directional_bias", { length: 20 }),
+  // B61 (2026-04-15): capture numeric DBS score alongside the category string.
+  // Category alone collapses the score into one of 7 buckets, losing the magnitude
+  // information that downstream analyses need (e.g. A.2 Final threshold calibration,
+  // A.4 Final component-sanity forward-return mechanical test).
+  pairDirectionalBiasScore: decimal("pair_directional_bias_score", { precision: 5, scale: 4 }),
+  globalDirectionalBiasScore: decimal("global_directional_bias_score", { precision: 5, scale: 4 }),
   decayPenalty: decimal("decay_penalty", { precision: 5, scale: 4 }),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
   persistedAt: timestamp("persisted_at", { withTimezone: true }).defaultNow().notNull(),

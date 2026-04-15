@@ -93,6 +93,9 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   globalFriction: number | null;
   pairDirectionalBias: string | null;
   globalDirectionalBias: string | null;
+  // B61 (2026-04-15): numeric DBS scores alongside categories
+  pairDirectionalBiasScore: number | null;
+  globalDirectionalBiasScore: number | null;
   filterTier: string | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
@@ -192,6 +195,9 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             globalFriction: trade.globalFriction ?? null,
             pairDirectionalBias: trade.pairDirectionalBias || null,
             globalDirectionalBias: trade.globalDirectionalBias || null,
+            // B61 (2026-04-15): numeric DBS scores alongside categories
+            pairDirectionalBiasScore: (typeof trade.pairDirectionalBiasScore === 'number') ? trade.pairDirectionalBiasScore : null,
+            globalDirectionalBiasScore: (typeof trade.globalDirectionalBiasScore === 'number') ? trade.globalDirectionalBiasScore : null,
             filterTier: trade.filterTier || null
           });
         }

@@ -105,6 +105,9 @@ export interface VirtualTrade {
   globalFriction?: number;
   pairDirectionalBias?: string;
   globalDirectionalBias?: string;
+  // B61 (2026-04-15): numeric DBS scores alongside categories
+  pairDirectionalBiasScore?: number | null;
+  globalDirectionalBiasScore?: number | null;
   filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier for ML segmentation
 
   // Metadata
@@ -787,6 +790,9 @@ export class VTSService extends EventEmitter {
       globalFriction: tradeData.globalFriction,
       pairDirectionalBias: tradeData.pairDirectionalBias,
       globalDirectionalBias: tradeData.globalDirectionalBias,
+      // B61 (2026-04-15): numeric DBS scores alongside categories
+      pairDirectionalBiasScore: tradeData.pairDirectionalBiasScore,
+      globalDirectionalBiasScore: tradeData.globalDirectionalBiasScore,
       filterTier: tradeData.filterTier,
       source: 'vts', // HF6: Fix source tag for Phase 14 trade visibility
       schemaVersion: '1.6.7'

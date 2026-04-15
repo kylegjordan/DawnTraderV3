@@ -141,6 +141,7 @@ for (const regime of Object.keys(REGIME_NARRATIVES) as CanonicalRegimeType[]) {
 let cachedGlobalRegime: MarketRegime = 'RANGE_BOUND_STABLE';
 let cachedGlobalFriction: number = 25;
 let cachedGlobalDBSCategory: string = 'NEUTRAL'; // HF6: Cached global DBS category for VTS trade context
+let cachedGlobalDBSScore: number | null = null; // B61 (2026-04-15): numeric global DBS score, for trade metadata and audit
 let lastUpdate: Date = new Date();
 
 const TOP_100_FALLBACK_PAIRS = [
@@ -301,8 +302,10 @@ export function getMarketIndicators(): MarketIndicators {
   }
 
   // HF6: Cache DBS category for VTS trade context getter
+  // B61 (2026-04-15): also cache the numeric score
   if (globalDBS) {
     cachedGlobalDBSCategory = globalDBS.category;
+    cachedGlobalDBSScore = globalDBS.score;
   }
 
   // Directive 11.4H.5 Task 3: Check for market event transitions
@@ -350,4 +353,14 @@ export function getGlobalFriction(): number {
  */
 export function getLastGlobalDBSCategory(): string {
   return cachedGlobalDBSCategory;
+}
+
+/**
+ * B61 (2026-04-15): Get last computed global DBS numeric score for VTS trade context.
+ * Paired with getLastGlobalDBSCategory(). Returns null if no global DBS has been
+ * computed yet this session (cachedGlobalDBSCategory will still be 'NEUTRAL' in
+ * that case, and consumers should treat a null score as "unknown", not "zero").
+ */
+export function getLastGlobalDBSScore(): number | null {
+  return cachedGlobalDBSScore;
 }

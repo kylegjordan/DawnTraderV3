@@ -87,6 +87,9 @@ export interface TelemetryEntry {
   globalFriction?: number;
   pairDirectionalBias?: string;
   globalDirectionalBias?: string;
+  // B61 (2026-04-15): numeric DBS scores alongside categories
+  pairDirectionalBiasScore?: number | null;
+  globalDirectionalBiasScore?: number | null;
   decayPenalty?: number;
 }
 
@@ -245,6 +248,9 @@ export async function saveTelemetryRecord(entry: TelemetryEntry): Promise<boolea
       globalFriction: entry.globalFriction?.toFixed(2),
       pairDirectionalBias: entry.pairDirectionalBias,
       globalDirectionalBias: entry.globalDirectionalBias,
+      // B61 (2026-04-15): numeric DBS scores alongside categories
+      pairDirectionalBiasScore: entry.pairDirectionalBiasScore != null ? entry.pairDirectionalBiasScore.toFixed(4) : undefined,
+      globalDirectionalBiasScore: entry.globalDirectionalBiasScore != null ? entry.globalDirectionalBiasScore.toFixed(4) : undefined,
       decayPenalty: entry.decayPenalty?.toFixed(4),
       timestamp: new Date(),
     };
@@ -297,6 +303,9 @@ export async function saveTelemetryBatch(entries: TelemetryEntry[]): Promise<num
         globalFriction: entry.globalFriction?.toFixed(2),
         pairDirectionalBias: entry.pairDirectionalBias,
         globalDirectionalBias: entry.globalDirectionalBias,
+        // B61 (2026-04-15): numeric DBS scores alongside categories
+        pairDirectionalBiasScore: entry.pairDirectionalBiasScore != null ? entry.pairDirectionalBiasScore.toFixed(4) : undefined,
+        globalDirectionalBiasScore: entry.globalDirectionalBiasScore != null ? entry.globalDirectionalBiasScore.toFixed(4) : undefined,
         decayPenalty: entry.decayPenalty?.toFixed(4),
         timestamp: new Date(),
       };

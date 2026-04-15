@@ -61,7 +61,7 @@ import { getMarketContextEngine } from './market-context-engine.js';
 import { StrategyEngine, type StrategySignal } from './strategy-engine.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
 // Phase 14 HF6: Global friction/DBS getters for trade context dimensions
-import { getGlobalFriction, getLastGlobalDBSCategory } from './market-indicators.js';
+import { getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from './market-indicators.js';
 // Phase 14: Real score calculator replaces simulation stubs
 import { computeRealHybridScore, computeRealDecayPenalty } from '../core/utils/vts-real-score.js';
 import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
@@ -415,6 +415,10 @@ interface Phase10TradeRecord {
   globalFriction?: number;
   pairDirectionalBias?: string;
   globalDirectionalBias?: string;
+  // B61 (2026-04-15): numeric DBS score captured alongside the category string.
+  // Category alone collapses [-1, +1] into one of 7 buckets and loses magnitude.
+  pairDirectionalBiasScore?: number | null;
+  globalDirectionalBiasScore?: number | null;
   filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier
 }
 
@@ -458,6 +462,9 @@ interface OpenVirtualTrade {
   globalFriction?: number;
   pairDirectionalBias?: string;
   globalDirectionalBias?: string;
+  // B61 (2026-04-15): numeric DBS score captured alongside the category string.
+  pairDirectionalBiasScore?: number | null;
+  globalDirectionalBiasScore?: number | null;
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
@@ -1159,6 +1166,9 @@ async function generatePhase10Signal(
     globalFriction: getGlobalFriction(), // HF6: Read cached global friction from market-indicators
     pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
     globalDirectionalBias: getLastGlobalDBSCategory(), // HF6: Read cached global DBS from market-indicators
+    // B61 (2026-04-15): capture numeric scores alongside the category strings
+    pairDirectionalBiasScore: mceContext.directionalBias?.score ?? null,
+    globalDirectionalBiasScore: getLastGlobalDBSScore(),
     filterTier,  // HF9: IMF filter tier from FX5 scanner
     sourcePool: sourcePool,  // Batch 37: Propagate as-is, no fallback
   };
@@ -1440,6 +1450,9 @@ async function resolveOpenVirtualTrades(): Promise<{
       globalFriction: trade.globalFriction,
       pairDirectionalBias: trade.pairDirectionalBias,
       globalDirectionalBias: trade.globalDirectionalBias,
+      // B61 (2026-04-15): propagate numeric DBS scores alongside categories
+      pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
+      globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
       sourcePool: trade.sourcePool,
     };
     
@@ -1497,6 +1510,9 @@ async function resolveOpenVirtualTrades(): Promise<{
         globalFriction: trade.globalFriction,
         pairDirectionalBias: trade.pairDirectionalBias,
         globalDirectionalBias: trade.globalDirectionalBias,
+        // B61 (2026-04-15): propagate numeric DBS scores
+        pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
+        globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
         filterTier: trade.filterTier,
       });
       if (result.persisted) persisted++;
@@ -2617,6 +2633,9 @@ export function getOpenVirtualTradesForML(): Array<{
   globalFriction: number | null;
   pairDirectionalBias: string | null;
   globalDirectionalBias: string | null;
+  // B61 (2026-04-15): numeric DBS scores alongside categories
+  pairDirectionalBiasScore: number | null;
+  globalDirectionalBiasScore: number | null;
 }> {
   const now = Date.now();
   const trades: Array<any> = [];
@@ -2698,7 +2717,10 @@ export function getOpenVirtualTradesForML(): Array<{
       pairFriction: trade.pairFriction ?? null,
       globalFriction: trade.globalFriction ?? null,
       pairDirectionalBias: trade.pairDirectionalBias || null,
-      globalDirectionalBias: trade.globalDirectionalBias || null
+      globalDirectionalBias: trade.globalDirectionalBias || null,
+      // B61 (2026-04-15): numeric DBS scores alongside categories
+      pairDirectionalBiasScore: trade.pairDirectionalBiasScore ?? null,
+      globalDirectionalBiasScore: trade.globalDirectionalBiasScore ?? null
     });
   }
   
