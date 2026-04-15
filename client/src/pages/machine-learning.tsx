@@ -44,6 +44,9 @@ interface OpenTrade {
   globalFriction: number | null;
   pairDirectionalBias: string | null;
   globalDirectionalBias: string | null;
+  // B61 (2026-04-15): numeric DBS scores alongside categories
+  pairDirectionalBiasScore: number | null;
+  globalDirectionalBiasScore: number | null;
 }
 
 interface ClosedTrade {
@@ -79,6 +82,9 @@ interface ClosedTrade {
   globalFriction: number | null;
   pairDirectionalBias: string | null;
   globalDirectionalBias: string | null;
+  // B61 (2026-04-15): numeric DBS scores alongside categories
+  pairDirectionalBiasScore: number | null;
+  globalDirectionalBiasScore: number | null;
 }
 
 type AdjustmentType = 
@@ -586,8 +592,26 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
-                  <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
-                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</td>
+                  <td className="px-3 py-2 text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      <span>{trade.pairDirectionalBias || '\u2014'}</span>
+                      {trade.pairDirectionalBiasScore != null && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {trade.pairDirectionalBiasScore >= 0 ? '+' : ''}{trade.pairDirectionalBiasScore.toFixed(3)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      <span>{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</span>
+                      {trade.globalDirectionalBiasScore != null && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {trade.globalDirectionalBiasScore >= 0 ? '+' : ''}{trade.globalDirectionalBiasScore.toFixed(3)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-xs">
                     {format(new Date(trade.entryTime), 'MM/dd HH:mm')}
                   </td>
@@ -814,8 +838,26 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
-                  <td className="px-3 py-2 text-xs">{trade.pairDirectionalBias || '\u2014'}</td>
-                  <td className="px-3 py-2 text-xs">{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</td>
+                  <td className="px-3 py-2 text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      <span>{trade.pairDirectionalBias || '\u2014'}</span>
+                      {trade.pairDirectionalBiasScore != null && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {trade.pairDirectionalBiasScore >= 0 ? '+' : ''}{trade.pairDirectionalBiasScore.toFixed(3)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      <span>{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</span>
+                      {trade.globalDirectionalBiasScore != null && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {trade.globalDirectionalBiasScore >= 0 ? '+' : ''}{trade.globalDirectionalBiasScore.toFixed(3)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-xs">
                     <div className="flex flex-col gap-0.5">
                       <span>{format(new Date(trade.entryTime), 'MM/dd HH:mm')}</span>
