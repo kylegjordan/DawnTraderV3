@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-04-15 (B61 Phase-3a grep amendment — §5.1b corrected from "orphan" to "dormant wire + half-wire", burial-pattern case study added)
+> **Last Updated**: 2026-04-16 (B62 — §5.1 DBS-integrated classifier, §5.1b LIVE status, §5.2.5 MCE DBS-before-regime + getCachedVolumes, §7.1 VTS benchmark unblock + half-wire removal)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -260,17 +260,17 @@
 
 ## Layer 5: Regime Classification
 
-### 5.1 calculatePairRegime() — CANONICAL (ACTIVE, CODE FROZEN during Phase 15b audit)
+### 5.1 calculatePairRegime() — CANONICAL (ACTIVE, redesigned B62)
 - **File**: `server/core/metrics/market-regime.ts`
-- **What**: Canonical pair-level regime classification. 5 regimes (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION). Uses volatility, momentum, DX (raw, not smoothed ADX). DX thresholds recalibrated for crypto in HF7 (25 to 45/50/55/60).
-- **Upstream**: OHLC price data (60-min candles from both VTS and orchestrator — aligned in HF8)
+- **What**: Canonical pair-level regime classification. **B62 Design B:** `calculatePairRegime()` now accepts `dbsScore` parameter as primary classification input. DBS-integrated classifier eliminates drift contamination (RBS 70% → 0%). 5 regimes (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION). Uses DBS score + volatility + momentum + DX. DX thresholds recalibrated for crypto in HF7 (25 to 45/50/55/60).
+- **Upstream**: OHLC price data (60-min candles from both VTS and orchestrator — aligned in HF8), **DBS score (from directional-bias.ts via MCE — B62, new upstream feeder)**
 - **Downstream**: VTS Runner (heavy use via MCE), Signal Orchestrator (via MCE — **WIRED**, Phase 13 Batch 14)
-- **Execution**: Synchronous — called per pair via MCE
+- **Execution**: Synchronous — called per pair via MCE. **MCE computes DBS before regime (B62 ordering swap).**
 - **Blast Radius**: **HIGH** — regime determines strategy selection
-- **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13). DX thresholds recalibrated for crypto in HF7 (`64014bd2`).
-- **⚠ Phase 15b audit finding (2026-04-14):** The classifier uses vol + ADX + momentum thresholds but has **no directional drift check**. Result: 54.5% of pairs labeled `RANGE_BOUND_STABLE` while only ~8% have truly neutral momentum — the other 47% are drift-contaminated false ranges, bleeding `range_trade` (76% loss rate). The classifier is being audited and redesigned in Phase 15b (B61–B65). **Code is FROZEN during the audit** — no threshold/formula changes except instrumentation for evidence collection.
+- **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13). DX thresholds recalibrated for crypto in HF7 (`64014bd2`). **Code freeze LIFTED (B62).** DBS-integrated classifier deployed to staging, 72h verification pending.
+- **⚠ Phase 15b audit finding (2026-04-14):** The pre-B62 classifier used vol + ADX + momentum thresholds but had **no directional drift check**. Result: 54.5% of pairs labeled `RANGE_BOUND_STABLE` while only ~8% had truly neutral momentum — the other 47% were drift-contaminated false ranges, bleeding `range_trade` (76% loss rate). **B62 fix:** DBS score is now the primary classification input, eliminating drift contamination. RBS drift contamination 70% → 0%. TFS+IE share 14% → 36.5%.
 
-### 5.1b calculateDBS() / getPairDirectionalBias() / getGlobalDirectionalBias() — DORMANT-WIRE + HALF-WIRE (CODE FROZEN during Phase 15b audit)
+### 5.1b calculateDBS() / getPairDirectionalBias() / getGlobalDirectionalBias() — LIVE (consumed by regime classifier, B62)
 - **File**: `server/core/metrics/directional-bias.ts`, `server/types/directional-bias.types.ts`
 - **What**: Directional Bias Score (DBS) — composite formula `0.40×slope + 0.35×return + 0.25×EMA_alignment`, ATR-normalized. 7 categories (UP_STRONG through DOWN_STRONG). Per-pair DBS plus global DBS (weighted median of pair DBS by 24h volume). `biasConfidenceModifier` defined in types file (aligned 1.05–1.15×, opposing 0.70–0.85×, neutral 1.0×).
 - **Upstream**: OHLC candles (60-min), ATR (from MCE), EMA chain (from MCE)
@@ -280,10 +280,10 @@
 - **Other DBS references (all classified benign by Phase 3a grep):** `directional-bias.ts` + `directional-bias.types.ts` (emitters/types); `market-context-engine.ts` (computes and caches DBS on the MCE cycle — expected emitter); `market-indicators.ts` L291–305 (reads MCE DBS, caches `globalDBS` category, written to VTS trade metadata only); `vts-runner.ts` L1128/1409/1466/2668 (writes `pairDirectionalBias`/`globalDirectionalBias` into openTrade metadata — passthrough); `telemetry-repository.ts` L246–299 (persists trade metadata — passthrough); `routes.ts` L7474–7476 (API response display); `analytics.tsx`, `machine-learning.tsx` (UI display); `export-csv.ts`, `shared/schema.ts`, `frictionColor.ts` (metadata/display helpers). **Not consumed by:** regime classifier (`calculatePairRegime`), strategy detection gates (`StrategyEngine`), SQE filters, RTB ranking, TEC trade execution / early exits, Net_EV gate.
 - **Execution**: Synchronous — `calculateDBS()` called per pair per MCE cycle (60s). Consumer sites execute only when their host paths run (signal-orchestrator: never during B61; vts-runner: every VTS strategy evaluation, result discarded).
 - **Blast Radius**: **CURRENTLY ZERO applied.** Potential HIGH — once any consumer path is actually exercised with an applied modifier, DBS touches regime classification, strategy selection, filter layer, entry gates, exit triggers.
-- **Status**: **DORMANT-WIRE + HALF-WIRE.** Fully implemented, actively computed, logged to VTS telemetry. Two consumer sites exist in source but neither has ever modified a captured decision during the DBS era. Re-classified during Phase 3a codebase consumer grep (2026-04-15, B61). The earlier "ORPHAN METRIC" label (from 2026-04-14 `range_trade` root-cause investigation) was imprecise: the wire-level orphan claim was false, but the decision-level orphan claim remains effectively true because active trading was off. Phase 15b B61 exists to audit DBS (formula, thresholds, global methodology, data quality) and determine optimal integration into regime classification + filter layer.
+- **Status**: **LIVE — consumed by regime classifier (B62).** DBS is now the primary input to `calculatePairRegime()` via MCE. Both dead code paths removed: signal-orchestrator.ts:454 dormant wire REMOVED, vts-runner.ts:877 half-wire REMOVED. `sentinelZero` field added to DBS output (flags zero-volume pairs for coverage gating). VTS benchmark exclusion filter removed. Previously DORMANT-WIRE + HALF-WIRE through B61. Re-classified during Phase 3a codebase consumer grep (2026-04-15, B61). B62 completed the integration that B61 validated.
 - **⚠ Governance framing (corrected 2026-04-15):** Not "DBS is orphaned" (ambiguous and partly false — imports existed). Not "DBS has been silently shaping signals" (also false — active trading has been off). The correct framing is **"dormant wire on orchestrator, no-op half-wire on VTS, both buried under ambiguous orphan language."** The governance failure is that the prior SIM entry said "NONE" and "never imported anywhere" — operationally true for captured decisions during the DBS era, but false as a code-path inventory claim. Every future review must check both runtime consumer behavior AND source-level imports, not conflate them.
 - **⚠ Burial pattern — false parity claim (case study for future reviews).** The `signal-orchestrator.ts:448` comment `// (parity with VTS path)` asserts consistency with a sibling path that is itself dead code. The sibling (`vts-runner.ts:877`) computes the modifier and discards the result, so there is no "parity" to achieve — the parity claim is fictional. Future reviews should specifically flag comments that assert consistency with another code path without verifying the other path actually does what the comment claims. This is a named burial pattern: **false parity claim between two broken paths.**
-- **Code freeze:** FROZEN during Phase 15b audit. No formula, weight, or threshold changes in `directional-bias.ts` or `market-regime.ts`. Instrumentation-only exception, expanded 2026-04-15 to include two observational emitters at `signal-orchestrator.ts:454` and `vts-runner.ts:877` (feature-flagged, no behavior change — see `BATCH_61_PRE_AUDIT.md` §6.9).
+- **Code freeze:** LIFTED (B62). `directional-bias.ts` and `market-regime.ts` both modified in B62 as part of DBS-integrated classifier redesign. Previous freeze was in effect through B61 audit.
 - **Simulation evidence (2026-04-14):** DBS-based classifier redesign produces `TREND_FRIENDLY_STABLE` 19.3% → 55.7%, `RANGE_BOUND_STABLE` 54.5% → 3.4%. Live DBS distribution: 55.7% of pairs UP_MODERATE or stronger, only 4.5% NEUTRAL. See `Claude Comms and Packages/Scope Files/REGIME_DBS_STRATEGY_AUDIT_SCOPE_2026-04-14.md`.
 - **✅ Operational takeaway:** The 15-day VTS audit window (2026-03-31 → 2026-04-14, ~960 closed VTS trades) is DBS-clean. No captured trade has been modified by DBS. The B59 `range_trade` investigation and the planned B61 A.1/A.2/A.4 Final measurements run against uncontaminated data. B61 measurement integrity is intact.
 
@@ -303,9 +303,10 @@
 - **Shared State**: Per-symbol context cache (60s TTL), singleton instance
 - **Execution**: Synchronous — called per symbol per cycle by orchestrator (60s) and VTS (60s). `getDominantRegime()` iterates cache on-demand.
 - **Blast Radius**: **HIGH** — all regime classification and indicator data flows through MCE. Global regime now derived from MCE cache population.
-- **Status**: **ACTIVE** — installed Batch 14 (`8f26369a`), extended Batch 19 (`getDominantRegime()`). Resolves RISK-002 (indicator duplication).
+- **Status**: **ACTIVE** — installed Batch 14 (`8f26369a`), extended Batch 19 (`getDominantRegime()`), extended B62 (DBS-before-regime ordering, `getCachedVolumes()`, coverage gate). Resolves RISK-002 (indicator duplication).
 - **Tests**: Zero direct MCE test files yet. Validated via integration through signal-orchestrator and VTS.
-- **B61 Instrumentation (2026-04-15):** Three observational telemetry emitters added, feature-flagged on `DT_PHASE15B_DBS_TELEMETRY=1`: (1) MCE cycle-sampled emitter writes per-pair DBS + regime + indicators to `logs/phase15b_dbs_telemetry/YYYY-MM-DD.jsonl` every 60s cycle. (2) Signal-orchestrator dormant-wire emitter at L454 logs DBS modifier computation when active trading runs (currently never — active trading OFF). (3) VTS half-wire emitter at `vts-runner.ts:877` logs discarded `biasModifier` to `logs/phase15b_dbs_telemetry/consumer_sites/YYYY-MM-DD.jsonl`. All three are read-only instrumentation — no behavior change, no formula/threshold modification. Disk budget ~12 MB/day. Will be removed or converted to permanent telemetry in B62+.
+- **B62 updates (2026-04-16):** MCE now computes DBS before regime classification (ordering swap). New `getCachedVolumes()` method provides 24h volume data for global DBS computation. Coverage gate added — global DBS requires minimum pair coverage before being treated as decision-grade. DBS score passed as parameter to `calculatePairRegime()`.
+- **B61 Instrumentation (2026-04-15):** Three observational telemetry emitters added, feature-flagged on `DT_PHASE15B_DBS_TELEMETRY=1`: (1) MCE cycle-sampled emitter writes per-pair DBS + regime + indicators to `logs/phase15b_dbs_telemetry/YYYY-MM-DD.jsonl` every 60s cycle. (2) Signal-orchestrator dormant-wire emitter at L454 — **REMOVED in B62** (dead code path deleted). (3) VTS half-wire emitter at `vts-runner.ts:877` — **REMOVED in B62** (dead code path deleted). MCE cycle emitter (1) remains active.
 
 ### 5.3 ~~MCP/ARE~~ — **REMOVED** (Phase 13, Batch 14, commit `8f26369a`)
 - **Files**: ~~`server/services/market-profiler.ts`, `server/services/adaptive-regime.ts`~~ DELETED
@@ -391,6 +392,7 @@
 - **Batch 45**: Bearish strategies disabled in long-only VTS: `liquidity_trap` (bearish by design), `DHMA` short branch, `inside_bar_reversal` SELL path. 5-min post-close re-entry cooldown prevents runaway loops. `sourcePool` propagated to closed trades. `expectedEdge` stored on open trade and used in API (replaces `predictiveConfidence` default).
 - **Batch 46**: Governance state persistence loaded via import (`governance-persistence.ts`).
 - **Batch 57**: Pattern-strategy mismatch fixed — per-strategy pattern routing matches VTS behavior to signal-orchestrator fix. Pool-split null reason tracking added (quant pool vs pattern pool breakdown in null reason counters). adaptive-flow.ts THREE_SOLDIERS/MORNING_STAR canonicalization bug fixed.
+- **B62**: Benchmark exclusion filter removed (VTS benchmarks unblocked). Half-wire at L877 (`biasModifier` computed and discarded) removed — dead code path deleted.
 - **Tests**: `vts-modernization.test.ts`, `vts-signal-generation.test.ts`
 
 ### 7.2 VTS Service

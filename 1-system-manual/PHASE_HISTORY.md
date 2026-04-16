@@ -34,7 +34,7 @@
 | 11.8 | Phase 11 Finalization: Adjustment Framework + Authority Baseline | Batch 58 | COMPLETE |
 | 15a | Predictive Learning UI Audit & Data Path Fixes | Batch 59 | COMPLETE (Regime Archive verification pending next telemetry cycle) |
 | 15b (OLD) | ~~Rules-Based Predictive Execution / Smart Thermostat~~ | ~~B60~~ | **DEFERRED post-live → renumbered Phase 17.5** (2026-04-14). Cannot tune adaptive policy on top of a misclassified state model. |
-| **15b (NEW)** | **Regime / DBS / Strategy / Filter Restructure** — DBS validation, regime taxonomy redesign, DBS integration inventory, strategy re-audit, conditional implementation | **B61, B62, B63, B64, B65** | **LOCKED 2026-04-14 — IN PROGRESS.** Sub-Phase A (B61 DBS Validation) CLOSED 2026-04-16. B62 gate CLEAR. Sub-phases B–E remain. Code freeze on regime/DBS during audit. Sub-Phase E conditional on audit findings. |
+| **15b (NEW)** | **Regime / DBS / Strategy / Filter Restructure** — DBS validation, regime taxonomy redesign, DBS integration inventory, strategy re-audit, conditional implementation | **B61, B62, B63, B64, B65** | **LOCKED 2026-04-14 — IN PROGRESS.** Sub-Phase A (B61 DBS Validation) CLOSED 2026-04-16. **Sub-Phase B (B62 Regime Taxonomy Redesign) IN PROGRESS — deployed to staging, 72h verification pending.** Code freeze on regime/DBS LIFTED (B62). Sub-phases C–E remain. Sub-Phase E conditional on audit findings. |
 | 16 | DB & Legacy Cleanup | — | PLANNED |
 | 19 | Paper Mode Full Audit & Debug | — | PLANNED |
 | 20 | Production Hardening | — | PLANNED |

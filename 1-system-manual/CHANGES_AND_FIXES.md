@@ -1631,6 +1631,27 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - **Governance lesson**: The prior SIM entry said "NONE" for downstream consumers. This was operationally true for captured decisions during the DBS era, but false as a code-path inventory claim. Every future review must check both runtime consumer behavior AND source-level imports, not conflate them. See SIM §5.1b burial-pattern case study (false parity claim between two broken paths).
 - **Reference**: `BATCH_61_SCOPE.md` §2, `BATCH_61_PRE_AUDIT.md` §2.2.1, SIM §5.1b (updated 2026-04-15).
 
+### DBS-B62-001: Regime Classifier Redesign (Design B — DBS-Integrated)
+- **Severity**: HIGH (structural fix for 70% drift contamination in RANGE_BOUND_STABLE)
+- **Type**: REDESIGN
+- **Location**: `server/core/metrics/market-regime.ts`, `server/services/market-context-engine.ts`
+- **Summary**: `calculatePairRegime()` redesigned to accept `dbsScore` as 4th input. Three DBS gates added: RBS requires `|DBS| < 0.10` (eliminates drift contamination), TFS admits `|DBS| >= 0.30`, IE admits `|DBS| >= 0.50 + vol > 0.015`. MCE ordering swapped to DBS-before-regime. Phase 0 evidence: TFS+IE 14.1%→36.5%, RBS drift 70.2%→0.0%, family flicker 1.99% (passes 2.0% ceiling). TFS threshold 0.30 selected by parameter sweep as the only value that passes flicker ceiling.
+- **Reference**: `BATCH_62_PHASE0_REPLAY_ANALYSIS.md`, `BATCH_62_SCOPE.md`
+
+### DBS-B62-002: Global DBS Three-Defect Fix (A.3 Remediation)
+- **Severity**: MEDIUM (global DBS was operationally noisy — 50.32% flicker from partial cache reads)
+- **Type**: FIX
+- **Location**: `server/core/metrics/directional-bias.ts`, `server/services/market-context-engine.ts`, `server/services/market-indicators.ts`
+- **Summary**: Three A.3 defects fixed: (1) real 24h volume from MCE cache instead of empty map, (2) coverage gate at 70% of peak — prevents computing global DBS from underfilled cache, (3) sentinel-zero filter on `DirectionalBiasResult`. Configurable weight cap constant added (`GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT = 1.0`, disabled). Further architectural improvement (persistent store + end-of-cycle snapshot) deferred to post-72h verification.
+- **Reference**: `BATCH_61_A3_GLOBAL_DBS_METHODOLOGY.md`, `BATCH_62_PRE_AUDIT.md`
+
+### DBS-B62-003: VTS Benchmark Unblock + Dead Code Removal
+- **Severity**: MEDIUM
+- **Type**: CLEANUP + FEATURE
+- **Location**: `server/services/vts-runner.ts`, `server/services/signal-orchestrator.ts`, `server/services/fx5-scanner.ts`
+- **Summary**: (1) Directive 11.6F benchmark exclusion removed from vts-runner.ts. (2) Batch 52 benchmark filter removed from fx5-scanner.ts. BTC/ETH/SOL now flow through VTS. (3) Dormant DBS confidence modifier removed from signal-orchestrator.ts (L448-467 + import). (4) Half-wired biasModifier removed from vts-runner.ts (L875-877 + import). Both `computeBiasConfidenceModifier` imports eliminated.
+- **Reference**: `BATCH_62_SCOPE.md` §4.9
+
 ### INFRA-15B-006: CLAUDE.md Autonomy-With-Langston Rule Missing
 - **Severity**: MEDIUM (caused the new CC session to escalate every routine Langston exchange to Kyle instead of iterating to consensus directly)
 - **Location**: `CLAUDE.md` §6 Three-Way Communication Protocol

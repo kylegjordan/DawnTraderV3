@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Consolidated**: 2026-02-17
-> **Last Updated**: 2026-04-12 (B58 — Adjustment Framework + Authority Baseline added to authority hierarchy)
+> **Last Updated**: 2026-04-16 (B62 — DBS-integrated regime classifier redesign, Layer 1 + Layer 1b updates)
 > **Source**: Systematic 11-phase repository audit
 > **Companion Documents**: CHANGES_AND_FIXES.md, LEGACY_DEPRECATION_PLAN.md, POST_AUDIT_ROADMAP.md, ADJUSTMENT_FRAMEWORK.md (parameter governance), AUTHORITY_BASELINE.md (V1.0 snapshot)
 > **Status**: Complete (all 11 phases consolidated)
@@ -26,7 +26,7 @@ This manual documents both **what the system currently does** and **what it is d
 - Components are labeled with their status: **ACTIVE**, **LEGACY**, **CANONICAL CANDIDATE**, **DEPRECATED**, **LOCKED**, etc.
 - The phrase "defined but not wired" or "implemented but not actively selected" indicates a component that exists in code but is not in the live execution path
 
-**When in doubt**: The active trading path uses the Market Context Engine (MCE), which calls `calculatePairRegime()` for canonical 5-regime classification and looks up strategies via `CANONICAL_REGIME_STRATEGY_MAP` (17 strategies). The legacy 6-regime / 9-quant-only map has been fully replaced (Batch 13 DSS rewire + Batch 14 MCE installation). See Chapter 2 for the full regime architecture breakdown.
+**When in doubt**: The active trading path uses the Market Context Engine (MCE), which computes DBS first, then calls `calculatePairRegime(momentum, adx, volatility, dbsScore)` for canonical 5-regime classification and looks up strategies via `CANONICAL_REGIME_STRATEGY_MAP` (17 strategies). The classifier uses DBS to gate regime assignments (B62 redesign). The legacy 6-regime / 9-quant-only map has been fully replaced (Batch 13 DSS rewire + Batch 14 MCE installation). See Chapter 2 for the full regime architecture breakdown.
 
 ### System Overview
 
@@ -85,7 +85,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 |-----------|---------|-----------|
 | **Net Expectancy Kernel** | `signal-orchestrator.ts`, `paper-execution-engine.ts` | Sole EV authority. Mathematically correct. |
 | **cost-model.ts** | `server/core/cost-model.ts` | Cost-of-trade authority. Real spread + slippage + fees. |
-| **calculatePairRegime()** | `server/core/metrics/market-regime.ts` | Canonical pair-level regime classification. 5 regimes. |
+| **calculatePairRegime()** | `server/core/metrics/market-regime.ts` | Canonical pair-level regime classification. 5 regimes. DBS-integrated (B62): accepts `dbsScore` parameter, gates RBS/TFS/IE. |
 | **Market Context Engine (MCE)** | `server/services/market-context-engine.ts`, `server/types/market-context.ts` | Centralized VWAP/SMA/ATR/regime computation. Signal orchestrator and VTS both call `MCE.computeContext()`. Singleton, 60s cache TTL. |
 | **Canonical Regime Strategy Map** | `server/config/canonical-regime-strategy-map.ts` | SSOT: 5 regimes, 17 strategies. **Wired via MCE** (Batch 14). |
 | **Guardrails V2** | `guardrails-v2.ts` | Risk gate authority. 10 named guardrails + kill switch. |
@@ -1287,38 +1287,54 @@ DawnTrader contains **four** independent regime classification systems operating
 | Engine #4 uses stubbed metrics | `volume_z = 0` and `correlation = 0.5` are hardcoded — never computed from market data. System was locked before implementation was finished (RISK-019) |
 | Two systems generating signals and adjustments simultaneously | Kyle confirmed this was never the intention. Canonical map and DSS were built to replace MCP/ARE, not coexist with it |
 
-### Current Regime Architecture (Post-Batch 14, Pre-Phase-15b-Restructure)
+### Current Regime Architecture (Post-Batch 14, B62 DBS-Integrated Classifier)
 
-**Layer 1 — Pair-Level Regime Authority (Strategy Routing) — ACTIVE (FROZEN during Phase 15b audit):**
-Market Context Engine (MCE) calls `calculatePairRegime()` from `market-regime.ts` → 5 canonical regime names → `CANONICAL_REGIME_STRATEGY_MAP` lookup → allowed strategies. Both signal orchestrator (active trading) and VTS runner (passive learning) call `MCE.computeContext()`. ~~BUG-006~~ RESOLVED (Batch 13). ~~BUG-002, BUG-003~~ RESOLVED (Batch 14).
+**Layer 1 — Pair-Level Regime Authority (Strategy Routing) — ACTIVE (REDESIGNED in B62):**
+Market Context Engine (MCE) computes DBS first, then calls `calculatePairRegime(momentum, adx, volatility, dbsScore)` from `market-regime.ts` → 5 canonical regime names → `CANONICAL_REGIME_STRATEGY_MAP` lookup → allowed strategies. Both signal orchestrator (active trading) and VTS runner (passive learning) call `MCE.computeContext()`. ~~BUG-006~~ RESOLVED (Batch 13). ~~BUG-002, BUG-003~~ RESOLVED (Batch 14).
 
-> **⚠ Phase 15b audit finding (2026-04-14):** The classifier uses volatility + ADX + momentum thresholds but has **no directional drift check**. It labels 54.5% of pairs as `RANGE_BOUND_STABLE` while only ~8% of pairs actually have truly neutral momentum. The other ~47% are drift-contaminated false ranges (B61 measured **70.17%** on a 22h cycle-sampled window — B59's 47% snapshot underestimated the problem), which explains why `range_trade` has a 76% loss rate (77.5% stop-hit) despite having sound R:R 2.31 strategy logic. The classifier is being audited and redesigned in Phase 15b (batches B61–B65). **Code is FROZEN during the audit** — no threshold or formula changes permitted except instrumentation needed to collect evidence. See `POST_AUDIT_ROADMAP.md` Phase 15b body and `Claude Comms and Packages/Scope Files/REGIME_DBS_STRATEGY_AUDIT_SCOPE_2026-04-14.md`.
+**B62 classifier redesign (Design B — DBS-integrated gates).** The `calculatePairRegime()` function now accepts a `dbsScore` parameter (default 0) and uses DBS to gate regime assignments:
+- **RANGE_BOUND_STABLE** requires `|DBS| < 0.10` in addition to the existing volatility < 0.012 and ADX < 45 checks. This eliminates drift-contaminated false ranges — Phase 0 replay measured **RBS drift contamination 70.2% → 0.0%** under Design B.
+- **TREND_FOLLOWING_STRONG** admits pairs with `|DBS| >= 0.30` even without traditional momentum/ADX signals. This unblocks trend strategies that were previously locked out by RBS misclassification.
+- **IMPULSE_EXPANSION** admits pairs with `|DBS| >= 0.50 && vol > 0.015` (less restrictive than the old vol > 0.020 && ADX > 55 gate), expanding IE from vestigial ~1% to a viable regime.
+- **MCE execution order changed:** DBS is now computed BEFORE regime classification (was regime-first). This is required because the classifier consumes `dbsScore` as an input.
+- **Code freeze on `market-regime.ts` LIFTED as of B62 Phase 1.**
 
-**Layer 1b — Directional Bias Score (DBS) — DORMANT-WIRE + HALF-WIRE (FROZEN during Phase 15b audit):**
-`server/core/metrics/directional-bias.ts` implements the Directional Bias Score: composite formula `0.40×slope + 0.35×return + 0.25×EMA_alignment`, all ATR-normalized. 7 categories (UP_STRONG through DOWN_STRONG). Per-pair DBS plus global DBS (weighted median of per-pair DBS by 24h volume). File comment states: *"Regime answers how the market behaves mechanically. Directional Bias answers: is price going up or down, and how strongly?"*
+**Phase 0 replay evidence (B62).** 4-day historical replay across the full pair universe validated Design B:
+- TFS+IE combined share: **14.1% → 36.5%** (trend strategies unblocked)
+- RBS drift contamination: **70.2% → 0.0%** (drift-contaminated pairs correctly reclassified)
+- Family-level regime flicker: **1.99%** (well under 2.0% ceiling)
+- TFS DBS threshold of 0.30 is the **only tested value** that passes the 2.0% flicker ceiling (0.20 and 0.25 both failed)
+
+> **Historical context (Phase 15b audit, 2026-04-14 through B61).** The pre-B62 classifier used volatility + ADX + momentum thresholds but had **no directional drift check**. It labeled 54.5% of pairs as `RANGE_BOUND_STABLE` while only ~8% had truly neutral momentum. B61 measured **70.17%** drift contamination on a 22h cycle-sampled window (B59's 47% snapshot underestimated the problem), which explained why `range_trade` had a 76% loss rate (77.5% stop-hit) despite sound R:R 2.31 strategy logic. See `POST_AUDIT_ROADMAP.md` Phase 15b body and `Claude Comms and Packages/Scope Files/REGIME_DBS_STRATEGY_AUDIT_SCOPE_2026-04-14.md`.
+
+**Layer 1b — Directional Bias Score (DBS) — LIVE INPUT TO REGIME CLASSIFIER (B62):**
+`server/core/metrics/directional-bias.ts` implements the Directional Bias Score: composite formula `0.40×slope + 0.35×return + 0.25×EMA_alignment`, all ATR-normalized. 7 categories (UP_STRONG through DOWN_STRONG). Per-pair DBS plus global DBS (weighted median of per-pair DBS by 24h volume, with configurable weight cap constant). `sentinelZero` boolean added to `DirectionalBiasResult` to flag zero-score sentinel values. File comment states: *"Regime answers how the market behaves mechanically. Directional Bias answers: is price going up or down, and how strongly?"*
 
 **⚠ Formula design constraint — slope-clamp interaction (recorded 2026-04-15 per B61 A.1 §3.3):** `slopeComponent` has an internal clamp at `[-0.40, +0.40]` applied BEFORE the 0.40 slope weight is multiplied in. This clamp binds at the component level. Raising the slope weight alone cannot produce extreme-category readings (UP_STRONG ≥ +0.60 or DOWN_STRONG ≤ -0.60) because the clamp caps slope's maximum contribution at the weight × 0.40 boundary, which is below the ±0.60 category threshold. **Empirical confirmation (B61 A.1 weight-sensitivity analysis, 13,757 cycle-samples):** under a slope-heavy weighting of 0.50/0.30/0.20, **zero observations reach UP_STRONG or DOWN_STRONG**, because slope alone can contribute at most ±0.50 and the demoted return + ema components cannot make up the difference. This is a permanent design property, not a bug. **Implication for future designers:** "just upweight slope to capture stronger trends" is provably counterproductive — it collapses the extreme categories to zero. Any design change that wants to increase the share of extreme-category readings must either (a) widen the internal clamp on `slopeComponent`, (b) rebalance weights while preserving the return component's contribution, or (c) redesign the categorization thresholds. Record in B62 design-space decisions.
 
-**As of 2026-04-15 (corrected by B61 Phase-3a consumer grep), DBS is DORMANT-WIRE + HALF-WIRE, not orphaned at the code-path level.** It is:
+**As of B62 (2026-04-16), DBS is a LIVE INPUT to the regime classifier — the dormant-wire and half-wire dead code paths have been REMOVED.** Current consumer status:
 - Fully implemented
-- Actively computed every MCE cycle
+- Actively computed every MCE cycle (computed BEFORE regime classification as of B62)
 - Emitted to logs and VTS trade metadata as `pairDirectionalBias` / `globalDirectionalBias`
-- **Imported at two source-level consumer sites** — `server/services/signal-orchestrator.ts:89` and `server/services/vts-runner.ts:67`. Both import `computeBiasConfidenceModifier` from `directional-bias.ts`. **The earlier "never imported anywhere" claim was objectively false** and is corrected here.
-- Consumer site 1: **`signal-orchestrator.ts:454` — dormant consumer wire.** Computes `dbsModifier`, multiplies `extendedMetrics.confidence` by it, and recomputes `finalScore` at L448–467. Shipped 2026-03-05 22:08 UTC in commit `c28f0df`, the same day `directional-bias.ts` was created (commit `5bfa63b`, 11:56 UTC). **Has never executed against a captured cycle** — active trading has been continuously OFF since at least 2026-01-12 (verified against zero rows in Supabase `trades`, `paper_trades`, `paper_sim_trades`, and audit_log latest timestamp 2026-01-12 19:05 UTC, seven weeks before DBS integration). The wire was born dormant.
-- Consumer site 2: **`vts-runner.ts:877` — no-op half-wire.** Computes `biasModifier = computeBiasConfidenceModifier(biasCategory)`; the result is never referenced again anywhere in the file. Every VTS-emitted trade across the 15-day B61 audit window has `biasModifier` computed and immediately discarded. VTS trade metadata's `pairDirectionalBias` field captures the raw category string as observation only, not a modifier effect.
-- **NOT consumed (at decision layer) by any runtime path** — no captured decision during the DBS era has been modified by DBS, because the dormant path never ran and the half-wire discards its result. Not applied by: regime classifier (Layer 1), strategy detection gates, SQE filters, RTB ranking, TEC exits, Net_EV gate.
+- **ACTIVE consumer: `market-regime.ts` `calculatePairRegime()`** — the regime classifier consumes `dbsScore` to gate RBS (requires `|DBS| < 0.10`), admit TFS (`|DBS| >= 0.30`), and admit IE (`|DBS| >= 0.50`). This is DBS's first active runtime consumer.
+- **REMOVED: `signal-orchestrator.ts` dormant wire** — the `computeBiasConfidenceModifier` import and the `dbsModifier` computation at the former L448–467 block have been deleted in B62. This wire was born dormant (shipped 2026-03-05, active trading OFF since 2026-01-12) and never executed against a captured cycle.
+- **REMOVED: `vts-runner.ts` no-op half-wire** — the `computeBiasConfidenceModifier` import and the discarded `biasModifier` computation at the former L877 have been deleted in B62. `computeBiasConfidenceModifier` is no longer imported by any file.
+- **VTS benchmark exclusion (Directive 11.6F) REMOVED** — benchmarks now flow through VTS. The exclusion was a Phase 15b audit-era safeguard that is no longer needed with the DBS-integrated classifier live.
+- **Global DBS fixes deployed in B62:** (1) real volume weighting replaces unweighted median when volumes are available, (2) coverage gate prevents global DBS from being authoritative when fewer than a threshold number of pairs contribute, (3) sentinel-zero filter excludes pairs with `sentinelZero: true` from the global aggregation.
+
+**Historical context (pre-B62).** Prior to B62, DBS was DORMANT-WIRE + HALF-WIRE. The two consumer sites (`signal-orchestrator.ts:454` and `vts-runner.ts:877`) both imported `computeBiasConfidenceModifier` but neither produced a runtime effect — the orchestrator path never ran (active trading OFF) and the VTS path computed and discarded the result. No captured decision during the pre-B62 DBS era was modified by DBS. See B61 completion report for the full forensic consumer inventory.
 
 **Governance-failure framing (corrected 2026-04-15).** This is neither "DBS is orphaned" (the 2026-04-14 framing from the `range_trade` root-cause investigation — ambiguous and false at the code-path inventory level) nor "DBS has been silently shaping signals" (a first-draft B61 framing also false because active trading has been off). The correct framing is **"dormant wire on orchestrator, no-op half-wire on VTS, both buried under ambiguous orphan language."** The governance failure is that prior docs conflated runtime-consumer truth with source-import truth — the SIM said "NONE" and the System Manual said "never imported anywhere", both of which were operationally true for captured decisions but factually wrong as code-path inventory claims. Every future review must check both runtime consumer behavior AND source-level imports, and report them separately.
 
 **Burial pattern — false parity claim (case study, added 2026-04-15).** The `// (parity with VTS path)` comment at `signal-orchestrator.ts:448` asserts consistency with a sibling path that is itself dead code. The sibling (`vts-runner.ts:877`) computes the modifier and discards the result, so there is no parity to achieve — the parity claim is fictional from day one. **Future reviews must specifically flag comments that assert consistency with another code path without verifying the other path actually does what the comment claims.** This is a named burial pattern: **false parity claim between two broken paths.** It is the canonical example of a comment that looks reassuring to a skim-review and covers a two-path defect.
 
-**Phase 15b B61 DBS Validation — COMPLETE (2026-04-16).** 8-deliverable audit across formula, thresholds, global methodology, and data quality. Key verdicts:
+**Phase 15b B61 DBS Validation — COMPLETE (2026-04-16). B62 Regime Taxonomy Redesign — DEPLOYED (2026-04-16).** B61: 8-deliverable audit across formula, thresholds, global methodology, and data quality. B62: DBS-integrated classifier (Design B) deployed with Phase 0 replay validation. Key B61 verdicts:
 - **A.1 Formula: KEEP.** Formula reconstructs exactly, weights on a plateau, ATR normalization confirmed PASS (IQR ratio 0.676, DBS volatility ratio 0.897 across ATR tiers). Slope × ema pooled correlation 0.5792 (acceptable). Return component is load-bearing.
 - **A.2 Thresholds: DEFENSIBLE.** Drift contamination = **70.17%** of RBS labels (B59 estimated ~47% — B61 confirmed the problem is worse). Strategy lockout = **55.28%** of strong-DBS pair-cycles locked in RBS. IMPULSE_EXPANSION = 1.03% (vestigial). Fixed thresholds wider than distribution justifies (STRONG categories = 2.38% combined). Positive median skew +0.042.
 - **A.3 Global DBS: REVISE (GREEN-with-conditions).** Three code defects found: (1) empty volumes → unweighted median, (2) cache membership instability (mean 18/60 pairs per snapshot, 50.32% category flip rate), (3) sentinel-zero not excluded. All external references AGREE in direction. Pair-level DBS trustworthy; global aggregation needs fixes before B62 use.
 - **A.4 Data Quality: PASS WITH CAVEAT.** Family-level flip rate 1.35% (better than legacy 1.37%). Category-boundary flip rate 2.37% (technical fail vs 2.34% mature-window threshold by 0.03pp — threshold-placement artifact, not directional instability).
-- **B62 gate: CLEAR.** 24 carry-forward items documented in completion report §8.
-- **B59-era simulation projections** (TFS 19.3% → 55.7%, RBS 54.5% → 3.4%) are superseded by B61's empirical findings. The actual regime shift under a DBS-integrated classifier will be determined by B62's Phase 0 replay analysis.
+- **B62 gate: CLEAR.** 24 carry-forward items documented in B61 completion report §8.
+- **B62 Phase 0 replay results** (the authoritative empirical numbers): TFS+IE 14.1% → 36.5%, RBS drift contamination 70.2% → 0.0%, family flicker 1.99%. B59-era simulation projections (TFS 19.3% → 55.7%, RBS 54.5% → 3.4%) are superseded — they were directionally correct but magnitude-wrong because they used different methodology.
 
 **Rule going forward:** any computed metric must have an explicit consumer documented in both this manual and `SYSTEM_IMPACT_MAP.md`, and the documentation must distinguish **runtime-applied consumers** (a path that actually executes and uses the value in a decision) from **source-level imports** (a symbol is named in a file, regardless of whether the path runs or the result is used). Metrics written but never read, imports that never execute, and computes whose results are discarded are all governance failures but they are **different failures and must be labeled accordingly.**
 
