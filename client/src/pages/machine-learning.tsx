@@ -474,7 +474,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Type</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
@@ -488,6 +488,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
 
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Rank</th>
               <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
@@ -503,7 +504,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={23} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={25} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
@@ -731,7 +732,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Type</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
@@ -760,7 +761,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={23} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={24} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
