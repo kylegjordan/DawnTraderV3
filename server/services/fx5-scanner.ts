@@ -1423,21 +1423,19 @@ export class Fx5ScannerService {
         console.log(`[19F][VTS_PARITY] ${bothPoolsCount.count} pairs duplicated in both quant+pattern pools for VTS parity`);
       }
 
-      // Batch 52: Remove benchmark pairs from VTS batch (Kyle directive 2026-04-06)
-      // Benchmarks can pass filters but must not enter VTS for trade evaluation
-      const preBenchmarkCount = taggedVtsSurvivors.length;
-      const benchmarkSurvivors = taggedVtsSurvivors.filter(s => s.isBenchmark);
-      const nonBenchmarkVtsSurvivors = taggedVtsSurvivors.filter(s => !s.isBenchmark);
-      if (benchmarkSurvivors.length > 0) {
-        const benchmarkSyms = [...new Set(benchmarkSurvivors.map(s => s.symbol))].slice(0, 5);
-        console.log(`[52][BENCHMARK] Removed ${benchmarkSurvivors.length} benchmark entries from VTS batch (${benchmarkSyms.join(', ')}${benchmarkSurvivors.length > 5 ? '...' : ''}). Pre-benchmark: ${preBenchmarkCount}, post-benchmark: ${nonBenchmarkVtsSurvivors.length}`);
+      // B62: Benchmark pairs now INCLUDED in VTS batch (Kyle decision 2026-04-16)
+      // Previously removed by Batch 52 (Kyle directive 2026-04-06). Unblocked because
+      // active trading will trade benchmarks and VTS should simulate them.
+      const benchmarkCount = taggedVtsSurvivors.filter(s => s.isBenchmark).length;
+      if (benchmarkCount > 0) {
+        console.log(`[B62][BENCHMARK] ${benchmarkCount} benchmark pairs INCLUDED in VTS batch (previously excluded by B52)`);
       }
-      scanDiag.destinationCount = nonBenchmarkVtsSurvivors.length;
+      scanDiag.destinationCount = taggedVtsSurvivors.length;
 
       // Directive 11.4C.1: FX5 does NOT write to telemetry (M70)
       // VTS is the sole source of telemetry writes - FX5 outputs raw data only
       // VTS gets pairs directly from FX5's current scan batch via getCurrentScanBatch()
-      this.updateCurrentBatch(mode, nonBenchmarkVtsSurvivors);
+      this.updateCurrentBatch(mode, taggedVtsSurvivors);
       
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;
