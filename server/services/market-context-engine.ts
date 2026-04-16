@@ -62,12 +62,24 @@ interface CacheEntry {
 
 // ─── MCE Class ───────────────────────────────────────────────────────────────
 
+/**
+ * B62: Minimum fraction of the known universe that must be in cache
+ * before computeGlobalBias() will produce a result. Below this,
+ * global DBS returns NEUTRAL with pairCount=0 to avoid the
+ * partial-membership noise that A.3 identified (50.32% flicker rate
+ * from rotating 18/60 pairs). 0.70 = require 70% of peak universe.
+ */
+const GLOBAL_DBS_MIN_COVERAGE_PCT = 0.70;
+
 export class MarketContextEngine {
   private cache: Map<string, CacheEntry> = new Map();
   private config: MCEConfig;
   private running: boolean = false;
   // Phase 15b B61: monotonic cycle counter for DBS telemetry correlation
   private cycleCounter: number = 0;
+  // B62 A.3 fix #2: track the peak number of non-expired cache entries
+  // observed, as the "expected universe size" for coverage gating.
+  private peakCacheSize: number = 0;
 
   constructor(config: Partial<MCEConfig> = {}) {
     this.config = { ...DEFAULT_MCE_CONFIG, ...config };
@@ -171,6 +183,12 @@ export class MarketContextEngine {
       expiresAt: now + this.config.cacheTTLMs,
     });
 
+    // B62 A.3 fix #2: track peak cache size for coverage gating
+    const currentValidCount = this.countValidEntries();
+    if (currentValidCount > this.peakCacheSize) {
+      this.peakCacheSize = currentValidCount;
+    }
+
     console.log(
       `[Phase14][MCE] ${symbol}: regime=${regimeResult.regime} conf=${regimeResult.confidence.toFixed(3)} ` +
       `vwap=${vwap.toFixed(2)} sma=${sma.toFixed(2)} atr=${atr.toFixed(4)} ` +
@@ -210,18 +228,18 @@ export class MarketContextEngine {
    */
   /**
    * B62: Compute global directional bias from cached pair contexts.
-   * Uses atomic snapshot of all non-expired cache entries.
+   * Coverage-gated: requires ≥70% of the peak observed universe to be in cache.
    * Filters sentinel-zero entries. Applies per-pair volume weight cap.
    *
    * @param volumes - Map of symbol -> 24h volume (for weighting). Must be populated.
-   * @returns GlobalDirectionalBias
+   * @returns GlobalDirectionalBias (returns NEUTRAL/0/pairCount=0 if coverage insufficient)
    */
   computeGlobalBias(volumes: Map<string, number>): GlobalDirectionalBias {
     const now = Date.now();
     const pairScores = new Map<string, number>();
     const sentinelFlags = new Map<string, boolean>();
 
-    // B62 A.3 fix #2: atomic snapshot of all non-expired cache entries
+    // Atomic snapshot of all non-expired cache entries
     for (const [symbol, entry] of this.cache.entries()) {
       if (entry.expiresAt > now) {
         pairScores.set(symbol, entry.context.directionalBias.score);
@@ -229,7 +247,42 @@ export class MarketContextEngine {
       }
     }
 
+    // B62 A.3 fix #2: Coverage gate — prevent partial-membership noise
+    // A.3 showed mean 18/60 pairs in cache → 50.32% flicker rate.
+    // Only compute global DBS when cache has ≥70% of the peak observed universe.
+    const currentCount = pairScores.size;
+    const requiredCount = Math.max(
+      Math.floor(this.peakCacheSize * GLOBAL_DBS_MIN_COVERAGE_PCT),
+      5 // absolute minimum — don't compute on fewer than 5 pairs regardless
+    );
+
+    if (currentCount < requiredCount) {
+      console.log(
+        `[B62][MCE] Global DBS skipped: cache has ${currentCount}/${this.peakCacheSize} pairs ` +
+        `(need ${requiredCount}, ${(GLOBAL_DBS_MIN_COVERAGE_PCT * 100).toFixed(0)}% of peak). ` +
+        `Returning NEUTRAL.`
+      );
+      return {
+        score: 0,
+        category: 'NEUTRAL',
+        pairCount: 0,
+        distribution: { UP_STRONG: 0, UP_MODERATE: 0, UP_WEAK: 0, NEUTRAL: 0, DOWN_WEAK: 0, DOWN_MODERATE: 0, DOWN_STRONG: 0 }
+      };
+    }
+
     return computeGlobalDirectionalBias(pairScores, volumes, undefined, sentinelFlags);
+  }
+
+  /**
+   * B62 A.3 fix #2: Count non-expired cache entries.
+   */
+  private countValidEntries(): number {
+    const now = Date.now();
+    let count = 0;
+    for (const entry of this.cache.values()) {
+      if (entry.expiresAt > now) count++;
+    }
+    return count;
   }
 
   /**
