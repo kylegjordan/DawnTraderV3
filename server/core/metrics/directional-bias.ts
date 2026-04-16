@@ -40,6 +40,7 @@ import {
   DEFAULT_DBS_CONFIG,
   DEFAULT_BIAS_CONFIDENCE_MODIFIER,
   DIRECTIONAL_BIAS_CATEGORIES,
+  GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT,
 } from '../../types/directional-bias.types';
 
 // ─── Pair-Level DBS ─────────────────────────────────────────────────────────
@@ -64,6 +65,7 @@ export function computeDirectionalBias(
     return {
       score: 0,
       category: 'NEUTRAL',
+      sentinelZero: true,
       components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 }
     };
   }
@@ -105,6 +107,7 @@ export function computeDirectionalBias(
   return {
     score,
     category,
+    sentinelZero: false,
     components: {
       slopeComponent,
       returnComponent,
@@ -122,10 +125,20 @@ export function computeDirectionalBias(
  * @param volumes - Map of symbol -> 24h volume (for weighting)
  * @returns GlobalDirectionalBias
  */
+/**
+ * Compute global directional bias as weighted median of pair DBS scores.
+ * B62: Filters sentinel-zero entries, applies configurable per-pair weight cap.
+ *
+ * @param pairScores - Map of symbol -> DBS score
+ * @param volumes - Map of symbol -> 24h volume (for weighting)
+ * @param sentinelFlags - Map of symbol -> sentinelZero boolean (B62: filter these out)
+ * @returns GlobalDirectionalBias
+ */
 export function computeGlobalDirectionalBias(
   pairScores: Map<string, number>,
   volumes: Map<string, number>,
-  config: DBSConfig = DEFAULT_DBS_CONFIG
+  config: DBSConfig = DEFAULT_DBS_CONFIG,
+  sentinelFlags?: Map<string, boolean>
 ): GlobalDirectionalBias {
   if (pairScores.size === 0) {
     return {
@@ -136,15 +149,39 @@ export function computeGlobalDirectionalBias(
     };
   }
 
-  // Build weighted entries
-  const entries: { score: number; weight: number }[] = [];
+  // Build weighted entries, filtering sentinel zeros
+  const entries: { symbol: string; score: number; weight: number }[] = [];
   const distribution: Record<DirectionalBiasCategory, number> = emptyDistribution();
 
   for (const [symbol, score] of pairScores.entries()) {
+    // B62 A.3 fix #3: exclude sentinel-zero pairs from global aggregation
+    if (sentinelFlags?.get(symbol) === true) {
+      continue;
+    }
     const volume = volumes.get(symbol) ?? 1;
-    entries.push({ score, weight: volume });
+    entries.push({ symbol, score, weight: volume });
     const cat = classifyDBS(score, config.thresholds);
     distribution[cat]++;
+  }
+
+  if (entries.length === 0) {
+    return {
+      score: 0,
+      category: 'NEUTRAL',
+      pairCount: 0,
+      distribution: emptyDistribution()
+    };
+  }
+
+  // B62: Apply per-pair weight cap (GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT)
+  if (GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT < 1.0) {
+    const totalRawWeight = entries.reduce((sum, e) => sum + e.weight, 0);
+    const maxWeight = totalRawWeight * GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT;
+    for (const entry of entries) {
+      if (entry.weight > maxWeight) {
+        entry.weight = maxWeight;
+      }
+    }
   }
 
   // Weighted median
@@ -167,7 +204,7 @@ export function computeGlobalDirectionalBias(
   return {
     score: globalScore,
     category: globalCategory,
-    pairCount: pairScores.size,
+    pairCount: entries.length,
     distribution
   };
 }

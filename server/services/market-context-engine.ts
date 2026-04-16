@@ -119,15 +119,18 @@ export class MarketContextEngine {
       return cached.context;
     }
 
-    // ── Regime calculation (single call to calculatePairRegime) ──
-    const regimeResult = calculatePairRegime(ohlcData);
-
     // ── Indicators (VWAP, SMA, ATR, high24h, low24h) ──
     const vwap = this.computeVWAP(ohlcData);
     const sma = this.computeSMA(ohlcData, smaPeriod ?? this.config.smaPeriod);
     const atr = this.computeATR(ohlcData, this.config.atrPeriod);
     const high24h = this.computeHigh24h(ohlcData);
     const low24h = this.computeLow24h(ohlcData);
+
+    // ── B62: DBS computed BEFORE regime (DBS feeds the classifier) ──
+    const directionalBias = computeDirectionalBias(ohlcData, atr);
+
+    // ── B62: Regime calculation now receives DBS score as 4th input ──
+    const regimeResult = calculatePairRegime(ohlcData, directionalBias.score);
 
     const indicators: MarketIndicators = {
       vwap,
@@ -152,9 +155,6 @@ export class MarketContextEngine {
       regimeWeight: weight,
       allowedStrategies,
     };
-
-    // ── Phase 14: Directional Bias ──
-    const directionalBias = computeDirectionalBias(ohlcData, atr);
 
     const context: MarketContext = {
       symbol,
@@ -208,17 +208,43 @@ export class MarketContextEngine {
    * @param volumes - Map of symbol -> 24h volume (for weighting)
    * @returns GlobalDirectionalBias
    */
+  /**
+   * B62: Compute global directional bias from cached pair contexts.
+   * Uses atomic snapshot of all non-expired cache entries.
+   * Filters sentinel-zero entries. Applies per-pair volume weight cap.
+   *
+   * @param volumes - Map of symbol -> 24h volume (for weighting). Must be populated.
+   * @returns GlobalDirectionalBias
+   */
   computeGlobalBias(volumes: Map<string, number>): GlobalDirectionalBias {
     const now = Date.now();
     const pairScores = new Map<string, number>();
+    const sentinelFlags = new Map<string, boolean>();
 
+    // B62 A.3 fix #2: atomic snapshot of all non-expired cache entries
     for (const [symbol, entry] of this.cache.entries()) {
       if (entry.expiresAt > now) {
         pairScores.set(symbol, entry.context.directionalBias.score);
+        sentinelFlags.set(symbol, entry.context.directionalBias.sentinelZero);
       }
     }
 
-    return computeGlobalDirectionalBias(pairScores, volumes);
+    return computeGlobalDirectionalBias(pairScores, volumes, undefined, sentinelFlags);
+  }
+
+  /**
+   * B62 A.3 fix #1: Extract 24h volumes from all non-expired cached contexts.
+   * Used by market-indicators.ts to supply real volume weights to computeGlobalBias().
+   */
+  getCachedVolumes(): Map<string, number> {
+    const now = Date.now();
+    const volumes = new Map<string, number>();
+    for (const [symbol, entry] of this.cache.entries()) {
+      if (entry.expiresAt > now) {
+        volumes.set(symbol, entry.context.indicators.volume || 1);
+      }
+    }
+    return volumes;
   }
 
   // ─── Lookups ───────────────────────────────────────────────────────────────

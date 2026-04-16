@@ -64,7 +64,6 @@ import type { PatternInput } from '../strategies/strategy-helpers.js';
 import { getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from './market-indicators.js';
 // Phase 14: Real score calculator replaces simulation stubs
 import { computeRealHybridScore, computeRealDecayPenalty } from '../core/utils/vts-real-score.js';
-import { computeBiasConfidenceModifier } from '../core/metrics/directional-bias.js';
 // Phase 15b B61: DBS telemetry emitter (observational, feature-flagged, no behavior change)
 import { emitConsumerTelemetry } from './phase15b-dbs-telemetry.js';
 import {
@@ -881,33 +880,19 @@ async function generatePhase10Signal(
   const hybridScore = computeRealHybridScore(strategy, mceContext.indicators, ohlcData, regime);
   const predictiveConfidence = getPredictiveConfidence(symbol, regime, strategy);
 
-  // Phase 14: Apply Directional Bias confidence modifier
-  //
-  // ⚠ Phase 15b B61 finding (2026-04-15): this site is HALF-WIRED DEAD CODE.
-  // The `biasModifier` value is computed but never referenced again anywhere in this
-  // file — every VTS-emitted trade has biasModifier computed and immediately discarded.
-  // The "Apply..." comment above is misleading; no application occurs. The signal
-  // -orchestrator sibling path's "(parity with VTS path)" comment is a FALSE PARITY
-  // CLAIM because there is no applying sibling here. The 15-day VTS audit window
-  // (2026-03-31 → 2026-04-14, ~960 trades) is therefore DBS-clean. Fix is deferred
-  // to B62 disposition decision per scope §8.1 implementation-bug exception clause.
-  // Rationale: fixing this mid-audit would introduce a new confounder into the
-  // forward cycle-sampled measurement window. Preserve baseline now, decide later.
-  const biasCategory = mceContext.directionalBias?.category ?? 'NEUTRAL';
-  const biasModifier = computeBiasConfidenceModifier(biasCategory);
+  // B62: Half-wired DBS modifier removed. Was dead code — biasModifier was computed
+  // but never consumed. See B61 provisional findings report.
 
   // Phase 15b B61: observational telemetry emit (no-op unless DT_PHASE15B_DBS_TELEMETRY=1).
-  // Fires once per VTS strategy evaluation. dbsApplied is ALWAYS false — the empirical
-  // confirmation that biasModifier is discarded. confidencePreDBS === confidencePostDBS
-  // and finalScorePreDBS === finalScorePostDBS because no mutation occurs. See
-  // BATCH_61_PRE_AUDIT.md §6.9.
+  // Half-wire removed — emitter retained for audit continuity.
+  const biasCategory = mceContext.directionalBias?.category ?? 'NEUTRAL';
   emitConsumerTelemetry({
     cycleId: Date.now(),
     site: 'vts-runner.ts:877',
     symbol,
     strategy,
     dbsCategory: biasCategory,
-    dbsModifier: biasModifier,
+    dbsModifier: 1.0,
     confidencePreDBS: predictiveConfidence,
     confidencePostDBS: predictiveConfidence,
     finalScorePreDBS: hybridScore,
@@ -1253,16 +1238,15 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
     const scanBatch = fx5Scanner.getCurrentScanBatch('paper');
 
     if (scanBatch.length >= 10) {
-      // Directive 11.6F: Filter out benchmarks before processing - they stay in pool but don't trade
-      const tradablePairs = scanBatch.filter(p => !p.isBenchmark);
-      const benchmarkCount = scanBatch.length - tradablePairs.length;
-      const patternCount = tradablePairs.filter(p => p.sourcePool === 'pattern').length;
-      const quantCount = tradablePairs.filter(p => isQuantPool(p.sourcePool)).length;
-      console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks excluded, ${tradablePairs.length} tradable: ${quantCount} quant + ${patternCount} pattern)`);
+      // B62: Benchmarks are now tradable — no longer filtered out (was Directive 11.6F)
+      const benchmarkCount = scanBatch.filter(p => p.isBenchmark).length;
+      const patternCount = scanBatch.filter(p => p.sourcePool === 'pattern').length;
+      const quantCount = scanBatch.filter(p => isQuantPool(p.sourcePool)).length;
+      console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks included, ${scanBatch.length} tradable: ${quantCount} quant + ${patternCount} pattern)`);
 
       // Directive 11.4H.1 Task 1: Normalize symbols at ingress with fallback and tier logging
       const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: string }> = [];
-      for (const p of tradablePairs) {
+      for (const p of scanBatch) {
         const rawSymbol = p.symbol;
         const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
 
@@ -1285,10 +1269,10 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
         validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier, sourcePool: p.sourcePool });
       }
       // Batch 52: Diagnostic trace — handoff chain counts
-      const droppedByNormalization = tradablePairs.length - validPairs.length;
+      const droppedByNormalization = scanBatch.length - validPairs.length;
       const validQuant = validPairs.filter(p => isQuantPool(p.sourcePool)).length;
       const validPattern = validPairs.filter(p => p.sourcePool === 'pattern').length;
-      console.log(`[52][HANDOFF] FX5 batch: ${scanBatch.length} → benchmarks removed: ${benchmarkCount} → tradable: ${tradablePairs.length} → after normalization: ${validPairs.length} (dropped ${droppedByNormalization}) | quant=${validQuant} pattern=${validPattern}`);
+      console.log(`[52][HANDOFF] FX5 batch: ${scanBatch.length} → benchmarks included: ${benchmarkCount} → tradable: ${scanBatch.length} → after normalization: ${validPairs.length} (dropped ${droppedByNormalization}) | quant=${validQuant} pattern=${validPattern}`);
       return validPairs;
     }
 

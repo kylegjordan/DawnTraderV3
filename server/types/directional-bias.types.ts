@@ -106,6 +106,7 @@ export const DEFAULT_DBS_CONFIG: DBSConfig = {
 export interface DirectionalBiasResult {
   score: number;                     // -1.0 to +1.0
   category: DirectionalBiasCategory; // Classified category
+  sentinelZero: boolean;             // B62: true if score=0 from early-return (insufficient OHLC or ATR<=0)
   components: {
     slopeComponent: number;          // Weighted log-price slope
     returnComponent: number;         // Weighted normalized return
@@ -138,6 +139,14 @@ export const DEFAULT_BIAS_CONFIDENCE_MODIFIER: BiasConfidenceModifier = {
   neutral: 1.0,
   aligning: { min: 1.05, max: 1.15 }
 };
+
+/**
+ * B62: Maximum per-pair volume weight contribution to global DBS median.
+ * 1.0 = no cap (disabled). Set to e.g. 0.20-0.25 if a single pair (BTC)
+ * consistently exceeds 40% of total volume weight and the median degenerates.
+ * Configurable without code change — adjust this constant.
+ */
+export const GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT = 1.0;
 
 /**
  * Display names for directional bias categories (for UI).

@@ -288,17 +288,18 @@ export function getMarketIndicators(): MarketIndicators {
   // Directive 11.4H.6G: Canonical logging for regime-strategy mapping
   console.log(`[11.4H.6G][Canonical] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
 
-  // Phase 14: Compute global directional bias from MCE cache
+  // B62: Compute global directional bias from MCE cache with real volume weights
   let globalDBS: GlobalDirectionalBias | null = null;
   try {
     const mce = getMarketContextEngine();
-    const emptyVolumes = new Map<string, number>();
-    globalDBS = mce.computeGlobalBias(emptyVolumes);
+    // B62 A.3 fix #1: Extract real 24h volumes from MCE cached contexts
+    const volumes = mce.getCachedVolumes();
+    globalDBS = mce.computeGlobalBias(volumes);
     if (globalDBS.pairCount > 0) {
-      console.log(`[Phase14][MarketIndicators] Global DBS: score=${globalDBS.score.toFixed(3)} category=${globalDBS.category} pairs=${globalDBS.pairCount}`);
+      console.log(`[B62][MarketIndicators] Global DBS: score=${globalDBS.score.toFixed(3)} category=${globalDBS.category} pairs=${globalDBS.pairCount} (volume-weighted)`);
     }
   } catch (err) {
-    console.warn('[Phase14][MarketIndicators] Global DBS unavailable:', err);
+    console.warn('[B62][MarketIndicators] Global DBS unavailable:', err);
   }
 
   // HF6: Cache DBS category for VTS trade context getter

@@ -104,44 +104,73 @@ export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
   return dx;
 }
 
-export function calculatePairRegime(ohlcData: OHLCData[]): RegimeCalculationResult {
+/**
+ * B62 Design B: DBS-integrated pair-level regime classifier.
+ *
+ * Adds DBS (Directional Bias Score) as a 4th input to the vol + ADX + momentum
+ * decision tree. Key changes from the pre-B62 classifier:
+ *   - RBS requires |DBS| < 0.10 (prevents drift-contaminated false ranges)
+ *   - TFS admits pairs with |DBS| >= 0.30 (directional pairs reach trend strategies)
+ *   - IE admits pairs with |DBS| >= 0.50 + moderate vol (less restrictive than vol>0.020 && dx>55)
+ *
+ * Phase 0 evidence (26,700 samples):
+ *   - RBS drift contamination: 70.2% -> 0.0%
+ *   - TFS+IE share: 14.1% -> 36.5%
+ *   - Family-level flicker: 1.32% -> 1.99% (passes 2.0% ceiling)
+ *   - Strong-DBS -> trend: 17% -> 100%
+ *
+ * TFS threshold 0.30 is the only tested value that passes the 2.0% flicker ceiling.
+ * See BATCH_62_PHASE0_REPLAY_ANALYSIS.md §1.3 for the sweep evidence.
+ *
+ * @param ohlcData - OHLC candles
+ * @param dbsScore - Directional Bias Score from computeDirectionalBias() (default 0)
+ */
+export function calculatePairRegime(ohlcData: OHLCData[], dbsScore: number = 0): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
   const mom = computeMomentum(ohlcData);
   const dx = computeADX(ohlcData);
+  const absDbs = Math.abs(dbsScore);
 
   let regime: MarketRegimeType;
   let confidence: number;
 
   // HF7: Recalibrated thresholds for crypto market data
   // computeADX returns DX (not Wilder's smoothed ADX). Crypto DX runs 35-90 on 15-min.
-  // Old threshold of 25 was always exceeded -> meaningless. Recalibrated tiers:
   //   DX < 45 = balanced/ranging (weak directional pressure)
   //   DX 45-55 = moderate directional movement
-  //   DX > 55 = strong directional movement (equivalent to classic ADX > 25)
+  //   DX > 55 = strong directional movement
   //   DX > 60 = very strong directional pressure
   // Volatility (std dev of returns): < 0.012 = quiet, > 0.020 = elevated
   // Momentum (30-candle price change ratio): |mom| < 0.003 = noise, > 0.005 = meaningful
+  // DBS (B62): |dbs| < 0.10 = neutral, >= 0.30 = moderate+, >= 0.50 = strong
 
-  if (vol < 0.012 && dx < 45) {
-    // Low volatility + no strong directional pressure -> ranging market
+  if (vol < 0.012 && dx < 45 && absDbs < 0.10) {
+    // B62: Low vol + low ADX + low DBS = genuine ranging market
+    // (pre-B62: no DBS gate, 70% of RBS was drift-contaminated)
     regime = REGIMES.RANGE_BOUND_STABLE;
     confidence = 0.75 + (0.012 - vol) * 12;
-  } else if (vol > 0.020 && dx > 55) {
-    // Elevated volatility + strong directional movement -> impulse expansion
+  } else if ((vol > 0.020 && dx > 55) || (vol > 0.015 && absDbs >= 0.50)) {
+    // B62: High vol + strong direction OR moderate vol + very strong DBS = impulse
+    // (pre-B62: IE was 0.9% of cycles; now ~2.0% with the DBS-based entry)
     regime = REGIMES.IMPULSE_EXPANSION;
-    confidence = 0.65 + (vol - 0.020) * 6 + (dx - 55) * 0.003;
-  } else if (mom > 0.003 && dx > 50) {
-    // Positive momentum + directional strength -> uptrend
+    confidence = 0.65 + (vol - 0.015) * 6 + (dx - 45) * 0.002 + absDbs * 0.1;
+  } else if ((mom > 0.003 && dx > 50) || absDbs >= 0.30) {
+    // B62: Positive momentum + directional strength OR moderate+ DBS = trend
+    // (pre-B62: TFS was 13.2%; now 34.6% as directional pairs correctly routed)
+    // Threshold 0.30 is the only tested value that passes 2.0% flicker ceiling
     regime = REGIMES.TREND_FRIENDLY_STABLE;
-    confidence = 0.70 + Math.min(mom * 8, 0.2) + (dx - 50) * 0.003;
+    confidence = 0.70 + Math.min(Math.max(mom, 0) * 8, 0.15) + Math.min(absDbs * 0.3, 0.1);
   } else if ((vol > 0.015 && mom < -0.003) || (dx > 60 && mom < -0.005)) {
     // Elevated vol in decline OR very strong downward direction -> volatile/unstable
     regime = REGIMES.HIGH_VOLATILITY_UNSTABLE;
     confidence = 0.65 + Math.min(Math.abs(mom) * 8, 0.2);
   } else {
     // No strong classification -> structural transition
+    // B62 note: ST is 36.6% under Design B. Monitored post-deploy.
+    // If ST strategies perform poorly on moderate-DBS overflow, a DBS-aware
+    // sub-condition may be added in a follow-up batch.
     regime = REGIMES.STRUCTURAL_TRANSITION;
-    confidence = 0.50 + Math.min(vol * 5, 0.15);
+    confidence = 0.50 + Math.min(vol * 5, 0.10) + Math.min(absDbs * 0.15, 0.05);
   }
 
   confidence = Math.min(Math.max(confidence, 0.4), 0.95);

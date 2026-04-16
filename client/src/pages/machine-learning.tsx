@@ -345,6 +345,15 @@ function formatDuration(minutes: number): string {
   return `${days}d ${remainingHours}h`;
 }
 
+// Client-side benchmark detection matching server-side benchmark-regex.ts
+const BENCHMARK_BASE_COINS = ['BTC', 'XBT', 'ETH', 'SOL', 'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD'];
+function isBenchmarkSymbol(symbol: string): boolean {
+  if (!symbol) return false;
+  const upper = symbol.toUpperCase().trim();
+  const base = upper.split(/[-_/]/)[0];
+  return BENCHMARK_BASE_COINS.includes(base);
+}
+
 type OpenSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'grossProfitValue' | 'netProfitValue' | 'finalScore' | 'expectedEdge' | 'regimeWeight' | 'entryTime' | 'durationOpenMinutes';
 type SortDirection = 'asc' | 'desc';
 
@@ -465,6 +474,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Type</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
@@ -493,7 +503,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={23} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
@@ -501,6 +511,11 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.entryTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
+                  <td className="px-3 py-2">
+                    <Badge variant="outline" className={`text-xs ${isBenchmarkSymbol(trade.symbol) ? 'bg-violet-500/20 text-violet-400 border-violet-500/30' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+                      {isBenchmarkSymbol(trade.symbol) ? 'Benchmark' : 'Standard'}
+                    </Badge>
+                  </td>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
                       {normalizeRegimeDisplay(trade.regime)}
@@ -716,6 +731,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Type</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
@@ -744,7 +760,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={22} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={23} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
@@ -752,6 +768,11 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.exitTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
+                  <td className="px-3 py-2">
+                    <Badge variant="outline" className={`text-xs ${isBenchmarkSymbol(trade.symbol) ? 'bg-violet-500/20 text-violet-400 border-violet-500/30' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+                      {isBenchmarkSymbol(trade.symbol) ? 'Benchmark' : 'Standard'}
+                    </Badge>
+                  </td>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
                       {normalizeRegimeDisplay(trade.regime)}
