@@ -1426,9 +1426,9 @@ export class Fx5ScannerService {
       // B62: Benchmark pairs now INCLUDED in VTS batch (Kyle decision 2026-04-16)
       // Previously removed by Batch 52 (Kyle directive 2026-04-06). Unblocked because
       // active trading will trade benchmarks and VTS should simulate them.
-      const benchmarkCount = taggedVtsSurvivors.filter(s => s.isBenchmark).length;
-      if (benchmarkCount > 0) {
-        console.log(`[B62][BENCHMARK] ${benchmarkCount} benchmark pairs INCLUDED in VTS batch (previously excluded by B52)`);
+      const b62BenchmarkCount = taggedVtsSurvivors.filter(s => s.isBenchmark).length;
+      if (b62BenchmarkCount > 0) {
+        console.log(`[B62][BENCHMARK] ${b62BenchmarkCount} benchmark pairs INCLUDED in VTS batch (previously excluded by B52)`);
       }
       scanDiag.destinationCount = taggedVtsSurvivors.length;
 
