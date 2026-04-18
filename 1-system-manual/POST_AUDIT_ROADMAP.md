@@ -83,15 +83,24 @@ Steps 1-8 are COMPLETE (Phases 12-14.7, Batches 1-54).
 **Pre-Live (in order):**
 1. ✅ Phase 11 Finalization — Adjustment Framework + Authority Baseline (COMPLETE, B58)
 2. ✅ Phase 15a — Predictive Learning UI Audit & Data Path Fixes (COMPLETE, B59)
-3. **Phase 15b NEW — Regime/DBS/Strategy/Filter Restructure (B61-B65) ← NEXT**
-4. Phase 16 — DB/Legacy Cleanup
-5. Phase 19 — Paper Mode Full Audit & Debug
-6. Phase 20 — Production Hardening
-7. Phase 21 — Live Mode Activation (real Kraken orders)
+3. ✅ Phase 15b NEW — Regime/DBS/Strategy/Filter Restructure (B61-B62 COMPLETE, B63-B65 conditional)
+4. **Phase 15c NEW — Post-B62/Pre-Launch Consolidation (Kyle locked 2026-04-18) ← NEXT**
+5. Phase 16 — DB/Legacy Cleanup
+6. Phase 19 — Paper Mode Full Audit & Debug
+7. Phase 20 — Production Hardening
+8. Phase 21 — Live Mode Activation (real Kraken orders)
 
 **Pre-Live tracked work items (folded into the phases above):**
-- **Archive minimum-viable capture** — establish regime/DBS/trade archive DB schema + fields. Capture only; defer aggregation/analytics. Folded into Phase 15b instrumentation track and Phase 16 DB schema work.
-- **Paper trading pipeline readiness** — verify the full paper pipeline works under the new math, new filters, and dual-path (quant + pattern) end-to-end. Folded into Phase 19.
+- **Post-B62/Pre-Launch Consolidation** — 5-item plan locked by Kyle 2026-04-18. Full detail in `Claude Comms and Packages/Scope Files/POST_B62_PRE_LAUNCH_PLAN.md`. Summary:
+  1. Regime drift tracking dashboard tab (permanent UI tab with warnings + actions)
+  2. Data archiving update — pair-level scan data + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data
+  3. Global DBS architecture fix (persistent store + end-of-cycle snapshot + fixed 20-pair min floor)
+  4. Canonical Regime/Strategy map sync (main file + Analytics & Diagnostics UI + IE metrics update)
+  5. Asset class field + standardized schema across all signal/trade tables (VTS open/closed, active filter/RTB/open/closed, paper sim)
+  - **Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined). Fits current Hetzner CPX22 disk with ~18 months runway before upgrade/archive needed.
+  - **ML prep only** — model work itself deferred to post-launch Phase 17/18.
+- **Archive minimum-viable capture** — SUPERSEDED by the 2026-04-18 post-B62 plan above. The MVP capture is replaced by the full capture plan (all pair data + all trade data + OHLC references).
+- **Paper trading pipeline readiness** — verify the full paper pipeline works under the new math, new filters, and dual-path (quant + pattern) end-to-end. Folded into Phase 19. **DEPENDS ON Phase 15c item 5** (standardized schema must be in place before paper mode activates, otherwise paper trades lose DBS/friction context).
 - **Live trading pipeline readiness** — verify the live execution pipeline is sound. May require rebuild from paper if structural divergence is found. Folded into Phase 20 + Phase 21 kickoff.
 
 **Post-Live (in order):**
