@@ -164,6 +164,14 @@
 
 ---
 
+## Governance housekeeping
+
+| Date | Action |
+|---|---|
+| 2026-04-20 | **CCPI retired.** `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` moved to `1-system-manual/_archive/`. Role absorbed by `CLAUDE.md` (repo root) + `MEMORY.md` + BATCH_CATALOG + PHASE_HISTORY. No active governance doc was drifting because CCPI had not been updated since the Phase 15b lock on 2026-04-14 — formal retirement eliminates the duplicate-governance sync problem. See `1-system-manual/_archive/README.md`. |
+
+---
+
 ## Notes
 
 - Some early and mid-series commit hashes are still unavailable from the currently accessible source set and are intentionally left as `—`.

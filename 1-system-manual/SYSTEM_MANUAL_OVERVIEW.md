@@ -45,12 +45,12 @@ Everything in this folder is authoritative. When there is a question about how t
 │
 │  ── GOVERNANCE DOCUMENTS ───────────────────────────────────
 │
-├── CLAUDE_CODE_PROJECT_INSTRUCTIONS.md
-│                                 The CCPI — workflow, roles, rules,
-│                                 current state. Essentials section at top
-│                                 covers batch checklist, operations,
-│                                 audit procedures, and canonical docs.
-│                                 This is THE governance document.
+├── _archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md
+│                                 CCPI — RETIRED 2026-04-20. Role absorbed by
+│                                 `CLAUDE.md` at repo root (auto-loaded at
+│                                 session start). See `_archive/README.md`.
+│                                 THE governance documents are now:
+│                                 CLAUDE.md + MEMORY.md + this folder.
 │
 ├── BATCH_CATALOG.md              Index of every batch
 │                                 Batch ID, description, scope file,
@@ -163,13 +163,20 @@ The complete implementation roadmap from current state to production:
 
 Includes dependency chain, risk assessment, decision points requiring Kyle's input, and a cross-reference table mapping Kyle's "Next Steps" document to roadmap phases.
 
-### CLAUDE_CODE_PROJECT_INSTRUCTIONS.md — "How we work"
-The CCPI is the canonical governance document. It defines:
+### CLAUDE.md (repo root) — "How we work"
+`CLAUDE.md` is the canonical governance document. It auto-loads into every Claude Code session at start. It defines:
 
-- **Essentials section** (at the top) — roles, mandatory batch checklist, operations reference, audit procedures, templates, canonical document index, and critical rules. This is the first thing any actor reads.
-- **Body sections** — detailed reference for Langston infrastructure, session lifecycle, rules, investigation notes, and identity/expertise definitions.
+- **Roles & responsibilities** (§1) — who does what in the three-way workflow
+- **Canonical workflow** (§2) — the 11-phase batch process
+- **Governance tiers** (§3) — which docs get updated every batch vs when-applicable
+- **Canonical file locations** (§4) — where everything lives
+- **Critical rules** (§5) — non-negotiable invariants (clone is source of truth, Replit frozen, etc.)
+- **Three-way communication** (§6) — Kyle + CC + Langston protocol, Telegram patterns, escalation triggers
+- **Infrastructure reference** (§7) — server addresses, credentials, deploy commands
 
-The Essentials section is designed to be self-contained for most batch work. The body provides deeper context when needed.
+Volatile current state (current phase, current batch, next steps) lives in `.claude/memory/MEMORY.md`, not in CLAUDE.md.
+
+**Historical note:** Before 2026-04-20, the canonical governance doc was `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) in this folder. It was retired and moved to `_archive/` when `CLAUDE.md` at repo root took over the auto-load role. See `_archive/README.md`.
 
 ### BATCH_CATALOG.md — "Index of every batch"
 Master index of all batches with batch ID, description, scope file location, completion report location, commit hash, and date. Updated in every governance batch. This replaces the legacy DIRECTIVE_INDEX.md.
@@ -211,14 +218,17 @@ The legacy directive folders from the pre-batch workflow era. Contains DIRECTIVE
 
 ### How a Batch Flows
 
-See the **Mandatory Batch Checklist** in the CCPI Essentials section for the complete step-by-step workflow. The checklist is the canonical workflow reference.
+See the **Canonical Workflow** section (§2) in `CLAUDE.md` at repo root for the complete step-by-step workflow. That is the canonical workflow reference (CCPI retired 2026-04-20).
 
-In summary:
-1. Scope and planning (capacity check, scope discussion, pre-implementation audit, Langston review)
-2. Code writing (write changes, create batch folder, Langston reviews, zip and stage)
-3. Deployment (upload to Replit via replit-cmd, Agent applies changes, push to GitHub, pull to clone)
-4. Verification (post-implementation audit, batch completion report, Langston reviews)
-5. Governance (update CCPI, BATCH_CATALOG, PHASE_HISTORY, MEMORY, and any relevant Tier 2 documents)
+In summary (post-Replit workflow, 2026-03-30 onwards):
+1. Scope and planning (Kyle directive, CC drafts scope, Langston reviews)
+2. Pre-implementation audit (SIM consultation, upstream/downstream trace)
+3. Implementation (CC edits directly in clone repo on migration branch)
+4. Code review (Langston reviews git diff BEFORE push)
+5. Push + CI + deploy to Hetzner staging
+6. Verification (first-pass CC, second-pass Langston)
+7. Iteration until objectives green
+8. Governance (update Tier 1 + applicable Tier 2 docs, write completion report)
 
 ---
 

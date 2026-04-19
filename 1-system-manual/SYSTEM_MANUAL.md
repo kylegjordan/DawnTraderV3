@@ -8851,10 +8851,10 @@ The `entryPrice * 1.02` hardcoded simulation in `components/trading/active-trade
 
 # Operational Model — Development Pipeline & Actor Roles
 
-**Added**: 2026-03-17 (HF12B)
-**Canonical Reference**: `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI)
+**Added**: 2026-03-17 (HF12B). **Updated 2026-04-20:** canonical reference migrated from CCPI (retired) to `CLAUDE.md` at repo root.
+**Canonical Reference**: `CLAUDE.md` (repo root) — auto-loaded at session start. For historical CCPI, see `1-system-manual/_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md`.
 
-> This section provides a summary of the operational model. The CCPI is the single source of truth for workflow rules, actor roles, and governance procedures. Do not duplicate detailed rules here — reference the CCPI.
+> This section provides a summary of the operational model. `CLAUDE.md` is the single source of truth for workflow rules, actor roles, and governance procedures. Do not duplicate detailed rules here — reference `CLAUDE.md`.
 
 ## Four-Actor Model
 
@@ -8906,7 +8906,7 @@ The team communicates via Telegram ("Dawn Trader HQ" forum group) with topic-bas
 | Reports (#23) | Formal reports (batch completion, hotfix, daily summary) |
 | Design (#28) | Feature design discussions |
 
-For detailed rules on 3-way communication protocol, message formatting, and session management, see the CCPI.
+For detailed rules on 3-way communication protocol, message formatting, and session management, see `CLAUDE.md` §6 at repo root (CCPI retired 2026-04-20).
 
 ---
 

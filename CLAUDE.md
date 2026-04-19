@@ -54,11 +54,13 @@
 ## 3. Governance Tiers & Mandatory Documents
 
 **Tier 1 — EVERY batch (mandatory, no exceptions):**
-- `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) — workflow, actor roles, rules, current state
 - `1-system-manual/BATCH_CATALOG.md` — add the new batch entry
 - `1-system-manual/PHASE_HISTORY.md` — update phase status
+- `.claude/memory/MEMORY.md` — volatile state block (phase/batch/next-step) after every batch
 - `Claude Comms and Packages/Scope Files/BATCH_N_SCOPE.md` — written in Phase 1
 - `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md` — written in Phase 11, includes list of governance files changed
+
+> **Note:** `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) was RETIRED on 2026-04-20. Its role was absorbed by this `CLAUDE.md` file (auto-loaded at session start) + `MEMORY.md` (volatile state) + `BATCH_CATALOG.md` + `PHASE_HISTORY.md`. Historical copy preserved at `1-system-manual/_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` — do not edit, do not cite as live governance.
 
 **Tier 2 — When applicable (update if the batch affects these domains):**
 - `1-system-manual/SYSTEM_MANUAL.md` — **architecture + math documentation.** Any change to system architecture, strategy logic, regime detection, filter design, signal pipeline, or quantitative math MUST be reflected here. This is how we avoid burying important details like the DBS orphan situation.
@@ -78,7 +80,8 @@
 ## 4. Canonical File Locations (post-reorganization, 2026-04-14)
 
 **Governance (all in `1-system-manual/`):**
-- CCPI, BATCH_CATALOG, PHASE_HISTORY, SYSTEM_MANUAL, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP, ADJUSTMENT_FRAMEWORK, AUTHORITY_BASELINE, RUNNING_ISSUES
+- BATCH_CATALOG, PHASE_HISTORY, SYSTEM_MANUAL, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP, ADJUSTMENT_FRAMEWORK, AUTHORITY_BASELINE, RUNNING_ISSUES
+- `_archive/` — retired governance docs (CCPI retired 2026-04-20). Do not edit, do not cite as live governance. See `_archive/README.md`.
 
 **Claude Comms and Packages (inside the repo at `DawnTraderV3/Claude Comms and Packages/`):**
 - `Scope Files/` — `BATCH_N_SCOPE.md`, `BATCH_N_PRE_AUDIT.md`, audit discussion docs
