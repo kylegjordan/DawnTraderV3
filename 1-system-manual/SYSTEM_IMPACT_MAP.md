@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-04-16 (B62 — §5.1 DBS-integrated classifier, §5.1b LIVE status, §5.2.5 MCE DBS-before-regime + getCachedVolumes, §7.1 VTS benchmark unblock + half-wire removal)
+> **Last Updated**: 2026-04-19 (B62 CLOSED with verified 72h metrics — RBS drift 0.00% across 23,983 samples, TFS+IE 46.19%, 174k MCE samples + 359 trades. All §5.1 / §5.1b / §5.2.5 / §7.1 B62 changes verified operational.)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
@@ -267,7 +267,7 @@
 - **Downstream**: VTS Runner (heavy use via MCE), Signal Orchestrator (via MCE — **WIRED**, Phase 13 Batch 14)
 - **Execution**: Synchronous — called per pair via MCE. **MCE computes DBS before regime (B62 ordering swap).**
 - **Blast Radius**: **HIGH** — regime determines strategy selection
-- **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13). DX thresholds recalibrated for crypto in HF7 (`64014bd2`). **Code freeze LIFTED (B62).** DBS-integrated classifier deployed to staging, 72h verification pending.
+- **Status**: **ACTIVE** — sole pair-level regime authority for both VTS and active trading (~~BUG-006~~ RESOLVED, Batch 13). DX thresholds recalibrated for crypto in HF7 (`64014bd2`). **Code freeze LIFTED (B62).** DBS-integrated classifier deployed to staging and **verified 2026-04-19** across 174k MCE samples: RBS drift contamination 0.00%, TFS+IE 46.19%, RBS 14.4%, IE 3.2%. Primary B62 objective met.
 - **⚠ Phase 15b audit finding (2026-04-14):** The pre-B62 classifier used vol + ADX + momentum thresholds but had **no directional drift check**. Result: 54.5% of pairs labeled `RANGE_BOUND_STABLE` while only ~8% had truly neutral momentum — the other 47% were drift-contaminated false ranges, bleeding `range_trade` (76% loss rate). **B62 fix:** DBS score is now the primary classification input, eliminating drift contamination. RBS drift contamination 70% → 0%. TFS+IE share 14% → 36.5%.
 
 ### 5.1b calculateDBS() / getPairDirectionalBias() / getGlobalDirectionalBias() — LIVE (consumed by regime classifier, B62)

@@ -19,10 +19,9 @@
 | 2 | **TEC as shared service** (wire advanced TEC to VTS + paper; per-strategy config) | ~1 day | B63 or B64 |
 | 3 | Global DBS architecture fix (persistent store + 20-pair min floor) | ~4h | B64 |
 | 4 | Canonical Regime/Strategy map sync (main file + UI + IE metrics update + Strong Bull Trend entry) | < 1 day | B64 |
-| 5 | Position sizing fix (portfolio value + risk-per-trade reads real config, not $1000 fallback) | ~2h | B64 |
-| 6 | Asset class field + standardized signal/trade schema | 1 batch | B65 |
-| 7 | Data archiving update (pair + trade, VTS/Paper/Live + Option B backfill) | 1-2 batches | B65/B66 |
-| 8 | Regime drift tracking dashboard tab | 1 batch | B66 |
+| 5 | Asset class field + standardized signal/trade schema | 1 batch | B65 |
+| 6 | Data archiving update (pair + trade, VTS/Paper/Live + Option B backfill) | 1-2 batches | B65/B66 |
+| 7 | Regime drift tracking dashboard tab | 1 batch | B66 |
 
 ---
 
@@ -160,23 +159,9 @@ Every trade record (VTS, paper, live) captures:
 
 ---
 
-## Item 5: Position Sizing Fix
+## Item 5: Asset Class + Standardized Schema
 
-**Evidence:** `vts-runner.ts getPortfolioValue()` reads `config.paperBalance` but that field doesn't exist in `systemConfigService.getConfig()` — always falls back to hardcoded $1000. VTS has been sizing trades on a phantom $1000 regardless of actual paper balance. Dashboard shows $878; VTS uses $250 max (25% of $1000) which is where those $250 trades came from.
-
-**Scope:**
-- Wire `getPortfolioValue()` to actual paper portfolio state from DB (the same value the dashboard displays)
-- Audit `getRiskPerTrade()` for same issue
-- Audit any other hardcoded fallbacks in VTS sizing path
-- Same logic needed for paper mode and live mode sizing (they may read from different config paths)
-
-**Effort:** ~2 hours.
-
----
-
-## Item 6: Asset Class + Standardized Schema
-
-### 6a. `assetClass` enum (extensible)
+### 5a. `assetClass` enum (extensible)
 - `CRYPTO_SPOT` (current default)
 - `CRYPTO_PERPETUAL` (future — Kraken perp)
 - `EQUITY_SPOT` (future — Kraken X-stocks)
@@ -187,7 +172,7 @@ Every trade record (VTS, paper, live) captures:
 
 Applied to all trade and signal tables.
 
-### 6b. Unified field set across ALL signal and trade tables
+### 5b. Unified field set across ALL signal and trade tables
 
 Tables in scope:
 - VTS Open Simulated Trades, VTS Closed Simulated Trades
@@ -216,24 +201,24 @@ Required fields (displayed in UI = captured for archival = identical schema):
 
 ---
 
-## Item 7: Data Archiving Update
+## Item 6: Data Archiving Update
 
-### 7a. Unified archiver — reads from VTS + paper + live
+### 6a. Unified archiver — reads from VTS + paper + live
 - Same rich record schema (established in Item 6)
 - `tradeSource` field for filtering
 - Archive job aggregates across all sources
 
-### 7b. Pair-level scan data archiving
+### 6b. Pair-level scan data archiving
 - Every pair evaluated by FX5 every cycle (survivors AND rejections)
 - All filter metric values + verdict + OHLC snapshot reference
 - Enables ML counterfactual training ("why did we NOT trade pair X")
 
-### 7c. OHLC snapshot persistence
+### 6c. OHLC snapshot persistence
 - Central OHLC store per pair per hour (deduped — 60-min candles don't change intra-hour)
 - Referenced by scan records and trade records via (symbol, hour) key
 - Indefinite retention (Olympic blood-sample principle)
 
-### 7d. Data integrity tier backfill — Option B (Kyle approved 2026-04-18)
+### 6d. Data integrity tier backfill — Option B (Kyle approved 2026-04-18)
 - TIER_0_SIMULATED (< 2026-01-20): excluded from ML
 - TIER_2_REAL_PRICES (Jan 20 – Mar 5): real prices, stubbed scoring
 - TIER_1_FULL_OLD_CLASSIFIER (Mar 6 – Apr 16 09:15): full integrity, pre-B62 labels
@@ -259,7 +244,7 @@ Hetzner CPX22 (80 GB) runway: ~18 months before disk upgrade or cold-tier archiv
 
 ---
 
-## Item 8: Regime Drift Tracking Dashboard
+## Item 7: Regime Drift Tracking Dashboard
 
 **Scope:** new permanent UI tab (mockup approved in principle 2026-04-17):
 - 4 primary metric cards: RBS drift contamination, TFS+IE share, family-level flicker, global DBS
@@ -292,12 +277,12 @@ Items from the original Phase 15b Sub-Phase C/D/E plan, mapped to current dispos
 |---|---|---|
 | C.1 biasConfidenceModifier application | ✅ ADDRESSED | Dead code removed in B62. If DBS-modulated confidence is wanted future, rebuild fresh — don't resurrect dormant path. |
 | C.2 Net_EV gate DBS-aware thresholds | ⏳ RESIDUAL | Defer to post-launch or fold into Item 1's strategy-specific gate if data supports. |
-| C.3 Position sizing within risk limits | ✅ ADDRESSED by Item 5 |
+| C.3 Position sizing within risk limits | ✅ NO CHANGE NEEDED | VTS uses intentional fixed-sized trades (~$150/trade via $1000 nominal × regime risk). Kyle confirmed 2026-04-19: no real paper balance is meant to feed in; design preserves consistent trade sizing matched to expected Kraken capital. Regime-weighted multipliers work correctly on top of nominal base. |
 | C.4 TP/SL ratios in trending vs neutral | ✅ SUBSUMED by Item 1 (Strong Bull Trend) |
 | C.5 Entry filter opposing global DBS | ⏳ RESIDUAL | Defer to post-launch unless Item 1 data supports. |
 | C.6 RTB rankingScore DBS alignment boost | ⏳ RESIDUAL | Defer to post-launch. |
 | C.7 TEC early-exit on DBS flip | ✅ SUBSUMED by Item 2 (`useDBSEarlyExit` config flag) |
-| C.8 Events feed DBS transitions | ✅ SUBSUMED by Item 8 (drift dashboard history) |
+| C.8 Events feed DBS transitions | ✅ SUBSUMED by Item 7 (drift dashboard history) |
 | D.1 range_trade false-range bleeding reduced? | ✅ ANSWERED in B62 72h data — RBS drift contamination 0.00% |
 | D.2 Dormant strategies receive flow? | ⚠️ PARTIAL — DBS routes pairs correctly but some strategies receive flow they're not designed for. Addressed by Item 1. |
 | D.3 Trade-selection economics improve? | ⚠️ MIXED — neutral pairs fine; high-DBS pairs bleed. Item 1 fixes this. |
@@ -322,7 +307,7 @@ Phase 15b remains in effect through B66. Phase 16 begins after B66 closes (DB/Le
 
 ## Prerequisites before "launch"
 
-Per Kyle's 2026-04-18 directive (confirmed 2026-04-19), ALL 8 items above must complete before live mode activates. ML model work does not start until post-launch; all data infrastructure must be in place BEFORE launch so the system captures correctly from day one.
+Per Kyle's 2026-04-18 directive (confirmed 2026-04-19), ALL 7 items above must complete before live mode activates. ML model work does not start until post-launch; all data infrastructure must be in place BEFORE launch so the system captures correctly from day one.
 
 Items 1 and 2 also improve VTS trade economics immediately, which matters for Phase 19 (Paper Mode Full Audit) and Phase 20 (Production Hardening).
 

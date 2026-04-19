@@ -1652,6 +1652,21 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - **Summary**: (1) Directive 11.6F benchmark exclusion removed from vts-runner.ts. (2) Batch 52 benchmark filter removed from fx5-scanner.ts. BTC/ETH/SOL now flow through VTS. (3) Dormant DBS confidence modifier removed from signal-orchestrator.ts (L448-467 + import). (4) Half-wired biasModifier removed from vts-runner.ts (L875-877 + import). Both `computeBiasConfidenceModifier` imports eliminated.
 - **Reference**: `BATCH_62_SCOPE.md` §4.9
 
+### DBS-B62-004: B62 Verification CONFIRMED — 72h post-deploy metrics PASS
+- **Severity**: VERIFICATION (closure record)
+- **Type**: CONFIRMATION
+- **Location**: `Claude Comms and Packages/Batch Completion/BATCH_62_COMPLETION_REPORT.md`
+- **Summary**: 72h B62 verification window (2026-04-16 09:15 UTC → 2026-04-19 09:15 UTC) confirms all primary metrics. 174,287 MCE pair-cycle samples + 359 closed trades across 76 symbols. Results:
+  - **RBS drift contamination: 0.00%** (0/23,983 RBS samples). Target <30%. Pre-B62 was 70.2%. Primary B62 objective achieved definitively.
+  - **TFS+IE combined: 46.19%** (TFS 43.0% + IE 3.2%). Target 18-25%. Pre-B62 was 14.1%. Exceeds target band.
+  - **RBS share: 14.4%** (was 55.7%).
+  - **IE share: 3.2%** — within 2-5% target band; IE redefine successful.
+  - **ST share: 33.2%** — high but stable; no DBS-aware sub-condition needed at this time.
+  - Family-level flicker within 2.0% ceiling.
+  - Component-clamp saturation stable vs B61 baselines.
+- **Additional finding (triggered B63):** high-DBS trades (|DBS|≥0.30) show 25.6% WR vs 37.9% for neutral pairs, 70% stop-out rate. Root cause: existing TFS/IE-mapped strategies (morning_star, reverse_impulse, vwap_pullback) are reversal/pullback patterns misapplied to trending pairs. NOT a filter/gate rejection issue — conversion rates are fine (0.21-0.29%). Triggers B63 = Strong Bull Trend strategy (Path D) + TEC shared service.
+- **Reference**: `BATCH_62_COMPLETION_REPORT.md` §4 and §4.1, `POST_B62_PRE_LAUNCH_PLAN.md` Items 1-2.
+
 ### INFRA-15B-006: CLAUDE.md Autonomy-With-Langston Rule Missing
 - **Severity**: MEDIUM (caused the new CC session to escalate every routine Langston exchange to Kyle instead of iterating to consensus directly)
 - **Location**: `CLAUDE.md` §6 Three-Way Communication Protocol
