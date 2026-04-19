@@ -91,13 +91,16 @@ Steps 1-8 are COMPLETE (Phases 12-14.7, Batches 1-54).
 8. Phase 21 — Live Mode Activation (real Kraken orders)
 
 **Pre-Live tracked work items (folded into the phases above):**
-- **Post-B62/Pre-Launch Consolidation** — 5-item plan locked by Kyle 2026-04-18. Full detail in `Claude Comms and Packages/Scope Files/POST_B62_PRE_LAUNCH_PLAN.md`. Summary:
-  1. Regime drift tracking dashboard tab (permanent UI tab with warnings + actions)
-  2. Data archiving update — pair-level scan data + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data
-  3. Global DBS architecture fix (persistent store + end-of-cycle snapshot + fixed 20-pair min floor)
-  4. Canonical Regime/Strategy map sync (main file + Analytics & Diagnostics UI + IE metrics update)
-  5. Asset class field + standardized schema across all signal/trade tables (VTS open/closed, active filter/RTB/open/closed, paper sim)
-  - **Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined). Fits current Hetzner CPX22 disk with ~18 months runway before upgrade/archive needed.
+- **Post-B62/Pre-Launch Consolidation** — 8-item plan locked by Kyle (original 5 items 2026-04-18, expanded to 8 on 2026-04-19 after 72h verification analysis). Full detail in `Claude Comms and Packages/Scope Files/POST_B62_PRE_LAUNCH_PLAN.md`. Priority order:
+  1. **Strong Bull Trend strategy** (aka Path D — new strategy for high-DBS bullish pairs). ~1 week. B63. Triggered by 2026-04-19 analysis: high-DBS trades losing at 25.6% WR / 70% stop-out rate because existing "trend" strategies (morning_star, reverse_impulse, vwap_pullback) are actually reversal/pullback patterns misapplied to trending pairs.
+  2. **TEC as shared service** — wire dormant advanced TEC (trailing-exit-controller.ts, built but never activated) to both VTS and paper engine; per-strategy `tecConfig` in canonical map (no hard-coded strategy checks). ~1 day. B63 or B64.
+  3. Global DBS architecture fix — persistent store + end-of-cycle snapshot + fixed 20-pair min floor. ~4h. B64.
+  4. Canonical Regime/Strategy map sync — main file + Analytics & Diagnostics UI + IE metrics update + Strong Bull Trend entry. < 1 day. B64.
+  5. Position sizing fix — `getPortfolioValue()` reads real portfolio state instead of $1000 fallback. ~2h. B64.
+  6. Asset class field + standardized schema across all signal/trade tables. 1 batch. B65.
+  7. Data archiving update — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches. B65/B66.
+  8. Regime drift tracking dashboard tab. 1 batch. B66.
+  - **Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined). Fits current Hetzner CPX22 disk with ~18 months runway.
   - **ML prep only** — model work itself deferred to post-launch Phase 17/18.
 - **Archive minimum-viable capture** — SUPERSEDED by the 2026-04-18 post-B62 plan above. The MVP capture is replaced by the full capture plan (all pair data + all trade data + OHLC references).
 - **Paper trading pipeline readiness** — verify the full paper pipeline works under the new math, new filters, and dual-path (quant + pattern) end-to-end. Folded into Phase 19. **DEPENDS ON Phase 15c item 5** (standardized schema must be in place before paper mode activates, otherwise paper trades lose DBS/friction context).

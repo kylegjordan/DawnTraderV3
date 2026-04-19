@@ -1,213 +1,331 @@
 # Post-B62 / Pre-Launch Plan
 
-**Owner:** Kyle Jordan (approved 2026-04-18)
+**Owner:** Kyle Jordan (locked 2026-04-18, restructured 2026-04-19)
 **Status:** LOCKED — items below must complete before go-live
 **Scope:** Everything between B62 close (~Apr 19) and live-mode activation
 **ML work:** DEFERRED to post-launch. Items below are data/infrastructure PREP for ML; model work itself comes later.
 
----
+**2026-04-19 restructure note:** After ~72h of B62 post-deploy data (174k MCE samples, 359 closed trades), analysis revealed that high-DBS pairs ARE reaching strategies (conversion 0.21-0.29%) but are LOSING MORE than neutral pairs (25.6% win rate vs 37.9%, 70.1% stop-out rate). The existing "trend" strategies (morning_star, reverse_impulse, vwap_pullback) are actually reversal/pullback patterns being misapplied to trending pairs. Path D (a true trend-rider strategy) and TEC activation now precede the infrastructure items in priority order.
 
-## Item 1: Regime Drift Tracking Dashboard Tab
-
-**Source:** CC design mockup dated 2026-04-17 (approved in principle; detailed answers pending from Kyle).
-
-**Scope:**
-- New permanent tab in the DawnTrader UI showing live DBS + regime distribution + drift metrics + warnings
-- Four primary metric cards: RBS drift contamination, TFS+IE share, family-level flicker, global DBS status
-- Regime distribution view (pie/bar + table)
-- DBS category distribution
-- Drift history time series (RBS drift % over time)
-- Active warnings panel with context-appropriate action buttons
-- Actions panel: diagnostic (safe one-click) + corrective (confirm + audit-logged)
-- User-configurable alert thresholds
-
-**Open design questions** (from mockup review — Kyle to answer before build):
-1. Default time window (suggested: 24h)
-2. Notification channel (Telegram DM, email, both?)
-3. Corrective actions — one-click or confirmation-gated?
-4. "Open drift remediation batch" button — should it auto-generate a scope doc?
-5. Additional metrics beyond the base set?
-6. Visual style — match existing dashboards or distinct?
-
-**Effort estimate:** 1 batch (~1 week). Data plumbing already exists; work is API endpoint + React component + alert wiring.
-
-**Reference:** Mockup in CC session transcript 2026-04-17.
+**Phase 15b folding:** The original B63 Sub-Phase C+D (DBS integration inventory + strategy re-audit) and B64/B65 (classifier deployment) are partly obsolete (B62 completed the classifier) and partly subsumed into the items below. Residual items preserved in §9.
 
 ---
 
-## Item 2: Data Archiving Update — Pair + Trade, All Three Modes
+## Priority order (revised 2026-04-19)
+
+| # | Item | Effort | Batch |
+|---|---|---|---|
+| 1 | **Strong Bull Trend strategy** (new strategy for high-DBS pairs, aka Path D) | ~1 week | **B63** |
+| 2 | **TEC as shared service** (wire advanced TEC to VTS + paper; per-strategy config) | ~1 day | B63 or B64 |
+| 3 | Global DBS architecture fix (persistent store + 20-pair min floor) | ~4h | B64 |
+| 4 | Canonical Regime/Strategy map sync (main file + UI + IE metrics update + Strong Bull Trend entry) | < 1 day | B64 |
+| 5 | Position sizing fix (portfolio value + risk-per-trade reads real config, not $1000 fallback) | ~2h | B64 |
+| 6 | Asset class field + standardized signal/trade schema | 1 batch | B65 |
+| 7 | Data archiving update (pair + trade, VTS/Paper/Live + Option B backfill) | 1-2 batches | B65/B66 |
+| 8 | Regime drift tracking dashboard tab | 1 batch | B66 |
+
+---
+
+## Item 1: Strong Bull Trend Strategy (Path D) — B63
+
+**Rationale (evidence from 2026-04-19 72h analysis):**
+- 164 high-DBS trades (|DBS|≥0.30) over 72h → 25.6% win rate, $-3.01 total P/L
+- 70.1% stop-out rate on high-DBS trades (vs 61.0% on neutral)
+- Existing strategies mapped to TFS/IE are reversal/pullback patterns, NOT trend-riders:
+  - morning_star = 3-candle reversal pattern (29% WR)
+  - reverse_impulse = reversal of volatile move (22% WR)
+  - vwap_pullback = pullback to VWAP (34% WR — classic mean-reversion within trend)
+- Winning strategies (volatility_edge 64%, support_bounce 53%, range_trade 49%) all operate on LOW-DBS pairs at range extremes
+- Gap: no strategy designed to enter WITH a strong trend and ride it
+
+**Design principles:**
+- **LONG-ONLY** (system doesn't support shorting) — hence "Strong BULL Trend"
+- **Mapped regime:** TREND_FRIENDLY_STABLE (primary), IMPULSE_EXPANSION (secondary)
+- **Entry gate:** |DBS| ≥ 0.30 AND DBS > 0 (bullish direction confirmed — not just magnitude)
+- **Entry trigger:** continuation confirmation (e.g., price breaks prior swing high with volume > 1.3× avg) — NOT a reversal signal
+- **Initial stop:** wider than mean-reversion strategies (proposed 3× ATR vs current ~1-2× ATR). Rationale: high-DBS pairs have larger intrabar counter-moves; a 1-ATR stop gets whipsawed.
+- **Initial target:** modest (proposed 2× ATR) — main profit comes from TEC trailing, not hitting the initial TP
+- **Hand-off to TEC:** once target is hit or break-even latched, TEC's MOONBAG mode takes over and trails the trend
+- **No take-profit ceiling:** let the trailing stop decide when the trade ends
+
+**Proposed strategy key:** `strong_bull_trend` (final name TBD — candidates: `strong_bull_trend`, `trend_rider`, `bull_continuation`)
+
+**Signal type:** QUANT (indicator-based, not pattern-based). Potentially HYBRID if pattern confirmation at entry is wanted.
+
+**Canonical regime-strategy map changes:**
+- Add entry under TREND_FRIENDLY_STABLE with signalType QUANT
+- Add entry under IMPULSE_EXPANSION with signalType QUANT (secondary — DBS ≥ 0.50 pairs go to IE)
+- The strategy's detect function gates on DBS itself so it only fires for the right pairs
+
+**Data capture:**
+- Every Strong Bull Trend trade must be tagged so ML can distinguish its outcomes
+- Entry-time DBS stored (already captured via pairDirectionalBiasScore)
+- Track whether trade exited via initial TP, trailing stop (break-even), trailing stop (MOONBAG), or initial SL — see Item 2 for TEC standardized exit reasons
+
+**Effort:** ~1 week. Scope: strategy detect function, entry/stop logic, canonical map entries, unit tests, VTS observation period.
+
+**Folds in Phase 15b original items:** C.4 (TP/SL ratios in trending vs neutral markets), D.2/D.3 (opportunity flow to dormant strategies — now addressed by creating a new strategy instead).
+
+---
+
+## Item 2: TEC as Shared Service
+
+**Current state:**
+- **Simple trailing logic EXISTS in paper-execution-engine.ts (lines 905-924):** metadata-driven `trailingStopPercent` with `highWaterMark`, exits with `trailing_stop_hit` type. Naive — percentage-based trail from HWM.
+- **Advanced TEC (trailing-exit-controller.ts) is BUILT BUT DORMANT:** full two-stage latching (break-even + target lock), K' dynamic distance based on DI/VolNoise, MOONBAG mode (TRAILING_TAKE), cost-aware net floors. Never wired to a consumer.
+  - Likely dormant because active trading has been OFF since ≥2026-01-12. TEC was built as Phase 11.3A pre-launch infrastructure expecting to be wired up when active trading came back on.
+- **VTS has NEITHER** — naive candle-based TP/SL checks in vts-service.ts:308-348.
+- **Exit reason enum already exists in paper engine:** `target_hit | stop_hit | trailing_stop_hit | max_holding_period | guardrail | manual_stop`, with mapping to `TP | SL | TRAILING_STOP | MANUAL | KILL_SWITCH | ENGINE_STOP | UNKNOWN`. VTS lacks the `trailing_stop_hit` distinction.
 
 **Scope:**
 
-### 2a. Unified trade record schema across VTS / Paper mode / Live mode
+**2a. Wire advanced TEC as a SHARED SERVICE**
+- Callable by both VTS `updateOpenTrades()` and paper-execution-engine's `evaluateExitConditions()`
+- Per-trade state keyed by trade ID (not just symbol — future-proof for multiple positions same pair)
+- Hot-swappable with existing paper simple trailing logic — paper opts in per trade
 
-Every trade, regardless of mode, must capture the same rich context:
-- **Signal/entry fields:** entry/exit price, stop, target, strategy, signal type, pattern type, pattern strength, final score, hybrid score, predictive confidence, regime weight, expected edge
-- **Outcome fields:** gross P/L, net P/L, fees, position size, result type, close reason, exit time
-- **Context fields (B61/B62 additions):** regime (pair-level), globalRegime, pairFriction, globalFriction, pairDirectionalBias, globalDirectionalBias, pairDirectionalBiasScore, globalDirectionalBiasScore, filterTier, sourcePool, **assetClass (NEW — see Item 5)**
-- **Integrity fields:** schemaVersion, dataIntegrityTier (see 2d), classifierVersion (pre-B62 vs B62-design-b)
+**2b. Per-strategy TEC config (NO hard-coded strategy checks in TEC)**
+- TEC accepts `tecConfig` at `initializeTrailingState()`:
+  - `K_base` (trailing distance base multiplier, default 1.0)
+  - `alpha` (DI weight for K', default 0.5)
+  - `beta` (VolNoise weight for K', default 0.8)
+  - `breakEvenATR` (profit distance to latch break-even, default 1.0)
+  - `targetLockMultiplier` (floor-above-target margin, default 1.0)
+  - `useDBSEarlyExit` (C.7 subsumed — exit if DBS flips bearish while holding, default false)
+- **Strategy config lives in the canonical regime-strategy map, NOT in TEC code**
+- Each strategy declares its `tecConfig`. Strong Bull Trend declares `{ K_base: 2.0, alpha: 0.3, beta: 0.5, breakEvenATR: 2.0, useDBSEarlyExit: true }` for wider trailing. Existing strategies default to the existing K_base=1.0 behavior.
+- Default config used if strategy doesn't declare one (backward compatible)
 
-Currently:
-- **VTS** (`virtual_trades/*.json`) has all of these (except assetClass and integrity tier markers) ✅
-- **Paper sim** (`paper_sim_trades` DB table) has most columns but **MISSING** globalRegime, pairFriction, globalFriction, pairDirectionalBias, globalDirectionalBias, pairDirectionalBiasScore, globalDirectionalBiasScore, filterTier — needs migration
-- **Live** (`trades` DB table) — same gaps as paper_sim_trades — needs migration
+**2c. Standardize exit reason field across all modes**
+- VTS's `resultType` enum extended: `take_profit | stop_loss | timeout | trailing_stop_breakeven | trailing_stop_moonbag`
+- Paper engine's existing enum kept, with `trailing_stop_hit` split internally into the breakeven vs moonbag distinction
+- Unified trade record's `closeReason` enum:
+  - `SL` — original stop-loss hit (trade closed at a loss)
+  - `TP` — original take-profit hit (target latch NOT yet engaged)
+  - `TRAILING_BREAKEVEN` — trailing stop hit after break-even latched but before target latch (profit ≥ entry cost)
+  - `TRAILING_MOONBAG` — trailing stop hit after target latch (profit ≥ original target)
+  - `TIMEOUT`, `GUARDRAIL`, `MANUAL`, `KILL_SWITCH`, `ENGINE_STOP`
 
-**Work:** DB migrations + trade writer updates + unified archiver that reads from all three sources.
+**2d. Archive fields for TEC decisions**
+Every trade record (VTS, paper, live) captures:
+- `tradeMode` at close: TARGET vs TRAILING_TAKE
+- `breakEvenLatched`: boolean
+- `targetLatched`: boolean
+- `highWaterMark`: highest price achieved during hold
+- `originalStopLoss`: entry-time stop (unchanged throughout trade)
+- `finalStopPrice`: stop at moment of exit (may differ from originalStopLoss if trailing engaged)
+- `stopMovedCount`: how many times TEC moved the stop
+- `Kprime_at_exit`: K' value in use at exit
+- `closeReason` (standardized enum from 2c)
+- `dbsAtEntry`, `dbsAtExit` (for analysis of DBS trajectory during hold)
 
-### 2b. Pair-level scan data archiving
+**2e. VTS observation integration**
+- VTS trade records show all TEC fields
+- ML page Open/Closed tables add key TEC columns (tradeMode, finalStopPrice) — may be collapsed by default
+- TEC state persistence across PM2 restarts (already in TEC; wire into VTS startup/shutdown)
 
-Capture every pair evaluated by the FX5 scanner every cycle, regardless of whether it passes filters or generates a trade:
+**Effort:** ~1 day for VTS integration (sequenced AFTER Item 1 so Strong Bull Trend's wider stop and TEC config are designed together).
 
-- All filter metric values (volume 24h, spread, daily range, liquidity score, volatility, directional integrity)
-- Filter verdict (passed / which specific filter rejected it)
-- OHLC snapshot reference (or full 48-candle window; see 2c)
-- Derived indicators if reached MCE (DBS, regime, vol, ADX, momentum)
-- Scan cycle ID + timestamp
-
-**Storage estimate:** ~330 pairs × 60s cycles × ~500 bytes = ~165 KB/cycle = ~240 MB/day uncompressed, ~72 MB/day gzipped. ~26 GB/year gzipped. Trivial on current disk.
-
-**Value:** Enables ML training on "why did we NOT trade pair X" counterfactuals. Enables filter calibration review. Enables retroactive classifier analysis on rejected pairs.
-
-### 2c. OHLC snapshot persistence
-
-Persist the OHLC window used at each decision point. Options:
-- **Per-cycle-per-pair snapshot** (full blood-sample approach) — ~5 GB/year gzipped, every pair's OHLC captured every cycle
-- **Per-trade snapshot only** — much smaller but loses context for non-trading pairs
-
-**Recommendation:** Per-cycle-per-pair. Small marginal cost, massive future ML value.
-
-### 2d. Data integrity tier backfill (Option B)
-
-Retroactively assign integrity tiers and recomputed regime labels to existing VTS data:
-
-| Tier | Date range | Characteristics |
-|---|---|---|
-| **TIER_0_SIMULATED** | < 2026-01-20 11:05 UTC | Random values; not usable |
-| **TIER_2_REAL_PRICES** | 2026-01-20 to 2026-03-06 | Real prices + outcomes, stubbed strategy scoring |
-| **TIER_1_FULL_OLD_CLASSIFIER** | 2026-03-06 to 2026-04-16 09:15 UTC | Full integrity, pre-B62 classifier labels |
-| **TIER_1_FULL_B62** | 2026-04-16 onwards | Full integrity, B62 classifier labels |
-
-**Option B (Kyle approved 2026-04-18):**
-- Mark TIER_1_FULL_OLD_CLASSIFIER trades with `classifierVersion: pre-B62`
-- **Retroactively re-label regime** using B62 Design B classifier applied to each trade's captured pairDirectionalBiasScore + vol + ADX + momentum values. Store as `regime_b62_recomputed` alongside the original `regime` field.
-- Net gain: ~10,000-15,000 pre-B62 trades upgraded to B62-classifier-compatible training data (~10x multiplier on clean corpus vs post-B62 only)
-- One-time backfill script; a few hours of effort
-
-**Policy:** No pre-Mar-6 VTS data used for ML. Pre-Jan-20 data archived-read-only for historical record but excluded from all training/inference pipelines.
-
-### Storage budget for Item 2
-
-| Data store | Per day (gzipped) | Per year |
-|---|---|---|
-| Pair-level scan records (~330 pairs × 1,440 cycles, OHLC referenced not embedded) | ~72 MB | ~26 GB |
-| Central OHLC snapshot store (330 pairs × hourly candles, deduplicated) | ~12 MB | ~4 GB |
-| Trade records (unified VTS + paper + live, avg ~300 trades/day once active) | ~0.6 MB | ~220 MB |
-| Post-B62 MCE telemetry (already running) | ~25 MB | ~9 GB |
-| **Total** | **~110 MB/day** | **~40 GB/year** |
-
-**Storage runway:** On the Hetzner CPX22's 80 GB disk, ~18 months before needing disk upgrade or tiered cold storage for older data. Manageable. For context: 1 year of full-capture is roughly the size of a high-resolution movie.
-
-**Tiering policy (recommended):**
-- Hot (last 30 days): uncompressed or light gzip, fast read access
-- Warm (30-365 days): aggressive gzip (zstd -19 or similar)
-- Cold (>1 year): offload to Supabase storage or similar cheap object store; indexed for lookup but rehydrated only on demand
-
-### Effort estimate for Item 2 (all parts): 1-2 batches
+**Folds in Phase 15b original item:** C.7 (TEC early-exit on DBS flip) — implemented as `useDBSEarlyExit` config flag.
 
 ---
 
 ## Item 3: Global DBS Architecture Fix
 
-**Design:** CC + Langston consensus from 2026-04-17, modified by Kyle to use fixed minimum (not % of peak).
+**Design** (CC + Langston consensus from 2026-04-17, modified by Kyle to use fixed minimum):
 
-**Implementation:**
-- **Persistent per-pair DBS store** — `Map<symbol, {score, timestamp, sentinelZero}>` separate from the MCE TTL cache. Updated whenever MCE computes a pair's context. No expiry; entry only removed if pair leaves FX5 universe entirely.
-- **End-of-cycle snapshot** — after each complete VTS scan cycle, take atomic snapshot of persistent store and publish as "current global DBS." All downstream consumers read this snapshot, not the live store.
-- **Coverage gate replaced with fixed floor** — **minimum 20 valid (non-sentinel-zero, non-stale) pairs** required before computing global DBS. Below this, return NEUTRAL with a log entry and keep the last-good snapshot marked stale.
-- **Staleness handling:** soft target = updated within last 2 scan intervals (~120s); hard expiry = 5 min. Entries older than 5 min dropped from snapshot.
-- **Weighting:** transformed/capped volume weighting (volume-based but with per-pair cap to prevent single-pair dominance). Existing `GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT` constant stays; default remains disabled (1.0); activate at 20-25% only if BTC consistently > 40% of weight.
-- **External signals** (Fear & Greed, BTC dominance, altcoin momentum) used as monitoring overlays only — NOT blended into the canonical formula.
+- **Persistent per-pair DBS store** — `Map<symbol, {score, timestamp, sentinelZero}>` separate from the MCE TTL cache. Updated whenever MCE computes a pair's context.
+- **End-of-cycle snapshot** — after each complete VTS scan cycle, take atomic snapshot and publish as "current global DBS." All downstream consumers read snapshot, not live store.
+- **Coverage gate = fixed floor of 20 pairs** (replaces "70% of peak"). Below 20, return NEUTRAL with log; keep last-good snapshot marked stale.
+- **Staleness:** soft target 2 scan intervals (~120s); hard expiry 5 min; drop from snapshot after hard expiry.
+- **Weighting:** transformed/capped volume weighting. `GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT` stays; default 1.0 (disabled); activate at 20-25% only if BTC consistently > 40% of weight.
+- **External signals** (Fear & Greed, BTC dominance, altcoin momentum) used as monitoring overlays only — NOT blended into canonical formula.
 - **Benchmarks included** (already deployed in B62).
 
-**Effort estimate:** 2-4 hours of code. Requires PM2 restart to deploy.
+**Effort:** 2-4 hours. Requires PM2 restart.
 
 ---
 
-## Item 4: Canonical Regime/Strategy Map — Sync Main File and UI
+## Item 4: Canonical Regime/Strategy Map Sync
 
 **Scope:**
-- Verify `server/config/canonical-regime-strategy-map.ts` reflects all current strategy-to-regime assignments
-- Verify the UI's Analytics and Diagnostics page → Overview tab renders the same mapping
-- Specifically check: **IMPULSE_EXPANSION regime definition** in the map's `metrics` field still shows old momentum/ADX criteria but the B62 classifier now admits IE via `|DBS| >= 0.50 && vol > 0.015`. Update map's IE metrics description to reflect the new definition.
-- If any strategies were reassigned between regimes in B62 (none were, per the scope), reflect that.
-- Ensure the daily bridge sync (`sync-canonical-bridge.ts`) regenerates bridge JSON/Markdown from the updated source of truth.
+- Verify `server/config/canonical-regime-strategy-map.ts` reflects current strategy assignments
+- **Add Strong Bull Trend entry** (from Item 1) with its `tecConfig`
+- Verify Analytics and Diagnostics → Overview tab renders correct mapping
+- **Update IMPULSE_EXPANSION regime metrics description** to reflect B62's criteria (`|DBS| >= 0.50 && vol > 0.015`) — currently still shows old momentum/ADX thresholds
+- **Add `tecConfig` field per strategy** (from Item 2b)
+- Ensure daily bridge sync regenerates JSON/Markdown from updated source
 
-**Effort estimate:** < 1 day. Mostly documentation + UI verification.
+**Effort:** < 1 day.
 
 ---
 
-## Item 5: Asset Class + Standardized Signal/Trade Schema
+## Item 5: Position Sizing Fix
+
+**Evidence:** `vts-runner.ts getPortfolioValue()` reads `config.paperBalance` but that field doesn't exist in `systemConfigService.getConfig()` — always falls back to hardcoded $1000. VTS has been sizing trades on a phantom $1000 regardless of actual paper balance. Dashboard shows $878; VTS uses $250 max (25% of $1000) which is where those $250 trades came from.
 
 **Scope:**
+- Wire `getPortfolioValue()` to actual paper portfolio state from DB (the same value the dashboard displays)
+- Audit `getRiskPerTrade()` for same issue
+- Audit any other hardcoded fallbacks in VTS sizing path
+- Same logic needed for paper mode and live mode sizing (they may read from different config paths)
 
-### 5a. Add `assetClass` field to all signal + trade tables
+**Effort:** ~2 hours.
 
-Enum values (initial set, extensible):
-- `CRYPTO_SPOT`
-- `CRYPTO_PERPETUAL` (future)
+---
+
+## Item 6: Asset Class + Standardized Schema
+
+### 6a. `assetClass` enum (extensible)
+- `CRYPTO_SPOT` (current default)
+- `CRYPTO_PERPETUAL` (future — Kraken perp)
 - `EQUITY_SPOT` (future — Kraken X-stocks)
 - `EQUITY_OPTIONS` (future)
-- `FX_SPOT` (some Kraken pairs like EUR/USD are already FX, should be tagged as such)
-- `COMMODITY_SPOT` (gold proxies like PAXG/XAUT)
-- `STABLECOIN` (stablecoin pairs)
+- `FX_SPOT` (tag EUR/USD, USD/CHF etc.)
+- `COMMODITY_SPOT` (PAXG, XAUT — gold)
+- `STABLECOIN` (USDG pairs etc.)
 
-Applied to: VTS open/closed tables, active trading tables (filter, RTB, open, closed), paper sim tables, live trade tables.
+Applied to all trade and signal tables.
 
-### 5b. Standardize displayed-data = captured-data
+### 6b. Unified field set across ALL signal and trade tables
 
-**Principle:** Whatever fields we capture for ML/archival must also be what's displayed in the UI tables, and vice versa. No field should exist in capture but not in display, or in display but not in capture.
-
-**Scope:**
-- VTS Open Simulated Trades table
-- VTS Closed Simulated Trades table
-- Active Trading — Filter table
-- Active Trading — RTB table
-- Active Trading — Open table
-- Active Trading — Closed table
+Tables in scope:
+- VTS Open Simulated Trades, VTS Closed Simulated Trades
+- Active Trading — Filter, RTB, Open, Closed
 - Paper sim equivalents
+- Live trade table (`trades`)
 
-**Required field set** (applied to all 6+ tables):
-- Symbol, **assetClass**, B/S (benchmark/standard) type
-- Regime (pair), global regime
-- Strategy, signal type, pattern type, pattern strength
+Required fields (displayed in UI = captured for archival = identical schema):
+- Symbol, **assetClass**, B/S type
+- Regime (pair), globalRegime
+- Strategy, signalType, patternType, patternStrength
 - Entry/exit price, stop, target, position size, quantity
 - P/L gross, P/L net, fees, slippage
 - Entry time, exit time, duration
-- Final score, hybrid score, predictive confidence, regime weight
-- Pair friction, global friction
-- Pair DBS (category + score), global DBS (category + score)
-- Source pool, filter tier
-- Schema version, classifier version, data integrity tier
-- Result type, close reason
+- Final score, hybridScore, predictiveConfidence, regimeWeight
+- pairFriction, globalFriction
+- pairDirectionalBias (category + score), globalDirectionalBias (category + score)
+- sourcePool, filterTier
+- schemaVersion, classifierVersion, dataIntegrityTier
+- **Item 2 additions:** tradeMode, breakEvenLatched, targetLatched, highWaterMark, originalStopLoss, finalStopPrice, stopMovedCount, Kprime_at_exit, closeReason (standardized), dbsAtEntry, dbsAtExit
+- resultType/closeReason
 
-**Effort estimate:** 1 batch (DB migrations + writer updates + UI table updates).
+**Principle:** whatever is captured must be displayable; whatever is displayed must be captured. No display-only derived values.
+
+**Effort:** 1 batch.
 
 ---
 
-## Implementation Order (suggested)
+## Item 7: Data Archiving Update
 
-1. **Item 3 (Global DBS fix)** — smallest, blocks nothing else, can deploy immediately after B62 closes. Single PM2 restart.
-2. **Item 4 (Canonical map sync)** — docs/UI only, no restart needed, can happen in parallel.
-3. **Item 5 (Standardized schema + asset class)** — prerequisite for 2a's unified archiver. Do before paper mode activates.
-4. **Item 2 (Data archiving)** — the big one. Multiple batches. Depends on Item 5.
-5. **Item 1 (Dashboard)** — consumes data captured by earlier items. Do last.
+### 7a. Unified archiver — reads from VTS + paper + live
+- Same rich record schema (established in Item 6)
+- `tradeSource` field for filtering
+- Archive job aggregates across all sources
+
+### 7b. Pair-level scan data archiving
+- Every pair evaluated by FX5 every cycle (survivors AND rejections)
+- All filter metric values + verdict + OHLC snapshot reference
+- Enables ML counterfactual training ("why did we NOT trade pair X")
+
+### 7c. OHLC snapshot persistence
+- Central OHLC store per pair per hour (deduped — 60-min candles don't change intra-hour)
+- Referenced by scan records and trade records via (symbol, hour) key
+- Indefinite retention (Olympic blood-sample principle)
+
+### 7d. Data integrity tier backfill — Option B (Kyle approved 2026-04-18)
+- TIER_0_SIMULATED (< 2026-01-20): excluded from ML
+- TIER_2_REAL_PRICES (Jan 20 – Mar 5): real prices, stubbed scoring
+- TIER_1_FULL_OLD_CLASSIFIER (Mar 6 – Apr 16 09:15): full integrity, pre-B62 labels
+- TIER_1_FULL_B62 (Apr 16 onwards): full integrity, B62 labels
+- **Retroactive re-label** of TIER_1_FULL_OLD_CLASSIFIER trades using B62 Design B classifier applied to captured vol/ADX/momentum/DBS; stores `regime_b62_recomputed` alongside original `regime`
+- Gain: ~10-15k pre-B62 trades upgraded to B62-compatible training data
+
+**Storage budget:**
+
+| Store | /day gzipped | /year |
+|---|---|---|
+| Pair scan records | ~72 MB | ~26 GB |
+| OHLC snapshots (deduped) | ~12 MB | ~4 GB |
+| Trade records (unified) | ~0.6 MB | ~220 MB |
+| MCE telemetry (existing) | ~25 MB | ~9 GB |
+| **Total** | **~110 MB/day** | **~40 GB/year** |
+
+Hetzner CPX22 (80 GB) runway: ~18 months before disk upgrade or cold-tier archive.
+
+**Tiering:** hot (30d) uncompressed → warm (30-365d) aggressive gzip → cold (>1y) offload to Supabase storage.
+
+**Effort:** 1-2 batches.
+
+---
+
+## Item 8: Regime Drift Tracking Dashboard
+
+**Scope:** new permanent UI tab (mockup approved in principle 2026-04-17):
+- 4 primary metric cards: RBS drift contamination, TFS+IE share, family-level flicker, global DBS
+- Regime distribution (pie + table with Δ arrows)
+- DBS category distribution (horizontal bar)
+- Drift history time series (RBS drift % over time)
+- Active warnings panel with action buttons
+- Actions: diagnostic (safe one-click) + corrective (confirm + audit-logged)
+- User-configurable alert thresholds
+
+**Folds in Phase 15b original item:** C.8 (events feed DBS transitions) — surfaced in dashboard's drift history view.
+
+**Open design questions (Kyle to answer before build):**
+1. Default time window (suggested: 24h)
+2. Notification channel (Telegram DM, email, both?)
+3. Corrective action gating (one-click vs confirmation)
+4. Auto-generate scope doc on drift-remediation button?
+5. Additional metrics?
+6. Visual style (match existing dashboards)
+
+**Effort:** 1 batch.
+
+---
+
+## 9. Phase 15b residual items status
+
+Items from the original Phase 15b Sub-Phase C/D/E plan, mapped to current disposition:
+
+| Original Item | Status | Disposition |
+|---|---|---|
+| C.1 biasConfidenceModifier application | ✅ ADDRESSED | Dead code removed in B62. If DBS-modulated confidence is wanted future, rebuild fresh — don't resurrect dormant path. |
+| C.2 Net_EV gate DBS-aware thresholds | ⏳ RESIDUAL | Defer to post-launch or fold into Item 1's strategy-specific gate if data supports. |
+| C.3 Position sizing within risk limits | ✅ ADDRESSED by Item 5 |
+| C.4 TP/SL ratios in trending vs neutral | ✅ SUBSUMED by Item 1 (Strong Bull Trend) |
+| C.5 Entry filter opposing global DBS | ⏳ RESIDUAL | Defer to post-launch unless Item 1 data supports. |
+| C.6 RTB rankingScore DBS alignment boost | ⏳ RESIDUAL | Defer to post-launch. |
+| C.7 TEC early-exit on DBS flip | ✅ SUBSUMED by Item 2 (`useDBSEarlyExit` config flag) |
+| C.8 Events feed DBS transitions | ✅ SUBSUMED by Item 8 (drift dashboard history) |
+| D.1 range_trade false-range bleeding reduced? | ✅ ANSWERED in B62 72h data — RBS drift contamination 0.00% |
+| D.2 Dormant strategies receive flow? | ⚠️ PARTIAL — DBS routes pairs correctly but some strategies receive flow they're not designed for. Addressed by Item 1. |
+| D.3 Trade-selection economics improve? | ⚠️ MIXED — neutral pairs fine; high-DBS pairs bleed. Item 1 fixes this. |
+| D.4/D.5 Full per-strategy/per-regime/per-DBS matrix | ⏳ RESIDUAL | Defer to post-launch. Non-blocking. |
+| B64/B65 classifier + map implementation | ✅ COMPLETED in B62. Original scope obsolete. |
+| E.5 VTS data migration under new classifier | ✅ ADDRESSED by Item 7d Option B backfill |
+
+**Items still to track (not subsumed anywhere):** C.2, C.5, C.6, D.4/D.5 — all are "residual — defer to post-launch." Add to post-launch backlog. Non-blocking for go-live.
+
+---
+
+## Batch assignment (proposed)
+
+- **B63 — Strong Bull Trend + TEC shared service** (Items 1 + 2). Largest single deliverable. End of B63, we have a new strategy AND working trailing exits in VTS.
+- **B64 — Infrastructure cleanup** (Items 3, 4, 5). Global DBS fix + canonical map sync + position sizing. All small fixes bundled for one deploy.
+- **B65 — Unified schema + asset class** (Item 6). DB migrations + UI updates.
+- **B66 — Data archiving + drift dashboard** (Items 7 + 8). May split into two batches if B66 gets too large.
+
+Phase 15b remains in effect through B66. Phase 16 begins after B66 closes (DB/Legacy Cleanup — pre-existing plan).
 
 ---
 
 ## Prerequisites before "launch"
 
-Per Kyle's 2026-04-18 directive, ALL five items above must complete before live mode activates. ML work does not start until after launch, but all the data infrastructure must be in place BEFORE launch so the system is capturing correctly from day one.
+Per Kyle's 2026-04-18 directive (confirmed 2026-04-19), ALL 8 items above must complete before live mode activates. ML model work does not start until post-launch; all data infrastructure must be in place BEFORE launch so the system captures correctly from day one.
+
+Items 1 and 2 also improve VTS trade economics immediately, which matters for Phase 19 (Paper Mode Full Audit) and Phase 20 (Production Hardening).
 
 ---
 
-*End of POST_B62_PRE_LAUNCH_PLAN.md*
+*End of POST_B62_PRE_LAUNCH_PLAN.md — revised 2026-04-19*
