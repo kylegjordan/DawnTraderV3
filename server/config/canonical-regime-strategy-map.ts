@@ -374,7 +374,9 @@ export const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   vwap_bounce: 'VWAP Bounce',
   volatility_edge: 'Volatility Edge',
   dhma: 'DHMA',
-  liquidity_trap: 'Liquidity Trap'
+  liquidity_trap: 'Liquidity Trap',
+  // B63: Strong Bull Trend (Path D) — QUANT, LONG-only Donchian breakout
+  strong_bull_trend: 'Strong Bull Trend'
 };
 
 /**
