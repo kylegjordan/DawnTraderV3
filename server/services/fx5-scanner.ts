@@ -200,6 +200,15 @@ export interface ScanDiagnostics {
   familyQualifiedUnique: number;
   destination: 'active_pool' | 'vts_batch';
   destinationCount: number;
+  // B63: High-DBS routing diagnostics (Kyle 2026-04-20 — dedicated tracking tab)
+  b63Dbs?: {
+    totalClassified: number;       // Classified survivors entering family routing
+    strongDbsPairs: number;         // Pairs with |DBS| >= 0.35 (positive, LONG-only)
+    strongDbsPct: number;           // strongDbsPairs / totalClassified * 100
+    strongTrendPoolPassed: number;  // Passed strong_trend family IMF filter
+    strongTrendPoolPct: number;     // strongTrendPoolPassed / strongDbsPairs * 100
+    strongDbsSymbols: string[];     // Which symbols had strong positive DBS this scan
+  };
 }
 
 const DIAGNOSTICS_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -361,6 +370,15 @@ export class Fx5ScannerService {
     // Batch 48: Pipeline reconciliation fields
     totalFamilyQualifiedUnique: number;
     totalDestinationCount: number;
+    // B63: Rolling 24h high-DBS aggregation (Kyle's DBS tracking tab)
+    b63Dbs: {
+      totalClassified: number;
+      strongDbsPairs: number;
+      strongDbsPct: number;
+      strongTrendPoolPassed: number;
+      strongTrendPoolPct: number;
+      uniqueStrongDbsSymbols: string[];
+    };
     aggregated: {
       quant: ScanDiagnostics['quant'];
       pattern: ScanDiagnostics['pattern'];
@@ -381,6 +399,7 @@ export class Fx5ScannerService {
         uniquePairsScanned: 0,
         totalFamilyQualifiedUnique: 0,
         totalDestinationCount: 0,
+        b63Dbs: { totalClassified: 0, strongDbsPairs: 0, strongDbsPct: 0, strongTrendPoolPassed: 0, strongTrendPoolPct: 0, uniqueStrongDbsSymbols: [] },
         aggregated: {
           quant: {
             global: { failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0, failed_min_price: 0, failed_stablecoin: 0, failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0, failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0, passed_all_filters: 0 },
@@ -467,12 +486,34 @@ export class Fx5ScannerService {
       aggDestinationCount += d.destinationCount ?? 0;
     }
 
+    // B63: Aggregate high-DBS diagnostics across rolling 24h
+    let aggTotalClassified = 0;
+    let aggStrongDbsPairs = 0;
+    let aggStrongTrendPassed = 0;
+    const uniqueStrongDbsSymbolsSet = new Set<string>();
+    for (const d of history) {
+      if (d.b63Dbs) {
+        aggTotalClassified += d.b63Dbs.totalClassified;
+        aggStrongDbsPairs += d.b63Dbs.strongDbsPairs;
+        aggStrongTrendPassed += d.b63Dbs.strongTrendPoolPassed;
+        for (const sym of d.b63Dbs.strongDbsSymbols) uniqueStrongDbsSymbolsSet.add(sym);
+      }
+    }
+
     return {
       totalScans: history.length,
       totalPairsScanned,
       uniquePairsScanned: uniqueSymbols.size,
       totalFamilyQualifiedUnique: aggFamilyQualifiedUnique,
       totalDestinationCount: aggDestinationCount,
+      b63Dbs: {
+        totalClassified: aggTotalClassified,
+        strongDbsPairs: aggStrongDbsPairs,
+        strongDbsPct: aggTotalClassified > 0 ? (aggStrongDbsPairs / aggTotalClassified) * 100 : 0,
+        strongTrendPoolPassed: aggStrongTrendPassed,
+        strongTrendPoolPct: aggStrongDbsPairs > 0 ? (aggStrongTrendPassed / aggStrongDbsPairs) * 100 : 0,
+        uniqueStrongDbsSymbols: Array.from(uniqueStrongDbsSymbolsSet),
+      },
       aggregated: {
         quant: {
           global: aggQuantGlobal,
@@ -1223,7 +1264,7 @@ export class Fx5ScannerService {
 
     // Batch 22: Run family-specific IMF filters on all classified survivors
     const familyPoolSurvivors: Record<string, typeof classifiedSurvivors> = {};
-    const familyImfDiagnostics: Record<string, { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }> = {};
+    const familyImfDiagnostics: Record<string, { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number; excludedByRouting?: number }> = {};
 
     for (const family of familyFilterPaths) {
       const thresholds = familyImfThresholds[family];
@@ -1231,10 +1272,10 @@ export class Fx5ScannerService {
       if (!thresholds) {
         console.error(`[B54][CRITICAL] Family '${family}' thresholds null (DB row missing) — entire family skipped from scan`);
         familyPoolSurvivors[family] = [];
-        familyImfDiagnostics[family] = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: classifiedSurvivors.length };
+        familyImfDiagnostics[family] = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0, excludedByRouting: 0 };
         continue;
       }
-      let failedLQ = 0, failedVN = 0, failedDI = 0, passed = 0;
+      let failedLQ = 0, failedVN = 0, failedDI = 0, passed = 0, excludedByRouting = 0, evaluated = 0;
       const survivors: typeof classifiedSurvivors = [];
 
       for (const s of classifiedSurvivors) {
@@ -1244,10 +1285,11 @@ export class Fx5ScannerService {
         const pairDbs = (s as any).dbsScore ?? 0;
         const isStrongBullDbs = pairDbs >= B63_STRONG_DBS_THRESHOLD;
         if (family === 'strong_trend') {
-          if (!isStrongBullDbs) continue; // Skip non-strong-DBS pairs in strong_trend evaluation
+          if (!isStrongBullDbs) { excludedByRouting++; continue; }
         } else {
-          if (isStrongBullDbs) continue; // Exclude strong-DBS pairs from other family pools
+          if (isStrongBullDbs) { excludedByRouting++; continue; }
         }
+        evaluated++;
 
         const lq = s.LQ ?? 0;
         const vn = s.VolNoise ?? 1;
@@ -1262,8 +1304,11 @@ export class Fx5ScannerService {
       }
 
       familyPoolSurvivors[family] = survivors;
-      familyImfDiagnostics[family] = { failedLQ, failedVN, failedDI, passed, total: classifiedSurvivors.length };
-      console.log(`[22][FX5] Family '${family}' IMF: ${passed} passed / ${classifiedSurvivors.length} total (LQ=${failedLQ} VN=${failedVN} DI=${failedDI} failed)`);
+      // B63 fix: `total` now reflects pairs ACTUALLY evaluated by this family's IMF thresholds
+      // (post-routing exclusion). `excludedByRouting` tracks how many were skipped to the other lane.
+      // This removes the misleading "0/55" display for strong_trend when 0 strong-DBS pairs exist.
+      familyImfDiagnostics[family] = { failedLQ, failedVN, failedDI, passed, total: evaluated, excludedByRouting };
+      console.log(`[22][FX5] Family '${family}' IMF: ${passed} passed / ${evaluated} evaluated (LQ=${failedLQ} VN=${failedVN} DI=${failedDI} failed; ${excludedByRouting} excluded by DBS routing)`);
     }
 
       // Batch 43: Build family-qualified union = unique pairs that passed at least one family IMF
@@ -1385,6 +1430,20 @@ export class Fx5ScannerService {
         destination: isEngineActive ? 'active_pool' : 'vts_batch',
         destinationCount: 0,
       };
+
+      // B63: High-DBS routing diagnostics (Kyle's request — DBS tracking tab)
+      const strongDbsClassified = classifiedSurvivors.filter(s => ((s as any).dbsScore ?? 0) >= B63_STRONG_DBS_THRESHOLD);
+      const strongTrendPassed = familyPoolSurvivors['strong_trend']?.length ?? 0;
+      const totalClassified = classifiedSurvivors.length;
+      scanDiag.b63Dbs = {
+        totalClassified,
+        strongDbsPairs: strongDbsClassified.length,
+        strongDbsPct: totalClassified > 0 ? (strongDbsClassified.length / totalClassified) * 100 : 0,
+        strongTrendPoolPassed: strongTrendPassed,
+        strongTrendPoolPct: strongDbsClassified.length > 0 ? (strongTrendPassed / strongDbsClassified.length) * 100 : 0,
+        strongDbsSymbols: strongDbsClassified.map(s => s.symbol),
+      };
+
       this.lastScanDiagnostics = scanDiag;
 
       // Batch 34: Compute metric distribution stats — combined + per-pool (quant and pattern)

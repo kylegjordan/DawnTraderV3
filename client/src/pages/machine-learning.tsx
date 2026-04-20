@@ -118,11 +118,12 @@ interface ScanDiagnostics {
 
 interface FilterDiagnosticsData {
   ok: boolean;
-  lastScan: ScanDiagnostics | null;
+  lastScan: (ScanDiagnostics & { b63Dbs?: B63DbsSnapshot; familyPaths?: Record<string, any> }) | null;
   rolling24h: {
     totalScans: number;
     totalPairsScanned: number;
     uniquePairsScanned: number;
+    b63Dbs?: B63DbsAggregate;
     aggregated: {
       quant: ScanDiagnostics['quant'];
       pattern: ScanDiagnostics['pattern'];
@@ -134,6 +135,26 @@ interface FilterDiagnosticsData {
     byReason: Record<string, number>;
     byRegime: Record<string, number>;
   };
+  vtsEvaluation?: any;
+  lastCycleVtsEval?: any;
+}
+
+interface B63DbsSnapshot {
+  totalClassified: number;
+  strongDbsPairs: number;
+  strongDbsPct: number;
+  strongTrendPoolPassed: number;
+  strongTrendPoolPct: number;
+  strongDbsSymbols: string[];
+}
+
+interface B63DbsAggregate {
+  totalClassified: number;
+  strongDbsPairs: number;
+  strongDbsPct: number;
+  strongTrendPoolPassed: number;
+  strongTrendPoolPct: number;
+  uniqueStrongDbsSymbols: string[];
 }
 
 interface PredictiveAdjustment {
@@ -2704,6 +2725,159 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
 }
 
 
+// B63: DBS Pair Tracking — Kyle's quick-and-dirty diagnostic for high-DBS pair visibility.
+// Two tables: last scan + rolling 24h. Shows total pairs, high-DBS pairs, strong_trend
+// pool survivors, strong_bull_trend evaluations/nulls/signals/trades, null-reason breakdown.
+function DbsPairTrackingPanel({ data, isLoading }: { data: FilterDiagnosticsData | undefined; isLoading: boolean }) {
+  if (isLoading) {
+    return <Card><CardContent className="p-6">Loading B63 DBS diagnostics…</CardContent></Card>;
+  }
+  if (!data) {
+    return <Card><CardContent className="p-6 text-muted-foreground">No data available.</CardContent></Card>;
+  }
+
+  const lastDbs = data.lastScan?.b63Dbs;
+  const rollingDbs = data.rolling24h?.b63Dbs;
+  const lastScanPairs = data.lastScan?.totalPairsScanned ?? 0;
+  const rolling24hPairs = data.rolling24h?.totalPairsScanned ?? 0;
+
+  // Extract strong_bull_trend strategy stats from VTS evaluation counters
+  const lastCycleEval = data.lastCycleVtsEval?.byStrategy?.strong_bull_trend;
+  const rolling24hEval = data.vtsEvaluation?.byStrategy?.strong_bull_trend;
+
+  // Per-strategy null reasons (B63 added these). Filter to strong_bull_trend.
+  const lastNullReasons: Record<string, number> = data.lastCycleVtsEval?.byStrategyNullReasons?.strong_bull_trend ?? {};
+  const rolling24hNullReasons: Record<string, number> = data.vtsEvaluation?.byStrategyNullReasons?.strong_bull_trend ?? {};
+
+  const fmt = (v: number | undefined) => (v ?? 0).toLocaleString();
+  const pct = (v: number | undefined, denom: number | undefined) => {
+    if (!denom || denom <= 0) return '—';
+    return `${(((v ?? 0) / denom) * 100).toFixed(1)}%`;
+  };
+
+  // Helper: render a strategy stat row as (count, % of evaluations)
+  const renderStrategyRow = (label: string, value: number | undefined, denom: number | undefined, extra?: React.ReactNode) => (
+    <tr className="border-b">
+      <td className="p-2 text-xs text-muted-foreground">{label}</td>
+      <td className="p-2 text-right font-mono">{fmt(value)}</td>
+      <td className="p-2 text-right text-xs text-muted-foreground">{pct(value, denom)}</td>
+      {extra !== undefined && <td className="p-2 text-xs text-muted-foreground">{extra}</td>}
+    </tr>
+  );
+
+  const renderPanel = (title: string, dbs: B63DbsSnapshot | B63DbsAggregate | undefined, totalPairsScanned: number, evalStats: any, nullReasons: Record<string, number>, isAggregate: boolean) => {
+    const classified = dbs?.totalClassified ?? 0;
+    const strongDbs = dbs?.strongDbsPairs ?? 0;
+    const strongPool = dbs?.strongTrendPoolPassed ?? 0;
+    const nullTotal = Object.values(nullReasons).reduce((a, b) => a + b, 0);
+    const evaluations = evalStats?.evaluated ?? 0;
+    const nulls = evalStats?.nulls ?? 0;
+    const preRej = evalStats?.preRejectionSignals ?? evalStats?.signals ?? 0;
+    const trades = evalStats?.signals ?? 0;
+    const rejected = evalStats?.rejected ?? 0;
+    const symbols = (dbs as any)?.strongDbsSymbols ?? (dbs as any)?.uniqueStrongDbsSymbols ?? [];
+
+    return (
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="text-base">{title}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          <table className="w-full text-sm">
+            <tbody>
+              <tr className="border-b">
+                <td className="p-2 text-xs text-muted-foreground">Total pairs scanned</td>
+                <td className="p-2 text-right font-mono">{fmt(totalPairsScanned)}</td>
+                <td className="p-2 text-right text-xs text-muted-foreground">—</td>
+                <td className="p-2 text-xs text-muted-foreground">Unique pair evaluations in window</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-2 text-xs text-muted-foreground">Classified survivors entering family routing</td>
+                <td className="p-2 text-right font-mono">{fmt(classified)}</td>
+                <td className="p-2 text-right text-xs text-muted-foreground">{pct(classified, totalPairsScanned)}</td>
+                <td className="p-2 text-xs text-muted-foreground">Pairs that passed pre-IMF screening</td>
+              </tr>
+              <tr className="border-b bg-orange-500/5">
+                <td className="p-2 text-xs font-semibold">High-DBS pairs (|DBS| ≥ 0.35)</td>
+                <td className="p-2 text-right font-mono font-semibold">{fmt(strongDbs)}</td>
+                <td className="p-2 text-right text-xs font-semibold">{pct(strongDbs, classified)}</td>
+                <td className="p-2 text-xs text-muted-foreground">Positive DBS only (LONG-only)</td>
+              </tr>
+              <tr className="border-b bg-green-500/5">
+                <td className="p-2 text-xs font-semibold">Survived strong_trend filter pool</td>
+                <td className="p-2 text-right font-mono font-semibold">{fmt(strongPool)}</td>
+                <td className="p-2 text-right text-xs font-semibold">{pct(strongPool, strongDbs)}</td>
+                <td className="p-2 text-xs text-muted-foreground">Of high-DBS pairs, how many passed IMF</td>
+              </tr>
+              <tr className="border-b">
+                <td colSpan={4} className="p-2 text-xs font-semibold text-muted-foreground bg-muted/30">Strong Bull Trend Strategy Activity</td>
+              </tr>
+              {renderStrategyRow("Strategy evaluations", evaluations, evaluations || 1, "byStrategy.strong_bull_trend.evaluated")}
+              {renderStrategyRow("Nulls (returned null)", nulls, evaluations, `${evaluations - nulls} non-null outcomes`)}
+              {renderStrategyRow("Signals generated (pre-rejection)", preRej, evaluations, "Detect returned a valid StrategySignal")}
+              {renderStrategyRow("Rejected post-signal (NetEV, dup, etc.)", rejected, preRej, "Signals killed by post-detect gates")}
+              {renderStrategyRow("Trades generated (actual opens)", trades, evaluations, "Signals that became open VTS trades")}
+            </tbody>
+          </table>
+
+          {Object.keys(nullReasons).length > 0 ? (
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-muted-foreground mb-2">Null-reason breakdown (strong_bull_trend only)</div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-xs text-muted-foreground">
+                    <th className="p-2 text-left">Reason</th>
+                    <th className="p-2 text-right">Count</th>
+                    <th className="p-2 text-right">% of nulls</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(nullReasons)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([reason, count]) => (
+                      <tr key={reason} className="border-b hover:bg-muted/30">
+                        <td className="p-2 font-mono text-xs">{reason}</td>
+                        <td className="p-2 text-right font-mono">{fmt(count)}</td>
+                        <td className="p-2 text-right text-xs text-muted-foreground">{pct(count, nullTotal)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="mt-4 text-xs text-muted-foreground italic">No null reasons recorded yet (waiting for per-strategy tracking to accumulate — requires PM2 restart after B63.2 deploy).</div>
+          )}
+
+          {symbols.length > 0 && (
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-muted-foreground mb-1">
+                {isAggregate ? 'Unique high-DBS symbols observed (24h)' : 'High-DBS symbols this scan'}
+              </div>
+              <div className="text-xs font-mono bg-muted/20 rounded p-2 max-h-32 overflow-auto">
+                {symbols.slice(0, 50).join(', ')}
+                {symbols.length > 50 && ` … +${symbols.length - 50} more`}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  return (
+    <div>
+      <div className="mb-3 text-sm text-muted-foreground">
+        High-DBS pair tracking for B63 Path D (Strong Bull Trend). Shows routing exclusivity,
+        strong_trend filter pool performance, strategy evaluation outcomes, and null-reason
+        breakdown specific to strong_bull_trend.
+      </div>
+      {renderPanel("Last Scan Cycle", lastDbs, lastScanPairs, lastCycleEval, lastNullReasons, false)}
+      {renderPanel("Rolling 24h", rollingDbs, rolling24hPairs, rolling24hEval, rolling24hNullReasons, true)}
+    </div>
+  );
+}
+
+
 export default function MachineLearningPage() {
   const [activeTab, setActiveTab] = useState("open");
   const queryClient = useQueryClient();
@@ -2938,6 +3112,10 @@ export default function MachineLearningPage() {
               <Filter className="w-4 h-4" />
               Filter Diagnostics
             </TabsTrigger>
+            <TabsTrigger value="dbs-tracking" className="flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              DBS Pair Tracking
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
@@ -3051,6 +3229,13 @@ export default function MachineLearningPage() {
 
         <TabsContent value="diagnostics">
           <FilterDiagnosticsPanel
+            data={diagnosticsData}
+            isLoading={diagnosticsLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="dbs-tracking">
+          <DbsPairTrackingPanel
             data={diagnosticsData}
             isLoading={diagnosticsLoading}
           />

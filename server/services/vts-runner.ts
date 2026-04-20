@@ -314,6 +314,18 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
         aggregated.patternNullReasonDetail![reason] = (aggregated.patternNullReasonDetail![reason] ?? 0) + count;
       }
     }
+    // B63: Aggregate per-strategy null reason detail
+    const snapByStrat = (snap as any).byStrategyNullReasons;
+    if (snapByStrat) {
+      if (!(aggregated as any).byStrategyNullReasons) { (aggregated as any).byStrategyNullReasons = {}; }
+      const aggByStrat = (aggregated as any).byStrategyNullReasons;
+      for (const [strat, reasons] of Object.entries(snapByStrat as Record<string, Record<string, number>>)) {
+        if (!aggByStrat[strat]) aggByStrat[strat] = {};
+        for (const [reason, count] of Object.entries(reasons)) {
+          aggByStrat[strat][reason] = (aggByStrat[strat][reason] ?? 0) + count;
+        }
+      }
+    }
   }
 
   return aggregated;
@@ -2107,6 +2119,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
               if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
               vtsEvalCounters.quantNullReasonDetail[detailReason] = (vtsEvalCounters.quantNullReasonDetail[detailReason] ?? 0) + 1;
             }
+            // B63: Per-strategy null reason detail (Kyle's request — DBS diagnostic tab)
+            if (!(vtsEvalCounters as any).byStrategyNullReasons) { (vtsEvalCounters as any).byStrategyNullReasons = {}; }
+            const byStratReasonsR = (vtsEvalCounters as any).byStrategyNullReasons;
+            if (!byStratReasonsR[stratKey]) { byStratReasonsR[stratKey] = {}; }
+            byStratReasonsR[stratKey][detailReason] = (byStratReasonsR[stratKey][detailReason] ?? 0) + 1;
           } else {
             // True strategy null — no setup found
             vtsEvalCounters.byStrategy[stratKey].nulls++;
@@ -2126,6 +2143,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
               if (!vtsEvalCounters.quantNullReasonDetail) { vtsEvalCounters.quantNullReasonDetail = {}; }
               vtsEvalCounters.quantNullReasonDetail[detailReason] = (vtsEvalCounters.quantNullReasonDetail[detailReason] ?? 0) + 1;
             }
+            // B63: Per-strategy null reason detail (Kyle's request — needed for
+            // strong_bull_trend-specific null breakdown in the DBS diagnostic tab).
+            if (!(vtsEvalCounters as any).byStrategyNullReasons) { (vtsEvalCounters as any).byStrategyNullReasons = {}; }
+            const byStratReasons = (vtsEvalCounters as any).byStrategyNullReasons;
+            if (!byStratReasons[stratKey]) { byStratReasons[stratKey] = {}; }
+            byStratReasons[stratKey][detailReason] = (byStratReasons[stratKey][detailReason] ?? 0) + 1;
           }
           continue;
         }
