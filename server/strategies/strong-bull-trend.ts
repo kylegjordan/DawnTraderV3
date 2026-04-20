@@ -14,9 +14,12 @@
  *
  * Gates (evaluated in order):
  *   1. DBS >= 0.35 (positive — LONG only)
- *   2. DBS slope > 0 (DBS is rising, not decaying)
- *   3. close > N12-bar high + 0.15 * ATR (real breakout with buffer)
- *   4. bar body <= 1.5 * ATR (anti-exhaustion — reject blow-off candles)
+ *   2. close > N6-bar high + 0.15 * ATR (real breakout with buffer) — B63.1: N reduced 12→6
+ *   3. bar body <= 1.5 * ATR (anti-exhaustion — reject blow-off candles)
+ *
+ * B63.1 (2026-04-20): Slope-rising gate dropped — accounted for 55% of B63's detect nulls
+ * without any evidence it filtered out bad trades. N reduced 12→6 to catch continuation
+ * breakouts within sustained trends (41% of remaining nulls were "no_breakout" at N=12).
  *
  * Geometry (interim, pre-TEC):
  *   Entry:  close
@@ -37,7 +40,9 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 
 // Strategy constants
 const SBT_DBS_MIN = 0.35;              // Entry threshold (positive — LONG only)
-const SBT_DONCHIAN_N = 12;             // N-bar lookback for breakout high
+// B63.1: N reduced 12 → 6 after forensics showed 41% of real nulls at N12 (pair in sustained
+// uptrend rarely makes new 12-bar highs; 6-bar lookback catches continuation breakouts within trend).
+const SBT_DONCHIAN_N = 6;              // N-bar lookback for breakout high
 const SBT_BREAKOUT_BUFFER_ATR = 0.15;  // Min ATR fraction above N-bar high for valid breakout
 const SBT_ANTI_EXHAUSTION_ATR = 1.5;   // Max bar body as multiple of ATR (reject blow-offs)
 const SBT_STOP_ATR_MULT = 3.0;         // Initial stop: entry - 3*ATR
@@ -73,12 +78,12 @@ export function detectStrongBullTrend(
     return null;
   }
 
-  // ── Gate 2: DBS slope rising ────────────────────────────────────────────
-  if (dbsSlope <= 0) {
-    console.log(`${LOG_PREFIX} DBS slope not rising (slope=${dbsSlope.toFixed(4)}). Skipping.`);
-    setNullReason('dbs_slope_flat_or_falling');
-    return null;
-  }
+  // B63.1: Slope-rising gate REMOVED. Forensics (B63 first 7.5h) showed this gate
+  // accounted for 55% of real detect-level nulls. A pair sitting at DBS=0.60 with
+  // stable slope is still a strong trend worth riding — requiring strict acceleration
+  // was too restrictive for a trend-riding strategy. DBS >= 0.35 alone is now the
+  // directional authority; slope may be used as a confidence bonus in a future revision.
+  // Slope value is still received via indicators.dbsSlope for future instrumentation.
 
   // ── ATR must be positive (required for stop/target geometry) ────────────
   if (atr <= 0) {

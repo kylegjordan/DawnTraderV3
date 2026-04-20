@@ -171,7 +171,7 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         strategyKey: 'strong_bull_trend',
         signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'DBS \u2265 0.35 \u2022 DBS slope rising \u2022 N12 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR'
+        secondaryMetrics: 'DBS \u2265 0.35 \u2022 N6 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR (B63.1: slope gate dropped, N 12\u21926)'
       }
     ],
     riskMultiplier: 1.2,
@@ -293,7 +293,7 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         strategyKey: 'strong_bull_trend',
         signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'DBS \u2265 0.35 \u2022 DBS slope rising \u2022 N12 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR'
+        secondaryMetrics: 'DBS \u2265 0.35 \u2022 N6 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR (B63.1: slope gate dropped, N 12\u21926)'
       }
     ],
     riskMultiplier: 0.8,
