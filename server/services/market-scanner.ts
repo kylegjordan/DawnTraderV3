@@ -648,41 +648,48 @@ export async function collectAdaptiveBatch(
   // This enables DBS-aware routing: pairs with DBS>=0.35 (positive, LONG-only) get the
   // strong_trend global filter profile; others get the standard profile. Pairs with
   // non-strong DBS or no OHLC fall back to standard filters as before.
+  //
+  // Rate-limit mitigation: process pairs in batches of 10 concurrent fetches to avoid
+  // overwhelming Kraken API on cold cache. ohlcCache has 5-min TTL so after first cycle
+  // most pairs are warm and fetches are effectively free.
   const dbsCache = new Map<string, { score: number; category: string; slope: number; atr: number }>();
   if (strongTrendFilters) {
     const preFetchStart = Date.now();
-    // Parallel OHLC fetches. ohlcCache has 5-min TTL, so warm-cache hits are ~free.
-    await Promise.all(batch.map(async (pair) => {
-      try {
-        const { ohlc } = await ohlcCache.getOHLCData(pair.symbol, 60);
-        if (!ohlc || ohlc.length < 20) return;
-        const ohlcFull: OHLCData[] = ohlc.map((c: any) => ({
-          open: parseFloat(c.open),
-          high: parseFloat(c.high),
-          low: parseFloat(c.low),
-          close: parseFloat(c.close),
-          volume: parseFloat(c.volume || '0'),
-          timestamp: typeof c.time === 'number' ? c.time : (c.time ? Date.parse(c.time) : 0),
-        }));
-        const atr = computeATR14(ohlcFull);
-        if (atr <= 0) return;
-        const dbsResult = computeDirectionalBias(ohlcFull, atr);
-        let slope = 0;
-        const priorOHLC = ohlcFull.slice(0, -3);
-        if (priorOHLC.length >= 20) {
-          const priorAtr = computeATR14(priorOHLC);
-          if (priorAtr > 0) {
-            const priorDbs = computeDirectionalBias(priorOHLC, priorAtr);
-            slope = dbsResult.score - priorDbs.score;
+    const B63_OHLC_FETCH_CONCURRENCY = 10; // Kraken-friendly burst size
+    for (let i = 0; i < batch.length; i += B63_OHLC_FETCH_CONCURRENCY) {
+      const chunk = batch.slice(i, i + B63_OHLC_FETCH_CONCURRENCY);
+      await Promise.all(chunk.map(async (pair) => {
+        try {
+          const { ohlc } = await ohlcCache.getOHLCData(pair.symbol, 60);
+          if (!ohlc || ohlc.length < 20) return;
+          const ohlcFull: OHLCData[] = ohlc.map((c: any) => ({
+            open: parseFloat(c.open),
+            high: parseFloat(c.high),
+            low: parseFloat(c.low),
+            close: parseFloat(c.close),
+            volume: parseFloat(c.volume || '0'),
+            timestamp: typeof c.time === 'number' ? c.time : (c.time ? Date.parse(c.time) : 0),
+          }));
+          const atr = computeATR14(ohlcFull);
+          if (atr <= 0) return;
+          const dbsResult = computeDirectionalBias(ohlcFull, atr);
+          let slope = 0;
+          const priorOHLC = ohlcFull.slice(0, -3);
+          if (priorOHLC.length >= 20) {
+            const priorAtr = computeATR14(priorOHLC);
+            if (priorAtr > 0) {
+              const priorDbs = computeDirectionalBias(priorOHLC, priorAtr);
+              slope = dbsResult.score - priorDbs.score;
+            }
           }
+          dbsCache.set(pair.symbol, { score: dbsResult.score, category: dbsResult.category, slope, atr });
+        } catch {
+          // OHLC unavailable — pair will fall back to standard filters (no DBS-aware routing)
         }
-        dbsCache.set(pair.symbol, { score: dbsResult.score, category: dbsResult.category, slope, atr });
-      } catch {
-        // OHLC unavailable — pair will fall back to standard filters (no DBS-aware routing)
-      }
-    }));
+      }));
+    }
     const strongCount = Array.from(dbsCache.values()).filter(d => d.score >= B63_STRONG_DBS_THRESHOLD).length;
-    console.log(`[B63.3][AdaptiveScan] Pre-DBS pass: ${dbsCache.size}/${batch.length} pairs with OHLC, ${strongCount} strong-DBS (>=0.35) candidates (${Date.now() - preFetchStart}ms)`);
+    console.log(`[B63.3][AdaptiveScan] Pre-DBS pass: ${dbsCache.size}/${batch.length} pairs with OHLC, ${strongCount} strong-DBS (>=0.35) candidates (${Date.now() - preFetchStart}ms, batched ${B63_OHLC_FETCH_CONCURRENCY} concurrent)`);
   }
 
   for (const pair of batch) {
