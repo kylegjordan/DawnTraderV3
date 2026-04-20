@@ -1715,7 +1715,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
             const pct = (n: number, d: number) => d > 0 ? ` (${Math.round(n / d * 100)}%)` : '';
             const universe = rolling24h.totalPairsScanned;
             const familySurvivorsTotal = r24.familyPaths
-              ? ['trend', 'reversal', 'breakout', 'oscillator'].reduce((sum, f) => sum + (r24.familyPaths?.[f]?.survivors ?? 0), 0)
+              ? ['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].reduce((sum, f) => sum + (r24.familyPaths?.[f]?.survivors ?? 0), 0)
               : 0;
             const ve = data?.vtsEvaluation;
             return (
@@ -1771,7 +1771,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                     <tr className="border-b hover:bg-muted/30">
                       <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Per-Family Breakdown</td>
                       <td className="p-2 text-right text-xs text-orange-400">
-                        {['trend', 'reversal', 'breakout', 'oscillator'].map(f =>
+                        {['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].map(f =>
                           `${f[0].toUpperCase()}:${fmt(r24.familyPaths?.[f]?.survivors ?? 0)}`
                         ).join(' ')}
                       </td>
@@ -1968,7 +1968,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                           Family Path IMF Breakdown (per-family detail)
                         </td>
                       </tr>
-                      {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
+                      {['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].map(family => {
                         const fp = (data.lastScan as any)?.familyPaths?.[family];
                         if (!fp) return null;
                         const familyLabel: Record<string, string> = { trend: 'Trend Family', reversal: 'Reversal Family', breakout: 'Breakout Family', oscillator: 'Oscillator Family' };
@@ -2164,7 +2164,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                   </tr>
                   {/* Family Path IMF Results — quant only, should reconcile with quant IMF Passed above */}
                   {rolling24h.aggregated.familyPaths && (() => {
-                    const familyTotal = ['trend', 'reversal', 'breakout', 'oscillator'].reduce((sum, f) =>
+                    const familyTotal = ['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].reduce((sum, f) =>
                       sum + (rolling24h.aggregated.familyPaths?.[f]?.survivors ?? 0), 0);
                     return (
                     <>
@@ -2173,7 +2173,7 @@ function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsDa
                           Family Path IMF Results (24h — quant families)
                         </td>
                       </tr>
-                      {['trend', 'reversal', 'breakout', 'oscillator'].map(family => {
+                      {['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].map(family => {
                         const fp = rolling24h.aggregated.familyPaths?.[family];
                         if (!fp) return null;
                         const familyLabel: Record<string, string> = { trend: 'Trend Family', reversal: 'Reversal Family', breakout: 'Breakout Family', oscillator: 'Oscillator Family' };
