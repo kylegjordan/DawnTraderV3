@@ -1130,9 +1130,34 @@ export class Fx5ScannerService {
         if (VolNoise > 2 || VolNoise < 0 || !Number.isFinite(VolNoise)) VolNoise = 0.6;
         const DI = ohlcPrices.length > 0 ? calculateDirectionalIntegrity(ohlcPrices) : 0;
 
-        console.log(`[19F][PATTERN_IMF] Computing IMF for pattern-only pair ${normalizedSymbol}: LQ=${LQ.toFixed(1)} VN=${VolNoise.toFixed(2)} DI=${DI.toFixed(1)}`);
+        // B63: DBS for pattern-only pairs (parity with quant path — propagates through pipeline).
+        // Pattern-only pairs will have |DBS| < 0.35 by exclusive-routing gate; this is just for safe propagation.
+        let dbsScore = 0;
+        let dbsCategory = 'NEUTRAL';
+        let dbsSlope = 0;
+        let atrValue = 0;
+        if (ohlcEntry && ohlcEntry.ohlcFull && ohlcEntry.ohlcFull.length >= 20) {
+          atrValue = computeATRFromOHLC(ohlcEntry.ohlcFull, 14);
+          if (atrValue > 0) {
+            try {
+              const dbsResult = computeDirectionalBias(ohlcEntry.ohlcFull, atrValue);
+              dbsScore = dbsResult.score;
+              dbsCategory = dbsResult.category;
+              const priorOHLC = ohlcEntry.ohlcFull.slice(0, -3);
+              if (priorOHLC.length >= 20) {
+                const priorAtr = computeATRFromOHLC(priorOHLC, 14);
+                if (priorAtr > 0) {
+                  const priorDbs = computeDirectionalBias(priorOHLC, priorAtr);
+                  dbsSlope = dbsScore - priorDbs.score;
+                }
+              }
+            } catch { /* leave at 0 */ }
+          }
+        }
 
-        return { ...s, symbol: normalizedSymbol, LQ, VolNoise, DI, volumeUSD };
+        console.log(`[19F][PATTERN_IMF] Computing IMF for pattern-only pair ${normalizedSymbol}: LQ=${LQ.toFixed(1)} VN=${VolNoise.toFixed(2)} DI=${DI.toFixed(1)} DBS=${dbsScore.toFixed(3)}`);
+
+        return { ...s, symbol: normalizedSymbol, LQ, VolNoise, DI, volumeUSD, dbsScore, dbsCategory, dbsSlope, atr: atrValue };
       });
 
       if (patternOnlyClassified.length > 0) {
