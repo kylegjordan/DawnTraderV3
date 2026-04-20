@@ -42,7 +42,9 @@ export const strategyTypeEnum = pgEnum("strategy_type", [
   "reverse_impulse",
   "defensive_hedge",
   "adaptive_flow",
-  "volatility_edge"
+  "volatility_edge",
+  // B63: Strong Bull Trend (Path D) — QUANT, LONG-only, exclusive quant-strong_trend routing
+  "strong_bull_trend"
 ]);
 export const tradeStatusEnum = pgEnum("trade_status", ["open", "closed", "cancelled"]);
 export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);

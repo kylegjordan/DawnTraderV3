@@ -1578,13 +1578,16 @@ export class PaperExecutionEngine {
 
     // Directive 11.8B: Net Expectancy Gate
     // Check if trade has positive mathematical expectancy after fees & slippage
+    // B63: Forward sourcePool + dbsScore so the kernel uses DBS-based pWin for Path D signals.
     const expectancyResult = evaluateTradeExpectancy(signal.symbol, {
       entryPrice: signal.entryPrice,
       targetPrice: signal.targetPrice,
       stopPrice: signal.stopPrice,
       DI: signal.metadata?.DI,
       VolNoise: signal.metadata?.VolNoise,
-      prices: signal.metadata?.prices
+      prices: signal.metadata?.prices,
+      sourcePool: (signal as any).sourcePool ?? signal.metadata?.sourcePool,
+      dbsScore: signal.metadata?.dbsScore,
     });
     
     if (!expectancyResult.isTradeable) {

@@ -71,6 +71,14 @@ export function detectMorningStar(
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
 
+  // B63: Belt-and-braces for Path D LONG-only leak. Strong POSITIVE DBS pairs should
+  // route exclusively to quant-strong_trend per FX5 routing — this guard is a second
+  // safety net if a leak occurs. Strong negative DBS (bear trends) still handled here.
+  if (((indicators as any).dbsScore ?? 0) >= 0.35) {
+    setNullReason('b63_strong_dbs_exclusion');
+    return null;
+  }
+
   // ── Guard: Parse candles ─────────────────────────────────────────────────
   const ohlc = parseCandles(candles);
   if (ohlc.length < 20) {

@@ -37,6 +37,11 @@ export interface NetExpectancyKernelInput {
   totalFriction: number;
   DI?: number;
   volNoise?: number;
+  // B63: Path-aware pWin inputs for quant-strong_trend sourcePool.
+  // When sourcePool='quant-strong_trend', pWin is derived from |DBS| instead of DI
+  // (DBS supersedes DI for strong trends — matches the filter-layer philosophy).
+  sourcePool?: string;
+  dbsScore?: number;
 }
 
 export interface NetExpectancyKernelResult {
@@ -70,12 +75,23 @@ export function computeNetExpectancyKernel(input: NetExpectancyKernelInput): Net
     targetPrice,
     totalFriction,
     DI = 50,
+    sourcePool,
+    dbsScore,
   } = input;
 
   const distTarget = Math.abs(targetPrice - entryPrice);
   const distStop = Math.abs(entryPrice - stopPrice);
 
-  const pWin = Math.min(MAX_PWIN, Math.max(MIN_PWIN, MIN_PWIN + (DI / DI_PWIN_FACTOR)));
+  // B63: Path-aware pWin. Strong-trend pairs get a DBS-magnitude based pWin because
+  // DI is no longer a reliable proxy for win probability for those pairs (filter-layer
+  // philosophy: DBS supersedes DI for strong trends). Same min/max bounds preserved.
+  let pWin: number;
+  if (sourcePool === 'quant-strong_trend') {
+    const absDbs = Math.abs(dbsScore ?? 0);
+    pWin = Math.min(MAX_PWIN, Math.max(MIN_PWIN, MIN_PWIN + (absDbs / 2)));
+  } else {
+    pWin = Math.min(MAX_PWIN, Math.max(MIN_PWIN, MIN_PWIN + (DI / DI_PWIN_FACTOR)));
+  }
   const pLoss = 1 - pWin;
 
   const rawEV = (pWin * distTarget) - (pLoss * distStop);

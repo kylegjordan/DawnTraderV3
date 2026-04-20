@@ -121,7 +121,8 @@ export class MarketContextEngine {
     ohlcData: OHLCData[],
     currentPrice: number,
     volume24h: number,
-    smaPeriod?: number
+    smaPeriod?: number,
+    propagatedDbs?: { score: number; category: string; slope?: number } // B63: DBS propagated from FX5 scanner pre-filter
   ): MarketContext {
     const now = Date.now();
 
@@ -138,10 +139,21 @@ export class MarketContextEngine {
     const high24h = this.computeHigh24h(ohlcData);
     const low24h = this.computeLow24h(ohlcData);
 
-    // ── B62: DBS computed BEFORE regime (DBS feeds the classifier) ──
-    const directionalBias = computeDirectionalBias(ohlcData, atr);
+    // ── B63: DBS is a HARD PIPELINE CONTRACT. No fallback. No recompute. No default. ──
+    // FX5 scanner computes DBS pre-filter and propagates it through the pair object.
+    // MCE CONSUMES the propagated DBS — never computes it. If missing, fail loudly.
+    // Rationale: "Every time we put a fallback in, it ends up somehow becoming the default." — Kyle directive 2026-04-20
+    if (!propagatedDbs || !Number.isFinite(propagatedDbs.score)) {
+      throw new Error(`[B63][MCE] DBS not propagated for ${symbol} — hard-contract violation. Caller must supply propagatedDbs from pair object.`);
+    }
+    const directionalBias = {
+      score: propagatedDbs.score,
+      category: (propagatedDbs.category as any) || 'NEUTRAL',
+      sentinelZero: false,
+      components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 },
+    };
 
-    // ── B62: Regime calculation now receives DBS score as 4th input ──
+    // ── B62: Regime calculation receives DBS score as 4th input ──
     const regimeResult = calculatePairRegime(ohlcData, directionalBias.score);
 
     const indicators: MarketIndicators = {

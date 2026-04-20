@@ -880,8 +880,16 @@ export class SignalOrchestrator {
 
           // Get MCE context for regime + indicators
           const mce = getMarketContextEngine();
-          const volume24h = patternPoolPairs.find(p => normalizeToInternalSymbol(p.symbol) === symbol)?.volume24h ?? 0;
-          const context = mce.computeContext(symbol, ohlcData, currentPrice, volume24h);
+          const poolPair = patternPoolPairs.find(p => normalizeToInternalSymbol(p.symbol) === symbol);
+          const volume24h = poolPair?.volume24h ?? 0;
+          // B63: DBS hard contract — propagate from pair object. Pattern-pool strong-DBS leaks are blocked
+          // at scanner level, but defensive propagation keeps the contract consistent for any edge case.
+          const propagatedDbs = (poolPair as any)?.dbsScore !== undefined ? {
+            score: (poolPair as any).dbsScore as number,
+            category: ((poolPair as any).dbsCategory as string) || 'NEUTRAL',
+            slope: (poolPair as any).dbsSlope as number | undefined,
+          } : undefined;
+          const context = mce.computeContext(symbol, ohlcData, currentPrice, volume24h, undefined, propagatedDbs);
 
           // Pattern recognition
           const candles = ohlcData.map(d => ({
@@ -1024,7 +1032,14 @@ export class SignalOrchestrator {
 
       // Phase 13: MCE computes indicators + regime in a single pass
       const mce = getMarketContextEngine();
-      const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20);
+      // B63: Propagate DBS from active filter pool (hard contract — MCE no longer computes DBS locally).
+      const poolEntry = fx5Survivors.find(p => normalizeToInternalSymbol(p.symbol) === symbol);
+      const orchestratorDbs = (poolEntry as any)?.dbsScore !== undefined ? {
+        score: (poolEntry as any).dbsScore as number,
+        category: ((poolEntry as any).dbsCategory as string) || 'NEUTRAL',
+        slope: (poolEntry as any).dbsSlope as number | undefined,
+      } : undefined;
+      const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20, orchestratorDbs);
 
       console.log(`[Phase13][MCE] ${symbol}: regime=${mceContext.regime.regime}, weight=${mceContext.regime.regimeWeight.toFixed(2)}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
 
@@ -1068,6 +1083,7 @@ export class SignalOrchestrator {
       console.log(`[Phase13][MCE] ${symbol}: activeStrategies=[${[...activeStrategies].join(',')}] for regime=${mceContext.regime.regime}`);
 
       // Phase 13: Use MCE pre-computed indicators (eliminates duplicate VWAP/SMA)
+      // B63: Pass through DBS fields so detect() guards + strong_bull_trend can read them.
       const indicators = {
         vwap: mceContext.indicators.vwap,
         sma: mceContext.indicators.sma,
@@ -1075,6 +1091,10 @@ export class SignalOrchestrator {
         volume: mceContext.indicators.volume,
         high24h: mceContext.indicators.high24h,
         low24h: mceContext.indicators.low24h,
+        atr: mceContext.indicators.atr,
+        dbsScore: orchestratorDbs?.score,
+        dbsCategory: orchestratorDbs?.category,
+        dbsSlope: orchestratorDbs?.slope,
       };
 
       const ohlcAsAny = ohlcData as any[];
@@ -1372,6 +1392,17 @@ export class SignalOrchestrator {
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'volatility_edge' as any, sizingContext);
+          if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      // B63: Strong Bull Trend (Path D) — QUANT, LONG-only, evaluates only on quant-strong_trend sourcePool pairs.
+      // Strategy's internal DBS guard provides belt-and-braces if routing leaks.
+      if (activeStrategies.has('strong_bull_trend')) {
+        const rawSignal = this.strategyEngine.detectStrongBullTrend(indicators, ohlcAsAny, buildPatternInputForStrategy('strong_bull_trend'));
+        if (rawSignal) {
+          rawSignal.symbol = symbol;
+          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'strong_bull_trend' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
         }
       }

@@ -23,6 +23,11 @@ const FAMILY_FILTER_SEEDS = [
   { mode: 'paper', filterPath: 'vts_reversal',       lqMin: '20.00', vnMax: '0.9000', diMin: '0.00',  diMax: '40.00',  corrMax: '0.9800', minVolume: '150000.00', minHistoryDays: 14 },
   { mode: 'paper', filterPath: 'vts_breakout',       lqMin: '28.00', vnMax: '0.7500', diMin: '15.00', diMax: '100.00', corrMax: '0.9500', minVolume: '200000.00', minHistoryDays: 14 },
   { mode: 'paper', filterPath: 'vts_oscillator',     lqMin: '20.00', vnMax: '0.9000', diMin: '0.00',  diMax: '35.00',  corrMax: '0.9800', minVolume: '150000.00', minHistoryDays: 14 },
+  // B63: Strong Bull Trend path — DI disabled, VN heavily relaxed, execution floors moderate.
+  // Entry gate is |DBS| >= 0.35 (positive, LONG-only), enforced in fx5-scanner routing + strategy detect.
+  // Rationale: DBS supersedes DI/VN for strong trends — existing DI/VN filters reject exactly the pairs we want to ride.
+  { mode: 'paper', filterPath: 'active_strong_trend', lqMin: '35.00', vnMax: '0.9500', diMin: '0.00',  diMax: '100.00', corrMax: '0.9500', minVolume: '250000.00', minHistoryDays: 21 },
+  { mode: 'paper', filterPath: 'vts_strong_trend',    lqMin: '30.00', vnMax: '0.9800', diMin: '0.00',  diMax: '100.00', corrMax: '0.9800', minVolume: '200000.00', minHistoryDays: 14 },
 ];
 
 export async function seedFamilyFilters() {

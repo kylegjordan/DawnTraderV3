@@ -67,6 +67,10 @@ export interface TradeMeta {
   DI?: number;
   VolNoise?: number;
   prices?: number[];
+  // B63: Path-aware Net EV inputs — required for quant-strong_trend pairs so Path D
+  // signals are not penalized by DI-based pWin (DBS supersedes DI for strong trends).
+  sourcePool?: string;
+  dbsScore?: number;
 }
 
 /**
@@ -528,6 +532,9 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): T
     totalFriction: friction,
     DI,
     volNoise: VolNoise,
+    // B63: Forward sourcePool + dbsScore so the kernel can apply path-aware pWin for Path D.
+    sourcePool: tradeMeta.sourcePool,
+    dbsScore: tradeMeta.dbsScore,
   });
   
   const { netEV, rawEV, pWin, pLoss } = kernelResult;

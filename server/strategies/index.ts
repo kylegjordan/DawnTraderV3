@@ -22,9 +22,12 @@ export { detectReverseImpulse } from './reverse-impulse';
 export { detectDefensiveHedge } from './defensive-hedge';
 export { detectAdaptiveFlow } from './adaptive-flow';
 export { detectVolatilityEdge } from './volatility-edge';
+// B63: Strong Bull Trend (Path D) — QUANT, LONG-only, Donchian breakout archetype
+export { detectStrongBullTrend } from './strong-bull-trend';
 
 /**
- * All 8 new strategy keys for type checking and registration
+ * All new strategy keys for type checking and registration
+ * B63: +1: strong_bull_trend
  */
 export const NEW_STRATEGY_KEYS = [
   'morning_star',
@@ -35,6 +38,7 @@ export const NEW_STRATEGY_KEYS = [
   'defensive_hedge',
   'adaptive_flow',
   'volatility_edge',
+  'strong_bull_trend',
 ] as const;
 
 export type NewStrategyKey = typeof NEW_STRATEGY_KEYS[number];

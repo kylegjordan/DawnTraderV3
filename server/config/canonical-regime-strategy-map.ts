@@ -163,6 +163,15 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         signalType: 'HYBRID',
         patternType: 'MORNING_STAR',
         secondaryMetrics: 'RSI 45\u201355 \u2022 ADX slope > 0.5'
+      },
+      {
+        // B63 — Strong Bull Trend (Path D). LONG-only. Evaluates ONLY for pairs in
+        // quant-strong-trend sourcePool (strong_trend family) via vts-runner family gate.
+        strategy: 'Strong Bull Trend',
+        strategyKey: 'strong_bull_trend',
+        signalType: 'QUANT',
+        patternType: null,
+        secondaryMetrics: 'DBS \u2265 0.35 \u2022 DBS slope rising \u2022 N12 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR'
       }
     ],
     riskMultiplier: 1.2,
@@ -275,6 +284,16 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         signalType: 'QUANT',
         patternType: null,
         secondaryMetrics: 'HMA(9) cross HMA(21) \u2022 ADX flat'
+      },
+      {
+        // B63 — Strong Bull Trend (Path D). Registered in IE because B62 classifier routes
+        // |DBS|>=0.50 pairs to IE. Family gate (strong_trend) still enforces exclusivity —
+        // strategy only evaluates on quant-strong-trend sourcePool pairs.
+        strategy: 'Strong Bull Trend',
+        strategyKey: 'strong_bull_trend',
+        signalType: 'QUANT',
+        patternType: null,
+        secondaryMetrics: 'DBS \u2265 0.35 \u2022 DBS slope rising \u2022 N12 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR'
       }
     ],
     riskMultiplier: 0.8,
@@ -752,7 +771,9 @@ export const CANONICAL_SCHEMA_DATE = '2026-03-05';
 // when a pair survives EITHER parent family's filter path.
 // ══════════════════════════════════════════════════════════════════════════════
 
-export type StrategyFamily = 'trend' | 'reversal' | 'breakout' | 'oscillator' | 'pattern' | 'hybrid';
+// B63: Added 'strong_trend' family for Path D (Strong Bull Trend strategy).
+// Strong-trend family is exclusive — pairs with |DBS|>=0.35 (positive, LONG-only) route ONLY to this family.
+export type StrategyFamily = 'trend' | 'reversal' | 'breakout' | 'oscillator' | 'pattern' | 'hybrid' | 'strong_trend';
 
 export const STRATEGY_FAMILY_MAP: Record<string, StrategyFamily> = {
   // TREND family — want clean directional movement (high DI, low VN)
@@ -781,10 +802,15 @@ export const STRATEGY_FAMILY_MAP: Record<string, StrategyFamily> = {
   defensive_hedge: 'hybrid',
   adaptive_flow: 'hybrid',
   volatility_edge: 'hybrid',
+
+  // B63 STRONG_TREND family — exclusive lane for |DBS|>=0.35 pairs (LONG-only).
+  // DI/VN filters disabled for this path; DBS magnitude is the routing key and gate.
+  strong_bull_trend: 'strong_trend',
 };
 
 // Canonical list of filter families (excluding pattern and hybrid which have their own paths)
-export const FILTER_FAMILIES: readonly StrategyFamily[] = ['trend', 'reversal', 'breakout', 'oscillator'] as const;
+// B63: strong_trend added as a 5th quant-side filter family.
+export const FILTER_FAMILIES: readonly StrategyFamily[] = ['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'] as const;
 
 // Which filter families each hybrid strategy can use (inherits from parents)
 export const HYBRID_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {

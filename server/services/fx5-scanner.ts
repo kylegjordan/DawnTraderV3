@@ -50,10 +50,35 @@ import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
 import { setCostMetrics, getCostMetrics } from '../core/cache/cost-cache.js';
 import { ohlcCache } from './ohlc-cache.js';
+// B63: DBS pre-filter computation
+import { computeDirectionalBias } from '../core/metrics/directional-bias.js';
+import type { OHLCData } from '../types/market-regime.types.js';
 
 const SCAN_INTERVAL_SECONDS = 30; // 30 seconds aligned with clock ticks
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_SECONDS * 1000; // For backwards compatibility
 const CYCLES_PER_HOUR = Math.round(3600 / SCAN_INTERVAL_SECONDS); // 120 for 30s intervals
+
+/**
+ * B63: Compute ATR (Average True Range) from full OHLC data.
+ * Separate from the strategy-engine's computeATR (which consumes string PriceData).
+ * Used to supply ATR to computeDirectionalBias() during pre-filter DBS compute.
+ */
+function computeATRFromOHLC(ohlcData: OHLCData[], period: number = 14): number {
+  if (ohlcData.length < period + 1) return 0;
+  const recent = ohlcData.slice(-(period + 1));
+  let trSum = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const high = recent[i].high;
+    const low = recent[i].low;
+    const prevClose = recent[i - 1].close;
+    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+    trSum += tr;
+  }
+  return trSum / period;
+}
+
+// B63: Strong DBS threshold for Path D routing (positive, LONG-only).
+const B63_STRONG_DBS_THRESHOLD = 0.35;
 
 /**
  * Directive 11.4H.6 Task 1A: Benchmark Symbol Regex Correction
@@ -214,6 +239,11 @@ export interface ScanBatchPair {
   volNoiseScore?: number;   // HF9: VolNoise score for IMF diagnostics
   filterTier?: 'standard' | 'relaxed'; // HF9: IMF filter tier (standard=strict, relaxed=VTS-only)
   sourcePool?: string; // Batch 37: Family-qualified source pool (quant-trend, quant-reversal, etc.)
+  // B63: DBS computed pre-filter. Hard contract — follows pair end-to-end.
+  dbsScore?: number;        // Directional Bias Score [-1, 1]
+  dbsCategory?: string;     // DBS category (UP_STRONG, UP_MODERATE, NEUTRAL, DOWN_*, etc.)
+  dbsSlope?: number;        // DBS slope (current - prior 3-bar window)
+  atr?: number;             // ATR computed from full OHLC for DBS normalization (also reusable downstream)
 }
 
 export class Fx5ScannerService {
@@ -714,7 +744,8 @@ export class Fx5ScannerService {
       } : null;
 
     // Batch 22: Load family-specific filter profiles from DB
-    const familyFilterPaths = ['trend', 'reversal', 'breakout', 'oscillator'] as const;
+    // B63: Added 'strong_trend' as 5th family for Path D (|DBS|>=0.35 LONG-only exclusive routing).
+    const familyFilterPaths = ['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'] as const;
     const familyDbRows: Record<string, any> = {};
     const familyImfThresholds: Record<string, { LQ_MIN: number; VN_MAX: number; DI_MIN: number; DI_MAX: number } | null> = {};
 
@@ -804,7 +835,8 @@ export class Fx5ScannerService {
       // Provides ~720 60-min candles for VN/σ/DI (close prices) and LQ (per-candle volume).
       // Sequential fetches avoid Kraken rate limiting.
       // First scan after restart: ~60-70 API calls (~17s). Subsequent: mostly cache hits (<1s).
-      const ohlcDataMap = new Map<string, { prices: number[], avgVolumeUSD: number }>();
+      // B63: ohlcData (full OHLC) stored alongside closes for pre-filter DBS computation.
+      const ohlcDataMap = new Map<string, { prices: number[], avgVolumeUSD: number, ohlcFull: OHLCData[] }>();
       for (const s of survivors) {
         if (s.volume24h == null || s.dailyRange == null) continue;
         const sym = normalizeToInternalSymbol(s.symbol);
@@ -820,7 +852,16 @@ export class Fx5ScannerService {
               totalPriceVolume += tp * parseFloat(c.volume || '0');
             }
             const avgVolumeUSD = totalPriceVolume / ohlc.length;
-            ohlcDataMap.set(sym, { prices: closePrices, avgVolumeUSD });
+            // B63: Convert Kraken OHLC (string-valued) to typed OHLCData[] for DBS compute.
+            const ohlcFull: OHLCData[] = ohlc.map((c: any) => ({
+              open: parseFloat(c.open),
+              high: parseFloat(c.high),
+              low: parseFloat(c.low),
+              close: parseFloat(c.close),
+              volume: parseFloat(c.volume || '0'),
+              timestamp: typeof c.time === 'number' ? c.time : (c.time ? Date.parse(c.time) : 0),
+            }));
+            ohlcDataMap.set(sym, { prices: closePrices, avgVolumeUSD, ohlcFull });
           }
         } catch {
           // OHLC fetch failed for this symbol — will fall back to ticker data
@@ -849,7 +890,16 @@ export class Fx5ScannerService {
                 totalPriceVolume += tp * parseFloat(c.volume || '0');
               }
               const avgVolumeUSD = totalPriceVolume / ohlc.length;
-              ohlcDataMap.set(sym, { prices: closePrices, avgVolumeUSD });
+              // B63: Full OHLC for pattern-only pairs too — DBS compute path parity.
+              const ohlcFull: OHLCData[] = ohlc.map((c: any) => ({
+                open: parseFloat(c.open),
+                high: parseFloat(c.high),
+                low: parseFloat(c.low),
+                close: parseFloat(c.close),
+                volume: parseFloat(c.volume || '0'),
+                timestamp: typeof c.time === 'number' ? c.time : (c.time ? Date.parse(c.time) : 0),
+              }));
+              ohlcDataMap.set(sym, { prices: closePrices, avgVolumeUSD, ohlcFull });
               patternOhlcFetched++;
             }
           } catch {
@@ -968,25 +1018,58 @@ export class Fx5ScannerService {
 
         const DI = calculateDirectionalIntegrity(ohlcPrices);
         const Sigma = calculateSigma(ohlcPrices);
-        
+
+        // B63: Compute DBS pre-filter (hard contract — no fallback).
+        // Skips pairs lacking full OHLC (cannot compute DBS without open/high/low/close).
+        let dbsScore = 0;
+        let dbsCategory = 'NEUTRAL';
+        let dbsSlope = 0;
+        let atrValue = 0;
+        if (ohlcEntry && ohlcEntry.ohlcFull && ohlcEntry.ohlcFull.length >= 20) {
+          atrValue = computeATRFromOHLC(ohlcEntry.ohlcFull, 14);
+          if (atrValue > 0) {
+            try {
+              const dbsResult = computeDirectionalBias(ohlcEntry.ohlcFull, atrValue);
+              dbsScore = dbsResult.score;
+              dbsCategory = dbsResult.category;
+              // Slope: current DBS vs DBS computed on window excluding last 3 bars.
+              const priorOHLC = ohlcEntry.ohlcFull.slice(0, -3);
+              if (priorOHLC.length >= 20) {
+                const priorAtr = computeATRFromOHLC(priorOHLC, 14);
+                if (priorAtr > 0) {
+                  const priorDbs = computeDirectionalBias(priorOHLC, priorAtr);
+                  dbsSlope = dbsScore - priorDbs.score;
+                }
+              }
+            } catch (err) {
+              console.warn(`[B63][DBS_FAIL] ${normalizedSymbol}: DBS compute threw — leaving at 0`, err);
+            }
+          }
+        }
+
         // Directive 9.1.G: Telemetry logging with [9.1] tags
-        console.log(`[9.1][FX5] ${s.symbol} LQ=${LQ.toFixed(1)} DI=${DI.toFixed(1)} VN=${VolNoise.toFixed(2)} σ=${Sigma.toFixed(4)} src=${imfSource}`);
-        
+        console.log(`[9.1][FX5] ${s.symbol} LQ=${LQ.toFixed(1)} DI=${DI.toFixed(1)} VN=${VolNoise.toFixed(2)} σ=${Sigma.toFixed(4)} DBS=${dbsScore.toFixed(3)} src=${imfSource}`);
+
         // Directive 9.1.F: Log if pair fails core metric filters
         if (!passesMetricFilter) {
           // Batch 19G VN HF: Log DB-driven thresholds instead of hardcoded CORE_METRIC_THRESHOLDS
           console.log(`[9.1][FILTER] Excluding ${s.symbol} - LQ=${LQ.toFixed(1)}, VN=${VolNoise.toFixed(2)} (threshold: LQ>=${dbLqMin}[DB], VN<=${dbVnMax}[DB])`);
         }
-        
-        return { 
+
+        return {
           ...s,
           symbol: normalizedSymbol, // Directive 11.4H: Use normalized symbol
-          volumeClass, 
+          volumeClass,
           volumeUSD,
           LQ,
           DI,
           VolNoise,
           Sigma,
+          // B63: DBS propagated from pre-filter computation.
+          dbsScore,
+          dbsCategory,
+          dbsSlope,
+          atr: atrValue,
           passesMetricFilter,
           forceInclude, // Directive 11.4H Task 3
           benchmarkForceInclude, // Directive 11.4H Task 3
@@ -1130,6 +1213,17 @@ export class Fx5ScannerService {
       const survivors: typeof classifiedSurvivors = [];
 
       for (const s of classifiedSurvivors) {
+        // B63: Exclusive routing. Pairs with |DBS|>=0.35 AND positive DBS route ONLY to strong_trend family.
+        // - For 'strong_trend' family: accept ONLY strong-DBS pairs (DBS>=0.35 positive).
+        // - For other 4 families: REJECT strong-DBS pairs (they belong exclusively to path 6).
+        const pairDbs = (s as any).dbsScore ?? 0;
+        const isStrongBullDbs = pairDbs >= B63_STRONG_DBS_THRESHOLD;
+        if (family === 'strong_trend') {
+          if (!isStrongBullDbs) continue; // Skip non-strong-DBS pairs in strong_trend evaluation
+        } else {
+          if (isStrongBullDbs) continue; // Exclude strong-DBS pairs from other family pools
+        }
+
         const lq = s.LQ ?? 0;
         const vn = s.VolNoise ?? 1;
         const di = s.DI ?? 50;
@@ -1388,6 +1482,9 @@ export class Fx5ScannerService {
       for (const s of vtsFilteredSurvivors) {
         const inQuant = quantSymbols.has(s.symbol);
         const inPattern = patternSymbolSet.has(s.symbol);
+        // B63: Strong-DBS pairs route EXCLUSIVELY to strong_trend. Exclude from pattern pool to prevent leak.
+        const pairDbs = (s as any).dbsScore ?? 0;
+        const isStrongBullDbs = pairDbs >= B63_STRONG_DBS_THRESHOLD;
 
         if (inQuant) {
           // Create one entry per family the pair survived through
@@ -1401,7 +1498,8 @@ export class Fx5ScannerService {
             console.error(`[37][FX5] ${s.symbol} passed quant filters but has no family path -- CONFIG_MISSING`);
           }
         }
-        if (inPattern) {
+        if (inPattern && !isStrongBullDbs) {
+          // B63: strong-DBS pairs skipped — they route exclusively to strong_trend family (path 6).
           taggedVtsSurvivors.push({ ...s, sourcePool: 'pattern' });
           if (inQuant) bothPoolsCount.count++;
         }
@@ -1613,7 +1711,11 @@ export class Fx5ScannerService {
     LQ?: number;          // HF9: Log-Liquidity score
     VolNoise?: number;    // HF9: VolNoise score
     filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier
-    sourcePool?: 'quant' | 'pattern';     // Batch 19F: Filter path source
+    sourcePool?: string;  // B63: widened from 'quant'|'pattern' to arbitrary string (family-qualified: quant-trend, quant-strong_trend, pattern, etc.)
+    dbsScore?: number;    // B63: DBS propagation
+    dbsCategory?: string; // B63: DBS propagation
+    dbsSlope?: number;    // B63: DBS propagation
+    atr?: number;         // B63: ATR propagation
   }>): void {
     const batch: ScanBatchPair[] = survivors.map(s => ({
       symbol: s.symbol,
@@ -1629,6 +1731,11 @@ export class Fx5ScannerService {
       volNoiseScore: s.VolNoise,  // HF9: Propagate VN for IMF diagnostics
       filterTier: s.filterTier,   // HF9: Propagate filter tier for ML segmentation
       sourcePool: s.sourcePool,   // Batch 19F: Propagate filter path source
+      // B63: Propagate DBS fields to VTS via scan batch pair object (hard contract)
+      dbsScore: s.dbsScore,
+      dbsCategory: s.dbsCategory,
+      dbsSlope: s.dbsSlope,
+      atr: s.atr,
     }));
     this.currentBatch.set(mode, batch);
     const benchmarkCount = batch.filter(b => b.isBenchmark).length;

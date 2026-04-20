@@ -12,6 +12,8 @@ import { detectReverseImpulse } from '../strategies/reverse-impulse.js';
 import { detectDefensiveHedge } from '../strategies/defensive-hedge.js';
 import { detectAdaptiveFlow } from '../strategies/adaptive-flow.js';
 import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
+// B63: Strong Bull Trend (Path D) QUANT strategy
+import { detectStrongBullTrend } from '../strategies/strong-bull-trend.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 
@@ -40,6 +42,7 @@ function computeATR(priceHistory: PriceData[], period: number = 14): number {
  * Directive 12.3.2: Expanded to 17 canonical strategies
  * Original 9: vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap, dhma
  * New 8: morning_star, inside_bar_reversal, support_bounce, pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge
+ * B63: +1: strong_bull_trend
  */
 export interface StrategySignal {
   symbol: string;
@@ -47,7 +50,8 @@ export interface StrategySignal {
     | 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout'
     | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma'
     | 'morning_star' | 'inside_bar_reversal' | 'support_bounce' | 'pivot_shift'
-    | 'reverse_impulse' | 'defensive_hedge' | 'adaptive_flow' | 'volatility_edge';
+    | 'reverse_impulse' | 'defensive_hedge' | 'adaptive_flow' | 'volatility_edge'
+    | 'strong_bull_trend';
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -62,18 +66,28 @@ export interface TechnicalIndicators {
   volume: number;
   high24h: number;
   low24h: number;
+  atr?: number;             // ATR, used by multiple strategies. Historically accessed via loose indexing.
+  // B63: DBS propagated from FX5 scanner pre-filter. Required for Path D + 5 self-exclusion guards.
+  dbsScore?: number;        // Directional Bias Score [-1, 1]
+  dbsCategory?: string;     // 'UP_STRONG' | 'UP_MODERATE' | 'NEUTRAL' | 'DOWN_MODERATE' | 'DOWN_STRONG'
+  dbsSlope?: number;        // DBS slope (current - 3-bar-prior), positive = rising
 }
 
 export class StrategyEngine {
   
   // VWAP Pullback Strategy
   detectVWAPPullback(
-    indicators: TechnicalIndicators, 
+    indicators: TechnicalIndicators,
     settings: TradingSettings,
     priceHistory?: PriceData[]
   ): StrategySignal | null {
+    // B63: Belt-and-braces for Path D LONG-only leak. Strong positive DBS routes exclusively to path 6.
+    if ((indicators.dbsScore ?? 0) >= 0.35) {
+      console.log(`[VWAP Strategy] [B63] Skipped: |DBS|>=0.35 (=${(indicators.dbsScore ?? 0).toFixed(3)}) — pair belongs to quant-strong_trend lane`);
+      return null;
+    }
     const { currentPrice, vwap, high24h, low24h, volume } = indicators;
-    
+
     // User-configured settings with defaults
     const pullbackThreshold = parseFloat(settings.vwapPullbackThreshold || '3.0') / 100; // Crypto-calibrated (Batch 18H): 2% → 3%
     const volumeMultiplier = parseFloat(settings.vwapVolumeMultiplier || '1.5'); // Default 1.5x
@@ -1426,6 +1440,19 @@ export class StrategyEngine {
     patternSignal: PatternInput | null
   ): StrategySignal | null {
     return detectVolatilityEdge(indicators, candles, patternSignal);
+  }
+
+  /**
+   * B63: Strong Bull Trend (QUANT, LONG-only)
+   * Donchian N-bar breakout on confirmed strong positive DBS (|DBS| >= 0.35).
+   * Exclusive lane via sourcePool='quant-strong_trend' routing.
+   */
+  detectStrongBullTrend(
+    indicators: TechnicalIndicators,
+    candles: PriceData[],
+    patternSignal: PatternInput | null
+  ): StrategySignal | null {
+    return detectStrongBullTrend(indicators, candles, patternSignal);
   }
 
   private calculateVolatility(data: PriceData[]): number {

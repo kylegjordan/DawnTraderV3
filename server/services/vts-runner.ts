@@ -692,6 +692,9 @@ function callStrategyDetect(
       return strategyEngine.detectAdaptiveFlow(indicators, ohlcData, patternInput);
     case 'volatility_edge':
       return strategyEngine.detectVolatilityEdge(indicators, ohlcData, patternInput);
+    // B63: Strong Bull Trend (Path D) — QUANT, LONG-only
+    case 'strong_bull_trend':
+      return strategyEngine.detectStrongBullTrend(indicators, ohlcData, patternInput);
     default:
       console.warn(`[HF6][VTS] Unknown strategy: ${strategy}, no detect function available`);
       return null;
@@ -707,11 +710,13 @@ async function generatePhase10Signal(
   filterTier?: 'standard' | 'relaxed',
   sourcePool?: string, // Batch 37: Family-qualified source pool
   counters?: any,
-  preDetectedPatterns?: any[] // Batch 44: Pre-detected patterns from outer loop (avoids duplicate scanPatterns)
+  preDetectedPatterns?: any[], // Batch 44: Pre-detected patterns from outer loop (avoids duplicate scanPatterns)
+  propagatedDbs?: { score: number; category: string; slope?: number } // B63: DBS pre-filter propagation (hard contract)
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
-  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0);  // HF6B: Pass real ticker volume instead of 0
+  // B63: DBS is a hard pipeline contract — must be propagated from scanner via pair object.
+  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, propagatedDbs);
   const regimeResult = mceContext.raw;
   const regime = regimeResult.regime;
 
@@ -798,6 +803,7 @@ async function generatePhase10Signal(
   
   // Phase 14 HF6: Call strategy-specific detect function for real entry/stop/target
   // Build indicators (same format as signal orchestrator lines 857-864)
+  // B63: Pass through DBS fields so detect() guards and strong_bull_trend can read them.
   const stratDetectIndicators = {
     vwap: mceContext.indicators.vwap,
     sma: mceContext.indicators.sma,
@@ -805,6 +811,10 @@ async function generatePhase10Signal(
     volume: mceContext.indicators.volume,
     high24h: mceContext.indicators.high24h,
     low24h: mceContext.indicators.low24h,
+    atr: mceContext.indicators.atr,
+    dbsScore: propagatedDbs?.score,
+    dbsCategory: propagatedDbs?.category,
+    dbsSlope: propagatedDbs?.slope,
   };
 
   // Build patternInput from detected patterns (same as orchestrator lines 1048-1070)
@@ -971,7 +981,10 @@ async function generatePhase10Signal(
     stopPrice: stopLoss,
     targetPrice: takeProfit,
     totalFriction,
-    DI
+    DI,
+    // B63: Path-aware pWin for Path D. Strong-trend signals use DBS magnitude (not DI) for win probability.
+    sourcePool,
+    dbsScore: propagatedDbs?.score,
   });
   
   // Batch 52 Fix 19C: All byStrategy counter increments moved to caller (runPhase10SimulationCycle)
@@ -1230,7 +1243,7 @@ async function generatePhase10Signal(
  * Directive 11.4C.1: Get pairs directly from FX5 Scanner (not telemetry)
  * VTS is the sole source of telemetry writes - it gets raw pairs from FX5 and generates signal data
  */
-async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: string }>> {
+async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: string; dbsScore?: number; dbsCategory?: string; dbsSlope?: number; atr?: number }>> {
   try {
     // Directive 11.4C.1: Get pairs directly from FX5 scanner's current batch
     // Batch 19F Phase 2: FX5 scan batch now includes sourcePool tags from dual-path filters.
@@ -1245,7 +1258,8 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
       console.log(`[11.4C.1][VTS] Using FX5 scan batch: ${scanBatch.length} pairs (${benchmarkCount} benchmarks included, ${scanBatch.length} tradable: ${quantCount} quant + ${patternCount} pattern)`);
 
       // Directive 11.4H.1 Task 1: Normalize symbols at ingress with fallback and tier logging
-      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: string }> = [];
+      // B63: Extended with DBS fields propagated from scan batch.
+      const validPairs: Array<{ symbol: string; pool: 'ideal' | 'rotational'; filterTier?: 'standard' | 'relaxed'; sourcePool?: string; dbsScore?: number; dbsCategory?: string; dbsSlope?: number; atr?: number }> = [];
       for (const p of scanBatch) {
         const rawSymbol = p.symbol;
         const canonicalSymbol = normalizeToInternalSymbol(rawSymbol);
@@ -1266,7 +1280,17 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
         }
 
         // Batch 19F Phase 2: Propagate sourcePool from FX5 scan batch
-        validPairs.push({ symbol: canonicalSymbol, pool: p.pool, filterTier: p.filterTier, sourcePool: p.sourcePool });
+        // B63: Also propagate DBS fields — hard pipeline contract (no fallback downstream).
+        validPairs.push({
+          symbol: canonicalSymbol,
+          pool: p.pool,
+          filterTier: p.filterTier,
+          sourcePool: p.sourcePool,
+          dbsScore: (p as any).dbsScore,
+          dbsCategory: (p as any).dbsCategory,
+          dbsSlope: (p as any).dbsSlope,
+          atr: (p as any).atr,
+        });
       }
       // Batch 52: Diagnostic trace — handoff chain counts
       const droppedByNormalization = scanBatch.length - validPairs.length;
@@ -1820,7 +1844,15 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       // ══════════════════════════════════════════════════════════════════════════════
       // Phase 13: MCE computes regime + indicators in a single pass (cached per symbol)
       const mce = getMarketContextEngine();
-      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0);  // HF6B: Pass real ticker volume instead of 0
+      // B63: DBS propagated from FX5 scanner pre-filter via pair object. Hard contract.
+      const pairPropagatedDbs = (pair as any).dbsScore !== undefined
+        ? {
+            score: (pair as any).dbsScore as number,
+            category: ((pair as any).dbsCategory as string) || 'NEUTRAL',
+            slope: (pair as any).dbsSlope as number | undefined,
+          }
+        : undefined;
+      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, pairPropagatedDbs);
       const pairRegime = mceContext.regime.regime as MarketRegimeType;
       const regimeStrategies = getStrategiesForRegime(pairRegime);
       
@@ -2039,7 +2071,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         // Batch 31: Reset null reason tracker before each strategy call
         resetNullReason();
-        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters, outerLoopDetectedPatterns);
+        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters, outerLoopDetectedPatterns, pairPropagatedDbs);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
         if (!vtsEvalCounters.byStrategy[stratKey]) {

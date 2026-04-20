@@ -62,5 +62,9 @@ export const PATTERN_POOL_STRATEGIES: string[] = [
 export const DEFAULT_ASSET_CLASS = 'crypto_spot';
 
 // --- Source Pool Types ---
-export type SourcePool = 'quant-trend' | 'quant-reversal' | 'quant-breakout' | 'quant-oscillation' | 'pattern' | 'hybrid';
+// B63: Added 'quant-strong_trend' for Path D (|DBS| >= 0.35 LONG-only routing).
+// Note: scanner generates sourcePool as `quant-${family}` — family name is 'strong_trend' (underscore).
+// The 'quant-oscillation' entry appears to be a pre-existing typo (scanner generates 'quant-oscillator').
+// Not fixing that pre-existing inconsistency here; following the scanner's actual output naming for the new entry.
+export type SourcePool = 'quant-trend' | 'quant-reversal' | 'quant-breakout' | 'quant-oscillation' | 'quant-strong_trend' | 'pattern' | 'hybrid';
 export type AssetClass = 'crypto_spot'; // Extend when new asset classes added

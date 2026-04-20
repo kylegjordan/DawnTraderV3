@@ -76,6 +76,11 @@ export function detectVolatilityEdge(
   candles: any[],
   patternSignal: PatternInput | null
 ): StrategySignal | null {
+  // B63: Belt-and-braces for Path D LONG-only leak.
+  if (((indicators as any).dbsScore ?? 0) >= 0.35) {
+    setNullReason('b63_strong_dbs_exclusion');
+    return null;
+  }
   // ── Parse candles ──────────────────────────────────────────
   const ohlc = parseCandles(candles);
   if (ohlc.length < 50 + 15) {

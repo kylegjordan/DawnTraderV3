@@ -38,6 +38,10 @@ export interface ActiveFilteredPair {
   source: 'paper' | 'live';   // Trading mode
   sourcePool?: SourcePool;     // Phase 14.5: 'quant' | 'pattern' — which filter path admitted this pair
   assetClass?: AssetClass;     // Phase 14.5: 'crypto_spot' — future-proofing for xStocks etc.
+  // B63: DBS computed pre-filter in FX5 scanner. Hard-contract propagation — follows pair end-to-end.
+  dbsScore?: number;           // Directional Bias Score [-1, 1]
+  dbsCategory?: string;        // 'UP_STRONG' | 'UP_MODERATE' | 'NEUTRAL' | 'DOWN_MODERATE' | 'DOWN_STRONG'
+  dbsSlope?: number;           // Slope of DBS (current - 3-bar-prior), positive = rising
   fx5Snapshot?: {             // Optional: snapshot of FX5 metrics when added
     volume24h: number;
     dailyRange: number;
@@ -70,6 +74,9 @@ class ActiveFilterPoolService {
   private liveBreakoutPool: Map<string, ActiveFilteredPair> = new Map();
   private paperOscillatorPool: Map<string, ActiveFilteredPair> = new Map();
   private liveOscillatorPool: Map<string, ActiveFilteredPair> = new Map();
+  // B63: Strong Trend family pool — exclusive lane for |DBS|>=0.35 LONG pairs.
+  private paperStrongTrendPool: Map<string, ActiveFilteredPair> = new Map();
+  private liveStrongTrendPool: Map<string, ActiveFilteredPair> = new Map();
 
   // Volume cache for Kraken ticker fallback (symbol -> volume data)
   private volumeCache: Map<string, VolumeCacheEntry> = new Map();
@@ -204,6 +211,11 @@ class ActiveFilterPoolService {
       currentPrice: number;
       volume24h: number;
       dailyRange: number;
+      // B63: Optional DBS propagation fields (hard pipeline contract downstream)
+      dbsScore?: number;
+      dbsCategory?: string;
+      dbsSlope?: number;
+      sourcePool?: string;
     }>,
     skipPassiveCheck: boolean = false
   ): {
@@ -246,8 +258,12 @@ class ActiveFilterPoolService {
             lastUpdated: nowISO,
             expiresAt,
             source: mode,
-            sourcePool: 'quant-trend',        // Batch 37: TODO -- pass family from FX5 when active mode family tagging is implemented
+            sourcePool: (survivor.sourcePool as any) || 'quant-trend',  // B63: honor caller-supplied sourcePool
             assetClass: 'crypto_spot',  // Phase 14.5: default asset class
+            // B63: DBS propagation — hard pipeline contract (MCE will throw if missing for live path)
+            dbsScore: survivor.dbsScore,
+            dbsCategory: survivor.dbsCategory,
+            dbsSlope: survivor.dbsSlope,
             fx5Snapshot: {
               volume24h: survivor.volume24h,
               dailyRange: survivor.dailyRange,
@@ -274,8 +290,12 @@ class ActiveFilterPoolService {
           lastUpdated: nowISO,
           expiresAt,
           source: mode,
-          sourcePool: 'quant-trend',        // Batch 37: TODO -- pass family from FX5 when active mode family tagging is implemented
+          sourcePool: (survivor.sourcePool as any) || 'quant-trend',  // B63: honor caller-supplied sourcePool
           assetClass: 'crypto_spot',  // Phase 14.5: default asset class
+          // B63: DBS propagation fields
+          dbsScore: survivor.dbsScore,
+          dbsCategory: survivor.dbsCategory,
+          dbsSlope: survivor.dbsSlope,
           fx5Snapshot: {
             volume24h: survivor.volume24h,
             dailyRange: survivor.dailyRange,
@@ -392,6 +412,9 @@ class ActiveFilterPoolService {
       'live_breakout': this.liveBreakoutPool,
       'paper_oscillator': this.paperOscillatorPool,
       'live_oscillator': this.liveOscillatorPool,
+      // B63: Strong Trend family pool
+      'paper_strong_trend': this.paperStrongTrendPool,
+      'live_strong_trend': this.liveStrongTrendPool,
     };
     const key = `${mode}_${family}`;
     return Array.from(poolMap[key]?.values() ?? []);
@@ -408,6 +431,9 @@ class ActiveFilterPoolService {
       'live_breakout': this.liveBreakoutPool,
       'paper_oscillator': this.paperOscillatorPool,
       'live_oscillator': this.liveOscillatorPool,
+      // B63: Strong Trend family pool
+      'paper_strong_trend': this.paperStrongTrendPool,
+      'live_strong_trend': this.liveStrongTrendPool,
     };
     const key = `${mode}_${family}`;
     const pool = poolMap[key];
@@ -493,6 +519,9 @@ class ActiveFilterPoolService {
     this.liveBreakoutPool.clear();
     this.paperOscillatorPool.clear();
     this.liveOscillatorPool.clear();
+    // B63: Clear strong_trend pool too
+    this.paperStrongTrendPool.clear();
+    this.liveStrongTrendPool.clear();
 
     console.log(`[8.6.7][DEBUG] Cleared ${mode} Active Pool (${size} quant + ${patternSize} pattern entries removed)`);
   }
