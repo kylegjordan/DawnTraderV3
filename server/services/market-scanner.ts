@@ -4,6 +4,26 @@ import { activeFilterPool } from './active-filter-pool.js';
 import { getAdaptiveScanManager, type AdaptiveScanBatch } from './adaptive-scan-manager.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { setCostMetrics } from '../core/cache/cost-cache.js';
+// B63.3: OHLC + DBS pre-compute imports (for pre-global DBS routing)
+import { ohlcCache } from './ohlc-cache.js';
+import { computeDirectionalBias } from '../core/metrics/directional-bias.js';
+import type { OHLCData } from '../types/market-regime.types.js';
+
+// B63.3: Local ATR helper (mirrors fx5-scanner.ts computeATRFromOHLC — 14-period Wilder)
+function computeATR14(ohlcData: OHLCData[]): number {
+  if (ohlcData.length < 15) return 0;
+  const recent = ohlcData.slice(-15);
+  let trSum = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const hl = recent[i].high - recent[i].low;
+    const hc = Math.abs(recent[i].high - recent[i-1].close);
+    const lc = Math.abs(recent[i].low - recent[i-1].close);
+    trSum += Math.max(hl, hc, lc);
+  }
+  return trSum / 14;
+}
+
+const B63_STRONG_DBS_THRESHOLD = 0.35; // LONG-only, positive DBS
 
 // ============================================================================
 // REB 2.10: Passive Learning Deep Tests - Types & Buffer
@@ -400,6 +420,12 @@ export interface BatchResult {
     tradeCount?: number;
     spread?: number;
     bidAskSpread?: number;
+    // B63.3: DBS computed pre-global in collectAdaptiveBatch (hard-contract propagation)
+    dbsScore?: number;
+    dbsCategory?: string;
+    dbsSlope?: number;
+    atr?: number;
+    routedViaStrongTrend?: boolean;  // True if pair passed globals via strong_trend config
   }>;
   evaluatedSymbols: string[];
   breakdown: {
@@ -481,12 +507,25 @@ export async function collectAdaptiveBatch(
       MIN_LIQUIDITY?: number;
       MIN_MARKET_CAP?: number;
     };
+    // B63.3: Strong trend filter config — applied to pairs with |DBS|>=0.35 (positive, LONG).
+    // When provided, collectAdaptiveBatch pre-fetches OHLC + computes DBS, and uses these
+    // relaxed thresholds for strong-DBS pairs (bypassing standard global filter profile).
+    strongTrendFilters?: {
+      minVolume: number;
+      minPrice: number;
+      maxPrice: number;
+      maxBidAskSpread: number;
+      minHistoryDays: number;
+      minLiquidity: number;
+      minMarketCap: number;
+    };
   }
 ): Promise<BatchResult> {
   const startTime = Date.now();
   const cycleId = `adaptive_${mode}_${Date.now()}`;
   const isPassiveLearning = options?.passiveLearning ?? false;
   const patternFilters = options?.patternFilters ?? null;
+  const strongTrendFilters = options?.strongTrendFilters ?? null;
   
   console.log(`[AdaptiveScan][11.4C.1] Starting adaptive batch scan (mode=${mode}, passiveLearning=${isPassiveLearning}, cycleId=${cycleId})`);
   
@@ -604,7 +643,48 @@ export async function collectAdaptiveBatch(
   let idealSurvivors = 0;
   let rotationalSurvivors = 0;
   let benchmarkExemptCount = 0;
-  
+
+  // B63.3: Pre-fetch OHLC + compute DBS for all batch pairs when strong_trend filters provided.
+  // This enables DBS-aware routing: pairs with DBS>=0.35 (positive, LONG-only) get the
+  // strong_trend global filter profile; others get the standard profile. Pairs with
+  // non-strong DBS or no OHLC fall back to standard filters as before.
+  const dbsCache = new Map<string, { score: number; category: string; slope: number; atr: number }>();
+  if (strongTrendFilters) {
+    const preFetchStart = Date.now();
+    // Parallel OHLC fetches. ohlcCache has 5-min TTL, so warm-cache hits are ~free.
+    await Promise.all(batch.map(async (pair) => {
+      try {
+        const { ohlc } = await ohlcCache.getOHLCData(pair.symbol, 60);
+        if (!ohlc || ohlc.length < 20) return;
+        const ohlcFull: OHLCData[] = ohlc.map((c: any) => ({
+          open: parseFloat(c.open),
+          high: parseFloat(c.high),
+          low: parseFloat(c.low),
+          close: parseFloat(c.close),
+          volume: parseFloat(c.volume || '0'),
+          timestamp: typeof c.time === 'number' ? c.time : (c.time ? Date.parse(c.time) : 0),
+        }));
+        const atr = computeATR14(ohlcFull);
+        if (atr <= 0) return;
+        const dbsResult = computeDirectionalBias(ohlcFull, atr);
+        let slope = 0;
+        const priorOHLC = ohlcFull.slice(0, -3);
+        if (priorOHLC.length >= 20) {
+          const priorAtr = computeATR14(priorOHLC);
+          if (priorAtr > 0) {
+            const priorDbs = computeDirectionalBias(priorOHLC, priorAtr);
+            slope = dbsResult.score - priorDbs.score;
+          }
+        }
+        dbsCache.set(pair.symbol, { score: dbsResult.score, category: dbsResult.category, slope, atr });
+      } catch {
+        // OHLC unavailable — pair will fall back to standard filters (no DBS-aware routing)
+      }
+    }));
+    const strongCount = Array.from(dbsCache.values()).filter(d => d.score >= B63_STRONG_DBS_THRESHOLD).length;
+    console.log(`[B63.3][AdaptiveScan] Pre-DBS pass: ${dbsCache.size}/${batch.length} pairs with OHLC, ${strongCount} strong-DBS (>=0.35) candidates (${Date.now() - preFetchStart}ms)`);
+  }
+
   for (const pair of batch) {
     // Directive 11.4H.4 Task 5: Check if this is a benchmark pair
     const isBenchmarkPair = benchmarkSet.has(pair.symbol.toUpperCase());
@@ -644,58 +724,75 @@ export async function collectAdaptiveBatch(
       // Fall through to survivor recording without rejection
     } else {
       // Non-benchmark pairs: Apply all filters normally
-      
+
       // Already active check
       if (poolSymbols.has(pair.symbol) || activeTradeSymbols.has(pair.symbol)) {
         breakdown.already_active++;
         continue;
       }
-      
+
       // Filter: Stablecoins - Directive 11.4H.4 Task 3: Strict Base/Quote regex
       // Only true stablecoin pairs like USDT/USD are excluded, not FARTCOIN/USDC
       if (!rejected && excludeStablecoins && isStablePairRegex.test(pair.symbol)) {
         breakdown.failed_stablecoin++;
         rejected = true;
       }
-      
-      // Filter: Min volume
-      if (!rejected && volume24h < minVolume) {
+
+      // B63.3: DBS-aware routing. If this pair has strong positive DBS (>=0.35), apply the
+      // strong_trend global filter profile instead of the standard one. This is the key
+      // architectural promise of B63 — strong-DBS pairs bypass normal global filters.
+      const cachedDbs = dbsCache.get(pair.symbol);
+      const isStrongBullDbs = !!(strongTrendFilters && cachedDbs && cachedDbs.score >= B63_STRONG_DBS_THRESHOLD);
+      const activeMinVolume = isStrongBullDbs ? strongTrendFilters!.minVolume : minVolume;
+      const activeMinPrice = isStrongBullDbs ? strongTrendFilters!.minPrice : minPrice;
+      const activeMaxBidAskSpread = isStrongBullDbs ? strongTrendFilters!.maxBidAskSpread : maxBidAskSpread;
+      const activeMinHistoryDays = isStrongBullDbs ? strongTrendFilters!.minHistoryDays : minHistoryDays;
+
+      // Filter: Min volume (B63.3: uses strong_trend threshold for strong-DBS pairs)
+      if (!rejected && volume24h < activeMinVolume) {
         breakdown.failed_min_volume++;
         rejected = true;
       }
-      
-      // Filter: Min price
-      if (!rejected && currentPrice < minPrice) {
+
+      // Filter: Min price (B63.3: uses strong_trend threshold for strong-DBS pairs)
+      if (!rejected && currentPrice < activeMinPrice) {
         breakdown.failed_min_price++;
         rejected = true;
       }
       
-      // Filter: Bid-ask spread
-      if (!rejected && bidAskSpread > maxBidAskSpread) {
+      // Filter: Bid-ask spread (B63.3: strong-DBS pairs use strong_trend spread threshold)
+      if (!rejected && bidAskSpread > activeMaxBidAskSpread) {
         breakdown.failed_spread++;
         rejected = true;
       }
-      
-      // Filter: History (async)
-      if (!rejected && minHistoryDays > 0) {
-        const historyResult = await passesHistoryFilter(pair.symbol, historyFilterCtx);
+
+      // Filter: History (async, B63.3: strong-DBS pairs use strong_trend history requirement)
+      if (!rejected && activeMinHistoryDays > 0) {
+        const sbHistoryCtx: HistoryFilterContext = isStrongBullDbs
+          ? { ...historyFilterCtx, minHistoryDays: activeMinHistoryDays }
+          : historyFilterCtx;
+        const historyResult = await passesHistoryFilter(pair.symbol, sbHistoryCtx);
         if (!historyResult.passed) {
           breakdown.failed_history++;
           rejected = true;
         }
       }
     }
-    
+
     // Record result to AdaptiveScanManager for telemetry
     if (!rejected) {
       breakdown.passed_all_filters++;
-      
+
       if (pair.poolType === 'ideal') {
         idealSurvivors++;
       } else {
         rotationalSurvivors++;
       }
-      
+
+      // B63.3: Determine final DBS-tag for downstream routing
+      const finalDbs = dbsCache.get(pair.symbol);
+      const strongDbsPositive = !!(finalDbs && finalDbs.score >= B63_STRONG_DBS_THRESHOLD);
+
       survivors.push({
         symbol: pair.symbol,
         currentPrice,
@@ -705,6 +802,12 @@ export async function collectAdaptiveBatch(
         poolType: pair.poolType,
         // Directive 11.4H.3: Pass spread data through for friction calculation
         bidAskSpread,
+        // B63.3: Propagate DBS + routing tag for downstream consumers
+        dbsScore: finalDbs?.score,
+        dbsCategory: finalDbs?.category,
+        dbsSlope: finalDbs?.slope,
+        atr: finalDbs?.atr,
+        routedViaStrongTrend: strongDbsPositive,
       });
       
       // Directive 11.4C-R2: VTS is the single source of truth for telemetry

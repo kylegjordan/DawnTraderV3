@@ -808,7 +808,29 @@ export class Fx5ScannerService {
       console.log(`[22][FX5] Family filter '${familyPath}': LQ>=${familyImfThresholds[family]!.LQ_MIN} VN<=${familyImfThresholds[family]!.VN_MAX} DI=${familyImfThresholds[family]!.DI_MIN}-${familyImfThresholds[family]!.DI_MAX}`);
     }
 
+      // B63.3: Load strong_trend global filter config for DBS-aware pre-global routing.
+      // Pairs with |DBS|>=0.35 (positive, LONG-only) bypass the standard global filters
+      // and instead use this relaxed profile. This is the architectural authority Kyle
+      // intended when B63 was designed — strong-DBS pairs get their own global lane.
+      const strongTrendFilterPath = isPassiveLearningMode ? 'vts_strong_trend' : 'active_strong_trend';
+      const strongTrendDbRow = await storage.getScreenerFilters({ mode, filterPath: strongTrendFilterPath });
+      const strongTrendFilters = strongTrendDbRow ? {
+        minVolume: parseFloat(strongTrendDbRow.minVolume || '250000'),
+        minPrice: parseFloat(strongTrendDbRow.minPrice || '0.01'),
+        maxPrice: parseFloat(strongTrendDbRow.maxPrice || '99999999.99'),
+        maxBidAskSpread: parseFloat(strongTrendDbRow.maxBidAskSpread || '1.50'),
+        minHistoryDays: strongTrendDbRow.minHistoryDays ?? 21,
+        minLiquidity: parseFloat(strongTrendDbRow.minLiquidity || '250000'),
+        minMarketCap: parseFloat(strongTrendDbRow.minMarketCap || '50000000'),
+      } : undefined;
+      if (strongTrendFilters) {
+        console.log(`[B63.3][FX5] strong_trend globals loaded from '${strongTrendFilterPath}': minVolume=${strongTrendFilters.minVolume} minPrice=${strongTrendFilters.minPrice} maxSpread=${strongTrendFilters.maxBidAskSpread}% minHistory=${strongTrendFilters.minHistoryDays}`);
+      } else {
+        console.warn(`[B63.3][FX5] strong_trend filter DB row missing for '${strongTrendFilterPath}' — DBS-aware pre-global routing DISABLED this cycle`);
+      }
+
       // Directive 11.4C.1: Execute adaptive batch scanning (100 pairs: 60% Ideal + 40% Rotational)
+      // B63.3: strongTrendFilters enables DBS-aware routing inside collectAdaptiveBatch.
       const batchResult: BatchResult = await collectAdaptiveBatch(
         this.krakenService,
         filters,
@@ -816,6 +838,7 @@ export class Fx5ScannerService {
         {
           passiveLearning: isPassiveLearningMode, // Directive 11.4H.4 Task 5: Pass passive learning flag
           patternFilters: activePatternGlobalFilters, // Batch 19G: Pattern global filters from DB
+          strongTrendFilters, // B63.3: DBS-aware pre-global routing
         }
       );
       
@@ -1060,20 +1083,22 @@ export class Fx5ScannerService {
         const DI = calculateDirectionalIntegrity(ohlcPrices);
         const Sigma = calculateSigma(ohlcPrices);
 
-        // B63: Compute DBS pre-filter (hard contract — no fallback).
-        // Skips pairs lacking full OHLC (cannot compute DBS without open/high/low/close).
-        let dbsScore = 0;
-        let dbsCategory = 'NEUTRAL';
-        let dbsSlope = 0;
-        let atrValue = 0;
-        if (ohlcEntry && ohlcEntry.ohlcFull && ohlcEntry.ohlcFull.length >= 20) {
+        // B63.3: DBS is now pre-computed in collectAdaptiveBatch (pre-global-filter). Use those values
+        // directly from the survivor object. Fall back to local compute only if the pre-compute is
+        // missing (shouldn't happen when strong_trend filters were provided to collectAdaptiveBatch).
+        const survivorAny = s as any;
+        let dbsScore = survivorAny.dbsScore ?? 0;
+        let dbsCategory = survivorAny.dbsCategory ?? 'NEUTRAL';
+        let dbsSlope = survivorAny.dbsSlope ?? 0;
+        let atrValue = survivorAny.atr ?? 0;
+        // Fallback compute (B63 behavior) only if pre-compute missing
+        if (survivorAny.dbsScore === undefined && ohlcEntry && ohlcEntry.ohlcFull && ohlcEntry.ohlcFull.length >= 20) {
           atrValue = computeATRFromOHLC(ohlcEntry.ohlcFull, 14);
           if (atrValue > 0) {
             try {
               const dbsResult = computeDirectionalBias(ohlcEntry.ohlcFull, atrValue);
               dbsScore = dbsResult.score;
               dbsCategory = dbsResult.category;
-              // Slope: current DBS vs DBS computed on window excluding last 3 bars.
               const priorOHLC = ohlcEntry.ohlcFull.slice(0, -3);
               if (priorOHLC.length >= 20) {
                 const priorAtr = computeATRFromOHLC(priorOHLC, 14);
@@ -1083,7 +1108,7 @@ export class Fx5ScannerService {
                 }
               }
             } catch (err) {
-              console.warn(`[B63][DBS_FAIL] ${normalizedSymbol}: DBS compute threw — leaving at 0`, err);
+              console.warn(`[B63][DBS_FAIL] ${normalizedSymbol}: fallback DBS compute threw — leaving at 0`, err);
             }
           }
         }
