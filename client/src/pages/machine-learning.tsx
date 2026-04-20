@@ -140,6 +140,11 @@ interface FilterDiagnosticsData {
 }
 
 interface B63DbsSnapshot {
+  // B63.4: Pre-global stage (the TRUE high-DBS count before any filter)
+  preGlobalDbsComputed?: number;
+  preGlobalStrongDbs?: number;
+  preGlobalStrongDbsSymbols?: string[];
+  // Post-global stage
   totalClassified: number;
   strongDbsPairs: number;
   strongDbsPct: number;
@@ -2792,22 +2797,34 @@ function DbsPairTrackingPanel({ data, isLoading }: { data: FilterDiagnosticsData
                 <td className="p-2 text-xs text-muted-foreground">Unique pair evaluations in window</td>
               </tr>
               <tr className="border-b">
-                <td className="p-2 text-xs text-muted-foreground">Classified survivors entering family routing</td>
+                <td className="p-2 text-xs text-muted-foreground">Pairs with OHLC for DBS compute</td>
+                <td className="p-2 text-right font-mono">{fmt((dbs as any)?.preGlobalDbsComputed ?? 0)}</td>
+                <td className="p-2 text-right text-xs text-muted-foreground">{pct((dbs as any)?.preGlobalDbsComputed ?? 0, totalPairsScanned)}</td>
+                <td className="p-2 text-xs text-muted-foreground">OHLC cached — DBS computed on these only</td>
+              </tr>
+              <tr className="border-b bg-orange-500/10">
+                <td className="p-2 text-xs font-semibold">High-DBS candidates PRE-global filter (DBS ≥ 0.35 positive)</td>
+                <td className="p-2 text-right font-mono font-semibold">{fmt((dbs as any)?.preGlobalStrongDbs ?? 0)}</td>
+                <td className="p-2 text-right text-xs font-semibold">{pct((dbs as any)?.preGlobalStrongDbs ?? 0, (dbs as any)?.preGlobalDbsComputed ?? 0)}</td>
+                <td className="p-2 text-xs text-muted-foreground">TRUE high-DBS count — before any filter applied</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-2 text-xs text-muted-foreground">Classified survivors (post-global-filter)</td>
                 <td className="p-2 text-right font-mono">{fmt(classified)}</td>
                 <td className="p-2 text-right text-xs text-muted-foreground">{pct(classified, totalPairsScanned)}</td>
-                <td className="p-2 text-xs text-muted-foreground">Pairs that passed pre-IMF screening</td>
+                <td className="p-2 text-xs text-muted-foreground">Survived global filters (standard or strong_trend profile)</td>
               </tr>
               <tr className="border-b bg-orange-500/5">
-                <td className="p-2 text-xs font-semibold">High-DBS pairs (|DBS| ≥ 0.35)</td>
+                <td className="p-2 text-xs font-semibold">High-DBS that passed global filter</td>
                 <td className="p-2 text-right font-mono font-semibold">{fmt(strongDbs)}</td>
-                <td className="p-2 text-right text-xs font-semibold">{pct(strongDbs, classified)}</td>
-                <td className="p-2 text-xs text-muted-foreground">Positive DBS only (LONG-only)</td>
+                <td className="p-2 text-right text-xs font-semibold">{pct(strongDbs, (dbs as any)?.preGlobalStrongDbs ?? 0)}</td>
+                <td className="p-2 text-xs text-muted-foreground">Of PRE-global high-DBS, survived strong_trend globals</td>
               </tr>
               <tr className="border-b bg-green-500/5">
-                <td className="p-2 text-xs font-semibold">Survived strong_trend filter pool</td>
+                <td className="p-2 text-xs font-semibold">Survived strong_trend IMF filter</td>
                 <td className="p-2 text-right font-mono font-semibold">{fmt(strongPool)}</td>
                 <td className="p-2 text-right text-xs font-semibold">{pct(strongPool, strongDbs)}</td>
-                <td className="p-2 text-xs text-muted-foreground">Of high-DBS pairs, how many passed IMF</td>
+                <td className="p-2 text-xs text-muted-foreground">Of post-global, survived LQ/VN/DI IMF checks</td>
               </tr>
               <tr className="border-b">
                 <td colSpan={4} className="p-2 text-xs font-semibold text-muted-foreground bg-muted/30">Strong Bull Trend Strategy Activity</td>

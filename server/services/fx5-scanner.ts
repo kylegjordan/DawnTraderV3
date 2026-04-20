@@ -202,12 +202,18 @@ export interface ScanDiagnostics {
   destinationCount: number;
   // B63: High-DBS routing diagnostics (Kyle 2026-04-20 — dedicated tracking tab)
   b63Dbs?: {
-    totalClassified: number;       // Classified survivors entering family routing
-    strongDbsPairs: number;         // Pairs with |DBS| >= 0.35 (positive, LONG-only)
+    // B63.4: Pre-global stage — the TRUE "how many high-DBS pairs exist" metric.
+    // These are pairs with DBS >= 0.35 BEFORE any global filter was applied.
+    // This is what the B62 pitch referred to; the drop-off to classifiedSurvivors is the real story.
+    preGlobalDbsComputed?: number;    // Pairs in batch with OHLC available (DBS computable)
+    preGlobalStrongDbs?: number;       // Strong-DBS pairs found pre-global-filters
+    preGlobalStrongDbsSymbols?: string[]; // Which symbols those were
+    totalClassified: number;       // Classified survivors entering family routing (post-global)
+    strongDbsPairs: number;         // Pairs with |DBS| >= 0.35 AMONG classified survivors (post-global)
     strongDbsPct: number;           // strongDbsPairs / totalClassified * 100
     strongTrendPoolPassed: number;  // Passed strong_trend family IMF filter
     strongTrendPoolPct: number;     // strongTrendPoolPassed / strongDbsPairs * 100
-    strongDbsSymbols: string[];     // Which symbols had strong positive DBS this scan
+    strongDbsSymbols: string[];     // Symbols that reached classified with strong positive DBS
   };
 }
 
@@ -1456,14 +1462,24 @@ export class Fx5ScannerService {
         destinationCount: 0,
       };
 
-      // B63: High-DBS routing diagnostics (Kyle's request — DBS tracking tab)
+      // B63.4: High-DBS routing diagnostics with stage-by-stage decomposition.
+      // Stage 1 (pre-global): pairs found with DBS>=0.35 BEFORE any filter was applied.
+      // Stage 2 (post-global): those that survived strong_trend global filter profile.
+      // Stage 3 (post-IMF): those that survived strong_trend IMF.
+      // Downstream: strategy evaluations, signals, trades (from byStrategy counters).
       const strongDbsClassified = classifiedSurvivors.filter(s => ((s as any).dbsScore ?? 0) >= B63_STRONG_DBS_THRESHOLD);
       const strongTrendPassed = familyPoolSurvivors['strong_trend']?.length ?? 0;
       const totalClassified = classifiedSurvivors.length;
       scanDiag.b63Dbs = {
+        // Pre-global (the TRUE "how many strong-DBS pairs exist" count)
+        preGlobalDbsComputed: batchResult.metrics?.preGlobalDbsComputed,
+        preGlobalStrongDbs: batchResult.metrics?.preGlobalStrongDbs,
+        preGlobalStrongDbsSymbols: batchResult.metrics?.preGlobalStrongDbsSymbols,
+        // Post-global survivors (strong-DBS pairs that passed the strong_trend global profile)
         totalClassified,
         strongDbsPairs: strongDbsClassified.length,
         strongDbsPct: totalClassified > 0 ? (strongDbsClassified.length / totalClassified) * 100 : 0,
+        // Post-IMF survivors (strong-DBS pairs that also passed strong_trend IMF)
         strongTrendPoolPassed: strongTrendPassed,
         strongTrendPoolPct: strongDbsClassified.length > 0 ? (strongTrendPassed / strongDbsClassified.length) * 100 : 0,
         strongDbsSymbols: strongDbsClassified.map(s => s.symbol),

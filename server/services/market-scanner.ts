@@ -449,6 +449,10 @@ export interface BatchResult {
     idealCount: number; // Directive 11.4C.1: Ideal pool survivors
     rotationalCount: number; // Directive 11.4C.1: Rotational pool survivors
     krakenUniverseSize: number;
+    // B63.4: Pre-global DBS diagnostics (exposes the drop-off at each stage)
+    preGlobalDbsComputed?: number;     // Pairs with OHLC available for DBS compute
+    preGlobalStrongDbs?: number;       // Pairs with DBS >= 0.35 positive BEFORE global filters
+    preGlobalStrongDbsSymbols?: string[]; // Which symbols those were
   };
   // Batch 19F: Pattern global filter survivors (dual-path)
   patternSurvivors?: Array<{
@@ -967,6 +971,9 @@ export async function collectAdaptiveBatch(
     console.log(`[19F][PATTERN_GLOBAL] Pattern global filter: ${patternResults.length}/${batch.length} pairs passed relaxed thresholds`);
   }
 
+  // B63.4: Compute pre-global DBS diagnostics (visibility into drop-off at each stage)
+  const preGlobalStrongDbsEntries = Array.from(dbsCache.entries()).filter(([, d]) => d.score >= B63_STRONG_DBS_THRESHOLD);
+
   return {
     survivors,
     evaluatedSymbols,
@@ -978,6 +985,10 @@ export async function collectAdaptiveBatch(
       idealCount: idealSurvivors,
       rotationalCount: rotationalSurvivors,
       krakenUniverseSize,
+      // B63.4: Expose pre-global DBS data so UI can show drop-off stage-by-stage.
+      preGlobalDbsComputed: dbsCache.size,
+      preGlobalStrongDbs: preGlobalStrongDbsEntries.length,
+      preGlobalStrongDbsSymbols: preGlobalStrongDbsEntries.map(([sym]) => sym),
     },
     patternSurvivors,
     patternBreakdown,
