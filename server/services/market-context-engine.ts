@@ -48,7 +48,10 @@ import {
   CANONICAL_REGIME_STRATEGY_MAP,
   type CanonicalRegimeType,
 } from '../config/canonical-regime-strategy-map.js';
-import { computeDirectionalBias, computeGlobalDirectionalBias } from '../core/metrics/directional-bias.js';
+import { computeDirectionalBias } from '../core/metrics/directional-bias.js';
+// B63 Item 16: persistent store + atomic snapshot for global DBS.
+// computeGlobalDirectionalBias is now invoked inside directional-bias-store.ts only.
+import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
 import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
 // Phase 15b B61: DBS telemetry emitter (observational, feature-flagged)
 import { emitMceTelemetry } from './phase15b-dbs-telemetry.js';
@@ -69,7 +72,9 @@ interface CacheEntry {
  * partial-membership noise that A.3 identified (50.32% flicker rate
  * from rotating 18/60 pairs). 0.70 = require 70% of peak universe.
  */
-const GLOBAL_DBS_MIN_COVERAGE_PCT = 0.70;
+// B63 Item 16: legacy coverage gate. Replaced by directionalBiasStore's fixed 20-pair floor.
+// Retained for one release as a reference marker in case we need to roll back.
+const GLOBAL_DBS_MIN_COVERAGE_PCT_DEPRECATED = 0.70;
 
 export class MarketContextEngine {
   private cache: Map<string, CacheEntry> = new Map();
@@ -208,6 +213,15 @@ export class MarketContextEngine {
       `dbs=${directionalBias.score.toFixed(3)} bias=${directionalBias.category}`
     );
 
+    // B63 Item 16: feed the persistent per-pair DBS store. Store is the source of
+    // truth for the end-of-cycle atomic snapshot consumed by all global-DBS readers.
+    directionalBiasStore.updatePair(
+      symbol,
+      directionalBias.score,
+      directionalBias.sentinelZero,
+      volume24h ?? 0
+    );
+
     // Phase 15b B61: observational telemetry (no-op unless DT_PHASE15B_DBS_TELEMETRY=1)
     this.cycleCounter += 1;
     emitMceTelemetry({
@@ -239,41 +253,37 @@ export class MarketContextEngine {
    * @returns GlobalDirectionalBias
    */
   /**
-   * B62: Compute global directional bias from cached pair contexts.
-   * Coverage-gated: requires ≥70% of the peak observed universe to be in cache.
-   * Filters sentinel-zero entries. Applies per-pair volume weight cap.
+   * B63 Item 16: Global DBS is now served from the persistent per-pair store
+   * (directional-bias-store.ts). On each call we publish an atomic snapshot
+   * from the store's current state and return its value. Within a single
+   * cycle, multiple callers receive the same value.
    *
-   * @param volumes - Map of symbol -> 24h volume (for weighting). Must be populated.
-   * @returns GlobalDirectionalBias (returns NEUTRAL/0/pairCount=0 if coverage insufficient)
+   * Behavior (see directional-bias-store.ts for full 5-row spec):
+   *   - Cold start (no prior snapshot, store below floor) → NEUTRAL/pairCount=0
+   *   - Degraded coverage with prior snapshot → last good snapshot, marked stale
+   *   - Happy path → fresh snapshot
+   *   - Invalid compute → prior snapshot marked stale
+   *
+   * The `volumes` parameter is IGNORED post-B63 — volumes are tracked inside
+   * the store as part of each pair's update. Parameter retained for backward
+   * compatibility with callers that still pass it.
+   *
+   * NOTE: pre-B63 coverage gate (70% of peak cache) is replaced by the store's
+   * fixed 20-pair floor. `this.peakCacheSize` remains populated for diagnostics
+   * only — no longer gates computation.
+   *
+   * @param volumes - LEGACY parameter, ignored. Kept for signature compatibility.
+   * @returns GlobalDirectionalBias. NEUTRAL/0 on cold-start or below-floor-no-snapshot.
    */
-  computeGlobalBias(volumes: Map<string, number>): GlobalDirectionalBias {
-    const now = Date.now();
-    const pairScores = new Map<string, number>();
-    const sentinelFlags = new Map<string, boolean>();
+  computeGlobalBias(_volumes: Map<string, number>): GlobalDirectionalBias {
+    // B63 Item 16: publish atomic snapshot (reads store, handles all 5 behavior-spec rows).
+    const snapshot = directionalBiasStore.publishSnapshot();
 
-    // Atomic snapshot of all non-expired cache entries
-    for (const [symbol, entry] of this.cache.entries()) {
-      if (entry.expiresAt > now) {
-        pairScores.set(symbol, entry.context.directionalBias.score);
-        sentinelFlags.set(symbol, entry.context.directionalBias.sentinelZero);
-      }
-    }
-
-    // B62 A.3 fix #2: Coverage gate — prevent partial-membership noise
-    // A.3 showed mean 18/60 pairs in cache → 50.32% flicker rate.
-    // Only compute global DBS when cache has ≥70% of the peak observed universe.
-    const currentCount = pairScores.size;
-    const requiredCount = Math.max(
-      Math.floor(this.peakCacheSize * GLOBAL_DBS_MIN_COVERAGE_PCT),
-      5 // absolute minimum — don't compute on fewer than 5 pairs regardless
-    );
-
-    if (currentCount < requiredCount) {
-      console.log(
-        `[B62][MCE] Global DBS skipped: cache has ${currentCount}/${this.peakCacheSize} pairs ` +
-        `(need ${requiredCount}, ${(GLOBAL_DBS_MIN_COVERAGE_PCT * 100).toFixed(0)}% of peak). ` +
-        `Returning NEUTRAL.`
-      );
+    if (!snapshot) {
+      // Cold start or below floor with no prior snapshot — return a NEUTRAL
+      // placeholder per legacy callers' expectations. Consumers that need to
+      // distinguish "no snapshot" from "NEUTRAL global" should use
+      // getLatestGlobalDbsSnapshot() directly and check for null.
       return {
         score: 0,
         category: 'NEUTRAL',
@@ -282,7 +292,16 @@ export class MarketContextEngine {
       };
     }
 
-    return computeGlobalDirectionalBias(pairScores, volumes, undefined, sentinelFlags);
+    // Emit a concise log on stale snapshots so operators can see when we're
+    // serving a carry-forward value vs a fresh compute.
+    if (snapshot.isStale) {
+      console.log(
+        `[B63 Item 16][MCE] Serving STALE global DBS snapshot: score=${snapshot.value.score.toFixed(3)} ` +
+        `coverage=${snapshot.coverage} snapshotAge=${Math.round((Date.now() - snapshot.snapshotTime) / 1000)}s`
+      );
+    }
+
+    return snapshot.value;
   }
 
   /**
