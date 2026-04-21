@@ -148,14 +148,14 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         strategyKey: 'vwap_pullback',
         signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'VWAP deviation < \u22121\u03c3 \u2022 Momentum > 0'
+        secondaryMetrics: 'VWAP deviation < \u22121\u03c3 \u2022 Momentum > 0 \u2022 Blocked when DBS \u2264 \u22120.35 (counter-trend LONG guard, B63 Item 10) \u2022 Also eligible in strong-trend lane at DBS \u2265 0.35 with Variant E geometry (4\u00d7ATR stop, 3R target, B63 Items 11\u201312)'
       },
       {
         strategy: 'Morning Star / Evening Star',
         strategyKey: 'morning_star',
         signalType: 'PATTERN',
         patternType: 'MORNING_STAR',
-        secondaryMetrics: '3-bar sequence; momentum flip > 0.3%'
+        secondaryMetrics: '3-bar sequence; momentum flip > 0.3% \u2022 Blocked when DBS \u2265 0.35 (B63 Item 6, lane routing) or DBS \u2264 \u22120.35 (counter-trend LONG guard, B63 Item 10)'
       },
       {
         strategy: 'Pivot Shift',
@@ -192,14 +192,14 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         strategyKey: 'reverse_impulse',
         signalType: 'HYBRID',
         patternType: 'PINBAR',
-        secondaryMetrics: 'Volume > 1.5\u00d7 avg \u2022 Momentum spike < \u22120.5%'
+        secondaryMetrics: 'Volume > 1.5\u00d7 avg \u2022 Momentum spike < \u22120.5% \u2022 Blocked when |DBS| \u2265 0.35 (B63 Items 6 + 10 — counter-trend LONG guard + positive-DBS lane routing)'
       },
       {
         strategy: 'Defensive Hedge',
         strategyKey: 'defensive_hedge',
         signalType: 'HYBRID',
         patternType: 'ENGULFING',
-        secondaryMetrics: 'BTC Corr < 0.3 \u2022 Vol Offset > 1\u03c3'
+        secondaryMetrics: 'BTC Corr < 0.3 \u2022 Vol Offset > 1\u03c3 \u2022 Blocked when |DBS| \u2265 0.35 (B63 Items 6 + 10)'
       },
       {
         strategy: 'Inside Bar Reversal',
@@ -255,7 +255,7 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         strategyKey: 'sma_trend_ride',
         signalType: 'QUANT',
         patternType: null,
-        secondaryMetrics: 'SMA(50) > SMA(100) \u2022 ADX > 25 \u2022 RSI 55\u201370'
+        secondaryMetrics: 'SMA(50) > SMA(100) \u2022 ADX > 25 \u2022 RSI 55\u201370 \u2022 Blocked when DBS \u2264 \u22120.35 (counter-trend LONG guard, B63 Item 10)'
       },
       {
         strategy: 'Breakout',
@@ -398,7 +398,7 @@ export const REGIME_DISPLAY_NAMES: Record<CanonicalRegimeType, string> = {
 export const REGIME_NARRATIVES: Record<CanonicalRegimeType, { title: string; description: string }> = {
   TREND_FRIENDLY_STABLE: {
     title: 'Trend-Friendly Stable',
-    description: 'The market is in a steady structural trend with controlled volatility. Price action is orderly and pullbacks are shallow. Momentum-based or trend-following signals are more likely to succeed here because the market structure supports continuation. You can expect trades to stay open longer, aiming for larger gains.'
+    description: 'The market is in a steady structural trend with controlled volatility. Price action is orderly and pullbacks are shallow. Momentum-based or trend-following signals are more likely to succeed here because the market structure supports continuation. You can expect trades to stay open longer, aiming for larger gains. Pairs with strong directional bias (|DBS| \u2265 0.35) are routed exclusively to the dedicated strong-trend lane (strong_bull_trend + promoted vwap_pullback), which uses native trend-rider geometry and bypasses mode-overlay stop/target multipliers to preserve the designed reward-to-risk ratio (B63 Items 4, 11, 14).'
   },
   HIGH_VOLATILITY_UNSTABLE: {
     title: 'High-Volatility Unstable',
@@ -410,7 +410,7 @@ export const REGIME_NARRATIVES: Record<CanonicalRegimeType, { title: string; des
   },
   IMPULSE_EXPANSION: {
     title: 'Impulse Expansion',
-    description: 'The market is experiencing sharp, impulsive moves with high momentum bursts. Breakouts are more likely to follow through, and trend-following strategies can capture large moves. However, volatility is elevated so position sizing accounts for wider swings. Expect faster trade cycles with active trailing stop adjustments.'
+    description: 'The market is experiencing sharp, impulsive moves with high momentum bursts. Breakouts are more likely to follow through, and trend-following strategies can capture large moves. However, volatility is elevated so position sizing accounts for wider swings. Expect faster trade cycles with active trailing stop adjustments. B62 post-audit redefined the IE admission criteria: a pair qualifies as IE when |DBS| \u2265 0.50 AND volatility > 0.015; these thresholds emerged from the B62 72h verification and the post-B62 counterfactual audit. Strongly-directional IE pairs (|DBS| \u2265 0.35 positive) are additionally routed to the strong-trend lane alongside TFS (B63 Item 4).'
   },
   STRUCTURAL_TRANSITION: {
     title: 'Structural Transition',

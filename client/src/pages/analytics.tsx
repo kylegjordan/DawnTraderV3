@@ -36,6 +36,11 @@ interface MarketIndicatorsData {
     globalDBSScore: number | null;
     globalDBSCategory: string;
     globalDBSPairCount: number;
+    // B63 Item 16: snapshot staleness flags. `globalDBSIsStale` is true when the
+    // store dropped below 20-pair floor and is serving a prior good snapshot.
+    // `globalDBSSnapshotAgeSeconds` is the age of whatever snapshot is currently served.
+    globalDBSIsStale?: boolean;
+    globalDBSSnapshotAgeSeconds?: number | null;
   };
   timestamp: string;
 }
@@ -581,6 +586,18 @@ function MarketOverviewSection({ indicators, error, onRetry }: { indicators: Mar
               <Badge variant="outline" className={getDBSBadgeColor(data.globalDBSCategory || 'NEUTRAL')}>
                 {(data.globalDBSCategory || 'NEUTRAL').replace(/_/g, ' ')}
               </Badge>
+              {/* B63 Item 16: surface snapshot staleness when the store is carrying forward
+                  a prior good snapshot because the live store dropped below the 20-pair floor. */}
+              {data.globalDBSIsStale && (
+                <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+                  ⚠ Stale
+                  {typeof data.globalDBSSnapshotAgeSeconds === 'number' && data.globalDBSSnapshotAgeSeconds >= 0
+                    ? ` (${data.globalDBSSnapshotAgeSeconds < 60
+                        ? `${data.globalDBSSnapshotAgeSeconds}s`
+                        : `${Math.round(data.globalDBSSnapshotAgeSeconds / 60)}m`} old)`
+                    : ''}
+                </Badge>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">
               {(data.globalDBSPairCount || 0) > 0

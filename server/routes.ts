@@ -7474,6 +7474,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           globalDBSScore: indicators.globalDBS?.score ?? null,
           globalDBSCategory: indicators.globalDBS?.category ?? 'NEUTRAL',
           globalDBSPairCount: indicators.globalDBS?.pairCount ?? 0,
+          // B63 Item 16: staleness flags from the persistent-store snapshot.
+          // Consumers that want to distinguish "serving stale prior snapshot" from "fresh
+          // snapshot" (behavior-spec Rows 2 vs 5) read these. UI should surface when
+          // globalDBSIsStale === true so users are aware the displayed value is carried
+          // forward from a prior cycle and the store is currently degraded.
+          globalDBSIsStale: indicators.globalDBSIsStale ?? false,
+          globalDBSSnapshotAgeSeconds: indicators.globalDBSSnapshotAgeSeconds ?? null,
         },
         timestamp: indicators.timestamp.toISOString(),
       });

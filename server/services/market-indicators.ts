@@ -70,6 +70,13 @@ export interface MarketIndicators {
   frictionNarrative: string;
   // Phase 14: Global Directional Bias
   globalDBS: GlobalDirectionalBias | null;
+  // B63 Item 16: staleness flags from the persistent-store snapshot.
+  // `globalDBSIsStale` is true when the store is serving a carry-forward snapshot
+  // (store dropped below 20-pair floor but a prior good snapshot is being reused
+  // with isStale=true per behavior-spec Row 2). `globalDBSSnapshotAgeSeconds` is
+  // the age of the currently-served snapshot; useful for "last updated" UI hints.
+  globalDBSIsStale: boolean;
+  globalDBSSnapshotAgeSeconds: number | null;
   timestamp: Date;
 }
 
@@ -290,6 +297,8 @@ export function getMarketIndicators(): MarketIndicators {
 
   // B62: Compute global directional bias from MCE cache with real volume weights
   let globalDBS: GlobalDirectionalBias | null = null;
+  let globalDBSIsStale = false;
+  let globalDBSSnapshotAgeSeconds: number | null = null;
   try {
     const mce = getMarketContextEngine();
     // B62 A.3 fix #1: Extract real 24h volumes from MCE cached contexts
@@ -297,6 +306,14 @@ export function getMarketIndicators(): MarketIndicators {
     globalDBS = mce.computeGlobalBias(volumes);
     if (globalDBS.pairCount > 0) {
       console.log(`[B62][MarketIndicators] Global DBS: score=${globalDBS.score.toFixed(3)} category=${globalDBS.category} pairs=${globalDBS.pairCount} (volume-weighted)`);
+    }
+    // B63 Item 16: read the raw snapshot for staleness + age metadata (value itself
+    // is already returned from computeGlobalBias above; we just want the flags).
+    const { directionalBiasStore } = await import('../core/metrics/directional-bias-store.js');
+    const snapshot = directionalBiasStore.getLatestSnapshot();
+    if (snapshot) {
+      globalDBSIsStale = snapshot.isStale;
+      globalDBSSnapshotAgeSeconds = Math.max(0, Math.round((Date.now() - snapshot.snapshotTime) / 1000));
     }
   } catch (err) {
     console.warn('[B62][MarketIndicators] Global DBS unavailable:', err);
@@ -326,6 +343,8 @@ export function getMarketIndicators(): MarketIndicators {
     frictionDescription: frictionStatus,
     frictionNarrative: frictionStatus.narrative,
     globalDBS,
+    globalDBSIsStale,
+    globalDBSSnapshotAgeSeconds,
     timestamp: lastUpdate,
   };
 }
