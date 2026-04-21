@@ -71,6 +71,14 @@ export interface TechnicalIndicators {
   dbsScore?: number;        // Directional Bias Score [-1, 1]
   dbsCategory?: string;     // 'UP_STRONG' | 'UP_MODERATE' | 'NEUTRAL' | 'DOWN_MODERATE' | 'DOWN_STRONG'
   dbsSlope?: number;        // DBS slope (current - 3-bar-prior), positive = rising
+  // B63 Item 12: Strong-trend lane geometry override. Populated by vts-runner ONLY when
+  // the pair is routed through quant-strong_trend sourcePool. Detectors that support the
+  // override (currently vwap_pullback for Item 11 promotion) consume these multipliers
+  // in place of their default geometry. Detectors that do not consume it simply ignore it.
+  strongTrendGeometryOverride?: {
+    stopAtrMultiplier: number;   // e.g. 4.0 for Variant E (stop = entry - 4*ATR)
+    targetAsRMultiple: number;   // e.g. 3.0 for Variant E (target = entry + 3*R, where R = stopDistance)
+  };
 }
 
 export class StrategyEngine {
@@ -81,9 +89,18 @@ export class StrategyEngine {
     settings: TradingSettings,
     priceHistory?: PriceData[]
   ): StrategySignal | null {
-    // B63: Belt-and-braces for Path D LONG-only leak. Strong positive DBS routes exclusively to path 6.
-    if ((indicators.dbsScore ?? 0) >= 0.35) {
-      console.log(`[VWAP Strategy] [B63] Skipped: |DBS|>=0.35 (=${(indicators.dbsScore ?? 0).toFixed(3)}) — pair belongs to quant-strong_trend lane`);
+    // B63 Item 11: vwap_pullback PROMOTED into strong-trend lane. The prior B63 Item 6
+    // `dbs >= 0.35` exclusion has been REMOVED — vwap_pullback is now eligible on both:
+    //   (a) its original trend/reversal context (low-DBS pairs), with default geometry
+    //   (b) the strong-trend lane (|DBS|>=0.35 positive, via MULTI_FAMILY_ELIGIBILITY), with
+    //       geometry override per Item 12 (4×ATR stop, 3R target = Variant E from audit).
+    //
+    // B63 Item 10: Counter-trend LONG guard (mirror-defect fix). vwap_pullback is LONG-only
+    // (pullback-resumption on bullish setups). Firing on strong NEGATIVE DBS pairs means
+    // entering LONG against a strong downtrend. 15 mirror-defect trades in B62 72h window
+    // per BATCH_63_COUNTERFACTUAL_AUDIT. Block here.
+    if ((indicators.dbsScore ?? 0) <= -0.35) {
+      setNullReason('b63b_counter_trend_long_exclusion');
       return null;
     }
     const { currentPrice, vwap, high24h, low24h, volume } = indicators;
@@ -131,14 +148,29 @@ export class StrategyEngine {
       // Batch 45: ATR-relative entry/stop/target
       const atr = indicators.atr ?? (high24h - low24h) * 0.1; // Fallback: 10% of daily range
       const entryPrice = currentPrice + atr * 0.1;
-      const stopPrice = Math.min(vwap - atr * 0.5, low24h + atr * 0.1);
-      const targetPrice = high24h - atr * 0.25;
-      
-      // B3 FIX: For long trades, use Math.max to pick the HIGHER of the two targets (not the lower)
-      const riskDistance = entryPrice - stopPrice;
-      const twoRTarget = entryPrice + (riskDistance * 2);
-      const finalTarget = Math.max(targetPrice, twoRTarget);
-      
+
+      // B63 Item 12: strong-trend geometry override (Variant E from counterfactual audit).
+      // When vts-runner routes this detector via quant-strong_trend sourcePool, it attaches
+      // { stopAtrMultiplier, targetAsRMultiple } to indicators. Use those in place of the
+      // default vwap_pullback geometry. Default path (no override) preserves prior behavior.
+      const override = indicators.strongTrendGeometryOverride;
+      let stopPrice: number;
+      let finalTarget: number;
+      if (override && atr > 0) {
+        stopPrice = entryPrice - atr * override.stopAtrMultiplier;
+        const riskDistance = entryPrice - stopPrice;
+        finalTarget = entryPrice + riskDistance * override.targetAsRMultiple;
+        console.log(`[VWAP Strategy] [B63 Item 12] Using strong-trend geometry override: stop=${override.stopAtrMultiplier}×ATR, target=${override.targetAsRMultiple}R`);
+      } else {
+        // Default (pre-B63-Item-12) geometry for low-DBS pullback context
+        stopPrice = Math.min(vwap - atr * 0.5, low24h + atr * 0.1);
+        const targetPrice = high24h - atr * 0.25;
+        // B3 FIX: For long trades, use Math.max to pick the HIGHER of the two targets (not the lower)
+        const riskDistance = entryPrice - stopPrice;
+        const twoRTarget = entryPrice + (riskDistance * 2);
+        finalTarget = Math.max(targetPrice, twoRTarget);
+      }
+
       // B3: Safety validation - reject signal if target is not above entry
       if (finalTarget <= entryPrice) {
         console.log(`[VWAP Strategy] ❌ Target validation failed - target (${finalTarget.toFixed(2)}) <= entry (${entryPrice.toFixed(2)})`);

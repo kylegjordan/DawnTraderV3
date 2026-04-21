@@ -816,6 +816,10 @@ async function generatePhase10Signal(
   // Phase 14 HF6: Call strategy-specific detect function for real entry/stop/target
   // Build indicators (same format as signal orchestrator lines 857-864)
   // B63: Pass through DBS fields so detect() guards and strong_bull_trend can read them.
+  // B63 Item 12: Attach strongTrendGeometryOverride when pair is routed via strong-trend lane.
+  // vwap_pullback consumes the override per Item 11 to use Variant E geometry (4×ATR stop, 3R target).
+  // Other strategies routed via this lane ignore the field and use their own geometry.
+  const isStrongTrendLane = sourcePool === 'quant-strong_trend';
   const stratDetectIndicators = {
     vwap: mceContext.indicators.vwap,
     sma: mceContext.indicators.sma,
@@ -827,6 +831,9 @@ async function generatePhase10Signal(
     dbsScore: propagatedDbs?.score,
     dbsCategory: propagatedDbs?.category,
     dbsSlope: propagatedDbs?.slope,
+    strongTrendGeometryOverride: isStrongTrendLane
+      ? { stopAtrMultiplier: 4.0, targetAsRMultiple: 3.0 }
+      : undefined,
   };
 
   // Build patternInput from detected patterns (same as orchestrator lines 1048-1070)
@@ -1069,10 +1076,21 @@ async function generatePhase10Signal(
   const quantity = dollarValue / entryPrice;
   
   // Directive 11.7S: Apply mode overlay to stop loss and take profit distances
+  // B63 Item 14: Strong-trend lane mode-overlay BYPASS. Trades routed via quant-strong_trend
+  // use their NATIVE geometry (no mode-overlay multiplication). Rationale: mode-overlay's
+  // asymmetric stop×1.2 + target×0.8 (DEFENSIVE) or stop×1.5 + target×0.6 (SURVIVAL) silently
+  // destroys the 2:1 (strong_bull_trend) or 3:1 (vwap_pullback Variant E) RR that the
+  // strong-trend archetype requires. Reversal/continuation archetypes still use the overlay
+  // as designed — the bypass is SCOPED to the strong-trend lane only.
+  const useNativeGeometry = sourcePool === 'quant-strong_trend';
   const stopDistance = entryPrice - stopLoss;
   const targetDistance = takeProfit - entryPrice;
-  const adjustedStopDistance = stopDistance * modeOverlay.stopLossDistanceMultiplier;
-  const adjustedTargetDistance = targetDistance * modeOverlay.takeProfitDistanceMultiplier;
+  const adjustedStopDistance = useNativeGeometry
+    ? stopDistance
+    : stopDistance * modeOverlay.stopLossDistanceMultiplier;
+  const adjustedTargetDistance = useNativeGeometry
+    ? targetDistance
+    : targetDistance * modeOverlay.takeProfitDistanceMultiplier;
   const adjustedStopLoss = entryPrice - adjustedStopDistance;
   const adjustedTakeProfit = entryPrice + adjustedTargetDistance;
   
@@ -1085,6 +1103,36 @@ async function generatePhase10Signal(
   if (lastClose && Date.now() - lastClose < REENTRY_COOLDOWN_MS) {
     setNullReason('reentry_cooldown');
     return null;
+  }
+
+  // B63 Item 11 — Strong-trend lane arbitration. When a pair is routed via the strong-trend
+  // lane, multiple strategies (currently strong_bull_trend + vwap_pullback) are eligible to
+  // fire on the SAME pair in the SAME cycle. Scope doc committed to a tie-break rule; we
+  // implement it here as first-claim-wins (same pattern as the existing per-strategy duplicate
+  // guard immediately below).
+  //
+  // Rationale for first-claim-wins vs strict R-multiple arbitration:
+  //   (a) strategy dispatch iterates serially per pair — the first strategy to produce a valid
+  //       signal wins by natural order. R-multiple tie-break would require collecting all
+  //       lane-eligible signals before opening any, which is a larger refactor.
+  //   (b) practically, vwap_pullback (requires pullback-to-VWAP + reversal pattern) and
+  //       strong_bull_trend (requires Donchian breakout + anti-exhaustion) rarely satisfy
+  //       their entry conditions on the same bar — same-cycle conflicts should be uncommon.
+  //   (c) extending to explicit R-multiple arbitration remains available as a follow-up.
+  //
+  // Null-reason: strong_trend_lane_conflict (distinguishable in logs from duplicate_position).
+  if (sourcePool === 'quant-strong_trend') {
+    const strongTrendLaneStrategies = new Set(['strong_bull_trend', 'vwap_pullback']);
+    const laneConflict = Array.from(openVirtualTrades.values()).find(t =>
+      t.symbol === symbol &&
+      t.strategy !== strategy &&
+      strongTrendLaneStrategies.has(t.strategy)
+    );
+    if (laneConflict) {
+      console.log(`[B63][Item 11][LANE_CONFLICT] ${symbol}: ${strategy} blocked — already open via ${laneConflict.strategy} in strong-trend lane`);
+      setNullReason('strong_trend_lane_conflict');
+      return null;
+    }
   }
 
   // Batch 19G HF1: Strict duplicate guard — only 1 open trade per symbol+strategy combo
@@ -1792,7 +1840,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
     // Batch 22: Build per-symbol family set for VTS from ACTUAL family filter results.
     // FX5 scanner runs family IMF filters and stores results in familyPoolSurvivors.
     // We need those results tagged onto VTS pairs. Read from FX5 scanner's last diagnostics.
-    const { STRATEGY_FAMILY_MAP, FILTER_FAMILIES, HYBRID_FAMILY_ELIGIBILITY } = await import('../config/canonical-regime-strategy-map.js');
+    const { STRATEGY_FAMILY_MAP, FILTER_FAMILIES, HYBRID_FAMILY_ELIGIBILITY, MULTI_FAMILY_ELIGIBILITY } = await import('../config/canonical-regime-strategy-map.js');
     const { fx5Scanner } = await import('./fx5-scanner.js');
     const vtsSymbolFamilies = new Map<string, Set<string>>();
 
@@ -2000,7 +2048,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         // Batch 22: Family-aware strategy check
         const stratFamily = STRATEGY_FAMILY_MAP[stratDef.strategyKey];
         const pairFams = vtsSymbolFamilies.get(pair.symbol);
-        if (stratFamily && stratFamily !== 'hybrid' && pairFams && !pairFams.has(stratFamily)) {
+        // B63 Item 11: MULTI_FAMILY_ELIGIBILITY extends eligibility beyond the primary family.
+        // A strategy passes the family gate if its primary family is in pairFams OR any of its
+        // additional multi-family entries is in pairFams. Used to route vwap_pullback into the
+        // strong-trend lane alongside strong_bull_trend per BATCH_63_SCOPE Items 11/12.
+        const additionalFams = MULTI_FAMILY_ELIGIBILITY[stratDef.strategyKey] ?? [];
+        const primaryFamilyMismatch = stratFamily && stratFamily !== 'hybrid' && pairFams && !pairFams.has(stratFamily);
+        const additionalFamilyMatch = additionalFams.some(f => pairFams?.has(f) ?? false);
+        if (primaryFamilyMismatch && !additionalFamilyMatch) {
           // Batch 45: familyFilterMismatch is a pre-detect eligibility skip, NOT a strategy evaluation.
           // Do NOT count it in totalStrategyEvaluations, byStrategy, or null counters.
           // This keeps the detect()-level null rate honest.

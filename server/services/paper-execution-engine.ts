@@ -2159,14 +2159,24 @@ export class PaperExecutionEngine {
       console.log(`[11.7S][Paper] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
       
       // 11.7S: Apply mode overlay to stop/target distances
+      // B63 Item 14: Strong-trend lane mode-overlay BYPASS (mirrored from vts-runner).
+      // Signals routed via quant-strong_trend use native geometry to preserve the intended
+      // archetype RR (2:1 for strong_bull_trend, 3:1 for vwap_pullback Variant E).
+      const paperSourcePool = (signal as any).sourcePool ?? signal.metadata?.sourcePool;
+      const useNativeGeometry = paperSourcePool === 'quant-strong_trend';
       if (signal.stopPrice && signal.targetPrice) {
         const stopDistance = signal.entryPrice - signal.stopPrice;
         const targetDistance = signal.targetPrice - signal.entryPrice;
-        const adjustedStopDistance = stopDistance * modeOverlay.stopLossDistanceMultiplier;
-        const adjustedTargetDistance = targetDistance * modeOverlay.takeProfitDistanceMultiplier;
+        const adjustedStopDistance = useNativeGeometry
+          ? stopDistance
+          : stopDistance * modeOverlay.stopLossDistanceMultiplier;
+        const adjustedTargetDistance = useNativeGeometry
+          ? targetDistance
+          : targetDistance * modeOverlay.takeProfitDistanceMultiplier;
         signalAny.stopPrice = signal.entryPrice - adjustedStopDistance;
         signalAny.targetPrice = signal.entryPrice + adjustedTargetDistance;
-        console.log(`[11.7S][Paper] ${signal.symbol}: Stop ${signal.stopPrice.toFixed(4)}→${signalAny.stopPrice.toFixed(4)} | TP ${signal.targetPrice.toFixed(4)}→${signalAny.targetPrice.toFixed(4)}`);
+        const geomNote = useNativeGeometry ? ' [B63 Item 14 bypass]' : '';
+        console.log(`[11.7S][Paper] ${signal.symbol}: Stop ${signal.stopPrice.toFixed(4)}→${signalAny.stopPrice.toFixed(4)} | TP ${signal.targetPrice.toFixed(4)}→${signalAny.targetPrice.toFixed(4)}${geomNote}`);
       }
       
       // 11.7S: Store mode info on signal for downstream logging

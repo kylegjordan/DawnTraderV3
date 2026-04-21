@@ -822,3 +822,16 @@ export const HYBRID_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
   adaptive_flow: ['trend', 'reversal'],
   volatility_edge: ['breakout', 'reversal'],
 };
+
+// B63 Item 11 — Strategies eligible in families beyond their primary STRATEGY_FAMILY_MAP entry.
+// Unlike HYBRID_FAMILY_ELIGIBILITY (which replaces the primary family for hybrid strategies),
+// this map ADDS additional family eligibility on top of the primary. Consumers OR the primary
+// family with the entries here to get the full eligibility set.
+//
+// vwap_pullback primary = 'trend'; additional = 'strong_trend' (promoted by B63 Item 11 for
+// the pullback-resumption archetype on strongly-trending pairs, per BATCH_63_COUNTERFACTUAL_AUDIT).
+// When routed via sourcePool='quant-strong_trend', vwap_pullback receives the strong-trend
+// geometry override per Item 12 (4×ATR stop, 3R target = Variant E).
+export const MULTI_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
+  vwap_pullback: ['strong_trend'],
+};
