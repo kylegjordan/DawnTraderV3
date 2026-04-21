@@ -72,6 +72,14 @@ export function detectReverseImpulse(
     setNullReason('b63_strong_dbs_exclusion');
     return null;
   }
+  // B63 Item 10: Counter-trend LONG guard (mirror-defect fix). reverse_impulse is LONG-only
+  // and fires on pinbar-reversal setups; firing on strong NEGATIVE DBS pairs means entering
+  // LONG against a strong downtrend. This strategy was the LARGEST contributor to the mirror
+  // defect — 54 losing trades in the B62 72h window per BATCH_63_COUNTERFACTUAL_AUDIT. Block.
+  if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+    setNullReason('b63b_counter_trend_long_exclusion');
+    return null;
+  }
   // ── Parse candles ──────────────────────────────────────────
   const ohlc = parseCandles(candles);
   if (ohlc.length < RI_LOOKBACK + 1) {

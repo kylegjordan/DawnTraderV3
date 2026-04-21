@@ -73,9 +73,18 @@ export function detectMorningStar(
 
   // B63: Belt-and-braces for Path D LONG-only leak. Strong POSITIVE DBS pairs should
   // route exclusively to quant-strong_trend per FX5 routing — this guard is a second
-  // safety net if a leak occurs. Strong negative DBS (bear trends) still handled here.
+  // safety net if a leak occurs.
   if (((indicators as any).dbsScore ?? 0) >= 0.35) {
     setNullReason('b63_strong_dbs_exclusion');
+    return null;
+  }
+
+  // B63 Item 10: Counter-trend LONG guard (mirror-defect fix). morning_star is LONG-only
+  // and opens on reversal setups; firing on strong NEGATIVE DBS pairs means entering LONG
+  // against a strong downtrend — this is the mirror of the positive-DBS leak and produced
+  // 22 losing trades in the B62 72h window per BATCH_63_COUNTERFACTUAL_AUDIT. Block here.
+  if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+    setNullReason('b63b_counter_trend_long_exclusion');
     return null;
   }
 

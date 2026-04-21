@@ -93,6 +93,14 @@ export function detectDefensiveHedge(
     setNullReason('b63_strong_dbs_exclusion');
     return null;
   }
+  // B63 Item 10: Counter-trend LONG guard (mirror-defect fix). defensive_hedge is BUY-only
+  // (direction: 'BUY'); firing on strong NEGATIVE DBS pairs means entering LONG against a
+  // strong downtrend. 2 mirror-defect trades in the B62 72h window per
+  // BATCH_63_COUNTERFACTUAL_AUDIT. Block here.
+  if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+    setNullReason('b63b_counter_trend_long_exclusion');
+    return null;
+  }
   // ── Parse candles ──────────────────────────────────────────
   const ohlc = parseCandles(candles);
   if (ohlc.length < DH_CORR_WINDOW + 2) {

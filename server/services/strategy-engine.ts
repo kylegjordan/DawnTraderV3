@@ -306,12 +306,23 @@ export class StrategyEngine {
 
   // SMA Trend Ride Strategy
   detectSMATrendRide(
-    indicators: TechnicalIndicators, 
-    priceHistory: PriceData[], 
+    indicators: TechnicalIndicators,
+    priceHistory: PriceData[],
     settings: TradingSettings
   ): StrategySignal | null {
+    // B63 Item 10: Counter-trend LONG guard (mirror-defect fix). sma_trend_ride is a
+    // LONG-only trend-riding strategy; firing on strong NEGATIVE DBS pairs means entering
+    // LONG against a strong downtrend. 1 mirror-defect trade in B62 72h window per
+    // BATCH_63_COUNTERFACTUAL_AUDIT. Block here. (No paired positive-DBS guard needed —
+    // high-positive-DBS pairs are routed exclusively to Path D per B63 Item 4 and do not
+    // reach sma_trend_ride's quant family.)
+    if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+      setNullReason('b63b_counter_trend_long_exclusion');
+      return null;
+    }
+
     const { currentPrice, sma, volume } = indicators;
-    
+
     // User-configured settings with defaults
     const entryCondition = settings.smaEntryCondition || 'above'; // Default: above
     const exitCondition = settings.smaExitCondition || 'break'; // Default: break below
