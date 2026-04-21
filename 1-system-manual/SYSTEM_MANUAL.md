@@ -10238,3 +10238,85 @@ ChatGPT recommended a 5-phase database cleanup strategy, which aligns with and e
 ---
 
 *Phase 11 complete (with addendum). This is the final phase of the 11-phase systematic audit.*
+
+---
+
+# Appendix B63: Strong-Trend Lane Architecture & Global DBS Store (2026-04-21)
+
+This appendix documents the architectural additions shipped in B63 Items 10-14 + 16. These are now first-class concepts in the system and should be treated as architecture, not batch-specific tuning.
+
+## B63.1 Strong-Trend Lane as a First-Class Concept
+
+**What changed:** the strong-trend routing lane (`sourcePool === 'quant-strong_trend'`) is no longer just a family path — it carries its own ROUTING-CONTEXT CONTRACT that downstream components inherit. Two properties of the contract:
+
+1. **Geometry override (B63 Item 12)** — `TechnicalIndicators.strongTrendGeometryOverride: { stopAtrMultiplier, targetAsRMultiple }` is attached to indicators by `vts-runner.ts` when a pair routes through this lane. Detectors that consume it apply the override in place of their default geometry. Detectors that don't consume it (like `strong_bull_trend` with locked native 3×ATR/6×ATR) simply ignore the field.
+
+2. **Mode-overlay bypass (B63 Item 14)** — `vts-runner.ts` and `paper-execution-engine.ts` both check `sourcePool === 'quant-strong_trend'` and skip mode-overlay multipliers when true. Reversal/continuation archetypes retain mode-overlay behavior as designed; the bypass is scoped exclusively to the strong-trend lane.
+
+**Design rationale:** future strategies promoted into this lane inherit both contracts automatically. Adding a new strategy to `MULTI_FAMILY_ELIGIBILITY[strategyKey] = [...'strong_trend']` and having its detect function read `indicators.strongTrendGeometryOverride` is the ONE thing that needs to happen — routing and mode-overlay bypass are handled at the lane level, not per-strategy.
+
+**Multi-strategy lane arbitration (B63 Item 11):** when more than one strategy in the lane fires same-pair same-cycle, first-claim-wins. The second strategy to attempt opening a trade returns `null` with reason `strong_trend_lane_conflict` (distinct from the existing per-strategy `duplicate_position` reason). Implementation: pre-open guard in `vts-runner.ts` immediately above the Batch 19G duplicate guard. Strict R-multiple arbitration deferred.
+
+**Strategies in the lane as of 2026-04-21:**
+- `strong_bull_trend` — primary, built for this lane from scope. Ignores geometry override (uses its own locked 3×ATR stop, 6×ATR target).
+- `vwap_pullback` — promoted into the lane via `MULTI_FAMILY_ELIGIBILITY`. Consumes geometry override (Variant E: 4×ATR stop, 3R target) when fired through the lane. Retains default geometry on non-lane firings.
+
+## B63.2 Counter-Trend LONG Guard Pattern
+
+**Pattern:** any LONG-only strategy whose archetype does not fit strong-downtrend conditions adds a symmetric guard to the existing B63 Item 6 positive-DBS exclusion.
+
+```ts
+if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+  setNullReason('b63b_counter_trend_long_exclusion');
+  return null;
+}
+```
+
+**Applied to (2026-04-21):** `morning_star`, `reverse_impulse`, `defensive_hedge`, `sma_trend_ride`, `vwap_pullback`.
+
+**Not applied to:** any strategy that is not LONG-only. Any future new strategy that is LONG-only by design should include this guard as part of its signature unless it is specifically built to fire on counter-trend setups.
+
+**Threshold:** `-0.35` (symmetric with B63 Item 6's `+0.35`). If the positive-side threshold is ever tuned, the negative side should move in lockstep unless evidence supports asymmetric thresholds.
+
+**Null-reason:** `b63b_counter_trend_long_exclusion` — distinct from `b63_strong_dbs_exclusion` so diagnostics can separate the two gate types in logs.
+
+## B63.3 Global DBS Persistent Store (see also SIM §5.1c)
+
+Pre-B63, `computeGlobalBias()` walked MCE's cache at read time and applied a 70% coverage gate that could silently degrade to NEUTRAL. Value could vary between reads within a cycle depending on cache state.
+
+B63 Item 16 replaces this with:
+1. **Persistent per-pair store** (`server/core/metrics/directional-bias-store.ts`) — Map<symbol, { score, timestamp, sentinelZero, volume }> with 5-minute hard expiry.
+2. **End-of-cycle atomic snapshot publish** — MCE's `computeGlobalBias()` delegates to `store.publishSnapshot()`. Within a cycle, `store.getLatestSnapshot()` returns the same object reference across multiple consumer reads.
+3. **Fixed 20-pair floor** — `GLOBAL_DBS_MIN_SAMPLE_COUNT = 20`. Below floor, snapshot is never freshly computed — either the prior good snapshot is served with `isStale: true`, or `null` is returned.
+4. **Explicit 5-row behavior spec** — cold-start / below-floor-with-prior / below-floor-without-prior / invalid-compute / happy-path all have distinct code paths, distinct log prefixes, and distinct return semantics. `null` and `isStale: true` are DIFFERENT states.
+
+**Governance principle:** silent degradation is a governance failure. Consumers must be able to tell the difference between "no snapshot available" and "stale snapshot served." B63 Item 16 enforces this at the type and log level.
+
+**In-memory only for B63.** DB-backed persistence is a candidate follow-up if operational evidence demands cross-restart snapshot continuity.
+
+## B63.4 Mode-Overlay Bypass Pattern
+
+**Problem observed pre-fix:** mode-overlay (NORMAL / DEFENSIVE / SURVIVAL) applied asymmetric multipliers to stop/target distances globally. For reversal archetypes this was defensible (grab profits fast in choppy markets). For continuation/trend archetypes it was destructive — DEFENSIVE mode squashed 2:1 RR to 1.33:1 and SURVIVAL inverted to 0.8:1 (target closer than stop).
+
+**Solution pattern:** archetype-appropriate bypass scoped to a routing lane, not a strategy name list. When `sourcePool === 'quant-strong_trend'`, bypass mode-overlay multipliers and use native geometry.
+
+**Where enforced:**
+- `server/services/vts-runner.ts` (~L1086, where mode-overlay is applied to stop/target distances for VTS virtual trades)
+- `server/services/paper-execution-engine.ts` (~L2165, where mode-overlay is applied for paper/active trading signals)
+
+**Why scoped to a lane (not a strategy name list):** promoting a strategy into the strong-trend lane (per B63.1) automatically inherits the bypass. Adding new continuation strategies does not require updating mode-overlay code.
+
+**Non-scope:** other lanes continue to apply mode-overlay as designed. The bypass is NOT a deprecation of mode-overlay — it is a lane-specific opt-out for archetype compatibility.
+
+## B63.5 Cohort Boundaries for Observation
+
+Three PM2 restart boundaries for B63 observation attribution:
+- `#79` (2026-04-21 ~14:45 UTC) — Stage 10A: Item 10 counter-trend LONG guards
+- `#80` (2026-04-21 ~15:13 UTC) — Stage 10B+10C: Items 11/12/14
+- `#81` (2026-04-21 ~15:34 UTC) — Stage 16: Item 16
+
+Trade records opened under each cohort should be segmented in observation analysis. Same-day boundaries may collapse per Langston's cohort-separation rule if the completion report's attribution benefits from a single combined window.
+
+---
+
+*End of Appendix B63. Items 15/17/18/19 produce their own deliverable documents (B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md, B63_ITEM18_SQE_AUDIT.md, B63_ITEM19_CADENCE_LATENCY_AUDIT.md) and are referenced from BATCH_63_COMPLETION_REPORT.md rather than the System Manual.*

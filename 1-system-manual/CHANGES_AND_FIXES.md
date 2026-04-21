@@ -1674,3 +1674,75 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - **Fix**: Added a full "Autonomy with Langston — iterate to consensus, don't escalate every round to Kyle" subsection in §6 with: iterate-decide-respond loop, 5 explicit escalation triggers (true deadlock 2-3 rounds, architectural decision, risk/authority boundary, new directive needed, scope expansion), explicit default behavior statement, and exceptions for Langston's no-objection feedback and Kyle interruptions.
 - **Reference**: CLAUDE.md §6 "Autonomy with Langston" after commit `6f667570`.
 - **Lesson**: Stable content in instant-context files (CLAUDE.md / BOOTSTRAP.md) must explicitly describe the DEFAULT behavior, not just the exceptions. Omission reads as "escalate when in doubt" to fresh sessions. If you want the default to be "iterate with peer and decide," say so explicitly.
+
+### DBS-B63B-001: Counter-Trend LONG Guard (Mirror-Defect Fix)
+- **Severity**: MEDIUM
+- **Type**: FIX + NEW GOVERNANCE PATTERN
+- **Location**: `server/strategies/morning-star.ts`, `server/strategies/reverse-impulse.ts`, `server/strategies/defensive-hedge.ts`, `server/services/strategy-engine.ts` (sma_trend_ride block), `server/services/strategy-engine.ts` (vwap_pullback block — restructured in DBS-B63B-002)
+- **Problem**: B62 72h counterfactual audit found 94 LONG-only trades opened on pairs with `pairDirectionalBiasScore ≤ -0.30` (strong downtrend). Win rate 22.3%. Contributors: reverse_impulse (54), morning_star (22), vwap_pullback (15), defensive_hedge (2), sma_trend_ride (1). Mirror of B63 Item 6's positive-DBS exclusion — the negative side was unaddressed.
+- **Fix**: Added `if dbsScore <= -0.35 return null` with new null-reason `b63b_counter_trend_long_exclusion` to all 5 LONG-only strategies. Threshold -0.35 chosen for symmetry with B63 Item 6's +0.35. Commits `b0b8e39e` (Stage 10A, 4 strategies) + `c3fe0712` (Stage 10B+10C, vwap_pullback restructure integrates the mirror guard).
+- **Post-deploy verification**: 5 occurrences of `b63b_counter_trend_long_exclusion` in compiled dist (one per strategy) confirmed after PM2 #79 restart.
+- **Reference**: `BATCH_63_SCOPE.md` Item 10; `BATCH_63_COUNTERFACTUAL_AUDIT.md` for trigger evidence.
+
+### DBS-B63B-002: vwap_pullback Promotion Into Strong-Trend Lane + First-Claim-Wins Arbitration
+- **Severity**: MEDIUM (architectural)
+- **Type**: FEATURE
+- **Location**: `server/services/strategy-engine.ts` (vwap_pullback block), `server/config/canonical-regime-strategy-map.ts` (new `MULTI_FAMILY_ELIGIBILITY` map), `server/services/vts-runner.ts` (family-eligibility gate + first-claim-wins arbitration block)
+- **Problem**: Counterfactual audit showed vwap_pullback as the ONE legacy archetype that works on strong-trend pairs (baseline WR 63.2% on n=19 high-DBS bullish sample). B63 Item 6's positive-DBS exclusion blocked promotion.
+- **Fix**: (1) Removed vwap_pullback's positive-DBS exclusion. (2) Added mirror-defect guard per DBS-B63B-001. (3) New `MULTI_FAMILY_ELIGIBILITY` map makes vwap_pullback eligible in both `trend` (primary) and `strong_trend` families; gate logic OR's primary + additional. (4) Lane arbitration: if both `strong_bull_trend` and strong-trend-lane `vwap_pullback` fire same-pair same-cycle, first-claim-wins (same pattern as Batch 19G duplicate guard). Null-reason `strong_trend_lane_conflict`. Strict R-multiple arbitration deferred to future enhancement.
+- **Commit**: `c3fe0712` (Stage 10B+10C).
+- **Reference**: `BATCH_63_SCOPE.md` Items 11 + 13.
+
+### DBS-B63B-003: Strong-Trend Geometry Override Plumbing (Variant E)
+- **Severity**: LOW (additive)
+- **Type**: FEATURE
+- **Location**: `server/services/strategy-engine.ts` (new optional `TechnicalIndicators.strongTrendGeometryOverride` field + vwap_pullback consumption), `server/services/vts-runner.ts` (override attached when `sourcePool === 'quant-strong_trend'`)
+- **Design rationale**: routing lane is the first-class concept; override carried via routing context (not hard-coded DBS branch inside the strategy). Future strategies promoted into the lane inherit the contract automatically.
+- **Fix**: Optional `strongTrendGeometryOverride: { stopAtrMultiplier, targetAsRMultiple }` on `TechnicalIndicators`. vts-runner attaches `{ 4.0, 3.0 }` (Variant E per counterfactual audit) at call site when sourcePool is quant-strong_trend. `vwap_pullback` consumes override; `strong_bull_trend` ignores (uses own locked constants).
+- **Contract test**: `server/tests/unit/b63-item12-geometry-override.test.ts` — 4 tests verify override path, default path, counter-trend guard precedence, Variant E constants.
+- **Commit**: `c3fe0712` (Stage 10B+10C).
+- **Reference**: `BATCH_63_SCOPE.md` Item 12.
+
+### DBS-B63B-004: Strong-Trend Lane Mode-Overlay Bypass
+- **Severity**: HIGH (silently destroyed R:R geometry on every pre-fix strong-trend trade)
+- **Type**: FIX
+- **Location**: `server/services/vts-runner.ts` (~L1086), `server/services/paper-execution-engine.ts` (~L2165)
+- **Problem**: Existing mode-overlay applied asymmetric multipliers globally. DEFENSIVE: stop×1.2 + target×0.8 → 2:1 RR became 1.33:1. SURVIVAL: stop×1.5 + target×0.6 → ratio 0.8 (target closer than stop, inversion). Every pre-fix strong_bull_trend trade in observed CSVs sat in DEFENSIVE or SURVIVAL with silently-destroyed geometry.
+- **Fix**: Lane-based bypass. When `sourcePool === 'quant-strong_trend'`, use native stop/target distances. Reversal/continuation archetypes retain mode-overlay as designed — bypass is scoped to the strong-trend lane only.
+- **Post-deploy verification**: direct proof from same-cycle log pair under SURVIVAL mode. ETH/USD (normal lane): `Stop 2283.27→2271.75 | TP 2333.89→2322.86` (multipliers applied). EVAA/USD (strong-trend lane): `Stop 0.6653→0.6653 | TP 1.1200→1.1200` (bypass active, identical before/after values).
+- **Commit**: `c3fe0712` (Stage 10B+10C).
+- **Reference**: `BATCH_63_SCOPE.md` Item 14.
+
+### DBS-B63-ITEM16-001: Global DBS Persistent Store + End-of-Cycle Atomic Snapshot + Fixed 20-Pair Floor
+- **Severity**: HIGH (architectural)
+- **Type**: FEATURE (replaces opportunistic cache-read approach)
+- **Location**: NEW `server/core/metrics/directional-bias-store.ts`, MOD `server/services/market-context-engine.ts`
+- **Problem**: Pre-fix global DBS used opportunistic TTL cache reads with a 70% coverage gate that silently returned NEUTRAL/0 when cache dropped below threshold. Consumers could receive different values within the same cycle depending on cache state at read time. No explicit stale/cold-start semantics.
+- **Fix**: (1) Persistent per-pair DBS store with timestamps + 5-minute hard expiry. (2) End-of-cycle atomic snapshot publish — consumers read snapshot, get same value within a cycle. (3) Fixed 20-pair floor replaces 70% coverage gate. (4) Explicit 5-row behavior spec implemented:
+  - Row 1 — cold start (empty store + no prior) → `null` + `[GlobalDBS][coldStart]` log
+  - Row 2 — below floor WITH prior snapshot → stale prior, `isStale: true` + `[degradedCoverage]` log
+  - Row 3 — below floor WITHOUT prior snapshot → `null` + `[noSnapshot]` log
+  - Row 4 — non-finite compute → stale prior if exists, else null + `[invalidCompute]` log
+  - Row 5 — happy path → fresh snapshot, `isStale: false`, no log (normal operation)
+- **Semantics contract**: `null` and `isStale: true` are DIFFERENT states; consumers never substitute zero/default for null. In-memory only for B63 (DB persistence deferred). Within-cycle determinism: `getLatestSnapshot()` returns same object reference until next publish.
+- **Contract test**: `server/tests/unit/b63-item16-dbs-store.test.ts` — 11 tests covering all 5 spec rows including fake-timer-driven Row 2 (populate → publish → advance 6min → repopulate below floor → assert stale carry-forward with exact prior value/coverage/snapshotTime).
+- **Post-deploy verification (PM2 #81, 2026-04-21 15:34:43 UTC)**: cold-start log at T+3s, warm-up to first valid snapshot at T+63s (pairs=33), zero degraded/stale/invalid/noSnapshot logs during 15+ min of normal operation post-warm-up.
+- **Commit**: `a4f5dbe0` (Stage 16).
+- **Reference**: `BATCH_63_SCOPE.md` Item 16; `BATCH_63_PRE_AUDIT.md` §13 Item 16 (5-row behavior spec source).
+
+### DBS-B63-AUDIT-001: Counterfactual Audit — Exit-Only Replay of B62 72h High-DBS Trades
+- **Severity**: EVIDENCE (audit finding, no code change)
+- **Type**: ANALYSIS
+- **Location**: `Claude Comms and Packages/Scope Files/BATCH_63_COUNTERFACTUAL_AUDIT.md`, `scripts/phase15b/b63_counterfactual_audit.py`
+- **Summary**: Exit-only counterfactual replay of 90 bullish high-DBS LONG trades from the B62 72h window. Six variants tested (baseline, A/B/C/D/E with varying stop × target geometry) using 15-min Kraken OHLC + MCE-derived ATR-at-entry. Findings: (a) morning_star (55/90 = 61% of population) had identical 32.1% WR across EVERY fixed-stop variant — widening stops does NOT rescue the archetype, confirming entry-archetype problem not exit-geometry; (b) vwap_pullback (19/90) already profitable at baseline (63.2% WR) and responds positively to Variant E (4×ATR stop, 3R target, Sum R doubled to +4.1); (c) only 13.5% of original stop-outs later reached +1R under fixed-stop variants — small rescue effect, concentrated in vwap_pullback; (d) losers' median MFE 0.0016 vs winners' 0.0252 (15× gap) — directionally wrong from entry, not stopped by noise; (e) separate mirror defect — 94 DBS ≤ -0.30 LONG trades in window with WR 22.3%, dominated by reverse_impulse (54) and morning_star (22). **Triggered: B63 Items 10 (counter-trend LONG guards), 11 (vwap_pullback lane promotion), 12 (geometry override), 14 (mode-overlay bypass).**
+- **Reference**: `BATCH_63_COUNTERFACTUAL_AUDIT.md`.
+
+### B64-AUDIT-001: B58a Authority Baseline — Current DB State Verified
+- **Severity**: VERIFICATION (restores trust after prior discovery of DB-vs-docs drift)
+- **Type**: AUDIT (documented-as-wired vs actually-wired)
+- **Location**: `screener_filters` table on staging Supabase.
+- **Context**: Earlier in B63 Kyle raised that DB rows existed but values were not all populated per documented design. Trust in governance records was shaken. This audit verifies current state against `AUTHORITY_BASELINE.md` Section A.
+- **Finding**: **ALL 12 B58a baseline filter paths match AUTHORITY_BASELINE.md Section A exactly on `vn_max, di_min, di_max, min_volume` across both `live` and `paper` modes = 24 rows, exact match.** Additionally B63 added 2 new strong_trend filter paths (`active_strong_trend`, `vts_strong_trend`) = 28 total rows in DB today.
+- **Documented-vs-actual drift (1 item, intentional)**: B63 original scope doc proposed `min_volume=$250k` for strong_trend paths; B63.4 intentionally loosened to `min_volume=$0` to increase Path D trade count. Current DB reflects the loosened value. B63 scope doc is stale on this specific parameter. Log and close — no further action required.
+- **Residual observation**: B63.3 commit message references columns (min_price tiered, max_price, liquidity, market_cap, spread, history) outside the B58a baseline scope (baseline documented only `vn_max/di_min/di_max/min_volume/volume_24h_min`). Those columns are present in the schema but out of B58a-audit scope. B64 treats this as confirmed-baseline-intact, not a gap.
+- **Reference**: `AUTHORITY_BASELINE.md` Section A; `BATCH_63_COMPLETION_REPORT.md` §B64 audit section.
