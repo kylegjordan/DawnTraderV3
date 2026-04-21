@@ -1,27 +1,33 @@
 # Post-B62 / Pre-Launch Plan
 
-**Owner:** Kyle Jordan (locked 2026-04-18, restructured 2026-04-19)
+**Owner:** Kyle Jordan (locked 2026-04-18, restructured 2026-04-19, **synced 2026-04-22 after B63 implementation close**)
 **Status:** LOCKED — items below must complete before go-live
 **Scope:** Everything between B62 close (~Apr 19) and live-mode activation
 **ML work:** DEFERRED to post-launch. Items below are data/infrastructure PREP for ML; model work itself comes later.
 
-**2026-04-19 restructure note:** After ~72h of B62 post-deploy data (174k MCE samples, 359 closed trades), analysis revealed that high-DBS pairs ARE reaching strategies (conversion 0.21-0.29%) but are LOSING MORE than neutral pairs (25.6% win rate vs 37.9%, 70.1% stop-out rate). The existing "trend" strategies (morning_star, reverse_impulse, vwap_pullback) are actually reversal/pullback patterns being misapplied to trending pairs. Path D (a true trend-rider strategy) and TEC activation now precede the infrastructure items in priority order.
+**2026-04-19 restructure note:** After ~72h of B62 post-deploy data (174k MCE samples, 359 closed trades), analysis revealed that high-DBS pairs ARE reaching strategies but are LOSING MORE than neutral pairs. Existing "trend" strategies are actually reversal/pullback patterns being misapplied to trending pairs. Path D and TEC activation moved ahead of infrastructure items.
+
+**2026-04-22 sync note:** B63 implementation closed 2026-04-21 with 19-item scope expansion. Items 1 and 3 below are now DONE (B63 absorbed global DBS fix as Item 16). Items 2, 4, 5, 6, 7 remain open. A large audit track (Items 15/17/18/19 inside B63) is running in parallel during 24-48h observation window. New items 8-11 added for B63-internal deliverables that span beyond the implementation close.
 
 **Phase 15b folding:** The original B63 Sub-Phase C+D (DBS integration inventory + strategy re-audit) and B64/B65 (classifier deployment) are partly obsolete (B62 completed the classifier) and partly subsumed into the items below. Residual items preserved in §9.
 
 ---
 
-## Priority order (revised 2026-04-19)
+## Priority order (synced 2026-04-22)
 
-| # | Item | Effort | Batch |
-|---|---|---|---|
-| 1 | **Strong Bull Trend strategy** (new strategy for high-DBS pairs, aka Path D) | ~1 week | **B63** |
-| 2 | **TEC as shared service** (wire advanced TEC to VTS + paper; per-strategy config) | ~1 day | B63 or B64 |
-| 3 | Global DBS architecture fix (persistent store + 20-pair min floor) | ~4h | B64 |
-| 4 | Canonical Regime/Strategy map sync (main file + UI + IE metrics update + Strong Bull Trend entry) | < 1 day | B64 |
-| 5 | Asset class field + standardized signal/trade schema | 1 batch | B65 |
-| 6 | Data archiving update (pair + trade, VTS/Paper/Live + Option B backfill) | 1-2 batches | B65/B66 |
-| 7 | Regime drift tracking dashboard tab | 1 batch | B66 |
+| # | Item | Effort | Batch | Status |
+|---|---|---|---|---|
+| 1 | **Strong Bull Trend strategy** (new strategy for high-DBS pairs, aka Path D) | shipped | **B63** | ✅ **DONE** — commits `b7d4e0f8`/`4c6f2a3e`/`3514859b`/`7a59771f` + B63.4 + post-audit Items 10-14. |
+| 2 | **TEC as shared service** (wire advanced TEC to VTS + paper; per-strategy config) | ~1 day | **B64+ (deferred)** | ❌ NOT shipped in B63. Counterfactual audit reframed TEC as "amplifier for directionally-right entries, not rescue mechanism." Wiring still pending. |
+| 3 | Global DBS architecture fix (persistent store + 20-pair min floor) | shipped | **B63 Item 16** | ✅ **DONE** — commit `a4f5dbe0`. Persistent store + atomic snapshot + fixed 20-pair floor + 5-row behavior spec. Cold-start T+3s, warm-up T+63s verified post-deploy. |
+| 4 | Canonical Regime/Strategy map sync (main file + UI + IE metrics update + Strong Bull Trend entry) | < 1 day | **B64** | ⚠️ **PARTIAL** — strong_bull_trend registered in B63; MULTI_FAMILY_ELIGIBILITY added in B63 Item 11 for vwap_pullback. IE metrics description update + UI alignment still pending. |
+| 5 | Asset class field + standardized signal/trade schema | 1 batch | B65 | ❌ NOT started. |
+| 6 | Data archiving update (pair + trade, VTS/Paper/Live + Option B backfill) | 1-2 batches | B65/B66 | ❌ NOT started. |
+| 7 | Regime drift tracking dashboard tab | 1 batch | B66 | ❌ NOT started — 6 open design questions from 2026-04-17 still pending Kyle's answers. |
+| **NEW 8** | **B63 audit deliverables (Items 15/18/19)** — multi-lever adaptive framework + full SQE + classifier cadence/latency | ~1 week data-analysis | **B63 (open)** | ❌ Kicks off after 24-48h observation window closes (~2026-04-22 onward). |
+| **NEW 9** | **B63 Item 13 decision gate** — vwap_pullback-in-lane KEEP/TUNE/BUILD_DEDICATED | 30 min at checkpoint | **B63 (open)** | ❌ Evaluated ≥ 1 week post-deploy = 2026-04-28. Pre-registered spec: `BATCH_63_ITEM13_DECISION_GATE_SPEC.md`. |
+| **NEW 10** | **B64 authority baseline verification (Sections B + C)** — widen the Section A check | 2-4h | B64 | ⚠️ Section A verified 2026-04-22 (`B64-AUDIT-001` in CHANGES_AND_FIXES). B + C scheduled during B63 observation window. |
+| **NEW 11** | **LQ threshold tune for strong_trend** (deferred from B63) | data-dependent | B65 | ❌ Tune after observation if Path D trade count is too low / too noisy. |
 
 ---
 
