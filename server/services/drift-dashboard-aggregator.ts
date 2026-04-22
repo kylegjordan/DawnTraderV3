@@ -285,15 +285,18 @@ function aggregateRegimeMetrics(startMs: number, endMs: number): {
     ema: total > 0 ? +(emaSat / total * 100).toFixed(2) : 0,
   };
 
-  // Global DBS history: sample one snapshot per 30-minute bucket from the MCE stream.
-  // (The authoritative global-DBS snapshot is published by directionalBiasStore; the MCE stream
-  // carries per-pair DBS. We reconstruct a per-bucket GLOBAL from the pairs via median per bucket.)
-  // To keep compute bounded, a second pass with bucket-median would be ideal; MVP: sample current
-  // snapshot + emit hourly markers from telemetry ts ranges.
-  // For now, emit a coarse history keyed by cycleId rounded hours — best effort.
-  // (This is a known simplification; a richer history can be added in a follow-up batch.)
-  const globalDbsHistory: Array<{ timestamp: string; score: number; category: string; pairCount: number }> = [];
-  const globalDbsTransitions: Array<{ timestamp: string; from: string; to: string }> = [];
+  // Global DBS history + transitions come from the store's ring buffers (B64a follow-up).
+  // Store persists up to 96 snapshots (24h at 15-min cadence) + last 50 category transitions.
+  // We filter by the caller's window here so the aggregator's window toggle is honored even
+  // when the store's history is longer than the requested window.
+  const rawHistory = directionalBiasStore.getHistory();
+  const rawTransitions = directionalBiasStore.getTransitions();
+  const globalDbsHistory = rawHistory
+    .filter(h => h.timestamp >= startMs && h.timestamp <= endMs)
+    .map(h => ({ timestamp: new Date(h.timestamp).toISOString(), score: h.score, category: h.category, pairCount: h.pairCount }));
+  const globalDbsTransitions = rawTransitions
+    .filter(t => t.timestamp >= startMs && t.timestamp <= endMs)
+    .map(t => ({ timestamp: new Date(t.timestamp).toISOString(), from: t.from, to: t.to }));
 
   return { totalSamples: total, shares, familyFlickerPct, rbsDriftContaminationPct, componentClampSaturationPct, dbsDistribution: dbsDist, globalDbsHistory, globalDbsTransitions };
 }

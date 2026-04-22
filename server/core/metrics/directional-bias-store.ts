@@ -66,9 +66,40 @@ const PAIR_HARD_EXPIRY_MS = 5 * 60 * 1000;
 /** Fixed floor — do not compute global DBS from fewer than this many pairs. */
 export const GLOBAL_DBS_MIN_SAMPLE_COUNT = 20;
 
+/** Ring-buffer size for snapshot history. 96 entries × 15 min = 24h of history. */
+const SNAPSHOT_HISTORY_MAX = 96;
+
+/** Ring-buffer size for category transitions. Keeps most recent N category changes. */
+const TRANSITION_HISTORY_MAX = 50;
+
+/**
+ * Minimal snapshot record for the history ring buffer. Trimmed from the full
+ * GlobalDbsSnapshot to keep memory bounded — we only persist the values the
+ * dashboard needs for plotting.
+ */
+export interface HistoricalSnapshot {
+  timestamp: number;  // epoch ms
+  score: number;
+  category: string;
+  pairCount: number;
+}
+
+/**
+ * Category transition event. Emitted by the store whenever publishSnapshot
+ * produces a different `category` than the prior published snapshot.
+ */
+export interface CategoryTransition {
+  timestamp: number;
+  from: string;
+  to: string;
+  scoreAt: number;
+}
+
 class DirectionalBiasStore {
   private store = new Map<string, PairStoreEntry>();
   private latestSnapshot: GlobalDbsSnapshot | null = null;
+  private history: HistoricalSnapshot[] = [];
+  private transitions: CategoryTransition[] = [];
 
   /**
    * Update (or insert) a pair's DBS entry. Called whenever computePairDirectionalBias
@@ -180,13 +211,52 @@ class DirectionalBiasStore {
     }
 
     // Row 5: happy path — publish fresh
+    const priorSnapshot = this.latestSnapshot;
+    const nowMs = Date.now();
     this.latestSnapshot = {
       value: computed,
-      snapshotTime: Date.now(),
+      snapshotTime: nowMs,
       coverage: freshCount,
       isStale: false,
     };
+
+    // Record in history ring buffer (bounded to 24h at 15-min cadence).
+    this.history.push({
+      timestamp: nowMs,
+      score: computed.score,
+      category: computed.category,
+      pairCount: freshCount,
+    });
+    if (this.history.length > SNAPSHOT_HISTORY_MAX) {
+      this.history.shift();
+    }
+
+    // Emit a transition if category changed vs prior non-stale snapshot.
+    // (Stale snapshots don't reflect a real change, so we compare against
+    // the prior FRESH value instead of prior served value.)
+    if (priorSnapshot && !priorSnapshot.isStale && priorSnapshot.value.category !== computed.category) {
+      this.transitions.push({
+        timestamp: nowMs,
+        from: priorSnapshot.value.category,
+        to: computed.category,
+        scoreAt: computed.score,
+      });
+      if (this.transitions.length > TRANSITION_HISTORY_MAX) {
+        this.transitions.shift();
+      }
+    }
+
     return this.latestSnapshot;
+  }
+
+  /** Historical snapshot ring buffer (up to last 24h at 15-min cadence). */
+  getHistory(): HistoricalSnapshot[] {
+    return this.history.slice(); // defensive copy
+  }
+
+  /** Category transitions observed across published snapshots. */
+  getTransitions(): CategoryTransition[] {
+    return this.transitions.slice();
   }
 
   /**
@@ -215,6 +285,8 @@ class DirectionalBiasStore {
   clear(): void {
     this.store.clear();
     this.latestSnapshot = null;
+    this.history = [];
+    this.transitions = [];
   }
 }
 

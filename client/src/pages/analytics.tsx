@@ -1099,6 +1099,48 @@ interface DriftDashboardData {
   tradeCounts: { total: number; wins: number; losses: number; winRate: number; avgNetPct: number };
 }
 
+/**
+ * B64a follow-up: simple inline-SVG sparkline for global DBS 24h history.
+ * Zero external dependencies — renders a polyline scaled to the data's actual
+ * [min, max] range with a zero-axis marker if the range crosses zero. Keeps
+ * bundle size small and matches the rest of the dashboard's understated style.
+ */
+function GlobalDbsSparkline({ history }: { history: Array<{ timestamp: string; score: number; category: string; pairCount: number }> }) {
+  if (!history || history.length < 2) return null;
+  const W = 600;
+  const H = 80;
+  const PADDING = 4;
+  const scores = history.map(h => h.score);
+  const minS = Math.min(...scores, 0);
+  const maxS = Math.max(...scores, 0);
+  const span = Math.max(maxS - minS, 0.01);
+  const n = history.length;
+  const xFor = (i: number) => PADDING + (i / Math.max(n - 1, 1)) * (W - PADDING * 2);
+  const yFor = (s: number) => PADDING + (1 - (s - minS) / span) * (H - PADDING * 2);
+  const zeroY = yFor(0);
+  const points = history.map((h, i) => `${xFor(i).toFixed(1)},${yFor(h.score).toFixed(1)}`).join(' ');
+  const lastPoint = history[history.length - 1];
+  const firstTs = new Date(history[0].timestamp).toLocaleTimeString();
+  const lastTs = new Date(lastPoint.timestamp).toLocaleTimeString();
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-20 bg-muted/30 rounded">
+        {minS < 0 && maxS > 0 && (
+          <line x1={PADDING} x2={W - PADDING} y1={zeroY} y2={zeroY} stroke="currentColor" strokeOpacity={0.2} strokeDasharray="2,2" />
+        )}
+        <polyline points={points} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.5} />
+        <circle cx={xFor(n - 1)} cy={yFor(lastPoint.score)} r={2.5} fill="hsl(var(--primary))" />
+      </svg>
+      <div className="flex justify-between text-xs text-muted-foreground mt-1 font-mono">
+        <span>{firstTs} · {minS >= 0 ? '+' : ''}{minS.toFixed(3)}</span>
+        <span className="text-center">{n} snapshots</span>
+        <span>{lastTs} · max {maxS >= 0 ? '+' : ''}{maxS.toFixed(3)}</span>
+      </div>
+    </div>
+  );
+}
+
 function DriftDashboardSection() {
   const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_24h');
   const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: DriftDashboardData }>({
@@ -1256,9 +1298,35 @@ function DriftDashboardSection() {
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  History line + transition markers: planned follow-up. Current MVP shows live snapshot only.
-                </p>
+                {/* 24h history sparkline + transitions list (B64a) */}
+                {d.globalDbs.history24h && d.globalDbs.history24h.length > 1 ? (
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">24-hour snapshot history ({d.globalDbs.history24h.length} points, {d.globalDbs.history24h.length * 15}m window actual)</p>
+                      <GlobalDbsSparkline history={d.globalDbs.history24h} />
+                    </div>
+                    {d.globalDbs.transitions && d.globalDbs.transitions.length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Category transitions in window ({d.globalDbs.transitions.length})</p>
+                        <div className="space-y-1">
+                          {d.globalDbs.transitions.slice(-10).map((t, i) => (
+                            <div key={i} className="text-xs font-mono flex items-center gap-2">
+                              <span className="text-muted-foreground">{new Date(t.timestamp).toLocaleString()}</span>
+                              <span>{t.from.replace(/_/g, ' ')} → {t.to.replace(/_/g, ' ')}</span>
+                            </div>
+                          ))}
+                          {d.globalDbs.transitions.length > 10 && (
+                            <p className="text-xs text-muted-foreground italic">showing last 10 of {d.globalDbs.transitions.length}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    History + transitions accumulate as the store publishes snapshots. Cold start after deploy; expect data to populate within ~15 minutes of stable operation.
+                  </p>
+                )}
               </div>
 
               {/* Strategies by regime */}
