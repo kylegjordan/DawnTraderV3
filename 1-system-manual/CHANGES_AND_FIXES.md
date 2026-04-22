@@ -1746,3 +1746,33 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
 - **Documented-vs-actual drift (1 item, intentional)**: B63 original scope doc proposed `min_volume=$250k` for strong_trend paths; B63.4 intentionally loosened to `min_volume=$0` to increase Path D trade count. Current DB reflects the loosened value. B63 scope doc is stale on this specific parameter. Log and close — no further action required.
 - **Residual observation**: B63.3 commit message references columns (min_price tiered, max_price, liquidity, market_cap, spread, history) outside the B58a baseline scope (baseline documented only `vn_max/di_min/di_max/min_volume/volume_24h_min`). Those columns are present in the schema but out of B58a-audit scope. B64 treats this as confirmed-baseline-intact, not a gap.
 - **Reference**: `AUTHORITY_BASELINE.md` Section A; `BATCH_63_COMPLETION_REPORT.md` §B64 audit section.
+
+### DBS-B64a-001: Regime & Strategy Drift Dashboard
+- **Severity**: FEATURE (observation tool)
+- **Type**: NEW UI + NEW API + STORE EXTENSION
+- **Location**:
+  - NEW `server/services/drift-dashboard-aggregator.ts` — reads closed-trade JSONs + MCE telemetry JSONLs; computes B62-style metrics + strategies-by-regime tables; reads live snapshot/history/transitions from `directional-bias-store`.
+  - MOD `server/routes.ts` — new endpoint `GET /api/analytics/drift-dashboard?window=rolling_24h|rolling_7d|rolling_30d|cohort_latest` (auth required).
+  - MOD `server/core/metrics/directional-bias-store.ts` — added `snapshotHistory` ring buffer (96 × 15-min = 24h) + `transitions` array (last 50 category changes). New public methods `getHistory()` + `getTransitions()`. Transitions only emitted across FRESH snapshots (stale carry-forwards deliberately excluded to avoid false transition events).
+  - MOD `client/src/pages/analytics.tsx` — new "Drift Dashboard" tab (5th of 8). `DriftDashboardSection` with window toggle + summary cards + regime shares + regime integrity metrics + DBS distribution counts + Global DBS live snapshot with isStale badge + `GlobalDbsSparkline` inline SVG chart + category transition list + per-regime strategy performance tables.
+- **Design decisions (per Kyle 6-question spec 2026-04-22):**
+  1. Window: rolling 24h/7d/30d + since-last-restart toggle
+  2. Metrics: all B62-72h-report metrics (regime shares, family flicker, RBS drift contamination, component-clamp saturation, DBS distribution)
+  3. Strategy grouping: by REGIME (for each regime, which strategies fired + WR + avg R / net PnL)
+  4. DBS distribution: simple category counts, no heavy charts
+  5. Global DBS: current snapshot + 24h history sparkline + transitions list
+  6. CLOSED trades only (live positions stay on existing Active Trades page)
+- **Scope constraints:**
+  - No caching — aggregator reads disk on each request. Add 60s memoization later if CPU becomes an issue.
+  - Regime strings sourced through canonical SSOT (`REGIMES.*` from `canonical-regime-strategy-map.ts`) to satisfy the `regime_mapping_integrity` test (no hardcoded regime strings outside config/tests).
+  - Zero external chart library dependencies — inline SVG for sparkline.
+- **Hotfix 1** (`cd139ed8`): initial UI-sync commit had `await import(...)` inside a sync function; esbuild failed. Replaced with static top-of-file import.
+- **Hotfix 2** (`cf7baef1`): regime_mapping_integrity test failed because aggregator hardcoded regime strings in 4 places. Routed all through `CANONICAL_REGIMES` / `REGIMES.*`.
+- **Post-deploy verification (PM2 #84, 2026-04-22 ~02:05 UTC):**
+  - Endpoint returns 24h rolling: 84 closed trades, WR 55.95%, avg net +1.414%, 72,765 MCE samples
+  - Regime shares: TFS 40.4% / RBS 25.5% / ST 21.8% / IE 10.6% / HVU 1.8%
+  - Family flicker 1.24% (target ≤ 2.0% — passing)
+  - Strategy tables populated per regime (e.g. RBS range_trade n=21 WR 71%, TFS strong_bull_trend n=32 WR 53%)
+  - History + transitions start empty (cold start) — expected; populate within ~15-30 min of stable operation
+- **Commits**: `eb790763` (B64a), `cd139ed8` (HF1), `0be18c4f` (B64a.1 history+sparkline), `cf7baef1` (HF2 regime strings).
+- **Reference**: `BATCH_63_SCOPE.md` Item 7 originally planned as B71 drift dashboard tab; shifted up to B64a since Kyle wanted it operational during the B63 audit window (Items 15/18/19 in flight).
