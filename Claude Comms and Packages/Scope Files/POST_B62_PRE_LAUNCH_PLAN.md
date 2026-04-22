@@ -27,7 +27,9 @@
 | **NEW 8** | **B63 audit deliverables (Items 15/18/19)** — multi-lever adaptive framework + full SQE + classifier cadence/latency | ~1 week data-analysis | **B63 (open)** | ❌ Kicks off after 24-48h observation window closes (~2026-04-22 onward). |
 | **NEW 9** | **B63 Item 13 decision gate** — vwap_pullback-in-lane KEEP/TUNE/BUILD_DEDICATED | 30 min at checkpoint | **B63 (open)** | ❌ Evaluated ≥ 1 week post-deploy = 2026-04-28. Pre-registered spec: `BATCH_63_ITEM13_DECISION_GATE_SPEC.md`. |
 | **NEW 10** | **B64 authority baseline verification (Sections B + C)** — widen the Section A check | 2-4h | B64 | ⚠️ Section A verified 2026-04-22 (`B64-AUDIT-001` in CHANGES_AND_FIXES). B + C scheduled during B63 observation window. |
-| **NEW 11** | **LQ threshold tune for strong_trend** (deferred from B63) | data-dependent | B65 | ❌ Tune after observation if Path D trade count is too low / too noisy. |
+| **NEW 11** | **LQ threshold tune for strong_trend** (deferred from B63) | data-dependent | B66 | ❌ Tune after observation if Path D trade count is too low / too noisy. |
+| **NEW 12** | **External Data Context Layer — Phase 1 (multi-TF + macro)** | 2-3 weeks | **B67** | ❌ Added 2026-04-22. Higher-timeframe OHLC (1h, 4h) + BTC dominance + crypto market cap momentum + perpetual funding rates. Free APIs only. Centralized context service consumed by existing strategies as optional confidence multipliers. Triggered by backtest findings that naive technical detectors (liquidity_trap inversion, VSB, simple bullish engulfing) converge to poor prospective signal/noise — adding NEW strategies is lower value than adding CONTEXT to existing strategies. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 1. |
+| **NEW 13** | **External Data Context Layer — Phase 2 (derivatives + cross-asset)** | 2-3 weeks | **B68** | ❌ Added 2026-04-22. Exchange inflows/outflows (BTC/ETH) + liquidation cascades + DXY + SPX. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 2. Conditional on B67 showing measurable lift on existing-strategy WR. |
 
 ---
 

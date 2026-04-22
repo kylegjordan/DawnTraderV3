@@ -90,17 +90,36 @@ Steps 1-8 are COMPLETE (Phases 12-14.7, Batches 1-54).
 7. Phase 20 — Production Hardening
 8. Phase 21 — Live Mode Activation (real Kraken orders)
 
-**Pre-Live tracked work items (folded into the phases above):**
-- **Post-B62/Pre-Launch Consolidation** — 7-item plan locked by Kyle (original 5 items 2026-04-18, restructured 2026-04-19 after 72h verification analysis). Full detail in `Claude Comms and Packages/Scope Files/POST_B62_PRE_LAUNCH_PLAN.md`. Priority order:
-  1. **Strong Bull Trend strategy** (aka Path D — new strategy for high-DBS bullish pairs). ~1 week. B63. Triggered by 2026-04-19 analysis: high-DBS trades losing at 25.6% WR / 70% stop-out rate because existing "trend" strategies (morning_star, reverse_impulse, vwap_pullback) are actually reversal/pullback patterns misapplied to trending pairs.
-  2. **TEC as shared service** — wire dormant advanced TEC (trailing-exit-controller.ts, built but never activated) to both VTS and paper engine; per-strategy `tecConfig` in canonical map (no hard-coded strategy checks). ~1 day. B63 or B64.
-  3. Global DBS architecture fix — persistent store + end-of-cycle snapshot + fixed 20-pair min floor. ~4h. B64.
-  4. Canonical Regime/Strategy map sync — main file + Analytics & Diagnostics UI + IE metrics update + Strong Bull Trend entry. < 1 day. B64.
-  5. Asset class field + standardized schema across all signal/trade tables. 1 batch. B65.
-  6. Data archiving update — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches. B65/B66.
-  7. Regime drift tracking dashboard tab. 1 batch. B66.
-  - **Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined). Fits current Hetzner CPX22 disk with ~18 months runway.
-  - **ML prep only** — model work itself deferred to post-launch Phase 17/18.
+**Pre-Live tracked work items — Phase 15c sequencing (updated 2026-04-22 after B63 implementation close + backtest findings):**
+
+Full detail for all items in `Claude Comms and Packages/Scope Files/POST_B62_PRE_LAUNCH_PLAN.md`. External data inventory in `EXTERNAL_DATA_SOURCES_INVENTORY.md`.
+
+**Done (B63 shipped 2026-04-21):**
+  - ✅ Strong Bull Trend strategy (Path D, Items 1-9 of B63)
+  - ✅ Counter-trend LONG guards (B63 Item 10 — mirror defect fix)
+  - ✅ vwap_pullback promotion into strong-trend lane + geometry override + mode-overlay bypass (B63 Items 11/12/14)
+  - ✅ Global DBS architecture fix (B63 Item 16 — persistent store + snapshot + 20-pair floor)
+  - ✅ B58a Authority baseline verification (B64-lite, Section A + Sections B+C both intact)
+
+**In flight (B63 audit track — running during observation window):**
+  - **B63 Item 15** — Multi-lever adaptive framework audit (audit-only deliverable)
+  - **B63 Item 18** — Full SQE audit (audit-only deliverable)
+  - **B63 Item 19** — Classifier cadence / latency audit (audit-only deliverable)
+  - **B63 Item 13** — vwap_pullback-in-lane decision gate (evaluated ≥ 2026-04-28)
+
+**Queued sequence (revised 2026-04-22):**
+  1. **B64 — Canonical map sync / IE metrics / residual UI alignment** — ~1 day. Partial work done in B63 (strong_bull_trend registered, MULTI_FAMILY_ELIGIBILITY added, secondaryMetrics annotations). Remaining: IE metrics text + any residual UI polish surfaced by Items 15/18/19.
+  2. **B65 — TEC wiring as shared service** — dormant advanced TEC to VTS + paper engine with per-strategy `tecConfig` in canonical map. ~1-2 days. Counterfactual audit reframed TEC as amplifier for directionally-right entries, not rescue mechanism; scope clarified, wiring still pending.
+  3. **B66 — Strategy Refinement from Audit Outputs** — action whatever Items 15/18/19 recommend: threshold recalibrations, inputs replacements, framework adjustments. Scope sized based on audit deliverables; could be 1 batch or split across 2-3.
+  4. **B67 — External Data Context Layer Phase 1 (NEW 2026-04-22)** — first external context integration: higher-timeframe OHLC (1h, 4h) + BTC dominance + crypto market cap momentum + perpetual funding rates. Free APIs only. Centralized context service (`market-context` pattern). All existing strategies consume via optional confidence multipliers. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 1. Rationale: three naive-pattern backtests (LONG liquidity_trap, VSB, simple bullish engulfing) converged to similar poor prospective signal/noise, confirming that NEW technical strategies are low-value but context FILTERS would lift all existing strategies simultaneously. ~2-3 weeks.
+  5. **B68 — External Data Context Layer Phase 2 (NEW 2026-04-22)** — second external integration: exchange inflows/outflows (BTC/ETH), liquidation cascades, DXY + SPX cross-asset. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 2. Conditional on B67 showing measurable lift. ~2-3 weeks.
+  6. **B69 — Asset class field + standardized schema** across all signal/trade tables. 1 batch. Prerequisite for expansion to equities/FX and for asset-class-specific external data routing.
+  7. **B70 — Data archiving update** — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches.
+  8. **B71 — Regime & Strategy Drift Dashboard tab** — permanent UI surfaces for regime share, DBS distribution, strategy WR by cohort, and B62-style observation-window metrics. 1 batch. Mirrors the reporting done during B62 72h observation period.
+
+**Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined, pre-external-data; B67+B68 add minimal additional storage). Fits current Hetzner CPX22 disk with ~18 months runway.
+
+**ML prep only** — model work itself deferred to post-launch Phase 17/18.
 - **Archive minimum-viable capture** — SUPERSEDED by the 2026-04-18 post-B62 plan above. The MVP capture is replaced by the full capture plan (all pair data + all trade data + OHLC references).
 - **Paper trading pipeline readiness** — verify the full paper pipeline works under the new math, new filters, and dual-path (quant + pattern) end-to-end. Folded into Phase 19. **DEPENDS ON Phase 15c item 5** (standardized schema must be in place before paper mode activates, otherwise paper trades lose DBS/friction context).
 - **Live trading pipeline readiness** — verify the live execution pipeline is sound. May require rebuild from paper if structural divergence is found. Folded into Phase 20 + Phase 21 kickoff.
