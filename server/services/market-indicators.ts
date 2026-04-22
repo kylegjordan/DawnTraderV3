@@ -30,6 +30,9 @@ import {
 import { computeMarketFriction, describeFriction, type FrictionStatus } from '../core/metrics/cost-metrics.js';
 import { getMarketContextEngine } from './market-context-engine.js';
 import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
+// B63 Item 16: static import of the persistent-store singleton so we can read snapshot
+// staleness flags without awaiting a dynamic import inside a sync function.
+import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
 import { getCostMetrics as getCacheMetrics, getCacheSize } from '../core/cache/cost-cache.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
@@ -309,7 +312,7 @@ export function getMarketIndicators(): MarketIndicators {
     }
     // B63 Item 16: read the raw snapshot for staleness + age metadata (value itself
     // is already returned from computeGlobalBias above; we just want the flags).
-    const { directionalBiasStore } = await import('../core/metrics/directional-bias-store.js');
+    // Uses the top-of-file static import of directionalBiasStore to keep this function sync.
     const snapshot = directionalBiasStore.getLatestSnapshot();
     if (snapshot) {
       globalDBSIsStale = snapshot.isStale;
