@@ -25,12 +25,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
+// B64a: regime names imported from the canonical SSOT to satisfy the
+// regime_mapping_integrity test ("no hardcoded regime strings outside config/tests").
+import { CANONICAL_REGIMES, REGIMES, type CanonicalRegimeType } from '../config/canonical-regime-strategy-map.js';
 
 const TRADES_DIR = '/home/deploy/dawntrader/logs/virtual_trades';
 const TELEMETRY_DIR = '/home/deploy/dawntrader/logs/phase15b_dbs_telemetry';
 
-const REGIMES = ['TREND_FRIENDLY_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION', 'RANGE_BOUND_STABLE', 'HIGH_VOLATILITY_UNSTABLE'] as const;
-type RegimeName = typeof REGIMES[number];
+const REGIMES = CANONICAL_REGIMES;
+type RegimeName = CanonicalRegimeType;
 
 const DBS_CATEGORIES = ['UP_STRONG', 'UP_MODERATE', 'UP_WEAK', 'NEUTRAL', 'DOWN_WEAK', 'DOWN_MODERATE', 'DOWN_STRONG'] as const;
 type DbsCategory = typeof DBS_CATEGORIES[number];
@@ -213,7 +216,10 @@ function* streamTelemetryLines(startMs: number, endMs: number): Generator<McePer
 // ──────────────────────────────────────────────────────────────────────────────
 
 function emptyRegimeShares(): Record<RegimeName, number> {
-  return { TREND_FRIENDLY_STABLE: 0, IMPULSE_EXPANSION: 0, STRUCTURAL_TRANSITION: 0, RANGE_BOUND_STABLE: 0, HIGH_VOLATILITY_UNSTABLE: 0 };
+  // Build dynamically from CANONICAL_REGIMES so we never hardcode regime names here.
+  const out = {} as Record<RegimeName, number>;
+  for (const r of REGIMES) out[r] = 0;
+  return out;
 }
 
 function emptyDbsDistribution(): Record<DbsCategory, number> {
@@ -257,7 +263,7 @@ function aggregateRegimeMetrics(startMs: number, endMs: number): {
     if (dbsCat && dbsCat in dbsDist) dbsDist[dbsCat] += 1;
 
     // RBS drift contamination: RBS samples where |DBS| >= 0.30 (directional pair mis-labeled as range).
-    if (regime === 'RANGE_BOUND_STABLE') {
+    if (regime === REGIMES.RANGE_BOUND_STABLE) {
       rbsTotal += 1;
       if (Math.abs(sample.dbs?.score ?? 0) >= 0.30) rbsDriftContaminated += 1;
     }
@@ -321,7 +327,8 @@ function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, St
     const netPct = entryPrice > 0 ? (net / entryPrice) * 100 : 0;
     s.sumNetPct += netPct;
   }
-  const out: Record<RegimeName, StrategyStats[]> = { TREND_FRIENDLY_STABLE: [], IMPULSE_EXPANSION: [], STRUCTURAL_TRANSITION: [], RANGE_BOUND_STABLE: [], HIGH_VOLATILITY_UNSTABLE: [] };
+  const out = {} as Record<RegimeName, StrategyStats[]>;
+  for (const r of REGIMES) out[r] = [];
   for (const r of REGIMES) {
     const arr: StrategyStats[] = [];
     for (const s of buckets[r].values()) {
