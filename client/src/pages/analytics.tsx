@@ -1073,6 +1073,242 @@ interface CanonicalMapData {
   [key: string]: any;
 }
 
+// B64a: Regime & Strategy Drift Dashboard — closed-trades observation lens.
+// Mirrors the B62 72h completion report's metrics in a permanent always-on UI.
+interface DriftDashboardData {
+  window: string;
+  windowStart: string;
+  windowEnd: string;
+  cohortStart?: string;
+  regime: {
+    totalSamples: number;
+    shares: Record<string, number>;
+    familyFlickerPct: number | null;
+    rbsDriftContaminationPct: number | null;
+    componentClampSaturationPct: { slope: number; return: number; ema: number };
+  };
+  strategiesByRegime: Record<string, Array<{
+    strategy: string; tradeCount: number; winCount: number; winRate: number; avgNetPct: number; sumNetPct: number;
+  }>>;
+  dbsDistribution: Record<string, number>;
+  globalDbs: {
+    current: { score: number | null; category: string | null; pairCount: number; isStale: boolean; snapshotAgeSeconds: number | null };
+    history24h: Array<{ timestamp: string; score: number; category: string; pairCount: number }>;
+    transitions: Array<{ timestamp: string; from: string; to: string }>;
+  };
+  tradeCounts: { total: number; wins: number; losses: number; winRate: number; avgNetPct: number };
+}
+
+function DriftDashboardSection() {
+  const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_24h');
+  const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: DriftDashboardData }>({
+    queryKey: ['/api/analytics/drift-dashboard', windowSel],
+    queryFn: () => apiFetch(`/api/analytics/drift-dashboard?window=${windowSel}`),
+    refetchInterval: 60_000, // refresh every minute
+  });
+
+  const d = resp?.data;
+
+  const WINDOW_LABELS: Record<string, string> = {
+    rolling_24h: 'Rolling 24 hours',
+    rolling_7d: 'Rolling 7 days',
+    rolling_30d: 'Rolling 30 days',
+    cohort_latest: 'Since last restart',
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" /> Regime &amp; Strategy Drift Dashboard
+            </span>
+            <div className="flex items-center gap-2">
+              {(['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'] as const).map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setWindowSel(w)}
+                  className={`px-3 py-1 text-xs rounded-md border ${
+                    windowSel === w ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+                  }`}
+                >
+                  {WINDOW_LABELS[w]}
+                </button>
+              ))}
+            </div>
+          </CardTitle>
+          {d && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Window: {new Date(d.windowStart).toLocaleString()} → {new Date(d.windowEnd).toLocaleString()}
+              {d.cohortStart ? ` (cohort boundary at ${new Date(d.cohortStart).toLocaleString()})` : ''}
+            </p>
+          )}
+        </CardHeader>
+        <CardContent>
+          {isLoading && <p className="text-sm text-muted-foreground">Loading dashboard…</p>}
+          {error && <p className="text-sm text-red-500">Failed to load dashboard: {String(error)}</p>}
+          {d && (
+            <div className="space-y-6">
+
+              {/* Top-level tallies */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Summary (closed trades)</h4>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">Total trades</p>
+                    <p className="text-2xl font-mono font-bold">{d.tradeCounts.total}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">Wins / Losses</p>
+                    <p className="text-xl font-mono font-bold">{d.tradeCounts.wins} / {d.tradeCounts.losses}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">Win rate</p>
+                    <p className="text-2xl font-mono font-bold">{d.tradeCounts.winRate.toFixed(1)}%</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">Avg net %</p>
+                    <p className="text-2xl font-mono font-bold">{d.tradeCounts.avgNetPct >= 0 ? '+' : ''}{d.tradeCounts.avgNetPct.toFixed(3)}%</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">MCE samples</p>
+                    <p className="text-2xl font-mono font-bold">{d.regime.totalSamples.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Regime shares */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Regime distribution ({d.regime.totalSamples.toLocaleString()} MCE samples)</h4>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {Object.entries(d.regime.shares).map(([r, pct]) => (
+                    <div key={r} className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-xs text-muted-foreground">{r.replace(/_/g, ' ')}</p>
+                      <p className="text-xl font-mono font-bold">{pct.toFixed(1)}%</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Family-level integrity metrics */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Regime integrity (B62-style)</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">Family flicker</p>
+                    <p className="text-xl font-mono font-bold">
+                      {d.regime.familyFlickerPct === null ? '—' : `${d.regime.familyFlickerPct.toFixed(2)}%`}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Target ≤ 2.0%</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">RBS drift contamination</p>
+                    <p className="text-xl font-mono font-bold">
+                      {d.regime.rbsDriftContaminationPct === null ? '—' : `${d.regime.rbsDriftContaminationPct.toFixed(2)}%`}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Target &lt; 30%; B62 target 0%</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <p className="text-xs text-muted-foreground">Component clamp saturation</p>
+                    <p className="text-xs font-mono">
+                      slope {d.regime.componentClampSaturationPct.slope.toFixed(1)}% ·
+                      return {d.regime.componentClampSaturationPct.return.toFixed(1)}% ·
+                      ema {d.regime.componentClampSaturationPct.ema.toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* DBS distribution */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">DBS category distribution (per-pair-per-cycle samples)</h4>
+                <div className="grid grid-cols-7 gap-2">
+                  {(['UP_STRONG', 'UP_MODERATE', 'UP_WEAK', 'NEUTRAL', 'DOWN_WEAK', 'DOWN_MODERATE', 'DOWN_STRONG'] as const).map((cat) => (
+                    <div key={cat} className="p-2 rounded bg-muted/50 text-center">
+                      <p className="text-xs text-muted-foreground">{cat.replace('_', ' ')}</p>
+                      <p className="text-lg font-mono font-bold">{(d.dbsDistribution[cat] ?? 0).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Global DBS */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Global DBS (live snapshot)</h4>
+                <div className="p-4 rounded-lg bg-muted/50 flex items-center gap-4">
+                  <span className="text-3xl font-mono font-bold">
+                    {d.globalDbs.current.score !== null
+                      ? (d.globalDbs.current.score >= 0 ? '+' : '') + d.globalDbs.current.score.toFixed(3)
+                      : '—'}
+                  </span>
+                  <Badge variant="outline">{d.globalDbs.current.category ?? 'NONE'}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {d.globalDbs.current.pairCount > 0 ? `${d.globalDbs.current.pairCount} pairs` : 'awaiting data'}
+                  </span>
+                  {d.globalDbs.current.isStale && (
+                    <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+                      ⚠ Stale {typeof d.globalDbs.current.snapshotAgeSeconds === 'number'
+                        ? `(${d.globalDbs.current.snapshotAgeSeconds < 60
+                            ? `${d.globalDbs.current.snapshotAgeSeconds}s`
+                            : `${Math.round(d.globalDbs.current.snapshotAgeSeconds / 60)}m`} old)`
+                        : ''}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  History line + transition markers: planned follow-up. Current MVP shows live snapshot only.
+                </p>
+              </div>
+
+              {/* Strategies by regime */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Strategy performance by regime at entry (closed trades in window)</h4>
+                <div className="space-y-4">
+                  {Object.entries(d.strategiesByRegime).map(([regime, strategies]) => (
+                    <div key={regime}>
+                      <p className="text-xs font-medium mb-2">{regime.replace(/_/g, ' ')}</p>
+                      {strategies.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">no closed trades in this regime during the window</p>
+                      ) : (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-left text-muted-foreground border-b">
+                              <th className="py-1 pr-4">Strategy</th>
+                              <th className="py-1 pr-4 text-right">N</th>
+                              <th className="py-1 pr-4 text-right">Wins</th>
+                              <th className="py-1 pr-4 text-right">WR</th>
+                              <th className="py-1 pr-4 text-right">Avg net %</th>
+                              <th className="py-1 pr-4 text-right">Sum net %</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {strategies.map((s) => (
+                              <tr key={s.strategy} className="border-b border-border/40">
+                                <td className="py-1 pr-4 font-mono">{s.strategy}</td>
+                                <td className="py-1 pr-4 text-right font-mono">{s.tradeCount}</td>
+                                <td className="py-1 pr-4 text-right font-mono">{s.winCount}</td>
+                                <td className="py-1 pr-4 text-right font-mono">{s.winRate.toFixed(1)}%</td>
+                                <td className={`py-1 pr-4 text-right font-mono ${s.avgNetPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>{s.avgNetPct >= 0 ? '+' : ''}{s.avgNetPct.toFixed(3)}%</td>
+                                <td className={`py-1 pr-4 text-right font-mono ${s.sumNetPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>{s.sumNetPct >= 0 ? '+' : ''}{s.sumNetPct.toFixed(2)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function MappingDriftSection() {
   const [syncing, setSyncing] = useState(false);
 
@@ -2010,7 +2246,7 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-7 max-w-5xl">
+          <TabsList className="grid w-full grid-cols-8 max-w-6xl">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
@@ -2026,6 +2262,10 @@ export default function AnalyticsPage() {
             <TabsTrigger value="mapping-drift" className="flex items-center gap-2">
               <GitBranch className="w-4 h-4" />
               Mapping Drift
+            </TabsTrigger>
+            <TabsTrigger value="drift" className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Drift Dashboard
             </TabsTrigger>
             <TabsTrigger value="top-batch" className="flex items-center gap-2">
               <List className="w-4 h-4" />
@@ -2055,6 +2295,10 @@ export default function AnalyticsPage() {
           
           <TabsContent value="mapping-drift" className="mt-6">
             <MappingDriftSection />
+          </TabsContent>
+
+          <TabsContent value="drift" className="mt-6">
+            <DriftDashboardSection />
           </TabsContent>
           
           <TabsContent value="top-batch" className="mt-6">

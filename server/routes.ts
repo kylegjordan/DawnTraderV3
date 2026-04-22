@@ -7489,7 +7489,31 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ ok: false, error: error.message });
     }
   });
-  
+
+  // B64a: Regime & Strategy Drift Dashboard — closed-trades-only observation lens.
+  // Mirrors the metrics the B62 72h completion report produced (regime shares, family
+  // flicker, drift contamination, component-clamp saturation, DBS distribution, strategy
+  // performance by regime). Closed trades only; live positions stay on existing Active
+  // Trades page.
+  //
+  // Query params:
+  //   ?window=rolling_24h | rolling_7d | rolling_30d | cohort_latest (default: rolling_24h)
+  apiRouter.get('/analytics/drift-dashboard', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { computeDriftDashboard } = await import('./services/drift-dashboard-aggregator.js') as any;
+      const win = (req.query.window as string) || 'rolling_24h';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'. must be one of ${allowed.join(', ')}` });
+      }
+      const data = computeDriftDashboard(win);
+      res.json({ ok: true, data });
+    } catch (error: any) {
+      console.error('[B64a][drift-dashboard] Error computing dashboard:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/narrative-feed - Get narrative events
   apiRouter.get('/narrative-feed', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
