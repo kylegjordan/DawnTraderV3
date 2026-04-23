@@ -879,81 +879,106 @@ export class PaperExecutionEngine {
     // Phase 8.8.3-I6 B2: Diagnostic logging for SL/TP evaluation
     console.log(`[8.8.3-I6][EXIT_EVAL] symbol=${position.symbol} livePrice=${currentPrice} tp=${takeProfit} sl=${stopLoss} distTP=${distanceToTP?.toFixed(4)}% distSL=${distanceToSL?.toFixed(4)}%`);
 
-    // B65.2: delegate static SL/TP decisions to the shared TEC evaluator so
-    // VTS and paper share one authoritative primitive. Paper preserves its
-    // "exit at currentPrice" fill convention (VTS clamps to the level); we
-    // override the evaluator's clamped exitPrice with currentPrice for the
-    // returned ExitCondition to keep paper's downstream math unchanged.
-    // Trailing + max-holding-period (metadata-driven) stay inline below —
-    // future B65.3 can migrate paper's percentage-trailing onto the ATR-
-    // based TEC state machine as a separate regression surface.
+    // B65.2 (2026-04-23): paper engages the full ATR-based trailing engine.
+    // Break-even lock on 1×ATR gain, target-lock + moonbag on target hit (if
+    // strategy qualifies), trailing stop in moonbag mode, 4h duration cap,
+    // concurrency cap via reserved-slots policy. The legacy percentage-based
+    // trailing block below is GONE (it fought the ATR engine). Max-holding-
+    // period metadata is preserved as a separate per-position override.
+    const metadata = position.metadata as Record<string, any>;
+    const atrAtOpen = metadata?.atr_at_open ? parseFloat(metadata.atr_at_open) : 0;
+    const diAtOpen = metadata?.di_at_open ? parseFloat(metadata.di_at_open) : 50;
+    const volNoiseAtOpen = metadata?.vol_noise_at_open ? parseFloat(metadata.vol_noise_at_open) : 0.3;
+
     if (stopLoss !== null || takeProfit !== null) {
-      // The TEC evaluator requires finite stop/target. Use ±Infinity for a
-      // missing side so that branch cannot trigger.
+      // Current open-position count drives the concurrency cap for paper.
+      // Reading size from storage once per exit-check is cheap enough; if
+      // this becomes a hot path we'll cache at the service level.
+      const currentOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const currentSlotTotal = currentOpenPositions.length;
+
       const decision = await evaluateTECExit({
         symbol: position.symbol,
         entryPrice: avgPrice,
         stopPrice: stopLoss ?? -Infinity,
         targetPrice: takeProfit ?? Infinity,
         currentPrice,
-        atr: 0,
+        atr: atrAtOpen,
         holdDurationMs: 0,   // paper handles maxHoldingPeriod inline below
-        maxHoldMs: Infinity, // disable timeout branch here
+        maxHoldMs: Infinity, // disable global timeout branch here
         context: {
           exchange: 'kraken',
           assetClass: 'crypto_spot',
           strategy: position.strategyName,
           regime: (position as any).regime,
         },
-        useTrailing: false,
+        useTrailing: true,
+        DI: diAtOpen,
+        volNoise: volNoiseAtOpen,
+        callerMode: this.mode === 'live' ? 'live' : 'paper',
+        sourcePool: (position as any).sourcePool ?? null,
+        currentSlotTotal,
       });
 
-      if (decision.shouldExit && decision.exitReason === 'target_hit' && takeProfit !== null) {
-        console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit price=${currentPrice} tp=${takeProfit}`);
-        return {
-          type: 'target_hit',
-          price: currentPrice,
-          reason: `Price ${currentPrice.toFixed(2)} reached target ${takeProfit.toFixed(2)}`
-        };
-      }
-      if (decision.shouldExit && decision.exitReason === 'stop_hit' && stopLoss !== null) {
-        console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit price=${currentPrice} sl=${stopLoss}`);
-        return {
-          type: 'stop_hit',
-          price: currentPrice,
-          reason: `Price ${currentPrice.toFixed(2)} hit stop ${stopLoss.toFixed(2)}`
-        };
-      }
-    }
-
-    // Check trailing stop (if metadata indicates it)
-    const metadata = position.metadata as Record<string, any>;
-    if (metadata?.trailingStopPercent && metadata?.highWaterMark) {
-      const trailingStopPercent = parseFloat(metadata.trailingStopPercent) / 100;
-      const highWaterMark = parseFloat(metadata.highWaterMark);
-      const trailingStopPrice = highWaterMark * (1 - trailingStopPercent);
-
-      // Update high water mark if current price is higher
-      if (currentPrice > highWaterMark) {
+      // B65.2: if the engine ratcheted the stop (break-even lock, target
+      // lock, or trailing), write the new stop back to the open-position
+      // row so the next exit-check cycle sees it AND the UI shows the
+      // ratcheted stop instead of the static entry-time stop.
+      if (decision.newStopPrice !== undefined && stopLoss !== null && decision.newStopPrice > stopLoss) {
         await storage.updatePaperSimOpenPosition(this.mode, position.id, {
-          metadata: {
-            ...metadata,
-            highWaterMark: currentPrice.toString()
-          }
+          stopLoss: decision.newStopPrice.toString(),
         });
       }
 
-      // Check if trailing stop hit
-      if (currentPrice <= trailingStopPrice) {
-        return {
-          type: 'trailing_stop_hit',
-          price: currentPrice,
-          reason: `Price ${currentPrice.toFixed(2)} hit trailing stop at ${trailingStopPrice.toFixed(2)} (${(trailingStopPercent * 100).toFixed(1)}% from high ${highWaterMark.toFixed(2)})`
-        };
+      // B65.2: write trade_mode on mode change (TARGET → TRAILING_TAKE).
+      if (decision.modeChanged) {
+        await storage.updatePaperSimOpenPosition(this.mode, position.id, {
+          tradeMode: 'TRAILING_TAKE',
+        });
+      }
+
+      if (decision.shouldExit) {
+        switch (decision.exitReason) {
+          case 'target_hit':
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit price=${currentPrice}`);
+            return {
+              type: 'target_hit',
+              price: currentPrice,
+              reason: `Price ${currentPrice.toFixed(2)} reached target ${(takeProfit ?? 0).toFixed(2)}`,
+            };
+          case 'stop_hit':
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit price=${currentPrice}`);
+            return {
+              type: 'stop_hit',
+              price: currentPrice,
+              reason: `Price ${currentPrice.toFixed(2)} hit stop ${(stopLoss ?? 0).toFixed(2)}`,
+            };
+          case 'trailing_stop_hit':
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit price=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            return {
+              type: 'trailing_stop_hit',
+              price: currentPrice,
+              reason: `Trailing stop at ${decision.newStopPrice?.toFixed(2)} hit after moonbag ratchet`,
+            };
+          case 'moonbag_timeout':
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=moonbag_timeout price=${currentPrice}`);
+            return {
+              // Reuse the existing trailing_stop_hit exit bucket on the DB
+              // side so we don't need a new enum — the close reason will
+              // be suffixed (see closePosition). Callers reading the
+              // ExitCondition.type can still distinguish via the reason string.
+              type: 'trailing_stop_hit',
+              price: currentPrice,
+              reason: `Moonbag duration cap reached (4h) — forced close at ${currentPrice.toFixed(2)}`,
+            };
+        }
       }
     }
 
-    // Check max holding period
+    // Per-position max holding period (separate from the global 4h moonbag
+    // cap above — this is a position-level operator override that typically
+    // targets much longer holds, e.g. a "close this swing trade after 7d"
+    // rule). Unchanged by B65.2.
     if (metadata?.maxHoldingPeriod) {
       const openTime = new Date(position.openedAt).getTime();
       const currentTime = Date.now();
@@ -1094,6 +1119,13 @@ export class PaperExecutionEngine {
     const trade = trades.find(t => t.openedAt && !t.closedAt);
     
     if (trade) {
+      // B65.2: read the final trailing-engine state for this symbol so the
+      // closed-trade row preserves whether the trade ended in moonbag mode.
+      // If no state exists (trade opened before the engine started tracking
+      // it, or cleared already), default to TARGET.
+      const { getTrailingState: _getTES } = await import('./trailing-exit-controller.js');
+      const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = _getTES(position.symbol)?.tradeMode ?? 'TARGET';
+
       // Update trade record - Phase 8.8.3-C2: Include all cost/P&L breakdown fields
       await storage.updatePaperSimTrade(this.mode, trade.id, {
         exitPrice: actualExitPrice.toString(),
@@ -1116,7 +1148,8 @@ export class PaperExecutionEngine {
         totalCost: totalCost.toString(),
         grossPnl: grossPnl.toString(),
         netPnl: netPnl.toString(),
-        netPnlPercent: netPnlPercent.toString()
+        netPnlPercent: netPnlPercent.toString(),
+        tradeMode: finalTradeMode, // B65.2
       });
 
       // Log the exit event with C2 breakdown
@@ -1169,6 +1202,17 @@ export class PaperExecutionEngine {
     let deleteSuccessful = false;
     let deleteError: string | undefined;
     
+    // B65.2: clear trailing engine state after the closed-trade row has been
+    // updated with the final tradeMode. clearTrailingState also decrements
+    // the concurrent-moonbag counter if this trade was in TRAILING_TAKE mode,
+    // freeing a slot for the next setup that hits target.
+    try {
+      const { clearTrailingState } = await import('./trailing-exit-controller.js');
+      clearTrailingState(position.symbol);
+    } catch (err) {
+      console.error(`[B65.2][TEC] Failed to clear trailing state for ${position.symbol}:`, err);
+    }
+
     // Delete open position with error handling for AJ19-B
     try {
       await storage.deletePaperSimOpenPosition(this.mode, positionId);
@@ -1866,9 +1910,14 @@ export class PaperExecutionEngine {
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,
-          highWaterMark: actualEntryPrice.toString(), // For trailing stop tracking
+          highWaterMark: actualEntryPrice.toString(), // retained for legacy dashboards; no longer consumed by exit logic
           expectancyScore: expectancyResult.score, // Directive 11.8B: Trade quality score
-          expectancyEV: expectancyResult.ev // Directive 11.8B: Net expectancy
+          expectancyEV: expectancyResult.ev, // Directive 11.8B: Net expectancy
+          // B65.2 (2026-04-23): volatility snapshot at open, consumed by the
+          // trailing-exit engine at every subsequent exit-check cycle.
+          atr_at_open: (signal as any)?.metadata?.atr ?? 0,
+          di_at_open: (signal as any)?.metadata?.DI ?? 50,
+          vol_noise_at_open: (signal as any)?.metadata?.VolNoise ?? 0.3,
         }
       });
 

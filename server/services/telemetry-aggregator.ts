@@ -19,7 +19,10 @@
 
 import { SCANNER_PARAMS, FILTER_SCHEMA_VERSION } from '../config/system-guards.js';
 import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
-import { EXECUTION_CONFIG } from '../config/execution-config.js';
+// B65.2 (2026-04-23): EXECUTION_CONFIG deleted. TEC diagnostic payload below
+// mirrors the seeded defaults from `module_constants` (trailing_exit +
+// risk_sizing modules). Authoritative per-trade resolution (which honors
+// strategy/regime overrides) happens inside trailing-exit-controller.ts itself.
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
 import { 
@@ -1547,13 +1550,23 @@ export class TelemetryAggregatorService {
         isValid: schemaValidation.isValid,
         mismatchReason: schemaValidation.mismatchReason,
       },
+      // B65.2 (2026-04-23): Authoritative TEC config is in `module_constants`
+      // (modules `trailing_exit` + `risk_sizing`). This telemetry payload
+      // surfaces the seeded defaults as a diagnostic mirror for any downstream
+      // UI that consumes this shape. For live per-trade resolution (which
+      // honors strategy/regime-specific overrides), read via
+      // `moduleConstantsService.getConstant(...)` directly. Values below
+      // match the B65.1 + B65.2 seed migrations.
       tecConfig: {
-        expandFactor: EXECUTION_CONFIG.ADAPTIVE_EXPAND_FACTOR,
-        contractFactor: EXECUTION_CONFIG.ADAPTIVE_CONTRACT_FACTOR,
-        trailingBase: EXECUTION_CONFIG.TRAILING_STOP_BASE,
-        trailingAccel: EXECUTION_CONFIG.TRAILING_STOP_ACCELERATION,
-        maxRisk: EXECUTION_CONFIG.MAX_POSITION_RISK,
-        version: EXECUTION_CONFIG.VERSION,
+        breakEvenTriggerR: 1.0,        // trailing_exit.break_even_trigger_r (seeded B65.1)
+        targetLockR: 1.5,               // trailing_exit.target_lock_r (seeded B65.1)
+        trailDistanceAtrMultiplier: 1.0, // trailing_exit.trail_distance_atr_multiplier (seeded B65.1)
+        persistenceDebounceMs: 5000,    // trailing_exit.persistence_debounce_ms (seeded B65.1)
+        moonbagMaxDurationMs: 14400000, // trailing_exit.moonbag_max_duration_ms (seeded B65.2)
+        moonbagCapMode: 'reserved_slots', // trailing_exit.moonbag_cap_mode (seeded B65.2)
+        moonbagReservedSlots: 1,        // trailing_exit.moonbag_reserved_slots (seeded B65.2)
+        maxPositionRisk: 0.02,          // risk_sizing.max_position_risk (seeded B65.2, migrated from deleted EXECUTION_CONFIG)
+        version: 'B65.2',
         readOnly: true,
       },
       ...filterPerformance,

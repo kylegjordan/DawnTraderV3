@@ -418,7 +418,8 @@ interface Phase10TradeRecord {
   pool?: 'ideal' | 'rotational';
   sourcePool?: string; // Batch 37: Family-qualified source pool
   timestamp: string;
-  exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending';
+  // B65.2 (2026-04-23): expanded with trailing_stop_hit + moonbag_timeout
+  exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending' | 'trailing_stop_hit' | 'moonbag_timeout';
   volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
   trendZ?: number; // Directive 11.7F-B: Trend Z-score (momentum) for drift calculation
   executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Multi-strategy identification
@@ -478,6 +479,12 @@ interface OpenVirtualTrade {
   // B61 (2026-04-15): numeric DBS score captured alongside the category string.
   pairDirectionalBiasScore?: number | null;
   globalDirectionalBiasScore?: number | null;
+  // B65.2 (2026-04-23): volatility snapshot at open, consumed by the
+  // trailing-exit engine. ATR drives the break-even trigger and trailing
+  // distance math; DI + VolNoise fine-tune the trailing K' multiplier.
+  atrAtOpen?: number;
+  diAtOpen?: number;
+  volNoiseAtOpen?: number;
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
@@ -1247,6 +1254,11 @@ async function generatePhase10Signal(
     globalDirectionalBiasScore: getLastGlobalDBSScore(),
     filterTier,  // HF9: IMF filter tier from FX5 scanner
     sourcePool: sourcePool,  // Batch 37: Propagate as-is, no fallback
+    // B65.2: snapshot volatility inputs at open for the trailing engine.
+    // Defaults match the engine's own defaults when mceContext doesn't carry them.
+    atrAtOpen: mceContext.indicators.atr,
+    diAtOpen: 50,
+    volNoiseAtOpen: 0.3,
   };
 
   openVirtualTrades.set(tradeId, openTrade);
@@ -1445,17 +1457,23 @@ async function resolveOpenVirtualTrades(): Promise<{
   const priceDataMap = await priceCache.getBatch(bucketType, symbols);
   
   // Check each open trade against current prices
+  // B65.2 (2026-04-23): widened exit-reason domain now that the TEC state
+  // machine is engaged — trailing_stop_hit + moonbag_timeout join the
+  // legacy triad.
   const tradesToClose: Array<{
     id: string;
     trade: OpenVirtualTrade;
     exitPrice: number;
-    exitReason: 'stop_hit' | 'target_hit' | 'timeout';
+    exitReason: 'stop_hit' | 'target_hit' | 'timeout' | 'trailing_stop_hit' | 'moonbag_timeout';
   }> = [];
   
-  // B65.2: VTS exit-decision loop now delegates to evaluateTECExit() — the
-  // centralized primitive shared with paper-execution-engine. Preserves
-  // Batch 18I stale-cleanup, Directive 11.6 SL/TP clamping, and B64b 7-day
-  // MAX_HOLD_MS safety valve. `useTrailing:false` — VTS stays simple-SL/TP.
+  // B65.2: VTS exit loop engages the full trailing-exit engine. Each trade
+  // gets break-even protection at 1×ATR gain, target-lock on target hit,
+  // moonbag mode (if strategy qualifies) with a 4h duration cap, and a
+  // trailing stop that ratchets up with new highs. VTS has no concurrency
+  // cap on moonbag mode (passing slot total = Infinity signals unlimited).
+  // The B64b 7-day MAX_HOLD_MS safety valve is preserved as a stale-cleanup
+  // outer bound.
   for (const [tradeId, trade] of openVirtualTrades) {
     const holdDurationMs = now - trade.openedAt;
     const priceData = priceDataMap.get(trade.symbol);
@@ -1467,7 +1485,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       stopPrice: trade.stopLoss,
       targetPrice: trade.takeProfit,
       currentPrice,
-      atr: 0, // VTS does not pass ATR; not needed for simple SL/TP path.
+      atr: trade.atrAtOpen ?? 0,
       holdDurationMs,
       maxHoldMs: MAX_HOLD_MS,
       context: {
@@ -1476,17 +1494,39 @@ async function resolveOpenVirtualTrades(): Promise<{
         strategy: trade.strategy,
         regime: trade.regime,
       },
-      useTrailing: false,
+      useTrailing: true,
+      DI: trade.diAtOpen ?? 50,
+      volNoise: trade.volNoiseAtOpen ?? 0.3,
+      callerMode: 'vts',
+      sourcePool: trade.sourcePool ?? null,
+      currentSlotTotal: Number.POSITIVE_INFINITY, // VTS: no concurrency cap
     });
+
+    // B65.2: if the engine ratcheted the stop (break-even lock or trailing),
+    // propagate the new stop back onto the in-memory trade record so the
+    // next cycle's evaluation sees the updated level and so any downstream
+    // reader (e.g. diagnostic endpoint) shows the live stop.
+    if (decision.newStopPrice !== undefined && decision.newStopPrice > trade.stopLoss) {
+      trade.stopLoss = decision.newStopPrice;
+    }
 
     if (!decision.shouldExit) continue;
 
-    // Normalize TEC's richer exit reasons down to VTS's legacy 3-value set.
-    // stale_timeout + timeout both map to 'timeout' on the closed-trade row.
-    const normalizedReason: 'stop_hit' | 'target_hit' | 'timeout' =
-      decision.exitReason === 'stop_hit' || decision.exitReason === 'target_hit'
-        ? decision.exitReason
-        : 'timeout';
+    // Map TEC exit reasons to the VTS closed-trade enum. VTS preserves its
+    // existing 3-valued set plus the 2 new trailing-related reasons.
+    let normalizedReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'timeout';
+    switch (decision.exitReason) {
+      case 'stop_hit':
+      case 'target_hit':
+      case 'trailing_stop_hit':
+      case 'moonbag_timeout':
+        normalizedReason = decision.exitReason;
+        break;
+      case 'stale_timeout':
+      case 'timeout':
+      default:
+        normalizedReason = 'timeout';
+    }
 
     if (decision.exitReason === 'stale_timeout' || decision.exitReason === 'timeout') {
       const hasLivePrice = currentPrice !== null;
@@ -1579,6 +1619,11 @@ async function resolveOpenVirtualTrades(): Promise<{
     
     // Directive 11.6C: Persist to legacy VTS storage and ML pipeline
     try {
+      // B65.2: extract trade_mode snapshot from the trailing engine so the
+      // closed-trade log preserves whether the trade ended in moonbag mode.
+      const { getTrailingState } = await import('./trailing-exit-controller.js');
+      const trailingSnapshot = getTrailingState(trade.symbol);
+      const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = trailingSnapshot?.tradeMode ?? 'TARGET';
       const result = await vtsService.persistRealPriceTrade({
         symbol: trade.symbol,
         entryTime: trade.openedAt,
@@ -1595,6 +1640,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         pnl: netPnl,
         grossPnl: grossPnl,
         exitReason: exitReason,
+        tradeMode: finalTradeMode, // B65.2
         finalScore: trade.finalScore,
         hybridScore: trade.hybridScore,
         predictiveConfidence: trade.predictiveConfidence,
@@ -1625,15 +1671,28 @@ async function resolveOpenVirtualTrades(): Promise<{
     openVirtualTrades.delete(id);
     // Batch 45: Record close timestamp for re-entry cooldown
     recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
-    
+
+    // B65.2: clear trailing engine state for this symbol. This also decrements
+    // the concurrent-moonbag counter if the trade was in TRAILING_TAKE mode.
+    try {
+      const { clearTrailingState } = await import('./trailing-exit-controller.js');
+      clearTrailingState(trade.symbol);
+    } catch (err) {
+      console.error(`[B65.2][TEC] Failed to clear trailing state for ${trade.symbol}:`, err);
+    }
+
     // Directive 11.6 Task 6: Verification logging
     const pnlSign = netPnl >= 0 ? '+' : '';
     console.log(`[11.6][Exit] ${trade.symbol} closed via ${exitReason} @ ${exitPrice.toFixed(6)} after ${holdDurationStr} | PnL=${pnlSign}${pnlPercent}%`);
-    
+
     resolved++;
     if (exitReason === 'stop_hit') stopHits++;
     if (exitReason === 'target_hit') targetHits++;
     if (exitReason === 'timeout') timeouts++;
+    // B65.2: count trailing-stop and moonbag-timeout closes separately so
+    // the cycle summary reflects trailing engagement.
+    if (exitReason === 'trailing_stop_hit') { targetHits++; /* counts as winner */ }
+    if (exitReason === 'moonbag_timeout') { targetHits++; }
   }
   
   if (resolved > 0) {

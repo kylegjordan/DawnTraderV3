@@ -23,7 +23,8 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { EXECUTION_CONFIG } from '../config/execution-config.js';
+// B65.2 (2026-04-23): EXECUTION_CONFIG deleted. Prior import was dead (no
+// references in this file) and has been removed along with the config file.
 
 export interface AdaptiveWeights {
   [key: string]: number;

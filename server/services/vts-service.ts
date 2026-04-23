@@ -703,7 +703,10 @@ export class VTSService extends EventEmitter {
     patternType?: string | null;
     pnl: number;
     grossPnl: number;
-    exitReason: 'stop_hit' | 'target_hit' | 'timeout';
+    // B65.2 (2026-04-23): expanded to include trailing_stop_hit and
+    // moonbag_timeout now that TEC is engaged from the VTS exit loop.
+    exitReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'timeout';
+    tradeMode?: 'TARGET' | 'TRAILING_TAKE'; // B65.2: final state of trailing engine for this trade
     finalScore: number;
     hybridScore: number;
     predictiveConfidence: number;
@@ -764,8 +767,15 @@ export class VTSService extends EventEmitter {
       id: `vts_${tradeData.symbol.replace('/', '_')}_${tradeData.exitTime}`,
       signal,
       status: 'closed',
-      resultType: tradeData.exitReason === 'stop_hit' ? 'stop_loss' 
-        : tradeData.exitReason === 'target_hit' ? 'take_profit' 
+      // B65.2: map new exit reasons. trailing_stop_hit is treated as a
+      // take_profit variant (it was a winner that ratcheted past target);
+      // moonbag_timeout also counts as take_profit since entry to trailing
+      // required a target-lock latch (price >= target). stop_hit and
+      // target_hit unchanged.
+      resultType: tradeData.exitReason === 'stop_hit' ? 'stop_loss'
+        : tradeData.exitReason === 'target_hit' ? 'take_profit'
+        : tradeData.exitReason === 'trailing_stop_hit' ? 'take_profit'
+        : tradeData.exitReason === 'moonbag_timeout' ? 'take_profit'
         : 'timeout',
       entryTime: tradeData.entryTime,
       exitTime: tradeData.exitTime,
@@ -798,8 +808,14 @@ export class VTSService extends EventEmitter {
       globalDirectionalBiasScore: tradeData.globalDirectionalBiasScore,
       filterTier: tradeData.filterTier,
       source: 'vts', // HF6: Fix source tag for Phase 14 trade visibility
-      schemaVersion: '1.6.7'
-    };
+      schemaVersion: '1.6.7',
+      // B65.2 (2026-04-23): preserve the trailing-exit mode the trade ended
+      // in so post-close analysis can distinguish moonbag runners (ended in
+      // TRAILING_TAKE via trailing_stop_hit or moonbag_timeout) from trades
+      // that never left the static target lane.
+      tradeMode: tradeData.tradeMode ?? 'TARGET',
+      exitReason: tradeData.exitReason, // raw exit reason preserved in log
+    } as any;
 
     // Add to closedTrades for ML calibration access
     this.closedTrades.push(trade);

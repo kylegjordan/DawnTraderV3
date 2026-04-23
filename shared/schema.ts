@@ -1608,7 +1608,7 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   netPnlPercent: decimal("net_pnl_percent", { precision: 10, scale: 4 }).default("0"), // Net return percentage
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
-  closeReason: varchar("close_reason", { length: 50 }), // 'target_hit', 'stop_hit', 'strategy_exit', 'manual', 'guardrail'
+  closeReason: varchar("close_reason", { length: 50 }), // 'target_hit', 'stop_hit', 'trailing_stop_hit', 'moonbag_timeout', 'strategy_exit', 'manual', 'guardrail'
   confidence: decimal("confidence", { precision: 5, scale: 2 }),
   // Directive 10.3: Signal Type Expansion
   signalType: signalTypeEnum("signal_type").default("QUANT").notNull(), // QUANT | PATTERN | HYBRID
@@ -1616,6 +1616,10 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   patternStrength: decimal("pattern_strength", { precision: 4, scale: 3 }), // 0.000-1.000 clarity score
   // Batch 19E: Source pool tracking for pattern scanning analysis
   sourcePool: varchar("source_pool", { length: 20 }), // 'quant' | 'pattern' | 'hybrid' | 'xstock' (nullable for existing records)
+  // B65.2 (2026-04-23): preserves the trailing-exit mode the trade ended in.
+  // TARGET = closed at static target/stop/timeout; TRAILING_TAKE = entered
+  // moonbag (trailing) mode and closed via trailing_stop_hit or moonbag_timeout.
+  tradeMode: varchar("trade_mode", { length: 20 }).notNull().default("TARGET"),
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),

@@ -24,7 +24,10 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { EXECUTION_CONFIG } from '../../config/execution-config.js';
+// B65.2 (2026-04-23): MAX_POSITION_RISK migrated from the deleted
+// execution-config.ts to the module_constants table under module='risk_sizing'.
+// Read through moduleConstantsService with the same 0.1 fallback.
+import { getConstant } from '../../services/module-constants-service.js';
 import { loadAdaptiveWeights, type AdaptiveWeights } from '../../services/adaptive-learning-repository.js';
 import { getRecentCostDrift } from '../../services/monitoring/cost-drift-monitor.js';
 
@@ -208,7 +211,14 @@ export async function computeDynamicSize(input: DynamicSizeInput): Promise<Dynam
     console.log(`[11.3C][DSE] Cost pressure dampening applied: ×${costPressure.toFixed(3)}`);
   }
 
-  const maxPositionRisk = EXECUTION_CONFIG.MAX_POSITION_RISK ?? 0.1;
+  // B65.2: resolve via module_constants. Fallback preserves the legacy 0.1
+  // behavior that the nullish-coalesce used before EXECUTION_CONFIG existed.
+  const maxPositionRisk = (await getConstant<number>('risk_sizing', 'max_position_risk', {
+    exchange: 'kraken',
+    assetClass: 'crypto_spot',
+    strategy: strategyId,
+    regime: regime as string,
+  })) ?? 0.1;
   const maxAllowedSize = balance * maxPositionRisk;
   
   let positionSize = baseSize * multiplier;

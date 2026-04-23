@@ -1173,7 +1173,19 @@ app.use((req, res, next) => {
       centralClock.stop();
       priceCache.shutdown();
       systemHealth.stop();
-      
+
+      // B65.2 (2026-04-23): Synchronously persist trailing-exit states so an
+      // in-flight break-even lock or moonbag trailing stop survives a restart.
+      // Prior behavior relied solely on the 5s debounced writer, which could
+      // miss the final state mutation if PM2 killed the process first.
+      try {
+        const { persistTrailingStates } = await import('./services/trade-safety.js');
+        persistTrailingStates();
+        console.log('[B65.2][SHUTDOWN] Trailing states flushed to disk');
+      } catch (err) {
+        console.error('[B65.2][SHUTDOWN] Failed to flush trailing states:', err);
+      }
+
       console.log('[A4.R10R-4][SHUTDOWN] All core services stopped');
       console.log('[A4.R10R-4][SHUTDOWN] Graceful shutdown complete');
       process.exit(0);

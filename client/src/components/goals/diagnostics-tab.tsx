@@ -449,8 +449,8 @@ export default function DiagnosticsTab() {
 
       <div className="p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg">
         <p className="text-xs text-violet-700 dark:text-violet-300">
-          <strong>Directive 11.0C:</strong> SQE & TEC Stabilization complete - EXECUTION_CONFIG centralized, adaptive sizing factors normalized (1.10x/0.90x),
-          SQE backfill logic for missing FinalScore/RegimeWeight implemented, TEC config exposed in telemetry summary for diagnostics visibility.
+          <strong>B65.2 (Directive 11.0C superseded):</strong> TEC modernized to ATR-based trailing with two-stage latch (break-even lock + target-lock moonbag). Phase-11 percentage-trailing + dormant adaptive-sizing implementation deleted.
+          Tunable parameters (break-even trigger, target-lock R, trail distance, moonbag duration/concurrency caps, max position risk) now sourced from the `module_constants` table; per-strategy/per-regime overrides are supported.
         </p>
       </div>
     </div>

@@ -21,7 +21,10 @@ import { systemConfigService } from '../services/system-config';
 import { loadBaseline } from '../config/authority-baseline';
 import { validateStartupConfig } from '../config/adjustment-registry';
 import { SCORE_WEIGHTS } from '../config/score-weights.config';
-import { EXECUTION_CONFIG } from '../config/execution-config';
+// B65.2 (2026-04-23): EXECUTION_CONFIG deleted. Startup validation now
+// receives a lightweight snapshot matching the B65.2 seed migration values.
+// Authoritative per-trade config lives in `module_constants` and is read at
+// use-time by the trailing engine, DSE, etc.
 
 const ML_SERVICE_HOST = process.env.ML_SERVICE_HOST || 'http://localhost:5001';
 const ML_SERVICE_AUTO_START = process.env.ML_SERVICE_AUTO_START !== 'false';
@@ -86,9 +89,14 @@ class BootOrchestrator extends EventEmitter {
     } else {
       console.warn(`[L3][BOOT_ORCHESTRATOR] Authority Baseline not loaded: ${baselineResult.error}`);
     }
+    // B65.2: pass seed-matching snapshot since EXECUTION_CONFIG is deleted.
+    // validateStartupConfig's MAX_POSITION_RISK sanity-bounds check still works.
     const startupValidation = validateStartupConfig({
       scoreWeights: SCORE_WEIGHTS?.FINAL_SCORE,
-      executionConfig: EXECUTION_CONFIG as unknown as Record<string, number | string | boolean>,
+      executionConfig: {
+        VERSION: 'B65.2',
+        MAX_POSITION_RISK: 0.02,
+      },
     });
     if (startupValidation.warnings.length > 0) {
       console.warn(`[L3][BOOT_ORCHESTRATOR] Startup validation: ${startupValidation.warnings.length} warning(s)`);

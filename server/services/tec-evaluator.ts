@@ -58,7 +58,11 @@ import { getModuleConstants } from './module-constants-service.js';
 import {
   updatePosition as tecUpdatePosition,
   shouldClosePosition as tecShouldClose,
+  isMoonbagQualifier,
+  canEnterMoonbag,
+  getConcurrentMoonbagCount,
   type TrailingUpdateResult,
+  type CallerMode,
 } from './trailing-exit-controller.js';
 
 export interface TECExitContext {
@@ -88,14 +92,20 @@ export interface TECExitInput {
   context: TECExitContext;
   /**
    * When true, engages the TEC state machine (trailing-exit-controller.ts).
-   * VTS passes false (simple SL/TP only); paper can pass true when an
-   * ATR-based trailing policy is desired. Default false.
+   * VTS and paper both pass true in B65.2+. Default false for backward compat.
    */
   useTrailing?: boolean;
   /** Directional integrity for trailing K' calculation. Default 50. */
   DI?: number;
   /** Volatility noise for trailing K' calculation. Default 0.3. */
   volNoise?: number;
+  // B65.2: caller mode + moonbag inputs
+  /** Which runtime path is calling: 'vts' | 'paper' | 'live'. Default 'paper'. */
+  callerMode?: CallerMode;
+  /** Source pool key for strategies that qualify only in specific pools (e.g. vwap_pullback). */
+  sourcePool?: string | null;
+  /** Current total slot count in the caller's pool — used for the concurrency cap. Ignored for VTS. */
+  currentSlotTotal?: number;
 }
 
 export type TECExitReason =
@@ -103,7 +113,8 @@ export type TECExitReason =
   | 'target_hit'
   | 'trailing_stop_hit'
   | 'timeout'
-  | 'stale_timeout';
+  | 'stale_timeout'
+  | 'moonbag_timeout';
 
 export interface TECExitDecision {
   shouldExit: boolean;
@@ -200,29 +211,48 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
     };
   }
 
-  // 3. Hard stop hit. Clamp to stopPrice to match VTS fill convention.
-  if (currentPrice <= input.stopPrice) {
-    return {
-      shouldExit: true,
-      exitReason: 'stop_hit',
-      exitPrice: input.stopPrice,
-      resolvedConstants,
-    };
+  // 3/4. When trailing is OFF, short-circuit on hard stop/target (legacy
+  //      B65.2-plumbing path). When trailing is ON, the trailing engine
+  //      owns the target-hit decision (qualifier gate + moonbag flip vs.
+  //      close-at-target) and the stop-hit decision (via its ratcheted
+  //      internal stop). So we skip these when useTrailing=true.
+  if (!input.useTrailing) {
+    if (currentPrice <= input.stopPrice) {
+      return {
+        shouldExit: true,
+        exitReason: 'stop_hit',
+        exitPrice: input.stopPrice,
+        resolvedConstants,
+      };
+    }
+    if (currentPrice >= input.targetPrice) {
+      return {
+        shouldExit: true,
+        exitReason: 'target_hit',
+        exitPrice: input.targetPrice,
+        resolvedConstants,
+      };
+    }
   }
 
-  // 4. Hard target hit. Clamp to targetPrice to match VTS fill convention.
-  if (currentPrice >= input.targetPrice) {
-    return {
-      shouldExit: true,
-      exitReason: 'target_hit',
-      exitPrice: input.targetPrice,
-      resolvedConstants,
-    };
-  }
-
-  // 5. Optional trailing path (ATR-based state machine via TEC module).
-  //    Only engaged when caller opts in and ATR is meaningful.
+  // 5. Trailing path (ATR-based state machine). B65.2: engaged by both VTS
+  //    and paper. The engine owns ALL exit decisions once engaged —
+  //    break-even lock, target lock + moonbag gate, trailing stop, duration
+  //    cap. The evaluator layer only forwards the engine's verdict.
   if (input.useTrailing && input.atr > 0) {
+    const callerMode: CallerMode = input.callerMode ?? 'paper';
+
+    // Moonbag gate checks — both async, both use the engine's config cache.
+    const [moonbagQualified, moonbagAllowed] = await Promise.all([
+      isMoonbagQualifier(input.context.strategy ?? '', input.sourcePool, input.context.regime),
+      canEnterMoonbag(
+        callerMode,
+        input.currentSlotTotal ?? Number.POSITIVE_INFINITY,
+        input.context.strategy,
+        input.context.regime,
+      ),
+    ]);
+
     const update: TrailingUpdateResult = tecUpdatePosition({
       symbol: input.symbol,
       entryPrice: input.entryPrice,
@@ -232,13 +262,48 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       VolNoise: input.volNoise ?? 0.3,
       ATR: input.atr,
       currentStopPrice: input.stopPrice,
+      strategy: input.context.strategy,
+      sourcePool: input.sourcePool,
+      regime: input.context.regime,
+      callerMode,
+      moonbagQualified,
+      moonbagAllowed,
     });
 
-    if (tecShouldClose(input.symbol, currentPrice)) {
+    // Engine-authored terminal decisions (B65.2):
+    if (update.closeNow && update.closeReason === 'moonbag_timeout') {
       return {
         shouldExit: true,
-        exitReason: 'trailing_stop_hit',
+        exitReason: 'moonbag_timeout',
         exitPrice: currentPrice,
+        newStopPrice: update.newStopPrice,
+        modeChanged: update.modeChanged,
+        resolvedConstants,
+      };
+    }
+    if (update.closeNow && update.closeReason === 'target_hit_no_trailing') {
+      return {
+        shouldExit: true,
+        exitReason: 'target_hit',
+        exitPrice: input.targetPrice, // clamp to target for fill-convention parity
+        newStopPrice: update.newStopPrice,
+        modeChanged: update.modeChanged,
+        resolvedConstants,
+      };
+    }
+
+    if (tecShouldClose(input.symbol, currentPrice)) {
+      // Distinguish a pure static-stop hit (engine never ratcheted the stop)
+      // from a trailing/break-even stop hit (engine moved the stop up, and
+      // price later reversed into the ratcheted level).
+      const stopWasRatcheted = update.breakEvenLatched || update.targetLatched;
+      return {
+        shouldExit: true,
+        exitReason: stopWasRatcheted ? 'trailing_stop_hit' : 'stop_hit',
+        // Static-stop close clamps to the original stop level (fill-convention
+        // parity with the !useTrailing path); trailing-stop close exits at the
+        // current price (the stop is a moving target).
+        exitPrice: stopWasRatcheted ? currentPrice : input.stopPrice,
         newStopPrice: update.newStopPrice,
         modeChanged: update.modeChanged,
         resolvedConstants,

@@ -201,7 +201,9 @@ export function validateStartupConfig(config: {
 
   // Validate execution config frozen values haven't been tampered with
   if (config.executionConfig) {
-    const expectedVersion = 'v1.0.0';
+    // B65.2 (2026-04-23): version stamp transitioned from v1.0.0 to B65.2
+    // when EXECUTION_CONFIG was deleted and values moved into module_constants.
+    const expectedVersion = 'B65.2';
     if (config.executionConfig.VERSION !== expectedVersion) {
       warnings.push(`ExecutionConfig version mismatch: ${config.executionConfig.VERSION} vs expected ${expectedVersion}`);
     }
