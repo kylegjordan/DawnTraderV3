@@ -32,6 +32,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+// Load DATABASE_URL from .env before using it — `npm run` does not auto-load
+// .env, so the script does it itself. `dotenv` is already a project dependency.
+import 'dotenv/config';
 // `pg` is a CommonJS package; with ESM (type:module) we need the default import
 // and destructure from it. Named imports fail with "does not provide an export".
 import pg from 'pg';
