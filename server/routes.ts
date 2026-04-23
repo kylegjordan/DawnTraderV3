@@ -10800,8 +10800,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[8.8.3-C7-FIX][MANUAL_CLOSE_COSTS] symbol=${position.symbol} exitPrice=${currentPrice.toFixed(4)} actualExitPrice=${actualExitPrice.toFixed(4)} entryFee=${entryFee.toFixed(4)} exitFee=${exitFee.toFixed(4)} entrySlip=${entrySlippage.toFixed(4)} exitSlip=${exitSlippage.toFixed(4)} totalCost=${totalCost.toFixed(4)} grossPnl=${grossPnl.toFixed(4)} netPnl=${netPnl.toFixed(4)}`);
       
       // Build closed trade payload with all cost fields
+      // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on paper_sim_trades. Derive from symbol.
       const closedTradePayload = {
         symbol: position.symbol,
+        baseCurrency: position.symbol.split('/')[0] || position.symbol,
         strategyName: position.strategyName,
         side: position.side,
         quantity: position.quantity?.toString() || '0',

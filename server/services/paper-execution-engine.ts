@@ -1743,8 +1743,12 @@ export class PaperExecutionEngine {
       
       console.log(`[10.3] Trade Execute: ${signal.symbol} | Type=${signalType} | Pattern=${patternType || 'N/A'} | Strength=${patternStrength || 'N/A'}`);
       
+      // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on paper_sim_trades. Derive from symbol.
+      const baseCurrency = signal.symbol.split('/')[0] || signal.symbol;
+
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
+        baseCurrency,
         strategyName: signal.strategy,
         side: 'buy',
         quantity: quantity.toString(),

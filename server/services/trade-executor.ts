@@ -181,8 +181,14 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
       
       console.log(`[10.3] Trade Execute: ${signal.symbol} | Type=${signalType} | Pattern=${patternType || 'N/A'}`);
 
+      // B65.1-HF2 (2026-04-23): derive baseCurrency from symbol at insert time.
+      // Matches migration rule: COALESCE(NULLIF(SPLIT_PART(symbol, '/', 1), ''), symbol).
+      // baseCurrency is NOT NULL on paper_sim_trades as of B65.1 for per-underlying tracking.
+      const baseCurrency = signal.symbol.split('/')[0] || signal.symbol;
+
       const trade: InsertPaperSimTrade = {
         symbol: signal.symbol,
+        baseCurrency,
         strategyName: signal.strategy,
         side: 'buy',
         quantity: quantity.toString(),
