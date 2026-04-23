@@ -9,7 +9,9 @@ import fs from 'fs/promises';
 import path from 'path';
 
 interface TradeRecord {
-  [key: string]: string | number | null | undefined;
+  // B65.2-HF2 (2026-04-23): widened to include boolean so trailing-engine
+  // state flags (breakEvenLatched, targetLatched) can flow into CSV export.
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 /**
