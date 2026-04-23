@@ -36,6 +36,8 @@ import { getPredictiveConfidence } from '../core/utils/score-calculator.js';
 import { logSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
+// B65.2: centralized exit-decision primitive (stale / timeout / stop / target / trailing)
+import { evaluateTECExit } from './tec-evaluator.js';
 import { systemConfigService } from './system-config.js';
 import { activeFilterPool } from './active-filter-pool.js';
 // Batch 19C import removed by 19G HF1 Item 4: PATTERN_POOL_STRATEGIES no longer used
@@ -1450,43 +1452,57 @@ async function resolveOpenVirtualTrades(): Promise<{
     exitReason: 'stop_hit' | 'target_hit' | 'timeout';
   }> = [];
   
+  // B65.2: VTS exit-decision loop now delegates to evaluateTECExit() — the
+  // centralized primitive shared with paper-execution-engine. Preserves
+  // Batch 18I stale-cleanup, Directive 11.6 SL/TP clamping, and B64b 7-day
+  // MAX_HOLD_MS safety valve. `useTrailing:false` — VTS stays simple-SL/TP.
   for (const [tradeId, trade] of openVirtualTrades) {
     const holdDurationMs = now - trade.openedAt;
     const priceData = priceDataMap.get(trade.symbol);
+    const currentPrice = priceData && priceData.price > 0 ? priceData.price : null;
 
-    // Batch 18I: Force-close stale positions even without price data.
-    // Previously, trades with unavailable prices were skipped entirely via
-    // `continue`, causing indefinite accumulation in the in-memory Map.
-    // Timeout check now runs BEFORE price availability check.
-    if (holdDurationMs > MAX_HOLD_MS) {
-      const exitPrice = (priceData && priceData.price > 0) ? priceData.price : trade.entryPrice;
-      tradesToClose.push({ id: tradeId, trade, exitPrice, exitReason: 'timeout' });
-      console.log(`[11.6][STALE_CLEANUP] Force-closing ${trade.symbol}/${trade.strategy} after ${Math.round(holdDurationMs / 3600000)}h (price=${(priceData && priceData.price > 0) ? 'live' : 'entry-fallback'})`);
-      continue;
+    const decision = await evaluateTECExit({
+      symbol: trade.symbol,
+      entryPrice: trade.entryPrice,
+      stopPrice: trade.stopLoss,
+      targetPrice: trade.takeProfit,
+      currentPrice,
+      atr: 0, // VTS does not pass ATR; not needed for simple SL/TP path.
+      holdDurationMs,
+      maxHoldMs: MAX_HOLD_MS,
+      context: {
+        exchange: 'kraken',
+        assetClass: 'crypto_spot',
+        strategy: trade.strategy,
+        regime: trade.regime,
+      },
+      useTrailing: false,
+    });
+
+    if (!decision.shouldExit) continue;
+
+    // Normalize TEC's richer exit reasons down to VTS's legacy 3-value set.
+    // stale_timeout + timeout both map to 'timeout' on the closed-trade row.
+    const normalizedReason: 'stop_hit' | 'target_hit' | 'timeout' =
+      decision.exitReason === 'stop_hit' || decision.exitReason === 'target_hit'
+        ? decision.exitReason
+        : 'timeout';
+
+    if (decision.exitReason === 'stale_timeout' || decision.exitReason === 'timeout') {
+      const hasLivePrice = currentPrice !== null;
+      console.log(
+        `[11.6][STALE_CLEANUP] Force-closing ${trade.symbol}/${trade.strategy} after ${Math.round(
+          holdDurationMs / 3600000,
+        )}h (price=${hasLivePrice ? 'live' : 'entry-fallback'})`,
+      );
     }
 
-    if (!priceData || priceData.price <= 0) {
-      // No price data - skip this cycle (stale trades handled above)
-      continue;
-    }
-
-    const currentPrice = priceData.price;
-
-    // Directive 11.6 Task 3: Trade Exit Conditions
-    let exitReason: 'stop_hit' | 'target_hit' | 'timeout' | null = null;
-    let exitPrice = currentPrice;
-
-    if (currentPrice <= trade.stopLoss) {
-      exitReason = 'stop_hit';
-      exitPrice = trade.stopLoss; // Exit at stop level
-    } else if (currentPrice >= trade.takeProfit) {
-      exitReason = 'target_hit';
-      exitPrice = trade.takeProfit; // Exit at target level
-    }
-
-    if (exitReason) {
-      tradesToClose.push({ id: tradeId, trade, exitPrice, exitReason });
-    }
+    tradesToClose.push({
+      id: tradeId,
+      trade,
+      exitPrice: decision.exitPrice,
+      exitReason: normalizedReason,
+    });
   }
   
   // Directive 11.6C: Track persistence and ML queue counts

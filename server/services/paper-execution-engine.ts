@@ -49,6 +49,8 @@
 
 import { storage } from '../storage';
 import { KrakenService } from './kraken';
+// B65.2: centralized exit-decision primitive shared with VTS
+import { evaluateTECExit } from './tec-evaluator';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
@@ -876,25 +878,52 @@ export class PaperExecutionEngine {
     
     // Phase 8.8.3-I6 B2: Diagnostic logging for SL/TP evaluation
     console.log(`[8.8.3-I6][EXIT_EVAL] symbol=${position.symbol} livePrice=${currentPrice} tp=${takeProfit} sl=${stopLoss} distTP=${distanceToTP?.toFixed(4)}% distSL=${distanceToSL?.toFixed(4)}%`);
-    
-    // Check target hit (long position)
-    if (takeProfit && currentPrice >= takeProfit) {
-      console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit price=${currentPrice} tp=${takeProfit}`);
-      return {
-        type: 'target_hit',
-        price: currentPrice,
-        reason: `Price ${currentPrice.toFixed(2)} reached target ${takeProfit.toFixed(2)}`
-      };
-    }
 
-    // Check stop hit (long position)
-    if (stopLoss && currentPrice <= stopLoss) {
-      console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit price=${currentPrice} sl=${stopLoss}`);
-      return {
-        type: 'stop_hit',
-        price: currentPrice,
-        reason: `Price ${currentPrice.toFixed(2)} hit stop ${stopLoss.toFixed(2)}`
-      };
+    // B65.2: delegate static SL/TP decisions to the shared TEC evaluator so
+    // VTS and paper share one authoritative primitive. Paper preserves its
+    // "exit at currentPrice" fill convention (VTS clamps to the level); we
+    // override the evaluator's clamped exitPrice with currentPrice for the
+    // returned ExitCondition to keep paper's downstream math unchanged.
+    // Trailing + max-holding-period (metadata-driven) stay inline below —
+    // future B65.3 can migrate paper's percentage-trailing onto the ATR-
+    // based TEC state machine as a separate regression surface.
+    if (stopLoss !== null || takeProfit !== null) {
+      // The TEC evaluator requires finite stop/target. Use ±Infinity for a
+      // missing side so that branch cannot trigger.
+      const decision = await evaluateTECExit({
+        symbol: position.symbol,
+        entryPrice: avgPrice,
+        stopPrice: stopLoss ?? -Infinity,
+        targetPrice: takeProfit ?? Infinity,
+        currentPrice,
+        atr: 0,
+        holdDurationMs: 0,   // paper handles maxHoldingPeriod inline below
+        maxHoldMs: Infinity, // disable timeout branch here
+        context: {
+          exchange: 'kraken',
+          assetClass: 'crypto_spot',
+          strategy: position.strategyName,
+          regime: (position as any).regime,
+        },
+        useTrailing: false,
+      });
+
+      if (decision.shouldExit && decision.exitReason === 'target_hit' && takeProfit !== null) {
+        console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit price=${currentPrice} tp=${takeProfit}`);
+        return {
+          type: 'target_hit',
+          price: currentPrice,
+          reason: `Price ${currentPrice.toFixed(2)} reached target ${takeProfit.toFixed(2)}`
+        };
+      }
+      if (decision.shouldExit && decision.exitReason === 'stop_hit' && stopLoss !== null) {
+        console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit price=${currentPrice} sl=${stopLoss}`);
+        return {
+          type: 'stop_hit',
+          price: currentPrice,
+          reason: `Price ${currentPrice.toFixed(2)} hit stop ${stopLoss.toFixed(2)}`
+        };
+      }
     }
 
     // Check trailing stop (if metadata indicates it)
