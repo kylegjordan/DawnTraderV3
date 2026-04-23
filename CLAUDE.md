@@ -33,9 +33,11 @@
 
 ---
 
-## 2. Canonical Workflow (Post-Replit, 11 phases, outcomes-based)
+## 2. Canonical Workflow (Post-Replit, 11 steps, outcomes-based)
 
 **This is an outcomes-based workflow.** A batch is NOT done until every numbered objective from the scope document is verifiably achieved in the staging UI and confirmed by both Claude Code and Langston.
+
+> **Naming note (B65.2, 2026-04-23):** The 11 workflow stages below are called **steps**, not phases, to avoid collision with the system's own numbered development phases (Phase 15c, Phase 16, Phase 19, etc.). When older governance docs or batch reports say "Phase N review" in the batch-workflow sense, read it as "Step N review." System-phase references are unchanged.
 
 1. **Planning + Scope** — Kyle directive → Claude Code drafts `BATCH_N_SCOPE.md` (in `Claude Comms and Packages/Scope Files/`) with numbered objectives and verification criteria → Langston reviews and approves.
 2. **Pre-Implementation Audit** — Claude Code reads actual files, checks PM2 logs, queries Supabase, screenshots UI via Claude-in-Chrome. **MANDATORY: consult `1-system-manual/SYSTEM_IMPACT_MAP.md` for every component affected by the batch.** Trace upstream dependencies, downstream consumers, shared state, background execution, and blast radius. Document in `BATCH_N_PRE_AUDIT.md`. Langston reviews the audit including the impact map analysis. **Skipping the SIM review is non-negotiable — it is how cascade bugs are prevented.**
@@ -57,14 +59,14 @@
 - `1-system-manual/BATCH_CATALOG.md` — add the new batch entry
 - `1-system-manual/PHASE_HISTORY.md` — update phase status
 - `.claude/memory/MEMORY.md` — volatile state block (phase/batch/next-step) after every batch
-- `Claude Comms and Packages/Scope Files/BATCH_N_SCOPE.md` — written in Phase 1
-- `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md` — written in Phase 11, includes list of governance files changed
+- `Claude Comms and Packages/Scope Files/BATCH_N_SCOPE.md` — written in Step 1
+- `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md` — written in Step 11, includes list of governance files changed
 
 > **Note:** `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) was RETIRED on 2026-04-20. Its role was absorbed by this `CLAUDE.md` file (auto-loaded at session start) + `MEMORY.md` (volatile state) + `BATCH_CATALOG.md` + `PHASE_HISTORY.md`. Historical copy preserved at `1-system-manual/_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` — do not edit, do not cite as live governance.
 
 **Tier 2 — When applicable (update if the batch affects these domains):**
 - `1-system-manual/SYSTEM_MANUAL.md` — **architecture + math documentation.** Any change to system architecture, strategy logic, regime detection, filter design, signal pipeline, or quantitative math MUST be reflected here. This is how we avoid burying important details like the DBS orphan situation.
-- `1-system-manual/SYSTEM_IMPACT_MAP.md` — **file-level dependency map.** Any change that adds, removes, or modifies a component MUST be reflected here. This is consulted in Phase 2 (pre-audit) of every batch to prevent cascade bugs.
+- `1-system-manual/SYSTEM_IMPACT_MAP.md` — **file-level dependency map.** Any change that adds, removes, or modifies a component MUST be reflected here. This is consulted in Step 2 (pre-audit) of every batch to prevent cascade bugs.
 - `1-system-manual/CHANGES_AND_FIXES.md` — bug/risk registry, add entries for fixes
 - `1-system-manual/POST_AUDIT_ROADMAP.md` — phase-level roadmap updates
 - `1-system-manual/ADJUSTMENT_FRAMEWORK.md` — any change to parameter-adjustment governance
@@ -306,7 +308,7 @@ DawnTrader is massive and scaling. Cascade effects are easy to miss. Important d
 
 **Rules:**
 
-1. **Pre-audit (Phase 2):** Before implementing any change, read `1-system-manual/SYSTEM_IMPACT_MAP.md` and identify every component affected by the batch. For each affected component, trace:
+1. **Pre-audit (Step 2):** Before implementing any change, read `1-system-manual/SYSTEM_IMPACT_MAP.md` and identify every component affected by the batch. For each affected component, trace:
    - UPSTREAM dependencies — will they still feed correct data?
    - DOWNSTREAM consumers — will they still receive what they expect?
    - SHARED STATE — will config/state changes ripple elsewhere?
@@ -317,9 +319,9 @@ DawnTrader is massive and scaling. Cascade effects are easy to miss. Important d
    
    Document the analysis in `BATCH_N_PRE_AUDIT.md`. Langston reviews the SIM + System Manual analysis before implementation begins.
 
-2. **Implementation (Phase 3):** If you discover a component is more connected than SIM showed, stop and update SIM before continuing. Don't paper over it.
+2. **Implementation (Step 3):** If you discover a component is more connected than SIM showed, stop and update SIM before continuing. Don't paper over it.
 
-3. **Governance (Phase 10):** Any batch that changes architecture, formulas, routing, thresholds, or canonical meaning is **incomplete** until SIM and System Manual are updated where applicable. Update for every added, removed, or modified component, every new connection, every blast-radius change. A completion report that lists code changes but omits SIM / System Manual updates (when either applies) is rejected, not approved.
+3. **Governance (Step 10):** Any batch that changes architecture, formulas, routing, thresholds, or canonical meaning is **incomplete** until SIM and System Manual are updated where applicable. Update for every added, removed, or modified component, every new connection, every blast-radius change. A completion report that lists code changes but omits SIM / System Manual updates (when either applies) is rejected, not approved.
 
 4. **System Manual scope:** architecture, strategy logic, regime detection, filter design, signal pipeline, quantitative math, canonical meaning of regime/strategy/filter terms. Anything in those domains that changes = System Manual update.
 
