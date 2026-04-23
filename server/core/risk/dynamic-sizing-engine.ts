@@ -211,14 +211,26 @@ export async function computeDynamicSize(input: DynamicSizeInput): Promise<Dynam
     console.log(`[11.3C][DSE] Cost pressure dampening applied: ×${costPressure.toFixed(3)}`);
   }
 
-  // B65.2: resolve via module_constants. Fallback preserves the legacy 0.1
-  // behavior that the nullish-coalesce used before EXECUTION_CONFIG existed.
-  const maxPositionRisk = (await getConstant<number>('risk_sizing', 'max_position_risk', {
-    exchange: 'kraken',
-    assetClass: 'crypto_spot',
-    strategy: strategyId,
-    regime: regime as string,
-  })) ?? 0.1;
+  // B65.2: resolve via module_constants. Fallback matches the B65.2 seed
+  // migration value (0.02 = 2% max position risk) so behavior is identical
+  // whether the DB read succeeds or the service is unavailable. Pre-B65.2
+  // this value came from the hardcoded EXECUTION_CONFIG.MAX_POSITION_RISK.
+  // Wrapped in try/catch so the sizing path never fails on DB issues (also
+  // keeps unit/integration tests passing without a live DB).
+  let maxPositionRisk = 0.02;
+  try {
+    const dbValue = await getConstant<number>('risk_sizing', 'max_position_risk', {
+      exchange: 'kraken',
+      assetClass: 'crypto_spot',
+      strategy: strategyId,
+      regime: regime as string,
+    });
+    if (typeof dbValue === 'number' && dbValue > 0) {
+      maxPositionRisk = dbValue;
+    }
+  } catch {
+    // Leave at 0.02 seed default — identical to pre-B65.2 behavior.
+  }
   const maxAllowedSize = balance * maxPositionRisk;
   
   let positionSize = baseSize * multiplier;
