@@ -47,6 +47,8 @@ export interface StrategyStats {
   winRate: number;
   avgNetPct: number;
   sumNetPct: number;
+  avgNetValue: number;  // dollar average per trade
+  sumNetValue: number;  // dollar total across trades
 }
 
 export interface DriftDashboardResponse {
@@ -316,7 +318,7 @@ function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, St
     const strat = t.strategy || 'unknown';
     let s = buckets[regime].get(strat);
     if (!s) {
-      s = { strategy: strat, tradeCount: 0, winCount: 0, winRate: 0, avgNetPct: 0, sumNetPct: 0 };
+      s = { strategy: strat, tradeCount: 0, winCount: 0, winRate: 0, avgNetPct: 0, sumNetPct: 0, avgNetValue: 0, sumNetValue: 0 };
       buckets[regime].set(strat, s);
     }
     s.tradeCount += 1;
@@ -326,6 +328,7 @@ function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, St
     const entryPrice = t.signal?.entryPrice ?? 0;
     const netPct = entryPrice > 0 ? (net / entryPrice) * 100 : 0;
     s.sumNetPct += netPct;
+    s.sumNetValue += net;
   }
   const out = {} as Record<RegimeName, StrategyStats[]>;
   for (const r of REGIMES) out[r] = [];
@@ -334,6 +337,9 @@ function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, St
     for (const s of buckets[r].values()) {
       s.winRate = s.tradeCount > 0 ? +(s.winCount / s.tradeCount * 100).toFixed(2) : 0;
       s.avgNetPct = s.tradeCount > 0 ? +(s.sumNetPct / s.tradeCount).toFixed(4) : 0;
+      s.avgNetValue = s.tradeCount > 0 ? +(s.sumNetValue / s.tradeCount).toFixed(2) : 0;
+      s.sumNetValue = +s.sumNetValue.toFixed(2);
+      s.sumNetPct = +s.sumNetPct.toFixed(2);
       arr.push(s);
     }
     arr.sort((a, b) => b.tradeCount - a.tradeCount);

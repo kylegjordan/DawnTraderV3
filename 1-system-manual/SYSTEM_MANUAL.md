@@ -10320,3 +10320,76 @@ Trade records opened under each cohort should be segmented in observation analys
 ---
 
 *End of Appendix B63. Items 15/17/18/19 produce their own deliverable documents (B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md, B63_ITEM18_SQE_AUDIT.md, B63_ITEM19_CADENCE_LATENCY_AUDIT.md) and are referenced from BATCH_63_COMPLETION_REPORT.md rather than the System Manual.*
+
+---
+
+# Appendix B64a — Regime & Strategy Drift Dashboard
+
+**Batch:** B64a (promoted from B71 during B63 closeout)
+**Deployed:** 2026-04-22 at PM2 #84
+**Purpose:** provide operators (Kyle + CC + Langston) a single dashboard showing how the system's regime classifier, directional-bias scoring, and strategy performance are actually distributed over time — not point-in-time snapshots.
+
+## B64a.1 Architecture
+
+The dashboard is a three-layer read-only analytics surface. No writes to production data. No background computation that could interfere with the trading pipeline.
+
+**Layer 1 — Data sources (read-only):**
+1. `logs/virtual_trades/*.jsonl` — closed trade records with `regime`, `strategy`, `sourcePool`, `FinalScore`, `rankingScore`, `netProfit`, `outcome`, `entryTime`, `exitTime`.
+2. `logs/phase15b_dbs_telemetry/*.jsonl` — per-MCE-cycle samples of regime classification + DBS distribution + clamp saturation telemetry installed during B61.
+3. `server/core/metrics/directional-bias-store.ts` in-memory ring buffer (see §B63.3).
+
+**Layer 2 — Aggregator (`server/services/drift-dashboard-aggregator.ts`):**
+- Entry: `computeDriftDashboard(window: DashboardWindow): DriftDashboardResponse`
+- 4 window modes: `rolling_24h`, `rolling_7d`, `rolling_30d`, `cohort_latest`
+- Produces:
+  - `tradeCounts` — total / wins / losses / winRate / avgNetPct
+  - `regime.shares` — per-regime share of MCE samples in window
+  - `regime.familyFlickerPct` — rolling measure of same-pair family-class flips per unit time
+  - `regime.rbsDriftContaminationPct` — rolling measure of RBS-labeled samples that behave as non-RBS
+  - `regime.componentClampSaturationPct` — slope/return/ema clamp saturation levels
+  - `strategiesByRegime[regime] = StrategyStats[]` with `{strategy, tradeCount, winCount, winRate, avgNetPct, sumNetPct, avgNetValue, sumNetValue}`
+  - `dbsDistribution[category] = sampleCount`
+  - `globalDbs.current` — latest snapshot + isStale + snapshotAgeSeconds
+  - `globalDbs.history24h` — filtered from store ring buffer
+  - `globalDbs.transitions` — filtered from store transitions array
+
+**Layer 3 — HTTP endpoint (`server/routes.ts`) → React UI (`client/src/pages/analytics.tsx` → `DriftDashboardSection`):**
+- Endpoint: `GET /api/analytics/drift-dashboard?window=rolling_24h`
+- UI is 5th Analytics tab. Window toggle (24h / 7d / 30d / cohort). Auto-refresh on a timer.
+- Global DBS sparkline: inline SVG, auto-scales to history's actual [min, max], zero-axis line when range crosses zero. Zero external chart-lib dependencies.
+- Per-regime strategy table: unified single-table layout with regime section headers; columns are column-aligned across all regimes via `colgroup` fixed-width declarations. Columns in order: Strategy | N | Wins | WR | Avg net $ | Avg net % | Sum net $ | Sum net %.
+
+## B64a.2 Why B64a exists (rolling vs snapshot doctrine)
+
+From CLAUDE.md critical rule #13 (codified during B61):
+
+> **Prefer rolling windows over single-point snapshots for distribution metrics.** Snapshots catch whatever moment they happen to land on and can be off by 10+ percentage points; rolling windows give you the mean AND the variance.
+
+B59 reported 47% drift contamination from a single 88-pair snapshot; B61's 13,954-sample rolling window measured 72.59% — same classifier, same universe. B59 also reported 19.3% TFS share (snapshot) vs B61's 3.42% (rolling). The gap was decision-threatening.
+
+**The Drift Dashboard exists to make rolling-window measurement the default observational surface** and to make it impossible to ask "what's the regime distribution" and get a snapshot answer. Every metric the dashboard exposes is rolling-window by construction.
+
+## B64a.3 Ring-buffer constants (see also `directional-bias-store.ts`)
+
+- `SNAPSHOT_HISTORY_MAX = 96` (24h at 15-min MCE cadence)
+- `TRANSITION_HISTORY_MAX = 50` (last 50 category transitions)
+- `GLOBAL_DBS_MIN_SAMPLE_COUNT = 20` (minimum pairs sampled before global DBS can publish)
+- `PAIR_HARD_EXPIRY_MS = 5 * 60 * 1000` (5-minute per-pair hard expiry)
+
+If any of these constants change, the aggregator's window filters must be re-validated and the UI sparkline's sampling density must be re-checked.
+
+## B64a.4 Invariants (do not violate without governance update)
+
+1. **No hardcoded regime strings in the aggregator.** All regime literals route through `CANONICAL_REGIMES` / `REGIMES.*`. Enforced by `regime_mapping_integrity.test.ts`. This was the last bug fixed in B64a HF (commit `cf7baef1`).
+2. **isStale is surfaced, not hidden.** If the global DBS snapshot's age exceeds the freshness window, `isStale: true` flows through to the UI and a badge is displayed. Do not silently replace a stale snapshot with a fabricated fresh one.
+3. **No writes from the dashboard code path.** The aggregator reads; the endpoint serves; the UI renders. No code in this chain mutates production state, triggers scans, or writes to disk.
+4. **Window filtering at aggregator boundary.** The store's ring buffer may hold up to 24h; consumers requesting `rolling_7d` get an empty history array (expected, not an error). Never extend the store's buffer to satisfy a longer window — instead add a secondary long-window persistence layer if that need arises.
+
+## B64a.5 Known open items (pre-registered for follow-up)
+
+- **History persistence across restart** — ring buffer is in-memory only; PM2 restart wipes it. DB-backed persistence is a candidate follow-up if operational evidence demands cross-restart snapshot continuity (currently: not needed, daily telemetry archive is sufficient for historical analysis).
+- **UI polish** — B71 slot is repurposed for final Drift Dashboard polish based on observation-window feedback (deferred until after 2026-04-28 Item 13 decision gate). Local redesign already drafted (column-aligned unified table, dollar-value columns added) — queued for deploy after open book resolves.
+
+---
+
+*End of Appendix B64a.*

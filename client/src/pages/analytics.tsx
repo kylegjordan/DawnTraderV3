@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1088,7 +1088,9 @@ interface DriftDashboardData {
     componentClampSaturationPct: { slope: number; return: number; ema: number };
   };
   strategiesByRegime: Record<string, Array<{
-    strategy: string; tradeCount: number; winCount: number; winRate: number; avgNetPct: number; sumNetPct: number;
+    strategy: string; tradeCount: number; winCount: number; winRate: number;
+    avgNetPct: number; sumNetPct: number;
+    avgNetValue: number; sumNetValue: number;
   }>>;
   dbsDistribution: Record<string, number>;
   globalDbs: {
@@ -1329,43 +1331,75 @@ function DriftDashboardSection() {
                 )}
               </div>
 
-              {/* Strategies by regime */}
+              {/* Strategies by regime — single unified table, perfectly column-aligned,
+                  constrained width, regime names rendered as full-row section headers so
+                  the columns don't re-indent per regime. */}
               <div>
                 <h4 className="text-sm font-medium mb-3">Strategy performance by regime at entry (closed trades in window)</h4>
-                <div className="space-y-4">
-                  {Object.entries(d.strategiesByRegime).map(([regime, strategies]) => (
-                    <div key={regime}>
-                      <p className="text-xs font-medium mb-2">{regime.replace(/_/g, ' ')}</p>
-                      {strategies.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">no closed trades in this regime during the window</p>
-                      ) : (
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-left text-muted-foreground border-b">
-                              <th className="py-1 pr-4">Strategy</th>
-                              <th className="py-1 pr-4 text-right">N</th>
-                              <th className="py-1 pr-4 text-right">Wins</th>
-                              <th className="py-1 pr-4 text-right">WR</th>
-                              <th className="py-1 pr-4 text-right">Avg net %</th>
-                              <th className="py-1 pr-4 text-right">Sum net %</th>
+                <div className="max-w-4xl">
+                  <table className="w-full text-xs table-fixed">
+                    <colgroup>
+                      <col style={{ width: '22%' }} />  {/* Strategy */}
+                      <col style={{ width: '6%' }} />   {/* N */}
+                      <col style={{ width: '7%' }} />   {/* Wins */}
+                      <col style={{ width: '8%' }} />   {/* WR */}
+                      <col style={{ width: '13%' }} />  {/* Avg net $ */}
+                      <col style={{ width: '13%' }} />  {/* Avg net % */}
+                      <col style={{ width: '13%' }} />  {/* Sum net $ */}
+                      <col style={{ width: '13%' }} />  {/* Sum net % */}
+                    </colgroup>
+                    <thead>
+                      <tr className="text-left text-muted-foreground border-b sticky top-0 bg-background">
+                        <th className="py-1 pr-2">Strategy</th>
+                        <th className="py-1 px-2 text-right">N</th>
+                        <th className="py-1 px-2 text-right">Wins</th>
+                        <th className="py-1 px-2 text-right">WR</th>
+                        <th className="py-1 px-2 text-right">Avg net $</th>
+                        <th className="py-1 px-2 text-right">Avg net %</th>
+                        <th className="py-1 px-2 text-right">Sum net $</th>
+                        <th className="py-1 pl-2 text-right">Sum net %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(d.strategiesByRegime).map(([regime, strategies]) => (
+                        <React.Fragment key={regime}>
+                          <tr className="bg-muted/40">
+                            <td colSpan={8} className="py-1.5 px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {regime.replace(/_/g, ' ')}
+                            </td>
+                          </tr>
+                          {strategies.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="py-1 pl-4 pr-2 text-xs italic text-muted-foreground">
+                                no closed trades in this regime during the window
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {strategies.map((s) => (
-                              <tr key={s.strategy} className="border-b border-border/40">
-                                <td className="py-1 pr-4 font-mono">{s.strategy}</td>
-                                <td className="py-1 pr-4 text-right font-mono">{s.tradeCount}</td>
-                                <td className="py-1 pr-4 text-right font-mono">{s.winCount}</td>
-                                <td className="py-1 pr-4 text-right font-mono">{s.winRate.toFixed(1)}%</td>
-                                <td className={`py-1 pr-4 text-right font-mono ${s.avgNetPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>{s.avgNetPct >= 0 ? '+' : ''}{s.avgNetPct.toFixed(3)}%</td>
-                                <td className={`py-1 pr-4 text-right font-mono ${s.sumNetPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>{s.sumNetPct >= 0 ? '+' : ''}{s.sumNetPct.toFixed(2)}%</td>
+                          ) : (
+                            strategies.map((s) => (
+                              <tr key={`${regime}-${s.strategy}`} className="border-b border-border/40">
+                                <td className="py-1 pl-4 pr-2 font-mono truncate">{s.strategy}</td>
+                                <td className="py-1 px-2 text-right font-mono">{s.tradeCount}</td>
+                                <td className="py-1 px-2 text-right font-mono">{s.winCount}</td>
+                                <td className="py-1 px-2 text-right font-mono">{s.winRate.toFixed(1)}%</td>
+                                <td className={`py-1 px-2 text-right font-mono ${s.avgNetValue >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  {s.avgNetValue >= 0 ? '+$' : '-$'}{Math.abs(s.avgNetValue).toFixed(2)}
+                                </td>
+                                <td className={`py-1 px-2 text-right font-mono ${s.avgNetPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  {s.avgNetPct >= 0 ? '+' : ''}{s.avgNetPct.toFixed(3)}%
+                                </td>
+                                <td className={`py-1 px-2 text-right font-mono ${s.sumNetValue >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  {s.sumNetValue >= 0 ? '+$' : '-$'}{Math.abs(s.sumNetValue).toFixed(2)}
+                                </td>
+                                <td className={`py-1 pl-2 text-right font-mono ${s.sumNetPct >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  {s.sumNetPct >= 0 ? '+' : ''}{s.sumNetPct.toFixed(2)}%
+                                </td>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  ))}
+                            ))
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 

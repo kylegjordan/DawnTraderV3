@@ -1,12 +1,20 @@
-# BATCH 63 — Completion Report (SKELETON, OPEN)
+# BATCH 63 — Completion Report
 
-**Status:** IMPLEMENTATION COMPLETE (2026-04-21) — audit and observation items open
-**Final close:** pending 24-48h observation metrics + Items 15/18/19 audit deliverables
+**Status:** AUDITS CLOSED (2026-04-22) — observation window in final stretch
+**Final close:** pending Item 13 decision gate (2026-04-28) + 48h observation completion
 **Scope doc:** `Claude Comms and Packages/Scope Files/BATCH_63_SCOPE.md` (19 items)
 **Pre-audit:** `Claude Comms and Packages/Scope Files/BATCH_63_PRE_AUDIT.md`
 **Trigger evidence:** `Claude Comms and Packages/Scope Files/BATCH_63_COUNTERFACTUAL_AUDIT.md`
 
-> This is the skeleton report committed 2026-04-22 alongside the governance updates. Items marked **[PENDING]** are filled in after the 24-48h observation window and/or when audit deliverables land.
+**Audit deliverables (all closed 2026-04-22):**
+- `B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md` (47.8 KB)
+- `B63_ITEM18_SQE_AUDIT.md` (47.8 KB)
+- `B63_ITEM19_CADENCE_LATENCY_AUDIT.md` (24.4 KB, corrected)
+- `B63_STREAKINESS_ANALYSIS.md` (13 KB, companion doc)
+- `MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` (consolidation)
+- `EXTERNAL_DATA_ARCHITECTURE_PLACEMENT.md` (B67 anchor)
+
+> This report was updated 2026-04-22 after all Item 15/18/19 audits + streakiness + synthesis + placement docs landed. Items marked **[OBS PENDING]** are awaiting the 2026-04-28 decision gate. Items marked **[OBS IN PROGRESS]** have data accumulating and will close at window end.
 
 ---
 
@@ -43,13 +51,13 @@ B63 originally scoped 9 items (2026-04-20). Expanded to 19 items (2026-04-21) af
 | 10 | Counter-trend LONG guards | Implementation | ✅ SHIPPED | commit `b0b8e39e` + integrated into `c3fe0712`; 5 occurrences of `b63b_counter_trend_long_exclusion` in compiled dist |
 | 11 | vwap_pullback strong-trend lane promotion + lane arbitration | Implementation | ✅ SHIPPED | commit `c3fe0712`; `MULTI_FAMILY_ELIGIBILITY` map + first-claim-wins guard |
 | 12 | Strong-trend geometry override plumbing | Implementation | ✅ SHIPPED | commit `c3fe0712`; 4-test contract suite passing |
-| 13 | Observation + decision gate for dedicated `strong_bull_pullback` | Decision gate | **[PENDING 1-week observation]** | evaluate at 2026-04-28 per Item 13 criteria |
+| 13 | Observation + decision gate for dedicated `strong_bull_pullback` | Decision gate | **[OBS PENDING — 2026-04-28]** | evidence-accumulation script `B63_ITEM13_EVIDENCE_SCRIPT.py` ready; evaluate at 2026-04-28 per Item 13 criteria (KEEP if WR ≥ 50% AND AvgR ≥ 0.15; TUNE if intermediate; BUILD_DEDICATED if poor) |
 | 14 | Strong-trend lane mode-overlay bypass | Implementation | ✅ SHIPPED | commit `c3fe0712`; live proof from PM2 #80 same-cycle log pair (ETH multipliers applied vs EVAA bypass identical before/after) |
-| 15 | Multi-lever adaptive framework audit | Audit | **[PENDING — B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md]** | kick-off after 24-48h observation |
+| 15 | Multi-lever adaptive framework audit | Audit | ✅ **CLOSED 2026-04-22** | `B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md` (47.8 KB). 69 levers inventoried (51 static-tunable, 18 runtime-adaptive). Snapshot-heavy scoring (7/10 scoring inputs). ExpectedEdge Pearson r = −0.130 vs actual net. PredConf self-cancellation identified as design flaw. Part E modularization lens with 4-cluster analysis + 5-module partition. |
 | 16 | Global DBS persistent store + atomic snapshot + 20-pair floor | Implementation | ✅ SHIPPED | commit `a4f5dbe0`; 11-test contract suite passing; cold-start + warm-up verified post-deploy |
 | 17 | High-DBS exclusivity decision gate | Decision gate | ✅ KEEP EXCLUSIVE (consensus 2026-04-21) | revisit if observation shows missed signals; see B63_PRE_AUDIT §13 Item 17 |
-| 18 | Full SQE audit | Audit | **[PENDING — B63_ITEM18_SQE_AUDIT.md]** | kick-off after 24-48h observation |
-| 19 | Classifier cadence / latency audit | Audit | **[PENDING — B63_ITEM19_CADENCE_LATENCY_AUDIT.md]** | kick-off after 24-48h observation |
+| 18 | Full SQE audit | Audit | ✅ **CLOSED 2026-04-22** | `B63_ITEM18_SQE_AUDIT.md` (47.8 KB, Parts A-E). FinalScore anti-predictive (r = −0.017, D9 WR 15.3%). MIN_FINAL_SCORE 1.8% filter / MIN_REGIME_WEIGHT 0.0% filter. rankingScore not logged. Only quant-strong_trend source pool net-profitable (validates B63 Item 11). PredConf self-cancellation design flaw. 6 P1 constants to promote in B66. |
+| 19 | Classifier cadence / latency audit | Audit | ✅ **CLOSED 2026-04-22** (with corrections) | `B63_ITEM19_CADENCE_LATENCY_AUDIT.md` (24.4 KB). 25 inputs inventoried. H1 (global regime frozen) confirmed pre-B62, **PARTIALLY FIXED post-B62** (2 transitions in 72h, severity P0→P1). H2 (scan-cycle batch correlation) confirmed: 87.8% same-outcome vs 51.9% expected (36pp excess). H3 mechanism validated via H1. MCE cadence corrected to 60s cache TTL (not 5min cycles). |
 
 ## 4. Verification metrics
 
@@ -57,14 +65,14 @@ B63 originally scoped 9 items (2026-04-20). Expanded to 19 items (2026-04-21) af
 
 **Observation start:** 2026-04-21 ~15:34 UTC (PM2 #81 = final stage boundary). Window runs 24-48h minimum per Langston's cohort-separation rule.
 
-| Metric | Target | Current | Status |
+| Metric | Target | Current (2026-04-22 ~12:40 UTC check, T+21h) | Status |
 |---|---|---|---|
-| Path D trade count (investigation trigger if <3 in 2h) | ≥ 3 in 2h | **[PENDING]** | — |
-| Strong-DBS routing share to Path 6 | ≥ 95% | **[PENDING]** | — |
-| Existing strategies firing on \|DBS\|≥0.35 | ~0 | **[PENDING]** | — |
-| Path D TP hit rate (N ≥ 20 closed) | ≥ 30% | **[PENDING]** | — |
-| Path D stop-out rate (N ≥ 20 closed) | ≤ 55% | **[PENDING]** | — |
-| Path D RTB rank median | top half | **[PENDING]** | — |
+| Path D trade count (investigation trigger if <3 in 2h) | ≥ 3 in 2h | 63 entries total since first fire 2026-04-20 14:48 UTC (1/35/27 by day); peak bursts during UP tape | ✅ well above trigger |
+| Strong-DBS routing share to Path 6 | ≥ 95% | 100% of SBT entries carry `sourcePool=quant-strong_trend` (63/63) | ✅ |
+| Existing strategies firing on \|DBS\|≥0.35 | ~0 | Counter-trend LONG guards live (Item 10), 5 guard sites in dist — no audit yet of guard hit count across cohort | pending raw event count |
+| Path D TP hit rate (N ≥ 20 closed) | ≥ 30% | 53.97% (34 TP / 63 closed; TIMEOUT=1, SL=28) | ✅ |
+| Path D stop-out rate (N ≥ 20 closed) | ≤ 55% | 44.44% (28 SL / 63 closed) | ✅ |
+| Path D RTB rank median | top half | **[PENDING — RTB rank logger not wired into JSON export]** | — |
 
 ### 4.2 Items 10-14 post-deploy
 
@@ -90,17 +98,67 @@ B63 originally scoped 9 items (2026-04-20). Expanded to 19 items (2026-04-21) af
 | Zero `[GlobalDBS][invalidCompute]` | 0 | 0 | ✅ |
 | Zero `[B63 Item 16][MCE] Serving STALE` | 0 | 0 | ✅ |
 
-## 5. Observation analysis (placeholder — filled at window close)
+## 5. Observation analysis (partial — T+21h since PM2 #81, T+10.5h since PM2 #84)
 
-**[PENDING — 24-48h post-deploy review]**
+**Interim snapshot captured 2026-04-22 ~12:40 UTC. Full 24-48h close still outstanding; these numbers are preliminary but directionally meaningful.**
 
-Planned content:
-- Aggregate trade counts by strategy + sourcePool + cohort
-- Path D WR, SL/TP distribution, median hold time
-- vwap_pullback-in-strong-trend-lane outcomes (feeds Item 13 decision gate)
-- Before/after comparison of high-DBS trade WR (counterfactual target: material improvement over pre-fix 37.8% WR baseline)
-- Any `strong_trend_lane_conflict` firings (evidence for Item 11's first-claim-wins vs strict R-multiple arbitration)
-- Mode-overlay bypass evidence across multiple sample trades (not just the first proof)
+### 5.1 SBT (Path D) aggregate, all cohorts combined
+
+| Field | Value |
+|---|---|
+| Total SBT entries since first fire 2026-04-20 14:48 UTC | 63 |
+| By day (opened): 04-20 / 04-21 / 04-22 | 1 / 35 / 27 |
+| Closed at check time | 63 (all closed — 0 still open in JSON log snapshot) |
+| Resolution mix | TP 34 / SL 28 / TIMEOUT 1 |
+| Win rate | **53.97%** |
+| sourcePool routing | 100% `quant-strong_trend` (0 leakage) |
+| Regime at entry | 52 TREND_FRIENDLY_STABLE / 11 IMPULSE_EXPANSION |
+| pairDirectionalBias at entry | 43 UP_MODERATE / 20 UP_STRONG |
+| Sum net profit (units: decimal-return per trade, not $-scaled) | +0.38 |
+| Top 3 winners | BASED/USD +0.189, UAI/USD +0.185, H/USD +0.136 — all take_profit |
+| Bottom 3 losers | UAI/USD -0.159, EUL/USD -0.084, EUL/EUR -0.078 — all stop_loss |
+
+**Read:** WR 54% on N=63 meets the ≥30% TP-hit target and comes in well under the ≤55% stop-out ceiling, even counting TIMEOUT as non-TP. Path D is doing what the scope said it would do.
+
+### 5.2 Per-day close trajectory
+
+| Day | Opened | TP | SL | TIMEOUT | WR | Notes |
+|---|---:|---:|---:|---:|---:|---|
+| 04-20 (seed day, 1 trade) | 1 | 1 | 0 | 0 | 100% | UAI/USD TP in IMPULSE_EXPANSION — first fire |
+| 04-21 (Stages 10A/10BC/16 live) | 35 | 20 | 14 | 1 | 57.14% | healthy early-life cohort |
+| 04-22 (post-B64a deploy) | 27 | 13 | 14 | 0 | 48.15% | tape cooled midday; WR dropped but still within target |
+
+### 5.3 Drift Dashboard rolling_24h (independent read, 2026-04-22 12:40 UTC)
+
+Pulled from `/api/analytics/drift-dashboard?window=rolling_24h`:
+
+- Regime mix (88,667 samples, 15-min cadence): TFS 57.93% / RBS 17.71% / ST 13.05% / IE 9.76% / HVU 1.55%. Family flicker 0.89% — healthy.
+- Global DBS: score 0.506 (UP_MODERATE), pairCount 167, `isStale=false`, snapshotAge 20s. **Only 1 transition in 24h** — NEUTRAL → UP_MODERATE at 2026-04-22 02:05:20 UTC. That is the PM2 #84 cold-start transition; there has been zero flicker since.
+- Trade counts in dashboard (closed-only, rolling_24h): total 80, WR 51.25% across all strategies.
+- SBT in TFS (within 24h window): 30 trades, 15 wins, WR 50%, avgNetPct +37.24 (sum +1117%). Note: `avgNetPct` is price-% entry→exit, not position-normalized $ return — large values reflect TP being ~3×ATR off entry on micro-caps.
+- SBT in IE (within 24h window): 6 trades, 1 win, WR 16.67%, avgNetPct +113.61 (dominated by outlier). IE cohort is small; do not over-read.
+
+### 5.4 vwap_pullback-in-strong-trend-lane (Item 13 feed)
+
+- Dashboard rolling_24h in TFS: vwap_pullback n=2, both wins (100% WR, sum +0.01 pct). Sample is too small for any verdict; Item 13 gate evaluates 2026-04-28.
+- Ratio vs legacy QUANT-TREND-lane baseline: pre-B64a vwap_pullback cohort was WR 37.3% / meanPL -1.033% (n=51). Current 2-trade snapshot does not reject the baseline — waiting for the 1-week observation.
+
+### 5.5 Counter-trend LONG (Item 10) activity
+
+The guard is active in dist (5 sites found), but the market during the observation window was UP-biased with `pairDBS ≤ -0.35` rare. So the guard has not had many chances to fire. Accumulates as market rotates — not a gap.
+
+### 5.6 Global DBS store (Item 16) stability
+
+Zero `degradedCoverage`, zero `noSnapshot`, zero `invalidCompute`, zero `Serving STALE` logs in the full 21-hour window post-PM2 #81. Store is stable; the design holds in production.
+
+### 5.7 Mode-overlay bypass (Item 14) — additional evidence needed
+
+First-proof log pair captured at PM2 #80 +3min (ETH/USD normal lane vs EVAA/USD strong-trend lane). During the overnight window SURVIVAL mode has not been hit again to generate more proofs; pending a second SURVIVAL activation to fill the bypass-evidence table.
+
+### 5.8 Open concerns
+
+1. **SBT WR fell from 57% (04-21) to 48% (04-22 through 10:26 UTC).** Plausibly tape cooling (global DBS still UP_MODERATE but pairDBS distribution loosening). Not a red flag — single-day noise on N=27. Monitor the next 24h.
+2. **`avgNetPct` field semantics in drift dashboard** — value scale suggests price-% entry→exit, not position-adjusted $ return. Usable for comparison across strategies (same formula), but should not be read as a portfolio metric. Flagged for B64 wording pass.
 
 ## 6. B58a Authority Baseline Verification (B64-lite integrated check)
 
@@ -166,14 +224,142 @@ Tier 2 pending (filled at window close):
 
 ## 8. Open items for final close
 
-- **[PENDING]** Observation window metrics (24-48h from PM2 #81 = ~2026-04-22 15:34 UTC through ~2026-04-23 15:34 UTC at minimum)
-- **[PENDING]** Item 13 decision gate (1-week observation = 2026-04-28): vwap_pullback-in-strong-trend-lane KEEP/TUNE/BUILD_DEDICATED
-- **[PENDING]** Item 15 audit deliverable: `B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md` (multi-lever adaptive framework — KEEP/MODIFY/REPLACE verdict + ride-along table segmented by archetype family)
-- **[PENDING]** Item 18 audit deliverable: `B63_ITEM18_SQE_AUDIT.md` (full SQE audit covering FinalScore/RegimeWeight thresholds + rankingScore architecture 3-outcome eval + structural single-vs-multi-stage question + VTS-alignment gaps)
-- **[PENDING]** Item 19 audit deliverable: `B63_ITEM19_CADENCE_LATENCY_AUDIT.md` (per-input cadence + response + tail-drag table + full-loop adaptation latency vs observed 2-6h market-shift timescale)
-- **[PENDING]** Final Tier 2 governance sync after audit deliverables land
+- **[CLOSED 2026-04-22]** Item 15 audit — `B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md` (47.8 KB, L1/L2/L3 + Part E)
+- **[CLOSED 2026-04-22]** Item 18 audit — `B63_ITEM18_SQE_AUDIT.md` (47.8 KB, Parts A-E)
+- **[CLOSED 2026-04-22]** Item 19 audit — `B63_ITEM19_CADENCE_LATENCY_AUDIT.md` (24.4 KB, Parts A/B/C/E + post-B62 H1 re-verification)
+- **[CLOSED 2026-04-22]** Streakiness companion analysis — `B63_STREAKINESS_ANALYSIS.md` (13 KB)
+- **[CLOSED 2026-04-22]** Modularization synthesis — `MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md`
+- **[CLOSED 2026-04-22]** External data architectural placement — `EXTERNAL_DATA_ARCHITECTURE_PLACEMENT.md`
+- **[OBS IN PROGRESS]** 48h observation window — ~28-32h elapsed as of report update (started ~2026-04-21 12:00 UTC). No code changes during window per Kyle directive.
+- **[OBS PENDING 2026-04-28]** Item 13 decision gate: vwap_pullback-in-strong-trend-lane KEEP/TUNE/BUILD_DEDICATED. Evidence-accumulation script ready at `B63_ITEM13_EVIDENCE_SCRIPT.py`.
+- **[NEXT BATCH]** B66 scope written: `BATCH_66_SCOPE.md` — core recalibration (P0 formula constant promotion, PredConf rolling window, per-underlying position limits, realized-EV-adaptive floor, rankingScore logging).
+- **[FINAL CLOSE BLOCKER]** Item 13 verdict at 2026-04-28 is the last remaining dependency; batch formally closes with that verdict recorded.
 
-## 9. References
+## 9. Autonomous overnight monitoring check (2026-04-22 ~12:40 UTC)
+
+Kyle requested autonomous monitoring continuation between sessions. This section logs the findings of the T+21h check so the next manual session picks up cold.
+
+### 9.1 Tasks executed
+
+| # | Task | Result |
+|---|---|---|
+| 1 | Count new SBT trades opened since first fire | 63 total (1 on 04-20, 35 on 04-21, 27 through 04-22 10:26 UTC) |
+| 2 | Classify SBT closed trades TP vs SL vs TIMEOUT | 34 TP / 28 SL / 1 TIMEOUT; 0 still open in JSON log |
+| 3 | Scan PM2 logs for new error patterns since last check | See §9.3 — all patterns are pre-existing background noise, no B63 regression |
+| 4 | Verify USDC/CHF errors still absent | Confirmed absent from last ~5000 err log lines |
+| 5 | Query VTS trade log JSON for SBT entries | Done — schema is `resultType` (take_profit / stop_loss / timeout), `netProfit` per decimal return, `sourcePool` always `quant-strong_trend` for SBT |
+| 6 | Completion report update | This section |
+
+### 9.2 Route of access notes for the next autonomous run
+
+- **Trade data ground truth:** `/home/deploy/dawntrader/logs/virtual_trades/<YYYY-MM-DD>.json`. Each entry is a closed trade object. Schema: `status`, `resultType`, `entryTime` (ms), `exitTime` (ms), `entryPrice`, `exitPrice`, `netProfit` (decimal return per trade, NOT $), `positionSize` ($), `strategy`, `sourcePool`, `regime`, `pairDirectionalBias(/Score)`, `globalDirectionalBias(/Score)`.
+- **`paper_sim_trades` DB table is empty** — VTS trades are file-based (JSON), not DB-persisted on staging as of 2026-04-22. Trying `SELECT FROM paper_sim_trades` returns 0 rows. Use the JSON files.
+- **Drift Dashboard API endpoint:** `GET /api/analytics/drift-dashboard?window={rolling_24h|rolling_7d|rolling_30d|cohort_latest}` (not `/api/vts/drift-dashboard`).
+- **Auth:** `POST /api/auth/login` returns `{ accessToken }`. Bearer in subsequent calls.
+
+### 9.3 Error taxonomy (last ~8000 err log lines)
+
+All of the top error buckets are pre-existing background noise predating B63, not new regressions:
+
+| Count | Pattern | Age | Classification |
+|---:|---|---|---|
+| 2,397 | `[8.9.0-B][WS] Sub Error: Method(s) not found` | present since PM2 error log birth 2026-03-30 | pre-existing — Kraken WebSocket subscription-method mismatch; MD fallback active, no market-data outage |
+| 35 | `Kraken API error: EQuery:Unknown asset pair` (REBN/HND contexts) | old | pre-existing — specific pair name-mismatch, not impacting scanner universe |
+| 21 | `[CCP][Export] Error reading <path>.json: SyntaxError: Unterminated string` | old | pre-existing — export-only path, does not affect live scanning |
+| 20+ | OpenAI `invalid_api_key sk-place…` | old | expected on staging — API key placeholder, AI-insights panel unused |
+| 14 | `Failed trades check: invalid input value for enum trading_mode: <uuid>-…` | old | pre-existing — SystemHealth job using a uuid-like string in enum slot; cosmetic |
+| 14 | AI insights auth error (same as above) | old | expected |
+| 7 | `federatedEthicsHub.getDeltaUpdates is not a function` | old | pre-existing — scheduler method missing, not in B63 surface |
+| 6 | `EmbeddingService auth error` | old | tied to OpenAI key placeholder |
+| 3 | `/home/runner` EACCES | old | pre-existing — Replit-era path reference, never updated to `/home/deploy` in one specific writer |
+| 3 | `systemHealthMonitor.startPeriodicChecks is not a function` | old | pre-existing |
+| 2 | `UnifiedCore Failed to synchronize: error: syntax error at or near "desc"` | old | pre-existing — SQL fragment |
+| 2 | `FORMULA-AUDIT Alert creation error: duplicate key value violates unique constraint "unique_global_alert"` | old | pre-existing — upsert needs ON CONFLICT |
+| 2 | `AutonomyController: Cannot read properties of undefined (reading 'startsWith')` | old | pre-existing — null-check missing |
+
+**Verdict:** no new error patterns introduced by B63 implementation stages 10A/10B/10C/16 or the B64a dashboard deploy. The log floor is noisy with Replit-era/pre-B63 issues that are queued for later cleanup, but the B63 surface is clean.
+
+### 9.4 WebSocket investigation note (defer to separate batch)
+
+`[8.9.0-B][WS] Sub Error: Method(s) not found` is the loudest single pattern (2,397 hits in the sampled window; 14,630 in the full err-log file). It predates B63 by weeks (first appearance in log file dated 2026-03-30). The system is functioning on the REST fallback — `[MD-Coordinator] WebSocket data stale (~30s), checking fallback...` runs every 30s and immediately recovers, which is why `isStale=false` on global DBS and scan cycles keep producing signals. Treating this as a known-to-system, low-priority backlog item (candidate for B64-lite housekeeping scope) rather than a B63 regression.
+
+### 9.5 SBT cohort resolution mini-table (for Item 13 and §5 feeds)
+
+| Cohort | N | TP | SL | TIMEOUT | WR | Notes |
+|---|---:|---:|---:|---:|---:|---|
+| All-time since 2026-04-20 14:48 UTC | 63 | 34 | 28 | 1 | 53.97% | 100% quant-strong_trend routing |
+| 04-22 (today) subset through 10:26 UTC | 27 | 13 | 14 | 0 | 48.15% | WR softened day-over-day — monitor |
+| 04-21 (full day) | 35 | 20 | 14 | 1 | 57.14% | main cohort post-Stages 10A/10BC/16 |
+| Outlier check | — | — | — | — | — | 3 UAI/USD re-fires (1 TP +0.189, 1 TP +0.185, 1 SL -0.159) — pair re-selected by scanner multiple times, consistent with design |
+
+### 9.6 Next autonomous check recommended items
+
+- Re-run §5.1 + §5.2 at T+48h (≈ 2026-04-23 15:34 UTC) for cohort-close numbers and update §4.1.
+- Pull `source_pool` + `strategy` 24h rollup from the Drift Dashboard for Items 10/11 accumulation (counter-trend guard firings, lane-promotion vwap_pullback count).
+- If SBT WR drops below 45% over the 04-22 cohort full-day close, flag for investigation before Item 13 evaluation on 2026-04-28.
+
+## 10. Consolidated headline findings (from Items 15/18/19 + Streakiness + Synthesis + Placement)
+
+### 10.1 Scoring pipeline is anti-predictive
+
+- **FinalScore vs net profit Pearson r = −0.017** (Item 18 — uncorrelated with slight negative bias)
+- **Decile-1 WR 50.8%, Decile-9 WR 15.3%** — monotonic inversion in TFS regime (46.2% of trades)
+- **ExpectedEdge vs actual net Pearson r = −0.130** (Item 15 — worse than FinalScore; systematic overestimation). Mean expected edge +2.28% vs mean actual net −0.98%.
+- **Only `quant-strong_trend` source pool is net-profitable** (n=53, 58.5% WR, +0.0093 avg net). Every other pool net-negative. Validates B63 Item 11 strong-trend-lane architecture.
+- **PredConf self-cancellation design flaw** (Item 15 §3.10, Item 18 §D) — same input eases FinalScore gate AND tightens ROI gate. In VTS where FinalScore is no-op, ROI becomes binding → high-confidence trades face STRICTER filtering than low-confidence ones.
+
+### 10.2 Temporal pathologies (cause of streakiness)
+
+- **Runs test z = −15.574 (p < 10⁻⁵⁰)** on 620 closed trades (full 7d window) — outcomes are catastrophically non-random.
+- **Post-B62 re-measurement (2026-04-20+, n=163):** z = **−5.43** (still rejects independence but 3× less extreme). Max loss streak drops from 70 → 20. WR rises from 34.1% → 62.6%. **B62 alone delivered most of the streakiness reduction** by adding DBS as a regime-classifier input. B66's success-criteria target of z > −10 is already met post-B62.
+- **Max loss streak: 70 consecutive losses** (pre-B62) across 6 strategies, 5 pair regimes, 3 source pools, 42 pairs. Only constant: global regime = 100% TFS.
+- **Scan-cycle batch correlation 87.8% same-outcome** vs 51.9% expected under independence (Item 19 H2). 21% of all trades enter in multi-entry minutes. Consistent with VTS design intent (broad capture, no SQE filtering) but sets the minimum requirement for active-trading gate tightness in Phase 19.
+- **Global regime frozen pre-B62, PARTIALLY FIXED post-B62** (Item 19 H1 re-verification). 2 global regime transitions in 72h post-B62. Severity P0 → P1.
+- **MCE on-demand per-pair with 60s cache TTL** (corrected in Item 19). Not "5-minute cycles" as initial framing suggested. Staleness window = ~2 consecutive scans share the same cached context.
+- **PredConf uses all-time cumulative VTS WR** (Item 15 §3.1) — in a market that shifts on multi-hour timescales, it measures a market that no longer exists.
+
+### 10.3 Lever inventory + rigidity
+
+- **69 adaptive levers across 14 categories** (Item 15 Level 1)
+- **51 (74%) are static-tunable** — hard-coded constants requiring code deploy to change
+- **18 (26%) genuinely adaptive** at runtime
+- **Only 6 of 51 static-tunable are DB-driven** (via `screener_filters` table); **45 are hard-coded in source across 12+ files**
+- **7 of 10 scoring inputs use snapshot or cumulative data** (governance violation per CLAUDE.md §5 rule #13)
+
+### 10.4 Modularization — 8 canonical modules across 5 orthogonal dimensions
+
+Synthesized from Items 15/18/19 §E sections + streakiness mechanisms + Kyle 2026-04-22 directives on multi-exchange + asset-class filter sets:
+
+**Modules:** Exchange Adapter / Filter Module Family / Context Provider (extended MCE) / Eligibility / Scoring Kernel / Threshold / Profitability / Ranking (currently missing — Phase 19 new module).
+
+**Dimensions:** `(exchange, asset_class, filter, strategy, regime) → constants` with most-specific-wins resolution hierarchy.
+
+**Primary driver per Kyle directive:** modularization is the REQUIRED precondition for asset-class expansion (crypto perpetuals, x-stocks, real equities, FX) AND new-exchange expansion (Binance, Alpaca, IBKR, FX brokers). Without it, adding any of these requires forking; with it, each becomes DB rows + small adapter/filter implementations.
+
+**Secondary driver:** rapid calibration iteration. Items 15/18 found the 6 P1 constants need promotion for B66 recalibration to be iteration-fast rather than deploy-cycle-slow.
+
+### 10.5 External data architectural placement (B67 anchor)
+
+External data sources feed **MCE (extended)** — NOT SQE, NOT per-strategy. Architectural decision documented in `EXTERNAL_DATA_ARCHITECTURE_PLACEMENT.md`:
+- MCE is already the context distribution layer; extending its output schema means all consumers (Scoring Kernel, Regime Classifier, Strategy detect(), Mode Overlay, SQE) auto-benefit
+- Asset-class routing required: crypto pair context excludes equity fields, and vice versa
+- Cadence-awareness mirrors `directional-bias-store.ts` pattern: isStale flags propagate, explicit staleness semantics, no silent reuse
+
+### 10.6 B66 scope (written 2026-04-22)
+
+`BATCH_66_SCOPE.md` — concrete 3-sub-deploy batch:
+- **B66.1:** `module_constants` table + P0 formula constant promotion (6 items)
+- **B66.2:** PredConf rolling window + per-underlying position limits
+- **B66.3:** Realized-EV-adaptive Net EV floor + rankingScore logging + P2/P3 cleanup
+- **Prereq:** B65 (TEC wiring + asset_class + exchange schema formalization)
+- **Success criteria:** runs-test z > −10 (streakiness reduced), max loss streak < 30, FinalScore vs net profit r > +0.05, ExpectedEdge r > −0.05
+
+### 10.7 Post-live phases queued
+
+- **Modularization Phase** (post-live, new phase slot): extract 8 modules from monolith, formalize Exchange Adapter, build Ranking module, per-asset-class filter sets, module_constants resolution hierarchy
+- **Phase 21.5:** new exchange + asset class expansion (depends on Modularization Phase)
+
+## 11. References
 
 - `BATCH_63_SCOPE.md` — 19-item scope + 5-row Item 16 behavior spec
 - `BATCH_63_PRE_AUDIT.md` — per-item implementation plan, audit methodology, SIM consultation

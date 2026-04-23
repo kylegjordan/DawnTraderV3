@@ -515,7 +515,15 @@ function pruneReentryMaps(): void {
     }
   }
 }
-const MAX_HOLD_MS = 24 * 60 * 60 * 1000; // Directive 11.6: 24 hours max hold time (configurable)
+// 2026-04-23: 24h VTS timeout removed per Kyle directive. Rationale: concurrent-open count has
+// been comfortably below the 300-trade VTS cap (peak ~170 on 2026-04-22), and the 24h cap was
+// prematurely closing trades that may have resolved naturally via TP/SL given more time. 63
+// timeouts in the 04-16 to 04-23 window (43 on 04-23 alone) — the cap was biting frequently and
+// converting what could have been TP/SL outcomes into "timeout" rows with uncertain attribution.
+// Removing the cap gives us cleaner learning data on natural trade duration. If open-trade count
+// starts approaching 300 consistently, revisit via cap raise (300 → 500) or re-introduction of
+// a 48h timeout.
+const MAX_HOLD_MS = Number.POSITIVE_INFINITY;
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
 let phase10SessionStartTime: number | null = null;
