@@ -803,6 +803,8 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
               <SortableHeader label="Pool (I/R)" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
+              {/* B65.2-HF2c: TEC State column on Closed Simulated Trades for parity with Open table */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Trailing-exit mode the trade ended in. TARGET = closed at static target/stop/timeout; MOONBAG = flipped into trailing mode at target and closed via trailing stop or moonbag-duration cap.">TEC State</th>
               <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Entry/Exit" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
@@ -826,7 +828,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={24} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={25} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
@@ -861,6 +863,18 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                       {(trade.sourcePool ?? 'unknown').toUpperCase()}
                     </Badge>
                   </td>
+                  {/* B65.2-HF2c: TEC State column on Closed — TARGET vs MOONBAG end-state */}
+                  <td className="px-3 py-2">
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${(trade as any).tradeMode === 'TRAILING_TAKE' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}
+                      title={(trade as any).tradeMode === 'TRAILING_TAKE'
+                        ? 'Trade entered moonbag (trailing) mode after hitting target — closed via trailing stop or duration cap'
+                        : 'Trade closed at static target, stop, or timeout — never entered trailing mode'}
+                    >
+                      {(trade as any).tradeMode === 'TRAILING_TAKE' ? '🌙 MOONBAG' : 'TARGET'}
+                    </Badge>
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-mono text-xs text-blue-400">${trade.dollarValue?.toFixed(2) ?? '0.00'}</span>
@@ -880,30 +894,20 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <div className="flex flex-col items-center gap-0.5">
-                      <Badge variant="outline" className={`text-xs ${getResultBadgeColor(trade.resultType)}`}>
-                        {trade.resultType === 'TRAILING_STOP_HIT' || trade.resultType === 'MOONBAG_TIMEOUT' ? (
-                          <TrendingUp className="w-3 h-3 mr-1 inline" />
-                        ) : trade.resultType.includes('TARGET') || trade.resultType.includes('PROFIT') ? (
-                          <TrendingUp className="w-3 h-3 mr-1 inline" />
-                        ) : trade.resultType.includes('STOP') ? (
-                          <TrendingDown className="w-3 h-3 mr-1 inline" />
-                        ) : (
-                          <AlertTriangle className="w-3 h-3 mr-1 inline" />
-                        )}
-                        {getResultLabel(trade.resultType)}
-                      </Badge>
-                      {/* B65.2: Moonbag chip on trades that ended in TRAILING_TAKE mode */}
-                      {(trade as any).tradeMode === 'TRAILING_TAKE' && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] bg-yellow-500/15 text-yellow-300 border-yellow-500/40"
-                          title="Trade entered moonbag (trailing) mode after hitting target"
-                        >
-                          🌙 MOONBAG
-                        </Badge>
+                    {/* B65.2-HF2c: Moonbag state moved to a dedicated TEC State column.
+                        This cell keeps the expanded result mapping (Trail Stop / Moonbag Cap) only. */}
+                    <Badge variant="outline" className={`text-xs ${getResultBadgeColor(trade.resultType)}`}>
+                      {trade.resultType === 'TRAILING_STOP_HIT' || trade.resultType === 'MOONBAG_TIMEOUT' ? (
+                        <TrendingUp className="w-3 h-3 mr-1 inline" />
+                      ) : trade.resultType.includes('TARGET') || trade.resultType.includes('PROFIT') ? (
+                        <TrendingUp className="w-3 h-3 mr-1 inline" />
+                      ) : trade.resultType.includes('STOP') ? (
+                        <TrendingDown className="w-3 h-3 mr-1 inline" />
+                      ) : (
+                        <AlertTriangle className="w-3 h-3 mr-1 inline" />
                       )}
-                    </div>
+                      {getResultLabel(trade.resultType)}
+                    </Badge>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
