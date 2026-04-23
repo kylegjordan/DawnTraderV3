@@ -1,7 +1,7 @@
 # Batch 65 — TEC Wiring + Asset Class + Exchange Schema
 
-**Author:** Claude Code, 2026-04-22
-**Status:** Draft scope. Expands original B65 scope ("TEC wiring") with asset_class + exchange schema formalization per 2026-04-22 modularization directive.
+**Author:** Claude Code, 2026-04-22 (Langston review 2026-04-23, refinements applied)
+**Status:** Phase 1 scope with Langston's B65 refinement applied (underlying column NOT NULL with derivation default). Ready for Phase 2 pre-audit.
 **Phase:** 15c
 **Prereq:** B64 (canonical map sync / residual UI alignment)
 **Blocks:** B66 (SQE recalibration — needs the module_constants table schema), B67 (external data — needs asset-class routing dimension), Modularization Phase, Phase 21.5 asset-class expansion
@@ -72,9 +72,9 @@ Both workstreams are pre-Phase-19 preparation. No immediate deploy during the ob
 
 1. Add `exchange TEXT NOT NULL DEFAULT 'kraken'` column to pair metadata tables
 2. Add `asset_class TEXT NOT NULL DEFAULT 'crypto_spot'` column to pair metadata tables
-3. Add `underlying TEXT` column (nullable, populated for pairs where the underlying differs from the symbol — e.g. `ETH/USDT` → underlying `ETH`). Used by per-underlying position limits in B66.
+3. Add `underlying TEXT NOT NULL` column with derivation default populated at migration time (per Langston review 2026-04-23: was originally proposed nullable, changed to NOT NULL-with-derivation so B66's per-underlying position limit has guaranteed coverage). Derivation rule for crypto spot: `underlying = symbol.split('/')[0]` (e.g. `ETH/USDT` → `ETH`, `BTC/USD` → `BTC`). For pairs without a parseable `/`, fall back to `underlying = symbol` itself and log a warning for operator review. **No pair row may have a null underlying** — the migration fails and is rolled back if any row can't be derived.
 4. Create `module_constants` table per Modularization Synthesis §3.2 / §3.5 (5-dimensional with most-specific-wins resolution)
-5. Backfill existing rows: all pairs get `exchange='kraken', asset_class='crypto_spot'`, `underlying` derived from the symbol where derivable
+5. Backfill existing rows: all pairs get `exchange='kraken', asset_class='crypto_spot'`, `underlying` derived from the symbol per the rule above. Verification step in the migration: `SELECT COUNT(*) FROM screener_filters WHERE underlying IS NULL` must return 0 before commit.
 
 **Code changes:**
 

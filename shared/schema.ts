@@ -473,6 +473,43 @@ export const screenerFilters = pgTable("screener_filters", {
   uniqueModePath: uniqueIndex("screener_filters_mode_path_idx").on(table.mode, table.filterPath),
 }));
 
+// B65 (2026-04-23): Module Constants — central 5-dimensional tunable parameter
+// table. Replaces hardcoded-in-source constants throughout the signal pipeline
+// with a DB-driven configuration surface. Keys are
+// (module_name, exchange, asset_class, strategy, regime, constant_name);
+// wildcards ('*') indicate "applies to all values of this dimension."
+// Resolution is most-specific-wins via moduleConstantsService.ts (60s cache).
+// See MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md §3.3.
+// Seeded at B65 migration time with current TEC defaults. B66 will add entries
+// for the 6 P1 SQE formula constants (SCORE_WEIGHTS + RW coefficients).
+export const moduleConstants = pgTable("module_constants", {
+  moduleName: text("module_name").notNull(),
+  exchange: text("exchange").notNull().default("*"),
+  assetClass: text("asset_class").notNull().default("*"),
+  strategy: text("strategy").notNull().default("*"),
+  regime: text("regime").notNull().default("*"),
+  constantName: text("constant_name").notNull(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: text("updated_by"),
+}, (table) => ({
+  pk: uniqueIndex("module_constants_pk_idx").on(
+    table.moduleName,
+    table.exchange,
+    table.assetClass,
+    table.strategy,
+    table.regime,
+    table.constantName,
+  ),
+  exchangeAssetIdx: index("module_constants_exchange_asset_idx").on(
+    table.exchange,
+    table.assetClass,
+  ),
+}));
+
+export type ModuleConstant = typeof moduleConstants.$inferSelect;
+export type InsertModuleConstant = typeof moduleConstants.$inferInsert;
+
 // Strategy Settings (per mode, per user, per strategy)
 // Phase 2C: Single-tenant - userId removed
 export const strategySettings = pgTable("strategy_settings", {
@@ -510,6 +547,11 @@ export const watchlistPairs = pgTable("watchlist_pairs", {
   symbol: varchar("symbol", { length: 20 }).notNull(),
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
   quoteCurrency: varchar("quote_currency", { length: 10 }).notNull(),
+  // B65 (2026-04-23): asset class + exchange dimensions for modularization.
+  // Default 'crypto_spot' / 'kraken' matches current-state behavior. New asset
+  // classes (crypto_perp, xstock, equity, fx) and exchanges set at row insert time.
+  exchange: text("exchange").notNull().default("kraken"),
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
   marketCap: decimal("market_cap", { precision: 20, scale: 2 }),
   volume24h: decimal("volume_24h", { precision: 20, scale: 2 }),
   currentPrice: decimal("current_price", { precision: 20, scale: 8 }),
@@ -530,6 +572,9 @@ export const tradingSignals = pgTable("trading_signals", {
   symbol: varchar("symbol", { length: 20 }).notNull(),
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
   quoteCurrency: varchar("quote_currency", { length: 10 }).notNull(),
+  // B65 (2026-04-23): asset class + exchange dimensions for modularization.
+  exchange: text("exchange").notNull().default("kraken"),
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
   strategy: strategyTypeEnum("strategy").notNull(),
   confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(), // 0.0000-1.0000
   entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
@@ -556,6 +601,13 @@ export const tradingSignals = pgTable("trading_signals", {
 export const trades = pgTable("trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
+  // B65 (2026-04-23): baseCurrency added for per-underlying tracking (supports B66
+  // per-underlying position limits). Migration-time derivation from symbol using
+  // COALESCE(SPLIT_PART(symbol, '/', 1), symbol). NOT NULL post-backfill.
+  baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
+  // B65: asset class + exchange dimensions for modularization.
+  exchange: text("exchange").notNull().default("kraken"),
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
   strategy: strategyTypeEnum("strategy").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   status: tradeStatusEnum("status").default("open"),
@@ -1522,6 +1574,11 @@ export const historicSignals = pgTable("historic_signals", {
 export const paperSimTrades = pgTable("paper_sim_trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
+  // B65 (2026-04-23): baseCurrency + exchange + assetClass for per-underlying
+  // tracking and modularization. baseCurrency derived at migration time from symbol.
+  baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
+  exchange: text("exchange").notNull().default("kraken"),
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
   quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
