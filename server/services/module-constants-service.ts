@@ -66,7 +66,7 @@ export interface ResolutionKey {
   exchange: string;      // e.g. 'kraken', 'binance' — use actual exchange
   assetClass: string;    // e.g. 'crypto_spot', 'crypto_perp', 'xstock'
   strategy: string;      // strategy key, e.g. 'strong_bull_trend'
-  regime: string;        // e.g. 'TREND_FRIENDLY_STABLE'
+  regime: string;        // canonical regime key from REGIMES.* enum (see shared/schema and canonical-regime-strategy-map)
 }
 
 /**
