@@ -32,7 +32,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { Client } from 'pg';
+// `pg` is a CommonJS package; with ESM (type:module) we need the default import
+// and destructure from it. Named imports fail with "does not provide an export".
+import pg from 'pg';
+const { Client } = pg;
 
 const MIGRATIONS_DIR = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
