@@ -10357,7 +10357,7 @@ The dashboard is a three-layer read-only analytics surface. No writes to product
 - Endpoint: `GET /api/analytics/drift-dashboard?window=rolling_24h`
 - UI is 5th Analytics tab. Window toggle (24h / 7d / 30d / cohort). Auto-refresh on a timer.
 - Global DBS sparkline: inline SVG, auto-scales to history's actual [min, max], zero-axis line when range crosses zero. Zero external chart-lib dependencies.
-- Per-regime strategy table: unified single-table layout with regime section headers; columns are column-aligned across all regimes via `colgroup` fixed-width declarations. Columns in order: Strategy | N | Wins | WR | Avg net $ | Avg net % | Sum net $ | Sum net %.
+- Per-regime strategy table: unified single-table layout with regime section headers; columns are column-aligned across all regimes via `colgroup` fixed-width declarations. Columns in order: Strategy | N | Wins | WR | Avg net $ | Avg move % | Sum net $ | Sum move %. (Note: `%` columns renamed from `Avg net %` / `Sum net %` to `Avg move %` / `Sum move %` in B64b 2026-04-23 to disambiguate from the position-sized `$` columns — the `%` values are entry-to-exit price moves, not portfolio-adjusted returns.)
 
 ## B64a.2 Why B64a exists (rolling vs snapshot doctrine)
 

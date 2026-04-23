@@ -1212,7 +1212,7 @@ function DriftDashboardSection() {
                     <p className="text-2xl font-mono font-bold">{d.tradeCounts.winRate.toFixed(1)}%</p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground">Avg net %</p>
+                    <p className="text-xs text-muted-foreground">Avg move %</p>
                     <p className="text-2xl font-mono font-bold">{d.tradeCounts.avgNetPct >= 0 ? '+' : ''}{d.tradeCounts.avgNetPct.toFixed(3)}%</p>
                   </div>
                   <div className="p-3 rounded-lg bg-muted/50">
@@ -1344,9 +1344,9 @@ function DriftDashboardSection() {
                       <col style={{ width: '7%' }} />   {/* Wins */}
                       <col style={{ width: '8%' }} />   {/* WR */}
                       <col style={{ width: '13%' }} />  {/* Avg net $ */}
-                      <col style={{ width: '13%' }} />  {/* Avg net % */}
+                      <col style={{ width: '13%' }} />  {/* Avg move % */}
                       <col style={{ width: '13%' }} />  {/* Sum net $ */}
-                      <col style={{ width: '13%' }} />  {/* Sum net % */}
+                      <col style={{ width: '13%' }} />  {/* Sum move % */}
                     </colgroup>
                     <thead>
                       <tr className="text-left text-muted-foreground border-b sticky top-0 bg-background">
@@ -1355,9 +1355,9 @@ function DriftDashboardSection() {
                         <th className="py-1 px-2 text-right">Wins</th>
                         <th className="py-1 px-2 text-right">WR</th>
                         <th className="py-1 px-2 text-right">Avg net $</th>
-                        <th className="py-1 px-2 text-right">Avg net %</th>
+                        <th className="py-1 px-2 text-right">Avg move %</th>
                         <th className="py-1 px-2 text-right">Sum net $</th>
-                        <th className="py-1 pl-2 text-right">Sum net %</th>
+                        <th className="py-1 pl-2 text-right">Sum move %</th>
                       </tr>
                     </thead>
                     <tbody>

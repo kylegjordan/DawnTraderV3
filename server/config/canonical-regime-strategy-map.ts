@@ -106,36 +106,41 @@ export const CANONICAL_PATTERN_TYPES: readonly CanonicalPatternType[] = [
   null
 ] as const;
 
+// REGIME_METRICS descriptions updated 2026-04-23 (B64b Obj 1) to reflect post-B62 DBS-integrated
+// classifier behavior and B63 strategy-registration updates. Momentum/ADX/volatility thresholds
+// are directional heuristics; the live classifier (server/core/metrics/market-regime.ts
+// :: calculatePairRegime) ALSO consumes DBS score as of B62 (2026-04-19). Descriptions now
+// note the DBS-awareness and any B63 strategy-registration changes where relevant.
 export const REGIME_METRICS: Record<CanonicalRegimeType, RegimeMetrics> = {
   TREND_FRIENDLY_STABLE: {
     momentum: '>0.005',
     adx: '>25',
     volatility: '<0.025',
-    description: 'Low noise, low volatility, orderly price action with confirmed directional trend'
+    description: 'Low noise, low volatility, orderly price action with confirmed directional trend. Post-B62: DBS score is a classifier input; TFS typically correlates with moderate-to-strong directional DBS (|DBS| in 0.15-0.50 band). Post-B63: strong_bull_trend is registered here when DBS crosses 0.35 threshold and routes via the quant-strong_trend sourcePool.'
   },
   HIGH_VOLATILITY_UNSTABLE: {
     momentum: '<-0.005',
     adx: '>25',
     volatility: '>0.03',
-    description: 'High volatility, high noise, wide dispersion with strong trend confirmation'
+    description: 'High volatility, high noise, wide dispersion with strong trend confirmation. Post-B62: DBS-aware classification distinguishes HVU from IE based on volatility-first vs momentum-first dominance.'
   },
   RANGE_BOUND_STABLE: {
     momentum: 'abs<0.002',
     adx: '<20',
     volatility: '<0.015',
-    description: 'Flat market with no directionality and narrow range'
+    description: 'Flat market with no directionality and narrow range. Post-B62: DBS typically near-neutral (|DBS| < 0.15). RBS is where mean-reversion and range-bound strategies (range_trade, support_bounce) have their strongest historical performance. Note: B63 Item 18 audit found current RegimeWeight formula produces low RW values in RBS despite strong strategy performance — recalibration targeted in B66.'
   },
   IMPULSE_EXPANSION: {
     momentum: '>0.010',
     adx: '>30',
     volatility: '>0.03',
-    description: 'Sharp moves with trend acceleration and violent expansion'
+    description: 'Sharp directional moves with trend acceleration and violent expansion. Post-B62 (2026-04-19): classification incorporates DBS score alongside momentum/ADX/volatility — pairs entering IE typically show |DBS| >= 0.50 combined with rapid momentum expansion. Post-B63 (2026-04-21): IE-registered strategies are sma_trend_ride, breakout, vwap_bounce, volatility_edge, dhma, and strong_bull_trend (which routes via quant-strong_trend sourcePool when DBS crosses 0.35).'
   },
   STRUCTURAL_TRANSITION: {
     momentum: '\u00b10.004',
     adx: '20-25',
     volatility: '0.015-0.03',
-    description: 'Boundary state between regimes with weakening trend and volatility uplift'
+    description: 'Boundary state between regimes with weakening trend and volatility uplift. Post-B62: DBS-aware classification flags pairs mid-transition before full regime commitment. STRUCTURAL_TRANSITION is often a short-lived regime between TFS and HVU/IE as conditions intensify.'
   }
 };
 
@@ -830,8 +835,26 @@ export const HYBRID_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
 //
 // vwap_pullback primary = 'trend'; additional = 'strong_trend' (promoted by B63 Item 11 for
 // the pullback-resumption archetype on strongly-trending pairs, per BATCH_63_COUNTERFACTUAL_AUDIT).
-// When routed via sourcePool='quant-strong_trend', vwap_pullback receives the strong-trend
-// geometry override per Item 12 (4×ATR stop, 3R target = Variant E).
+//
+// DOWNSTREAM BEHAVIOR CHAIN (for any strategy added to this map with 'strong_trend'):
+//   1. Family-eligibility gate in server/services/vts-runner.ts OR's primary + additional,
+//      so the strategy is admitted when routed via sourcePool='quant-strong_trend'.
+//   2. When sourcePool === 'quant-strong_trend', vts-runner attaches a
+//      `strongTrendGeometryOverride: { stopAtrMultiplier: 4.0, targetAsRMultiple: 3.0 }`
+//      (Variant E per B63 Item 12) to the signal's TechnicalIndicators. Consumer strategies
+//      that opt in read from this override; strategies that don't (e.g. strong_bull_trend)
+//      use their own locked native constants.
+//   3. Mode-overlay lane bypass (B63 Item 14) fires in BOTH vts-runner and paper-execution-
+//      engine: NORMAL/DEFENSIVE/SURVIVAL stop/target multipliers are skipped when
+//      sourcePool === 'quant-strong_trend', preserving the native (or Variant E) geometry.
+//      This prevents the pre-B63 silent RR destruction (2:1 → 1.33:1 in DEFENSIVE, 0.8:1
+//      in SURVIVAL) on strong-trend-lane trades.
+//   4. First-claim-wins lane arbitration (B63 Item 11): if two strategies in the same
+//      strong-trend lane fire on the same pair in the same cycle, the earlier admit wins;
+//      subsequent admits log null-reason 'strong_trend_lane_conflict'.
+//
+// Adding a new entry here activates all 4 downstream behaviors automatically for the named
+// strategy. See SYSTEM_MANUAL.md Appendix B63.1 + SYSTEM_IMPACT_MAP.md "Recent Additions (B63)".
 export const MULTI_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
   vwap_pullback: ['strong_trend'],
 };
