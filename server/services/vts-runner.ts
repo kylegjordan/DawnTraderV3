@@ -38,6 +38,9 @@ import { loadCalibration, applyCalibration, type CalibrationCoefficients } from 
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
 // B65.2: centralized exit-decision primitive (stale / timeout / stop / target / trailing)
 import { evaluateTECExit } from './tec-evaluator.js';
+// B65.2-HF2 (2026-04-23): ML dashboard needs trailing-engine state for VTS
+// open trades (tradeMode, latch flags, ratcheted stop).
+import { getTrailingState as getTECState } from './trailing-exit-controller.js';
 import { systemConfigService } from './system-config.js';
 import { activeFilterPool } from './active-filter-pool.js';
 // Batch 19C import removed by 19G HF1 Item 4: PATTERN_POOL_STRATEGIES no longer used
@@ -2821,10 +2824,27 @@ export function getOpenVirtualTradesForML(): Array<{
   // B61 (2026-04-15): numeric DBS scores alongside categories
   pairDirectionalBiasScore: number | null;
   globalDirectionalBiasScore: number | null;
+  // B65.2 (2026-04-23): trailing-engine state surfaced to the Open
+  // Simulated Trades UI. tradeMode distinguishes TARGET (still aiming for
+  // original target price) from TRAILING_TAKE (hit target, now in moonbag
+  // mode trailing for additional upside). breakEvenLatched = true once
+  // price gained 1×ATR and the stop ratcheted to net-breakeven (trade is
+  // protected from becoming a loser). targetLatched = true once target
+  // was reached (equivalent to tradeMode === 'TRAILING_TAKE'). The current
+  // engine-tracked stop is also surfaced so the UI reflects ratcheted
+  // stop moves, not just the original entry-time stop.
+  tradeMode: 'TARGET' | 'TRAILING_TAKE';
+  breakEvenLatched: boolean;
+  targetLatched: boolean;
+  engineStopPrice: number | null;
 }> {
   const now = Date.now();
   const trades: Array<any> = [];
-  
+
+  // B65.2 (2026-04-23): read trailing-engine state once per call so the UI
+  // sees the current mode + latch flags + ratcheted stop for every trade.
+  // Imported at module-load (see top of file): getTECState.
+
   for (const [_, trade] of openVirtualTrades) {
     const cachedPrice = priceCache.get(trade.symbol);
     const priceIsFresh = cachedPrice && (Date.now() - cachedPrice.lastUpdatedAt < 120000);
@@ -2905,10 +2925,24 @@ export function getOpenVirtualTradesForML(): Array<{
       globalDirectionalBias: trade.globalDirectionalBias || null,
       // B61 (2026-04-15): numeric DBS scores alongside categories
       pairDirectionalBiasScore: trade.pairDirectionalBiasScore ?? null,
-      globalDirectionalBiasScore: trade.globalDirectionalBiasScore ?? null
+      globalDirectionalBiasScore: trade.globalDirectionalBiasScore ?? null,
+      // B65.2 (2026-04-23): trailing-engine state for the Open Simulated
+      // Trades UI. tradeMode flips to TRAILING_TAKE on target hit for
+      // qualifying strategies; breakEvenLatched fires at 1×ATR gain.
+      // engineStopPrice is the engine's ratcheted stop (may be higher
+      // than the original trade.stopLoss once the engine has moved it).
+      ...(() => {
+        const ts = getTECState(trade.symbol);
+        return {
+          tradeMode: (ts?.tradeMode ?? 'TARGET') as 'TARGET' | 'TRAILING_TAKE',
+          breakEvenLatched: ts?.breakEvenLatched ?? false,
+          targetLatched: ts?.targetLatched ?? false,
+          engineStopPrice: ts?.currentStopPrice ?? null,
+        };
+      })(),
     });
   }
-  
+
   return trades.sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime());
 }
 

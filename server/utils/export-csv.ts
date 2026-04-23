@@ -97,6 +97,17 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   pairDirectionalBiasScore: number | null;
   globalDirectionalBiasScore: number | null;
   filterTier: string | null;
+  // B65.2 (2026-04-23): trailing-exit mode preserved on close so the
+  // Closed Simulated Trades UI can distinguish trades that ended in
+  // moonbag (TRAILING_TAKE) from trades that closed at the static
+  // target / stop / timeout. Populated from the trailing engine's
+  // final state at close time (written by vts-runner into the JSON log).
+  tradeMode: 'TARGET' | 'TRAILING_TAKE';
+  // B65.2: raw exitReason preserved alongside the normalized resultType
+  // so the UI can render differentiated badges for trailing_stop_hit
+  // and moonbag_timeout instead of collapsing everything to
+  // TAKE_PROFIT / STOP_LOSS / TIMEOUT.
+  exitReason: string;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -152,13 +163,22 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
           const entryTimestamp = new Date(trade.entryTime || trade.openedAt || trade.signal?.createdAt || 0).getTime();
           const durationMinutes = Math.floor((exitTimestamp - entryTimestamp) / 60000);
           
+          // B65.2 (2026-04-23): resultType mapping expanded so the new
+          // trailing_stop_hit + moonbag_timeout exit reasons flow through
+          // to the UI as distinct badges instead of collapsing to TIMEOUT.
+          // Order matters: check specific reasons first, then generic ones.
           let resultType = 'TIMEOUT';
+          const rawExit = (trade.exitReason || '').toString().toLowerCase();
           if (trade.resultType) {
             resultType = trade.resultType.toUpperCase().replace(/[_-]/g, '_');
-          } else if (trade.exitReason) {
-            if (trade.exitReason.includes('stop') || trade.exitReason.includes('STOP')) {
+          } else if (rawExit) {
+            if (rawExit === 'trailing_stop_hit') {
+              resultType = 'TRAILING_STOP_HIT';
+            } else if (rawExit === 'moonbag_timeout') {
+              resultType = 'MOONBAG_TIMEOUT';
+            } else if (rawExit.includes('stop')) {
               resultType = 'STOP_HIT';
-            } else if (trade.exitReason.includes('target') || trade.exitReason.includes('PROFIT') || trade.exitReason.includes('TARGET')) {
+            } else if (rawExit.includes('target') || rawExit.includes('profit')) {
               resultType = 'TARGET_HIT';
             }
           }
@@ -198,7 +218,10 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             // B61 (2026-04-15): numeric DBS scores alongside categories
             pairDirectionalBiasScore: (typeof trade.pairDirectionalBiasScore === 'number') ? trade.pairDirectionalBiasScore : null,
             globalDirectionalBiasScore: (typeof trade.globalDirectionalBiasScore === 'number') ? trade.globalDirectionalBiasScore : null,
-            filterTier: trade.filterTier || null
+            filterTier: trade.filterTier || null,
+            // B65.2 (2026-04-23): trailing-exit mode at close + raw exit reason
+            tradeMode: (trade.tradeMode === 'TRAILING_TAKE' ? 'TRAILING_TAKE' : 'TARGET') as 'TARGET' | 'TRAILING_TAKE',
+            exitReason: (trade.exitReason || '').toString(),
           });
         }
       } catch (err) {
