@@ -112,6 +112,7 @@ export type TECExitReason =
   | 'stop_hit'
   | 'target_hit'
   | 'trailing_stop_hit'
+  | 'break_even_stop' // B65.2-HF3: BE lock ratcheted the stop, trade exited on that ratcheted stop without ever reaching target. Distinct from trailing_stop_hit which now means only a moonbag-mode trailing exit.
   | 'timeout'
   | 'stale_timeout'
   | 'moonbag_timeout';
@@ -293,17 +294,37 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
     }
 
     if (tecShouldClose(input.symbol, currentPrice)) {
-      // Distinguish a pure static-stop hit (engine never ratcheted the stop)
-      // from a trailing/break-even stop hit (engine moved the stop up, and
-      // price later reversed into the ratcheted level).
-      const stopWasRatcheted = update.breakEvenLatched || update.targetLatched;
+      // B65.2-HF3: three distinct close semantics when the engine reports
+      // "close now":
+      //   1. targetLatched = trade entered TRAILING_TAKE (moonbag), now
+      //      the ratcheting trailing stop caught a pullback → trailing_stop_hit
+      //   2. breakEvenLatched & !targetLatched = trade gained 1×ATR, stop
+      //      ratcheted up to net-breakeven, price reversed into that
+      //      protective level without ever hitting target → break_even_stop
+      //   3. neither latched = original entry-time stop hit on a losing
+      //      trade before any protection engaged → stop_hit
+      // These distinct reasons produce distinct UI badges and let post-close
+      // analysis tell apart moonbag wins, breakeven-protected exits, and
+      // real losers — which the prior collapsed 'trailing_stop_hit' label
+      // could not.
+      let exitReason: TECExitReason;
+      let exitPrice: number;
+      if (update.targetLatched) {
+        exitReason = 'trailing_stop_hit';
+        exitPrice = currentPrice;
+      } else if (update.breakEvenLatched) {
+        exitReason = 'break_even_stop';
+        exitPrice = currentPrice;
+      } else {
+        exitReason = 'stop_hit';
+        // Static-stop close clamps to the original stop level (fill-convention
+        // parity with the !useTrailing path).
+        exitPrice = input.stopPrice;
+      }
       return {
         shouldExit: true,
-        exitReason: stopWasRatcheted ? 'trailing_stop_hit' : 'stop_hit',
-        // Static-stop close clamps to the original stop level (fill-convention
-        // parity with the !useTrailing path); trailing-stop close exits at the
-        // current price (the stop is a moving target).
-        exitPrice: stopWasRatcheted ? currentPrice : input.stopPrice,
+        exitReason,
+        exitPrice,
         newStopPrice: update.newStopPrice,
         modeChanged: update.modeChanged,
         resolvedConstants,

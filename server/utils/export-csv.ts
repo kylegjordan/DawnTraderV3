@@ -165,20 +165,31 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
           const entryTimestamp = new Date(trade.entryTime || trade.openedAt || trade.signal?.createdAt || 0).getTime();
           const durationMinutes = Math.floor((exitTimestamp - entryTimestamp) / 60000);
           
-          // B65.2 (2026-04-23): resultType mapping expanded so the new
-          // trailing_stop_hit + moonbag_timeout exit reasons flow through
-          // to the UI as distinct badges instead of collapsing to TIMEOUT.
-          // Order matters: check specific reasons first, then generic ones.
+          // B65.2-HF3 (2026-04-24): resultType mapping priority inverted.
+          // Prior HF2 behavior checked `trade.resultType` FIRST, which
+          // vts-service writes as 'take_profit' for trailing_stop_hit and
+          // moonbag_timeout, collapsing B65.2's new exit reasons back into
+          // the legacy TAKE_PROFIT badge. Now the specific exitReason is
+          // consulted first — only if it's absent or generic do we fall
+          // back to the legacy resultType. This surfaces TRAIL STOP /
+          // MOONBAG CAP / BE PROTECT badges correctly in the UI.
           let resultType = 'TIMEOUT';
           const rawExit = (trade.exitReason || '').toString().toLowerCase();
-          if (trade.resultType) {
+          if (rawExit === 'trailing_stop_hit') {
+            resultType = 'TRAILING_STOP_HIT';
+          } else if (rawExit === 'moonbag_timeout') {
+            resultType = 'MOONBAG_TIMEOUT';
+          } else if (rawExit === 'break_even_stop') {
+            resultType = 'BREAK_EVEN_STOP';
+          } else if (trade.resultType) {
             resultType = trade.resultType.toUpperCase().replace(/[_-]/g, '_');
+            // vts-service may have written 'break_even_stop' as resultType
+            // directly (B65.2-HF3 mapping). Surface it with the right enum.
+            if (resultType === 'BREAK_EVEN_STOP') {
+              // already correct
+            }
           } else if (rawExit) {
-            if (rawExit === 'trailing_stop_hit') {
-              resultType = 'TRAILING_STOP_HIT';
-            } else if (rawExit === 'moonbag_timeout') {
-              resultType = 'MOONBAG_TIMEOUT';
-            } else if (rawExit.includes('stop')) {
+            if (rawExit.includes('stop')) {
               resultType = 'STOP_HIT';
             } else if (rawExit.includes('target') || rawExit.includes('profit')) {
               resultType = 'TARGET_HIT';

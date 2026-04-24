@@ -953,6 +953,18 @@ export class PaperExecutionEngine {
               price: currentPrice,
               reason: `Price ${currentPrice.toFixed(2)} hit stop ${(stopLoss ?? 0).toFixed(2)}`,
             };
+          case 'break_even_stop':
+            // B65.2-HF3: BE-lock-ratcheted stop was hit before trade reached
+            // target. Reuse the existing stop_hit ExitCondition type on the
+            // paper side to keep downstream P&L math identical; the reason
+            // string carries the BE-protect semantics and the closed-trade
+            // row records 'break_even_stop' in the closeReason column.
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop price=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            return {
+              type: 'stop_hit',
+              price: currentPrice,
+              reason: `Break-even protection: ratcheted stop at ${decision.newStopPrice?.toFixed(2)} hit before target`,
+            };
           case 'trailing_stop_hit':
             console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit price=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {

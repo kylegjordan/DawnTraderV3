@@ -705,7 +705,10 @@ export class VTSService extends EventEmitter {
     grossPnl: number;
     // B65.2 (2026-04-23): expanded to include trailing_stop_hit and
     // moonbag_timeout now that TEC is engaged from the VTS exit loop.
-    exitReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'timeout';
+    // B65.2-HF3: break_even_stop added — BE lock ratcheted stop was hit
+    // before trade reached target (distinct from trailing_stop_hit which
+    // now implies moonbag mode had been entered).
+    exitReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop' | 'timeout';
     tradeMode?: 'TARGET' | 'TRAILING_TAKE'; // B65.2: final state of trailing engine for this trade
     finalScore: number;
     hybridScore: number;
@@ -767,15 +770,19 @@ export class VTSService extends EventEmitter {
       id: `vts_${tradeData.symbol.replace('/', '_')}_${tradeData.exitTime}`,
       signal,
       status: 'closed',
-      // B65.2: map new exit reasons. trailing_stop_hit is treated as a
-      // take_profit variant (it was a winner that ratcheted past target);
-      // moonbag_timeout also counts as take_profit since entry to trailing
-      // required a target-lock latch (price >= target). stop_hit and
-      // target_hit unchanged.
+      // B65.2: map new exit reasons.
+      //   trailing_stop_hit (post-HF3 semantics: moonbag trailing close) → take_profit
+      //   moonbag_timeout → take_profit (entered trailing at target, held past cap)
+      //   break_even_stop → 'break_even_stop' preserved as-is so the
+      //     closed-trade log can distinguish protective exits from real
+      //     take-profits and real stop-losses. The UI renders a dedicated
+      //     badge for this value.
+      //   stop_hit and target_hit unchanged.
       resultType: tradeData.exitReason === 'stop_hit' ? 'stop_loss'
         : tradeData.exitReason === 'target_hit' ? 'take_profit'
         : tradeData.exitReason === 'trailing_stop_hit' ? 'take_profit'
         : tradeData.exitReason === 'moonbag_timeout' ? 'take_profit'
+        : tradeData.exitReason === 'break_even_stop' ? 'break_even_stop'
         : 'timeout',
       entryTime: tradeData.entryTime,
       exitTime: tradeData.exitTime,

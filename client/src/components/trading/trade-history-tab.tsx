@@ -799,7 +799,7 @@ export function TradeHistoryTab() {
                             {trade.exitPrice ? `$${formatNumber(trade.exitPrice, 4)}` : '-'}
                           </td>
                           
-                          {/* 6. Reason - C2A; B65.2: includes trailing_stop_hit + moonbag_timeout */}
+                          {/* 6. Reason - C2A; B65.2 + HF3: trailing_stop_hit, moonbag_timeout, break_even_stop */}
                           <td className="p-2">
                             <div className="flex items-center gap-1">
                               <Badge
@@ -809,6 +809,7 @@ export function TradeHistoryTab() {
                                   trade.closeReason === 'target_hit' && "bg-green-500/20 text-green-600 border-green-500/50",
                                   trade.closeReason === 'trailing_stop_hit' && "bg-emerald-500/20 text-emerald-600 border-emerald-500/50",
                                   trade.closeReason === 'moonbag_timeout' && "bg-amber-500/20 text-amber-600 border-amber-500/50",
+                                  trade.closeReason === 'break_even_stop' && "bg-slate-500/20 text-slate-600 border-slate-400/50",
                                   trade.closeReason === 'stop_hit' && "bg-red-500/20 text-red-600 border-red-500/50"
                                 )}
                               >
@@ -816,6 +817,7 @@ export function TradeHistoryTab() {
                                  trade.closeReason === 'target_hit' ? 'Target' :
                                  trade.closeReason === 'trailing_stop_hit' ? 'Trail' :
                                  trade.closeReason === 'moonbag_timeout' ? 'M.Cap' :
+                                 trade.closeReason === 'break_even_stop' ? 'BE Protect' :
                                  trade.closeReason === 'stop_hit' ? 'Stop' :
                                  trade.closeReason === 'manual_close' ? 'Manual' :
                                  trade.closeReason === 'manual_stop' ? 'M.Stop' :

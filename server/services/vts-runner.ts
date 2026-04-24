@@ -422,7 +422,8 @@ interface Phase10TradeRecord {
   sourcePool?: string; // Batch 37: Family-qualified source pool
   timestamp: string;
   // B65.2 (2026-04-23): expanded with trailing_stop_hit + moonbag_timeout
-  exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending' | 'trailing_stop_hit' | 'moonbag_timeout';
+  // HF3: break_even_stop added.
+  exitType?: 'stop_hit' | 'target_hit' | 'timeout' | 'pending' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop';
   volZ?: number; // Directive 11.7F-B: Volatility Z-score for drift calculation
   trendZ?: number; // Directive 11.7F-B: Trend Z-score (momentum) for drift calculation
   executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Multi-strategy identification
@@ -1462,12 +1463,13 @@ async function resolveOpenVirtualTrades(): Promise<{
   // Check each open trade against current prices
   // B65.2 (2026-04-23): widened exit-reason domain now that the TEC state
   // machine is engaged — trailing_stop_hit + moonbag_timeout join the
-  // legacy triad.
+  // legacy triad. B65.2-HF3: break_even_stop added to distinguish BE-lock
+  // protective exits from genuine moonbag trailing closes.
   const tradesToClose: Array<{
     id: string;
     trade: OpenVirtualTrade;
     exitPrice: number;
-    exitReason: 'stop_hit' | 'target_hit' | 'timeout' | 'trailing_stop_hit' | 'moonbag_timeout';
+    exitReason: 'stop_hit' | 'target_hit' | 'timeout' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop';
   }> = [];
   
   // B65.2: VTS exit loop engages the full trailing-exit engine. Each trade
@@ -1517,12 +1519,13 @@ async function resolveOpenVirtualTrades(): Promise<{
 
     // Map TEC exit reasons to the VTS closed-trade enum. VTS preserves its
     // existing 3-valued set plus the 2 new trailing-related reasons.
-    let normalizedReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'timeout';
+    let normalizedReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop' | 'timeout';
     switch (decision.exitReason) {
       case 'stop_hit':
       case 'target_hit':
       case 'trailing_stop_hit':
       case 'moonbag_timeout':
+      case 'break_even_stop':
         normalizedReason = decision.exitReason;
         break;
       case 'stale_timeout':
@@ -1693,9 +1696,13 @@ async function resolveOpenVirtualTrades(): Promise<{
     if (exitReason === 'target_hit') targetHits++;
     if (exitReason === 'timeout') timeouts++;
     // B65.2: count trailing-stop and moonbag-timeout closes separately so
-    // the cycle summary reflects trailing engagement.
+    // the cycle summary reflects trailing engagement. HF3: break_even_stop
+    // counts as neither hit — it's protection-at-breakeven, call it a stopHit
+    // for cycle accounting since the stop fired, but semantically it's
+    // distinct and the DB row carries the real reason.
     if (exitReason === 'trailing_stop_hit') { targetHits++; /* counts as winner */ }
     if (exitReason === 'moonbag_timeout') { targetHits++; }
+    if (exitReason === 'break_even_stop') { stopHits++; /* for cycle stats only */ }
   }
   
   if (resolved > 0) {

@@ -350,11 +350,15 @@ const getSourcePoolBadgeColor = (sourcePool: string) => {
 };
 
 const getResultBadgeColor = (result: string) => {
-  // B65.2 (2026-04-23): distinct colors for trailing-exit outcomes so
-  // moonbag runners and trail-stop closes are visually differentiated
-  // from static target/stop hits.
+  // B65.2-HF3 (2026-04-24): distinct colors for B65.2 exit outcomes:
+  // TRAIL STOP (emerald) = genuine moonbag trailing close, real upside past target
+  // MOONBAG CAP (amber) = moonbag held past 4h duration cap
+  // BE PROTECT (slate blue) = break-even lock ratcheted stop was hit, near-breakeven exit
+  // TAKE PROFIT (green) = static target hit, no trailing
+  // STOP LOSS (red) = original stop hit, real loss
   if (result === 'TRAILING_STOP_HIT') return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
   if (result === 'MOONBAG_TIMEOUT') return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+  if (result === 'BREAK_EVEN_STOP') return 'bg-slate-500/20 text-slate-300 border-slate-400/40';
   if (result.includes('TARGET') || result.includes('PROFIT')) return 'bg-green-500/20 text-green-400 border-green-500/30';
   if (result.includes('STOP')) return 'bg-red-500/20 text-red-400 border-red-500/30';
   return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
@@ -364,6 +368,7 @@ const getResultBadgeColor = (result: string) => {
 const getResultLabel = (result: string): string => {
   if (result === 'TRAILING_STOP_HIT') return 'TRAIL STOP';
   if (result === 'MOONBAG_TIMEOUT') return 'MOONBAG CAP';
+  if (result === 'BREAK_EVEN_STOP') return 'BE PROTECT';
   if (result === 'TAKE_PROFIT' || result === 'TARGET_HIT') return 'TAKE PROFIT';
   if (result === 'STOP_LOSS' || result === 'STOP_HIT') return 'STOP LOSS';
   return result;
