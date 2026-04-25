@@ -177,6 +177,20 @@
 | Date | Action |
 |---|---|
 | 2026-04-20 | **CCPI retired.** `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` moved to `1-system-manual/_archive/`. Role absorbed by `CLAUDE.md` (repo root) + `MEMORY.md` + BATCH_CATALOG + PHASE_HISTORY. No active governance doc was drifting because CCPI had not been updated since the Phase 15b lock on 2026-04-14 — formal retirement eliminates the duplicate-governance sync problem. See `1-system-manual/_archive/README.md`. |
+| 2026-04-23 | **CLAUDE.md §2 workflow renamed: "Phase N" → "Step N"** (B65.2 governance commit `3ea530bf`). Resolves long-standing collision between batch-workflow stage numbering and system-phase numbering. Older batch reports referencing "Phase 4 review" should be read as "Step 4 review." System-phase references unchanged. |
+| 2026-04-25 | **Adaptive Market Response concept document filed** (`1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`). Captures multi-batch arc (B59 onwards) recognizing VTS streaks as market-condition-driven. Phase 19.5 conditional inserted in roadmap. No new batch — extends existing Directive 11.7S mode overlay. |
+
+## B65.2 hotfix sub-rows
+
+The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subsequent hotfixes refined the surface area without changing the core engine logic:
+
+| Hotfix | Date | Commit | What |
+|---|---|---|---|
+| HF1 | 2026-04-23 | `806effc0` | DSE `max_position_risk` fallback realigned to 0.02 seed value (was 0.1 from legacy nullish-coalesce). Closes test-suite regression on dynamic_sizing.test.ts that HF2 collateral. |
+| HF2 | 2026-04-23 | `48e830c4` | Surfaced trailing-engine state on the VTS Machine Learning page. New TEC State column on Open Simulated Trades. Endpoint extensions on `/api/vts/ml/open` and `/api/vts/ml/closed` carrying `tradeMode`, `breakEvenLatched`, `targetLatched`, `engineStopPrice`. Closes a Step-7 verification gap CC missed in the original pre-audit. |
+| HF2b | 2026-04-23 | `98705e8e` | TradeRecord type widened to include `boolean` so trailing-state booleans can flow into CSV export. Pure type fix. |
+| HF2c | 2026-04-23 | `aa7d9bb1` | TEC State column added to Closed Simulated Trades for parity with Open table. Kyle UI-review caught the missing column. |
+| HF3 | 2026-04-24 | `def5ec68` | Distinguished `break_even_stop` from `trailing_stop_hit` in tec-evaluator. BE-lock-stop exits no longer mislabeled as moonbag trailing. Result-mapping priority bug in export-csv.ts fixed (specific exitReason now wins over legacy resultType). New "BE PROTECT" (slate) badge on UI separate from "TRAIL STOP" (emerald). Post-deploy data showed 49 BE-lock exits averaging +$0.09 net (protection working) vs. 5 genuine moonbag runners averaging +$2.68 net. |
 
 ---
 

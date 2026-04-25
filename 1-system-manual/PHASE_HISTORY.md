@@ -377,3 +377,22 @@ The system is now in a far more governable state than at any point in the pre-go
 - Batch 53: 8 strategy threshold relaxations (Langston consensus), zero-duration trades entry guard, full 17-strategy audit, IMF fallback removal, Screeners UI fix
 - Batch 54: Pattern recognizer relaxed for crypto (PINBAR, INSIDE_BAR, THREE_SOLDIERS, MORNING_STAR), DI threshold 12→10 for trend family, ai-analyst legacy service removed, ALL hardcoded filter defaults removed (60+ across 4 files, DB sole authority), ML service installed on staging
 - **Outcome**: All 17 strategies audited. Pattern detection rate improved. Trend family gained 5 pairs. Dominant constraint is regime eligibility. 5 regime-map decisions deferred (Langston: insufficient evidence). Canonical regime-strategy map (Directive 11.7F) confirmed as SSOT. Running Issues fully cleared (37 resolved, 1 deferred, 0 open).
+
+### Phase 15a-c: Predictive Learning Audit, DBS Integration, Strong-Trend Family, TEC (Batches 59-65, 2026-04-12 to 2026-04-25)
+
+**Phase 15a (B59):** Predictive Learning UI audit. Regime Archive 0% WR fix. ESM compatibility fixes. Phase 15 split into 15a + 15b/c.
+
+**Phase 15b (B60-B62):** DBS validation and regime-classifier restructuring. B60 absorbed into B61/B62 (Smart Thermostat / Policy Engine deferred to post-launch as Phase 17.5 — cannot tune adaptive policy on top of misclassified state). B61 8-deliverable DBS validation audit. B62 regime taxonomy redesign with DBS now first-class input — RBS drift contamination dropped from 70.2% to 0.00%, TFS+IE share normalized.
+
+**Phase 15c (B63-B65):** Strong-trend family + TEC functional + adaptive-response framing.
+- **B63** Strong Bull Trend strategy + DBS pre-filter routing + 19 audit items. Strong-trend lane mode-overlay bypass. Streakiness analysis (z=−15.57 runs test, mode-overlay dormancy flagged). Item 13 vwap_pullback decision gate evaluation 2026-04-28.
+- **B64a** Drift Dashboard tab shipped 2026-04-22. Closed-trade rolling-window metrics (regime shares, family flicker, RBS drift, DBS distribution).
+- **B64b** Canonical map sync + MAX_HOLD_MS safety valve restoration (POSITIVE_INFINITY → 7 days).
+- **B65.1** module_constants infrastructure (5-dim tunable-parameter table, most-specific-wins resolver, 60s cache). Schema additions (exchange + asset_class on 4 tables; baseCurrency NOT NULL). 4 TEC seed rows. New `scripts/db-migrate.ts` file-based runner replacing drizzle-kit push.
+- **B65.2 functional** Trailing exits engaged end-to-end in VTS + paper. ATR-based two-stage latch (BE lock at 1×ATR, target-lock + moonbag at target hit for qualifying strategies). 4h duration cap, reserved-slots concurrency cap. Stop writeback. trade_mode populated across all 4 trade-row tables. Phase-11 percentage-trailing TEC deleted outright. EXECUTION_CONFIG live consumers migrated to module_constants. 11-scenario parity test green.
+  - **HF1-HF3** series fixed DSE fallback, surfaced trailing engine state in the VTS Machine Learning UI (TEC State column on Open + Closed Simulated Trades, endpoint extensions for tradeMode/breakEvenLatched/targetLatched/engineStopPrice), distinguished break_even_stop from trailing_stop_hit (49 BE-lock exits at +$0.09 mean were being mislabeled as moonbag trails — now correctly badged "BE PROTECT"). PM2 #96 live.
+- **Adaptive Market Response concept (2026-04-25):** Captured the multi-batch arc that started with B59 — VTS streaks are market-condition-driven, not strategy-quality-driven. Existing mode overlay (Directive 11.7S) is defensive-only skeleton; needs expansion to add offensive mode and richer detection signals. Concept document at `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`. Conditional **Phase 19.5** inserted in roadmap, pending paper-trading observation results.
+
+**Phase 15c outcome:** Trailing and break-even protection observably engaging on staging. Adaptive-response framework conceptually unified across docs. Pre-launch B66 (SQE recalibration + streakiness P0/P1 levers) remains queued.
+
+**Next: Batch 66.** Scope drafted. Covers SQE FinalScore recalibration plus rolling PredConf window, underlying-based position limits, realized-EV-adaptive floor, mode-overlay stability-signal expansion, global-state freshness check.

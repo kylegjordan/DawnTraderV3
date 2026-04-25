@@ -761,3 +761,56 @@
 ---
 
 *This map is a living document. Update it after any directive that changes component dependencies, adds new services, or removes legacy systems.*
+
+---
+
+## B65.1 — `module_constants` infrastructure (2026-04-23)
+
+**New service:** `server/services/module-constants-service.ts`. 5-dim keying `(module_name, exchange, asset_class, strategy, regime, constant_name) → JSONB value`. Most-specific-wins resolution (regime weight 8, strategy 4, asset_class 2, exchange 1). 60s cache. Exports `getConstant`, `getModuleConstants`, `setConstant`, `invalidateModuleCache`, `clearModuleConstantsCache`.
+
+**Schema additions:** `exchange` + `asset_class` columns on `watchlist_pairs`, `trading_signals`, `trades`, `paper_sim_trades`. `base_currency` NOT NULL on `trades` + `paper_sim_trades`.
+
+**New deploy primitive:** `scripts/db-migrate.ts` + `npm run db:migrate`. Replaces drizzle-kit push (introspector breaks on PG ARRAY defaults — see CHANGES_AND_FIXES B65.1-FIX-001).
+
+---
+
+## B65.2 — Trailing-exit engine engaged (2026-04-23 + HF1-HF3 through 2026-04-24)
+
+**Engaged:** `server/services/trailing-exit-controller.ts` was dormant since Phase 11; now called from BOTH the VTS exit loop and paper `checkExitConditions` via the new `server/services/tec-evaluator.ts` centralizer.
+
+**Deleted (no deprecation):** `server/services/execution-controller.ts`, `server/config/execution-config.ts`, `server/types/trade-flow.ts`, 2 unit tests for those files.
+
+**EXECUTION_CONFIG consumers migrated** to `module_constants` before deletion: dynamic-sizing-engine (`MAX_POSITION_RISK` → `risk_sizing.max_position_risk`), telemetry-aggregator (diagnostic mirror), boot-orchestrator + adjustment-registry (B65.2 version stamp), adaptive-manager (dead import removed), diagnostics-tab.tsx (narrative text).
+
+**Schema:** `paper_sim_trades.trade_mode` column added (varchar 20, NOT NULL DEFAULT 'TARGET', CHECK `IN ('TARGET','TRAILING_TAKE')`).
+
+**Stop writeback:** `paper_sim_open_positions.stop_loss` now updated on every engine ratchet (debounced 5s via `trade-safety.ts::persistTrailingStates`).
+
+**SIGTERM handler:** `server/index.ts` shutdown handler synchronously flushes trailing-state persistence file.
+
+**Engine state on UI:**
+- `/api/vts/ml/open` extended with `tradeMode`, `breakEvenLatched`, `targetLatched`, `engineStopPrice`.
+- `/api/vts/ml/closed` extended with `tradeMode` + raw `exitReason`.
+- `client/src/pages/machine-learning.tsx` renders TEC State column on both Open + Closed Simulated Trades tables.
+- `client/src/components/trading/trade-history-tab.tsx` renders updated close-reason badges (Trail / M.Cap / BE Protect / Stop / Target).
+
+**Module-constants seed rows** (`trailing_exit` module): break_even_trigger_r=1.0, target_lock_r=1.5, trail_distance_atr_multiplier=1.0, persistence_debounce_ms=5000, moonbag_qualifying_strategies (4-strategy array), moonbag_qualifying_source_pools (vwap_pullback → quant-strong_trend only), moonbag_max_duration_ms=14400000, moonbag_cap_mode='reserved_slots', moonbag_reserved_slots=1. (`risk_sizing` module): max_position_risk=0.02.
+
+**Exit-reason taxonomy after HF3:**
+- `stop_hit` — entry-time stop hit, real loss
+- `break_even_stop` — BE lock ratcheted stop hit before target. Near-breakeven protective exit.
+- `target_hit` — static target hit, no trailing (non-qualifier or concurrency cap)
+- `trailing_stop_hit` — moonbag (TRAILING_TAKE) trailing stop hit after target latch
+- `moonbag_timeout` — moonbag held past 4h cap
+- `timeout` / `stale_timeout` — VTS-only, MAX_HOLD_MS safety valve
+
+**Cross-cutting impact:**
+- **If you edit trailing-exit-controller.ts** → check tec-evaluator (caller), vts-runner exit loop, paper-execution-engine.checkExitConditions, parity test `b65-tec-parity.test.ts`. PositionUpdate now carries optional strategy/sourcePool/regime/callerMode/moonbagAllowed/moonbagQualified.
+- **If you edit moonbag qualifier or caps** → values live in `module_constants` rows; engine reads via 60s cache. Tunable without redeploy.
+- **If you edit exit-reason mapping in vts-service.ts** → check `export-csv.ts::getClosedVTSTradesFromLogs` mapping priority. Raw exitReason now wins over legacy resultType for B65.2 reasons. Inverting that ordering re-introduces FIX-002.
+
+---
+
+## Adaptive Market Response — concept anchor (2026-04-25)
+
+**Status:** concept-document only. Existing skeleton: `server/core/governance/strategy-modes.ts` (Directive 11.7S) maps `RegimeStability` → `StrategyMode` → mode-overlay multipliers. Currently mostly dormant. Concept doc at `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`. Conditional Phase 19.5 in roadmap.

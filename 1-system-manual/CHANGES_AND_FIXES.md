@@ -1776,3 +1776,34 @@ Total: 5 files modified + 10 files created = 15 files. ~4,000 new/modified lines
   - History + transitions start empty (cold start) — expected; populate within ~15-30 min of stable operation
 - **Commits**: `eb790763` (B64a), `cd139ed8` (HF1), `0be18c4f` (B64a.1 history+sparkline), `cf7baef1` (HF2 regime strings).
 - **Reference**: `BATCH_63_SCOPE.md` Item 7 originally planned as B71 drift dashboard tab; shifted up to B64a since Kyle wanted it operational during the B63 audit window (Items 15/18/19 in flight).
+
+### B64b-FIX-001 — MAX_HOLD_MS safety valve restoration
+- **Reported by**: Langston in B63-close commit review 2026-04-23
+- **Resolved by**: B64b commit `0a56d139` (2026-04-23, PM2 #86)
+- **Issue**: B63-close commit set `MAX_HOLD_MS = Number.POSITIVE_INFINITY` while removing the 24-hour timeout (Kyle directive). This unintentionally disabled the Batch 18I force-close-stale safety valve — VTS trades on illiquid pairs with unavailable price feeds would accumulate indefinitely.
+- **Fix**: `vts-runner.ts` L534 `MAX_HOLD_MS = 7 * 24 * 60 * 60 * 1000` (7 days). Normal trades resolve via TP/SL well before 7d (longest observed hold ~22h); cap exists only as zombie-cleanup.
+
+### B65.1-FIX-001 — drizzle-kit push introspection broken on PG ARRAY defaults
+- **Reported by**: CC during B65.1 deploy attempt 2026-04-23
+- **Resolved by**: B65.1-HF3 commits `a129e567` + `b98fd288` + `31013517` (2026-04-23, PM2 #91)
+- **Issue**: drizzle-kit 0.31.4 introspector parses PG ARRAY column defaults (`ARRAY['USD','USDT']::text[]` and similar — present on ~15 columns in `shared/schema.ts`) as JSON, fails with `SyntaxError: Unexpected token 'R'`. Has blocked schema-driven migrations.
+- **Fix**: New `scripts/db-migrate.ts` file-based migration runner. Reads SQL files from `drizzle/migrations/` in lexicographic order, tracks applied filenames in `_migrations` ledger table, skips rollback files. Uses `pg` Client directly. Self-loads `.env`. Deploys now use `npm run db:migrate` instead of `npm run db:push`. db:push retained as dev-only tool.
+
+### B65.2-FIX-001 — TEC dormant for 8 months
+- **Reported by**: Kyle observation 2026-04-23 — "B65.2 plumbing-only commit shipped without behavior change."
+- **Resolved by**: B65.2 functional commit `0fcd19b1` + HF1 `806effc0` (2026-04-23, PM2 #93)
+- **Issue**: The trailing-exit engine (`trailing-exit-controller.ts`, Directive 9.2) had been dormant since Phase 11 — built, unit-tested, never wired into VTS or paper exit loops. Same for the Phase-11 Trade Execution Controller (`execution-controller.ts`, Directive 11.0C) which contained a separate competing trailing implementation plus the dormant adaptive-sizing function. Both running orphaned. CC's first attempt at B65.2 (`dd1f5372`) shipped a centralized evaluator but set `useTrailing:false` on both callers — plumbing without function. CLAUDE.md §2 step 7 (staging UI verification) skipped, so the gap survived through deploy.
+- **Fix**: B65.2 functional commit engaged the engine end-to-end. VTS exit loop and paper `checkExitConditions` both call `evaluateTECExit({ useTrailing:true })`. Stop writeback to `paper_sim_open_positions.stop_loss` on every ratchet. ATR/DI/VolNoise snapshot at trade open. trade_mode populated across all four trade-row tables. Phase-11 percentage-trailing implementation deleted outright (`execution-controller.ts`, `execution-config.ts`, `trade-flow.ts`, 2 unit tests) per Kyle directive — no deprecation. EXECUTION_CONFIG live consumers migrated to module_constants before deletion. SIGTERM handler synchronously flushes trailing-state persistence file. 11-scenario parity test green.
+- **Lesson logged**: CLAUDE.md §2 steps 2 (SIM walk) and 7 (UI verification on staging) BOTH have to be substantive. The earlier commit looked workflow-compliant but each step had been done shallow.
+
+### B65.2-FIX-002 — break_even_stop mislabeled as trailing_stop_hit
+- **Reported by**: Kyle CSV review 2026-04-24
+- **Resolved by**: B65.2-HF3 commit `def5ec68` (2026-04-24, PM2 #96)
+- **Issue**: Two distinct semantic concepts collapsed into one `trailing_stop_hit` label: (a) BE-lock-stop hit on a trade that gained 1×ATR and reversed before reaching target (protective exit near breakeven, NOT moonbag), and (b) genuine moonbag trailing-stop hit on a trade that flipped into TRAILING_TAKE and reversed. 7-day post-deploy data showed 49 events of (a) at +$0.09 mean and 5 events of (b) at +$2.68 mean — but the collapsed label made (a) look like underperforming moonbag. Compounding: `export-csv.ts` mapping priority was inverted (`trade.resultType` checked before raw exitReason), so even with correct exitReason the UI badges showed legacy TAKE_PROFIT.
+- **Fix**: New `break_even_stop` exit reason threaded through tec-evaluator → vts-runner → vts-service → paper-execution-engine → closed-trade log. Engine logic: `targetLatched → trailing_stop_hit`; `breakEvenLatched only → break_even_stop`; `neither → stop_hit`. UI renders "BE PROTECT" (slate) badge separate from "TRAIL STOP" (emerald). export-csv mapping priority inverted: specific exitReason cases now win over legacy resultType.
+
+### B65.2-FIX-003 — VTS Machine Learning UI missed during pre-audit
+- **Reported by**: Kyle UI review 2026-04-23 evening
+- **Resolved by**: B65.2-HF2 commit `48e830c4` + HF2b `98705e8e` + HF2c `aa7d9bb1` (2026-04-23, PM2 #95)
+- **Issue**: CC told Langston in B65.2 pre-audit that VTS had no open/closed simulated-trades UI surface and got sign-off to skip surfacing trailing-engine state there. Kyle screenshots of `/machine-learning` proved this wrong — the VTS Open + Closed Simulated Trades tables have existed since Phase 11. CC failed to screenshot staging UI during pre-audit (CLAUDE.md §2 step 2) and again during first-pass verification (step 7).
+- **Fix**: HF2 extended `getOpenVirtualTradesForML()` and `getClosedVTSTradesFromLogs()` to carry trailing-engine state. UI in `machine-learning.tsx` got a new TEC State column on Open. HF2b widened TradeRecord type for boolean. HF2c added the matching column on Closed.
