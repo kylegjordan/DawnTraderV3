@@ -24,6 +24,40 @@ The B63 architecture changes (Variant E geometry override, mode-overlay bypass, 
 
 The previous batch's failure mode (B63 Item 11) was jumping straight from a positive-baseline counterfactual to a production deployment without an in-between phase that asked "what specifically about the existing detector would survive the lane change?" This batch will not repeat that. The phases below run sequentially; each gates the next.
 
+**Phase order (post-2026-04-26 Kyle revision):**
+1. **A0** — Market-window control (sibling-strategy WR + mode/regime overlay + time-clustering). NEW. Gates A.
+2. **A** — Loser/winner pattern-classification on the 57-trade cohort (only proceeds if A0 routes to it).
+3. **B** — Single-rule detector hypothesis (only proceeds if A produces a discriminating axis).
+4. **C** — Backtest hypothesis on 60–90 days of historical OHLC (Kyle sign-off here).
+5. **D** — Conditional build OR drop (own canonical strategy key if BUILD; one-line `MULTI_FAMILY_ELIGIBILITY` removal if DROP).
+
+### Phase A0 — Market-window control (NEW 2026-04-26, gates Phase A)
+
+**Goal:** before classifying patterns, determine whether the 57-trade cohort metrics reflect strategy quality or window quality. The B63 streakiness analysis (z=−15.57 runs test) established that the system has hostile windows in which every strategy posts ≤30% WR. If the cohort overlapped with such windows, pattern-classification on those trades would be measuring window noise wearing a pattern-distribution costume.
+
+**Selection-bias risk this addresses:** if we skip A0, Phase A produces a confident-looking pattern distribution; Phase B forms a hypothesis against that distribution; Phase C backtests against historical OHLC where we may *also* have hostile-window contamination — and we end up with a "validated" detector tuned against bad-window noise rather than intrinsic edge. The detector then fails post-deploy on different bad-window stretches and we burn another cohort.
+
+**Tasks:**
+
+1. Pull the 57-trade cohort with `psql` (one CSV).
+2. **Sibling-strategy WR** — for each trade entry timestamp, query every other strategy's trades that fired within ±60 minutes (Langston Q1: 8–15 siblings per window, clean conditions read). All 17 canonical strategies in the universe (Langston Q2: hostile-window signal needs cross-strategy correlation, not just archetype match). Compute per-window sibling WR. Then compute the cohort-wide sibling WR (mean across all 57 windows).
+2a. **`strong_bull_trend` (SBT) focused control** (Langston Q3: most important A0 sub-analysis). SBT is the lane-mate, same DBS routing. Report as own row in the output table. Read: SBT winning + vwap_pullback losing in same windows = strategy problem; both losing = lane/window problem.
+3. **Mode / regime overlay at entry** — for each entry, capture the active mode (`NORMAL` / `DEFENSIVE` / `SURVIVAL`), global DBS at entry, regime distribution at entry. Look for clustering in DEFENSIVE / SURVIVAL / low-global-DBS windows.
+4. **Time-clustering** — are the 57 trades bunched in 2–3 specific bad-day clusters, or spread evenly across the 4-day cohort window? Bunched = window-quality story. Spread = strategy-quality story.
+4a. **Per-day breakdown** (Langston Q5: makes routing decision much more defensible). For each cohort day (2026-04-21 → 2026-04-25), tally trades opened, WR that day, and same-day sibling WR. If 40+ losers concentrate on one or two specific bad days (e.g., the streakiness-analysis catastrophic day), that IS the confound in its most obvious form. A flat distribution argues against the confound.
+
+**Outcome routing:**
+
+| Sibling WR in same windows | Reading | Path |
+|---|---|---|
+| **≥ 50%** | Other strategies winning in same windows; vwap_pullback truly is the problem | Proceed with Phase A pattern-classification → B/C/D as planned |
+| **≤ 30%** | Universal hostile windows; vwap_pullback may be fine | Recommend **NEITHER BUILD NOR DROP for this strategy** — finding feeds **Phase 19.5 Adaptive Market Response** (system needs hostile-window stand-down overlay, not per-strategy redesign). **Also flags a future batch (separate from B65.5) to re-evaluate the B63 Item 13 verdict** in light of conditions — Kyle directive 2026-04-26: "we might want to retest the VWAP pullback results or reconsider them based on the fact that the market conditions were not good." |
+| **30–50%** | Mixed; both factors contributing | Proceed with Phase A pattern-classification BUT segment the cohort by window quality — only the bad-strategy-good-window subset gets the detector hypothesis treatment; the rest gets the AMR-overlay treatment + the future Item-13-reconsideration batch flag |
+
+**Output:** `B65_5_PHASE_A0_WINDOW_CONTROL.md` with sibling-strategy WR table, mode/regime overlay distribution, time-clustering chart, and the routing decision (which path Phase A proceeds on).
+
+**Deliverable gate:** Langston reviews A0 findings BEFORE Phase A pattern-classification begins. Routing decision is the gate.
+
 ### Phase A — Loser pattern-match on the 57-trade failure cohort
 
 **Goal:** understand what the detector said vs. what the market did. Not "the strategy lost money" — that's the result, not the cause. Cause-level reading.
@@ -130,6 +164,7 @@ If Phases A–C recommend DROP, the deliverable is a single-line removal:
 
 | Gate | Owner | Decision | Outcome if no |
 |---|---|---|---|
+| **Phase A0 routing** (NEW) | Langston (review) + Kyle (sign-off if non-trivial) | "Is sibling-strategy WR ≥ 50%, ≤ 30%, or 30–50% in the same windows?" | ≤30% → defer to Phase 19.5 AMR + flag future Item-13-reconsider batch, skip A/B/C/D. 30–50% → segment cohort, partial A. ≥50% → proceed to Phase A as planned. |
 | Phase A pattern distribution clean enough | Langston (review) + Kyle (escalation if needed) | "Is there a single dominant loser category?" | Recommend DROP, skip B/C/D |
 | Phase B hypothesis specifiable + falsifiable | Langston (review) | "Can this be coded as one rule?" | Iterate Phase A → B until specifiable |
 | Phase C backtest meets BUILD thresholds (WR ≥ 55%, sumR > +5.0, mean net > 0%, pattern shift) | Langston (review) + Kyle (sign-off) | "Did the hypothesis hold on out-of-sample data?" | Recommend DROP, skip D |
