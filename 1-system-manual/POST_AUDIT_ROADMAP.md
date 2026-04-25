@@ -819,13 +819,24 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 - Confirm learning systems are improving signal quality
 - Validate data retention and archiving
 
-**Expected outcome**: Fully debugged paper trading system. All components validated. Ready for production hardening.
+### 19.4 SQE Recalibration (B66, conditional)
 
----
+**Status (2026-04-25):** Was originally queued as a pre-launch standalone batch. Moved INTO Phase 19 because SQE recalibration is downstream of signal generation and orchestration — if those upstream paths have problems in active-trading mode, SQE recalibration is unverifiable and risks shipping changes we cannot validate.
 
-## Phase 19.5: Adaptive Market Response (Conditional, Post Paper Audit)
+Decision gate: after several days of paper trading shows real WR / streak / FinalScore-vs-outcome data, we recalibrate SQE thresholds against actual paper observations rather than against VTS data.
 
-**Status**: PLANNED CONDITIONALLY. Decision gate at end of Phase 19. May be deferred to post-launch if paper-trading observations show losing-streak phenomenon does not materialize at meaningful magnitude in active-trading mode.
+Scope (from `BATCH_66_SCOPE.md`):
+- 6 formula constant promotions to `module_constants`
+- PredConf rolling window (replace all-time cumulative)
+- Per-underlying position limits (cross-pair correlation cap)
+- Realized-EV-adaptive floor
+- rankingScore logging
+
+May be split into multiple sub-deploys per the original scope. May be partially deferred to post-launch if paper-trading evidence suggests current SQE behavior is acceptable.
+
+### 19.5 Adaptive Market Response (conditional)
+
+**Status (2026-04-25):** Moved INTO Phase 19 (was previously listed as a separate Phase 19.5 conditional after the audit). Same conditional logic — decision gate at end of paper trading observations. Goal is to extend the existing rules-based mode overlay (Directive 11.7S) from defensive-only to a full adaptive market response — the system reads multiple weather signals, classifies current market conditions, and adjusts behavior both defensively (slow down, restrict, or pause in bad conditions) and offensively (lean in when conditions are unusually favorable).
 
 **Goal**: Extend the existing rules-based mode overlay (Directive 11.7S) from defensive-only to a full adaptive market response — the system reads multiple weather signals, classifies current market conditions, and adjusts behavior both defensively (slow down, restrict, or pause in bad conditions) and offensively (lean in when conditions are unusually favorable).
 
@@ -833,7 +844,11 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 
 **Why conditional**: The system's existing protections (break-even lock, ladder trailing, SQE filtering, RTBQ slot caps) may absorb the streak phenomenon adequately at active-trading scale even without this layer. The streak phenomenon is real and measurable in the VTS, where the pipeline is permissive and unfiltered, but active-trading filters are strict. The right time to decide whether this layer is needed is after several days of paper trading data shows whether streaks actually appear at active-trading volume.
 
-### 19.5.1 Detection layer (richer weather report)
+**Concept document**: `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`
+
+**Why conditional**: The system's existing protections (break-even lock, ladder trailing, SQE filtering, RTBQ slot caps) may absorb the streak phenomenon adequately at active-trading scale even without this layer. The streak phenomenon is real and measurable in the VTS, where the pipeline is permissive and unfiltered, but active-trading filters are strict.
+
+##### 19.5.1 Detection layer (richer weather report)
 
 Replace the single-input stability sensor with a multi-input aggregator that reads:
 - Regime state and how steady it has been (existing)
@@ -845,25 +860,27 @@ Replace the single-input stability sensor with a multi-input aggregator that rea
 
 Output: single classification (calm / choppy / stormy / favorable) plus continuous confidence number.
 
-### 19.5.2 Offensive mode
+#### 19.5.2 Offensive mode
 
 Add a fourth driving mode (Aggressive / Favorable) to the existing Normal / Defensive / Survival set. Increases position size, broadens strategy roster, lowers confidence floor, shortens cooldowns when weather is unusually favorable.
 
-### 19.5.3 Tunable response dials
+#### 19.5.3 Tunable response dials
 
 Promote hardcoded mode-overlay multipliers from `strategy-modes.ts` to `module_constants` table rows (aligns with B65.1 modularization).
 
-### 19.5.4 Calibration from VTS data
+#### 19.5.4 Calibration from VTS data
 
 One-time pre-launch calibration: walk VTS closed-trade history, identify weather-indicator combinations that preceded long streaks (winning and losing), set detector thresholds based on identified patterns. This is the only step that requires VTS data, and it runs once before VTS shuts off in active-trading mode.
 
-### 19.5.5 Verification in paper
+#### 19.5.5 Verification in paper
 
 Restart paper with adaptive response live. Confirm that mode transitions fire when conditions warrant and that the response actions actually reduce losing-streak length and capture additional profit during favorable streaks.
 
 **Relationship to Phase 17.5**: This is the rules-based pre-launch version of the same concept Phase 17.5 implements with machine learning post-launch. Same shape, two stages of sophistication. Phase 19.5 sets the rules manually; Phase 17.5 lets the system learn the rules from data.
 
 **Expected outcome (if greenlit)**: Pre-launch system that responds to market conditions instead of treating all conditions identically. Reduces losing-streak length and amplifies favorable-streak capture. Tunable without redeploys. Calibrated against months of VTS data before going live.
+
+**Phase 19 expected outcome**: Fully debugged paper trading system with optional SQE recalibration (19.4) and Adaptive Market Response (19.5) layered in based on what paper-mode evidence shows. All components validated. Ready for production hardening.
 
 ---
 

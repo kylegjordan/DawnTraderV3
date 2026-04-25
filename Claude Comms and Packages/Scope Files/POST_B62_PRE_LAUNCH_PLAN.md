@@ -313,6 +313,20 @@ Phase 15b remains in effect through B66. Phase 16 begins after B66 closes (DB/Le
 
 ---
 
+## Update 2026-04-25 — B66 SQE recalibration deferred into Phase 19
+
+The original B66 scope mixed two distinct workstreams: (a) data archiving + drift dashboard infrastructure (Items 7 + 8 above), and (b) SQE recalibration based on the streakiness analysis from B63 (rolling PredConf window, underlying-based position limits, realized-EV-adaptive floor, mode-overlay stability-signal expansion, global-state freshness check).
+
+**Decision:** the SQE recalibration workstream **moves from a standalone pre-launch B66 to Phase 19.4** (within the Paper Mode Audit), conditional on what paper-trading evidence shows. Reasoning: SQE recalibration is downstream of signal generation and orchestration. If those upstream paths have problems in active-trading mode, SQE recalibration is unverifiable and risks shipping changes we cannot validate against real outcomes.
+
+**The Adaptive Market Response framework** (extending the existing Directive 11.7S mode overlay from defensive-only to defensive + offensive) **also moves into Phase 19, as Phase 19.5**, on the same logic. Concept document at `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`.
+
+What remains in pre-launch as the original B66 scope (data archiving + drift dashboard infrastructure) is unchanged.
+
+See `1-system-manual/POST_AUDIT_ROADMAP.md` Phase 19.4 and Phase 19.5 for the within-Phase-19 sequencing.
+
+---
+
 ## Prerequisites before "launch"
 
 Per Kyle's 2026-04-18 directive (confirmed 2026-04-19), ALL 7 items above must complete before live mode activates. ML model work does not start until post-launch; all data infrastructure must be in place BEFORE launch so the system captures correctly from day one.
@@ -321,4 +335,4 @@ Items 1 and 2 also improve VTS trade economics immediately, which matters for Ph
 
 ---
 
-*End of POST_B62_PRE_LAUNCH_PLAN.md — revised 2026-04-19*
+*End of POST_B62_PRE_LAUNCH_PLAN.md — revised 2026-04-19, updated 2026-04-25 (B66 SQE workstream + Adaptive Market Response moved into Phase 19).*
