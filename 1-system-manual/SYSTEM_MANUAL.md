@@ -3311,7 +3311,7 @@ DSE extracts edge and confidence from adaptive weights (VTS learning repository)
 
 ### Hard Cap
 
-Final position size is capped at `balance x MAX_POSITION_RISK` where `MAX_POSITION_RISK = 0.02` (2%) from `EXECUTION_CONFIG`.
+Final position size is capped at `balance × max_position_risk` where `max_position_risk = 0.02` (2%) by default, resolved at runtime via `getConstant('risk_sizing', 'max_position_risk', key)` from the `module_constants` table. (Migrated from the deleted `EXECUTION_CONFIG.MAX_POSITION_RISK` const in B65.2 — see §12.)
 
 ### Invariants
 
@@ -4352,28 +4352,56 @@ Hot-reload pub/sub for strategy settings changes. Subscribers can receive mode-b
 
 ## 5. TrailingExitController
 
-**File**: `server/services/trailing-exit-controller.ts` (~335 lines)
-**Directives**: 9.2.A (Dynamic Trailing Exit), 11.3A (Cost-Aware Ratchet)
+**File**: `server/services/trailing-exit-controller.ts`
+**Directives**: 9.2.A (Dynamic Trailing Exit), 11.3A (Cost-Aware Ratchet), B65.2 (Functional engagement + moonbag qualifier + duration cap + concurrency cap)
+**Status**: Engaged in production for both VTS and paper exit loops as of 2026-04-23 (B65.2). Was dormant from Phase 11 through that point.
+
+> **B65.2 (2026-04-23) note:** This module is the canonical TEC. The Phase-11 percentage-based implementation (`server/services/execution-controller.ts`, Directive 11.0C) was deleted outright when this module was wired into production. The "TEC" label has been reassigned to this ATR-based service going forward. See SIM §B65.2 for the deletion + migration trail.
 
 ### 5.1 Two-Stage Latch System
 
-The TrailingExitController implements a sophisticated two-stage exit system:
+The TrailingExitController implements a two-stage exit system. Both stages are gated by separate conditions and apply cost-aware floors:
 
 ```
 Stage 0: TARGET mode (initial)
-  │  Price gains 1×ATR above entry
+  │  Price gains break_even_trigger_r × ATR above entry (default 1.0)
   ▼
-Stage 1: BREAK-EVEN LATCHED
+Stage 1: BREAK-EVEN LATCHED  (applies to ALL trades, regardless of strategy)
   │  Stop moves to netBreakeven (cost-aware)
-  │  Dynamic trailing from HWM begins
-  │  Price reaches target price
+  │  Trade can no longer become a net loser
+  │  Dynamic trailing from HWM begins (still aiming at original target)
+  │
+  │  Price reaches target_lock_r × R above entry (default 1.5)
+  │  AND moonbag qualifier check passes (strategy + sourcePool allowlist)
+  │  AND moonbag concurrency cap allows entry
   ▼
-Stage 2: TARGET LATCHED → TRAILING_TAKE mode
+Stage 2: TARGET LATCHED → TRAILING_TAKE mode  (moonbag — qualifying strategies only)
   │  Stop locks to netTargetFloor (cost-aware)
-  │  "MOONBAG" mode activated
   │  Dynamic trailing continues from HWM
-  └──> shouldClosePosition() returns true when price <= currentStopPrice
+  │  Duration cap timer starts (default 4h)
+  │
+  └──> shouldClosePosition() returns true when:
+       - price <= currentStopPrice (trailing_stop_hit), OR
+       - duration > moonbag_max_duration_ms (moonbag_timeout)
 ```
+
+If a target hit occurs but the qualifier check fails (non-qualifying strategy, or paper concurrency cap reached), the trade closes at target with reason `target_hit` and never enters TRAILING_TAKE mode.
+
+### 5.1.1 Moonbag Qualifier (B65.2)
+
+Strategies that qualify for moonbag mode on target hit are stored in `module_constants.trailing_exit.moonbag_qualifying_strategies` (default: `["strong_bull_trend", "sma_trend_ride", "vwap_pullback", "breakout"]`). Some strategies have additional source-pool constraints in `module_constants.trailing_exit.moonbag_qualifying_source_pools` (default: vwap_pullback only qualifies in `quant-strong_trend` source pool).
+
+### 5.1.2 Concurrency Cap (B65.2)
+
+Cap behavior is per-mode and tunable:
+- **VTS** — unlimited (observation goal: see trailing behavior at scale).
+- **Paper / Live** — reserved-slots model. Max concurrent moonbags = current slot total − `moonbag_reserved_slots` (default 1). Scales automatically as portfolio grows; small portfolios get protection (small slot count → cap binds and reserves at least one slot for fresh setups), large portfolios find the cap effectively non-binding.
+
+Cap state is tracked in a per-mode counter (`concurrentMoonbagByMode`) that decrements on `clearTrailingState()` and rebuilds on `importStates()` for restart-safety.
+
+### 5.1.3 Duration Cap (B65.2)
+
+Once a trade enters TRAILING_TAKE mode, a timer starts. If the trade remains in TRAILING_TAKE longer than `module_constants.trailing_exit.moonbag_max_duration_ms` (default 14400000ms = 4h), the engine emits a `moonbag_timeout` close decision regardless of where the trailing stop sits. Prevents moonbag trades from indefinitely tying up trade slots.
 
 ### 5.2 Cost-Aware Floors (Directive 11.3A)
 
@@ -4602,77 +4630,113 @@ t_decide → t_submit → t_ack → t_fill
 
 ---
 
-## 11. Trade Flow Types (Directive 11.0B)
+## 11. Trade Flow Types (Directive 11.0B) — DELETED in B65.2
 
-**File**: `server/types/trade-flow.ts` (~127 lines)
+**File**: `server/types/trade-flow.ts` — **DELETED 2026-04-23 (B65.2)**
 
-### 11.1 Type Definitions
+This file was deleted alongside the Phase-11 `execution-controller.ts` (Directive 11.0C) when the dormant Trade Execution Controller was removed in favor of the now-engaged ATR-based trailing engine (`trailing-exit-controller.ts`, see §5). The types it defined (`TradeSignal`, `ExecutionIntent`, `ExitDecision`, `ActiveTrade`, `TradeOrder`, `AdaptiveSizeResult`, `TradeExecutionController`, `Trendline`) were exclusively consumed by the deleted execution-controller and had no other importers. Orphan check during deletion confirmed zero remaining references.
 
-| Type | Purpose |
-|------|---------|
-| `TradeSignal` | Signal from strategy engine |
-| `ExecutionIntent` | Intent to execute a trade |
-| `ExitDecision` | Whether to exit a position |
-| `ActiveTrade` | Currently open trade |
-| `TradeOrder` | Order submitted to exchange |
-| `AdaptiveSizeResult` | Position size adjustment |
-| `TradeExecutionController` | TEC interface contract |
-| `Trendline` | Feedback for adaptive sizing |
+The exit-decision shapes used in the active codebase now live in:
+- `server/services/tec-evaluator.ts :: TECExitInput`, `TECExitDecision`, `TECExitReason`
+- `server/services/trailing-exit-controller.ts :: TrailingState`, `PositionUpdate`, `TrailingUpdateResult`, `CallerMode`
 
-### 11.2 ⚠ StrategyType Mismatch
+No replacement file was created for the deleted types — the new types live with the consumers that use them.
 
-The `StrategyType` union type lists only **9 strategies**:
+### 11.2 ⚠ StrategyType Mismatch — RESOLVED-BY-DELETION (B65.2)
 
-```typescript
-type StrategyType = 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride'
-  | 'breakout' | 'mean_reversion' | 'range_trading'
-  | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
-```
+The 9-strategy `StrategyType` union type that lived in this file (and triggered RISK-033 in CHANGES_AND_FIXES) is no longer a concern: the file was deleted in B65.2 and the active `StrategyType` definitions in the live codebase (e.g. `server/services/trade-executor.ts`, `paper-execution-engine.ts`) carry the full 17-strategy roster. The original BUG-002/BUG-003 mismatch is now strictly historical.
 
-The canonical system defines **17 strategies** (5 quant + 5 pattern + 5 hybrid + 2 special). This mismatch means 8 strategy types cannot be properly typed through the trade flow layer. This is consistent with BUG-002/BUG-003 (DSS/SignalOrchestrator use legacy 9-strategy map) but creates an additional enforcement point for the strategy type mismatch.
+### 11.3 Trade Lifecycle Flow Documentation — superseded
 
-### 11.3 Trade Lifecycle Flow Documentation
-
-The file header documents the canonical flow:
+The flow diagram that lived in the deleted file's header has been superseded by the engaged trailing-exit pipeline documented in §5 (TrailingExitController) and §11.7S references in §Phase 4. The canonical post-B65.2 lifecycle flow is:
 
 ```
 [Signal Orchestrator] (exposure, correlation, cooldown)
      ↓
-[SQE] (FinalScore + RegimeWeight)
+[SQE] (FinalScore + RegimeWeight; not active in VTS path)
      ↓
-[Ready-to-Buy Queue] (2-min or 15-signal trigger)
+[Ready-to-Buy Queue] (2-min or 15-signal trigger; paper/live only)
      ↓
 [TCL] (FinalScore ranking)
      ↓
-[TEC] (adaptive sizing + trailing exits)
+[Mode Overlay (Directive 11.7S)] (NORMAL/DEFENSIVE/SURVIVAL multipliers on size/stop/target/confidence/cooldown)
+     ↓
+[Trade open: ATR/DI/VolNoise snapshot stored on trade record]
+     ↓
+[Per-cycle exit evaluation: tec-evaluator.evaluateTECExit]
+     │  ├─ Stale-price branch (no price + held > MAX_HOLD_MS → close at entry)
+     │  ├─ MAX_HOLD timeout branch
+     │  ├─ Static stop/target branch (when useTrailing=false; VTS pre-B65.2)
+     │  └─ Trailing engine branch (when useTrailing=true; B65.2+ for both VTS + paper)
+     │     └─ trailing-exit-controller.updatePosition (see §5)
+     │        ├─ Stage 1: Break-even latch on 1×ATR gain → stop ratchets to net-breakeven
+     │        ├─ Stage 2: Target latch + moonbag (if qualifier + cap permit) → TRAILING_TAKE
+     │        ├─ Duration cap: moonbag_max_duration_ms exceeded → moonbag_timeout
+     │        └─ Stop hit (any stage): close at currentPrice or stop, depending on stage
      ↓
 [Order Management]
+     ↓
+[Closed-trade write: trade_mode + exit_reason captured across all 4 trade-row tables]
 ```
+
+The dormant Phase-11 TEC (`execution-controller.ts`) that was previously cited at the bottom of this flow is gone; the trailing-exit-controller now occupies that slot.
 
 ---
 
-## 12. Execution Configuration
+## 12. Execution Configuration — `module_constants` (B65.1)
 
-**File**: `server/config/execution-config.ts` (~23 lines)
-**Directive**: 11.0C
+**File**: `server/services/module-constants-service.ts`
+**Schema**: `shared/schema.ts :: moduleConstants` table
+**Migration**: `drizzle/migrations/2026-04-23-b65-create-module-constants.sql` + `2026-04-23-b65-2-trailing-exit-seeds-and-trade-mode.sql`
+**Status**: Active since 2026-04-23 (B65.1). Replaces the deleted `server/config/execution-config.ts` (Directive 11.0C, frozen const file deleted in B65.2).
 
-### 12.1 TEC Parameters
+### 12.1 Resolution model
+
+5-dimensional keyed lookup: `(module_name, exchange, asset_class, strategy, regime, constant_name) → JSONB value`. Most-specific row wins, with dimension weights:
+
+| Dimension | Weight | Rationale |
+|---|---|---|
+| regime | 8 | Most specific. Per-regime calibration is the primary axis for adapting to market conditions. |
+| strategy | 4 | Per-strategy tuning beats infrastructure specificity. |
+| asset_class | 2 | Asset-class tuning meaningful but lower priority than strategy/regime. |
+| exchange | 1 | Lowest-priority axis; usually the broadest override (e.g. fee schedule). |
+
+Wildcard rows use `'*'` literal in any dimension. A row matching `(module=trailing_exit, exchange=*, asset_class=*, strategy=strong_bull_trend, regime=*)` (score 4) beats a row matching `(module=trailing_exit, exchange=kraken, asset_class=crypto_spot, strategy=*, regime=*)` (score 1+2=3).
+
+### 12.2 Cache
+
+Per-`module_name` cache with 60s TTL (mirrors MCE pattern). Resolution is in-memory per-read against the cached rowset. Cache cleared via `clearModuleConstantsCache()` (used in tests).
+
+### 12.3 Service API
 
 ```typescript
-EXECUTION_CONFIG = Object.freeze({
-  ADAPTIVE_EXPAND_FACTOR: 1.10,      // Expand position by 10%
-  ADAPTIVE_CONTRACT_FACTOR: 0.90,     // Contract position by 10%
-  TRAILING_STOP_BASE: 0.015,          // 1.5% base trailing stop
-  TRAILING_STOP_ACCELERATION: 0.002,  // Acceleration factor
-  MAX_POSITION_RISK: 0.02,            // 2% max position risk
-  TRAILING_STOP_ACTIVATION_PCT: 1.0,  // Activation at 1% gain
-  TRAILING_STOP_DISTANCE_PCT: 0.5,    // Distance at 0.5%
-  MAX_HOLDING_PERIOD_MS: 86400000,    // 24 hours
-  VERSION: "v1.0.0"
-});
+// Resolve one constant value for the given context
+getConstant<T>(moduleName, constantName, key: ResolutionKey): Promise<T | undefined>
+
+// Bulk-resolve all constants under a module for the given context
+getModuleConstants(moduleName, key: ResolutionKey): Promise<Record<string, unknown>>
+
+// Write a constant (admin/operator path)
+setConstant(moduleName, constantName, key: Partial<ResolutionKey>, value, updatedBy)
+
+// Cache management
+invalidateModuleCache(moduleName): void
+clearModuleConstantsCache(): void
 ```
 
-**Note**: `MAX_POSITION_RISK: 0.02` (2%) was flagged in Phase 4 as RISK-031 and deferred by Kyle.
+`ResolutionKey` is `{ exchange, assetClass, strategy, regime }` — all four fields required by the caller (use `'*'` to match wildcard rows when a specific value isn't relevant).
+
+### 12.4 Live consumers
+
+| Consumer | Module read | Constants used |
+|---|---|---|
+| `trailing-exit-controller.ts` | `trailing_exit` | `break_even_trigger_r`, `target_lock_r`, `trail_distance_atr_multiplier`, `persistence_debounce_ms`, `moonbag_qualifying_strategies`, `moonbag_qualifying_source_pools`, `moonbag_max_duration_ms`, `moonbag_cap_mode`, `moonbag_reserved_slots` |
+| `dynamic-sizing-engine.ts` | `risk_sizing` | `max_position_risk` (migrated from deleted `EXECUTION_CONFIG.MAX_POSITION_RISK`) |
+| `telemetry-aggregator.ts` | (no DB read; sync mirror) | Hardcoded mirror of seed values for the diagnostic `tecConfig` payload (sync function constraint — authoritative live values are read directly by per-trade consumers) |
+
+### 12.5 Migration history (B65.2)
+
+The Phase-11 `EXECUTION_CONFIG` const was deleted in B65.2. All live consumers were migrated to `module_constants` BEFORE the file deletion to keep the build green. The Phase-4 RISK-031 (DSE 2% cap vs. guardrails 10/30%) is no longer file-pinned — it's a `module_constants.risk_sizing.max_position_risk` row that can be tuned per (exchange, asset_class, strategy, regime) without redeploy. The semantic concern (DSE caps before the guardrail can bind) remains and is tracked in CHANGES_AND_FIXES as RISK-031, deferred per Kyle.
 
 ---
 
@@ -5209,7 +5273,9 @@ startAutonomousSimulation()
 
 **Pre-Score Governance (Directive 11.7R-E)**: Before any scoring, strategies are checked against regime stability. If a strategy's dependency (trend, volatility, stability) is blocked in the current regime stability state, the signal is never scored, never ranked, and never generates a trade.
 
-**Strategy Mode Modulation (Directive 11.7S)**: After governance, the strategy mode is resolved (AGGRESSIVE, STANDARD, CONSERVATIVE) based on global regime stability. The mode overlay adjusts position size, stop-loss distance, and take-profit distance via multipliers.
+**Strategy Mode Modulation (Directive 11.7S)**: After governance, the strategy mode is resolved (NORMAL / DEFENSIVE / SURVIVAL) based on global regime stability. The mode overlay adjusts position size, stop-loss distance, take-profit distance, confidence floor, and entry cooldown via multipliers. This is the **defensive-only skeleton** of the broader Adaptive Market Response framework.
+
+> **Adaptive Market Response (concept, 2026-04-25):** The mode overlay above is the existing defensive half of a planned multi-input, defensive-and-offensive market-response framework. The expansion adds richer detection inputs (regime + DBS trend + realized-EV drift + pair-distribution + friction trend), an offensive Aggressive mode for favorable conditions, and tunable response dials in `module_constants`. Conditional Phase 19.5 in roadmap; concept document at `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`. The post-launch ML-driven version is Phase 17.5 (Smart Thermostat).
 
 ### Configuration
 
@@ -9029,7 +9095,10 @@ Tests are organized by directive number, reflecting the phased development histo
 | `directive-11.7R-E-enforcement.test.ts` | 198 | 11.7R-E | Enforcement regression: UNSTABLE + vwap_pullback blocked pre-score, HIGH dependency blocking |
 | `directive-11.7R-governance.test.ts` | 267 | 11.7R | Regime transition governance: STABLE/TRANSITION/UNSTABLE classification, multipliers, cooldowns |
 | `directive-11.7S-strategy-modes.test.ts` | 257 | 11.7S | Strategy mode modulation: NORMAL/DEFENSIVE/SURVIVAL overlays, confidence floors, mode stats |
-| `execution-config.test.ts` | 54 | 11.0D | EXECUTION_CONFIG immutability, adaptive sizing params, trailing stop params |
+| ~~`execution-config.test.ts`~~ | — | 11.0D | **DELETED 2026-04-23 (B65.2)**. Tested the Phase-11 EXECUTION_CONFIG const which was deleted; values migrated to `module_constants` table. |
+| `b65-tec-parity.test.ts` | ~290 | B65.2 | TEC exit-evaluator parity: 11 scenarios covering stop_hit, target_hit, stale_timeout, MAX_HOLD timeout, qualifier accept/reject, source-pool gate, concurrency cap (paper blocks at N-1, VTS unlimited), static-stop vs trailing-stop discrimination. Mocks DB + cost-model + storage; exercises real engine logic. |
+| `b65-module-constants-resolution.test.ts` | — | B65.1 | module_constants resolution-hierarchy unit test (most-specific-wins scoring). |
+| `b65-migration-validation.test.ts` | — | B65.1 | Migration-validation tests for the B65 schema additions. |
 | `filter-insights.test.ts` | 441 | 10.9C | Filter insights service: 9 active filters, schema v1.3.1, rolling 24h window, telemetry |
 | `finalscore-equivalence.test.ts` | 201 | 11.0E | FinalScore formula: canonical weights, fallback, clamping, NaN detection, idempotency |
 | `hybrid-integration.test.ts` | 385 | 10.4 | Ensemble scoring, confluence detection, strategy selection, pattern decay, timeframe guard |
@@ -9042,7 +9111,7 @@ Tests are organized by directive number, reflecting the phased development histo
 | `score-weights.test.ts` | 253 | 10.9A | SCORE_WEIGHTS: immutability, version v1.0.1, inline FinalScore calculation consistency |
 | `signal_mapping_integrity.test.ts` | 168 | 11.4F.1 | Signal mapping: 17 strategies → signalType, legacy normalization chain, ISO timestamps |
 | `sqe-config-dynamic.test.ts` | 139 | 11.0D | SQE dynamic config: FinalScore backfill, RegimeWeight calculation from trend/volatility |
-| `tco-tec-tcl.test.ts` | 400 | 11.0B | Component boundaries: TCL methods, SQE thresholds, TEC monitoring/trailing, TCO file removed |
+| ~~`tco-tec-tcl.test.ts`~~ | — | 11.0B | **DELETED 2026-04-23 (B65.2)**. Tested the Phase-11 TEC (`execution-controller.ts`) which was deleted in the same batch. |
 | `telemetry-aggregator.test.ts` | 207 | 10.8 | Telemetry aggregator: pair recording, composite score, top/rotational pairs, cascade efficiency |
 | `trailing-exit.test.ts` | 239 | 9.2.H | Trailing exit controller: dynamic stop distance (K'), break-even trigger, target lock, persistence |
 | `vn_parity.test.ts` | 114 | 11.7H | VN parity: IMF vs canonical analysis-utils produce identical VolNoise values |
