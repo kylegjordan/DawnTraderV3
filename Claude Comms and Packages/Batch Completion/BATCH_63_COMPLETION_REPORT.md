@@ -1,7 +1,7 @@
 # BATCH 63 — Completion Report
 
-**Status:** AUDITS CLOSED (2026-04-22) — observation window in final stretch
-**Final close:** pending Item 13 decision gate (2026-04-28) + 48h observation completion
+**Status:** ✅ **FORMALLY CLOSED 2026-04-25**
+**Final close:** Closed by Kyle directive 2026-04-25 — Item 13 preliminary verdict reached statistical certainty 3 days ahead of the original 2026-04-28 gate (cohort at 2.85× min sample size, both metrics deep below KEEP and TUNE thresholds, +27 R recovery in 3 remaining days statistically not happening). Verdict: **BUILD_DEDICATED**. Follow-on: B65.5 Strong Bull Pullback research-then-design (may renumber B66.5 / B72). Full Item 13 verdict block at §11 below.
 **Scope doc:** `Claude Comms and Packages/Scope Files/BATCH_63_SCOPE.md` (19 items)
 **Pre-audit:** `Claude Comms and Packages/Scope Files/BATCH_63_PRE_AUDIT.md`
 **Trigger evidence:** `Claude Comms and Packages/Scope Files/BATCH_63_COUNTERFACTUAL_AUDIT.md`
@@ -51,7 +51,7 @@ B63 originally scoped 9 items (2026-04-20). Expanded to 19 items (2026-04-21) af
 | 10 | Counter-trend LONG guards | Implementation | ✅ SHIPPED | commit `b0b8e39e` + integrated into `c3fe0712`; 5 occurrences of `b63b_counter_trend_long_exclusion` in compiled dist |
 | 11 | vwap_pullback strong-trend lane promotion + lane arbitration | Implementation | ✅ SHIPPED | commit `c3fe0712`; `MULTI_FAMILY_ELIGIBILITY` map + first-claim-wins guard |
 | 12 | Strong-trend geometry override plumbing | Implementation | ✅ SHIPPED | commit `c3fe0712`; 4-test contract suite passing |
-| 13 | Observation + decision gate for dedicated `strong_bull_pullback` | Decision gate | **[OBS PENDING — 2026-04-28]** | evidence-accumulation script `B63_ITEM13_EVIDENCE_SCRIPT.py` ready; evaluate at 2026-04-28 per Item 13 criteria (KEEP if WR ≥ 50% AND AvgR ≥ 0.15; TUNE if intermediate; BUILD_DEDICATED if poor) |
+| 13 | Observation + decision gate for dedicated `strong_bull_pullback` | Decision gate | ✅ **CLOSED 2026-04-25 — BUILD_DEDICATED** | 57 closed trades / 21.1% WR / sumR -28.99 / mean net -1.81% / total net -$42.26 at 2.85× min sample. Both metrics below KEEP (≥55% / >0) and TUNE (45-55% / -2.0 to 0) thresholds; would need +27 R recovery to escape — not statistically possible in remaining window. Closed early by Kyle directive. Follow-on: **B65.5 Strong Bull Pullback research-then-design**. See §11 below for full verdict block. |
 | 14 | Strong-trend lane mode-overlay bypass | Implementation | ✅ SHIPPED | commit `c3fe0712`; live proof from PM2 #80 same-cycle log pair (ETH multipliers applied vs EVAA bypass identical before/after) |
 | 15 | Multi-lever adaptive framework audit | Audit | ✅ **CLOSED 2026-04-22** | `B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md` (47.8 KB). 69 levers inventoried (51 static-tunable, 18 runtime-adaptive). Snapshot-heavy scoring (7/10 scoring inputs). ExpectedEdge Pearson r = −0.130 vs actual net. PredConf self-cancellation identified as design flaw. Part E modularization lens with 4-cluster analysis + 5-module partition. |
 | 16 | Global DBS persistent store + atomic snapshot + 20-pair floor | Implementation | ✅ SHIPPED | commit `a4f5dbe0`; 11-test contract suite passing; cold-start + warm-up verified post-deploy |
@@ -373,4 +373,47 @@ External data sources feed **MCE (extended)** — NOT SQE, NOT per-strategy. Arc
 
 ---
 
-*End of skeleton. Final close blocked on observation metrics + audit deliverables.*
+## 11. Item 13 Final Verdict — BUILD_DEDICATED (closed 2026-04-25)
+
+**Pre-registered evaluation criteria** (from `BATCH_63_ITEM13_DECISION_GATE_SPEC.md`):
+
+| Verdict | Win Rate | Sum R | Met? |
+|---|---|---|---|
+| KEEP | ≥ 55% | > 0 | ❌ |
+| TUNE | 45–55% | −2.0 to 0 | ❌ |
+| **BUILD_DEDICATED** | **< 45%** | **≤ −2.0** | **✅ both** |
+
+**Cohort metrics as of 2026-04-25 (cohort start: PM2 #80 = 2026-04-21 15:13 UTC, ~3.4 days into 7-day window):**
+
+| Metric | Value | Threshold |
+|---|---|---|
+| Closed trades | 57 | min 20 (2.85× over) |
+| Win rate | 21.1% (12 W / 45 L) | < 45% by 24 pts |
+| Sum R | −28.99 | < −2.0 by 27 R |
+| Mean net % | −1.81% | — |
+| Total net | −$42.26 | — |
+
+**Cohort exit-reason distribution:**
+
+| Exit reason | Count | Pattern |
+|---|---|---|
+| `break_even_stop` | 21 | BE protection catching reversals — entry, gain, reverse, BE-stop fires |
+| (pre-HF3 entries with no exitReason field) | 26 | Pre-2026-04-24 trades with collapsed mappings |
+| `trailing_stop_hit` | 6 | Some moonbag captures did happen |
+| `stop_hit` | 4 | Real losses on the original stop |
+
+**Reading:** The strategy isn't producing winning trades reliably enough in the current market environment. Many trades enter, gain a small amount, then reverse — triggering BE protection rather than reaching target. The B63 architecture changes (Variant E geometry override, mode-overlay bypass, lane-specific routing, first-claim-wins arbitration) did not unlock vwap_pullback as a profitable strong-trend strategy. The mismatch is at the entry-detector layer: vwap_pullback's existing pullback geometry is a mean-reversion archetype mismatched with the high-DBS continuation pairs in the strong-trend lane.
+
+**Closure decision (Kyle directive 2026-04-25):**
+
+Statistical certainty was reached at 2.85× minimum sample size — the cohort would need +27 R recovery in the remaining 3 days to escape BUILD_DEDICATED, which is implausible at the current win-rate trajectory. Closing the gate 3 days ahead of the original 2026-04-28 schedule.
+
+**Verdict: BUILD_DEDICATED.** Path forward:
+
+Either **(a)** build a new dedicated `strong_bull_pullback` strategy with its own detector tuned for actual continuation patterns (not the existing pullback geometry), OR **(b)** remove vwap_pullback from the strong-trend lane entirely and let `strong_bull_trend` carry the lane alone.
+
+**Follow-on batch: B65.5 Strong Bull Pullback research-then-design** (may renumber as B66.5 or B72 once scope formalized). Approach: (1) analyze the 57-trade failure cohort, pattern-match losers; (2) form hypothesis on filter/detector change excluding bad ones while preserving 12 winners; (3) backtest hypothesis against historical OHLC; (4) deploy behind A/B observation flag if backtest favorable. Realistic timeline: 1-2 weeks analysis + iteration. Outcome may be (a) BUILD or (b) DROP.
+
+---
+
+*B63 formally closed 2026-04-25. All implementation items shipped, all audit deliverables filed, Item 13 decision gate resolved. Follow-on work tracked in B65.5.*
