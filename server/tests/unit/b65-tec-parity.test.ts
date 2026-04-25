@@ -307,13 +307,15 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 12 (B65.4): Rung 1 hit + reverse — exit captures original-target floor', async () => {
     // Trade entry $100, stop $95, target $107.5 → R = 5, R_step = 7.5
-    // Price hits $107.5 → rung 1: new target = $115, new floor = $107.5
-    // Price reverses to $107.30 → exit with ladderRungsHit=1
+    // Price hits $108 (just above $107.5 target) → rung 1 latches:
+    //   new target = $115, new floor = $107.5. Stop ratchets to $107.5.
+    //   Note: price $108 > stop $107.5, so trade is alive.
+    // Price reverses to $107.30 (below floor) → exit with ladderRungsHit=1.
     const sym = 'LADDER1/USD';
-    // Step 1: hit rung 1
+    // Step 1: hit rung 1 (price slightly above target so trade doesn't immediately close at boundary)
     let d = await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 107.5, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.modeChanged).toBe(true);
@@ -331,18 +333,19 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
   });
 
   it('Scenario 13 (B65.4): Rung 2 hit + reverse — captures rung-1 floor (locked-in profit)', async () => {
-    // Trade hits rung 1 at $107.5, then rung 2 at $115. Reverse to $114.40.
+    // Prices slightly above each rung target so trade stays alive at each step
+    // before the final reverse. Scenarios use $108 then $115.5 then $114.40.
     const sym = 'LADDER2/USD';
     // rung 1
     await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 107.5, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
-    // rung 2
+    // rung 2 (price slightly above $115 target)
     let d = await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 115, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 115.5, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.ladderRungsHit).toBe(2);
@@ -407,14 +410,14 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 17 (B65.4): HWM dynamic floor — captures upside when running between rungs', async () => {
     // After rung 1, price climbs to $113 (between rung-1 target $107.5 and rung-2 target $115).
-    // HWM = $113. K' default ~1 → dynamic stop ≈ $113 - 1×ATR = $113 - 2 = $111.
-    // Effective stop = max(rungFloor=$107.5, dynamicStop=$111) = $111.
-    // Reverse to $110.50 → exit at $110.50 (ABOVE rung floor, captured upside via HWM).
+    // HWM = $113. K' default ~1.49 (DI=50, VolNoise=0.3) → dynamic ≈ $113 - 1.49×2 = $110.02.
+    // Effective stop = max(rungFloor=$107.5, dynamic=$110.02) = $110.02.
+    // Reverse to $109.50 → exit (below dynamic floor, above rung floor).
     const sym = 'LADDER6/USD';
-    // rung 1
+    // rung 1 (price slightly above target)
     await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 107.5, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // climb between rungs
@@ -426,39 +429,42 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // reverse — should hit dynamic floor, not rung floor
     const d = await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 110.50, atr: 2, holdDurationMs: 180_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 109.50, atr: 2, holdDurationMs: 180_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.shouldExit).toBe(true);
     expect(d.exitReason).toBe('trailing_stop_hit');
     expect(d.ladderRungsHit).toBe(1); // never made it to rung 2
-    // Exit price is currentPrice (engine's "exit at currentPrice when stop hit" convention).
-    // The point: stop level was ABOVE rung-1 floor due to dynamic HWM trail.
+    // The point: stop level was ABOVE rung-1 floor ($107.5) due to dynamic HWM trail (~$110).
   });
 
   it('Scenario 18 (B65.4): Duration cap fires at rung > 1 — moonbag_timeout with ladder count preserved', async () => {
-    // Use a tiny moonbag duration cap by setting moonbag_max_duration_ms via mockRows.
-    // After climbing to rung 2, sit until duration cap fires.
+    // Use a tiny moonbag duration cap (50ms) so the test can wait past it.
+    // The engine has its OWN local config cache (60s TTL) separate from the
+    // module-constants service cache, so we must clear BOTH for the engine
+    // to pick up the new cap value.
     mockRows.current = mockRows.current.map(r =>
-      r.constantName === 'moonbag_max_duration_ms' ? { ...r, value: 100 } : r
+      r.constantName === 'moonbag_max_duration_ms' ? { ...r, value: 50 } : r
     );
     clearModuleConstantsCache();
+    const { _testClearEngineConfigCache } = await import('../../services/trailing-exit-controller.js');
+    _testClearEngineConfigCache();
 
     const sym = 'LADDER7/USD';
-    // rung 1
+    // rung 1 (price slightly above target so trade stays alive)
     await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 107.5, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
-    // rung 2
+    // rung 2 (slightly above $115 target)
     await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 115, atr: 2, holdDurationMs: 90_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 115.5, atr: 2, holdDurationMs: 90_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
-    // wait past the cap
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // wait past the cap (50ms cap, wait 150ms)
+    await new Promise(resolve => setTimeout(resolve, 150));
     const d = await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
       currentPrice: 116, atr: 2, holdDurationMs: 95_000, maxHoldMs: 7 * 86400_000,
@@ -498,37 +504,35 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     expect(restored?.currentRungFloor).toBe(0); // safe default
   });
 
-  it('Scenario 20 (B65.4 — Langston Q5 ordering test): Rung target hit on same tick as HWM update', async () => {
-    // Critical ordering: when currentPrice equals a rung target exactly,
-    // the rung event must fire FIRST, then HWM updates, then dynamic trail
-    // computes against the new HWM. If HWM updates first, the dynamic trail
-    // could overshoot the new rung floor and produce inconsistent state.
+  it('Scenario 20 (B65.4 — Langston Q5 ordering test): Rung target hit cleanly above prior HWM', async () => {
+    // Critical ordering: when currentPrice crosses a rung target with HWM
+    // updating in the same cycle, the rung event must fire first (lock the
+    // floor at the just-crossed target), then dynamic trail computes against
+    // the updated HWM. The rung floor takes precedence in max().
     //
-    // Setup: rung 1 already hit. currentRungTarget = $115. ATR = 2.
-    // currentPrice = $115 exactly. Expected:
-    //   1. Loop fires: ladderRung increments to 2, currentRungFloor = $115.
-    //   2. HWM updates to $115.
-    //   3. Dynamic trail: HWM - K'×ATR = $115 - 1×2 = $113.
-    //   4. newStop = max(currentRungFloor=$115, dynamicStop=$113) = $115.
-    //
-    // The rung floor wins, stop locks at $115 — locked-in profit at the rung
-    // target. If HWM update came first, dynamic could be higher than $115
-    // (which it isn't here), but rungFloor of $115 still wins.
+    // Setup: rung 1 latched at $108. Engine state has HWM=$108, currentRungTarget=$115.
+    // Now a single update arrives with currentPrice=$115.5 (slightly above rung-2 target).
+    // Expected:
+    //   1. HWM updates to $115.5.
+    //   2. Loop processes rung-2 hit: ladderRung→2, currentRungFloor=$115 (cost-aware floor of $115 = $115 with zero costs).
+    //   3. Dynamic trail: $115.5 - 1.49×2 ≈ $112.52.
+    //   4. newStop = max(currentRungFloor=$115, dynamicStop=$112.52) = $115.
+    //   5. shouldClose: $115.5 <= $115? No. shouldExit=false.
     const sym = 'LADDER8/USD';
-    // rung 1
+    // rung 1 (slightly above target so trade stays alive)
     await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 107.5, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
-    // currentPrice exactly at rung-2 target
+    // currentPrice slightly past rung-2 target
     const d = await evaluateTECExit({
       symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 115, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 115.5, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.ladderRungsHit).toBe(2);
     expect(d.newStopPrice).toBeGreaterThanOrEqual(115); // rung-2 floor at $115
-    expect(d.shouldExit).toBe(false); // not exited; trade is alive at the rung-2 target boundary
+    expect(d.shouldExit).toBe(false); // price still above stop floor
   });
 });

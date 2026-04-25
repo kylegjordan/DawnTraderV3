@@ -161,6 +161,16 @@ export async function getResolvedTECConfig(strategy?: string, regime?: string): 
 }
 
 /**
+ * B65.4 (2026-04-25): Test-only helper to invalidate the engine's local
+ * cachedConfig so the next resolveTECConfig() call refetches from the
+ * module_constants service. Needed for tests that change moonbag config
+ * mid-flight (e.g. setting a tiny duration cap to exercise timeout paths).
+ */
+export function _testClearEngineConfigCache(): void {
+  configExpiresAt = 0;
+}
+
+/**
  * Directive 9.2.D: Schedule persistence save (debounced)
  */
 function schedulePersistence(): void {
