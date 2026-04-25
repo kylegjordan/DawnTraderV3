@@ -1,6 +1,6 @@
 # BATCH 65.5 — Strong Bull Pullback (Research → Design → Backtest → Optional Build)
 
-**Status:** DRAFT (Step 1 — scope, awaiting Langston review)
+**Status:** ✅ Step-1 APPROVED by Langston 2026-04-25 with 5 refinements (incorporated below). Ready to start Phase A.
 **Owner:** Claude Code (implementation), Langston (review), Kyle (decider)
 **Trigger:** B63 Item 13 closed 2026-04-25 with verdict **BUILD_DEDICATED** (57 trades / 21.1% WR / sumR −28.99 at 2.85× min sample)
 **Type:** Research-then-design batch — analysis-first, code last (or no code at all if research recommends DROP)
@@ -40,9 +40,10 @@ The previous batch's failure mode (B63 Item 11) was jumping straight from a posi
    - Reversal disguised as pullback (price retraced and KEPT going against the prior trend)
    - Range-bound chop misclassified as pullback by the detector
    - Volume-divergence pullback (price pulled back on rising volume — bearish under continuation logic)
+   - **Late entry — pullback already resolving** (price bottomed 3–5 candles before entry, detector fired late on the recovery; classified separately because the failure mode is latency/cadence, not pattern misread) [Langston Q2 refinement]
    - Other (record and tally)
-3. Same classification on the 12 winners — what did they have in common that the losers didn't?
-4. Output: `B65_5_FAILURE_COHORT_PATTERN_AUDIT.md` with the loser/winner pattern distributions plus per-category sample trades.
+3. **Apply the same taxonomy to the 12 winners.** This is not optional or secondary — Phase A's discriminating signal comes from the comparison. If all 12 winners are "true continuation pullback" and 40 of 45 losers are "reversal disguised as pullback," the detector hypothesis writes itself. If winners and losers share the same pattern distribution, the pullback-classification axis is NOT discriminating and we have to look elsewhere (entry timing, DBS trajectory during the pullback, volume profile, etc.) [Langston Q5 refinement].
+4. Output: `B65_5_FAILURE_COHORT_PATTERN_AUDIT.md` with side-by-side loser/winner pattern distributions, per-category sample trades, and explicit statement of whether a discriminating axis exists in the pullback-pattern dimension.
 
 **Deliverable gate:** if the pattern distribution shows no statistically clean signal separating losers from winners (e.g., all four categories appear roughly evenly in both), the answer is DROP, not BUILD. We escalate to Kyle with that recommendation and skip Phases B–D.
 
@@ -70,9 +71,10 @@ The previous batch's failure mode (B63 Item 11) was jumping straight from a posi
 3. Compare: original `vwap_pullback`-in-strong-trend-lane on the same window vs. proposed `strong_bull_pullback` on the same window.
 4. Output: `B65_5_BACKTEST_REPORT.md` with side-by-side metrics and pattern distributions.
 
-**Deliverable gate:** for the BUILD recommendation to proceed, the proposed detector must show:
-- WR ≥ 50% on the historical replay (the KEEP threshold for Item 13)
-- sumR > 0 on the historical replay
+**Deliverable gate (tightened per Langston Q3 refinement — new strategy demands higher bar than the Item 13 KEEP threshold the failed cohort couldn't clear):**
+- WR ≥ **55%** on the historical replay
+- sumR > **+5.0** on the historical replay
+- Mean net % > **0%** (no break-even-pretending-to-work cases)
 - Loser pattern distribution materially shifted away from the dominant Phase A failure mode
 If any of those fail, the recommendation flips to DROP.
 
@@ -83,7 +85,7 @@ If any of those fail, the recommendation flips to DROP.
 **Tasks:**
 1. New strategy file `server/strategies/strong-bull-pullback.ts` (or extend `strategy-engine.ts` block per existing pattern — TBD with Langston).
 2. Canonical map registration with own `tecConfig` (B65.1 module_constants entry rather than hard-coded). Mapped regimes: TREND_FRIENDLY_STABLE primary, IMPULSE_EXPANSION secondary.
-3. A/B observation flag — initial deployment runs the new detector in shadow mode on VTS only, comparing per-pair entries against `vwap_pullback`-in-strong-trend-lane for one observation week before promoting to active.
+3. A/B observation flag — initial deployment runs the new detector in shadow mode on VTS only, comparing per-pair entries against `vwap_pullback`-in-strong-trend-lane for one observation week before promoting to active. **The shadow strategy MUST register as its own canonical key `strong_bull_pullback`, NOT as a `vwap_pullback` variant** [Langston Q4 refinement] — clean telemetry separation from day one so cohort metrics, exit-reason mixes, and per-strategy WR are unambiguous in the Drift Dashboard and ML page from the first trade.
 4. New scope+pre-audit+code-review+deploy follow the standard 11-step workflow.
 5. Output: standalone batch (likely renumbered B65.6 or B72) with own scope, pre-audit, completion report.
 
@@ -130,7 +132,7 @@ If Phases A–C recommend DROP, the deliverable is a single-line removal:
 |---|---|---|---|
 | Phase A pattern distribution clean enough | Langston (review) + Kyle (escalation if needed) | "Is there a single dominant loser category?" | Recommend DROP, skip B/C/D |
 | Phase B hypothesis specifiable + falsifiable | Langston (review) | "Can this be coded as one rule?" | Iterate Phase A → B until specifiable |
-| Phase C backtest meets BUILD thresholds (WR ≥ 50%, sumR > 0, pattern shift) | Langston (review) + Kyle (sign-off) | "Did the hypothesis hold on out-of-sample data?" | Recommend DROP, skip D |
+| Phase C backtest meets BUILD thresholds (WR ≥ 55%, sumR > +5.0, mean net > 0%, pattern shift) | Langston (review) + Kyle (sign-off) | "Did the hypothesis hold on out-of-sample data?" | Recommend DROP, skip D |
 | Phase D scope ready | Langston (review) + Kyle (approve) | "Is this a normal 11-step batch?" | Iterate scope until approved |
 
 ---
@@ -155,4 +157,22 @@ If Phases A–C recommend DROP, the deliverable is a single-line removal:
 
 ---
 
-*End of B65.5 scope draft. Sent to Langston for Step-1 review 2026-04-25.*
+## 8. Step-1 Langston review log
+
+**Sent:** 2026-04-25 ~20:25 UTC via Telegram thread 21 + brain delivery (cc-inbox #819).
+
+**Returned:** 2026-04-25 ~20:30 UTC. **APPROVED with 5 refinements** (all incorporated above):
+
+| # | Langston refinement | Where applied |
+|---|---|---|
+| Q1 | Research-then-design framing correct — do NOT skip Phase A. B63's failure was exactly the skip this batch avoids. | §2 framing confirmed, no change |
+| Q2 | Add 6th pattern category: "late entry — pullback already resolving" (price bottomed 3–5 candles before entry). Latency-related failure mode classified separately. | §2 Phase A bullet 2 |
+| Q3 | Tighten Phase C BUILD threshold: WR ≥ 55% AND sumR > +5.0 AND mean net > 0%. New strategy demands higher bar than KEEP. | §2 Phase C deliverable gate + §5 decision-points table |
+| Q4 | Shadow-via-VTS acceptable, but condition: own strategy key `strong_bull_pullback`, not a `vwap_pullback` variant. Clean telemetry separation from day one. | §2 Phase D bullet 3 |
+| Q5 | Phase A must classify winners AND losers with same taxonomy. Discriminating signal lives in the comparison. | §2 Phase A bullet 3 |
+
+**Status:** scope CLOSED, Phase A approved to begin.
+
+---
+
+*End of B65.5 scope. Step-1 Langston-approved 2026-04-25 (cc-inbox #819).*
