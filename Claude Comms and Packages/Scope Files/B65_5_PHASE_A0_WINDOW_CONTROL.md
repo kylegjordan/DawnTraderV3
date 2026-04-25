@@ -44,6 +44,12 @@ Almost the entire cohort net loss came from a single catastrophic day (2026-04-2
 
 **Reading:** the cohort trades happened in windows where everything was losing. Cohort WR (27.0%) is statistically indistinguishable from sibling WR (25.8%) and SBT WR (23.9%). There is no separation between strategy quality and window quality in this evidence.
 
+### 2.2.1 Recurrence — 04-22 is the SECOND instance of the same pattern as 04-18 (Langston observation, cc-inbox #821)
+
+The B63 streakiness analysis (`B63_STREAKINESS_ANALYSIS.md`) flagged 2026-04-18 as the catastrophic-streak day (70-loss streak, runs test z=−15.57, p<10⁻⁵⁰). On that day, globalRegime was reported as TREND_FRIENDLY_STABLE for 100% of the affected trades while the market disagreed catastrophically. Phase A0 has now identified 2026-04-22 as the same pattern in the same week: 239 trades, 18.8% WR system-wide, **100% globalRegime TFS**.
+
+**Two catastrophic days in one ~5-day window, same mechanism. This is not a one-off anomaly — it is a recurring failure mode of the regime classifier in conjunction with the lack of a hostile-window response layer.** Strengthens the Phase 19.5 AMR case considerably — the AMR detection layer is needed to identify days like 04-18 / 04-22 in the first 30–60 minutes and throttle trading before the system runs hundreds of entries through a window where everything is losing.
+
 ### 2.3 Per-day breakdown (Langston Q5 — the catastrophic-day check)
 
 | Day | All n | All WR | Cohort n | Cohort WR | Cohort sumNet | SBT n | SBT WR |

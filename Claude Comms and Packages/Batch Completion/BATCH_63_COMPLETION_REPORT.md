@@ -417,3 +417,35 @@ Either **(a)** build a new dedicated `strong_bull_pullback` strategy with its ow
 ---
 
 *B63 formally closed 2026-04-25. All implementation items shipped, all audit deliverables filed, Item 13 decision gate resolved. Follow-on work tracked in B65.5.*
+
+---
+
+## 12. Item 13 verdict — 2026-04-26 addendum (provisional reframe to INCONCLUSIVE)
+
+**Status:** original BUILD_DEDICATED verdict (§11) stands as historical record. Provisional reframe added below based on B65.5 Phase A0 findings.
+
+**What changed:** B65.5 Phase A0 (market-window control) was run on the cohort 2026-04-26. The methodology improvement was to compute sibling-strategy WR in ±60min windows around each cohort entry, plus an SBT-focused control on the lane-mate, plus a per-day breakdown. Findings:
+
+| Metric | Value |
+|---|---:|
+| Cohort WR (n=63 in A0 pull, vs. n=57 in original §11 pull — minor cohort-boundary variance) | 27.0% |
+| Sibling-strategy WR in same ±60min windows | **25.8%** |
+| `strong_bull_trend` (lane-mate) WR in same windows | **23.9%** |
+| Cohort WR excluding 2026-04-22 | **43.2%** (n=37) |
+| `strong_bull_trend` WR excluding 2026-04-22 | 32.3% (n=282) |
+
+Cohort WR is statistically indistinguishable from sibling WR. The strategy was not underperforming relative to the windows it traded in. Excluding the catastrophic 04-22 day (which contributed 25 of the cohort's losers), the cohort *outperforms* the lane-mate by ~10 points.
+
+**Recurrence finding (Langston cc-inbox #821):** the 04-22 day is the second instance in one week of the same failure mode as the B63 04-18 streakiness day — both with globalRegime classified as TREND_FRIENDLY_STABLE for the entire affected window while the market disagreed catastrophically. This is not a one-off anomaly; it is a recurring failure mode that motivates the Phase 19.5 Adaptive Market Response framework rather than per-strategy detector redesign.
+
+**Reframed verdict (provisional, 2026-04-26): INCONCLUSIVE — INSUFFICIENT EVIDENCE.**
+
+The original verdict was procedurally correct against pre-registered thresholds. The thresholds did not include a sibling-strategy WR control to identify hostile-window contamination — that is a methodology gap, not a process flaw. The right action is to:
+
+1. Leave `vwap_pullback` in the strong-trend lane (no canonical map change).
+2. Open a separate future batch (Kyle directive 2026-04-26, number TBD) to re-evaluate Item 13 with cleaner data, post-Phase-19 paper audit.
+3. Treat the 04-18 + 04-22 recurrence as canonical positive cases for Phase 19.5 AMR detection-layer design.
+
+**No code change** is shipped from this addendum. The B63 implementation items remain as committed; the strong-trend lane mode-overlay bypass and Variant E geometry override stand. Only the Item 13 *recommendation* (BUILD vs DROP vs KEEP vs TUNE) is reframed.
+
+**See:** `Claude Comms and Packages/Scope Files/B65_5_PHASE_A0_WINDOW_CONTROL.md` for the full Phase A0 evidence; `Claude Comms and Packages/Batch Completion/BATCH_65_5_COMPLETION_REPORT.md` for the closure report; `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md` for the AMR design context.

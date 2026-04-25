@@ -213,3 +213,40 @@ To answer when the batch is scoped (post Paper Mode Audit):
 ---
 
 *This is a concept document, not a scope or implementation plan. It defines the intent and the shape of the work. Detailed scoping happens at the start of Phase 19.5 if and when that phase is greenlit at the end of Phase 19.*
+
+---
+
+## 10. Canonical positive cases for the AMR detection signal (added 2026-04-26)
+
+The following concrete events from VTS observation are canonical positive cases that any Phase 19.5 AMR detection-layer design must catch. If the detector cannot flag these in the first 30–60 minutes of the affected window, it is not detecting the phenomenon AMR is intended to address.
+
+### 10.1 The 04-18 streakiness day (B63 origin)
+
+- 70-loss streak documented in `Claude Comms and Packages/Scope Files/B63_STREAKINESS_ANALYSIS.md`
+- Runs test z = −15.57, p < 10⁻⁵⁰
+- 100% of affected trades classified as `globalRegime = TREND_FRIENDLY_STABLE` while the market disagreed catastrophically
+- Existing mode overlay (Directive 11.7S) did not engage because its single stability sensor read TFS as stable
+
+### 10.2 The 04-22 hostile-window day (B65.5 Phase A0 finding)
+
+- 239 closed VTS trades system-wide, **18.8% WR overall** — every strategy struggled
+- vwap_pullback-in-strong-trend-lane cohort: 26 trades, **1 winner / 25 losers**, sumNet −$1.01 — virtually all the cohort net loss for the entire 2026-04-21 → 2026-04-25 observation window came from this single day
+- `strong_bull_trend` (lane-mate): 177 trades, 16.4% WR — same pain
+- **100% of affected trades classified as `globalRegime = TREND_FRIENDLY_STABLE` while the market disagreed catastrophically** (identical pattern to 04-18)
+- Existing mode overlay did not engage (same reason as 04-18)
+- Source: `Claude Comms and Packages/Scope Files/B65_5_PHASE_A0_WINDOW_CONTROL.md`
+
+### 10.3 Recurrence pattern (Langston cc-inbox #821, 2026-04-26)
+
+**Two catastrophic days in a single ~5-day observation window, both with the same failure mode (globalRegime = TFS while the market disagreed catastrophically).** This is not a one-off anomaly. It is a recurring failure mode of the regime classifier in conjunction with the absence of a hostile-window response layer. The recurrence frequency means:
+
+1. Per-strategy detector redesign is the wrong response — every strategy is affected, the failure is upstream.
+2. The AMR detection layer is needed to identify these days in the first 30–60 minutes and throttle trading before the system runs hundreds of entries through the window.
+3. The detection signal cannot rely solely on the existing `globalRegime` field — both cases were classified TFS by the existing classifier. A multi-input aggregator (per §6 of this document) is required.
+
+### 10.4 Implications for Phase 19.5 detection-layer design
+
+Section 6 of this document already specifies a multi-input aggregator reading regime state, global DBS, realized-vs-predicted EV gap, pair-level regime distribution, friction trend, and optional external signals (B67). The 04-18 + 04-22 evidence raises two design questions for the Phase 19.5 scope:
+
+1. **How fast does the aggregator need to identify a hostile day?** 30–60 minutes from market open is the implied target; if the detection lags until end-of-day, the throttling window has already passed.
+2. **What is the false-positive cost?** Throttling on a day that turns out to be normal is a missed-opportunity cost; missing a hostile day is the cost being paid in the 04-18 / 04-22 events. The threshold balance is part of the calibration step (§19.5.4).
