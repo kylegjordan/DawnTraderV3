@@ -828,13 +828,14 @@ export function TradeHistoryTab() {
                                  trade.closeReason || '?'}
                               </Badge>
                               {/* B65.2: Moonbag badge for trades that entered TRAILING_TAKE mode */}
+                              {/* B65.4: rung count appended (MB×N) when ladder data is present */}
                               {(trade as any).tradeMode === 'TRAILING_TAKE' && (
                                 <Badge
                                   variant="outline"
                                   className="text-[10px] bg-yellow-500/20 text-yellow-700 border-yellow-500/50"
-                                  title="Trade entered moonbag (trailing) mode after hitting target"
+                                  title={`Trade entered moonbag (trailing) mode after hitting target. Ratcheted through ${(trade as any).ladderRungsHit ?? 1} ladder rung${((trade as any).ladderRungsHit ?? 1) === 1 ? '' : 's'} before exit.`}
                                 >
-                                  🌙 MB
+                                  🌙 MB×{(trade as any).ladderRungsHit ?? 1}
                                 </Badge>
                               )}
                             </div>

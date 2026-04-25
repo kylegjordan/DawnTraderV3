@@ -132,6 +132,10 @@ export interface TECExitDecision {
     targetLockR: number;
     trailDistanceAtrMultiplier: number;
   };
+  // B65.4 (2026-04-25): ladder rung count from the engine — 0 if the trade
+  // has not entered moonbag, 1+ if it has. Surfaced so the caller can
+  // capture it on the closed-trade record.
+  ladderRungsHit?: number;
 }
 
 const DEFAULTS = {
@@ -280,6 +284,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         newStopPrice: update.newStopPrice,
         modeChanged: update.modeChanged,
         resolvedConstants,
+        ladderRungsHit: update.ladderRungsHit,
       };
     }
     if (update.closeNow && update.closeReason === 'target_hit_no_trailing') {
@@ -290,6 +295,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         newStopPrice: update.newStopPrice,
         modeChanged: update.modeChanged,
         resolvedConstants,
+        ladderRungsHit: update.ladderRungsHit, // 0 — qualifier rejected, no ladder
       };
     }
 
@@ -328,6 +334,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         newStopPrice: update.newStopPrice,
         modeChanged: update.modeChanged,
         resolvedConstants,
+        ladderRungsHit: update.ladderRungsHit,
       };
     }
 
@@ -338,6 +345,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       newStopPrice: update.newStopPrice,
       modeChanged: update.modeChanged,
       resolvedConstants,
+      ladderRungsHit: update.ladderRungsHit,
     };
   }
 

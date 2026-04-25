@@ -1135,8 +1135,11 @@ export class PaperExecutionEngine {
       // closed-trade row preserves whether the trade ended in moonbag mode.
       // If no state exists (trade opened before the engine started tracking
       // it, or cleared already), default to TARGET.
+      // B65.4: also capture ladder rung count from the same state.
       const { getTrailingState: _getTES } = await import('./trailing-exit-controller.js');
-      const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = _getTES(position.symbol)?.tradeMode ?? 'TARGET';
+      const _finalState = _getTES(position.symbol);
+      const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = _finalState?.tradeMode ?? 'TARGET';
+      const finalLadderRung: number = _finalState?.ladderRung ?? 0;
 
       // Update trade record - Phase 8.8.3-C2: Include all cost/P&L breakdown fields
       await storage.updatePaperSimTrade(this.mode, trade.id, {
@@ -1162,6 +1165,7 @@ export class PaperExecutionEngine {
         netPnl: netPnl.toString(),
         netPnlPercent: netPnlPercent.toString(),
         tradeMode: finalTradeMode, // B65.2
+        ladderRungsHit: finalLadderRung, // B65.4
       });
 
       // Log the exit event with C2 breakdown

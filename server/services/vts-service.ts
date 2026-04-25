@@ -710,6 +710,7 @@ export class VTSService extends EventEmitter {
     // now implies moonbag mode had been entered).
     exitReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop' | 'timeout';
     tradeMode?: 'TARGET' | 'TRAILING_TAKE'; // B65.2: final state of trailing engine for this trade
+    ladderRungsHit?: number; // B65.4: number of ladder-rung target hits before close (0 = no moonbag entry)
     finalScore: number;
     hybridScore: number;
     predictiveConfidence: number;
@@ -822,6 +823,7 @@ export class VTSService extends EventEmitter {
       // that never left the static target lane.
       tradeMode: tradeData.tradeMode ?? 'TARGET',
       exitReason: tradeData.exitReason, // raw exit reason preserved in log
+      ladderRungsHit: tradeData.ladderRungsHit ?? 0, // B65.4
     } as any;
 
     // Add to closedTrades for ML calibration access

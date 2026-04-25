@@ -489,6 +489,9 @@ interface OpenVirtualTrade {
   atrAtOpen?: number;
   diAtOpen?: number;
   volNoiseAtOpen?: number;
+  // B65.4 (2026-04-25): live ladder rung count, updated by the engine
+  // writeback in the exit loop. Propagated to closed-trade record on close.
+  ladderRungsHit?: number;
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
@@ -1515,6 +1518,13 @@ async function resolveOpenVirtualTrades(): Promise<{
       trade.stopLoss = decision.newStopPrice;
     }
 
+    // B65.4: write back the live ladder rung count so the closed-trade
+    // record (and ML page Open Simulated Trades) can show how far up the
+    // ladder this trade has climbed.
+    if (typeof decision.ladderRungsHit === 'number') {
+      trade.ladderRungsHit = decision.ladderRungsHit;
+    }
+
     if (!decision.shouldExit) continue;
 
     // Map TEC exit reasons to the VTS closed-trade enum. VTS preserves its
@@ -1647,6 +1657,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         grossPnl: grossPnl,
         exitReason: exitReason,
         tradeMode: finalTradeMode, // B65.2
+        ladderRungsHit: trade.ladderRungsHit ?? 0, // B65.4
         finalScore: trade.finalScore,
         hybridScore: trade.hybridScore,
         predictiveConfidence: trade.predictiveConfidence,
@@ -2844,6 +2855,9 @@ export function getOpenVirtualTradesForML(): Array<{
   breakEvenLatched: boolean;
   targetLatched: boolean;
   engineStopPrice: number | null;
+  // B65.4: live ladder rung count (0 = no targets hit; 1+ = N target hits in moonbag mode).
+  // Surfaces a "rung climb count" diagnostic in the Open Simulated Trades UI.
+  ladderRungsHit: number;
 }> {
   const now = Date.now();
   const trades: Array<any> = [];
@@ -2945,6 +2959,7 @@ export function getOpenVirtualTradesForML(): Array<{
           breakEvenLatched: ts?.breakEvenLatched ?? false,
           targetLatched: ts?.targetLatched ?? false,
           engineStopPrice: ts?.currentStopPrice ?? null,
+          ladderRungsHit: ts?.ladderRung ?? 0, // B65.4
         };
       })(),
     });

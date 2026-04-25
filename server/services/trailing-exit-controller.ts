@@ -206,7 +206,7 @@ export interface TrailingState {
   symbol: string;
   tradeMode: TradeMode;
   entryPrice: number;
-  targetPrice: number;
+  targetPrice: number;     // ORIGINAL target at trade open. Reference only.
   currentStopPrice: number;
   highWaterMark: number;
   breakEvenLatched: boolean;
@@ -221,6 +221,21 @@ export interface TrailingState {
   // B65.2: caller mode — tracked so concurrency counter decrements on the
   // correct mode when the trade closes.
   callerMode?: CallerMode;
+  // B65.4 (2026-04-25): ladder rung tracking. Each time price hits the
+  // current rung target, both target and stop ratchet up to a new rung.
+  // ladderRung = 0 means trade has not yet entered moonbag (no targets hit).
+  // ladderRung = 1 means original target was hit (first moonbag rung).
+  // ladderRung = N means N target hits in moonbag mode have occurred.
+  // currentRungTarget tracks the active target being aimed at (advances on
+  // each rung event). currentRungFloor is the cost-aware floor that the
+  // active stop cannot drop below — set to net-target-floor of the
+  // PREVIOUS rung's target after each ratchet. Stop = max(currentRungFloor,
+  // dynamic_HWM_trail) so HWM-based ratchet still applies between rungs
+  // and provides additional upside capture if price runs significantly
+  // past the current target without crossing the next one.
+  ladderRung: number;
+  currentRungTarget: number;
+  currentRungFloor: number;
 }
 
 export interface PositionUpdate {
@@ -270,6 +285,12 @@ export interface TrailingUpdateResult {
   // → caller should use static target close).
   closeNow?: boolean;
   closeReason?: 'moonbag_timeout' | 'target_hit_no_trailing';
+  // B65.4 (2026-04-25): rung count is propagated through the result so the
+  // evaluator + caller can capture it on the closed-trade record. Equals
+  // state.ladderRung after this update — 0 if trade hasn't entered moonbag,
+  // 1+ if it has (1 = original target hit, 2+ = ratcheted further up the
+  // ladder).
+  ladderRungsHit: number;
 }
 
 const trailingStates = new Map<string, TrailingState>();
@@ -298,7 +319,14 @@ export function initializeTrailingState(
     lastUpdated: Date.now(),
     DI,
     VolNoise,
-    ATR
+    ATR,
+    // B65.4: ladder starts at rung 0 (no targets hit). currentRungTarget
+    // tracks the active target; advances on each rung event. Initially
+    // equals the original target (rung 0 is "aiming at original target").
+    // currentRungFloor is 0 until first rung lands.
+    ladderRung: 0,
+    currentRungTarget: targetPrice,
+    currentRungFloor: 0,
   };
   
   trailingStates.set(symbol, state);
@@ -371,46 +399,93 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   const moonbagAllowed = update.moonbagAllowed !== false;     // default true
   state.callerMode = update.callerMode ?? state.callerMode ?? 'paper';
 
-  // Target-lock gate. In B65.2 the latch itself ALWAYS fires once price hits
-  // target (so the stop ratchets up to the net-target floor regardless, which
-  // still protects the trade against a quick reversal below target). What the
-  // qualifier + concurrency cap control is whether mode flips to
-  // TRAILING_TAKE — i.e. whether the trade gets to keep running past target
-  // in moonbag mode, or closes here at target.
   let closeNow = false;
   let closeReason: TrailingUpdateResult['closeReason'] | undefined;
 
+  // B65.4 (2026-04-25): Ladder model. The original target is treated as
+  // rung 1; each subsequent rung is a +R-distance step (where R = original
+  // entry-to-stop distance). On each rung event:
+  //   - target advances to (current_target + R_step)
+  //   - stop locks at the cost-aware floor of the previous rung's target
+  //     (i.e. the rung we just hit). This is the rung's locked-in profit.
+  //   - ladderRung increments
+  //
+  // Order of operations within a single update is critical (Langston's Q5
+  // ordering-sensitivity test): the rung-target check happens BEFORE HWM
+  // update for THIS cycle's currentPrice, so the rung floor is computed
+  // against the previous rung's target, not against a HWM that already
+  // includes today's spike past the rung target.
+  //
+  // We process rung events in a loop so a single cycle that gaps past
+  // multiple rungs (e.g. price jump on a large candle) ladders up
+  // correctly through every rung it cleared. Defense against state drift.
+
+  const originalRiskPerUnit = state.entryPrice - update.currentStopPrice;
+  // For the rung step, derive R (risk in price units) from the trade's
+  // ORIGINAL entry-to-stop distance. We use update.currentStopPrice ONLY
+  // for the very first computation; thereafter the engine doesn't have
+  // the original stop anymore (it's been ratcheted). So we capture the
+  // step distance once on first ladder evaluation and store via target
+  // arithmetic: rung_step = (originalTarget - entryPrice) — this matches
+  // the geometry the strategy designed (target distance from entry IS
+  // the step size).
+  const rungStepPrice = state.targetPrice - state.entryPrice;
+
+  // First, handle the initial target-latch event (rung 0 → rung 1).
   if (!state.targetLatched) {
     if (isTargetLockTriggered(update.currentPrice, state.targetPrice)) {
       state.targetLatched = true;
-      // Directive 11.3A: Use net target floor (accounts for costs)
-      newStopPrice = Math.max(newStopPrice, netTargetFloor);
-      console.log(`[9.2][LOCK] ${update.symbol} TARGET latched @ ${netTargetFloor.toFixed(4)} (net)`);
 
       if (moonbagQualified && moonbagAllowed) {
+        // Enter moonbag at rung 1.
         state.tradeMode = 'TRAILING_TAKE';
         state.moonbagEnteredAt = Date.now();
+        state.ladderRung = 1;
+        // Lock the cost-aware floor at the original target's net-target floor.
+        state.currentRungFloor = netTargetFloor;
+        // Advance the rung target by one R-step.
+        state.currentRungTarget = state.targetPrice + rungStepPrice;
         modeChanged = true;
         concurrentMoonbagByMode[state.callerMode] += 1;
-        console.log(`[9.2][MODE] ${update.symbol} → TRAILING_TAKE (MOONBAG activated, mode=${state.callerMode}, concurrent=${concurrentMoonbagByMode[state.callerMode]})`);
+        newStopPrice = Math.max(newStopPrice, state.currentRungFloor);
+        console.log(`[9.2][LADDER] ${update.symbol} rung=1 (entry-target hit) — new_target=${state.currentRungTarget.toFixed(4)} new_floor=${state.currentRungFloor.toFixed(4)} mode=${state.callerMode} concurrent=${concurrentMoonbagByMode[state.callerMode]}`);
       } else {
-        // Qualifier rejected or cap hit → close at target, no trailing.
+        // Qualifier rejected or cap hit → close at target, no ladder.
+        // Stop still ratchets to the net-target floor for protection on the close fill.
+        newStopPrice = Math.max(newStopPrice, netTargetFloor);
         closeNow = true;
         closeReason = 'target_hit_no_trailing';
         const reason = !moonbagQualified ? 'strategy-not-qualified' : 'concurrency-cap-reached';
         console.log(`[9.2][MODE] ${update.symbol} → TARGET close (moonbag denied: ${reason})`);
       }
     }
-  } else if (state.tradeMode === 'TRAILING_TAKE' && state.moonbagEnteredAt) {
-    // B65.2: duration cap — already in moonbag, check if it's time to force close.
+  }
+
+  // Then, while in TRAILING_TAKE, ratchet through any further rungs the
+  // current price has cleared. Loop handles multi-rung price gaps.
+  if (state.targetLatched && state.tradeMode === 'TRAILING_TAKE' && !closeNow) {
+    while (update.currentPrice >= state.currentRungTarget) {
+      // The rung we are CROSSING becomes the new floor (cost-aware).
+      const justHitTarget = state.currentRungTarget;
+      const hitFloor = computeNetTargetFloor(justHitTarget, costMetrics);
+      state.currentRungFloor = Math.max(state.currentRungFloor, hitFloor);
+      state.ladderRung += 1;
+      state.currentRungTarget = justHitTarget + rungStepPrice;
+      newStopPrice = Math.max(newStopPrice, state.currentRungFloor);
+      console.log(`[9.2][LADDER] ${update.symbol} rung=${state.ladderRung} (target ${justHitTarget.toFixed(4)} hit) — new_target=${state.currentRungTarget.toFixed(4)} new_floor=${state.currentRungFloor.toFixed(4)}`);
+    }
+  }
+
+  // Then, duration cap check (only if we are in TRAILING_TAKE and didn't already close).
+  if (state.targetLatched && state.tradeMode === 'TRAILING_TAKE' && state.moonbagEnteredAt && !closeNow) {
     const durationMs = Date.now() - state.moonbagEnteredAt;
     if (durationMs > cachedConfig.moonbagMaxDurationMs) {
       closeNow = true;
       closeReason = 'moonbag_timeout';
-      console.log(`[9.2][TIMEOUT] ${update.symbol} moonbag duration ${Math.round(durationMs / 60000)}m exceeded cap ${Math.round(cachedConfig.moonbagMaxDurationMs / 60000)}m — forcing close`);
+      console.log(`[9.2][TIMEOUT] ${update.symbol} moonbag duration ${Math.round(durationMs / 60000)}m exceeded cap ${Math.round(cachedConfig.moonbagMaxDurationMs / 60000)}m — forcing close (rung=${state.ladderRung})`);
     }
   }
-  
+
   if (state.targetLatched && state.ATR > 0) {
     const dynamicStop = calculateTrailingStopPrice(
       state.highWaterMark,
@@ -418,12 +493,15 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
       state.DI,
       state.VolNoise
     );
-    // Directive 11.3A: Use net target floor instead of gross target
-    const floorStop = netTargetFloor;
+    // B65.4: floor is now the rung floor (cost-aware, locked-in profit
+    // from the most-recent rung target hit). Dynamic HWM trail still
+    // applies as a SECONDARY floor so price running far past current rung
+    // target without crossing the next one still produces stop ratchet.
+    const floorStop = state.currentRungFloor;
     newStopPrice = Math.max(floorStop, dynamicStop);
-    
+
     const Kprime = calculateDynamicStopDistance(state.DI, state.VolNoise);
-    console.log(`[9.2][EXIT] ${update.symbol} trailing: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (netFloor=${floorStop.toFixed(4)})`);
+    console.log(`[9.2][EXIT] ${update.symbol} trailing rung=${state.ladderRung}: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (rungFloor=${floorStop.toFixed(4)}, nextTarget=${state.currentRungTarget.toFixed(4)})`);
   } else if (state.breakEvenLatched && !state.targetLatched && state.ATR > 0) {
     const dynamicStop = calculateTrailingStopPrice(
       state.highWaterMark,
@@ -470,6 +548,8 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
     // B65.2: terminal-decision signals consumed by the caller's exit gate.
     closeNow,
     closeReason,
+    // B65.4: ladder rung count (0 = not in moonbag, 1+ = N target hits).
+    ladderRungsHit: state.ladderRung,
   };
 }
 
@@ -528,12 +608,43 @@ export function importStates(states: TrailingState[]): void {
   concurrentMoonbagByMode.vts = 0;
   concurrentMoonbagByMode.paper = 0;
   concurrentMoonbagByMode.live = 0;
-  for (const state of states) {
+  let migratedCount = 0;
+  for (const stateRaw of states) {
+    // B65.4: backward-compat migration. Persistence files written before the
+    // ladder fields existed will not have ladderRung / currentRungTarget /
+    // currentRungFloor. Best-effort migration:
+    //   - targetLatched=false → ladderRung=0, currentRungTarget=targetPrice
+    //   - targetLatched=true → ladderRung=1, currentRungTarget=targetPrice,
+    //     currentRungFloor=0 (will be ratcheted up on next cycle's update if
+    //     applicable; floor of 0 won't bind because the dynamic HWM trail
+    //     dominates anything meaningful).
+    // Either way the engine's next cycle reconciles correctly from currentPrice.
+    const state = stateRaw as TrailingState;
+    let migrated = false;
+    if (typeof state.ladderRung !== 'number') {
+      state.ladderRung = state.targetLatched ? 1 : 0;
+      migrated = true;
+    }
+    if (typeof state.currentRungTarget !== 'number') {
+      state.currentRungTarget = state.targetPrice;
+      migrated = true;
+    }
+    if (typeof state.currentRungFloor !== 'number') {
+      state.currentRungFloor = 0;
+      migrated = true;
+    }
+    if (migrated) {
+      migratedCount++;
+    }
+
     trailingStates.set(state.symbol, state);
     if (state.tradeMode === 'TRAILING_TAKE' && state.callerMode) {
       concurrentMoonbagByMode[state.callerMode] += 1;
     }
-    console.log(`[9.2][EXIT] ${state.symbol} restored: mode=${state.tradeMode}, stop=${state.currentStopPrice.toFixed(4)}`);
+    console.log(`[9.2][EXIT] ${state.symbol} restored: mode=${state.tradeMode}, stop=${state.currentStopPrice.toFixed(4)}, rung=${state.ladderRung}${migrated ? ' (B65.4 migrated)' : ''}`);
+  }
+  if (migratedCount > 0) {
+    console.log(`[9.2][B65.4] Migrated ${migratedCount} pre-ladder persisted states with default ladder fields`);
   }
   console.log(`[9.2][EXIT] Restored ${states.length} trailing states (moonbag concurrency: vts=${concurrentMoonbagByMode.vts}, paper=${concurrentMoonbagByMode.paper}, live=${concurrentMoonbagByMode.live})`);
 }

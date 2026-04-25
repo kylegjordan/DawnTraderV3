@@ -587,16 +587,19 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                     </Badge>
                   </td>
                   {/* B65.2: TEC State — moonbag mode + break-even lock visibility */}
+                  {/* B65.4 (2026-04-25): MOONBAG badge shows live ladder rung count (MB×N) */}
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-0.5">
                       <Badge
                         variant="outline"
                         className={`text-xs ${(trade as any).tradeMode === 'TRAILING_TAKE' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}
                         title={(trade as any).tradeMode === 'TRAILING_TAKE'
-                          ? 'Target reached — now in moonbag (trailing) mode, capturing additional upside'
+                          ? `Target reached — now in moonbag (trailing) mode. Ratcheted through ${(trade as any).ladderRungsHit ?? 1} ladder rung${((trade as any).ladderRungsHit ?? 1) === 1 ? '' : 's'} so far.`
                           : 'Aiming for original target price'}
                       >
-                        {(trade as any).tradeMode === 'TRAILING_TAKE' ? '🌙 MOONBAG' : 'TARGET'}
+                        {(trade as any).tradeMode === 'TRAILING_TAKE'
+                          ? `🌙 MB×${(trade as any).ladderRungsHit ?? 1}`
+                          : 'TARGET'}
                       </Badge>
                       {(trade as any).breakEvenLatched && (trade as any).tradeMode !== 'TRAILING_TAKE' && (
                         <Badge
@@ -869,15 +872,18 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                     </Badge>
                   </td>
                   {/* B65.2-HF2c: TEC State column on Closed — TARGET vs MOONBAG end-state */}
+                  {/* B65.4 (2026-04-25): MOONBAG badge shows ladder rung count (MB×N) when present */}
                   <td className="px-3 py-2">
                     <Badge
                       variant="outline"
                       className={`text-xs ${(trade as any).tradeMode === 'TRAILING_TAKE' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}
                       title={(trade as any).tradeMode === 'TRAILING_TAKE'
-                        ? 'Trade entered moonbag (trailing) mode after hitting target — closed via trailing stop or duration cap'
+                        ? `Trade entered moonbag (trailing) mode after hitting target. ${(trade as any).ladderRungsHit > 0 ? `Ratcheted through ${(trade as any).ladderRungsHit} ladder rung target hit${(trade as any).ladderRungsHit === 1 ? '' : 's'} before exiting.` : ''}`
                         : 'Trade closed at static target, stop, or timeout — never entered trailing mode'}
                     >
-                      {(trade as any).tradeMode === 'TRAILING_TAKE' ? '🌙 MOONBAG' : 'TARGET'}
+                      {(trade as any).tradeMode === 'TRAILING_TAKE'
+                        ? `🌙 MB×${(trade as any).ladderRungsHit ?? 1}`
+                        : 'TARGET'}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right">

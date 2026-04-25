@@ -1620,6 +1620,10 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   // TARGET = closed at static target/stop/timeout; TRAILING_TAKE = entered
   // moonbag (trailing) mode and closed via trailing_stop_hit or moonbag_timeout.
   tradeMode: varchar("trade_mode", { length: 20 }).notNull().default("TARGET"),
+  // B65.4 (2026-04-25): number of ladder-rung target ratchets before close.
+  // 0 = no moonbag entry (closed at target/stop/timeout/qualifier-rejected).
+  // 1+ = trade ratcheted through N rungs in moonbag mode before reversing.
+  ladderRungsHit: integer("ladder_rungs_hit").notNull().default(0),
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),
