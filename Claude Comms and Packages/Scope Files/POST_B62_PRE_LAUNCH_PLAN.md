@@ -324,6 +324,8 @@ The original B66 scope mixed two distinct workstreams: (a) data archiving + drif
 
 What remains in pre-launch as the original B66 scope (data archiving + drift dashboard infrastructure) is unchanged.
 
+**Methodology requirement added 2026-04-26 (B65.5 Phase A0 lesson):** when Phase 19.4 SQE recalibration runs, every cohort-based metric used to drive a recalibration decision must include a sibling-strategy WR control in the threshold definition. The B63 Item 13 BUILD_DEDICATED verdict was procedurally clean against pre-registered thresholds but was confounded by hostile-window contamination — sibling-strategy WR in the same ±60min windows was identical to the cohort, meaning the cohort metrics reflected window quality, not strategy quality. The same gap potentially applies to other B63 audit findings, in particular `B63_ITEM18_SQE_AUDIT.md` (FinalScore anti-predictive r=−0.017, D9 WR 15.3%, only quant-strong_trend source pool net-profitable). All three findings could be artifacts of hostile-window contamination during the observation period and must be re-validated with sibling-strategy WR controls before any of their recommendations are acted on as part of Phase 19.4 recalibration changes. See `POST_AUDIT_ROADMAP.md` Phase 19.4 for the full methodology specification.
+
 See `1-system-manual/POST_AUDIT_ROADMAP.md` Phase 19.4 and Phase 19.5 for the within-Phase-19 sequencing.
 
 ---
