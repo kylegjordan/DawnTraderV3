@@ -107,15 +107,17 @@ Full detail for all items in `Claude Comms and Packages/Scope Files/POST_B62_PRE
   - **B63 Item 19** — Classifier cadence / latency audit (audit-only deliverable)
   - **B63 Item 13** — vwap_pullback-in-lane decision gate (evaluated ≥ 2026-04-28)
 
-**Queued sequence (revised 2026-04-22):**
-  1. **B64 — Canonical map sync / IE metrics / residual UI alignment** — ~1 day. Partial work done in B63 (strong_bull_trend registered, MULTI_FAMILY_ELIGIBILITY added, secondaryMetrics annotations). Remaining: IE metrics text + any residual UI polish surfaced by Items 15/18/19.
-  2. **B65 — TEC wiring as shared service** — dormant advanced TEC to VTS + paper engine with per-strategy `tecConfig` in canonical map. ~1-2 days. Counterfactual audit reframed TEC as amplifier for directionally-right entries, not rescue mechanism; scope clarified, wiring still pending.
-  3. **B66 — Strategy Refinement from Audit Outputs** — action whatever Items 15/18/19 recommend: threshold recalibrations, inputs replacements, framework adjustments. Scope sized based on audit deliverables; could be 1 batch or split across 2-3.
-  4. **B67 — External Data Context Layer Phase 1 (NEW 2026-04-22)** — first external context integration: higher-timeframe OHLC (1h, 4h) + BTC dominance + crypto market cap momentum + perpetual funding rates. Free APIs only. Centralized context service (`market-context` pattern). All existing strategies consume via optional confidence multipliers. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 1. Rationale: three naive-pattern backtests (LONG liquidity_trap, VSB, simple bullish engulfing) converged to similar poor prospective signal/noise, confirming that NEW technical strategies are low-value but context FILTERS would lift all existing strategies simultaneously. ~2-3 weeks.
-  5. **B68 — External Data Context Layer Phase 2 (NEW 2026-04-22)** — second external integration: exchange inflows/outflows (BTC/ETH), liquidation cascades, DXY + SPX cross-asset. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 2. Conditional on B67 showing measurable lift. ~2-3 weeks.
-  6. **B69 — Asset class field + standardized schema** across all signal/trade tables. 1 batch. Prerequisite for expansion to equities/FX and for asset-class-specific external data routing.
-  7. **B70 — Data archiving update** — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches.
-  8. **B71 — Regime & Strategy Drift Dashboard tab** — permanent UI surfaces for regime share, DBS distribution, strategy WR by cohort, and B62-style observation-window metrics. 1 batch. Mirrors the reporting done during B62 72h observation period.
+**Queued sequence (revised 2026-04-25):**
+  1. ✅ **B64 — Canonical map sync / IE metrics / residual UI alignment** — DONE (B64a + B64b shipped Apr 21-23).
+  2. ✅ **B65.1–B65.4 — module_constants infra + TEC shared-service wiring + ladder trailing model** — DONE through B65.4 ship 2026-04-25. B65.3 (paper percentage-trailing → ATR TEC migration) found MOOT during B65.2 audit because paper-execution-engine no longer consumes the metadata `trailingStopPercent` path (deleted in B65.2 functional ship); residual ladder/BE/floor verification under active trading folded into Phase 19.
+  3. **B65.5 — Strong Bull Pullback research (NEW 2026-04-25)** — research-only batch (no code ship). Trigger: B63 Item 13 preliminary BUILD_DEDICATED verdict on vwap_pullback in strong-trend lane (57 trades, 21.1% WR, sumR -28.99 at 2.85x min sample size). Analyze whether to build a purpose-built `strong_bull_pullback` strategy (continuation-pattern entries on high-DBS bullish pairs that pull back without reversing) OR drop pullback entries from the strong-trend lane entirely and let strong_bull_trend carry it alone. Output: scope decision document + recommendation. ~2-3 days.
+  4. **B65.6 — Strong Bull Pullback build (conditional on B65.5)** — implements new strategy if research recommends BUILD; otherwise becomes a closure batch (canonical map removal + log line) if recommendation is DROP.
+  5. **B66 — RETIRED.** Original scope split: SQE recalibration moved to Phase 19.4; data archiving moved to B70; drift dashboard delivered as B71 (now done). Number reserved, no work attached.
+  6. **B67 — External Data Context Layer Phase 1 (added 2026-04-22)** — first external context integration: higher-timeframe OHLC (1h, 4h) + BTC dominance + crypto market cap momentum + perpetual funding rates. Free APIs only. Centralized context service (`market-context` pattern). All existing strategies consume via optional confidence multipliers. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 1. Rationale: three naive-pattern backtests (LONG liquidity_trap, VSB, simple bullish engulfing) converged to similar poor prospective signal/noise, confirming that NEW technical strategies are low-value but context FILTERS would lift all existing strategies simultaneously. ~2-3 weeks.
+  7. **B68 — External Data Context Layer Phase 2 (added 2026-04-22)** — second external integration: exchange inflows/outflows (BTC/ETH), liquidation cascades, DXY + SPX cross-asset. Per `EXTERNAL_DATA_SOURCES_INVENTORY.md` Tier 2. Conditional on B67 showing measurable lift. ~2-3 weeks.
+  8. **B69 — Asset class field + standardized schema** across all signal/trade tables. 1 batch. Prerequisite for expansion to equities/FX and for asset-class-specific external data routing.
+  9. **B70 — Data archiving update** — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches.
+  10. ✅ **B71 — Regime & Strategy Drift Dashboard tab** — DONE 2026-04-25. Verified live in Analytics & Diagnostics → Drift Dashboard tab: Rolling 24h/7d/30d/Since-last-restart toggles, summary cards, regime distribution, B62-style regime integrity, DBS category distribution, Global DBS live snapshot.
 
 **Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined, pre-external-data; B67+B68 add minimal additional storage). Fits current Hetzner CPX22 disk with ~18 months runway.
 
@@ -641,7 +643,28 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 - Fix remaining LSP error causes in active code
 - Target: zero or near-zero LSP errors in active codebase
 
-**Expected outcome**: All legacy infrastructure permanently removed. Schema cleaned. ~71 legacy tables dropped. LSP errors resolved.
+### 16.6 Trailing-Percent Code Purge (added 2026-04-25, Kyle directive)
+
+The B65.2 functional ship deleted the paper-execution-engine consumption of metadata-driven `trailingStopPercent` for exit decisions, and B65.4 replaced the moonbag pure-trail design with the ATR-based ladder. The original B65.3 sub-batch ("migrate paper percentage trailing onto ATR TEC") was therefore declared MOOT in the catalog because the migration target no longer existed. Phase 16 will delete the residual references that survived only as legacy or dashboard-write artifacts:
+
+**Required deletions:**
+- `server/services/paper-execution-engine.ts:1929` — the single `highWaterMark` write at trade-open, comment-flagged "retained for legacy dashboards; no longer consumed by exit logic." Audit any "legacy dashboards" still reading the field; update them off the legacy path or delete them too.
+- `server/services/tec-evaluator.ts` JSDoc paragraph referencing legacy paper trailing — already reduced to a forward-looking note in 2026-04-25 governance commit; remove entirely once the residual `highWaterMark` write is gone.
+
+**Conditional deletions (only if ABCD + SMA Trend Ride strategies are themselves retired in Phase 16 cleanup):**
+- `client/src/lib/types.ts:47,52` — `abcdTrailingStopPercent`, `smaTrailingStopPercent` settings type fields.
+- `server/services/strategy-engine.ts` ABCD detector (~L232, L293, L314) and SMA Trend Ride detector (~L361, L378, L405, L428) per-strategy trailing-stop logic. These are entry-side strategy detector internals that compute `trailingStopPercent` from `trading_settings` and produce signal metadata — NOT the deleted paper exit-loop path. Decide retire/keep based on whether the strategies themselves still earn their slot in the canonical map after Phase 19 paper audit.
+- `server/routes.ts:6602` — settings default literal `'2%'`.
+- `1-system-manual/AUTHORITY_BASELINE.md` lines 89, 94 — canonical baseline references for ABCD + SMA Trend Ride trailing-stop. Update only if the strategies are retired.
+- `1-system-manual/authority-baseline-v1.json` lines 68, 81 — same baseline JSON.
+
+**Documentation-only references (no code change required):**
+- `1-system-manual/sections/PHASE5_TRADE_EXECUTION_AND_LIFECYCLE.md:441`, `1-system-manual/SYSTEM_MANUAL.md:4464` — the engine's own `highWaterMark` field on `TrailingState` (still used inside `trailing-exit-controller.ts` as the secondary dynamic floor). Do NOT delete; this is the live engine field.
+- `bridge/reference/DawnTrader_Chat_Archive_*.md` and `Archived Reports - Pre-Phase 12 Governance Implementation/*` — historical archives; do not edit.
+
+**Pass criteria:** post-deletion, `grep -rn "trailingStopPercent"` over `server/` should return only the engine's own internal `highWaterMark` (which is part of the active ATR TEC state, not legacy). Any remaining ABCD/SMA references mean those strategies were kept; document the kept references explicitly so future audits don't re-flag them.
+
+**Phase 16 expected outcome**: All legacy infrastructure permanently removed. Schema cleaned. ~71 legacy tables dropped. LSP errors resolved. Residual paper percentage-trailing code purged from active codebase.
 
 ---
 
@@ -818,6 +841,21 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 - Validate strategy performance across regimes
 - Confirm learning systems are improving signal quality
 - Validate data retention and archiving
+
+### 19.3.5 Trailing-exit live verification (folded-in B65.3, 2026-04-25)
+
+**Status:** B65.3 was originally scoped as "migrate paper's metadata-driven percentage trailing onto the ATR TEC state machine," but during the B65.2 audit it was found that paper-execution-engine.ts no longer consumes the legacy `trailingStopPercent` + `highWaterMark` exit path — the consumption was deleted as part of the B65.2 functional ship. Only a single non-consumed `highWaterMark` write at trade-open survives for legacy dashboards (paper-execution-engine.ts:1929, comment-flagged). The migration target therefore no longer exists.
+
+**What folds into Phase 19.3.5 instead:** live verification under active paper trading that the ATR TEC service — already wired into both VTS and paper exit loops as of B65.2, with B65.4 ladder ratchet on top — produces the expected behavior under real fills:
+
+- Break-even lock fires at +1×ATR gain
+- Target lock fires at first rung
+- Ladder rung ratchet (B65.4) advances stop AND target by `(targetPrice − entryPrice)` step on each rung hit
+- Cost-aware net floor (`computeNetTargetFloor`) holds even on volatile pairs where slippage might otherwise nip the profit
+- HWM dynamic trail acts as secondary floor below the rung floor
+- Persistence across PM2 restarts continues to work (already verified post-B65.4 ship via `[9.2][EXIT] {symbol} restored: ... rung=N` log lines)
+
+**Pass criteria:** at least one closed paper trade per scenario above, observed in logs and reflected in the Machine Learning page Closed Simulated Trades table with the correct TEC State badge (BE PROTECT slate / TRAIL STOP emerald / 🌙 MB×N).
 
 ### 19.4 SQE Recalibration (B66, conditional)
 
