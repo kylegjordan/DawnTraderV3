@@ -395,4 +395,6 @@ The system is now in a far more governable state than at any point in the pre-go
 
 **Phase 15c outcome:** Trailing and break-even protection observably engaging on staging. Adaptive-response framework conceptually unified across docs. Pre-launch B66 (SQE recalibration + streakiness P0/P1 levers) remains queued.
 
-**Next: Batch 66.** Scope drafted. Covers SQE FinalScore recalibration plus rolling PredConf window, underlying-based position limits, realized-EV-adaptive floor, mode-overlay stability-signal expansion, global-state freshness check.
+**Phase 15c continuation 2026-04-25:** B65.4 ladder trailing model shipped (commits `37beb18c` + HF1 `4b958a6b` + governance `ce13705e`). PM2 restart #97. Replaces pure-trail moonbag (one target latch event, HWM-based ratchet) with target-ratcheting ladder (each rung hit advances both stop and target by R-distance step). Combined with HWM dynamic trail kept as secondary floor. Backward-compat persistence migration verified live for in-flight trades. Roadmap updated 2026-04-25 (commit `3e50eb9c`): B66 SQE recalibration moves into Phase 19.4 (conditional on paper-mode evidence); Adaptive Market Response moves into Phase 19.5 (conditional). Concept document `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md` captures the multi-batch arc that started in B59.
+
+**Next: Phase 19 (Paper Mode Audit).** All pre-launch trailing/breakeven engine work complete. Phase 19 will run paper trading for several days, then conditionally land 19.4 (B66 SQE) and/or 19.5 (Adaptive Market Response) based on empirical observations.

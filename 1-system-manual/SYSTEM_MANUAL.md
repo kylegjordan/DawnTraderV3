@@ -4376,16 +4376,35 @@ Stage 1: BREAK-EVEN LATCHED  (applies to ALL trades, regardless of strategy)
   │  AND moonbag concurrency cap allows entry
   ▼
 Stage 2: TARGET LATCHED → TRAILING_TAKE mode  (moonbag — qualifying strategies only)
-  │  Stop locks to netTargetFloor (cost-aware)
-  │  Dynamic trailing continues from HWM
+  │  ladderRung = 1 (B65.4)
+  │  currentRungFloor = netTargetFloor of original target (cost-aware)
+  │  currentRungTarget = original target + R_step (B65.4 — see §5.1.5)
   │  Duration cap timer starts (default 4h)
+  │  active stop = max(currentRungFloor, dynamic_HWM_trail)
+  │
+  │  Each subsequent target hit (B65.4):
+  │  ├─ ladderRung++
+  │  ├─ currentRungFloor = netTargetFloor of just-hit target (locked-in profit)
+  │  ├─ currentRungTarget += R_step (advance to next rung)
+  │  └─ active stop = max(currentRungFloor, dynamic_HWM_trail)
   │
   └──> shouldClosePosition() returns true when:
-       - price <= currentStopPrice (trailing_stop_hit), OR
+       - price <= currentStopPrice (trailing_stop_hit, with ladderRungsHit captured), OR
        - duration > moonbag_max_duration_ms (moonbag_timeout)
 ```
 
 If a target hit occurs but the qualifier check fails (non-qualifying strategy, or paper concurrency cap reached), the trade closes at target with reason `target_hit` and never enters TRAILING_TAKE mode.
+
+### 5.1.5 Ladder ratchet (B65.4)
+
+Where pure-trail (B65.2) had only a single target-latch event per trade and HWM-based dynamic trail thereafter, B65.4 turns each target hit into a "rung event":
+
+- **Rung step size** = original entry-to-target distance. So if entry was $100 and target was $107.50 (1.5R), rung 1 advances target to $115, rung 2 to $122.50, rung 3 to $130, etc. Same R-multiple geometry the strategy designed.
+- **Rung floor** = cost-aware floor of the just-hit target via `computeNetTargetFloor(rungTarget, costMetrics)`. Same canonical cost model as the BE floor — locks in profit at each rung.
+- **Active stop** = `max(currentRungFloor, dynamic_HWM_trail)` where the HWM dynamic trail (B65.2) is preserved as a SECONDARY floor. If price runs significantly past current rung target without crossing the next one, the dynamic trail captures the upside; if it stays just past the rung target, the rung floor binds.
+- **Multi-rung gap handling** — a single price update that gaps past multiple rung targets ratchets through all crossed rungs in sequence (while-loop in `updatePosition`). Each rung locks its floor before advancing.
+- **Backward compat** — pre-B65.4 persisted states (`targetLatched=true` without ladder fields) migrate on `importStates()` to `ladderRung=1, currentRungTarget=originalTarget, currentRungFloor=0`. Engine reconciles correctly from `currentPrice` on the next cycle.
+- **`ladderRungsHit` captured on close** — the closed-trade record carries the rung count. Trade with `trailing_stop_hit` and `ladderRungsHit=3` ran past original target plus two more rung targets before reversing. Trade with `ladderRungsHit=1` reached original target then reversed before rung 2.
 
 ### 5.1.1 Moonbag Qualifier (B65.2)
 

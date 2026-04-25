@@ -814,3 +814,43 @@
 ## Adaptive Market Response — concept anchor (2026-04-25)
 
 **Status:** concept-document only. Existing skeleton: `server/core/governance/strategy-modes.ts` (Directive 11.7S) maps `RegimeStability` → `StrategyMode` → mode-overlay multipliers. Currently mostly dormant. Concept doc at `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`. Conditional Phase 19.5 in roadmap.
+
+---
+
+## B65.4 — Ladder trailing model (2026-04-25)
+
+**Engine state extension:** `TrailingState` interface in `server/services/trailing-exit-controller.ts` adds three fields:
+- `ladderRung: number` — 0 = no targets hit; 1+ = N target hits in moonbag mode
+- `currentRungTarget: number` — the active target being aimed at; advances on each rung event
+- `currentRungFloor: number` — locked-in stop floor (cost-aware) from previous rung's target
+
+**Engine semantic change:** `updatePosition()` now ratchets BOTH stop AND target on each rung event (was: only stop ratcheted via HWM dynamic trail in pure-trail design). Loop processes any further rung crossings within the same cycle for multi-rung price gaps. After ladder advances, dynamic HWM trail is preserved as a SECONDARY floor: `newStopPrice = max(currentRungFloor, dynamic_HWM_trail)`.
+
+**Engine return extension:** `TrailingUpdateResult.ladderRungsHit: number` — propagated to all downstream consumers so the closed-trade record can capture how far up the ladder the trade climbed.
+
+**Backward compatibility:** `importStates()` migrates pre-B65.4 persisted states. `targetLatched=true` → `ladderRung=1`, `currentRungTarget=targetPrice`, `currentRungFloor=0`. Logged.
+
+**Schema:** `paper_sim_trades.ladder_rungs_hit INTEGER NOT NULL DEFAULT 0` column added (migration `2026-04-25-b65-4-add-ladder-rungs.sql`). `shared/schema.ts :: paperSimTrades` updated.
+
+**Surface changes:**
+- `tec-evaluator.ts::TECExitDecision` includes `ladderRungsHit`. All return paths in trailing branch propagate.
+- `vts-runner.ts`: `OpenVirtualTrade` interface gains `ladderRungsHit`. Exit loop writes back from decision. `getOpenVirtualTradesForML` returns it on `/api/vts/ml/open`.
+- `vts-service.ts::persistRealPriceTrade` accepts `ladderRungsHit`, writes to JSON log.
+- `paper-execution-engine.ts::closePosition` reads engine state for `finalLadderRung`, writes to closed-trade row.
+- `export-csv.ts::getClosedVTSTradesFromLogs` surfaces `ladderRungsHit` on `/api/vts/ml/closed`.
+
+**UI changes:**
+- `client/src/pages/machine-learning.tsx`: TEC State column on both Open + Closed Simulated Trades renders `🌙 MB×N` for trades with ladder rung count. Tooltip explains the ratchet count.
+- `client/src/components/trading/trade-history-tab.tsx`: close-reason cell renders the same `MB×N` chip on moonbag-ended trades.
+
+**Tests:** `server/tests/unit/b65-tec-parity.test.ts` extended with 9 new scenarios (12-20) covering rung 1/2/3, multi-rung gap in single cycle, qualifier/cap rejects (no ladder), HWM dynamic floor between rungs, duration cap at rung > 1, backward-compat persistence migration, Langston Q5 ordering test (rung target hit cleanly above prior HWM).
+
+**Cross-cutting impact:**
+- **If you edit the rung-step computation** in `updatePosition` → check that `rungStepPrice = state.targetPrice - state.entryPrice` is still calculated from ORIGINAL entry-to-target distance (not from currentStopPrice which can be ratcheted by then).
+- **If you edit `computeNetTargetFloor`** → both Stage-1.5 BE-trailing AND ladder rung-floor computation use it. Behavior changes there cascade.
+- **If you change `module_constants.trailing_exit.target_lock_r`** → controls when target latch fires (rung 0 → 1) but does NOT control the rung step size. Step size always = original target distance from entry.
+- **If you persist new fields on `TrailingState`** → update `importStates` migration to handle missing fields with sensible defaults.
+
+**Concurrency cap counter:** unchanged from B65.2. Counter increments on rung 1 entry (modeChanged from TARGET → TRAILING_TAKE), decrements on `clearTrailingState`. Subsequent rungs (2, 3, ...) do NOT re-increment — each trade occupies one moonbag slot regardless of rung count.
+
+**Duration cap:** unchanged from B65.2. Timer starts at first target latch (rung 1), fires on cap exceed regardless of current rung. `ladderRungsHit` is captured on the `moonbag_timeout` close.
