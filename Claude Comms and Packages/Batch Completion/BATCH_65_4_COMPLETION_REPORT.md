@@ -43,10 +43,10 @@ Also captures the "execution-discipline" failure where I committed to building t
 | 17 | 9 new test scenarios | ✅ | b65-tec-parity.test.ts scenarios 12-20. Cover all rung paths, multi-rung gap, qualifier reject, cap reject, HWM dynamic floor, duration cap at rung > 1, backward-compat migration, Q5 ordering. |
 | 18 | Langston Step-1+2 review approved | ✅ | All 5 open questions answered. 1 additional test scenario (Q5) added per request. |
 | 19 | Langston Step-4 code review approved | ✅ | All 4 flagged items answered. Approved for push. |
-| 20 | CI all blocking checks green | ⏳ | Pending CI run on commit `37beb18c`. |
-| 21 | Deploy to staging clean | ⏳ | Pending. |
-| 22 | First-pass UI verification on /machine-learning | ⏳ | Pending. |
-| 23 | Langston Step-8 second-pass | ⏳ | Pending observation data. |
+| 20 | CI all blocking checks green | ✅ | Test Suite, Build, Docker green on `37beb18c` (TS Check 645 baseline). HF1 `4b958a6b` fixed test boundary issues. |
+| 21 | Deploy to staging clean | ✅ | PM2 restart #97 2026-04-25. Migration `2026-04-25-b65-4-add-ladder-rungs.sql` applied cleanly. Backward-compat persistence migration verified live via `[9.2][EXIT] {symbol} restored: ... rung=0 (B65.4 migrated)` log lines. |
+| 22 | First-pass UI verification on /machine-learning | ✅ | TEC State column renders MB×N chip on Open + Closed Simulated Trades. trade-history-tab.tsx close-reason renders MB×N badge. |
+| 23 | Langston Step-8 second-pass | ⏳ | Live ladder event captured 2026-04-26 02:11:59 UTC on 2Z/USD (see §4 below). Sent to Langston for second-pass UI + API verification. |
 
 ---
 
@@ -118,3 +118,47 @@ Tier 2 (applicable):
 ---
 
 *End of completion report. CI/deploy/Step-8 outcomes appended below as they complete.*
+
+---
+
+## 4. First live ladder event — 2026-04-26 02:11:59 UTC (proof of life)
+
+**Pair:** 2Z/USD
+**Sequence captured in PM2 logs (search: `2Z/USD` or `[9.2][LADDER]`):**
+
+```
+02:11:59 UTC  [9.2][EXIT] 2Z/USD new HWM=0.0908
+02:11:59 UTC  [9.2][LADDER] 2Z/USD rung=1 (entry-target hit) — new_target=0.0944 new_floor=0.0903 mode=vts concurrent=1
+02:11:59 UTC  [9.2][EXIT] 2Z/USD trailing rung=1: K'=1.49, HWM=0.0908, stop=0.0903 (rungFloor=0.0903, nextTarget=0.0944)
+```
+
+**What this confirms:**
+
+1. **Target hit detected.** Price reached the entry target, ladder logic engaged.
+2. **Rung ratchet fired.** Both stop AND target advanced by one R-distance step (the original entry-to-target distance). Stop locked at `new_floor=0.0903` which is the cost-aware floor for the just-hit rung (per `computeNetTargetFloor`). Target advanced to `new_target=0.0944` (next R-step up).
+3. **Position transitioned to TRAILING_TAKE / moonbag mode.** Subsequent line shows `trailing rung=1: K'=1.49 ... rungFloor=0.0903, nextTarget=0.0944`. Engine is now actively managing the position with the dynamic K' adjusted for current volatility (1.49) AND the rung-locked floor.
+4. **Stop ordering correct (Langston Q5 review).** Active stop = `max(rungFloor, dynamic_HWM_trail)`. Computed dynamic trail at K'=1.49 with HWM=0.0908 and ATR ~0.0012 would put the dynamic floor at ~0.0890. The rungFloor 0.0903 dominates as the higher of the two — exactly the ordering Langston signed off on in Step-4.
+5. **No flicker, no infinite loop.** Single-cycle event; while-loop exited cleanly after 1 ratchet.
+
+**Trade context (from preceding PM2 lines):**
+- Symbol: 2Z/USD (alt with low daily volume — 38K USD/24h)
+- Source pool: `quant-strong_trend`
+- Strategy: `vwap_pullback` (returned null on this cycle's signal generation, but the open position from a previous entry hit its target)
+- Regime at entry: TREND_FRIENDLY_STABLE (DBS=0.621, UP_STRONG)
+
+**Why this matters:** the B65.4 ladder model is producing the exact behavior it was designed for. Pre-B65.4 design (single-target latch, HWM-based stop ratchet) would have closed this trade at the first target hit. B65.4 ladder design transitions the trade into moonbag mode with both stop and target ratcheted, looking for the next rung. Whether 2Z/USD actually reaches rung 2 or gets stopped at rungFloor 0.0903 depends on price action; either way the engine handled the rung-1 event correctly.
+
+---
+
+## 5. Step-8 verification request to Langston
+
+Sent 2026-04-26 immediately after live event capture. Asks Langston to verify:
+- 2Z/USD position appears on /machine-learning Open Simulated Trades with TEC State column showing MB×1 chip
+- API endpoint `/api/vts/ml/open` returns the position with `ladderRungsHit=1`, `targetLatched=true`, `tradeMode=TRAILING_TAKE`, `engineStopPrice=0.0903`
+- Once 2Z/USD eventually closes (whether via further rung ratchets or via stop-out at rungFloor), the closed-trade row on /machine-learning Closed Simulated Trades shows the final `ladder_rungs_hit` value
+
+If Langston confirms all three, B65.4 fully closes.
+
+---
+
+*B65.4 effectively complete pending Langston Step-8 sign-off.*
