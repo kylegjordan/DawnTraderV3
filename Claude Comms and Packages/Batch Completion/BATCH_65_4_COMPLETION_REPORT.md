@@ -46,7 +46,7 @@ Also captures the "execution-discipline" failure where I committed to building t
 | 20 | CI all blocking checks green | ✅ | Test Suite, Build, Docker green on `37beb18c` (TS Check 645 baseline). HF1 `4b958a6b` fixed test boundary issues. |
 | 21 | Deploy to staging clean | ✅ | PM2 restart #97 2026-04-25. Migration `2026-04-25-b65-4-add-ladder-rungs.sql` applied cleanly. Backward-compat persistence migration verified live via `[9.2][EXIT] {symbol} restored: ... rung=0 (B65.4 migrated)` log lines. |
 | 22 | First-pass UI verification on /machine-learning | ✅ | TEC State column renders MB×N chip on Open + Closed Simulated Trades. trade-history-tab.tsx close-reason renders MB×N badge. |
-| 23 | Langston Step-8 second-pass | ⏳ | Live ladder event captured 2026-04-26 02:11:59 UTC on 2Z/USD (see §4 below). Sent to Langston for second-pass UI + API verification. |
+| 23 | Langston Step-8 second-pass | ✅ | Approved cc-inbox #825. Engine functionality verified via PM2 logs + `/tmp/trailing-states.json` persistence file (2Z/USD: tradeMode=TRAILING_TAKE, ladderRung=1, stop=0.0903, currentRungFloor=0.0903 — all match log event exactly). API/UI verification deferred to a punch-list item — see §6 below. |
 
 ---
 
@@ -161,4 +161,20 @@ If Langston confirms all three, B65.4 fully closes.
 
 ---
 
-*B65.4 effectively complete pending Langston Step-8 sign-off.*
+## 6. Step-8 verification result + punch-list item
+
+**Step 8 sign-off (cc-inbox #825, 2026-04-26 02:16:53 UTC):** Langston confirmed B65.4 engine functionality verified. Persistence file `/tmp/trailing-states.json` on staging shows 2Z/USD with `tradeMode=TRAILING_TAKE`, `ladderRung=1`, `stop=0.0903`, `currentRungFloor=0.0903` — all matching the `[9.2][LADDER]` log event from §4. Engine is working as designed.
+
+**Punch-list item (NOT a B65.4 blocker):**
+
+`/api/vts/ml/open` endpoint returns 0 trades despite open positions existing in the in-memory `openVirtualTrades` map. This is a known gap from B65.2 pre-audit §9 risk 1 — Langston flagged it then, CC proposed a lightweight read-only endpoint, Langston deferred it for B65.2 surgical scope. The gap surfaced again here when trying to verify the live ladder event from the UI/API surface.
+
+**Scope of the fix:** small follow-up batch (or hotfix). Add a read-only endpoint that serializes the `openVirtualTrades` Map on demand for the UI's TEC State column to render. Engine state is already correct; only the read-side wiring is missing.
+
+**Why this isn't blocking B65.4:** the engine produces the correct state. PM2 logs + persistence file + telemetry all confirm the ladder ratchet fired correctly. The UI/API not exposing it is an observability gap, not a functional one. B65.4 ships the engine; UI exposure is a separable concern.
+
+**Pending (non-blocking):** when 2Z/USD eventually closes (whether at rung 1 stop-out or after additional rungs ratchet), Langston will verify the closed-trade row on /machine-learning Closed Simulated Trades shows the final `ladder_rungs_hit` value. This goes in the completion report's data trail but doesn't block closure.
+
+---
+
+*B65.4 CLOSED 2026-04-26 with Langston Step-8 sign-off. Engine functionality verified. API/UI exposure punch-list item filed for separate small follow-up.*
