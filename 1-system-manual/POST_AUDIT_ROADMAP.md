@@ -119,7 +119,7 @@ Full detail for all items in `Claude Comms and Packages/Scope Files/POST_B62_PRE
   9. **B70 — Data archiving update** — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches.
   10. ✅ **B71 — Regime & Strategy Drift Dashboard tab** — DONE 2026-04-25.
   11. **B65.6 — Per-pair regime classifier audit + sustainability gate (ACTIVE 2026-04-26, scope drafted)** — Promoted from the originally-queued B72 slot per Kyle directive 2026-04-26 to continue this line of work NOW.
-  12. **Inline lever migration during B65.6 / B66 / B67 / B68 / etc.** — comprehensive lever-to-`module_constants` sweep is a Modularization Phase deliverable (post-live, see new phase entry below). In the meantime, every pre-live batch that touches a currently-hardcoded constant must DB-migrate the affected constant inline as part of its own change rather than introducing new hardcoded values. This avoids accumulating debt that the Modularization Phase has to clean up later. — focused audit of `server/core/metrics/market-regime.ts` triggered by `REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md`. The TFS branch fires when `(mom > 0.003 AND ADX > 50) OR |DBS| >= 0.30 (alone)` — the second-path sole `|DBS| >= 0.30` trigger over-classifies pairs as TFS on strong-direction days, producing the 04-22 inversion (195 TFS-classified pairs at 13.8% WR while 6 STRUCTURAL_TRANSITION-classified pairs had 83.3% WR). Threshold was tuned for flicker stability (2% ceiling), not outcome alignment. Scope: (a) test whether requiring an additional non-lagging confirmation (ADX > 35, momentum > 0.002, volume ratio > 1.2) on the |DBS|-alone path improves outcome alignment without breaching flicker ceiling; (b) re-tune 0.30 threshold for outcome alignment with smoothing as a separate downstream layer; (c) evaluate confidence-decay for stale-DBS readings (exhausted-trend vs fresh-trend). Research-then-design batch — analysis first, code only if recommendations validate. ~1-2 weeks. Independent of B65.5 (which closed via SKIP). Verified live in Analytics & Diagnostics → Drift Dashboard tab: Rolling 24h/7d/30d/Since-last-restart toggles, summary cards, regime distribution, B62-style regime integrity, DBS category distribution, Global DBS live snapshot.
+  12. **B72 — Comprehensive lever-to-`module_constants` sweep (pre-launch, Kyle directive 2026-04-26)** — runs as the FINAL pre-Phase-19 batch so it can sweep any new constants introduced by B65.6 / B67 / B68 / B69 / B70 along with the original Item 15 inventory. Comprehensive sweep of all hardcoded levers in the active codebase, migrate each to `module_constants` table with proper most-specific-wins resolution scope (regime / strategy / asset_class / exchange). Original intention from go-live design: every threshold, weight, multiplier, and limit must be DB-tunable before live trading so operators can adjust without code redeploy. Inline migration for B65.6 / B66 / B67 / etc. continues — B72 is the comprehensive backstop sweep, not a license to defer. Output sub-deliverable: `LEVER_INVENTORY.md` listing every promotable constant with current location, candidate module, candidate resolution scope, current value, and migration risk rating. **Phase 21.4 Modularization (post-live) keeps the 8-module architectural extraction work; the lever-migration sub-phase moves to B72 pre-launch.** — focused audit of `server/core/metrics/market-regime.ts` triggered by `REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md`. The TFS branch fires when `(mom > 0.003 AND ADX > 50) OR |DBS| >= 0.30 (alone)` — the second-path sole `|DBS| >= 0.30` trigger over-classifies pairs as TFS on strong-direction days, producing the 04-22 inversion (195 TFS-classified pairs at 13.8% WR while 6 STRUCTURAL_TRANSITION-classified pairs had 83.3% WR). Threshold was tuned for flicker stability (2% ceiling), not outcome alignment. Scope: (a) test whether requiring an additional non-lagging confirmation (ADX > 35, momentum > 0.002, volume ratio > 1.2) on the |DBS|-alone path improves outcome alignment without breaching flicker ceiling; (b) re-tune 0.30 threshold for outcome alignment with smoothing as a separate downstream layer; (c) evaluate confidence-decay for stale-DBS readings (exhausted-trend vs fresh-trend). Research-then-design batch — analysis first, code only if recommendations validate. ~1-2 weeks. Independent of B65.5 (which closed via SKIP). Verified live in Analytics & Diagnostics → Drift Dashboard tab: Rolling 24h/7d/30d/Since-last-restart toggles, summary cards, regime distribution, B62-style regime integrity, DBS category distribution, Global DBS live snapshot.
 
 **Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined, pre-external-data; B67+B68 add minimal additional storage). Fits current Hetzner CPX22 disk with ~18 months runway.
 
@@ -1023,13 +1023,15 @@ Restart paper with adaptive response live. Confirm that mode transitions fire wh
 
 ---
 
-## Phase 21.4: Modularization (Post-Live, formalized 2026-04-26)
+## Phase 21.4: Modularization — 8-Module Architectural Extraction (Post-Live, formalized 2026-04-26, refined 2026-04-26)
 
 **Status:** Formally inserted into the roadmap on 2026-04-26 in response to Kyle's question about where comprehensive lever-to-database migration lives. The phase has existed as an architectural plan in `Claude Comms and Packages/Scope Files/MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` since B63 close, but was not formally scheduled as a discrete phase header in this roadmap until now.
 
-**Goal:** Extract 8 canonical modules from the current monolith and align all configuration on the 5D `(exchange, asset_class, filter, strategy, regime)` resolution matrix backed by `module_constants` (B65.1 infrastructure). Comprehensive migration of all ~69 hardcoded levers (Item 15 inventory) plus any additional levers identified during sweep, into `module_constants` table with proper most-specific-wins resolution.
+**Refinement 2026-04-26 (Kyle directive):** Comprehensive lever-to-`module_constants` migration was originally placed here, but per Kyle's go-live design intent, all levers must be DB-tunable BEFORE live trading. Lever migration moves to **B72 pre-launch** (final pre-Phase-19 batch). Phase 21.4 retains only the 8-module architectural extraction work, which is the heavy structural decomposition that benefits from live-trading evidence on which modules need which resolution scopes.
 
-**Why post-live:** Modularization is a coherent architectural exercise that benefits from being done once with full intent rather than piecemeal under deadline. By post-live, the system has live-trading evidence for which levers actually matter most (and at what resolution scope), which informs the migration. Pre-live batches that touch hardcoded constants migrate inline as part of their own scope so the modularization sweep doesn't have to clean up new debt accumulated in the meantime.
+**Goal:** Extract 8 canonical modules from the current monolith. The 5D `(exchange, asset_class, filter, strategy, regime)` resolution matrix is already in place (B65.1 module_constants infrastructure + B72 comprehensive lever migration); Phase 21.4 wires the modules together against that matrix.
+
+**Why post-live:** the architectural decomposition is a coherent exercise that benefits from being done once with full intent. By post-live, the system has live-trading evidence for which boundaries between modules matter most. Phase 21.4 is the prerequisite for Phase 21.5 (Exchange Expansion — XStocks + Perpetual Futures); without the 8-module decomposition, every new exchange or asset class would have to thread through the existing monolith.
 
 **Why before Phase 21.5 Exchange Expansion:** the 5D matrix is the prerequisite for adding new exchanges and asset classes in Phase 21.5. Without modularization, every new exchange or asset class would have to thread through the existing monolith — defeating the architectural intent.
 
@@ -1046,23 +1048,15 @@ Per `MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md`:
 7. **Profitability** — net-EV computation with friction, slippage, fees
 8. **Ranking** — ranks eligible signals for slot allocation
 
-### 21.4.2 Comprehensive lever-to-`module_constants` migration
+### 21.4.2 ~~Comprehensive lever-to-`module_constants` migration~~ — MOVED TO B72 (pre-launch)
 
-Sweep all hardcoded constants across the codebase and migrate to `module_constants` with proper resolution scope. Sources:
-
-- **Item 15 inventory** — 51 static + 18 adaptive levers documented in `B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md`
-- **Levers added since Item 15** — any constants introduced in B65.x, B66, B67, B68, B69, B70 batches that weren't DB-migrated inline at the time
-- **Levers discovered during sweep** — anywhere a `const X = NUMBER` shows up in scoring / threshold / profitability / strategy logic
-
-Output: `LEVER_INVENTORY.md` listing every promotable constant with current location, candidate module, candidate resolution scope, current value, and migration risk rating.
+Per Kyle directive 2026-04-26: comprehensive lever migration moves to **B72 pre-launch** as the final pre-Phase-19 batch. Original go-live design intent is that all levers are DB-tunable before live trading. This phase retains only the architectural extraction work (§21.4.1).
 
 ### 21.4.3 storage.ts modularization (folded in from Phase 16.2)
 
 Phase 16.2's "storage.ts must be modularized BEFORE legacy tables are dropped" is also covered here as part of the 8-module extraction (Exchange Adapter + per-domain storage). The Phase 16 reference may need to be re-sequenced if the modularization phase happens later than Phase 16; alternative is to do a minimum storage.ts split as part of Phase 16 cleanup and the full split as part of 21.4.
 
-**Open question for Kyle:** is the post-live timing of 21.4 still the right call, or does the lever-migration sub-phase (21.4.2) need to move earlier (pre-Phase-16) for cleaner legacy cleanup?
-
-**Phase 21.4 expected outcome:** monolith decomposed into 8 modules with DB-resolvable constants. Adding a new exchange or asset class becomes a configuration-and-adapter exercise, not a code-rewrite exercise. Phase 21.5 (Exchange Expansion) becomes feasible.
+**Phase 21.4 expected outcome:** monolith decomposed into 8 modules. With B72 lever migration already complete pre-launch, the 5D resolution matrix is populated and the modules just need to be wired against it. Adding a new exchange or asset class in Phase 21.5 becomes a configuration-and-adapter exercise, not a code-rewrite exercise.
 
 ---
 
