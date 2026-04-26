@@ -1,6 +1,13 @@
 # BATCH 65.6 — Per-Pair Regime Classifier Audit + Sustainability Gate
 
-**Status:** DRAFT (Step 1 — scope, awaiting Langston review)
+**Status:** ✅ Step-1 Langston-APPROVED 2026-04-26 (cc-inbox #822) with 5 refinements (incorporated below). Ready to start Phase A.
+
+**Langston refinements applied:**
+- Q1: ADX-floor on |DBS|-only path is the right starting hypothesis (already in input vector, minimum-viable fix). DBS-percentile deferred to Phase 19.5 if needed.
+- Q2: Phase C thresholds OK + ADD explicit guard — **clean-day TFS-tagged WR must not drop more than 3pp from current baseline.** Prevents "fix hostile, break clean."
+- Q3: **MCE telemetry source identified — `phase15b_dbs_telemetry` logs.** 60K entries/day, covers 04-15 → 04-22+, has full classifier inputs (dbs.score, classifier.vol/adx/mom/regime). Use as Phase C replay source; cross-ref VTS trade logs for outcomes. Feasible without new infrastructure.
+- Q4: Flicker ceiling negotiable. **Make it a `module_constants` entry (`classifier_flicker_ceiling_pct`, seed 2.0).** Kyle signs off on specific number at Phase C review.
+- Q5: **Phase A confidence-vs-outcome inversion check across ALL 5 regimes**, not just TFS. (Reconciliation note: Langston's Q5 referenced checking inversion on 04-18; per Kyle's same-day directive 04-18 is pre-B62 and excluded — Phase A applies the across-all-5-regimes check to the post-B62 04-22 hostile day only. If only one post-B62 hostile day is available, the across-regime inversion check has limited statistical power; flag in Phase A output and consider extending observation window.)
 **Owner:** CC implementation + analysis, Langston review, Kyle decider
 **Promoted from:** the originally-queued B72 slot — Kyle directive 2026-04-26 to continue this line of work NOW rather than defer
 **Trigger:** `REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md` finding that the TFS branch in `server/core/metrics/market-regime.ts:157` fires on `|DBS| >= 0.30` alone with no sustainability check, producing the inverted confidence-vs-outcome on 04-22 (195 TFS-classified pairs at 13.8% WR vs 6 STRUCTURAL_TRANSITION-classified pairs at 83.3% WR)
@@ -81,7 +88,8 @@ Output: `B65_6_PHASE_B_DETECTOR_HYPOTHESIS.md` with the proposed rule, the predi
 **Deliverable gate (Kyle sign-off):**
 - Aggregate WR across strategies improves on the historical replay
 - Hostile-day TFS misclassifications drop materially (target: 04-22 TFS share drops from 82% to <60%, and TFS-tagged WR on 04-22 rises from 13.8% to >20%)
-- Flicker stays within the 2% ceiling OR the new rule explicitly accepts a higher ceiling with justification
+- **Clean-day TFS-tagged WR must NOT drop more than 3pp from current baseline (Langston Q2 refinement).** Prevents "fix hostile, break clean."
+- Flicker stays within the `classifier_flicker_ceiling_pct` module constant (seeded 2.0; Kyle signs off on specific value at Phase C review per Langston Q4 refinement)
 
 If any of those fail, the recommendation is **DEFER** — the classifier issue exists but no improvement that satisfies the constraints has been found in the current input space, and the work moves to either (a) adding new inputs (B67-style external data, B70 archived inputs), or (b) a downstream guardrail (AMR overlay) that catches hostile windows even when the classifier is wrong.
 
