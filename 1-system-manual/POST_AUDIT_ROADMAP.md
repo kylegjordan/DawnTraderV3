@@ -816,13 +816,13 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 
 ---
 
-## Phase 18.5: VTS Partition + Exchange-Data Adapter (NEW 2026-04-26, Kyle directive)
+## Phase 19.0: VTS Partition + Exchange-Data Adapter (NEW 2026-04-26, renumbered from 18.5 same-day per Kyle directive: Phase 18 = ML/post-launch, can't reuse the number)
 
-**Status:** New phase inserted between B72 (lever-to-DB sweep) and Phase 19 (Paper Mode Audit) per Kyle directive 2026-04-26.
+**Status:** First sub-section of Phase 19. Sits BEFORE 19.1 Paper Trading Run because the partition is a prerequisite for running the rest of Phase 19 effectively — without it, every active-trading-engine restart during Phase 19 audit work interrupts VTS data accumulation.
 
 **Why this phase exists:** during Phase 19 the team will be repeatedly starting and stopping the active-trading engine to audit and fix it. Today VTS shares the trading-engine process and Kraken API budget — so every active-trading restart interrupts VTS data accumulation. To preserve continuous VTS observation through the start-stop cycles of Phase 19 paper-mode audit, VTS needs to be partitioned into a process that runs independently of the active-trading engine, with its own data feed (Binance + Coinbase + KuCoin combined fallback chain), and its own scan engine (FX5 instance) so it doesn't compete for Kraken API budget when active trading is running.
 
-**Why this is also a modularization preview:** the work cleanly aligns with two of the Phase 21.4 Modularization phase's eight canonical modules — Exchange Adapter and Filter Module Family. By pulling these forward into Phase 18.5, we land the architectural patterns pre-launch on a low-risk surface (VTS observation), then Phase 21.4 extends the same patterns across the full system post-launch. This is the right time to start because the next exchange we'll integrate is XStocks for tokenized equities (Phase 21.5), and the cleaner the Exchange Adapter pattern is by then, the easier that integration becomes.
+**Why this is also a modularization preview:** the work cleanly aligns with two of the Phase 21.4 Modularization phase's eight canonical modules — Exchange Adapter and Filter Module Family. By pulling these forward into Phase 19.0, we land the architectural patterns pre-launch on a low-risk surface (VTS observation), then Phase 21.4 extends the same patterns across the full system post-launch. This is the right time to start because the next exchange we'll integrate is XStocks for tokenized equities (Phase 21.5), and the cleaner the Exchange Adapter pattern is by then, the easier that integration becomes.
 
 **Effort:** 1-2 weeks. Larger than the original feasibility note's 3-5 day estimate because this scope adds: (a) the symbol normalizer service so different exchanges' symbol conventions map cleanly, (b) the VTS-process partition (own PM2 process, own state), and (c) a dedicated FX5 scanner instance so the data layer split is clean.
 
@@ -830,7 +830,7 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 - B72 lever-to-`module_constants` sweep should complete first so the new components land DB-tunable from day one.
 - `INDEPENDENT_VTS_DATA_FEED_FEASIBILITY.md` is the architectural reference.
 
-### 18.5.1 Symbol Normalizer Service (NEW)
+### 19.0.1 Symbol Normalizer Service (NEW)
 
 Build a small service that maps Kraken pair symbols (e.g., `BTC/USD`, `ETH/EUR`, `2Z/USD`) to their equivalents on Binance, Coinbase, and KuCoin (e.g., `BTCUSDT`, `BTC-USD`, `BTC-USDT`). Includes:
 
@@ -843,7 +843,7 @@ Build a small service that maps Kraken pair symbols (e.g., `BTC/USD`, `ETH/EUR`,
 
 This service is reusable — when XStocks is added in Phase 21.5, the same normalizer adds the stock-symbol convention.
 
-### 18.5.2 Exchange-Data Adapter Layer (Phase 21.4 Modularization preview)
+### 19.0.2 Exchange-Data Adapter Layer (Phase 21.4 Modularization preview)
 
 Build a pluggable adapter interface in VTS specifically. The adapter abstracts OHLC fetching, with one backend per source exchange:
 
@@ -859,7 +859,7 @@ Backends to implement: BinanceAdapter, CoinbaseAdapter, KuCoinAdapter. Pluggable
 
 Fallback chain logic: for each Kraken pair, the chain tries Binance first (largest coverage), then Coinbase (USD-quoted gaps), then KuCoin (altcoin tail). First adapter with the pair wins. Coverage report logged at startup.
 
-### 18.5.3 VTS Process Partition
+### 19.0.3 VTS Process Partition
 
 Move VTS into its own PM2 process (`dawntrader-vts`) separate from `dawntrader` (active-trading process). VTS process:
 
@@ -871,7 +871,7 @@ Move VTS into its own PM2 process (`dawntrader-vts`) separate from `dawntrader` 
 
 When the active-trading process is stopped/restarted during Phase 19 audit work, VTS continues running uninterrupted.
 
-### 18.5.4 Coverage diagnostics + observability
+### 19.0.4 Coverage diagnostics + observability
 
 Health-check page or dashboard widget that shows:
 
@@ -882,7 +882,7 @@ Health-check page or dashboard widget that shows:
 
 This makes the ~5% coverage gap explicit and trackable — if specific missing pairs turn out to matter, we know exactly which ones to address.
 
-**Phase 18.5 expected outcome:** VTS runs continuously through Phase 19's start-stop cycles. The Exchange-Data Adapter pattern is in production on a low-risk surface. The symbol normalizer is in place ready to be extended for XStocks (Phase 21.5) and any future exchange. Phase 21.4 Modularization has a working reference implementation for two of its eight canonical modules already shipped.
+**Phase 19.0 expected outcome:** VTS runs continuously through Phase 19's start-stop cycles. The Exchange-Data Adapter pattern is in production on a low-risk surface. The symbol normalizer is in place ready to be extended for XStocks (Phase 21.5) and any future exchange. Phase 21.4 Modularization has a working reference implementation for two of its eight canonical modules already shipped.
 
 ---
 
@@ -1138,7 +1138,7 @@ Restart paper with adaptive response live. Confirm that mode transitions fire wh
 
 **Why post-live:** the architectural decomposition is a coherent exercise that benefits from being done once with full intent. By post-live, the system has live-trading evidence for which boundaries between modules matter most. Phase 21.4 is the prerequisite for Phase 21.5 (Exchange Expansion — XStocks + Perpetual Futures); without the 8-module decomposition, every new exchange or asset class would have to thread through the existing monolith.
 
-**Pre-launch preview in Phase 18.5 (added 2026-04-26):** two of Phase 21.4's eight canonical modules — Exchange Adapter and Filter Module Family — land pre-launch as part of the VTS-partition work in Phase 18.5. The pre-launch versions are scoped to the VTS observation surface only (low-risk, doesn't affect active trading). Phase 21.4 then extends the same pattern to all 8 modules across the active-trading system. By that point the architectural pattern has been validated in production for months.
+**Pre-launch preview in Phase 19.0 (added 2026-04-26, renumbered from 18.5):** two of Phase 21.4's eight canonical modules — Exchange Adapter and Filter Module Family — land pre-launch as part of the VTS-partition work in Phase 19.0 (which sits at the very start of Phase 19, before paper audit work begins). The pre-launch versions are scoped to the VTS observation surface only (low-risk, doesn't affect active trading). Phase 21.4 then extends the same pattern to all 8 modules across the active-trading system. By that point the architectural pattern has been validated in production for months.
 
 **Why before Phase 21.5 Exchange Expansion:** the 5D matrix is the prerequisite for adding new exchanges and asset classes in Phase 21.5. Without modularization, every new exchange or asset class would have to thread through the existing monolith — defeating the architectural intent.
 
