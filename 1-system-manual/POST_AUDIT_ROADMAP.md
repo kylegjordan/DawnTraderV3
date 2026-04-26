@@ -889,6 +889,40 @@ Scope (from `BATCH_66_SCOPE.md`):
 
 May be split into multiple sub-deploys per the original scope. May be partially deferred to post-launch if paper-trading evidence suggests current SQE behavior is acceptable.
 
+### 19.4.5 Observational Decision Gate — pre-launch reordering (NEW 2026-04-26, Kyle directive)
+
+**Status:** added 2026-04-26 after B65.6 closed via SKIP. Sits between SQE recalibration (19.4) and AMR (19.5). The gate's job is to use 1-2 weeks of clean active-paper-trading data to decide which currently-post-live items might need to move pre-live.
+
+**Trigger:** runs once after the trading engine is verified working in paper mode (19.1–19.3), SQE recalibration is complete (19.4), and B72 lever-to-`module_constants` migration is complete. By this point the system is stable, observable, and tunable from the database — the prerequisites for collecting decision-grade observational data.
+
+**Reference document:** `Claude Comms and Packages/Scope Files/B65_6_FINDINGS_PAPER.md` — captures the per-pair classifier work that was done pre-Phase-19 and intentionally NOT shipped, so future-CC reading this gate during Phase 19 has the full record of what was tested and why we deferred to observation rather than building a fix in advance.
+
+**Observation scope (1-2 weeks of paper trading):**
+
+The gate watches for several conditions that, if observed, would justify pulling normally-post-live work into the pre-launch path:
+
+1. **Hostile-window recurrence at active-trading scale.** The B65.6 work showed that VTS sees recurring hostile windows (04-22 trend-rider failure, 04-18 reversal-strategy failure, etc.). Active-trading filters are stricter than VTS, so the streak phenomenon may attenuate naturally. If active-paper-trading shows similar hostile-window concentration → **move Phase 19.5 AMR into pre-launch.** If it doesn't → AMR can stay post-launch.
+2. **Daily signal volume.** If active-paper-trading is generating low daily signal counts (e.g., < 5 signals/day across the whole pair universe), the system isn't capturing enough opportunity to be meaningfully validated. **Trigger to move XStocks + Perp Futures (currently Phase 21.5) forward into pre-launch** so the pair universe expands and signal volume comes up to a level we can audit.
+3. **Per-pair classifier misclassification visible in active trading.** If TFS-tagged pairs in active trading show outcome-vs-confidence inversion comparable to the 04-22 VTS pattern (TFS 13.8% WR vs STR 83.3% WR), → reopen B65.6 as a pre-launch fix using the candidate variables documented in §4 of the findings paper.
+4. **Hardcoded constants causing operational pain.** If during the observation period the team needs to change any threshold, weight, or limit and finds it requires a code redeploy, → indicates B72 lever migration was incomplete and should be expanded before launch.
+5. **Modularization friction.** If during observation the team identifies cross-module changes that require touching multiple files in the monolith to test ideas, → consider pulling some Phase 21.4 modularization work pre-launch (specifically the modules that block the testing work).
+6. **Machine learning data sufficiency.** If by end of observation the system has accumulated enough trade + classifier-input + outcome data that ML model training becomes obviously valuable, → consider pulling Phase 17 ML Design pre-launch as well.
+
+**Decision artifacts:** at the end of the observation period, the gate produces a written decision document (likely named `PHASE_19_OBSERVATIONAL_DECISIONS.md` when it lands) that lists, for each of the 6 items above:
+
+- What was actually observed
+- Whether the threshold for moving the work pre-launch was met
+- The decision (move pre-launch / keep post-launch / re-evaluate at next milestone)
+- The justification
+
+**Decision-making principle (Kyle directive 2026-04-26):** prefer NOT to build pre-launch fixes that will likely be replaced post-launch. The 19.4.5 gate exists specifically to prevent shipping interim patches that create technical debt. Only move post-launch work into pre-launch when the observed evidence shows the post-launch design point is materially different from what was assumed when the original sequencing was set.
+
+**Why this gate exists:** during the pre-Phase-19 batches (B62 through B65.6), several investigations surfaced findings that COULD have justified pre-launch fixes but didn't have enough evidence to be sure. The findings paper for B65.6 is the canonical example — the per-pair classifier showed inverted confidence/outcome on 04-22, but no per-pair fix in the current input space was sharp enough to ship without unacceptable clean-day cost. The decision was to NOT ship something that might be replaced by Phase 19.5 AMR. This gate formalizes that pattern: defer pre-launch fixes to the observational stage when the evidence will be cleaner, then make final go/no-go calls with active-paper-trading data in hand.
+
+**Phase 19.4.5 expected outcome:** a written decision document for each of the 6 observation items, plus any pre-launch reordering of subsequent work that the observations justify. By the end of 19.4.5 the team has empirical data about what the system actually does when running close to active conditions, which informs whether to proceed to Phase 20 (Production Hardening) directly or to insert additional pre-launch work (AMR, XStocks, Modularization, ML) first.
+
+---
+
 ### 19.5 Adaptive Market Response (conditional)
 
 **Status (2026-04-25):** Moved INTO Phase 19 (was previously listed as a separate Phase 19.5 conditional after the audit). Same conditional logic — decision gate at end of paper trading observations. Goal is to extend the existing rules-based mode overlay (Directive 11.7S) from defensive-only to a full adaptive market response — the system reads multiple weather signals, classifies current market conditions, and adjusts behavior both defensively (slow down, restrict, or pause in bad conditions) and offensively (lean in when conditions are unusually favorable).
