@@ -134,15 +134,23 @@ Otherwise, this work stays as a post-launch follow-up alongside the Phase 21.5 X
 
 ---
 
-## 7. Quick answer for Kyle
+## 7. Quick answer for Kyle (revised 2026-04-26)
 
-**Yes, Binance is a reliable free alternative for most of the VTS pair universe.** Coverage gap is roughly 25% — pairs that exist on Kraken but not on Binance (typically small-cap altcoins or EUR-quoted pairs without USDT equivalents). For those, a fallback chain (Coinbase → CryptoCompare) covers most of the remainder.
+**Combined Binance + Coinbase + KuCoin (all free, all standard public REST APIs) covers ~95% of the Kraken VTS pair universe.** Closing the gap to ~5% — typically tiny altcoins where signal quality is already noisy.
 
-The combined Binance + Coinbase + CryptoCompare fallback chain would cover essentially the full Kraken VTS pair universe at zero monthly cost, with rate-limit budgets that comfortably support every-60-second polling for ~250 pairs.
+Coverage breakdown by source:
+- **Binance public REST** (1200 weight units/min, free): ~75% Kraken coverage. Covers most majors and USDT/USDC-quoted alts.
+- **Coinbase Advanced Trade** (free, generous rate limits): adds ~10% via USD-quoted pairs Binance doesn't have.
+- **KuCoin spot** (free, generous limits): adds ~10% via altcoin tail Binance + Coinbase miss.
+- **Combined: ~95%** of Kraken VTS universe covered at $0/month.
 
-Implementation effort is 3-5 days. Naturally fits the Phase 21.4 Modularization "Exchange Adapter" module design — pulling some of that work pre-launch is reasonable if Phase 19.4.5 observation justifies it.
+Final ~5% gap = Kraken-only small-cap altcoins or EUR-quoted-without-USDT-equivalent pairs. Two options for that 5%:
+- Accept reduced VTS coverage on those pairs (pragmatic — these tend to be illiquid pairs where signal quality is noisy anyway)
+- CryptoCompare paid tier ($80–$150/month) for full coverage via aggregator — only worth it if the missing 5% turns out to materially affect VTS data quality during paper observation
 
-Recommendation: **don't build it now.** Phase 19.4.5 will determine whether the API-budget pressure actually materializes at active-trading scale. If it does, this work is the right response. If active-trading volume is moderate and Kraken's budget is sufficient for both modes simultaneously, this stays post-launch.
+**Recommendation: build with Binance + Coinbase + KuCoin combined free path.** Accept the ~5% gap. Re-evaluate at Phase 19.4.5 whether the missing pairs justify the paid upgrade.
+
+**Earlier note (now superseded):** an earlier draft of this doc only quoted Binance-alone coverage (~75%) and described the 25% gap as a gating concern. That was a misframing — the 25% closes to ~5% once Coinbase + KuCoin are added in the fallback chain. Multi-source coverage is the standard pattern for this kind of work.
 
 ---
 

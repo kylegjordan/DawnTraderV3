@@ -136,9 +136,48 @@ export function computeNetBreakeven(entryPrice: number, costs: CostComponents): 
   return entryPrice * (1 + totalCost);
 }
 
-export function computeNetTargetFloor(targetPrice: number, costs: CostComponents): number {
-  const totalCost = computeTotalRoundTripCost(costs.fee, costs.slippage, costs.spread);
-  return targetPrice * (1 - totalCost / 2);
+/**
+ * Compute the floor price to lock in when a ladder rung target is hit.
+ *
+ * B65.4.1 hotfix (2026-04-26, Kyle directive): the original formula returned
+ * `targetPrice * (1 - totalCost / 2)` — a "breakeven-after-costs" floor that sat
+ * BELOW the just-hit target. On reversal, this allowed exits BELOW the original
+ * target price, costing us the gain we'd already achieved on the way up.
+ *
+ * Live evidence (5 closed laddered trades through 2026-04-26 morning):
+ *   - 2Z/USD: target 0.09633, floor 0.09030 (6.26% below target). Trade reversed
+ *     off target, exited at -0.12% net — a target-hit became a small loser.
+ *   - ENSO/USD: target 1.28909, floor 1.27864. Trade ratcheted, reversed, exited
+ *     at +23.53% vs counterfactual at-target +36.65% — left $6.26 on the table.
+ *   Across 5 trades, the ladder LOST ~$11 vs the just-take-target counterfactual.
+ *
+ * New formula: floor = targetPrice * (1 + slippage * bufferMultiplier).
+ *
+ * The floor sits ABOVE the target by exactly enough to absorb the typical
+ * stop-trigger slippage on a reversal, ensuring the actual fill on a stop-out
+ * is at-or-above the target level. Multi-rung ratcheting still works as before
+ * (the floor moves up with each rung), so the design's payoff scenario is
+ * preserved while the failure mode (single-rung-then-reverse losing more than
+ * target gave) is fixed.
+ *
+ * The buffer multiplier is resolved per-trade via module_constants
+ * (`rung_floor_slippage_buffer_multiplier`, seed 1.0) so it can be tuned per
+ * (asset_class, exchange, regime, strategy) without redeploy.
+ *
+ * @param targetPrice - the just-hit rung target price
+ * @param costs - per-pair cost components (fee, slippage, spread)
+ * @param slippageBufferMultiplier - multiplier on costs.slippage for the buffer.
+ *        Default 1.0 = exactly the per-pair slippage estimate. >1.0 widens the
+ *        buffer at cost of trigger sensitivity. <1.0 tightens (more triggers
+ *        but tighter to target).
+ */
+export function computeNetTargetFloor(
+  targetPrice: number,
+  costs: CostComponents,
+  slippageBufferMultiplier: number = 1.0,
+): number {
+  const buffer = costs.slippage * slippageBufferMultiplier;
+  return targetPrice * (1 + buffer);
 }
 
 export const DEFAULT_FEE = DEFAULT_TAKER_FEE;

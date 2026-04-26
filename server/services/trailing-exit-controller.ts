@@ -60,6 +60,10 @@ interface TrailingExitConfig {
   moonbagMaxDurationMs: number;
   moonbagCapMode: 'unlimited' | 'reserved_slots';
   moonbagReservedSlots: number;
+  // B65.4.1 (2026-04-26): rung-floor buffer multiplier for the slippage-aware
+  // floor placement above the just-hit target. See computeNetTargetFloor in
+  // cost-model.ts and B65_4_LADDER_COUNTERFACTUAL_ANALYSIS.md.
+  rungFloorSlippageBufferMultiplier: number;
 }
 
 const TEC_DEFAULTS: TrailingExitConfig = {
@@ -72,6 +76,7 @@ const TEC_DEFAULTS: TrailingExitConfig = {
   moonbagMaxDurationMs: 14400000, // 4h
   moonbagCapMode: 'reserved_slots',
   moonbagReservedSlots: 1,
+  rungFloorSlippageBufferMultiplier: 1.0, // B65.4.1: 1.0 = exactly the per-pair slippage; >1 widens; <1 tightens.
 };
 
 let cachedConfig: TrailingExitConfig = { ...TEC_DEFAULTS };
@@ -103,6 +108,7 @@ async function resolveTECConfig(strategy?: string, regime?: string): Promise<Tra
       moonbagMaxDurationMs: pick('moonbag_max_duration_ms', TEC_DEFAULTS.moonbagMaxDurationMs),
       moonbagCapMode: pick('moonbag_cap_mode', TEC_DEFAULTS.moonbagCapMode),
       moonbagReservedSlots: pick('moonbag_reserved_slots', TEC_DEFAULTS.moonbagReservedSlots),
+      rungFloorSlippageBufferMultiplier: pick('rung_floor_slippage_buffer_multiplier', TEC_DEFAULTS.rungFloorSlippageBufferMultiplier),
     };
     configExpiresAt = now + CONFIG_TTL_MS;
   } catch (err) {
@@ -393,7 +399,11 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   // Directive 11.3A: Get cost metrics for net-aware floor calculations
   const costMetrics = getCachedCostMetrics(update.symbol);
   const netBreakeven = computeNetBreakeven(state.entryPrice, costMetrics);
-  const netTargetFloor = computeNetTargetFloor(state.targetPrice, costMetrics);
+  // B65.4.1 (2026-04-26): rung floor placement uses a slippage buffer above the
+  // just-hit target so reversals can't fall below the gain we already achieved.
+  // Multiplier is module_constants-resolved per-trade; default 1.0.
+  const rungFloorMult = cachedConfig.rungFloorSlippageBufferMultiplier;
+  const netTargetFloor = computeNetTargetFloor(state.targetPrice, costMetrics, rungFloorMult);
   
   if (!state.breakEvenLatched && state.ATR > 0) {
     if (isBreakEvenTriggered(update.currentPrice, state.entryPrice, state.ATR)) {
@@ -476,8 +486,9 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   if (state.targetLatched && state.tradeMode === 'TRAILING_TAKE' && !closeNow) {
     while (update.currentPrice >= state.currentRungTarget) {
       // The rung we are CROSSING becomes the new floor (cost-aware).
+      // B65.4.1: rungFloorMult resolved earlier from module_constants.
       const justHitTarget = state.currentRungTarget;
-      const hitFloor = computeNetTargetFloor(justHitTarget, costMetrics);
+      const hitFloor = computeNetTargetFloor(justHitTarget, costMetrics, rungFloorMult);
       state.currentRungFloor = Math.max(state.currentRungFloor, hitFloor);
       state.ladderRung += 1;
       state.currentRungTarget = justHitTarget + rungStepPrice;

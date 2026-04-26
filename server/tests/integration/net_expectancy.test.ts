@@ -108,16 +108,36 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
     });
   });
   
-  describe('Cost-Aware Target Floor', () => {
-    it('should compute net target floor below gross target', async () => {
+  describe('Cost-Aware Target Floor (B65.4.1: floor ABOVE target with slippage buffer)', () => {
+    it('should compute net target floor ABOVE gross target by exactly the slippage buffer', async () => {
       const { computeNetTargetFloor } = await import('../../core/math/cost-model.js');
-      
+
       const target = 110;
       const costMetrics = { fee: 0.001, slippage: 0.0005, spread: 0.001 };
-      
+
+      // Default multiplier 1.0
       const netTargetFloor = computeNetTargetFloor(target, costMetrics);
-      
-      expect(netTargetFloor).toBeLessThan(target);
+
+      // B65.4.1: floor sits ABOVE target by `slippage * multiplier` so that
+      // a stop-out reversal still nets at-or-above the just-hit target value.
+      expect(netTargetFloor).toBeGreaterThan(target);
+      expect(netTargetFloor).toBeCloseTo(target * 1.0005, 6);
+    });
+
+    it('should respect a custom slippage buffer multiplier', async () => {
+      const { computeNetTargetFloor } = await import('../../core/math/cost-model.js');
+
+      const target = 110;
+      const costMetrics = { fee: 0.001, slippage: 0.0005, spread: 0.001 };
+
+      // 2x multiplier widens the buffer
+      const wideFloor = computeNetTargetFloor(target, costMetrics, 2.0);
+      // 0.5x multiplier tightens it
+      const tightFloor = computeNetTargetFloor(target, costMetrics, 0.5);
+
+      expect(wideFloor).toBeCloseTo(target * 1.001, 6);    // target * (1 + 0.0005 * 2.0)
+      expect(tightFloor).toBeCloseTo(target * 1.00025, 6); // target * (1 + 0.0005 * 0.5)
+      expect(wideFloor).toBeGreaterThan(tightFloor);
     });
   });
   

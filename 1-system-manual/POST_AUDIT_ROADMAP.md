@@ -816,6 +816,76 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 
 ---
 
+## Phase 18.5: VTS Partition + Exchange-Data Adapter (NEW 2026-04-26, Kyle directive)
+
+**Status:** New phase inserted between B72 (lever-to-DB sweep) and Phase 19 (Paper Mode Audit) per Kyle directive 2026-04-26.
+
+**Why this phase exists:** during Phase 19 the team will be repeatedly starting and stopping the active-trading engine to audit and fix it. Today VTS shares the trading-engine process and Kraken API budget — so every active-trading restart interrupts VTS data accumulation. To preserve continuous VTS observation through the start-stop cycles of Phase 19 paper-mode audit, VTS needs to be partitioned into a process that runs independently of the active-trading engine, with its own data feed (Binance + Coinbase + KuCoin combined fallback chain), and its own scan engine (FX5 instance) so it doesn't compete for Kraken API budget when active trading is running.
+
+**Why this is also a modularization preview:** the work cleanly aligns with two of the Phase 21.4 Modularization phase's eight canonical modules — Exchange Adapter and Filter Module Family. By pulling these forward into Phase 18.5, we land the architectural patterns pre-launch on a low-risk surface (VTS observation), then Phase 21.4 extends the same patterns across the full system post-launch. This is the right time to start because the next exchange we'll integrate is XStocks for tokenized equities (Phase 21.5), and the cleaner the Exchange Adapter pattern is by then, the easier that integration becomes.
+
+**Effort:** 1-2 weeks. Larger than the original feasibility note's 3-5 day estimate because this scope adds: (a) the symbol normalizer service so different exchanges' symbol conventions map cleanly, (b) the VTS-process partition (own PM2 process, own state), and (c) a dedicated FX5 scanner instance so the data layer split is clean.
+
+**Dependencies:**
+- B72 lever-to-`module_constants` sweep should complete first so the new components land DB-tunable from day one.
+- `INDEPENDENT_VTS_DATA_FEED_FEASIBILITY.md` is the architectural reference.
+
+### 18.5.1 Symbol Normalizer Service (NEW)
+
+Build a small service that maps Kraken pair symbols (e.g., `BTC/USD`, `ETH/EUR`, `2Z/USD`) to their equivalents on Binance, Coinbase, and KuCoin (e.g., `BTCUSDT`, `BTC-USD`, `BTC-USDT`). Includes:
+
+- A canonical `MarketSymbol` type with `{base, quote, exchange}` shape internally
+- Forward map: Kraken symbol → exchange symbol per source
+- Reverse map: exchange symbol → Kraken symbol (for inbound data normalization)
+- Quote-substitution rules (e.g., Kraken EUR pair → Binance USDT proxy when no EUR equivalent exists)
+- Coverage diagnostics: at startup, report how many Kraken pairs have at least one source mapping vs. uncovered pairs
+- Stored as a registry that's `module_constants`-tunable so new pairs / new exchanges can be added without code redeploy
+
+This service is reusable — when XStocks is added in Phase 21.5, the same normalizer adds the stock-symbol convention.
+
+### 18.5.2 Exchange-Data Adapter Layer (Phase 21.4 Modularization preview)
+
+Build a pluggable adapter interface in VTS specifically. The adapter abstracts OHLC fetching, with one backend per source exchange:
+
+```
+interface IExchangeDataAdapter {
+  getOHLCData(symbol: string, interval: string, lookback: number): Promise<OHLCCandle[]>
+  isAvailable(symbol: string): boolean
+  rateLimit: { weightPerMinute: number, weightPerCall: number }
+}
+```
+
+Backends to implement: BinanceAdapter, CoinbaseAdapter, KuCoinAdapter. Pluggable enough that adding KrakenAdapter (for the active-trading process) is trivial.
+
+Fallback chain logic: for each Kraken pair, the chain tries Binance first (largest coverage), then Coinbase (USD-quoted gaps), then KuCoin (altcoin tail). First adapter with the pair wins. Coverage report logged at startup.
+
+### 18.5.3 VTS Process Partition
+
+Move VTS into its own PM2 process (`dawntrader-vts`) separate from `dawntrader` (active-trading process). VTS process:
+
+- Runs its own scan engine (FX5 instance) on its own schedule
+- Pulls OHLC from the Exchange-Data Adapter (Binance/Coinbase/KuCoin combined), NOT from Kraken
+- Generates signals and simulates trades independently of active-trading state
+- Persists VTS observations to the same database (via the same archiving path) as today
+- Exposes its state via a separate set of API endpoints (`/api/vts/...`) so the active-trading process never blocks VTS-only API calls
+
+When the active-trading process is stopped/restarted during Phase 19 audit work, VTS continues running uninterrupted.
+
+### 18.5.4 Coverage diagnostics + observability
+
+Health-check page or dashboard widget that shows:
+
+- Which Kraken pairs have which exchange-data source backing them
+- Adapter rate-limit health (any throttling events)
+- Per-source coverage drift over time (if an exchange delists a pair, surface that)
+- VTS signal volume vs. theoretical max if all pairs were covered
+
+This makes the ~5% coverage gap explicit and trackable — if specific missing pairs turn out to matter, we know exactly which ones to address.
+
+**Phase 18.5 expected outcome:** VTS runs continuously through Phase 19's start-stop cycles. The Exchange-Data Adapter pattern is in production on a low-risk surface. The symbol normalizer is in place ready to be extended for XStocks (Phase 21.5) and any future exchange. Phase 21.4 Modularization has a working reference implementation for two of its eight canonical modules already shipped.
+
+---
+
 ## Phase 19: Paper Mode Audit & Debug (Weeks 34-37)
 
 **Goal**: Run the complete system end-to-end in Paper Mode with all components active (MCE, real VTS, Directional Bias, Short Trading, Predictive Execution, ML). Find and fix everything before live capital.
@@ -907,7 +977,7 @@ The gate watches for several conditions that, if observed, would justify pulling
 4. **Hardcoded constants causing operational pain.** If during the observation period the team needs to change any threshold, weight, or limit and finds it requires a code redeploy, → indicates B72 lever migration was incomplete and should be expanded before launch.
 5. **Modularization friction.** If during observation the team identifies cross-module changes that require touching multiple files in the monolith to test ideas, → consider pulling some Phase 21.4 modularization work pre-launch (specifically the modules that block the testing work).
 6. **Machine learning data sufficiency.** If by end of observation the system has accumulated enough trade + classifier-input + outcome data that ML model training becomes obviously valuable, → consider pulling Phase 17 ML Design pre-launch as well.
-7. **Ladder net contribution at active-trading scale (added 2026-04-26).** Per `B65_4_LADDER_COUNTERFACTUAL_ANALYSIS.md` — across the first 5 closed laddered VTS trades, the ladder cost ~$11 in absolute terms vs the counterfactual of just exiting at original target. The single multi-rung trade (MINA/USD ratcheted twice) added +$0.31 of incremental profit; three single-rung-then-reverse trades lost between $1 and $6 each. Sample is tiny but the finding is directionally concerning. Track laddered-trade actual vs counterfactual across at least 30 laddered trades during paper observation. If the net contribution stays negative or near-zero, either (a) tighten the cost-aware floor formula (small `module_constants` adjustment), or (b) revisit whether the ladder design should be retired in favor of just-take-target-and-exit (larger decision). The B65.4 implementation is functionally correct — this is a calibration / design question, not a bug.
+7. **Ladder net contribution at active-trading scale (added 2026-04-26, narrowed by B65.4.1 hotfix same-day).** Per `B65_4_LADDER_COUNTERFACTUAL_ANALYSIS.md` — original B65.4 formula cost ~$11 in absolute terms vs the counterfactual of just exiting at original target across the first 5 closed laddered VTS trades. **B65.4.1 hotfix shipped 2026-04-26** changing the rung floor formula from `target * (1 - totalCost/2)` (floor below target) to `target * (1 + slippage * bufferMultiplier)` (floor above target). The hotfix narrows the Phase 19.4.5 question from "fix formula or retire ladder" to "**tune multiplier or retire ladder**." The buffer multiplier is now a `module_constants` entry (`rung_floor_slippage_buffer_multiplier`, seed 1.0) so calibration is a DB update, not a code change. Phase 19.4.5 should track laddered-trade actual vs counterfactual across at least 30 laddered trades under the hotfix. Reporting instructions preserved at `BATCH_65_4_1_HOTFIX_COMPLETION.md` §5 — runnable ad-hoc using grep + awk + manual aggregation; refactor to scripted form when cohort grows past n=30. Decision options at end of observation: (a) keep multiplier at 1.0 if net contribution is positive, (b) tune multiplier up/down via DB, or (c) retire ladder design in favor of just-take-target-and-exit if even the slippage-buffer formula doesn't deliver positive net contribution.
 
 **Decision artifacts:** at the end of the observation period, the gate produces a written decision document (likely named `PHASE_19_OBSERVATIONAL_DECISIONS.md` when it lands) that lists, for each of the 6 items above:
 
@@ -1067,6 +1137,8 @@ Restart paper with adaptive response live. Confirm that mode transitions fire wh
 **Goal:** Extract 8 canonical modules from the current monolith. The 5D `(exchange, asset_class, filter, strategy, regime)` resolution matrix is already in place (B65.1 module_constants infrastructure + B72 comprehensive lever migration); Phase 21.4 wires the modules together against that matrix.
 
 **Why post-live:** the architectural decomposition is a coherent exercise that benefits from being done once with full intent. By post-live, the system has live-trading evidence for which boundaries between modules matter most. Phase 21.4 is the prerequisite for Phase 21.5 (Exchange Expansion — XStocks + Perpetual Futures); without the 8-module decomposition, every new exchange or asset class would have to thread through the existing monolith.
+
+**Pre-launch preview in Phase 18.5 (added 2026-04-26):** two of Phase 21.4's eight canonical modules — Exchange Adapter and Filter Module Family — land pre-launch as part of the VTS-partition work in Phase 18.5. The pre-launch versions are scoped to the VTS observation surface only (low-risk, doesn't affect active trading). Phase 21.4 then extends the same pattern to all 8 modules across the active-trading system. By that point the architectural pattern has been validated in production for months.
 
 **Why before Phase 21.5 Exchange Expansion:** the 5D matrix is the prerequisite for adding new exchanges and asset classes in Phase 21.5. Without modularization, every new exchange or asset class would have to thread through the existing monolith — defeating the architectural intent.
 
