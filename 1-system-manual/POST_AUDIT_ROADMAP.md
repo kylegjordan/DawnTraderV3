@@ -118,7 +118,8 @@ Full detail for all items in `Claude Comms and Packages/Scope Files/POST_B62_PRE
   8. **B69 — Asset class field + standardized schema** across all signal/trade tables. 1 batch. Prerequisite for expansion to equities/FX and for asset-class-specific external data routing.
   9. **B70 — Data archiving update** — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches.
   10. ✅ **B71 — Regime & Strategy Drift Dashboard tab** — DONE 2026-04-25.
-  11. **B65.6 — Per-pair regime classifier audit + sustainability gate (ACTIVE 2026-04-26, scope drafted)** — Promoted from the originally-queued B72 slot per Kyle directive 2026-04-26 to continue this line of work NOW. — focused audit of `server/core/metrics/market-regime.ts` triggered by `REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md`. The TFS branch fires when `(mom > 0.003 AND ADX > 50) OR |DBS| >= 0.30 (alone)` — the second-path sole `|DBS| >= 0.30` trigger over-classifies pairs as TFS on strong-direction days, producing the 04-22 inversion (195 TFS-classified pairs at 13.8% WR while 6 STRUCTURAL_TRANSITION-classified pairs had 83.3% WR). Threshold was tuned for flicker stability (2% ceiling), not outcome alignment. Scope: (a) test whether requiring an additional non-lagging confirmation (ADX > 35, momentum > 0.002, volume ratio > 1.2) on the |DBS|-alone path improves outcome alignment without breaching flicker ceiling; (b) re-tune 0.30 threshold for outcome alignment with smoothing as a separate downstream layer; (c) evaluate confidence-decay for stale-DBS readings (exhausted-trend vs fresh-trend). Research-then-design batch — analysis first, code only if recommendations validate. ~1-2 weeks. Independent of B65.5 (which closed via SKIP). Verified live in Analytics & Diagnostics → Drift Dashboard tab: Rolling 24h/7d/30d/Since-last-restart toggles, summary cards, regime distribution, B62-style regime integrity, DBS category distribution, Global DBS live snapshot.
+  11. **B65.6 — Per-pair regime classifier audit + sustainability gate (ACTIVE 2026-04-26, scope drafted)** — Promoted from the originally-queued B72 slot per Kyle directive 2026-04-26 to continue this line of work NOW.
+  12. **Inline lever migration during B65.6 / B66 / B67 / B68 / etc.** — comprehensive lever-to-`module_constants` sweep is a Modularization Phase deliverable (post-live, see new phase entry below). In the meantime, every pre-live batch that touches a currently-hardcoded constant must DB-migrate the affected constant inline as part of its own change rather than introducing new hardcoded values. This avoids accumulating debt that the Modularization Phase has to clean up later. — focused audit of `server/core/metrics/market-regime.ts` triggered by `REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md`. The TFS branch fires when `(mom > 0.003 AND ADX > 50) OR |DBS| >= 0.30 (alone)` — the second-path sole `|DBS| >= 0.30` trigger over-classifies pairs as TFS on strong-direction days, producing the 04-22 inversion (195 TFS-classified pairs at 13.8% WR while 6 STRUCTURAL_TRANSITION-classified pairs had 83.3% WR). Threshold was tuned for flicker stability (2% ceiling), not outcome alignment. Scope: (a) test whether requiring an additional non-lagging confirmation (ADX > 35, momentum > 0.002, volume ratio > 1.2) on the |DBS|-alone path improves outcome alignment without breaching flicker ceiling; (b) re-tune 0.30 threshold for outcome alignment with smoothing as a separate downstream layer; (c) evaluate confidence-decay for stale-DBS readings (exhausted-trend vs fresh-trend). Research-then-design batch — analysis first, code only if recommendations validate. ~1-2 weeks. Independent of B65.5 (which closed via SKIP). Verified live in Analytics & Diagnostics → Drift Dashboard tab: Rolling 24h/7d/30d/Since-last-restart toggles, summary cards, regime distribution, B62-style regime integrity, DBS category distribution, Global DBS live snapshot.
 
 **Storage budget:** ~40 GB/year gzipped (pair scan + OHLC + trades + MCE telemetry combined, pre-external-data; B67+B68 add minimal additional storage). Fits current Hetzner CPX22 disk with ~18 months runway.
 
@@ -866,7 +867,14 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 
 1. For any reported "strategy X has WR Y%" finding, also report sibling-strategy WR in the same time windows.
 2. For any reported "FinalScore is anti-predictive r=Z" finding, segment the data by per-day or per-window quality and check whether the anti-predictive correlation holds in clean windows or only appears when hostile-window observations dominate the sample.
-3. The B63 audit findings (Item 18 SQE in particular — see `B63_ITEM18_SQE_AUDIT.md`) were generated under the same methodology gap and must be re-validated with sibling-strategy WR controls before any of their recommendations get acted on as part of Phase 19.4. **The 2026-04-26 spot-check (`REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md` §8.3 + Item 18 spot-check addendum below) confirms the gap is real:** segmenting Item 18's "FinalScore anti-predictive r=−0.017" finding by per-day quality returns r=−0.0503 on HOSTILE days (n=569), r=+0.0392 on CLEAN days (n=1220), r=+0.1450 on MIXED days (n=420). FinalScore IS predictive on clean/mixed days; the aggregate negative is dragged down by hostile-day contamination. Item 18's "only quant-strong_trend net-profitable" claim also fails to replicate on the spot-check — quant-strong_trend has the WORST WR (28.4% / −$7.07 sumNet) of the four major source pools across the full window, and on CLEAN days quant-trend slightly outperforms it. **Phase 19.4 must NOT act on Item 18's headline conclusions as stated.** Re-validation is required before any threshold or formula change derived from those findings is shipped.
+3. The B63 audit findings (Item 18 SQE in particular — see `B63_ITEM18_SQE_AUDIT.md`) were generated on a window that included pre-B62 data and must be re-validated with sibling-strategy WR controls + post-B62-only restriction before any of their recommendations get acted on as part of Phase 19.4. The 2026-04-26 spot-check (`REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md` §11 + §12 corrected re-run) returned mixed results:
+   - **Item 18 FinalScore-anti-predictive: probably stands on post-B62 data.** Re-run on post-B62-only (740 trades, 04-20 onward): r=−0.140 full, r=−0.094 HOSTILE, r=−0.057 CLEAN, r=+0.005 MIXED. The signal is STRONGER on post-B62 data than the original Item 18 claim of r=−0.017 (which was averaged across pre+post B62 data and partially diluted). Hostile-amplified but persists on CLEAN days too. **Direction is robust; re-validate magnitude with sibling-strategy controls.**
+   - **Item 18 "only quant-strong_trend net-profitable": INVERTED from current truth.** On post-B62 data, quant-strong_trend = WORST pool (28.3% WR / −$7.08 net). Pattern pool leads (57.1% WR / +$0.26 net). On CLEAN days quant-strong_trend = 42.0% WR / −$1.13 (still net negative). **Whatever Item 18 measured for source-pool profitability does not match current behavior. Discard this claim.**
+   - **Item 15 ExpectedEdge anti-predictive r=−0.130: does not replicate on post-B62 data.** Full r=+0.008. Mostly noise per segment except MIXED days (r=+0.261). Original strength likely from a different cohort. Discard unless re-derived.
+   - **Item 15 PredConf design flaw: mild signal at design level.** Post-B62 r=−0.097 full, smaller per-segment. Design-level claim probably stands; empirical magnitude smaller than originally reported.
+   - **Item 19 batch correlation 87.8%: reproduces lower (~72%) on post-B62.** Hostile-amplification pattern holds. Reinterpretation as "global state dominance" stands — argues for Phase 19.5 AMR approach, not cadence change.
+
+   **Phase 19.4 must re-derive every recalibration recommendation from post-B62 data with sibling-strategy WR controls before shipping any threshold or formula change.** The Item 18 FinalScore-anti-predictive direction is robust enough that Phase 19.4 work is still warranted; the source-pool profitability conclusion is wrong and must not be acted on.
 
 This is not a Phase 19.4 blocker — it is a methodology requirement that the recalibration process must satisfy. The decision gate at end of Phase 19 paper audit is now: "do the empirical paper-mode outcomes (with sibling controls) support the recalibration changes B66 proposed, OR do they show that B66's findings were window-confounded?"
 
@@ -1012,6 +1020,49 @@ Restart paper with adaptive response live. Confirm that mode transitions fire wh
 - Error alerting
 - ML performance dashboards (live)
 
+
+---
+
+## Phase 21.4: Modularization (Post-Live, formalized 2026-04-26)
+
+**Status:** Formally inserted into the roadmap on 2026-04-26 in response to Kyle's question about where comprehensive lever-to-database migration lives. The phase has existed as an architectural plan in `Claude Comms and Packages/Scope Files/MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` since B63 close, but was not formally scheduled as a discrete phase header in this roadmap until now.
+
+**Goal:** Extract 8 canonical modules from the current monolith and align all configuration on the 5D `(exchange, asset_class, filter, strategy, regime)` resolution matrix backed by `module_constants` (B65.1 infrastructure). Comprehensive migration of all ~69 hardcoded levers (Item 15 inventory) plus any additional levers identified during sweep, into `module_constants` table with proper most-specific-wins resolution.
+
+**Why post-live:** Modularization is a coherent architectural exercise that benefits from being done once with full intent rather than piecemeal under deadline. By post-live, the system has live-trading evidence for which levers actually matter most (and at what resolution scope), which informs the migration. Pre-live batches that touch hardcoded constants migrate inline as part of their own scope so the modularization sweep doesn't have to clean up new debt accumulated in the meantime.
+
+**Why before Phase 21.5 Exchange Expansion:** the 5D matrix is the prerequisite for adding new exchanges and asset classes in Phase 21.5. Without modularization, every new exchange or asset class would have to thread through the existing monolith — defeating the architectural intent.
+
+### 21.4.1 8-module extraction
+
+Per `MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md`:
+
+1. **Exchange Adapter** — abstracts exchange-specific I/O (Kraken REST/WS, future Binance/Coinbase/etc.)
+2. **Filter Module Family** — pluggable filter set per asset class
+3. **Context Provider (MCE)** — extended to consume external data (B67/B68 outputs)
+4. **Eligibility** — gates which signals proceed to scoring
+5. **Scoring Kernel** — computes FinalScore / HybridScore / etc. with module_constants-resolved weights
+6. **Threshold** — DB-tunable per (exchange, asset_class, filter, strategy, regime)
+7. **Profitability** — net-EV computation with friction, slippage, fees
+8. **Ranking** — ranks eligible signals for slot allocation
+
+### 21.4.2 Comprehensive lever-to-`module_constants` migration
+
+Sweep all hardcoded constants across the codebase and migrate to `module_constants` with proper resolution scope. Sources:
+
+- **Item 15 inventory** — 51 static + 18 adaptive levers documented in `B63_ITEM15_ADAPTIVE_FRAMEWORK_AUDIT.md`
+- **Levers added since Item 15** — any constants introduced in B65.x, B66, B67, B68, B69, B70 batches that weren't DB-migrated inline at the time
+- **Levers discovered during sweep** — anywhere a `const X = NUMBER` shows up in scoring / threshold / profitability / strategy logic
+
+Output: `LEVER_INVENTORY.md` listing every promotable constant with current location, candidate module, candidate resolution scope, current value, and migration risk rating.
+
+### 21.4.3 storage.ts modularization (folded in from Phase 16.2)
+
+Phase 16.2's "storage.ts must be modularized BEFORE legacy tables are dropped" is also covered here as part of the 8-module extraction (Exchange Adapter + per-domain storage). The Phase 16 reference may need to be re-sequenced if the modularization phase happens later than Phase 16; alternative is to do a minimum storage.ts split as part of Phase 16 cleanup and the full split as part of 21.4.
+
+**Open question for Kyle:** is the post-live timing of 21.4 still the right call, or does the lever-migration sub-phase (21.4.2) need to move earlier (pre-Phase-16) for cleaner legacy cleanup?
+
+**Phase 21.4 expected outcome:** monolith decomposed into 8 modules with DB-resolvable constants. Adding a new exchange or asset class becomes a configuration-and-adapter exercise, not a code-rewrite exercise. Phase 21.5 (Exchange Expansion) becomes feasible.
 
 ---
 

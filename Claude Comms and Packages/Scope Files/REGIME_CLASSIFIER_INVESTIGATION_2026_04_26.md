@@ -267,4 +267,55 @@ Per Kyle directive 2026-04-26, spot-checked the other major B63 audit findings (
 
 ---
 
-*End of investigation. Findings actionable. Awaiting Langston review + Kyle decision on §8.1 (now B65.6, scope drafted 2026-04-26 — see `BATCH_65_6_SCOPE.md`) and §8.3 (SQE Item 18 re-validation requirement, now codified in POST_AUDIT_ROADMAP Phase 19.4).*
+## 12. Post-B62 data correction (added 2026-04-26 same-day, Kyle directive)
+
+**04-18 is pre-B62.** B62 Phase 1 (the regime classifier rebuild itself) was committed at `b2a446a7` on 2026-04-16 ~01:45 UTC, iterated through B62 closure on 2026-04-19 23:59 UTC+2. To safely analyze the *current* classifier behavior, all analyses must restrict to **2026-04-20 onward** (POST_B62_CUTOFF_MS = 1776643200000 ms).
+
+This invalidates the §11 findings that included pre-B62 data. Re-running the spot-checks on post-B62 data only (740 trades, 2026-04-20 → 04-25):
+
+**Day quality post-B62:**
+
+| Day | n | WR | Quality |
+|---|---:|---:|---|
+| 2026-04-20 | 58 | 69.0% | CLEAN |
+| 2026-04-21 | 61 | 59.0% | CLEAN |
+| **2026-04-22** | **239** | **18.8%** | **HOSTILE** |
+| 2026-04-23 | 56 | 41.1% | CLEAN |
+| 2026-04-24 | 186 | 36.0% | CLEAN |
+| 2026-04-25 | 140 | 26.4% | MIXED |
+
+**04-22 still flags as the canonical hostile day.** The investigation finding about 04-22 stands as a post-B62 finding. **04-18 is removed from the canonical positive cases** — it was running a different classifier and is not a valid evidence point for the current TFS over-classification issue.
+
+**Revised Item 18 spot-check (post-B62 only):**
+
+- FinalScore r=−0.140 full, r=−0.094 HOSTILE, r=−0.057 CLEAN, r=+0.005 MIXED. **Anti-predictive signal is STRONGER here than the original Item 18 claim of r=−0.017** (which was likely averaged across pre-B62 + post-B62). Hostile-amplified but persists on CLEAN days too. **Item 18's FinalScore-anti-predictive finding probably stands** — partially window-amplified, but not a pure window-confound artifact.
+- Source pools: **quant-strong_trend = WORST (28.3% WR / −$7.08 net).** Pattern pool leads (57.1% WR / +$0.26 net). On CLEAN days quant-strong_trend = 42.0% WR / −$1.13 (still net negative). **Item 18's "only quant-strong_trend net-profitable" claim is INVERTED from post-B62 truth — strong_trend is the LEAST profitable pool.** Whatever Item 18 measured does not match current behavior.
+
+**Revised Item 15 spot-check (post-B62 only):**
+
+- ExpectedEdge r=+0.008 full, r=−0.021 HOSTILE, r=−0.035 CLEAN, r=+0.261 MIXED. **Original Item 15 claim of r=−0.130 does not replicate at the strength claimed in any segment.**
+- PredConf r=−0.097 full, r=+0.006 HOSTILE, r=−0.042 CLEAN, r=+0.025 MIXED. **Mild anti-predictive across full window but mostly noise per-segment.** Item 15's PredConf design-flaw claim probably still stands at the design level but the empirical magnitude is smaller than originally reported.
+
+**Revised Item 19 spot-check (post-B62 only):**
+
+- Same-cycle batch correlation = 71.8% all-same outcome (HOSTILE 75.7% / CLEAN 69.2%). **Reproduces lower than the original 87.8% claim** but the hostile-amplification pattern holds. Reinterpretation note (global state dominates short-horizon outcome) stands.
+
+**Updated summary across the audits:**
+
+| Audit | Post-B62 verdict |
+|---|---|
+| Item 18 FinalScore anti-predictive | **STRONGER on post-B62.** Real signal. Action: re-validate magnitude with sibling-strategy controls, but the direction is robust. |
+| Item 18 "only quant-strong_trend net-profitable" | **INVERTED from current truth.** quant-strong_trend is the WORST pool. Whatever Item 18 measured does not apply. Action: discard. |
+| Item 15 ExpectedEdge anti-predictive | **Does not replicate.** Original strength likely from a different cohort. Action: discard unless re-derived. |
+| Item 15 PredConf design flaw | **Mild signal at the design level.** Magnitude smaller than originally reported. Action: re-derive empirically before any Phase 19.4 action. |
+| Item 19 batch correlation | **Reproduces lower (~72% vs 88%) but hostile-amplification pattern holds.** Reinterpretation as "global state dominance" stands. Action: feed AMR design, not cadence change. |
+
+**Implications for B65.6 Phase A:**
+
+- Use **04-20 → 04-25 only** for the input-space characterization (740 trades total).
+- 04-22 is the single canonical false-positive-TFS day in the data window. 04-21 + 04-23 + 04-24 + 04-25 are the comparison days. 04-18 is OUT.
+- Sample size is smaller than originally hoped (740 vs 2200+) but cleaner. May need to extend the observation window forward (continue collecting post-B65.6-Phase-A data through next several days) before backtest in Phase C.
+
+---
+
+*End of investigation. Findings actionable. Awaiting Langston review + Kyle decision on §8.1 (now B65.6, scope drafted 2026-04-26 — see `BATCH_65_6_SCOPE.md`) and §8.3 (SQE Item 18 re-validation requirement, now codified in POST_AUDIT_ROADMAP Phase 19.4 with the corrected post-B62-only context).*

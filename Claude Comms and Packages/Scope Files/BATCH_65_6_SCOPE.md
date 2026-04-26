@@ -36,12 +36,14 @@ Same structure as B65.5. Each phase gates the next.
 
 **Goal:** for the 04-22 cohort of 195 TFS-classified pairs that lost ~86% of their trades, characterize what the inputs to the classifier looked like at entry vs what the inputs to the 6 STRUCTURAL_TRANSITION-classified pairs (83% WR) looked like. Find the input-space dimension(s) that separate the winning STR-tagged trades from the losing TFS-tagged trades.
 
+**Data scope (post-B62 only, Kyle directive 2026-04-26):** all analysis must restrict to **2026-04-20 onward**. The pre-B62 classifier was a different code path; including 04-18 or earlier confounds the analysis with classifier-version differences. 04-18 is OUT.
+
 **Tasks:**
 
 1. Pull all 04-22 trades + the inputs that fed the per-pair classifier at entry: `dbsScore`, ADX (`dx`), volatility (`vol`), momentum (`mom`), and any volume features available in the VTS log signal payload.
-2. Repeat for 04-18 (the other catastrophic day) — does the same input-space pattern hold, or is 04-18 a different failure shape?
-3. Cross-reference with at least two clean comparison days (04-21 and 04-24) — do the inputs that produced winning TFS classifications on those days look different from the inputs that produced losing TFS classifications on 04-22?
-4. Output: `B65_6_PHASE_A_CLASSIFIER_INPUT_AUDIT.md` with side-by-side input distributions on hostile vs clean days, and a quantified separating axis if one exists.
+2. Cross-reference with the four post-B62 clean/mixed comparison days (04-20, 04-21, 04-23, 04-24, 04-25) — do the inputs that produced winning TFS classifications on those days look different from the inputs that produced losing TFS classifications on 04-22?
+3. The post-B62 sample is smaller than originally hoped (740 trades total) but cleaner. If Phase A's separating signal is borderline due to sample size, plan to extend the observation window forward over the next several days before opening Phase C backtest.
+4. Output: `B65_6_PHASE_A_CLASSIFIER_INPUT_AUDIT.md` with side-by-side input distributions on hostile-day-04-22 vs clean-comparison-days, and a quantified separating axis if one exists.
 
 **Deliverable gate:** if no separating axis exists in the inputs the classifier already has access to, Phase B has to look at adding NEW inputs (e.g., volume profile, order book features, cross-pair regime concentration). If a separating axis DOES exist in current inputs, Phase B is the much smaller exercise of changing the threshold logic to incorporate it.
 

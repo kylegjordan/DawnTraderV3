@@ -220,14 +220,16 @@ To answer when the batch is scoped (post Paper Mode Audit):
 
 The following concrete events from VTS observation are canonical positive cases that any Phase 19.5 AMR detection-layer design must catch. If the detector cannot flag these in the first 30–60 minutes of the affected window, it is not detecting the phenomenon AMR is intended to address.
 
-### 10.1 The 04-18 streakiness day (B63 origin)
+### 10.1 The 04-18 streakiness day (B63 origin) — RETAINED AS HISTORICAL EVIDENCE, NOT A CURRENT-CLASSIFIER POSITIVE CASE
 
+**Status update 2026-04-26 (Kyle directive):** 04-18 ran the **pre-B62 regime classifier** (B62 Phase 1 deployed at commit `b2a446a7`, 2026-04-16 → close 2026-04-19). The 04-18 evidence is preserved here as the trigger for the streakiness analysis and the AMR concept itself, but it is **NOT a valid evidence point for current-classifier behavior** and must NOT be used in the B65.6 input-space audit or in any post-B62 spot-check work. The streakiness phenomenon and the absence of a hostile-window response layer are still real findings; only the specific classifier-output details from 04-18 are no longer comparable to today's classifier.
+
+Original 04-18 details (kept for historical traceability):
 - 70-loss streak documented in `Claude Comms and Packages/Scope Files/B63_STREAKINESS_ANALYSIS.md`
 - Runs test z = −15.57, p < 10⁻⁵⁰
-- 100% of affected trades classified as `globalRegime = TREND_FRIENDLY_STABLE` while the market disagreed catastrophically
-- Existing mode overlay (Directive 11.7S) did not engage because its single stability sensor read TFS as stable
+- Pre-B62 classifier in effect — globalRegime / per-pair regime / DBS readings on this day reflect a different code path
 
-### 10.2 The 04-22 hostile-window day (B65.5 Phase A0 finding)
+### 10.2 The 04-22 hostile-window day (B65.5 Phase A0 finding) — CURRENT CANONICAL CASE
 
 - 239 closed VTS trades system-wide, **18.8% WR overall** — every strategy struggled
 - vwap_pullback-in-strong-trend-lane cohort: 26 trades, **1 winner / 25 losers**, sumNet −$1.01 — virtually all the cohort net loss for the entire 2026-04-21 → 2026-04-25 observation window came from this single day
@@ -236,9 +238,17 @@ The following concrete events from VTS observation are canonical positive cases 
 - Existing mode overlay did not engage (same reason as 04-18)
 - Source: `Claude Comms and Packages/Scope Files/B65_5_PHASE_A0_WINDOW_CONTROL.md`
 
-### 10.3 Recurrence pattern (Langston cc-inbox #821, 2026-04-26)
+### 10.3 Recurrence pattern — REVISED 2026-04-26
 
-**Two catastrophic days in a single ~5-day observation window, both with the same failure mode (globalRegime = TFS while the market disagreed catastrophically).** This is not a one-off anomaly. It is a recurring failure mode of the regime classifier in conjunction with the absence of a hostile-window response layer. The recurrence frequency means:
+**Original framing (Langston cc-inbox #821, before 04-18 was identified as pre-B62):** "Two catastrophic days in one week, same mechanism, different classifiers" was a stronger claim than the post-B62-only data supports. Under post-B62 data only, **04-22 is the single canonical hostile-day case in the available window**. We do not yet have a second post-B62 hostile day in the data to confirm recurrence.
+
+**What the post-B62 evidence actually supports:**
+
+1. The TFS over-classification issue (B65.6) is real on post-B62 data — 04-22 by itself is sufficient evidence of the false-positive-TFS pattern.
+2. The streakiness phenomenon as described in `B63_STREAKINESS_ANALYSIS.md` was measured on data that includes pre-B62 days. The phenomenon may be present on post-B62 data, may have been reduced by B62, or may be expressed differently. **Re-measurement on post-B62-only data is required before treating recurrence as established.**
+3. The AMR detection layer is still motivated — 04-22 alone shows the system trading 239 entries through a hostile window with the existing mode overlay never engaging. One catastrophic post-B62 day with no protection is enough to motivate the build, even if the recurrence frequency claim needs re-validation.
+
+The recurrence frequency means (revised — original list mostly stands):
 
 1. Per-strategy detector redesign is the wrong response — every strategy is affected, the failure is upstream.
 2. The AMR detection layer is needed to identify these days in the first 30–60 minutes and throttle trading before the system runs hundreds of entries through the window.
