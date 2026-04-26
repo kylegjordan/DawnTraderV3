@@ -217,4 +217,54 @@ The Phase A0 finding that B63 Item 13's BUILD_DEDICATED verdict was confounded b
 
 ---
 
-*End of investigation. Findings actionable. Awaiting Langston review + Kyle decision on §8.1 (new batch) and §8.3 (SQE Item 18 re-validation requirement).*
+## 11. Items 15 + 19 spot-check addendum (added 2026-04-26 same-day)
+
+Per Kyle directive 2026-04-26, spot-checked the other major B63 audit findings (Items 15 and 19) for the same window-confound that affected Item 18.
+
+**Item 15 — ExpectedEdge anti-predictive (claimed r=−0.130):**
+
+| Segment | n | WR | r |
+|---|---:|---:|---:|
+| Full window | 2212 | 38.0% | −0.020 |
+| HOSTILE days | 569 | 16.5% | +0.014 |
+| CLEAN days | 1220 | 51.6% | −0.056 |
+| MIXED days | 423 | 27.4% | +0.133 |
+
+**Verdict:** original claim (r=−0.130) does not replicate at the strength claimed in any segment. Whatever signal exists is weak. Could be a tighter cohort or different computation method in Item 15. **Do not act on Item 15's ExpectedEdge anti-predictive finding without re-validation.**
+
+**Item 15 — PredConf self-cancellation (qualitative claim, design flaw):**
+
+| Segment | n | WR | r |
+|---|---:|---:|---:|
+| Full window | 2212 | 38.0% | −0.064 |
+| HOSTILE days | 569 | 16.5% | −0.097 |
+| CLEAN days | 1220 | 51.6% | −0.028 |
+| MIXED days | 423 | 27.4% | +0.034 |
+
+**Verdict:** PredConf shows mild anti-predictivity that's amplified on hostile days but persists weakly even on clean days. **Item 15's PredConf design-flaw claim probably stands at the design level even with hostile-window influence.** Do re-validate with sibling-strategy WR controls before any Phase 19.4 action.
+
+**Item 19 — Scan-cycle batch correlation (claimed 87.8% same-outcome):**
+
+| Segment | Multi-trade batches | All-same outcome | % |
+|---|---:|---:|---:|
+| Full window | 213 | 170 | 79.8% |
+| HOSTILE days | 75 | 64 | 85.3% |
+| CLEAN days | 101 | 79 | 78.2% |
+| MIXED days | 37 | 27 | 73.0% |
+
+**Verdict:** original claim (87.8%) reproduces approximately (my 79.8% on a slightly different methodology), AND the correlation IS higher on hostile days (85.3% vs 78.2% clean). **The "scan-cycle batches correlate" finding is partly window-driven** — on hostile days, all trades in a batch trivially correlate because everything loses. The actual interpretation needs adjustment: it's not (or not only) "scan cadence is wrong"; it's "same-cycle trades all see the same global market state, which dominates short-horizon outcome more than per-strategy edge does." **This is itself an argument for the AMR approach (catch hostile windows) rather than per-strategy detector tweaks.** Item 19's MCE-cadence-correct conclusion remains valid; only the interpretation of the batch-correlation finding needs re-framing.
+
+**Summary across all three audits:**
+
+| Audit | Hostile-window confound severity |
+|---|---|
+| Item 18 SQE | **HEAVY** — FinalScore anti-predictive is a hostile-window artifact; "only quant-strong_trend net-profitable" doesn't replicate |
+| Item 15 ExpectedEdge | **WEAK / DOES NOT REPLICATE** — original strength may be a different cohort |
+| Item 15 PredConf | **MILD AMPLIFICATION** — real design-level issue, hostile-amplified |
+| Item 19 batch correlation | **REINTERPRETATION NEEDED** — finding stands as data; interpretation shifts from "cadence" to "global-state dominance" |
+
+**Phase 19.4 SQE recalibration must apply sibling-strategy WR controls + per-day quality segmentation when re-validating any of these findings before acting on them.** That requirement was added to POST_AUDIT_ROADMAP.md Phase 19.4 + POST_B62_PRE_LAUNCH_PLAN.md in the 2026-04-26 governance commits.
+
+---
+
+*End of investigation. Findings actionable. Awaiting Langston review + Kyle decision on §8.1 (now B65.6, scope drafted 2026-04-26 — see `BATCH_65_6_SCOPE.md`) and §8.3 (SQE Item 18 re-validation requirement, now codified in POST_AUDIT_ROADMAP Phase 19.4).*
