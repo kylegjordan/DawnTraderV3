@@ -21,6 +21,11 @@
 import type { OHLCData, MarketRegimeType, RegimeCalculationResult } from './market-regime.types';
 import type { CanonicalRegimeType } from '../config/canonical-regime-strategy-map';
 import type { DirectionalBiasResult } from './directional-bias.types';
+// B67.1: macro confidence modifier types — see server/core/metrics/macro-modifier.ts.
+// Imported here so MarketContext can carry the macro snapshot + modifier result
+// alongside other per-cycle fields, available to downstream consumers (B67.0
+// ablation hooks read the modifier value to populate alternate_decision JSONB).
+import type { MacroSnapshot, MacroModifierResult } from '../core/metrics/macro-modifier.js';
 
 /**
  * MarketIndicators — Superset of strategy-engine's TechnicalIndicators.
@@ -56,6 +61,23 @@ export interface RegimeContext {
 }
 
 /**
+ * B67.1 — Macro context attached to MarketContext.
+ *
+ * `modifier` is null when `b67_1_enabled=false` (shadow mode at deploy). When
+ * non-null, the modifier was applied to `regime.confidence` inside
+ * calculatePairRegime, and downstream consumers (ablation hooks) can read both
+ * the modifier value and the originating snapshot for telemetry purposes.
+ *
+ * Populated by `market-context-engine.ts` once per cycle (NOT per pair — the
+ * macro snapshot is global) and attached identically to every per-pair
+ * MarketContext returned in that cycle.
+ */
+export interface MacroContext {
+  snapshot: MacroSnapshot;
+  modifier: MacroModifierResult | null;
+}
+
+/**
  * MarketContext — The complete output of MCE.computeContext().
  * Contains pre-computed indicators + regime context + directional bias for a single symbol + OHLC pass.
  */
@@ -67,6 +89,10 @@ export interface MarketContext {
   raw: RegimeCalculationResult; // Full regime result for consumers that need raw metrics
   // Phase 14: Directional Bias
   directionalBias: DirectionalBiasResult;
+  // B67.1: macro context (optional — present once macro feed is wired in MCE).
+  // null `modifier` field signals b67_1_enabled=false; absent `macro` field
+  // signals pre-B67.1 contexts (callers must handle both for back-compat).
+  macro?: MacroContext;
 }
 
 /**

@@ -13,6 +13,10 @@ import { knowledgeRetrievalService } from './knowledge-retrieval'; // Phase 16.0
 import { startDriftDetector } from './drift-detector'; // L11
 // Phase 13: Market Context Engine — centralized indicator + regime computation
 import { initMarketContextEngine } from './market-context-engine';
+// B67.1: External macro feed (CoinGecko + Binance public futures). Polls every
+// b67_1_external_feed_cache_seconds and exposes a singleton snapshot consumed
+// by MCE's macro-modifier refresh loop.
+import { initExternalMacroFeed } from './external-macro-feed';
 import { updateRegimePerformanceFromVTS, getVTSTelemetryStatus } from '../core/logging/vts-telemetry'; // 11.7B
 import { recalibratePredictiveWeights, getRecalibrationStatus } from '../scripts/recalibrate-predictive-weights'; // 11.7D
 import { db } from '../db';
@@ -24,6 +28,14 @@ startDriftDetector();
 // Phase 13: Initialize MCE at startup (no data needed, computes on-demand)
 initMarketContextEngine();
 console.log('[Phase13][SCHEDULER] Market Context Engine initialized');
+
+// B67.1: Start the external macro feed singleton. Polls CoinGecko + Binance
+// public futures on its own interval. MCE reads cached snapshot + baseline
+// from this service. Errors logged + swallowed; null modifier on cold-start.
+initExternalMacroFeed().catch((err) => {
+  console.error('[B67.1][SCHEDULER] External macro feed init failed:', err);
+});
+console.log('[B67.1][SCHEDULER] External macro feed initialized');
 
 /**
  * Phase 8.9: Autonomy Layer Scheduler

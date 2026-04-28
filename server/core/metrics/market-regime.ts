@@ -122,10 +122,27 @@ export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
  * TFS threshold 0.30 is the only tested value that passes the 2.0% flicker ceiling.
  * See BATCH_62_PHASE0_REPLAY_ANALYSIS.md §1.3 for the sweep evidence.
  *
+ * B67.1: Optional `macroModifier` parameter — when supplied, multiplies the
+ * computed confidence BEFORE the final clamp. Label is unchanged. Caller
+ * (market-context-engine.ts) only supplies the modifier when
+ * `module_constants.macro_modifier.b67_1_enabled = true`. When omitted (or
+ * 1.0), behavior is identical to pre-B67.1.
+ *
+ * Confidence clamp: post-modifier upper bound raised 0.95 → 1.0 to accommodate
+ * 0.95 × 1.05 = 0.9975. Verified zero callers asserting on the prior 0.95
+ * ceiling (BATCH_67_1_PRE_AUDIT.md §1.1). Lower bound 0.4 retained as hard
+ * floor — pre-B67 invariant for downstream consumers.
+ *
  * @param ohlcData - OHLC candles
  * @param dbsScore - Directional Bias Score from computeDirectionalBias() (default 0)
+ * @param macroModifier - Optional B67.1 multiplier on confidence in [0.85, 1.05].
+ *                        Default 1.0 (no-op). When passed, applied pre-clamp.
  */
-export function calculatePairRegime(ohlcData: OHLCData[], dbsScore: number = 0): RegimeCalculationResult {
+export function calculatePairRegime(
+  ohlcData: OHLCData[],
+  dbsScore: number = 0,
+  macroModifier: number = 1.0,
+): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
   const mom = computeMomentum(ohlcData);
   const dx = computeADX(ohlcData);
@@ -173,7 +190,11 @@ export function calculatePairRegime(ohlcData: OHLCData[], dbsScore: number = 0):
     confidence = 0.50 + Math.min(vol * 5, 0.10) + Math.min(absDbs * 0.15, 0.05);
   }
 
-  confidence = Math.min(Math.max(confidence, 0.4), 0.95);
+  // B67.1: apply macro modifier BEFORE final clamp. macroModifier defaults to
+  // 1.0 (no-op) for callers that haven't been updated. Upper bound raised
+  // 0.95 → 1.0 (see function header).
+  confidence = confidence * macroModifier;
+  confidence = Math.min(Math.max(confidence, 0.4), 1.0);
 
   return {
     regime,

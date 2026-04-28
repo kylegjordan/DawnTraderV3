@@ -96,7 +96,9 @@ import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
 // Batch 19G Fix 5: Shared hybrid compatibility registry (single source of truth)
 import { findHybridMatch, HYBRID_COMPATIBILITY } from '../config/hybrid-compatibility-registry.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
-import { emitAblationRecord } from './factor-ablation-emitter.js';
+import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emitter.js';
+// B67.1 — macro modifier alternate row builder
+import { buildB67_1Alternate } from '../core/metrics/macro-modifier.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 
@@ -635,6 +637,25 @@ export class SignalOrchestrator {
     // replay-ablation job.
     //
     // Fire-and-forget; classifier hot path never blocks on this.
+    // B67.1 — push the macro modifier alternate when the modifier is in play.
+    // null modifier = shadow mode (b67_1_enabled=false) OR cold-start.
+    // In shadow mode we still want to record what the modifier WOULD have
+    // produced, so we read MCE's macro context and emit even when value=1.0.
+    const ablationAlternates: FactorAlternate[] = [];
+    {
+      const macro = getMarketContextEngine().getCurrentMacroContext();
+      if (macro?.modifier) {
+        ablationAlternates.push(
+          buildB67_1Alternate(
+            extendedMetrics.confidence ?? 0.5,
+            macro.modifier,
+            extendedMetrics.regime ?? 'UNKNOWN',
+            true,
+          ),
+        );
+      }
+    }
+
     emitAblationRecord(
       { kind: 'active_signal', signalId },
       rawSignal.symbol,
@@ -648,7 +669,7 @@ export class SignalOrchestrator {
           sourcePool: rawSignal.metadata?.sourcePool,
         },
       },
-      [], // factor alternates — populated by B67.1+ producers
+      ablationAlternates,
     );
 
     // M5B: VTS capture DISABLED - VTS now runs autonomously

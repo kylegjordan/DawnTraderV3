@@ -37,6 +37,7 @@ import type {
   MarketIndicators,
   RegimeContext,
   MCEConfig,
+  MacroContext,
 } from '../types/market-context.js';
 import { DEFAULT_MCE_CONFIG } from '../types/market-context.js';
 import type { OHLCData, RegimeCalculationResult } from '../types/market-regime.types';
@@ -55,6 +56,20 @@ import { directionalBiasStore } from '../core/metrics/directional-bias-store.js'
 import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
 // Phase 15b B61: DBS telemetry emitter (observational, feature-flagged)
 import { emitMceTelemetry } from './phase15b-dbs-telemetry.js';
+// B67.1: macro confidence modifier — feed snapshot + modifier computation.
+// MCE reads the snapshot once per cycle (cheap; cached in feed singleton) and
+// computes the modifier once, threading it into every per-pair calculatePairRegime
+// call in this cycle. Per-pair recomputation NOT done — the modifier is global.
+import {
+  getLatestMacroSnapshot,
+  getLatestMacroBaseline,
+} from './external-macro-feed.js';
+import {
+  computeMacroModifier,
+  type MacroModifierConfig,
+  type MacroModifierResult,
+} from '../core/metrics/macro-modifier.js';
+import { getConstant } from './module-constants-service.js';
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -86,6 +101,15 @@ export class MarketContextEngine {
   // observed, as the "expected universe size" for coverage gating.
   private peakCacheSize: number = 0;
 
+  // ─── B67.1: macro modifier per-cycle cache ────────────────────────────────
+  // Macro snapshot + modifier are GLOBAL per cycle (not per-pair). Resolve
+  // once per `cacheTTLMs` window and reuse across every per-pair computeContext
+  // call within that window. Cache miss → re-resolve from module_constants
+  // and recompute modifier. Avoids hammering module_constants on every pair.
+  private macroCachedAt: number = 0;
+  private macroCachedContext: MacroContext | null = null;
+  private macroConfigCache: MacroModifierConfig | null = null;
+
   constructor(config: Partial<MCEConfig> = {}) {
     this.config = { ...DEFAULT_MCE_CONFIG, ...config };
     console.log('[Phase14][MCE] Market Context Engine created');
@@ -93,19 +117,136 @@ export class MarketContextEngine {
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
+  // ─── B67.1: macro context refresh timer ──────────────────────────────────
+  private macroRefreshTimer: NodeJS.Timeout | null = null;
+
   start(): void {
     this.running = true;
+    // B67.1: kick off periodic macro context refresh. First refresh runs
+    // immediately so cold-start window is bounded by feed.getLatest() not by
+    // refresh cadence. Errors swallowed (logged) — null context = no-op
+    // modifier in computeContext.
+    void this.refreshMacroContext();
+    if (this.macroRefreshTimer === null) {
+      this.macroRefreshTimer = setInterval(() => {
+        void this.refreshMacroContext();
+      }, this.config.cacheTTLMs);
+    }
     console.log('[Phase14][MCE] Started');
   }
 
   stop(): void {
     this.running = false;
     this.cache.clear();
+    if (this.macroRefreshTimer !== null) {
+      clearInterval(this.macroRefreshTimer);
+      this.macroRefreshTimer = null;
+    }
+    this.macroCachedContext = null;
+    this.macroCachedAt = 0;
     console.log('[Phase14][MCE] Stopped, cache cleared');
+  }
+
+  /**
+   * B67.1: Refresh the macro context cache. Called periodically by the
+   * `macroRefreshTimer`. Reads `module_constants.macro_modifier.*` for config,
+   * snapshot + baseline from `external-macro-feed`, computes modifier (or
+   * returns null when `b67_1_enabled=false`), stores in MCE state.
+   *
+   * Errors logged + swallowed — caller (timer) cannot await. On error the
+   * previous cached context is retained until the next successful refresh.
+   * Worst case: stale-data fallback fires inside the modifier itself.
+   */
+  private async refreshMacroContext(): Promise<void> {
+    try {
+      const enabled = await getConstant<boolean>(
+        'macro_modifier',
+        'b67_1_enabled',
+        { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any,
+      );
+      const snapshot = getLatestMacroSnapshot();
+
+      // When b67_1_enabled=false (shadow at deploy), still PUBLISH the
+      // snapshot but with a null modifier so downstream ablation hooks can
+      // see "what the modifier WOULD have been" without applying it. Per
+      // B67.0 framework: shadow rows still emit alternate decisions.
+      if (enabled !== true) {
+        this.macroCachedContext = { snapshot, modifier: null };
+        this.macroCachedAt = Date.now();
+        return;
+      }
+
+      // Resolve config from module_constants. Defaults from scope §4 used
+      // only when the constant row is missing (post-rollback or pre-seed).
+      const [
+        btcW,
+        fundW,
+        mcapW,
+        modMin,
+        modMax,
+        staleSec,
+        zMinN,
+      ] = await Promise.all([
+        getConstant<number>('macro_modifier', 'b67_1_btc_dominance_weight', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+        getConstant<number>('macro_modifier', 'b67_1_funding_weight', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+        getConstant<number>('macro_modifier', 'b67_1_mcap_momentum_weight', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+        getConstant<number>('macro_modifier', 'b67_1_modifier_min', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+        getConstant<number>('macro_modifier', 'b67_1_modifier_max', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+        getConstant<number>('macro_modifier', 'b67_1_external_feed_stale_seconds', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+        getConstant<number>('macro_modifier', 'b67_1_zscore_min_sample_count', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+      ]);
+
+      const cfg: MacroModifierConfig = {
+        enabled: true,
+        btcDominanceWeight: btcW ?? 0.40,
+        fundingWeight: fundW ?? 0.35,
+        mcapMomentumWeight: mcapW ?? 0.25,
+        modifierMin: modMin ?? 0.85,
+        modifierMax: modMax ?? 1.05,
+        staleSeconds: staleSec ?? 300,
+        zScoreMinSampleCount: zMinN ?? 48,
+      };
+      this.macroConfigCache = cfg;
+
+      const baseline = getLatestMacroBaseline();
+      const result: MacroModifierResult = computeMacroModifier(snapshot, baseline, cfg);
+
+      this.macroCachedContext = { snapshot, modifier: result };
+      this.macroCachedAt = Date.now();
+
+      console.log(
+        `[B67.1][modifier] value=${result.value.toFixed(4)} ` +
+          `btcZ=${result.btcDomZ.toFixed(3)} fundZ=${result.fundingZ.toFixed(3)} ` +
+          `mcapZ=${result.mcapZ.toFixed(3)} fallback=${result.fallbackActive} ` +
+          `stale=${result.staleDataFlag}`,
+      );
+    } catch (err) {
+      console.error(
+        '[B67.1][MCE] macro context refresh failed:',
+        err instanceof Error ? err.message : err,
+      );
+      // Keep prior cached context (or null on cold start). Modifier will be
+      // 1.0 (no-op) if context is null; otherwise the stale prior is used
+      // until the next successful refresh — same semantics as
+      // directional-bias-store stale snapshot retention.
+    }
   }
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  /**
+   * B67.1: Public accessor for the most recently refreshed macro context.
+   * Returns null when refresh has not yet succeeded (cold start), the feed
+   * is stale beyond the resolved threshold, or when `b67_1_enabled=false` is
+   * resolved with a null modifier (shadow at deploy).
+   *
+   * Consumers (signal-orchestrator + vts-runner ablation hooks) call this to
+   * build B67.1 FactorAlternate rows for the B67.0 emitter.
+   */
+  getCurrentMacroContext(): MacroContext | null {
+    return this.macroCachedContext;
   }
 
   // ─── Core: Compute Context ─────────────────────────────────────────────────
@@ -158,8 +299,21 @@ export class MarketContextEngine {
       components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 },
     };
 
-    // ── B62: Regime calculation receives DBS score as 4th input ──
-    const regimeResult = calculatePairRegime(ohlcData, directionalBias.score);
+    // ── B67.1: read pre-resolved macro context from MCE state (sync) ──
+    // Macro context is refreshed on a periodic timer started in MCE.start();
+    // here we just read whatever the most recent refresh produced. Null when
+    // refresh hasn't happened yet (cold start), refresh failed, or
+    // b67_1_enabled=false. In any null case calculatePairRegime sees
+    // macroModifier=1.0 (no-op, identical to pre-B67.1 behavior).
+    const macroContext = this.macroCachedContext;
+    const macroModifierValue = macroContext?.modifier?.value ?? 1.0;
+
+    // ── B62 + B67.1: Regime calculation receives DBS + macro modifier ──
+    const regimeResult = calculatePairRegime(
+      ohlcData,
+      directionalBias.score,
+      macroModifierValue,
+    );
 
     const indicators: MarketIndicators = {
       vwap,
@@ -192,6 +346,10 @@ export class MarketContextEngine {
       regime,
       raw: regimeResult,
       directionalBias,
+      // B67.1: attach macro context for downstream consumers (ablation hooks
+      // read `modifier` to populate alternate_decision JSONB). undefined when
+      // refresh hasn't happened yet (cold start) so back-compat preserved.
+      macro: macroContext ?? undefined,
     };
 
     // Cache

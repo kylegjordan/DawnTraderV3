@@ -97,7 +97,9 @@ import { computeRankingScore, normalizeNetReturn } from '../config/ranking-weigh
 import '../core/governance/governance-persistence.js'; // Batch 46: Auto-persist/rehydrate governance state
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
-import { emitAblationRecord } from './factor-ablation-emitter.js';
+import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emitter.js';
+// B67.1 — macro modifier alternate row builder
+import { buildB67_1Alternate } from '../core/metrics/macro-modifier.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
@@ -1371,6 +1373,25 @@ async function generatePhase10Signal(
   // B67.1+ producers ship, each adds its FactorAlternate here. signal.id is
   // the synthetic VTS string trade id (vsig_p10_*) — the schema's
   // sourceType='vts_trade' branch carries this in vts_trade_id (TEXT).
+  // B67.1 — VTS path mirror of the orchestrator alternate. Same shape, same
+  // logic — push the macro modifier alternate row when MCE has a non-null
+  // modifier (in shadow mode the alternate still emits with value=1.0 so the
+  // ablation framework can observe the WOULD-BE counterfactual).
+  const _b67_1_alternates: FactorAlternate[] = [];
+  {
+    const _b67_1_macro = getMarketContextEngine().getCurrentMacroContext();
+    if (_b67_1_macro?.modifier) {
+      _b67_1_alternates.push(
+        buildB67_1Alternate(
+          predictiveConfidence ?? 0.5,
+          _b67_1_macro.modifier,
+          regime ?? 'UNKNOWN',
+          true,
+        ),
+      );
+    }
+  }
+
   emitAblationRecord(
     { kind: 'vts_trade', vtsTradeId: signal.id },
     symbol,
@@ -1384,7 +1405,7 @@ async function generatePhase10Signal(
         sourcePool,
       },
     },
-    [], // factor alternates — populated by B67.1+ producers
+    _b67_1_alternates,
   );
 
   return { signal, tradeRecord };
