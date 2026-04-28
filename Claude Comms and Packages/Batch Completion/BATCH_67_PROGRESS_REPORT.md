@@ -2,7 +2,7 @@
 
 **Author:** Claude Code
 **Opened:** 2026-04-28
-**Status:** OPEN — B67.0, B67.3, B67.1 sub-deliverables closed; B67.2, B67.4, B67.5 + calibration check remaining
+**Status:** OPEN — B67.0, B67.3, B67.1, B67.2 sub-deliverables closed (all LIVE); B67.4, B67.5 + calibration check remaining
 **Closes as:** `BATCH_67_COMPLETION_REPORT.md` once all 6 sub-deliverables are closed.
 
 This report stays open across multiple commits and accumulates the closure of each sub-deliverable as it ships. It becomes the completion report when the final sub-deliverable closes.
@@ -16,7 +16,7 @@ This report stays open across multiple commits and accumulates the closure of ea
 | B67.0 | Telemetry & ablation framework | ✅ CLOSED | `105d2b53` | 2026-04-28 |
 | B67.3 | Per-underlying position limits | ✅ CLOSED (shadow mode at deploy) | `ca0e2c2d` | 2026-04-28 |
 | B67.1 | Macro confidence modifier (BTC dominance + funding + mcap) | ✅ CLOSED (shadow mode at deploy) | `828f6d92` | 2026-04-28 |
-| B67.2 | Phase dimension (EARLY/PRIME/LATE) | ⏳ Pending | — | — |
+| B67.2 | Phase dimension (EARLY/PRIME/LATE) | ✅ CLOSED (LIVE) | `9f82f401` | 2026-04-29 |
 | — | Calibration check (gating event) | ⏳ Pending | — | — |
 | B67.5 | Wire regime confidence into 7 consumers | ⏳ Pending (gated on calibration pass) | — | — |
 | B67.4 | Realized-outcome feedback | ⏳ Pending | — | — |
@@ -203,7 +203,7 @@ See `Claude Comms and Packages/Change Lists/BATCH_67_3_CHANGE_LIST.md` for granu
 
 ---
 
-*This report is OPEN. Next update when B67.2 closes (B67.2 ships after B67.1 24h shadow soak per Option A serial sequencing).*
+*Superseded by the B67.1 cleanup + B67.2 closure block below.*
 
 ---
 
@@ -283,4 +283,4 @@ See `Claude Comms and Packages/Change Lists/BATCH_67_3_CHANGE_LIST.md` for granu
 
 ---
 
-*This report is OPEN. Next update when B67.2 closes (B67.2 ships after B67.1 24h shadow soak per Option A serial sequencing).*
+*Superseded by the B67.1 cleanup + B67.2 closure block below.*
