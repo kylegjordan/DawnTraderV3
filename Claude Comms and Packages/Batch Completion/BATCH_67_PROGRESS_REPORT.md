@@ -2,7 +2,7 @@
 
 **Author:** Claude Code
 **Opened:** 2026-04-28
-**Status:** OPEN — B67.0 sub-deliverable closed; B67.1, B67.2, B67.3, B67.4, B67.5 remaining
+**Status:** OPEN — B67.0, B67.3, B67.1 sub-deliverables closed; B67.2, B67.4, B67.5 + calibration check remaining
 **Closes as:** `BATCH_67_COMPLETION_REPORT.md` once all 6 sub-deliverables are closed.
 
 This report stays open across multiple commits and accumulates the closure of each sub-deliverable as it ships. It becomes the completion report when the final sub-deliverable closes.
@@ -15,7 +15,7 @@ This report stays open across multiple commits and accumulates the closure of ea
 |---|---|---|---|---|
 | B67.0 | Telemetry & ablation framework | ✅ CLOSED | `105d2b53` | 2026-04-28 |
 | B67.3 | Per-underlying position limits | ✅ CLOSED (shadow mode at deploy) | `ca0e2c2d` | 2026-04-28 |
-| B67.1 | Macro confidence modifier (BTC dominance + funding + mcap) | ⏳ Pending | — | — |
+| B67.1 | Macro confidence modifier (BTC dominance + funding + mcap) | ✅ CLOSED (shadow mode at deploy) | `828f6d92` | 2026-04-28 |
 | B67.2 | Phase dimension (EARLY/PRIME/LATE) | ⏳ Pending | — | — |
 | — | Calibration check (gating event) | ⏳ Pending | — | — |
 | B67.5 | Wire regime confidence into 7 consumers | ⏳ Pending (gated on calibration pass) | — | — |
@@ -203,4 +203,84 @@ See `Claude Comms and Packages/Change Lists/BATCH_67_3_CHANGE_LIST.md` for granu
 
 ---
 
-*This report is OPEN. Next update when B67.1 + B67.2 close (deploy together per scope §3 dependency chain).*
+*This report is OPEN. Next update when B67.2 closes (B67.2 ships after B67.1 24h shadow soak per Option A serial sequencing).*
+
+---
+
+## B67.1 closure — 2026-04-28 (shadow mode at deploy)
+
+**Sub-deliverable 3 of 6.** Macro confidence modifier on per-pair regime classifier output. Confidence-modifier architecture (Langston's Option C from master planning doc §3) — label preserved; only confidence is modulated by a multiplier in [0.85, 1.05]. Inputs: BTC dominance + funding rates + total-mcap momentum.
+
+**Commit:** `828f6d92` (2026-04-28)
+**Deploy:** PM2 restart #103 at 2026-04-28 ~21:54 UTC. HTTP 200.
+**CI:** run `25079501950` overall conclusion **SUCCESS** (Build/Test/Docker green; TS Check legacy-failing per established baseline).
+**Mode at deploy:** SHADOW (`b67_1_enabled=false`). Activation via `module_constants` flip after 24h soak.
+
+### Code shipped
+
+- New `server/core/metrics/macro-modifier.ts` — pure `computeMacroModifier()` (z-score normalized, min-48-sample floor + stale-data fallback) + `buildB67_1Alternate()` ablation row helper with reverse-derivation `confidence_without = modulated / modifier.value`
+- New `server/services/external-macro-feed.ts` — singleton polling CoinGecko `/global` (BTC dom + total mcap) + Binance `/fapi/v1/premiumIndex` (BTC + ETH 8h funding, OI-weighted 0.6/0.4). 60s cache, 720-sample rolling window for z-score baselines, partial-feed graceful, loud `[B67.1][feed]` PM2 logging.
+- Modified `server/core/metrics/market-regime.ts` — `calculatePairRegime()` accepts optional `macroModifier: number = 1.0` 3rd parameter. Applied PRE-clamp. Clamp upper bound raised 0.95 → 1.0.
+- Modified `server/services/market-context-engine.ts` — periodic `refreshMacroContext()` timer started in `start()`. Reads module_constants + feed snapshot/baseline + computes modifier on cadence. Sync `getCurrentMacroContext()` accessor for ablation hooks. `computeContext()` threads modifier into classifier + attaches macro context to returned MarketContext.
+- Modified `server/services/signal-orchestrator.ts` (line ~638) + `server/services/vts-runner.ts` (line ~1374) — push `buildB67_1Alternate()` row onto `emitAblationRecord` alternates when MCE has non-null modifier. In shadow mode (b67_1_enabled=false), MCE returns null modifier and the hook does NOT emit a B67.1 alternate.
+- Modified `server/services/market-snapshot.ts` — pre-existing stub reconciled per V2 pre-audit §3.5. Single caller `ai-market-analyzer.ts` transparently inherits real values. New `fundingRate?` field on type.
+- Modified `server/services/autonomy-scheduler.ts` — `initExternalMacroFeed()` boot wire-up.
+- Modified `server/types/market-context.ts` — `MacroContext` interface + optional `macro?` field on `MarketContext`.
+- New unit tests `server/tests/unit/b67-1-macro-modifier.test.ts` — 18 cases.
+
+### Module constants seeded (11 rows in `macro_modifier` module)
+
+`b67_1_enabled=false` (shadow), weights 0.40/0.35/0.25 (BTC dom/funding/mcap), band 0.85-1.05, cache 60s, stale 300s, lookbacks 30d, **`b67_1_zscore_min_sample_count=48`** (cold-start floor per Langston cc-inbox #844 §6.2). Migration `2026-04-28-b67-1-macro-modifier.sql` ran cleanly.
+
+### Workflow gates
+
+| Step | Status |
+|---|---|
+| 1 — Scope | ✅ `BATCH_67_1_SCOPE.md` Langston-approved (cc-inbox #844) |
+| 2 — Pre-audit | ✅ `BATCH_67_1_PRE_AUDIT.md` Langston-approved (cc-inbox #844) — full SIM walk + code-level inspection + §11 decision 12 BTC-correlation grep |
+| 3 — Implementation | ✅ Complete — TS clean on B67.1 files |
+| 4 — Code review | ✅ Langston-approved (cc-inbox #845) with one bug fixed (`mcapMomentum` field separated from raw `totalMarketCapUsd` per "no naming lie" rule); funding-weight inline doc added per non-blocking observation |
+| 5 — GitHub push + CI | ✅ commit `828f6d92`, run `25079501950` overall SUCCESS |
+| 6 — Staging deploy | ✅ PM2 #103, HTTP 200 within 12s |
+| 7 — First-pass verification (CC) | ✅ Feed alive, 11 seeds present, shadow mode confirmed |
+| 8 — Second-pass verification (Langston) | ✅ Acknowledged cc-inbox #847 (Langston cannot SSH; verification based on CC's Step-7 evidence which checks out) |
+| 9 — Iterate | None needed |
+| 10 — Governance | ✅ This block + `BATCH_67_1_CHANGE_LIST.md` + `BATCH_CATALOG.md` + `PHASE_HISTORY.md` + `SYSTEM_IMPACT_MAP.md` (B67.1 cross-cutting impact section) + `CHANGES_AND_FIXES.md` (B67.1 entry + governance-pattern entry) + MEMORY |
+| 11 — Completion ack | ⏳ Pending Kyle |
+
+### Verification log
+
+| Check | Result |
+|---|---|
+| TypeScript | `npx tsc --noEmit` zero new B67.1 errors |
+| CI | run `25079501950` conclusion SUCCESS (Build/Test/Docker green; TS Check same legacy pattern as prior runs) |
+| Migration | `npm run db:migrate` applied 1 pending migration cleanly |
+| HTTP health | `GET /api/health` → 200 within 12s of PM2 restart |
+| Module constants | 11 rows in `macro_modifier` module verified via psql (`b67_1_enabled=false` confirmed shadow) |
+| Feed alive | `[B67.1][feed] btc_dom=57.98% mcap_mom=0.00000 funding=0.000029 windows=(btc:2,fund:2,mcap:1)` per 60s |
+| Modifier in shadow | No `[B67.1][modifier]` lines yet (b67_1_enabled=false → MCE refresh sets modifier=null → classifier sees default 1.0 no-op) |
+| PM2 errors | Zero `[B67.1]` errors |
+
+### Activation plan post-shadow-soak
+
+1. ✅ Ship in shadow mode (current state)
+2. 24h soak so rolling baselines reach ≥48 samples (cold-start floor; happens at ~T+48 minutes from deploy)
+3. Flip `b67_1_enabled=true` via `UPDATE module_constants SET value='true'::jsonb WHERE module_name='macro_modifier' AND constant_name='b67_1_enabled';` (no code redeploy)
+4. Verify `[B67.1][modifier] value=X.XXXX btcZ=... fundZ=... mcapZ=... fallback=false stale=false` line appears
+5. Verify at least one `regime_factor_alternates` row with `factor_name='b67_1_macro_modifier'` and the agreed JSONB shape
+6. Begin 14-day observation period
+7. Calibration check at end of observation: tertile-monotonic WR(HIGH) − WR(LOW) ≥ 7pp at p<0.05, n≥150 per bucket. If pass, B67.5 ships. If fail, B67.4 (realized-outcome feedback) ships first to recalibrate.
+
+### Files in commit `828f6d92`
+
+10 code files (5 new + 5 modified) + 4 governance files (B67.1 + B67.2 scope + pre-audit) + B67.1 change list + B67.2 weight-table seed doc. See `Claude Comms and Packages/Change Lists/BATCH_67_1_CHANGE_LIST.md` for granular file-by-file change list.
+
+### Out of scope (deferred)
+
+- **DB persistence of rolling baseline** — in-memory only for v1. Promotes to `macro_feed_history` table in B67.4 only if calibration check requires restart-surviving baselines.
+- **B67.5 post-composition floor** — when both B67.1 + B67.2 enabled, effective admission-confidence range is `[0.32, 1.10]` (= `[0.4×0.80, 1.0×1.10]`). Below pre-B67 0.4 floor. Decorative today (no consumer reads confidence as a gate). B67.5 scope must define a post-composition floor for Kelly/EV consumers (per Langston cc-inbox #844). Pre-registered note in `BATCH_67_2_SCOPE.md` §9.
+- **Feed-fallback dedicated test file** — fallback semantics covered via the modifier's stale + cold-start tests. The HTTP-fetching feed itself is hard to unit-test cleanly without `vi.mock(fetch)` infrastructure; deferred unless Step-4 had required.
+
+---
+
+*This report is OPEN. Next update when B67.2 closes (B67.2 ships after B67.1 24h shadow soak per Option A serial sequencing).*

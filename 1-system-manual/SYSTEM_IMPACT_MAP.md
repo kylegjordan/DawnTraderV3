@@ -949,3 +949,55 @@ The regime classifier overhaul + external data integration plan lives at `Claude
 - **Add a new B67.x factor producer** → add the alternate computation at the wire-in sites in signal-orchestrator + vts-runner; do NOT modify the emitter API; new factor name strings should be `b67_X_<descriptor>` for consistency
 
 **Independent safety gap (separate from B67.0 scope):** B67.0 V2 pre-audit found the kill-switch `dailyLossKillSwitchPct` is configured (10% per UI) but `tripKillSwitch()` is only called manually — no auto-trip code exists. Logged as `POST_AUDIT_ROADMAP.md` Phase 19.4.5 item 9 marked **BLOCKING for live-trading activation**.
+
+---
+
+## B67.1 — Macro Confidence Modifier (2026-04-28, commit `828f6d92`)
+
+**New service:** `server/services/external-macro-feed.ts`. Singleton polling CoinGecko `/global` (BTC dominance + total mcap) and Binance `/fapi/v1/premiumIndex` (BTC + ETH 8h funding rates, OI-weighted 0.6/0.4). 60s cache + 720-sample in-memory rolling window for z-score normalization. Partial-feed graceful (one upstream fails → snapshot.partialFeed=true; both fail → stale snapshot retained). Loud `[B67.1][feed]` PM2 logging per cycle. Lifecycle: `initExternalMacroFeed()` at boot; `getLatestMacroSnapshot()` + `getLatestMacroBaseline()` sync read API.
+
+**New pure function:** `server/core/metrics/macro-modifier.ts`. `computeMacroModifier(snapshot, baseline, config)` returns `{value, btcDomZ, fundingZ, mcapZ, fallbackActive, staleDataFlag}`. Cold-start floor: when any baseline has < `b67_1_zscore_min_sample_count` (default 48) samples → modifier=1.0 + fallbackActive=true. Stale-data floor: snapshot.ageSeconds > staleSeconds → modifier=1.0 + staleDataFlag=true. Sign convention: rising BTC dominance penalizes (alt confidence drops on "BTC season"); crowded funding penalizes (mean-revert risk); rising mcap momentum reinforces (broad-breadth confirmation). Exports `buildB67_1Alternate()` helper that produces the B67.0 ablation alternate row from a modulated confidence + modifier result via reverse-derivation `confidence_without = modulated / modifier.value`.
+
+**Modified:** `server/core/metrics/market-regime.ts` `calculatePairRegime(ohlcData, dbsScore=0, macroModifier=1.0)` — accepts optional 3rd `macroModifier` parameter applied PRE-clamp. Confidence clamp upper bound raised 0.95 → 1.0 to accommodate post-modifier 0.95×1.05=0.9975. Verified zero callers asserted on prior 0.95 ceiling. Default 1.0 preserves pre-B67.1 behavior for callers that don't pass the arg.
+
+**Modified:** `server/services/market-context-engine.ts` MCE adds `refreshMacroContext()` async timer started in `start()` (interval = `cacheTTLMs`, default 60s). Reads `module_constants.macro_modifier.*` for config, reads snapshot + baseline from feed singleton, computes modifier, caches result on instance. Sync accessor `getCurrentMacroContext()` exposes cached `MacroContext = { snapshot, modifier: MacroModifierResult | null }` for downstream consumers. `computeContext()` reads cached macro context, threads `modifier?.value ?? 1.0` into `calculatePairRegime` 3rd arg, attaches macro context to returned `MarketContext.macro` field. **Refresh is async outside per-pair hot path** — no latency impact on per-pair classification.
+
+**Modified:** `server/services/signal-orchestrator.ts` (line ~638 emit hook) and `server/services/vts-runner.ts` (line ~1374 emit hook) — push `buildB67_1Alternate()` row onto `emitAblationRecord` alternates array when MCE has non-null modifier. In shadow mode (`b67_1_enabled=false`), MCE returns `{snapshot, modifier: null}` and the hook does NOT emit a B67.1 alternate. After flip, every signal evaluation emits the alternate with the agreed JSONB shape.
+
+**Modified:** `server/services/market-snapshot.ts` reconciled per pre-audit §3.5. Pre-existing stub returned hardcoded values (`btcDominance: 54.2`); now thin wrapper around `external-macro-feed.ts` `getLatestMacroSnapshot()`. Single existing caller (`ai-market-analyzer.ts`) transparently inherits real values. New `fundingRate?: number` field on the `MarketSnapshot` type.
+
+**Modified:** `server/services/autonomy-scheduler.ts` adds `initExternalMacroFeed()` at boot, alongside the existing `initMarketContextEngine()`. Fire-and-forget; errors logged.
+
+**Modified:** `server/types/market-context.ts` adds `MacroContext` interface + optional `macro?: MacroContext` field on `MarketContext` (back-compat).
+
+**New module_constants seeds (`macro_modifier` module, 11 rows):**
+- `b67_1_enabled` (bool, default `false` shadow)
+- `b67_1_btc_dominance_weight` / `funding_weight` / `mcap_momentum_weight` (floats, 0.40 / 0.35 / 0.25)
+- `b67_1_modifier_min` / `modifier_max` (floats, 0.85 / 1.05)
+- `b67_1_external_feed_cache_seconds` (60) / `b67_1_external_feed_stale_seconds` (300)
+- `b67_1_btc_dominance_zscore_lookback_days` / `b67_1_funding_zscore_lookback_days` (30 / 30)
+- `b67_1_zscore_min_sample_count` (48 — cold-start floor per Langston cc-inbox #844)
+
+**Cross-cutting impact:**
+- **If you edit `calculatePairRegime` upper-clamp** → upper bound is 1.0 post-B67.1 (was 0.95 pre-B67.1). Anything reading regime.confidence and asserting on a strict 0.95 ceiling breaks.
+- **If you edit the MCE refresh cadence** → both the constants-read and the modifier compute happen on this timer. Per-pair `computeContext` reads the CACHED context synchronously; cadence change affects refresh staleness, not per-pair accuracy.
+- **If you flip `b67_1_enabled = true`** → MCE refresh sets `modifier` to a non-null value; `calculatePairRegime` starts applying modulation; ablation hooks at orchestrator + vts-runner start emitting B67.1 alternate rows. No code redeploy required.
+- **If you change the BTC + ETH 0.6/0.4 OI weighting** → this is intentionally hardcoded in `external-macro-feed.ts` (NOT in `module_constants`) per Langston cc-inbox #845 — changing it requires understanding OI structure, not knob-tuning.
+- **If you persist the rolling baseline to DB** (B67.4 future) → see `external-macro-feed.ts` header — currently in-memory only; promote to `macro_feed_history` table only if calibration check requires restart-surviving baselines.
+- **If you add a new factor producer (B67.2+)** → follow B67.1's pattern: pure function, MCE refresh-loop wire-up if global, sync accessor, ablation hook at both orchestrator + vts-runner. Do NOT modify emitter API.
+- **If you reconcile `market-snapshot.ts` further** → 1 caller today (`ai-market-analyzer.ts`); type already extended with `fundingRate?` field. Shape changes need to consider that caller.
+
+**Blast Radius:** Currently **LOW** — confidence is decorative pre-B67.5 (no consumer reads it as a gate; verified `isHighConfidenceRegime()` has zero callers). Becomes **HIGH** at B67.5 when consumers wire in.
+
+**Status:** **SHIPPED** 2026-04-28 in commit `828f6d92`. PM2 restart #103. HTTP 200. Migration `2026-04-28-b67-1-macro-modifier.sql` applied cleanly. Feed alive (`[B67.1][feed]` per 60s). All 11 seeds verified. Shadow mode (`b67_1_enabled=false`). 18 unit tests pass at `b67-1-macro-modifier.test.ts`. Step-7 first-pass verification clean. Step-8 Langston second-pass acknowledged via cc-inbox #847.
+
+**B67.1 cross-references "If I Change X, Check Y":**
+- **Edit `macro-modifier.ts` formula** → unit test cases need refresh; ablation row reverse-derivation in `buildB67_1Alternate` may need adjustment if value semantics change
+- **Edit `external-macro-feed.ts` upstream API URLs** → confirm response shape parsers; partial-feed handling triggers gracefully
+- **Edit MCE refresh interval** → impacts both modifier staleness and the constants-cache hit ratio
+- **Add a fundingRate consumer outside `external-macro-feed.ts`** → re-read via `getLatestMacroSnapshot().fundingRate`; do NOT poll Binance directly elsewhere
+- **Promote rolling baseline to DB** → migration + rollback + state class refactor; B67.4 dependency
+
+**B67.1 V2 pre-audit findings carry forward:**
+- **defensive-hedge BTC correlation:** orthogonal to B67.1 (per-pair Spearman vs macro dominance). No double-count. Different decision points (strategy entry filter vs system-wide regime confidence). Documented `BATCH_67_1_PRE_AUDIT.md` §3.4.
+- **`market-snapshot.ts` stub:** reconciled inline per `BATCH_67_1_PRE_AUDIT.md` §3.5. Single caller transparently upgrades. No parallel `MarketSnapshot` type created.
