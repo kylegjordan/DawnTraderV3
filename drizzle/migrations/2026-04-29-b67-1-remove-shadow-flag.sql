@@ -1,0 +1,24 @@
+-- B67.1 Follow-up — Remove shadow-mode flag (Kyle directive 2026-04-29: no fallbacks, no shadow theater)
+--
+-- The original B67.1 migration seeded `b67_1_enabled` (bool, default false) as
+-- a feature flag for shadow-mode ship. Per Kyle directive 2026-04-29, we are
+-- removing this flag entirely:
+--
+--   - No shadow theater — modifier is always computed and always applied
+--   - No conditional null path in MCE refresh — modifier is always non-null
+--   - Kill-switch use case (need to disable B67.1 operationally without code
+--     redeploy) is now handled by setting modifier_min = modifier_max = 1.0
+--     in the DB. Math produces identity, no special code path.
+--
+-- The code change in this commit removes all references to b67_1_enabled.
+-- This migration just deletes the now-orphaned row.
+--
+-- Rollback: 2026-04-29-b67-1-restore-shadow-flag.sql
+
+BEGIN;
+
+DELETE FROM module_constants
+WHERE module_name = 'macro_modifier'
+  AND constant_name = 'b67_1_enabled';
+
+COMMIT;

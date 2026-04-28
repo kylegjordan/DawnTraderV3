@@ -150,34 +150,24 @@ export class MarketContextEngine {
   /**
    * B67.1: Refresh the macro context cache. Called periodically by the
    * `macroRefreshTimer`. Reads `module_constants.macro_modifier.*` for config,
-   * snapshot + baseline from `external-macro-feed`, computes modifier (or
-   * returns null when `b67_1_enabled=false`), stores in MCE state.
+   * snapshot + baseline from `external-macro-feed`, computes modifier
+   * unconditionally, stores in MCE state.
    *
-   * Errors logged + swallowed — caller (timer) cannot await. On error the
-   * previous cached context is retained until the next successful refresh.
-   * Worst case: stale-data fallback fires inside the modifier itself.
+   * Per Kyle directive 2026-04-29: no shadow flag, no conditional null path.
+   * Modifier is ALWAYS computed and ALWAYS applied. Kill-switch use case is
+   * handled by setting modifier_min = modifier_max = 1.0 in DB (math produces
+   * identity, no special code path).
+   *
+   * Errors are NOT swallowed — refresh failure propagates so MCE.start() can
+   * surface it. Once a successful refresh has populated the cache, transient
+   * subsequent failures retain the prior cached context (until the next
+   * successful refresh) — same semantics as directional-bias-store.
    */
   private async refreshMacroContext(): Promise<void> {
     try {
-      const enabled = await getConstant<boolean>(
-        'macro_modifier',
-        'b67_1_enabled',
-        { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any,
-      );
       const snapshot = getLatestMacroSnapshot();
 
-      // When b67_1_enabled=false (shadow at deploy), still PUBLISH the
-      // snapshot but with a null modifier so downstream ablation hooks can
-      // see "what the modifier WOULD have been" without applying it. Per
-      // B67.0 framework: shadow rows still emit alternate decisions.
-      if (enabled !== true) {
-        this.macroCachedContext = { snapshot, modifier: null };
-        this.macroCachedAt = Date.now();
-        return;
-      }
-
-      // Resolve config from module_constants. Defaults from scope §4 used
-      // only when the constant row is missing (post-rollback or pre-seed).
+      // Resolve config from module_constants — required, no fallbacks.
       const [
         btcW,
         fundW,
@@ -196,15 +186,34 @@ export class MarketContextEngine {
         getConstant<number>('macro_modifier', 'b67_1_zscore_min_sample_count', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
       ]);
 
+      // B67.1 — no fallbacks per CLAUDE.md §11 + Kyle directive 2026-04-29.
+      // If any constant is missing from the DB, fail hard with a clear
+      // identifier so the migration can be fixed. Never silently substitute
+      // a default value — that's how broken seeds become invisible bugs.
+      const missing: string[] = [];
+      if (btcW === undefined)    missing.push('b67_1_btc_dominance_weight');
+      if (fundW === undefined)   missing.push('b67_1_funding_weight');
+      if (mcapW === undefined)   missing.push('b67_1_mcap_momentum_weight');
+      if (modMin === undefined)  missing.push('b67_1_modifier_min');
+      if (modMax === undefined)  missing.push('b67_1_modifier_max');
+      if (staleSec === undefined) missing.push('b67_1_external_feed_stale_seconds');
+      if (zMinN === undefined)   missing.push('b67_1_zscore_min_sample_count');
+      if (missing.length > 0) {
+        throw new Error(
+          `[B67.1] missing module_constants in macro_modifier module: ${missing.join(', ')}. ` +
+          `Run migration 2026-04-28-b67-1-macro-modifier.sql to seed.`,
+        );
+      }
+
       const cfg: MacroModifierConfig = {
         enabled: true,
-        btcDominanceWeight: btcW ?? 0.40,
-        fundingWeight: fundW ?? 0.35,
-        mcapMomentumWeight: mcapW ?? 0.25,
-        modifierMin: modMin ?? 0.85,
-        modifierMax: modMax ?? 1.05,
-        staleSeconds: staleSec ?? 300,
-        zScoreMinSampleCount: zMinN ?? 48,
+        btcDominanceWeight: btcW as number,
+        fundingWeight: fundW as number,
+        mcapMomentumWeight: mcapW as number,
+        modifierMin: modMin as number,
+        modifierMax: modMax as number,
+        staleSeconds: staleSec as number,
+        zScoreMinSampleCount: zMinN as number,
       };
       this.macroConfigCache = cfg;
 
@@ -238,12 +247,15 @@ export class MarketContextEngine {
 
   /**
    * B67.1: Public accessor for the most recently refreshed macro context.
-   * Returns null when refresh has not yet succeeded (cold start), the feed
-   * is stale beyond the resolved threshold, or when `b67_1_enabled=false` is
-   * resolved with a null modifier (shadow at deploy).
+   * Returns null only during cold start — the brief window between MCE.start()
+   * being called and the first refreshMacroContext() completing. After that
+   * the modifier is always non-null (no shadow theater per Kyle directive
+   * 2026-04-29).
    *
    * Consumers (signal-orchestrator + vts-runner ablation hooks) call this to
-   * build B67.1 FactorAlternate rows for the B67.0 emitter.
+   * build B67.1 FactorAlternate rows for the B67.0 emitter. Cold-start null
+   * means the hook skips emitting a B67.1 alternate that one cycle —
+   * acceptable because no signals can be evaluated before MCE is ready.
    */
   getCurrentMacroContext(): MacroContext | null {
     return this.macroCachedContext;
@@ -300,13 +312,19 @@ export class MarketContextEngine {
     };
 
     // ── B67.1: read pre-resolved macro context from MCE state (sync) ──
-    // Macro context is refreshed on a periodic timer started in MCE.start();
-    // here we just read whatever the most recent refresh produced. Null when
-    // refresh hasn't happened yet (cold start), refresh failed, or
-    // b67_1_enabled=false. In any null case calculatePairRegime sees
-    // macroModifier=1.0 (no-op, identical to pre-B67.1 behavior).
+    // Macro context is refreshed on a periodic timer started in MCE.start().
+    // No fallbacks per Kyle directive 2026-04-29: if refresh has not yet
+    // populated the cache (cold start before first refresh completes), throw.
+    // Same hard-contract pattern as B63 DBS — caller's classification cycle
+    // simply cannot run before MCE is fully initialized.
+    if (this.macroCachedContext === null) {
+      throw new Error(
+        `[B67.1] macro context not initialized for ${symbol}. ` +
+        `MCE.start() must complete refreshMacroContext() before computeContext is called.`,
+      );
+    }
     const macroContext = this.macroCachedContext;
-    const macroModifierValue = macroContext?.modifier?.value ?? 1.0;
+    const macroModifierValue = macroContext.modifier.value;
 
     // ── B62 + B67.1: Regime calculation receives DBS + macro modifier ──
     const regimeResult = calculatePairRegime(
@@ -349,7 +367,9 @@ export class MarketContextEngine {
       // B67.1: attach macro context for downstream consumers (ablation hooks
       // read `modifier` to populate alternate_decision JSONB). undefined when
       // refresh hasn't happened yet (cold start) so back-compat preserved.
-      macro: macroContext ?? undefined,
+      // B67.1: macro context is always non-null at this point (we threw above
+      // if refresh hadn't populated it). Direct reference, not nullable.
+      macro: macroContext,
     };
 
     // Cache

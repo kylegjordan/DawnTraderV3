@@ -122,11 +122,12 @@ export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
  * TFS threshold 0.30 is the only tested value that passes the 2.0% flicker ceiling.
  * See BATCH_62_PHASE0_REPLAY_ANALYSIS.md §1.3 for the sweep evidence.
  *
- * B67.1: Optional `macroModifier` parameter — when supplied, multiplies the
- * computed confidence BEFORE the final clamp. Label is unchanged. Caller
- * (market-context-engine.ts) only supplies the modifier when
- * `module_constants.macro_modifier.b67_1_enabled = true`. When omitted (or
- * 1.0), behavior is identical to pre-B67.1.
+ * B67.1: Required `macroModifier` parameter — multiplies the computed
+ * confidence BEFORE the final clamp. Label is unchanged. Per Kyle directive
+ * 2026-04-29 (no fallbacks), the parameter is REQUIRED. Caller must compute
+ * the appropriate modifier value (1.0 = identity / no modulation; values in
+ * [0.85, 1.05] when B67.1 is producing a real modulation). Caller produces
+ * the value via `computeMacroModifier()` from `macro-modifier.ts`.
  *
  * Confidence clamp: post-modifier upper bound raised 0.95 → 1.0 to accommodate
  * 0.95 × 1.05 = 0.9975. Verified zero callers asserting on the prior 0.95
@@ -134,14 +135,16 @@ export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
  * floor — pre-B67 invariant for downstream consumers.
  *
  * @param ohlcData - OHLC candles
- * @param dbsScore - Directional Bias Score from computeDirectionalBias() (default 0)
- * @param macroModifier - Optional B67.1 multiplier on confidence in [0.85, 1.05].
- *                        Default 1.0 (no-op). When passed, applied pre-clamp.
+ * @param dbsScore - Directional Bias Score from computeDirectionalBias()
+ * @param macroModifier - REQUIRED B67.1 multiplier on confidence. Caller
+ *                        passes 1.0 for the identity case (no modulation),
+ *                        or the value from `computeMacroModifier()` when
+ *                        applying B67.1 modulation.
  */
 export function calculatePairRegime(
   ohlcData: OHLCData[],
-  dbsScore: number = 0,
-  macroModifier: number = 1.0,
+  dbsScore: number,
+  macroModifier: number,
 ): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
   const mom = computeMomentum(ohlcData);
@@ -263,7 +266,10 @@ export function getDynamicRegimeScore(ohlcData: OHLCData[]): {
   score: number;
   metrics: { adx: number; volatility: number };
 } {
-  const result = calculatePairRegime(ohlcData);
+  // B67.1: macroModifier required. This advisory function (per SIM §5.4)
+  // doesn't have macro context available — pass 1.0 explicitly to indicate
+  // identity / no modulation (advisory call, not the live classification path).
+  const result = calculatePairRegime(ohlcData, 0, 1.0);
   const score = calculateRegimeScore(result.regime, {
     adx: result.adx,
     volatility: result.volatility

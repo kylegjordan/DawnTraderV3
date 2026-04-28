@@ -149,7 +149,8 @@ async function runDiagnosticSweep(pairLimit: number = 100): Promise<void> {
     
     summary.pairsWithOHLC++;
     
-    const regimeResult = calculatePairRegime(ohlcData);
+    // B67.1: macroModifier required. Diagnostic script — identity modifier explicitly.
+    const regimeResult = calculatePairRegime(ohlcData, 0, 1.0);
     trace.regime = regimeResult.regime;
     
     const candles = ohlcData.map(o => ({

@@ -63,18 +63,18 @@ export interface RegimeContext {
 /**
  * B67.1 — Macro context attached to MarketContext.
  *
- * `modifier` is null when `b67_1_enabled=false` (shadow mode at deploy). When
- * non-null, the modifier was applied to `regime.confidence` inside
- * calculatePairRegime, and downstream consumers (ablation hooks) can read both
- * the modifier value and the originating snapshot for telemetry purposes.
+ * Per Kyle directive 2026-04-29: no shadow theater, no conditional null path.
+ * Modifier is ALWAYS populated. The downstream consumer (calculatePairRegime)
+ * always applies it. Kill-switch use case = set modifier_min=max=1.0 in DB
+ * (math produces identity, no special code path).
  *
- * Populated by `market-context-engine.ts` once per cycle (NOT per pair — the
- * macro snapshot is global) and attached identically to every per-pair
- * MarketContext returned in that cycle.
+ * Populated by `market-context-engine.ts` once per refresh cycle (NOT per
+ * pair — the macro snapshot is global) and attached identically to every
+ * per-pair MarketContext returned in that cycle.
  */
 export interface MacroContext {
   snapshot: MacroSnapshot;
-  modifier: MacroModifierResult | null;
+  modifier: MacroModifierResult;
 }
 
 /**

@@ -77,8 +77,8 @@ describe('Market Regime Calculator', () => {
   
   it('should calculate pair regime with valid result', () => {
     const ohlc = generateMockOHLC(30);
-    const result = calculatePairRegime(ohlc);
-    
+    const result = calculatePairRegime(ohlc, 0, 1.0);
+
     expect(result).toHaveProperty('regime');
     expect(result).toHaveProperty('volatility');
     expect(result).toHaveProperty('momentum');
@@ -280,7 +280,7 @@ describe('Governance Invariants', () => {
     ];
     
     for (const ohlc of datasets) {
-      const result = calculatePairRegime(ohlc);
+      const result = calculatePairRegime(ohlc, 0, 1.0);
       expect(result.regime).toBeDefined();
     }
   });

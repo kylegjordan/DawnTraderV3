@@ -62,7 +62,7 @@ Multiplier range: **0.80 (strong against) → 1.10 (strong fit)** with a conserv
 
 `module_constants` JSONB blob `b67_2_strategy_phase_weights` keyed `<strategy>_<phase>` (per scope §7.4). Tunable at runtime without code redeploy.
 
-Default fallback for missing key (e.g. a new strategy added post-B67.2 before its row is seeded): **1.00** (neutral). Logged loudly in PM2 with `[B67.2][missing-weight]` prefix.
+**No fallback** per CLAUDE.md §11 + Kyle directive 2026-04-29: missing key throws hard at the lookup site (same pattern as B63 DBS hard-contract `throw new Error(...)`). Loud and visible in PM2. Forces migration fix rather than silently shipping neutral 1.00. The migration MUST seed all 54 cells; if a future batch adds a new canonical strategy, that batch's migration is responsible for seeding its 3 phase rows (`<new_strategy>_EARLY/PRIME/LATE`).
 
 ---
 

@@ -637,14 +637,19 @@ export class SignalOrchestrator {
     // replay-ablation job.
     //
     // Fire-and-forget; classifier hot path never blocks on this.
-    // B67.1 — push the macro modifier alternate when the modifier is in play.
-    // null modifier = shadow mode (b67_1_enabled=false) OR cold-start.
-    // In shadow mode we still want to record what the modifier WOULD have
-    // produced, so we read MCE's macro context and emit even when value=1.0.
+    // B67.1 — always push the macro modifier alternate. Per Kyle directive
+    // 2026-04-29 (no shadow theater): modifier is always non-null after MCE
+    // start. The cold-start null window is the brief moment between MCE.start()
+    // and the first refreshMacroContext completing — no signals reach this hook
+    // during that window. Defensive null check retained only for that edge.
     const ablationAlternates: FactorAlternate[] = [];
     {
       const macro = getMarketContextEngine().getCurrentMacroContext();
-      if (macro?.modifier) {
+      if (macro === null) {
+        // Cold-start window — should never reach here in practice because
+        // signals can't evaluate before MCE is ready. Skip the alternate.
+        console.warn('[B67.1][orchestrator] macro context null at ablation hook — cold-start race');
+      } else {
         ablationAlternates.push(
           buildB67_1Alternate(
             extendedMetrics.confidence ?? 0.5,

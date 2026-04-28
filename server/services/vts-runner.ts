@@ -1373,14 +1373,15 @@ async function generatePhase10Signal(
   // B67.1+ producers ship, each adds its FactorAlternate here. signal.id is
   // the synthetic VTS string trade id (vsig_p10_*) — the schema's
   // sourceType='vts_trade' branch carries this in vts_trade_id (TEXT).
-  // B67.1 — VTS path mirror of the orchestrator alternate. Same shape, same
-  // logic — push the macro modifier alternate row when MCE has a non-null
-  // modifier (in shadow mode the alternate still emits with value=1.0 so the
-  // ablation framework can observe the WOULD-BE counterfactual).
+  // B67.1 — VTS path mirror of the orchestrator alternate. Always emit per
+  // Kyle directive 2026-04-29 (no shadow theater). Defensive null check only
+  // for the cold-start race window.
   const _b67_1_alternates: FactorAlternate[] = [];
   {
     const _b67_1_macro = getMarketContextEngine().getCurrentMacroContext();
-    if (_b67_1_macro?.modifier) {
+    if (_b67_1_macro === null) {
+      console.warn('[B67.1][vts-runner] macro context null at ablation hook — cold-start race');
+    } else {
       _b67_1_alternates.push(
         buildB67_1Alternate(
           predictiveConfidence ?? 0.5,

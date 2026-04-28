@@ -58,9 +58,20 @@ const RESOLUTION_KEY = {
   regime: '*',
 } as const;
 
-async function readConst<T>(name: string, fallback: T): Promise<T> {
+/**
+ * Read a required module_constants value. Throws if missing — no silent
+ * fallback per CLAUDE.md §11 + Kyle directive 2026-04-29. Migration must
+ * seed every constant before deploy.
+ */
+async function readConstStrict<T>(name: string): Promise<T> {
   const v = await getConstant<T>('macro_modifier', name, RESOLUTION_KEY as any);
-  return v === undefined ? fallback : v;
+  if (v === undefined) {
+    throw new Error(
+      `[B67.1] missing module_constant macro_modifier.${name}. ` +
+      `Run migration 2026-04-28-b67-1-macro-modifier.sql to seed.`,
+    );
+  }
+  return v;
 }
 
 // ─── Rolling-window state ───────────────────────────────────────────────────
@@ -300,7 +311,7 @@ async function pollCycle(): Promise<void> {
 export async function initExternalMacroFeed(): Promise<void> {
   if (pollTimer !== null) return;
 
-  pollIntervalSec = await readConst<number>('b67_1_external_feed_cache_seconds', 60);
+  pollIntervalSec = await readConstStrict<number>('b67_1_external_feed_cache_seconds');
 
   // Kick off an immediate poll so cold-start latency is the first poll cycle,
   // not the first interval-delayed cycle.
