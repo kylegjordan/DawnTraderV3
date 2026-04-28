@@ -143,6 +143,11 @@ export interface TECExitDecision {
   // has not entered moonbag, 1+ if it has. Surfaced so the caller can
   // capture it on the closed-trade record.
   ladderRungsHit?: number;
+  // B65.4.2 (2026-04-28): observability fields propagated from TrailingState
+  // through the engine update result to the caller for closed-trade persistence.
+  originalStopPrice?: number;
+  latchTriggerPrice?: number;
+  rungTargetHistory?: number[];
 }
 
 const DEFAULTS = {
@@ -292,6 +297,10 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         modeChanged: update.modeChanged,
         resolvedConstants,
         ladderRungsHit: update.ladderRungsHit,
+        // B65.4.2: propagate observability fields for closed-trade persistence.
+        originalStopPrice: update.originalStopPrice,
+        latchTriggerPrice: update.latchTriggerPrice,
+        rungTargetHistory: update.rungTargetHistory,
       };
     }
     if (update.closeNow && update.closeReason === 'target_hit_no_trailing') {
@@ -303,6 +312,9 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         modeChanged: update.modeChanged,
         resolvedConstants,
         ladderRungsHit: update.ladderRungsHit, // 0 — qualifier rejected, no ladder
+        originalStopPrice: update.originalStopPrice,
+        latchTriggerPrice: update.latchTriggerPrice,
+        rungTargetHistory: update.rungTargetHistory,
       };
     }
 
@@ -342,6 +354,10 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         modeChanged: update.modeChanged,
         resolvedConstants,
         ladderRungsHit: update.ladderRungsHit,
+        // B65.4.2: propagate observability fields for closed-trade persistence.
+        originalStopPrice: update.originalStopPrice,
+        latchTriggerPrice: update.latchTriggerPrice,
+        rungTargetHistory: update.rungTargetHistory,
       };
     }
 
@@ -353,6 +369,11 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       modeChanged: update.modeChanged,
       resolvedConstants,
       ladderRungsHit: update.ladderRungsHit,
+      // B65.4.2: still propagate even on no-exit so callers tracking the
+      // open-trade state can observe latch-trigger after it fires.
+      originalStopPrice: update.originalStopPrice,
+      latchTriggerPrice: update.latchTriggerPrice,
+      rungTargetHistory: update.rungTargetHistory,
     };
   }
 

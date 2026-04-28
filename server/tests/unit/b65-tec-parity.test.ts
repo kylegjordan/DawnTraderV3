@@ -502,6 +502,13 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     expect(restored?.ladderRung).toBe(1); // migrated because targetLatched=true
     expect(restored?.currentRungTarget).toBe(107.5); // best-effort
     expect(restored?.currentRungFloor).toBe(0); // safe default
+    // B65.4.2: observability fields backward-compat — rungTargetHistory should
+    // be initialized to an empty array on migration. originalStopPrice and
+    // latchTriggerPrice remain undefined (we cannot reconstruct them from a
+    // pre-B65.4.2 persisted state).
+    expect(restored?.rungTargetHistory).toEqual([]);
+    expect(restored?.originalStopPrice).toBeUndefined();
+    expect(restored?.latchTriggerPrice).toBeUndefined();
   });
 
   it('Scenario 20 (B65.4 — Langston Q5 ordering test): Rung target hit cleanly above prior HWM', async () => {

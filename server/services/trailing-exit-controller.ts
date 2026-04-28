@@ -252,6 +252,23 @@ export interface TrailingState {
   ladderRung: number;
   currentRungTarget: number;
   currentRungFloor: number;
+  // B65.4.2 (2026-04-28): observability fields for ladder mechanics in CSV exports.
+  // Captured from engine state so reports can show what actually happened without
+  // grepping PM2 logs. All optional for backward-compat with persisted states.
+  //
+  // originalStopPrice: the stop set at trade-open time, before any ratcheting.
+  //   Captured once at initializeTrailingState() and never modified.
+  // latchTriggerPrice: the actual price at which targetLatch fired (the rung-1
+  //   ratchet event). Only set once when targetLatched flips false→true.
+  //   Useful because target_lock_r interaction means latch can fire below the
+  //   strategy's published target on tight-stop trades.
+  // rungTargetHistory: ordered array of rung target prices crossed. Index 0 is
+  //   the original target (rung 1 — set when targetLatched), each subsequent
+  //   entry is appended on each ratchet event. Length reflects ladderRung at
+  //   the moment of capture.
+  originalStopPrice?: number;
+  latchTriggerPrice?: number;
+  rungTargetHistory?: number[];
 }
 
 export interface PositionUpdate {
@@ -307,6 +324,13 @@ export interface TrailingUpdateResult {
   // 1+ if it has (1 = original target hit, 2+ = ratcheted further up the
   // ladder).
   ladderRungsHit: number;
+  // B65.4.2 (2026-04-28): observability fields propagated alongside
+  // ladderRungsHit. Optional because some paths don't surface them (and
+  // legacy persisted states may not have them). Caller persists these to the
+  // closed-trade record alongside ladderRungsHit.
+  originalStopPrice?: number;
+  latchTriggerPrice?: number;
+  rungTargetHistory?: number[];
 }
 
 const trailingStates = new Map<string, TrailingState>();
@@ -343,6 +367,12 @@ export function initializeTrailingState(
     ladderRung: 0,
     currentRungTarget: targetPrice,
     currentRungFloor: 0,
+    // B65.4.2 (2026-04-28): observability fields for ladder mechanics.
+    // Captured at init so reports can show what the original stop was even
+    // after the engine ratchets currentStopPrice up. latchTriggerPrice and
+    // rungTargetHistory remain unset until the first target latch fires.
+    originalStopPrice: initialStopPrice,
+    rungTargetHistory: [],
   };
   
   trailingStates.set(symbol, state);
@@ -465,6 +495,13 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
         state.currentRungFloor = netTargetFloor;
         // Advance the rung target by one R-step.
         state.currentRungTarget = state.targetPrice + rungStepPrice;
+        // B65.4.2: capture the actual price at which the latch fired (may be
+        // different from state.targetPrice if target_lock_r interaction means
+        // latch can fire at +1.5R from entry rather than at the strategy's
+        // published target). And start rungTargetHistory with the just-hit rung.
+        state.latchTriggerPrice = update.currentPrice;
+        if (!state.rungTargetHistory) state.rungTargetHistory = [];
+        state.rungTargetHistory.push(state.targetPrice);
         modeChanged = true;
         concurrentMoonbagByMode[state.callerMode] += 1;
         newStopPrice = Math.max(newStopPrice, state.currentRungFloor);
@@ -492,6 +529,9 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
       state.currentRungFloor = Math.max(state.currentRungFloor, hitFloor);
       state.ladderRung += 1;
       state.currentRungTarget = justHitTarget + rungStepPrice;
+      // B65.4.2: append the just-crossed rung target to history.
+      if (!state.rungTargetHistory) state.rungTargetHistory = [];
+      state.rungTargetHistory.push(justHitTarget);
       newStopPrice = Math.max(newStopPrice, state.currentRungFloor);
       console.log(`[9.2][LADDER] ${update.symbol} rung=${state.ladderRung} (target ${justHitTarget.toFixed(4)} hit) — new_target=${state.currentRungTarget.toFixed(4)} new_floor=${state.currentRungFloor.toFixed(4)}`);
     }
@@ -571,6 +611,14 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
     closeReason,
     // B65.4: ladder rung count (0 = not in moonbag, 1+ = N target hits).
     ladderRungsHit: state.ladderRung,
+    // B65.4.2: observability fields surfaced through the update result so
+    // callers can persist them on close. originalStopPrice always present
+    // for trades initialized via initializeTrailingState; latchTriggerPrice
+    // only present after target latched; rungTargetHistory only populated
+    // after target latched.
+    originalStopPrice: state.originalStopPrice,
+    latchTriggerPrice: state.latchTriggerPrice,
+    rungTargetHistory: state.rungTargetHistory ? [...state.rungTargetHistory] : undefined,
   };
 }
 
@@ -654,6 +702,18 @@ export function importStates(states: TrailingState[]): void {
       state.currentRungFloor = 0;
       migrated = true;
     }
+    // B65.4.2 backward-compat: pre-existing persisted states won't have the
+    // observability fields. Initialize them to safe defaults — null is fine
+    // for trades that latched before B65.4.2 deployed (we'll never know what
+    // the latch-trigger price actually was), and rungTargetHistory defaults
+    // to an empty array which will start populating on the next ratchet event.
+    if (!Array.isArray(state.rungTargetHistory)) {
+      state.rungTargetHistory = [];
+      migrated = true;
+    }
+    // originalStopPrice and latchTriggerPrice are intentionally left undefined
+    // for migrated states — we cannot reconstruct them from the persistence
+    // file (the original stop was never recorded; the latch fired in the past).
     if (migrated) {
       migratedCount++;
     }

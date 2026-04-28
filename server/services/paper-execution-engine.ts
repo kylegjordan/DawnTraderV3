@@ -1136,10 +1136,17 @@ export class PaperExecutionEngine {
       // If no state exists (trade opened before the engine started tracking
       // it, or cleared already), default to TARGET.
       // B65.4: also capture ladder rung count from the same state.
+      // B65.4.2 (2026-04-28): also capture observability fields for the
+      // closed-trade record (originalStopPrice, latchTriggerPrice,
+      // rungTargetHistory). All optional; null on persisted trades that
+      // closed before this state was tracked.
       const { getTrailingState: _getTES } = await import('./trailing-exit-controller.js');
       const _finalState = _getTES(position.symbol);
       const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = _finalState?.tradeMode ?? 'TARGET';
       const finalLadderRung: number = _finalState?.ladderRung ?? 0;
+      const finalOriginalStop: number | null = _finalState?.originalStopPrice ?? null;
+      const finalLatchTrigger: number | null = _finalState?.latchTriggerPrice ?? null;
+      const finalRungHistory: number[] | null = _finalState?.rungTargetHistory ?? null;
 
       // Update trade record - Phase 8.8.3-C2: Include all cost/P&L breakdown fields
       await storage.updatePaperSimTrade(this.mode, trade.id, {
@@ -1166,6 +1173,11 @@ export class PaperExecutionEngine {
         netPnlPercent: netPnlPercent.toString(),
         tradeMode: finalTradeMode, // B65.2
         ladderRungsHit: finalLadderRung, // B65.4
+        // B65.4.2: ladder mechanics observability columns. Drizzle schema
+        // has these as numeric/jsonb so we pass strings/array/null directly.
+        originalStopPrice: finalOriginalStop !== null ? finalOriginalStop.toString() : null,
+        latchTriggerPrice: finalLatchTrigger !== null ? finalLatchTrigger.toString() : null,
+        rungTargetHistory: finalRungHistory,
       });
 
       // Log the exit event with C2 breakdown

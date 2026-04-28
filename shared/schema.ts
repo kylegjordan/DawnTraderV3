@@ -1624,6 +1624,15 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   // 0 = no moonbag entry (closed at target/stop/timeout/qualifier-rejected).
   // 1+ = trade ratcheted through N rungs in moonbag mode before reversing.
   ladderRungsHit: integer("ladder_rungs_hit").notNull().default(0),
+  // B65.4.2 (2026-04-28): observability fields for ladder mechanics. Captured
+  // from TrailingState at trade close (or at engine-state read time for open
+  // positions). All nullable for backward-compat with rows written before
+  // these columns existed AND for trades that never latched (originalStopPrice
+  // is set at trade open; latchTriggerPrice and rungTargetHistory remain null
+  // for trades that never reached target).
+  originalStopPrice: numeric("original_stop_price", { precision: 20, scale: 8 }),
+  latchTriggerPrice: numeric("latch_trigger_price", { precision: 20, scale: 8 }),
+  rungTargetHistory: jsonb("rung_target_history"), // number[] — array of rung target prices crossed in order
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),

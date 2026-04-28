@@ -115,6 +115,14 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   // moonbag was entered and the trade ratcheted through N rungs before
   // exiting via trailing_stop_hit or moonbag_timeout.
   ladderRungsHit: number;
+  // B65.4.2 (2026-04-28): ladder mechanics observability columns. Read
+  // from the JSON log entry (which is written from the engine state at
+  // close time). Null for trades written before B65.4.2 deployed AND for
+  // trades that never latched (latchTriggerPrice + rungTargetHistory).
+  // originalStopPrice is available for ALL trades initialized after B65.4.2.
+  originalStopPrice: number | null;
+  latchTriggerPrice: number | null;
+  rungTargetHistory: number[] | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -242,6 +250,10 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             exitReason: (trade.exitReason || '').toString(),
             // B65.4 (2026-04-25): ladder rung count
             ladderRungsHit: typeof trade.ladderRungsHit === 'number' ? trade.ladderRungsHit : 0,
+            // B65.4.2 (2026-04-28): ladder mechanics observability fields
+            originalStopPrice: typeof trade.originalStopPrice === 'number' ? trade.originalStopPrice : null,
+            latchTriggerPrice: typeof trade.latchTriggerPrice === 'number' ? trade.latchTriggerPrice : null,
+            rungTargetHistory: Array.isArray(trade.rungTargetHistory) ? trade.rungTargetHistory : null,
           });
         }
       } catch (err) {

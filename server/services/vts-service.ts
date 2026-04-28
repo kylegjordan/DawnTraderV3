@@ -711,6 +711,12 @@ export class VTSService extends EventEmitter {
     exitReason: 'stop_hit' | 'target_hit' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop' | 'timeout';
     tradeMode?: 'TARGET' | 'TRAILING_TAKE'; // B65.2: final state of trailing engine for this trade
     ladderRungsHit?: number; // B65.4: number of ladder-rung target hits before close (0 = no moonbag entry)
+    // B65.4.2 (2026-04-28): observability fields for ladder mechanics (CSV columns).
+    // originalStopPrice captured at trade open. latchTriggerPrice + rungTargetHistory
+    // populated only after target latched. All optional for backward-compat.
+    originalStopPrice?: number;
+    latchTriggerPrice?: number;
+    rungTargetHistory?: number[];
     finalScore: number;
     hybridScore: number;
     predictiveConfidence: number;
@@ -824,6 +830,12 @@ export class VTSService extends EventEmitter {
       tradeMode: tradeData.tradeMode ?? 'TARGET',
       exitReason: tradeData.exitReason, // raw exit reason preserved in log
       ladderRungsHit: tradeData.ladderRungsHit ?? 0, // B65.4
+      // B65.4.2 (2026-04-28): observability for ladder mechanics. Null/undefined
+      // for trades that never latched OR for trades initialized before B65.4.2
+      // deployed.
+      originalStopPrice: tradeData.originalStopPrice ?? null,
+      latchTriggerPrice: tradeData.latchTriggerPrice ?? null,
+      rungTargetHistory: tradeData.rungTargetHistory ?? null,
     } as any;
 
     // Add to closedTrades for ML calibration access

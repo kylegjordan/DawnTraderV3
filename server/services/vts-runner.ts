@@ -492,6 +492,13 @@ interface OpenVirtualTrade {
   // B65.4 (2026-04-25): live ladder rung count, updated by the engine
   // writeback in the exit loop. Propagated to closed-trade record on close.
   ladderRungsHit?: number;
+  // B65.4.2 (2026-04-28): observability fields kept in sync with engine state
+  // so /api/vts/ml/open + persistRealPriceTrade can serialize them. Original
+  // stop captured at trade open; latchTriggerPrice + rungTargetHistory
+  // populated after target latches.
+  originalStopPrice?: number;
+  latchTriggerPrice?: number;
+  rungTargetHistory?: number[];
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
@@ -1266,6 +1273,10 @@ async function generatePhase10Signal(
     atrAtOpen: mceContext.indicators.atr,
     diAtOpen: 50,
     volNoiseAtOpen: 0.3,
+    // B65.4.2: capture the original stop at trade-open time so it survives
+    // ratcheting and is available on closed-trade record + open-trade API.
+    originalStopPrice: stopLoss,
+    rungTargetHistory: [],
   };
 
   openVirtualTrades.set(tradeId, openTrade);
@@ -1524,6 +1535,17 @@ async function resolveOpenVirtualTrades(): Promise<{
     if (typeof decision.ladderRungsHit === 'number') {
       trade.ladderRungsHit = decision.ladderRungsHit;
     }
+    // B65.4.2: keep the open-trade observability fields in sync with engine
+    // state so /api/vts/ml/open + persistRealPriceTrade have current values.
+    if (typeof decision.originalStopPrice === 'number') {
+      trade.originalStopPrice = decision.originalStopPrice;
+    }
+    if (typeof decision.latchTriggerPrice === 'number') {
+      trade.latchTriggerPrice = decision.latchTriggerPrice;
+    }
+    if (Array.isArray(decision.rungTargetHistory)) {
+      trade.rungTargetHistory = decision.rungTargetHistory;
+    }
 
     if (!decision.shouldExit) continue;
 
@@ -1658,6 +1680,11 @@ async function resolveOpenVirtualTrades(): Promise<{
         exitReason: exitReason,
         tradeMode: finalTradeMode, // B65.2
         ladderRungsHit: trade.ladderRungsHit ?? 0, // B65.4
+        // B65.4.2: ladder mechanics observability — read from in-memory trade
+        // state (kept in sync with engine via the writeback above).
+        originalStopPrice: trade.originalStopPrice,
+        latchTriggerPrice: trade.latchTriggerPrice,
+        rungTargetHistory: trade.rungTargetHistory,
         finalScore: trade.finalScore,
         hybridScore: trade.hybridScore,
         predictiveConfidence: trade.predictiveConfidence,
@@ -2858,6 +2885,13 @@ export function getOpenVirtualTradesForML(): Array<{
   // B65.4: live ladder rung count (0 = no targets hit; 1+ = N target hits in moonbag mode).
   // Surfaces a "rung climb count" diagnostic in the Open Simulated Trades UI.
   ladderRungsHit: number;
+  // B65.4.2 (2026-04-28): ladder mechanics observability for the Open
+  // Simulated Trades UI / CSV export. originalStopPrice always present
+  // (captured at trade open). latchTriggerPrice null until target latches.
+  // rungTargetHistory empty array until first ratchet event.
+  originalStopPrice: number | null;
+  latchTriggerPrice: number | null;
+  rungTargetHistory: number[] | null;
 }> {
   const now = Date.now();
   const trades: Array<any> = [];
@@ -2960,6 +2994,12 @@ export function getOpenVirtualTradesForML(): Array<{
           targetLatched: ts?.targetLatched ?? false,
           engineStopPrice: ts?.currentStopPrice ?? null,
           ladderRungsHit: ts?.ladderRung ?? 0, // B65.4
+          // B65.4.2: ladder mechanics observability — read directly from
+          // engine state, not from trade.* fields, so we get the freshest
+          // values regardless of how recently the writeback ran.
+          originalStopPrice: ts?.originalStopPrice ?? trade.originalStopPrice ?? null,
+          latchTriggerPrice: ts?.latchTriggerPrice ?? trade.latchTriggerPrice ?? null,
+          rungTargetHistory: ts?.rungTargetHistory ?? trade.rungTargetHistory ?? null,
         };
       })(),
     });
