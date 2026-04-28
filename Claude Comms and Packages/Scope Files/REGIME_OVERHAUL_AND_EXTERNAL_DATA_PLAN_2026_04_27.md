@@ -1,0 +1,382 @@
+# Regime Classifier Overhaul + External Data Integration — Master Planning Document
+
+**Owner:** Kyle (decisions), Claude Code (implementation), Langston (review)
+**Date opened:** 2026-04-27
+**Status:** Pre-scoping — captures the full conversation between CC and Langston on Kyle's questions about external data, the regime classifier, and material improvement levers. **This is a planning document, not a scope document.** Decisions called out in §11.
+**Reading-priority:** ⭐ MUST READ on next session start. Listed in `MEMORY.md` as key immediate-read.
+**Context for why this exists:** Kyle's directive 2026-04-27 to capture everything we've discussed before context compaction so the work doesn't get lost. We have a coordinated set of changes that are interconnected and need to be planned out together rather than implemented piecemeal.
+
+---
+
+## 1. The starting question (Kyle, 2026-04-27)
+
+Kyle asked five sharp questions when we started discussing B67/B68 (external data integration):
+
+1. What is external data being fed INTO? Specifically the per-pair regime classifier formula, or somewhere else?
+2. How will adding external data affect regime calculations? How do we know that's the right way to add it? Won't this create classifications we can't make sense of?
+3. Are there industry norms? Known/proven correlations between external data and pair regimes?
+4. Plain-language explanation of how each external data type quantifiably impacts regime classifications and the theoretical why/how.
+5. Rate the regime classifier overall, complete honesty. Confidence in routing pairs to right strategies. What's missing. How to materially improve (not cosmetic 1-2% improvements). Are there enough regimes? Are some missing?
+
+Kyle's framing in plain terms: don't just bolt external data onto the system to say we did it. Make a real case for how it helps, with measurable impact, anchored in known correlations, and audited up- and down-stream so we don't double-count or cancel out signals already in the system.
+
+---
+
+## 2. CC's initial position (the position we are now revising)
+
+CC proposed two integration patterns:
+
+**Option A — alongside the classifier (CC's original recommendation):** external data flows External Data Service → MCE storage → consumed by SQE pre-filter gates AND/OR ranking-weights bonus formula. The pair regime classifier formula stays unchanged. The regime label that comes out is the same as today; new gates layered after classification.
+
+**Option B — inside the classifier:** external data joins the classifier formula directly. Regime labels can change based on macro context. Bigger blast radius; existing strategy mappings might no longer mean the same thing; requires re-tuning thresholds and re-validating mappings.
+
+CC recommended Option A on the basis of smaller blast radius.
+
+---
+
+## 3. Langston's independent take — the third option (now the recommended one)
+
+Langston pushed back with a third option CC hadn't laid out:
+
+**Option C — confidence modifier on the classifier output.** The pair regime LABEL stays unchanged (so "TFS" still means what it meant). But the classifier's CONFIDENCE NUMBER gets multiplied by a 0.85-1.05x range based on macro alignment. Low confidence → triggers TRANSITION/UNSTABLE stability → activates the existing DEFENSIVE mode overlay → automatic throttling of trades through paths that are already wired in.
+
+**In plain language:** when the classifier says "TFS, confidence 0.85" but BTC dominance is rising sharply, the macro modifier knocks confidence down to "TFS, confidence 0.72." The downstream stability detector reads that as less-stable, which the existing mode-overlay (Directive 11.7S) reads as defensive conditions, which throttles new entries. The label is preserved; only the confidence is modulated.
+
+**Why Option C is better than CC's Option A:**
+
+- One integration point (the confidence number), not two (gates + bonuses). Cleaner attribution: when something changes downstream we can trace it back to one source.
+- Preserves B62 calibration entirely. The thresholds, the regime-to-strategy map, the mode-overlay logic all stay.
+- Automatic propagation. Existing systems that read confidence/stability automatically pick up macro context. No new pathway to debug.
+- Shrinks blast radius. Doesn't change what TFS means; doesn't add new SQE gate semantics; doesn't add new ranking-weight terms.
+
+**CC has withdrawn Option A and recommends Option C.**
+
+---
+
+## 4. Industry norms and known correlations (plain language)
+
+Kyle asked whether these external signals have known empirical backing or are speculative hypotheses.
+
+| Signal | Status | Plain-language description |
+|---|---|---|
+| **BTC dominance vs altcoin performance** | Well-established multi-cycle empirical finding | When BTC dominance rises, money rotates from alts into BTC, alts underperform. When dominance falls, alts outperform. "Altseason" vs "BTC season" terminology comes from this. Magnitude varies by cycle phase but direction is robust. |
+| **Funding rates as squeeze signal** | Well-established in derivatives literature | Extreme positive funding (longs paying shorts) means the trade is overcrowded; mean-reversion / squeeze typically follows. Standard input on every major derivatives desk. Multiple academic papers documenting predictive power. |
+| **DXY inverse correlation with crypto** | Known but weaker post-2022 | Strong correlation 2017-2021; has decreased as crypto became more institutionally held. Still directionally true but not as tight. Useful as context input, less reliable as hard filter. |
+| **Crypto market-cap momentum** | Well-established | Sector-wide capital flow leads individual pair moves. Essentially the same logic as BTC dominance from a different angle; less novel insight. |
+| **Exchange flows / on-chain** | Well-documented in Glassnode/CryptoQuant research | When BTC flows TO exchanges, sell pressure typically follows within hours/days. Less granular for short-term trading; more useful for daily/weekly context. Langston: "lag by hours, not useful for intraday." |
+| **Liquidation cascades** | Reactive, not predictive | You see it as it happens, not before. Useful as a circuit-breaker (pause new entries for N minutes after a cascade) rather than a leading indicator. |
+
+**Honest caveat across all of these:** correlations have predictive power on AVERAGE but vary by market cycle (bull/bear, early/late), pair characteristics (BTC vs small-cap alt), time horizon (hours vs days), and microstructure (low-volume periods amplify signals). We should not expect "BTC dominance > 60% means filter all alt entries" to deliver +20pp WR. We should expect maybe +3-5pp WR on alt strategies during high-dominance periods, with significant variance.
+
+**Langston's framing:** "Each one tells you something the per-pair data can't see — they're the 'weather' that every 'pair-level thermometer' is operating inside."
+
+---
+
+## 5. Honest classifier rating
+
+Kyle asked for complete honesty, no soft-pedaling. Here's the consolidated CC + Langston view (we agreed on this rating).
+
+**Overall confidence: medium-low.** Competent on easy cases, unreliable on the cases where routing matters most.
+
+### 5.1 What works (strengths to preserve)
+
+- **5-regime taxonomy covers the broad space** (trend, range, volatility expansion, no-direction-vol, uncertain).
+- **B62's DBS integration was a real achievement.** Pre-B62 the system was 70.2% drift-contaminated; B62 fixed that to 0.00%. **Langston flagged this as undersold in CC's first rating** — it deserves to be called out as a major success, not background context.
+- **Per-cycle classification (~60s)** so it adapts quickly to changing conditions.
+- **Indicator inputs (vol, ADX, momentum, DBS)** are widely-used in technical analysis literature.
+- **Code is well-tested** and the math itself is correct given its inputs.
+
+### 5.2 What doesn't work, in order of impact
+
+1. **Path B over-firing** (B65.6 documented). The TFS branch fires whenever `|DBS| >= 0.30` alone, with no sustainability check. On strong-direction days this trivially classifies most pairs as TFS regardless of whether the trend has more room. Direct cost in real money: ~$11 across 5 trades on 04-22 just from one strategy family.
+2. **No multi-timeframe agreement.** Classifier looks at the most recent ~7.5 hours of price action. A 1m DBS reading of +0.40 might be inside a 1h DBS that's rolling over (about to reverse) or inside a 1h DBS that's still rising (continuation likely). The classifier doesn't distinguish. **Industry-standard trend-following systems use multi-timeframe agreement as a hard filter; ours doesn't.** (Note: this lever is downstream of B67 because it requires higher-TF OHLC data.)
+3. **No volume regime separately.** Volume is used in the FX5 filter (minimum-volume gate) but not as a dimension in regime classification. Accumulation-volume vs distribution-volume is a real distinction we can't see. Rising prices on declining volume = exhaustion; rising prices on rising volume = healthy. Classifier sees neither.
+4. **No macro context.** The 04-22 evidence showed this directly. System has zero visibility into BTC dominance, funding rates, mcap momentum, DXY, etc. **B67 addresses this.**
+5. **No pair-correlation context.** Small-cap alt moving up purely because BTC is moving up has no idiosyncratic edge — the trade adds no value over just buying BTC. Classifier doesn't know correlated-drift vs idiosyncratic moves. **Langston: this is the cross-pair concentration gate (already in AMR Phase 19.5 design), not a regime taxonomy issue.**
+6. **No regime-age / freshness tracking.** Time-since-last-regime-change is a real signal in trading literature. A pair that just entered TFS is more reliable than a pair that's been TFS for 6 hours and might exhaust. We don't track this.
+7. **No regime-TRANSITION-freshness as first-class state** (Langston's addition, CC missed this). When a pair flips from RBS to TFS, the new TFS classification is treated identically to a TFS that's been stable for 6 hours. A fresh transition is fundamentally different from a long-running label.
+8. **Confidence number is computed but underused.** Classifier emits 0.40-0.95; no downstream code uses it as a hard gate. Wasted information. **Langston: this is exactly the integration point his confidence-modifier architecture targets.**
+
+### 5.3 Are there missing regimes?
+
+CC's first answer was "yes, four missing": Distribution/Topping, Accumulation/Bottoming, Climactic/Parabolic, Correlated-drift.
+
+**Langston pushed back: don't add new top-level regimes. Sub-classify the existing ones.**
+
+Specifically: add a **PHASE DIMENSION (EARLY / MATURE / LATE)** to the existing 5 regimes, with phase boundaries at 2 hours and 12 hours of regime stability. So instead of:
+
+- TFS, RBS, IE, STR, HVU, +new regimes
+
+You get a 5×3 matrix:
+
+- TFS-EARLY, TFS-MATURE, TFS-LATE
+- RBS-EARLY, RBS-MATURE, RBS-LATE
+- IE-EARLY, IE-MATURE, IE-LATE
+- HVU-EARLY, HVU-MATURE, HVU-LATE
+- STR-EARLY, STR-MATURE, STR-LATE
+
+**Captures most of what CC was reaching for:**
+
+- TFS-LATE = the topping case (trend has been going for a while, exhaustion-prone)
+- RBS-LATE = the accumulation case (range has held long enough to be coiling for breakout)
+- IE-EARLY = the climactic case (move just exploded, may parabolic-fail)
+
+**Why Langston's approach is better:** cheaper, easier to validate, doesn't require new strategy mappings (each existing strategy can read the phase as a confidence modifier on its own entry decision). Doesn't expand the regime taxonomy footprint. Composable with the macro confidence modifier.
+
+**Correlated-drift goes elsewhere** (cross-pair concentration gate, Phase 19.5 AMR) per Langston.
+
+**CC has withdrawn the new-regimes proposal and recommends the phase dimension.**
+
+### 5.4 How to MATERIALLY improve (not cosmetic)
+
+Combined CC + Langston view, ranked by expected impact and ordered for sequencing:
+
+| # | Lever | Expected impact | Effort | Notes |
+|---|---|---:|---:|---|
+| 1 | **Macro confidence modifier (B67 work, Langston's architecture)** | 5-10pp on hostile-day cohorts, 2-3pp overall | ~2 weeks | Core of the new design. BTC dominance + funding rates + mcap momentum modulate confidence. Triggers existing stability/mode-overlay path. |
+| 2 | **Concentration gate + phase dimension** | 3-7pp combined | ~1 week | Concentration catches universe-level hostile windows (Phase 19.5 AMR work). Phase dimension catches per-pair exhaustion (regime-age tracking). |
+| 3 | **Multi-timeframe agreement** | 3-5pp on trend-rider signals | ~1 week (after B67) | Blocked by B67 because it requires higher-TF OHLC. 1h regime as confirming filter on 1m signals. |
+| 4 | **Volume regime as second dimension** | 2-4pp on trend-rider WR | ~1 week | Accumulation/distribution as a second confidence multiplier. |
+| 5 | **Per-underlying position limits** (Langston add, missed by CC) | 3-5pp hostile-day risk reduction | ~1-2 days | Limit concurrent open trades on any one underlying. Already in `POST_B62_PRE_LAUNCH_PLAN.md` Item 4 as paper-only with VTS bypass — promote to general. |
+| 6 | **Realized-outcome feedback** (Langston add, missed by CC) | 2-4pp | ~2-3 days | If recent trades on (regime, strategy) combo are losing, downgrade confidence on new entries. Self-correcting. |
+| 7 | **Path B sustainability tightening (B65.6 deferred work)** | 1-2pp alone, compounds with #1-3 | ~3-5 days | The work we deferred per Kyle's earlier directive. Worth revisiting once macro modifier is in place — together they solve the over-firing problem. |
+| 8 | **ML-light reliability score** (Langston, pre-launch viable) | 2-4pp | ~2-3 days | Logistic regression on classifier inputs, trained on 30d VTS data, predicts "is this classification wrong?" Outputs reliability score = another confidence modifier. |
+| 9 | **Full ML regime classification (Phase 17/18)** | 5-15pp eventually | months | Long-term post-launch work. Replaces rule-based with learned classifier. |
+
+**Combined realistic estimate (Langston + CC consensus): 10-20pp WR improvement on currently-failing cohorts (hostile days, exhausted-trend setups), 3-5pp on the overall population.** Stacked, not magic-bullet from any single lever.
+
+---
+
+## 6. The recommended coordinated work package
+
+Per Kyle: "I want to incorporate all or most of it, and I wanna make sure that we do this right, not haphazardly."
+
+**Proposed coordinated batch structure (B67 with sub-deliverables):**
+
+The first 6 levers above are tightly coupled — they all affect the confidence number that drives downstream gating, and they share the architecture (confidence modifier on classifier output). Treating them as one coordinated batch is cleaner than splitting them.
+
+```
+B67 — Coordinated Regime-Confidence Overhaul
+
+  B67.1  Macro confidence modifier (BTC dominance + funding + mcap)         ~2 weeks
+  B67.2  Phase dimension (EARLY/MATURE/LATE on existing regimes)            ~3 days
+  B67.3  Per-underlying position limits (promote from paper-only)           ~1-2 days
+  B67.4  Realized-outcome feedback into classifier confidence               ~2-3 days
+  B67.5  Path B sustainability tightening (deferred B65.6 work folded in)   ~3-5 days
+  
+B68 — External Data Phase 2 (conditional on B67 success)
+  Exchange flows, liquidations, DXY, SPX cross-asset                        ~2-3 weeks
+  
+Phase 19.4 candidate (interim, post-paper-mode-active):
+  ML-light reliability score                                                 ~2-3 days
+  
+Phase 19.5 (already planned):
+  Cross-pair concentration gate + AMR mode-overlay expansion                  TBD
+  
+Post-launch:
+  Multi-timeframe agreement (requires B67 OHLC infrastructure)
+  Volume regime as second dimension
+```
+
+**Why bundle B67.1-B67.5 into one batch:** they all consume the same B67-introduced infrastructure (external data fetching, telemetry storage), they all write into the same target (the confidence number), and they're scientifically coupled (you can't validate the macro modifier in isolation if the phase dimension is also active and changing the population). Better to land them together with one careful observation period than dribble them out one at a time.
+
+**Estimated total effort for the bundle: ~3-4 weeks of CC implementation time** plus the standard workflow overhead (Langston reviews, deploys, observation).
+
+---
+
+## 7. Industry-norm caveats Kyle specifically asked about
+
+**"How do we know that the way you plan to add that into the regime calc is the right way to do it, and that adding them is not going to result in classifications that we can't make sense of?"**
+
+Honest answer: we don't know with certainty. We know the correlations are real and documented. We don't know the right magnitudes for our specific universe. Three protective design choices in the proposed plan:
+
+1. **Confidence-modifier architecture means the regime LABEL doesn't change.** A pair classified as TFS today is still classified as TFS after the change. Only confidence is modulated. So we cannot produce "classifications we can't make sense of" — labels are preserved; we'd just see the same label with lower confidence, which is interpretable.
+2. **Modifier range bounded at 0.85-1.05x initially.** Even if the macro signal is wrong, the worst case is confidence is 15% off. Conservative band keeps the change mostly in "throttle a bit" territory rather than "completely override."
+3. **Validation period before activation.** The data collection runs for 1-2 weeks before the modifier is wired into actual decisions. We see what the modifier WOULD have done on real cohorts before letting it gate anything.
+
+**"And how is that going to affect our signals and the trades that would open from those signals?"**
+
+The modifier reduces confidence on trades during macro-disagreement conditions (hostile windows for that pair direction). Reduced confidence triggers existing stability/mode-overlay path that throttles entries. So:
+
+- Some entries that would fire today will not fire (they get filtered through the existing throttle)
+- Some entries that fire will be smaller-sized (mode overlay has size dampening)
+- Entries that pass the throttle are higher-quality on average (they survived the macro filter)
+
+Net expected effect on trade volume: -10% to -25% during high-macro-disagreement periods, near-zero during macro-aligned periods.
+
+**"Is there a way to measure its effectiveness once it's put in?"**
+
+Yes, two natural measures:
+
+1. **Hostile-day WR** (days where system-wide WR < 25%). Should improve materially because that's exactly where the modifier earns its keep.
+2. **Counterfactual analysis** — same pattern as the B65.4.1 ladder counterfactual we already documented. For each modifier-rejected trade, compute what would have happened if it had fired. Aggregate over time. Positive aggregate means the modifier is filtering preferentially-bad trades.
+
+**"What is this addressing?"**
+
+The 04-22 case in plain terms: globalRegime said "trend-friendly stable, 98% of pairs bullish, all clear for trend-riders." The system entered 177 strong-bull-trend trades. 84% of them lost. Why? Because the directional bias was lagging — it captured "what just happened" not "what's about to happen" — and the macro context (which the system can't see) was rolling over. With macro context, BTC dominance rising sharply on a "everyone bullish" day would have been a contrarian flag, knocking confidence down on those 177 trades and either preventing many of them or sizing them smaller. We don't have that visibility today. B67 adds it.
+
+---
+
+## 8. Things to look up- and downstream of these changes
+
+Kyle: "we need to make sure that we look up and downstream in our math and in our signal generation process to make sure that we're not double counting or canceling things out."
+
+**Up-stream of regime classification (input dependencies):**
+
+- DBS calculation (B62 work). Macro modifier doesn't change DBS itself. Safe.
+- Per-pair OHLC + technical indicators. Unchanged by external data. Safe.
+- FX5 scanner / minimum-volume filter. Unchanged. Safe.
+
+**Down-stream of regime classification (consumers):**
+
+- **Regime-to-strategy canonical map.** UNCHANGED — labels are preserved. ✅
+- **Strategy entry detection** (e.g., strong_bull_trend's Donchian + ATR detector). UNCHANGED — strategies still see their regime mapping. ✅
+- **SQE pre-filter gates.** The existing SQE consumes confidence as one input. Macro modifier flows in there naturally. Watch for: SQE thresholds were calibrated against pre-modifier confidence range; tightening the band may be needed.
+- **Ranking weights / queue priority.** Same as SQE — consumes confidence. May need re-tuning.
+- **Mode overlay (Directive 11.7S).** Reads regime stability. Reduced confidence → less stable → mode overlay activates DEFENSIVE. **This is the main intended effect channel.** Already wired; modifier just feeds it more accurately.
+- **Trailing exit / TEC.** Doesn't directly read regime confidence. Reads regime label for moonbag qualification. UNCHANGED — labels preserved. ✅
+
+**Specific double-counting / cancellation concerns to audit during implementation:**
+
+1. **BTC correlation already factored somewhere?** Kyle flagged this in his message: "I believe that we already have some sort of BTC correlation component factored in somewhere into our system." CC needs to grep the codebase for "BTC", "btc_correlation", "dominance" before B67 implementation to confirm whether there's pre-existing logic to coordinate with.
+2. **Mode overlay already throttling on stability flicker.** Risk: macro modifier triggers throttle, then mode overlay throttles AGAIN on top of the modifier's effect. Could be over-throttling. Audit: simulate macro-modifier outcomes against current mode-overlay logic during the 1-2 week data-collection period.
+3. **B65.6 concentration gate (if/when shipped) and macro modifier might cover overlapping cases.** When ALL pairs are bullish (concentration high) AND BTC dominance is rising (macro disagreement), both signals fire. Need to confirm they multiply rather than double-count. Likely fine because they target different mechanisms (concentration = local pair universe state, macro = broader market state) but worth explicit testing.
+4. **Realized-outcome feedback risk.** This signal is computed from recent VTS trade outcomes. If VTS itself is using the macro modifier, the outcome feedback is partially measuring the modifier's own effect. Need to think carefully about whether to lag the feedback or use a holdout cohort.
+
+---
+
+## 9. ML-light pre-launch — Langston's interesting suggestion
+
+CC originally said full ML is post-launch (Phase 17/18). Langston pointed out an interim ML-light step is viable pre-launch:
+
+**The proposal:** logistic regression model. Inputs: classifier's existing inputs (vol, ADX, momentum, DBS) plus B67 macro features. Output: probability that this classification will produce a winning trade — i.e., a **reliability score** that becomes another confidence modifier.
+
+Training data: 30 days of VTS observations (we'll have this by the time B67 ships). Effort: 2-3 days. Architecture: a single sklearn model behind a service interface that the classifier reads at inference time.
+
+**Why it's pre-launch viable:**
+
+- Logistic regression is interpretable (we can see which features matter and by how much)
+- 30 days of VTS data is enough for a binary classifier with ~10-20 features
+- Single model, no deep learning, no GPU, no production-ML infrastructure needed
+- Outputs a single number (reliability score) that fits the confidence-modifier architecture cleanly
+- Validation is easy — held-out test set, classification accuracy / AUC are standard metrics
+
+**What it doesn't do:** doesn't replace the rule-based classifier. Doesn't predict prices. Doesn't trade. Just rates the reliability of each classification the rule-based system produces. Phase 17/18 ML can replace the classifier entirely; this is a stepping stone.
+
+**Where to slot it:** Phase 19.4 candidate, after macro modifier is in production for 1-2 weeks (so we have macro features in the training data). Lands during paper-mode audit period.
+
+---
+
+## 10. Implications for existing roadmap
+
+If we adopt this plan, several existing roadmap items shift:
+
+- **B65.6 (Per-pair classifier audit + sustainability gate)** — folds into B67 as sub-deliverable B67.5 (Path B sustainability tightening). Standalone B65.6 closes via SUPERSEDED route.
+- **B67/B68 (External Data Context Layer)** — B67 expands from "single workstream" into a coordinated 5-sub-deliverable batch. B68 stays as conditional Tier-2 work.
+- **POST_B62_PRE_LAUNCH_PLAN Item 4 (Per-underlying position limits)** — was "paper-only with VTS bypass." Promotes to "general" within B67.3.
+- **Phase 19.4 SQE Recalibration** — can include the ML-light reliability score as an additional sub-item.
+- **Phase 19.5 AMR (Adaptive Market Response)** — concentration gate stays here. Phase dimension is now in B67 instead of being conceptually part of AMR. Cleaner separation: B67 = per-pair confidence work; Phase 19.5 = system-wide hostile-window response. Both feed into the mode overlay.
+- **Phase 18.5 (VTS Partition + Exchange-Data Adapter)** — Kyle directive 2026-04-27: rename to "very start of Phase 19" or "back of Phase 16" because Phase 18 is ML/post-launch and we shouldn't use 18.5 for pre-launch work. **Need to re-label this in next governance pass.**
+- **Phase 21.4 Modularization** — unchanged. Lever-migration sub-phase already moved to B72 pre-launch.
+
+---
+
+## 11. ⭐ DECISIONS QUEUED FOR KYLE
+
+These are the calls that need to be made before we can scope B67 or write a step-by-step plan. Listed here so they don't get lost.
+
+**Architecture decisions:**
+
+1. **Adopt Langston's confidence-modifier architecture (Option C) for external data integration?** vs my original alongside-the-classifier (Option A) or the bigger "external data inside the classifier formula" (Option B). [CC + Langston recommend C.]
+2. **Sub-classify existing regimes with EARLY/MATURE/LATE phase dimension?** vs add new top-level regimes (Distribution/Topping etc.) vs do nothing. [CC + Langston recommend phase dimension.]
+3. **Treat B67 as one coordinated batch with 5 sub-deliverables?** vs split into separate sequential batches. [CC + Langston recommend coordinated.]
+4. **Include ML-light reliability score as Phase 19.4 item?** vs defer to post-launch Phase 17/18.
+
+**Sequencing decisions:**
+
+5. **Start B67 immediately after compaction?** vs finish other pre-Phase-19 items first (B69 schema, B70 archiving) and do B67 later. [CC view: B67 should go first; the macro modifier compounds with everything else.]
+6. **B68 (Tier-2 external data) — keep as conditional or drop entirely?** Tier-2 is exchange flows + liquidations + DXY + SPX. Useful but additive on top of B67. CC view: keep as conditional, decide based on B67 outcomes.
+
+**Scope decisions:**
+
+7. **Tier-1 source selection: BTC dominance + funding rates + mcap momentum (all three)?** vs just BTC dominance + funding (drop mcap as redundant with dominance) vs just BTC dominance (minimum-viable). [CC recommends all three; redundancy with mcap is OK since they capture different time horizons.]
+8. **Modifier range: 0.85-1.05x initially?** vs wider (0.7-1.2x) for stronger initial signal vs narrower (0.95-1.05x) for ultra-conservative test. CC view: 0.85-1.05x is the right starting band — strong enough to matter, not so strong it overrides classifier confidence.
+9. **Phase dimension boundaries: 2h (EARLY→MATURE) and 12h (MATURE→LATE)?** Langston's proposal. CC view: defensible starting points, calibrate with VTS data.
+
+**Validation decisions:**
+
+10. **Ship-data-then-validate vs activate-immediately?** Ship-data: 1-2 weeks of macro data collection BEFORE the modifier is wired into actual decisions, validate against historical VTS, then activate only what shows positive lift. Activate-immediately: turn it on with default thresholds, observe live, tune in production. [CC view: ship-data-then-validate. We already have evidence the system is making bad calls; we shouldn't add a new uncalibrated signal on top.]
+11. **Define "success" thresholds for B67 deactivation.** If after 30 days of post-activation observation the macro modifier has NOT delivered measurable lift, what's the response? Tune thresholds, deactivate, leave running with no expectation? CC view: pre-register threshold (e.g., +3pp WR on hostile-day cohorts) below which we treat the modifier as inert and revisit design.
+
+**Pre-implementation audit decisions:**
+
+12. **BTC correlation pre-existing logic audit.** Kyle flagged: "I believe that we already have some sort of BTC correlation component factored in somewhere into our system." CC needs to grep the codebase before B67 design is finalized. Decision: do this audit as part of B67 pre-audit (Step 2)?
+
+---
+
+## 12. What CC and Langston agreed on (consensus)
+
+So Kyle has clear visibility into where the two of us align (high confidence in this direction) vs where we differed (CC was wrong, deferred to Langston).
+
+**Strong consensus:**
+- Classifier rating is medium-low overall.
+- B62 DBS integration was a real success.
+- Path B over-firing is a real problem.
+- 04-22 evidence is canonical hostile-day positive case.
+- 10-20pp WR improvement on currently-failing cohorts is realistic with stacked levers.
+- Multi-timeframe agreement is missing and matters.
+- Volume regime is missing and matters.
+- Macro context is missing and matters.
+
+**CC was wrong, Langston corrected:**
+- "Alongside the classifier" was inferior to "confidence modifier on classifier output."
+- "New top-level regimes" was inferior to "phase dimension on existing regimes."
+- B62 DBS achievement was undersold.
+- Per-underlying position limits and realized-outcome feedback were missing from CC's lever list.
+- ML-light pre-launch is more viable than CC initially thought.
+
+**Where we still both have uncertainty:**
+- Exact magnitudes per lever (we have estimates, not measurements).
+- Best modifier range (0.85-1.05x is starting point, optimal TBD).
+- Whether to add multi-TF and volume regime in B67 or wait for Phase 17/18 (currently leaving out of B67 scope for blast-radius reasons).
+
+---
+
+## 13. Open data analysis still owed
+
+Two specific data analyses are queued and not yet started:
+
+1. **Codebase audit for pre-existing BTC correlation logic.** Per Kyle's flag in §11 decision 12. Grep `server/` for `btc_correlation`, `btcDominance`, anything BTC-related not just symbol references. Output: short report listing what already exists and recommendations for how B67 integrates without double-counting.
+2. **Counterfactual analysis re-run for B65.4.1 hotfix verification.** Kyle is uploading CSVs (open + closed simulated trades). Reporting workflow at `BATCH_65_4_1_HOTFIX_COMPLETION.md` §5. Run weekly during Phase 19 observation per Phase 19.4.5 item 7.
+
+---
+
+## 14. Cross-references
+
+- `B65_4_LADDER_COUNTERFACTUAL_ANALYSIS.md` — the analysis pattern
+- `BATCH_65_4_1_HOTFIX_COMPLETION.md` §5 — the reporting instructions
+- `REGIME_CLASSIFIER_INVESTIGATION_2026_04_26.md` — the deep dive on the per-pair classifier issue
+- `B65_5_PHASE_A0_WINDOW_CONTROL.md` — the 04-22 hostile-day discovery
+- `ADAPTIVE_MARKET_RESPONSE_CONCEPT.md` — the AMR concept doc Phase 19.5 will scope from
+- `INDEPENDENT_VTS_DATA_FEED_FEASIBILITY.md` — the multi-exchange data feed feasibility (relevant for B67 if external data feeds also need multi-exchange)
+- `EXTERNAL_DATA_SOURCES_INVENTORY.md` — original B67/B68 source inventory
+- `BATCH_67_SCOPE.md` (pending) — actual scope doc to be written after Kyle's decisions on §11 are made
+- `MEMORY.md` — flags this document as ⭐ MUST READ on next session
+
+---
+
+## 15. Workflow note
+
+**This is a planning document, not a scope document.** The actual scope (`BATCH_67_SCOPE.md`) gets written ONLY after Kyle has made the §11 decisions. That's the next workflow step.
+
+Per CLAUDE.md §2 (the 11-step workflow), the next phases would be:
+
+- Step 1 (Planning + Scope) — write `BATCH_67_SCOPE.md` with concrete sub-deliverable definitions, file lists, API designs, threshold seed values, validation criteria.
+- Step 2 (Pre-Implementation Audit) — including the BTC-correlation codebase audit per §11 decision 12.
+- Steps 3-11 — standard workflow.
+
+This planning doc is the input to Step 1. Kyle's §11 decisions are the gating event.
+
+---
+
+*End of master planning document. Listed in MEMORY.md as ⭐ MUST READ on next session start. Decisions queued in §11.*
