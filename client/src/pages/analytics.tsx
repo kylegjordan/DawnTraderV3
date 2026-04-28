@@ -1411,6 +1411,128 @@ function DriftDashboardSection() {
   );
 }
 
+// B67.0 — Factor Ablation Comparison panel.
+// Sibling to DriftDashboardSection. Reads /api/analytics/ablation-comparison
+// (regime_factor_alternates table). Empty until B67.1+ factor producers begin
+// emitting alternates. Renders the empty state explicitly so users know the
+// feature is alive and waiting for factor data.
+interface AblationFactorStats {
+  factorName: string;
+  totalRows: number;
+  pendingReplay: number;
+  replayed: number;
+  unreplayable: number;
+  bothAdmitCount: number;
+  realAdmitAltRejectCount: number;
+  realAdmitAltRejectAvgPnlUsdLost: number;
+  bothRejectCount: number;
+  realRejectAltAdmitCount: number;
+}
+
+interface AblationComparisonData {
+  window: string;
+  windowStart: string;
+  windowEnd: string;
+  factors: AblationFactorStats[];
+  totalRows: number;
+  hasReplayedRows: boolean;
+}
+
+function AblationComparisonSection() {
+  const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_24h');
+  const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: AblationComparisonData }>({
+    queryKey: ['/api/analytics/ablation-comparison', windowSel],
+    queryFn: () => apiFetch(`/api/analytics/ablation-comparison?window=${windowSel}`),
+    refetchInterval: 60_000,
+  });
+
+  const d = resp?.data;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" /> Factor Ablation Comparison
+            <span className="text-xs font-normal text-muted-foreground">(B67.0)</span>
+          </span>
+          <div className="flex items-center gap-2">
+            {(['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setWindowSel(w)}
+                className={`px-3 py-1 text-xs rounded-md border ${
+                  windowSel === w ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+                }`}
+              >
+                {w.replace('rolling_', '').replace('cohort_', 'Since ').replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
+        {error && <div className="text-sm text-red-500">Error: {String((error as Error).message)}</div>}
+        {d && d.totalRows === 0 && (
+          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md">
+            <div className="font-medium mb-2">No ablation rows in this window yet.</div>
+            <div className="text-xs">
+              The replay-ablation framework (B67.0) is wired and listening, but no factor producers (B67.1 macro modifier, B67.2 phase dimension, B67.4 outcome feedback, B68.x) have shipped yet. Once they begin emitting alternates, this panel will populate automatically with per-factor counterfactual statistics.
+            </div>
+          </div>
+        )}
+        {d && d.totalRows > 0 && (
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              Window: {d.window} · Total alternate rows: <span className="font-mono">{d.totalRows}</span> · Replayed: <span className="font-mono">{d.factors.reduce((s, f) => s + f.replayed, 0)}</span> · Pending: <span className="font-mono">{d.factors.reduce((s, f) => s + f.pendingReplay, 0)}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50">
+                  <tr className="text-left">
+                    <th className="px-2 py-2">Factor</th>
+                    <th className="px-2 py-2 text-right">Total</th>
+                    <th className="px-2 py-2 text-right">Replayed</th>
+                    <th className="px-2 py-2 text-right">Pending</th>
+                    <th className="px-2 py-2 text-right">Both Admit</th>
+                    <th className="px-2 py-2 text-right">Real Admit / Alt Reject</th>
+                    <th className="px-2 py-2 text-right">Avg $ Saved if Alt Active</th>
+                    <th className="px-2 py-2 text-right">Real Reject / Alt Admit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.factors.map((f) => (
+                    <tr key={f.factorName} className="border-t border-border">
+                      <td className="px-2 py-2 font-mono text-[11px]">{f.factorName}</td>
+                      <td className="px-2 py-2 text-right">{f.totalRows}</td>
+                      <td className="px-2 py-2 text-right">{f.replayed}</td>
+                      <td className="px-2 py-2 text-right text-muted-foreground">{f.pendingReplay}</td>
+                      <td className="px-2 py-2 text-right">{f.bothAdmitCount}</td>
+                      <td className="px-2 py-2 text-right">{f.realAdmitAltRejectCount}</td>
+                      <td className="px-2 py-2 text-right">
+                        {f.realAdmitAltRejectAvgPnlUsdLost != null
+                          ? `$${f.realAdmitAltRejectAvgPnlUsdLost.toFixed(2)}`
+                          : '—'}
+                      </td>
+                      <td className="px-2 py-2 text-right text-muted-foreground" title="Cannot replay without forward-simulation harness">
+                        {f.realRejectAltAdmitCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <strong>Reading:</strong> "Real Admit / Alt Reject" = how many trades the alternate would have prevented; "$ Saved if Alt Active" = average loss avoided per such trade. "Real Reject / Alt Admit" = trades the alternate would have admitted (cannot replay forward; counted for awareness only).
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function MappingDriftSection() {
   const [syncing, setSyncing] = useState(false);
 
@@ -2400,7 +2522,10 @@ export default function AnalyticsPage() {
           </TabsContent>
 
           <TabsContent value="drift" className="mt-6">
-            <DriftDashboardSection />
+            <div className="space-y-6">
+              <DriftDashboardSection />
+              <AblationComparisonSection />
+            </div>
           </TabsContent>
           
           <TabsContent value="top-batch" className="mt-6">

@@ -7514,6 +7514,27 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B67.0 — Factor Ablation Comparison endpoint.
+  // Sibling to /analytics/drift-dashboard. Reads regime_factor_alternates
+  // table and returns per-factor counterfactual stats. Empty until B67.1+
+  // factor producers begin emitting alternates.
+  // Query params: ?window=rolling_24h | rolling_7d | rolling_30d | cohort_latest
+  apiRouter.get('/analytics/ablation-comparison', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { computeAblationComparison } = await import('./services/drift-dashboard-aggregator.js');
+      const win = (req.query.window as string) || 'rolling_24h';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'. must be one of ${allowed.join(', ')}` });
+      }
+      const data = await computeAblationComparison(win as 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest');
+      res.json({ ok: true, data });
+    } catch (error: any) {
+      console.error('[B67.0][ablation-comparison] Error computing comparison:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/narrative-feed - Get narrative events
   apiRouter.get('/narrative-feed', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

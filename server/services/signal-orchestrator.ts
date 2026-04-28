@@ -95,6 +95,8 @@ import { computeRankingScore, normalizeNetReturn, CONTEXT_BONUS } from '../confi
 import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
 // Batch 19G Fix 5: Shared hybrid compatibility registry (single source of truth)
 import { findHybridMatch, HYBRID_COMPATIBILITY } from '../config/hybrid-compatibility-registry.js';
+// B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
+import { emitAblationRecord } from './factor-ablation-emitter.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -600,6 +602,33 @@ export class SignalOrchestrator {
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {
       console.error(`[8.8.4-C.5][RTB_ERROR] Failed to queue ${rawSignal.symbol}/${strategyId}:`, err);
     });
+
+    // B67.0 — Factor ablation emit hook. Today this fires with an empty
+    // alternates array (no factors deployed yet) and no-ops. When B67.1
+    // (macro modifier), B67.2 (phase), B67.4 (outcome feedback), B68.1
+    // (multi-TF), B68.2 (volume), B68.3 (pair correlation), B68.4 (regime
+    // age), B68.5 (Path B sustainability) ship, each producer adds its
+    // FactorAlternate to the alternates array here, recomputing the
+    // classifier output as if its specific contribution were absent. The
+    // emitter then persists one row per (signal, factor) for the nightly
+    // replay-ablation job.
+    //
+    // Fire-and-forget; classifier hot path never blocks on this.
+    emitAblationRecord(
+      { kind: 'active_signal', signalId },
+      rawSignal.symbol,
+      {
+        regimeLabel: extendedMetrics.regime ?? 'UNKNOWN',
+        confidence: extendedMetrics.confidence ?? 0.5,
+        admissionPossible: true, // we got here past SQE gate
+        metadata: {
+          finalScore: extendedMetrics.finalScore,
+          regimeWeight: extendedMetrics.regimeWeight, // pre-B67.5; replaced by regimeConfidence after Consumer #1 ships
+          sourcePool: rawSignal.metadata?.sourcePool,
+        },
+      },
+      [], // factor alternates — populated by B67.1+ producers
+    );
 
     // M5B: VTS capture DISABLED - VTS now runs autonomously
     // VTS generates its own signals from pricing service cache when tradingActive=false

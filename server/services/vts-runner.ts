@@ -96,6 +96,8 @@ import { computeGlobalStability } from '../core/governance/regime-stability.js';
 import { computeRankingScore, normalizeNetReturn } from '../config/ranking-weights.js';
 import '../core/governance/governance-persistence.js'; // Batch 46: Auto-persist/rehydrate governance state
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
+// B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
+import { emitAblationRecord } from './factor-ablation-emitter.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -1343,7 +1345,28 @@ async function generatePhase10Signal(
   };
   
   console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool} sourcePool=${sourcePool ?? 'quant'} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
-  
+
+  // B67.0 — Factor ablation emit hook (VTS path mirror).
+  // Today fires with empty alternates and no-ops (no factors deployed). When
+  // B67.1+ producers ship, each adds its FactorAlternate here. signal.id is
+  // the synthetic VTS string trade id (vsig_p10_*) — the schema's
+  // sourceType='vts_trade' branch carries this in vts_trade_id (TEXT).
+  emitAblationRecord(
+    { kind: 'vts_trade', vtsTradeId: signal.id },
+    symbol,
+    {
+      regimeLabel: regime ?? 'UNKNOWN',
+      confidence: predictiveConfidence ?? 0.5,
+      admissionPossible: true,
+      metadata: {
+        finalScore,
+        regimeWeight, // pre-B67.5; replaced by regimeConfidence after Consumer #1 ships
+        sourcePool,
+      },
+    },
+    [], // factor alternates — populated by B67.1+ producers
+  );
+
   return { signal, tradeRecord };
 }
 

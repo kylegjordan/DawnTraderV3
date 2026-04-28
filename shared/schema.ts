@@ -510,6 +510,53 @@ export const moduleConstants = pgTable("module_constants", {
 export type ModuleConstant = typeof moduleConstants.$inferSelect;
 export type InsertModuleConstant = typeof moduleConstants.$inferInsert;
 
+// B67.0 — Regime Factor Alternates table for replay-ablation framework.
+// On every signal evaluation, the classifier emits its real decision plus N
+// alternate decisions (one per confidence-modifying factor). Each alternate is
+// computed as "what would I have decided if this factor were absent?" Nightly
+// replay-ablation.ts job replays each alternate against the trade's actual
+// price path → counterfactual outcome.
+//
+// Confidence-modifying factors covered: B67.1 macro, B67.2 phase, B67.4
+// outcome feedback, B68.1 multi-TF, B68.2 volume regime, B68.3 pair
+// correlation, B68.4 regime age, B68.5 Path B sustainability. Admission-
+// gating factors (B67.3 per-underlying limits) use a separate universe-split
+// A/B mechanism, NOT this table.
+//
+// See BATCH_67_SCOPE.md §4 + BATCH_67_PRE_AUDIT.md §6.4.
+export const regimeFactorAlternates = pgTable("regime_factor_alternates", {
+  id: serial("id").primaryKey(),
+  // Source discriminator. 'active_signal' → signalId populated, vtsTradeId null.
+  // 'vts_trade' → signalId null, vtsTradeId populated. CHECK constraint at the
+  // DB level enforces XOR; both columns nullable here so the discriminator
+  // works.
+  sourceType: text("source_type").notNull(),
+  signalId: integer("signal_id"),
+  vtsTradeId: text("vts_trade_id"),
+  pairSymbol: text("pair_symbol").notNull(),
+  evaluatedAt: timestamp("evaluated_at", { withTimezone: true }).notNull().defaultNow(),
+  factorName: text("factor_name").notNull(),
+  factorState: text("factor_state").notNull(), // 'alternate_disabled' | 'alternate_enabled'
+  realDecision: jsonb("real_decision").notNull(),
+  alternateDecision: jsonb("alternate_decision").notNull(),
+  replayOutcome: jsonb("replay_outcome"),
+  replayCompletedAt: timestamp("replay_completed_at", { withTimezone: true }),
+}, (table) => ({
+  factorTimeIdx: index("regime_factor_alternates_factor_time_idx").on(
+    table.factorName,
+    table.evaluatedAt,
+  ),
+  signalIdx: index("regime_factor_alternates_signal_idx").on(table.signalId),
+  vtsTradeIdx: index("regime_factor_alternates_vts_trade_idx").on(table.vtsTradeId),
+  pairTimeIdx: index("regime_factor_alternates_pair_time_idx").on(
+    table.pairSymbol,
+    table.evaluatedAt,
+  ),
+}));
+
+export type RegimeFactorAlternate = typeof regimeFactorAlternates.$inferSelect;
+export type InsertRegimeFactorAlternate = typeof regimeFactorAlternates.$inferInsert;
+
 // Strategy Settings (per mode, per user, per strategy)
 // Phase 2C: Single-tenant - userId removed
 export const strategySettings = pgTable("strategy_settings", {

@@ -406,3 +406,149 @@ export function computeDriftDashboard(window: DashboardWindow): DriftDashboardRe
     tradeCounts: { total, wins, losses, winRate, avgNetPct },
   };
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// B67.0 — Ablation comparison aggregator (extends drift-dashboard panel)
+//
+// Reads the regime_factor_alternates table populated by factor-ablation-emitter
+// (B67.0) and the nightly replay-ablation job. Per-factor: counts pending vs
+// replayed rows, computes "real WR vs alternate WR" deltas where the
+// counterfactual is computable (admit/admit and admit/reject cases — see
+// replay-ablation.ts header for the four-quadrant taxonomy).
+//
+// At B67.0 ship time (no factor producers yet), this returns zero rows for
+// every metric. When B67.1+ producers begin emitting alternates, the panel
+// populates automatically.
+//
+// Reference: BATCH_67_SCOPE.md §4.5 / §4.7
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface AblationFactorStats {
+  factorName: string;
+  totalRows: number;
+  pendingReplay: number;
+  replayed: number;
+  unreplayable: number;
+  /** Where both real & alternate ADMIT — outcome unchanged. Always ~equal. */
+  bothAdmitCount: number;
+  /** Where real ADMIT, alternate REJECT — counterfactual is no-trade. */
+  realAdmitAltRejectCount: number;
+  realAdmitAltRejectAvgPnlUsdLost: number; // sum of (-realPnl) across these rows / count
+  /** Where both REJECT — both produce no trade. */
+  bothRejectCount: number;
+  /**
+   * Where real REJECTED but alternate would have ADMITTED. These can't be
+   * replayed (no actual trade exists). Counted for analyst awareness.
+   */
+  realRejectAltAdmitCount: number;
+}
+
+export interface AblationComparisonResponse {
+  window: DashboardWindow;
+  windowStart: string;
+  windowEnd: string;
+  /** Per-factor breakdown. Empty array until B67.1+ producers ship. */
+  factors: AblationFactorStats[];
+  /** Total alternate rows in window across all factors. */
+  totalRows: number;
+  /** Whether replay job has produced any outcomes yet. */
+  hasReplayedRows: boolean;
+}
+
+export async function computeAblationComparison(
+  window: DashboardWindow,
+): Promise<AblationComparisonResponse> {
+  // Lazy-import db to avoid coupling this aggregator's other (file-based)
+  // paths to the Drizzle/pg dependency at module-load time.
+  const { db } = await import('../db.js');
+  const { regimeFactorAlternates } = await import('../../shared/schema.js');
+  const { gte, sql, isNotNull, isNull } = await import('drizzle-orm');
+
+  const now = Date.now();
+  const windowMs = WINDOW_TO_MS[window];
+  const windowStart = new Date(now - windowMs);
+  const windowEnd = new Date(now);
+
+  // Aggregate per factor. Using raw sql for the GROUP BY + counts because the
+  // typed Drizzle helpers would fight us on the conditional aggregations.
+  const rows = await db.execute(sql`
+    SELECT
+      factor_name AS "factorName",
+      COUNT(*)::int AS "totalRows",
+      SUM(CASE WHEN replay_completed_at IS NULL THEN 1 ELSE 0 END)::int AS "pendingReplay",
+      SUM(CASE WHEN replay_completed_at IS NOT NULL THEN 1 ELSE 0 END)::int AS "replayed",
+      -- 'unreplayable' is a forward-looking catch-all for any alternateOutcome
+      -- prefixed 'unreplayable_*'. Today only one variant exists
+      -- ('unreplayable_real_rejected'); future outcome types may add more.
+      -- LIKE-prefix match keeps this field meaningful as the taxonomy grows.
+      SUM(CASE WHEN replay_outcome->>'alternateOutcome' LIKE 'unreplayable_%' THEN 1 ELSE 0 END)::int AS "unreplayable",
+      SUM(CASE WHEN replay_outcome->>'notes' = 'admit_admit_no_delta' THEN 1 ELSE 0 END)::int AS "bothAdmitCount",
+      SUM(CASE WHEN replay_outcome->>'notes' = 'alternate_would_have_rejected' THEN 1 ELSE 0 END)::int AS "realAdmitAltRejectCount",
+      SUM(CASE WHEN replay_outcome->>'notes' = 'reject_reject_no_delta' THEN 1 ELSE 0 END)::int AS "bothRejectCount",
+      -- realRejectAltAdmitCount specifically counts the real-rejected-but-
+      -- alternate-would-admit case. Today this overlaps with 'unreplayable'
+      -- (it's the only unreplayable variant) but the two fields stay separate
+      -- so the meaning is explicit and survives future outcome additions.
+      SUM(CASE WHEN replay_outcome->>'alternateOutcome' = 'unreplayable_real_rejected' THEN 1 ELSE 0 END)::int AS "realRejectAltAdmitCount",
+      AVG(CASE WHEN replay_outcome->>'notes' = 'alternate_would_have_rejected'
+               THEN -COALESCE((replay_outcome->>'pnlDeltaUsd')::numeric, 0)
+               ELSE NULL END)::float AS "realAdmitAltRejectAvgPnlUsdLost"
+    FROM regime_factor_alternates
+    WHERE evaluated_at >= ${windowStart}
+    GROUP BY factor_name
+    ORDER BY factor_name ASC
+  `);
+
+  // Drizzle .execute returns a result whose row shape varies by driver.
+  // node-postgres returns { rows: [...] }; pg-pool returns array directly.
+  // Normalize.
+  const factorRows = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []) as Array<{
+    factorName: string;
+    totalRows: number;
+    pendingReplay: number;
+    replayed: number;
+    unreplayable: number;
+    bothAdmitCount: number;
+    realAdmitAltRejectCount: number;
+    bothRejectCount: number;
+    realRejectAltAdmitCount: number;
+    realAdmitAltRejectAvgPnlUsdLost: number | null;
+  }>;
+
+  const factors: AblationFactorStats[] = factorRows.map((r) => ({
+    factorName: r.factorName,
+    totalRows: r.totalRows,
+    pendingReplay: r.pendingReplay,
+    replayed: r.replayed,
+    unreplayable: r.unreplayable,
+    bothAdmitCount: r.bothAdmitCount,
+    realAdmitAltRejectCount: r.realAdmitAltRejectCount,
+    realAdmitAltRejectAvgPnlUsdLost: r.realAdmitAltRejectAvgPnlUsdLost ?? 0,
+    bothRejectCount: r.bothRejectCount,
+    realRejectAltAdmitCount: r.realRejectAltAdmitCount,
+  }));
+
+  const totalRows = factors.reduce((sum, f) => sum + f.totalRows, 0);
+  const hasReplayedRows = factors.some((f) => f.replayed > 0);
+
+  return {
+    window,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    factors,
+    totalRows,
+    hasReplayedRows,
+  };
+}
+
+// Window-to-ms helper for ablation aggregator. Mirrors the constants in the
+// drift-dashboard aggregator above. cohort_latest is treated as 24h here
+// because ablation rows don't carry a "since-restart" marker; cohort_latest
+// granularity adds little value over rolling_24h for this panel and can be
+// added later if needed.
+const WINDOW_TO_MS: Record<DashboardWindow, number> = {
+  rolling_24h: 24 * 60 * 60 * 1000,
+  rolling_7d: 7 * 24 * 60 * 60 * 1000,
+  rolling_30d: 30 * 24 * 60 * 60 * 1000,
+  cohort_latest: 24 * 60 * 60 * 1000,
+};

@@ -8,6 +8,257 @@
 
 ---
 
+## §0 — Update 2026-04-28: Resolved decisions and design refinements
+
+Following Kyle's review of this planning doc on 2026-04-28, all §11 decisions have been resolved and several design refinements have been added. This section captures the deltas. Downstream sections (§3, §5.3, §6, §10, §11) preserve the original CC+Langston conversation and reasoning for traceability.
+
+### §0.1 §11 decision resolutions (Kyle, 2026-04-28)
+
+| # | Decision | Kyle's answer |
+|---|---|---|
+| 1 | Adopt Langston's confidence-modifier (Option C) | **YES** — adopted |
+| 2 | Phase dimension on existing regimes | **YES** — adopted, with rename MATURE → **PRIME** (see §0.2) |
+| 3 | B67 as one coordinated batch | **YES** — but expanded to B67/B68/B69 split (see §0.4) |
+| 4 | ML-light reliability score in scope | **YES** — slotted as B69 (separate batch) |
+| 5 | Start B67 immediately after compaction | **YES** |
+| 6 | B68 (Tier-2 external data) conditional | **YES** — conditional on B67 success; renumbered to B70+ post-split |
+| 7 | Tier-1 sources: BTC dominance + funding + mcap (all three) | **YES** |
+| 8 | Modifier range 0.85–1.05× initially | **YES** |
+| 9 | Phase boundaries 2h / 12h | **YES** — calibrate with VTS data |
+| 10 | Ship-data-then-validate | **REPLACED** by continuous replay-ablation framework (B67.0). See §0.5. |
+| 11 | Pre-register success thresholds | **YES** — to be defined in `BATCH_67_SCOPE.md` |
+| 12 | BTC-correlation codebase audit | **YES** — runs in B67 pre-audit (Step 2) |
+
+### §0.2 Naming change: MATURE → PRIME
+
+Throughout all subsequent code, schema, dashboards, governance docs, and discussions: phase dimension uses **EARLY / PRIME / LATE**, not EARLY / MATURE / LATE. Kyle's reasoning: PRIME more clearly conveys "right in the thick of things." Section §5.3 below retains the original "MATURE" wording for historical record; all forward-looking artifacts use PRIME.
+
+### §0.3 Confidence score: identity clarified
+
+The "confidence" Langston flagged as computed-but-underused is `RegimeClassification.confidence` — the per-pair regime classifier's own confidence number from `server/core/metrics/market-regime.ts`. This is **distinct** from:
+
+- `PredConf` (signal-pattern match confidence, used in signal scoring)
+- `CWQI` (composite weighted quality index, signal scoring)
+- `FinalScore` (admission gate composite)
+
+Today, regime confidence is **not consumed** by FinalScore, CWQI, or PredConf. The signal-scoring pipeline ignores it entirely. The "underused" diagnosis was specifically about regime confidence, not about the signal-scoring confidences. B67.5 wires regime confidence into seven concrete consumer points — see §0.6.
+
+### §0.4 Final batch structure: B67 / B68 / B69 split
+
+Original §6 proposed a single B67 with 5 sub-deliverables. The 2026-04-28 discussion expanded the lever set to 10 (Kyle's directive: don't let any of the recommendations slide). To keep individual batches reasonable, work is now split:
+
+**B67 — Coordinated Regime-Confidence Core (~3–4 weeks)**
+
+- B67.0 Telemetry & ablation framework (NEW; built first — see §0.5)
+- B67.1 Macro confidence modifier (BTC dominance + funding + mcap)
+- B67.2 Phase dimension (EARLY/PRIME/LATE)
+- B67.3 Per-underlying position limits (general, not paper-only)
+- B67.4 Realized-outcome feedback into classifier confidence
+- B67.5 Wire confidence into seven downstream consumers (see §0.6)
+
+**B68 — Structural Classifier Improvements (~3–4 weeks; starts after B67 closes)**
+
+- B68.1 Multi-timeframe DBS agreement (Path B's second gate AND broader classifier input)
+- B68.2 Volume regime dimension
+- B68.3 Pair correlation context
+- B68.4 Regime-age tracking as first-class metric
+- B68.5 Path B sustainability tightening (uses B68.1's multi-TF metric)
+
+**B69 — ML-Lite Reliability Score (~2–3 weeks; starts after B68 closes)**
+
+- Logistic regression error-detector. Trained on B67/B68-instrumented data.
+
+**Sequencing rationale:** ML-Lite trains on whatever the classifier looks like at training time. If we train it on the pre-B68 classifier and then change the classifier under it, the model is stale. ML-Lite ships last so it learns the post-B68 classifier.
+
+External-data Tier-2 (the original B68 in MEMORY — exchange flows, liquidations, DXY, SPX) becomes B70+, renumbered post-split. Conditional on B67/B68 producing measurable lift before we invest in additional external feeds.
+
+### §0.5 Telemetry & ablation framework (B67.0) — replaces "ship-data-then-validate"
+
+§11 decision 10 originally proposed a 1–2 week macro-data-collection-before-activation phase. Kyle's directive 2026-04-28 redirected this: implement and measure with telemetry rather than observe-then-implement. The replacement is a **replay ablation framework** that measures each factor's impact while everything runs in production.
+
+**Architecture:**
+
+1. Every B67/B68 sub-deliverable has an `enabled` flag in `module_constants`.
+2. Classifier emits its real decision plus N alternate decisions on every signal evaluation — one per factor; each alternate computed as "if this factor were absent."
+3. Alternates logged to a sibling table.
+4. Nightly job replays each alternate against the trade's actual price path → counterfactual outcome.
+5. Dashboard panel: real WR vs WR-without-factor-X for each factor.
+
+**Why this beats the original ship-data-then-validate plan:**
+
+- Per-factor attribution is continuous, not batch-and-evaluate.
+- All factors stay live in production. No A/B periods. No market-conditions-changed problem (rotation across observation periods is what makes traditional A/B unreliable here).
+- ~2–3 days of implementation work, not a multi-week observation window blocking implementation.
+
+**Exception — B67.3 (per-underlying limits) cannot be replay-attributed.** Limits prevent trades from existing in the first place; there is no actual price path to replay an alternate against. For B67.3 specifically: deterministic universe-split A/B (hash pair-ID, half with limit, half without, run for N days). One factor, one A/B test, manageable.
+
+### §0.6 Eight consumers identified, **seven shipping in B67.5** — Consumer #6 deferred to Phase 19 observation
+
+**Update 2026-04-28 (Kyle directive):** the originally-scoped 8 consumers reduce to 7 in B67.5. Consumer #6 (daily loss budget weighting) is deferred to a Phase 19.X observational decision item. Pre-audit V2 confirmed no daily-loss-budget service exists today and that the kill switch's auto-trip is not wired despite the threshold being configured. Both of those findings are deferred for paper-mode observation rather than building speculatively pre-launch. The numbering gap at #6 is preserved for traceability.
+
+Today, `RegimeClassification.confidence` is essentially decorative — computed and shown in dashboards but not gating any decisions. B67.5 wires it into seven concrete decision points. This is the deliverable that makes B67.1 and B67.2 functionally meaningful (those re-compute the value; B67.5 makes the new value affect outcomes).
+
+| # | Consumer | Today | Post-B67 |
+|---|---|---|---|
+| 1 | Signal admission gate | `admit = FinalScore ≥ threshold` | `admit = (FinalScore × f(regime_conf)) ≥ threshold` |
+| 2 | Position sizing (Kelly) | Kelly × portfolio constraints | Kelly × regime_conf × portfolio constraints |
+| 3 | EV gate threshold | Static per strategy | Inversely scales with regime_conf — low conf raises the EV bar |
+| 4 | Strategy routing tiebreak | First-match / static priority | Highest-confidence regime wins the slot |
+| 5 | TEC parameters at trade-open | Static `module_constants` | Modulated by regime_conf at entry — BE-lock distance, moonbag eligibility, ladder rung-floor buffer |
+| 6 | Daily loss budget weighting | All losses count equally | Low-confidence-trade losses get a cost multiplier |
+| 7 | VTS feature column | Not recorded | Persisted on every trade record — enables B69 ML-Lite training |
+
+**Calibration-gated sequencing within B67:**
+
+```
+B67.0 telemetry framework
+   ↓
+B67.1 macro modifier  +  B67.2 phase dimension       (recompute the confidence value)
+   ↓
+CALIBRATION CHECK: does WR stratify cleanly by confidence bucket? (high-conf bucket WR > low-conf bucket WR by meaningful margin)
+   ↓
+B67.5 wire into seven consumers                       (only if calibration passes)
+   ↓
+B67.3 per-underlying limits  +  B67.4 realized-outcome feedback
+```
+
+The calibration check is a **hard prerequisite** for B67.5. If regime confidence is poorly calibrated, multiplying Kelly by it (consumer #2) makes sizing worse, not better. If calibration fails, B67.4 (realized-outcome feedback) likely needs to ship first to recalibrate, then re-test.
+
+### §0.7 Routing-map methodology: post-hoc regime labeling
+
+Original §5.4 implied the (regime, phase, strategy) → outcome map would be built from naïve backfill: tag every historical trade with classifier-label-at-entry, measure WR by bucket. Kyle's 2026-04-28 pushback was correct — this conflates two failure modes:
+
+- (a) Strategy was a bad fit for the actual regime → routing-map problem
+- (b) Classifier mislabeled the regime → classifier-accuracy problem
+
+Both produce identical observations (loss). Same data point, two different lessons.
+
+**Refined methodology — post-hoc regime labeling:**
+
+For each historical trade, compute a second regime label using **only price action AFTER entry** (classifier re-run on the trade's holding period). Call this the **realized regime**.
+
+Split trades into two cohorts:
+
+- **Classifier-correct cohort** (entry label ≈ realized regime): informs the routing map. Strategy losses here are real strategy/regime mismatches.
+- **Classifier-wrong cohort** (entry label ≠ realized regime): informs classifier improvements (B67.1 macro modifier, B68.1 multi-TF, B68.5 Path B tightening, etc.).
+
+Routing map gets built from the **classifier-correct cohort only**. That's the clean signal.
+
+**Honest caveat:** "realized regime" is hindsight-defined ground truth. We're using the classifier itself as the truth source, just run on forward-looking data. Imperfect but the best available without an external oracle. Worth doing — it's a real upgrade over naïve backfill.
+
+This refines §5.4's lever ranking and adds ~50% audit work to B67's pre-implementation phase. Worth the investment.
+
+### §0.8 Path B second-gate evaluation: four-case backtest
+
+Original framing was implicit pick-one between multi-TF DBS agreement vs DBS slope. Kyle's 2026-04-28 suggestion: also test combining both. Final backtest matrix (lives in B68.1):
+
+| Case | Gates |
+|---|---|
+| A | `|DBS| ≥ 0.30` alone (current — baseline) |
+| B | A + multi-TF DBS agreement (5m sign matches 1h sign) |
+| C | A + DBS slope rising/stable |
+| D | A + multi-TF + slope (triple gate) |
+
+**Selection criterion:** `net_expectancy × sample_size` — total expected $ produced over the backtest period. Maximizes total profit, not just per-trade WR. D may be highest per-trade but starve signal volume; B or C may still win on total expected dollars.
+
+All four cases backtested. No prejudgment. Report all four results, data picks the winner.
+
+### §0.10 Langston's consensus refinements (2026-04-28)
+
+After CC sent the consensus message (R1–R7) summarizing §0.1–§0.9, Langston came back with sharpening adjustments. All accepted; consensus reached.
+
+**§0.10.A — B67.3 deploys FIRST within B67.** Per-underlying limits are a safety net with zero confidence dependency — ship them before any new confidence factors so we have downside protection during the rollout. Original sequencing in §0.6 had B67.3 last; revised to first. Updated dependency chain:
+
+```
+B67.0 telemetry framework
+  ↓
+B67.3 per-underlying limits          (safety net, no confidence dependency)
+  ↓
+B67.1 macro modifier  +  B67.2 phase dimension
+  ↓
+CALIBRATION CHECK
+  ↓
+B67.5 wire confidence into 8 consumers
+  ↓
+B67.4 realized-outcome feedback
+```
+
+**§0.10.B — RegimeWeight REPLACED, not multiplied.** Critical architectural correction. Original §0.6 Consumer #1 had `admit = (FinalScore × f(regime_conf)) ≥ threshold` — multiply on top. Langston flagged: B63 Item 18 already proved RegimeWeight (the 20% term in FinalScore today) is anti-predictive; stacking regime confidence on top creates squared dependence on a flawed input. Correct approach: **regime confidence REPLACES RegimeWeight in the FinalScore formula.**
+
+```
+TODAY:        FinalScore = hybridScore × 0.4 + confidence × 0.3 + regimeWeight × 0.2 − decayPenalty × 0.1
+POST-B67.5:   FinalScore = hybridScore × 0.4 + confidence × 0.3 + regimeConfidence × 0.2 − decayPenalty × 0.1
+```
+
+Important identity note: RegimeWeight today is `trendStrength × 0.7 + (1 − normalizedVolatility) × 0.3` — NOT the classifier's confidence. It's a per-signal composite of trend strength and low-volatility preference. The two underlying inputs (trendStrength, volatility) survive independently in their existing consumers (`strategy-engine.ts`, `signal-orchestrator.ts`, `strategy-filters.ts`, `strategy-validators.ts`, MCE, TEC, ATR sizing, friction modeling). Removing RegimeWeight does not orphan them.
+
+**RegimeWeight deletion scope (per Kyle's directive — be exhaustive):**
+
+- Code: `score-calculator.ts`, `quality_index.ts`, `signal_quality_evaluator.ts`, `score-weights.config.ts`, plus 40+ other server files. Full grep, file-by-file removal.
+- Database schema: `paper_sim_trades.regime_weight` column removal via migration. Same for any other signal-level tables.
+- UI: `client/src/pages/machine-learning.tsx` column. Closed-trade table column. Open-trade table column. Diagnostics dashboard tiles.
+- CSV exports: open + closed simulated trade exports.
+- Logs: `console.log` lines emitting `regimeWeight=...`.
+- Tests: `finalscore-equivalence.test.ts`, `score-weights.test.ts`, plus regression tests.
+- Governance docs: SYSTEM_MANUAL formula sections, AUTHORITY_BASELINE, ADJUSTMENT_FRAMEWORK, score-weights documentation, CHANGES_AND_FIXES entry.
+- Active-trading tables: deferred per Kyle's directive until paper-mode rebuild — logged in POST_AUDIT_ROADMAP as deferred line item.
+
+Full file list will be a sub-deliverable inside `BATCH_67_SCOPE.md` so Langston can verify completeness during Step-4 code review.
+
+**§0.10.C — Calibration criterion sharpened to tertile-monotonic.** Original §0.6 used binary high/low confidence buckets. Langston proposed tertile (HIGH / MID / LOW) with required monotonic ordering and tighter gap. Reasoning: Kelly amplifies miscalibration, so the bar must be stricter than a binary check.
+
+| Criterion | CC original | Langston revised |
+|---|---|---|
+| Bucket structure | Binary (high vs low) | Tertile (HIGH > MID > LOW) |
+| Required ordering | High > Low | Strict monotonic — HIGH > MID > LOW |
+| WR gap threshold | ≥5pp | **≥7pp** (HIGH−LOW) |
+| Sample size per bucket | ≥200 | ≥150 |
+| Statistical test | p<0.05 | chi-square p<0.05 |
+
+Adopted as written.
+
+**§0.10.D — Consumer #8 resolved as tiebreak only.** Original Langston proposal had Consumer #8 as RTB queue ordering (rankingScore). Kyle's pushback: rankingScore already inherits regime confidence transitively via FinalScore (the first term in `rankingScore = FinalScore × qualityWeight + ...`). Adding regime confidence as a separate term double-counts.
+
+**Resolution:** Consumer #8 is a **tiebreak only**, not in the rankingScore formula.
+
+```
+IF |rankingScore_A − rankingScore_B| < ε  (ε = 0.02)
+  THEN prefer signal with higher regimeConfidence
+  ELSE existing rankingScore ordering applies
+```
+
+This activates only on near-ties where the primary ranking cannot discriminate. Does not double-count. Replaces current arbitrary tiebreak (insertion order) with a meaningful secondary sort.
+
+`ε = 0.02` enters `module_constants` per §0.9 governance rule.
+
+**§0.10.E — Three-cohort split for routing map (replaces two-cohort).** Original §0.7 used two cohorts (CORRECT vs WRONG). Langston refined to three:
+
+| Cohort | Definition | Use |
+|---|---|---|
+| **CORRECT** | Entry label matches realized regime, any phase | Build routing map from this cohort |
+| **WRONG** | Label mismatch AND entry confidence ≥0.60 | Feed into classifier improvement work (B67.1, B68.1, B68.5) |
+| **AMBIGUOUS** | Label mismatch AND entry confidence <0.60 | Discard — classifier was already uncertain, mismatch isn't a clean failure signal |
+
+Routing map quality goes up (built from CORRECT only). Classifier-improvement work focuses on confident-wrong cases (WRONG only). Discarded data is data the classifier itself flagged as not-trustworthy.
+
+**§0.10.F — Storage growth flag.** Ablation row count grows linearly with factors × trades. With 10 factors and ~100 trades/day, ~1,000 alternate-outcome rows per day. Trivial at VTS scale; flag for monitoring at paper/live scale and downsample if necessary. Logged as B67.0 sub-task: include retention policy.
+
+**§0.10.G — Path B four-case backtest predicted ordering: B > C > D > A.** Both CC and Langston converge on Case B (multi-TF DBS agreement) winning the `net_expectancy × sample_size` criterion. Reasoning: 04-22 dominant failure mode was "DBS ≥ 0.30 from a recent move, but the move was already exhausted." Multi-TF agreement (5m sign matches 1h sign) catches this directly when the lower TF reverses while the higher TF is still positive. Case D (triple gate) likely too restrictive — temporal misalignment of all three signals starves volume. Case C (slope) is a weaker version of the same signal Case B captures more cleanly.
+
+This is a prediction; B68.1 backtest is the authoritative test.
+
+---
+
+### §0.9 No new hardcoded constants from B67 forward
+
+**Permanent governance rule (Kyle directive 2026-04-28):** every new threshold, weight, multiplier, cutoff, lookback, percentile bound, or seed value introduced from B67 onward goes directly into `module_constants` at the moment of introduction. No new hardcoded values in the codebase.
+
+This rule will be added to `CLAUDE.md` §5 (Critical Rules) on the next governance pass and tagged as a non-negotiable invariant. Langston will be asked to enforce this during code review.
+
+Effect on B72 scope: B72 (comprehensive lever sweep) becomes a sweep of **pre-B67 legacy constants only** — much smaller than originally planned. Inline migration during B67/B68/B69 covers everything new; B72 cleans up everything old.
+
+---
+
 ## 1. The starting question (Kyle, 2026-04-27)
 
 Kyle asked five sharp questions when we started discussing B67/B68 (external data integration):
@@ -281,9 +532,11 @@ If we adopt this plan, several existing roadmap items shift:
 
 ---
 
-## 11. ⭐ DECISIONS QUEUED FOR KYLE
+## 11. ⭐ DECISIONS QUEUED FOR KYLE — RESOLVED 2026-04-28
 
-These are the calls that need to be made before we can scope B67 or write a step-by-step plan. Listed here so they don't get lost.
+> **STATUS: ALL 12 DECISIONS RESOLVED.** See §0.1 for the resolution table. Original questions and CC+Langston positions retained below for traceability.
+
+These are the calls that needed to be made before we could scope B67. As of 2026-04-28 they have all been resolved by Kyle. Forward-looking work uses §0 as the authoritative state.
 
 **Architecture decisions:**
 
