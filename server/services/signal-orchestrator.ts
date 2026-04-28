@@ -99,6 +99,8 @@ import { findHybridMatch, HYBRID_COMPATIBILITY } from '../config/hybrid-compatib
 import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emitter.js';
 // B67.1 — macro modifier alternate row builder
 import { buildB67_1Alternate } from '../core/metrics/macro-modifier.js';
+// B67.2 — phase preference application
+import { applyPhasePreference } from '../core/metrics/regime-phase.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 
@@ -637,17 +639,19 @@ export class SignalOrchestrator {
     // replay-ablation job.
     //
     // Fire-and-forget; classifier hot path never blocks on this.
-    // B67.1 — always push the macro modifier alternate. Per Kyle directive
-    // 2026-04-29 (no shadow theater): modifier is always non-null after MCE
-    // start. The cold-start null window is the brief moment between MCE.start()
-    // and the first refreshMacroContext completing — no signals reach this hook
-    // during that window. Defensive null check retained only for that edge.
+    // B67.1 + B67.2 — always push the macro + phase alternates. Per Kyle
+    // directive 2026-04-29 (no shadow theater): both factors always live.
+    // Cold-start null window is the brief moment between MCE.start() and the
+    // first refreshMacroContext — no signals reach this hook during that
+    // window. Defensive null checks retained only for that edge.
     const ablationAlternates: FactorAlternate[] = [];
     {
-      const macro = getMarketContextEngine().getCurrentMacroContext();
+      const mce = getMarketContextEngine();
+      const macro = mce.getCurrentMacroContext();
+      const phaseWeights = mce.getCurrentPhaseWeights();
+
+      // B67.1 macro modifier alternate
       if (macro === null) {
-        // Cold-start window — should never reach here in practice because
-        // signals can't evaluate before MCE is ready. Skip the alternate.
         console.warn('[B67.1][orchestrator] macro context null at ablation hook — cold-start race');
       } else {
         ablationAlternates.push(
@@ -658,6 +662,52 @@ export class SignalOrchestrator {
             true,
           ),
         );
+      }
+
+      // B67.2 phase preference alternate
+      // Confidence here is the strategy's effective confidence value at admission.
+      // Phase preference multiplies it; alternate row records both with/without
+      // the multiplication for downstream calibration analysis.
+      if (phaseWeights === null) {
+        console.warn('[B67.2][orchestrator] phase weights null at ablation hook — cold-start race');
+      } else if (macro !== null) {
+        // Need a phase + ageSeconds. Read from rawSignal's pair via MCE
+        // context. If MCE produced a context, regime.phase is non-null.
+        const symbolCtx = mce.getCachedContext(rawSignal.symbol);
+        const phase = symbolCtx?.regime.phase;
+        const phaseAgeSeconds = symbolCtx?.regime.phaseAgeSeconds ?? 0;
+        const regimeLabel = extendedMetrics.regime ?? 'UNKNOWN';
+        if (phase) {
+          const baseConf = extendedMetrics.confidence ?? 0.5;
+          try {
+            const strategyKey = (rawSignal as any).strategy ?? 'unknown';
+            const modulated = applyPhasePreference(strategyKey, phase, phaseWeights, baseConf);
+            const weight = phaseWeights[`${strategyKey}_${phase}`];
+            ablationAlternates.push({
+              factorName: 'b67_2_phase_dimension',
+              factorState: 'alternate_disabled',
+              alternateDecision: {
+                regimeLabel,
+                confidence: baseConf, // confidence WITHOUT phase preference
+                admissionPossible: true,
+                metadata: {
+                  confidence_with_phase_pref: modulated,
+                  confidence_without_phase_pref: baseConf,
+                  phase,
+                  phase_age_seconds: phaseAgeSeconds,
+                  strategy_phase_weight: weight,
+                  regime_label: regimeLabel,
+                },
+              },
+            });
+          } catch (err) {
+            // applyPhasePreference throws on missing weight key. Log loudly.
+            console.error(
+              '[B67.2][orchestrator] phase preference lookup failed:',
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
       }
     }
 

@@ -70,6 +70,17 @@ import {
   type MacroModifierResult,
 } from '../core/metrics/macro-modifier.js';
 import { getConstant } from './module-constants-service.js';
+// B67.2: phase dimension (EARLY/PRIME/LATE on existing 5 regimes).
+// Per-pair age tracked by regimePhaseStore singleton; MCE ticks the store on
+// every cycle and computes the phase from age + boundary constants. Phase
+// preference application lives in signal-orchestrator + vts-runner via the
+// shared applyPhasePreference utility (NOT in MCE — MCE only attaches the
+// phase + age fields to RegimeContext for downstream consumers to read).
+import {
+  regimePhaseStore,
+  computePhase,
+  type RegimePhase,
+} from '../core/metrics/regime-phase.js';
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -109,6 +120,15 @@ export class MarketContextEngine {
   private macroCachedAt: number = 0;
   private macroCachedContext: MacroContext | null = null;
   private macroConfigCache: MacroModifierConfig | null = null;
+
+  // ─── B67.2: phase dimension config cache ──────────────────────────────────
+  // Phase boundaries + strategy-phase weights resolved on the same refresh
+  // cadence as macro. The 54-cell weights blob is read ONCE per refresh and
+  // exposed via getCurrentPhaseWeights() for signal-orchestrator + vts-runner
+  // to read at admission time (no per-pair DB hit).
+  private phaseEarlyMaxHours: number | null = null;
+  private phasePrimeMaxHours: number | null = null;
+  private phaseWeights: Record<string, number> | null = null;
 
   constructor(config: Partial<MCEConfig> = {}) {
     this.config = { ...DEFAULT_MCE_CONFIG, ...config };
@@ -223,6 +243,29 @@ export class MarketContextEngine {
       this.macroCachedContext = { snapshot, modifier: result };
       this.macroCachedAt = Date.now();
 
+      // ── B67.2: also refresh phase boundaries + strategy-phase weights ──
+      // Same fail-hard discipline as macro modifier — missing constants
+      // throw with explicit identifier list so the migration can be fixed.
+      const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+      const [earlyHrs, primeHrs, weightsBlob] = await Promise.all([
+        getConstant<number>('regime_phase', 'b67_2_early_phase_max_hours', RES_KEY),
+        getConstant<number>('regime_phase', 'b67_2_prime_phase_max_hours', RES_KEY),
+        getConstant<Record<string, number>>('regime_phase', 'b67_2_strategy_phase_weights', RES_KEY),
+      ]);
+      const missingPhase: string[] = [];
+      if (earlyHrs === undefined)    missingPhase.push('b67_2_early_phase_max_hours');
+      if (primeHrs === undefined)    missingPhase.push('b67_2_prime_phase_max_hours');
+      if (weightsBlob === undefined) missingPhase.push('b67_2_strategy_phase_weights');
+      if (missingPhase.length > 0) {
+        throw new Error(
+          `[B67.2] missing module_constants in regime_phase module: ${missingPhase.join(', ')}. ` +
+          `Run migration 2026-04-29-b67-2-phase-dimension.sql to seed.`,
+        );
+      }
+      this.phaseEarlyMaxHours = earlyHrs as number;
+      this.phasePrimeMaxHours = primeHrs as number;
+      this.phaseWeights = weightsBlob as Record<string, number>;
+
       console.log(
         `[B67.1][modifier] value=${result.value.toFixed(4)} ` +
           `btcZ=${result.btcDomZ.toFixed(3)} fundZ=${result.fundingZ.toFixed(3)} ` +
@@ -243,6 +286,30 @@ export class MarketContextEngine {
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  /**
+   * B67.2: Sync read of the most recently computed MarketContext for a
+   * symbol from MCE's per-symbol cache (60s TTL). Returns null if the cache
+   * entry is missing or expired. Consumers (ablation hooks downstream of
+   * computeContext) use this to read phase + age without re-computing.
+   */
+  getCachedContext(symbol: string): MarketContext | null {
+    const entry = this.cache.get(symbol);
+    if (!entry) return null;
+    if (entry.expiresAt < Date.now()) return null;
+    return entry.context;
+  }
+
+  /**
+   * B67.2: Public accessor for the strategy-phase weights blob.
+   * Returns null only during cold start (before first refresh completes) —
+   * after that it's always populated. Consumers (signal-orchestrator + vts-
+   * runner) call this at admission time to look up `<strategy>_<phase>` weight
+   * via the shared `applyPhasePreference` utility.
+   */
+  getCurrentPhaseWeights(): Record<string, number> | null {
+    return this.phaseWeights;
   }
 
   /**
@@ -333,6 +400,31 @@ export class MarketContextEngine {
       macroModifierValue,
     );
 
+    // ── B67.2: tick regime-phase store + compute phase ────────────────────
+    // No fallbacks per Kyle directive 2026-04-29: boundaries must be loaded
+    // before computeContext runs. Throw if cold-start race produced null.
+    if (this.phaseEarlyMaxHours === null || this.phasePrimeMaxHours === null) {
+      throw new Error(
+        `[B67.2] phase boundaries not initialized for ${symbol}. ` +
+        `MCE.start() must complete refreshMacroContext() before computeContext is called.`,
+      );
+    }
+    const phaseAgeMs = regimePhaseStore.tick(symbol, regimeResult.regime, now);
+    const phase: RegimePhase = computePhase(
+      phaseAgeMs,
+      this.phaseEarlyMaxHours,
+      this.phasePrimeMaxHours,
+    );
+    const phaseAgeSeconds = Math.floor(phaseAgeMs / 1000);
+    // Detect phase transitions (regime change OR boundary cross) and log.
+    // ageMs near zero immediately after a non-zero tick = transition; the
+    // store reset enteredAt. Logging is gated to avoid noise on every cycle.
+    if (phaseAgeMs === 0) {
+      console.log(
+        `[B67.2][transition] ${symbol} regime=${regimeResult.regime} phase=${phase} (regime change reset)`,
+      );
+    }
+
     const indicators: MarketIndicators = {
       vwap,
       sma,
@@ -355,6 +447,9 @@ export class MarketContextEngine {
       confidence: regimeResult.confidence,
       regimeWeight: weight,
       allowedStrategies,
+      // B67.2 — phase dimension (per-pair age + computed phase)
+      phase,
+      phaseAgeSeconds,
     };
 
     const context: MarketContext = {

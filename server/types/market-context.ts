@@ -52,12 +52,21 @@ export interface MarketIndicators {
 
 /**
  * RegimeContext — Regime classification + metadata from a single computeContext() call.
+ *
+ * B67.2: extended with `phase` + `phaseAgeSeconds`. Phase is computed alongside
+ * regime in MCE (NOT inside the classifier). EARLY (0..2h) / PRIME (2..12h) /
+ * LATE (12h+) by default; boundaries configurable via module_constants. Phase
+ * preference is applied at signal admission (signal-orchestrator + vts-runner)
+ * via `applyPhasePreference()` from `regime-phase.ts`.
  */
 export interface RegimeContext {
   regime: MarketRegimeType;
-  confidence: number;         // Regime classification confidence (0.4-0.95)
+  confidence: number;         // Regime classification confidence (post-B67.1: 0.4-1.0)
   regimeWeight: number;       // From REGIME_WEIGHTS lookup (used in FinalScore)
   allowedStrategies: string[]; // Strategy keys allowed for this regime
+  // B67.2 — phase dimension
+  phase: 'EARLY' | 'PRIME' | 'LATE';
+  phaseAgeSeconds: number;
 }
 
 /**

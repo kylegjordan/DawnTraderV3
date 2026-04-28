@@ -100,6 +100,8 @@ import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/
 import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emitter.js';
 // B67.1 — macro modifier alternate row builder
 import { buildB67_1Alternate } from '../core/metrics/macro-modifier.js';
+// B67.2 — phase preference application
+import { applyPhasePreference } from '../core/metrics/regime-phase.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
@@ -1373,23 +1375,63 @@ async function generatePhase10Signal(
   // B67.1+ producers ship, each adds its FactorAlternate here. signal.id is
   // the synthetic VTS string trade id (vsig_p10_*) — the schema's
   // sourceType='vts_trade' branch carries this in vts_trade_id (TEXT).
-  // B67.1 — VTS path mirror of the orchestrator alternate. Always emit per
-  // Kyle directive 2026-04-29 (no shadow theater). Defensive null check only
-  // for the cold-start race window.
+  // B67.1 + B67.2 — VTS path mirror of the orchestrator alternates. Always
+  // emit per Kyle directive 2026-04-29 (no shadow theater). Defensive null
+  // checks only for the cold-start race window.
   const _b67_1_alternates: FactorAlternate[] = [];
   {
-    const _b67_1_macro = getMarketContextEngine().getCurrentMacroContext();
-    if (_b67_1_macro === null) {
+    const _mce = getMarketContextEngine();
+    const _macro = _mce.getCurrentMacroContext();
+    const _phaseWeights = _mce.getCurrentPhaseWeights();
+    const _ctx = _mce.getCachedContext(symbol);
+
+    // B67.1 macro modifier alternate
+    if (_macro === null) {
       console.warn('[B67.1][vts-runner] macro context null at ablation hook — cold-start race');
     } else {
       _b67_1_alternates.push(
         buildB67_1Alternate(
           predictiveConfidence ?? 0.5,
-          _b67_1_macro.modifier,
+          _macro.modifier,
           regime ?? 'UNKNOWN',
           true,
         ),
       );
+    }
+
+    // B67.2 phase preference alternate
+    if (_phaseWeights === null) {
+      console.warn('[B67.2][vts-runner] phase weights null at ablation hook — cold-start race');
+    } else if (_ctx) {
+      const phase = _ctx.regime.phase;
+      const phaseAgeSeconds = _ctx.regime.phaseAgeSeconds;
+      const baseConf = predictiveConfidence ?? 0.5;
+      try {
+        const modulated = applyPhasePreference(strategy, phase, _phaseWeights, baseConf);
+        const weight = _phaseWeights[`${strategy}_${phase}`];
+        _b67_1_alternates.push({
+          factorName: 'b67_2_phase_dimension',
+          factorState: 'alternate_disabled',
+          alternateDecision: {
+            regimeLabel: regime ?? 'UNKNOWN',
+            confidence: baseConf,
+            admissionPossible: true,
+            metadata: {
+              confidence_with_phase_pref: modulated,
+              confidence_without_phase_pref: baseConf,
+              phase,
+              phase_age_seconds: phaseAgeSeconds,
+              strategy_phase_weight: weight,
+              regime_label: regime ?? 'UNKNOWN',
+            },
+          },
+        });
+      } catch (err) {
+        console.error(
+          '[B67.2][vts-runner] phase preference lookup failed:',
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
   }
 
