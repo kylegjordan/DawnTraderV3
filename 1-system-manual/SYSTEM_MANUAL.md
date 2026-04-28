@@ -4400,11 +4400,12 @@ If a target hit occurs but the qualifier check fails (non-qualifying strategy, o
 Where pure-trail (B65.2) had only a single target-latch event per trade and HWM-based dynamic trail thereafter, B65.4 turns each target hit into a "rung event":
 
 - **Rung step size** = original entry-to-target distance. So if entry was $100 and target was $107.50 (1.5R), rung 1 advances target to $115, rung 2 to $122.50, rung 3 to $130, etc. Same R-multiple geometry the strategy designed.
-- **Rung floor** = cost-aware floor of the just-hit target via `computeNetTargetFloor(rungTarget, costMetrics)`. Same canonical cost model as the BE floor — locks in profit at each rung.
+- **Rung floor** = slippage-buffer floor placed ABOVE the just-hit target via `computeNetTargetFloor(rungTarget, costMetrics, multiplier)`. **B65.4.1 (2026-04-26):** the formula was originally `target * (1 - totalCost/2)` (floor BELOW target — allowed reversals to give back gain) but was hotfixed to `target * (1 + slippage * multiplier)` (floor ABOVE target — locks in at-or-above just-hit target value on stop-out). Multiplier is `module_constants.trailing_exit.rung_floor_slippage_buffer_multiplier` (seed 1.0). Multi-rung ratcheting still works as before; only the per-rung floor placement changed.
 - **Active stop** = `max(currentRungFloor, dynamic_HWM_trail)` where the HWM dynamic trail (B65.2) is preserved as a SECONDARY floor. If price runs significantly past current rung target without crossing the next one, the dynamic trail captures the upside; if it stays just past the rung target, the rung floor binds.
 - **Multi-rung gap handling** — a single price update that gaps past multiple rung targets ratchets through all crossed rungs in sequence (while-loop in `updatePosition`). Each rung locks its floor before advancing.
 - **Backward compat** — pre-B65.4 persisted states (`targetLatched=true` without ladder fields) migrate on `importStates()` to `ladderRung=1, currentRungTarget=originalTarget, currentRungFloor=0`. Engine reconciles correctly from `currentPrice` on the next cycle.
 - **`ladderRungsHit` captured on close** — the closed-trade record carries the rung count. Trade with `trailing_stop_hit` and `ladderRungsHit=3` ran past original target plus two more rung targets before reversing. Trade with `ladderRungsHit=1` reached original target then reversed before rung 2.
+- **B65.4.2 observability columns (2026-04-28)** — `paper_sim_trades` adds `original_stop_price`, `latch_trigger_price`, `rung_target_history` columns. TrailingState captures `originalStopPrice` at init, `latchTriggerPrice` at first target latch, `rungTargetHistory[]` appended at each ratchet. Surfaced in both open + closed CSV exports + `/api/vts/ml/open`. Made the ladder counterfactual analysis report (template at `B65_4_1_LADDER_TABLE_2026_04_28.md`) readable directly from CSV without grepping PM2 logs.
 
 ### 5.1.1 Moonbag Qualifier (B65.2)
 
@@ -10481,3 +10482,61 @@ If any of these constants change, the aggregator's window filters must be re-val
 ---
 
 *End of Appendix B64a.*
+
+---
+
+# Appendix B65.4.x — Ladder Trailing Model + Hotfixes
+
+## B65.4 Ladder design (2026-04-25)
+
+See §5.1 above for the engine details. Each target hit advances both stop and target by one R-distance step; trade runs through as many rungs as price moves.
+
+## B65.4.1 Cost-aware floor formula change (2026-04-26 hotfix)
+
+**Trigger:** counterfactual analysis on first 5 closed laddered trades (`B65_4_LADDER_COUNTERFACTUAL_ANALYSIS.md`) showed the original formula `target * (1 - totalCost/2)` placed the rung floor BELOW the just-hit target, allowing reversals to exit BELOW the original target value. Aggregate cost: ~$11 across 5 trades vs the just-take-target counterfactual.
+
+**Fix:** new formula `target * (1 + slippage * bufferMultiplier)`. Floor now sits ABOVE just-hit target by exactly enough to absorb stop-trigger slippage on a reversal. Multi-rung ratcheting still works as before. The buffer multiplier is `module_constants.trailing_exit.rung_floor_slippage_buffer_multiplier` (seed 1.0), tunable per `(asset_class, exchange, regime, strategy)` without code redeploy.
+
+## B65.4.2 Observability columns (2026-04-28 hotfix)
+
+**Trigger:** B65.4.1 verification 2026-04-28 showed counterfactual analysis was unreadable on "anomaly" rows because the closed-trade CSV didn't expose latch-trigger price (which can fire at +1.5R from entry due to `target_lock_r` interaction, not at the strategy's published target), original stop, or per-rung target history. Analyst had to grep PM2 entry logs to recover original stops.
+
+**Three TrailingState fields added:**
+- `originalStopPrice` — captured at `initializeTrailingState`, never modified
+- `latchTriggerPrice` — set ONCE when `targetLatched` first flips false→true (records actual latch trigger price)
+- `rungTargetHistory` (number[]) — appended at each ratchet event
+
+**Three `paper_sim_trades` columns added** (migration `2026-04-28-b65-4-2-ladder-observability-columns.sql`): `original_stop_price` decimal(20,8), `latch_trigger_price` decimal(20,8), `rung_target_history` jsonb. Surfaced in both open + closed CSV exports + `/api/vts/ml/open` endpoint.
+
+## B65.4.x verification findings (2026-04-28)
+
+**The hotfix is doing what it was designed to do for clean post-deploy cases.** Across 4 post-hotfix-clean laddered trades, ladder is approximately break-even vs counterfactual (−3.98pp aggregate). Multi-rung still captures upside in the design's payoff scenario.
+
+**Aggregate ladder Δ across all 17 laddered trades: −59.89pp / ≈ −$39 vs the just-take-target counterfactual.** Even with the hotfix, the ladder is net-negative in aggregate. Bigger picture: the broader 7-day VTS cohort (1,136 trades) is **−$1,187** with 74% of exits at break-even-stop / original-stop / trailing-stop. Most trades never reach target in the first place.
+
+**The dominant problem is upstream entry quality, not ladder calibration.** The ladder fires on 1.5% of trades; the other 98.5% lose money on entries that are systematically mis-timed against macro context. **B67 macro confidence modifier is the priority lever.** Ladder net contribution stays under observation per Phase 19.4.5 item 7; possible outcomes are (a) keep multiplier at 1.0 if observation turns positive, (b) tune multiplier via `module_constants` DB update, or (c) retire ladder design in favor of just-take-target-and-exit.
+
+---
+
+# Appendix REGIME — Master Planning Doc Reference
+
+## Regime classifier overhaul + external data integration plan (2026-04-27)
+
+**Document:** `Claude Comms and Packages/Scope Files/REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md`. Listed as ⭐ MUST READ on next session start in MEMORY.md. **Required pre-work before any B67-related implementation.**
+
+**Captures the full conversation between CC and Langston** about external data integration, regime classifier improvements, material-improvement levers, missing regimes, and ML-light pre-launch viability. Honest classifier rating: medium-low overall. B62 DBS integration was a real success and was undersold in CC's first rating.
+
+**Key architectural positions reached:**
+
+- **Confidence-modifier architecture** (Langston, recommended over CC's original alongside-the-classifier approach): external data modulates the classifier's CONFIDENCE NUMBER (0.85-1.05x range), not the regime LABEL. Low confidence → triggers TRANSITION/UNSTABLE stability → activates existing DEFENSIVE mode overlay → automatic throttling. One integration point, preserves B62 calibration.
+- **Phase dimension** (Langston, recommended over adding new top-level regimes): sub-classify existing 5 regimes with EARLY/MATURE/LATE phase boundaries (2h / 12h regime stability). Captures Topping (TFS-LATE), Accumulation (RBS-LATE), Climactic (IE-EARLY) without expanding regime taxonomy.
+- **B67 expanded to 5 coordinated sub-deliverables** (~3-4 weeks total): macro confidence modifier (B67.1), phase dimension (B67.2), per-underlying position limits (B67.3, promote from paper-only), realized-outcome feedback into classifier confidence (B67.4), Path B sustainability tightening (B67.5, folds in deferred B65.6 work).
+- **ML-light reliability score** (Langston suggestion): logistic regression on classifier inputs + B67 macro features predicting "is this classification wrong?" trained on 30d VTS data. ~2-3 days work. Pre-launch viable as Phase 19.4 candidate.
+
+**Combined realistic estimate (CC + Langston consensus): 10-20pp WR improvement on currently-failing cohorts; 3-5pp overall.**
+
+**12 decisions queued for Kyle in §11** of the planning doc (4 architecture, 2 sequencing, 3 scope, 2 validation, 1 pre-implementation audit). These are the gating event for writing `BATCH_67_SCOPE.md`.
+
+---
+
+*End of B65.4.x + REGIME planning appendices.*

@@ -854,3 +854,53 @@
 **Concurrency cap counter:** unchanged from B65.2. Counter increments on rung 1 entry (modeChanged from TARGET → TRAILING_TAKE), decrements on `clearTrailingState`. Subsequent rungs (2, 3, ...) do NOT re-increment — each trade occupies one moonbag slot regardless of rung count.
 
 **Duration cap:** unchanged from B65.2. Timer starts at first target latch (rung 1), fires on cap exceed regardless of current rung. `ladderRungsHit` is captured on the `moonbag_timeout` close.
+
+---
+
+## B65.4.1 — Cost-aware floor formula change (2026-04-26 hotfix)
+
+**Trigger:** B65.4 ladder counterfactual analysis showed the original `computeNetTargetFloor` formula (`target * (1 - totalCost/2)`) placed the rung floor BELOW the just-hit target, allowing reversals to exit below the original target value. Across the first 5 closed laddered trades, the ladder lost ~$11 vs the just-take-target counterfactual.
+
+**Change:** new formula `target * (1 + slippage * bufferMultiplier)` places floor ABOVE the target by exactly the per-pair slippage estimate × multiplier. Multi-rung ratcheting still works unchanged.
+
+**Module constant:** `trailing_exit.rung_floor_slippage_buffer_multiplier` (seed 1.0). Tunable per `(asset_class, exchange, regime, strategy)` without code redeploy. Migration `2026-04-26-b65-4-1-rung-floor-buffer-seed.sql`.
+
+**Cross-cutting impact:**
+- **If you edit `computeNetTargetFloor`** → both initial target-latch floor placement AND ladder rung-floor computation use it. Verify the function still receives the multiplier parameter and applies it correctly. BE-latch path uses `computeNetBreakeven` (separate function, NOT affected by this change).
+- **If you change the multiplier seed** → `module_constants` DB update only; no code change required.
+
+---
+
+## B65.4.2 — Ladder observability columns (2026-04-28 hotfix)
+
+**Trigger:** B65.4.1 verification 2026-04-28 showed counterfactual analysis was unreadable on "anomaly" rows because the closed-trade CSV didn't expose latch-trigger price, original stop, or per-rung target history. Analyst had to grep PM2 entry logs to recover original stops.
+
+**Engine state extension:** `TrailingState` interface in `server/services/trailing-exit-controller.ts` adds three optional observability fields:
+- `originalStopPrice` (number) — captured at `initializeTrailingState`, never modified.
+- `latchTriggerPrice` (number) — set ONCE when `targetLatched` first flips false→true. Records actual latch-trigger price (which can differ from `state.targetPrice` due to `target_lock_r` interaction).
+- `rungTargetHistory` (number[]) — appended at each ratchet. Index 0 = original target (rung 1).
+
+**Propagation:** the 3 fields flow through `TrailingUpdateResult` → `tec-evaluator.ts:TECExitDecision` → `vts-runner.ts:OpenVirtualTrade` → `vts-service.ts:persistRealPriceTrade` → JSON log + `paper-execution-engine.ts:closePosition` → `paper_sim_trades` row. Also surfaced through `getOpenVirtualTradesForML` for the open-trades API serializer.
+
+**Schema:** `paper_sim_trades` adds three columns (migration `2026-04-28-b65-4-2-ladder-observability-columns.sql`):
+- `original_stop_price` decimal(20,8) nullable
+- `latch_trigger_price` decimal(20,8) nullable
+- `rung_target_history` jsonb nullable
+
+**Backward compatibility:** `importStates` initializes `rungTargetHistory: []` on migrated states. `originalStopPrice` and `latchTriggerPrice` remain undefined for trades whose state was persisted before B65.4.2 (cannot reconstruct).
+
+**Cross-cutting impact:**
+- **If you edit the closed-trade CSV export schema** → 3 new columns appear in both open + closed exports (`server/utils/export-csv.ts` updated).
+- **If you edit `getOpenVirtualTradesForML`** → 3 new fields added to the return type, read from engine state with `trade.*` fallback.
+- **If you ever reconstruct old trades for backtest** → `originalStopPrice`/`latchTriggerPrice` will be null for trades closed before 2026-04-28; cannot be backfilled.
+
+---
+
+## Master planning doc reference (2026-04-27)
+
+The regime classifier overhaul + external data integration plan lives at `Claude Comms and Packages/Scope Files/REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md`. **Required pre-work before any B67-related implementation.** §11 contains 12 decisions queued for Kyle.
+
+**Architecture decisions (Kyle-pending) that affect SIM downstream:**
+- B67 confidence-modifier architecture means the regime classifier formula stays unchanged; macroAdjustment (0.85-1.05x) modulates the confidence number, propagates through stability detector → existing mode overlay → throttle on entry.
+- Phase dimension EARLY/MATURE/LATE on existing 5 regimes (no new top-level regimes).
+- B67 expanded to 5 sub-deliverables (~3-4 weeks).
