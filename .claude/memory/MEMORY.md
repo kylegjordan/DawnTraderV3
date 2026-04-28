@@ -7,12 +7,12 @@
 ## READ FIRST ON SESSION START
 
 1. **This memory file** — current state, in-progress work, known issues (below)
-2. ⭐ **NEXT WORK = B67.1 + B67.2 (deploy together per scope §3).** B67.0 + B67.3 both closed 2026-04-28. Remaining: B67.1 macro confidence modifier (BTC dominance + funding + mcap) + B67.2 phase dimension (EARLY/PRIME/LATE on existing 5 regimes). Both modulate the regime classifier's confidence number. Ship together because they share the calibration check (gating event) downstream. Read in order:
-   - `Claude Comms and Packages/Scope Files/BATCH_67_SCOPE.md` §6 (B67.1) + §7 (B67.2)
-   - `Claude Comms and Packages/Scope Files/BATCH_67_PRE_AUDIT.md` (V2, SIM consultation)
-   - `Claude Comms and Packages/Scope Files/REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md` §0 (master decisions)
-   - `Claude Comms and Packages/Batch Completion/BATCH_67_PROGRESS_REPORT.md` (open; B67.0 + B67.3 closed)
-   - **B67.3 follow-up before activation:** small wire-in to persist `pair_id_hash` to `paper_sim_trades` row at trade-open. Required before flipping `b67_3_enabled=true` so end-of-observation cohort comparison has the data.
+2. ⭐ **MASTER REGIME CLASSIFIER OVERHAUL DOCUMENT — REQUIRED READING (do this FIRST):** `Claude Comms and Packages/Scope Files/REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md` — full 2026-04-27 + 2026-04-28 conversation between CC + Langston + Kyle on the regime overhaul. §0 has all 12 §11 decisions resolved + 7 V2 audit refinements. §0.4 has the B67/B68/B69 split. §0.6 has the 7 consumers. §0.7 has post-hoc regime labeling. §0.10 has Langston's consensus refinements. **DO NOT scope or implement any B67/B68/regime work without reading this end-to-end first.**
+
+3. ⭐ **NEXT WORK = B67.1 + B67.2 SCOPE (work with Langston).** B67.0 + B67.3 both closed 2026-04-28. Active task: scope B67.1 macro confidence modifier (BTC dominance + funding + mcap) + B67.2 phase dimension (EARLY/PRIME/LATE on existing 5 regimes) — these ship TOGETHER per scope §3 because they both modulate regime confidence and share the calibration check (gating event) downstream. Process: re-read the master planning doc above, then `BATCH_67_SCOPE.md` §6 (B67.1 spec) + §7 (B67.2 spec), then engage Langston via 2-step protocol (Telegram + brain). Topic-21 session UUID: `16b70816-c63d-4cf0-8c80-bebd9f2cf066`. Other reads:
+   - `Claude Comms and Packages/Scope Files/BATCH_67_PRE_AUDIT.md` (V2, SIM consultation — coexistence requirements with B63 mode-overlay-bypass + Pattern Pool guardrails)
+   - `Claude Comms and Packages/Batch Completion/BATCH_67_PROGRESS_REPORT.md` (open; tracks B67.0 + B67.3 closures)
+   - **B67.3 follow-up before activation:** small wire-in to persist `pair_id_hash` to `paper_sim_trades` row at trade-open. Required before flipping `b67_3_enabled=true` so end-of-observation cohort comparison has the data. Sequence: can land before, during, or after B67.1+B67.2 work — not blocking.
 3. `DawnTraderV3/1-system-manual/POST_AUDIT_ROADMAP.md` — Phase 15c sequencing
 4. `DawnTraderV3/Claude Comms and Packages/Scope Files/POST_B62_PRE_LAUNCH_PLAN.md` — batches queued
 5. `DawnTraderV3/Claude Comms and Packages/Scope Files/MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` — architectural reference
