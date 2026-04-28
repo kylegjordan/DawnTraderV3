@@ -902,5 +902,50 @@ The regime classifier overhaul + external data integration plan lives at `Claude
 
 **Architecture decisions (Kyle-pending) that affect SIM downstream:**
 - B67 confidence-modifier architecture means the regime classifier formula stays unchanged; macroAdjustment (0.85-1.05x) modulates the confidence number, propagates through stability detector → existing mode overlay → throttle on entry.
-- Phase dimension EARLY/MATURE/LATE on existing 5 regimes (no new top-level regimes).
-- B67 expanded to 5 sub-deliverables (~3-4 weeks).
+- Phase dimension EARLY/PRIME/LATE on existing 5 regimes (no new top-level regimes). Naming locked 2026-04-28.
+- B67 expanded to 6 sub-deliverables (~3-4 weeks). All 12 §11 decisions resolved 2026-04-28.
+
+---
+
+## B67.0 — Telemetry & Ablation Framework (2026-04-28, commit `105d2b53`)
+
+**New service:** `server/services/factor-ablation-emitter.ts`. Fire-and-forget `emitAblationRecord(source, pairSymbol, realDecision, alternates)` API with discriminated `AblationSource = { kind: 'active_signal'; signalId: number } | { kind: 'vts_trade'; vtsTradeId: string }` union. Gated on `module_constants.ablation_framework.b67_0_ablation_emit_enabled` (default true). Bulk insert one row per (source, factor); empty alternates short-circuits to no-op. Errors caught + logged; classifier never blocks on emit.
+
+**New script:** `server/scripts/replay-ablation.ts`. Nightly cron at 04:00 UTC (npm script `b67:replay-ablation`). Skeleton at B67.0 ship — counts pending rows by source_type, runs 90-day retention sweep on `evaluated_at`. Active-path replay outcome lookup gated until B67.5 produces ablation rows joinable to `paper_sim_trades`. VTS path JSONL outcome reader gated until first B67.1+ factor producer needs it. Exported `classifyTradeOutcome(pnlUsd)` and `AblationOutcome` type for downstream factor producers.
+
+**New table:** `regime_factor_alternates` (12 columns). XOR CHECK constraint: exactly one of `signal_id` (integer, for active path) or `vts_trade_id` (text, for VTS path) populated; `source_type IN ('active_signal','vts_trade')` discriminator. JSONB `real_decision` and `alternate_decision` permissive for forward-compat. `replay_outcome` + `replay_completed_at` populated by nightly job. 4 indexes: (factor_name, evaluated_at DESC), (signal_id WHERE NOT NULL), (vts_trade_id WHERE NOT NULL), (pair_symbol, evaluated_at DESC).
+
+**New module_constants seeds (`ablation_framework` module):**
+- `b67_0_ablation_emit_enabled` (bool, default `true`)
+- `b67_0_alternates_retention_days` (int, default `90`)
+- `b67_0_paper_replay_capital_threshold_pct` (float, default `0.80`)
+
+**Wire-in sites (call hooks for B67.1+ factor producers):**
+- `server/services/signal-orchestrator.ts` — emit hook after `readyToBuyService.queueSQESignal()` in the active-trading path. Today fires with empty alternates (no-op). When B67.1+ ships, each producer adds its `FactorAlternate` to the array.
+- `server/services/vts-runner.ts` — emit hook before `return { signal, tradeRecord }` in the VTS-mirror path. Same empty-alternates pattern.
+
+**New API endpoint:** `GET /api/analytics/ablation-comparison?window=...` (`server/routes.ts`). Reads `regime_factor_alternates` via the aggregator, returns per-factor counterfactual stats. Empty until B67.1+ producers ship.
+
+**Aggregator extension:** `server/services/drift-dashboard-aggregator.ts` adds `computeAblationComparison(window)` exported function. GROUP BY factor_name with conditional JSONB aggregations from `replay_outcome` for the four-quadrant taxonomy (admit/admit, admit/reject, reject/admit, reject/reject). Lazy-imports DB to avoid coupling the file's existing JSONL paths to Drizzle/pg at module load.
+
+**UI:** `AblationComparisonSection` component in `client/src/pages/analytics.tsx` Drift Dashboard tab. Renders below existing `DriftDashboardSection`. 60s refetch. Window toggle (24h / 7d / 30d / since-restart). Empty-state explainer when `totalRows === 0`; 8-column table when populated.
+
+**Cross-cutting impact:**
+- **If you edit the emitter API signature** → check both call sites (`signal-orchestrator.ts`, `vts-runner.ts`) AND every B67.1+ factor producer that accumulates alternates. The discriminated `AblationSource` union enforces source-type at the type level — the wire-in sites cannot pass a raw integer.
+- **If you change the four-quadrant taxonomy in `replay-ablation.ts`** → update the aggregator's SQL CASE conditions in `drift-dashboard-aggregator.ts` and the UI's column labels. The `notes` and `alternateOutcome` discriminator strings flow through three files.
+- **If you flip `b67_0_ablation_emit_enabled = false`** → emit becomes no-op globally. Useful as kill-switch if storage growth is unexpected. No code change needed.
+- **If you change the retention window** → update `b67_0_alternates_retention_days` in `module_constants`; nightly job picks it up next run.
+- **If you migrate trade outcome storage off paper_sim_trades + JSONL** → the replay job's outcome-lookup queries (gated for B67.1+) need a corresponding update.
+
+**Blast Radius:** **MEDIUM** at B67.0 ship time (no factor producers yet, observation-only). Becomes **HIGH** as factor producers ship and the framework's outputs feed live calibration decisions.
+
+**Status:** **ACTIVE** — shipped 2026-04-28 in commit `105d2b53`. PM2 restart #101. HTTP 200. 0 rows in table (expected at ship time). Step-7 first-pass verification clean. Step-8 Langston second-pass + Kyle UI ack pending.
+
+**B67.x cross-references "If I Change X, Check Y":**
+- **Edit `factor-ablation-emitter.ts`** → check both wire-in sites + every factor producer
+- **Edit `regime_factor_alternates` schema** → update `shared/schema.ts` Drizzle table, migration + rollback files, aggregator SQL queries
+- **Edit `replay-ablation.ts` outcome taxonomy** → update aggregator SQL discriminators AND UI column labels
+- **Edit aggregator window translation** → both `drift-dashboard-aggregator.ts` (existing) and the new B67.0 `WINDOW_TO_MS` constant must agree; mismatched window semantics produce confusing dashboards
+- **Add a new B67.x factor producer** → add the alternate computation at the wire-in sites in signal-orchestrator + vts-runner; do NOT modify the emitter API; new factor name strings should be `b67_X_<descriptor>` for consistency
+
+**Independent safety gap (separate from B67.0 scope):** B67.0 V2 pre-audit found the kill-switch `dailyLossKillSwitchPct` is configured (10% per UI) but `tripKillSwitch()` is only called manually — no auto-trip code exists. Logged as `POST_AUDIT_ROADMAP.md` Phase 19.4.5 item 9 marked **BLOCKING for live-trading activation**.
