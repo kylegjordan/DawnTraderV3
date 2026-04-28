@@ -1630,8 +1630,8 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   // these columns existed AND for trades that never latched (originalStopPrice
   // is set at trade open; latchTriggerPrice and rungTargetHistory remain null
   // for trades that never reached target).
-  originalStopPrice: numeric("original_stop_price", { precision: 20, scale: 8 }),
-  latchTriggerPrice: numeric("latch_trigger_price", { precision: 20, scale: 8 }),
+  originalStopPrice: decimal("original_stop_price", { precision: 20, scale: 8 }),
+  latchTriggerPrice: decimal("latch_trigger_price", { precision: 20, scale: 8 }),
   rungTargetHistory: jsonb("rung_target_history"), // number[] — array of rung target prices crossed in order
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
