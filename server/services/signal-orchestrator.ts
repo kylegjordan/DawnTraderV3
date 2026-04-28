@@ -97,6 +97,8 @@ import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
 import { findHybridMatch, HYBRID_COMPATIBILITY } from '../config/hybrid-compatibility-registry.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
 import { emitAblationRecord } from './factor-ablation-emitter.js';
+// B67.3 — Per-underlying position cap (admission gate for active path)
+import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -557,6 +559,25 @@ export class SignalOrchestrator {
     }
 
     console.log(`[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: passed SQE filter`);
+
+    // B67.3 — Per-underlying position cap check.
+    // Counts currently-open trades sharing the signal's base currency.
+    // Default disabled (shadow mode) at ship; activation is a module_constants
+    // flip with no code change. In shadow mode, logs what would have been
+    // rejected without actually rejecting. Cohort 1 (control) bypasses the
+    // cap during the A/B observation window.
+    try {
+      const activeTrades = await storage.getActiveTrades(sizingContext.mode);
+      const openSymbols = activeTrades.map((t) => t.symbol);
+      const capDecision = await checkPerUnderlyingCap(rawSignal.symbol, openSymbols);
+      console.log(formatDecisionLog(rawSignal.symbol, capDecision));
+      if (!capDecision.allowed) {
+        return null; // hard reject; signal does not enter RTB queue
+      }
+    } catch (err) {
+      console.error(`[B67.3][cap-check] Failed for ${rawSignal.symbol}; allowing through:`, err instanceof Error ? err.message : err);
+      // Fail-open by design: a B67.3 lookup error must not block trading.
+    }
 
     // Phase 8.8.4-C.5: Queue SQE-qualified signal to RTB pool
     // All signals that pass SQE go into the unified pool regardless of capacity

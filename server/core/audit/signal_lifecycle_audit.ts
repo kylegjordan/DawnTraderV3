@@ -37,6 +37,7 @@ export type RejectionReason =
   | 'EXPIRED_SIGNAL'          // Signal TTL expired
   | 'NO_PRICE'                // Could not get reliable price
   | 'SQE_QUALITY_REJECT'      // Phase 8.8.4-B.1: Signal failed SQE quality thresholds
+  | 'PER_UNDERLYING_CAP'      // B67.3: simultaneous-open-trades-per-base-currency cap reached
   | 'OTHER';                  // Other reason
 
 export interface SignalLifecycleEvent {

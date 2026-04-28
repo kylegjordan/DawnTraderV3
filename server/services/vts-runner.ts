@@ -98,6 +98,8 @@ import '../core/governance/governance-persistence.js'; // Batch 46: Auto-persist
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
 import { emitAblationRecord } from './factor-ablation-emitter.js';
+// B67.3 — Per-underlying position cap (VTS-mirror admission gate)
+import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -1223,6 +1225,24 @@ async function generatePhase10Signal(
     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
     setNullReason('max_open_trades');
     return null;
+  }
+
+  // B67.3 — Per-underlying position cap check (VTS-mirror gate).
+  // Default disabled (shadow mode) at ship; logs would-reject without
+  // actually rejecting until module_constants flag flips. Cohort 1 (control)
+  // bypasses the cap during the A/B observation window. Same gate as the
+  // active-trading path in signal-orchestrator.
+  try {
+    const openSymbols = Array.from(openVirtualTrades.values()).map((t) => t.symbol);
+    const capDecision = await checkPerUnderlyingCap(symbol, openSymbols);
+    console.log(formatDecisionLog(symbol, capDecision));
+    if (!capDecision.allowed) {
+      setNullReason('per_underlying_cap');
+      return null;
+    }
+  } catch (err) {
+    console.error(`[B67.3][cap-check][VTS] Failed for ${symbol}; allowing through:`, err instanceof Error ? err.message : err);
+    // Fail-open: B67.3 lookup error must not block VTS data accumulation.
   }
   
   // Directive 11.6: Create open virtual trade for real-price resolution

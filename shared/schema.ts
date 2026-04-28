@@ -1680,6 +1680,10 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   originalStopPrice: decimal("original_stop_price", { precision: 20, scale: 8 }),
   latchTriggerPrice: decimal("latch_trigger_price", { precision: 20, scale: 8 }),
   rungTargetHistory: jsonb("rung_target_history"), // number[] — array of rung target prices crossed in order
+  // B67.3 — A/B universe-split cohort marker. CRC32(symbol) % 2 at trade open.
+  // Cohort 0: per-underlying cap ENABLED. Cohort 1: cap DISABLED (control).
+  // NULL on trades opened before B67.3 deploy.
+  pairIdHash: integer("pair_id_hash"),
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),
