@@ -58,6 +58,9 @@ import type { TradingSettings, PriceData, InsertExecutionAttemptAudit, Guardrail
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
 import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyType } from './paper-position-sizing';
+// B67.3 follow-up: re-export the cohort-hash function under a clearer name for use
+// at trade-open. Same FNV-1a hash the admission gate uses — keeping a single source.
+import { assignCohortHash as assignCohortHashForPersistence } from './per-underlying-cap';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 import { aj18Diagnostic } from './aj18-rtb-diagnostic';
@@ -1847,6 +1850,12 @@ export class PaperExecutionEngine {
       // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on paper_sim_trades. Derive from symbol.
       const baseCurrency = signal.symbol.split('/')[0] || signal.symbol;
 
+      // B67.3 follow-up: persist cohort hash on trade record at trade-open. Used at
+      // end-of-observation cohort comparison to group closed trades by capped (0)
+      // vs uncapped (1). Cohort assignment is deterministic on symbol via FNV-1a
+      // — same hash function the gate uses, computed inline here at trade-open.
+      const pairIdHash = assignCohortHashForPersistence(signal.symbol);
+
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
         baseCurrency,
@@ -1865,6 +1874,8 @@ export class PaperExecutionEngine {
         patternStrength: patternStrength,
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
+        // B67.3: cohort marker (0=capped treatment / 1=uncapped control)
+        pairIdHash,
         metadata: signal.metadata || {}
       });
 
