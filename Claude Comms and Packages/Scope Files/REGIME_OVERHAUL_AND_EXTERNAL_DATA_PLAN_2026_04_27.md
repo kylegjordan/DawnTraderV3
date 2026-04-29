@@ -336,14 +336,15 @@ After §0.11's reorganization, additional implementation issues surfaced and wer
 | 4 | B67.2.1 trade record persistence + UI | `141ec3c3` + `41abd541` + `575dbca4` | 6 nullable columns on `paper_sim_trades` (regime_confidence_raw, macro_modifier_value, phase, phase_age_seconds, strategy_phase_weight, regime_confidence_modulated). Active path + VTS path both populate. UI renders regime + confidence + phase badge in same column. CSV exports auto-include. |
 | 5 | Replay logic + cron | `3d1a1e7f` + `5e1031a6` + `33df2380` | `replay-ablation.ts` actual outcome lookup wired (was stubbed). VTS JSONL reader. Real bug fixed: signal id mismatch between ablation rows and JSONL — threaded `originalSignalId` through `persistRealPriceTrade`. Cron at 04:00 UTC nightly. |
 | 6 | Persistence + dashboard cleanup | `8f417ca5` | `regimePhaseStore` and macro-feed rolling window persist to `/tmp/*.json` files. Dashboard SQL filters legacy factor names. |
+| 7 | **B67.3.5 Pre-Window Hardening** | `49209eb4` + `d97d47d7` | Phase backfill from OHLC history (resolves §0.12.B Item 1) + TFS branch desaturation (resolves §0.12.B Item 2). New `RegimeConfig` type; `calculatePairRegime` 4th param; `regimePhaseStore.tick` accepts optional `BackfillContext`; 5 new module_constants in regime_classifier module. PM2 #114. First diversified macro modifier observed: 0.85 with real z-scores. |
 
-Comprehensive governance pass: BATCH_CATALOG, PHASE_HISTORY, SIM (new "B67.x foundation work" section), CHANGES_AND_FIXES (full lessons-learned entry), BATCH_67_PROGRESS_REPORT (closure block), MEMORY all updated through commit `fa3fa593`.
+Comprehensive governance pass: BATCH_CATALOG, PHASE_HISTORY, SIM (new "B67.x foundation work" section), CHANGES_AND_FIXES (full lessons-learned entry), BATCH_67_PROGRESS_REPORT (closure block), MEMORY all updated through commit `fa3fa593`. B67.3.5 closure governance pass: same set updated through commit (TBD).
 
-#### §0.12.B Open discussion items (queued for next Langston touchpoint)
+#### §0.12.B Resolved items — both shipped 2026-04-29 in B67.3.5
 
-These two items surfaced during 2026-04-29 investigation and need design discussion. Neither is currently fixed; both have implications for the calibration check.
+Items 1 + 2 below were the open-discussion items surfaced 2026-04-29 evening. Discussed with Langston post-compact (cc-inbox #850), scoped + pre-audited + implemented + reviewed + deployed in a single sub-batch (B67.3.5). Both are now LIVE on staging PM2 #114. Original framing preserved below for traceability; resolution noted inline.
 
-**Item 1 — Phase backfill from OHLC history (Kyle 2026-04-29):**
+**Item 1 — Phase backfill from OHLC history (Kyle 2026-04-29):** ✅ SHIPPED in B67.3.5 (`backfillFromHistory` method on `RegimePhaseStore`). First-observation only, current DBS approximation accepted, persisted via existing `/tmp/regime-phase-store.json` layer, walks 12 × 60min windows, caps age at walk depth.
 
 Current `regimePhaseStore.tick()` records `enteredAt = now` on first observation. So the moment we first see a pair, regime age = 0 — even if the pair has actually been in TFS for 6 hours by external reality. Phase reads as EARLY when it should read PRIME (or LATE).
 
@@ -357,7 +358,7 @@ Kyle's question: can we backfill regime entry time from OHLC history? The classi
 - Should the backfilled enteredAt persist to disk via the same persistence layer added in §0.12.A item 6?
 - If a pair's backfilled age is > 12h, it lands in LATE phase immediately — does that flow correctly through the existing code paths?
 
-**Item 2 — Confidence saturation (Kyle 2026-04-29):**
+**Item 2 — Confidence saturation (Kyle 2026-04-29):** ✅ SHIPPED in B67.3.5. TFS branch step-function replaced with continuous mapping `confidence = min + (max - min) × (mom_factor × dbs_strength × vol_inverse)` on the same three inputs. Output range [0.50, 0.90] via 5 module_constants (recalibrate via DB UPDATE post-deploy). Other 4 regime branches (HVU/RBS/IE/ST) deferred to post-window classifier-tuning batch — logged in `RUNNING_ISSUES.md`. Original framing:
 
 TFS branch in `market-regime.ts:177-184` saturates at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. After B67.1's clamp ceiling raise to 1.0:
 - `0.95 × 1.05 macro_modifier × 1.10 phase_weight = 1.097` → clamps to 1.0 for almost every TFS classification
@@ -374,11 +375,15 @@ Kyle's question (paraphrased): does it make sense to have a confidence score whe
 - Alternative calibration check approach: bucket on RAW pre-clamp confidence value, OR on macro modifier value alone, OR on phase weight alone (each has more variance than modulated confidence)
 - Defer to a dedicated classifier-formula tuning batch post-B67.4 vs address inline
 
-**Sequencing:** Both items will be discussed with Langston after Kyle's next compact. The cheap-tier bundle (B67.4) may proceed first if the discussion lands on "tune later, ship more levers now" — or it may wait if "fix saturation before shipping more levers that touch the same modulation chain."
+**Sequencing resolved (Langston cc-inbox #850):** Modified B chosen — fix both before B67.4 cheap-tier ships. Reasoning: B67.4 outcome feedback adjusts confidence per (regime, strategy); saturated input makes the feedback loop a no-op and the calibration check meaningless. Cost of fix (1-2 days) < cost of 14d wasted calibration window. Sub-batch B67.3.5 implemented both items together. Now LIVE PM2 #114, awaiting deferred verification (cold-pair backfill logs + TFS distribution shift + phase mix shift) ~24h post-deploy.
 
-#### §0.12.C Calibration window status (as of 2026-04-29)
+#### §0.12.C Calibration window status (as of 2026-04-29 evening)
 
-NOT YET STARTED. All 6 pre-window foundation fixes complete. Step 7 (B67.4 cheap-tier bundle) remains. Window starts when B67.4 deploys clean per master plan §0.11.C.
+NOT YET STARTED. All 7 pre-window foundation fixes complete (now including B67.3.5 phase backfill + TFS desaturation). Only B67.4 cheap-tier bundle remains. Window starts when B67.4 deploys clean per master plan §0.11.C.
+
+#### §0.12.D Known follow-up: other 4 regime-branch desaturation
+
+B67.3.5 desaturated only the TFS branch (~55-60% of pairs — the dominant regime, immediate calibration bottleneck). HVU / RBS / IE / ST branches still use the original step-function-with-bonuses formulas. Tracked in `RUNNING_ISSUES.md` for a post-window classifier-formula tuning batch. Reasoning: TFS desaturation alone gives ≥ half the calibration window meaningful confidence variance; deferring the other 4 branches keeps B67.3.5 scope tight and lets us verify the desat approach on one branch before applying it to the others.
 
 ---
 

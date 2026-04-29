@@ -1027,6 +1027,25 @@ The regime classifier overhaul + external data integration plan lives at `Claude
 
 **B67 dashboard cleanup** (`drift-dashboard-aggregator.ts`): aggregator SQL filters `factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')` so the dashboard shows only the 4 active per-input rows + `b67_2_phase_preference`. Legacy frozen rows preserved in DB.
 
-**Pre-existing B62 confidence saturation finding** (documented, not fixed in this work): TFS branch in `market-regime.ts:177-184` saturates at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. After B67.1's clamp ceiling raise to 1.0, modulation has minimal output headroom — most TFS classifications clamp to 1.0 post-modulation. **Compromises calibration check premise** (tertile-monotonic on clustered distribution unreliable). Flagged for post-B67.4 classifier-formula tuning batch.
+**Pre-existing B62 confidence saturation finding** (resolved by B67.3.5 below): TFS branch in `market-regime.ts:177-184` saturated at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. Resolved 2026-04-29 in B67.3.5; HVU/RBS/IE/ST branches still use original step-function formulas (deferred per `RUNNING_ISSUES.md` #40).
 
-**Status**: All foundation work LIVE on PM2 #113. Calibration window starts when B67.4 cheap-tier bundle ships (the only remaining pre-window step).
+**B67.3.5 — Pre-Window Hardening** (commits `49209eb4` + `d97d47d7`, PM2 #114, 2026-04-29):
+
+*Phase backfill from OHLC history* (`server/core/metrics/regime-phase.ts`): new `backfillFromHistory` method walks 12 backward 60-min OHLC windows running `calculatePairRegime` to find the actual regime entry boundary. First-observation only (regime transitions handled by normal `tick()`). Uses CURRENT DBS as approximation. Insufficient-history (<30 candles) → structured warning + `enteredAt = now`. Walk-cap (no different regime within 12h) → pair lands in LATE phase. Persists via existing `/tmp/regime-phase-store.json`. New optional `BackfillContext` parameter on `tick()` is backwards-compatible.
+
+*TFS branch desaturation* (`server/core/metrics/market-regime.ts:177-184`): step-function replaced with continuous mapping `confidence = min + (max - min) × (momentum_factor × dbs_strength × vol_inverse)`. Multiplicative — any weak input collapses score. Output [0.50, 0.90] via 5 module_constants in `regime_classifier` module (TFS-scoped): `b67_3_5_tfs_desat_min/max/momentum_scale/volatility_scale/dbs_scale`. Recalibrate via DB UPDATE; no code redeploy.
+
+*New `RegimeConfig` type* (`server/types/market-regime.types.ts`): contract carries the 5 desat tunables. Required 4th param on `calculatePairRegime`. `DEFAULT_REGIME_CONFIG` exported for advisory paths (diagnostics, tests).
+
+*MCE wiring* (`server/services/market-context-engine.ts`): `regimeConfig` field resolved in `refreshMacroContext` with hard-fail on missing keys. `getCurrentRegimeConfig()` accessor. Threaded as 4th param into `calculatePairRegime` AND as `BackfillContext` into `regimePhaseStore.tick`. Cleared on `MCE.stop()`.
+
+**B67.3.5 cross-references "If I Change X, Check Y":**
+- **Edit TFS desat formula** → b67-3-5-tfs-desat unit tests need refresh; multiplicative semantics encode "all three align" — replacing inputs requires re-thinking
+- **Edit module_constants desat scales** → no code redeploy; `UPDATE module_constants SET value=...`
+- **Edit walk depth** → 12 currently matches LATE phase; track `b67_2_prime_phase_max_hours` if it changes
+- **Edit `regimePhaseStore.tick` signature** → 4 callers (3 tests + 1 MCE); `BackfillContext` optional so backwards-compatible
+- **Add a new regime classification branch** → it gets the original step-function default; for desat pattern, extend `RegimeConfig` + migration
+
+**Live evidence post-deploy:** First diversified macro modifier observed = 0.85 (clamped to min) with real z-scores (BTC -0.79, funding +1.90, mcap +0.08). Macro feed rolling windows survived restart (btc:78, fund:96, mcap:77 samples). RegimeConfig contract resolved cleanly. Backfill log lines + TFS distribution shift + phase mix shift deferred to ~24h verification.
+
+**Status**: B67.3.5 LIVE on PM2 #114. All 7 pre-calibration-window foundation fixes complete. Calibration window starts when B67.4 cheap-tier bundle ships (the only remaining pre-window step).

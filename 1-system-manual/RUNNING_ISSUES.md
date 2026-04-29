@@ -90,13 +90,14 @@
 
 | # | Issue | Status | Notes |
 |---|-------|--------|-------|
+| 40 | **Other 4 regime-branch confidence saturation** — B67.3.5 desaturated only the TFS branch (~55-60% of pairs, dominant regime, immediate calibration bottleneck). The other 4 branches (HVU / RBS / IE / ST) still use the original step-function-with-bonuses formulas inherited from B62. After calibration window evidence accrues post-B67.5, queue a classifier-formula tuning batch to apply the same continuous-mapping treatment to the remaining branches. Each branch needs its own multiplicative input set (semantically tuned to that regime's identity) — TFS used (momentum, DBS, vol_inverse) because it's "trend-friendly STABLE"; HVU likely uses (vol, |momentum|, dbs_neutrality), etc. | DEFERRED | Logged 2026-04-29 as part of B67.3.5 closure. Defers until B67 calibration window completes and we have data on whether the TFS desat actually improved confidence-bucket WR signal. If yes → roll out to other 4 branches; if no → reconsider approach. |
 | 39 | **TypeScript Check CI job failing** — `storage.ts` has pre-existing TS errors (TradingMode type not found, cash/cryptoValue properties, enum narrowing). Also `inside-bar-reversal.ts` comparison warning, `market-events.ts` EXTREME_NOISE enum, `validate-canonical.ts` JSON module resolution. These errors are in the CI environment `tsc` check — Build, Tests, and Docker all pass. The overall CI workflow passes due to `continue-on-error: true` on the TypeScript Check job. | OPEN | Discovered during B58 push. These errors are NOT from B58 files — verified zero TS errors in adjustment-registry.ts, authority-baseline.ts, routes.ts, boot_orchestrator.ts. The TS check may have been failing since B57 (all historical CI runs accessible show TS Check as failure). Needs investigation: either fix storage.ts types or determine when the regression occurred. |
 
 ---
 
 ## Summary Counts
 - **RESOLVED:** 37 (#1-5, #6-8, #9-11, #12, #12a-12d, #12f, #13-17, #17a, #18-21, #22-28, #29-38)
-- **DEFERRED:** 1 (#12e — regime-gated strategy dormancy, awaiting evidence)
+- **DEFERRED:** 2 (#12e — regime-gated strategy dormancy, awaiting evidence; #40 — other 4 regime-branch desaturation, post-B67-window batch)
 - **CRITICAL:** 0
 - **IN PROGRESS:** 0
 - **OPEN:** 1 (#39 — CI TypeScript Check failing)
