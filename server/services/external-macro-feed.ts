@@ -225,17 +225,21 @@ async function fetchBinanceFunding(): Promise<{ fundingRate?: number }> {
     if (!Number.isFinite(btcRate) && !Number.isFinite(ethRate)) {
       return {};
     }
-    // Weighted average — BTC weighted 0.6, ETH 0.4 reflecting OI dominance.
-    // Intentionally hardcoded (NOT in module_constants) per Langston review
-    // cc-inbox #845: changing this requires understanding OI structure rather
-    // than tuning a knob. Hardcoded prevents an operator from misreading it as
-    // "configurable parameter" and adjusting without context. OI ratios shift
-    // slowly (months/quarters) and revisiting them is a code-change concern.
-    // Drops gracefully when one is missing.
+    // BTC + ETH OI-weighted average. Per Kyle directive 2026-04-29 the
+    // weights live in module_constants (b67_1_funding_btc_weight /
+    // b67_1_funding_eth_weight) — no fallback for missing constants per the
+    // no-fallbacks discipline. Read on each poll cycle so operator tuning
+    // takes effect at the next 60s tick without redeploy.
+    //
+    // Drops gracefully when one perp side is missing — uses the available
+    // side at full weight (this is a feed-availability fallback, not a
+    // config fallback, so it's allowed and explicitly documented).
     const validBtc = Number.isFinite(btcRate);
     const validEth = Number.isFinite(ethRate);
     if (validBtc && validEth) {
-      return { fundingRate: btcRate * 0.6 + ethRate * 0.4 };
+      const btcW = await readConstStrict<number>('b67_1_funding_btc_weight');
+      const ethW = await readConstStrict<number>('b67_1_funding_eth_weight');
+      return { fundingRate: btcRate * btcW + ethRate * ethW };
     }
     if (validBtc) return { fundingRate: btcRate };
     if (validEth) return { fundingRate: ethRate };

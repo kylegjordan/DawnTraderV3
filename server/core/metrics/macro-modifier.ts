@@ -206,12 +206,19 @@ export function computeMacroModifier(
   // conservative; alternative would be to fire with whatever's available and
   // zero out missing terms. Conservative chosen because cold-start is a known
   // brief window (~2 days post-restart at default 48-sample floor).
+  //
+  // Cold-start IS a fallback path, but it's a LEGITIMATE runtime state with
+  // explicit telemetry (fallbackActive=true). Per Kyle directive 2026-04-29
+  // this stays. The previously-`?? 0` z-score fields below were silent
+  // substitution and have been replaced with NaN (explicit "not computed")
+  // so downstream analysis can distinguish "z=0 by computation" from
+  // "z couldn't be computed."
   if (btcZ === null || fundingZ === null || mcapZ === null) {
     return {
       value: 1.0,
-      btcDomZ: btcZ ?? 0,
-      fundingZ: fundingZ ?? 0,
-      mcapZ: mcapZ ?? 0,
+      btcDomZ: btcZ === null ? NaN : btcZ,
+      fundingZ: fundingZ === null ? NaN : fundingZ,
+      mcapZ: mcapZ === null ? NaN : mcapZ,
       fallbackActive: true,
       staleDataFlag: false,
     };
