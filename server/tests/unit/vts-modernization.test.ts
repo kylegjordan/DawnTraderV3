@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { calculatePairRegime, computeVolatility, computeMomentum, computeADX, getRegimeWeight } from '../../core/metrics/market-regime';
+import { calculatePairRegime, computeVolatility, computeMomentum, computeADX, getRegimeWeight, DEFAULT_REGIME_CONFIG } from '../../core/metrics/market-regime';
 import { CANONICAL_REGIME_STRATEGY_MAP as regimeStrategyMap, selectRandomStrategy, getRegimeRiskMultiplier } from '../../config/canonical-regime-strategy-map';
 import { preloadPatternHistory, isPatternRecognitionWarmedUp, getPatternHistoryStatus, resetPatternHistory } from '../../core/pattern-recognition';
 import { SCORE_WEIGHTS } from '../../config/score-weights.config';
@@ -77,7 +77,7 @@ describe('Market Regime Calculator', () => {
   
   it('should calculate pair regime with valid result', () => {
     const ohlc = generateMockOHLC(30);
-    const result = calculatePairRegime(ohlc, 0, 1.0);
+    const result = calculatePairRegime(ohlc, 0, 1.0, DEFAULT_REGIME_CONFIG);
 
     expect(result).toHaveProperty('regime');
     expect(result).toHaveProperty('volatility');
@@ -280,7 +280,7 @@ describe('Governance Invariants', () => {
     ];
     
     for (const ohlc of datasets) {
-      const result = calculatePairRegime(ohlc, 0, 1.0);
+      const result = calculatePairRegime(ohlc, 0, 1.0, DEFAULT_REGIME_CONFIG);
       expect(result.regime).toBeDefined();
     }
   });

@@ -20,9 +20,24 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import type { OHLCData, MarketRegimeType, RegimeCalculationResult } from '../../types/market-regime.types';
+import type { OHLCData, MarketRegimeType, RegimeCalculationResult, RegimeConfig } from '../../types/market-regime.types';
 import { REGIME_WEIGHTS } from '../../types/market-regime.types';
 import { REGIMES } from '../../config/canonical-regime-strategy-map';
+
+/**
+ * B67.3.5 — Default RegimeConfig matching the migration seed values.
+ * Used by ADVISORY paths (diagnostics, unit tests) that don't have MCE
+ * macro/regime resolution available. Production classification (MCE) MUST
+ * resolve actual values from module_constants and pass them in — never use
+ * this default.
+ */
+export const DEFAULT_REGIME_CONFIG: RegimeConfig = {
+  tfsDesatMin: 0.50,
+  tfsDesatMax: 0.90,
+  tfsMomentumScale: 0.020,
+  tfsVolatilityScale: 0.025,
+  tfsDbsScale: 0.7,
+};
 
 export function computeVolatility(ohlcData: OHLCData[]): number {
   if (ohlcData.length < 2) return 0;
@@ -145,6 +160,7 @@ export function calculatePairRegime(
   ohlcData: OHLCData[],
   dbsScore: number,
   macroModifier: number,
+  regimeConfig: RegimeConfig,
 ): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
   const mom = computeMomentum(ohlcData);
@@ -179,7 +195,17 @@ export function calculatePairRegime(
     // (pre-B62: TFS was 13.2%; now 34.6% as directional pairs correctly routed)
     // Threshold 0.30 is the only tested value that passes 2.0% flicker ceiling
     regime = REGIMES.TREND_FRIENDLY_STABLE;
-    confidence = 0.70 + Math.min(Math.max(mom, 0) * 8, 0.15) + Math.min(absDbs * 0.3, 0.1);
+    // B67.3.5: continuous mapping replaces step-function. Output [min, max]
+    // (default [0.50, 0.90]). Multiplicative — any weak input collapses score
+    // (semantic match for "trend-friendly STABLE" = all three should align).
+    // Scales seeded from indicator threshold analysis; recalibrate post-window.
+    // See BATCH_67_3_5_PRE_AUDIT.md §B.2.
+    const momentumFactor = Math.max(0, Math.min(1, mom / regimeConfig.tfsMomentumScale));
+    const dbsStrength    = Math.max(0, Math.min(1, absDbs / regimeConfig.tfsDbsScale));
+    const volInverse     = Math.max(0, Math.min(1, (regimeConfig.tfsVolatilityScale - vol) / regimeConfig.tfsVolatilityScale));
+    confidence = regimeConfig.tfsDesatMin
+      + (regimeConfig.tfsDesatMax - regimeConfig.tfsDesatMin)
+        * (momentumFactor * dbsStrength * volInverse);
   } else if ((vol > 0.015 && mom < -0.003) || (dx > 60 && mom < -0.005)) {
     // Elevated vol in decline OR very strong downward direction -> volatile/unstable
     regime = REGIMES.HIGH_VOLATILITY_UNSTABLE;
@@ -269,7 +295,7 @@ export function getDynamicRegimeScore(ohlcData: OHLCData[]): {
   // B67.1: macroModifier required. This advisory function (per SIM §5.4)
   // doesn't have macro context available — pass 1.0 explicitly to indicate
   // identity / no modulation (advisory call, not the live classification path).
-  const result = calculatePairRegime(ohlcData, 0, 1.0);
+  const result = calculatePairRegime(ohlcData, 0, 1.0, DEFAULT_REGIME_CONFIG);
   const score = calculateRegimeScore(result.regime, {
     adx: result.adx,
     volatility: result.volatility

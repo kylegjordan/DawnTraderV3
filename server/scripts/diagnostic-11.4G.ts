@@ -15,7 +15,7 @@
 import { fx5Scanner } from '../services/fx5-scanner.js';
 import { scanPatterns } from '../services/pattern-recognizer.js';
 import { KrakenService } from '../services/kraken.js';
-import { calculatePairRegime } from '../core/metrics/market-regime.js';
+import { calculatePairRegime, DEFAULT_REGIME_CONFIG } from '../core/metrics/market-regime.js';
 import { 
   CANONICAL_REGIME_STRATEGY_MAP,
   selectContextAwareStrategy,
@@ -149,8 +149,9 @@ async function runDiagnosticSweep(pairLimit: number = 100): Promise<void> {
     
     summary.pairsWithOHLC++;
     
-    // B67.1: macroModifier required. Diagnostic script — identity modifier explicitly.
-    const regimeResult = calculatePairRegime(ohlcData, 0, 1.0);
+    // B67.1 + B67.3.5: macroModifier + regimeConfig required. Diagnostic
+    // script — identity modifier + default regime config explicitly.
+    const regimeResult = calculatePairRegime(ohlcData, 0, 1.0, DEFAULT_REGIME_CONFIG);
     trace.regime = regimeResult.regime;
     
     const candles = ohlcData.map(o => ({

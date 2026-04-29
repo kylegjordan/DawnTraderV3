@@ -40,7 +40,7 @@ import type {
   MacroContext,
 } from '../types/market-context.js';
 import { DEFAULT_MCE_CONFIG } from '../types/market-context.js';
-import type { OHLCData, RegimeCalculationResult } from '../types/market-regime.types';
+import type { OHLCData, RegimeCalculationResult, RegimeConfig } from '../types/market-regime.types';
 import {
   calculatePairRegime,
   getRegimeWeight,
@@ -130,6 +130,11 @@ export class MarketContextEngine {
   private phasePrimeMaxHours: number | null = null;
   private phaseWeights: Record<string, number> | null = null;
 
+  // ─── B67.3.5: TFS desaturation config ─────────────────────────────────────
+  // Five tunable scales for the continuous TFS confidence formula. Resolved
+  // alongside macro/phase on each refresh cycle. Null only during cold start.
+  private regimeConfig: RegimeConfig | null = null;
+
   constructor(config: Partial<MCEConfig> = {}) {
     this.config = { ...DEFAULT_MCE_CONFIG, ...config };
     console.log('[Phase14][MCE] Market Context Engine created');
@@ -164,6 +169,7 @@ export class MarketContextEngine {
     }
     this.macroCachedContext = null;
     this.macroCachedAt = 0;
+    this.regimeConfig = null;
     console.log('[Phase14][MCE] Stopped, cache cleared');
   }
 
@@ -266,6 +272,37 @@ export class MarketContextEngine {
       this.phasePrimeMaxHours = primeHrs as number;
       this.phaseWeights = weightsBlob as Record<string, number>;
 
+      // ── B67.3.5: resolve TFS desaturation scales ──
+      // Five tunables for the continuous TFS confidence formula. All required;
+      // missing keys throw with explicit list per Kyle no-fallbacks directive.
+      const REGIME_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: 'TREND_FRIENDLY_STABLE' } as any;
+      const [tfsMin, tfsMax, tfsMomScale, tfsVolScale, tfsDbsScale] = await Promise.all([
+        getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_min', REGIME_KEY),
+        getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_max', REGIME_KEY),
+        getConstant<number>('regime_classifier', 'b67_3_5_tfs_momentum_scale', REGIME_KEY),
+        getConstant<number>('regime_classifier', 'b67_3_5_tfs_volatility_scale', REGIME_KEY),
+        getConstant<number>('regime_classifier', 'b67_3_5_tfs_dbs_scale', REGIME_KEY),
+      ]);
+      const missingRegime: string[] = [];
+      if (tfsMin === undefined)      missingRegime.push('b67_3_5_tfs_desat_min');
+      if (tfsMax === undefined)      missingRegime.push('b67_3_5_tfs_desat_max');
+      if (tfsMomScale === undefined) missingRegime.push('b67_3_5_tfs_momentum_scale');
+      if (tfsVolScale === undefined) missingRegime.push('b67_3_5_tfs_volatility_scale');
+      if (tfsDbsScale === undefined) missingRegime.push('b67_3_5_tfs_dbs_scale');
+      if (missingRegime.length > 0) {
+        throw new Error(
+          `[B67.3.5] missing module_constants in regime_classifier module: ${missingRegime.join(', ')}. ` +
+          `Run migration 2026-04-29-b67-3-5-tfs-desat.sql to seed.`,
+        );
+      }
+      this.regimeConfig = {
+        tfsDesatMin: tfsMin as number,
+        tfsDesatMax: tfsMax as number,
+        tfsMomentumScale: tfsMomScale as number,
+        tfsVolatilityScale: tfsVolScale as number,
+        tfsDbsScale: tfsDbsScale as number,
+      };
+
       console.log(
         `[B67.1][modifier] value=${result.value.toFixed(4)} ` +
           `btcZ=${result.btcDomZ.toFixed(3)} fundZ=${result.fundingZ.toFixed(3)} ` +
@@ -339,6 +376,15 @@ export class MarketContextEngine {
     return this.macroCachedContext;
   }
 
+  /**
+   * B67.3.5: Public accessor for the resolved RegimeConfig (TFS desaturation
+   * scales). Returns null only during cold start. Diagnostic / observability
+   * reads.
+   */
+  getCurrentRegimeConfig(): RegimeConfig | null {
+    return this.regimeConfig;
+  }
+
   // ─── Core: Compute Context ─────────────────────────────────────────────────
 
   /**
@@ -404,11 +450,20 @@ export class MarketContextEngine {
     const macroContext = this.macroCachedContext;
     const macroModifierValue = macroContext.modifier.value;
 
-    // ── B62 + B67.1: Regime calculation receives DBS + macro modifier ──
+    // ── B62 + B67.1 + B67.3.5: Regime calculation receives DBS + macro
+    //    modifier + tunable regime config. RegimeConfig must be loaded before
+    //    computeContext runs (refreshMacroContext resolves it).
+    if (this.regimeConfig === null) {
+      throw new Error(
+        `[B67.3.5] regime config not initialized for ${symbol}. ` +
+        `MCE.start() must complete refreshMacroContext() before computeContext is called.`,
+      );
+    }
     const regimeResult = calculatePairRegime(
       ohlcData,
       directionalBias.score,
       macroModifierValue,
+      this.regimeConfig,
     );
 
     // ── B67.2: tick regime-phase store + compute phase ────────────────────
@@ -420,7 +475,15 @@ export class MarketContextEngine {
         `MCE.start() must complete refreshMacroContext() before computeContext is called.`,
       );
     }
-    const phaseAgeMs = regimePhaseStore.tick(symbol, regimeResult.regime, now);
+    // B67.3.5: pass historical OHLC + current DBS + regime config so the
+    // phase store can backfill `enteredAt` from history on FIRST observation
+    // of the pair (cold-pair age inference). Subsequent ticks use the
+    // persisted/tracked `enteredAt`. See regime-phase.ts:backfillFromHistory.
+    const phaseAgeMs = regimePhaseStore.tick(symbol, regimeResult.regime, now, {
+      ohlcData,
+      dbsScore: directionalBias.score,
+      regimeConfig: this.regimeConfig,
+    });
     const phase: RegimePhase = computePhase(
       phaseAgeMs,
       this.phaseEarlyMaxHours,

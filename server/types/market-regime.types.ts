@@ -35,6 +35,26 @@ export interface RegimeCalculationResult {
   confidence: number;
 }
 
+/**
+ * B67.3.5 — TFS branch desaturation scales (resolved from module_constants).
+ *
+ * Replaces the prior step-function `confidence = 0.70 + bonuses` with a
+ * continuous mapping `confidence = min + (max - min) × (mom_factor × dbs ×
+ * vol_inv)`. All five values are tunable via DB; no hardcoded constants per
+ * §0.9. See `BATCH_67_3_5_PRE_AUDIT.md` §B.2 for derivation.
+ *
+ * Caller (MCE) resolves these from module_constants on startup with hard-fail
+ * on any missing key, then passes the object into `calculatePairRegime` per
+ * tick. Same passthrough pattern used for `macroModifier` since B67.1.
+ */
+export interface RegimeConfig {
+  tfsDesatMin: number;
+  tfsDesatMax: number;
+  tfsMomentumScale: number;
+  tfsVolatilityScale: number;
+  tfsDbsScale: number;
+}
+
 export const REGIME_WEIGHTS: Record<MarketRegimeType, number> = {
   [REGIMES.TREND_FRIENDLY_STABLE]: 0.85,
   [REGIMES.HIGH_VOLATILITY_UNSTABLE]: 0.40,

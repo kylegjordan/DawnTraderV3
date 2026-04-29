@@ -38,8 +38,41 @@
  */
 
 import * as fs from 'fs';
+import type { OHLCData, RegimeConfig } from '../../types/market-regime.types';
+import { calculatePairRegime } from './market-regime';
 
 export type RegimePhase = 'EARLY' | 'PRIME' | 'LATE';
+
+/**
+ * B67.3.5 — Minimum candles required by `calculatePairRegime` to produce a
+ * stable label. ADX needs period+1 = 15; momentum needs lookback ≥ 5;
+ * volatility needs ≥ 2. Conservatively require 30 candles for the backfill
+ * walk, matching `computeMomentum`'s lookback ceiling.
+ */
+const BACKFILL_MIN_CANDLES = 30;
+
+/** Default 60-min windows × 12 = 12h (LATE-phase ceiling). */
+const BACKFILL_DEFAULT_WINDOWS = 12;
+const BACKFILL_DEFAULT_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * B67.3.5 — Optional context passed into `regimePhaseStore.tick` to enable
+ * historical-OHLC backfill on first observation. Caller (MCE) supplies the
+ * pair's recent OHLC + current DBS + resolved RegimeConfig. If omitted,
+ * `tick` falls back to legacy behavior (`enteredAt = now`).
+ */
+export interface BackfillContext {
+  /** Recent OHLC for the pair, most-recent-last. ≥ 30 candles required. */
+  ohlcData: OHLCData[];
+  /** Current DBS score (used as approximation for historical windows). */
+  dbsScore: number;
+  /** Resolved regime config from module_constants. */
+  regimeConfig: RegimeConfig;
+  /** Optional: number of windows to walk backward (default 12). */
+  windowsToWalk?: number;
+  /** Optional: window size in ms (default 60min). */
+  windowSizeMs?: number;
+}
 
 /**
  * Per-symbol entry tracked by the store. Reset whenever the regime changes.
@@ -129,7 +162,12 @@ class RegimePhaseStore {
    *   by comparing the returned ageMs to the prior tick's value (a near-zero
    *   ageMs after a previously larger value indicates transition).
    */
-  tick(symbol: string, currentRegime: string, now: number): number {
+  tick(
+    symbol: string,
+    currentRegime: string,
+    now: number,
+    backfillCtx?: BackfillContext,
+  ): number {
     const existing = this.entries.get(symbol);
     if (existing && existing.regime === currentRegime) {
       existing.lastSeenAt = now;
@@ -140,15 +178,111 @@ class RegimePhaseStore {
       if (Math.random() < 0.02) this.saveToDisk(); // ~2% of ticks
       return now - existing.enteredAt;
     }
-    // New symbol or regime change → reset. Always persist on transition since
-    // these are operationally significant.
+    // First observation OR regime transition.
+    //
+    // B67.3.5 backfill: only on FIRST observation (no existing entry). Regime
+    // transitions get the standard `enteredAt = now` because the transition
+    // moment IS when the pair entered the new regime. Cold pairs need backfill
+    // because we missed the actual entry boundary.
+    let enteredAt = now;
+    if (!existing && backfillCtx) {
+      enteredAt = this.backfillFromHistory(symbol, currentRegime, backfillCtx, now);
+    }
     this.entries.set(symbol, {
       regime: currentRegime,
-      enteredAt: now,
+      enteredAt,
       lastSeenAt: now,
     });
     this.saveToDisk();
-    return 0;
+    return now - enteredAt;
+  }
+
+  /**
+   * B67.3.5 — Walk backward through historical OHLC to find when the pair
+   * actually entered the current regime. Returns an epoch-ms timestamp for
+   * `enteredAt`.
+   *
+   * Mechanism: for each backward window, slice the OHLC up to that window's
+   * end-time, re-run `calculatePairRegime`, and check the regime label. The
+   * most recent window where the label DIFFERS from the current regime marks
+   * the boundary; `enteredAt` = that window's end-time (i.e. the start of the
+   * first window where the pair was in the current regime).
+   *
+   * Approximations (Langston cc-inbox #850 Q2):
+   * - DBS at the historical window time uses CURRENT DBS (we don't have
+   *   historical DBS). The regime label is fairly robust because vol +
+   *   momentum + ADX carry most of the classification signal.
+   *
+   * Edge cases:
+   * - If no different regime found within the walk window: `enteredAt = now -
+   *   (windowsToWalk × windowSizeMs)` — caps age at the walk depth, so the
+   *   pair lands in LATE phase immediately. `computePhase` already handles
+   *   this correctly.
+   * - If insufficient candles for a stable classification: emit structured
+   *   warning + return `now`. Pair starts as EARLY and accrues age normally.
+   */
+  private backfillFromHistory(
+    symbol: string,
+    currentRegime: string,
+    ctx: BackfillContext,
+    now: number,
+  ): number {
+    const ohlc = ctx.ohlcData;
+    const windows = ctx.windowsToWalk ?? BACKFILL_DEFAULT_WINDOWS;
+    const windowMs = ctx.windowSizeMs ?? BACKFILL_DEFAULT_WINDOW_MS;
+
+    if (!ohlc || ohlc.length < BACKFILL_MIN_CANDLES) {
+      console.warn(
+        `[regime-phase][backfill] insufficient_history pair=${symbol} ` +
+          `candles=${ohlc?.length ?? 0} (min=${BACKFILL_MIN_CANDLES})`,
+      );
+      return now;
+    }
+
+    // OHLC is most-recent-last. The "current" window ends at the last candle's
+    // timestamp; each step back is one window earlier.
+    // Walk: for w = 1..windows, slice OHLC up to (now - w × windowMs) and
+    // classify. The first (most recent) walk where label != currentRegime is
+    // the boundary.
+    for (let w = 1; w <= windows; w++) {
+      const cutoffMs = now - w * windowMs;
+      const slice = ohlc.filter((c) => c.timestamp <= cutoffMs);
+      if (slice.length < BACKFILL_MIN_CANDLES) {
+        // Not enough history at this depth — stop walking; cap age here.
+        const enteredAt = now - (w - 1) * windowMs;
+        console.log(
+          `[regime-phase][backfill] applied pair=${symbol} regime=${currentRegime} ` +
+            `age_minutes=${Math.floor(((w - 1) * windowMs) / 60000)} (history-cap)`,
+        );
+        return enteredAt;
+      }
+      const result = calculatePairRegime(
+        slice,
+        ctx.dbsScore,
+        1.0, // identity macro modifier — backfill is for label, not modulation
+        ctx.regimeConfig,
+      );
+      if (result.regime !== currentRegime) {
+        // Found the boundary: pair was in a different regime at window w,
+        // so it entered the current regime between window w-1 and w. Use the
+        // start of window w-1 (i.e. cutoff at w-1 windows back) as enteredAt.
+        const enteredAt = now - (w - 1) * windowMs;
+        console.log(
+          `[regime-phase][backfill] applied pair=${symbol} regime=${currentRegime} ` +
+            `age_minutes=${Math.floor(((w - 1) * windowMs) / 60000)} (boundary-found)`,
+        );
+        return enteredAt;
+      }
+    }
+    // Walked the full window without finding a different regime — pair has
+    // been in this regime for at least `windows × windowMs`. Cap at that
+    // depth; pair lands in LATE phase per existing computePhase logic.
+    const enteredAt = now - windows * windowMs;
+    console.log(
+      `[regime-phase][backfill] applied pair=${symbol} regime=${currentRegime} ` +
+        `age_minutes=${Math.floor((windows * windowMs) / 60000)} (window-cap)`,
+    );
+    return enteredAt;
   }
 
   /** Returns the current entry for a symbol (or undefined). Test/diagnostic only. */

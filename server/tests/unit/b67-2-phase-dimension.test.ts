@@ -18,7 +18,31 @@ import {
   regimePhaseStore,
   computePhase,
   applyPhasePreference,
+  type BackfillContext,
 } from '../../core/metrics/regime-phase';
+import { DEFAULT_REGIME_CONFIG } from '../../core/metrics/market-regime';
+import type { OHLCData } from '../../types/market-regime.types';
+
+// Helper for backfill tests: build OHLC such that calculatePairRegime returns
+// a stable label across the whole series. We use a strong-uptrend series that
+// classifies as TFS for all backward windows.
+function makeTfsOhlc(count = 60, baseTimestampMs = 0, spacingMs = 60 * 60 * 1000): OHLCData[] {
+  const ohlc: OHLCData[] = [];
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    const close = 100 + 5 * t + 0.05 * Math.sin(i * 1.7);
+    const open = i === 0 ? close : ohlc[i - 1].close;
+    ohlc.push({
+      open,
+      high: Math.max(open, close) * 1.001,
+      low: Math.min(open, close) * 0.999,
+      close,
+      volume: 1000,
+      timestamp: baseTimestampMs + i * spacingMs,
+    });
+  }
+  return ohlc;
+}
 
 describe('B67.2 — computePhase', () => {
   it('returns EARLY when age below early-max boundary', () => {
@@ -94,6 +118,97 @@ describe('B67.2 — regimePhaseStore.tick', () => {
     expect(ethAge).toBe(60_000);
   });
 });
+
+describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
+  beforeEach(() => {
+    regimePhaseStore.clear();
+  });
+
+  it('legacy tick (no backfill ctx) preserves existing enteredAt=now behavior', () => {
+    const age = regimePhaseStore.tick('BTC/USD', 'TFS', 1000);
+    expect(age).toBe(0);
+  });
+
+  it('emits structured warning + falls back to enteredAt=now on insufficient history', () => {
+    const warnSpy = vi_spy_console_warn();
+    // Only 5 candles — well below the 30-min required
+    const ohlc = makeTfsOhlc(5);
+    const ctx: BackfillContext = {
+      ohlcData: ohlc,
+      dbsScore: 0.5,
+      regimeConfig: DEFAULT_REGIME_CONFIG,
+    };
+    const age = regimePhaseStore.tick('BTC/USD', 'TFS', ohlc[ohlc.length - 1].timestamp + 1, ctx);
+    expect(age).toBe(0); // enteredAt = now → age 0
+    expect(warnSpy.calls.some((c) => /insufficient_history/.test(c.join(' ')))).toBe(true);
+    warnSpy.restore();
+  });
+
+  it('caps enteredAt at the walk depth when no different regime found in window', () => {
+    const now = 24 * 60 * 60 * 1000; // 24h
+    // 60 candles spanning 60h, all TFS — backfill walks 12 windows back (12h)
+    // and finds same regime everywhere, so enteredAt = now - 12h
+    const ohlc = makeTfsOhlc(60, 0, 60 * 60 * 1000);
+    const ctx: BackfillContext = {
+      ohlcData: ohlc,
+      dbsScore: 0.5,
+      regimeConfig: DEFAULT_REGIME_CONFIG,
+    };
+    const age = regimePhaseStore.tick('BTC/USD', 'TREND_FRIENDLY_STABLE', now, ctx);
+    expect(age).toBe(12 * 60 * 60 * 1000); // exactly 12h (window cap)
+  });
+
+  it('does NOT re-backfill on subsequent ticks for the same pair', () => {
+    const now = 24 * 60 * 60 * 1000;
+    const ohlc = makeTfsOhlc(60, 0, 60 * 60 * 1000);
+    const ctx: BackfillContext = {
+      ohlcData: ohlc,
+      dbsScore: 0.5,
+      regimeConfig: DEFAULT_REGIME_CONFIG,
+    };
+    const age1 = regimePhaseStore.tick('BTC/USD', 'TREND_FRIENDLY_STABLE', now, ctx);
+    expect(age1).toBe(12 * 60 * 60 * 1000);
+    // Second tick 1h later, same pair, same regime — should NOT re-backfill;
+    // age advances by 1h.
+    const age2 = regimePhaseStore.tick('BTC/USD', 'TREND_FRIENDLY_STABLE', now + 60 * 60 * 1000, ctx);
+    expect(age2).toBe(13 * 60 * 60 * 1000);
+  });
+
+  it('regime transition does NOT trigger backfill (transition resets enteredAt=now)', () => {
+    const now = 24 * 60 * 60 * 1000;
+    const ohlc = makeTfsOhlc(60, 0, 60 * 60 * 1000);
+    const ctx: BackfillContext = {
+      ohlcData: ohlc,
+      dbsScore: 0.5,
+      regimeConfig: DEFAULT_REGIME_CONFIG,
+    };
+    regimePhaseStore.tick('BTC/USD', 'TREND_FRIENDLY_STABLE', now, ctx);
+    // Pair transitions to STRUCTURAL_TRANSITION — enteredAt should be the
+    // transition moment, not a backfill-derived value.
+    const ageAtTransition = regimePhaseStore.tick(
+      'BTC/USD',
+      'STRUCTURAL_TRANSITION',
+      now + 30 * 60 * 1000,
+      ctx,
+    );
+    expect(ageAtTransition).toBe(0);
+  });
+});
+
+// Tiny console.warn spy helper (avoids pulling vi.fn for a single-file usage).
+function vi_spy_console_warn() {
+  const original = console.warn;
+  const calls: any[][] = [];
+  console.warn = (...args: any[]) => {
+    calls.push(args);
+  };
+  return {
+    calls,
+    restore: () => {
+      console.warn = original;
+    },
+  };
+}
 
 describe('B67.2 — applyPhasePreference', () => {
   const weights = {
