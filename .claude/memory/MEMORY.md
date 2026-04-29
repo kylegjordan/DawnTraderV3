@@ -45,20 +45,77 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 
 ---
 
-## Current State (2026-04-29 night post-B73 full ship, PM2 #116)
+## Current State (2026-04-29/30 night post-B73 full ship + governance update, PM2 #116)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `f53b9d60` (B73 test float-precision fixes; CI `25136181772` GREEN — Test Suite + Build + Docker; TS Check pre-existing legacy baseline).
-- **Live behavior on staging (PM2 #116):**
-  - All B67.0/1/2/2.1/3 + B67.3.5 + B73 (data + governance + UI + tests) LIVE
-  - **B67**: macro modifier diversifying (first non-1.0 was 0.85), TFS desat in use, phase backfill ready on cold pairs
-  - **B73**: data layer + UI panel under Analytics → Drift Dashboard tab + 12-variant unit tests passing on CI. `exit_strategy_alternates` accumulating on every VTS close.
-- **Tonight chain (13 commits):** B67.3.5 fold-in/governance → B67.4 scope+pre-audit → comms fix (`--reply-account default`) → B73 scope/pre-audit/data-layer/governance/UI/tests. See `BATCH_73_PROGRESS_REPORT.md` for full sub-deliverable status.
-- **Tomorrow morning (~6 UTC) plan**:
-  - B67.3.5 verification gates (backfill log lines, TFS distribution shift, phase mix LATE, replay cron, modifier diversification)
-  - First-close verification on B73 — confirm 12 rows per closed VTS trade
-  - B67.4 implementation per `BATCH_67_4_PRE_AUDIT.md` §D refinements
-  - B74 equity passive scan scope (lighter)
+- **HEAD commit:** `53bd9a05` (B73 governance update for UI + tests; folds same-day commits into BATCH_CATALOG/PHASE_HISTORY/SIM/CHANGES_AND_FIXES/progress report)
+- **Last CI run** `25136181772` GREEN: Test Suite + Build + Docker. (TS Check failing on pre-existing client-side legacy errors — established baseline since B58.)
+
+---
+
+## ⭐ JUST COMPLETED (2026-04-29 night → 2026-04-30 early, 14 commits)
+
+| # | Commit | Layer | Outcome |
+|---|---|---|---|
+| 1 | `1632d392` | Governance | 2-file MEMORY pattern + 200-line cap added to CLAUDE.md §3.1/§3.2; B67.3.5 standalone completion report deleted, content folded into `BATCH_67_PROGRESS_REPORT.md` |
+| 2-4 | `276ab697` `541c9450` `6240f372` | B67.4 scope + pre-audit | Cheap-tier bundle (B67.4 outcome feedback + B68.4 regime-age + B68.5 Path B sustainability gate). Langston Step 1/2 cc-inbox #856/#857 with 4 refinements: 7d expiry on OutcomeFeedbackStore, B68.5 ablation as 0/1 numeric, EMA first-sample direct, refreshMacroContext split into 6 sub-methods |
+| 5-6 | `ab701b69` `6354480b` | Comms fix | Telegram identity-collapse fix: `--reply-account default` (Langston's @LangstonDTBot) not `ccdt-relay` (CC's @CCDTCommsBot). CLAUDE.md §6 updated with verified-working pattern |
+| 7-8 | `a7c48007` `f0374418` | B73 scope + pre-audit + roadmap | Exit-strategy ablation framework — 12 variants observation only. POST_AUDIT_ROADMAP.md gains B73 + B74 entries + Phase 21.4 modularization note (no pre-launch batch). Langston Step 1/2 cc-inbox #861/#862 |
+| 9 | `a747b646` | **B73 data layer ship** | Migration + `exit-strategy-replay.ts` (12 variants + simplified trailing state machine) + `exit-strategy-replay-service.ts` (orchestrator) + VTS `persistRealPriceTrade` async hook. PM2 #115. 13 module_constants seeded. Langston Step 4 cc-inbox #863. |
+| 10 | `778a1fe9` | B73 governance pass | BATCH_CATALOG + PHASE_HISTORY + SIM + CHANGES_AND_FIXES + RUNNING_ISSUES + MEMORY + new `BATCH_73_PROGRESS_REPORT.md`. Paper-execution-engine hook DROPPED per Kyle directive (research-mode framework, B67-style symmetry). |
+| 11 | `a4bd0e6c` | **B73 UI + API** | `GET /api/analytics/exit-strategy-ablation` returning per-variant Sharpe-like scores with paired-diff vs Variant A baseline. New `ExitStrategyAblationSection` rendered under Analytics → Drift Dashboard tab. Per-regime filter dropdown + window selector + READY/ACCUMULATING badge. PM2 #116. |
+| 12-13 | `49c711d2` `f53b9d60` | **B73 unit tests** | 12 variants + state machine + edge cases (gap bar, SELL direction, INSUFFICIENT_DATA, TIMEOUT). 3 initial float-precision assertion failures fixed in `f53b9d60` (test fixtures only). CI run `25136181772` GREEN. 916 tests passing total. |
+| 14 | `53bd9a05` | B73 governance update | Tonight's UI + tests + float-precision fix folded into BATCH_CATALOG, PHASE_HISTORY, SIM, CHANGES_AND_FIXES, MEMORY, BATCH_73_PROGRESS_REPORT. |
+
+**Live state PM2 #116:**
+- All B67.0/1/2/2.1/3 + B67.3.5 + B73 (full stack: data + governance + UI + tests) LIVE
+- **B67**: macro modifier diversifying (first non-1.0 was 0.85 with real z-scores), TFS desat continuous formula in use, phase backfill ready on cold pairs entering universe
+- **B73**: data layer + UI + tests live; `exit_strategy_alternates` accumulates 12 rows per VTS trade close. Async fire-and-forget hook in `vts-service.persistRealPriceTrade`. UI viewable at Analytics → Drift Dashboard tab → bottom of page.
+- **Calibration window NOT YET STARTED.** Starts when B67.4 cheap-tier bundle deploys clean.
+
+---
+
+## ⭐ NEXT IMPLEMENTATIONS (priority order)
+
+1. **Tomorrow ~6 UTC verification gates (B67.3.5)** — REQUIRED before B67.4 implementation:
+   - `[regime-phase][backfill] applied` log lines on cold pairs entering universe overnight
+   - TFS confidence raw distribution shift (target P10 ≤ 0.55, P50 ∈ [0.60, 0.80], P90 ≥ 0.80) on new closed trades
+   - Phase distribution mix shift — should see LATE pairs by 6 UTC (PM2 ~16h uptime, persistence file ~17.5h old)
+   - Replay cron 04:00 UTC run + populated rows in `regime_factor_alternates`
+   - Macro modifier diversifying (not pinned at 0.85 for the whole window)
+   - New closed VTS trades carrying B67.2.1 fields populated correctly
+
+2. **B73 first-close verification** — confirm 12 rows per closed VTS trade in `exit_strategy_alternates`. Use:
+   ```sql
+   SELECT count(*), count(DISTINCT variant_id), count(DISTINCT trade_id)
+   FROM exit_strategy_alternates;
+   ```
+
+3. **B67.4 cheap-tier bundle implementation** (Step 3) per `BATCH_67_4_PRE_AUDIT.md` §D refinements. Order of operations:
+   - Migration SQL (11 module_constants in 3 modules: outcome_feedback + regime_age + path_b_sustainability)
+   - New `outcome-feedback-store.ts` (mirror regimePhaseStore pattern, 7d expiry per Langston Q2)
+   - `regime-phase.ts` — add `peekAgeMs` accessor
+   - `market-regime.ts` — split TFS branch into Path A / Path B-with-gate / Path B-rejected; add `dbsSlope` 3rd param + `b68_5DbsSlopeMin` to RegimeConfig
+   - `market-context-engine.ts` — split `refreshMacroContext` into 6 sub-methods + orchestrator (per Langston Q6)
+   - Update 4 callers of `calculatePairRegime`
+   - `signal-orchestrator.ts` + `vts-runner.ts` — apply B68.4 + B67.4 modulation, push 3 new alternate types
+   - `paper-execution-engine.ts` + `vts-service.ts` — trade-close `updateEma` calls
+   - 3 new test files
+   - `npm run check` clean; bring diff to Langston Step 4 BEFORE push
+
+4. **B74 equity passive data collection** (Kyle directive 2026-04-29) — minimal: scan + store Kraken X-stocks + stock perp futures. New service file (NOT FX5 extension), plain dump tables, no schemas/processing/cohorting. Verify Kraken pair count first. Tomorrow scope.
+
+5. **B73 first variant winner declaration** — when n=200 total + n=50 per-regime accumulated (~1.3 days of VTS volume for headline; longer for per-regime). Sharpe-like metric pre-registered.
+
+6. **B67 calibration window** (14d) starts when B67.4 deploys clean + post-deploy verification confirms all 5 factor types emitting (`b67_1_*` 3 rows + `b67_2_phase_preference` + `b67_4_outcome_feedback` + `b68_4_regime_age` + `b68_5_path_b_sustainability`). Day 0 of 14.
+
+7. **B67.5 wire confidence into 7 consumers** — only if calibration check passes (tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket). Must define post-composition floor first (pre-registered per Langston cc-inbox #856 Q6 — compound penalty-stack can drop to 0.566, below pre-B67 0.4 floor).
+
+8. **B68.2 Volume regime → B68.3 Pair correlation → B68.1 Multi-timeframe agreement** — each gets its own ~14d mini-window post-B67.5.
+
+9. **B69 ML-light** — deferred to end of pre-Phase-16.
+
+10. **B72 lever sweep** — final pre-Phase-19 batch.
 
 ---
 
