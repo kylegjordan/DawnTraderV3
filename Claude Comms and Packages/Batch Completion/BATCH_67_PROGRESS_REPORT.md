@@ -283,4 +283,61 @@ See `Claude Comms and Packages/Change Lists/BATCH_67_3_CHANGE_LIST.md` for granu
 
 ---
 
-*Superseded by the B67.1 cleanup + B67.2 closure block below.*
+## Pre-calibration-window foundation work — 2026-04-29 (PM2 #105 → #113)
+
+After B67.1 + B67.2 shipped 2026-04-28, mid-batch Kyle review surfaced multiple issues. This section documents the remediation. **All pre-window fixes 1-6 complete. Only B67.4 cheap-tier bundle (step 7) remains before calibration window starts.**
+
+### Per-input ablation split — `ed9a1a08`
+
+Single `b67_1_macro_modifier` row replaced with three per-input rows: `b67_1_btc_dominance`, `b67_1_funding_rates`, `b67_1_mcap_momentum`. Each alternate recomputes the modifier formula with one term removed. `b67_2_phase_dimension` renamed `b67_2_phase_preference`. New `MarketContextEngine.getCurrentMacroConfig()` accessor.
+
+### Final fallback removal — `cab55804`
+
+Per Kyle "all fallbacks deleted": 7 `??` config-read fallbacks → throw. `readConst` → `readConstStrict`. `pollIntervalSec` default removed. `calculatePairRegime(macroModifier=1.0)` default arg removed. `?? 1.0` at MCE consumer → throws. `b67_1_enabled` shadow flag removed entirely. BTC/ETH 0.6/0.4 funding weighting promoted to `module_constants`. `?? 0` z-score result → NaN. Cold-start warmup fallback STAYS — legitimate runtime state.
+
+### B67.3 ACTIVATION — `c1b314ad` + DB UPDATE
+
+`pair_id_hash` trade-open persistence wired (active path + VTS path). `b67_3_enabled=true` flipped via SQL UPDATE. 14-day cohort A/B observation began.
+
+### B67.2.1 — Trade record observability — `141ec3c3` + `41abd541` + `575dbca4`
+
+Pulled forward from B67.5 per master plan §0.11.D. Three phases:
+
+**Phase 1**: schema migration + active-path capture. 6 nullable columns on `paper_sim_trades` (regime_confidence_raw, macro_modifier_value, phase, phase_age_seconds, strategy_phase_weight, regime_confidence_modulated) + CHECK constraint. Active-path `createPaperSimTrade` populates from MCE state.
+
+**Phase 2**: VTS-path capture. `OpenVirtualTrade` extended; captured at trade-open from MCE; propagated through `persistRealPriceTrade` to JSONL.
+
+**Phase 3**: UI + CSV. Open + closed trade tables render regime label + confidence + phase badge in SAME column per Kyle directive; tooltip shows multiplication chain. CSV exports auto-include all new fields.
+
+### Replay logic + cron — `3d1a1e7f` + `5e1031a6` + `33df2380`
+
+Wired actual outcome lookup. **Real bug found mid-implementation:** ablation rows store `vts_trade_id = signal.id` but JSONL had different format. Fixed by threading `originalSignalId` through `persistRealPriceTrade`. VTS JSONL outcome reader builds 14d in-memory index. Active path implemented for forward-compat. Per-pass bound 5000 rows. **Cron at 04:00 UTC nightly.**
+
+### Persistence + dashboard cleanup — `8f417ca5`
+
+Investigation found phase=EARLY and modifier=1.0 universally on today's 16 closed trades. Cause: 8 PM2 restarts in a few hours wiped both in-memory stores.
+
+**Fix:** persist both stores to disk. `regime-phase.ts` reads `/tmp/regime-phase-store.json` on construction (24h hard-expiry); saves on regime transitions + ~2% of stable ticks. `external-macro-feed.ts` `restoreFeedState` on init; `persistFeedState` after every poll.
+
+**Dashboard cleanup:** aggregator filters out legacy factor names — only the 4 active per-input rows + `b67_2_phase_preference` show in UI. Pre-split rows preserved in DB for forensics.
+
+### Confidence saturation finding — documented, not fixed
+
+Pre-existing B62 design issue: TFS branch saturates at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. After B67.1's clamp ceiling raise to 1.0: `0.95 × 1.05 × 1.10 = 1.097` → clamps to 1.0 for almost every TFS classification. Today's distribution: 12 trades at 1.0, 3 at 0.9, 1 at 0.8.
+
+**Compromises calibration check premise.** Tertile-monotonic on tightly-clustered distribution will not be reliable. **Flagged for post-B67.4 tuning batch** — not addressed this batch.
+
+### Workflow gates (this batch as a whole)
+
+| Step | Status |
+|---|---|
+| 3 — Implementation | ✅ Commits through `8f417ca5` |
+| 5 — Push + CI | ✅ |
+| 6 — Staging deploy | ✅ PM2 #106 → #113 |
+| 7 — First-pass verification | ✅ |
+| 10 — Governance | ✅ This block + BATCH_CATALOG + PHASE_HISTORY + SIM + CHANGES_AND_FIXES + MEMORY |
+| 11 — Completion ack | ⏳ Pending Kyle |
+
+---
+
+*This report is OPEN. Next update when B67.4 cheap-tier bundle ships (unblocks calibration window start).*

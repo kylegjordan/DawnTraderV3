@@ -1001,3 +1001,32 @@ The regime classifier overhaul + external data integration plan lives at `Claude
 **B67.1 V2 pre-audit findings carry forward:**
 - **defensive-hedge BTC correlation:** orthogonal to B67.1 (per-pair Spearman vs macro dominance). No double-count. Different decision points (strategy entry filter vs system-wide regime confidence). Documented `BATCH_67_1_PRE_AUDIT.md` §3.4.
 - **`market-snapshot.ts` stub:** reconciled inline per `BATCH_67_1_PRE_AUDIT.md` §3.5. Single caller transparently upgrades. No parallel `MarketSnapshot` type created.
+
+---
+
+## B67.x pre-calibration-window foundation work (2026-04-29, commits `ed9a1a08` → `8f417ca5`)
+
+**Per-input ablation split** (`ed9a1a08`): single `b67_1_macro_modifier` factor row replaced with three per-input rows (`b67_1_btc_dominance`, `b67_1_funding_rates`, `b67_1_mcap_momentum`). Each emits per signal evaluation (3× row volume vs pre-split). `b67_2_phase_dimension` renamed `b67_2_phase_preference`. New `MarketContextEngine.getCurrentMacroConfig()` accessor. Pre-split rows preserved in DB but frozen — dashboard query filters them out.
+
+**B67.2.1 trade record persistence** (commits `141ec3c3` + `41abd541` + `575dbca4`): 6 new nullable columns on `paper_sim_trades` (regime_confidence_raw, macro_modifier_value, phase, phase_age_seconds, strategy_phase_weight, regime_confidence_modulated) + CHECK constraint on phase. `OpenVirtualTrade` interface extended with same 6 fields + `pairIdHash`. Both active-trading path (`paper-execution-engine.ts:1850`) and VTS path (vts-runner trade-open + `persistRealPriceTrade` propagation to JSONL) populate from MCE cached state. UI renders all in same column as regime label; CSV exports auto-include via Object.keys generator.
+
+**B67.0 replay logic** (commits `3d1a1e7f` + `5e1031a6` + `33df2380`): `replay-ablation.ts` actual outcome lookup wired (was stubbed). VTS JSONL reader indexes 14d of closed trades by `signal.id`; matches against ablation row `vts_trade_id` (which is = signal.id at emit time). Real bug fixed: persistRealPriceTrade was creating a NEW random `vs_*` id, threading original `vsig_p10_*` id through as `originalSignalId` field so join resolves. Active-path query implemented for forward-compat (currently no rows since active trading is OFF). Cron scheduled 04:00 UTC nightly in root crontab.
+
+**Persistence: regime-phase store + macro feed** (`8f417ca5`):
+- `server/core/metrics/regime-phase.ts` — `regimePhaseStore` reads `/tmp/regime-phase-store.json` on construction (24h hard-expiry on entries to drop ancient state). Saves on every regime-transition tick (always) + ~2% of stable-regime ticks (throttled). Pattern matches `server/services/trailing-exit-controller.ts`'s state file.
+- `server/services/external-macro-feed.ts` — `restoreFeedState()` called on init before first poll; `persistFeedState()` called after every successful poll cycle (60s cadence; ~2KB JSON). Restores `lastSnapshot` + 3 rolling-window sample arrays + `prevTotalMarketCapUsd`.
+
+**Net effect:** PM2 restarts no longer reset phase ages or z-score baselines. Pairs accrue regime age across deploys; modifier produces real z-score-driven values immediately on restart instead of the prior ~48 minutes of `fallbackActive=true`. Both findings root-caused investigation 2026-04-29 (16 closed VTS trades all phase=EARLY, modifier=1.0 — traced to 8 PM2 restarts within a few hours).
+
+**Cross-cutting impact:**
+- **If you edit `regime-phase.ts` tick semantics** → check the persistence write logic + the 24h expiry threshold + the throttled-save heuristic
+- **If you edit `external-macro-feed.ts` state shape** → update `persistFeedState`/`restoreFeedState` field list + the JSON structure
+- **If you reset by removing `/tmp/*.json` files** → expect the cold-start fallback for ~48 minutes for the macro feed; phase store starts empty + fills on next MCE cycle
+- **If you migrate `/tmp` to ephemeral storage on a new host** → both files are recreated automatically but state is wiped (acceptable; same as a code redeploy)
+- **If you scale horizontally (multiple instances)** → these files are local; need a shared store (DB or Redis) before any multi-instance deploy. Today single-instance, so not blocking.
+
+**B67 dashboard cleanup** (`drift-dashboard-aggregator.ts`): aggregator SQL filters `factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')` so the dashboard shows only the 4 active per-input rows + `b67_2_phase_preference`. Legacy frozen rows preserved in DB.
+
+**Pre-existing B62 confidence saturation finding** (documented, not fixed in this work): TFS branch in `market-regime.ts:177-184` saturates at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. After B67.1's clamp ceiling raise to 1.0, modulation has minimal output headroom — most TFS classifications clamp to 1.0 post-modulation. **Compromises calibration check premise** (tertile-monotonic on clustered distribution unreliable). Flagged for post-B67.4 classifier-formula tuning batch.
+
+**Status**: All foundation work LIVE on PM2 #113. Calibration window starts when B67.4 cheap-tier bundle ships (the only remaining pre-window step).
