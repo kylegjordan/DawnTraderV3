@@ -322,6 +322,66 @@ The §0.9 "no new hardcoded constants from B67 forward" rule is reinforced 2026-
 
 ---
 
+### §0.12 — 2026-04-29 mid-batch foundation work + open discussion items
+
+After §0.11's reorganization, additional implementation issues surfaced and were addressed mid-batch. This section documents what shipped and what remains as open discussion for the next Langston touchpoint.
+
+#### §0.12.A Foundation work shipped 2026-04-29 (PM2 #105 → #113)
+
+| # | Fix | Commit | Notes |
+|---|---|---|---|
+| 1 | Per-input ablation split | `ed9a1a08` | Single `b67_1_macro_modifier` row → 3 per-input rows (btc_dominance / funding_rates / mcap_momentum). `b67_2_phase_dimension` renamed `b67_2_phase_preference`. |
+| 2 | Final fallback removal | `cab55804` | All `??` config-read patterns → throw. `b67_1_enabled` shadow flag removed entirely. BTC/ETH funding weighting → `module_constants`. Cold-start warmup fallback retained (legitimate runtime state). |
+| 3 | B67.3 activation | `c1b314ad` + DB UPDATE | `pair_id_hash` trade-open persistence (active + VTS paths). `b67_3_enabled=true` flipped on staging. 14d cohort A/B observation began. |
+| 4 | B67.2.1 trade record persistence + UI | `141ec3c3` + `41abd541` + `575dbca4` | 6 nullable columns on `paper_sim_trades` (regime_confidence_raw, macro_modifier_value, phase, phase_age_seconds, strategy_phase_weight, regime_confidence_modulated). Active path + VTS path both populate. UI renders regime + confidence + phase badge in same column. CSV exports auto-include. |
+| 5 | Replay logic + cron | `3d1a1e7f` + `5e1031a6` + `33df2380` | `replay-ablation.ts` actual outcome lookup wired (was stubbed). VTS JSONL reader. Real bug fixed: signal id mismatch between ablation rows and JSONL — threaded `originalSignalId` through `persistRealPriceTrade`. Cron at 04:00 UTC nightly. |
+| 6 | Persistence + dashboard cleanup | `8f417ca5` | `regimePhaseStore` and macro-feed rolling window persist to `/tmp/*.json` files. Dashboard SQL filters legacy factor names. |
+
+Comprehensive governance pass: BATCH_CATALOG, PHASE_HISTORY, SIM (new "B67.x foundation work" section), CHANGES_AND_FIXES (full lessons-learned entry), BATCH_67_PROGRESS_REPORT (closure block), MEMORY all updated through commit `fa3fa593`.
+
+#### §0.12.B Open discussion items (queued for next Langston touchpoint)
+
+These two items surfaced during 2026-04-29 investigation and need design discussion. Neither is currently fixed; both have implications for the calibration check.
+
+**Item 1 — Phase backfill from OHLC history (Kyle 2026-04-29):**
+
+Current `regimePhaseStore.tick()` records `enteredAt = now` on first observation. So the moment we first see a pair, regime age = 0 — even if the pair has actually been in TFS for 6 hours by external reality. Phase reads as EARLY when it should read PRIME (or LATE).
+
+Persistence (shipped in §0.12.A item 6) fixes the PM2-restart-wipe problem but doesn't address the cold-pair problem (pairs that come into the universe mid-cycle, or after the universe expands).
+
+Kyle's question: can we backfill regime entry time from OHLC history? The classifier is a pure function of OHLC + DBS. We have historical OHLC per pair. We could walk backward through 60-min windows until the classifier output changes — that's the actual regime entry time. With ~177 pairs × up to 12 windows (covering 12h LATE phase) = ~2,124 classifier calls per cold-start scan. Not heavy.
+
+**Open design questions for Langston:**
+- Should we backfill on first observation only, OR re-validate periodically (e.g., once per pair per day) in case the historical regime changed near the boundary?
+- DBS is required for the classifier; do we have backfilled DBS, or just current DBS? If only current, the backfill is approximate.
+- Should the backfilled enteredAt persist to disk via the same persistence layer added in §0.12.A item 6?
+- If a pair's backfilled age is > 12h, it lands in LATE phase immediately — does that flow correctly through the existing code paths?
+
+**Item 2 — Confidence saturation (Kyle 2026-04-29):**
+
+TFS branch in `market-regime.ts:177-184` saturates at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. After B67.1's clamp ceiling raise to 1.0:
+- `0.95 × 1.05 macro_modifier × 1.10 phase_weight = 1.097` → clamps to 1.0 for almost every TFS classification
+
+Today's distribution from 16 closed VTS trades: 12 at conf=1.0, 3 at 0.9, 1 at 0.8 — heavily clustered at the top 25% of the possible range.
+
+**This compromises the calibration check premise.** Tertile-monotonic WR by confidence bucket requires meaningful variance in confidence; with current saturation, tertile boundaries collapse to nearly-identical buckets and the calibration check passes/fails trivially without telling us anything.
+
+Kyle's question (paraphrased): does it make sense to have a confidence score where everything is in the top 25% of the possible range? Probably not. The current B62 formula structure (per-regime branch with sum-of-bonuses capped) produces tightly-clustered output rather than a continuous score.
+
+**Open design questions for Langston:**
+- Replace branch-based formula with continuous mapping (sigmoid? logistic regression on raw indicators?)
+- Spread the per-regime baseline values so they don't anchor at 0.50 / 0.65 / 0.70 / 0.75 — let modulators differentiate within a wider band
+- Alternative calibration check approach: bucket on RAW pre-clamp confidence value, OR on macro modifier value alone, OR on phase weight alone (each has more variance than modulated confidence)
+- Defer to a dedicated classifier-formula tuning batch post-B67.4 vs address inline
+
+**Sequencing:** Both items will be discussed with Langston after Kyle's next compact. The cheap-tier bundle (B67.4) may proceed first if the discussion lands on "tune later, ship more levers now" — or it may wait if "fix saturation before shipping more levers that touch the same modulation chain."
+
+#### §0.12.C Calibration window status (as of 2026-04-29)
+
+NOT YET STARTED. All 6 pre-window foundation fixes complete. Step 7 (B67.4 cheap-tier bundle) remains. Window starts when B67.4 deploys clean per master plan §0.11.C.
+
+---
+
 ### §0.9 No new hardcoded constants from B67 forward
 
 **Permanent governance rule (Kyle directive 2026-04-28):** every new threshold, weight, multiplier, cutoff, lookback, percentile bound, or seed value introduced from B67 onward goes directly into `module_constants` at the moment of introduction. No new hardcoded values in the codebase.
