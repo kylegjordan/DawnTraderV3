@@ -495,6 +495,14 @@ export async function computeAblationComparison(
                ELSE NULL END)::float AS "realAdmitAltRejectAvgPnlUsdLost"
     FROM regime_factor_alternates
     WHERE evaluated_at >= ${windowStart}
+      -- B67.0 follow-up 2026-04-29 (Kyle directive): hide pre-split legacy
+      -- factor names from the dashboard so only the 4 active per-input + phase
+      -- factors are surfaced. Legacy rows (b67_1_macro_modifier emitted before
+      -- the per-input split commit ed9a1a08; b67_2_phase_dimension renamed to
+      -- b67_2_phase_preference in the same commit) are frozen — they never
+      -- grow further. Filtering them in the dashboard query keeps the data
+      -- in DB for forensics while removing UI noise.
+      AND factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')
     GROUP BY factor_name
     ORDER BY factor_name ASC
   `);

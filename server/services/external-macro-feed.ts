@@ -43,11 +43,19 @@
  * Reference: BATCH_67_1_SCOPE.md §3 + §5
  */
 
+import * as fs from 'fs';
 import { getConstant } from './module-constants-service.js';
 import {
   type MacroSnapshot,
   type MacroBaseline,
 } from '../core/metrics/macro-modifier.js';
+
+// B67.1 follow-up 2026-04-29 (Kyle directive): persist the rolling-window
+// state so PM2 restarts don't reset the z-score baselines back to cold-start
+// (which forces modifier=1.0 + fallbackActive=true for ~48 minutes of
+// every restart). Writing JSON to /tmp matches the trailing-state pattern
+// from server/services/trade-safety.ts.
+const FEED_PERSIST_FILE = '/tmp/external-macro-feed-state.json';
 
 // ─── Constants resolution helper ────────────────────────────────────────────
 
@@ -154,6 +162,69 @@ const state: FeedState = {
   mcapMomentumWindow: new RollingWindow(WINDOW_SIZE_SAMPLES),
   prevTotalMarketCapUsd: undefined,
 };
+
+/**
+ * Persist the feed state to disk. Called after each successful poll. On
+ * cold start (first call before init has happened) this is a no-op
+ * because state has empty windows.
+ */
+function persistFeedState(): void {
+  try {
+    const data = {
+      lastSuccessAt: state.lastSuccessAt,
+      lastSnapshot: state.lastSnapshot,
+      btcDomSamples: (state.btcDomWindow as any).samples ?? [],
+      fundingSamples: (state.fundingWindow as any).samples ?? [],
+      mcapMomentumSamples: (state.mcapMomentumWindow as any).samples ?? [],
+      prevTotalMarketCapUsd: state.prevTotalMarketCapUsd,
+    };
+    fs.writeFileSync(FEED_PERSIST_FILE, JSON.stringify(data));
+  } catch (err) {
+    console.warn(
+      '[B67.1][feed] Failed to persist state:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
+ * Restore feed state from disk on init. Called from initExternalMacroFeed.
+ * Tolerates missing/corrupt file.
+ */
+function restoreFeedState(): void {
+  try {
+    if (!fs.existsSync(FEED_PERSIST_FILE)) return;
+    const raw = fs.readFileSync(FEED_PERSIST_FILE, 'utf-8');
+    const data = JSON.parse(raw);
+    if (typeof data.lastSuccessAt === 'number') state.lastSuccessAt = data.lastSuccessAt;
+    if (data.lastSnapshot && typeof data.lastSnapshot === 'object') {
+      state.lastSnapshot = data.lastSnapshot;
+    }
+    // Restore samples by repopulating the rolling windows. Bounded by
+    // WINDOW_SIZE_SAMPLES via the push() side-effect in the class.
+    if (Array.isArray(data.btcDomSamples)) {
+      for (const v of data.btcDomSamples) state.btcDomWindow.push(v);
+    }
+    if (Array.isArray(data.fundingSamples)) {
+      for (const v of data.fundingSamples) state.fundingWindow.push(v);
+    }
+    if (Array.isArray(data.mcapMomentumSamples)) {
+      for (const v of data.mcapMomentumSamples) state.mcapMomentumWindow.push(v);
+    }
+    if (typeof data.prevTotalMarketCapUsd === 'number') {
+      state.prevTotalMarketCapUsd = data.prevTotalMarketCapUsd;
+    }
+    console.log(
+      `[B67.1][feed] Restored from ${FEED_PERSIST_FILE} — ` +
+        `windows=(btc:${state.btcDomWindow.size()},fund:${state.fundingWindow.size()},mcap:${state.mcapMomentumWindow.size()})`,
+    );
+  } catch (err) {
+    console.warn(
+      '[B67.1][feed] Failed to restore persisted state:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 
 let pollTimer: NodeJS.Timeout | null = null;
 let pollIntervalSec = 60;
@@ -292,6 +363,11 @@ async function pollCycle(): Promise<void> {
     state.lastSuccessAt = startedAt;
   }
 
+  // B67.1 follow-up: persist after every poll so the rolling baseline survives
+  // PM2 restarts. ~720 sample writes per window × 3 windows = ~2KB JSON;
+  // synchronous fs write is well under the 60s poll cadence.
+  persistFeedState();
+
   if (partial) {
     console.warn(
       `[B67.1][feed] partial snapshot — btc_dom=${cg.btcDominance ?? 'NA'} ` +
@@ -314,6 +390,13 @@ async function pollCycle(): Promise<void> {
  */
 export async function initExternalMacroFeed(): Promise<void> {
   if (pollTimer !== null) return;
+
+  // B67.1 follow-up 2026-04-29: restore persisted rolling-window state from
+  // disk so the z-score baselines survive PM2 restarts. Without this, every
+  // restart forces modifier=1.0 + fallbackActive=true for the first ~48
+  // minutes (cold-start floor). With this, baselines pick up where they left
+  // off and the modifier produces real values immediately.
+  restoreFeedState();
 
   pollIntervalSec = await readConstStrict<number>('b67_1_external_feed_cache_seconds');
 

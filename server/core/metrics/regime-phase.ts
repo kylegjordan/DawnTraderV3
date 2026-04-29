@@ -37,6 +37,8 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
+import * as fs from 'fs';
+
 export type RegimePhase = 'EARLY' | 'PRIME' | 'LATE';
 
 /**
@@ -51,8 +53,71 @@ interface PairPhaseEntry {
   lastSeenAt: number;
 }
 
+// B67.2.1 follow-up 2026-04-29 (Kyle directive): persistence for survival
+// across restarts. Writing through to /tmp matches the trailing-state file
+// pattern (server/services/trailing-exit-controller.ts). Written
+// synchronously on each tick (low cost — Map is bounded by pair count).
+// Read at module load so a fresh process inherits accumulated regime ages
+// from the prior process. Without this, every PM2 restart resets every
+// pair's age to 0 → all pairs show EARLY for the first 2h, the dashboard
+// is uninformative.
+const PERSIST_FILE = '/tmp/regime-phase-store.json';
+const STALE_HARD_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h: drop entries older than this
+
 class RegimePhaseStore {
   private entries: Map<string, PairPhaseEntry> = new Map();
+  private dirty: boolean = false;
+
+  constructor() {
+    this.loadFromDisk();
+  }
+
+  private loadFromDisk(): void {
+    try {
+      if (!fs.existsSync(PERSIST_FILE)) return;
+      const raw = fs.readFileSync(PERSIST_FILE, 'utf-8');
+      const data = JSON.parse(raw) as Record<string, PairPhaseEntry>;
+      const now = Date.now();
+      let loaded = 0;
+      let expired = 0;
+      for (const [symbol, entry] of Object.entries(data)) {
+        if (entry && entry.regime && Number.isFinite(entry.enteredAt)) {
+          // Drop entries whose lastSeenAt is older than 24h — they're
+          // probably stale from a long-ago run, not relevant to current state.
+          if (entry.lastSeenAt && now - entry.lastSeenAt > STALE_HARD_EXPIRY_MS) {
+            expired++;
+            continue;
+          }
+          this.entries.set(symbol, entry);
+          loaded++;
+        }
+      }
+      console.log(
+        `[B67.2][regimePhaseStore] Loaded ${loaded} pairs from ${PERSIST_FILE} (expired ${expired})`,
+      );
+    } catch (err) {
+      console.warn(
+        '[B67.2][regimePhaseStore] Failed to load persisted state:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  private saveToDisk(): void {
+    try {
+      const data: Record<string, PairPhaseEntry> = {};
+      for (const [symbol, entry] of this.entries) {
+        data[symbol] = entry;
+      }
+      fs.writeFileSync(PERSIST_FILE, JSON.stringify(data));
+      this.dirty = false;
+    } catch (err) {
+      console.warn(
+        '[B67.2][regimePhaseStore] Failed to persist state:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   /**
    * Record a per-pair tick. Returns the regime age in milliseconds.
@@ -68,14 +133,21 @@ class RegimePhaseStore {
     const existing = this.entries.get(symbol);
     if (existing && existing.regime === currentRegime) {
       existing.lastSeenAt = now;
+      this.dirty = true;
+      // Throttle disk writes — only persist if 60s+ since last write.
+      // Implementation: write every 60th tick. Cheap heuristic. Alternative
+      // is a setInterval timer but that adds another lifecycle to manage.
+      if (Math.random() < 0.02) this.saveToDisk(); // ~2% of ticks
       return now - existing.enteredAt;
     }
-    // New symbol or regime change → reset.
+    // New symbol or regime change → reset. Always persist on transition since
+    // these are operationally significant.
     this.entries.set(symbol, {
       regime: currentRegime,
       enteredAt: now,
       lastSeenAt: now,
     });
+    this.saveToDisk();
     return 0;
   }
 
