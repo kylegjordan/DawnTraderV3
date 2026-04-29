@@ -103,7 +103,7 @@ import { buildB67_1Alternates } from '../core/metrics/macro-modifier.js';
 // B67.2 — phase preference application
 import { applyPhasePreference } from '../core/metrics/regime-phase.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
-import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
+import { checkPerUnderlyingCap, formatDecisionLog, assignCohortHash } from './per-underlying-cap.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -507,6 +507,20 @@ interface OpenVirtualTrade {
   originalStopPrice?: number;
   latchTriggerPrice?: number;
   rungTargetHistory?: number[];
+  // B67.3 (2026-04-29): cohort marker for the per-underlying limits A/B
+  // observation. 0 = capped treatment, 1 = uncapped control. Persisted on
+  // close to JSONL so end-of-observation cohort comparison can group trades.
+  pairIdHash?: number;
+  // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier +
+  // phase persisted at trade-open per Kyle directive (master plan §0.11.D).
+  // Available throughout the trade lifecycle for UI rendering, CSV export,
+  // and serialized to JSONL on close for B70 archive ingestion.
+  regimeConfidenceRaw?: number;
+  macroModifierValue?: number;
+  phase?: 'EARLY' | 'PRIME' | 'LATE';
+  phaseAgeSeconds?: number;
+  strategyPhaseWeight?: number;
+  regimeConfidenceModulated?: number;
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
@@ -1303,6 +1317,26 @@ async function generatePhase10Signal(
     // ratcheting and is available on closed-trade record + open-trade API.
     originalStopPrice: stopLoss,
     rungTargetHistory: [],
+    // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation.
+    pairIdHash: assignCohortHash(symbol),
+    // B67.2.1 (2026-04-29): capture regime classifier confidence + macro
+    // modifier + phase at trade-open. Read from MCE cached context +
+    // macro context + phase weights. Phase weight looked up from the
+    // 54-cell blob via (strategy, phase) key.
+    regimeConfidenceModulated: mceContext.regime.confidence,
+    macroModifierValue: getMarketContextEngine().getCurrentMacroContext()?.modifier.value,
+    regimeConfidenceRaw: (() => {
+      const mod = getMarketContextEngine().getCurrentMacroContext()?.modifier.value;
+      const conf = mceContext.regime.confidence;
+      return mod && mod > 0 ? conf / mod : conf;
+    })(),
+    phase: mceContext.regime.phase,
+    phaseAgeSeconds: mceContext.regime.phaseAgeSeconds,
+    strategyPhaseWeight: (() => {
+      const weights = getMarketContextEngine().getCurrentPhaseWeights();
+      const p = mceContext.regime.phase;
+      return weights ? weights[`${strategy}_${p}`] : undefined;
+    })(),
   };
 
   openVirtualTrades.set(tradeId, openTrade);
@@ -1813,6 +1847,15 @@ async function resolveOpenVirtualTrades(): Promise<{
         pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
         globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
         filterTier: trade.filterTier,
+        // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+        pairIdHash: trade.pairIdHash,
+        // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase
+        regimeConfidenceRaw: trade.regimeConfidenceRaw,
+        macroModifierValue: trade.macroModifierValue,
+        phase: trade.phase,
+        phaseAgeSeconds: trade.phaseAgeSeconds,
+        strategyPhaseWeight: trade.strategyPhaseWeight,
+        regimeConfidenceModulated: trade.regimeConfidenceModulated,
       });
       if (result.persisted) persisted++;
       if (result.mlTriggered) mlQueued++;

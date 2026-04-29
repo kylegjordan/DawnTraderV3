@@ -735,6 +735,16 @@ export class VTSService extends EventEmitter {
     pairDirectionalBiasScore?: number | null;
     globalDirectionalBiasScore?: number | null;
     filterTier?: 'standard' | 'relaxed';
+    // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+    pairIdHash?: number;
+    // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
+    // captured at trade-open, propagated to closed-trade record + JSONL.
+    regimeConfidenceRaw?: number;
+    macroModifierValue?: number;
+    phase?: 'EARLY' | 'PRIME' | 'LATE';
+    phaseAgeSeconds?: number;
+    strategyPhaseWeight?: number;
+    regimeConfidenceModulated?: number;
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
     const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
@@ -836,6 +846,15 @@ export class VTSService extends EventEmitter {
       originalStopPrice: tradeData.originalStopPrice ?? null,
       latchTriggerPrice: tradeData.latchTriggerPrice ?? null,
       rungTargetHistory: tradeData.rungTargetHistory ?? null,
+      // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+      pairIdHash: tradeData.pairIdHash ?? null,
+      // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase
+      regimeConfidenceRaw: tradeData.regimeConfidenceRaw ?? null,
+      macroModifierValue: tradeData.macroModifierValue ?? null,
+      phase: tradeData.phase ?? null,
+      phaseAgeSeconds: tradeData.phaseAgeSeconds ?? null,
+      strategyPhaseWeight: tradeData.strategyPhaseWeight ?? null,
+      regimeConfidenceModulated: tradeData.regimeConfidenceModulated ?? null,
     } as any;
 
     // Add to closedTrades for ML calibration access
