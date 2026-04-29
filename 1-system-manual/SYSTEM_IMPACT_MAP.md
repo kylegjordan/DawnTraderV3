@@ -1049,3 +1049,38 @@ The regime classifier overhaul + external data integration plan lives at `Claude
 **Live evidence post-deploy:** First diversified macro modifier observed = 0.85 (clamped to min) with real z-scores (BTC -0.79, funding +1.90, mcap +0.08). Macro feed rolling windows survived restart (btc:78, fund:96, mcap:77 samples). RegimeConfig contract resolved cleanly. Backfill log lines + TFS distribution shift + phase mix shift deferred to ~24h verification.
 
 **Status**: B67.3.5 LIVE on PM2 #114. All 7 pre-calibration-window foundation fixes complete. Calibration window starts when B67.4 cheap-tier bundle ships (the only remaining pre-window step).
+
+---
+
+## B73 — Exit-Strategy Ablation Framework (2026-04-29, commit `a747b646`, PM2 #115)
+
+Observation-only framework parallel to B67.0. Records what 12 BE-stop / trailing-stop variants WOULD have done on every closed VTS trade. No exit-behavior changes; zero contamination with B67 calibration window.
+
+**New components:**
+- `server/services/exit-strategy-replay.ts` — 12 variant evaluators (BE A-F, Trail G-J, Combined K-L) with simplified trailing state machine (peak + level + ATR multiplier)
+- `server/services/exit-strategy-replay-service.ts` — orchestrator: 1-min OHLC fetch via `ohlcCache.getOHLCData(symbol, 1, since)` (bypasses cache via since-param), bulk-insert into `exit_strategy_alternates`, error-swallowing `[B73][exit-replay]` logging
+- `exit_strategy_alternates` table (parallel to `regime_factor_alternates`) — 12 rows per closed trade, indexed on (variant_id, created_at) and (regime, variant_id)
+- 13 module_constants in new `exit_strategy_replay` module: variant params (snapshot baselines + variant-specific overrides) + global config (max_hold_ms=7d, ohlc_buffer=1h, min_n_total=200, min_n_per_regime=50, replay_enabled flag)
+
+**Hook point (single — VTS only):**
+- `server/services/vts-service.ts:persistRealPriceTrade` — async fire-and-forget `void import('./exit-strategy-replay-service').then(...)`. Trade-close path never blocked. ATR approximation `Math.abs(target - entry) / 1.5` (target_lock_r proxy) used for variant thresholds; consistent across all 12 so relative comparisons remain valid even if absolute thresholds drift.
+
+**Paper-execution-engine intentionally NOT hooked** (Kyle directive 2026-04-29). Active trading is OFF; B73 is research-mode for multi-week observation. If active trading reactivates BEFORE B73 conclusion, the paper hook is a 5-line addition at that point. B67-style symmetry: neither framework needs a paper-execution-engine hook today.
+
+**Variant A baseline isolation (Langston cc-inbox #862):** Variant A reads from `b73_baseline_be_trigger_r=1.0` and `b73_baseline_trail_distance_atr=1.0` snapshot constants — NOT live `trailing_exit` keys. This insulates the multi-week observation from TEC tuning that would otherwise drift the baseline mid-window and invalidate paired-diff Sharpe calculations.
+
+**Selection criterion (pre-registered in scope):** `(mean_pnl_variant - mean_pnl_baseline) / std(pnl_variant - pnl_baseline) × sqrt(n)` per Langston cc-inbox #858. Penalizes variance, rewards consistency. n=200 total minimum for headline winner; n=50 per regime for regime-specific recommendations.
+
+**B73 cross-references "If I Change X, Check Y":**
+- **Edit a variant evaluator in exit-strategy-replay.ts** → unit tests pending tomorrow follow-up; verify variant produces correct VirtualExit on synthetic OHLC scenarios
+- **Edit a `b73_baseline_*` constant** → DOES NOT take effect for already-replayed trades (each trade replays once). Affects new replays going forward. Document the change date for cohort partitioning during analysis.
+- **Edit a `trailing_exit` constant (live TEC)** → does NOT affect Variant A in B73 (snapshot isolation). The actual trade behavior changes; ablation observation continues with the snapshot baseline reference. Note the TEC change in MEMORY/CHANGES so analysis can partition pre/post.
+- **Add a new variant** → assign next letter (M, N, ...), implement evaluator, add to `replayAllVariants()`, add module_constants for params, add VARIANT_NAMES entry. No schema migration needed (variant_id is varchar).
+- **Tomorrow's follow-up commits** (paper-execution-engine hook intentionally skipped):
+  - API endpoint `GET /api/analytics/exit-strategy-ablation` for variant aggregations
+  - UI panel "Exit Strategy Ablation" in machine-learning page (sortable by Sharpe, per-regime filter)
+  - Unit tests for 12 variants + state machine
+
+**Live evidence post-deploy:** `exit_strategy_alternates` table created cleanly with 13 module_constants seeded. PM2 #115 online. First VTS trade closure post-deploy will populate 12 rows. Verification SQL: `SELECT count(*), count(DISTINCT variant_id) FROM exit_strategy_alternates;`.
+
+**Status**: B73 data layer LIVE on PM2 #115. UI + tests follow-up tomorrow. Multi-week observation accumulates in parallel with B67.4 cheap-tier + calibration window.

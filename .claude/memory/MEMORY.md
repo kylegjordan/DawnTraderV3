@@ -45,17 +45,20 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 
 ---
 
-## Current State (2026-04-29 evening post-B67.3.5, PM2 #114)
+## Current State (2026-04-29 night post-B73, PM2 #115)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `d97d47d7` (B67.3.5 CI fixes). Chain: `49209eb4` B67.3.5 impl → `d97d47d7` test fixture + regime-string CI fixes.
-- **Live behavior on staging (PM2 #114):**
-  - All B67.0/1/2/2.1/3 + replay logic + persistence + B67.3.5 LIVE
-  - **First diversified macro modifier observed:** value=0.85 (clamped to min) with real z-scores BTC -0.79, funding +1.90 (very crowded longs), mcap +0.08
-  - TFS branch using continuous formula `confidence = 0.50 + 0.40 × (mom_factor × dbs_strength × vol_inverse)` via 5 module_constants in regime_classifier module
-  - Phase backfill ready to fire on cold pairs entering universe
-  - All B67 contracts resolving cleanly (no missing-key errors)
-- **Tomorrow ~6 UTC verification:** check (a) cron ran 04:00 UTC + replay populated rows; (b) backfill log lines on cold pairs (`[regime-phase][backfill] applied`); (c) TFS confidence raw distribution P10≤0.55, P50∈[0.60,0.80], P90≥0.80; (d) phase mix EARLY/PRIME/LATE; (e) new closed trades carry B67.2.1 fields.
+- **HEAD commit:** `a747b646` (B73 data layer ship). Tonight chain: B67.3.5 governance pass → B67.4 scope/pre-audit → comms fix → B73 scope/pre-audit/ship.
+- **Live behavior on staging (PM2 #115):**
+  - All B67.0/1/2/2.1/3 + B67.3.5 + B73 data layer LIVE
+  - **B67**: macro modifier diversifying (first non-1.0 was 0.85), TFS desat continuous formula in use, phase backfill ready on cold pairs
+  - **B73**: `exit_strategy_alternates` table created with 13 module_constants seeded; will populate 12 rows per VTS trade close (waiting for first close post-deploy)
+  - Async fire-and-forget hook in vts-service.persistRealPriceTrade — zero contamination with B67 calibration
+- **Tomorrow ~6 UTC verification gates** (B67.3.5): backfill log lines, TFS confidence distribution shift, phase mix LATE pairs appearing, replay cron run, modifier diversification
+- **Tomorrow follow-up commits**:
+  - B73: API endpoint + UI panel + unit tests (paper-execution-engine hook DROPPED per Kyle directive — research-mode framework, hook only if active trading reactivates)
+  - B67.4 implementation per `BATCH_67_4_PRE_AUDIT.md` §D refinements
+  - B74 equity passive scan scope
 
 ---
 
