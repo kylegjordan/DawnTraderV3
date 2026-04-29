@@ -7535,6 +7535,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B73 — Exit Strategy Ablation comparison endpoint.
+  // Reads exit_strategy_alternates table and returns per-variant statistics
+  // including Sharpe-like score (paired-diff vs Variant A baseline) for the
+  // dashboard. No cron needed — virtual_pnl_pct is fully resolved at write
+  // time. Empty until first VTS trade closes post-deploy.
+  // Query params:
+  //   ?window=rolling_24h | rolling_7d | rolling_30d | cohort_latest
+  //   ?regime=TFS | HVU | RBS | IE | ST | * (optional regime filter)
+  apiRouter.get('/analytics/exit-strategy-ablation', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { computeExitStrategyAblation } = await import('./services/exit-strategy-ablation-aggregator.js');
+      const win = (req.query.window as string) || 'rolling_24h';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'. must be one of ${allowed.join(', ')}` });
+      }
+      const regimeFilter = (req.query.regime as string) || null;
+      const data = await computeExitStrategyAblation(
+        win as 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest',
+        regimeFilter,
+      );
+      res.json({ ok: true, data });
+    } catch (error: any) {
+      console.error('[B73][exit-strategy-ablation] Error computing aggregation:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/narrative-feed - Get narrative events
   apiRouter.get('/narrative-feed', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

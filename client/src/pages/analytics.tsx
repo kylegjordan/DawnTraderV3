@@ -1533,6 +1533,187 @@ function AblationComparisonSection() {
   );
 }
 
+// B73 — Exit Strategy Ablation panel.
+// Sibling to AblationComparisonSection but for exit-strategy variants instead
+// of regime-confidence factors. Reads /api/analytics/exit-strategy-ablation
+// (exit_strategy_alternates table). 12 variants ranked by Sharpe-like score
+// (paired-diff vs Variant A baseline). Empty until first VTS trade closes
+// post-deploy of B73 (commit a747b646, PM2 #115).
+interface ExitStrategyVariantStats {
+  variantId: string;
+  variantName: string;
+  n: number;
+  meanPnlPct: number | null;
+  stdPnlPct: number | null;
+  meanDiffVsBaseline: number | null;
+  stdDiffVsBaseline: number | null;
+  sharpeScore: number | null;
+  winRatePct: number | null;
+  exitReasonBreakdown: Record<string, number>;
+  meanDurationMin: number | null;
+}
+
+interface ExitStrategyAblationData {
+  window: string;
+  windowStart: string;
+  windowEnd: string;
+  regimeFilter: string | null;
+  totalTrades: number;
+  totalRows: number;
+  variants: ExitStrategyVariantStats[];
+  minNTotal: number;
+  minNPerRegime: number;
+  ready: boolean;
+}
+
+function ExitStrategyAblationSection() {
+  const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_7d');
+  const [regimeSel, setRegimeSel] = useState<string>('*');
+
+  const queryUrl = `/api/analytics/exit-strategy-ablation?window=${windowSel}${regimeSel !== '*' ? `&regime=${regimeSel}` : ''}`;
+  const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: ExitStrategyAblationData }>({
+    queryKey: ['/api/analytics/exit-strategy-ablation', windowSel, regimeSel],
+    queryFn: () => apiFetch(queryUrl),
+    refetchInterval: 60_000,
+  });
+
+  const d = resp?.data;
+  const sortedByDiff = d ? [...d.variants].sort((a, b) =>
+    (b.meanDiffVsBaseline ?? -Infinity) - (a.meanDiffVsBaseline ?? -Infinity),
+  ) : [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between flex-wrap gap-2">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" /> Exit Strategy Ablation
+            <span className="text-xs font-normal text-muted-foreground">(B73)</span>
+          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={regimeSel}
+              onChange={(e) => setRegimeSel(e.target.value)}
+              className="px-2 py-1 text-xs rounded-md border border-border bg-muted text-muted-foreground"
+              data-testid="select-regime"
+            >
+              <option value="*">All regimes</option>
+              <option value="TREND_FRIENDLY_STABLE">TFS</option>
+              <option value="HIGH_VOLATILITY_UNSTABLE">HVU</option>
+              <option value="RANGE_BOUND_STABLE">RBS</option>
+              <option value="IMPULSE_EXPANSION">IE</option>
+              <option value="STRUCTURAL_TRANSITION">ST</option>
+            </select>
+            {(['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setWindowSel(w)}
+                className={`px-3 py-1 text-xs rounded-md border ${
+                  windowSel === w ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+                }`}
+                data-testid={`button-window-${w}`}
+              >
+                {w.replace('rolling_', '').replace('cohort_', 'Since ').replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
+        {error && <div className="text-sm text-red-500">Error: {String((error as Error).message)}</div>}
+        {d && d.totalRows === 0 && (
+          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md">
+            <div className="font-medium mb-2">No exit-strategy ablation rows in this window yet.</div>
+            <div className="text-xs">
+              The framework is wired and listening. Each VTS trade close populates 12 variant rows automatically. If this stays empty, check that VTS is closing trades and that <code className="text-[11px]">originalStopPrice</code> is populated on new closures.
+            </div>
+          </div>
+        )}
+        {d && d.totalRows > 0 && (
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
+              <span>Window: <span className="font-mono">{d.window}</span></span>
+              <span>Trades: <span className="font-mono">{d.totalTrades}</span></span>
+              <span>Variant rows: <span className="font-mono">{d.totalRows}</span></span>
+              <span>min n: <span className="font-mono">{d.regimeFilter && d.regimeFilter !== '*' ? d.minNPerRegime : d.minNTotal}</span></span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] ${d.ready ? 'bg-emerald-500/20 text-emerald-700' : 'bg-amber-500/20 text-amber-700'}`}>
+                {d.ready ? 'READY (n threshold met)' : 'ACCUMULATING'}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50">
+                  <tr className="text-left">
+                    <th className="px-2 py-2">ID</th>
+                    <th className="px-2 py-2">Variant</th>
+                    <th className="px-2 py-2 text-right">n</th>
+                    <th className="px-2 py-2 text-right">Mean P&L %</th>
+                    <th className="px-2 py-2 text-right">Δ vs A %</th>
+                    <th className="px-2 py-2 text-right" title="(mean_diff / std_diff) × √n; pre-registered selection metric">Sharpe</th>
+                    <th className="px-2 py-2 text-right">Win %</th>
+                    <th className="px-2 py-2 text-right">Avg Dur (min)</th>
+                    <th className="px-2 py-2">Top exit reasons</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedByDiff.map((v) => {
+                    const isBaseline = v.variantId === 'A';
+                    const sharpeColor = v.sharpeScore == null
+                      ? 'text-muted-foreground'
+                      : v.sharpeScore > 1.0 ? 'text-emerald-600 font-semibold'
+                      : v.sharpeScore > 0.5 ? 'text-emerald-500'
+                      : v.sharpeScore < -0.5 ? 'text-red-500'
+                      : 'text-foreground';
+                    const topReasons = Object.entries(v.exitReasonBreakdown)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 3)
+                      .map(([r, n]) => `${r}:${n}`)
+                      .join(', ');
+                    return (
+                      <tr key={v.variantId} className={`border-t border-border ${isBaseline ? 'bg-muted/30' : ''}`}>
+                        <td className="px-2 py-2 font-mono font-bold">{v.variantId}</td>
+                        <td className="px-2 py-2 font-mono text-[11px]">
+                          {v.variantName}
+                          {isBaseline && <span className="ml-1 text-[10px] text-muted-foreground">(baseline)</span>}
+                        </td>
+                        <td className="px-2 py-2 text-right">{v.n}</td>
+                        <td className="px-2 py-2 text-right font-mono">
+                          {v.meanPnlPct != null ? `${v.meanPnlPct >= 0 ? '+' : ''}${v.meanPnlPct.toFixed(3)}` : '—'}
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono">
+                          {isBaseline ? '—' : (v.meanDiffVsBaseline != null
+                            ? `${v.meanDiffVsBaseline >= 0 ? '+' : ''}${v.meanDiffVsBaseline.toFixed(3)}`
+                            : '—')}
+                        </td>
+                        <td className={`px-2 py-2 text-right font-mono ${sharpeColor}`}>
+                          {isBaseline ? '—' : (v.sharpeScore != null ? v.sharpeScore.toFixed(2) : '—')}
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          {v.winRatePct != null ? `${v.winRatePct.toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          {v.meanDurationMin != null ? Math.round(v.meanDurationMin) : '—'}
+                        </td>
+                        <td className="px-2 py-2 text-[10px] text-muted-foreground max-w-[300px] truncate" title={topReasons}>
+                          {topReasons || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              <strong>Reading:</strong> Variant A (baseline) is the current BE-stop logic. <em>Δ vs A</em> = paired difference (this variant's P&L − Variant A's P&L on the same trade). <em>Sharpe</em> = pre-registered selection metric: (mean_diff ÷ std_diff) × √n. Variants ranked by Δ vs A (descending). Sharpe &gt; 1.0 = strong signal; &lt; −0.5 = consistently worse than baseline. Per-regime breakdown via the regime filter (drop-down). Variants: A=current / B=ATR-padded BE+ / C=higher BE trigger / D=trailing instead of BE / E=vol-conditional skip / F=NO BE / G=baseline trail / H=tighter trail / I=looser trail / J=no trailing / K=NO BE+NO trail / L=BE+pad and looser trail.
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function MappingDriftSection() {
   const [syncing, setSyncing] = useState(false);
 
@@ -2525,6 +2706,7 @@ export default function AnalyticsPage() {
             <div className="space-y-6">
               <DriftDashboardSection />
               <AblationComparisonSection />
+              <ExitStrategyAblationSection />
             </div>
           </TabsContent>
           
