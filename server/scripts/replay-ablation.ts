@@ -78,6 +78,11 @@ const VTS_LOGS_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
  * pass so we don't re-read files for every pending row.
  */
 async function buildVtsTradeIndex(daysBack: number = 14): Promise<Map<string, any>> {
+  // Indexed by SIGNAL ID (vsig_p10_* / similar), NOT trade.id. Reason:
+  // ablation rows store `vts_trade_id = signal.id` from the emit hook in
+  // vts-runner.ts (line ~1374). VirtualTrade.id is a different format
+  // (vts_{symbol}_{exitTime}). The original signal.id is preserved inside
+  // the nested trade.signal object — that's the join key.
   const index = new Map<string, any>();
   try {
     const files = await fs.readdir(VTS_LOGS_DIR);
@@ -88,7 +93,6 @@ async function buildVtsTradeIndex(daysBack: number = 14): Promise<Map<string, an
     for (const filename of files) {
       if (!filename.endsWith('.json')) continue;
       const datePart = filename.replace('.json', '');
-      // Skip files older than the lookback window
       if (datePart < cutoffStr) continue;
 
       try {
@@ -96,8 +100,14 @@ async function buildVtsTradeIndex(daysBack: number = 14): Promise<Map<string, an
         const raw = await fs.readFile(fullPath, 'utf-8');
         const trades = JSON.parse(raw) as any[];
         for (const trade of trades) {
-          if (trade?.id && trade?.status === 'closed') {
-            index.set(trade.id, trade);
+          if (trade?.status === 'closed') {
+            // Prefer signal.id (matches ablation row vts_trade_id);
+            // fall back to trade.id for any older records that don't have
+            // signal nested.
+            const joinKey = trade?.signal?.id ?? trade?.id;
+            if (joinKey) {
+              index.set(joinKey, trade);
+            }
           }
         }
       } catch (err) {
