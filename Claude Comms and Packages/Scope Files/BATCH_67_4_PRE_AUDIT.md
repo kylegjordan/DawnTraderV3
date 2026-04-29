@@ -4,7 +4,7 @@
 **Step:** 2 of 11 per CLAUDE.md §2 workflow
 **SIM consulted:** YES — see §A.1 below
 **System Manual consulted:** YES — see §A.2 below
-**Status:** Drafted, awaiting Langston review (Step 2)
+**Status:** APPROVED at Step 2 (Langston cc-inbox #857). 4 refinements folded in below — see §D Refinements.
 
 ---
 
@@ -326,4 +326,56 @@ All seeds approved by Langston cc-inbox #856 (Q2-Q4):
 
 ---
 
-*End of B67.4 pre-audit. On Langston approval, hold for ~6 UTC verification gate check, then proceed to Step 3 implementation.*
+## §D. Refinements from Langston Step 2 review (cc-inbox #857)
+
+These 4 deltas supersede the original §B specs. Implementation must follow the refined version:
+
+### §D.1 OutcomeFeedbackStore expiry: **7 days, not 24h** (Q2)
+
+Rare-regime tuples (IE, ST fire <5% of the time) need a longer window between bursts. Change:
+- Add `b67_4_expiry_hours` module_constant (seed `168` = 7 days)
+- Use this in the hard-expiry sweep on disk-load (drop entries where `now - last_update > expiry_hours × 3600 × 1000`)
+- 11 module_constants total now (was 10)
+
+### §D.2 B68.5 ablation row: **numeric 0/1, not strings** (Q4)
+
+For dashboard consistency, factor_value_with/without are numeric:
+- `factor_value_with: 0 or 1` (1 = gate flipped the label)
+- `factor_value_without: 0` (no gate = no flip)
+- `metadata`: still carries `regime_with_gate`, `regime_without_gate`, `dbs_score`, `dbs_slope`, `path_a_triggered` for forensics
+
+This keeps aggregation queries (AVG, SUM) working uniformly across all factor types.
+
+### §D.3 EMA first-sample: **first sample AS EMA** (Q5)
+
+Confirmed approach. First trade's PnL becomes ema_pnl_pct directly (no decay applied). Cold-start floor at 5 samples means the first 4 EMA values aren't consumed for confidence modulation anyway, so first-sample-as-EMA noisiness doesn't propagate.
+
+### §D.4 Split `refreshMacroContext` into 6 methods + orchestrator (Q6)
+
+Replace the monolithic `refreshMacroContext` with:
+- `refreshMacroConfig()` — B67.1 macro modifier (7 constants)
+- `refreshPhaseConfig()` — B67.2 phase boundaries + weights (3 constants)
+- `refreshRegimeConfig()` — B67.3.5 TFS desat (5 constants)
+- `refreshOutcomeFeedbackConfig()` — B67.4 outcome feedback (5 + 1 = 6 constants per §D.1)
+- `refreshRegimeAgeConfig()` — B68.4 regime age (4 constants)
+- `refreshPathBConfig()` — B68.5 path B sustainability (1 constant)
+
+Plus a `refreshAllConfigs()` orchestrator called on the 60s timer. Each sub-method:
+- Hard-fails on missing constant with explicit identifier list
+- Returns a clean error message naming the specific config group that failed
+
+Orchestrator behavior:
+- **First refresh at startup**: hard-fail (we can't run without config). Throw and let MCE.start fail.
+- **Subsequent refreshes**: catch errors per sub-method, log which group failed, keep prior cached config for that group. Don't let one missing constant in B68.5 take down the entire MCE refresh.
+
+Rationale: tighter error attribution, independent unit testability per sub-method, fault tolerance for runtime config-update issues.
+
+### §D.5 Module constants count update
+
+11 total (was 10): 5 outcome_feedback + 4 regime_age + 1 path_b_sustainability + 1 outcome_feedback expiry-hours = 11.
+
+Migration SQL `2026-04-30-b67-4-cheap-tier.sql` adds 11 INSERTs.
+
+---
+
+*End of B67.4 pre-audit. APPROVED at Step 2. Hold for ~6 UTC verification gate check, then proceed to Step 3 implementation per §D refinements.*
