@@ -1806,6 +1806,10 @@ async function resolveOpenVirtualTrades(): Promise<{
       const trailingSnapshot = getTrailingState(trade.symbol);
       const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = trailingSnapshot?.tradeMode ?? 'TARGET';
       const result = await vtsService.persistRealPriceTrade({
+        // B67.0 follow-up: thread the original VTS signal id (matches the
+        // vts_trade_id stored on ablation rows at emit time) so the
+        // replay-ablation job can join JSONL outcomes back to ablation rows.
+        originalSignalId: trade.id,
         symbol: trade.symbol,
         entryTime: trade.openedAt,
         exitTime: now,

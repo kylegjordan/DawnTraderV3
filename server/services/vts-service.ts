@@ -735,6 +735,10 @@ export class VTSService extends EventEmitter {
     pairDirectionalBiasScore?: number | null;
     globalDirectionalBiasScore?: number | null;
     filterTier?: 'standard' | 'relaxed';
+    // B67.0 (2026-04-29 follow-up): preserve the original VTS signal id so the
+    // replay-ablation join can match on it. Ablation rows store the same id at
+    // emit time; without persisting it on the trade record the join breaks.
+    originalSignalId?: string;
     // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
     pairIdHash?: number;
     // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
@@ -756,9 +760,14 @@ export class VTSService extends EventEmitter {
     // Calculate fees using the same formula as VTSService.simulateTrade
     const fees = tradeData.frictionCost * tradeData.positionSize;
     
-    // Convert to VirtualTrade format for legacy persistence compatibility
+    // Convert to VirtualTrade format for legacy persistence compatibility.
+    // B67.0 follow-up: prefer the originalSignalId (passed through from
+    // vts-runner) so JSONL trades can be joined back to ablation rows.
+    // Falls back to the legacy random `vs_*` format only when the caller
+    // didn't supply originalSignalId (older code paths).
     const signal: VirtualSignal = {
-      id: `vs_${tradeData.entryTime}_${Math.random().toString(36).substr(2, 9)}`,
+      id: tradeData.originalSignalId
+        ?? `vs_${tradeData.entryTime}_${Math.random().toString(36).substr(2, 9)}`,
       symbol: tradeData.symbol,
       entryPrice: tradeData.entryPrice,
       takeProfit: tradeData.takeProfit,
