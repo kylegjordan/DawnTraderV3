@@ -249,6 +249,79 @@ This is a prediction; B68.1 backtest is the authoritative test.
 
 ---
 
+### §0.11 — 2026-04-29 mid-batch reorganization (Kyle directive)
+
+After B67.1 + B67.2 shipped LIVE (no shadow flags, all fallbacks removed) on 2026-04-28/29, Kyle's mid-batch review surfaced several issues and a directive to expand the scope of work that runs through the 14-day calibration window. This section captures the resulting reorganization. **Supersedes §0.4's "B67/B68/B69 split" for the 6 confidence-modifying levers from §5.4.**
+
+#### §0.11.A Issues found 2026-04-29 (require fix before window can start)
+
+1. **Replay logic not wired.** `replay-ablation.ts` is gated/stubbed — counts pending rows + retention sweep only. No active-path or VTS-path outcome lookup. No cron scheduled. The ablation framework is collecting evidence rows but nothing replays them. Without this fix, all "Replayed" counters stay at 0 indefinitely → no calibration data.
+2. **Phase transition logging shows zero entries** in 10K+ PM2 log lines despite MCE classifying 177 pairs every cycle. Either the regime-phase store isn't being ticked OR the log statement has a bug. **B67.2 may be silently broken.** Must debug before adding more levers.
+3. **`?? 0` fallbacks remain in `macro-modifier.ts`** lines 212-214 (z-score result construction). Missed during the cleanup commit. Plus the BTC/ETH 0.6/0.4 funding weighting is still hardcoded — should be `module_constants` per §0.9.
+4. **Modifier + phase + regime confidence not persisted on trade records.** Originally deferred to B67.5 — wrong call. They need to be on every trade record from this batch forward (NOT B67.5) for daily monitoring during the window AND for active-trading path eventually.
+5. **`paper_sim_trades` empty.** 0 rows total — VTS trade outcomes aren't landing in the table the replay job's planned join targets. Trade-outcome data flow needs investigation.
+6. **B67.3 still in shadow.** No good ongoing reason. Plus `pair_id_hash` follow-up commit (persist hash to trade record at trade-open) hasn't shipped — required before flipping `b67_3_enabled=true` for the cohort A/B comparison.
+7. **04-22 was not the only hostile day.** Sustained underperformance pattern across last 7 days (analytics shows strong_bull_trend in TFS at 20.5% WR, IE at 23.8%; range_trade in RBS at 0%). Recurring failure mode, not a one-off.
+
+#### §0.11.B Lever-batching reorganization
+
+The original §0.4 split B67 (confidence-modifier core) from B68 (structural improvements) sequentially with B68 starting "after B67 closes." Kyle's 2026-04-29 directive: **pull the cheap and medium tiers forward** so they can be observed during the calibration window via the per-factor ablation rows (which the framework natively supports — each factor gets its own row independent of when it was deployed).
+
+**Final 4-batch structure for the remaining 6 confidence-modifying levers from §5.4** (ML-light still deferred per below):
+
+| Batch | Levers | Effort | Notes |
+|---|---|---|---|
+| **B67.4 cheap-tier bundle** ⭐ NEXT | Three small levers shipping in one commit, retaining separate sub-deliverable identifiers for ablation tracking: <br>• **B67.4** — Realized-outcome feedback (recent (regime, strategy) losses → downgrade confidence on new entries) <br>• **B68.4** — Regime-age first-class metric (per-pair regime history depth, "freshness fingerprint") <br>• **B68.5** — Path B sustainability tightening (deferred B65.6 work — multi-TF DBS agreement OR slope check OR combined gate, backtest selects winner per §0.8 four-case matrix) | ~2 weeks combined | All three small, complementary. Bundle into one commit because they share the per-pair regime tracking surface. |
+| **B68.2 — Volume regime** | Accumulation/distribution as a second confidence dimension. Volume profile computation per pair. | ~1 week | Own batch. Needs new volume-profile infrastructure. |
+| **B68.3 — Pair correlation** | Cross-pair correlation gate. Distinguishes idiosyncratic alt moves from BTC-correlated drift. | ~1 week | Own batch. Needs cross-pair correlation matrix infrastructure. Builds on existing per-pair BTC correlation in `defensive-hedge.ts`. |
+| **B68.1 — Multi-timeframe agreement** | 1h regime confirming 1m signals. Higher-TF OHLC pipeline. | ~2 weeks | Own batch. Needs new higher-TF OHLC data path — real new infrastructure. |
+| ~~B69 — ML-light~~ | Logistic regression error detector | ~2-3 weeks | **Stays deferred to end of pre-Phase-16 batches** per Kyle directive 2026-04-29. Trains on data accumulated by B67.x + B68.x. |
+
+#### §0.11.C Calibration window timing — revised
+
+Original plan had a single 14-day window starting at B67.2 deploy (2026-04-29). **Revised:** window cannot start until ablation framework is actually capable of replaying counterfactuals AND all factors that will be observed in the window are live.
+
+**Concrete window-start sequencing:**
+
+1. Fix the issues from §0.11.A:
+   - Lock calibration window dates in MEMORY (placeholder until window-start is determined)
+   - Debug B67.2 phase transition log absence (potential silent breakage)
+   - Remove remaining fallbacks in macro-modifier.ts + promote BTC/ETH funding weighting to module_constants
+   - Implement actual replay logic + schedule cron
+   - Persist modifier + phase + regime confidence on trade records + UI tables (with regime confidence rendered in same column as regime label)
+   - B67.3 pair_id_hash trade-open persistence + activation flip
+2. Ship B67.4 cheap-tier bundle (3 small levers in one commit).
+3. **Calibration window officially starts** when the cheap-tier bundle deploys + post-deploy verification confirms all 5 factors (B67.1 + B67.2 + B67.4 + B68.4 + B68.5) emitting ablation rows correctly.
+4. 14-day observation window. Calibration check at end → if pass, B67.5 wires confidence into 7 consumers; if fail, recalibrate per §0.6 sequencing.
+5. **Subsequent batches (B68.2 → B68.3 → B68.1) get their own ~14-day mini-windows** when each ships. Each batch's calibration check evaluates its own factor against its own observation cohort. The ablation framework natively handles this because each factor has its own row.
+
+**Why this works:** the ablation framework attributes per-factor independently. When B68.2 ships into a running calibration window, it adds its own row type to the ablation table. The B68.2-specific calibration check uses only rows where `factor_name='b68_2_volume_regime'` over the 14 days following its deploy. Earlier factors' calibration data (B67.1, B67.2, etc.) is unaffected because their rows are separate.
+
+#### §0.11.D Persistence + UI changes (B67.2.1 follow-up scope)
+
+Surfaced 2026-04-29: regime classifier outputs need to be persisted on every trade record (open + closed) and rendered in the UI tables. Specifically:
+
+- **Trade-record fields** (added to whatever schema VTS currently uses + paper_sim_trades for active path):
+  - `regime_confidence_raw` (pre-modifier, pre-phase)
+  - `macro_modifier_value` (B67.1 output)
+  - `phase` ('EARLY' | 'PRIME' | 'LATE')
+  - `phase_age_seconds`
+  - `strategy_phase_weight` (the (strategy, phase) JSONB lookup result)
+  - `regime_confidence_modulated` (final value: raw × modifier × phase_weight)
+- **CSV exports** include these fields for both open and closed trades.
+- **UI tables** render regime confidence in the same column as the regime label (under or beside it) so it's immediately visible.
+- **Cross-cutting:** the persistence layer must be writable from BOTH the VTS path AND the active trading path so when active trading turns back on, the same fields populate.
+
+#### §0.11.E No-fallbacks discipline (carry-forward from §0.9)
+
+The §0.9 "no new hardcoded constants from B67 forward" rule is reinforced 2026-04-29:
+- **Cold-start warmup paths are NOT fallbacks** (legitimate runtime states with explicit telemetry flags). Modifier returning `value=1.0 + fallbackActive=true` when rolling baseline has < 48 samples STAYS.
+- **Config-read defaults ARE fallbacks** (silent substitution). All `??` patterns on `getConstant()` reads MUST throw on missing.
+- **Hardcoded constants that should be in DB ARE fallbacks** (e.g., the BTC/ETH 0.6/0.4 weighting). Promote to `module_constants`.
+- **Future levers** must follow this discipline from the first commit. Migrations seed all-or-nothing; missing keys throw.
+
+---
+
 ### §0.9 No new hardcoded constants from B67 forward
 
 **Permanent governance rule (Kyle directive 2026-04-28):** every new threshold, weight, multiplier, cutoff, lookback, percentile bound, or seed value introduced from B67 onward goes directly into `module_constants` at the moment of introduction. No new hardcoded values in the codebase.
