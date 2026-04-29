@@ -6,7 +6,7 @@
 
 ## ⭐ SESSION-START PROTOCOL — DO THIS IMMEDIATELY EVERY NEW SESSION / POST-COMPACT
 
-1. **Read `DawnTraderV3/CLAUDE.md`** end-to-end. Lock in: 11-step workflow (§2), governance tiers (§3), critical rules (§5), Three-way comms protocol (§6 — including the two-step Telegram + brain delivery + the combined `openclaw agent --session-id <UUID> --message ... --deliver --reply-channel telegram --reply-account ccdt-relay --reply-to "-1003575211453"` pattern), SIM discipline (§9). DO NOT ASK Kyle to remind me of these — they are binding.
+1. **Read `DawnTraderV3/CLAUDE.md`** end-to-end. Lock in: 11-step workflow (§2), governance tiers (§3 + 200-line MEMORY cap + 2-file MEMORY pattern), critical rules (§5), Three-way comms protocol (§6 — **two-step canonical form** for Telegram + brain delivery: Step 1 sends CC's msg via `--account ccdt-relay`; Step 2 delivers to Langston's brain WITHOUT `--reply-account` so his reply uses `@LangstonDTBot` not `@CCDTCommsBot`. NEVER use `--reply-account ccdt-relay` on the agent --deliver call), SIM discipline (§9). DO NOT ASK Kyle to remind me of these — they are binding.
 2. **Read this file (`MEMORY.md`)** for volatile state.
 3. **Read `Claude Comms and Packages/Scope Files/REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md`** end-to-end (master regime overhaul plan, sections §0 + §0.10 + §0.11 + §0.12 are the resolved-decisions + reorganization + foundation work + open discussion items). If anything in §0.12 is stale relative to commits past `35b9de16`, update it.
 4. **Start the silent polling chain** for Langston: `ssh root@204.168.141.77 "sleep 30 && cc-poll-once"` with `run_in_background: true`. Relaunch silently on every wake.
@@ -75,7 +75,7 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 ## Session Behavior Invariants
 
 - **Iterate with Langston to consensus; don't escalate every response to Kyle.** CLAUDE.md §6.
-- **Telegram multi-line:** /tmp file → scp to 204.168.141.77 → MSG=$(cat)+openclaw. Combined Telegram + brain delivery: `openclaw agent --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --message "$MSG" --deliver --reply-channel telegram --reply-account ccdt-relay --reply-to "-1003575211453"`. Kyle prefers replies in Claude Code Desktop app unless explicitly asked for Telegram.
+- **Telegram 2-step canonical** (DO NOT use combined `--reply-account ccdt-relay` — it forces Langston's reply through CC's bot, collapsing identities). /tmp file → scp to 204.168.141.77 → MSG=$(cat). **Step 1** (CC speaks via @CCDTCommsBot): `openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "$MSG"`. **Step 2** (Langston's reply via @LangstonDTBot — no `--reply-account` flag): `openclaw agent --deliver --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --message "$MSG"`. Kyle prefers replies in Claude Code Desktop app unless explicitly asked for Telegram.
 - **VTS position sizing nominal $1000 base** producing ~$150/trade. Intentional — NOT a bug.
 - **Langston brain session UUID:** `16b70816-c63d-4cf0-8c80-bebd9f2cf066` (topic-21, Opus 4.6).
 
