@@ -123,6 +123,15 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   originalStopPrice: number | null;
   latchTriggerPrice: number | null;
   rungTargetHistory: number[] | null;
+  // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+  pairIdHash: number | null;
+  // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
+  regimeConfidenceRaw: number | null;
+  macroModifierValue: number | null;
+  phase: string | null;
+  phaseAgeSeconds: number | null;
+  strategyPhaseWeight: number | null;
+  regimeConfidenceModulated: number | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -254,6 +263,15 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             originalStopPrice: typeof trade.originalStopPrice === 'number' ? trade.originalStopPrice : null,
             latchTriggerPrice: typeof trade.latchTriggerPrice === 'number' ? trade.latchTriggerPrice : null,
             rungTargetHistory: Array.isArray(trade.rungTargetHistory) ? trade.rungTargetHistory : null,
+            // B67.3 (2026-04-29): cohort marker
+            pairIdHash: typeof trade.pairIdHash === 'number' ? trade.pairIdHash : null,
+            // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase
+            regimeConfidenceRaw: typeof trade.regimeConfidenceRaw === 'number' ? trade.regimeConfidenceRaw : null,
+            macroModifierValue: typeof trade.macroModifierValue === 'number' ? trade.macroModifierValue : null,
+            phase: typeof trade.phase === 'string' ? trade.phase : null,
+            phaseAgeSeconds: typeof trade.phaseAgeSeconds === 'number' ? trade.phaseAgeSeconds : null,
+            strategyPhaseWeight: typeof trade.strategyPhaseWeight === 'number' ? trade.strategyPhaseWeight : null,
+            regimeConfidenceModulated: typeof trade.regimeConfidenceModulated === 'number' ? trade.regimeConfidenceModulated : null,
           });
         }
       } catch (err) {

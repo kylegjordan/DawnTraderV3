@@ -47,6 +47,16 @@ interface OpenTrade {
   // B61 (2026-04-15): numeric DBS scores alongside categories
   pairDirectionalBiasScore: number | null;
   globalDirectionalBiasScore: number | null;
+  // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+  pairIdHash?: number | null;
+  // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
+  // captured at trade-open. NULL on trades opened pre-B67.2.1.
+  regimeConfidenceRaw?: number | null;
+  macroModifierValue?: number | null;
+  phase?: 'EARLY' | 'PRIME' | 'LATE' | null;
+  phaseAgeSeconds?: number | null;
+  strategyPhaseWeight?: number | null;
+  regimeConfidenceModulated?: number | null;
 }
 
 interface ClosedTrade {
@@ -85,6 +95,16 @@ interface ClosedTrade {
   // B61 (2026-04-15): numeric DBS scores alongside categories
   pairDirectionalBiasScore: number | null;
   globalDirectionalBiasScore: number | null;
+  // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+  pairIdHash?: number | null;
+  // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
+  // captured at trade-open. NULL on trades opened pre-B67.2.1.
+  regimeConfidenceRaw?: number | null;
+  macroModifierValue?: number | null;
+  phase?: 'EARLY' | 'PRIME' | 'LATE' | null;
+  phaseAgeSeconds?: number | null;
+  strategyPhaseWeight?: number | null;
+  regimeConfidenceModulated?: number | null;
 }
 
 type AdjustmentType = 
@@ -565,9 +585,29 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                     </Badge>
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
-                      {normalizeRegimeDisplay(trade.regime)}
-                    </Badge>
+                    {/* B67.2.1 (2026-04-29): regime label + confidence + phase in the
+                        SAME column per Kyle directive. Confidence shows post-modulation
+                        (raw × macro_modifier × strategy_phase_weight) effective number;
+                        phase badge surfaces EARLY/PRIME/LATE for age awareness. */}
+                    <div className="flex flex-col gap-0.5">
+                      <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
+                        {normalizeRegimeDisplay(trade.regime)}
+                      </Badge>
+                      {trade.regimeConfidenceModulated != null && (
+                        <span className="text-[10px] text-muted-foreground" title={`raw=${trade.regimeConfidenceRaw?.toFixed(3) ?? '—'} × modifier=${trade.macroModifierValue?.toFixed(3) ?? '—'} × phase_w=${trade.strategyPhaseWeight?.toFixed(3) ?? '—'}`}>
+                          conf {trade.regimeConfidenceModulated.toFixed(3)}
+                        </span>
+                      )}
+                      {trade.phase && (
+                        <Badge variant="outline" className={`text-[10px] w-fit ${
+                          trade.phase === 'EARLY' ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' :
+                          trade.phase === 'PRIME' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
+                          'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                        }`} title={`age ${trade.phaseAgeSeconds != null ? Math.floor(trade.phaseAgeSeconds / 60) : '?'}m`}>
+                          {trade.phase}
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-xs">{trade.strategy}</td>
                   <td className="px-3 py-2">
@@ -850,9 +890,29 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                     </Badge>
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
-                      {normalizeRegimeDisplay(trade.regime)}
-                    </Badge>
+                    {/* B67.2.1 (2026-04-29): regime label + confidence + phase in the
+                        SAME column per Kyle directive. Confidence shows post-modulation
+                        (raw × macro_modifier × strategy_phase_weight) effective number;
+                        phase badge surfaces EARLY/PRIME/LATE for age awareness. */}
+                    <div className="flex flex-col gap-0.5">
+                      <Badge variant="outline" className={`text-xs ${getRegimeBadgeColor(trade.regime)}`}>
+                        {normalizeRegimeDisplay(trade.regime)}
+                      </Badge>
+                      {trade.regimeConfidenceModulated != null && (
+                        <span className="text-[10px] text-muted-foreground" title={`raw=${trade.regimeConfidenceRaw?.toFixed(3) ?? '—'} × modifier=${trade.macroModifierValue?.toFixed(3) ?? '—'} × phase_w=${trade.strategyPhaseWeight?.toFixed(3) ?? '—'}`}>
+                          conf {trade.regimeConfidenceModulated.toFixed(3)}
+                        </span>
+                      )}
+                      {trade.phase && (
+                        <Badge variant="outline" className={`text-[10px] w-fit ${
+                          trade.phase === 'EARLY' ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' :
+                          trade.phase === 'PRIME' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
+                          'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                        }`} title={`age ${trade.phaseAgeSeconds != null ? Math.floor(trade.phaseAgeSeconds / 60) : '?'}m`}>
+                          {trade.phase}
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-xs">{trade.strategy}</td>
                   <td className="px-3 py-2">

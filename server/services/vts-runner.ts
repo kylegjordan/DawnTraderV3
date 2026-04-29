@@ -3158,6 +3158,17 @@ export function getOpenVirtualTradesForML(): Array<{
           rungTargetHistory: ts?.rungTargetHistory ?? trade.rungTargetHistory ?? null,
         };
       })(),
+      // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+      pairIdHash: trade.pairIdHash ?? null,
+      // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase persisted
+      // at trade-open. Surfaced on the open-trades UI so daily monitoring can see
+      // per-trade modulation values in real time.
+      regimeConfidenceRaw: trade.regimeConfidenceRaw ?? null,
+      macroModifierValue: trade.macroModifierValue ?? null,
+      phase: trade.phase ?? null,
+      phaseAgeSeconds: trade.phaseAgeSeconds ?? null,
+      strategyPhaseWeight: trade.strategyPhaseWeight ?? null,
+      regimeConfidenceModulated: trade.regimeConfidenceModulated ?? null,
     });
   }
 
