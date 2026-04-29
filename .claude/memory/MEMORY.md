@@ -45,20 +45,20 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 
 ---
 
-## Current State (2026-04-29 night post-B73, PM2 #115)
+## Current State (2026-04-29 night post-B73 full ship, PM2 #116)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `a747b646` (B73 data layer ship). Tonight chain: B67.3.5 governance pass → B67.4 scope/pre-audit → comms fix → B73 scope/pre-audit/ship.
-- **Live behavior on staging (PM2 #115):**
-  - All B67.0/1/2/2.1/3 + B67.3.5 + B73 data layer LIVE
-  - **B67**: macro modifier diversifying (first non-1.0 was 0.85), TFS desat continuous formula in use, phase backfill ready on cold pairs
-  - **B73**: `exit_strategy_alternates` table created with 13 module_constants seeded; will populate 12 rows per VTS trade close (waiting for first close post-deploy)
-  - Async fire-and-forget hook in vts-service.persistRealPriceTrade — zero contamination with B67 calibration
-- **Tomorrow ~6 UTC verification gates** (B67.3.5): backfill log lines, TFS confidence distribution shift, phase mix LATE pairs appearing, replay cron run, modifier diversification
-- **Tomorrow follow-up commits**:
-  - B73: API endpoint + UI panel + unit tests (paper-execution-engine hook DROPPED per Kyle directive — research-mode framework, hook only if active trading reactivates)
+- **HEAD commit:** `f53b9d60` (B73 test float-precision fixes; CI `25136181772` GREEN — Test Suite + Build + Docker; TS Check pre-existing legacy baseline).
+- **Live behavior on staging (PM2 #116):**
+  - All B67.0/1/2/2.1/3 + B67.3.5 + B73 (data + governance + UI + tests) LIVE
+  - **B67**: macro modifier diversifying (first non-1.0 was 0.85), TFS desat in use, phase backfill ready on cold pairs
+  - **B73**: data layer + UI panel under Analytics → Drift Dashboard tab + 12-variant unit tests passing on CI. `exit_strategy_alternates` accumulating on every VTS close.
+- **Tonight chain (13 commits):** B67.3.5 fold-in/governance → B67.4 scope+pre-audit → comms fix (`--reply-account default`) → B73 scope/pre-audit/data-layer/governance/UI/tests. See `BATCH_73_PROGRESS_REPORT.md` for full sub-deliverable status.
+- **Tomorrow morning (~6 UTC) plan**:
+  - B67.3.5 verification gates (backfill log lines, TFS distribution shift, phase mix LATE, replay cron, modifier diversification)
+  - First-close verification on B73 — confirm 12 rows per closed VTS trade
   - B67.4 implementation per `BATCH_67_4_PRE_AUDIT.md` §D refinements
-  - B74 equity passive scan scope
+  - B74 equity passive scan scope (lighter)
 
 ---
 

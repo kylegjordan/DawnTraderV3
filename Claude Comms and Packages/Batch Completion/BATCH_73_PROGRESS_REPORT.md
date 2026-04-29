@@ -15,11 +15,11 @@
 | 1 | Counterfactual investigation (n=87) | ✅ DONE — 18.4% would have hit TP first; net +1.18% per trade vs ~0% with BE-stop. n too small to act on alone. |
 | 2 | 12-variant scope + pre-audit | ✅ DONE — `BATCH_73_SCOPE.md` + `BATCH_73_PRE_AUDIT.md`. Langston Steps 1/2 cc-inbox #861/#862. |
 | 3 | Data layer (migration + replay service + VTS hook) | ✅ SHIPPED — commit `a747b646`, PM2 #115. Langston Step 4 cc-inbox #863. |
-| 4 | API endpoint `GET /api/analytics/exit-strategy-ablation` | ⏳ Tomorrow follow-up commit |
-| 5 | UI panel "Exit Strategy Ablation" in machine-learning page | ⏳ Tomorrow follow-up commit |
-| 6 | Unit tests (12 variants + state machine) | ⏳ Tomorrow follow-up commit |
-| 7 | Multi-week observation (n=200 total + n=50 per-regime min) | ⏳ Accumulating starting first VTS close post-deploy |
-| 8 | Variant winner declaration via Sharpe-like metric | ⏳ When n thresholds met |
+| 4 | API endpoint `GET /api/analytics/exit-strategy-ablation` | ✅ SHIPPED — commit `a4bd0e6c`, PM2 #116. Returns per-variant Sharpe-like score, paired-diff vs Variant A baseline, exit-reason breakdown, per-regime filter. |
+| 5 | UI panel "Exit Strategy Ablation" in analytics page | ✅ SHIPPED — commit `a4bd0e6c`. Rendered under Analytics → Drift Dashboard tab alongside DriftDashboardSection + AblationComparisonSection. Sortable by Δ vs A. Sharpe color-coded. Per-regime dropdown. READY/ACCUMULATING badge. |
+| 6 | Unit tests (12 variants + state machine + edge cases) | ✅ SHIPPED — commits `49c711d2` (initial) + `f53b9d60` (3 float-precision assertion fixes). CI run `25136181772` Test Suite/Build/Docker green. 916 total tests passing. |
+| 7 | Multi-week observation (n=200 total + n=50 per-regime min) | ⏳ Accumulating starting first VTS close post-deploy. Currently 0 rows. |
+| 8 | Variant winner declaration via Sharpe-like metric | ⏳ When n thresholds met (~1.3 days at 160 trades/day for headline; longer for per-regime). |
 
 ---
 
@@ -131,15 +131,25 @@ This matches B67's symmetry: B67.0 ablation framework hooks into `signal-orchest
 
 ---
 
-## Tomorrow follow-up commits
+## Same-day follow-ups all shipped tonight
 
-1. **API endpoint** `GET /api/analytics/exit-strategy-ablation?regime=<filter>&days=<int>` — aggregates per-variant: n, mean_pnl, std, sharpe_score, win_rate
-2. **UI panel** "Exit Strategy Ablation" in machine-learning page — variant leaderboard sorted by Sharpe, per-regime filter dropdown, drill-into per-trade detail
-3. **Unit tests** in `server/tests/unit/b73-exit-strategy-replay.test.ts`:
-   - Per-variant tests with synthetic OHLC scenarios (price hits TP / SL / BE level / chops)
-   - Trailing state machine tests (peak update, level computation, exit trigger)
-   - Edge cases: insufficient OHLC, all variants timeout, identical variants converge
-4. **NOT included** (Kyle directive): paper-execution-engine close-path hook
+1. ✅ **API endpoint** `GET /api/analytics/exit-strategy-ablation?window=<>&regime=<>` — commit `a4bd0e6c`. Returns per-variant: n, mean_pnl, mean_diff_vs_baseline, std_diff, sharpe_score, win_rate, exit_reason_breakdown, mean_duration_min. Reads `b73_min_n_total` and `b73_min_n_per_regime` from module_constants for ready-state badge.
+2. ✅ **UI panel** "Exit Strategy Ablation" — commit `a4bd0e6c`. Rendered under Analytics → Drift Dashboard tab. Variants sorted by Δ vs A descending. Sharpe color-coded (>1.0 emerald-bold, >0.5 emerald, <-0.5 red). Per-regime dropdown (All / TFS / HVU / RBS / IE / ST). Window selector (24h / 7d / 30d / Since latest). READY vs ACCUMULATING badge. Top-3 exit reasons inline per row. Reading-guide footer with all 12 variant definitions.
+3. ✅ **Unit tests** in `server/tests/unit/b73-exit-strategy-replay.test.ts` — commits `49c711d2` (initial) + `f53b9d60` (float-precision fixes):
+   - INSUFFICIENT_DATA path (all 12 variants when no OHLC bars)
+   - Variant A: TP-direct, BE-retrace (canonical "BE protects from drawdown"), SL-no-latch, TIMEOUT
+   - Variant F: TP after retrace ("leaves money on table" scenario from n=87 counterfactual finding)
+   - Variant B: BE+pad exits at 101 vs A's BE=100 on same bar
+   - Variant C: doesn't latch on 1×ATR move (only on 1.5×ATR)
+   - Variant E: vol-conditional A→F switch (low-vol = A, high-vol = F)
+   - Trailing state machine (G/H/I): activation, peak update, trail level computation, tighter exits earlier than baseline, looser exits later
+   - Variant J: hits target through volatility (no trail interference)
+   - Variant L combined: phase transitions pre→be_latched→trailing
+   - SELL trade direction (inverted target/SL checks)
+   - Gap-bar edge case (target wins per Langston cc-inbox #863)
+   - Return shape (12 variants in correct order with correct names)
+   - **CI run `25136181772` Test Suite + Build + Docker GREEN. 916 total tests passing.**
+4. **NOT included** (Kyle directive 2026-04-29): paper-execution-engine close-path hook. B73 is research-mode framework; active trading OFF; B67-style symmetry — neither framework needs paper hook today.
 
 ---
 

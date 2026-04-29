@@ -1083,4 +1083,24 @@ Observation-only framework parallel to B67.0. Records what 12 BE-stop / trailing
 
 **Live evidence post-deploy:** `exit_strategy_alternates` table created cleanly with 13 module_constants seeded. PM2 #115 online. First VTS trade closure post-deploy will populate 12 rows. Verification SQL: `SELECT count(*), count(DISTINCT variant_id) FROM exit_strategy_alternates;`.
 
-**Status**: B73 data layer LIVE on PM2 #115. UI + tests follow-up tomorrow. Multi-week observation accumulates in parallel with B67.4 cheap-tier + calibration window.
+**Status**: B73 fully shipped same-day on PM2 #116:
+- Data layer LIVE (commit `a747b646`)
+- Governance pass complete (commit `778a1fe9`)
+- API endpoint + UI panel LIVE (commit `a4bd0e6c`) — `GET /api/analytics/exit-strategy-ablation` and `ExitStrategyAblationSection` under Analytics → Drift Dashboard tab
+- Unit tests passing (commits `49c711d2` + `f53b9d60`) — 12 variants + state machine + edge cases verified via CI run `25136181772`
+
+**B73 Components added to SIM (full inventory):**
+
+| # | Component | File | Status |
+|---|---|---|---|
+| 1 | Migration + table | `drizzle/migrations/2026-04-30-b73-exit-strategy-alternates.sql` | ✅ Applied to staging |
+| 2 | Replay variant evaluators | `server/services/exit-strategy-replay.ts` | ✅ LIVE |
+| 3 | Replay orchestrator | `server/services/exit-strategy-replay-service.ts` | ✅ LIVE |
+| 4 | Aggregator | `server/services/exit-strategy-ablation-aggregator.ts` | ✅ LIVE (NEW since governance pass) |
+| 5 | API endpoint | `server/routes.ts` (line ~7538 — sibling to ablation-comparison) | ✅ LIVE |
+| 6 | UI panel | `client/src/pages/analytics.tsx:ExitStrategyAblationSection` | ✅ LIVE under drift tab |
+| 7 | VTS trade-close hook | `server/services/vts-service.ts:persistRealPriceTrade` | ✅ LIVE |
+| 8 | Module constants | 13 keys in `exit_strategy_replay` module | ✅ Seeded |
+| 9 | Unit tests | `server/tests/unit/b73-exit-strategy-replay.test.ts` | ✅ CI passing |
+
+Multi-week observation accumulates in parallel with B67.4 cheap-tier + calibration window.
