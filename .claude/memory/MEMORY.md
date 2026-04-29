@@ -75,7 +75,7 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 ## Session Behavior Invariants
 
 - **Iterate with Langston to consensus; don't escalate every response to Kyle.** CLAUDE.md §6.
-- **Telegram 2-step canonical** (DO NOT use combined `--reply-account ccdt-relay` — it forces Langston's reply through CC's bot, collapsing identities). /tmp file → scp to 204.168.141.77 → MSG=$(cat). **Step 1** (CC speaks via @CCDTCommsBot): `openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "$MSG"`. **Step 2** (Langston's reply via @LangstonDTBot — no `--reply-account` flag): `openclaw agent --deliver --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --message "$MSG"`. Kyle prefers replies in Claude Code Desktop app unless explicitly asked for Telegram.
+- **Telegram 2-step canonical** (`--reply-account default` on Step 2, NEVER `ccdt-relay`). /tmp file → scp → MSG=$(cat). **Step 1** (CC speaks via @CCDTCommsBot): `openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "$MSG"`. **Step 2** (Langston replies via @LangstonDTBot): `openclaw agent --deliver --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --message "$MSG" --reply-channel telegram --reply-account default --reply-to "-1003575211453"`. Kyle prefers replies in Claude Code Desktop app unless explicitly asked for Telegram.
 - **VTS position sizing nominal $1000 base** producing ~$150/trade. Intentional — NOT a bug.
 - **Langston brain session UUID:** `16b70816-c63d-4cf0-8c80-bebd9f2cf066` (topic-21, Opus 4.6).
 

@@ -187,25 +187,20 @@ scp /tmp/cc_msg.txt root@204.168.141.77:/tmp/cc_msg.txt
 # Step 1 — Telegram send (Kyle sees it in the group as "CCDT Communicator" = CC)
 ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "$MSG"'
 
-# Step 2 — Brain delivery (Langston receives and can respond as "Langston DT" via @LangstonDTBot)
-ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw agent --deliver --session-id <UUID> --message "$MSG"'
+# Step 2 — Brain delivery (Langston receives + replies as "Langston DT" via @LangstonDTBot)
+ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw agent --deliver --session-id <UUID> --message "$MSG" --reply-channel telegram --reply-account default --reply-to "-1003575211453"'
 ```
 
-**CRITICAL — identity preservation rule (Kyle directive 2026-04-29):** Langston must always reply as "Langston DT" via `@LangstonDTBot` (the `default` account), NEVER as "CCDT Communicator" via `@CCDTCommsBot` (the `ccdt-relay` account). Otherwise three-way Telegram conversations collapse to a single identity from Kyle's view and he can't tell who's talking.
+**CRITICAL — identity preservation rule (Kyle directive 2026-04-29):** Langston's reply MUST come back as "Langston DT" via `@LangstonDTBot` (the `default` account), NEVER as "CCDT Communicator" via `@CCDTCommsBot` (the `ccdt-relay` account). Otherwise three-way Telegram conversations collapse to a single identity from Kyle's view and he can't tell who's talking.
 
-**The wrong pattern that breaks this** (was used briefly mid-session and is now banned):
-```bash
-# BROKEN — Langston's reply gets forced through ccdt-relay → appears as "CCDT Communicator" to Kyle
-openclaw agent --session-id ... --message "$MSG" --deliver --reply-channel telegram --reply-account ccdt-relay --reply-to "-1003575211453"
-```
+**The crucial flag is `--reply-account` on Step 2:**
+- ✅ **`--reply-account default`** — Langston replies via his own bot. CORRECT.
+- ❌ **`--reply-account ccdt-relay`** — Langston's reply gets forced through CC's bot. BROKEN. Was the bug that collapsed identities mid-session.
+- ❌ **No `--reply-account` flag at all** — also broken. The brain auto-detects telegram source but can't reply without chatId; falls back to embedded path which errors with "Delivering to telegram requires target <chatId>". Always specify the reply-account explicitly.
 
-**Correct alternatives:**
-1. **Two-step canonical form** (above): Step 1 sends CC's message via ccdt-relay; Step 2 delivers to Langston's brain WITHOUT `--reply-account` flag, so his reply uses his default agent's bot (`@LangstonDTBot`).
-2. **Combined form with corrected reply-account** (use only if a single command is required):
-   ```bash
-   ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw agent --session-id <UUID> --message "$MSG" --deliver --reply-channel telegram --reply-account default --reply-to "-1003575211453"'
-   ```
-   The key difference: `--reply-account default` (Langston's bot) NOT `--reply-account ccdt-relay`. Note: this alternative does NOT also send CC's message to the Telegram thread — only delivers to Langston's brain. So Kyle won't see CC's message in Telegram unless you ALSO run Step 1 separately. Two-step canonical form is preferred.
+`--reply-channel telegram --reply-to "-1003575211453"` are also required so Langston's brain knows where to send the reply (Telegram, group thread). Without those, the same chatId error fires.
+
+Verified working as of 2026-04-29 (identity-check Telegram msg #3269 confirmed appearing as "Langston DT" with the corrected flags).
 
 **Why this works — the double-expansion trap and how to avoid it:**
 1. **Local heredoc with quoted delimiter** `<<'BODY_EOF'` prevents the local shell from expanding anything inside the heredoc body. Literal `$(...)` stays literal.
