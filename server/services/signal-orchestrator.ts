@@ -97,8 +97,8 @@ import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
 import { findHybridMatch, HYBRID_COMPATIBILITY } from '../config/hybrid-compatibility-registry.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
 import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emitter.js';
-// B67.1 — macro modifier alternate row builder
-import { buildB67_1Alternate } from '../core/metrics/macro-modifier.js';
+// B67.1 — per-input macro modifier alternate row builder (split into 3 factors per Kyle 2026-04-29)
+import { buildB67_1Alternates } from '../core/metrics/macro-modifier.js';
 // B67.2 — phase preference application
 import { applyPhasePreference } from '../core/metrics/regime-phase.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
@@ -648,20 +648,21 @@ export class SignalOrchestrator {
     {
       const mce = getMarketContextEngine();
       const macro = mce.getCurrentMacroContext();
+      const macroConfig = mce.getCurrentMacroConfig();
       const phaseWeights = mce.getCurrentPhaseWeights();
 
-      // B67.1 macro modifier alternate
-      if (macro === null) {
-        console.warn('[B67.1][orchestrator] macro context null at ablation hook — cold-start race');
+      // B67.1 macro modifier — per-input split into 3 factor rows
+      if (macro === null || macroConfig === null) {
+        console.warn('[B67.1][orchestrator] macro context/config null at ablation hook — cold-start race');
       } else {
-        ablationAlternates.push(
-          buildB67_1Alternate(
-            extendedMetrics.confidence ?? 0.5,
-            macro.modifier,
-            extendedMetrics.regime ?? 'UNKNOWN',
-            true,
-          ),
+        const perInputAlternates = buildB67_1Alternates(
+          extendedMetrics.confidence ?? 0.5,
+          macro.modifier,
+          extendedMetrics.regime ?? 'UNKNOWN',
+          true,
+          macroConfig,
         );
+        ablationAlternates.push(...perInputAlternates);
       }
 
       // B67.2 phase preference alternate
@@ -684,7 +685,7 @@ export class SignalOrchestrator {
             const modulated = applyPhasePreference(strategyKey, phase, phaseWeights, baseConf);
             const weight = phaseWeights[`${strategyKey}_${phase}`];
             ablationAlternates.push({
-              factorName: 'b67_2_phase_dimension',
+              factorName: 'b67_2_phase_preference',
               factorState: 'alternate_disabled',
               alternateDecision: {
                 regimeLabel,

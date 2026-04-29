@@ -18,10 +18,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeMacroModifier,
-  buildB67_1Alternate,
+  buildB67_1Alternates,
   type MacroSnapshot,
   type MacroBaseline,
   type MacroModifierConfig,
+  type MacroModifierResult,
 } from '../../core/metrics/macro-modifier';
 
 const DEFAULT_CONFIG: MacroModifierConfig = {
@@ -224,80 +225,104 @@ describe('B67.1 — computeMacroModifier', () => {
   });
 });
 
-describe('B67.1 — buildB67_1Alternate', () => {
-  it('returns correct factorName + factorState', () => {
-    const modifier = {
+describe('B67.1 — buildB67_1Alternates (per-input split)', () => {
+  const BASE_CONFIG: MacroModifierConfig = {
+    enabled: true,
+    btcDominanceWeight: 0.40,
+    fundingWeight: 0.35,
+    mcapMomentumWeight: 0.25,
+    modifierMin: 0.85,
+    modifierMax: 1.05,
+    staleSeconds: 300,
+    zScoreMinSampleCount: 48,
+  };
+
+  function makeModifier(overrides: Partial<MacroModifierResult> = {}): MacroModifierResult {
+    return {
       value: 0.92,
       btcDomZ: 0.5,
       fundingZ: 0.3,
       mcapZ: -0.1,
       fallbackActive: false,
       staleDataFlag: false,
+      ...overrides,
     };
-    const alt = buildB67_1Alternate(0.736, modifier, 'TREND_FRIENDLY_STABLE', true);
-    expect(alt.factorName).toBe('b67_1_macro_modifier');
-    expect(alt.factorState).toBe('alternate_disabled');
+  }
+
+  it('returns 3 alternate rows, one per external input', () => {
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TREND_FRIENDLY_STABLE', true, BASE_CONFIG);
+    expect(alts).toHaveLength(3);
+    expect(alts.map((a) => a.factorName)).toEqual([
+      'b67_1_btc_dominance',
+      'b67_1_funding_rates',
+      'b67_1_mcap_momentum',
+    ]);
+    expect(alts.every((a) => a.factorState === 'alternate_disabled')).toBe(true);
   });
 
-  it('reverse-derives confidence_without_modifier correctly', () => {
-    // 0.736 / 0.92 = 0.8 → confidence_without_modifier
-    const modifier = {
-      value: 0.92,
-      btcDomZ: 0.5,
-      fundingZ: 0.3,
-      mcapZ: -0.1,
-      fallbackActive: false,
-      staleDataFlag: false,
-    };
-    const alt = buildB67_1Alternate(0.736, modifier, 'TFS', true);
-    expect(alt.alternateDecision.metadata.confidence_without_modifier).toBeCloseTo(0.8, 6);
-    expect(alt.alternateDecision.metadata.confidence_with_modifier).toBe(0.736);
-    expect(alt.alternateDecision.metadata.modifier_value).toBe(0.92);
+  it('counterfactual modifier values reflect each input being removed', () => {
+    // With z-scores 0.5, 0.3, -0.1 and weights 0.40, 0.35, 0.25:
+    //   btc_term = 0.40 * -0.5 = -0.20
+    //   funding_term = 0.35 * -0.3 = -0.105
+    //   mcap_term = 0.25 * -0.1 = -0.025
+    //   actual_modifier = clamp(0.85, 1.05, 1.0 - 0.20 - 0.105 - 0.025) = clamp 0.67 → 0.85
+    // BUT we passed modifier.value=0.92 in the makeModifier — for the test math
+    // we let that be the actual; the per-input recomputation uses the term math:
+    //   without_btc = clamp(1.0 - 0.105 - 0.025) = clamp 0.87 → 0.87 (within band)
+    //   without_funding = clamp(1.0 - 0.20 - 0.025) = clamp 0.775 → 0.85
+    //   without_mcap = clamp(1.0 - 0.20 - 0.105) = clamp 0.695 → 0.85
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG);
+    const btcAlt = alts.find((a) => a.factorName === 'b67_1_btc_dominance')!;
+    const fundingAlt = alts.find((a) => a.factorName === 'b67_1_funding_rates')!;
+    const mcapAlt = alts.find((a) => a.factorName === 'b67_1_mcap_momentum')!;
+    expect(btcAlt.alternateDecision.metadata.counterfactual_modifier_value).toBeCloseTo(0.87, 4);
+    expect(fundingAlt.alternateDecision.metadata.counterfactual_modifier_value).toBe(0.85);
+    expect(mcapAlt.alternateDecision.metadata.counterfactual_modifier_value).toBe(0.85);
   });
 
-  it('handles modifier=1.0 (shadow mode) with identity reverse-derivation', () => {
-    const modifier = {
+  it('confidence_without_factor reflects the counterfactual modifier ratio', () => {
+    // confidence_without = modulated × (counterfactual / actual)
+    // For btc: 0.736 × (0.87 / 0.92) ≈ 0.696
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG);
+    const btcAlt = alts.find((a) => a.factorName === 'b67_1_btc_dominance')!;
+    expect(btcAlt.alternateDecision.metadata.confidence_without_factor).toBeCloseTo(0.736 * (0.87 / 0.92), 4);
+  });
+
+  it('preserves per-input metadata (z-score + weight) on each alternate', () => {
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG);
+    const btcAlt = alts.find((a) => a.factorName === 'b67_1_btc_dominance')!;
+    const fundingAlt = alts.find((a) => a.factorName === 'b67_1_funding_rates')!;
+    const mcapAlt = alts.find((a) => a.factorName === 'b67_1_mcap_momentum')!;
+    expect(btcAlt.alternateDecision.metadata.input_z_score).toBe(0.5);
+    expect(btcAlt.alternateDecision.metadata.input_weight).toBe(0.40);
+    expect(fundingAlt.alternateDecision.metadata.input_z_score).toBe(0.3);
+    expect(fundingAlt.alternateDecision.metadata.input_weight).toBe(0.35);
+    expect(mcapAlt.alternateDecision.metadata.input_z_score).toBe(-0.1);
+    expect(mcapAlt.alternateDecision.metadata.input_weight).toBe(0.25);
+  });
+
+  it('cold-start fallback: counterfactual = actual modifier (no informational difference)', () => {
+    const fallbackModifier = makeModifier({
       value: 1.0,
-      btcDomZ: 0,
-      fundingZ: 0,
-      mcapZ: 0,
-      fallbackActive: false,
-      staleDataFlag: false,
-    };
-    const alt = buildB67_1Alternate(0.7, modifier, 'TFS', true);
-    expect(alt.alternateDecision.metadata.confidence_with_modifier).toBe(0.7);
-    expect(alt.alternateDecision.metadata.confidence_without_modifier).toBe(0.7);
-  });
-
-  it('preserves z-scores + flags in metadata', () => {
-    const modifier = {
-      value: 0.95,
-      btcDomZ: 0.7,
-      fundingZ: -0.2,
-      mcapZ: 0.1,
-      fallbackActive: false,
-      staleDataFlag: true,
-    };
-    const alt = buildB67_1Alternate(0.665, modifier, 'IE', true);
-    expect(alt.alternateDecision.metadata.btc_dom_z).toBe(0.7);
-    expect(alt.alternateDecision.metadata.funding_z).toBe(-0.2);
-    expect(alt.alternateDecision.metadata.mcap_z).toBe(0.1);
-    expect(alt.alternateDecision.metadata.stale_data_flag).toBe(true);
-    expect(alt.alternateDecision.metadata.fallback_active).toBe(false);
+      btcDomZ: NaN,
+      fundingZ: NaN,
+      mcapZ: NaN,
+      fallbackActive: true,
+    });
+    const alts = buildB67_1Alternates(0.7, fallbackModifier, 'TFS', true, BASE_CONFIG);
+    expect(alts).toHaveLength(3);
+    for (const alt of alts) {
+      expect(alt.alternateDecision.metadata.counterfactual_modifier_value).toBe(1.0);
+      expect(alt.alternateDecision.metadata.fallback_active).toBe(true);
+    }
   });
 
   it('handles modifier.value=0 edge case without division-by-zero', () => {
-    // Defensive: modifier should never actually hit 0 due to clamp, but test
-    // the guard for safety.
-    const modifier = {
-      value: 0,
-      btcDomZ: 0,
-      fundingZ: 0,
-      mcapZ: 0,
-      fallbackActive: false,
-      staleDataFlag: false,
-    };
-    const alt = buildB67_1Alternate(0.5, modifier, 'TFS', true);
-    expect(alt.alternateDecision.metadata.confidence_without_modifier).toBe(0.5);
+    const zeroModifier = makeModifier({ value: 0 });
+    const alts = buildB67_1Alternates(0.5, zeroModifier, 'TFS', true, BASE_CONFIG);
+    for (const alt of alts) {
+      // Ratio falls back to modulatedConfidence directly when actual modifier is 0
+      expect(alt.alternateDecision.metadata.confidence_without_factor).toBe(0.5);
+    }
   });
 });

@@ -246,64 +246,144 @@ export function computeMacroModifier(
 }
 
 /**
- * Build the B67.0 ablation alternate row for B67.1 from a modulated confidence
- * and the modifier result. The alternate represents the counterfactual: "what
- * would the confidence have been without the macro modifier?"
+ * Per-input ablation alternate row builder for B67.1. Per Kyle directive
+ * 2026-04-29: split the original single `b67_1_macro_modifier` factor into
+ * three separate factor rows so each external input is independently
+ * attributable on the dashboard.
  *
- * Reverse-derivation: `confidenceWithoutModifier = modulatedConfidence /
- * modifier.value`. Edge-case-safe: when modifier is 1.0 (shadow / fallback /
- * cold-start), the with/without are identical. The clamp boundaries in
- * calculatePairRegime can produce small reverse-derivation imprecision in
- * extreme cases; documented as acceptable for ablation telemetry purposes
- * (post-hoc trend analysis, not sub-percent calibration).
+ * Each alternate represents: "what would the modifier value have been with
+ * THIS specific input's contribution removed?" The formula's three additive
+ * terms can be ablated independently because they're a weighted sum:
  *
- * Returns the FactorAlternate shape expected by factor-ablation-emitter.ts.
- * Caller pushes this onto the alternates array passed to emitAblationRecord.
+ *   modifier = clamp(min, max, 1.0
+ *     + btc_w × (-btc_z)
+ *     + funding_w × (-funding_z)
+ *     + mcap_w × (mcap_z))
+ *
+ * Per-input alternates:
+ *   - `b67_1_btc_dominance`:   alternate = clamp(min, max, 1.0 + funding_term + mcap_term)
+ *   - `b67_1_funding_rates`:   alternate = clamp(min, max, 1.0 + btc_term + mcap_term)
+ *   - `b67_1_mcap_momentum`:   alternate = clamp(min, max, 1.0 + btc_term + funding_term)
+ *
+ * Each alternate's confidence_without is computed as
+ * `modulatedConfidence × (alternate_modifier / actual_modifier)` — i.e., what
+ * the regime confidence would have been if the alternate modifier had been
+ * applied instead of the actual one.
+ *
+ * Cold-start / stale paths: when fallbackActive=true or staleDataFlag=true
+ * the actual modifier is 1.0 and individual contributions are zero/NaN. In
+ * that case all three alternates equal the actual modifier (1.0) → no
+ * informational difference for that signal. The alternate row still emits
+ * with the relevant flags so the dashboard can filter out cold-start
+ * contamination.
+ *
+ * Returns an array of 3 FactorAlternate entries. Caller pushes these onto
+ * the alternates array passed to emitAblationRecord.
  */
-export function buildB67_1Alternate(
+export function buildB67_1Alternates(
   modulatedConfidence: number,
   modifier: MacroModifierResult,
   regimeLabel: string,
   admissionPossible: boolean,
-): {
-  factorName: 'b67_1_macro_modifier';
+  config: MacroModifierConfig,
+): Array<{
+  factorName: 'b67_1_btc_dominance' | 'b67_1_funding_rates' | 'b67_1_mcap_momentum';
   factorState: 'alternate_disabled';
   alternateDecision: {
     regimeLabel: string;
     confidence: number;
     admissionPossible: boolean;
-    metadata: {
-      confidence_with_modifier: number;
-      confidence_without_modifier: number;
-      modifier_value: number;
-      btc_dom_z: number;
-      funding_z: number;
-      mcap_z: number;
-      fallback_active: boolean;
-      stale_data_flag: boolean;
-    };
+    metadata: Record<string, unknown>;
   };
-} {
-  const confidenceWithout =
-    modifier.value > 0 ? modulatedConfidence / modifier.value : modulatedConfidence;
+}> {
+  // Compute each input's contribution to the actual modifier formula.
+  // When fallback/stale is active the z-scores may be NaN; treat as 0 for
+  // the per-term math. The per-input alternate value is the modifier
+  // recomputed without that one term.
+  const safeBtc = Number.isFinite(modifier.btcDomZ) ? modifier.btcDomZ : 0;
+  const safeFunding = Number.isFinite(modifier.fundingZ) ? modifier.fundingZ : 0;
+  const safeMcap = Number.isFinite(modifier.mcapZ) ? modifier.mcapZ : 0;
 
-  return {
-    factorName: 'b67_1_macro_modifier' as const,
-    factorState: 'alternate_disabled' as const,
-    alternateDecision: {
-      regimeLabel,
-      confidence: confidenceWithout,
-      admissionPossible,
-      metadata: {
-        confidence_with_modifier: modulatedConfidence,
-        confidence_without_modifier: confidenceWithout,
-        modifier_value: modifier.value,
-        btc_dom_z: modifier.btcDomZ,
-        funding_z: modifier.fundingZ,
-        mcap_z: modifier.mcapZ,
-        fallback_active: modifier.fallbackActive,
-        stale_data_flag: modifier.staleDataFlag,
+  const btcTerm = config.btcDominanceWeight * -safeBtc;
+  const fundingTerm = config.fundingWeight * -safeFunding;
+  const mcapTerm = config.mcapMomentumWeight * safeMcap;
+
+  const clamp = (v: number) => Math.min(Math.max(v, config.modifierMin), config.modifierMax);
+
+  // Counterfactual modifier values (one input removed at a time)
+  const modifierWithoutBtc = modifier.fallbackActive || modifier.staleDataFlag
+    ? modifier.value
+    : clamp(1.0 + fundingTerm + mcapTerm);
+  const modifierWithoutFunding = modifier.fallbackActive || modifier.staleDataFlag
+    ? modifier.value
+    : clamp(1.0 + btcTerm + mcapTerm);
+  const modifierWithoutMcap = modifier.fallbackActive || modifier.staleDataFlag
+    ? modifier.value
+    : clamp(1.0 + btcTerm + fundingTerm);
+
+  // For each, compute the regime confidence that would have resulted from
+  // applying the counterfactual modifier instead of the actual one.
+  // confidenceWith = modulatedConfidence (actual)
+  // confidenceWithout = modulatedConfidence × (counterfactual_modifier / actual_modifier)
+  // Edge case: actual modifier == 0 → use modulatedConfidence directly (no division)
+  const ratio = (counterfactual: number) =>
+    modifier.value > 0 ? modulatedConfidence * (counterfactual / modifier.value) : modulatedConfidence;
+
+  const baseMeta = {
+    confidence_with_modifier: modulatedConfidence,
+    actual_modifier_value: modifier.value,
+    fallback_active: modifier.fallbackActive,
+    stale_data_flag: modifier.staleDataFlag,
+  };
+
+  return [
+    {
+      factorName: 'b67_1_btc_dominance' as const,
+      factorState: 'alternate_disabled' as const,
+      alternateDecision: {
+        regimeLabel,
+        confidence: ratio(modifierWithoutBtc),
+        admissionPossible,
+        metadata: {
+          ...baseMeta,
+          confidence_without_factor: ratio(modifierWithoutBtc),
+          counterfactual_modifier_value: modifierWithoutBtc,
+          input_z_score: modifier.btcDomZ,
+          input_weight: config.btcDominanceWeight,
+        },
       },
     },
-  };
+    {
+      factorName: 'b67_1_funding_rates' as const,
+      factorState: 'alternate_disabled' as const,
+      alternateDecision: {
+        regimeLabel,
+        confidence: ratio(modifierWithoutFunding),
+        admissionPossible,
+        metadata: {
+          ...baseMeta,
+          confidence_without_factor: ratio(modifierWithoutFunding),
+          counterfactual_modifier_value: modifierWithoutFunding,
+          input_z_score: modifier.fundingZ,
+          input_weight: config.fundingWeight,
+        },
+      },
+    },
+    {
+      factorName: 'b67_1_mcap_momentum' as const,
+      factorState: 'alternate_disabled' as const,
+      alternateDecision: {
+        regimeLabel,
+        confidence: ratio(modifierWithoutMcap),
+        admissionPossible,
+        metadata: {
+          ...baseMeta,
+          confidence_without_factor: ratio(modifierWithoutMcap),
+          counterfactual_modifier_value: modifierWithoutMcap,
+          input_z_score: modifier.mcapZ,
+          input_weight: config.mcapMomentumWeight,
+        },
+      },
+    },
+  ];
 }

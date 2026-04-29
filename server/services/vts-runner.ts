@@ -98,8 +98,8 @@ import '../core/governance/governance-persistence.js'; // Batch 46: Auto-persist
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
 import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emitter.js';
-// B67.1 — macro modifier alternate row builder
-import { buildB67_1Alternate } from '../core/metrics/macro-modifier.js';
+// B67.1 — per-input macro modifier alternate row builder (split into 3 factors per Kyle 2026-04-29)
+import { buildB67_1Alternates } from '../core/metrics/macro-modifier.js';
 // B67.2 — phase preference application
 import { applyPhasePreference } from '../core/metrics/regime-phase.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
@@ -1382,19 +1382,21 @@ async function generatePhase10Signal(
   {
     const _mce = getMarketContextEngine();
     const _macro = _mce.getCurrentMacroContext();
+    const _macroConfig = _mce.getCurrentMacroConfig();
     const _phaseWeights = _mce.getCurrentPhaseWeights();
     const _ctx = _mce.getCachedContext(symbol);
 
-    // B67.1 macro modifier alternate
-    if (_macro === null) {
-      console.warn('[B67.1][vts-runner] macro context null at ablation hook — cold-start race');
+    // B67.1 macro modifier — per-input split into 3 factor rows
+    if (_macro === null || _macroConfig === null) {
+      console.warn('[B67.1][vts-runner] macro context/config null at ablation hook — cold-start race');
     } else {
       _b67_1_alternates.push(
-        buildB67_1Alternate(
+        ...buildB67_1Alternates(
           predictiveConfidence ?? 0.5,
           _macro.modifier,
           regime ?? 'UNKNOWN',
           true,
+          _macroConfig,
         ),
       );
     }
@@ -1410,7 +1412,7 @@ async function generatePhase10Signal(
         const modulated = applyPhasePreference(strategy, phase, _phaseWeights, baseConf);
         const weight = _phaseWeights[`${strategy}_${phase}`];
         _b67_1_alternates.push({
-          factorName: 'b67_2_phase_dimension',
+          factorName: 'b67_2_phase_preference',
           factorState: 'alternate_disabled',
           alternateDecision: {
             regimeLabel: regime ?? 'UNKNOWN',

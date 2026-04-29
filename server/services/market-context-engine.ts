@@ -289,6 +289,17 @@ export class MarketContextEngine {
   }
 
   /**
+   * B67.1: Public accessor for the cached MacroModifierConfig used in the
+   * most recent refresh. Required by ablation hooks that build per-input
+   * counterfactual alternates (the per-input split needs the weights/band
+   * to recompute the formula without each input). Null only during cold
+   * start.
+   */
+  getCurrentMacroConfig(): MacroModifierConfig | null {
+    return this.macroConfigCache;
+  }
+
+  /**
    * B67.2: Sync read of the most recently computed MarketContext for a
    * symbol from MCE's per-symbol cache (60s TTL). Returns null if the cache
    * entry is missing or expired. Consumers (ablation hooks downstream of
