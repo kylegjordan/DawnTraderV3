@@ -321,13 +321,13 @@ Investigation found phase=EARLY and modifier=1.0 universally on today's 16 close
 
 **Dashboard cleanup:** aggregator filters out legacy factor names — only the 4 active per-input rows + `b67_2_phase_preference` show in UI. Pre-split rows preserved in DB for forensics.
 
-### Confidence saturation finding — documented, not fixed
+### Confidence saturation finding — RESOLVED in B67.3.5 (see below)
 
-Pre-existing B62 design issue: TFS branch saturates at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. After B67.1's clamp ceiling raise to 1.0: `0.95 × 1.05 × 1.10 = 1.097` → clamps to 1.0 for almost every TFS classification. Today's distribution: 12 trades at 1.0, 3 at 0.9, 1 at 0.8.
+Pre-existing B62 design issue: TFS branch saturated at 0.95 INPUT for any pair with positive momentum + |DBS| ≥ 0.30. After B67.1's clamp ceiling raise to 1.0: `0.95 × 1.05 × 1.10 = 1.097` → clamped to 1.0 for almost every TFS classification. Mid-batch distribution: 12 trades at 1.0, 3 at 0.9, 1 at 0.8.
 
-**Compromises calibration check premise.** Tertile-monotonic on tightly-clustered distribution will not be reliable. **Flagged for post-B67.4 tuning batch** — not addressed this batch.
+Resolved 2026-04-29 in B67.3.5 — see "B67.3.5 closure" section below. Other 4 regime branches (HVU/RBS/IE/ST) still on original step-function (deferred per `RUNNING_ISSUES.md` #40).
 
-### Workflow gates (this batch as a whole)
+### Workflow gates (foundation work batch)
 
 | Step | Status |
 |---|---|
@@ -337,6 +337,73 @@ Pre-existing B62 design issue: TFS branch saturates at 0.95 INPUT for any pair w
 | 7 — First-pass verification | ✅ |
 | 10 — Governance | ✅ This block + BATCH_CATALOG + PHASE_HISTORY + SIM + CHANGES_AND_FIXES + MEMORY |
 | 11 — Completion ack | ⏳ Pending Kyle |
+
+---
+
+## B67.3.5 closure — 2026-04-29 (PRE-WINDOW HARDENING — phase backfill + TFS desaturation)
+
+Sub-batch resolving the two open discussion items from master plan §0.12.B that surfaced 2026-04-29 evening: phase backfill from OHLC history (cold pairs read EARLY when actually deep in PRIME/LATE) and TFS branch confidence saturation (12/16 closed VTS trades at conf=1.0). Both fixes coordinated as one batch through full 11-step workflow; Langston reviewed at Steps 1, 2, 4, 8 (cc-inbox #851/#852/#853/#854).
+
+### What shipped
+
+**Phase backfill from OHLC history** (`server/core/metrics/regime-phase.ts:backfillFromHistory`): walks 12 backward 60-min OHLC windows running `calculatePairRegime` to find the actual regime entry boundary. First-observation only (regime transitions handled by normal `tick()` flow). Uses CURRENT DBS as approximation per Langston cc-inbox #850 — vol/momentum/ADX carry most of the classification signal so the regime LABEL is robust. Insufficient-history (<30 candles) → structured warning + `enteredAt = now`. Walk-cap (no different regime within 12h window) → pair lands in LATE. Persists via existing `/tmp/regime-phase-store.json` layer. New optional `BackfillContext` interface on `tick()` is backwards-compatible.
+
+**TFS branch desaturation** (`server/core/metrics/market-regime.ts:177-184`): step-function replaced with continuous mapping `confidence = min + (max - min) × (momentum_factor × dbs_strength × vol_inverse)`. Multiplicative — any weak input collapses score (semantic match for "trend-friendly STABLE" = all three should align). Output range [0.50, 0.90] via 5 module_constants in `regime_classifier` module: `b67_3_5_tfs_desat_min/max/momentum_scale/volatility_scale/dbs_scale`. Recalibrate via DB UPDATE post-deploy; no code redeploy. Other 4 regime branches NOT touched, queued in `RUNNING_ISSUES.md` #40.
+
+**New `RegimeConfig` type** (`server/types/market-regime.types.ts`): contract carries the 5 desaturation tunables. Required 4th parameter on `calculatePairRegime`. `DEFAULT_REGIME_CONFIG` exported for advisory paths (3 callers updated).
+
+**MCE wiring** (`server/services/market-context-engine.ts`): 5 new constants resolved alongside macro/phase boundaries with hard-fail on missing keys. New `getCurrentRegimeConfig()` accessor. Threaded as 4th param into classifier AND as `BackfillContext` into phase-store tick. Cleared on `MCE.stop()`.
+
+### Workflow gates (B67.3.5 sub-batch)
+
+| Step | Status | Evidence |
+|---|---|---|
+| 1 — Scope | ✅ | `BATCH_67_3_5_SCOPE.md` `3da1b179`. Langston approved cc-inbox #851. |
+| 2 — Pre-audit + impl plan | ✅ | `BATCH_67_3_5_PRE_AUDIT.md` `4f41605c`. Full SIM consultation per CLAUDE.md §9. Langston approved cc-inbox #852. |
+| 3 — Implementation | ✅ | 10 files, +574/-17. Migration + 5 module_constants. New types + methods. 11 unit-test cases. |
+| 4 — Code review | ✅ | 807-line diff to Langston. Approved cc-inbox #853 with no bugs found. Boundary semantics confirmed. |
+| 5 — Push + CI | ✅ (with one fix-up cycle) | First push `49209eb4` had 4 test failures (test fixtures + hardcoded regime string). Fixed `d97d47d7`. CI Test Suite/Build/Docker green. |
+| 6 — Migration + Deploy | ✅ | Migration applied 5 INSERTs. PM2 #114 online. |
+| 7 — First-pass verification | ✅ | First diversified macro modifier 0.85 with real z-scores. Macro feed rolling windows survived restart. |
+| 8 — Second-pass (Langston) | ✅ | cc-inbox #854. Modifier min-clamp confirmed expected for elevated funding (z=+1.90). |
+| 9 — Iterate | ✅ | One iteration on Step 5 CI fix. All scope objectives green. |
+| 10 — Governance | ✅ | BATCH_CATALOG + PHASE_HISTORY + SIM + CHANGES_AND_FIXES + RUNNING_ISSUES + master plan §0.12 + MEMORY. |
+| 11 — Completion ack | ⏳ Pending Kyle (this section is the sub-batch report — no separate file per Kyle directive 2026-04-29: while parent batch B67 is open, sub-batch closures fold here, not into separate completion reports) |
+
+### Verification evidence (B67.3.5 Step-7 first-pass)
+
+```
+14:04:40 [B67.1][modifier] value=0.8500 btcZ=-0.792 fundZ=1.897 mcapZ=0.076 fallback=false stale=false
+14:04:41 [B67.1][feed] btc_dom=58.09% mcap_mom=0.00000 funding=0.000020 windows=(btc:78,fund:96,mcap:77)
+```
+
+Proves: all 5 new module_constants resolved (refreshMacroContext would throw with explicit "missing module_constants in regime_classifier" otherwise); TFS desat formula in use (classifier ran without throwing); macro feed rolling windows survived restart (windows: btc:78, fund:96, mcap:77 — pre-restart accumulation preserved); macro modifier first-ever non-1.0 value diversifying.
+
+**Live verification on staging 19:22 UTC** (CSV pulled by Kyle):
+- Open trades n=28: confidence raw P10=0.572, P50=0.815, P90=0.845, **max=0.849** — no values at 1.0, real spread across full [0.50, 0.85] band
+- Macro modifier range [0.85, 1.05], median 1.047
+- Persistence file `/tmp/regime-phase-store.json` (file birth 12:30 UTC): 121 entries, max age 4.96h → 85 PRIME, 36 EARLY, 0 LATE — phase mix matches UI observation
+- Phase distribution diversity confirmed; LATE absence is expected (persistence file too young — by tomorrow morning 6 UTC, ~17.5h since persistence layer started, should see LATE pairs)
+
+### Out of scope (B67.3.5 deferred)
+
+- HVU / RBS / IE / ST regime branch desaturation — `RUNNING_ISSUES.md` #40, post-window classifier-formula tuning batch
+- DBS historical backfill — current DBS used as approximation (Langston-approved)
+- Periodic re-validation of backfilled enteredAt — first-observation only
+- Changing regime LABEL boundaries
+- B67.4 cheap-tier bundle — follows B67.3.5 closure
+- B67.5 consumer wiring — follows calibration window
+
+### Files in commits `49209eb4` + `d97d47d7`
+
+10 code files (+574/-17): migration SQL + rollback, `RegimeConfig` type, classifier desat + DEFAULT_REGIME_CONFIG, regime-phase backfillFromHistory + augmented tick, MCE wiring + accessor, 3 caller updates, 6 desat tests + 5 backfill tests.
+
+### Lessons logged (B67.3.5 — also in CHANGES_AND_FIXES.md)
+
+1. **`computeMomentum` lookback semantics in test fixtures**: synthetic OHLC test fixtures with end-to-end target momentum X give the LAST-30 (the lookback window) only ~X/2 momentum because the trend stretches over the full series. Use `count: 30` to align lookback with full series, OR scale endPrice up.
+2. **Regime string integrity**: `regime_mapping_integrity` test catches hardcoded regime strings — even DB resolution keys need to import from canonical config, not literal strings.
+3. **Test OHLC timestamps must respect the test's clock**: generate them as `nowMs - (count - 1 - i) × spacing` so the latest candle is at `now`, going backward.
+4. **Multiplicative continuous mapping > weighted-sum** for confidence formulas: produces wider distribution spread (central limit theorem effect on weighted-sum compresses to center).
 
 ---
 

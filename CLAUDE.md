@@ -77,6 +77,30 @@
 
 **Rule:** Every batch completion report lists which governance files were changed. If SIM or System Manual were applicable but not updated, the batch is not complete.
 
+### 3.1 MEMORY.md two-file pattern (Kyle directive 2026-04-29)
+
+There are TWO MEMORY.md files. Both must be kept in sync:
+
+| File | Path | Role |
+|---|---|---|
+| **Truth** | `C:\Users\kyleg\.claude\projects\G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3\memory\MEMORY.md` | What Claude Code auto-loads at session start. THIS IS THE ONE THAT GETS EDITED. |
+| **Persistence copy** | `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\.claude\memory\MEMORY.md` | Mirror checked into git. Pushed to GitHub so the state is never lost if user-cache is wiped. |
+
+**Two-step update workflow** (Kyle directive 2026-04-29 — non-negotiable):
+1. Edit the user-cache MEMORY.md (the truth file).
+2. Copy the entire updated file to the in-repo persistence path. Commit + push as part of the same governance update.
+
+If a session updates user-cache without copying to in-repo, the next push to GitHub leaves stale state on the remote. Always do step 2 in the same governance turn.
+
+### 3.2 MEMORY.md hard cap: 200 lines (Kyle directive 2026-04-29)
+
+The volatile MEMORY.md MUST NEVER EXCEED 200 lines. Every time MEMORY.md is updated:
+1. After the edit, count the lines (`wc -l` on the truth file).
+2. If line count > 200, prune the file before committing — collapse stale entries, drop resolved items that were carried for context, condense the state block.
+3. The line-count check runs every update, not just occasionally.
+
+This cap exists because MEMORY.md auto-loads into every Claude Code session — runaway growth wastes context every turn.
+
 ---
 
 ## 4. Canonical File Locations (post-reorganization, 2026-04-14)
