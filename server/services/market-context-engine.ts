@@ -41,6 +41,7 @@ import type {
 } from '../types/market-context.js';
 import { DEFAULT_MCE_CONFIG } from '../types/market-context.js';
 import type { OHLCData, RegimeCalculationResult, RegimeConfig } from '../types/market-regime.types';
+import { REGIMES } from '../config/canonical-regime-strategy-map';
 import {
   calculatePairRegime,
   getRegimeWeight,
@@ -275,7 +276,7 @@ export class MarketContextEngine {
       // ── B67.3.5: resolve TFS desaturation scales ──
       // Five tunables for the continuous TFS confidence formula. All required;
       // missing keys throw with explicit list per Kyle no-fallbacks directive.
-      const REGIME_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: 'TREND_FRIENDLY_STABLE' } as any;
+      const REGIME_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: REGIMES.TREND_FRIENDLY_STABLE } as any;
       const [tfsMin, tfsMax, tfsMomScale, tfsVolScale, tfsDbsScale] = await Promise.all([
         getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_min', REGIME_KEY),
         getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_max', REGIME_KEY),

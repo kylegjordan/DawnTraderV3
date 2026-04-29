@@ -25,20 +25,23 @@ import type { OHLCData } from '../../types/market-regime.types';
 
 // Helper for backfill tests: build OHLC such that calculatePairRegime returns
 // a stable label across the whole series. We use a strong-uptrend series that
-// classifies as TFS for all backward windows.
-function makeTfsOhlc(count = 60, baseTimestampMs = 0, spacingMs = 60 * 60 * 1000): OHLCData[] {
+// classifies as TFS for all backward windows. Timestamps end at `nowMs`,
+// going backward (most-recent-LAST in the array).
+function makeTfsOhlc(nowMs: number, count = 80, spacingMs = 60 * 60 * 1000): OHLCData[] {
   const ohlc: OHLCData[] = [];
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
     const close = 100 + 5 * t + 0.05 * Math.sin(i * 1.7);
     const open = i === 0 ? close : ohlc[i - 1].close;
+    // Index 0 is oldest, index count-1 is newest at exactly nowMs.
+    const timestamp = nowMs - (count - 1 - i) * spacingMs;
     ohlc.push({
       open,
       high: Math.max(open, close) * 1.001,
       low: Math.min(open, close) * 0.999,
       close,
       volume: 1000,
-      timestamp: baseTimestampMs + i * spacingMs,
+      timestamp,
     });
   }
   return ohlc;
@@ -132,7 +135,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
   it('emits structured warning + falls back to enteredAt=now on insufficient history', () => {
     const warnSpy = vi_spy_console_warn();
     // Only 5 candles — well below the 30-min required
-    const ohlc = makeTfsOhlc(5);
+    const ohlc = makeTfsOhlc(60 * 60 * 1000, 5);
     const ctx: BackfillContext = {
       ohlcData: ohlc,
       dbsScore: 0.5,
@@ -148,7 +151,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
     const now = 24 * 60 * 60 * 1000; // 24h
     // 60 candles spanning 60h, all TFS — backfill walks 12 windows back (12h)
     // and finds same regime everywhere, so enteredAt = now - 12h
-    const ohlc = makeTfsOhlc(60, 0, 60 * 60 * 1000);
+    const ohlc = makeTfsOhlc(now, 80, 60 * 60 * 1000);
     const ctx: BackfillContext = {
       ohlcData: ohlc,
       dbsScore: 0.5,
@@ -160,7 +163,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
 
   it('does NOT re-backfill on subsequent ticks for the same pair', () => {
     const now = 24 * 60 * 60 * 1000;
-    const ohlc = makeTfsOhlc(60, 0, 60 * 60 * 1000);
+    const ohlc = makeTfsOhlc(now, 80, 60 * 60 * 1000);
     const ctx: BackfillContext = {
       ohlcData: ohlc,
       dbsScore: 0.5,
@@ -176,7 +179,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
 
   it('regime transition does NOT trigger backfill (transition resets enteredAt=now)', () => {
     const now = 24 * 60 * 60 * 1000;
-    const ohlc = makeTfsOhlc(60, 0, 60 * 60 * 1000);
+    const ohlc = makeTfsOhlc(now, 80, 60 * 60 * 1000);
     const ctx: BackfillContext = {
       ohlcData: ohlc,
       dbsScore: 0.5,

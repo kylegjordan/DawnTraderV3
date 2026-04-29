@@ -60,8 +60,11 @@ function makeOhlc(opts: {
 
 describe('B67.3.5 — TFS branch desaturation', () => {
   it('strong-all-three pair lands near the upper bound (~0.85-0.90)', () => {
-    // Strong momentum (~3%), low volatility, |DBS| at upper-strong (0.7)
-    const ohlc = makeOhlc({ endPrice: 103, perStepNoise: 0.001 });
+    // Strong end-of-window momentum, low volatility, |DBS| at upper-strong.
+    // computeMomentum uses last 30 candles only — series must span enough
+    // upward move that the last 30 candles alone show ≥ 2% momentum (the
+    // saturation point for the default 0.020 momentum scale).
+    const ohlc = makeOhlc({ count: 60, endPrice: 106, perStepNoise: 0.001 });
     const result = calculatePairRegime(ohlc, 0.7, 1.0, DEFAULT_REGIME_CONFIG);
     expect(result.regime).toBe(REGIMES.TREND_FRIENDLY_STABLE);
     expect(result.confidence).toBeGreaterThan(0.80);
@@ -110,7 +113,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
   });
 
   it('macro modifier still scales the desaturated raw confidence', () => {
-    const ohlc = makeOhlc({ endPrice: 103, perStepNoise: 0.001 });
+    const ohlc = makeOhlc({ count: 60, endPrice: 106, perStepNoise: 0.001 });
     const baseline = calculatePairRegime(ohlc, 0.7, 1.0, DEFAULT_REGIME_CONFIG);
     const boosted = calculatePairRegime(ohlc, 0.7, 1.05, DEFAULT_REGIME_CONFIG);
     if (baseline.regime === REGIMES.TREND_FRIENDLY_STABLE) {
@@ -121,7 +124,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
   });
 
   it('respects override config (different bounds)', () => {
-    const ohlc = makeOhlc({ endPrice: 103, perStepNoise: 0.001 });
+    const ohlc = makeOhlc({ count: 60, endPrice: 106, perStepNoise: 0.001 });
     const tightConfig = {
       tfsDesatMin: 0.60,
       tfsDesatMax: 0.80,
