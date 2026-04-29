@@ -122,7 +122,7 @@ describe('B73 Variant A — current BE-stop baseline', () => {
     const v = findVariant(exits, 'A');
     expect(v.exitReason).toBe('SL_hit');
     expect(v.exitPrice).toBe(98);
-    expect(v.pnlPct).toBe(-2);
+    expect(v.pnlPct).toBeCloseTo(-2, 4);
   });
 
   it('times out when target/SL/BE never hit within window', () => {
@@ -169,7 +169,7 @@ describe('B73 Variant F — NO BE-stop', () => {
     const f = findVariant(exits, 'F');
     expect(f.exitReason).toBe('SL_hit');
     expect(f.exitPrice).toBe(98);
-    expect(f.pnlPct).toBe(-2);
+    expect(f.pnlPct).toBeCloseTo(-2, 4);
   });
 });
 
@@ -370,9 +370,8 @@ describe('B73 — SELL trade direction (inverted checks)', () => {
     const a = findVariant(exits, 'A');
     expect(a.exitReason).toBe('TP_target_hit');
     expect(a.exitPrice).toBe(95);
-    expect(a.pnlPct).toBeCloseTo(5, 4);  // (100/95 - 1) × 100 = 5.26... actually let me think
-    // pnlPct(SELL, 100, 95) = (100/95 - 1) × 100 = 5.26
-    expect(a.pnlPct).toBeCloseTo(((100 / 95) - 1) * 100, 2);
+    // pnlPct(SELL, 100, 95) = (100/95 - 1) × 100 = 5.263...
+    expect(a.pnlPct).toBeCloseTo(((100 / 95) - 1) * 100, 4);
   });
 });
 
