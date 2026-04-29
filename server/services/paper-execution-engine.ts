@@ -61,6 +61,8 @@ import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyT
 // B67.3 follow-up: re-export the cohort-hash function under a clearer name for use
 // at trade-open. Same FNV-1a hash the admission gate uses — keeping a single source.
 import { assignCohortHash as assignCohortHashForPersistence } from './per-underlying-cap';
+// B67.2.1: read regime confidence + macro modifier + phase from MCE at trade-open
+import { getMarketContextEngine } from './market-context-engine';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 import { aj18Diagnostic } from './aj18-rtb-diagnostic';
@@ -1856,6 +1858,25 @@ export class PaperExecutionEngine {
       // — same hash function the gate uses, computed inline here at trade-open.
       const pairIdHash = assignCohortHashForPersistence(signal.symbol);
 
+      // B67.2.1: capture regime classifier confidence + macro modifier + phase
+      // at trade-open per Kyle directive 2026-04-29 (master plan §0.11.D). Read
+      // from MCE's cached snapshot for this symbol; values may be undefined if
+      // MCE cache is cold for this pair (rare).
+      const _b67_2_1_mce = (() => { try { return getMarketContextEngine(); } catch { return null; } })();
+      const _b67_2_1_ctx = _b67_2_1_mce?.getCachedContext(signal.symbol) ?? null;
+      const _b67_2_1_macro = _b67_2_1_mce?.getCurrentMacroContext() ?? null;
+      const _b67_2_1_phaseWeights = _b67_2_1_mce?.getCurrentPhaseWeights() ?? null;
+      const _b67_2_1_phase = _b67_2_1_ctx?.regime.phase ?? null;
+      const _b67_2_1_phaseWeight = (_b67_2_1_phase && _b67_2_1_phaseWeights)
+        ? _b67_2_1_phaseWeights[`${signal.strategy}_${_b67_2_1_phase}`] ?? null
+        : null;
+      const _b67_2_1_modulatedConf = _b67_2_1_ctx?.regime.confidence ?? null;
+      const _b67_2_1_modifierValue = _b67_2_1_macro?.modifier.value ?? null;
+      // confidence_raw = modulated / modifier_value (reverse-derived; same approach as ablation row)
+      const _b67_2_1_rawConf = (_b67_2_1_modulatedConf !== null && _b67_2_1_modifierValue !== null && _b67_2_1_modifierValue > 0)
+        ? _b67_2_1_modulatedConf / _b67_2_1_modifierValue
+        : _b67_2_1_modulatedConf;
+
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
         baseCurrency,
@@ -1876,6 +1897,13 @@ export class PaperExecutionEngine {
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         // B67.3: cohort marker (0=capped treatment / 1=uncapped control)
         pairIdHash,
+        // B67.2.1: regime classifier confidence + macro modifier + phase
+        regimeConfidenceRaw: _b67_2_1_rawConf,
+        macroModifierValue: _b67_2_1_modifierValue,
+        phase: _b67_2_1_phase,
+        phaseAgeSeconds: _b67_2_1_ctx?.regime.phaseAgeSeconds ?? null,
+        strategyPhaseWeight: _b67_2_1_phaseWeight,
+        regimeConfidenceModulated: _b67_2_1_modulatedConf,
         metadata: signal.metadata || {}
       });
 

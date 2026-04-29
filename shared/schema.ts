@@ -15,7 +15,8 @@ import {
   index,
   vector,
   serial,
-  doublePrecision
+  doublePrecision,
+  real
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -1684,6 +1685,16 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   // Cohort 0: per-underlying cap ENABLED. Cohort 1: cap DISABLED (control).
   // NULL on trades opened before B67.3 deploy.
   pairIdHash: integer("pair_id_hash"),
+  // B67.2.1 — Regime classifier confidence + macro modifier + phase persisted
+  // at trade-open. NULL on trades opened pre-B67.2.1. Per Kyle directive
+  // 2026-04-29 (master plan §0.11.D): observability during the calibration
+  // window requires these on every trade record, not just in ablation rows.
+  regimeConfidenceRaw: real("regime_confidence_raw"),
+  macroModifierValue: real("macro_modifier_value"),
+  phase: text("phase"),  // CHECK constraint enforces 'EARLY' | 'PRIME' | 'LATE' | NULL
+  phaseAgeSeconds: integer("phase_age_seconds"),
+  strategyPhaseWeight: real("strategy_phase_weight"),
+  regimeConfidenceModulated: real("regime_confidence_modulated"),
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),
