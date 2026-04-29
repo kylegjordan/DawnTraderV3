@@ -884,6 +884,40 @@ export class VTSService extends EventEmitter {
     
     console.log(`[11.6D][Persist] ${tradeData.symbol} VTS_REAL_PRICE trade persisted (id=${trade.id})`);
 
+    // B73 (2026-04-29): async exit-strategy ablation replay (observation only,
+    // fire-and-forget). Records what 12 BE-stop / trailing-stop variants
+    // WOULD have done on this trade. No exit-behavior change. Per
+    // BATCH_73_SCOPE.md (Langston-approved cc-inbox #861/#862).
+    if (tradeData.originalStopPrice != null) {
+      // Only attempt replay when originalStopPrice is populated (true counterfactual baseline)
+      void import('./exit-strategy-replay-service').then(({ replayAndPersist }) => {
+        const side = tradeData.takeProfit > tradeData.entryPrice ? 'BUY' : 'SELL';
+        const atr = Math.abs(tradeData.takeProfit - tradeData.entryPrice) / 1.5; // approximation
+        replayAndPersist({
+          tradeId: trade.id,
+          tradeSource: 'vts',
+          symbol: tradeData.symbol,
+          side,
+          entryPrice: tradeData.entryPrice,
+          entryTime: tradeData.entryTime,
+          exitTime: tradeData.exitTime,
+          target: tradeData.takeProfit,
+          originalStopPrice: tradeData.originalStopPrice,
+          atr,
+          volatility: 0,
+          regime: tradeData.regime,
+          strategy: tradeData.strategy,
+          baselinePnlPct: tradeData.pnl !== 0
+            ? ((tradeData.exitPrice / tradeData.entryPrice) - 1) * 100 * (side === 'BUY' ? 1 : -1)
+            : 0,
+        }).catch(err =>
+          console.warn('[B73][exit-replay] failed:', err instanceof Error ? err.message : err),
+        );
+      }).catch(err =>
+        console.warn('[B73][exit-replay] import failed:', err instanceof Error ? err.message : err),
+      );
+    }
+
     // Trigger ML calibration for HYBRID trades (return whether triggered)
     let mlTriggered = false;
     if (normalizedSignalType === 'HYBRID') {
