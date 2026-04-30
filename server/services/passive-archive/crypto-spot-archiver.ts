@@ -45,14 +45,28 @@ const state = {
   shards: [] as Shard[],
 };
 
-/** Stable hash of a string (FNV-1a 32-bit). Keeps shard assignment deterministic. */
+/**
+ * Stable hash of a string (FNV-1a 32-bit + Murmur3 finalizer).
+ *
+ * Bare FNV-1a has a known low-bit bias when input strings share suffixes
+ * (e.g., crypto pairs like "BTC/USD", "ETH/USD" all ending in "/USD" produce
+ * hashes whose low bits cluster). With shardCount=2 this caused a 364/16 split
+ * on 380 input pairs in B74 v1. Murmur3-style finalizer (xor-shift-multiply
+ * three times) avalanches the bits so `% shardCount` distributes uniformly.
+ */
 function fnv1aHash(s: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
-    h = (h * 0x01000193) >>> 0;
+    h = Math.imul(h, 0x01000193) >>> 0;
   }
-  return h;
+  // Murmur3 fmix32 finalizer
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return h >>> 0;
 }
 
 function assignToShard(symbols: string[], shardCount: number): string[][] {

@@ -52,11 +52,37 @@ const SIX_TABLES = [
  * 28th); just surfaces it.
  */
 async function checkPartitionHeadroom(): Promise<void> {
-  const twoMonthsFromNow = new Date();
+  const now = new Date();
+  const twoMonthsFromNow = new Date(now);
   twoMonthsFromNow.setMonth(twoMonthsFromNow.getMonth() + 2);
+
+  // Current-month partition bounds — needed inline so we can self-heal if missing.
+  const curMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const curMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const curMonthSuffix = `${curMonthStart.getUTCFullYear()}_${String(curMonthStart.getUTCMonth() + 1).padStart(2, '0')}`;
+  const curStartIso = curMonthStart.toISOString().slice(0, 10);
+  const curEndIso = curMonthEnd.toISOString().slice(0, 10);
 
   for (const tableName of SIX_TABLES) {
     try {
+      // Step 1: Self-heal current-month partition if missing. This catches the
+      // off-by-one case where the original migration's pre-created partitions
+      // started from a future month and skipped the deploy month entirely
+      // (B74 v1 bug surfaced 2026-04-30: migration pre-created 2026-05 → 2027-04
+      // but deployed on 2026-04-30, so all inserts failed until UTC midnight).
+      const curName = `${tableName}_${curMonthSuffix}`;
+      const exists = await db.execute(sql`
+        SELECT 1 FROM pg_class WHERE relname = ${curName} LIMIT 1
+      `);
+      const existsResult = (Array.isArray(exists) ? exists : (exists as any).rows ?? []);
+      if (existsResult.length === 0) {
+        await db.execute(sql.raw(
+          `CREATE TABLE IF NOT EXISTS ${curName} PARTITION OF ${tableName} FOR VALUES FROM ('${curStartIso}') TO ('${curEndIso}')`
+        ));
+        console.warn(`[B74][partitions][SELF-HEAL] created missing CURRENT-month partition ${curName} (${curStartIso} → ${curEndIso})`);
+      }
+
+      // Step 2: Headroom check — warn if latest partition ends < 2 months out.
       const rows = await db.execute(sql`
         SELECT pg_get_expr(c.relpartbound, c.oid) AS partition_bound
         FROM pg_inherits i
@@ -71,7 +97,6 @@ async function checkPartitionHeadroom(): Promise<void> {
         console.warn(`[B74][partitions][WARN] no partitions found for ${tableName} — partition cron may have never run`);
         continue;
       }
-      // Parse the partition_bound expression: e.g., "FOR VALUES FROM ('2026-05-01...') TO ('2026-06-01...')"
       const match = result[0].partition_bound.match(/TO \('([^']+)'\)/);
       if (!match) {
         console.warn(`[B74][partitions][WARN] unexpected partition bound for ${tableName}: ${result[0].partition_bound}`);
