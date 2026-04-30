@@ -41,6 +41,14 @@ export interface ReplayContext {
   regime: string;
   strategy: string;
   baselinePnlPct: number;
+  // B73.1 (2026-04-30): realized exit values from the actual closed trade.
+  // Variant A is no longer simulated — it copies these directly so the
+  // baseline anchor IS live truth. Non-firing variants on TIMEOUT also
+  // inherit these instead of a synthetic last-bar mid. Per Langston cc-inbox
+  // #864 Q2(b)+(c).
+  actualExitPrice: number;
+  actualExitTime: number;
+  actualExitReason: 'TP_target_hit' | 'SL_hit' | 'BE_stop' | 'TRAIL_hit' | 'TIMEOUT';
 }
 
 let cachedConfig: ReplayConfig | null = null;
@@ -197,6 +205,12 @@ export async function replayAndPersist(ctx: ReplayContext): Promise<void> {
     volatility: ctx.volatility,
     ohlcBars,
     config,
+    // B73.1 (2026-04-30): realized exit pass-through for Variant A truth +
+    // TIMEOUT inheritance per Langston cc-inbox #864 Q2(b)+(c).
+    actualExitPrice: ctx.actualExitPrice,
+    actualExitTime: ctx.actualExitTime,
+    actualExitReason: ctx.actualExitReason,
+    actualPnlPct: ctx.baselinePnlPct,
   };
 
   const exits = replayAllVariants(inputs);

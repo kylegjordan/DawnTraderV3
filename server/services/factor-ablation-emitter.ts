@@ -116,6 +116,7 @@ export function emitAblationRecord(
   pairSymbol: string,
   realDecision: RegimeDecision,
   alternates: FactorAlternate[],
+  strategy: string | null = null,
 ): void {
   if (!alternates || alternates.length === 0) {
     // No factors to record — common during B67.0-only deploy before B67.1+ ships.
@@ -129,7 +130,7 @@ export function emitAblationRecord(
 
   // Fire-and-forget. We catch + log inside the async block so the synchronous
   // caller never sees the rejection.
-  void persistRecord(source, pairSymbol, realDecision, alternates).catch((err) => {
+  void persistRecord(source, pairSymbol, realDecision, alternates, strategy).catch((err) => {
     console.error(
       `[B67.0][ablation-emitter] Failed to persist ablation record for ${sourceLabel} pair=${pairSymbol}:`,
       err instanceof Error ? err.message : err,
@@ -142,6 +143,7 @@ async function persistRecord(
   pairSymbol: string,
   realDecision: RegimeDecision,
   alternates: FactorAlternate[],
+  strategy: string | null,
 ): Promise<void> {
   // Gate on module_constants flag. If disabled, skip silently. Default `true`
   // when the row is missing to preserve "deploy lights-on" behavior; the
@@ -174,6 +176,9 @@ async function persistRecord(
   const rows: InsertRegimeFactorAlternate[] = alternates.map((alt) => ({
     ...sourceFields,
     pairSymbol,
+    // B67.0.1 (2026-04-30): persist strategy for (pair_symbol, evaluated_at,
+    // strategy) natural-key join in replay-ablation. Per Langston cc-inbox #864.
+    strategy,
     factorName: alt.factorName,
     factorState: alt.factorState,
     realDecision: realDecision as unknown as Record<string, unknown>,

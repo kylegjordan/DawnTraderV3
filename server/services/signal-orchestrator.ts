@@ -726,6 +726,7 @@ export class SignalOrchestrator {
         },
       },
       ablationAlternates,
+      strategyId, // B67.0.1 (2026-04-30): natural-key join in replay-ablation per Langston #864
     );
 
     // M5B: VTS capture DISABLED - VTS now runs autonomously

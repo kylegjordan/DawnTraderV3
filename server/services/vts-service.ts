@@ -749,6 +749,12 @@ export class VTSService extends EventEmitter {
     phaseAgeSeconds?: number;
     strategyPhaseWeight?: number;
     regimeConfidenceModulated?: number;
+    // B73.1 (2026-04-30): real ATR captured at trade open. Plumbed through so
+    // exit-strategy ablation replay uses the actual ATR rather than the
+    // (target-entry)/1.5 proxy that was causing all variants to collapse to
+    // F (no_BE_stop) behavior because BE triggers never fired. Per Langston
+    // cc-inbox #864 Q2(a).
+    atrAtOpen?: number;
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
     const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
@@ -892,7 +898,25 @@ export class VTSService extends EventEmitter {
       // Only attempt replay when originalStopPrice is populated (true counterfactual baseline)
       void import('./exit-strategy-replay-service').then(({ replayAndPersist }) => {
         const side = tradeData.takeProfit > tradeData.entryPrice ? 'BUY' : 'SELL';
-        const atr = Math.abs(tradeData.takeProfit - tradeData.entryPrice) / 1.5; // approximation
+        // B73.1 (2026-04-30): use real ATR captured at trade open. Falls back
+        // to the legacy proxy only if atrAtOpen is missing (older open trades
+        // that pre-dated B73.1 deploy). Per Langston cc-inbox #864 Q2(a).
+        const atr = (tradeData.atrAtOpen && tradeData.atrAtOpen > 0)
+          ? tradeData.atrAtOpen
+          : Math.abs(tradeData.takeProfit - tradeData.entryPrice) / 1.5;
+        // B73.1: realized exit values for Variant A pass-through + TIMEOUT
+        // inheritance per Langston cc-inbox #864 Q2(b)+(c). Maps the trade's
+        // exit_reason to the variant taxonomy so the A row matches reality.
+        const realizedPnlPct = side === 'BUY'
+          ? ((tradeData.exitPrice / tradeData.entryPrice) - 1) * 100
+          : ((tradeData.entryPrice / tradeData.exitPrice) - 1) * 100;
+        const realizedExitReason: 'TP_target_hit' | 'SL_hit' | 'BE_stop' | 'TRAIL_hit' | 'TIMEOUT' =
+          tradeData.exitReason === 'target_hit' ? 'TP_target_hit'
+          : tradeData.exitReason === 'stop_hit' ? 'SL_hit'
+          : tradeData.exitReason === 'break_even_stop' ? 'BE_stop'
+          : tradeData.exitReason === 'trailing_stop_hit' ? 'TRAIL_hit'
+          : tradeData.exitReason === 'moonbag_timeout' ? 'TRAIL_hit'
+          : 'TIMEOUT';
         replayAndPersist({
           tradeId: trade.id,
           tradeSource: 'vts',
@@ -907,9 +931,10 @@ export class VTSService extends EventEmitter {
           volatility: 0,
           regime: tradeData.regime,
           strategy: tradeData.strategy,
-          baselinePnlPct: tradeData.pnl !== 0
-            ? ((tradeData.exitPrice / tradeData.entryPrice) - 1) * 100 * (side === 'BUY' ? 1 : -1)
-            : 0,
+          baselinePnlPct: realizedPnlPct,
+          actualExitPrice: tradeData.exitPrice,
+          actualExitTime: tradeData.exitTime,
+          actualExitReason: realizedExitReason,
         }).catch(err =>
           console.warn('[B73][exit-replay] failed:', err instanceof Error ? err.message : err),
         );

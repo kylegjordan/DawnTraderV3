@@ -8,6 +8,11 @@
  *
  * Reference: BATCH_73_SCOPE.md + BATCH_73_PRE_AUDIT.md (Langston-approved
  * Steps 1/2/4 cc-inbox #861/#862/#863).
+ *
+ * B73.1 (2026-04-30, Langston cc-inbox #864): Variant A is no longer
+ * simulated — it copies the realized trade outcome directly. TIMEOUT for
+ * any variant inherits the realized exit values rather than a synthetic
+ * last-bar mid. Tests reflect both changes.
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -44,8 +49,17 @@ function bar(minutesFromEntry: number, high: number, low: number): OHLCData {
   };
 }
 
-/** Standard BUY trade: entry $100, target $105, SL $98, ATR $2 (target=2.5×ATR, SL=1×ATR) */
+/**
+ * Standard BUY trade: entry $100, target $105, SL $98, ATR $2.
+ *
+ * B73.1 defaults the realized-truth fields to a benign TIMEOUT-at-entry
+ * outcome so most tests don't need to think about them. Tests that
+ * specifically assert Variant A pass-through OR TIMEOUT inheritance pass
+ * `actualExitPrice`/`actualExitReason`/`actualExitTime`/`actualPnlPct`
+ * via `extra` to make the realized truth explicit.
+ */
 function buyTradeInputs(ohlcBars: OHLCData[], extra: Partial<ReplayInputs> = {}): ReplayInputs {
+  const lastBarTs = ohlcBars.length > 0 ? ohlcBars[ohlcBars.length - 1].timestamp : 0;
   return {
     side: 'BUY',
     entryPrice: 100,
@@ -56,6 +70,10 @@ function buyTradeInputs(ohlcBars: OHLCData[], extra: Partial<ReplayInputs> = {})
     volatility: 0.010,
     ohlcBars,
     config: CONFIG,
+    actualExitPrice: 100,
+    actualExitTime: lastBarTs,
+    actualExitReason: 'TIMEOUT',
+    actualPnlPct: 0,
     ...extra,
   };
 }
@@ -83,88 +101,122 @@ describe('B73 — INSUFFICIENT_DATA', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// VARIANT A — Current BE-stop baseline
+// VARIANT A — B73.1 pass-through of realized truth (Langston cc-inbox #864 Q2b)
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe('B73 Variant A — current BE-stop baseline', () => {
-  it('hits TP when price runs straight to target', () => {
-    // ATR=2, BE trigger at entry+2=102, target=105. Price goes 100→105 directly.
-    const exits = replayAllVariants(buyTradeInputs([
-      bar(1, 101.5, 100.5),
-      bar(2, 103, 101.5),
-      bar(3, 105.5, 104),  // hits target 105
-    ]));
-    const v = findVariant(exits, 'A');
-    expect(v.exitReason).toBe('TP_target_hit');
-    expect(v.exitPrice).toBe(105);
-    expect(v.pnlPct).toBeCloseTo(5, 4);
+describe('B73.1 Variant A — copies realized truth (no re-simulation)', () => {
+  it('A reflects realized TP_target_hit regardless of OHLC path', () => {
+    const exits = replayAllVariants(buyTradeInputs([bar(1, 105.5, 100)], {
+      actualExitPrice: 105,
+      actualExitTime: 60_000,
+      actualExitReason: 'TP_target_hit',
+      actualPnlPct: 5,
+    }));
+    const a = findVariant(exits, 'A');
+    expect(a.exitReason).toBe('TP_target_hit');
+    expect(a.exitPrice).toBe(105);
+    expect(a.pnlPct).toBeCloseTo(5, 4);
+    expect((a.metadata as any).source).toBe('realized_truth');
   });
 
-  it('exits at BE when price hits trigger then retraces below entry', () => {
-    // BE trigger=102 (entry+1×ATR). Price goes 100→102.5 (latches BE), then drops to 99.
+  it('A reflects realized BE_stop even when OHLC would simulate something else', () => {
+    // OHLC suggests a clean TP path, but realized truth was BE_stop. A copies reality.
     const exits = replayAllVariants(buyTradeInputs([
-      bar(1, 101, 100.5),
-      bar(2, 102.5, 101),  // crosses BE trigger 102 → latches
-      bar(3, 102, 99.5),   // low crosses BE level (entry=100), exits
-    ]));
-    const v = findVariant(exits, 'A');
-    expect(v.exitReason).toBe('BE_stop');
-    expect(v.exitPrice).toBe(100);
-    expect(v.pnlPct).toBe(0);
+      bar(1, 102.5, 101),
+      bar(2, 105.5, 103),
+    ], {
+      actualExitPrice: 100,
+      actualExitTime: 90_000,
+      actualExitReason: 'BE_stop',
+      actualPnlPct: 0,
+    }));
+    const a = findVariant(exits, 'A');
+    expect(a.exitReason).toBe('BE_stop');
+    expect(a.exitPrice).toBe(100);
+    expect(a.pnlPct).toBe(0);
   });
 
-  it('hits original SL when BE never latched', () => {
-    // Price goes 100→99→97 (never hits trigger 102, just falls).
+  it('A reflects realized SL_hit at -2%', () => {
     const exits = replayAllVariants(buyTradeInputs([
-      bar(1, 100.5, 99),
-      bar(2, 99.5, 97.5),  // low 97.5 ≤ SL 98 → exits at SL
-    ]));
-    const v = findVariant(exits, 'A');
-    expect(v.exitReason).toBe('SL_hit');
-    expect(v.exitPrice).toBe(98);
-    expect(v.pnlPct).toBeCloseTo(-2, 4);
-  });
-
-  it('times out when target/SL/BE never hit within window', () => {
-    // Stays in [99, 101] forever.
-    const exits = replayAllVariants(buyTradeInputs([
-      bar(1, 101, 99.5),
-      bar(2, 100.5, 99.2),
-      bar(3, 100.8, 99.7),
-    ]));
-    const v = findVariant(exits, 'A');
-    expect(v.exitReason).toBe('TIMEOUT');
-    expect(v.exitTime).toBe(3 * 60_000);
+      bar(1, 99.5, 97.5),
+    ], {
+      actualExitPrice: 98,
+      actualExitTime: 60_000,
+      actualExitReason: 'SL_hit',
+      actualPnlPct: -2,
+    }));
+    const a = findVariant(exits, 'A');
+    expect(a.exitReason).toBe('SL_hit');
+    expect(a.exitPrice).toBe(98);
+    expect(a.pnlPct).toBeCloseTo(-2, 4);
   });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// VARIANT F — NO BE-stop (pure original SL only)
+// TIMEOUT inheritance (B73.1 — Langston cc-inbox #864 Q2c)
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe('B73 Variant F — NO BE-stop', () => {
-  it('hits target even after retracing toward (but not past) entry', () => {
-    // Same scenario as Variant A "BE_stop" test but no BE latch — price retraces to 99 then climbs to target.
+describe('B73.1 TIMEOUT inheritance — non-firing variants inherit realized exit', () => {
+  it('all 12 variants inherit realized exit when no level fires', () => {
+    // Path stays in [99, 101] — no variant hits anything within the OHLC window.
+    // Realized truth was TIMEOUT at $99.50.
+    const exits = replayAllVariants(buyTradeInputs([
+      bar(1, 101, 99.5),
+      bar(2, 100.5, 99.2),
+      bar(3, 100.8, 99.7),
+    ], {
+      actualExitPrice: 99.5,
+      actualExitTime: 3 * 60_000,
+      actualExitReason: 'TIMEOUT',
+      actualPnlPct: -0.5,
+    }));
+    for (const e of exits) {
+      expect(e.exitReason).toBe('TIMEOUT');
+      expect(e.exitPrice).toBe(99.5);
+      expect(e.pnlPct).toBeCloseTo(-0.5, 4);
+    }
+  });
+
+  it('TIMEOUT inheritance preserves a realized BE_stop reason for non-firing variants', () => {
+    // Realized was BE_stop at entry. Variants that don't fire any level inherit BE_stop.
+    const exits = replayAllVariants(buyTradeInputs([
+      bar(1, 100.5, 99.7),
+      bar(2, 100.3, 99.5),
+    ], {
+      actualExitPrice: 100,
+      actualExitTime: 2 * 60_000,
+      actualExitReason: 'BE_stop',
+      actualPnlPct: 0,
+    }));
+    // K (no_BE_no_trail) has no BE/trail logic — no level fires in the path.
+    const k = findVariant(exits, 'K');
+    expect(k.exitReason).toBe('BE_stop');
+    expect(k.exitPrice).toBe(100);
+    expect(k.pnlPct).toBe(0);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// VARIANT F — NO BE-stop (pure original SL only) — still simulates
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('B73 Variant F — NO BE-stop (simulated)', () => {
+  it('hits target through retrace because no BE protection', () => {
     const exits = replayAllVariants(buyTradeInputs([
       bar(1, 102.5, 101),
-      bar(2, 102, 99.5),   // retrace toward entry — Variant A would BE-stop here, F should NOT
-      bar(3, 105.5, 103),  // climbs back to target
+      bar(2, 102, 99.5),    // would BE-stop variant A's simulation, but A is now pass-through
+      bar(3, 105.5, 103),
     ]));
-    const a = findVariant(exits, 'A');
     const f = findVariant(exits, 'F');
-    // Variant A stops at BE
-    expect(a.exitReason).toBe('BE_stop');
-    expect(a.pnlPct).toBe(0);
-    // Variant F stays in, hits target — exactly the "BE-stop leaves money on table" scenario
     expect(f.exitReason).toBe('TP_target_hit');
     expect(f.exitPrice).toBe(105);
     expect(f.pnlPct).toBeCloseTo(5, 4);
   });
 
-  it('hits original SL when price falls below 98 (no BE protection)', () => {
+  it('hits original SL when price falls below 98', () => {
     const exits = replayAllVariants(buyTradeInputs([
-      bar(1, 102.5, 101),    // would latch BE for variant A
-      bar(2, 100, 97.5),     // crosses original SL — F exits at SL, A would have exited at BE
+      bar(1, 102.5, 101),
+      bar(2, 100, 97.5),
     ]));
     const f = findVariant(exits, 'F');
     expect(f.exitReason).toBe('SL_hit');
@@ -178,18 +230,12 @@ describe('B73 Variant F — NO BE-stop', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('B73 Variant B — ATR-padded BE+', () => {
-  it('exits at BE+pad (101) instead of BE (100)', () => {
-    // ATR=2, pad=0.5×ATR=1. BE level = entry+1 = 101.
+  it('exits at BE+pad (101)', () => {
     const exits = replayAllVariants(buyTradeInputs([
       bar(1, 102.5, 101),   // crosses trigger 102, latches
-      bar(2, 102, 100.5),   // low 100.5 < BE+pad 101, exits (Variant A would NOT exit here since BE=100)
+      bar(2, 102, 100.5),   // low 100.5 < BE+pad 101, exits
     ]));
-    const a = findVariant(exits, 'A');
     const b = findVariant(exits, 'B');
-    // Variant A: BE level = 100, low 100.5 doesn't cross → continues
-    // (Bar 2 low=100.5 > A's BE=100, so A doesn't exit yet)
-    expect(a.exitReason).not.toBe('BE_stop');
-    // Variant B: BE+pad level = 101, low 100.5 ≤ 101 → exits at 101
     expect(b.exitReason).toBe('BE_stop');
     expect(b.exitPrice).toBe(101);
     expect(b.pnlPct).toBeCloseTo(1, 4);
@@ -201,18 +247,14 @@ describe('B73 Variant B — ATR-padded BE+', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('B73 Variant C — higher BE trigger', () => {
-  it('does NOT latch BE on 1×ATR move (only on 1.5×ATR)', () => {
-    // ATR=2. A trigger = 102 (entry+1×ATR). C trigger = 103 (entry+1.5×ATR).
-    // Price goes 100→102.5 (crosses A trigger but NOT C trigger), then drops to 99.
+  it('does NOT latch BE on 1×ATR move (only on 1.5×ATR), so SL fires', () => {
     const exits = replayAllVariants(buyTradeInputs([
       bar(1, 102.5, 101),   // crosses A trigger 102, NOT C trigger 103
-      bar(2, 101, 99),      // low 99, no SL hit. A would exit at BE (100); C should NOT
+      bar(2, 101, 99),
       bar(3, 99.5, 97.5),   // hits SL 98
     ]));
-    const a = findVariant(exits, 'A');
     const c = findVariant(exits, 'C');
-    expect(a.exitReason).toBe('BE_stop');
-    expect(c.exitReason).toBe('SL_hit');  // C never latched, so SL fires
+    expect(c.exitReason).toBe('SL_hit');
   });
 });
 
@@ -221,25 +263,11 @@ describe('B73 Variant C — higher BE trigger', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('B73 Variant E — vol-conditional skip', () => {
-  it('runs as Variant A when volatility is below P75 threshold', () => {
-    // vol=0.010 < threshold=0.020 → behaves like Variant A
-    const ohlc = [
-      bar(1, 102.5, 101),
-      bar(2, 102, 99.5),  // BE retrace
-    ];
-    const exits = replayAllVariants(buyTradeInputs(ohlc, { volatility: 0.010 }));
-    const a = findVariant(exits, 'A');
-    const e = findVariant(exits, 'E');
-    expect(e.exitReason).toBe(a.exitReason);
-    expect(e.exitPrice).toBe(a.exitPrice);
-  });
-
   it('runs as no-BE (Variant F) when volatility is above P75 threshold', () => {
-    // vol=0.025 > threshold=0.020 → skip BE, behave like Variant F
     const ohlc = [
       bar(1, 102.5, 101),
-      bar(2, 102, 99.5),    // would BE-stop variant A
-      bar(3, 105.5, 103),   // climbs to target
+      bar(2, 102, 99.5),
+      bar(3, 105.5, 103),
     ];
     const exits = replayAllVariants(buyTradeInputs(ohlc, { volatility: 0.025 }));
     const e = findVariant(exits, 'E');
@@ -255,10 +283,9 @@ describe('B73 Variant E — vol-conditional skip', () => {
 
 describe('B73 Trailing state machine — Variants G/H/I', () => {
   it('Variant G: activates trail at trigger then exits at peak − 1×ATR', () => {
-    // Trigger = entry + 1×ATR = 102. Trail = 1×ATR.
     const ohlc = [
-      bar(1, 102.5, 101),    // crosses trigger 102 → trail active. Peak=102.5.
-      bar(2, 104, 102.5),    // peak updates to 104. Trail level = 104-2 = 102.
+      bar(1, 102.5, 101),
+      bar(2, 104, 102.5),
       bar(3, 104, 101.5),    // low 101.5 < trail 102 → exits at 102
     ];
     const exits = replayAllVariants(buyTradeInputs(ohlc));
@@ -269,40 +296,38 @@ describe('B73 Trailing state machine — Variants G/H/I', () => {
   });
 
   it('Variant H (tighter 0.5×ATR trail): exits earlier than G', () => {
-    // H trail = 0.5×ATR = 1. From peak 104, trail level = 103.
     const ohlc = [
-      bar(1, 102.5, 101),    // trigger latches
-      bar(2, 104, 102.5),    // peak=104, H trail=103, G trail=102
-      bar(3, 103.5, 102.5),  // low 102.5 < H trail 103 → H exits; G still in (low > 102)
+      bar(1, 102.5, 101),
+      bar(2, 104, 102.5),
+      bar(3, 103.5, 102.5),  // H trail=103 hits, G trail=102 doesn't
     ];
     const exits = replayAllVariants(buyTradeInputs(ohlc));
     const g = findVariant(exits, 'G');
     const h = findVariant(exits, 'H');
     expect(h.exitReason).toBe('TRAIL_hit');
     expect(h.exitPrice).toBe(103);
-    expect(g.exitReason).not.toBe('TRAIL_hit');  // G's trail at 102 not yet hit
+    expect(g.exitReason).not.toBe('TRAIL_hit');
   });
 
   it('Variant I (looser 2×ATR trail): exits later than G', () => {
-    // I trail = 2×ATR = 4. From peak 104, I trail = 100.
     const ohlc = [
-      bar(1, 102.5, 101),    // trigger latches
-      bar(2, 104, 102.5),    // peak=104, G trail=102, I trail=100
-      bar(3, 103.5, 101.5),  // low 101.5 < G trail 102 → G exits; I still in (low > 100)
+      bar(1, 102.5, 101),
+      bar(2, 104, 102.5),
+      bar(3, 103.5, 101.5),  // G trail=102 hits, I trail=100 doesn't
     ];
     const exits = replayAllVariants(buyTradeInputs(ohlc));
     const g = findVariant(exits, 'G');
     const i = findVariant(exits, 'I');
     expect(g.exitReason).toBe('TRAIL_hit');
     expect(g.exitPrice).toBe(102);
-    expect(i.exitReason).not.toBe('TRAIL_hit');  // I's trail at 100 not yet hit
+    expect(i.exitReason).not.toBe('TRAIL_hit');
   });
 
   it('Variant J: no trailing — hits target through volatility', () => {
     const ohlc = [
       bar(1, 103, 101),
       bar(2, 102, 99.5),
-      bar(3, 105.5, 103),  // hits target
+      bar(3, 105.5, 103),
     ];
     const exits = replayAllVariants(buyTradeInputs(ohlc));
     const j = findVariant(exits, 'J');
@@ -316,13 +341,11 @@ describe('B73 Trailing state machine — Variants G/H/I', () => {
 
 describe('B73 Variant L — BE+pad AND looser trail', () => {
   it('phase transitions: pre → be_latched → trailing', () => {
-    // BE trigger=102 (1×ATR), targetLockR=1.5 → 103 to flip to trailing.
-    // BE+pad level = 101. Looser trail = 2×ATR = 4 from peak.
     const ohlc = [
-      bar(1, 102.5, 101),    // crosses trigger 102 → be_latched. Peak=102.5.
-      bar(2, 103.5, 102.5),  // crosses 103 (target_lock) → trailing. Peak=103.5. Trail=99.5.
-      bar(3, 104, 103),      // peak=104, trail=100
-      bar(4, 103.5, 99.5),   // low 99.5 < trail 100 → exits at 100
+      bar(1, 102.5, 101),
+      bar(2, 103.5, 102.5),
+      bar(3, 104, 103),
+      bar(4, 103.5, 99.5),
     ];
     const exits = replayAllVariants(buyTradeInputs(ohlc));
     const l = findVariant(exits, 'L');
@@ -332,10 +355,9 @@ describe('B73 Variant L — BE+pad AND looser trail', () => {
   });
 
   it('exits at BE+pad if price retraces before reaching target_lock', () => {
-    // Crosses BE trigger 102 (latches BE+pad level=101) but never reaches 103.
     const ohlc = [
-      bar(1, 102.5, 101),   // be_latched, BE+pad=101
-      bar(2, 102, 100.5),   // low 100.5 < BE+pad 101 → exits at 101
+      bar(1, 102.5, 101),
+      bar(2, 102, 100.5),
     ];
     const exits = replayAllVariants(buyTradeInputs(ohlc));
     const l = findVariant(exits, 'L');
@@ -350,8 +372,7 @@ describe('B73 Variant L — BE+pad AND looser trail', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('B73 — SELL trade direction (inverted checks)', () => {
-  it('SELL: target hit when price falls to target', () => {
-    // SELL: entry=100, target=95 (below), SL=102 (above), ATR=2
+  it('SELL: target hit when price falls to target — non-A variants simulate', () => {
     const inputs: ReplayInputs = {
       side: 'SELL',
       entryPrice: 100,
@@ -362,16 +383,19 @@ describe('B73 — SELL trade direction (inverted checks)', () => {
       volatility: 0.010,
       ohlcBars: [
         bar(1, 99.5, 99),
-        bar(2, 96, 94.5),  // low 94.5 ≤ target 95 → TP
+        bar(2, 96, 94.5),
       ],
       config: CONFIG,
+      actualExitPrice: 95,
+      actualExitTime: 2 * 60_000,
+      actualExitReason: 'TP_target_hit',
+      actualPnlPct: ((100 / 95) - 1) * 100,
     };
     const exits = replayAllVariants(inputs);
-    const a = findVariant(exits, 'A');
-    expect(a.exitReason).toBe('TP_target_hit');
-    expect(a.exitPrice).toBe(95);
-    // pnlPct(SELL, 100, 95) = (100/95 - 1) × 100 = 5.263...
-    expect(a.pnlPct).toBeCloseTo(((100 / 95) - 1) * 100, 4);
+    const f = findVariant(exits, 'F');
+    expect(f.exitReason).toBe('TP_target_hit');
+    expect(f.exitPrice).toBe(95);
+    expect(f.pnlPct).toBeCloseTo(((100 / 95) - 1) * 100, 4);
   });
 });
 
@@ -380,14 +404,18 @@ describe('B73 — SELL trade direction (inverted checks)', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('B73 — gap-bar edge case', () => {
-  it('target check fires first when bar high crosses target AND low crosses SL', () => {
-    // Single gappy bar: high=106 (>target 105), low=97 (<SL 98)
+  it('non-A variants resolve target wins when both target and SL hit on same bar', () => {
+    // Realized truth: trade closed on TP. Non-A simulations should also pick TP.
     const ohlc = [bar(1, 106, 97)];
-    const exits = replayAllVariants(buyTradeInputs(ohlc));
-    const a = findVariant(exits, 'A');
-    // Optimistic interpretation per Langston cc-inbox #863: target wins
-    expect(a.exitReason).toBe('TP_target_hit');
-    expect(a.exitPrice).toBe(105);
+    const exits = replayAllVariants(buyTradeInputs(ohlc, {
+      actualExitPrice: 105,
+      actualExitTime: 60_000,
+      actualExitReason: 'TP_target_hit',
+      actualPnlPct: 5,
+    }));
+    const f = findVariant(exits, 'F');
+    expect(f.exitReason).toBe('TP_target_hit');
+    expect(f.exitPrice).toBe(105);
   });
 });
 

@@ -1485,6 +1485,7 @@ async function generatePhase10Signal(
       },
     },
     _b67_1_alternates,
+    strategy, // B67.0.1 (2026-04-30): natural-key join in replay-ablation per Langston #864
   );
 
   return { signal, tradeRecord };
@@ -1860,6 +1861,8 @@ async function resolveOpenVirtualTrades(): Promise<{
         phaseAgeSeconds: trade.phaseAgeSeconds,
         strategyPhaseWeight: trade.strategyPhaseWeight,
         regimeConfidenceModulated: trade.regimeConfidenceModulated,
+        // B73.1 (2026-04-30): real ATR for exit-strategy ablation replay.
+        atrAtOpen: trade.atrAtOpen,
       });
       if (result.persisted) persisted++;
       if (result.mlTriggered) mlQueued++;

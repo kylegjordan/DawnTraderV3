@@ -85,6 +85,20 @@ export interface ReplayInputs {
   volatility: number;
   ohlcBars: OHLCData[];
   config: ReplayConfig;
+  // B73.1 (2026-04-30): realized-trade pass-through fields. Per Langston
+  // cc-inbox #864 Q2(b)+(c):
+  //   - Variant A (current_BE_stop_baseline) IS live truth. No re-simulation.
+  //     The baseline anchor must equal what actually happened, otherwise the
+  //     paired-diff Sharpe vs A is meaningless.
+  //   - When a variant's logic doesn't fire any level within the OHLC replay
+  //     window (TIMEOUT case), inherit the realized exit values rather than
+  //     emitting a synthetic last-bar mid. Non-firing variants then register
+  //     zero diff vs A — clean signal, real differentiation only when the
+  //     variant actually fires a different exit.
+  actualExitPrice: number;
+  actualExitTime: number;
+  actualExitReason: 'TP_target_hit' | 'SL_hit' | 'BE_stop' | 'TRAIL_hit' | 'TIMEOUT';
+  actualPnlPct: number;
 }
 
 const VARIANT_NAMES: Record<VariantId, string> = {
@@ -112,7 +126,9 @@ export function replayAllVariants(inputs: ReplayInputs): VirtualExit[] {
     );
   }
   return [
-    replayBe(inputs, 'A', { trigger: inputs.config.baselineBeTriggerR, atrPad: 0 }),
+    // B73.1 (2026-04-30): Variant A copies realized truth — no re-simulation.
+    // Per Langston cc-inbox #864 Q2(b).
+    mkVariantAFromRealized(inputs),
     replayBe(inputs, 'B', { trigger: inputs.config.baselineBeTriggerR, atrPad: inputs.config.variantBBeAtrPad }),
     replayBe(inputs, 'C', { trigger: inputs.config.variantCBeTriggerR, atrPad: 0 }),
     replayTrailOnly(inputs, 'D', inputs.config.baselineTrailDistanceAtr),
@@ -128,6 +144,24 @@ export function replayAllVariants(inputs: ReplayInputs): VirtualExit[] {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * B73.1 (2026-04-30): Variant A pass-through. A is the live baseline — its
+ * outcome IS the actual realized trade outcome, not a re-simulation. Per
+ * Langston cc-inbox #864 Q2(b).
+ */
+function mkVariantAFromRealized(inputs: ReplayInputs): VirtualExit {
+  return {
+    variantId: 'A',
+    variantName: VARIANT_NAMES.A,
+    exitPrice: inputs.actualExitPrice,
+    exitReason: inputs.actualExitReason,
+    exitTime: inputs.actualExitTime,
+    pnlPct: inputs.actualPnlPct,
+    durationMin: durationMin(inputs.entryTime, inputs.actualExitTime),
+    metadata: { source: 'realized_truth' },
+  };
+}
 
 function mkInsufficient(id: VariantId): VirtualExit {
   return {
@@ -155,21 +189,27 @@ function isTimedOut(barTs: number, entryMs: number, maxHoldMs: number): boolean 
 }
 
 /**
- * Final-bar timeout exit. When no level was crossed within OHLC window AND
- * window covers maxHoldMs, exit at last bar's close.
+ * B73.1 (2026-04-30): When a variant's logic doesn't fire any level within the
+ * OHLC replay window, inherit the realized exit values rather than emitting a
+ * synthetic last-bar mid. This eliminates the artificial 12-way tie that made
+ * the data un-decision-grade — non-firing variants register zero diff vs A,
+ * and real differentiation only shows up when a variant actually changes the
+ * exit. Per Langston cc-inbox #864 Q2(c).
+ *
+ * The reason is preserved as the realized reason (typically TIMEOUT, but can
+ * be BE_stop, TRAIL_hit, etc. when a real exit fired but the variant's
+ * threshold structure wouldn't have triggered the same level).
  */
 function timeoutExit(id: VariantId, inputs: ReplayInputs, meta: Record<string, unknown> = {}): VirtualExit {
-  const lastBar = inputs.ohlcBars[inputs.ohlcBars.length - 1];
-  const closeApprox = (lastBar.high + lastBar.low) / 2;
   return {
     variantId: id,
     variantName: VARIANT_NAMES[id],
-    exitPrice: closeApprox,
-    exitReason: 'TIMEOUT',
-    exitTime: lastBar.timestamp,
-    pnlPct: pnlPct(inputs.side, inputs.entryPrice, closeApprox),
-    durationMin: durationMin(inputs.entryTime, lastBar.timestamp),
-    metadata: { ...meta, last_bar_high: lastBar.high, last_bar_low: lastBar.low },
+    exitPrice: inputs.actualExitPrice,
+    exitReason: inputs.actualExitReason,
+    exitTime: inputs.actualExitTime,
+    pnlPct: inputs.actualPnlPct,
+    durationMin: durationMin(inputs.entryTime, inputs.actualExitTime),
+    metadata: { ...meta, source: 'realized_inherited' },
   };
 }
 

@@ -535,6 +535,10 @@ export const regimeFactorAlternates = pgTable("regime_factor_alternates", {
   signalId: integer("signal_id"),
   vtsTradeId: text("vts_trade_id"),
   pairSymbol: text("pair_symbol").notNull(),
+  // B67.0.1 (2026-04-30): added for (pair_symbol, evaluated_at, strategy)
+  // natural-key join in replay-ablation. Nullable for backfill compat with
+  // pre-fix rows; new emits always populate.
+  strategy: text("strategy"),
   evaluatedAt: timestamp("evaluated_at", { withTimezone: true }).notNull().defaultNow(),
   factorName: text("factor_name").notNull(),
   factorState: text("factor_state").notNull(), // 'alternate_disabled' | 'alternate_enabled'
@@ -552,6 +556,12 @@ export const regimeFactorAlternates = pgTable("regime_factor_alternates", {
   pairTimeIdx: index("regime_factor_alternates_pair_time_idx").on(
     table.pairSymbol,
     table.evaluatedAt,
+  ),
+  // B67.0.1 (2026-04-30): composite for natural-key join.
+  naturalKeyIdx: index("regime_factor_alternates_natural_key_idx").on(
+    table.pairSymbol,
+    table.evaluatedAt,
+    table.strategy,
   ),
 }));
 

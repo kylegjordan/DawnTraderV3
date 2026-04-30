@@ -73,17 +73,23 @@ import { getConstant } from '../services/module-constants-service.js';
 const VTS_LOGS_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
 
 /**
- * Lazy index of VTS trade records by id. Built on demand from the JSONL
- * files covering the recent N days. Cached for the duration of the replay
- * pass so we don't re-read files for every pending row.
+ * B67.0.1 (2026-04-30): VTS trade index keyed by `(symbol|strategy)` →
+ * sorted-by-entryTime list of trades. Replaces the previous id-based index
+ * which broke because two emit paths produced different ID formats
+ * (vts-runner emits `vsig_p10_*`; vts-service writes JSONL with
+ * `vts_<sym>_<strat>_<ts>`). Per Langston cc-inbox #864 Q1, the natural-key
+ * tuple `(pair_symbol, evaluated_at, strategy)` is generated identically on
+ * both sides from source data, immune to ID-format drift.
+ *
+ * Lookup: see `findVtsTradeByNaturalKey` — matches the closest trade by
+ * entryTime within ±60s tolerance.
  */
-async function buildVtsTradeIndex(daysBack: number = 14): Promise<Map<string, any>> {
-  // Indexed by SIGNAL ID (vsig_p10_* / similar), NOT trade.id. Reason:
-  // ablation rows store `vts_trade_id = signal.id` from the emit hook in
-  // vts-runner.ts (line ~1374). VirtualTrade.id is a different format
-  // (vts_{symbol}_{exitTime}). The original signal.id is preserved inside
-  // the nested trade.signal object — that's the join key.
-  const index = new Map<string, any>();
+type VtsTradeIndexEntry = { entryTime: number; trade: any };
+
+async function buildVtsTradeIndex(
+  daysBack: number = 14,
+): Promise<Map<string, VtsTradeIndexEntry[]>> {
+  const index = new Map<string, VtsTradeIndexEntry[]>();
   try {
     const files = await fs.readdir(VTS_LOGS_DIR);
     const cutoff = new Date();
@@ -100,15 +106,15 @@ async function buildVtsTradeIndex(daysBack: number = 14): Promise<Map<string, an
         const raw = await fs.readFile(fullPath, 'utf-8');
         const trades = JSON.parse(raw) as any[];
         for (const trade of trades) {
-          if (trade?.status === 'closed') {
-            // Prefer signal.id (matches ablation row vts_trade_id);
-            // fall back to trade.id for any older records that don't have
-            // signal nested.
-            const joinKey = trade?.signal?.id ?? trade?.id;
-            if (joinKey) {
-              index.set(joinKey, trade);
-            }
-          }
+          if (trade?.status !== 'closed') continue;
+          const symbol: string | undefined = trade?.signal?.symbol ?? trade?.symbol;
+          const strategy: string | undefined = trade?.strategy ?? trade?.signal?.strategy;
+          const entryTime: number | undefined = trade?.entryTime ?? trade?.signal?.createdAt;
+          if (!symbol || !strategy || !entryTime) continue;
+          const key = `${symbol}|${strategy}`;
+          const list = index.get(key) ?? [];
+          list.push({ entryTime, trade });
+          index.set(key, list);
         }
       } catch (err) {
         console.warn(
@@ -117,6 +123,10 @@ async function buildVtsTradeIndex(daysBack: number = 14): Promise<Map<string, an
         );
       }
     }
+    // Sort each bucket so the binary-search-style match is fast.
+    for (const list of index.values()) {
+      list.sort((a, b) => a.entryTime - b.entryTime);
+    }
   } catch (err) {
     console.warn(
       '[B67.0][replay-ablation] VTS logs directory unreadable (cold cluster?):',
@@ -124,6 +134,42 @@ async function buildVtsTradeIndex(daysBack: number = 14): Promise<Map<string, an
     );
   }
   return index;
+}
+
+/**
+ * B67.0.1 (2026-04-30): Find the JSONL trade matching an ablation row by
+ * (symbol, strategy, evaluated_at±toleranceMs). Returns null if no match.
+ *
+ * The ablation row's `evaluatedAt` is stamped at signal-eval time (which is
+ * trade-open time — emit fires inside vts-runner / signal-orchestrator just
+ * before the trade is registered). The JSONL `entryTime` is also the
+ * trade-open epoch. They should be within milliseconds of each other under
+ * normal flow; the 60s tolerance covers any insert latency or clock drift.
+ *
+ * Ambiguity policy: if two trades on the same (symbol, strategy) opened
+ * within tolerance, take the closest. At realistic VTS scale (10s of trades
+ * per pair per day max) this collision is vanishingly rare.
+ */
+function findVtsTradeByNaturalKey(
+  index: Map<string, VtsTradeIndexEntry[]>,
+  symbol: string,
+  strategy: string | null,
+  evaluatedAtMs: number,
+  toleranceMs: number = 60_000,
+): any | null {
+  if (!strategy) return null;
+  const list = index.get(`${symbol}|${strategy}`);
+  if (!list || list.length === 0) return null;
+  let best: VtsTradeIndexEntry | null = null;
+  let bestDelta = Infinity;
+  for (const entry of list) {
+    const delta = Math.abs(entry.entryTime - evaluatedAtMs);
+    if (delta <= toleranceMs && delta < bestDelta) {
+      best = entry;
+      bestDelta = delta;
+    }
+  }
+  return best?.trade ?? null;
 }
 
 interface ReplayStats {
@@ -224,8 +270,10 @@ export async function runReplayAblation(): Promise<ReplayStats> {
     if (stats.pendingVtsTradeRows > 0) {
       try {
         const vtsIndex = await buildVtsTradeIndex(14);
+        const indexedTradeCount = Array.from(vtsIndex.values())
+          .reduce((sum, list) => sum + list.length, 0);
         console.log(
-          `[B67.0][replay-ablation] VTS index loaded: ${vtsIndex.size} closed trades from last 14d`,
+          `[B67.0][replay-ablation] VTS index loaded: ${indexedTradeCount} closed trades from last 14d, ${vtsIndex.size} (symbol|strategy) buckets`,
         );
 
         // Load pending VTS rows in batches. Bound to 5000 per pass so a
@@ -244,11 +292,23 @@ export async function runReplayAblation(): Promise<ReplayStats> {
         let matched = 0;
         let unmatched = 0;
         for (const row of pendingVtsRows) {
-          if (row.vtsTradeId === null) continue;
-
-          const trade = vtsIndex.get(row.vtsTradeId);
+          // B67.0.1 (2026-04-30): natural-key join via (symbol, strategy,
+          // evaluated_at±60s) instead of the broken vts_trade_id match.
+          // Falls back to the legacy id-based match for any pre-fix rows
+          // that have null strategy (none today, but safe for transition).
+          let trade: any = null;
+          if (row.strategy) {
+            trade = findVtsTradeByNaturalKey(
+              vtsIndex,
+              row.pairSymbol,
+              row.strategy,
+              row.evaluatedAt instanceof Date
+                ? row.evaluatedAt.getTime()
+                : Number(row.evaluatedAt),
+            );
+          }
           if (!trade) {
-            // Trade not yet closed (still open) OR file missing OR id mismatch.
+            // Trade not yet closed (still open) OR file missing OR no match.
             // Don't mark as completed — leave for next pass when the trade closes.
             unmatched++;
             continue;
@@ -273,6 +333,8 @@ export async function runReplayAblation(): Promise<ReplayStats> {
                 pnl_usd: netPnl,
                 exit_reason: exitReason,
                 vts_trade_id: row.vtsTradeId,
+                vts_jsonl_trade_id: trade?.id ?? null,
+                vts_jsonl_signal_id: trade?.signal?.id ?? null,
                 trade_mode: trade.tradeMode,
                 ladder_rungs_hit: trade.ladderRungsHit,
                 regime_at_entry: trade.regime,
