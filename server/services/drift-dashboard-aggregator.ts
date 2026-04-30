@@ -482,10 +482,10 @@ export async function computeAblationComparison(
       -- ('unreplayable_real_rejected'); future outcome types may add more.
       -- LIKE-prefix match keeps this field meaningful as the taxonomy grows.
       -- B67.0.1 (2026-04-30): the replay-ablation script writes outcomes via
-      -- `outcome` + `notes='pre_b67_5_both_admit'` (admit/admit case pre-Kelly
-      -- wiring), not `alternateOutcome`/`admit_admit_no_delta`. Aligning the
-      -- aggregator to actual emitter shape per Kyle observation that UI showed
-      -- 0 counts despite replays succeeding.
+      -- 'outcome' + notes='pre_b67_5_both_admit' (admit/admit case pre-Kelly
+      -- wiring), not alternateOutcome/'admit_admit_no_delta'. Aligning the
+      -- aggregator to actual emitter shape per Kyle observation that UI
+      -- showed 0 counts despite replays succeeding.
       SUM(CASE WHEN replay_outcome->>'outcome' LIKE 'unreplayable_%' THEN 1 ELSE 0 END)::int AS "unreplayable",
       SUM(CASE WHEN replay_outcome->>'notes' = 'pre_b67_5_both_admit' THEN 1 ELSE 0 END)::int AS "bothAdmitCount",
       SUM(CASE WHEN replay_outcome->>'notes' = 'alternate_would_have_rejected' THEN 1 ELSE 0 END)::int AS "realAdmitAltRejectCount",
