@@ -99,7 +99,7 @@
 
 | # | Issue | Status | Notes |
 |---|-------|--------|-------|
-| 41 | **B74 equity_perp_ohlc_1m at 0 rows** — Kraken Futures WS subscription `feed: 'candles_trade_1m'` returned no data despite connection being healthy (ticker stream populated 1,478 rows / 10 syms in same window). Feed name likely incorrect — Kraken Futures may use a different candle-feed identifier than what was implemented from initial docs reading. | OPEN (not blocking) | **Logged 2026-04-30 as part of B74 closure** per Langston cc-inbox #873. Ticker snapshots provide bid/ask/last/volume/VWAP/OI/funding which is more granular than 1-min OHLC for most analysis. Fix in v2 by probing Kraken Futures WS for correct feed name OR REST-polling futures candles every 5 min as fallback. Only 10 symbols affected; lowest priority of B74's 3 universes. |
+| 41 | **B74 equity_perp_ohlc_1m at 0 rows** — Kraken Futures WS subscription `feed: 'candles_trade_1m'` returned no data. | RESOLVED | **2026-04-30 night — B74.1 (commit `b8eba807`).** Diagnosis: Kraken Futures WS has NO candle/kline subscription feed (verified by probing several variant feed names; `candles_trade_1m` does not exist). Fix: rewrote `equity-perp-archiver.ts` to use REST polling at `https://futures.kraken.com/api/charts/v1/trade/<sym>/1m` every 60s with per-symbol last-seen-interval dedup. WS still used for ticker. Langston Step-4 approved cc-inbox #874. |
 | 42 | **CCDT Communicator narration leak to General/topic-1** — Langston's assistant-text reply (e.g., "Sent — Telegram #N to thread M") gets routed by openclaw to topic-1 instead of inheriting the inbound message's `message_thread_id`. Content reply lands correctly in thread 21; only the post-tool-call narration leaks. | IN PROGRESS (Langston self-fix) | Self-diagnosed by Langston cc-inbox #872 (2026-04-30). Immediate fix (Langston-side): NO_REPLY after explicit thread-21 sends, eliminating the leak. Upstream fix (platform-side): openclaw gateway should inherit `message_thread_id` on reply path — out of scope for any current batch. |
 
 ## Summary Counts
@@ -107,4 +107,4 @@
 - **DEFERRED:** 2 (#12e — regime-gated strategy dormancy, awaiting evidence; #40 — other 4 regime-branch desaturation, post-B67-window batch)
 - **CRITICAL:** 0
 - **IN PROGRESS:** 1 (#42 — narration leak, Langston self-fix in progress)
-- **OPEN:** 2 (#39 — CI TypeScript Check failing; #41 — B74 equity_perp OHLC feed name)
+- **OPEN:** 1 (#39 — CI TypeScript Check failing)

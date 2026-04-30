@@ -137,3 +137,50 @@ UNION ALL SELECT 'crypto_spot_ticker_snap', count(*), count(DISTINCT symbol) FRO
 - [ ] Kyle: scope completion ack ← awaiting
 
 *B74 closed pending Kyle's acknowledgment.*
+
+---
+
+## 8. B74.1 follow-up (2026-04-30 night — autonomous overnight scope per Kyle directive)
+
+**Commits:** `b8eba807` (3 deliverables) + `b9c4ebbb` (chunking hotfix). PM2 #122 → #124. Langston Step-4 approved cc-inbox #874.
+
+### Three deliverables shipped
+
+1. **Equity perp OHLC fix (RUNNING_ISSUES #41 RESOLVED)**
+   - Diagnosed: Kraken Futures WS has no candle/kline subscription feed. Earlier `feed: 'candles_trade_1m'` was a non-existent feed name.
+   - Fix: dual-path archiver — WS for ticker only (was working), REST polling at `/api/charts/v1/trade/<sym>/1m` every 60s with per-symbol last-seen-interval dedup, 100ms inter-symbol space-out.
+   - Initial poll backfills 2,000 1-min candles per symbol (≈5.5 days history).
+   - **Verified:** equity_perp transitioned from 0 to 20,030 OHLC rows / 10 of 10 syms post-deploy.
+
+2. **xStocks universe expansion 38 → 245**
+   - Method: WS-subscription probe of ~520 candidate equity tickers via throttled (30ms/req) `wss://ws-equities.kraken.com` subscriptions. Kraken Pro UI shows 128 listed; WS accepted 245.
+   - Overshoot intentional per Langston cc-inbox #874 Q1: passive capture of empty-data symbols is harmless; monitor panel's `Active in window` column surfaces which actually stream.
+
+3. **Monitor panel v1+v2 combined**
+   - Per-archiver `getEquitySpotStats()` / `getEquityPerpStats()` / `getCryptoSpotStats()` exports + cumulative `cumulativeOhlcRows` + `cumulativeTickerSnaps` counters.
+   - New `computePassiveArchiveStatus()` aggregator + `GET /api/analytics/passive-archive-status` endpoint.
+   - `PassiveArchiveSection` UI panel rendered under Analytics → Drift Dashboard tab alongside Factor Calibration / Ablation panels.
+   - Per-universe status badge: OK / NO_OHLC_DATA / NO_TICKER_DATA / DISCONNECTED / STARTING.
+   - Store-fraction = stored/scanned for drift detection on insert errors / partition routing failures.
+
+### One verification hotfix
+
+**`b9c4ebbb`** — chunked batch insert at CHUNK_SIZE=1000. The initial perp REST poll buffered 20,000 historical bars (2000 candles × 10 syms). Single bulk INSERT of 20,000 rows × 12 cols = 240,000 parameters → exceeds Postgres 65,535 bind limit → entire batch silently dropped (Drizzle doesn't auto-chunk). Fix: chunk inserts in caller. Same chunking applied to ticker writer. BUG-2026-04-30-J logged.
+
+### Verified post-deploy (PM2 #124)
+
+| Universe | Configured | Active in 24h | OHLC stored | Ticker stored | Status |
+|---|---|---|---|---|---|
+| equity_spot | 265 | 261 | 2,255 | 22,455 | OK |
+| equity_perp | 10 | 10 | **20,030** | 20,521 | OK |
+| crypto_spot | 379 | 375 | 18,976 | 7,582 | OK |
+
+**All 6 tables capturing data. Monitor endpoint live. RUNNING_ISSUES #41 RESOLVED.**
+
+### Sign-off (B74.1)
+
+- [x] CC: implementation + verification + governance
+- [x] Langston: Step-4 review (cc-inbox #874)
+- [ ] Kyle: B74.1 follow-up ack ← will be visible in completion-report-on-checkin
+
+*B74 + B74.1 closed pending Kyle's morning checkin.*

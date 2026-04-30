@@ -45,15 +45,28 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 
 ---
 
-## Current State (2026-04-30 night — B74 Passive Archive Pipeline SHIPPED + 3 hotfixes, PM2 #122)
+## Current State (2026-04-30 night → 2026-05-01 — B74 + B74.1 SHIPPED, PM2 #124)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `778cd4ed` (B74 hotfixes: partition self-heal + Murmur3 fmix32 sharding hash)
-- **Live state:** B74 v1 deployed end-to-end. 5 of 6 tables capturing data within 6 minutes (equity_spot 161 OHLC + 1,418 ticker / 38 syms; crypto_spot 4,008 OHLC + 824 ticker / 373 of 380 syms; equity_perp 1,478 ticker / 10 syms). equity_perp_ohlc_1m at 0 rows (RUNNING_ISSUES #41 — feed name mismatch, ticker covers asset class). Two crons added (daily 03:00 UTC universe refresh + monthly 28th 02:00 UTC partition pre-create). Three same-day hotfixes folded in: import.meta.url config path, partition off-by-one self-heal, FNV-1a sharding bias.
+- **HEAD commit:** `b9c4ebbb` (B74.1 chunked-insert hotfix for Postgres 65,535-param bind limit)
+- **Live state:** **All 6 B74 tables capturing data (RUNNING_ISSUES #41 RESOLVED).** equity_spot 261 syms / 2,255 OHLC + 22,455 ticker; **equity_perp 10/10 syms / 20,030 OHLC** (REST polling + 5.5 days of historical backfill) + 20,521 ticker; crypto_spot 375 syms / 18,976 OHLC + 7,582 ticker. xStocks universe expanded 38 → 245. Monitor panel `PassiveArchiveSection` live at Analytics → Drift Dashboard tab. Endpoint `/api/analytics/passive-archive-status` returns per-universe stored vs scanned with drift detection.
 
 ---
 
-## ⭐ JUST COMPLETED (2026-04-30 evening + night — B74 ship + Telegram routing fix, 6 commits)
+## ⭐ JUST COMPLETED (2026-04-30 night → 2026-05-01 — B74.1 follow-up: 3 deliverables + 1 hotfix)
+
+| # | Commit | Layer | Outcome |
+|---|---|---|---|
+| 1 | `b8eba807` | **B74.1 ship** | Equity-perp OHLC fix (REST polling, RUNNING_ISSUES #41 RESOLVED) + xStocks expansion 38→245 + Monitor panel v1+v2 (cumulative scanned counters per archiver, aggregator, endpoint, UI panel) |
+| 2 | `b9c4ebbb` | B74.1 hotfix | Chunked batch insert at CHUNK_SIZE=1000 to clear Postgres 65,535-param bind limit. Surfaced when initial perp REST poll backfilled 20,000 historical bars and Drizzle's bulk insert silently failed. BUG-2026-04-30-J logged. |
+
+**Verification post-deploy:**
+- equity_perp transitioned 0 → 20,030 OHLC rows / 10 of 10 syms (REST endpoint returns 2000 candles per call ≈ 5.5 days of backfill on first poll, ongoing 60s polls only insert new bars via dedup map)
+- xStocks 261 active of 265 configured (all that stream WS data)
+- Monitor endpoint live, returning structured per-universe data
+- Langston Step-4 approved cc-inbox #874
+
+## ⭐ Previously completed (2026-04-30 evening + night — B74 ship + Telegram routing fix, 6 commits)
 
 | # | Commit | Layer | Outcome |
 |---|---|---|---|
@@ -81,17 +94,9 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 |---|---|---|---|
 | 1 | `a98ce7ff` | **B73.2 + Factor Calibration UI** | Bar-derived ATR (14-bar TR avg from pre-entry bars) replaces proxy ATR for variant triggers. OHLC window extended to `entryTime + maxHoldMs` (7d) with pagination. `atr_live` + `atr_bar_derived` logged per variant for validation. New `computeFactorCalibration()` aggregator + `/api/analytics/factor-calibration` endpoint + `FactorCalibrationSection` UI panel (confidence-shift distribution + tertile WR + predictive lift per factor). Existing Factor Ablation Comparison panel marked SUBSTRATE. Wiped 180 useless inherited-only B73 rows. PM2 #119. |
 
-## ⭐ Previously completed (2026-04-30 morning, 3 commits, hotfix sub-batch)
+## ⭐ Previously completed (2026-04-30 morning + late-evening — see BATCH_CATALOG for B67.0.1 + B73.1 + B73.2 + Factor Calibration UI panel)
 
-| # | Commit | Layer | Outcome |
-|---|---|---|---|
-| 1 | `3afd8ed2` | **B67.0.1 + B73.1 ablation fixes** | ADD COLUMN `regime_factor_alternates.strategy` + composite index; rewrote replay-ablation join to natural-key (symbol, evaluated_at±60s, strategy); plumbed `atrAtOpen` through `vts-service.persistRealPriceTrade` to B73 hook (drop the `(target-entry)/1.5` proxy); B73 Variant A pass-through (no re-simulation); B73 TIMEOUT inheritance (non-firing variants inherit realized exit, not synthetic mid); wiped 480 bad B73 rows + 1477 NULL-strategy B67 rows; tests rewritten. PM2 #117. Per Langston cc-inbox #864 Q1-Q4 all approved. |
-| 2-3 | `f6a0bb87` `67cf66d9` | drift-dashboard aggregator alignment | Aggregator was querying `replay_outcome->>'notes' = 'admit_admit_no_delta'` but emitter writes `'pre_b67_5_both_admit'`; UI showed 0 counts. Aligned to actual emitter shape. `67cf66d9` fixes backticks-in-SQL-template build error. PM2 #118. |
-
-**Verified end-to-end post-deploy:**
-- B67.0.1: ad-hoc `npm run b67:replay-ablation` matched 4 rows (FLOW/USD strong_bull_trend close); API returns `bothAdmit=1 replayed=1` per factor (was 0)
-- B73.1: First post-fix close populated 12 rows — A=`source: realized_truth`, B-L=`source: realized_inherited` with `be_latched: false`/`trail_active: false`/`phase: pre` metadata showing why each didn't fire on the first OHLC window
-- 720-bar OHLC cap deferred to v2 watchpoint per Langston Q4 (max TIMEOUT duration was 283 min on pre-fix data, well under 12h)
+Detail folded into BATCH_CATALOG / PHASE_HISTORY / CHANGES_AND_FIXES. Brief: morning B67.0.1+B73.1 ablation fixes (cc-inbox #864, commits `3afd8ed2`+`f6a0bb87`+`67cf66d9`); afternoon B73.2 bar-derived ATR + Factor Calibration UI panel (commit `a98ce7ff`).
 
 ---
 

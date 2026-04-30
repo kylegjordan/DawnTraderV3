@@ -31,6 +31,22 @@
 
 ## BUGS
 
+### BUG-2026-04-30-I: B74 Equity Perp OHLC at 0 rows (Kraken Futures WS has no candle feed) — **RESOLVED**
+- **Severity**: HIGH (perp OHLC table empty for 1+ hours despite WS connection healthy)
+- **Location**: `server/services/passive-archive/equity-perp-archiver.ts`
+- **Problem**: B74 v1 implemented Kraken Futures perp OHLC capture via WS subscription `feed: 'candles_trade_1m'`. That feed name does not exist on Kraken Futures WS — Kraken Futures has no candle/kline subscription feed at all. WS connection accepted the subscription request without error but returned no candle data. Symptom: ticker stream populated 1,478 rows / 10 syms while OHLC table stayed at 0 rows.
+- **Detection**: B74 Step-7 verification — DB row count zero for `equity_perp_ohlc_1m` despite all other 5 tables capturing data.
+- **Fix** (`b8eba807` 2026-04-30, B74.1): rewrote equity-perp-archiver to dual-path. WS for ticker only (was already working); REST polling at `https://futures.kraken.com/api/charts/v1/trade/<sym>/1m` every 60s with per-symbol last-seen-interval dedup map, 100ms inter-symbol space-out. Endpoint returns 2000 1-min candles per call (~5.5 days back) → initial poll provides historical backfill in addition to ongoing capture.
+- **Lesson**: For exchange WS protocols, verify feed/channel names against live-probe behavior, not just docs. The Kraken Futures WS docs at the time of B74 v1 listed candle-related fields under message schemas without explicitly enumerating which feeds emit them — easy to assume a subscription name that doesn't actually exist. When in doubt, REST endpoints are the canonical truth for historical/aggregated data.
+
+### BUG-2026-04-30-J: B74 Bulk Insert Exceeds Postgres 65,535-Parameter Bind Limit — **RESOLVED**
+- **Severity**: HIGH (initial perp REST backfill of 20,000 rows silently dropped)
+- **Location**: `server/services/passive-archive/ohlc-batch-writer.ts` + `ticker-batch-writer.ts`
+- **Problem**: Drizzle `db.insert(table).values(rows)` builds a single parameterized INSERT statement. With OHLC rows having ~12 columns, 20,000 rows = 240,000 parameter placeholders → exceeds PostgreSQL's hard 65,535 bind-message parameter limit → query fails. Drizzle does NOT auto-chunk by default (verified during B74.1 verification). Surfaced when equity-perp's first REST poll buffered 20,000 historical bars (2000 candles × 10 symbols) and the entire batch was silently dropped; only subsequent 60s polls (~10 new bars) succeeded.
+- **Detection**: B74.1 verification — log showed `polled 10 symbols, 20000 new bars` but DB row count was only 10 after several flush cycles.
+- **Fix** (`b9c4ebbb` 2026-04-30): chunk batch inserts in CHUNK_SIZE=1000 rows in both `ohlc-batch-writer.ts` and `ticker-batch-writer.ts`. With ~12 OHLC columns × 1000 rows = 12,000 parameters per chunk — comfortable headroom under the 65,535 limit. Multiple smaller INSERTs per flush cycle, partition routing still automatic.
+- **Lesson**: When using ORM bulk-insert helpers, verify chunking behavior against the underlying DB's parameter limits. Drizzle/Postgres pattern is to chunk explicitly in caller code. Alternative is `pg-format` or `COPY`-style bulk import for very large batches; for B74's typical 100-1000 row buffers chunking is sufficient.
+
 ### BUG-2026-04-30-F: B74 Config Path via `import.meta.url` Doesn't Survive esbuild Bundle — **RESOLVED**
 - **Severity**: HIGH (B74 archivers silently failed to start at boot)
 - **Location**: `server/services/passive-archive/universe-loader.ts`

@@ -1136,9 +1136,21 @@ Continuous 1-min OHLC + per-update ticker snapshots captured to month-partitione
 - **B68.1 multi-timeframe** — crypto_spot_ohlc_1m provides the 1-min crypto substrate B68.1 needs. B68.1 owns the signal-pipeline integration when it lands.
 - **Phase 21.5 equity expansion** — 3 equity tables (spot OHLC, spot ticker, perp ticker) provide weeks-to-months of historical context when Phase 21.5 begins designing the equity strategy/admission logic.
 
-### B74 known limitations
+### B74 known limitations (post-B74.1, RESOLVED)
 
-- **xStocks universe currently 38 of 128.** v1 starter list from Kyle screenshots; expand via PR per Langston cc-inbox #867 Q3.
-- **Equity perp OHLC at 0 rows.** Feed-name mismatch on Kraken Futures WS subscription (RUNNING_ISSUES #41).
-- **NOT yet on UI surface.** Pure substrate. Phase 21.5 / B68.1 / B70 will surface analytics over this data.
+- ~~xStocks universe currently 38 of 128.~~ **B74.1: expanded to 245 via WS-subscription probe.**
+- ~~Equity perp OHLC at 0 rows.~~ **B74.1 RESOLVED:** Kraken Futures WS has no candle feed; switched to REST polling at `/api/charts/v1/trade/<sym>/1m` every 60s with per-symbol dedup.
+- ~~NOT yet on UI surface.~~ **B74.1: PassiveArchiveSection UI panel rendered under Analytics → Drift Dashboard tab.**
+
+### B74.1 added components (2026-04-30, commits `b8eba807` + `b9c4ebbb`)
+
+| # | Component | Path | Status |
+|---|---|---|---|
+| 17 | Equity-perp REST polling | `equity-perp-archiver.ts` (rewritten) | ✅ LIVE — 20,030 OHLC rows / 10 syms post-deploy |
+| 18 | Stats getters per archiver | `getEquitySpotStats()` / `getEquityPerpStats()` / `getCryptoSpotStats()` exports | ✅ LIVE |
+| 19 | Passive archive aggregator | `drift-dashboard-aggregator.ts:computePassiveArchiveStatus` | ✅ LIVE |
+| 20 | API endpoint | `GET /api/analytics/passive-archive-status` | ✅ LIVE |
+| 21 | UI panel | `client/src/pages/analytics.tsx:PassiveArchiveSection` | ✅ LIVE |
+| 22 | Chunked batch insert (1000 rows) | `ohlc-batch-writer.ts` + `ticker-batch-writer.ts` | ✅ LIVE — fixes Postgres 65,535-param bind limit |
+| 23 | Expanded xStocks universe (245 syms) | `server/config/xstocks-universe.json` | ✅ LIVE |
 
