@@ -21,10 +21,13 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_DIR = path.resolve(__dirname, '..', '..', 'config');
+// B74: config files live under server/config/ in source. Esbuild bundles to a
+// single dist/index.js so import.meta.url-based path resolution doesn't survive
+// the build (resolves to dist/ in prod, not server/services/passive-archive/).
+// Use process.cwd() instead — the dawntrader app is always launched from the
+// project root by PM2, so cwd is stable.
+const CONFIG_DIR = path.resolve(process.cwd(), 'server', 'config');
 
 // ───────────────────────────────────────────────────────────────────────────
 // Static configs (equity spot + perp)
