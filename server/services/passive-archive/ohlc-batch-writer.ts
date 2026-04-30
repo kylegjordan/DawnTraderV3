@@ -96,13 +96,19 @@ async function flushUniverse(universe: Universe): Promise<void> {
       // conflict on the primary key. Partition routing is automatic via
       // PARTITION BY RANGE.
       // Cast to `any` per Langston cc-inbox #870 Q1: safe because all 3 OHLC
-      // tables share IDENTICAL column shapes by design (only the partition
-      // tree differs). Revisit the cast if any per-universe column ever
-      // diverges (e.g., a perp-specific column added to equity_perp_ohlc_1m
-      // only). Type-narrowing via switch was rejected for v1 — adds ~30
-      // lines of boilerplate for zero runtime benefit while shapes remain
-      // identical.
-      await db.insert(table as any).values(rows as any);
+      // tables share IDENTICAL column shapes by design.
+      //
+      // CHUNKING: Postgres has a hard limit of 65,535 parameters per query.
+      // OHLC row has ~12 columns → max 5,461 rows per single INSERT before
+      // bind-message overflow. Use 1,000 rows per chunk for headroom.
+      // Without chunking, the equity-perp REST initial poll backfilled
+      // 20,000 historical bars at once → bind overflow → entire batch
+      // dropped silently (B74.1 verification 2026-04-30).
+      const CHUNK_SIZE = 1000;
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const slice = rows.slice(i, i + CHUNK_SIZE);
+        await db.insert(table as any).values(slice as any);
+      }
       console.log(`[B74][batch-writer] ${universe} flushed ${rows.length} rows`);
     } finally {
       releaseSlot();

@@ -105,10 +105,16 @@ async function flushTickerUniverse(universe: Universe): Promise<void> {
     await acquireSlot();
     try {
       const table = tickerTableForUniverse[universe];
-      // Cast to `any` per Langston cc-inbox #870 Q1: safe because all 3
-      // ticker_snap tables share IDENTICAL column shapes by design. Revisit
-      // if a per-universe column ever diverges.
-      await db.insert(table as any).values(rows as any);
+      // Cast safe per Langston cc-inbox #870 Q1; ticker_snap tables share
+      // IDENTICAL column shapes. Chunked insert (CHUNK_SIZE=1000) protects
+      // against Postgres 65,535-parameter bind limit (B74.1 verification:
+      // ticker rows have ~17 columns → 3,855-row max per insert; 1,000
+      // gives comfortable headroom).
+      const CHUNK_SIZE = 1000;
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const slice = rows.slice(i, i + CHUNK_SIZE);
+        await db.insert(table as any).values(slice as any);
+      }
       console.log(`[B74][ticker-writer] ${universe} flushed ${rows.length} rows`);
     } finally {
       releaseSlot();
