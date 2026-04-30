@@ -1,4 +1,25 @@
-# Batch 73 — Progress Report (OPEN — multi-week observation underway, B73.1 hotfix shipped 2026-04-30)
+# Batch 73 — Progress Report (OPEN — multi-week observation underway, B73.1 hotfix + B73.2 follow-up shipped 2026-04-30)
+
+## 2026-04-30 afternoon — B73.2 + Factor Calibration UI panel
+
+**Triggered** by Kyle observation that B73.1 morning fix was structurally working but variants STILL all collapsed to identical rows. Direct Kraken OHLC pull on AIXBT/USD (90 min, BE_stop): max bar high +0.5%; BE trigger threshold (proxy ATR) +5.9%. No bar's high crossed the trigger. Yet live trade DID latch BE — sub-minute pricing-service tick movement that 1-min OHLC bars don't expose.
+
+**Per Langston cc-inbox #866** (TWO separate questions, TWO separate fixes):
+- Q1 headline ("does live BE-stop convert TPs to BEs?") → answered by Variants F/K with EXTENDED post-exit window
+- Q2 parameter comparison → answered by A-E with TRIGGER thresholds that fire at bar resolution
+
+**Implementation** (`a98ce7ff`, PM2 #119):
+- Bar-derived ATR (14-bar TR average over 14 1-min bars BEFORE entry). Variant triggers use this instead of `(target-entry)/1.5` proxy
+- OHLC window extended to `entryTime + maxHoldMs` (7d), pagination enabled (10080 candle cap, 14 batches, 500ms delay)
+- `atr_live` + `atr_bar_derived` both logged in metadata of every variant row for diagnostic validation
+- Wiped 180 useless inherited-only B73 rows from B73.1 window
+
+**Plus Factor Calibration UI panel** — Kyle observation that pre-B67.5 the Factor Ablation Comparison panel was decoratively dead. Underlying data IS captured in JSONB. Surfaced via new endpoint + UI panel:
+- `GET /api/analytics/factor-calibration` returning per-factor confidence-shift distribution + tertile WR + predictive lift
+- New `FactorCalibrationSection` rendered above the existing Factor Ablation Comparison panel
+- Existing panel marked SUBSTRATE with pre-B67.5 explanatory note; stays in UI per Kyle directive
+- Decision-grade threshold: n ≥ 150 per tertile bucket (Langston cc-inbox #856)
+- Mid-window decision logic: lift > +7pp with n ≥ 50/bucket and monotonic ordering = ship factor early; lift solidly negative = drop factor early
 
 ## 2026-04-30 morning — B73.1 + B67.0.1 combined hotfix sub-batch
 

@@ -45,15 +45,21 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 
 ---
 
-## Current State (2026-04-30 morning — B73.1 + B67.0.1 hotfix sub-batch SHIPPED + verified end-to-end, PM2 #118)
+## Current State (2026-04-30 afternoon — B73.2 + Factor Calibration UI SHIPPED, PM2 #119)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `67cf66d9` (aggregator backtick-in-template hotfix)
-- **Live state:** Both ablation panels now decision-grade. B67.0 replay matched 4 rows on first ad-hoc run post-deploy. B73 first post-fix close populated 12 properly-differentiated variant rows.
+- **HEAD commit:** `a98ce7ff` (B73.2 bar-derived ATR + extended OHLC window + Factor Calibration aggregator/endpoint/UI panel)
+- **Live state:** B73 fix re-shipped (variants STILL collapsed after morning B73.1; root cause was 1-min OHLC vs sub-minute live tick visibility — fixed via bar-derived ATR + 7d window). New Factor Calibration UI panel surfaces the predictive-value analysis Kyle wanted (confidence-shift distribution + tertile WR + per-factor predictive lift). Existing Factor Ablation Comparison panel labelled SUBSTRATE pre-B67.5; stays in UI per Kyle directive.
 
 ---
 
-## ⭐ JUST COMPLETED (2026-04-30 morning, 3 commits, hotfix sub-batch)
+## ⭐ JUST COMPLETED (2026-04-30 afternoon, 1 commit)
+
+| # | Commit | Layer | Outcome |
+|---|---|---|---|
+| 1 | `a98ce7ff` | **B73.2 + Factor Calibration UI** | Bar-derived ATR (14-bar TR avg from pre-entry bars) replaces proxy ATR for variant triggers. OHLC window extended to `entryTime + maxHoldMs` (7d) with pagination. `atr_live` + `atr_bar_derived` logged per variant for validation. New `computeFactorCalibration()` aggregator + `/api/analytics/factor-calibration` endpoint + `FactorCalibrationSection` UI panel (confidence-shift distribution + tertile WR + predictive lift per factor). Existing Factor Ablation Comparison panel marked SUBSTRATE. Wiped 180 useless inherited-only B73 rows. PM2 #119. |
+
+## ⭐ Previously completed (2026-04-30 morning, 3 commits, hotfix sub-batch)
 
 | # | Commit | Layer | Outcome |
 |---|---|---|---|
@@ -99,7 +105,7 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
    - Macro modifier diversifying (not pinned at 0.85 for the whole window)
    - New closed VTS trades carrying B67.2.1 fields populated correctly
 
-2. **B67.0 + B73 ongoing observation** — both panels now decision-grade. As trades close, replay-ablation runs nightly (04:00 UTC cron) AND can be invoked ad-hoc. Confirm rows accumulate over the 14d window. n=200 total + n=50/regime threshold for B73 winner declaration.
+2. **B73.2 + Factor Calibration verification** — first new VTS close post-PM2 #119 will populate 12 B73 rows; expect Variants B-L to differentiate now (bar-derived ATR triggers fire at bar resolution; F/K see post-exit reality via 7d window). Factor Calibration panel will show confidence shifts populating + tertile counts increasing as trades replay.
 
 3. **B67.4 cheap-tier bundle implementation** (Step 3) per `BATCH_67_4_PRE_AUDIT.md` §D refinements. Order of operations:
    - Migration SQL (11 module_constants in 3 modules: outcome_feedback + regime_age + path_b_sustainability)
