@@ -1,0 +1,20 @@
+{
+  "_comment": "B74 — Kraken Futures equity-token perpetual futures universe for passive OHLC capture. 10 symbols verified via Kraken Futures API (futures.kraken.com/derivatives/api/v3/instruments) on 2026-04-30. All tradeable=true, type=flexible_futures. Symbol format is the Kraken Futures internal name (PF_<TICKER>X<QUOTE>). symbol-canonicalizer.ts maps these to <TICKER>/<QUOTE>:PERP for canonical query layer per Langston cc-inbox #867 Q1.",
+  "_lastUpdated": "2026-04-30",
+  "_source": "Kraken Futures API /derivatives/api/v3/instruments",
+  "_universe": "equity_perp",
+  "_endpoint": "wss://futures.kraken.com/ws/v1",
+  "_protocol": "Kraken Futures WebSocket",
+  "symbols": [
+    "PF_AAPLXUSD",
+    "PF_CRCLXUSD",
+    "PF_GLDXUSD",
+    "PF_GOOGLXUSD",
+    "PF_HOODXUSD",
+    "PF_MSTRXUSD",
+    "PF_NVDAXUSD",
+    "PF_QQQXUSD",
+    "PF_SPYXUSD",
+    "PF_TSLAXUSD"
+  ]
+}

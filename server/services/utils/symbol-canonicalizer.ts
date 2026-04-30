@@ -50,6 +50,25 @@ export function toCanonical(exchangeIdOrPair: string): string {
     return `${normalizedBase}/${normalizedQuote}`;
   }
 
+  // ── B74 (Langston-approved cc-inbox #867 Q1): Kraken Futures equity-token
+  // perpetual futures naming convention. Format: PF_<TICKER>X<QUOTE>
+  //   - PF_AAPLXUSD  → AAPL/USD:PERP   (Apple, perpetual contract on USD)
+  //   - PF_TSLAXUSD  → TSLA/USD:PERP
+  //   - PF_GOOGLXUSD → GOOGL/USD:PERP
+  // The colon-suffix `:PERP` is the standard cross-provider convention
+  // (TradingView, CCXT, CoinGecko derivatives) marking instrument type while
+  // keeping the BASE/QUOTE structure readable.
+  // Strict ^PF_ anchor + uppercase-only ticker + known-quote suffix means this
+  // branch can ONLY match Kraken Futures equity perp symbols. No collision
+  // with existing crypto patterns (which start with X, Z, or alpha-without-PF_).
+  // Per pre-audit §A.2: blast radius LOW — additive branch, ordered before
+  // the looser crypto patterns so PF_AAPLXUSD doesn't get parsed as bare
+  // {base: PF_AAPLX, quote: USD} by Pattern 2 below.
+  const perpMatch = exchangeIdOrPair.match(/^PF_([A-Z]+)X(USD|EUR|GBP)$/);
+  if (perpMatch) {
+    return `${perpMatch[1]}/${perpMatch[2]}:PERP`;
+  }
+
   // Kraken's exchange IDs often have X/Z prefixes and no slash
   // Common patterns:
   // - XXBTZUSD = XBT/USD (BTC)

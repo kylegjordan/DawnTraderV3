@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { 
-  pgTable, 
-  text, 
-  varchar, 
-  timestamp, 
-  decimal, 
-  integer, 
-  boolean, 
+import {
+  pgTable,
+  text,
+  varchar,
+  timestamp,
+  decimal,
+  integer,
+  boolean,
   jsonb,
   pgEnum,
   date,
@@ -15,8 +15,10 @@ import {
   index,
   vector,
   serial,
+  bigserial,
   doublePrecision,
-  real
+  real,
+  numeric
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -4543,3 +4545,110 @@ export const insertConfigRegistrySchema = createInsertSchema(configRegistry).omi
 
 export type InsertConfigRegistry = z.infer<typeof insertConfigRegistrySchema>;
 export type ConfigRegistry = typeof configRegistry.$inferSelect;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B74 — Passive OHLC Archive Pipeline (Equity + Crypto)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Six new tables for continuous 1-min OHLC + ticker-snapshot capture across
+// three asset universes. All MONTH-RANGE PARTITIONED on the time column so
+// B70 archival can DROP entire monthly partitions cheaply once cold-storage
+// export lands. NO foreign keys to live tables — rows are cold-archivable
+// standalone per the Langston-approved B70 archival contract.
+//
+// See drizzle/migrations/2026-05-01-b74-passive-archive-tables.sql for the
+// authoritative DDL including partition pre-creation. These Drizzle defs
+// give the application code typed access; the partitioning is
+// schema-level and not represented in the Drizzle table objects.
+//
+// Reference: BATCH_74_SCOPE.md v1.1 + BATCH_74_PRE_AUDIT.md v1.1
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── OHLC: 1-min bars ───────────────────────────────────────────────────────
+// Three near-identical tables (one per universe). Same columns, different
+// partition trees. The `universe` column is redundant with the table choice
+// but kept for self-describing rows (cold-storage extraction).
+
+const ohlcColumns = {
+  id: bigserial("id", { mode: "number" }).notNull(),
+  symbol: text("symbol").notNull(),
+  universe: text("universe").notNull(),
+  intervalBegin: timestamp("interval_begin", { withTimezone: true }).notNull(),
+  open: numeric("open", { precision: 20, scale: 8 }).notNull(),
+  high: numeric("high", { precision: 20, scale: 8 }).notNull(),
+  low: numeric("low", { precision: 20, scale: 8 }).notNull(),
+  close: numeric("close", { precision: 20, scale: 8 }).notNull(),
+  volume: numeric("volume", { precision: 28, scale: 8 }).notNull(),
+  vwap: numeric("vwap", { precision: 20, scale: 8 }),
+  tradeCount: integer("trade_count"),
+  metadata: jsonb("metadata").notNull().default(sql`'{"schema_version": 1}'::jsonb`),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+} as const;
+
+export const equitySpotOhlc1m = pgTable("equity_spot_ohlc_1m", ohlcColumns, (table) => ({
+  symTimeIdx: index("equity_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+}));
+
+export const equityPerpOhlc1m = pgTable("equity_perp_ohlc_1m", ohlcColumns, (table) => ({
+  symTimeIdx: index("equity_perp_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+}));
+
+export const cryptoSpotOhlc1m = pgTable("crypto_spot_ohlc_1m", ohlcColumns, (table) => ({
+  symTimeIdx: index("crypto_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+}));
+
+// ── Ticker snapshots ───────────────────────────────────────────────────────
+// Up to 1 snapshot/symbol/second per Langston cc-inbox #867 Q2. Equity-
+// specific fields (prev_day_*, is_extended_hours) populated for equity
+// universes; perp-specific fields (open_interest, funding_rate) populated
+// for perp universe. Crypto leaves both groups null. All universes share
+// the same column set for query uniformity.
+
+const tickerSnapColumns = {
+  id: bigserial("id", { mode: "number" }).notNull(),
+  symbol: text("symbol").notNull(),
+  universe: text("universe").notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+  bid: numeric("bid", { precision: 20, scale: 8 }),
+  bidQty: numeric("bid_qty", { precision: 28, scale: 8 }),
+  ask: numeric("ask", { precision: 20, scale: 8 }),
+  askQty: numeric("ask_qty", { precision: 28, scale: 8 }),
+  last: numeric("last", { precision: 20, scale: 8 }),
+  volume24h: numeric("volume_24h", { precision: 28, scale: 8 }),
+  vwap24h: numeric("vwap_24h", { precision: 20, scale: 8 }),
+  high24h: numeric("high_24h", { precision: 20, scale: 8 }),
+  low24h: numeric("low_24h", { precision: 20, scale: 8 }),
+  open24h: numeric("open_24h", { precision: 20, scale: 8 }),
+  prevDayClose: numeric("prev_day_close", { precision: 20, scale: 8 }),
+  prevDayVolume: numeric("prev_day_volume", { precision: 28, scale: 8 }),
+  isExtendedHours: boolean("is_extended_hours"),
+  openInterest: numeric("open_interest", { precision: 28, scale: 8 }),
+  fundingRate: numeric("funding_rate", { precision: 12, scale: 8 }),
+  metadata: jsonb("metadata").notNull().default(sql`'{"schema_version": 1}'::jsonb`),
+} as const;
+
+export const equitySpotTickerSnap = pgTable("equity_spot_ticker_snap", tickerSnapColumns, (table) => ({
+  symTimeIdx: index("equity_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+}));
+
+export const equityPerpTickerSnap = pgTable("equity_perp_ticker_snap", tickerSnapColumns, (table) => ({
+  symTimeIdx: index("equity_perp_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+}));
+
+export const cryptoSpotTickerSnap = pgTable("crypto_spot_ticker_snap", tickerSnapColumns, (table) => ({
+  symTimeIdx: index("crypto_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+}));
+
+// Type exports
+export type EquitySpotOhlc1m = typeof equitySpotOhlc1m.$inferSelect;
+export type InsertEquitySpotOhlc1m = typeof equitySpotOhlc1m.$inferInsert;
+export type EquityPerpOhlc1m = typeof equityPerpOhlc1m.$inferSelect;
+export type InsertEquityPerpOhlc1m = typeof equityPerpOhlc1m.$inferInsert;
+export type CryptoSpotOhlc1m = typeof cryptoSpotOhlc1m.$inferSelect;
+export type InsertCryptoSpotOhlc1m = typeof cryptoSpotOhlc1m.$inferInsert;
+export type EquitySpotTickerSnap = typeof equitySpotTickerSnap.$inferSelect;
+export type InsertEquitySpotTickerSnap = typeof equitySpotTickerSnap.$inferInsert;
+export type EquityPerpTickerSnap = typeof equityPerpTickerSnap.$inferSelect;
+export type InsertEquityPerpTickerSnap = typeof equityPerpTickerSnap.$inferInsert;
+export type CryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferSelect;
+export type InsertCryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferInsert;

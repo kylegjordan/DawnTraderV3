@@ -1,0 +1,14 @@
+{
+  "_comment": "B74 — Crypto universe selection criteria for passive OHLC capture. Universe is computed dynamically from Kraken's AssetPairs REST endpoint at startup AND refreshed daily via the system cron at server/scripts/b74-refresh-universe.ts (03:00 UTC). Filters out dead pairs and stablecoin/stablecoin degenerates. Per Langston cc-inbox #867 + #869: $10k 24h volume floor is conservative — could go to $5k while still filtering garbage; tunable via module_constants.passive_archive.b74_crypto_min_volume_24h_usd without redeploy.",
+  "_lastUpdated": "2026-04-30",
+  "_universe": "crypto_spot",
+  "_endpoint": "wss://ws.kraken.com/v2",
+  "_protocol": "Kraken WebSocket v2",
+  "filter": {
+    "allowedQuotes": ["USD", "USDT", "USDC"],
+    "minVolume24hUsd": 10000,
+    "_minVolumeNote": "Override comes from module_constants.passive_archive.b74_crypto_min_volume_24h_usd at runtime. This file's value is the documented default; runtime tuning happens in DB."
+  },
+  "_expectedUniverseSize": "400-600 pairs",
+  "_shardingThreshold": 300
+}

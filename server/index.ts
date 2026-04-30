@@ -758,6 +758,18 @@ app.use((req, res, next) => {
       } catch (mlError) {
         console.error('[11.7I-04] ⚠️ ML Calibration scheduler init failed:', mlError);
       }
+
+      // B74 (2026-05-01): Passive OHLC + ticker archive pipeline. LAST in
+      // bootstrap sequence per Langston cc-inbox #869 Q5 — non-critical
+      // infrastructure must not prevent VTS / signal-orchestrator / FX5 from
+      // starting. Fire-and-forget catch+log+continue on failure.
+      try {
+        const { passiveArchiveBootstrap } = await import('./startup/passive-archive-bootstrap.js');
+        await passiveArchiveBootstrap();
+        console.log('[B74] ✅ Passive archive pipeline initialized');
+      } catch (b74Error) {
+        console.error('[B74] ⚠️ Passive archive bootstrap failed (capture disabled, app continues):', b74Error);
+      }
     }, 1500);
 
     // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)
