@@ -31,6 +31,33 @@
 
 ## BUGS
 
+### BUG-2026-04-30-A: B67.0 Factor Ablation Replay Join Broken (0/1406 matches) — **RESOLVED**
+- **Severity**: HIGH (factor ablation table un-decision-grade for 6 days)
+- **Location**: `server/services/vts-runner.ts:1474-1488` emit + `server/services/vts-service.ts:769-770` JSONL write + `server/scripts/replay-ablation.ts:80-127` index
+- **Problem**: Two different code paths produced different VTS-trade IDs. Factor-ablation-emitter wrote `vts_trade_id = signal.id = vsig_p10_<ts>_<rand>` (vts-runner format). Persisted JSONL wrote `signal.id = vts_<sym>_<strategy>_<ts>` (vts-service format). The replay-ablation cron job indexed JSONL by `signal.id` and joined on `vts_trade_id` — these never matched, so 1406 pending rows remained pending across 6 days with `matched=0` every nightly run.
+- **Detection**: Kyle 2026-04-30 morning observation that Factor Ablation Comparison panel showed Total + Pending columns only, all stats columns at 0.
+- **Fix** (`3afd8ed2` 2026-04-30, B67.0.1): switched join from ID-based to natural-key tuple `(pair_symbol, evaluated_at±60s, strategy)` — derived from same source data on both emit and JSONL sides, immune to ID-format drift. Added `strategy` column to `regime_factor_alternates` + composite index. Updated emitter signature + both call sites (vts-runner, signal-orchestrator) to pass strategy. Rewrote `buildVtsTradeIndex` to key by `(symbol|strategy)` with `findVtsTradeByNaturalKey` doing ±60s tolerance match. Wiped 1477 NULL-strategy pre-fix rows. Per Langston cc-inbox #864 Q1.
+- **Verification**: ad-hoc `npm run b67:replay-ablation` post-deploy matched 4 rows (FLOW/USD strong_bull_trend close); API now returns `bothAdmit=1 replayed=1` per factor (was 0).
+- **Lesson**: When two code paths mint IDs for the same logical entity, prefer a natural-key derived from shared source data (symbol + entry_time + strategy) over ID-based joins. ID-based joins work only as long as both sides use the same generator; under refactor pressure they silently break and the failure surface (0 matches) looks identical to "no data yet."
+
+### BUG-2026-04-30-B: B73 Exit-Strategy Ablation Variant Collapse (11/12 identical) — **RESOLVED**
+- **Severity**: HIGH (exit-strategy ablation un-decision-grade despite running cleanly)
+- **Location**: `server/services/exit-strategy-replay.ts` (Variant A simulation + `timeoutExit`) + `server/services/vts-service.ts:891-919` B73 hook (ATR proxy)
+- **Problem**: Across 39 trades, every variant exited on the same bar at the same price (only Variant H's tighter trail ever produced a `TRAIL_hit`, 2 of 39). Three structural causes: (a) **ATR proxy** `atr = (target-entry)/1.5` mis-scaled BE triggers — real TEC may use a different `target_lock_r`, so BE never fired in replay and all BE variants behaved like F (no_BE_stop); (b) **TIMEOUT exit** synthesized last-bar mid `(high+low)/2` — identical for all 12 variants, producing the artificial 12-way tie on the 64% of trades that hit TIMEOUT; (c) **Variant A re-simulated** instead of being live truth — sample SL_hit row had `baseline_pnl_pct=+0.62%` (real BE_stop exit) but A returned `-0.11% SL_hit`, breaking the paired-diff Sharpe vs A baseline.
+- **Detection**: Kyle 2026-04-30 morning observation that Exit-Strategy Ablation panel showed all variants with near-identical stats except H.
+- **Fix** (`3afd8ed2` 2026-04-30, B73.1): (a) Plumbed real `atrAtOpen` through `vts-service.persistRealPriceTrade` to B73 hook (drop the `/1.5` proxy as primary; kept as fallback for legacy open trades). (b) `timeoutExit()` now inherits realized exit values (`actualExitPrice`/`actualExitTime`/`actualExitReason`/`actualPnlPct`) instead of synthetic mid — non-firing variants register zero diff vs A, real differentiation only when a variant actually fires. (c) New `mkVariantAFromRealized` returns realized values directly — A is no longer simulated; it IS live truth. Wiped 480 bad pre-fix rows. Tests rewritten for new semantics. Per Langston cc-inbox #864 Q2(a)+(b)+(c).
+- **Verification**: First post-fix close (BIO/USD strong_bull_trend) populated 12 rows with `source: realized_truth` for A and `source: realized_inherited` for B-L, with metadata explaining why each didn't fire (`be_latched: false`, `trail_active: false`, `phase: pre`).
+- **Lesson**: Ablation framework Variant A baseline must equal realized P&L by construction, not re-simulation. Re-simulation will diverge from live behavior under any model imprecision (1-min OHLC vs sub-second tick monitoring, ATR proxy vs real ATR, hit-check ordering vs real-time stop semantics) — and that divergence breaks the paired-diff metric the framework is designed around.
+
+### BUG-2026-04-30-C: drift-dashboard Aggregator Field-Name Drift — **RESOLVED**
+- **Severity**: MEDIUM (UI showed 0 counts despite replay populating rows correctly)
+- **Location**: `server/services/drift-dashboard-aggregator.ts:484-495`
+- **Problem**: Aggregator queried `replay_outcome->>'notes' = 'admit_admit_no_delta'` and `replay_outcome->>'alternateOutcome'`, but `replay-ablation.ts` writes `notes='pre_b67_5_both_admit'` and `outcome='admitted_breakeven|admitted_won|admitted_lost'`. Strings were never aligned — likely never were aligned because B67.0 shipped with empty alternates and B67.1+ filled them later with a different shape than what the aggregator query expected.
+- **Detection**: While verifying B67.0.1 fix end-to-end — replay matched 4 rows but `bothAdmitCount=0` in API response.
+- **Fix** (`f6a0bb87` then `67cf66d9` for backtick-in-template build error, 2026-04-30): aligned aggregator query to actual emitter shape — `outcome` LIKE 'unreplayable_%' instead of `alternateOutcome`, `notes='pre_b67_5_both_admit'` instead of `'admit_admit_no_delta'`, `outcome='unreplayable_real_rejected'` for realRejectAltAdmitCount.
+- **Verification**: API now returns `bothAdmit=1 replayed=1` per factor matching DB count.
+- **Lesson**: Aggregator and emitter for the same JSONB column should share a schema-like contract (TypeScript types or constants). String drift between the two is invisible until users complain about UI counts. Add explicit aggregator-emitter contract test in B72 lever-sweep batch.
+
 ### BUG-001: VTS Signal Generation Is Generic — **RESOLVED**
 - **Severity**: ~~CRITICAL~~ **RESOLVED** (Phase 14.1, Batch 15 HF6-HF7, Batch 16 HF8 `052fb224`, Batch 17 HF9 `f9fa56c6`)
 - **Location**: `server/services/vts-runner.ts`

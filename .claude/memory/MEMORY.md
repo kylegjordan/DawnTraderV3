@@ -45,15 +45,29 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 
 ---
 
-## Current State (2026-04-29/30 night post-B73 full ship + governance update, PM2 #116)
+## Current State (2026-04-30 morning — B73.1 + B67.0.1 hotfix sub-batch SHIPPED + verified end-to-end, PM2 #118)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `53bd9a05` (B73 governance update for UI + tests; folds same-day commits into BATCH_CATALOG/PHASE_HISTORY/SIM/CHANGES_AND_FIXES/progress report)
-- **Last CI run** `25136181772` GREEN: Test Suite + Build + Docker. (TS Check failing on pre-existing client-side legacy errors — established baseline since B58.)
+- **HEAD commit:** `67cf66d9` (aggregator backtick-in-template hotfix)
+- **Live state:** Both ablation panels now decision-grade. B67.0 replay matched 4 rows on first ad-hoc run post-deploy. B73 first post-fix close populated 12 properly-differentiated variant rows.
 
 ---
 
-## ⭐ JUST COMPLETED (2026-04-29 night → 2026-04-30 early, 14 commits)
+## ⭐ JUST COMPLETED (2026-04-30 morning, 3 commits, hotfix sub-batch)
+
+| # | Commit | Layer | Outcome |
+|---|---|---|---|
+| 1 | `3afd8ed2` | **B67.0.1 + B73.1 ablation fixes** | ADD COLUMN `regime_factor_alternates.strategy` + composite index; rewrote replay-ablation join to natural-key (symbol, evaluated_at±60s, strategy); plumbed `atrAtOpen` through `vts-service.persistRealPriceTrade` to B73 hook (drop the `(target-entry)/1.5` proxy); B73 Variant A pass-through (no re-simulation); B73 TIMEOUT inheritance (non-firing variants inherit realized exit, not synthetic mid); wiped 480 bad B73 rows + 1477 NULL-strategy B67 rows; tests rewritten. PM2 #117. Per Langston cc-inbox #864 Q1-Q4 all approved. |
+| 2-3 | `f6a0bb87` `67cf66d9` | drift-dashboard aggregator alignment | Aggregator was querying `replay_outcome->>'notes' = 'admit_admit_no_delta'` but emitter writes `'pre_b67_5_both_admit'`; UI showed 0 counts. Aligned to actual emitter shape. `67cf66d9` fixes backticks-in-SQL-template build error. PM2 #118. |
+
+**Verified end-to-end post-deploy:**
+- B67.0.1: ad-hoc `npm run b67:replay-ablation` matched 4 rows (FLOW/USD strong_bull_trend close); API returns `bothAdmit=1 replayed=1` per factor (was 0)
+- B73.1: First post-fix close populated 12 rows — A=`source: realized_truth`, B-L=`source: realized_inherited` with `be_latched: false`/`trail_active: false`/`phase: pre` metadata showing why each didn't fire on the first OHLC window
+- 720-bar OHLC cap deferred to v2 watchpoint per Langston Q4 (max TIMEOUT duration was 283 min on pre-fix data, well under 12h)
+
+---
+
+## ⭐ Previously completed (2026-04-29 night → 2026-04-30 early, 14 commits)
 
 | # | Commit | Layer | Outcome |
 |---|---|---|---|
@@ -85,11 +99,7 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
    - Macro modifier diversifying (not pinned at 0.85 for the whole window)
    - New closed VTS trades carrying B67.2.1 fields populated correctly
 
-2. **B73 first-close verification** — confirm 12 rows per closed VTS trade in `exit_strategy_alternates`. Use:
-   ```sql
-   SELECT count(*), count(DISTINCT variant_id), count(DISTINCT trade_id)
-   FROM exit_strategy_alternates;
-   ```
+2. **B67.0 + B73 ongoing observation** — both panels now decision-grade. As trades close, replay-ablation runs nightly (04:00 UTC cron) AND can be invoked ad-hoc. Confirm rows accumulate over the 14d window. n=200 total + n=50/regime threshold for B73 winner declaration.
 
 3. **B67.4 cheap-tier bundle implementation** (Step 3) per `BATCH_67_4_PRE_AUDIT.md` §D refinements. Order of operations:
    - Migration SQL (11 module_constants in 3 modules: outcome_feedback + regime_age + path_b_sustainability)

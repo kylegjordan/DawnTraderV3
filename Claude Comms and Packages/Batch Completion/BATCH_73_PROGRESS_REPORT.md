@@ -1,4 +1,24 @@
-# Batch 73 — Progress Report (OPEN — multi-week observation underway)
+# Batch 73 — Progress Report (OPEN — multi-week observation underway, B73.1 hotfix shipped 2026-04-30)
+
+## 2026-04-30 morning — B73.1 + B67.0.1 combined hotfix sub-batch
+
+Kyle observed both ablation panels were producing un-decision-grade data. Diagnosis + fixes per Langston cc-inbox #864 (Q1-Q4 all approved):
+
+**B67.0 — Factor Ablation: 0/1406 replay matches.** Root cause: vts-runner emit ID `vsig_p10_*` ≠ JSONL `signal.id = vts_<sym>_<strat>_<ts>`. Switched to natural-key tuple `(pair_symbol, evaluated_at±60s, strategy)`. Added `strategy` column + composite index to `regime_factor_alternates`. Updated emit signature + both call sites (vts-runner, signal-orchestrator). Wiped 1477 NULL-strategy pre-fix rows.
+
+**B73 — Exit-Strategy Ablation: 11/12 variants identical across 39 trades.** Three structural causes — (a) ATR proxy `(target-entry)/1.5` mis-scaling BE triggers, (b) TIMEOUT exit synthesizing identical last-bar mid, (c) Variant A re-simulating instead of being live truth. Fixes: (a) plumb real `atrAtOpen` through trade record → B73 hook, (b) `timeoutExit` inherits realized exit values, (c) `mkVariantAFromRealized` returns realized truth directly. Wiped 480 bad pre-fix rows. Tests rewritten.
+
+**drift-dashboard aggregator alignment** (additional hotfix): aggregator queried `notes='admit_admit_no_delta'` but emitter writes `'pre_b67_5_both_admit'`. Aligned to actual shape.
+
+**Commits:** `3afd8ed2` (combined fix) + `f6a0bb87` `67cf66d9` (aggregator + backtick-in-template build hotfix). PM2 #117 → #118.
+
+**Verified end-to-end:** ad-hoc `npm run b67:replay-ablation` matched 4 rows (FLOW/USD strong_bull_trend close); API returns `bothAdmit=1 replayed=1` per factor; B73 first post-fix close populated 12 differentiated rows (A=`source: realized_truth`, B-L=`source: realized_inherited` with metadata explaining why each didn't fire).
+
+**v2 watchpoint** (Langston Q4): 720-bar OHLC cap could systematically TIMEOUT trades >12h. Not blocking — max TIMEOUT duration on pre-fix data was 283 min, well under 12h. Add multi-call pagination if observation period reveals long-duration trades being capped.
+
+---
+
+# Batch 73 — Progress Report (original entry)
 
 **Type:** Exit-Strategy Ablation Framework (observation only)
 **Triggered by:** Kyle 2026-04-29 review of 7d closed-trades CSV showing 509 BE_STOP (44%) vs 22 TP (2%); long winning streaks gone
