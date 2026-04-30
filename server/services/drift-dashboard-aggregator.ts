@@ -638,6 +638,144 @@ export interface FactorCalibrationResponse {
 
 const MIN_N_PER_BUCKET = 150;       // Langston calibration check threshold (cc-inbox #856)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// B74 — Passive Archive Capture Monitor (added 2026-04-30 per Kyle directive)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Per-universe stats for the passive archive pipeline:
+//   1. Configured: how many symbols are in the universe config (static for
+//      equity, dynamic for crypto)
+//   2. Active in window: count(DISTINCT symbol) with at least 1 row in the
+//      rolling window (24h default)
+//   3. OHLC rows + ticker rows in window: count of rows persisted in the
+//      window. This is the "confirmed stored" metric.
+//   4. Cumulative scanned (v2): in-process counters that increment on every
+//      WS message received; "data observed" before DB write. Reset on PM2
+//      restart. Difference between scanned and stored = drops, batches that
+//      hit insert errors, rows lost during partition-routing failures, etc.
+//
+// Read-only DB queries + per-archiver stats getters; no admission impact.
+
+export interface PassiveArchiveUniverseStats {
+  universe: 'equity_spot' | 'equity_perp' | 'crypto_spot';
+  // Universe sizing
+  configuredSymbols: number;          // from archiver in-memory config
+  activeSymbolsInWindow: number;      // count(DISTINCT symbol) in window
+  // Stored (DB)
+  ohlcRowsInWindow: number;
+  tickerRowsInWindow: number;
+  // Scanned (in-process counters; reset on PM2 restart)
+  cumulativeOhlcScanned: number;
+  cumulativeTickerScanned: number;
+  // Connection state
+  wsConnected: boolean;
+  // Drift indicator: scanned-but-not-stored fraction
+  ohlcStoreFraction: number | null;   // stored / scanned, null when scanned=0
+  tickerStoreFraction: number | null;
+  // Health note
+  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING';
+}
+
+export interface PassiveArchiveResponse {
+  window: DashboardWindow;
+  windowStart: string;
+  windowEnd: string;
+  universes: PassiveArchiveUniverseStats[];
+  pidStartedAt: string;               // when current PM2 process began (counter reset reference)
+}
+
+export async function computePassiveArchiveStatus(
+  window: DashboardWindow,
+): Promise<PassiveArchiveResponse> {
+  const { db } = await import('../db.js');
+  const { sql } = await import('drizzle-orm');
+  const { getEquitySpotStats } = await import('./passive-archive/equity-spot-archiver.js');
+  const { getEquityPerpStats } = await import('./passive-archive/equity-perp-archiver.js');
+  const { getCryptoSpotStats } = await import('./passive-archive/crypto-spot-archiver.js');
+
+  const now = Date.now();
+  const windowMs = WINDOW_TO_MS[window];
+  const windowStart = new Date(now - windowMs);
+  const windowEnd = new Date(now);
+
+  // Per-universe DB queries via raw SQL (3 OHLC + 3 ticker tables share
+  // identical column shape; query each pair).
+  const universeConfigs = [
+    { name: 'equity_spot' as const, ohlcTable: 'equity_spot_ohlc_1m', tickerTable: 'equity_spot_ticker_snap', stats: getEquitySpotStats() },
+    { name: 'equity_perp' as const, ohlcTable: 'equity_perp_ohlc_1m', tickerTable: 'equity_perp_ticker_snap', stats: getEquityPerpStats() },
+    { name: 'crypto_spot' as const, ohlcTable: 'crypto_spot_ohlc_1m', tickerTable: 'crypto_spot_ticker_snap', stats: getCryptoSpotStats() },
+  ];
+
+  const universes: PassiveArchiveUniverseStats[] = [];
+  for (const cfg of universeConfigs) {
+    // OHLC: count + distinct symbol
+    const ohlcRows = await db.execute(sql.raw(
+      `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
+       FROM ${cfg.ohlcTable}
+       WHERE interval_begin >= '${windowStart.toISOString()}'`
+    ));
+    const ohlcResult = (Array.isArray(ohlcRows) ? ohlcRows : (ohlcRows as any).rows ?? []) as Array<{ row_count: number; sym_count: number }>;
+    const ohlcCount = ohlcResult[0]?.row_count ?? 0;
+    const ohlcSyms = ohlcResult[0]?.sym_count ?? 0;
+
+    // Ticker: count + distinct symbol
+    const tickerRows = await db.execute(sql.raw(
+      `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
+       FROM ${cfg.tickerTable}
+       WHERE captured_at >= '${windowStart.toISOString()}'`
+    ));
+    const tickerResult = (Array.isArray(tickerRows) ? tickerRows : (tickerRows as any).rows ?? []) as Array<{ row_count: number; sym_count: number }>;
+    const tickerCount = tickerResult[0]?.row_count ?? 0;
+    const tickerSyms = tickerResult[0]?.sym_count ?? 0;
+
+    // Active = max of OHLC + ticker symbol counts
+    const activeSymbols = Math.max(ohlcSyms, tickerSyms);
+
+    // Store fractions (DB rows / in-process scanned)
+    const ohlcStoreFraction = cfg.stats.cumulativeOhlcRows > 0
+      ? Math.min(1, ohlcCount / cfg.stats.cumulativeOhlcRows)
+      : null;
+    const tickerStoreFraction = cfg.stats.cumulativeTickerSnaps > 0
+      ? Math.min(1, tickerCount / cfg.stats.cumulativeTickerSnaps)
+      : null;
+
+    // Status determination
+    let status: PassiveArchiveUniverseStats['status'] = 'OK';
+    if (!cfg.stats.connected) {
+      status = cfg.stats.configuredSymbols === 0 ? 'STARTING' : 'DISCONNECTED';
+    } else if (ohlcCount === 0 && cfg.stats.cumulativeOhlcRows === 0) {
+      status = 'NO_OHLC_DATA';
+    } else if (tickerCount === 0 && cfg.stats.cumulativeTickerSnaps === 0) {
+      status = 'NO_TICKER_DATA';
+    }
+
+    universes.push({
+      universe: cfg.name,
+      configuredSymbols: cfg.stats.configuredSymbols,
+      activeSymbolsInWindow: activeSymbols,
+      ohlcRowsInWindow: ohlcCount,
+      tickerRowsInWindow: tickerCount,
+      cumulativeOhlcScanned: cfg.stats.cumulativeOhlcRows,
+      cumulativeTickerScanned: cfg.stats.cumulativeTickerSnaps,
+      wsConnected: cfg.stats.connected,
+      ohlcStoreFraction,
+      tickerStoreFraction,
+      status,
+    });
+  }
+
+  // PM2 process start reference (counters reset on restart)
+  const pidStartedAt = new Date(Date.now() - process.uptime() * 1000).toISOString();
+
+  return {
+    window,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    universes,
+    pidStartedAt,
+  };
+}
+
 interface RawCalibrationRow {
   factorName: string;
   realConfidence: number;

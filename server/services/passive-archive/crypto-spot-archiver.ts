@@ -38,12 +38,35 @@ interface Shard {
   backoff: BackoffPolicy;
   lastMsgAt: number;
   rowsPersistedLastMinute: number;
+  // B74 v2 cumulative counters
+  cumulativeOhlcRows: number;
+  cumulativeTickerSnaps: number;
 }
 
 const state = {
   enabled: true,
   shards: [] as Shard[],
 };
+
+export function getCryptoSpotStats(): {
+  connected: boolean;
+  configuredSymbols: number;
+  cumulativeOhlcRows: number;
+  cumulativeTickerSnaps: number;
+  shardCount: number;
+} {
+  const totalSymbols = state.shards.reduce((s, sh) => s + sh.symbols.length, 0);
+  const totalOhlc = state.shards.reduce((s, sh) => s + sh.cumulativeOhlcRows, 0);
+  const totalTicker = state.shards.reduce((s, sh) => s + sh.cumulativeTickerSnaps, 0);
+  const allConnected = state.shards.length > 0 && state.shards.every(sh => sh.ws?.readyState === WebSocket.OPEN);
+  return {
+    connected: allConnected,
+    configuredSymbols: totalSymbols,
+    cumulativeOhlcRows: totalOhlc,
+    cumulativeTickerSnaps: totalTicker,
+    shardCount: state.shards.length,
+  };
+}
 
 /**
  * Stable hash of a string (FNV-1a 32-bit + Murmur3 finalizer).
@@ -130,9 +153,13 @@ function handleMessage(shard: Shard, raw: WebSocket.RawData): void {
     for (const bar of msg.data) {
       parseOhlcBar(bar);
       shard.rowsPersistedLastMinute++;
+      shard.cumulativeOhlcRows++;
     }
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
-    for (const snap of msg.data) parseTickerSnap(snap);
+    for (const snap of msg.data) {
+      parseTickerSnap(snap);
+      shard.cumulativeTickerSnaps++;
+    }
   }
 }
 
@@ -215,6 +242,8 @@ export async function startCryptoSpotArchiver(): Promise<void> {
     backoff: makeBackoff(30),
     lastMsgAt: 0,
     rowsPersistedLastMinute: 0,
+    cumulativeOhlcRows: 0,
+    cumulativeTickerSnaps: 0,
   }));
 
   console.log(

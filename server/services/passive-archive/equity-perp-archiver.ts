@@ -3,14 +3,24 @@
  * B74 — Equity Perp (PF_*XUSD) Archiver
  * ═════════════════════════════════════════════════════════════════════════════
  *
- * Persistent WebSocket connection to wss://futures.kraken.com/ws/v1.
- * Subscribes to OHLC + ticker for the 10 PF_*XUSD perps.
+ * Captures from Kraken Futures via TWO paths:
  *
- * Kraken Futures WebSocket protocol differs from Kraken WS v2:
- *   - Subscription payload: { event: 'subscribe', feed: 'ticker', product_ids: ['PF_AAPLXUSD'] }
- *   - For OHLC: feed='candles_trade_1m'
+ *   1. WebSocket (`wss://futures.kraken.com/ws/v1`) — TICKER ONLY.
+ *      Subscribes to `feed: 'ticker'` for the 10 PF_*XUSD perps, persists
+ *      bid/ask/last/volume/VWAP/openInterest/funding_rate snapshots.
  *
- * Reference: https://docs.futures.kraken.com/#websocket-api
+ *   2. REST polling (`https://futures.kraken.com/api/charts/v1/trade/<sym>/1m`)
+ *      every 60s. Pulls the most recent 1-min OHLC bars for each perp,
+ *      dedupes against last-seen interval_begin, persists new bars only.
+ *
+ * Why two paths: Kraken Futures WebSocket v1 has NO candle/kline subscription
+ * feed (verified 2026-04-30 — earlier B74.0 attempt with `feed: 'candles_trade_1m'`
+ * returned no data; that feed name does not exist). The REST charts endpoint
+ * IS the canonical source for futures OHLC. Per Langston cc-inbox #873
+ * resolution + RUNNING_ISSUES #41 closure.
+ *
+ * Reference: https://docs.futures.kraken.com/#websocket-api +
+ *            https://futures.kraken.com/api/charts/v1/trade/<sym>/<tick>
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -21,6 +31,8 @@ import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 
 const WS_URL = 'wss://futures.kraken.com/ws/v1';
+const REST_BASE = 'https://futures.kraken.com/api/charts/v1/trade';
+const REST_POLL_INTERVAL_MS = 60_000;
 const UNIVERSE = 'equity_perp' as const;
 
 interface ArchiverState {
@@ -30,6 +42,12 @@ interface ArchiverState {
   enabled: boolean;
   lastMsgAt: number;
   rowsPersistedLastMinute: number;
+  // Last-seen interval_begin per symbol for OHLC dedup
+  lastOhlcInterval: Map<string, number>;
+  restPollTimer: NodeJS.Timeout | null;
+  // Cumulative counters (B74 v2 monitor panel)
+  cumulativeOhlcRows: number;
+  cumulativeTickerSnaps: number;
 }
 
 const state: ArchiverState = {
@@ -39,24 +57,76 @@ const state: ArchiverState = {
   enabled: true,
   lastMsgAt: 0,
   rowsPersistedLastMinute: 0,
+  lastOhlcInterval: new Map(),
+  restPollTimer: null,
+  cumulativeOhlcRows: 0,
+  cumulativeTickerSnaps: 0,
 };
 
-function parseOhlcBar(msg: any): void {
-  if (!msg?.product_id || !msg?.time) return;
-  bufferOhlcBar(UNIVERSE, {
-    symbol: msg.product_id,
-    universe: UNIVERSE,
-    intervalBegin: new Date(msg.time),
-    open: String(msg.open ?? '0'),
-    high: String(msg.high ?? '0'),
-    low: String(msg.low ?? '0'),
-    close: String(msg.close ?? '0'),
-    volume: String(msg.volume ?? '0'),
-    vwap: msg.vwap != null ? String(msg.vwap) : null,
-    tradeCount: msg.trade_count != null ? Number(msg.trade_count) : null,
-  } as any);
-  state.rowsPersistedLastMinute++;
+export function getEquityPerpStats(): {
+  connected: boolean;
+  configuredSymbols: number;
+  cumulativeOhlcRows: number;
+  cumulativeTickerSnaps: number;
+} {
+  return {
+    connected: state.ws?.readyState === WebSocket.OPEN,
+    configuredSymbols: state.symbols.length,
+    cumulativeOhlcRows: state.cumulativeOhlcRows,
+    cumulativeTickerSnaps: state.cumulativeTickerSnaps,
+  };
 }
+
+// ── REST polling for OHLC ──────────────────────────────────────────────────
+
+async function pollOhlcOnce(symbol: string): Promise<number> {
+  try {
+    const resp = await fetch(`${REST_BASE}/${symbol}/1m`);
+    if (!resp.ok) return 0;
+    const data = await resp.json() as { candles?: Array<{ time: number; open: string; high: string; low: string; close: string; volume?: string }> };
+    if (!data.candles || data.candles.length === 0) return 0;
+    const lastSeen = state.lastOhlcInterval.get(symbol) ?? 0;
+    let newCount = 0;
+    let maxTime = lastSeen;
+    for (const candle of data.candles) {
+      if (candle.time <= lastSeen) continue;
+      bufferOhlcBar(UNIVERSE, {
+        symbol,
+        universe: UNIVERSE,
+        intervalBegin: new Date(candle.time),
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume ?? '0',
+        vwap: null,
+        tradeCount: null,
+      } as any);
+      newCount++;
+      state.cumulativeOhlcRows++;
+      if (candle.time > maxTime) maxTime = candle.time;
+    }
+    if (maxTime > lastSeen) state.lastOhlcInterval.set(symbol, maxTime);
+    return newCount;
+  } catch (err) {
+    return 0;
+  }
+}
+
+async function pollAllOhlc(): Promise<void> {
+  if (!state.enabled || state.symbols.length === 0) return;
+  let totalNew = 0;
+  for (const sym of state.symbols) {
+    totalNew += await pollOhlcOnce(sym);
+    await new Promise(r => setTimeout(r, 100)); // 100ms space-out so we don't hammer the REST endpoint
+  }
+  if (totalNew > 0) {
+    console.log(`[B74][equity-perp][rest] polled ${state.symbols.length} symbols, ${totalNew} new bars`);
+    state.rowsPersistedLastMinute += totalNew;
+  }
+}
+
+// ── WebSocket for ticker ───────────────────────────────────────────────────
 
 function parseTickerSnap(msg: any): void {
   if (!msg?.product_id) return;
@@ -74,26 +144,20 @@ function parseTickerSnap(msg: any): void {
     high24h: msg.high != null ? String(msg.high) : null,
     low24h: msg.low != null ? String(msg.low) : null,
     open24h: msg.open != null ? String(msg.open) : null,
-    prevDayClose: null,    // not exposed by Kraken Futures WS
+    prevDayClose: null,
     prevDayVolume: null,
-    isExtendedHours: null, // n/a for perps (24/7)
+    isExtendedHours: null,
     openInterest: msg.openInterest != null ? String(msg.openInterest) : null,
     fundingRate: msg.funding_rate != null ? String(msg.funding_rate) : null,
   } as any);
+  state.cumulativeTickerSnaps++;
 }
 
 function handleMessage(raw: WebSocket.RawData): void {
   state.lastMsgAt = Date.now();
   let msg: any;
-  try {
-    msg = JSON.parse(raw.toString());
-  } catch {
-    return;
-  }
-  // Kraken Futures sends per-message `feed` field
-  if (msg.feed === 'candles_trade_1m_snapshot' || msg.feed === 'candles_trade_1m') {
-    parseOhlcBar(msg);
-  } else if (msg.feed === 'ticker' || msg.feed === 'ticker_snapshot') {
+  try { msg = JSON.parse(raw.toString()); } catch { return; }
+  if (msg.feed === 'ticker' || msg.feed === 'ticker_snapshot') {
     parseTickerSnap(msg);
   }
 }
@@ -101,15 +165,10 @@ function handleMessage(raw: WebSocket.RawData): void {
 function subscribe(ws: WebSocket): void {
   ws.send(JSON.stringify({
     event: 'subscribe',
-    feed: 'candles_trade_1m',
-    product_ids: state.symbols,
-  }));
-  ws.send(JSON.stringify({
-    event: 'subscribe',
     feed: 'ticker',
     product_ids: state.symbols,
   }));
-  console.log(`[B74][equity-perp] subscribed to candles_trade_1m + ticker for ${state.symbols.length} symbols`);
+  console.log(`[B74][equity-perp] subscribed to ticker for ${state.symbols.length} symbols (OHLC via REST polling at ${REST_POLL_INTERVAL_MS / 1000}s interval)`);
 }
 
 async function connect(): Promise<void> {
@@ -146,6 +205,7 @@ function scheduleReconnect(): void {
   setTimeout(() => { connect().catch(err => console.error('[B74][equity-perp] reconnect failed:', err)); }, delay);
 }
 
+// 60-second health log
 setInterval(() => {
   if (!state.enabled) return;
   const now = Date.now();
@@ -165,10 +225,22 @@ export async function startEquityPerpArchiver(): Promise<void> {
   }
   state.enabled = true;
   await connect();
+
+  // Kick off REST polling timer for OHLC. Initial poll happens immediately
+  // so we don't have to wait 60s for the first bars.
+  state.restPollTimer = setInterval(() => {
+    pollAllOhlc().catch(err => console.warn('[B74][equity-perp][rest] poll-cycle failed:', err));
+  }, REST_POLL_INTERVAL_MS);
+  // Initial poll
+  pollAllOhlc().catch(err => console.warn('[B74][equity-perp][rest] initial poll failed:', err));
 }
 
 export function stopEquityPerpArchiver(): void {
   state.enabled = false;
+  if (state.restPollTimer) {
+    clearInterval(state.restPollTimer);
+    state.restPollTimer = null;
+  }
   if (state.ws) {
     try { state.ws.close(); } catch { /* ignore */ }
     state.ws = null;

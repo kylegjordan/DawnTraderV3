@@ -36,6 +36,9 @@ interface ArchiverState {
   lastMsgAt: number;
   rowsPersistedLastMinute: number;
   rowsPersistedLastMinuteWindowStart: number;
+  // B74 v2: cumulative counters for monitor panel
+  cumulativeOhlcRows: number;
+  cumulativeTickerSnaps: number;
 }
 
 const state: ArchiverState = {
@@ -46,7 +49,23 @@ const state: ArchiverState = {
   lastMsgAt: 0,
   rowsPersistedLastMinute: 0,
   rowsPersistedLastMinuteWindowStart: Date.now(),
+  cumulativeOhlcRows: 0,
+  cumulativeTickerSnaps: 0,
 };
+
+export function getEquitySpotStats(): {
+  connected: boolean;
+  configuredSymbols: number;
+  cumulativeOhlcRows: number;
+  cumulativeTickerSnaps: number;
+} {
+  return {
+    connected: state.ws?.readyState === WebSocket.OPEN,
+    configuredSymbols: state.symbols.length,
+    cumulativeOhlcRows: state.cumulativeOhlcRows,
+    cumulativeTickerSnaps: state.cumulativeTickerSnaps,
+  };
+}
 
 function parseOhlcBar(data: any): void {
   if (!data?.symbol || !data?.interval_begin) return;
@@ -63,6 +82,7 @@ function parseOhlcBar(data: any): void {
     tradeCount: data.trades != null ? Number(data.trades) : null,
   } as any);
   state.rowsPersistedLastMinute++;
+  state.cumulativeOhlcRows++;
 }
 
 function parseTickerSnap(data: any): void {
@@ -87,6 +107,7 @@ function parseTickerSnap(data: any): void {
     openInterest: data.open_interest != null ? String(data.open_interest) : null,
     fundingRate: null, // n/a for spot
   } as any);
+  state.cumulativeTickerSnaps++;
 }
 
 function handleMessage(raw: WebSocket.RawData): void {

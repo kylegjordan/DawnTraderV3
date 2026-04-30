@@ -7560,6 +7560,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B74 — Passive Archive Capture monitoring endpoint (added 2026-04-30 per
+  // Kyle directive). Per-universe DB row counts + in-process cumulative
+  // scanned counters + connection state. Read-only; no admission impact.
+  apiRouter.get('/analytics/passive-archive-status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { computePassiveArchiveStatus } = await import('./services/drift-dashboard-aggregator.js');
+      const win = (req.query.window as string) || 'rolling_24h';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'. must be one of ${allowed.join(', ')}` });
+      }
+      const data = await computePassiveArchiveStatus(win as 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest');
+      res.json({ ok: true, data });
+    } catch (error: any) {
+      console.error('[B74][passive-archive-status] error:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // B73 — Exit Strategy Ablation comparison endpoint.
   // Reads exit_strategy_alternates table and returns per-variant statistics
   // including Sharpe-like score (paired-diff vs Variant A baseline) for the

@@ -1438,6 +1438,159 @@ interface AblationComparisonData {
   hasReplayedRows: boolean;
 }
 
+// B74 — Passive Archive Capture monitoring panel (added 2026-04-30 per Kyle).
+//
+// Per-universe (equity_spot / equity_perp / crypto_spot) row counts, active
+// symbol counts, and cumulative-scanned counters. Lets Kyle see at-a-glance
+// whether each universe is capturing data + whether scanned-vs-stored is
+// drifting (which would indicate insert errors / partition routing failures
+// / silent drops).
+
+interface PassiveArchiveUniverseStatsUI {
+  universe: 'equity_spot' | 'equity_perp' | 'crypto_spot';
+  configuredSymbols: number;
+  activeSymbolsInWindow: number;
+  ohlcRowsInWindow: number;
+  tickerRowsInWindow: number;
+  cumulativeOhlcScanned: number;
+  cumulativeTickerScanned: number;
+  wsConnected: boolean;
+  ohlcStoreFraction: number | null;
+  tickerStoreFraction: number | null;
+  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING';
+}
+
+interface PassiveArchiveData {
+  window: 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest';
+  windowStart: string;
+  windowEnd: string;
+  universes: PassiveArchiveUniverseStatsUI[];
+  pidStartedAt: string;
+}
+
+function PassiveArchiveSection() {
+  const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_24h');
+  const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: PassiveArchiveData }>({
+    queryKey: ['/api/analytics/passive-archive-status', windowSel],
+    queryFn: () => apiFetch(`/api/analytics/passive-archive-status?window=${windowSel}`),
+    refetchInterval: 30_000,
+  });
+
+  const d = resp?.data;
+
+  const universeLabel = (u: string) => {
+    if (u === 'equity_spot') return 'xStocks (spot)';
+    if (u === 'equity_perp') return 'Stock perps';
+    if (u === 'crypto_spot') return 'Crypto pairs';
+    return u;
+  };
+
+  const statusBadge = (status: PassiveArchiveUniverseStatsUI['status']) => {
+    switch (status) {
+      case 'OK': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">OK</span>;
+      case 'NO_OHLC_DATA': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">NO OHLC</span>;
+      case 'NO_TICKER_DATA': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">NO TICKER</span>;
+      case 'DISCONNECTED': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">DISCONNECTED</span>;
+      case 'STARTING': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">STARTING</span>;
+    }
+  };
+
+  const fmtN = (n: number) => n.toLocaleString();
+  const fmtPct = (f: number | null) => f != null ? `${(f * 100).toFixed(0)}%` : '—';
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" /> Passive Archive Capture
+            <span className="text-xs font-normal text-muted-foreground">(B74 — equity + crypto data accumulation)</span>
+          </span>
+          <div className="flex items-center gap-2">
+            {(['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setWindowSel(w)}
+                className={`px-3 py-1 text-xs rounded-md border ${
+                  windowSel === w ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+                }`}
+              >
+                {w.replace('rolling_', '').replace('cohort_', 'Since ').replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
+        {error && <div className="text-sm text-red-500">Error: {String((error as Error).message)}</div>}
+        {d && (
+          <div className="space-y-4">
+            <div className="text-xs text-muted-foreground">
+              Window: <span className="font-mono">{d.window.replace('rolling_', '')}</span>
+              · PID started: <span className="font-mono">{new Date(d.pidStartedAt).toISOString().slice(0, 19)}Z</span>
+              <span className="ml-2 text-[10px]">(cumulative-scanned counters reset at PID start)</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50">
+                  <tr className="text-left">
+                    <th className="px-2 py-2">Universe</th>
+                    <th className="px-2 py-2 text-right">Configured</th>
+                    <th className="px-2 py-2 text-right">Active in window</th>
+                    <th className="px-2 py-2 text-right" colSpan={3}>OHLC (1-min bars)</th>
+                    <th className="px-2 py-2 text-right" colSpan={3}>Ticker snapshots</th>
+                    <th className="px-2 py-2">Status</th>
+                  </tr>
+                  <tr className="text-left text-[10px] text-muted-foreground">
+                    <th className="px-2 py-1"></th>
+                    <th className="px-2 py-1 text-right">syms</th>
+                    <th className="px-2 py-1 text-right">syms</th>
+                    <th className="px-2 py-1 text-right">stored (window)</th>
+                    <th className="px-2 py-1 text-right">scanned (since PID)</th>
+                    <th className="px-2 py-1 text-right">store %</th>
+                    <th className="px-2 py-1 text-right">stored (window)</th>
+                    <th className="px-2 py-1 text-right">scanned (since PID)</th>
+                    <th className="px-2 py-1 text-right">store %</th>
+                    <th className="px-2 py-1"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.universes.map((u) => (
+                    <tr key={u.universe} className="border-t border-border">
+                      <td className="px-2 py-2 font-medium">{universeLabel(u.universe)}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtN(u.configuredSymbols)}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtN(u.activeSymbolsInWindow)}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtN(u.ohlcRowsInWindow)}</td>
+                      <td className="px-2 py-2 text-right font-mono text-muted-foreground">{fmtN(u.cumulativeOhlcScanned)}</td>
+                      <td className="px-2 py-2 text-right font-mono text-[10px]">{fmtPct(u.ohlcStoreFraction)}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtN(u.tickerRowsInWindow)}</td>
+                      <td className="px-2 py-2 text-right font-mono text-muted-foreground">{fmtN(u.cumulativeTickerScanned)}</td>
+                      <td className="px-2 py-2 text-right font-mono text-[10px]">{fmtPct(u.tickerStoreFraction)}</td>
+                      <td className="px-2 py-2">{statusBadge(u.status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>
+                <strong>Reading:</strong> "Configured" = symbols in archiver universe at startup. "Active in window" = distinct symbols with ≥1 row in the selected time window. "Stored (window)" = rows persisted to DB in the window — the canonical capture metric. "Scanned (since PID)" = in-process cumulative counter incremented on every WS message received since the current PM2 process started — useful for spotting silent drops between WS receive and DB write. "Store %" = stored ÷ scanned, ideally close to 100% (drift below indicates insert errors, partition-routing failures, or batch drops).
+              </div>
+              <div>
+                <strong>Status:</strong> OK = data flowing. NO OHLC = WS connected but no OHLC bars received (e.g., feed-name mismatch). NO TICKER = WS connected but no ticker updates. DISCONNECTED = WS down. STARTING = archiver still initializing.
+              </div>
+              <div>
+                <strong>Reset note:</strong> "Scanned" counters are in-process and reset on PM2 restart. "Stored" counts come from DB queries and persist across restarts.
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // B67 — Factor Calibration analysis panel (added 2026-04-30 per Kyle).
 //
 // Sibling to AblationComparisonSection but answers a DIFFERENT question:
@@ -2922,6 +3075,7 @@ export default function AnalyticsPage() {
               <FactorCalibrationSection />
               <AblationComparisonSection />
               <ExitStrategyAblationSection />
+              <PassiveArchiveSection />
             </div>
           </TabsContent>
           
