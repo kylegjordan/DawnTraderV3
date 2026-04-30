@@ -1438,6 +1438,209 @@ interface AblationComparisonData {
   hasReplayedRows: boolean;
 }
 
+// B67 — Factor Calibration analysis panel (added 2026-04-30 per Kyle).
+//
+// Sibling to AblationComparisonSection but answers a DIFFERENT question:
+// does each lever ADD PREDICTIVE VALUE? Three views per factor:
+//   1. Confidence-shift distribution (avg / max abs |REAL - ALT|)
+//   2. Tertile WR analysis on REAL confidence (low/mid/high buckets)
+//   3. Per-factor predictive lift (REAL spread minus ALT spread)
+//
+// Works pre-B67.5 — no consumer gating needed; analysis is on captured data.
+// Decision-grade once n >= 150 per tertile per factor (Langston cc-inbox #856).
+
+interface TertileBucketUI {
+  n: number;
+  avgConfidence: number;
+  avgPnlUsd: number;
+  winRatePct: number;
+}
+
+interface FactorCalibrationStatsUI {
+  factorName: string;
+  nReplayed: number;
+  avgRealConfidence: number;
+  avgAltConfidence: number;
+  avgConfidenceShift: number;
+  avgAbsConfidenceShift: number;
+  maxAbsConfidenceShift: number;
+  shiftIsZeroFraction: number;
+  realTertileLow: TertileBucketUI;
+  realTertileMid: TertileBucketUI;
+  realTertileHigh: TertileBucketUI;
+  realSpreadPP: number;
+  altTertileLow: TertileBucketUI;
+  altTertileMid: TertileBucketUI;
+  altTertileHigh: TertileBucketUI;
+  altSpreadPP: number;
+  predictiveLiftPP: number;
+  isDecisionGrade: boolean;
+  readinessNote: string;
+}
+
+interface FactorCalibrationData {
+  window: 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest';
+  windowStart: string;
+  windowEnd: string;
+  factors: FactorCalibrationStatsUI[];
+  minNPerBucket: number;
+  totalReplayed: number;
+}
+
+function FactorCalibrationSection() {
+  const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_7d');
+  const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: FactorCalibrationData }>({
+    queryKey: ['/api/analytics/factor-calibration', windowSel],
+    queryFn: () => apiFetch(`/api/analytics/factor-calibration?window=${windowSel}`),
+    refetchInterval: 60_000,
+  });
+
+  const d = resp?.data;
+
+  // Color helpers
+  const liftColor = (pp: number) => {
+    if (pp >= 7) return 'text-emerald-600 dark:text-emerald-400 font-semibold';
+    if (pp >= 3) return 'text-emerald-500 dark:text-emerald-300';
+    if (pp <= -3) return 'text-red-500';
+    return 'text-muted-foreground';
+  };
+  const shiftColor = (s: number) => {
+    if (Math.abs(s) >= 0.05) return 'text-foreground font-medium';
+    if (Math.abs(s) >= 0.01) return 'text-foreground';
+    return 'text-muted-foreground';
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" /> Factor Calibration
+            <span className="text-xs font-normal text-muted-foreground">(B67 — does each lever add predictive value?)</span>
+          </span>
+          <div className="flex items-center gap-2">
+            {(['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setWindowSel(w)}
+                className={`px-3 py-1 text-xs rounded-md border ${
+                  windowSel === w ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+                }`}
+              >
+                {w.replace('rolling_', '').replace('cohort_', 'Since ').replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
+        {error && <div className="text-sm text-red-500">Error: {String((error as Error).message)}</div>}
+        {d && d.factors.length === 0 && (
+          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md">
+            <div className="font-medium mb-2">No replayed factor rows in this window yet.</div>
+            <div className="text-xs">
+              Calibration analysis requires closed VTS trades that have been joined to ablation alternates by replay-ablation. As trades close and the nightly cron runs (or ad-hoc invocation), this panel will populate per-factor calibration statistics.
+            </div>
+          </div>
+        )}
+        {d && d.factors.length > 0 && (
+          <div className="space-y-4">
+            <div className="text-xs text-muted-foreground">
+              Window: <span className="font-mono">{d.window.replace('rolling_', '')}</span> · Replayed factor rows: <span className="font-mono">{d.totalReplayed}</span> · Decision-grade threshold: n ≥ <span className="font-mono">{d.minNPerBucket}</span> per tertile bucket
+            </div>
+
+            {/* View 1: Confidence shift distribution */}
+            <div>
+              <div className="text-xs font-semibold mb-1">Confidence shift per factor (REAL with all factors vs ALT with this factor disabled)</div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50">
+                    <tr className="text-left">
+                      <th className="px-2 py-2">Factor</th>
+                      <th className="px-2 py-2 text-right">n</th>
+                      <th className="px-2 py-2 text-right">avg REAL conf</th>
+                      <th className="px-2 py-2 text-right">avg ALT conf</th>
+                      <th className="px-2 py-2 text-right">avg shift (REAL − ALT)</th>
+                      <th className="px-2 py-2 text-right">avg |shift|</th>
+                      <th className="px-2 py-2 text-right">max |shift|</th>
+                      <th className="px-2 py-2 text-right">% trades shift = 0</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.factors.map((f) => (
+                      <tr key={f.factorName} className="border-t border-border">
+                        <td className="px-2 py-2 font-mono text-[11px]">{f.factorName}</td>
+                        <td className="px-2 py-2 text-right">{f.nReplayed}</td>
+                        <td className="px-2 py-2 text-right font-mono">{f.avgRealConfidence.toFixed(3)}</td>
+                        <td className="px-2 py-2 text-right font-mono">{f.avgAltConfidence.toFixed(3)}</td>
+                        <td className={`px-2 py-2 text-right font-mono ${shiftColor(f.avgConfidenceShift)}`}>{f.avgConfidenceShift >= 0 ? '+' : ''}{f.avgConfidenceShift.toFixed(4)}</td>
+                        <td className="px-2 py-2 text-right font-mono">{f.avgAbsConfidenceShift.toFixed(4)}</td>
+                        <td className="px-2 py-2 text-right font-mono">{f.maxAbsConfidenceShift.toFixed(4)}</td>
+                        <td className="px-2 py-2 text-right text-muted-foreground">{(f.shiftIsZeroFraction * 100).toFixed(0)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* View 2 + 3: Tertile WR + predictive lift */}
+            <div>
+              <div className="text-xs font-semibold mb-1">Tertile win-rate analysis + predictive lift per factor</div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50">
+                    <tr className="text-left">
+                      <th className="px-2 py-2">Factor</th>
+                      <th className="px-2 py-2 text-right" colSpan={3}>REAL conf tertile WR (low / mid / high)</th>
+                      <th className="px-2 py-2 text-right">REAL spread (high − low)</th>
+                      <th className="px-2 py-2 text-right" colSpan={3}>ALT conf tertile WR (low / mid / high)</th>
+                      <th className="px-2 py-2 text-right">ALT spread</th>
+                      <th className="px-2 py-2 text-right">Predictive lift</th>
+                      <th className="px-2 py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.factors.map((f) => (
+                      <tr key={f.factorName} className="border-t border-border">
+                        <td className="px-2 py-2 font-mono text-[11px]">{f.factorName}</td>
+                        <td className="px-2 py-2 text-right font-mono">{f.realTertileLow.winRatePct.toFixed(1)}% (n={f.realTertileLow.n})</td>
+                        <td className="px-2 py-2 text-right font-mono">{f.realTertileMid.winRatePct.toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-right font-mono">{f.realTertileHigh.winRatePct.toFixed(1)}% (n={f.realTertileHigh.n})</td>
+                        <td className={`px-2 py-2 text-right font-mono ${liftColor(f.realSpreadPP)}`}>{f.realSpreadPP >= 0 ? '+' : ''}{f.realSpreadPP.toFixed(1)}pp</td>
+                        <td className="px-2 py-2 text-right font-mono text-muted-foreground">{f.altTertileLow.winRatePct.toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-right font-mono text-muted-foreground">{f.altTertileMid.winRatePct.toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-right font-mono text-muted-foreground">{f.altTertileHigh.winRatePct.toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-right font-mono text-muted-foreground">{f.altSpreadPP >= 0 ? '+' : ''}{f.altSpreadPP.toFixed(1)}pp</td>
+                        <td className={`px-2 py-2 text-right font-mono ${liftColor(f.predictiveLiftPP)}`}>{f.predictiveLiftPP >= 0 ? '+' : ''}{f.predictiveLiftPP.toFixed(1)}pp</td>
+                        <td className="px-2 py-2 text-[10px] text-muted-foreground">
+                          {f.isDecisionGrade
+                            ? <span className="text-emerald-600 dark:text-emerald-400">READY</span>
+                            : <span className="text-amber-600 dark:text-amber-500">ACCUMULATING</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>
+                <strong>How to read:</strong> Tertile WR splits trades into 3 equal-size buckets by confidence. If high-bucket WR &gt; low-bucket WR (positive spread), confidence is predictive of outcomes. <strong>Predictive lift = REAL spread − ALT spread.</strong> If positive, removing this factor degrades predictive separation → factor adds value. If ≈ 0, factor is decorative. If negative, factor is actively misleading. Decision-grade gate: n ≥ {d.minNPerBucket} per tertile bucket per Langston cc-inbox #856 calibration check threshold.
+              </div>
+              <div>
+                <strong>What to expect:</strong> Today's 14-day window starts when the B67.4 cheap-tier bundle ships. Pre-B67.5 the panel collects evidence; the GO/NO-GO call on whether to wire confidence into Kelly sizing depends on these spreads + lifts crossing thresholds.
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AblationComparisonSection() {
   const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_24h');
   const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: AblationComparisonData }>({
@@ -1455,6 +1658,12 @@ function AblationComparisonSection() {
           <span className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5" /> Factor Ablation Comparison
             <span className="text-xs font-normal text-muted-foreground">(B67.0)</span>
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border"
+              title="Pre-B67.5 substrate: confidence isn't gating any consumer yet, so admission flips are always 0. Decision-grade per-factor analysis lives in the Factor Calibration panel above."
+            >
+              SUBSTRATE
+            </span>
           </span>
           <div className="flex items-center gap-2">
             {(['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'] as const).map((w) => (
@@ -1523,8 +1732,13 @@ function AblationComparisonSection() {
                 </tbody>
               </table>
             </div>
-            <div className="text-xs text-muted-foreground">
-              <strong>Reading:</strong> "Real Admit / Alt Reject" = how many trades the alternate would have prevented; "$ Saved if Alt Active" = average loss avoided per such trade. "Real Reject / Alt Admit" = trades the alternate would have admitted (cannot replay forward; counted for awareness only).
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div>
+                <strong>Reading:</strong> "Real Admit / Alt Reject" = how many trades the alternate would have prevented; "$ Saved if Alt Active" = average loss avoided per such trade. "Real Reject / Alt Admit" = trades the alternate would have admitted (cannot replay forward; counted for awareness only).
+              </div>
+              <div className="text-amber-600 dark:text-amber-500">
+                <strong>Pre-B67.5 note:</strong> No downstream consumer gates on confidence value yet, so the alternate decision admits the same trades as reality. "Both Admit" will equal "Replayed" until Kelly sizing and admission gates wire on confidence (B67.5). This panel is collecting substrate data — the per-factor predictive analysis (does each lever add lift?) lives in the <strong>Factor Calibration</strong> panel above.
+              </div>
             </div>
           </div>
         )}
@@ -2705,6 +2919,7 @@ export default function AnalyticsPage() {
           <TabsContent value="drift" className="mt-6">
             <div className="space-y-6">
               <DriftDashboardSection />
+              <FactorCalibrationSection />
               <AblationComparisonSection />
               <ExitStrategyAblationSection />
             </div>

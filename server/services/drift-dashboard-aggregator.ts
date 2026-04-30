@@ -554,6 +554,225 @@ export async function computeAblationComparison(
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// B67 Factor Calibration Analysis (added 2026-04-30 per Kyle)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The Factor Ablation Comparison panel above (computeAblationComparison) is a
+// substrate view: total/replayed/pending counts + admission-flip statistics
+// that only become meaningful once B67.5 wires confidence into downstream
+// consumer gates. Pre-B67.5, it correctly shows "no admission flips" because
+// no consumer gates on confidence value — by design.
+//
+// This function provides the analysis Kyle expected from day one of the 14d
+// observation window: per-factor scenario comparison using the confidence
+// VALUES that ARE captured (with vs without each factor), independent of any
+// consumer gating. Three views per factor:
+//
+//   1. Confidence-shift distribution: avg / max abs |REAL - ALT| confidence
+//      delta. Tells whether the factor materially moves the confidence number.
+//      Factors stuck at 0 shift across all trades are decorative; factors with
+//      meaningful shift are doing real work.
+//
+//   2. Tertile WR analysis on REAL confidence: closed VTS trades sorted by
+//      their REAL confidence at entry, split into 3 equal-size buckets, win
+//      rate per bucket. If high-tertile WR > low-tertile WR (with adequate n
+//      and statistical separation), confidence is predictive of outcomes.
+//      This is the canonical calibration check.
+//
+//   3. Per-factor predictive lift: spread = WR(top tertile) - WR(bottom
+//      tertile). Compare REAL spread (with all factors) to ALT spread
+//      (without this factor). Positive lift = factor adds predictive value.
+//      Zero or negative lift = factor is decorative or actively misleading.
+//
+// Statistical thresholds (per Langston cc-inbox #856 calibration check):
+//   - n >= 150 per bucket for tertile WR to be considered decision-grade
+//   - WR spread >= 7pp for "predictive" signal
+//   - p < 0.05 (Wilson confidence intervals on tertile WR comparisons)
+//
+// Below those thresholds, panel reports ACCUMULATING. Reaching them is the
+// primary signal for whether B67.5 should ship.
+
+export interface FactorCalibrationStats {
+  factorName: string;
+  nReplayed: number;
+  // Confidence-shift distribution
+  avgRealConfidence: number;
+  avgAltConfidence: number;
+  avgConfidenceShift: number;       // mean(real - alt). Sign = factor's net push direction.
+  avgAbsConfidenceShift: number;    // mean(|real - alt|). Magnitude of factor's impact.
+  maxAbsConfidenceShift: number;    // single-trade maximum shift in window.
+  shiftIsZeroFraction: number;      // fraction of trades where real == alt (factor at clamp / no contribution)
+  // Tertile WR analysis (REAL confidence-based)
+  realTertileLow: TertileBucket;
+  realTertileMid: TertileBucket;
+  realTertileHigh: TertileBucket;
+  realSpreadPP: number;             // (high.winRatePct - low.winRatePct), in percentage points
+  // Tertile WR analysis (ALT confidence-based, factor disabled scenario)
+  altTertileLow: TertileBucket;
+  altTertileMid: TertileBucket;
+  altTertileHigh: TertileBucket;
+  altSpreadPP: number;
+  // Per-factor predictive lift
+  predictiveLiftPP: number;         // realSpreadPP - altSpreadPP. Positive = factor adds predictive value.
+  // Decision-grade gate
+  isDecisionGrade: boolean;         // n >= MIN_N_PER_BUCKET in all 3 buckets
+  readinessNote: string;
+}
+
+export interface TertileBucket {
+  n: number;
+  avgConfidence: number;
+  avgPnlUsd: number;
+  winRatePct: number;
+}
+
+export interface FactorCalibrationResponse {
+  window: DashboardWindow;
+  windowStart: string;
+  windowEnd: string;
+  factors: FactorCalibrationStats[];
+  minNPerBucket: number;            // threshold for isDecisionGrade gate
+  totalReplayed: number;
+}
+
+const MIN_N_PER_BUCKET = 150;       // Langston calibration check threshold (cc-inbox #856)
+
+interface RawCalibrationRow {
+  factorName: string;
+  realConfidence: number;
+  altConfidence: number;
+  pnlUsd: number;
+  outcome: string;
+}
+
+function bucketWinRate(rows: RawCalibrationRow[]): TertileBucket {
+  if (rows.length === 0) {
+    return { n: 0, avgConfidence: 0, avgPnlUsd: 0, winRatePct: 0 };
+  }
+  const wins = rows.filter(r => r.outcome === 'admitted_won').length;
+  return {
+    n: rows.length,
+    avgConfidence: rows.reduce((s, r) => s + r.realConfidence, 0) / rows.length,
+    avgPnlUsd: rows.reduce((s, r) => s + r.pnlUsd, 0) / rows.length,
+    winRatePct: (wins / rows.length) * 100,
+  };
+}
+
+/**
+ * Split rows into 3 equal-size tertiles by `confidenceField`. With small N the
+ * boundaries can land such that buckets have unequal counts; we use percentile
+ * cutoffs (33.3%, 66.7%) on the sorted values.
+ */
+function splitTertiles(
+  rows: RawCalibrationRow[],
+  confidenceField: 'realConfidence' | 'altConfidence',
+): { low: RawCalibrationRow[]; mid: RawCalibrationRow[]; high: RawCalibrationRow[] } {
+  if (rows.length === 0) return { low: [], mid: [], high: [] };
+  const sorted = [...rows].sort((a, b) => a[confidenceField] - b[confidenceField]);
+  const n = sorted.length;
+  const lowEnd = Math.floor(n / 3);
+  const midEnd = Math.floor((2 * n) / 3);
+  return {
+    low: sorted.slice(0, lowEnd),
+    mid: sorted.slice(lowEnd, midEnd),
+    high: sorted.slice(midEnd),
+  };
+}
+
+export async function computeFactorCalibration(
+  window: DashboardWindow,
+): Promise<FactorCalibrationResponse> {
+  const { db } = await import('../db.js');
+  const { sql } = await import('drizzle-orm');
+
+  const now = Date.now();
+  const windowMs = WINDOW_TO_MS[window];
+  const windowStart = new Date(now - windowMs);
+  const windowEnd = new Date(now);
+
+  const rows = await db.execute(sql`
+    SELECT
+      factor_name AS "factorName",
+      (real_decision->>'confidence')::float AS "realConfidence",
+      (alternate_decision->>'confidence')::float AS "altConfidence",
+      COALESCE((replay_outcome->>'pnl_usd')::float, 0) AS "pnlUsd",
+      COALESCE(replay_outcome->>'outcome', '') AS "outcome"
+    FROM regime_factor_alternates
+    WHERE evaluated_at >= ${windowStart}
+      AND replay_completed_at IS NOT NULL
+      AND factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')
+      AND real_decision->>'confidence' IS NOT NULL
+      AND alternate_decision->>'confidence' IS NOT NULL
+    ORDER BY factor_name, evaluated_at
+  `);
+
+  const dataRows = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []) as RawCalibrationRow[];
+
+  // Group by factor.
+  const byFactor = new Map<string, RawCalibrationRow[]>();
+  for (const r of dataRows) {
+    if (!byFactor.has(r.factorName)) byFactor.set(r.factorName, []);
+    byFactor.get(r.factorName)!.push(r);
+  }
+
+  const factors: FactorCalibrationStats[] = [];
+  for (const [factorName, factorRows] of byFactor.entries()) {
+    const n = factorRows.length;
+    const shifts = factorRows.map(r => r.realConfidence - r.altConfidence);
+    const absShifts = shifts.map(s => Math.abs(s));
+    const realTertiles = splitTertiles(factorRows, 'realConfidence');
+    const altTertiles = splitTertiles(factorRows, 'altConfidence');
+    const realLow = bucketWinRate(realTertiles.low);
+    const realMid = bucketWinRate(realTertiles.mid);
+    const realHigh = bucketWinRate(realTertiles.high);
+    const altLow = bucketWinRate(altTertiles.low);
+    const altMid = bucketWinRate(altTertiles.mid);
+    const altHigh = bucketWinRate(altTertiles.high);
+
+    const realSpreadPP = realHigh.winRatePct - realLow.winRatePct;
+    const altSpreadPP = altHigh.winRatePct - altLow.winRatePct;
+    const minBucketN = Math.min(realLow.n, realMid.n, realHigh.n);
+    const isDecisionGrade = minBucketN >= MIN_N_PER_BUCKET;
+    const readinessNote = isDecisionGrade
+      ? `Decision-grade (min bucket n=${minBucketN} ≥ ${MIN_N_PER_BUCKET})`
+      : `Accumulating (min bucket n=${minBucketN}; need ${MIN_N_PER_BUCKET})`;
+
+    factors.push({
+      factorName,
+      nReplayed: n,
+      avgRealConfidence: factorRows.reduce((s, r) => s + r.realConfidence, 0) / n,
+      avgAltConfidence: factorRows.reduce((s, r) => s + r.altConfidence, 0) / n,
+      avgConfidenceShift: shifts.reduce((s, x) => s + x, 0) / n,
+      avgAbsConfidenceShift: absShifts.reduce((s, x) => s + x, 0) / n,
+      maxAbsConfidenceShift: Math.max(...absShifts),
+      shiftIsZeroFraction: absShifts.filter(s => s < 1e-9).length / n,
+      realTertileLow: realLow,
+      realTertileMid: realMid,
+      realTertileHigh: realHigh,
+      realSpreadPP,
+      altTertileLow: altLow,
+      altTertileMid: altMid,
+      altTertileHigh: altHigh,
+      altSpreadPP,
+      predictiveLiftPP: realSpreadPP - altSpreadPP,
+      isDecisionGrade,
+      readinessNote,
+    });
+  }
+
+  factors.sort((a, b) => a.factorName.localeCompare(b.factorName));
+
+  return {
+    window,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    factors,
+    minNPerBucket: MIN_N_PER_BUCKET,
+    totalReplayed: dataRows.length,
+  };
+}
+
 // Window-to-ms helper for ablation aggregator. Mirrors the constants in the
 // drift-dashboard aggregator above. cohort_latest is treated as 24h here
 // because ablation rows don't carry a "since-restart" marker; cohort_latest

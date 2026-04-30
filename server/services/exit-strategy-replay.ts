@@ -99,6 +99,14 @@ export interface ReplayInputs {
   actualExitTime: number;
   actualExitReason: 'TP_target_hit' | 'SL_hit' | 'BE_stop' | 'TRAIL_hit' | 'TIMEOUT';
   actualPnlPct: number;
+  // B73.2 (2026-04-30, Langston cc-inbox #866): ATR validation metadata.
+  // `atr` (above) is the value used for trigger thresholds (bar-derived
+  // post-B73.2). `atrLive` is the value computed by the live MCE indicator
+  // pipeline at trade open. Logging both per variant lets post-hoc analysis
+  // quantify the live↔bar ATR divergence — diagnostic for understanding why
+  // variants do or don't fire.
+  atrLive?: number;
+  atrBarDerived?: number;
 }
 
 const VARIANT_NAMES: Record<VariantId, string> = {
@@ -159,7 +167,7 @@ function mkVariantAFromRealized(inputs: ReplayInputs): VirtualExit {
     exitTime: inputs.actualExitTime,
     pnlPct: inputs.actualPnlPct,
     durationMin: durationMin(inputs.entryTime, inputs.actualExitTime),
-    metadata: { source: 'realized_truth' },
+    metadata: withAtrMetadata(inputs, { source: 'realized_truth' }),
   };
 }
 
@@ -209,7 +217,7 @@ function timeoutExit(id: VariantId, inputs: ReplayInputs, meta: Record<string, u
     exitTime: inputs.actualExitTime,
     pnlPct: inputs.actualPnlPct,
     durationMin: durationMin(inputs.entryTime, inputs.actualExitTime),
-    metadata: { ...meta, source: 'realized_inherited' },
+    metadata: withAtrMetadata(inputs, { ...meta, source: 'realized_inherited' }),
   };
 }
 
@@ -442,6 +450,24 @@ function mkExit(
     exitTime,
     pnlPct: pnlPct(inputs.side, inputs.entryPrice, exitPrice),
     durationMin: durationMin(inputs.entryTime, exitTime),
-    metadata,
+    metadata: withAtrMetadata(inputs, metadata),
+  };
+}
+
+/**
+ * B73.2 (2026-04-30, Langston cc-inbox #866): inject ATR validation metadata
+ * onto every variant emit so post-hoc analysis can diagnose live↔bar ATR
+ * divergence. Helper centralizes the merge so future metadata fields stay
+ * additive without touching call sites.
+ */
+function withAtrMetadata(
+  inputs: ReplayInputs,
+  meta: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...meta,
+    atr_live: inputs.atrLive ?? null,
+    atr_bar_derived: inputs.atrBarDerived ?? null,
+    atr_used_for_triggers: inputs.atr,
   };
 }

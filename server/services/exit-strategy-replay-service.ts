@@ -89,26 +89,48 @@ function toNum(v: any): number {
 }
 
 /**
- * Fetch 1-min OHLC bars covering the trade window:
- *   [entryTime, min(exitTime + buffer, entryTime + maxHoldMs)]
+ * B73.2 (2026-04-30, Langston cc-inbox #866): Fetch 1-min OHLC bars covering
+ *   [entryTime - ATR_LOOKBACK_MIN, entryTime + maxHoldMs]
  *
- * Per Langston cc-inbox #861 Q6: window must extend to maxHoldMs to capture
- * variants that would have held longer than the actual exit.
+ * Two B73.2 changes from prior B73.1 fetch:
+ *
+ * 1. Window extended to ENTRY + maxHoldMs (7d) regardless of actualExit.
+ *    Previously capped at exitTime + 1h, which prevented Variant F (no_BE_stop)
+ *    and K (no_BE_no_trail) from seeing whether the original target would
+ *    eventually have hit after the live BE_stop closed the trade. Per Langston
+ *    Q1 cc-inbox #866: this is what makes the headline question
+ *    "does live BE-stop convert TPs to break-evens" answerable at all.
+ *
+ * 2. Pre-entry bars fetched alongside replay bars, used to compute bar-derived
+ *    ATR. Prefix runs from entryTime - 14min to entryTime; replay window from
+ *    entryTime to windowEnd. Caller separates the two slices.
+ *
+ * Pagination is enabled with maxCandlesTotal sized for 7d × 1440min = 10080
+ * candles. Most trades won't actually need the full window; pagination short-
+ * circuits when Kraken returns < 720 candles in a batch (no more data).
  */
+const ATR_LOOKBACK_MIN = 14;
+
 async function fetchOhlcForReplay(
   symbol: string,
   entryTime: number,
   exitTime: number,
   maxHoldMs: number,
-  bufferMs: number,
+  bufferMs: number, // retained for back-compat, unused (window now always extends to entryTime + maxHoldMs)
 ): Promise<OHLCData[]> {
-  const windowEnd = Math.min(exitTime + bufferMs, entryTime + maxHoldMs);
-  const sinceSeconds = Math.floor(entryTime / 1000) - 60; // 1 candle of leeway
-  // ohlc-cache exposes getOHLCData; passing `since` bypasses cache and fetches
-  // historical 1-min candles directly. Returns up to 720 candles (12h) per call.
-  // For windows > 12h, multi-call pagination would be needed; v1 caps at 720
-  // bars (~12h) per fetch and times out variants past that with TIMEOUT.
-  const result = await ohlcCache.getOHLCData(symbol, 1, sinceSeconds);
+  void exitTime; void bufferMs; // explicit no-op; window is entry-anchored now
+  const windowEnd = entryTime + maxHoldMs;
+  // Prefix the pre-entry ATR lookback so the caller can compute bar-derived ATR.
+  const sinceSeconds = Math.floor(entryTime / 1000) - ATR_LOOKBACK_MIN * 60 - 60;
+  // Pagination enabled: 7d × 1440 = 10080 candles cap; ~14 batches × 720
+  // candles. Each batch is a separate Kraken REST call with 500ms delay.
+  // Async fire-and-forget so this doesn't block trade-close persistence.
+  const result = await ohlcCache.getOHLCData(symbol, 1, sinceSeconds, {
+    paginationEnabled: true,
+    maxBatches: 14,
+    maxCandlesTotal: 10_080,
+    endTimestamp: Math.floor(windowEnd / 1000),
+  });
   if (!result?.ohlc) return [];
   return result.ohlc
     .map((c: any) => ({
@@ -119,7 +141,39 @@ async function fetchOhlcForReplay(
       close: parseFloat(c.close),
       volume: parseFloat(c.volume),
     }))
-    .filter(b => b.timestamp >= entryTime && b.timestamp <= windowEnd);
+    .filter(b => b.timestamp >= entryTime - ATR_LOOKBACK_MIN * 60_000 && b.timestamp <= windowEnd);
+}
+
+/**
+ * B73.2: Compute bar-derived ATR from the 14 1-min bars BEFORE entry. This
+ * gives a stable per-trade ATR that's consistent with the data resolution the
+ * variant replay actually walks. Per Langston cc-inbox #866 Q1: the live ATR
+ * (from atrAtOpen) is computed on a different timeframe and produces trigger
+ * thresholds 1-2 orders of magnitude above what 1-min bar highs can show —
+ * causing every variant trigger check to fail. Using bar-derived ATR makes
+ * trigger thresholds firearble at bar resolution → variants actually
+ * differentiate. Trade-off: replay ATR ≠ live ATR; the framework answers
+ * "what would variant X have done if its THRESHOLDS scaled to bar visibility"
+ * not "what would variant X have done in the LIVE world." Acceptable for
+ * variant-comparability per cc-inbox #866.
+ */
+function computeBarDerivedAtr(preEntryBars: OHLCData[]): number {
+  if (preEntryBars.length < 2) return 0;
+  // True Range over the bars: max(high-low, |high-prevClose|, |low-prevClose|)
+  let trSum = 0;
+  let trCount = 0;
+  for (let i = 1; i < preEntryBars.length; i++) {
+    const cur = preEntryBars[i];
+    const prev = preEntryBars[i - 1];
+    const tr = Math.max(
+      cur.high - cur.low,
+      Math.abs(cur.high - prev.close),
+      Math.abs(cur.low - prev.close),
+    );
+    trSum += tr;
+    trCount++;
+  }
+  return trCount > 0 ? trSum / trCount : 0;
 }
 
 /**
@@ -183,17 +237,23 @@ export async function replayAndPersist(ctx: ReplayContext): Promise<void> {
     return;
   }
 
-  const ohlcBars = await fetchOhlcForReplay(
+  const allBars = await fetchOhlcForReplay(
     ctx.symbol,
     ctx.entryTime,
     ctx.exitTime,
     config.maxHoldMs,
-    3_600_000, // 1h buffer post-actual-exit
+    3_600_000, // back-compat; ignored — window is entry-anchored now
   );
-  if (ohlcBars.length === 0) {
+  if (allBars.length === 0) {
     console.warn(`[B73][exit-replay] no OHLC bars for ${ctx.symbol} ${ctx.tradeId}`);
     return;
   }
+
+  // B73.2 (2026-04-30, Langston cc-inbox #866): split pre-entry slice for
+  // bar-derived ATR vs replay slice for variant simulation.
+  const preEntryBars = allBars.filter(b => b.timestamp < ctx.entryTime);
+  const replayBars = allBars.filter(b => b.timestamp >= ctx.entryTime);
+  const atrBarDerived = computeBarDerivedAtr(preEntryBars);
 
   const inputs: ReplayInputs = {
     side: ctx.side,
@@ -201,16 +261,21 @@ export async function replayAndPersist(ctx: ReplayContext): Promise<void> {
     entryTime: ctx.entryTime,
     target: ctx.target,
     originalStopPrice: ctx.originalStopPrice,
-    atr: ctx.atr,
+    // B73.2 (2026-04-30): variant trigger thresholds use bar-derived ATR for
+    // internal comparability. Live `atr` (from atrAtOpen) is preserved in
+    // metadata for validation. Per Langston cc-inbox #866 Q1.
+    atr: atrBarDerived > 0 ? atrBarDerived : ctx.atr,
     volatility: ctx.volatility,
-    ohlcBars,
+    ohlcBars: replayBars,
     config,
-    // B73.1 (2026-04-30): realized exit pass-through for Variant A truth +
-    // TIMEOUT inheritance per Langston cc-inbox #864 Q2(b)+(c).
     actualExitPrice: ctx.actualExitPrice,
     actualExitTime: ctx.actualExitTime,
     actualExitReason: ctx.actualExitReason,
     actualPnlPct: ctx.baselinePnlPct,
+    // B73.2: ATR validation metadata — both values logged on every variant row
+    // so post-hoc analysis can quantify the live↔bar ATR divergence.
+    atrLive: ctx.atr,
+    atrBarDerived,
   };
 
   const exits = replayAllVariants(inputs);

@@ -7535,6 +7535,31 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B67 — Factor Calibration analysis endpoint (added 2026-04-30 per Kyle).
+  //
+  // Sibling to /analytics/ablation-comparison but answers a DIFFERENT question:
+  // does each factor add predictive value? Per-factor confidence-shift
+  // distribution + tertile WR analysis on REAL vs ALT confidence + per-factor
+  // predictive lift (REAL spread minus ALT spread). This works pre-B67.5 — no
+  // consumer gating needed, the analysis is purely on the captured data.
+  // Decision-grade once n >= 150 per tertile per factor (Langston cc-inbox
+  // #856 calibration check threshold).
+  apiRouter.get('/analytics/factor-calibration', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { computeFactorCalibration } = await import('./services/drift-dashboard-aggregator.js');
+      const win = (req.query.window as string) || 'rolling_7d';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'. must be one of ${allowed.join(', ')}` });
+      }
+      const data = await computeFactorCalibration(win as 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest');
+      res.json({ ok: true, data });
+    } catch (error: any) {
+      console.error('[B67][factor-calibration] Error computing calibration:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // B73 — Exit Strategy Ablation comparison endpoint.
   // Reads exit_strategy_alternates table and returns per-variant statistics
   // including Sharpe-like score (paired-diff vs Variant A baseline) for the
