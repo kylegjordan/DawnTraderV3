@@ -45,15 +45,37 @@ Items 1 + 2 from the prior session's open-discussion list are RESOLVED in B67.3.
 
 ---
 
-## Current State (2026-04-30 afternoon — B73.2 + Factor Calibration UI SHIPPED, PM2 #119)
+## Current State (2026-04-30 night — B74 Passive Archive Pipeline SHIPPED + 3 hotfixes, PM2 #122)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `a98ce7ff` (B73.2 bar-derived ATR + extended OHLC window + Factor Calibration aggregator/endpoint/UI panel)
-- **Live state:** B73 fix re-shipped (variants STILL collapsed after morning B73.1; root cause was 1-min OHLC vs sub-minute live tick visibility — fixed via bar-derived ATR + 7d window). New Factor Calibration UI panel surfaces the predictive-value analysis Kyle wanted (confidence-shift distribution + tertile WR + per-factor predictive lift). Existing Factor Ablation Comparison panel labelled SUBSTRATE pre-B67.5; stays in UI per Kyle directive.
+- **HEAD commit:** `778cd4ed` (B74 hotfixes: partition self-heal + Murmur3 fmix32 sharding hash)
+- **Live state:** B74 v1 deployed end-to-end. 5 of 6 tables capturing data within 6 minutes (equity_spot 161 OHLC + 1,418 ticker / 38 syms; crypto_spot 4,008 OHLC + 824 ticker / 373 of 380 syms; equity_perp 1,478 ticker / 10 syms). equity_perp_ohlc_1m at 0 rows (RUNNING_ISSUES #41 — feed name mismatch, ticker covers asset class). Two crons added (daily 03:00 UTC universe refresh + monthly 28th 02:00 UTC partition pre-create). Three same-day hotfixes folded in: import.meta.url config path, partition off-by-one self-heal, FNV-1a sharding bias.
 
 ---
 
-## ⭐ JUST COMPLETED (2026-04-30 afternoon, 1 commit)
+## ⭐ JUST COMPLETED (2026-04-30 evening + night — B74 ship + Telegram routing fix, 6 commits)
+
+| # | Commit | Layer | Outcome |
+|---|---|---|---|
+| 1-2 | `9e9ff010` `b10640af` | B74 Step-1 scope + CLAUDE.md updates | B74 scope drafted, Langston Step-1 approved cc-inbox #867. CLAUDE.md §8 documents two-agent two-model fact (CCDT Communicator @ GPT-4.1, Langston @ Opus 4.6) + relay-session reset diagnostic. |
+| 3 | `ce4a7e40` | **B74 v1 ship** | 21 files, 2,324 lines: scope + pre-audit + 6 partitioned tables + symbol canonicalizer extension + 3 archivers + 2 batch writers + bootstrap + 2 cron scripts + tests. Langston Steps-2/4 approved cc-inbox #869/#870. CI 3 of 4 green (TS Check legacy-baseline). PM2 #119. |
+| 4 | `bd60add3` | B74 hotfix #1 | Config path resolution: `import.meta.url` doesn't survive esbuild bundle to dist/index.js → switched to `process.cwd()`-based path. Surfaced post-deploy when archivers showed connected=false. |
+| 5 | `778cd4ed` | B74 hotfix #2 + #3 | (a) Partition off-by-one self-heal: bootstrap now ensures CURRENT-month partition exists with WARN log if missing. (b) FNV-1a hash low-bit bias on similar-suffix strings: added Murmur3 fmix32 finalizer; rebalanced 364/16 → 180/201 crypto sharding. |
+| 6 | (governance) | B74 governance | BATCH_CATALOG + PHASE_HISTORY + SIM + CHANGES_AND_FIXES (3 new BUG entries D-F-G-H) + RUNNING_ISSUES (#41 perp OHLC backlog + #42 narration leak) + MEMORY. Langston Step-8 approved cc-inbox #873. |
+
+**Live state PM2 #122:**
+- B74 capturing across 5 of 6 tables (perp OHLC backlog #41)
+- Crons added to root crontab
+- Self-heal will catch any future current-month partition gaps
+- B73.2 + Factor Calibration UI from earlier today still operational
+- All B67.x foundation work still operational
+
+**Telegram routing diagnostics:**
+- ✅ Langston content replies land in thread 21 (post-policy revert + relay session archive)
+- ❌ Langston narration ("Sent — Telegram #N to thread M") leaks to General/topic-1 — RUNNING_ISSUES #42, Langston self-fixing to NO_REPLY pattern
+- ✅ cc-inbox round-trip working under reverted (original allowlist) policy
+
+## ⭐ Previously completed (2026-04-30 afternoon, 1 commit)
 
 | # | Commit | Layer | Outcome |
 |---|---|---|---|

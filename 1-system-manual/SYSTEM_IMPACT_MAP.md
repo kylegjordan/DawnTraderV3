@@ -1104,3 +1104,41 @@ Observation-only framework parallel to B67.0. Records what 12 BE-stop / trailing
 | 9 | Unit tests | `server/tests/unit/b73-exit-strategy-replay.test.ts` | ✅ CI passing |
 
 Multi-week observation accumulates in parallel with B67.4 cheap-tier + calibration window.
+
+## B74 — Passive OHLC + Ticker Archive Pipeline (2026-04-30, commits `ce4a7e40` → `bd60add3` → `778cd4ed`, PM2 #119 → #122)
+
+Continuous 1-min OHLC + per-update ticker snapshots captured to month-partitioned dump tables across three asset universes via persistent WebSocket connections. NO signal-pipeline integration; substrate accumulation only. Verified non-impact on FX5 / VTS / signal-orchestrator / B73 hooks per pre-audit §A.3.
+
+### B74 components inventory
+
+| # | Component | Path | Status |
+|---|---|---|---|
+| 1 | Equity-spot archiver (xStocks via WS v2) | `server/services/passive-archive/equity-spot-archiver.ts` | ✅ LIVE — 38 syms, 161 OHLC + 1,418 ticker rows in first 6min |
+| 2 | Equity-perp archiver (PF_*XUSD via Kraken Futures WS) | `server/services/passive-archive/equity-perp-archiver.ts` | ✅ LIVE — 10 syms, 1,478 ticker; **OHLC at 0 rows pending RUNNING_ISSUES #41 (feed name)** |
+| 3 | Crypto-spot archiver (USD/USDT/USDC ≥ $10k vol via WS v2, hash-mod sharding) | `server/services/passive-archive/crypto-spot-archiver.ts` | ✅ LIVE — 380 pairs in 2 shards (180/201 post-Murmur3 fix) |
+| 4 | OHLC batch writer (5s flush, 2-slot semaphore) | `server/services/passive-archive/ohlc-batch-writer.ts` | ✅ LIVE |
+| 5 | Ticker batch writer (5s flush, 1s/sym throttle) | `server/services/passive-archive/ticker-batch-writer.ts` | ✅ LIVE |
+| 6 | Reconnect policy (exp backoff, 30s cap) | `server/services/passive-archive/reconnect-policy.ts` | ✅ LIVE |
+| 7 | Universe loader (static equity, dynamic crypto) | `server/services/passive-archive/universe-loader.ts` | ✅ LIVE |
+| 8 | Bootstrap (LAST in startup, partition self-heal) | `server/startup/passive-archive-bootstrap.ts` | ✅ LIVE |
+| 9 | Symbol canonicalizer extension (`PF_*XUSD` → `<TICKER>/USD:PERP`) | `server/services/utils/symbol-canonicalizer.ts` (modified) | ✅ LIVE |
+| 10 | Migration + rollback | `drizzle/migrations/2026-05-01-b74-passive-archive-tables*.sql` | ✅ Applied |
+| 11 | 6 partitioned tables + 72 monthly partitions | `equity_spot_ohlc_1m`, `equity_perp_ohlc_1m`, `crypto_spot_ohlc_1m`, `equity_spot_ticker_snap`, `equity_perp_ticker_snap`, `crypto_spot_ticker_snap` | ✅ LIVE; current-month partition self-heal added post-deploy |
+| 12 | 7 module_constants in `passive_archive` module | `b74_*_capture_enabled` × 3 + `b74_crypto_min_volume_24h_usd` + `b74_ws_reconnect_max_backoff_sec` + `b74_ticker_snapshot_min_interval_ms` + `b74_partition_lookhead_months` | ✅ Seeded |
+| 13 | Universe-refresh cron (03:00 UTC daily) | `server/scripts/b74-refresh-universe.ts` + root crontab line | ✅ LIVE |
+| 14 | Partition-creation cron (28th 02:00 UTC) | `server/scripts/b74-create-monthly-partitions.ts` + root crontab line | ✅ LIVE |
+| 15 | Static universe configs | `server/config/{xstocks,equity-perp}-universe.json` + `crypto-universe-filter.json` | ✅ LIVE |
+| 16 | Unit tests | `server/tests/unit/b74-symbol-canonicalizer-perp.test.ts` + `b74-universe-loader.test.ts` | ✅ CI passing |
+
+### B74 forward-couples
+
+- **B70 archival contract** — all 6 tables month-partitioned, no FK constraints, self-describing rows with `metadata.schema_version=1`. B70 will define hot/warm/cold tiering when it ships.
+- **B68.1 multi-timeframe** — crypto_spot_ohlc_1m provides the 1-min crypto substrate B68.1 needs. B68.1 owns the signal-pipeline integration when it lands.
+- **Phase 21.5 equity expansion** — 3 equity tables (spot OHLC, spot ticker, perp ticker) provide weeks-to-months of historical context when Phase 21.5 begins designing the equity strategy/admission logic.
+
+### B74 known limitations
+
+- **xStocks universe currently 38 of 128.** v1 starter list from Kyle screenshots; expand via PR per Langston cc-inbox #867 Q3.
+- **Equity perp OHLC at 0 rows.** Feed-name mismatch on Kraken Futures WS subscription (RUNNING_ISSUES #41).
+- **NOT yet on UI surface.** Pure substrate. Phase 21.5 / B68.1 / B70 will surface analytics over this data.
+

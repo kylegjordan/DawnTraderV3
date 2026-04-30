@@ -31,6 +31,30 @@
 
 ## BUGS
 
+### BUG-2026-04-30-F: B74 Config Path via `import.meta.url` Doesn't Survive esbuild Bundle — **RESOLVED**
+- **Severity**: HIGH (B74 archivers silently failed to start at boot)
+- **Location**: `server/services/passive-archive/universe-loader.ts`
+- **Problem**: Universe-loader resolved JSON config paths via `path.dirname(fileURLToPath(import.meta.url))` + relative `../../config`. In dev this resolves correctly inside `server/services/passive-archive/`. After esbuild bundles to single-file `dist/index.js`, `import.meta.url` resolves to `dist/` and the relative path doesn't reach `server/config/`. Universe-loader threw ENOENT, bootstrap's per-archiver `.catch()` swallowed the error to a log line that wasn't surfacing distinctly. Symptom: `[B74][bootstrap] passive archive pipeline started` log printed, but no `[B74][universe] equity_spot loaded: ...` follow-up; 60s health logs showed `connected=false` for all archivers; tables stayed empty.
+- **Detection**: Kyle observation post-B74 deploy that DB row counts were 0; investigated PM2 logs and found bootstrap completed without universe-load logs.
+- **Fix** (`bd60add3` 2026-04-30): switched to `process.cwd()`-based path. The dawntrader app is always launched from project root by PM2, so cwd is `/home/deploy/dawntrader/` — stable in both dev and prod.
+- **Lesson**: When a project bundles via esbuild to a single dist file, `import.meta.url`-based path resolution is a known footgun. Use `process.cwd()` or absolute paths for runtime-resolved files (configs, fixtures). Add a runtime-test step (not just `npm run check`) before declaring a feature shippable — the bundled output has different path semantics than source-tree TypeScript.
+
+### BUG-2026-04-30-G: B74 Migration Partition Off-By-One on Deploy Day — **RESOLVED**
+- **Severity**: HIGH (all inserts failed for hours until UTC midnight rolled over)
+- **Location**: `drizzle/migrations/2026-05-01-b74-passive-archive-tables.sql` DO block
+- **Problem**: Migration's DO block pre-created 12 monthly partitions starting from `DATE '2026-05-01' + (i || ' months')::INTERVAL` — covering May 2026 through April 2027. But the migration was applied on 2026-04-30 22:31 UTC (still April). Postgres has no partition for the current month → all inserts fail with `ERROR: no partition of relation "equity_spot_ohlc_1m" found for row` for ~1.5 hours until UTC midnight rolls into May 2026 (which IS pre-created). Bootstrap's headroom check passed because it queried the LATEST partition end date (2027-05-01, > 2 months ahead) without verifying CURRENT-month coverage.
+- **Detection**: Manual `INSERT INTO equity_spot_ohlc_1m ... VALUES (... NOW() ...)` returned the partition error after observing that DB row counts were 0 despite archivers reporting `rows_persisted_60s` non-zero.
+- **Fix** (`778cd4ed` 2026-04-30): bootstrap's `checkPartitionHeadroom` now ALSO ensures current-month partition exists, creating it inline with `[B74][partitions][SELF-HEAL] created missing CURRENT-month partition` warn log if missing. Catches both this off-by-one AND any future monthly-cron miss. Manually created the 2026-04 partitions on staging during the incident.
+- **Lesson**: Time-relative migration logic (date arithmetic from a hardcoded anchor) is fragile when deploy day doesn't match the anchor. Either: (a) pre-create partitions starting from `date_trunc('month', NOW())` in the DO block, OR (b) add bootstrap-time self-heal that ensures critical partitions exist regardless of migration timing. We chose (b) because (a) requires post-migration restart to re-run. Bootstrap-time self-heal is more robust for the live system.
+
+### BUG-2026-04-30-H: FNV-1a Hash Low-Bit Bias Causes Imbalanced WS Sharding — **RESOLVED**
+- **Severity**: MEDIUM (one shard exceeded recommended 300-symbol limit)
+- **Location**: `server/services/passive-archive/crypto-spot-archiver.ts` — `fnv1aHash()` function, used for `hash(symbol) % shardCount` sharding
+- **Problem**: Bare FNV-1a 32-bit hash has weak avalanche on the low bits. When inputs share suffixes (all 380 crypto pairs end in `/USD`, `/USDT`, or `/USDC`), the hashed values cluster on the low bits — `% 2` produced 364/16 shard distribution (96%/4% bias) instead of expected ~190/190.
+- **Detection**: Bootstrap logs showed `[B74][crypto-spot][shard0] subscribed ... for 364 symbols` and `[shard1] for 16 symbols`. Shard0 exceeded the 300-symbol Kraken WS v2 recommended limit per Langston cc-inbox #869 Q3.
+- **Fix** (`778cd4ed` 2026-04-30): added Murmur3 fmix32 finalizer (xor-shift-multiply three times) after the FNV-1a main loop. The avalanche function spreads the bits uniformly so `% shardCount` distributes evenly. Post-redeploy: 180/201 split — both shards under the 300 recommended limit.
+- **Lesson**: For hash-mod sharding with small modulo (especially `% 2` or `% 4`), bare FNV-1a is insufficient. Always apply a finalizer (Murmur3 fmix32 is the standard) when the input domain has suffix or prefix bias. Pattern is well-documented but easy to miss when implementing from scratch.
+
 ### BUG-2026-04-30-D: B73 Variant Collapse Persists After B73.1 (1-min OHLC vs Live TEC Tick Resolution) — **RESOLVED**
 - **Severity**: HIGH (B73 framework still un-decision-grade despite morning hotfix; ALL variants on ALL trades collapse to identical inherited values)
 - **Location**: `server/services/exit-strategy-replay-service.ts` (OHLC fetch window + ATR derivation) + `server/services/exit-strategy-replay.ts` (variant trigger thresholds)
