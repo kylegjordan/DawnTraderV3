@@ -312,7 +312,10 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
 ## 8. Langston Operations Reference
 
 - **Server:** Hetzner CPX22 at `204.168.141.77` (Helsinki). Ubuntu 24.04.
-- **Brain:** OpenClaw gateway running OpenAI GPT-5.4 permanently (272K tokens/topic, 1M override blocked on upstream openclaw/openclaw#42225 + PR #44475 — monitor for merge and retry).
+- **Two agents, two models** (Kyle directive 2026-04-30 — keep in context every session):
+  - **CCDT Communicator** (`telegram-relay` agent, `@CCDTCommsBot`) — uses **GPT-4.1** (full, NOT mini). Silent message-relay role; no conversational reasoning required, but tool-calling needs full GPT-4.1 minimum per the diagnostic runbook below (§8.1 step 6).
+  - **Langston** (`main` agent, `@LangstonDTBot`) — uses **Claude Opus 4.6**. Conversational, code-review, design-discussion role.
+- **Token caps:** 272K tokens per topic, 1M override blocked on upstream openclaw/openclaw#42225 + PR #44475 — monitor for merge and retry.
 - **OpenClaw version:** 2026.4.14 (upgraded from 2026.4.5 on 2026-04-14 via `openclaw update`).
 - **Workspace:** `/root/.openclaw/workspace/` (main agent / Langston) and `/root/.openclaw/agents/telegram-relay/workspace/` (CCDT Relay agent). Each contains BOOTSTRAP.md, MEMORY.md, SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md.
 - **Bot identities:** `@LangstonDTBot` (default account, `main` agent, conversational) and `@CCDTCommsBot` (ccdt-relay account, `telegram-relay` agent, silent message relay to cc-inbox). CC-initiated sends via `openclaw message send --account ccdt-relay` show in Telegram as "CCDT Communicator" — that is CC, not the relay agent.
