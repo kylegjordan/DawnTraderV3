@@ -94,6 +94,10 @@ import {
 // Pure-function module; no persistent state. Config resolved alongside the
 // other 6 groups via `refreshVolumeRegimeConfig()`.
 import type { VolumeRegimeConfig } from '../core/metrics/volume-regime.js';
+// B68.3 (2026-05-02): pair correlation as third orthogonal confidence
+// dimension. Pure-function module; no persistent state. BTC reference fetched
+// on-demand from ohlcCache at emit hook (not pre-cached in MCE state).
+import type { PairCorrelationConfig } from '../core/metrics/pair-correlation.js';
 
 /** B68.4 — freshness factor config resolved from `regime_age` module. */
 export interface RegimeAgeConfig {
@@ -111,6 +115,9 @@ export interface PathBSustainabilityConfig {
 /** B68.2 — Re-export so consumers can import VolumeRegimeConfig from MCE
  *  alongside the other config types without crossing module boundaries. */
 export type { VolumeRegimeConfig } from '../core/metrics/volume-regime.js';
+
+/** B68.3 — Re-export PairCorrelationConfig same as VolumeRegimeConfig. */
+export type { PairCorrelationConfig } from '../core/metrics/pair-correlation.js';
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -186,6 +193,12 @@ export class MarketContextEngine {
   // Pure function over OHLC; no persistent state on the MCE side. Config
   // resolved with the other 6 groups via `refreshVolumeRegimeConfig()`.
   private volumeRegimeConfig: VolumeRegimeConfig | null = null;
+
+  // ─── B68.3: pair correlation config block ─────────────────────────────────
+  // Pure function over OHLC + BTC reference. BTC reference fetched at emit
+  // hook from ohlcCache (cache read, not network — microsecond latency per
+  // Langston cc-inbox #884 D.1). No prefetch into MCE state at v1.
+  private pairCorrelationConfig: PairCorrelationConfig | null = null;
   /** True until the first successful `refreshAllConfigs()`. Used to enforce
    *  hard-fail-on-startup vs keep-prior-on-subsequent-failure (§D.4). */
   private firstRefreshPending: boolean = true;
@@ -231,6 +244,7 @@ export class MarketContextEngine {
     this.regimeAgeConfig = null;
     this.pathBSustainabilityConfig = null;
     this.volumeRegimeConfig = null;
+    this.pairCorrelationConfig = null;
     this.firstRefreshPending = true;
     console.log('[Phase14][MCE] Stopped, cache cleared');
   }
@@ -267,11 +281,12 @@ export class MarketContextEngine {
           this.refreshOutcomeFeedbackConfig(),
           this.refreshRegimeAgeConfig(),
           this.refreshPathBConfig(),
-          this.refreshVolumeRegimeConfig(), // B68.2 (2026-05-02): 7th group
+          this.refreshVolumeRegimeConfig(),     // B68.2 (2026-05-02): 7th group
+          this.refreshPairCorrelationConfig(),  // B68.3 (2026-05-02): 8th group
         ]);
         this.firstRefreshPending = false;
         this.assembleRegimeConfig();
-        console.log('[Phase14][MCE] First refresh complete — all 7 config groups loaded');
+        console.log('[Phase14][MCE] First refresh complete — all 8 config groups loaded');
       } catch (err) {
         console.error(
           '[Phase14][MCE] First refresh failed; will retry on next timer tick:',
@@ -288,7 +303,8 @@ export class MarketContextEngine {
       { name: 'outcome_feedback',       fn: () => this.refreshOutcomeFeedbackConfig() },
       { name: 'regime_age',             fn: () => this.refreshRegimeAgeConfig() },
       { name: 'path_b_sustainability',  fn: () => this.refreshPathBConfig() },
-      { name: 'volume_regime',          fn: () => this.refreshVolumeRegimeConfig() }, // B68.2
+      { name: 'volume_regime',          fn: () => this.refreshVolumeRegimeConfig() },    // B68.2
+      { name: 'pair_correlation',       fn: () => this.refreshPairCorrelationConfig() }, // B68.3
     ];
     await Promise.all(groups.map(async (g) => {
       try {
@@ -488,6 +504,55 @@ export class MarketContextEngine {
     };
   }
 
+  /** B68.3 — Pair correlation config (8 constants per Langston cc-inbox #883). */
+  private async refreshPairCorrelationConfig(): Promise<void> {
+    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [
+      lookbackBars,
+      btcRefSymbol,
+      factorMin,
+      factorMax,
+      sensitivity,
+      minSamples,
+      driftingThr,
+      idiosyncraticThr,
+    ] = await Promise.all([
+      getConstant<number>('pair_correlation', 'b68_3_lookback_bars', RES_KEY),
+      getConstant<string>('pair_correlation', 'b68_3_btc_reference_symbol', RES_KEY),
+      getConstant<number>('pair_correlation', 'b68_3_factor_min', RES_KEY),
+      getConstant<number>('pair_correlation', 'b68_3_factor_max', RES_KEY),
+      getConstant<number>('pair_correlation', 'b68_3_sensitivity', RES_KEY),
+      getConstant<number>('pair_correlation', 'b68_3_min_samples', RES_KEY),
+      getConstant<number>('pair_correlation', 'b68_3_drifting_threshold', RES_KEY),
+      getConstant<number>('pair_correlation', 'b68_3_idiosyncratic_threshold', RES_KEY),
+    ]);
+    const missing: string[] = [];
+    if (lookbackBars === undefined)    missing.push('b68_3_lookback_bars');
+    if (btcRefSymbol === undefined)    missing.push('b68_3_btc_reference_symbol');
+    if (factorMin === undefined)       missing.push('b68_3_factor_min');
+    if (factorMax === undefined)       missing.push('b68_3_factor_max');
+    if (sensitivity === undefined)     missing.push('b68_3_sensitivity');
+    if (minSamples === undefined)      missing.push('b68_3_min_samples');
+    if (driftingThr === undefined)     missing.push('b68_3_drifting_threshold');
+    if (idiosyncraticThr === undefined) missing.push('b68_3_idiosyncratic_threshold');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B68.3] missing module_constants in pair_correlation module: ${missing.join(', ')}. ` +
+        `Run migration 2026-05-02-b68-3-pair-correlation.sql to seed.`,
+      );
+    }
+    this.pairCorrelationConfig = {
+      lookbackBars: lookbackBars as number,
+      btcReferenceSymbol: btcRefSymbol as string,
+      factorMin: factorMin as number,
+      factorMax: factorMax as number,
+      sensitivity: sensitivity as number,
+      minSamples: minSamples as number,
+      driftingThreshold: driftingThr as number,
+      idiosyncraticThreshold: idiosyncraticThr as number,
+    };
+  }
+
   /** B68.2 — Volume regime config (8 constants per Langston cc-inbox #881). */
   private async refreshVolumeRegimeConfig(): Promise<void> {
     const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
@@ -642,6 +707,11 @@ export class MarketContextEngine {
   /** B68.2 — Volume regime config accessor. Null only during cold start. */
   getCurrentVolumeRegimeConfig(): VolumeRegimeConfig | null {
     return this.volumeRegimeConfig;
+  }
+
+  /** B68.3 — Pair correlation config accessor. Null only during cold start. */
+  getCurrentPairCorrelationConfig(): PairCorrelationConfig | null {
+    return this.pairCorrelationConfig;
   }
 
   // ─── Core: Compute Context ─────────────────────────────────────────────────

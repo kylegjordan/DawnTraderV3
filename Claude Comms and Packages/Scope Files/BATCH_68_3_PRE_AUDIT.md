@@ -4,7 +4,7 @@
 **Step:** 2 of 11 per CLAUDE.md §2 workflow
 **SIM consulted:** YES — see §A.1 below
 **System Manual consulted:** YES — see §A.2 below
-**Status:** Drafted, awaiting Langston Step-2 review
+**Status:** Drafted + updated with §A.4 XXBTZUSD finding, awaiting Langston Step-2 review
 
 ---
 
@@ -19,7 +19,7 @@ Per CLAUDE.md §9. **Same blast-radius profile as B68.2** — pure additive: 1 n
 | 1 | Pair correlation computation | `server/core/metrics/pair-correlation.ts` (NEW) | Pure-function score + factor + ablation builder. Reuses `spearmanRankCorrelation` + `ohlcCache.getOHLCData` for BTC reference. | LOW (new isolated module) |
 | 2 | MCE 8th refresh sub-method | `server/services/market-context-engine.ts` | Add `refreshPairCorrelationConfig()` (becomes 8-method orchestrator); `pairCorrelationConfig` private field + `getCurrentPairCorrelationConfig()` accessor. No threading into `calculatePairRegime` (chain-only). | MEDIUM — orchestrator critical infra; B67.4 hotfix-#2 try/catch wrapper inherited unchanged. |
 | 3 | Signal-orchestrator emit hook | `server/services/signal-orchestrator.ts` | Push `b68_3_pair_correlation` ablation row + apply factor in chain. Mirror B68.2 hook exactly (insert AFTER B68.2 volume-regime block). | MEDIUM — every signal in active path. Pre-B67.5 active trading is OFF → observational only. |
-| 4 | VTS-runner emit hook | `server/services/vts-runner.ts` | Same pattern as orchestrator. Uses function-scope `ohlcData` + fetches BTC reference via `ohlcCache.getOHLCData('XBT/USD', 60)`. Updates `openTrade.regimeConfidenceModulated` to reflect 6-modulator chain. | MEDIUM — every VTS signal. |
+| 4 | VTS-runner emit hook | `server/services/vts-runner.ts` | Same pattern as orchestrator. Uses function-scope `ohlcData` + fetches BTC reference via `ohlcCache.getOHLCData(config.btcReferenceSymbol, 60)` where config seeds `XXBTZUSD` (Kraken REST format — matches existing defensive-hedge BTC fetch at vts-runner:2248, shares cache entry). Updates `openTrade.regimeConfidenceModulated` to reflect 6-modulator chain. | MEDIUM — every VTS signal. |
 | 5 | Module constants | `module_constants` table | Add 8 new keys in `pair_correlation` module (additive, no schema change). | LOW. |
 | 6 | Tests | `server/tests/unit/b68-3-pair-correlation.test.ts` (NEW) | Pure-function tests. | NONE. |
 
@@ -64,6 +64,12 @@ Per CLAUDE.md §9. **Same blast-radius profile as B68.2** — pure additive: 1 n
 | Ablation row volume +12% per cycle (9 factor types vs 8) | ~1000 → ~1100 rows/cycle. Trivial at VTS scale; 90-day retention sweep already in `replay-ablation.ts`. | No mitigation needed. |
 
 **Net:** B68.3 is observational pre-B67.5 (no consumer reads as gate). The escalating compound-penalty concern (Langston O.1) is the only real architectural worry, and it's a B67.5 problem.
+
+### §A.4 Pre-audit finding: BTC reference symbol format
+
+**Finding:** Scope §F migration seeds `b68_3_btc_reference_symbol = "XBT/USD"` (Kraken WS format). But `ohlcCache.getOHLCData()` passes through to `krakenService.getOHLCData()` which hits Kraken REST. The existing BTC OHLC fetch in vts-runner (line 2248) uses `XXBTZUSD` (Kraken REST format). While Kraken REST accepts both formats, using `XXBTZUSD` shares the defensive-hedge BTC cache entry (cache key = `XXBTZUSD_60`), avoiding a redundant API call.
+
+**Decision:** Seed `"XXBTZUSD"` in migration (not `"XBT/USD"`). Self-reference check `symbol === config.btcReferenceSymbol` works because vts-runner symbols are also REST format. Scope §F migration SQL updated accordingly.
 
 ---
 
@@ -243,7 +249,7 @@ DELETE the 8 keys.
 
 ## §D. Open questions for Langston (Step 2 review)
 
-1. **BTC reference fetch latency in active-path emit hook.** The orchestrator emit hook currently fires synchronously (no `await`). Adding `await ohlcCache.getOHLCData('XBT/USD', 60)` introduces async overhead per signal eval. Acceptable for ablation hot path, or want to prefetch BTC OHLC into MCE state on the periodic refresh cadence and consume sync? Cleaner architecturally but adds a per-cycle data dependency.
+1. **BTC reference fetch latency in active-path emit hook.** The orchestrator emit hook currently fires synchronously (no `await`). Adding `await ohlcCache.getOHLCData(config.btcReferenceSymbol, 60)` introduces async overhead per signal eval (mitigated: BTC OHLC already cached from defensive-hedge fetch at vts-runner:2248 using `XXBTZUSD`). Acceptable for ablation hot path, or want to prefetch BTC OHLC into MCE state on the periodic refresh cadence and consume sync? Cleaner architecturally but adds a per-cycle data dependency.
 
 2. **Spearman correlation cost on hot path.** O(N log N) for ranking each series. Per-pair per-eval × ~110 pairs/cycle × 60s cycle = ~110 × 30 sorts per minute. Trivial CPU but worth confirming. Alternative: pre-compute once per cycle in MCE, cache per-pair, consume sync at emit time. Adds infrastructure for negligible win. Lean ship-now-iterate?
 

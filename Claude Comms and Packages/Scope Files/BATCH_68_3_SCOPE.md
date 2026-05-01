@@ -2,7 +2,7 @@
 
 **Owner:** Kyle (decisions), Claude Code (implementation), Langston (review)
 **Date opened:** 2026-05-02
-**Status:** Step 1 — scope drafted, awaiting Langston review
+**Status:** Step 1 — APPROVED by Langston (cc-inbox #883, 2026-05-01). Refinements D.1 + D.2 incorporated. Proceeding to Step 2.
 **Parent program:** Phase 15c — B67/B68 Regime-Confidence Overhaul
 **Predecessor:** B68.2 Volume Regime SHIPPED 2026-05-02 (PM2 #128). B68.2 mini-window Day 0 of 14.
 **Successor:** B68.1 Multi-TF agreement (~2 weeks, leverages B74's 1-min crypto OHLC archive)
@@ -230,7 +230,7 @@ Note: `b68_3_btc_reference_symbol` stored as JSONB string. Matches existing stri
 ```sql
 INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by) VALUES
   ('pair_correlation', '*', '*', '*', '*', 'b68_3_lookback_bars',         '30'::jsonb,         'b68.3-pair-correlation'),
-  ('pair_correlation', '*', '*', '*', '*', 'b68_3_btc_reference_symbol',  '"XBT/USD"'::jsonb,  'b68.3-pair-correlation'),
+  ('pair_correlation', '*', '*', '*', '*', 'b68_3_btc_reference_symbol',  '"XXBTZUSD"'::jsonb,  'b68.3-pair-correlation'),
   ('pair_correlation', '*', '*', '*', '*', 'b68_3_factor_min',            '0.95'::jsonb,       'b68.3-pair-correlation'),
   ('pair_correlation', '*', '*', '*', '*', 'b68_3_factor_max',            '1.05'::jsonb,       'b68.3-pair-correlation'),
   ('pair_correlation', '*', '*', '*', '*', 'b68_3_sensitivity',           '0.05'::jsonb,       'b68.3-pair-correlation'),

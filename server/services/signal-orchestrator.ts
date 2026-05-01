@@ -118,6 +118,11 @@ import {
   computeVolumeRegime,
   buildB68_2Alternate,
 } from '../core/metrics/volume-regime.js';
+// B68.3 (2026-05-02): pair correlation as third orthogonal confidence dimension
+import {
+  computePairCorrelation,
+  buildB68_3Alternate,
+} from '../core/metrics/pair-correlation.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 
@@ -807,6 +812,54 @@ export class SignalOrchestrator {
         }
       } else if (volumeRegimeConfig === null) {
         console.warn('[B68.2][orchestrator] volume regime config null at ablation hook — cold-start race');
+      }
+
+      // ── B68.3 pair correlation (6th chain modulator, 2026-05-02) ──────
+      // Spearman correlation of pair returns vs BTC returns over rolling N
+      // bars. Decorrelation score = 1 - |corr|; factor = clamp(1 + decorr ×
+      // sensitivity). Asymmetric range [0.95, 1.05] — boost only.
+      // BTC OHLC fetched on-demand from ohlcCache (cache read; microsecond
+      // latency per Langston cc-inbox #884 D.1). Self-reference handled
+      // inside computePairCorrelation (factor=1.0 + SELF_REFERENCE flag).
+      const pairCorrelationConfig = mce.getCurrentPairCorrelationConfig();
+      if (pairCorrelationConfig !== null && symbolCtx !== null) {
+        const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
+        if (ohlc && Array.isArray(ohlc) && ohlc.length >= pairCorrelationConfig.minSamples) {
+          try {
+            const { ohlcCache } = await import('./ohlc-cache.js');
+            const btcRaw = await ohlcCache.getOHLCData(pairCorrelationConfig.btcReferenceSymbol, 60);
+            const btcOhlc = (btcRaw?.ohlc ?? []).map((c: any) => ({
+              open: parseFloat(c.open || c[1]),
+              high: parseFloat(c.high || c[2]),
+              low: parseFloat(c.low || c[3]),
+              close: parseFloat(c.close || c[4]),
+              volume: parseFloat(c.volume || c[6] || 0),
+              timestamp: c.timestamp || c[0] * 1000,
+            }));
+            const result = computePairCorrelation(
+              rawSignal.symbol,
+              ohlc,
+              btcOhlc.length >= pairCorrelationConfig.minSamples ? btcOhlc : null,
+              pairCorrelationConfig,
+            );
+            modulatedConfChain *= result.factor;
+            ablationAlternates.push(
+              buildB68_3Alternate(modulatedConfChain, regimeLabel, result, pairCorrelationConfig),
+            );
+            console.log(
+              `[B68.3][correlation] pair=${rawSignal.symbol} corr=${result.correlationToBtc.toFixed(3)} ` +
+                `decorr=${result.decorrelationScore.toFixed(3)} factor=${result.factor.toFixed(4)} ` +
+                `label=${result.label}`,
+            );
+          } catch (err) {
+            console.error(
+              '[B68.3][orchestrator] pair correlation emit failed:',
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+      } else if (pairCorrelationConfig === null) {
+        console.warn('[B68.3][orchestrator] pair correlation config null at ablation hook — cold-start race');
       }
 
       // ── B68.5 Path B sustainability ablation row ──────────────────────
