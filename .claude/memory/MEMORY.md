@@ -20,23 +20,43 @@
 
 ## ⭐ CALIBRATION WINDOW STATUS
 
-**B67.4 window:** STARTED 2026-05-01 (Day 1 of 14). Ends 2026-05-15. 7 factor types accumulating.
+**THREE windows running in parallel** per master plan §0.11.C step 5 (framework attributes per-factor independently):
 
-**B68.2 window:** ⭐ **STARTED 2026-05-02 (Day 0 of 14).** Ends 2026-05-16. **All 8 factor types now emitting** ablation rows: b67_1_btc_dominance / funding_rates / mcap_momentum / b67_2_phase_preference / b67_4_outcome_feedback / b68_4_regime_age / b68_5_path_b_sustainability / **b68_2_volume_regime (NEW)**. Per master plan §0.11.C step 5, framework attributes per-factor independently — B68.2's window runs in parallel with B67.4's, segmenting on its own row type.
+- **B67.4 window:** Day 1 of 14, ends 2026-05-15. 7 factors.
+- **B68.2 window:** Day 0 of 14, ends 2026-05-16. b68_2_volume_regime.
+- **B68.3 window:** ⭐ **STARTED 2026-05-02 (Day 0 of 14).** Ends 2026-05-16. **All 9 factor types now emitting** ablation rows: b67_1_btc_dominance / funding_rates / mcap_momentum / b67_2_phase_preference / b67_4_outcome_feedback / b68_4_regime_age / b68_5_path_b_sustainability / b68_2_volume_regime / **b68_3_pair_correlation (NEW)**.
 
-**Subsequent batches:** B68.3 Pair correlation → B68.1 Multi-TF agreement, each own ~14d mini-window. B69 ML-light deferred to end of pre-Phase-16.
+**Subsequent batch:** B68.1 Multi-TF agreement (~2 weeks; leverages B74's 1-min crypto OHLC archive). B69 ML-light deferred to end of pre-Phase-16.
+
+**⚠ Langston O.1 escalating concern (cc-inbox #883):** 6-modulator compound penalty stack worst case ≈ 0.455. After B68.1 (7th modulator) ≈ 0.43, at the 0.4 floor edge. **B67.5 floor decision is now URGENT — no more deferring.**
 
 ---
 
-## Current State (2026-05-02 — B68.2 SHIPPED, PM2 #128)
+## Current State (2026-05-02 — B68.3 SHIPPED, PM2 #129)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `50670465` (B68.2 v1 ship — volume regime as second confidence dimension)
-- **Live state:** B68.2 + B67.4 both live. Modulation chain extended: `raw × macro × phase × freshness × outcome × volume_regime → clamp [0.4, 1.0]` (5 chain modulators now). `regime_confidence_modulated` column on closed VTS trades reflects 5-modulator composite. All B74 archivers + B73 replay still running. Two calibration windows active in parallel (B67.4 Day 1, B68.2 Day 0).
+- **HEAD commit:** `1cd79f04` (B68.3 hotfix #1 — anti-correlation test fix)
+- **Live state:** B68.3 + B68.2 + B67.4 all live. Modulation chain extended: `raw × macro × phase × freshness × outcome × volume_regime × pair_correlation → clamp [0.4, 1.0]` (6 chain modulators now). All B74 archivers + B73 replay still running. Three calibration windows active in parallel.
 
 ---
 
-## ⭐ JUST COMPLETED (2026-05-02 — B68.2 ship)
+## ⭐ JUST COMPLETED (2026-05-02 — B68.3 ship)
+
+| # | Commit | Layer | Outcome |
+|---|---|---|---|
+| 1 | `98751a6c` + `0b9136b6` | **B68.3 v1 ship** | 7 files: migration (8 module_constants in `pair_correlation` module incl. `b68_3_idiosyncratic_threshold` per Langston §D.1) + rollback + `pair-correlation.ts` pure-function module (~225 lines) + MCE 8th refresh sub-method + 2 emit hooks + 16-case test file. Reuses spearmanRankCorrelation from strategy-helpers.ts. PM2 #129. |
+| 2 | `1cd79f04` | Hotfix #1 | CI caught anti-correlation test using monotonic up vs monotonic down (Spearman ranks magnitude not sign → corr=+1, not -1). Added `makeAntiCorrelatedToNoisy` helper that negates noise deltas → produces sign-inverted returns → Spearman ≈ -1. Test now verifies `corr < -0.5` and `label = DRIFTING` per §D.2 invariant. Test-only fix, no production code. |
+
+**Verification post-deploy PM2 #129:**
+- All 9 factor types emitting in regime_factor_alternates: b67_1×3 + b67_2_phase_preference + b67_4_outcome_feedback + b68_4_regime_age + b68_5_path_b_sustainability + b68_2_volume_regime + **b68_3_pair_correlation (NEW)**.
+- First B68.3 row metadata: corr=0.0076 (essentially independent of BTC), decorrelation=0.992, factor=1.0496 (at ceiling), label=IDIOSYNCRATIC, isBtcSelfReference=false, coldStart=false. Math checks: 1 + 0.992 × 0.05 = 1.0496 ✓
+- B68.3 mini-window officially STARTED 2026-05-02 (Day 0 of 14, parallel with B67.4 + B68.2).
+
+**Langston cc-inbox sequence:** Step 1 #883 (+§D.1 idiosyncratic_threshold), Step 2 #884 (+§D.2 |corr| absolute clarification), Step 4 #885 APPROVED (push it).
+
+---
+
+## ⭐ Earlier 2026-05-02 (B68.2 Volume Regime ship)
 
 | # | Commit | Layer | Outcome |
 |---|---|---|---|
