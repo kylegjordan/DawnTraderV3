@@ -73,6 +73,7 @@ import { computeRealHybridScore, computeRealDecayPenalty } from '../core/utils/v
 import { emitConsumerTelemetry } from './phase15b-dbs-telemetry.js';
 import {
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
+  REGIMES,
   selectContextAwareStrategy,
   symbolToHash,
   getRegimeRiskMultiplier,
@@ -1538,10 +1539,9 @@ async function generatePhase10Signal(
               _baseConf,
             ),
           );
-          const tfsRegime = 'TREND_FRIENDLY_STABLE';
           console.log(
             `[B68.5][gate] pair=${symbol} dbs=${dbsScore.toFixed(3)} ` +
-              `slope=${dbsSlope.toFixed(4)} gate_admitted=${_regimeLabel === tfsRegime} ` +
+              `slope=${dbsSlope.toFixed(4)} gate_admitted=${_regimeLabel === REGIMES.TREND_FRIENDLY_STABLE} ` +
               `regime_label=${_regimeLabel}`,
           );
         } catch (err) {

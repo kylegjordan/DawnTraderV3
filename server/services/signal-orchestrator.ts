@@ -75,8 +75,9 @@ import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../config/score-weights.co
 // Directive 11.3A: Net Expectancy Standardization - Canonical Cost Model
 import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost } from '../core/math/cost-model.js';
 // Directive 11.4F.1B: Canonical regime-strategy mapping (single source of truth)
-import { 
+import {
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
+  REGIMES,
   STRATEGY_DISPLAY_NAMES,
   normalizeStrategy,
   normalizePatternToCanonical,
@@ -791,10 +792,9 @@ export class SignalOrchestrator {
                 baseConf,
               ),
             );
-            const tfsRegime = 'TREND_FRIENDLY_STABLE';
             console.log(
               `[B68.5][gate] pair=${rawSignal.symbol} dbs=${dbsScore.toFixed(3)} ` +
-                `slope=${dbsSlope.toFixed(4)} gate_admitted=${regimeLabel === tfsRegime} ` +
+                `slope=${dbsSlope.toFixed(4)} gate_admitted=${regimeLabel === REGIMES.TREND_FRIENDLY_STABLE} ` +
                 `regime_label=${regimeLabel}`,
             );
           } catch (err) {
