@@ -1521,8 +1521,11 @@ async function generatePhase10Signal(
     }
 
     // ── B68.5 Path B sustainability ablation (label counterfactual) ───
+    // OHLC source: use the function-scope ohlcData parameter directly. Earlier
+    // attempt to read from _ctx was undefined (MarketContext doesn't carry
+    // ohlcData — it computes & discards). Per Langston cc-inbox #879 OBS-1.
     if (_fullRegimeConfig !== null && _ctx) {
-      const ohlc = (_ctx as any).ohlcData;
+      const ohlc = ohlcData;
       const dbsScore = _ctx.directionalBias?.score ?? 0;
       const dbsSlope = (_ctx.directionalBias as any)?.slope ?? 0;
       const macroValue = _macro?.modifier.value ?? 1.0;
