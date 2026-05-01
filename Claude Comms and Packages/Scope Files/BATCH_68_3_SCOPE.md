@@ -139,7 +139,7 @@ Confidence-counterfactual semantic mirrors B68.2 (divide-out approximation). Sam
 - Label thresholds: corr ≥ 0.70 → DRIFTING, |corr| ≤ 0.30 → IDIOSYNCRATIC, else NEUTRAL
 - Counterfactual divide-out
 
-### A.6 Module constants — 7 in `pair_correlation` module
+### A.6 Module constants — 8 in `pair_correlation` module (§D.1 Langston cc-inbox #883)
 
 | Constant | Seed | Purpose |
 |---|---|---|
@@ -150,8 +150,11 @@ Confidence-counterfactual semantic mirrors B68.2 (divide-out approximation). Sam
 | `b68_3_sensitivity` | 0.05 | Slope of factor vs decorrelation score |
 | `b68_3_min_samples` | 30 | Cold-start floor |
 | `b68_3_drifting_threshold` | 0.70 | `\|corr\|` above which metadata flags `label = "DRIFTING"` |
+| `b68_3_idiosyncratic_threshold` | 0.30 | `\|corr\|` below which metadata flags `label = "IDIOSYNCRATIC"` (Langston §D.1) |
 
 Note: `b68_3_btc_reference_symbol` stored as JSONB string. Matches existing string-valued module_constants pattern.
+
+§D.2 (Langston cc-inbox #883): both `drifting_threshold` and `idiosyncratic_threshold` use `|correlationToBtc|` (absolute value) so both highly-positive AND highly-negative correlation flag as DRIFTING (anti-correlated pairs are also "no idiosyncratic edge" per §A.1.3).
 
 ### A.7 Observability
 
@@ -232,7 +235,8 @@ INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regi
   ('pair_correlation', '*', '*', '*', '*', 'b68_3_factor_max',            '1.05'::jsonb,       'b68.3-pair-correlation'),
   ('pair_correlation', '*', '*', '*', '*', 'b68_3_sensitivity',           '0.05'::jsonb,       'b68.3-pair-correlation'),
   ('pair_correlation', '*', '*', '*', '*', 'b68_3_min_samples',           '30'::jsonb,         'b68.3-pair-correlation'),
-  ('pair_correlation', '*', '*', '*', '*', 'b68_3_drifting_threshold',    '0.70'::jsonb,       'b68.3-pair-correlation')
+  ('pair_correlation', '*', '*', '*', '*', 'b68_3_drifting_threshold',    '0.70'::jsonb,       'b68.3-pair-correlation'),
+  ('pair_correlation', '*', '*', '*', '*', 'b68_3_idiosyncratic_threshold','0.30'::jsonb,       'b68.3-pair-correlation')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)
 DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW();
 ```
