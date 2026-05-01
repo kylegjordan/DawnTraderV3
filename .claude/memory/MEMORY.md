@@ -18,25 +18,42 @@
 
 ---
 
-## ⭐ B67 CALIBRATION WINDOW STATUS
+## ⭐ CALIBRATION WINDOW STATUS
 
-**Status:** ⭐ **STARTED 2026-05-01 — Day 0 of 14.** B67.4 cheap-tier bundle SHIPPED PM2 #126 with 3 hotfixes. All 7 expected factor types confirmed emitting ablation rows: `b67_1_btc_dominance` / `b67_1_funding_rates` / `b67_1_mcap_momentum` / `b67_2_phase_preference` / **`b67_4_outcome_feedback`** / **`b68_4_regime_age`** / **`b68_5_path_b_sustainability`** (last three NEW per B67.4).
+**B67.4 window:** STARTED 2026-05-01 (Day 1 of 14). Ends 2026-05-15. 7 factor types accumulating.
 
-**Window end:** 2026-05-15. Calibration check at end via `computeFactorCalibration` aggregator (n ≥ 150 per bucket per Langston cc-inbox #856 — currently below threshold; will populate over 14d).
+**B68.2 window:** ⭐ **STARTED 2026-05-02 (Day 0 of 14).** Ends 2026-05-16. **All 8 factor types now emitting** ablation rows: b67_1_btc_dominance / funding_rates / mcap_momentum / b67_2_phase_preference / b67_4_outcome_feedback / b68_4_regime_age / b68_5_path_b_sustainability / **b68_2_volume_regime (NEW)**. Per master plan §0.11.C step 5, framework attributes per-factor independently — B68.2's window runs in parallel with B67.4's, segmenting on its own row type.
 
-**Subsequent batches:** B68.2 Volume → B68.3 Pair correlation → B68.1 Multi-TF agreement, each its own ~14d mini-window. B69 ML-light deferred to end of pre-Phase-16.
+**Subsequent batches:** B68.3 Pair correlation → B68.1 Multi-TF agreement, each own ~14d mini-window. B69 ML-light deferred to end of pre-Phase-16.
 
 ---
 
-## Current State (2026-05-01 — B67.4 SHIPPED, PM2 #126)
+## Current State (2026-05-02 — B68.2 SHIPPED, PM2 #128)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `18165430` (B67.4 hotfix #3: B68.5 OHLC plumbing fix per Langston OBS-1)
-- **Live state:** B67.4 cheap-tier bundle live. Modulation chain `raw × macro × phase_weight × freshness × outcome_feedback → clamp [0.4, 1.0]` operational on every signal evaluation. `regime_confidence_modulated` column on closed VTS trades reflects the 4-modulator composite. All B74 archivers + B73 replay still running. Calibration window Day 0 of 14.
+- **HEAD commit:** `50670465` (B68.2 v1 ship — volume regime as second confidence dimension)
+- **Live state:** B68.2 + B67.4 both live. Modulation chain extended: `raw × macro × phase × freshness × outcome × volume_regime → clamp [0.4, 1.0]` (5 chain modulators now). `regime_confidence_modulated` column on closed VTS trades reflects 5-modulator composite. All B74 archivers + B73 replay still running. Two calibration windows active in parallel (B67.4 Day 1, B68.2 Day 0).
 
 ---
 
-## ⭐ JUST COMPLETED (2026-05-01 — B67.4 ship + 3 hotfixes + heartbeat infra fix)
+## ⭐ JUST COMPLETED (2026-05-02 — B68.2 ship)
+
+| # | Commit | Layer | Outcome |
+|---|---|---|---|
+| 1 | `50670465` | **B68.2 v1 ship** | 7 files: migration (8 module_constants in `volume_regime` module) + rollback + `volume-regime.ts` pure-function module (~225 lines) + MCE 7th refresh sub-method + 2 emit hooks (orchestrator + vts-runner) + 16-case test file. Langston Steps 1/2/4 cc-inbox #880/#881/#882 all approved. CI 3 of 4 green (TS Check legacy baseline). PM2 #128. |
+
+**Verification post-deploy PM2 #128:**
+- All 8 factor types emitting in regime_factor_alternates (window 5min): b67_1_btc_dominance, b67_1_funding_rates, b67_1_mcap_momentum, b67_2_phase_preference, b67_4_outcome_feedback, b68_4_regime_age, b68_5_path_b_sustainability, **b68_2_volume_regime (NEW)**.
+- First B68.2 row metadata: score=0.358 / factor=1.018 / label=NEUTRAL / has_liquidation_spike=true / cold_start=false / samples=30. All fields correctly populated.
+- B68.2 mini-window officially STARTED 2026-05-02 (Day 0 of 14, parallel with B67.4 window).
+
+**B68.2 follow-up watchpoints:**
+- Active-path orchestrator emit hook still uses any-cast on `MarketContext.ohlcData` (silent-skip when undefined). Active trading off so observational-only impact. Deferred to B67.5 per Langston cc-inbox #881 D.1 — RUNNING_ISSUES #44 carries.
+- v2 follow-up: per-regime sensitivity tuning if calibration data shows uniform behavior is suboptimal. Already marked in scope §D.
+
+---
+
+## ⭐ Earlier 2026-05-01 (B67.4 ship + 3 hotfixes + heartbeat infra fix)
 
 | # | Commit | Layer | Outcome |
 |---|---|---|---|
