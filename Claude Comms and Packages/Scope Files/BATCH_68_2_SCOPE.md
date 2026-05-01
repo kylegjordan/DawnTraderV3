@@ -120,13 +120,18 @@ Order discussion:
       "lookback_bars": <N>,
       "sample_count": <bars actually available>,
       "cold_start": <bool>,
-      "regime_at_eval": "<regime label>"
+      "regime_at_eval": "<regime label>",
+      "has_liquidation_spike": <bool>
     }
   }
 }
 ```
 
 **Confidence-counterfactual semantic** mirrors B67.4 (divide-out approximation). Same documented limitation as the existing chain factors.
+
+### A.4.1 Liquidation-spike detection (Langston §D.1 refinement, cc-inbox #880)
+
+For each pair-eval, compute median volume across the lookback window. Set `has_liquidation_spike = true` if any single bar in the lookback has `volume > 5 × median_volume`. Pure pass-through computation (one extra reduce on the same N-bar slice already loaded for the score). Single boolean in metadata; segments calibration data into "liquidation-contaminated" vs "clean" cohorts post-deploy without recomputation. Threshold (5×) is a v1 seed — promote to module_constant `b68_2_liquidation_spike_multiplier` if calibration shows it needs tuning.
 
 ### A.5 Tests
 
