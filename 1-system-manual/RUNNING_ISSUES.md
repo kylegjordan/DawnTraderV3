@@ -113,9 +113,15 @@
 | 47 | **openclaw heartbeat / subagents config blocks deleted** from `/root/.openclaw/openclaw.json` (Kyle directive 2026-05-01). Root cause for Langston topic-21 session being stuck on `gpt-4.1-mini` at 130% capacity: `agents.defaults.heartbeat.model = "openai/gpt-4.1-mini"` was stamping mini onto the session record on every async-exec-result NO_REPLY ack run. | RESOLVED 2026-05-01 | Deleted both blocks; restarted gateway; purged stale topic-21 from `sessions.json`; verified post-restart `agent:main:telegram:topic:21 → claude-opus-4-6 34k/200k`. Langston user-facing reply chain unaffected. |
 | 48 | **classifyTradeOutcome threshold mismatch** in `replay-ablation.ts` — `VirtualTrade.netProfit` stored as fraction (0.005 = 0.5%) but threshold was `>= 0.5` interpreting as $0.50. All replayed trades landed in `admitted_breakeven` → tertile WR = 0% across the board. Pre-existing since B67.0 ship; surfaced now because Factor Calibration UI is the first consumer that depends on the win/loss split. | RESOLVED 2026-05-01 | Hotfix commit `545094dc`: changed threshold to `>= 0.005` (0.5%) for win, mirror for loss. Re-classified 618 already-replayed rows in-place via SQL UPDATE → 92 won / 221 lost / 305 breakeven. Predictive lift now meaningful in UI panel. |
 
-## Summary Counts (updated 2026-05-01)
-- **RESOLVED:** 39 (adds #47, #48)
-- **DEFERRED:** 4 (adds #44, #45 to B67.5 wiring; carries #12e #40)
+## B68.2 — New Issue Logged 2026-05-02
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 49 | **B68.2 mini-window started Day 0 of 14** (ends 2026-05-16). Watching `regime_factor_alternates.factor_name = 'b68_2_volume_regime'` accumulate to n ≥ 150 per (factor, tertile) bucket per Langston cc-inbox #856 calibration check threshold. Runs in parallel with B67.4 window per master plan §0.11.C step 5 (framework attributes per-factor independently). | OPEN — observation period | Day 0 first ablation row metadata: score=0.358 / factor=1.018 / label=NEUTRAL / has_liquidation_spike=true / cold_start=false / samples=30. PM2 #128. RUNNING_ISSUES #44 (active-path emit hook deferred to B67.5) extends to cover B68.2 (same pattern; same disposition). |
+
+## Summary Counts (updated 2026-05-02)
+- **RESOLVED:** 39 (#47, #48)
+- **DEFERRED:** 4 (#44 active-path emit OHLC; #45 active-path persist hook; #12e regime-gated dormancy; #40 other 4 regime-branch desat)
 - **CRITICAL:** 0
-- **IN PROGRESS:** 1 (#42 — narration leak, Langston self-fix)
-- **OPEN:** 3 (#39 CI TS legacy baseline; #43 B67.4 calibration observation; #46 passive archive partition-aware index gap)
+- **IN PROGRESS:** 1 (#42 — narration leak)
+- **OPEN:** 4 (#39 CI TS legacy; #43 B67.4 calibration observation; #46 passive archive partition-aware index; #49 B68.2 calibration observation)
