@@ -238,18 +238,31 @@ export class MarketContextEngine {
    */
   private async refreshAllConfigs(): Promise<void> {
     if (this.firstRefreshPending) {
-      // First refresh: any failure must surface to MCE.start().
-      await Promise.all([
-        this.refreshMacroConfig(),
-        this.refreshPhaseConfig(),
-        this.refreshRegimeConfig(),
-        this.refreshOutcomeFeedbackConfig(),
-        this.refreshRegimeAgeConfig(),
-        this.refreshPathBConfig(),
-      ]);
-      this.firstRefreshPending = false;
-      this.assembleRegimeConfig();
-      console.log('[Phase14][MCE] First refresh complete — all 6 config groups loaded');
+      // First refresh: log + retry on failure (same shape as the legacy
+      // refreshMacroContext catch). Sub-methods still throw with explicit
+      // migration hints so the failure is attributable, but we don't crash
+      // the process — the timer keeps retrying every cacheTTLMs and the
+      // firstRefreshPending guard remains true until a successful pass.
+      // This preserves the §D.4 "no partial config" property without
+      // surfacing unhandled rejections from MCE.start()'s void-call.
+      try {
+        await Promise.all([
+          this.refreshMacroConfig(),
+          this.refreshPhaseConfig(),
+          this.refreshRegimeConfig(),
+          this.refreshOutcomeFeedbackConfig(),
+          this.refreshRegimeAgeConfig(),
+          this.refreshPathBConfig(),
+        ]);
+        this.firstRefreshPending = false;
+        this.assembleRegimeConfig();
+        console.log('[Phase14][MCE] First refresh complete — all 6 config groups loaded');
+      } catch (err) {
+        console.error(
+          '[Phase14][MCE] First refresh failed; will retry on next timer tick:',
+          err instanceof Error ? err.message : err,
+        );
+      }
       return;
     }
     // Subsequent refreshes: per-group fault tolerance.
