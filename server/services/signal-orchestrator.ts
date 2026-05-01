@@ -113,6 +113,11 @@ import {
   buildB68_4Alternate,
   buildB68_5Alternate,
 } from '../core/metrics/regime-age-factor.js';
+// B68.2 (2026-05-02): volume regime as second confidence dimension
+import {
+  computeVolumeRegime,
+  buildB68_2Alternate,
+} from '../core/metrics/volume-regime.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 
@@ -768,6 +773,40 @@ export class SignalOrchestrator {
         );
       } else {
         console.warn('[B67.4][orchestrator] outcome feedback config null at ablation hook — cold-start race');
+      }
+
+      // ── B68.2 volume regime (5th chain modulator) ─────────────────────
+      // Pure-function score over rolling OHLC. Active-path orchestrator
+      // inherits the same any-cast-on-MarketContext.ohlcData issue as B68.5
+      // (RUNNING_ISSUES #44 — deferred to B67.5 per Langston cc-inbox #881
+      // Step-2 D.1). When ohlc is undefined here, the >= minSamples guard
+      // silently skips emit. Active trading is OFF so observational-only
+      // impact is acceptable. VTS-runner path uses function-scope ohlcData
+      // and is correct.
+      const volumeRegimeConfig = mce.getCurrentVolumeRegimeConfig();
+      if (volumeRegimeConfig !== null && symbolCtx !== null) {
+        const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
+        if (ohlc && Array.isArray(ohlc) && ohlc.length >= volumeRegimeConfig.minSamples) {
+          try {
+            const result = computeVolumeRegime(ohlc, volumeRegimeConfig);
+            modulatedConfChain *= result.factor;
+            ablationAlternates.push(
+              buildB68_2Alternate(modulatedConfChain, regimeLabel, result, volumeRegimeConfig),
+            );
+            console.log(
+              `[B68.2][volume] pair=${rawSignal.symbol} score=${result.score.toFixed(3)} ` +
+                `factor=${result.factor.toFixed(4)} label=${result.label}` +
+                (result.hasLiquidationSpike ? ' (liquidation_spike)' : ''),
+            );
+          } catch (err) {
+            console.error(
+              '[B68.2][orchestrator] volume regime emit failed:',
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+      } else if (volumeRegimeConfig === null) {
+        console.warn('[B68.2][orchestrator] volume regime config null at ablation hook — cold-start race');
       }
 
       // ── B68.5 Path B sustainability ablation row ──────────────────────

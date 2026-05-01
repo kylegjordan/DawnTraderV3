@@ -90,6 +90,10 @@ import {
   outcomeFeedbackStore,
   type OutcomeFeedbackConfig,
 } from '../core/metrics/outcome-feedback-store.js';
+// B68.2 (2026-05-02): volume regime as second confidence dimension.
+// Pure-function module; no persistent state. Config resolved alongside the
+// other 6 groups via `refreshVolumeRegimeConfig()`.
+import type { VolumeRegimeConfig } from '../core/metrics/volume-regime.js';
 
 /** B68.4 — freshness factor config resolved from `regime_age` module. */
 export interface RegimeAgeConfig {
@@ -103,6 +107,10 @@ export interface RegimeAgeConfig {
 export interface PathBSustainabilityConfig {
   dbsSlopeMin: number;
 }
+
+/** B68.2 — Re-export so consumers can import VolumeRegimeConfig from MCE
+ *  alongside the other config types without crossing module boundaries. */
+export type { VolumeRegimeConfig } from '../core/metrics/volume-regime.js';
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -173,6 +181,11 @@ export class MarketContextEngine {
   private outcomeFeedbackConfig: OutcomeFeedbackConfig | null = null;
   private regimeAgeConfig: RegimeAgeConfig | null = null;
   private pathBSustainabilityConfig: PathBSustainabilityConfig | null = null;
+
+  // ─── B68.2: volume regime config block ────────────────────────────────────
+  // Pure function over OHLC; no persistent state on the MCE side. Config
+  // resolved with the other 6 groups via `refreshVolumeRegimeConfig()`.
+  private volumeRegimeConfig: VolumeRegimeConfig | null = null;
   /** True until the first successful `refreshAllConfigs()`. Used to enforce
    *  hard-fail-on-startup vs keep-prior-on-subsequent-failure (§D.4). */
   private firstRefreshPending: boolean = true;
@@ -217,6 +230,7 @@ export class MarketContextEngine {
     this.outcomeFeedbackConfig = null;
     this.regimeAgeConfig = null;
     this.pathBSustainabilityConfig = null;
+    this.volumeRegimeConfig = null;
     this.firstRefreshPending = true;
     console.log('[Phase14][MCE] Stopped, cache cleared');
   }
@@ -253,10 +267,11 @@ export class MarketContextEngine {
           this.refreshOutcomeFeedbackConfig(),
           this.refreshRegimeAgeConfig(),
           this.refreshPathBConfig(),
+          this.refreshVolumeRegimeConfig(), // B68.2 (2026-05-02): 7th group
         ]);
         this.firstRefreshPending = false;
         this.assembleRegimeConfig();
-        console.log('[Phase14][MCE] First refresh complete — all 6 config groups loaded');
+        console.log('[Phase14][MCE] First refresh complete — all 7 config groups loaded');
       } catch (err) {
         console.error(
           '[Phase14][MCE] First refresh failed; will retry on next timer tick:',
@@ -273,6 +288,7 @@ export class MarketContextEngine {
       { name: 'outcome_feedback',       fn: () => this.refreshOutcomeFeedbackConfig() },
       { name: 'regime_age',             fn: () => this.refreshRegimeAgeConfig() },
       { name: 'path_b_sustainability',  fn: () => this.refreshPathBConfig() },
+      { name: 'volume_regime',          fn: () => this.refreshVolumeRegimeConfig() }, // B68.2
     ];
     await Promise.all(groups.map(async (g) => {
       try {
@@ -472,6 +488,55 @@ export class MarketContextEngine {
     };
   }
 
+  /** B68.2 — Volume regime config (8 constants per Langston cc-inbox #881). */
+  private async refreshVolumeRegimeConfig(): Promise<void> {
+    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [
+      lookbackBars,
+      accumThr,
+      distThr,
+      factorMin,
+      factorMax,
+      sensitivity,
+      minSamples,
+      spikeMult,
+    ] = await Promise.all([
+      getConstant<number>('volume_regime', 'b68_2_lookback_bars', RES_KEY),
+      getConstant<number>('volume_regime', 'b68_2_accumulation_threshold', RES_KEY),
+      getConstant<number>('volume_regime', 'b68_2_distribution_threshold', RES_KEY),
+      getConstant<number>('volume_regime', 'b68_2_factor_min', RES_KEY),
+      getConstant<number>('volume_regime', 'b68_2_factor_max', RES_KEY),
+      getConstant<number>('volume_regime', 'b68_2_sensitivity', RES_KEY),
+      getConstant<number>('volume_regime', 'b68_2_min_samples', RES_KEY),
+      getConstant<number>('volume_regime', 'b68_2_liquidation_spike_multiplier', RES_KEY),
+    ]);
+    const missing: string[] = [];
+    if (lookbackBars === undefined) missing.push('b68_2_lookback_bars');
+    if (accumThr === undefined)     missing.push('b68_2_accumulation_threshold');
+    if (distThr === undefined)      missing.push('b68_2_distribution_threshold');
+    if (factorMin === undefined)    missing.push('b68_2_factor_min');
+    if (factorMax === undefined)    missing.push('b68_2_factor_max');
+    if (sensitivity === undefined)  missing.push('b68_2_sensitivity');
+    if (minSamples === undefined)   missing.push('b68_2_min_samples');
+    if (spikeMult === undefined)    missing.push('b68_2_liquidation_spike_multiplier');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B68.2] missing module_constants in volume_regime module: ${missing.join(', ')}. ` +
+        `Run migration 2026-05-02-b68-2-volume-regime.sql to seed.`,
+      );
+    }
+    this.volumeRegimeConfig = {
+      lookbackBars: lookbackBars as number,
+      accumulationThreshold: accumThr as number,
+      distributionThreshold: distThr as number,
+      factorMin: factorMin as number,
+      factorMax: factorMax as number,
+      sensitivity: sensitivity as number,
+      minSamples: minSamples as number,
+      liquidationSpikeMultiplier: spikeMult as number,
+    };
+  }
+
   /** B68.5 — Path B sustainability (1 constant). Resolved with regime=TFS. */
   private async refreshPathBConfig(): Promise<void> {
     const REGIME_KEY = {
@@ -572,6 +637,11 @@ export class MarketContextEngine {
   /** B68.5 — Path B sustainability config accessor. */
   getCurrentPathBSustainabilityConfig(): PathBSustainabilityConfig | null {
     return this.pathBSustainabilityConfig;
+  }
+
+  /** B68.2 — Volume regime config accessor. Null only during cold start. */
+  getCurrentVolumeRegimeConfig(): VolumeRegimeConfig | null {
+    return this.volumeRegimeConfig;
   }
 
   // ─── Core: Compute Context ─────────────────────────────────────────────────

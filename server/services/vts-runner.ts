@@ -114,6 +114,11 @@ import {
   buildB68_4Alternate,
   buildB68_5Alternate,
 } from '../core/metrics/regime-age-factor.js';
+// B68.2 (2026-05-02): volume regime as second confidence dimension
+import {
+  computeVolumeRegime,
+  buildB68_2Alternate,
+} from '../core/metrics/volume-regime.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
 import { checkPerUnderlyingCap, formatDecisionLog, assignCohortHash } from './per-underlying-cap.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
@@ -1518,6 +1523,32 @@ async function generatePhase10Signal(
       );
     } else {
       console.warn('[B67.4][vts-runner] outcome feedback config null at ablation hook — cold-start race');
+    }
+
+    // ── B68.2 volume regime (5th chain modulator, 2026-05-02) ─────────
+    // Pure-function score over rolling OHLC. Uses function-scope ohlcData
+    // parameter directly (correct path from B67.4 hotfix #3 pattern).
+    const _volumeRegimeConfig = _mce.getCurrentVolumeRegimeConfig();
+    if (_volumeRegimeConfig !== null && ohlcData && ohlcData.length >= _volumeRegimeConfig.minSamples) {
+      try {
+        const result = computeVolumeRegime(ohlcData, _volumeRegimeConfig);
+        _modulatedConfChain *= result.factor;
+        _b67_1_alternates.push(
+          buildB68_2Alternate(_modulatedConfChain, _regimeLabel, result, _volumeRegimeConfig),
+        );
+        console.log(
+          `[B68.2][volume] pair=${symbol} score=${result.score.toFixed(3)} ` +
+            `factor=${result.factor.toFixed(4)} label=${result.label}` +
+            (result.hasLiquidationSpike ? ' (liquidation_spike)' : ''),
+        );
+      } catch (err) {
+        console.error(
+          '[B68.2][vts-runner] volume regime emit failed:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+    } else if (_volumeRegimeConfig === null) {
+      console.warn('[B68.2][vts-runner] volume regime config null at ablation hook — cold-start race');
     }
 
     // ── B68.5 Path B sustainability ablation (label counterfactual) ───
