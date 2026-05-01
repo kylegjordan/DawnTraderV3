@@ -408,3 +408,90 @@ Proves: all 5 new module_constants resolved (refreshMacroContext would throw wit
 ---
 
 *This report is OPEN. Next update when B67.4 cheap-tier bundle ships (unblocks calibration window start).*
+
+---
+
+# B67.4 cheap-tier bundle — CLOSURE 2026-05-01
+
+**Status:** SHIPPED. PM2 #126. **Calibration window started — Day 0 of 14.**
+
+## Commits
+
+- `24c88702` — B67.4 v1: 18 files, +1569/-171
+- `173d1d59` — Hotfix #1: replace hardcoded TFS strings with `REGIMES.TREND_FRIENDLY_STABLE`
+- `f5fe7e71` — Hotfix #2: wrap MCE first-refresh in try/catch (CI unhandled rejection in no-PG test env)
+- `18165430` — Hotfix #3: fix B68.5 OHLC plumbing in vts-runner per Langston OBS-1
+
+## Three levers shipped in one commit
+
+**B67.4 — Realized-outcome feedback.** New `outcome-feedback-store.ts` singleton tracks per-(regime, strategy) tuple EMA of net P&L. Persisted `/tmp/b67-4-outcome-feedback.json` 7d expiry per §D.1. First-sample-as-EMA per §D.3. Modulates confidence via `1 + ema_pnl_pct × sensitivity / 100` clamped [0.85, 1.05]. Cold-start floor at 5 samples emits factor=1.0. EMA updated on every trade close (vts-service:persistRealPriceTrade + paper-execution-engine.closePosition).
+
+**B68.4 — Regime-age first-class metric.** New `regime-age-factor.ts` with `computeFreshnessFactor` formula `1 + (target − actual) × sensitivity / target` clamped [0.92, 1.05]. Promotes regimePhaseStore age to standalone confidence modulator. New `peekAgeMs(symbol, now)` accessor on regimePhaseStore.
+
+**B68.5 — Path B sustainability gate.** `calculatePairRegime` 3rd parameter `dbsSlope` (per-pair). `RegimeConfig.b68_5DbsSlopeMin` field. TFS Path B (`|DBS| ≥ 0.30`) requires `dbsSlope ≥ b68_5DbsSlopeMin`. Path A (mom + ADX) unchanged. Catches 04-22 hostile-day failure mode. Ablation row uses numeric 0/1 per §D.2.
+
+## §D refinements (Langston cc-inbox #857) — all folded in
+
+§D.1 7d expiry; §D.2 numeric 0/1 ablation; §D.3 first-sample-as-EMA; §D.4 6-method refresh split; §D.5 11 module_constants total.
+
+## MCE refresh refactor per §D.4
+
+`refreshAllConfigs` orchestrator + 6 sub-methods (refreshMacroConfig / refreshPhaseConfig / refreshRegimeConfig / refreshOutcomeFeedbackConfig / refreshRegimeAgeConfig / refreshPathBConfig). First refresh: Promise.all in try/catch (logs+retries on failure; firstRefreshPending stays true until success). Subsequent refreshes: per-group try/catch + keep-prior cached config. assembleRegimeConfig merges TFS desat scales + Path B slope. 3 new public accessors. dbsSlope threaded via `propagatedDbs.slope ?? 0`.
+
+## Modulation chain
+
+`raw × macro × phase_weight × freshness × outcome_feedback → clamp [0.4, 1.0]` per Langston cc-inbox #876. vts-runner emit hook updates `openTrade.regimeConfidenceModulated`. Active-path orchestrator computes chain for B67.4 ablation metadata only (active trading off; persist deferred to B67.5 per Langston cc-inbox #879 Q2).
+
+## Module constants seeded (11 across 3 modules)
+
+| Module | Constant | Seed |
+|---|---|---|
+| outcome_feedback | b67_4_alpha | 0.10 |
+| outcome_feedback | b67_4_sensitivity | 4.0 |
+| outcome_feedback | b67_4_min_samples | 5 |
+| outcome_feedback | b67_4_factor_min | 0.85 |
+| outcome_feedback | b67_4_factor_max | 1.05 |
+| outcome_feedback | b67_4_expiry_hours | 168 |
+| regime_age | b68_4_target_age_hours | 6.0 |
+| regime_age | b68_4_sensitivity | 0.10 |
+| regime_age | b68_4_min | 0.92 |
+| regime_age | b68_4_max | 1.05 |
+| path_b_sustainability (regime=TFS) | b68_5_dbs_slope_min | 0.0 |
+
+## Verification (Step 8)
+
+- `[Phase14][MCE] First refresh complete — all 6 config groups loaded` ✓
+- 11 module_constants confirmed in DB via psql ✓
+- All 7 factor types emitting in `regime_factor_alternates` (15-min window): b67_1_btc_dominance / funding_rates / mcap_momentum / b67_2_phase_preference / **b67_4_outcome_feedback (NEW)** / **b68_4_regime_age (NEW)** / **b68_5_path_b_sustainability (NEW)** ✓
+- Factor Calibration UI returns `factors:[]` at Day 0 (n<150 per bucket; expected)
+- Two non-blocking observations from Langston Step-4 review #879 — both addressed:
+  - **OBS-1 (B68.5 OHLC any-cast)**: confirmed real-world; resolved by hotfix #3. Active-path orchestrator hook still uses any-cast — deferred to B67.5.
+  - **OBS-2 (divide-out approximation)**: known limitation across all factor ablation rows; documented; non-blocking.
+
+## Heartbeat infrastructure fix (incidental but required during this batch)
+
+During Step-4 delivery, Langston's topic-21 session was discovered stuck on `gpt-4.1-mini` at 130% capacity. Root cause: `agents.defaults.heartbeat.model = "openai/gpt-4.1-mini"` stamped mini onto the session record on every async-exec-result NO_REPLY ack run. Fix per Kyle directive: deleted heartbeat + subagents blocks from `/root/.openclaw/openclaw.json`; restarted gateway. Purged stale topic-21 entry from `sessions.json`. Updated Langston's MEMORY.md with B67.4 state + reset notice. Verified post-restart: `agent:main:telegram:topic:21 → claude-opus-4-6 34k/200k`.
+
+## Workflow log
+
+- Step 1 (scope): Langston-approved cc-inbox #856 (2026-04-29)
+- Step 2 (pre-audit): Langston-approved cc-inbox #857 with 4 §D refinements (2026-04-29)
+- Step 3 (implementation): 2026-05-01
+- Step 4 (code review): Langston-approved cc-inbox #879 with 2 non-blocking observations (2026-05-01)
+- Step 5 (push): `24c88702` + 3 hotfixes
+- Step 6 (CI): 3 of 4 green throughout (TS Check legacy baseline)
+- Step 7 (deploy): PM2 #125 → #126; migration applied
+- Step 8 (CC verify): 7 factor types emitting confirmed
+- Step 9 (Langston verify): Telegram #3392 sent; response pending
+- Step 10 (governance): BATCH_CATALOG + MEMORY truth+repo + master plan §0.11.B all updated; SIM + CHANGES_AND_FIXES + PHASE_HISTORY pending in follow-up commit
+- Step 11 (closure): this section
+
+## What's next
+
+- **Calibration window Day 0–14** (ends 2026-05-15). Watch ablation rows accumulate to n ≥ 150 per (factor, tertile) bucket. Calibration check at end.
+- **B67.5** gated on calibration check. Includes deferred items: post-composition floor definition, active-path persist hook, active-path B68.5 OHLC fix.
+- B68.2 → B68.3 → B68.1 sequentially after B67.5.
+
+---
+
+*B67.4 closure section complete 2026-05-01.*

@@ -20,125 +20,59 @@
 
 ## ⭐ B67 CALIBRATION WINDOW STATUS
 
-**Status:** NOT YET STARTED. All 6 pre-window fixes done (B67.0/1/2/2.1/3/3.5 LIVE; commit anchors in BATCH_CATALOG). **Only B67.4 cheap-tier bundle remains** — scope + pre-audit Langston-approved (cc-inbox #856 + #857); implementation queued as the active next batch.
+**Status:** ⭐ **STARTED 2026-05-01 — Day 0 of 14.** B67.4 cheap-tier bundle SHIPPED PM2 #126 with 3 hotfixes. All 7 expected factor types confirmed emitting ablation rows: `b67_1_btc_dominance` / `b67_1_funding_rates` / `b67_1_mcap_momentum` / `b67_2_phase_preference` / **`b67_4_outcome_feedback`** / **`b68_4_regime_age`** / **`b68_5_path_b_sustainability`** (last three NEW per B67.4).
 
-**Window starts when:** B67.4 ships clean AND post-deploy verification confirms all 5 factors emitting ablation rows (`b67_1_*` 3 rows + `b67_2_phase_preference` + `b67_4_outcome_feedback` + `b68_4_regime_age` + `b68_5_path_b_sustainability`).
+**Window end:** 2026-05-15. Calibration check at end via `computeFactorCalibration` aggregator (n ≥ 150 per bucket per Langston cc-inbox #856 — currently below threshold; will populate over 14d).
 
-**Window dates:** Start TBD (after B67.4 ships). End = Start + 14 days. Subsequent batches B68.2 → B68.3 → B68.1 each get their own ~14d mini-window. B69 ML-light deferred to end of pre-Phase-16.
+**Subsequent batches:** B68.2 Volume → B68.3 Pair correlation → B68.1 Multi-TF agreement, each its own ~14d mini-window. B69 ML-light deferred to end of pre-Phase-16.
 
 ---
 
-## Current State (2026-04-30 night → 2026-05-01 — B74 + B74.1 SHIPPED, PM2 #124)
+## Current State (2026-05-01 — B67.4 SHIPPED, PM2 #126)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `b9c4ebbb` (B74.1 chunked-insert hotfix for Postgres 65,535-param bind limit)
-- **Live state:** **All 6 B74 tables capturing data (RUNNING_ISSUES #41 RESOLVED).** equity_spot 261 syms / 2,255 OHLC + 22,455 ticker; **equity_perp 10/10 syms / 20,030 OHLC** (REST polling + 5.5 days of historical backfill) + 20,521 ticker; crypto_spot 375 syms / 18,976 OHLC + 7,582 ticker. xStocks universe expanded 38 → 245. Monitor panel `PassiveArchiveSection` live at Analytics → Drift Dashboard tab. Endpoint `/api/analytics/passive-archive-status` returns per-universe stored vs scanned with drift detection.
+- **HEAD commit:** `18165430` (B67.4 hotfix #3: B68.5 OHLC plumbing fix per Langston OBS-1)
+- **Live state:** B67.4 cheap-tier bundle live. Modulation chain `raw × macro × phase_weight × freshness × outcome_feedback → clamp [0.4, 1.0]` operational on every signal evaluation. `regime_confidence_modulated` column on closed VTS trades reflects the 4-modulator composite. All B74 archivers + B73 replay still running. Calibration window Day 0 of 14.
 
 ---
 
-## ⭐ JUST COMPLETED (2026-04-30 night → 2026-05-01 — B74.1 follow-up: 3 deliverables + 1 hotfix)
+## ⭐ JUST COMPLETED (2026-05-01 — B67.4 ship + 3 hotfixes + heartbeat infra fix)
 
 | # | Commit | Layer | Outcome |
 |---|---|---|---|
-| 1 | `b8eba807` | **B74.1 ship** | Equity-perp OHLC fix (REST polling, RUNNING_ISSUES #41 RESOLVED) + xStocks expansion 38→245 + Monitor panel v1+v2 (cumulative scanned counters per archiver, aggregator, endpoint, UI panel) |
-| 2 | `b9c4ebbb` | B74.1 hotfix | Chunked batch insert at CHUNK_SIZE=1000 to clear Postgres 65,535-param bind limit. Surfaced when initial perp REST poll backfilled 20,000 historical bars and Drizzle's bulk insert silently failed. BUG-2026-04-30-J logged. |
+| 1 | `24c88702` | **B67.4 v1 ship** | 18 files, +1569/-171: migration + outcome-feedback-store + regime-age-factor + RegimeConfig extension + market-regime Path B gate + regime-phase peekAgeMs + MCE 6-method refresh split + signal-orchestrator/vts-runner emit hooks + trade-close updateEma in both close paths + 3 unit test files. Langston Step-4 approved cc-inbox #879. |
+| 2 | `173d1d59` | Hotfix #1 | regime_mapping_integrity test caught two hardcoded `'TREND_FRIENDLY_STABLE'` literals in B68.5 gate-admitted log lines — replaced with `REGIMES.TREND_FRIENDLY_STABLE` constant via canonical-regime-strategy-map import. |
+| 3 | `f5fe7e71` | Hotfix #2 | MCE first-refresh threw unhandled rejection in CI test env (no Postgres). Wrapped Promise.all in try/catch — sub-methods still throw with explicit migration hints (preserving no-fallback intent); outer catch logs and `firstRefreshPending` stays true until success → next timer tick retries. §D.4 no-partial-config invariant preserved via `assembleRegimeConfig` gate + `computeContext` null guards. |
+| 4 | `18165430` | Hotfix #3 | B68.5 ablation row not emitting because OHLC any-cast on `MarketContext.ohlcData` (which discards OHLC after compute) was always undefined — exactly Langston OBS-1 prediction. Switched vts-runner to function-scope `ohlcData` parameter. Active-path orchestrator hook still uses any-cast (deferred to B67.5 consumer wiring per Langston cc-inbox #879 Q2 — active trading off). |
+| 5 | (infra) | Heartbeat fix | Discovered Langston topic-21 session was stuck on gpt-4.1-mini at 130% capacity. Root cause: `agents.defaults.heartbeat.model = "openai/gpt-4.1-mini"` was stamping mini onto the session record on every async-exec-result NO_REPLY ack, downgrading from agent default Opus 4.6. Solution per Kyle directive: deleted `heartbeat` + `subagents` blocks from `/root/.openclaw/openclaw.json`; restarted gateway. Purged stale topic-21 entry from `sessions.json`. Updated Langston's MEMORY.md with full B67.4 state + reset notice. Fresh Opus session UUID `16b70816-c63d-4cf0-8c80-bebd9f2cf066` (same UUID, new jsonl). Verified post-restart: `agent:main:telegram:topic:21 → claude-opus-4-6 34k/200k`. |
 
-**Verification post-deploy:**
-- equity_perp transitioned 0 → 20,030 OHLC rows / 10 of 10 syms (REST endpoint returns 2000 candles per call ≈ 5.5 days of backfill on first poll, ongoing 60s polls only insert new bars via dedup map)
-- xStocks 261 active of 265 configured (all that stream WS data)
-- Monitor endpoint live, returning structured per-universe data
-- Langston Step-4 approved cc-inbox #874
+**Verification post-deploy PM2 #126:**
+- `[Phase14][MCE] First refresh complete — all 6 config groups loaded`
+- 11 module_constants confirmed in DB (psql)
+- All 7 factor types emitting in `regime_factor_alternates` (15-min window)
+- Factor Calibration UI returns `factors:[]` at Day 0 (n<150 per bucket; expected — populates over 14d)
+- Active-path orchestrator B68.5 hook still uses any-cast (acceptable for calibration window since active trading off)
+- Two non-blocking observations from Langston #879: divide-out approximation at clamp boundaries (known limitation across all factor ablation rows); active-path persist hook deferred to B67.5
 
-## ⭐ Previously completed (2026-04-30 evening + night — B74 ship + Telegram routing fix, 6 commits)
-
-| # | Commit | Layer | Outcome |
-|---|---|---|---|
-| 1-2 | `9e9ff010` `b10640af` | B74 Step-1 scope + CLAUDE.md updates | B74 scope drafted, Langston Step-1 approved cc-inbox #867. CLAUDE.md §8 documents two-agent two-model fact (CCDT Communicator @ GPT-4.1, Langston @ Opus 4.6) + relay-session reset diagnostic. |
-| 3 | `ce4a7e40` | **B74 v1 ship** | 21 files, 2,324 lines: scope + pre-audit + 6 partitioned tables + symbol canonicalizer extension + 3 archivers + 2 batch writers + bootstrap + 2 cron scripts + tests. Langston Steps-2/4 approved cc-inbox #869/#870. CI 3 of 4 green (TS Check legacy-baseline). PM2 #119. |
-| 4 | `bd60add3` | B74 hotfix #1 | Config path resolution: `import.meta.url` doesn't survive esbuild bundle to dist/index.js → switched to `process.cwd()`-based path. Surfaced post-deploy when archivers showed connected=false. |
-| 5 | `778cd4ed` | B74 hotfix #2 + #3 | (a) Partition off-by-one self-heal: bootstrap now ensures CURRENT-month partition exists with WARN log if missing. (b) FNV-1a hash low-bit bias on similar-suffix strings: added Murmur3 fmix32 finalizer; rebalanced 364/16 → 180/201 crypto sharding. |
-| 6 | (governance) | B74 governance | BATCH_CATALOG + PHASE_HISTORY + SIM + CHANGES_AND_FIXES (3 new BUG entries D-F-G-H) + RUNNING_ISSUES (#41 perp OHLC backlog + #42 narration leak) + MEMORY. Langston Step-8 approved cc-inbox #873. |
-
-**Live state PM2 #122:**
-- B74 capturing across 5 of 6 tables (perp OHLC backlog #41)
-- Crons added to root crontab
-- Self-heal will catch any future current-month partition gaps
-- B73.2 + Factor Calibration UI from earlier today still operational
-- All B67.x foundation work still operational
-
-**Telegram routing diagnostics:**
-- ✅ Langston content replies land in thread 21 (post-policy revert + relay session archive)
-- ❌ Langston narration ("Sent — Telegram #N to thread M") leaks to General/topic-1 — RUNNING_ISSUES #42, Langston self-fixing to NO_REPLY pattern
-- ✅ cc-inbox round-trip working under reverted (original allowlist) policy
-
-## ⭐ Previously completed (2026-04-30 afternoon, 1 commit)
-
-| # | Commit | Layer | Outcome |
-|---|---|---|---|
-| 1 | `a98ce7ff` | **B73.2 + Factor Calibration UI** | Bar-derived ATR (14-bar TR avg from pre-entry bars) replaces proxy ATR for variant triggers. OHLC window extended to `entryTime + maxHoldMs` (7d) with pagination. `atr_live` + `atr_bar_derived` logged per variant for validation. New `computeFactorCalibration()` aggregator + `/api/analytics/factor-calibration` endpoint + `FactorCalibrationSection` UI panel (confidence-shift distribution + tertile WR + predictive lift per factor). Existing Factor Ablation Comparison panel marked SUBSTRATE. Wiped 180 useless inherited-only B73 rows. PM2 #119. |
-
-## ⭐ Previously completed (2026-04-30 morning + late-evening — see BATCH_CATALOG for B67.0.1 + B73.1 + B73.2 + Factor Calibration UI panel)
-
-Detail folded into BATCH_CATALOG / PHASE_HISTORY / CHANGES_AND_FIXES. Brief: morning B67.0.1+B73.1 ablation fixes (cc-inbox #864, commits `3afd8ed2`+`f6a0bb87`+`67cf66d9`); afternoon B73.2 bar-derived ATR + Factor Calibration UI panel (commit `a98ce7ff`).
-
----
-
-## ⭐ Previously completed (2026-04-29 night — see BATCH_CATALOG for full detail)
-
-14 commits covering: 2-file MEMORY pattern + 200-line cap (1632d392); **B67.4 scope + pre-audit** Langston-approved cc-inbox #856/#857 (commits 276ab697 / 541c9450 / 6240f372); Telegram identity-collapse fix (ab701b69 / 6354480b); **B73 full stack ship** (a747b646 data + a4bd0e6c UI/API + 49c711d2/f53b9d60 tests + 778a1fe9/53bd9a05 governance). All live state working pre-B74.
+**Earlier 2026-04-30 work** — see BATCH_CATALOG for B74 + B74.1 + B73.1 + B73.2 + Factor Calibration UI panel + B67.0.1 ablation join fix. All operational.
 
 ---
 
 ## ⭐ NEXT IMPLEMENTATIONS (priority order)
 
-### ⭐ ACTIVE — B67.4 cheap-tier bundle implementation (start here post-compact)
+1. **Day 0–14 calibration window observation.** Watch `regime_factor_alternates` accumulate. Goal: n ≥ 150 per (factor, tertile) bucket by Day 14 → calibration check (tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05). Calibration check determines whether B67.4 confidence is decision-grade for B67.5 wiring. Watch PM2 logs for `[B67.4][feedback]`, `[B68.4][freshness]`, `[B68.5][gate]` lines emerging at expected frequency.
 
-This is the next batch we're picking up. Scope + pre-audit are already Langston-approved (cc-inbox #856 + #857). Implementation has not yet begun. Per Kyle directive 2026-05-01: this batch may span multiple compaction sessions; that's expected — the levers are split across sub-batches and each has its own scope/pre-audit gate.
+2. **B67.5 wire confidence into 7 consumers** — gated on calibration check. Must define post-composition floor first (Langston cc-inbox #856 Q6 — compound penalty-stack can drop to 0.566 below pre-B67 0.4 floor). Will also wire active-path persist hook for `regime_confidence_modulated` (deferred from B67.4 per Langston cc-inbox #879 Q2). Will also fix active-path B68.5 OHLC plumbing in signal-orchestrator (deferred for same reason).
 
-**Pre-implementation read order (post-compact):**
-1. `Claude Comms and Packages/Scope Files/REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md` — master plan, especially §0.11 (B67.4 cheap-tier bundle composition + reorganization rationale).
-2. `Claude Comms and Packages/Scope Files/BATCH_67_4_SCOPE.md` — what we're shipping in this batch.
-3. `Claude Comms and Packages/Scope Files/BATCH_67_4_PRE_AUDIT.md` — §D contains the 4 Langston refinements that are part of the binding plan: 7-day expiry on OutcomeFeedbackStore, B68.5 ablation as 0/1 numeric, EMA first-sample direct, refreshMacroContext split into 6 sub-methods.
-4. `1-system-manual/POST_AUDIT_ROADMAP.md` for the broader B67/B68 sequencing.
+3. **B68.2 Volume regime → B68.3 Pair correlation → B68.1 Multi-timeframe agreement** — each gets its own ~14d mini-window post-B67.5. B68.1 multi-TF can leverage the 1-min crypto OHLC B74 is archiving.
 
-**B67.4 cheap-tier bundle = 3 levers, one batch:**
-- B67.4 outcome feedback (per-strategy WR EMA → confidence modifier)
-- B68.4 regime-age first-class metric (replace heuristic with explicit per-pair regime-entry tracker)
-- B68.5 Path B sustainability tightening (gate Path B with `dbsSlope ≥ b68_5DbsSlopeMin`)
+4. **B73 ongoing observation** — running in parallel; first variant winner declaration when n=200 total + n=50 per-regime accumulated. Pre-registered Sharpe-like metric.
 
-**Implementation order (per pre-audit §D):**
-- Migration SQL (11 module_constants across 3 modules: `outcome_feedback`, `regime_age`, `path_b_sustainability`)
-- New `outcome-feedback-store.ts` (mirror `regimePhaseStore` pattern; 7d expiry per Langston Q2)
-- `regime-phase.ts` — add `peekAgeMs` accessor
-- `market-regime.ts` — split TFS branch into Path A / Path B-with-gate / Path B-rejected; add `dbsSlope` 3rd param + `b68_5DbsSlopeMin` to RegimeConfig
-- `market-context-engine.ts` — split `refreshMacroContext` into 6 sub-methods + orchestrator (per Langston Q6)
-- Update 4 callers of `calculatePairRegime`
-- `signal-orchestrator.ts` + `vts-runner.ts` — apply B68.4 + B67.4 modulation, push 3 new alternate types via factor-ablation-emitter
-- `paper-execution-engine.ts` + `vts-service.ts` — trade-close `updateEma` calls
-- 3 new unit test files
-- `npm run check` clean; bring diff to Langston Step 4 BEFORE push
+5. **B69 ML-light** — deferred to end of pre-Phase-16. Trains on data accumulated by B67.x + B68.x.
 
-**Workflow position:** Step 1 + Step 2 ALREADY Langston-approved. Resume at Step 3 (implementation).
+6. **B72 lever sweep** — final pre-Phase-19 batch. Sweep all new constants from B67/B68/B69.
 
-### Post-B67.4 sequence
-
-1. **Verify B67.3.5 calibration gates BEFORE merging B67.4 into pipeline:** `[regime-phase][backfill] applied` log lines on cold pairs; TFS confidence raw distribution shift (P10 ≤ 0.55, P50 ∈ [0.60, 0.80], P90 ≥ 0.80) on new closed trades; Phase distribution mix shift (LATE pairs visible); replay cron 04:00 UTC populating `regime_factor_alternates`; macro modifier diversifying (not pinned at 0.85). These gates were the original blocker pre-compact and may already be cleared by morning.
-
-2. **B67 calibration window** (14d) starts when B67.4 deploys clean + post-deploy verification confirms all 5 factor types emitting ablation rows (`b67_1_*` 3 rows + `b67_2_phase_preference` + `b67_4_outcome_feedback` + `b68_4_regime_age` + `b68_5_path_b_sustainability`). Day 0 of 14.
-
-3. **B67.5 wire confidence into 7 consumers** — only if calibration check passes (tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket). Must define post-composition floor first (Langston cc-inbox #856 Q6 — compound penalty-stack can drop to 0.566, below pre-B67 0.4 floor).
-
-4. **B68.2 Volume regime → B68.3 Pair correlation → B68.1 Multi-timeframe agreement** — each gets its own ~14d mini-window post-B67.5. B68.1 multi-TF can leverage the 1-min crypto OHLC B74 is now archiving.
-
-5. **B73 ongoing observation** — running in parallel; first variant winner declaration when n=200 total + n=50 per-regime accumulated. Pre-registered Sharpe-like metric.
-
-6. **B69 ML-light** — deferred to end of pre-Phase-16.
-
-7. **B72 lever-to-`module_constants` sweep** — final pre-Phase-19 batch. Can sweep any new constants B67.4 / B68.x / B69 added.
-
-8. **B74 ongoing accumulation** — passive archive pipeline running per RUNNING_ISSUES log. Universe expands via PR.
-
-10. **B72 lever sweep** — final pre-Phase-19 batch.
+7. **B74 ongoing accumulation** — passive archive pipeline running. Universe expansion via PR.
 
 ---
 
