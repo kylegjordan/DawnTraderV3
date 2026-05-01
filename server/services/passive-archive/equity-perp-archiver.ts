@@ -19,6 +19,11 @@
  * IS the canonical source for futures OHLC. Per Langston cc-inbox #873
  * resolution + RUNNING_ISSUES #41 closure.
  *
+ * **The non-existent feed name is logged in `KNOWN_NONEXISTENT_NAMES` in
+ * `server/services/utils/symbol-canonicalizer.ts`** so future batches don't
+ * re-discover the dead end. Per CLAUDE.md §5 rule #14 (Kyle directive
+ * 2026-04-30): always add bad names to that registry on discovery.
+ *
  * Reference: https://docs.futures.kraken.com/#websocket-api +
  *            https://futures.kraken.com/api/charts/v1/trade/<sym>/<tick>
  * ═════════════════════════════════════════════════════════════════════════════

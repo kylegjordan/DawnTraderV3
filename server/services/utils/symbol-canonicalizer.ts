@@ -1,13 +1,53 @@
 /**
  * Phase 27.F.12.b - Symbol Canonicalization
- * 
+ *
  * Enforces one canonical pair format (BASE/QUOTE) across:
  * - Whitelist/Blacklist
  * - Screener filters
  * - Guardrails
  * - Strategy prechecks
  * - MarketDataCoordinator
+ *
+ * ─── ALSO HOSTS: KNOWN_NONEXISTENT_NAMES registry (Kyle directive 2026-04-30) ───
+ *
+ * Every time a developer discovers an exchange feed name, channel name,
+ * endpoint path, or symbol form that turns out NOT to exist (after probing
+ * + verification), add the failing name + the correct alternative + the
+ * date + a one-line reason to KNOWN_NONEXISTENT_NAMES below. This builds
+ * institutional memory so future devs (and AI agents resuming work) don't
+ * waste time re-discovering the same dead ends.
+ *
+ * Standard practice when you discover a non-existent name:
+ *   1. Verify by probing the exchange (curl / WS subscription test)
+ *   2. Find the correct alternative (REST endpoint, different feed name, etc.)
+ *   3. Add an entry to KNOWN_NONEXISTENT_NAMES in this file
+ *   4. Reference the entry in any code comment that uses the WORKING alternative
+ *
+ * This file is a sensible home because symbol/exchange-name handling is its
+ * domain. If the registry grows large enough to deserve its own file, split it.
  */
+
+/**
+ * Registry of exchange API names we've verified DO NOT EXIST. Each entry
+ * documents a failed discovery so it's not re-attempted.
+ *
+ * Pattern: { exchange, type, badName, correctAlternative, dateDiscovered, reason }
+ *
+ * Used as documentation only; not consumed by runtime code (the working
+ * alternatives are baked into the relevant archivers/services directly).
+ */
+export const KNOWN_NONEXISTENT_NAMES = [
+  {
+    exchange: 'Kraken Futures',
+    type: 'WebSocket subscription feed',
+    badName: 'candles_trade_1m',
+    badContext: 'Subscribed via { event: "subscribe", feed: "candles_trade_1m", product_ids: [...] } on wss://futures.kraken.com/ws/v1',
+    correctAlternative: 'Kraken Futures WS has NO candle/kline subscription feed. Use REST endpoint GET https://futures.kraken.com/api/charts/v1/trade/<symbol>/<tick> where tick ∈ {1m, 5m, 15m, 1h, 4h, 12h, 1d, 1w}. Returns {candles: [{time, open, high, low, close, volume}, ...]}.',
+    dateDiscovered: '2026-04-30',
+    reason: 'Subscribe accepted silently but no candle messages ever flowed. Ticker feed for the same symbols worked normally, proving WS connection healthy. B74 v1 implemented WS-candles based on initial doc-reading assumption; B74.1 verified by live probe that the feed name does not exist. Implementation switched to REST polling at 60s interval.',
+    ref: 'BUG-2026-04-30-I in CHANGES_AND_FIXES.md, RUNNING_ISSUES #41 (RESOLVED)',
+  },
+] as const;
 
 /**
  * Converts any exchange ID or pair format to canonical BASE/QUOTE format
