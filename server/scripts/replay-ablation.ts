@@ -397,10 +397,17 @@ export async function runReplayAblation(): Promise<ReplayStats> {
  * computation while keeping classification consistent across the framework.
  */
 export function classifyTradeOutcome(
-  pnlUsd: number,
+  pnl: number,
 ): 'admitted_won' | 'admitted_lost' | 'admitted_breakeven' {
-  if (pnlUsd >= 0.5) return 'admitted_won';
-  if (pnlUsd <= -0.5) return 'admitted_lost';
+  // 2026-05-01 (B67.4 calibration window verification): VirtualTrade.netProfit
+  // is stored as a FRACTION (0.005 = 0.5% return), NOT dollars. Pre-fix the
+  // threshold was `>= 0.5` (interpreted as $0.50) which never fired — every
+  // trade landed in `admitted_breakeven`, collapsing tertile-WR analysis to
+  // 0% across the board. Fix: 0.5% return is the meaningful-win threshold,
+  // matching the gross/net log lines in vts-service.ts:335 which print
+  // `(netProfit * 100).toFixed(3)%`.
+  if (pnl >= 0.005) return 'admitted_won';
+  if (pnl <= -0.005) return 'admitted_lost';
   return 'admitted_breakeven';
 }
 

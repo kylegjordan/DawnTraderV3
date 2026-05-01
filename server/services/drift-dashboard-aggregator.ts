@@ -706,27 +706,56 @@ export async function computePassiveArchiveStatus(
     { name: 'crypto_spot' as const, ohlcTable: 'crypto_spot_ohlc_1m', tickerTable: 'crypto_spot_ticker_snap', stats: getCryptoSpotStats() },
   ];
 
+  // 2026-05-01: count + COUNT(DISTINCT) on ~400k-row partitioned crypto_spot_*
+  // tables takes 50s+ each on Supabase remote (verified via psql timing). Six
+  // queries × 50s = endpoint times out. Wrap each query in a per-statement
+  // timeout (4s) with a graceful fallback that flags the row "unknown" and
+  // surfaces in-process counters instead. UI then renders cumulative counts +
+  // a `db_query_timeout: true` flag rather than spinning forever.
+  const PASSIVE_QUERY_TIMEOUT_MS = 4000;
+  async function safeCount(
+    sqlText: string,
+  ): Promise<{ rowCount: number; symCount: number; timedOut: boolean }> {
+    try {
+      // Wrap in explicit transaction so SET LOCAL scopes to this query only
+      // and is reset on COMMIT (won't leak to other queries on the same
+      // pooled connection).
+      const wrapped = `BEGIN; SET LOCAL statement_timeout = ${PASSIVE_QUERY_TIMEOUT_MS}; ${sqlText}; COMMIT;`;
+      const rows = await db.execute(sql.raw(wrapped));
+      const result = (Array.isArray(rows) ? rows : (rows as any).rows ?? []) as Array<{ row_count: number; sym_count: number }>;
+      return {
+        rowCount: result[0]?.row_count ?? 0,
+        symCount: result[0]?.sym_count ?? 0,
+        timedOut: false,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('statement timeout') || msg.includes('canceling statement')) {
+        return { rowCount: 0, symCount: 0, timedOut: true };
+      }
+      // Real error — log + fail gracefully; aggregator should still return.
+      console.warn(`[PassiveArchive] Aggregator count query failed: ${msg}`);
+      return { rowCount: 0, symCount: 0, timedOut: true };
+    }
+  }
+
   const universes: PassiveArchiveUniverseStats[] = [];
   for (const cfg of universeConfigs) {
-    // OHLC: count + distinct symbol
-    const ohlcRows = await db.execute(sql.raw(
+    const ohlc = await safeCount(
       `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
        FROM ${cfg.ohlcTable}
-       WHERE interval_begin >= '${windowStart.toISOString()}'`
-    ));
-    const ohlcResult = (Array.isArray(ohlcRows) ? ohlcRows : (ohlcRows as any).rows ?? []) as Array<{ row_count: number; sym_count: number }>;
-    const ohlcCount = ohlcResult[0]?.row_count ?? 0;
-    const ohlcSyms = ohlcResult[0]?.sym_count ?? 0;
+       WHERE interval_begin >= '${windowStart.toISOString()}'`,
+    );
+    const ohlcCount = ohlc.rowCount;
+    const ohlcSyms = ohlc.symCount;
 
-    // Ticker: count + distinct symbol
-    const tickerRows = await db.execute(sql.raw(
+    const ticker = await safeCount(
       `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
        FROM ${cfg.tickerTable}
-       WHERE captured_at >= '${windowStart.toISOString()}'`
-    ));
-    const tickerResult = (Array.isArray(tickerRows) ? tickerRows : (tickerRows as any).rows ?? []) as Array<{ row_count: number; sym_count: number }>;
-    const tickerCount = tickerResult[0]?.row_count ?? 0;
-    const tickerSyms = tickerResult[0]?.sym_count ?? 0;
+       WHERE captured_at >= '${windowStart.toISOString()}'`,
+    );
+    const tickerCount = ticker.rowCount;
+    const tickerSyms = ticker.symCount;
 
     // Active = max of OHLC + ticker symbol counts
     const activeSymbols = Math.max(ohlcSyms, tickerSyms);
