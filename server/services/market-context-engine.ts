@@ -82,6 +82,27 @@ import {
   computePhase,
   type RegimePhase,
 } from '../core/metrics/regime-phase.js';
+// B67.4 cheap-tier bundle: outcome feedback (B67.4) + regime age (B68.4) +
+// Path B sustainability (B68.5). Three new config types resolved on the same
+// refresh cadence as macro / phase / regime. See BATCH_67_4_PRE_AUDIT.md §D.4
+// for the 6-method split rationale (clean error attribution, fault tolerance).
+import {
+  outcomeFeedbackStore,
+  type OutcomeFeedbackConfig,
+} from '../core/metrics/outcome-feedback-store.js';
+
+/** B68.4 — freshness factor config resolved from `regime_age` module. */
+export interface RegimeAgeConfig {
+  targetAgeHours: number;
+  sensitivity: number;
+  factorMin: number;
+  factorMax: number;
+}
+
+/** B68.5 — Path B gate config resolved from `path_b_sustainability` module. */
+export interface PathBSustainabilityConfig {
+  dbsSlopeMin: number;
+}
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -134,7 +155,27 @@ export class MarketContextEngine {
   // ─── B67.3.5: TFS desaturation config ─────────────────────────────────────
   // Five tunable scales for the continuous TFS confidence formula. Resolved
   // alongside macro/phase on each refresh cycle. Null only during cold start.
+  // B67.4 cheap-tier bundle (2026-05-01): RegimeConfig now also carries the
+  // B68.5 `b68_5DbsSlopeMin` field. The two are populated by SEPARATE refresh
+  // sub-methods (`refreshRegimeConfig` + `refreshPathBConfig`) per pre-audit
+  // §D.4 — both must succeed before `regimeConfig` is non-null.
   private regimeConfig: RegimeConfig | null = null;
+  // B67.3.5 desat scales (5 fields) and B68.5 slope min held privately so
+  // a partial refresh failure can keep prior `regimeConfig` while individual
+  // groups recover.
+  private tfsDesatScales: Pick<
+    RegimeConfig,
+    'tfsDesatMin' | 'tfsDesatMax' | 'tfsMomentumScale' | 'tfsVolatilityScale' | 'tfsDbsScale'
+  > | null = null;
+  private pathBSlopeMin: number | null = null;
+
+  // ─── B67.4 cheap-tier bundle: 3 new config blocks ────────────────────────
+  private outcomeFeedbackConfig: OutcomeFeedbackConfig | null = null;
+  private regimeAgeConfig: RegimeAgeConfig | null = null;
+  private pathBSustainabilityConfig: PathBSustainabilityConfig | null = null;
+  /** True until the first successful `refreshAllConfigs()`. Used to enforce
+   *  hard-fail-on-startup vs keep-prior-on-subsequent-failure (§D.4). */
+  private firstRefreshPending: boolean = true;
 
   constructor(config: Partial<MCEConfig> = {}) {
     this.config = { ...DEFAULT_MCE_CONFIG, ...config };
@@ -148,14 +189,14 @@ export class MarketContextEngine {
 
   start(): void {
     this.running = true;
-    // B67.1: kick off periodic macro context refresh. First refresh runs
-    // immediately so cold-start window is bounded by feed.getLatest() not by
-    // refresh cadence. Errors swallowed (logged) — null context = no-op
-    // modifier in computeContext.
-    void this.refreshMacroContext();
+    // B67.4 cheap-tier bundle (2026-05-01): orchestrator replaces the prior
+    // monolithic refreshMacroContext. First refresh hard-fails on any missing
+    // group's constants; subsequent refreshes per-group catch + keep prior.
+    // See refreshAllConfigs() + the 6 sub-methods.
+    void this.refreshAllConfigs();
     if (this.macroRefreshTimer === null) {
       this.macroRefreshTimer = setInterval(() => {
-        void this.refreshMacroContext();
+        void this.refreshAllConfigs();
       }, this.config.cacheTTLMs);
     }
     console.log('[Phase14][MCE] Started');
@@ -171,155 +212,274 @@ export class MarketContextEngine {
     this.macroCachedContext = null;
     this.macroCachedAt = 0;
     this.regimeConfig = null;
+    this.tfsDesatScales = null;
+    this.pathBSlopeMin = null;
+    this.outcomeFeedbackConfig = null;
+    this.regimeAgeConfig = null;
+    this.pathBSustainabilityConfig = null;
+    this.firstRefreshPending = true;
     console.log('[Phase14][MCE] Stopped, cache cleared');
   }
 
   /**
-   * B67.1: Refresh the macro context cache. Called periodically by the
-   * `macroRefreshTimer`. Reads `module_constants.macro_modifier.*` for config,
-   * snapshot + baseline from `external-macro-feed`, computes modifier
-   * unconditionally, stores in MCE state.
+   * B67.4 cheap-tier bundle (2026-05-01) — Orchestrator that replaces the
+   * prior monolithic `refreshMacroContext`. Per BATCH_67_4_PRE_AUDIT.md §D.4:
    *
-   * Per Kyle directive 2026-04-29: no shadow flag, no conditional null path.
-   * Modifier is ALWAYS computed and ALWAYS applied. Kill-switch use case is
-   * handled by setting modifier_min = modifier_max = 1.0 in DB (math produces
-   * identity, no special code path).
+   * - **First refresh** (firstRefreshPending=true): any sub-method failure
+   *   throws to the caller (via Promise.all rejection). MCE.start() relies on
+   *   this — a misconfigured DB at startup must surface immediately.
+   * - **Subsequent refreshes**: each sub-method runs in its own try/catch.
+   *   On failure the group keeps its prior cached value and logs an error.
+   *   One missing constant in B68.5 doesn't take down the entire MCE refresh.
    *
-   * Errors are NOT swallowed — refresh failure propagates so MCE.start() can
-   * surface it. Once a successful refresh has populated the cache, transient
-   * subsequent failures retain the prior cached context (until the next
-   * successful refresh) — same semantics as directional-bias-store.
+   * Six sub-methods: macro modifier (B67.1), phase (B67.2), regime classifier
+   * desat (B67.3.5), outcome feedback (B67.4), regime age (B68.4), Path B
+   * sustainability (B68.5). Each is independently unit-testable.
    */
-  private async refreshMacroContext(): Promise<void> {
-    try {
-      const snapshot = getLatestMacroSnapshot();
-
-      // Resolve config from module_constants — required, no fallbacks.
-      const [
-        btcW,
-        fundW,
-        mcapW,
-        modMin,
-        modMax,
-        staleSec,
-        zMinN,
-      ] = await Promise.all([
-        getConstant<number>('macro_modifier', 'b67_1_btc_dominance_weight', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
-        getConstant<number>('macro_modifier', 'b67_1_funding_weight', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
-        getConstant<number>('macro_modifier', 'b67_1_mcap_momentum_weight', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
-        getConstant<number>('macro_modifier', 'b67_1_modifier_min', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
-        getConstant<number>('macro_modifier', 'b67_1_modifier_max', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
-        getConstant<number>('macro_modifier', 'b67_1_external_feed_stale_seconds', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
-        getConstant<number>('macro_modifier', 'b67_1_zscore_min_sample_count', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any),
+  private async refreshAllConfigs(): Promise<void> {
+    if (this.firstRefreshPending) {
+      // First refresh: any failure must surface to MCE.start().
+      await Promise.all([
+        this.refreshMacroConfig(),
+        this.refreshPhaseConfig(),
+        this.refreshRegimeConfig(),
+        this.refreshOutcomeFeedbackConfig(),
+        this.refreshRegimeAgeConfig(),
+        this.refreshPathBConfig(),
       ]);
-
-      // B67.1 — no fallbacks per CLAUDE.md §11 + Kyle directive 2026-04-29.
-      // If any constant is missing from the DB, fail hard with a clear
-      // identifier so the migration can be fixed. Never silently substitute
-      // a default value — that's how broken seeds become invisible bugs.
-      const missing: string[] = [];
-      if (btcW === undefined)    missing.push('b67_1_btc_dominance_weight');
-      if (fundW === undefined)   missing.push('b67_1_funding_weight');
-      if (mcapW === undefined)   missing.push('b67_1_mcap_momentum_weight');
-      if (modMin === undefined)  missing.push('b67_1_modifier_min');
-      if (modMax === undefined)  missing.push('b67_1_modifier_max');
-      if (staleSec === undefined) missing.push('b67_1_external_feed_stale_seconds');
-      if (zMinN === undefined)   missing.push('b67_1_zscore_min_sample_count');
-      if (missing.length > 0) {
-        throw new Error(
-          `[B67.1] missing module_constants in macro_modifier module: ${missing.join(', ')}. ` +
-          `Run migration 2026-04-28-b67-1-macro-modifier.sql to seed.`,
-        );
-      }
-
-      const cfg: MacroModifierConfig = {
-        enabled: true,
-        btcDominanceWeight: btcW as number,
-        fundingWeight: fundW as number,
-        mcapMomentumWeight: mcapW as number,
-        modifierMin: modMin as number,
-        modifierMax: modMax as number,
-        staleSeconds: staleSec as number,
-        zScoreMinSampleCount: zMinN as number,
-      };
-      this.macroConfigCache = cfg;
-
-      const baseline = getLatestMacroBaseline();
-      const result: MacroModifierResult = computeMacroModifier(snapshot, baseline, cfg);
-
-      this.macroCachedContext = { snapshot, modifier: result };
-      this.macroCachedAt = Date.now();
-
-      // ── B67.2: also refresh phase boundaries + strategy-phase weights ──
-      // Same fail-hard discipline as macro modifier — missing constants
-      // throw with explicit identifier list so the migration can be fixed.
-      const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
-      const [earlyHrs, primeHrs, weightsBlob] = await Promise.all([
-        getConstant<number>('regime_phase', 'b67_2_early_phase_max_hours', RES_KEY),
-        getConstant<number>('regime_phase', 'b67_2_prime_phase_max_hours', RES_KEY),
-        getConstant<Record<string, number>>('regime_phase', 'b67_2_strategy_phase_weights', RES_KEY),
-      ]);
-      const missingPhase: string[] = [];
-      if (earlyHrs === undefined)    missingPhase.push('b67_2_early_phase_max_hours');
-      if (primeHrs === undefined)    missingPhase.push('b67_2_prime_phase_max_hours');
-      if (weightsBlob === undefined) missingPhase.push('b67_2_strategy_phase_weights');
-      if (missingPhase.length > 0) {
-        throw new Error(
-          `[B67.2] missing module_constants in regime_phase module: ${missingPhase.join(', ')}. ` +
-          `Run migration 2026-04-29-b67-2-phase-dimension.sql to seed.`,
-        );
-      }
-      this.phaseEarlyMaxHours = earlyHrs as number;
-      this.phasePrimeMaxHours = primeHrs as number;
-      this.phaseWeights = weightsBlob as Record<string, number>;
-
-      // ── B67.3.5: resolve TFS desaturation scales ──
-      // Five tunables for the continuous TFS confidence formula. All required;
-      // missing keys throw with explicit list per Kyle no-fallbacks directive.
-      const REGIME_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: REGIMES.TREND_FRIENDLY_STABLE } as any;
-      const [tfsMin, tfsMax, tfsMomScale, tfsVolScale, tfsDbsScale] = await Promise.all([
-        getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_min', REGIME_KEY),
-        getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_max', REGIME_KEY),
-        getConstant<number>('regime_classifier', 'b67_3_5_tfs_momentum_scale', REGIME_KEY),
-        getConstant<number>('regime_classifier', 'b67_3_5_tfs_volatility_scale', REGIME_KEY),
-        getConstant<number>('regime_classifier', 'b67_3_5_tfs_dbs_scale', REGIME_KEY),
-      ]);
-      const missingRegime: string[] = [];
-      if (tfsMin === undefined)      missingRegime.push('b67_3_5_tfs_desat_min');
-      if (tfsMax === undefined)      missingRegime.push('b67_3_5_tfs_desat_max');
-      if (tfsMomScale === undefined) missingRegime.push('b67_3_5_tfs_momentum_scale');
-      if (tfsVolScale === undefined) missingRegime.push('b67_3_5_tfs_volatility_scale');
-      if (tfsDbsScale === undefined) missingRegime.push('b67_3_5_tfs_dbs_scale');
-      if (missingRegime.length > 0) {
-        throw new Error(
-          `[B67.3.5] missing module_constants in regime_classifier module: ${missingRegime.join(', ')}. ` +
-          `Run migration 2026-04-29-b67-3-5-tfs-desat.sql to seed.`,
-        );
-      }
-      this.regimeConfig = {
-        tfsDesatMin: tfsMin as number,
-        tfsDesatMax: tfsMax as number,
-        tfsMomentumScale: tfsMomScale as number,
-        tfsVolatilityScale: tfsVolScale as number,
-        tfsDbsScale: tfsDbsScale as number,
-      };
-
-      console.log(
-        `[B67.1][modifier] value=${result.value.toFixed(4)} ` +
-          `btcZ=${result.btcDomZ.toFixed(3)} fundZ=${result.fundingZ.toFixed(3)} ` +
-          `mcapZ=${result.mcapZ.toFixed(3)} fallback=${result.fallbackActive} ` +
-          `stale=${result.staleDataFlag}`,
-      );
-    } catch (err) {
-      console.error(
-        '[B67.1][MCE] macro context refresh failed:',
-        err instanceof Error ? err.message : err,
-      );
-      // Keep prior cached context (or null on cold start). Modifier will be
-      // 1.0 (no-op) if context is null; otherwise the stale prior is used
-      // until the next successful refresh — same semantics as
-      // directional-bias-store stale snapshot retention.
+      this.firstRefreshPending = false;
+      this.assembleRegimeConfig();
+      console.log('[Phase14][MCE] First refresh complete — all 6 config groups loaded');
+      return;
     }
+    // Subsequent refreshes: per-group fault tolerance.
+    const groups: Array<{ name: string; fn: () => Promise<void> }> = [
+      { name: 'macro_modifier',         fn: () => this.refreshMacroConfig() },
+      { name: 'regime_phase',           fn: () => this.refreshPhaseConfig() },
+      { name: 'regime_classifier',      fn: () => this.refreshRegimeConfig() },
+      { name: 'outcome_feedback',       fn: () => this.refreshOutcomeFeedbackConfig() },
+      { name: 'regime_age',             fn: () => this.refreshRegimeAgeConfig() },
+      { name: 'path_b_sustainability',  fn: () => this.refreshPathBConfig() },
+    ];
+    await Promise.all(groups.map(async (g) => {
+      try {
+        await g.fn();
+      } catch (err) {
+        console.error(
+          `[B67/B68][MCE] refresh group "${g.name}" failed; keeping prior cached value:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }));
+    this.assembleRegimeConfig();
+  }
+
+  /** B68.5 + B67.3.5 split: assemble final RegimeConfig from both sub-states. */
+  private assembleRegimeConfig(): void {
+    if (this.tfsDesatScales !== null && this.pathBSlopeMin !== null) {
+      this.regimeConfig = {
+        ...this.tfsDesatScales,
+        b68_5DbsSlopeMin: this.pathBSlopeMin,
+      };
+    }
+  }
+
+  /** B67.1 — macro modifier (7 constants). */
+  private async refreshMacroConfig(): Promise<void> {
+    const snapshot = getLatestMacroSnapshot();
+    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [btcW, fundW, mcapW, modMin, modMax, staleSec, zMinN] = await Promise.all([
+      getConstant<number>('macro_modifier', 'b67_1_btc_dominance_weight', RES_KEY),
+      getConstant<number>('macro_modifier', 'b67_1_funding_weight', RES_KEY),
+      getConstant<number>('macro_modifier', 'b67_1_mcap_momentum_weight', RES_KEY),
+      getConstant<number>('macro_modifier', 'b67_1_modifier_min', RES_KEY),
+      getConstant<number>('macro_modifier', 'b67_1_modifier_max', RES_KEY),
+      getConstant<number>('macro_modifier', 'b67_1_external_feed_stale_seconds', RES_KEY),
+      getConstant<number>('macro_modifier', 'b67_1_zscore_min_sample_count', RES_KEY),
+    ]);
+    const missing: string[] = [];
+    if (btcW === undefined)     missing.push('b67_1_btc_dominance_weight');
+    if (fundW === undefined)    missing.push('b67_1_funding_weight');
+    if (mcapW === undefined)    missing.push('b67_1_mcap_momentum_weight');
+    if (modMin === undefined)   missing.push('b67_1_modifier_min');
+    if (modMax === undefined)   missing.push('b67_1_modifier_max');
+    if (staleSec === undefined) missing.push('b67_1_external_feed_stale_seconds');
+    if (zMinN === undefined)    missing.push('b67_1_zscore_min_sample_count');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B67.1] missing module_constants in macro_modifier module: ${missing.join(', ')}. ` +
+        `Run migration 2026-04-28-b67-1-macro-modifier.sql to seed.`,
+      );
+    }
+    const cfg: MacroModifierConfig = {
+      enabled: true,
+      btcDominanceWeight: btcW as number,
+      fundingWeight: fundW as number,
+      mcapMomentumWeight: mcapW as number,
+      modifierMin: modMin as number,
+      modifierMax: modMax as number,
+      staleSeconds: staleSec as number,
+      zScoreMinSampleCount: zMinN as number,
+    };
+    this.macroConfigCache = cfg;
+    const baseline = getLatestMacroBaseline();
+    const result: MacroModifierResult = computeMacroModifier(snapshot, baseline, cfg);
+    this.macroCachedContext = { snapshot, modifier: result };
+    this.macroCachedAt = Date.now();
+    console.log(
+      `[B67.1][modifier] value=${result.value.toFixed(4)} ` +
+        `btcZ=${result.btcDomZ.toFixed(3)} fundZ=${result.fundingZ.toFixed(3)} ` +
+        `mcapZ=${result.mcapZ.toFixed(3)} fallback=${result.fallbackActive} ` +
+        `stale=${result.staleDataFlag}`,
+    );
+  }
+
+  /** B67.2 — phase boundaries + strategy-phase weights (3 constants). */
+  private async refreshPhaseConfig(): Promise<void> {
+    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [earlyHrs, primeHrs, weightsBlob] = await Promise.all([
+      getConstant<number>('regime_phase', 'b67_2_early_phase_max_hours', RES_KEY),
+      getConstant<number>('regime_phase', 'b67_2_prime_phase_max_hours', RES_KEY),
+      getConstant<Record<string, number>>('regime_phase', 'b67_2_strategy_phase_weights', RES_KEY),
+    ]);
+    const missing: string[] = [];
+    if (earlyHrs === undefined)    missing.push('b67_2_early_phase_max_hours');
+    if (primeHrs === undefined)    missing.push('b67_2_prime_phase_max_hours');
+    if (weightsBlob === undefined) missing.push('b67_2_strategy_phase_weights');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B67.2] missing module_constants in regime_phase module: ${missing.join(', ')}. ` +
+        `Run migration 2026-04-29-b67-2-phase-dimension.sql to seed.`,
+      );
+    }
+    this.phaseEarlyMaxHours = earlyHrs as number;
+    this.phasePrimeMaxHours = primeHrs as number;
+    this.phaseWeights = weightsBlob as Record<string, number>;
+  }
+
+  /** B67.3.5 — TFS desaturation scales (5 constants). */
+  private async refreshRegimeConfig(): Promise<void> {
+    const REGIME_KEY = {
+      exchange: '*',
+      assetClass: '*',
+      strategy: '*',
+      regime: REGIMES.TREND_FRIENDLY_STABLE,
+    } as any;
+    const [tfsMin, tfsMax, tfsMomScale, tfsVolScale, tfsDbsScale] = await Promise.all([
+      getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_min', REGIME_KEY),
+      getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_max', REGIME_KEY),
+      getConstant<number>('regime_classifier', 'b67_3_5_tfs_momentum_scale', REGIME_KEY),
+      getConstant<number>('regime_classifier', 'b67_3_5_tfs_volatility_scale', REGIME_KEY),
+      getConstant<number>('regime_classifier', 'b67_3_5_tfs_dbs_scale', REGIME_KEY),
+    ]);
+    const missing: string[] = [];
+    if (tfsMin === undefined)      missing.push('b67_3_5_tfs_desat_min');
+    if (tfsMax === undefined)      missing.push('b67_3_5_tfs_desat_max');
+    if (tfsMomScale === undefined) missing.push('b67_3_5_tfs_momentum_scale');
+    if (tfsVolScale === undefined) missing.push('b67_3_5_tfs_volatility_scale');
+    if (tfsDbsScale === undefined) missing.push('b67_3_5_tfs_dbs_scale');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B67.3.5] missing module_constants in regime_classifier module: ${missing.join(', ')}. ` +
+        `Run migration 2026-04-29-b67-3-5-tfs-desat.sql to seed.`,
+      );
+    }
+    this.tfsDesatScales = {
+      tfsDesatMin: tfsMin as number,
+      tfsDesatMax: tfsMax as number,
+      tfsMomentumScale: tfsMomScale as number,
+      tfsVolatilityScale: tfsVolScale as number,
+      tfsDbsScale: tfsDbsScale as number,
+    };
+  }
+
+  /** B67.4 — outcome feedback config (6 constants per §D.5). Also runs the
+   *  `outcomeFeedbackStore` expiry sweep using the resolved expiry hours. */
+  private async refreshOutcomeFeedbackConfig(): Promise<void> {
+    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [alpha, sensitivity, minSamples, factorMin, factorMax, expiryHours] = await Promise.all([
+      getConstant<number>('outcome_feedback', 'b67_4_alpha', RES_KEY),
+      getConstant<number>('outcome_feedback', 'b67_4_sensitivity', RES_KEY),
+      getConstant<number>('outcome_feedback', 'b67_4_min_samples', RES_KEY),
+      getConstant<number>('outcome_feedback', 'b67_4_factor_min', RES_KEY),
+      getConstant<number>('outcome_feedback', 'b67_4_factor_max', RES_KEY),
+      getConstant<number>('outcome_feedback', 'b67_4_expiry_hours', RES_KEY),
+    ]);
+    const missing: string[] = [];
+    if (alpha === undefined)       missing.push('b67_4_alpha');
+    if (sensitivity === undefined) missing.push('b67_4_sensitivity');
+    if (minSamples === undefined)  missing.push('b67_4_min_samples');
+    if (factorMin === undefined)   missing.push('b67_4_factor_min');
+    if (factorMax === undefined)   missing.push('b67_4_factor_max');
+    if (expiryHours === undefined) missing.push('b67_4_expiry_hours');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B67.4] missing module_constants in outcome_feedback module: ${missing.join(', ')}. ` +
+        `Run migration 2026-05-01-b67-4-cheap-tier.sql to seed.`,
+      );
+    }
+    this.outcomeFeedbackConfig = {
+      alpha: alpha as number,
+      sensitivity: sensitivity as number,
+      minSamples: minSamples as number,
+      factorMin: factorMin as number,
+      factorMax: factorMax as number,
+      expiryHours: expiryHours as number,
+    };
+    // §D.1 — sweep stale tuples on each refresh using DB-resolved expiry.
+    const expiryMs = (expiryHours as number) * 60 * 60 * 1000;
+    outcomeFeedbackStore.evictExpired(expiryMs, Date.now());
+  }
+
+  /** B68.4 — regime age / freshness factor config (4 constants). */
+  private async refreshRegimeAgeConfig(): Promise<void> {
+    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [targetAgeHours, sensitivity, factorMin, factorMax] = await Promise.all([
+      getConstant<number>('regime_age', 'b68_4_target_age_hours', RES_KEY),
+      getConstant<number>('regime_age', 'b68_4_sensitivity', RES_KEY),
+      getConstant<number>('regime_age', 'b68_4_min', RES_KEY),
+      getConstant<number>('regime_age', 'b68_4_max', RES_KEY),
+    ]);
+    const missing: string[] = [];
+    if (targetAgeHours === undefined) missing.push('b68_4_target_age_hours');
+    if (sensitivity === undefined)    missing.push('b68_4_sensitivity');
+    if (factorMin === undefined)      missing.push('b68_4_min');
+    if (factorMax === undefined)      missing.push('b68_4_max');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B68.4] missing module_constants in regime_age module: ${missing.join(', ')}. ` +
+        `Run migration 2026-05-01-b67-4-cheap-tier.sql to seed.`,
+      );
+    }
+    this.regimeAgeConfig = {
+      targetAgeHours: targetAgeHours as number,
+      sensitivity: sensitivity as number,
+      factorMin: factorMin as number,
+      factorMax: factorMax as number,
+    };
+  }
+
+  /** B68.5 — Path B sustainability (1 constant). Resolved with regime=TFS. */
+  private async refreshPathBConfig(): Promise<void> {
+    const REGIME_KEY = {
+      exchange: '*',
+      assetClass: '*',
+      strategy: '*',
+      regime: REGIMES.TREND_FRIENDLY_STABLE,
+    } as any;
+    const slopeMin = await getConstant<number>(
+      'path_b_sustainability',
+      'b68_5_dbs_slope_min',
+      REGIME_KEY,
+    );
+    if (slopeMin === undefined) {
+      throw new Error(
+        `[B68.5] missing module_constant b68_5_dbs_slope_min in path_b_sustainability module. ` +
+        `Run migration 2026-05-01-b67-4-cheap-tier.sql to seed.`,
+      );
+    }
+    this.pathBSustainabilityConfig = { dbsSlopeMin: slopeMin as number };
+    this.pathBSlopeMin = slopeMin as number;
   }
 
   isRunning(): boolean {
@@ -378,12 +538,27 @@ export class MarketContextEngine {
   }
 
   /**
-   * B67.3.5: Public accessor for the resolved RegimeConfig (TFS desaturation
-   * scales). Returns null only during cold start. Diagnostic / observability
-   * reads.
+   * B67.3.5 + B68.5: Public accessor for the resolved RegimeConfig (TFS
+   * desaturation scales + Path B slope min). Returns null only during cold
+   * start. Diagnostic / observability reads.
    */
   getCurrentRegimeConfig(): RegimeConfig | null {
     return this.regimeConfig;
+  }
+
+  /** B67.4 — outcome feedback config accessor. Null only during cold start. */
+  getCurrentOutcomeFeedbackConfig(): OutcomeFeedbackConfig | null {
+    return this.outcomeFeedbackConfig;
+  }
+
+  /** B68.4 — regime age / freshness factor config accessor. */
+  getCurrentRegimeAgeConfig(): RegimeAgeConfig | null {
+    return this.regimeAgeConfig;
+  }
+
+  /** B68.5 — Path B sustainability config accessor. */
+  getCurrentPathBSustainabilityConfig(): PathBSustainabilityConfig | null {
+    return this.pathBSustainabilityConfig;
   }
 
   // ─── Core: Compute Context ─────────────────────────────────────────────────
@@ -460,9 +635,18 @@ export class MarketContextEngine {
         `MCE.start() must complete refreshMacroContext() before computeContext is called.`,
       );
     }
+    // B68.5 (cheap-tier bundle 2026-05-01): thread per-pair DBS slope into
+    // classifier so the Path B sustainability gate can be applied. `slope` is
+    // already produced by directional-bias-store per B62/B63 Item 16; if the
+    // caller didn't propagate it (legacy callers), default to 0.0 — which means
+    // Path B admits at the seed `b68_5DbsSlopeMin=0.0` threshold (DBS slope
+    // non-negative). When the gate is recalibrated to a positive threshold, a
+    // missing slope here will correctly REJECT Path B.
+    const dbsSlope = propagatedDbs.slope ?? 0;
     const regimeResult = calculatePairRegime(
       ohlcData,
       directionalBias.score,
+      dbsSlope,
       macroModifierValue,
       this.regimeConfig,
     );

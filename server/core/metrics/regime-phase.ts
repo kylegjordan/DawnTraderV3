@@ -259,6 +259,9 @@ class RegimePhaseStore {
       const result = calculatePairRegime(
         slice,
         ctx.dbsScore,
+        0,   // B68.5: identity dbsSlope — backfill is for label, not gating;
+             // historical DBS slope unavailable so use 0 (Path B admit).
+             // RegimeConfig.b68_5DbsSlopeMin = 0 means slope=0 admits.
         1.0, // identity macro modifier — backfill is for label, not modulation
         ctx.regimeConfig,
       );
@@ -288,6 +291,22 @@ class RegimePhaseStore {
   /** Returns the current entry for a symbol (or undefined). Test/diagnostic only. */
   peek(symbol: string): PairPhaseEntry | undefined {
     return this.entries.get(symbol);
+  }
+
+  /**
+   * B68.4 (cheap-tier bundle, 2026-05-01) — Read-only age accessor.
+   *
+   * Returns the symbol's current regime age in milliseconds, OR undefined if
+   * the pair is untracked. Used by signal-orchestrator + vts-runner to
+   * compute the B68.4 freshness factor without requiring a full `tick` (which
+   * would mutate state).
+   *
+   * Caller passes `now` for testability; production passes `Date.now()`.
+   */
+  peekAgeMs(symbol: string, now: number): number | undefined {
+    const entry = this.entries.get(symbol);
+    if (!entry) return undefined;
+    return now - entry.enteredAt;
   }
 
   /** Returns the number of tracked symbols. Diagnostic. */

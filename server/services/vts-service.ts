@@ -890,6 +890,32 @@ export class VTSService extends EventEmitter {
     
     console.log(`[11.6D][Persist] ${tradeData.symbol} VTS_REAL_PRICE trade persisted (id=${trade.id})`);
 
+    // B67.4 (2026-05-01): per-(regime, strategy) outcome feedback EMA update.
+    // Convert net P&L to a percent of notional so the EMA is unit-consistent
+    // across position sizes. positionSize × entryPrice = notional dollars.
+    // Cold start (sample_count=0) seeds first sample as EMA per pre-audit §D.3.
+    try {
+      const { outcomeFeedbackStore } = await import('../core/metrics/outcome-feedback-store.js');
+      const { getMarketContextEngine } = await import('./market-context-engine.js');
+      const cfg = getMarketContextEngine().getCurrentOutcomeFeedbackConfig();
+      const notional = tradeData.positionSize * tradeData.entryPrice;
+      if (cfg !== null && notional > 0 && Number.isFinite(tradeData.pnl)) {
+        const netPnlPct = (tradeData.pnl / notional) * 100;
+        outcomeFeedbackStore.updateEma(
+          tradeData.regime,
+          tradeData.strategy,
+          netPnlPct,
+          cfg.alpha,
+          Date.now(),
+        );
+      }
+    } catch (err) {
+      console.warn(
+        '[B67.4][vts-service] outcome feedback update failed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+
     // B73 (2026-04-29): async exit-strategy ablation replay (observation only,
     // fire-and-forget). Records what 12 BE-stop / trailing-stop variants
     // WOULD have done on this trade. No exit-behavior change. Per

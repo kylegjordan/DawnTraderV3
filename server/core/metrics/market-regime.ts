@@ -37,6 +37,9 @@ export const DEFAULT_REGIME_CONFIG: RegimeConfig = {
   tfsMomentumScale: 0.020,
   tfsVolatilityScale: 0.025,
   tfsDbsScale: 0.7,
+  // B68.5 — non-negative DBS slope to admit Path B (TFS-scoped). Production
+  // resolves from module_constants; advisory paths use this default.
+  b68_5DbsSlopeMin: 0.0,
 };
 
 export function computeVolatility(ohlcData: OHLCData[]): number {
@@ -149,8 +152,16 @@ export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
  * ceiling (BATCH_67_1_PRE_AUDIT.md §1.1). Lower bound 0.4 retained as hard
  * floor — pre-B67 invariant for downstream consumers.
  *
+ * B67.4 cheap-tier bundle: `dbsSlope` 3rd parameter added (per-pair, not config —
+ * see BATCH_67_4_PRE_AUDIT.md §B.1 File 3 + §C.1). Used by the new B68.5 Path B
+ * sustainability gate inside the TFS branch. Default 0.0 in advisory callers.
+ *
  * @param ohlcData - OHLC candles
  * @param dbsScore - Directional Bias Score from computeDirectionalBias()
+ * @param dbsSlope - DBS slope (per-pair time series; per B62 Item 16 already
+ *                   computed inside `directionalBias.slope`). Used by B68.5
+ *                   Path B sustainability gate. Pass 0.0 in advisory paths
+ *                   to neutralize the gate.
  * @param macroModifier - REQUIRED B67.1 multiplier on confidence. Caller
  *                        passes 1.0 for the identity case (no modulation),
  *                        or the value from `computeMacroModifier()` when
@@ -159,6 +170,7 @@ export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
 export function calculatePairRegime(
   ohlcData: OHLCData[],
   dbsScore: number,
+  dbsSlope: number,
   macroModifier: number,
   regimeConfig: RegimeConfig,
 ): RegimeCalculationResult {
@@ -190,10 +202,21 @@ export function calculatePairRegime(
     // (pre-B62: IE was 0.9% of cycles; now ~2.0% with the DBS-based entry)
     regime = REGIMES.IMPULSE_EXPANSION;
     confidence = 0.65 + (vol - 0.015) * 6 + (dx - 45) * 0.002 + absDbs * 0.1;
-  } else if ((mom > 0.003 && dx > 50) || absDbs >= 0.30) {
+  } else if (
+    (mom > 0.003 && dx > 50) ||
+    (absDbs >= 0.30 && dbsSlope >= regimeConfig.b68_5DbsSlopeMin)
+  ) {
     // B62: Positive momentum + directional strength OR moderate+ DBS = trend
     // (pre-B62: TFS was 13.2%; now 34.6% as directional pairs correctly routed)
-    // Threshold 0.30 is the only tested value that passes 2.0% flicker ceiling
+    // Threshold 0.30 is the only tested value that passes 2.0% flicker ceiling.
+    //
+    // B68.5 (cheap-tier bundle, 2026-05-01): Path B (`|DBS| >= 0.30`) now
+    // additionally requires `dbsSlope >= b68_5DbsSlopeMin` (default 0.0). This
+    // catches the 04-22 hostile-day failure mode where strong-but-decaying DBS
+    // was admitting aged-out moves into TFS. Path A (mom + ADX) is unchanged.
+    // When Path B fails the slope gate, the regime falls through to ST/HVU
+    // via the remaining branches below — see B68.5 ablation row at the
+    // signal-orchestrator hook for the LABEL counterfactual.
     regime = REGIMES.TREND_FRIENDLY_STABLE;
     // B67.3.5: continuous mapping replaces step-function. Output [min, max]
     // (default [0.50, 0.90]). Multiplicative — any weak input collapses score
@@ -292,10 +315,11 @@ export function getDynamicRegimeScore(ohlcData: OHLCData[]): {
   score: number;
   metrics: { adx: number; volatility: number };
 } {
-  // B67.1: macroModifier required. This advisory function (per SIM §5.4)
-  // doesn't have macro context available — pass 1.0 explicitly to indicate
-  // identity / no modulation (advisory call, not the live classification path).
-  const result = calculatePairRegime(ohlcData, 0, 1.0, DEFAULT_REGIME_CONFIG);
+  // B67.1: macroModifier required. B67.4 cheap-tier (2026-05-01): dbsSlope
+  // also required. This advisory function (per SIM §5.4) doesn't have macro
+  // context or DBS slope available — pass 0.0 / 1.0 explicitly for identity
+  // (advisory call, not the live classification path).
+  const result = calculatePairRegime(ohlcData, 0, 0, 1.0, DEFAULT_REGIME_CONFIG);
   const score = calculateRegimeScore(result.regime, {
     adx: result.adx,
     volatility: result.volatility

@@ -53,6 +53,21 @@ export interface RegimeConfig {
   tfsMomentumScale: number;
   tfsVolatilityScale: number;
   tfsDbsScale: number;
+  /**
+   * B68.5 — Path B sustainability gate (cheap-tier bundle).
+   *
+   * The TFS branch fires via two paths:
+   *   Path A — `mom > 0.003 && dx > 50` (momentum + ADX strong)
+   *   Path B — `|DBS| >= 0.30` (directional strength alone)
+   *
+   * Path B was over-firing on already-exhausted moves on hostile days
+   * (B65.6 deferred work). This threshold gates Path B by requiring the DBS
+   * slope to meet or exceed `b68_5DbsSlopeMin`. Default seed = 0.0 (DBS slope
+   * non-negative; allow stable or rising directional bias). Tunable via DB.
+   *
+   * Path A is unaffected — momentum + ADX strong enough on their own to admit.
+   */
+  b68_5DbsSlopeMin: number;
 }
 
 export const REGIME_WEIGHTS: Record<MarketRegimeType, number> = {

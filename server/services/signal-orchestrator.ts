@@ -100,7 +100,18 @@ import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emit
 // B67.1 — per-input macro modifier alternate row builder (split into 3 factors per Kyle 2026-04-29)
 import { buildB67_1Alternates } from '../core/metrics/macro-modifier.js';
 // B67.2 — phase preference application
-import { applyPhasePreference } from '../core/metrics/regime-phase.js';
+import { applyPhasePreference, regimePhaseStore } from '../core/metrics/regime-phase.js';
+// B67.4 cheap-tier bundle (2026-05-01): outcome feedback + regime age + path B gate
+import {
+  outcomeFeedbackStore,
+  computeOutcomeFeedbackFactor,
+  buildB67_4Alternate,
+} from '../core/metrics/outcome-feedback-store.js';
+import {
+  computeFreshnessFactor,
+  buildB68_4Alternate,
+  buildB68_5Alternate,
+} from '../core/metrics/regime-age-factor.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 
@@ -669,21 +680,27 @@ export class SignalOrchestrator {
       // Confidence here is the strategy's effective confidence value at admission.
       // Phase preference multiplies it; alternate row records both with/without
       // the multiplication for downstream calibration analysis.
+      const outcomeFeedbackConfig = mce.getCurrentOutcomeFeedbackConfig();
+      const regimeAgeConfig = mce.getCurrentRegimeAgeConfig();
+      const fullRegimeConfig = mce.getCurrentRegimeConfig();
+      const symbolCtx = mce.getCachedContext(rawSignal.symbol);
+      const strategyKey = (rawSignal as any).strategy ?? 'unknown';
+      const regimeLabel = extendedMetrics.regime ?? 'UNKNOWN';
+      const baseConf = extendedMetrics.confidence ?? 0.5;
+      let modulatedConfChain = baseConf;
+
       if (phaseWeights === null) {
         console.warn('[B67.2][orchestrator] phase weights null at ablation hook — cold-start race');
       } else if (macro !== null) {
         // Need a phase + ageSeconds. Read from rawSignal's pair via MCE
         // context. If MCE produced a context, regime.phase is non-null.
-        const symbolCtx = mce.getCachedContext(rawSignal.symbol);
         const phase = symbolCtx?.regime.phase;
         const phaseAgeSeconds = symbolCtx?.regime.phaseAgeSeconds ?? 0;
-        const regimeLabel = extendedMetrics.regime ?? 'UNKNOWN';
         if (phase) {
-          const baseConf = extendedMetrics.confidence ?? 0.5;
           try {
-            const strategyKey = (rawSignal as any).strategy ?? 'unknown';
             const modulated = applyPhasePreference(strategyKey, phase, phaseWeights, baseConf);
             const weight = phaseWeights[`${strategyKey}_${phase}`];
+            modulatedConfChain = modulated;
             ablationAlternates.push({
               factorName: 'b67_2_phase_preference',
               factorState: 'alternate_disabled',
@@ -710,6 +727,91 @@ export class SignalOrchestrator {
           }
         }
       }
+
+      // ── B68.4 freshness factor ────────────────────────────────────────
+      // Reads regimePhaseStore age via the new peekAgeMs accessor (read-only,
+      // does not tick). Cold-start (pair untracked) returns factor=1.0
+      // legitimately; logged for diagnostics on first eval.
+      if (regimeAgeConfig !== null) {
+        const ageMs = regimePhaseStore.peekAgeMs(rawSignal.symbol, Date.now());
+        const freshness = computeFreshnessFactor(ageMs, regimeAgeConfig);
+        modulatedConfChain *= freshness.factor;
+        ablationAlternates.push(
+          buildB68_4Alternate(
+            modulatedConfChain,
+            regimeLabel,
+            freshness,
+            regimeAgeConfig.targetAgeHours,
+          ),
+        );
+        console.log(
+          `[B68.4][freshness] pair=${rawSignal.symbol} age_hours=${freshness.ageHours.toFixed(2)} factor=${freshness.factor.toFixed(4)}`,
+        );
+      } else {
+        console.warn('[B68.4][orchestrator] regime age config null at ablation hook — cold-start race');
+      }
+
+      // ── B67.4 outcome feedback ────────────────────────────────────────
+      // Per-(regime, strategy) tuple EMA of net P&L. Cold-start (sample_count
+      // < min_samples) returns factor=1.0; legitimate runtime state.
+      if (outcomeFeedbackConfig !== null) {
+        const entry = outcomeFeedbackStore.peek(regimeLabel, strategyKey);
+        const outcome = computeOutcomeFeedbackFactor(entry, outcomeFeedbackConfig);
+        modulatedConfChain *= outcome.factor;
+        ablationAlternates.push(
+          buildB67_4Alternate(modulatedConfChain, regimeLabel, outcome, {
+            regime: regimeLabel,
+            strategy: strategyKey,
+            entry,
+          }),
+        );
+      } else {
+        console.warn('[B67.4][orchestrator] outcome feedback config null at ablation hook — cold-start race');
+      }
+
+      // ── B68.5 Path B sustainability ablation row ──────────────────────
+      // Ablation re-runs classifier with gate disabled (slopeMin=-Infinity)
+      // and records whether the gate flipped the label. Numeric 0/1 per §D.2.
+      // We have access to OHLC + DBS via the MCE cached context and pair object.
+      if (fullRegimeConfig !== null && symbolCtx !== null) {
+        const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
+        const dbsScore = symbolCtx.directionalBias?.score ?? 0;
+        const dbsSlope = (symbolCtx.directionalBias as any)?.slope ?? 0;
+        const macroValue = macro?.modifier.value ?? 1.0;
+        if (ohlc && Array.isArray(ohlc) && ohlc.length >= 30) {
+          try {
+            ablationAlternates.push(
+              buildB68_5Alternate(
+                ohlc,
+                dbsScore,
+                dbsSlope,
+                macroValue,
+                fullRegimeConfig,
+                regimeLabel,
+                baseConf,
+              ),
+            );
+            const tfsRegime = 'TREND_FRIENDLY_STABLE';
+            console.log(
+              `[B68.5][gate] pair=${rawSignal.symbol} dbs=${dbsScore.toFixed(3)} ` +
+                `slope=${dbsSlope.toFixed(4)} gate_admitted=${regimeLabel === tfsRegime} ` +
+                `regime_label=${regimeLabel}`,
+            );
+          } catch (err) {
+            console.error(
+              '[B68.5][orchestrator] gate ablation rebuild failed:',
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+      }
+
+      // ── Final clamp on full-chain modulated confidence ────────────────
+      modulatedConfChain = Math.max(0.4, Math.min(1.0, modulatedConfChain));
+      // Persisted via tradeRecord downstream; signal-orchestrator's active
+      // path doesn't currently maintain a per-record persistence hook for
+      // regimeConfidenceModulated (vts-runner does). The chain value is
+      // captured in B67.4's metadata for ablation analysis.
     }
 
     emitAblationRecord(

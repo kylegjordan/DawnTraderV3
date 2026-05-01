@@ -101,7 +101,18 @@ import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emit
 // B67.1 — per-input macro modifier alternate row builder (split into 3 factors per Kyle 2026-04-29)
 import { buildB67_1Alternates } from '../core/metrics/macro-modifier.js';
 // B67.2 — phase preference application
-import { applyPhasePreference } from '../core/metrics/regime-phase.js';
+import { applyPhasePreference, regimePhaseStore } from '../core/metrics/regime-phase.js';
+// B67.4 cheap-tier bundle (2026-05-01)
+import {
+  outcomeFeedbackStore,
+  computeOutcomeFeedbackFactor,
+  buildB67_4Alternate,
+} from '../core/metrics/outcome-feedback-store.js';
+import {
+  computeFreshnessFactor,
+  buildB68_4Alternate,
+  buildB68_5Alternate,
+} from '../core/metrics/regime-age-factor.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
 import { checkPerUnderlyingCap, formatDecisionLog, assignCohortHash } from './per-underlying-cap.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
@@ -1436,29 +1447,36 @@ async function generatePhase10Signal(
     }
 
     // B67.2 phase preference alternate
+    const _outcomeFeedbackConfig = _mce.getCurrentOutcomeFeedbackConfig();
+    const _regimeAgeConfig = _mce.getCurrentRegimeAgeConfig();
+    const _fullRegimeConfig = _mce.getCurrentRegimeConfig();
+    const _baseConf = predictiveConfidence ?? 0.5;
+    const _regimeLabel = regime ?? 'UNKNOWN';
+    let _modulatedConfChain = _baseConf;
+
     if (_phaseWeights === null) {
       console.warn('[B67.2][vts-runner] phase weights null at ablation hook — cold-start race');
     } else if (_ctx) {
       const phase = _ctx.regime.phase;
       const phaseAgeSeconds = _ctx.regime.phaseAgeSeconds;
-      const baseConf = predictiveConfidence ?? 0.5;
       try {
-        const modulated = applyPhasePreference(strategy, phase, _phaseWeights, baseConf);
+        const modulated = applyPhasePreference(strategy, phase, _phaseWeights, _baseConf);
         const weight = _phaseWeights[`${strategy}_${phase}`];
+        _modulatedConfChain = modulated;
         _b67_1_alternates.push({
           factorName: 'b67_2_phase_preference',
           factorState: 'alternate_disabled',
           alternateDecision: {
-            regimeLabel: regime ?? 'UNKNOWN',
-            confidence: baseConf,
+            regimeLabel: _regimeLabel,
+            confidence: _baseConf,
             admissionPossible: true,
             metadata: {
               confidence_with_phase_pref: modulated,
-              confidence_without_phase_pref: baseConf,
+              confidence_without_phase_pref: _baseConf,
               phase,
               phase_age_seconds: phaseAgeSeconds,
               strategy_phase_weight: weight,
-              regime_label: regime ?? 'UNKNOWN',
+              regime_label: _regimeLabel,
             },
           },
         });
@@ -1468,6 +1486,84 @@ async function generatePhase10Signal(
           err instanceof Error ? err.message : err,
         );
       }
+    }
+
+    // ── B68.4 freshness factor (cheap-tier bundle) ────────────────────
+    if (_regimeAgeConfig !== null) {
+      const ageMs = regimePhaseStore.peekAgeMs(symbol, Date.now());
+      const freshness = computeFreshnessFactor(ageMs, _regimeAgeConfig);
+      _modulatedConfChain *= freshness.factor;
+      _b67_1_alternates.push(
+        buildB68_4Alternate(_modulatedConfChain, _regimeLabel, freshness, _regimeAgeConfig.targetAgeHours),
+      );
+      console.log(
+        `[B68.4][freshness] pair=${symbol} age_hours=${freshness.ageHours.toFixed(2)} factor=${freshness.factor.toFixed(4)}`,
+      );
+    } else {
+      console.warn('[B68.4][vts-runner] regime age config null at ablation hook — cold-start race');
+    }
+
+    // ── B67.4 outcome feedback (cheap-tier bundle) ────────────────────
+    if (_outcomeFeedbackConfig !== null) {
+      const entry = outcomeFeedbackStore.peek(_regimeLabel, strategy);
+      const outcome = computeOutcomeFeedbackFactor(entry, _outcomeFeedbackConfig);
+      _modulatedConfChain *= outcome.factor;
+      _b67_1_alternates.push(
+        buildB67_4Alternate(_modulatedConfChain, _regimeLabel, outcome, {
+          regime: _regimeLabel,
+          strategy,
+          entry,
+        }),
+      );
+    } else {
+      console.warn('[B67.4][vts-runner] outcome feedback config null at ablation hook — cold-start race');
+    }
+
+    // ── B68.5 Path B sustainability ablation (label counterfactual) ───
+    if (_fullRegimeConfig !== null && _ctx) {
+      const ohlc = (_ctx as any).ohlcData;
+      const dbsScore = _ctx.directionalBias?.score ?? 0;
+      const dbsSlope = (_ctx.directionalBias as any)?.slope ?? 0;
+      const macroValue = _macro?.modifier.value ?? 1.0;
+      if (ohlc && Array.isArray(ohlc) && ohlc.length >= 30) {
+        try {
+          _b67_1_alternates.push(
+            buildB68_5Alternate(
+              ohlc,
+              dbsScore,
+              dbsSlope,
+              macroValue,
+              _fullRegimeConfig,
+              _regimeLabel,
+              _baseConf,
+            ),
+          );
+          const tfsRegime = 'TREND_FRIENDLY_STABLE';
+          console.log(
+            `[B68.5][gate] pair=${symbol} dbs=${dbsScore.toFixed(3)} ` +
+              `slope=${dbsSlope.toFixed(4)} gate_admitted=${_regimeLabel === tfsRegime} ` +
+              `regime_label=${_regimeLabel}`,
+          );
+        } catch (err) {
+          console.error(
+            '[B68.5][vts-runner] gate ablation rebuild failed:',
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    }
+
+    // ── Final clamp on modulated chain confidence ─────────────────────
+    _modulatedConfChain = Math.max(0.4, Math.min(1.0, _modulatedConfChain));
+    // Update the persisted regimeConfidenceModulated on the open trade so the
+    // closed-trade record carries the full chain (raw × macro × phase ×
+    // freshness × outcome) per pre-audit §B.3 step 5. This supersedes the
+    // earlier `mceContext.regime.confidence`-only assignment at openTrade
+    // creation (line ~1326 below) — the value here is more recent and
+    // includes all 4 modulators.
+    const _openTrade = openVirtualTrades.get(tradeId);
+    if (_openTrade) {
+      _openTrade.regimeConfidenceModulated = _modulatedConfChain;
     }
   }
 

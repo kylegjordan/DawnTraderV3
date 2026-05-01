@@ -1230,6 +1230,34 @@ export class PaperExecutionEngine {
       }
     }
 
+    // B67.4 (2026-05-01): per-(regime, strategy) outcome feedback EMA update.
+    // Mirrors the same hook in vts-service:persistRealPriceTrade — both close
+    // paths feed the same singleton OutcomeFeedbackStore so signal evaluation
+    // (active or VTS) reads a unified per-tuple history.
+    try {
+      const regimeAtOpen = (position as any).regime;
+      const strategyName = position.strategyName;
+      if (regimeAtOpen && strategyName && Number.isFinite(netPnlPercent)) {
+        const { outcomeFeedbackStore } = await import('../core/metrics/outcome-feedback-store.js');
+        const { getMarketContextEngine } = await import('./market-context-engine.js');
+        const cfg = getMarketContextEngine().getCurrentOutcomeFeedbackConfig();
+        if (cfg !== null) {
+          outcomeFeedbackStore.updateEma(
+            regimeAtOpen,
+            strategyName,
+            netPnlPercent,
+            cfg.alpha,
+            Date.now(),
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(
+        '[B67.4][paper-execution] outcome feedback update failed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+
     // [AJ19-B] Trade lifecycle CLOSE event - track slot counts before/after delete
     const slotCountBefore = (await storage.getPaperSimOpenPositions(this.mode)).length;
     let deleteSuccessful = false;

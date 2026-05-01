@@ -149,9 +149,11 @@ async function runDiagnosticSweep(pairLimit: number = 100): Promise<void> {
     
     summary.pairsWithOHLC++;
     
-    // B67.1 + B67.3.5: macroModifier + regimeConfig required. Diagnostic
-    // script — identity modifier + default regime config explicitly.
-    const regimeResult = calculatePairRegime(ohlcData, 0, 1.0, DEFAULT_REGIME_CONFIG);
+    // B67.1 + B67.3.5 + B68.5: macroModifier + dbsSlope + regimeConfig required.
+    // Diagnostic script — identity dbsSlope (0) + identity modifier (1.0) +
+    // default regime config explicitly. Default config sets b68_5DbsSlopeMin=0
+    // so Path B always admits in the diagnostic.
+    const regimeResult = calculatePairRegime(ohlcData, 0, 0, 1.0, DEFAULT_REGIME_CONFIG);
     trace.regime = regimeResult.regime;
     
     const candles = ohlcData.map(o => ({
