@@ -32,11 +32,11 @@
 
 ---
 
-## Current State (2026-05-02 — B68.3 SHIPPED, PM2 #129)
+## Current State (2026-05-03 — B67.5-prep SHIPPED, PM2 #130)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD commit:** `1cd79f04` (B68.3 hotfix #1 — anti-correlation test fix)
-- **Live state:** B68.3 + B68.2 + B67.4 all live. Modulation chain extended: `raw × macro × phase × freshness × outcome × volume_regime × pair_correlation → clamp [0.4, 1.0]` (6 chain modulators now). All B74 archivers + B73 replay still running. Three calibration windows active in parallel.
+- **HEAD commit:** `1d25cb7c` (B67.5-prep — post-composition floor module_constant 0.45)
+- **Live state:** B67.5-prep + B68.3 + B68.2 + B67.4 all live. Supabase compute upgraded Nano → Micro (1 GB memory, 2-core ARM). Modulation chain: `raw × macro × phase × freshness × outcome × volume_regime × pair_correlation → clamp [b67_5_post_composition_floor, 1.0]` where floor=0.45 module_constant (was hardcoded 0.4). All B74 archivers + B73 replay still running. Three calibration windows active in parallel. **B68.1 multi-TF UNBLOCKED.**
 
 ---
 
