@@ -495,3 +495,78 @@ During Step-4 delivery, Langston's topic-21 session was discovered stuck on `gpt
 ---
 
 *B67.4 closure section complete 2026-05-01.*
+
+---
+
+# B67 IMPLEMENTATION TRACK — CLOSE-OUT 2026-05-03
+
+**Status:** B67 IMPLEMENTATION TRACK CLOSED. All foundational sub-deliverables LIVE on PM2 #130. Only remaining piece is **B67.5 consumer wiring**, which is gated on the calibration check at the end of the B67.4 14-day window (~2026-05-15) and requires the calibration to pass before consumers can be wired.
+
+## Sub-deliverables shipped (chronological)
+
+| Sub-deliverable | Date | Commit anchor | Status |
+|---|---|---|---|
+| **B67.0** Telemetry & ablation framework | 2026-04-28 | `105d2b53` | ✅ LIVE |
+| **B67.3** Per-underlying position cap (shadow) | 2026-04-28 | `ca0e2c2d` | ✅ LIVE shadow |
+| **B67.1** Macro confidence modifier | 2026-04-28 → fully cleaned 2026-04-29 | `828f6d92` + cleanup `6177013e` `82e542ff` `cab55804` `ed9a1a08` | ✅ LIVE no-shadow |
+| **B67.2** Phase dimension (EARLY/PRIME/LATE) | 2026-04-29 | `9f82f401` | ✅ LIVE |
+| **B67.2.1** Trade-record persistence + UI | 2026-04-29 | `141ec3c3` `41abd541` `575dbca4` | ✅ LIVE |
+| Replay-ablation logic + cron | 2026-04-29 | `3d1a1e7f` `5e1031a6` `33df2380` | ✅ LIVE |
+| **B67.3.5** Pre-window hardening (TFS desat + phase backfill) | 2026-04-29 | `49209eb4` `d97d47d7` | ✅ LIVE |
+| **B67.0.1** Replay-ablation join fix (natural key) | 2026-04-30 | `3afd8ed2` + `f6a0bb87` `67cf66d9` | ✅ LIVE |
+| **B67.4** Cheap-tier bundle (outcome feedback + regime-age + Path B sustainability) | 2026-05-01 | `24c88702` + 3 hotfixes (`173d1d59` `f5fe7e71` `18165430`) | ✅ LIVE |
+| Calibration WR threshold + passive archive timeout fix | 2026-05-01 | `545094dc` | ✅ LIVE |
+| **B67.5-prep** Post-composition floor 0.40 → 0.45 module_constant | 2026-05-03 | `1d25cb7c` | ✅ LIVE |
+
+## Sub-deliverables remaining
+
+| Sub-deliverable | Status | Gate |
+|---|---|---|
+| **B67.5 consumer wiring** (7 consumers + RegimeWeight deletion) | PENDING | Calibration check at 2026-05-15 (B67.4 14-day window end) — must pass tertile-monotonic WR + ≥7pp HIGH-LOW gap + p<0.05 + n≥150/bucket per Langston cc-inbox #856. |
+| Active-path B68.5 OHLC plumbing fix | DEFERRED to B67.5 | Carries with B67.5 consumer wiring batch. RUNNING_ISSUES #44. |
+| Active-path persisted-modulated-confidence hook | DEFERRED to B67.5 | Same as above. RUNNING_ISSUES #45. |
+
+## Foundation architecture delivered by B67 (summary for future reference)
+
+1. **Confidence modulation chain** went from 1 modulator (pre-B67) to 6 modulators post-B68.3:
+   ```
+   raw × macro × phase × freshness × outcome × volume_regime × pair_correlation
+     → clamp [b67_5_post_composition_floor (0.45), 1.0]
+   ```
+   Note: B68.2 (volume regime) and B68.3 (pair correlation) shipped in the B68 program but slot into the same B67-architected chain.
+
+2. **Per-factor ablation framework** (B67.0): `regime_factor_alternates` table with discriminated source (active_signal vs vts_trade) + replay-ablation nightly cron + drift dashboard aggregator. 9 factor types currently emitting.
+
+3. **MCE 8-group config orchestrator** (built incrementally B67.1 → B67.4 §D.4 split → B68.2 → B68.3): `refreshAllConfigs` orchestrator + per-group try/catch fault tolerance + first-refresh hard-fail wrapper. Resolves all factor-related module_constants in a single 60s refresh cadence.
+
+4. **Calibration window infrastructure**: per-factor 14-day mini-windows attribute independently. Three currently running in parallel (B67.4 / B68.2 / B68.3, all ending ~2026-05-15-16).
+
+5. **Trade record persistence + UI** (B67.2.1): `regime_confidence_modulated` column reflects full chain composite; UI tables render confidence + phase badges in same column as regime label.
+
+6. **Factor Calibration UI panel** (B73.2 follow-up): tertile WR + predictive lift = REAL spread − ALT spread per factor. Decision-grade gate at n≥150 per bucket. Auto-extends to new factor types.
+
+7. **Hard-fail discipline on module_constants**: every threshold/weight/multiplier is DB-tunable. No hardcoded constants from B67 forward (Kyle §0.9 directive). Cold-start warmup paths are legitimate runtime states with telemetry, not silent fallbacks.
+
+## What B67.5 consumer wiring will entail (when calibration passes)
+
+- Replace `regimeWeight` reads with `regime_confidence_modulated` reads in 7 consumers (signal-orchestrator finalScore, RTB queue ranking, paper-execution sizing, etc. — full list in B67 master scope §6 Consumer Map)
+- Delete `regimeWeight` constant entirely (no fallback, no shadow)
+- Wire active-path emit hook OHLC fix (RUNNING_ISSUES #44)
+- Wire active-path persisted-modulated-confidence hook (RUNNING_ISSUES #45)
+- New batch when calibration check passes — own scope, pre-audit, implementation, governance.
+
+## Final close of B67 (separate event)
+
+This progress report stays OPEN until B67.5 consumer wiring ships. At that point the report gets a final closure section and B67 entry in BATCH_CATALOG flips from "implementation track closed" to fully CLOSED.
+
+## Workflow stats
+
+- Sub-deliverables: 11 ship events (incl. hotfixes + cleanup commits)
+- Langston review gates: cc-inbox #835, #836, #844, #846, #850, #852, #856, #857, #864, #866, #872, #876, #879, #880, #881, #882, #883, #884, #885, #886 (Steps 1/2/4/8 across all sub-deliverables)
+- Total commits to B67 umbrella: ~30+
+- CI hotfixes: 3 (B67.4 hardcoded TFS strings, B67.4 unhandled rejection, B67.4 OHLC plumbing) + 1 (B68.3 anti-correlation test fix)
+- Calibration windows opened: 3 (B67.4, B68.2, B68.3) all running in parallel through 2026-05-15-16
+
+---
+
+*B67 implementation track close-out complete 2026-05-03. Report stays OPEN until B67.5 consumer wiring ships post-calibration.*
