@@ -1636,7 +1636,12 @@ async function generatePhase10Signal(
     }
 
     // ── Final clamp on modulated chain confidence ─────────────────────
-    _modulatedConfChain = Math.max(0.4, Math.min(1.0, _modulatedConfChain));
+    // B67.5-prep (2026-05-03): floor sourced from module_constant via
+    // _fullRegimeConfig.b67_5PostCompositionFloor (default 0.45). Falls back
+    // to 0.4 only if regime config not yet loaded — same cold-start race
+    // as other config consumers.
+    const _floor = _fullRegimeConfig?.b67_5PostCompositionFloor ?? 0.4;
+    _modulatedConfChain = Math.max(_floor, Math.min(1.0, _modulatedConfChain));
     // Update the persisted regimeConfidenceModulated on the open trade so the
     // closed-trade record carries the full chain (raw × macro × phase ×
     // freshness × outcome) per pre-audit §B.3 step 5. This supersedes the

@@ -40,6 +40,9 @@ export const DEFAULT_REGIME_CONFIG: RegimeConfig = {
   // B68.5 — non-negative DBS slope to admit Path B (TFS-scoped). Production
   // resolves from module_constants; advisory paths use this default.
   b68_5DbsSlopeMin: 0.0,
+  // B67.5-prep — post-composition confidence floor (raised from 0.4 to 0.45
+  // for expanded chain). Production resolves from module_constants.
+  b67_5PostCompositionFloor: 0.45,
 };
 
 export function computeVolatility(ohlcData: OHLCData[]): number {
@@ -245,8 +248,12 @@ export function calculatePairRegime(
   // B67.1: apply macro modifier BEFORE final clamp. macroModifier defaults to
   // 1.0 (no-op) for callers that haven't been updated. Upper bound raised
   // 0.95 → 1.0 (see function header).
+  // B67.5-prep (2026-05-03): floor sourced from `regimeConfig.b67_5PostCompositionFloor`
+  // (tunable module_constant) instead of hardcoded 0.4. Default at 0.45 to
+  // accommodate the expanded modulation chain — see RegimeConfig field
+  // documentation + Langston cc-inbox #885 O.1.
   confidence = confidence * macroModifier;
-  confidence = Math.min(Math.max(confidence, 0.4), 1.0);
+  confidence = Math.min(Math.max(confidence, regimeConfig.b67_5PostCompositionFloor), 1.0);
 
   return {
     regime,

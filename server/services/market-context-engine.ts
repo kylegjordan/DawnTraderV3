@@ -183,6 +183,11 @@ export class MarketContextEngine {
     'tfsDesatMin' | 'tfsDesatMax' | 'tfsMomentumScale' | 'tfsVolatilityScale' | 'tfsDbsScale'
   > | null = null;
   private pathBSlopeMin: number | null = null;
+  // B67.5-prep (2026-05-03): post-composition floor, sourced from
+  // module_constants regime_classifier.b67_5_post_composition_floor (regime=*).
+  // Resolved alongside the 5 TFS desat scales in refreshRegimeConfig — same
+  // module so it folds into the existing call without a 9th sub-method.
+  private b67_5PostCompositionFloor: number | null = null;
 
   // ─── B67.4 cheap-tier bundle: 3 new config blocks ────────────────────────
   private outcomeFeedbackConfig: OutcomeFeedbackConfig | null = null;
@@ -240,6 +245,7 @@ export class MarketContextEngine {
     this.regimeConfig = null;
     this.tfsDesatScales = null;
     this.pathBSlopeMin = null;
+    this.b67_5PostCompositionFloor = null;
     this.outcomeFeedbackConfig = null;
     this.regimeAgeConfig = null;
     this.pathBSustainabilityConfig = null;
@@ -319,12 +325,17 @@ export class MarketContextEngine {
     this.assembleRegimeConfig();
   }
 
-  /** B68.5 + B67.3.5 split: assemble final RegimeConfig from both sub-states. */
+  /** B68.5 + B67.3.5 + B67.5-prep: assemble final RegimeConfig from sub-states. */
   private assembleRegimeConfig(): void {
-    if (this.tfsDesatScales !== null && this.pathBSlopeMin !== null) {
+    if (
+      this.tfsDesatScales !== null &&
+      this.pathBSlopeMin !== null &&
+      this.b67_5PostCompositionFloor !== null
+    ) {
       this.regimeConfig = {
         ...this.tfsDesatScales,
         b68_5DbsSlopeMin: this.pathBSlopeMin,
+        b67_5PostCompositionFloor: this.b67_5PostCompositionFloor,
       };
     }
   }
@@ -410,12 +421,15 @@ export class MarketContextEngine {
       strategy: '*',
       regime: REGIMES.TREND_FRIENDLY_STABLE,
     } as any;
-    const [tfsMin, tfsMax, tfsMomScale, tfsVolScale, tfsDbsScale] = await Promise.all([
+    const FLOOR_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [tfsMin, tfsMax, tfsMomScale, tfsVolScale, tfsDbsScale, postCompFloor] = await Promise.all([
       getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_min', REGIME_KEY),
       getConstant<number>('regime_classifier', 'b67_3_5_tfs_desat_max', REGIME_KEY),
       getConstant<number>('regime_classifier', 'b67_3_5_tfs_momentum_scale', REGIME_KEY),
       getConstant<number>('regime_classifier', 'b67_3_5_tfs_volatility_scale', REGIME_KEY),
       getConstant<number>('regime_classifier', 'b67_3_5_tfs_dbs_scale', REGIME_KEY),
+      // B67.5-prep (2026-05-03): regime=* (cross-cutting floor, not TFS-scoped)
+      getConstant<number>('regime_classifier', 'b67_5_post_composition_floor', FLOOR_KEY),
     ]);
     const missing: string[] = [];
     if (tfsMin === undefined)      missing.push('b67_3_5_tfs_desat_min');
@@ -423,10 +437,11 @@ export class MarketContextEngine {
     if (tfsMomScale === undefined) missing.push('b67_3_5_tfs_momentum_scale');
     if (tfsVolScale === undefined) missing.push('b67_3_5_tfs_volatility_scale');
     if (tfsDbsScale === undefined) missing.push('b67_3_5_tfs_dbs_scale');
+    if (postCompFloor === undefined) missing.push('b67_5_post_composition_floor');
     if (missing.length > 0) {
       throw new Error(
-        `[B67.3.5] missing module_constants in regime_classifier module: ${missing.join(', ')}. ` +
-        `Run migration 2026-04-29-b67-3-5-tfs-desat.sql to seed.`,
+        `[B67.3.5/B67.5-prep] missing module_constants in regime_classifier module: ${missing.join(', ')}. ` +
+        `Run migrations 2026-04-29-b67-3-5-tfs-desat.sql + 2026-05-03-b67-5-prep-floor.sql to seed.`,
       );
     }
     this.tfsDesatScales = {
@@ -436,6 +451,9 @@ export class MarketContextEngine {
       tfsVolatilityScale: tfsVolScale as number,
       tfsDbsScale: tfsDbsScale as number,
     };
+    // B67.5-prep: store the floor separately so assembleRegimeConfig can
+    // merge it alongside the TFS desat scales + B68.5 path B slope min.
+    this.b67_5PostCompositionFloor = postCompFloor as number;
   }
 
   /** B67.4 — outcome feedback config (6 constants per §D.5). Also runs the

@@ -68,6 +68,27 @@ export interface RegimeConfig {
    * Path A is unaffected — momentum + ADX strong enough on their own to admit.
    */
   b68_5DbsSlopeMin: number;
+
+  /**
+   * B67.5-prep (2026-05-03) — Post-composition confidence floor.
+   *
+   * The historical hardcoded 0.4 floor was designed for a chain of 1-2
+   * modulators. With 6 modulators (post-B68.3) the worst-case compound
+   * penalty stack is ~0.455. With 7 modulators (post-B68.1) it becomes
+   * ~0.43 — at the historical floor edge. Per Langston cc-inbox #885 O.1
+   * recommendation + Kyle approval 2026-05-03, raised to 0.45 to prevent
+   * extreme compound clipping while preserving meaningful differentiation
+   * across the lower confidence range.
+   *
+   * Used at three clamp sites:
+   *   - calculatePairRegime terminal clamp
+   *   - vts-runner emit hook chain clamp
+   *   - signal-orchestrator emit hook chain clamp
+   *
+   * Tunable via `module_constants.regime_classifier.b67_5_post_composition_floor`
+   * — recalibrate from calibration window data without code redeploy.
+   */
+  b67_5PostCompositionFloor: number;
 }
 
 export const REGIME_WEIGHTS: Record<MarketRegimeType, number> = {

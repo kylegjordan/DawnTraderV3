@@ -899,7 +899,10 @@ export class SignalOrchestrator {
       }
 
       // ── Final clamp on full-chain modulated confidence ────────────────
-      modulatedConfChain = Math.max(0.4, Math.min(1.0, modulatedConfChain));
+      // B67.5-prep (2026-05-03): floor from module_constant; default 0.4
+      // cold-start fallback matching legacy pre-B67.5 behavior.
+      const orchFloor = fullRegimeConfig?.b67_5PostCompositionFloor ?? 0.4;
+      modulatedConfChain = Math.max(orchFloor, Math.min(1.0, modulatedConfChain));
       // Persisted via tradeRecord downstream; signal-orchestrator's active
       // path doesn't currently maintain a per-record persistence hook for
       // regimeConfidenceModulated (vts-runner does). The chain value is

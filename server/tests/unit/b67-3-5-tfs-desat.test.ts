@@ -132,6 +132,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
       tfsVolatilityScale: 0.025,
       tfsDbsScale: 0.7,
       b68_5DbsSlopeMin: 0.0,
+      b67_5PostCompositionFloor: 0.45,
     };
     const result = calculatePairRegime(ohlc, 0.7, 0, 1.0, tightConfig);
     if (result.regime === REGIMES.TREND_FRIENDLY_STABLE) {
