@@ -226,3 +226,120 @@ Fix: added `makeAntiCorrelatedToNoisy` helper that negates noise deltas → prod
 ---
 
 *B68.3 closure section complete 2026-05-02. Report stays OPEN until B68.1 closes.*
+
+---
+
+# B68.1 — MULTI-TIMEFRAME AGREEMENT — CLOSURE 2026-05-03
+
+**Status:** SHIPPED. PM2 #135. Implementation commit `cb861176`.
+**Steps 1-4 APPROVED** Langston cc-inbox #887 / #888 / #889. Step 7 verification ack delivered. CI 3 of 4 green (664 TS errors before = 664 after — zero new). Migration applied cleanly. All 10 factor types emitting in `regime_factor_alternates`. Visual UI verified (Factor Ablation Comparison panel surfaces `b68_1_multi_tf_agreement`).
+
+**B68.x chain modulator series CLOSED with this batch.**
+
+## What shipped
+
+7th and final B68.x chain modulator. Per-pair higher-TF (240-min / 4h) regime AGREEMENT score on top of the active 1h regime classification. Three-state classification (CONFIRMED / COMPATIBLE / CONFLICTED) reuses `calculatePairRegime` unchanged for higher-TF (Path A only — DBS=0 in v1; v2 follow-up if calibration shows label-agreement too noisy without 4h DBS).
+
+**Modulation chain after this batch (FINAL 7-modulator chain):**
+
+```
+raw × macro × phase × freshness × outcome × volume_regime × pair_correlation
+    × multi_tf_agreement → clamp [0.45, 1.0]
+```
+
+## Architecture pivot from master plan estimate
+
+Master plan §0.11.B characterized B68.1 as *"~2 weeks; needs new higher-TF OHLC data path — real new infrastructure, heaviest of the three."* **Actual implementation: ~1 day surgical change.** Higher-TF source pivoted from B74 DB archive aggregation to Kraken native 240-min OHLC via existing `ohlcCache` (just a new cache key per pair, `${symbol}_240`). Kraken serves 4h directly; cache infrastructure already supports any Kraken-supported interval. This collapsed the master plan estimate by an order of magnitude. B74 archive remains the long-term canonical OHLC store but is NOT a runtime dependency for B68.1.
+
+## Three-state agreement classification
+
+| State | Condition | Factor |
+|---|---|---|
+| CONFIRMED | Active-TF regime label === Higher-TF regime label | 1.05 |
+| COMPATIBLE | Same family OR either is ST (transition) | 1.00 |
+| CONFLICTED | Different families, neither is ST | 0.95 |
+
+Family map (LOCAL to multi-tf-agreement.ts per Langston cc-inbox #888 D.1):
+- **directional**: TFS, IE
+- **range**: RBS
+- **volatile**: HVU
+- **transition**: ST (universally COMPATIBLE — never escalates to CONFLICTED)
+
+Asymmetric factor range [0.92, 1.05] — penalty floor wider than boost ceiling. Conflicted higher-TF is a stronger negative signal than confirmed is positive.
+
+## Files (10 total)
+
+- NEW `server/core/metrics/multi-tf-agreement.ts` (237 lines, pure functions + family map + alternate builder)
+- NEW `server/tests/unit/b68-1-multi-tf-agreement.test.ts` (14 cases)
+- NEW migration `drizzle/migrations/2026-05-03-b68-1-multi-tf-agreement.sql` + rollback
+- NEW scope + pre-audit files (`BATCH_68_1_SCOPE.md`, `BATCH_68_1_PRE_AUDIT.md`)
+- MODIFIED `server/services/market-context-engine.ts` — 9th refresh sub-method (was 8 post-B68.3); first-refresh `Promise.all` + groups[] both extended; orchestrator log message `8 config groups` → `9 config groups`; new accessor
+- MODIFIED `server/services/signal-orchestrator.ts` — emit hook AFTER B68.3 pair-correlation, BEFORE B68.5 Path B
+- MODIFIED `server/services/vts-runner.ts` — same hook pattern; uses function-scope `ohlcData` (B68.4 hotfix #3 fix); `MarketRegimeType` reused via existing alias
+- MODIFIED `1-system-manual/RUNNING_ISSUES.md` — #52 OHLC-shape tech debt + #53 B68.1 calibration window
+
+**8 module_constants** in new `multi_tf_agreement` module:
+
+| Constant | Seed |
+|---|---|
+| `b68_1_higher_tf_interval_minutes` | 240 |
+| `b68_1_min_higher_tf_samples` | 30 (= 5 days of 4h) |
+| `b68_1_factor_min` | 0.92 |
+| `b68_1_factor_max` | 1.05 |
+| `b68_1_sensitivity` | 0.05 |
+| `b68_1_compatible_score` | 0.5 |
+| `b68_1_confirmed_score` | 1.0 |
+| `b68_1_conflicted_score` | 0.0 |
+
+The 3 *_score constants exist primarily for ablation experimentation (e.g., setting compatible_score=1.0 collapses to a binary CONFIRMED/CONFLICTED gate).
+
+## Refinement D.1 (Langston cc-inbox #887)
+
+Explicit `higher_tf_dbs_score: 0` and `higher_tf_dbs_slope: 0` hardcoded in `buildB68_1Alternate` metadata. Schema-stable for v2 4h DBS upgrade — fields just stop being zero when 4h DBS pipeline lands.
+
+## Verification
+
+| Check | Result |
+|---|---|
+| CI Test Suite | ✓ |
+| CI Build | ✓ |
+| CI Docker Build | ✓ |
+| CI TypeScript Check | X — legacy baseline (664 errors before B68.1 = 664 after; zero new) |
+| Migration applied | ✓ via `npm run db:migrate` |
+| All 10 factor types emitting | ✓ (verified via psql) |
+| First B68.1 row metadata sane | ✓ — GIGA/USD active=TFS / higher=IE (4h, 721 samples) / agreement=COMPATIBLE / factor=1.0 / cold_start=false |
+| Refinement D.1 fields present | ✓ — higher_tf_dbs_score=0, higher_tf_dbs_slope=0 |
+| OHLC cache populated 240-min keys | ✓ (721 samples for GIGA/USD) |
+| **Visual UI verification (Claude-in-Chrome)** | ✓ — Factor Ablation Comparison panel on Drift Dashboard tab shows `b68_1_multi_tf_agreement` row 7/10 with Total=18 / Replayed=0 / Pending=18. Replay cron runs nightly 04:00 UTC; Factor Calibration panel populates b68_1 tomorrow morning. |
+| PM2 dawntrader running clean | ✓ #135 |
+| B68.1 mini-window started | ✓ Day 0 of 14 (ends ~2026-05-17) |
+
+## Local TS check
+
+**Unrunnable in this session.** GDrive npm install hits EBADF on tar writes (environmental Windows GDrive virtual filesystem issue — write throughput exceeds GDrive sync). Same disposition as prior B68.x batches. CI is the verification gate. Workflow fix candidate: symlink `node_modules` to local SSD off GDrive.
+
+## Tech debt logged
+
+**RUNNING_ISSUES #52** — OHLC-shape map duplication across 4 hook sites (B68.3 vts-runner + B68.3 orchestrator + B68.1 vts-runner + B68.1 orchestrator). Per Langston cc-inbox #888 D.2: defer to dedicated cleanup batch. Recommended fix: extract `mapKrakenOhlcToOhlcData(raw: any[])` shared helper. Not blocking.
+
+**RUNNING_ISSUES #53** — B68.1 calibration mini-window observation entry (Day 0 of 14, ends 2026-05-17). Four windows now running in parallel (B67.4 / B68.2 / B68.3 / B68.1). Calibration framework attributes per-factor independently per master plan §0.11.C step 5.
+
+## Active-path deferred items (carries with B68.2 / B68.3 / B68.5)
+
+- Active-path orchestrator emit hook `MarketContext.ohlcData` any-cast — silent-skip when undefined. Active trading off so observational-only impact. RUNNING_ISSUES #44 now carries through B68.1 (resolves with B67.5 consumer wiring).
+
+## Langston O.1 / O.2 disposition
+
+**O.1 (cc-inbox #887)** — 7-multiplier worst-case ≈ 0.419 below new 0.45 floor. Floor WILL engage in worst-case. **Resolved: B67.5-prep raised the floor in advance for exactly this scenario.** Floor-engagement is observational signal in itself, captured in ablation metadata (`confidence_with_factor` reflects clamp; `confidence_without_factor` shows pre-clamp).
+
+**O.2 (cc-inbox #887)** — B68.1 conceptually correlated with B68.5 Path B sustainability (both check structural support across timeframes). Risk: chain double-counts. **Resolved by deferral to post-window analysis** — calibration data over the next 14 days will reveal whether the marginal signal of B68.1 ON TOP of B68.5 is meaningful or one is redundant. Both factors emit independent ablation rows so the framework can attribute them separately.
+
+## What's next
+
+**B67.5 consumer wiring** — gated on B67.4 calibration check ~2026-05-15. When B67.4 calibration passes (tertile-monotonic WR + ≥7pp HIGH-LOW gap + p<0.05 + n≥150/bucket per Langston cc-inbox #856), B67.5 ships as own batch (~1 week) and finalizes B67 closure. Wires confidence into 7 consumers + deletes RegimeWeight + handles deferred RUNNING_ISSUES #44 #45.
+
+No active implementation work between now and B67.4 calibration window end. Standing by for calibration data to mature across all 4 windows (B67.4 ends 2026-05-15, B68.2 + B68.3 end 2026-05-16, B68.1 ends 2026-05-17).
+
+---
+
+*B68.1 closure section complete 2026-05-03. B68.x chain modulator series CLOSED. Report can be archived once B67.5 closes B67.*

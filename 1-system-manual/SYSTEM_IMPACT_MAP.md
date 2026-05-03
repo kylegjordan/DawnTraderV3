@@ -156,11 +156,12 @@
 - **File**: `server/services/ohlc-cache.ts`
 - **What**: Centralized OHLC data cache with 5-minute TTL. Wraps `KrakenService.getOHLCData()` with in-memory cache keyed by `symbol:interval`. Bypasses cache for paginated/historical fetches. Periodic cleanup every 10 minutes.
 - **Upstream**: Kraken REST API (via KrakenService)
-- **Downstream**: Signal Orchestrator (OHLC for regime/indicator computation), VTS Runner (OHLC for strategy detection + BTC candles for defensive_hedge)
+- **Downstream**: Signal Orchestrator (OHLC for regime/indicator computation; `60`-min keys for active-TF classification + `240`-min keys for B68.1 multi-TF agreement higher-TF), VTS Runner (OHLC for strategy detection + BTC candles for defensive_hedge + B68.3 pair correlation reference + B68.1 240-min higher-TF)
 - **Shared State**: In-memory cache map, singleton instance (`ohlcCache`)
 - **Execution**: **Passive** — populated on first fetch, cached for 5 minutes
 - **Blast Radius**: **MEDIUM** — all OHLC consumers route through this cache. Cache miss falls through to Kraken API transparently.
 - **Tests**: None specific (validated via integration through signal-orchestrator and VTS)
+- **B68.1 update (2026-05-03):** Now serves a SECOND interval per pair (60-min and 240-min keys coexist). 240-min keys consumed by B68.1 multi-tf-agreement emit hooks. ~177 pairs × ~720 candles × 80 bytes ≈ 10MB additional in-memory state. Same 5-min TTL. No code change in `ohlc-cache.ts` itself — the existing `${symbol}_${interval}` cache key generalizes; B68.1 is the first consumer of the 4h interval. Other Kraken-supported intervals available (1, 5, 15, 30, 60, 240, 1440, 10080, 21600 minutes) for future batches without code change.
 
 ---
 
@@ -1153,4 +1154,61 @@ Continuous 1-min OHLC + per-update ticker snapshots captured to month-partitione
 | 21 | UI panel | `client/src/pages/analytics.tsx:PassiveArchiveSection` | ✅ LIVE |
 | 22 | Chunked batch insert (1000 rows) | `ohlc-batch-writer.ts` + `ticker-batch-writer.ts` | ✅ LIVE — fixes Postgres 65,535-param bind limit |
 | 23 | Expanded xStocks universe (245 syms) | `server/config/xstocks-universe.json` | ✅ LIVE |
+
+---
+
+## B67/B68 Confidence Modulation Chain — full series CLOSED 2026-05-03
+
+**The 7-modulator confidence chain is the canonical post-classifier confidence transformation:**
+
+```
+raw × macro × phase × freshness × outcome × volume_regime × pair_correlation
+    × multi_tf_agreement → clamp [b67_5_post_composition_floor (0.45), 1.0]
+```
+
+Each modulator is a pure function over OHLC + state, emits an ablation row per signal evaluation, and is resolved from `module_constants` at the MCE refresh timer cadence. **Active trading is OFF** — chain is observational pre-B67.5 consumer wiring (gated on calibration check ~2026-05-15). Per-trade persist hook deferred to B67.5 (RUNNING_ISSUES #44 #45).
+
+### Chain factor module inventory
+
+| # | Modulator | File | Batch | Range | Cold-start factor |
+|---|---|---|---|---|---|
+| 1 | macro modifier | `server/core/metrics/macro-modifier.ts` | B67.1 | [`b67_1_modifier_min`, `b67_1_modifier_max`] | 1.0 (fallbackActive=true when baseline n<48) |
+| 2 | phase preference | `regime-phase.ts` + `applyPhasePreference()` helper | B67.2 | strategy-phase weights blob | per (strategy, phase) lookup; UNKNOWN → 1.0 |
+| 3 | freshness (regime age) | `server/core/metrics/regime-age-factor.ts` | B68.4 | [0.92, 1.05] | 1.0 (when ageMs undefined) |
+| 4 | outcome feedback | `server/core/metrics/outcome-feedback-store.ts` | B67.4 | [0.85, 1.05] | 1.0 (sample_count<5) |
+| 5 | volume regime | `server/core/metrics/volume-regime.ts` | B68.2 | [0.92, 1.05] | 1.0 (ohlc<30) |
+| 6 | pair correlation | `server/core/metrics/pair-correlation.ts` | B68.3 | [0.95, 1.05] (boost-only) | 1.0 (pair OR BTC ohlc<30; BTC=XBT/USD universal reference) |
+| 7 | multi-TF agreement | `server/core/metrics/multi-tf-agreement.ts` | **B68.1 (final)** | [0.92, 1.05] | 1.0 (higher-TF samples<30) |
+
+### MCE 9-group config orchestrator
+
+`server/services/market-context-engine.ts:refreshAllConfigs()` resolves 9 config groups in parallel:
+
+1. macro_modifier (B67.1)
+2. regime_phase (B67.2)
+3. regime_classifier (B67.3.5 + B67.5-prep — TFS desat scales + post-composition floor)
+4. outcome_feedback (B67.4)
+5. regime_age (B68.4)
+6. path_b_sustainability (B68.5 — gate on TFS Path B, not a chain modulator)
+7. volume_regime (B68.2)
+8. pair_correlation (B68.3)
+9. multi_tf_agreement (B68.1 — added 2026-05-03)
+
+**First-refresh** uses `Promise.all` with try/catch — hard-fail-on-startup with retry on next timer tick. **Subsequent refreshes** use per-group try/catch — keep-prior-on-failure (one group's missing module_constant doesn't take down the entire MCE refresh). B67.4 hotfix-#2 wrapper inherited unchanged across all subsequent additions.
+
+### B68.1 specifics (2026-05-03, commit `cb861176`)
+
+- **Higher-TF source**: Kraken native 240-min via `ohlcCache.getOHLCData(symbol, 240)` — new cache key `${symbol}_240`. NOT the B74 DB archive at runtime.
+- **Higher-TF classifier reuse**: `calculatePairRegime(higherTfOhlc, 0, 0, 1.0, regimeConfig)` — Path A only (DBS=0, slope=0 in v1).
+- **Three-state classification**: CONFIRMED (labels match) → 1.05 / COMPATIBLE (same family or ST-tolerant) → 1.00 / CONFLICTED (cross-family) → 0.95.
+- **Family map**: LOCAL to `multi-tf-agreement.ts` (5 regimes → 4 families: directional={TFS,IE} / range={RBS} / volatile={HVU} / transition={ST, universally COMPATIBLE}). Canonical regime map (`canonical-regime-strategy-map.ts`) untouched.
+- **Refinement D.1 (Langston cc-inbox #887)**: explicit `higher_tf_dbs_score: 0` and `higher_tf_dbs_slope: 0` in ablation metadata. Schema-stable for v2 4h DBS upgrade.
+
+### Floor engagement observability (post-B67.5-prep, post-B68.1)
+
+Worst-case 7-modulator compound `0.85⁴ × 0.92² × 0.95 ≈ 0.419` engages the new 0.45 floor in worst case. **Intentional + observational** — floor-binding is signal in itself, captured in ablation metadata (`confidence_with_factor` reflects clamp; `confidence_without_factor` shows pre-clamp). Closed Trades UI shows `conf 0.450` widely on recent post-B68.1 trades.
+
+### What's next
+
+**B67.5 consumer wiring** — gated on B67.4 calibration check ~2026-05-15. Wires confidence into 7 consumers + deletes legacy `RegimeWeight` code path + handles deferred RUNNING_ISSUES #44 (active-path orchestrator emit hook OHLC any-cast across all 7 chain factors) + #45 (active-path persist hook). When B67.5 lands, the chain transitions from observational to operational.
 
