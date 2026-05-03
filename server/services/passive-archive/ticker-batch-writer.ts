@@ -19,26 +19,28 @@ import {
   cryptoSpotTickerSnap,
   type InsertEquitySpotTickerSnap,
 } from '../../../shared/schema.js';
-import type { Universe } from './ohlc-batch-writer.js';
+import type { ArchiveAssetClass } from './ohlc-batch-writer.js';
 
 const BATCH_FLUSH_INTERVAL_MS = 5_000;
 const POOL_SLOT_TIMEOUT_MS = 5_000;
 const MAX_CONCURRENT_INSERTS = 2;
 const DEFAULT_THROTTLE_MS = 1_000;
 
-const tickerTableForUniverse = {
-  equity_spot: equitySpotTickerSnap,
-  equity_perp: equityPerpTickerSnap,
+// B69: renamed from tickerTableForUniverse. Drizzle table objects retain legacy
+// names (equitySpotTickerSnap etc.) but the routing key is now the asset class ID.
+const tickerTableForAssetClass = {
+  xstock_spot: equitySpotTickerSnap,
+  xstock_perp: equityPerpTickerSnap,
   crypto_spot: cryptoSpotTickerSnap,
 } as const;
 
-const tickerBuffers: Record<Universe, InsertEquitySpotTickerSnap[]> = {
-  equity_spot: [],
-  equity_perp: [],
+const tickerBuffers: Record<ArchiveAssetClass, InsertEquitySpotTickerSnap[]> = {
+  xstock_spot: [],
+  xstock_perp: [],
   crypto_spot: [],
 };
 
-// Throttle: track last-captured timestamp per (universe:symbol)
+// Throttle: track last-captured timestamp per (assetClass:symbol)
 const lastCaptured: Map<string, number> = new Map();
 
 let throttleMs = DEFAULT_THROTTLE_MS;
@@ -82,29 +84,29 @@ function releaseSlot(): void {
 }
 
 /**
- * Buffer a ticker snapshot. Throttled per-(universe:symbol) so successive
+ * Buffer a ticker snapshot. Throttled per-(assetClass:symbol) so successive
  * snapshots within the throttle window are dropped.
  */
-export function bufferTickerSnap(universe: Universe, row: InsertEquitySpotTickerSnap): boolean {
-  const key = `${universe}:${row.symbol}`;
+export function bufferTickerSnap(assetClass: ArchiveAssetClass, row: InsertEquitySpotTickerSnap): boolean {
+  const key = `${assetClass}:${row.symbol}`;
   const now = Date.now();
   const lastTs = lastCaptured.get(key) ?? 0;
   if (now - lastTs < throttleMs) {
     return false; // throttled — skip
   }
   lastCaptured.set(key, now);
-  tickerBuffers[universe].push(row);
+  tickerBuffers[assetClass].push(row);
   return true;
 }
 
-async function flushTickerUniverse(universe: Universe): Promise<void> {
-  const batch = tickerBuffers[universe];
+async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
+  const batch = tickerBuffers[assetClass];
   if (batch.length === 0) return;
   const rows = batch.splice(0, batch.length);
   try {
     await acquireSlot();
     try {
-      const table = tickerTableForUniverse[universe];
+      const table = tickerTableForAssetClass[assetClass];
       // Cast safe per Langston cc-inbox #870 Q1; ticker_snap tables share
       // IDENTICAL column shapes. Chunked insert (CHUNK_SIZE=1000) protects
       // against Postgres 65,535-parameter bind limit (B74.1 verification:
@@ -115,13 +117,13 @@ async function flushTickerUniverse(universe: Universe): Promise<void> {
         const slice = rows.slice(i, i + CHUNK_SIZE);
         await db.insert(table as any).values(slice as any);
       }
-      console.log(`[B74][ticker-writer] ${universe} flushed ${rows.length} rows`);
+      console.log(`[B74][ticker-writer] ${assetClass} flushed ${rows.length} rows`);
     } finally {
       releaseSlot();
     }
   } catch (err) {
     console.error(
-      `[B74][ticker-writer] ${universe} flush failed (${rows.length} rows dropped):`,
+      `[B74][ticker-writer] ${assetClass} flush failed (${rows.length} rows dropped):`,
       err instanceof Error ? err.message : err,
     );
   }
@@ -133,9 +135,9 @@ export function startTickerWriter(): void {
   if (flushTimer) return;
   flushTimer = setInterval(async () => {
     await Promise.all([
-      flushTickerUniverse('equity_spot'),
-      flushTickerUniverse('equity_perp'),
-      flushTickerUniverse('crypto_spot'),
+      flushTickerAssetClass('xstock_spot'),
+      flushTickerAssetClass('xstock_perp'),
+      flushTickerAssetClass('crypto_spot'),
     ]);
   }, BATCH_FLUSH_INTERVAL_MS);
   console.log(`[B74][ticker-writer] started (flush every ${BATCH_FLUSH_INTERVAL_MS / 1000}s, throttle=${throttleMs}ms)`);
@@ -147,8 +149,8 @@ export async function stopTickerWriter(): Promise<void> {
     flushTimer = null;
   }
   await Promise.all([
-    flushTickerUniverse('equity_spot'),
-    flushTickerUniverse('equity_perp'),
-    flushTickerUniverse('crypto_spot'),
+    flushTickerAssetClass('xstock_spot'),
+    flushTickerAssetClass('xstock_perp'),
+    flushTickerAssetClass('crypto_spot'),
   ]);
 }

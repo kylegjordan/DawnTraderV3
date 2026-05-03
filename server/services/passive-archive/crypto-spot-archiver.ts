@@ -28,7 +28,8 @@ import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 
 const WS_URL = 'wss://ws.kraken.com/v2';
-const UNIVERSE = 'crypto_spot' as const;
+// B69: unchanged value (crypto_spot was already correct), renamed var for consistency
+const ASSET_CLASS = 'crypto_spot' as const;
 const SHARD_SIZE = 300;
 
 interface Shard {
@@ -103,9 +104,10 @@ function assignToShard(symbols: string[], shardCount: number): string[][] {
 
 function parseOhlcBar(data: any): void {
   if (!data?.symbol || !data?.interval_begin) return;
-  bufferOhlcBar(UNIVERSE, {
+  bufferOhlcBar(ASSET_CLASS, {
     symbol: data.symbol,
-    universe: UNIVERSE,
+    assetClass: ASSET_CLASS,
+    exchange: 'kraken',
     intervalBegin: new Date(data.interval_begin),
     open: String(data.open),
     high: String(data.high),
@@ -119,9 +121,10 @@ function parseOhlcBar(data: any): void {
 
 function parseTickerSnap(data: any): void {
   if (!data?.symbol) return;
-  bufferTickerSnap(UNIVERSE, {
+  bufferTickerSnap(ASSET_CLASS, {
     symbol: data.symbol,
-    universe: UNIVERSE,
+    assetClass: ASSET_CLASS,
+    exchange: 'kraken',
     capturedAt: new Date(),
     bid: data.bid != null ? String(data.bid) : null,
     bidQty: data.bid_qty != null ? String(data.bid_qty) : null,

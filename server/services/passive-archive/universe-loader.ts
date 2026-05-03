@@ -49,17 +49,25 @@ async function loadStaticUniverse(filename: string): Promise<StaticUniverseConfi
   return parsed as StaticUniverseConfig;
 }
 
-export async function loadEquitySpotUniverse(): Promise<string[]> {
+// B69: renamed for consistency with asset class taxonomy (equity_spot → xstock_spot)
+export async function loadXstockSpotUniverse(): Promise<string[]> {
   const cfg = await loadStaticUniverse('xstocks-universe.json');
-  console.log(`[B74][universe] equity_spot loaded: ${cfg.symbols.length} symbols from ${cfg._endpoint}`);
+  console.log(`[B74][universe] xstock_spot loaded: ${cfg.symbols.length} symbols from ${cfg._endpoint}`);
   return cfg.symbols;
 }
 
-export async function loadEquityPerpUniverse(): Promise<string[]> {
+/** @deprecated Use loadXstockSpotUniverse(). */
+export const loadEquitySpotUniverse = loadXstockSpotUniverse;
+
+// B69: renamed for consistency with asset class taxonomy (equity_perp → xstock_perp)
+export async function loadXstockPerpUniverse(): Promise<string[]> {
   const cfg = await loadStaticUniverse('equity-perp-universe.json');
-  console.log(`[B74][universe] equity_perp loaded: ${cfg.symbols.length} symbols from ${cfg._endpoint}`);
+  console.log(`[B74][universe] xstock_perp loaded: ${cfg.symbols.length} symbols from ${cfg._endpoint}`);
   return cfg.symbols;
 }
+
+/** @deprecated Use loadXstockPerpUniverse(). */
+export const loadEquityPerpUniverse = loadXstockPerpUniverse;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Dynamic crypto universe

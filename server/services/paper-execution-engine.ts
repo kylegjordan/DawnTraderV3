@@ -2000,6 +2000,9 @@ export class PaperExecutionEngine {
         signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
         patternType: patternType as any,
         patternStrength: patternStrength,
+        // B69: asset class dimensions — explicit, not DB-default-reliant (Kyle §11)
+        exchange: 'kraken',
+        assetClass: 'crypto_spot',
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         metadata: {

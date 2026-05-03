@@ -2,7 +2,7 @@
   "_comment": "B74 — Kraken xStocks (tokenized equity) universe for passive OHLC capture. 275 symbols accepted by wss://ws-equities.kraken.com via WS subscription probe (2026-04-30 throttled probe at 30ms/req). Kraken Pro markets/tokenizedEquities page shows 128 listed; the WS accepts subscriptions for some additional equity tickers (likely pre-launch or extended set). Passive capture is harmless either way — symbols with no actual tokenization just have empty rows, no storage cost beyond schema. Per Langston cc-inbox #867 Q3 + #869 Q3: static config with manual update. To add symbols: edit this file, append to 'symbols', and submit PR. Bootstrap re-reads on startup; no migration needed. Symbol format is BASE/USD matching what wss://ws-equities.kraken.com accepts (no x-suffix on the WS, despite Kraken Pro display showing 'GOOGLx/USD').",
   "_lastUpdated": "2026-04-30",
   "_source": "Kraken Pro screenshots (Kyle 2026-04-30) + WS subscription probe",
-  "_universe": "equity_spot",
+  "_universe": "xstock_spot",
   "_endpoint": "wss://ws-equities.kraken.com",
   "_protocol": "Kraken WebSocket v2",
   "symbols": [

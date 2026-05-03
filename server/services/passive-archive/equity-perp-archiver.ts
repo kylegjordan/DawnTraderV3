@@ -38,7 +38,8 @@ import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 const WS_URL = 'wss://futures.kraken.com/ws/v1';
 const REST_BASE = 'https://futures.kraken.com/api/charts/v1/trade';
 const REST_POLL_INTERVAL_MS = 60_000;
-const UNIVERSE = 'equity_perp' as const;
+// B69: renamed from 'equity_perp' → 'xstock_perp' (tokenized equity perps)
+const ASSET_CLASS = 'xstock_perp' as const;
 
 interface ArchiverState {
   ws: WebSocket | null;
@@ -95,9 +96,10 @@ async function pollOhlcOnce(symbol: string): Promise<number> {
     let maxTime = lastSeen;
     for (const candle of data.candles) {
       if (candle.time <= lastSeen) continue;
-      bufferOhlcBar(UNIVERSE, {
+      bufferOhlcBar(ASSET_CLASS, {
         symbol,
-        universe: UNIVERSE,
+        assetClass: ASSET_CLASS,
+        exchange: 'kraken-futures',
         intervalBegin: new Date(candle.time),
         open: candle.open,
         high: candle.high,
@@ -135,9 +137,10 @@ async function pollAllOhlc(): Promise<void> {
 
 function parseTickerSnap(msg: any): void {
   if (!msg?.product_id) return;
-  bufferTickerSnap(UNIVERSE, {
+  bufferTickerSnap(ASSET_CLASS, {
     symbol: msg.product_id,
-    universe: UNIVERSE,
+    assetClass: ASSET_CLASS,
+    exchange: 'kraken-futures',
     capturedAt: new Date(),
     bid: msg.bid != null ? String(msg.bid) : null,
     bidQty: msg.bid_size != null ? String(msg.bid_size) : null,

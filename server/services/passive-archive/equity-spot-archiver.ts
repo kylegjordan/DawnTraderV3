@@ -26,7 +26,8 @@ import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 
 const WS_URL = 'wss://ws-equities.kraken.com';
-const UNIVERSE = 'equity_spot' as const;
+// B69: renamed from 'equity_spot' → 'xstock_spot' (tokenized equity, not real equity)
+const ASSET_CLASS = 'xstock_spot' as const;
 
 interface ArchiverState {
   ws: WebSocket | null;
@@ -69,9 +70,10 @@ export function getEquitySpotStats(): {
 
 function parseOhlcBar(data: any): void {
   if (!data?.symbol || !data?.interval_begin) return;
-  bufferOhlcBar(UNIVERSE, {
+  bufferOhlcBar(ASSET_CLASS, {
     symbol: data.symbol,
-    universe: UNIVERSE,
+    assetClass: ASSET_CLASS,
+    exchange: 'kraken-equities',
     intervalBegin: new Date(data.interval_begin),
     open: String(data.open),
     high: String(data.high),
@@ -87,9 +89,10 @@ function parseOhlcBar(data: any): void {
 
 function parseTickerSnap(data: any): void {
   if (!data?.symbol) return;
-  bufferTickerSnap(UNIVERSE, {
+  bufferTickerSnap(ASSET_CLASS, {
     symbol: data.symbol,
-    universe: UNIVERSE,
+    assetClass: ASSET_CLASS,
+    exchange: 'kraken-equities',
     capturedAt: new Date(),
     bid: data.bid != null ? String(data.bid) : null,
     bidQty: data.bid_qty != null ? String(data.bid_qty) : null,

@@ -10,8 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { apiFetch } from "@/lib/api";
 import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
-import { 
-  ArrowUpDown, 
+import { AssetClassBadge } from "@/components/ui/asset-class-badge";
+import {
+  ArrowUpDown,
   ArrowUp, 
   ArrowDown, 
   X, 
@@ -336,6 +337,11 @@ function TradeRow({
         </div>
       </td>
       
+      {/* B69: Asset Class */}
+      <td className="px-3 py-3">
+        <AssetClassBadge assetClass={(trade as any).assetClass} />
+      </td>
+
       {/* 2. Slot */}
       <td className="px-3 py-3">
         <Badge variant="outline" className="font-mono text-xs">
@@ -1218,6 +1224,7 @@ export default function ActiveTradesV2() {
                 <tr>
                   {/* Phase 8.8.3-C2A: Final column order per directive */}
                   <SortableHeader field="symbol" label="Symbol" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Class</th>
                   <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>

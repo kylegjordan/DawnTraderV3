@@ -208,12 +208,14 @@ async function persistExits(
         (trade_id, trade_source, variant_id, variant_name,
          virtual_exit_price, virtual_exit_reason, virtual_exit_time,
          virtual_pnl_pct, virtual_duration_min, baseline_pnl_pct,
-         regime, strategy, metadata)
+         regime, strategy, metadata,
+         exchange, asset_class)
       VALUES
         (${r.trade_id}, ${r.trade_source}, ${r.variant_id}, ${r.variant_name},
          ${r.virtual_exit_price}, ${r.virtual_exit_reason}, ${r.virtual_exit_time},
          ${r.virtual_pnl_pct}, ${r.virtual_duration_min}, ${r.baseline_pnl_pct},
-         ${r.regime}, ${r.strategy}, ${JSON.stringify(r.metadata)}::jsonb)
+         ${r.regime}, ${r.strategy}, ${JSON.stringify(r.metadata)}::jsonb,
+         'kraken', 'crypto_spot')
       ON CONFLICT (trade_id, variant_id) DO NOTHING
     `);
   }

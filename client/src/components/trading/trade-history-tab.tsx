@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiFetch } from "@/lib/api";
 import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
+import { AssetClassBadge } from "@/components/ui/asset-class-badge";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -711,6 +712,7 @@ export function TradeHistoryTab() {
                     <tr className="border-b border-border">
                       {/* Phase 8.8.3-C2A: Final column order per directive */}
                       <SortableHeader column="symbol" label="Symbol" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Class</th>
                       <SortableHeader column="strategyName" label="Strategy" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
                       <SortableHeader column="quantity" label="Qty" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
@@ -764,6 +766,11 @@ export function TradeHistoryTab() {
                             </span>
                           </td>
                           
+                          {/* B69: Asset Class */}
+                          <td className="p-2">
+                            <AssetClassBadge assetClass={(trade as any).assetClass} />
+                          </td>
+
                           {/* 2. Strategy - C2A */}
                           <td className="p-2">
                             <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/10")}>

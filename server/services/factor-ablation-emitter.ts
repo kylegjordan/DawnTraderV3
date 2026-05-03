@@ -179,6 +179,12 @@ async function persistRecord(
     // B67.0.1 (2026-04-30): persist strategy for (pair_symbol, evaluated_at,
     // strategy) natural-key join in replay-ablation. Per Langston cc-inbox #864.
     strategy,
+    // B69: explicit asset class + exchange (not DB-default-reliant).
+    // v1: all ablation is crypto_spot on kraken. When multi-asset-class trading
+    // goes live, the caller (signal-orchestrator / vts-runner) will pass these
+    // as parameters to emitAblationRecord.
+    exchange: 'kraken',
+    assetClass: 'crypto_spot',
     factorName: alt.factorName,
     factorState: alt.factorState,
     realDecision: realDecision as unknown as Record<string, unknown>,

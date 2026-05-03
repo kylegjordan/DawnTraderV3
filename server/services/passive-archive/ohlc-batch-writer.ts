@@ -29,18 +29,23 @@ const BATCH_FLUSH_INTERVAL_MS = 5_000;
 const POOL_SLOT_TIMEOUT_MS = 5_000;
 const MAX_CONCURRENT_INSERTS = 2;
 
-export type Universe = 'equity_spot' | 'equity_perp' | 'crypto_spot';
+// B69: "Universe" → "AssetClass" rename. The 3 actively-archived asset classes
+// map to their respective Drizzle table objects for routing inserts.
+export type ArchiveAssetClass = 'xstock_spot' | 'xstock_perp' | 'crypto_spot';
 
-const tableForUniverse = {
-  equity_spot: equitySpotOhlc1m,
-  equity_perp: equityPerpOhlc1m,
+/** @deprecated Use ArchiveAssetClass. Kept for transition period. */
+export type Universe = ArchiveAssetClass;
+
+const tableForAssetClass = {
+  xstock_spot: equitySpotOhlc1m,   // legacy table name retained
+  xstock_perp: equityPerpOhlc1m,   // legacy table name retained
   crypto_spot: cryptoSpotOhlc1m,
 } as const;
 
-// Buffers keyed by universe so each archiver has independent flush behavior.
-const buffers: Record<Universe, InsertEquitySpotOhlc1m[]> = {
-  equity_spot: [],
-  equity_perp: [],
+// Buffers keyed by asset class so each archiver has independent flush behavior.
+const buffers: Record<ArchiveAssetClass, InsertEquitySpotOhlc1m[]> = {
+  xstock_spot: [],
+  xstock_perp: [],
   crypto_spot: [],
 };
 
@@ -78,20 +83,20 @@ function releaseSlot(): void {
   if (next) next();
 }
 
-/** Buffer a single OHLC bar for the given universe. Flushed automatically. */
-export function bufferOhlcBar(universe: Universe, row: InsertEquitySpotOhlc1m): void {
-  buffers[universe].push(row);
+/** Buffer a single OHLC bar for the given asset class. Flushed automatically. */
+export function bufferOhlcBar(assetClass: ArchiveAssetClass, row: InsertEquitySpotOhlc1m): void {
+  buffers[assetClass].push(row);
 }
 
-/** Flush a single universe's buffer. Called by the periodic timer or on shutdown. */
-async function flushUniverse(universe: Universe): Promise<void> {
-  const batch = buffers[universe];
+/** Flush a single asset class buffer. Called by the periodic timer or on shutdown. */
+async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
+  const batch = buffers[assetClass];
   if (batch.length === 0) return;
   const rows = batch.splice(0, batch.length); // drain atomically
   try {
     await acquireSlot();
     try {
-      const table = tableForUniverse[universe];
+      const table = tableForAssetClass[assetClass];
       // Drizzle insert; PK includes auto-generated `id` so no realistic
       // conflict on the primary key. Partition routing is automatic via
       // PARTITION BY RANGE.
@@ -109,13 +114,13 @@ async function flushUniverse(universe: Universe): Promise<void> {
         const slice = rows.slice(i, i + CHUNK_SIZE);
         await db.insert(table as any).values(slice as any);
       }
-      console.log(`[B74][batch-writer] ${universe} flushed ${rows.length} rows`);
+      console.log(`[B74][batch-writer] ${assetClass} flushed ${rows.length} rows`);
     } finally {
       releaseSlot();
     }
   } catch (err) {
     console.error(
-      `[B74][batch-writer] ${universe} flush failed (${rows.length} rows dropped):`,
+      `[B74][batch-writer] ${assetClass} flush failed (${rows.length} rows dropped):`,
       err instanceof Error ? err.message : err,
     );
   }
@@ -128,9 +133,9 @@ export function startBatchWriter(): void {
   if (flushTimer) return; // already started
   flushTimer = setInterval(async () => {
     await Promise.all([
-      flushUniverse('equity_spot'),
-      flushUniverse('equity_perp'),
-      flushUniverse('crypto_spot'),
+      flushAssetClass('xstock_spot'),
+      flushAssetClass('xstock_perp'),
+      flushAssetClass('crypto_spot'),
     ]);
   }, BATCH_FLUSH_INTERVAL_MS);
   console.log(`[B74][batch-writer] started (flush every ${BATCH_FLUSH_INTERVAL_MS / 1000}s, max ${MAX_CONCURRENT_INSERTS} concurrent inserts)`);
@@ -143,8 +148,8 @@ export async function stopBatchWriter(): Promise<void> {
     flushTimer = null;
   }
   await Promise.all([
-    flushUniverse('equity_spot'),
-    flushUniverse('equity_perp'),
-    flushUniverse('crypto_spot'),
+    flushAssetClass('xstock_spot'),
+    flushAssetClass('xstock_perp'),
+    flushAssetClass('crypto_spot'),
   ]);
 }

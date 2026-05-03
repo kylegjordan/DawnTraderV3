@@ -541,6 +541,12 @@ export const regimeFactorAlternates = pgTable("regime_factor_alternates", {
   // natural-key join in replay-ablation. Nullable for backfill compat with
   // pre-fix rows; new emits always populate.
   strategy: text("strategy"),
+  // B69 (2026-05-03): asset class + exchange dimensions for cross-cutting analysis.
+  // Default 'kraken' / 'crypto_spot' matches pre-B69 reality (everything was crypto).
+  // New emits set these from `safeResolveAssetClass(symbol, exchange)` at the
+  // emit hook in factor-ablation-emitter.ts.
+  exchange: text("exchange").notNull().default("kraken"),
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
   evaluatedAt: timestamp("evaluated_at", { withTimezone: true }).notNull().defaultNow(),
   factorName: text("factor_name").notNull(),
   factorState: text("factor_state").notNull(), // 'alternate_disabled' | 'alternate_enabled'
@@ -1719,6 +1725,11 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
 export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
+  // B69 (2026-05-03): asset class + exchange for cross-cutting analysis.
+  // New rows are populated via `safeResolveAssetClass(symbol, exchange)` at
+  // paper-execution-engine open. Defaults match pre-B69 reality.
+  exchange: text("exchange").notNull().default("kraken"),
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
   quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
@@ -1748,6 +1759,9 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   // Batch 19E: Source pool tracking for pattern scanning analysis
   sourcePool: varchar("source_pool", { length: 20 }), // 'quant' | 'pattern' | 'hybrid' | 'xstock' (nullable for existing records)
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
+  // B69 (2026-05-03): asset class + exchange dimensions for multi-asset-class routing.
+  exchange: text("exchange").notNull().default("kraken"),
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),
   strategyIdx: index("paper_sim_open_positions_strategy_idx").on(table.strategyName),
@@ -4565,14 +4579,24 @@ export type ConfigRegistry = typeof configRegistry.$inferSelect;
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── OHLC: 1-min bars ───────────────────────────────────────────────────────
-// Three near-identical tables (one per universe). Same columns, different
-// partition trees. The `universe` column is redundant with the table choice
-// but kept for self-describing rows (cold-storage extraction).
+// Three near-identical tables (one per asset class). Same columns, different
+// partition trees. B69 (2026-05-03): renamed `universe` → `asset_class` for
+// consistency with the live tables + retagged equity_*-defaulted rows to
+// xstock_*. Per-row `exchange` added for symmetry with live trade tables.
+// Self-describing rows preserved (cold-storage extraction unchanged).
 
 const ohlcColumns = {
   id: bigserial("id", { mode: "number" }).notNull(),
   symbol: text("symbol").notNull(),
-  universe: text("universe").notNull(),
+  // B69: column renamed from `universe`. Same data, single source of truth.
+  // Values: 'crypto_spot' | 'xstock_spot' (was 'equity_spot') | 'xstock_perp'
+  // (was 'equity_perp'). Per-archiver default set in migration.
+  assetClass: text("asset_class").notNull(),
+  // B69: exchange added for schema symmetry with live tables.
+  // crypto_spot_ohlc_1m + equity_spot_ohlc_1m default 'kraken' (and
+  // 'kraken-equities' specifically for the equity-spot via ws-equities feed
+  // — per archiver insert). equity_perp_ohlc_1m defaults 'kraken-futures'.
+  exchange: text("exchange").notNull(),
   intervalBegin: timestamp("interval_begin", { withTimezone: true }).notNull(),
   open: numeric("open", { precision: 20, scale: 8 }).notNull(),
   high: numeric("high", { precision: 20, scale: 8 }).notNull(),
@@ -4607,7 +4631,13 @@ export const cryptoSpotOhlc1m = pgTable("crypto_spot_ohlc_1m", ohlcColumns, (tab
 const tickerSnapColumns = {
   id: bigserial("id", { mode: "number" }).notNull(),
   symbol: text("symbol").notNull(),
-  universe: text("universe").notNull(),
+  // B69 (2026-05-03): renamed from `universe` for single-source-of-truth
+  // alignment with live tables. Same data, same partition routing semantics.
+  assetClass: text("asset_class").notNull(),
+  // B69: exchange added for schema symmetry. equity_spot_ticker_snap
+  // defaults 'kraken-equities' (separate WS endpoint), others 'kraken' or
+  // 'kraken-futures' per archiver source.
+  exchange: text("exchange").notNull(),
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
   bid: numeric("bid", { precision: 20, scale: 8 }),
   bidQty: numeric("bid_qty", { precision: 28, scale: 8 }),
