@@ -121,9 +121,16 @@
 | 50 | **B68.3 mini-window started Day 0 of 14** (ends 2026-05-16). Watching `regime_factor_alternates.factor_name = 'b68_3_pair_correlation'` accumulate to n ≥ 150 per (factor, tertile) bucket. Three windows running in parallel (B67.4 Day 1, B68.2 Day 0, B68.3 Day 0). | OPEN — observation period | Day 0 first ablation row metadata: corr=0.0076 / decorrelation=0.992 / factor=1.0496 / label=IDIOSYNCRATIC / isBtcSelfReference=false / coldStart=false. PM2 #129. RUNNING_ISSUES #44 extends to cover B68.3 (same active-path emit hook deferral). |
 | 51 | **⚠ Langston O.1 escalating concern (cc-inbox #883):** 6-modulator compound penalty stack worst case ≈ 0.455. After B68.1 (next batch, 7th modulator) ≈ 0.43, at the pre-B67 0.4 floor edge. **B67.5 post-composition floor decision must be defined before consumer wiring — no more deferring.** | RESOLVED 2026-05-03 | B67.5-prep mini-batch shipped (commit `1d25cb7c`, PM2 #130). New module_constant `b67_5_post_composition_floor` seeded at 0.45, replacing 3 hardcoded 0.4 clamp sites. Folded into existing `refreshRegimeConfig` (no 9th MCE method). Tunable from calibration data via DB UPDATE. Langston cc-inbox #885 O.1 + #886 combined Steps 1/2/4 APPROVED + Kyle approval 2026-05-03. Unblocks B68.1. |
 
-## Summary Counts (updated 2026-05-03 post-B67.5-prep)
+## B68.1 — New Issues Logged 2026-05-03
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 52 | **OHLC-shape map duplication (tech debt).** The `parseFloat(c.open || c[1])` + derive-timestamp inline mapping appears in 4 places now: vts-runner B68.3 hook (~L1568), signal-orchestrator B68.3 hook (~L831), and the two new B68.1 hooks. Per Langston cc-inbox #888 D.2: defer cleanup to a small dedicated batch. Recommended fix: extract `mapKrakenOhlcToOhlcData(raw: any[])` shared helper into `server/services/ohlc-cache.ts` (or a new `ohlc-shape.ts`) and have all four hook sites call it. | DEFERRED — tech debt | Logged on B68.1 ship 2026-05-03. Not blocking — current duplication is field-tested and behaviorally identical across sites. Best fixed alongside B67.5 housekeeping pass or as a stand-alone cleanup batch. |
+| 53 | **B68.1 mini-window started Day 0 of 14** (ends ~2026-05-17). Watching `regime_factor_alternates.factor_name = 'b68_1_multi_tf_agreement'` accumulate to n ≥ 150 per (factor, tertile) bucket. Four windows now running in parallel (B67.4 Day 2, B68.2 Day 1, B68.3 Day 1, B68.1 Day 0). Calibration framework attributes per-factor independently per master plan §0.11.C step 5. | OPEN — observation period | Will be filled in post-deploy with first-cycle ablation row metadata (active_tf_regime / higher_tf_regime / agreement / factor distribution). PM2 #TBD. RUNNING_ISSUES #44 (active-path emit hook deferred to B67.5) extends to cover B68.1 (same pattern; same disposition). |
+
+## Summary Counts (updated 2026-05-03 post-B68.1)
 - **RESOLVED:** 40 (adds #51 — B67.5-prep shipped)
-- **DEFERRED:** 4 (#44 active-path emit OHLC; #45 active-path persist hook; #12e regime-gated dormancy; #40 other 4 regime-branch desat)
+- **DEFERRED:** 5 (#44 active-path emit OHLC; #45 active-path persist hook; #12e regime-gated dormancy; #40 other 4 regime-branch desat; #52 OHLC-shape map duplication tech debt)
 - **CRITICAL:** 0
 - **IN PROGRESS:** 1 (#42 — narration leak)
-- **OPEN:** 5 (#39 CI TS legacy; #43 B67.4 calibration observation; #46 passive archive partition-aware index; #49 B68.2 calibration observation; #50 B68.3 calibration observation)
+- **OPEN:** 6 (#39 CI TS legacy; #43 B67.4 calibration observation; #46 passive archive partition-aware index; #49 B68.2 calibration observation; #50 B68.3 calibration observation; #53 B68.1 calibration observation)

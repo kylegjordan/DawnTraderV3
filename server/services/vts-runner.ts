@@ -124,6 +124,15 @@ import {
   computePairCorrelation,
   buildB68_3Alternate,
 } from '../core/metrics/pair-correlation.js';
+// B68.1 (2026-05-03): multi-TF agreement as 7th and final B68.x chain modulator.
+// Higher-TF (240-min / 4h) regime classification reuses calculatePairRegime
+// unchanged. Higher-TF OHLC fetched at this hook from ohlcCache (new cache key
+// `${symbol}_240`). Family map kept LOCAL to multi-tf-agreement.ts per
+// Langston cc-inbox #888 D.1.
+import {
+  computeMultiTfAgreement,
+  buildB68_1Alternate,
+} from '../core/metrics/multi-tf-agreement.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
 import { checkPerUnderlyingCap, formatDecisionLog, assignCohortHash } from './per-underlying-cap.js';
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
@@ -1597,6 +1606,53 @@ async function generatePhase10Signal(
       }
     } else if (_pairCorrelationConfig === null) {
       console.warn('[B68.3][vts-runner] pair correlation config null at ablation hook — cold-start race');
+    }
+
+    // ── B68.1 multi-TF agreement (7th chain modulator, 2026-05-03) ────
+    // Higher-TF (240-min / 4h) regime classification reused via
+    // calculatePairRegime (Path A only — DBS=0 in v1). Three-state agreement:
+    // CONFIRMED (labels match) → 1.05 / COMPATIBLE (same family or ST-tolerant)
+    // → 1.00 / CONFLICTED → 0.95. ST is universally COMPATIBLE. Cold-start
+    // returns factor=1.0 + agreement=COLD_START. Ablation row metadata carries
+    // explicit higher_tf_dbs_score:0 + higher_tf_dbs_slope:0 (Langston D.1).
+    const _multiTfConfig = _mce.getCurrentMultiTfAgreementConfig();
+    if (_multiTfConfig !== null && ohlcData && ohlcData.length > 0) {
+      try {
+        const higherRaw = await ohlcCache.getOHLCData(
+          symbol,
+          _multiTfConfig.higherTfIntervalMinutes,
+        );
+        const higherTfOhlc = (higherRaw?.ohlc ?? []).map((c: any) => ({
+          open: parseFloat(c.open || c[1]),
+          high: parseFloat(c.high || c[2]),
+          low: parseFloat(c.low || c[3]),
+          close: parseFloat(c.close || c[4]),
+          volume: parseFloat(c.volume || c[6] || 0),
+          timestamp: c.timestamp || c[0] * 1000,
+        }));
+        const result = computeMultiTfAgreement(
+          _regimeLabel as MarketRegimeType,
+          higherTfOhlc.length >= _multiTfConfig.minHigherTfSamples ? higherTfOhlc : null,
+          _multiTfConfig,
+          _fullRegimeConfig ?? undefined,
+        );
+        _modulatedConfChain *= result.factor;
+        _b67_1_alternates.push(
+          buildB68_1Alternate(_modulatedConfChain, _regimeLabel, result, _multiTfConfig),
+        );
+        console.log(
+          `[B68.1][multi-tf] pair=${symbol} active=${result.activeTfRegime} ` +
+            `higher=${result.higherTfRegime ?? 'COLD'} agree=${result.agreement} ` +
+            `factor=${result.factor.toFixed(4)}`,
+        );
+      } catch (err) {
+        console.error(
+          '[B68.1][vts-runner] multi-tf emit failed:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+    } else if (_multiTfConfig === null) {
+      console.warn('[B68.1][vts-runner] multi-tf config null at ablation hook — cold-start race');
     }
 
     // ── B68.5 Path B sustainability ablation (label counterfactual) ───

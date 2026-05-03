@@ -123,6 +123,14 @@ import {
   computePairCorrelation,
   buildB68_3Alternate,
 } from '../core/metrics/pair-correlation.js';
+// B68.1 (2026-05-03): multi-TF agreement as 7th and final B68.x chain modulator.
+// Higher-TF (240-min / 4h) regime classification reuses calculatePairRegime
+// unchanged. Higher-TF OHLC fetched at this hook from ohlcCache (new cache key
+// `${symbol}_240`). Family map LOCAL to multi-tf-agreement.ts.
+import {
+  computeMultiTfAgreement,
+  buildB68_1Alternate,
+} from '../core/metrics/multi-tf-agreement.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 
@@ -860,6 +868,56 @@ export class SignalOrchestrator {
         }
       } else if (pairCorrelationConfig === null) {
         console.warn('[B68.3][orchestrator] pair correlation config null at ablation hook — cold-start race');
+      }
+
+      // ── B68.1 multi-TF agreement (7th chain modulator, 2026-05-03) ────
+      // Higher-TF (240-min / 4h) regime classification reused via
+      // calculatePairRegime (Path A only — DBS=0 in v1). Three-state agreement
+      // CONFIRMED/COMPATIBLE/CONFLICTED. ST is universally COMPATIBLE.
+      // Inherits same active-path any-cast deferral as B68.2/B68.3/B68.5
+      // (silent-skip when MarketContext.ohlcData is undefined; B67.5 fix).
+      const multiTfConfig = mce.getCurrentMultiTfAgreementConfig();
+      if (multiTfConfig !== null && symbolCtx !== null) {
+        const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
+        if (ohlc && Array.isArray(ohlc) && ohlc.length > 0) {
+          try {
+            const { ohlcCache } = await import('./ohlc-cache.js');
+            const higherRaw = await ohlcCache.getOHLCData(
+              rawSignal.symbol,
+              multiTfConfig.higherTfIntervalMinutes,
+            );
+            const higherTfOhlc = (higherRaw?.ohlc ?? []).map((c: any) => ({
+              open: parseFloat(c.open || c[1]),
+              high: parseFloat(c.high || c[2]),
+              low: parseFloat(c.low || c[3]),
+              close: parseFloat(c.close || c[4]),
+              volume: parseFloat(c.volume || c[6] || 0),
+              timestamp: c.timestamp || c[0] * 1000,
+            }));
+            const result = computeMultiTfAgreement(
+              regimeLabel as any,
+              higherTfOhlc.length >= multiTfConfig.minHigherTfSamples ? higherTfOhlc : null,
+              multiTfConfig,
+              fullRegimeConfig ?? undefined,
+            );
+            modulatedConfChain *= result.factor;
+            ablationAlternates.push(
+              buildB68_1Alternate(modulatedConfChain, regimeLabel, result, multiTfConfig),
+            );
+            console.log(
+              `[B68.1][multi-tf] pair=${rawSignal.symbol} active=${result.activeTfRegime} ` +
+                `higher=${result.higherTfRegime ?? 'COLD'} agree=${result.agreement} ` +
+                `factor=${result.factor.toFixed(4)}`,
+            );
+          } catch (err) {
+            console.error(
+              '[B68.1][orchestrator] multi-tf emit failed:',
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+      } else if (multiTfConfig === null) {
+        console.warn('[B68.1][orchestrator] multi-tf config null at ablation hook — cold-start race');
       }
 
       // ── B68.5 Path B sustainability ablation row ──────────────────────

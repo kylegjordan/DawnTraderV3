@@ -98,6 +98,11 @@ import type { VolumeRegimeConfig } from '../core/metrics/volume-regime.js';
 // dimension. Pure-function module; no persistent state. BTC reference fetched
 // on-demand from ohlcCache at emit hook (not pre-cached in MCE state).
 import type { PairCorrelationConfig } from '../core/metrics/pair-correlation.js';
+// B68.1 (2026-05-03): multi-timeframe agreement as 7th and final B68.x chain
+// modulator. Higher-TF (240-min / 4h) regime classification reuses
+// `calculatePairRegime` unchanged. Higher-TF OHLC fetched at emit hook from
+// ohlcCache (new cache key `${symbol}_240`). No prefetch into MCE state at v1.
+import type { MultiTfAgreementConfig } from '../core/metrics/multi-tf-agreement.js';
 
 /** B68.4 — freshness factor config resolved from `regime_age` module. */
 export interface RegimeAgeConfig {
@@ -118,6 +123,9 @@ export type { VolumeRegimeConfig } from '../core/metrics/volume-regime.js';
 
 /** B68.3 — Re-export PairCorrelationConfig same as VolumeRegimeConfig. */
 export type { PairCorrelationConfig } from '../core/metrics/pair-correlation.js';
+
+/** B68.1 — Re-export MultiTfAgreementConfig same pattern. */
+export type { MultiTfAgreementConfig } from '../core/metrics/multi-tf-agreement.js';
 
 // ─── Cache Entry ─────────────────────────────────────────────────────────────
 
@@ -204,6 +212,13 @@ export class MarketContextEngine {
   // hook from ohlcCache (cache read, not network — microsecond latency per
   // Langston cc-inbox #884 D.1). No prefetch into MCE state at v1.
   private pairCorrelationConfig: PairCorrelationConfig | null = null;
+
+  // ─── B68.1: multi-TF agreement config block ──────────────────────────────
+  // Pure function over OHLC; higher-TF series fetched at emit hook from
+  // ohlcCache (new cache key `${symbol}_240`). No prefetch into MCE state at
+  // v1. 7th and final B68.x chain modulator.
+  private multiTfAgreementConfig: MultiTfAgreementConfig | null = null;
+
   /** True until the first successful `refreshAllConfigs()`. Used to enforce
    *  hard-fail-on-startup vs keep-prior-on-subsequent-failure (§D.4). */
   private firstRefreshPending: boolean = true;
@@ -251,6 +266,7 @@ export class MarketContextEngine {
     this.pathBSustainabilityConfig = null;
     this.volumeRegimeConfig = null;
     this.pairCorrelationConfig = null;
+    this.multiTfAgreementConfig = null;
     this.firstRefreshPending = true;
     console.log('[Phase14][MCE] Stopped, cache cleared');
   }
@@ -289,10 +305,11 @@ export class MarketContextEngine {
           this.refreshPathBConfig(),
           this.refreshVolumeRegimeConfig(),     // B68.2 (2026-05-02): 7th group
           this.refreshPairCorrelationConfig(),  // B68.3 (2026-05-02): 8th group
+          this.refreshMultiTfAgreementConfig(), // B68.1 (2026-05-03): 9th group
         ]);
         this.firstRefreshPending = false;
         this.assembleRegimeConfig();
-        console.log('[Phase14][MCE] First refresh complete — all 8 config groups loaded');
+        console.log('[Phase14][MCE] First refresh complete — all 9 config groups loaded');
       } catch (err) {
         console.error(
           '[Phase14][MCE] First refresh failed; will retry on next timer tick:',
@@ -311,6 +328,7 @@ export class MarketContextEngine {
       { name: 'path_b_sustainability',  fn: () => this.refreshPathBConfig() },
       { name: 'volume_regime',          fn: () => this.refreshVolumeRegimeConfig() },    // B68.2
       { name: 'pair_correlation',       fn: () => this.refreshPairCorrelationConfig() }, // B68.3
+      { name: 'multi_tf_agreement',     fn: () => this.refreshMultiTfAgreementConfig() }, // B68.1
     ];
     await Promise.all(groups.map(async (g) => {
       try {
@@ -571,6 +589,61 @@ export class MarketContextEngine {
     };
   }
 
+  /**
+   * B68.1 — Multi-timeframe agreement config (8 constants per Langston cc-inbox
+   * #887). 7th and final B68.x chain modulator. Higher-TF (240-min / 4h)
+   * regime classification reuses calculatePairRegime unchanged at the emit
+   * hook. Per Langston cc-inbox #888: family map kept LOCAL to multi-tf-
+   * agreement.ts; this MCE method only resolves the 8 config keys.
+   */
+  private async refreshMultiTfAgreementConfig(): Promise<void> {
+    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
+    const [
+      higherTfInterval,
+      minHigherTfSamples,
+      factorMin,
+      factorMax,
+      sensitivity,
+      compatibleScore,
+      confirmedScore,
+      conflictedScore,
+    ] = await Promise.all([
+      getConstant<number>('multi_tf_agreement', 'b68_1_higher_tf_interval_minutes', RES_KEY),
+      getConstant<number>('multi_tf_agreement', 'b68_1_min_higher_tf_samples', RES_KEY),
+      getConstant<number>('multi_tf_agreement', 'b68_1_factor_min', RES_KEY),
+      getConstant<number>('multi_tf_agreement', 'b68_1_factor_max', RES_KEY),
+      getConstant<number>('multi_tf_agreement', 'b68_1_sensitivity', RES_KEY),
+      getConstant<number>('multi_tf_agreement', 'b68_1_compatible_score', RES_KEY),
+      getConstant<number>('multi_tf_agreement', 'b68_1_confirmed_score', RES_KEY),
+      getConstant<number>('multi_tf_agreement', 'b68_1_conflicted_score', RES_KEY),
+    ]);
+    const missing: string[] = [];
+    if (higherTfInterval === undefined)   missing.push('b68_1_higher_tf_interval_minutes');
+    if (minHigherTfSamples === undefined) missing.push('b68_1_min_higher_tf_samples');
+    if (factorMin === undefined)          missing.push('b68_1_factor_min');
+    if (factorMax === undefined)          missing.push('b68_1_factor_max');
+    if (sensitivity === undefined)        missing.push('b68_1_sensitivity');
+    if (compatibleScore === undefined)    missing.push('b68_1_compatible_score');
+    if (confirmedScore === undefined)     missing.push('b68_1_confirmed_score');
+    if (conflictedScore === undefined)    missing.push('b68_1_conflicted_score');
+    if (missing.length > 0) {
+      throw new Error(
+        `[B68.1] missing module_constants in multi_tf_agreement module: ${missing.join(', ')}. ` +
+        `Run migration 2026-05-03-b68-1-multi-tf-agreement.sql to seed.`,
+      );
+    }
+    this.multiTfAgreementConfig = {
+      higherTfIntervalMinutes: higherTfInterval as number,
+      minHigherTfSamples: minHigherTfSamples as number,
+      factorMin: factorMin as number,
+      factorMax: factorMax as number,
+      sensitivity: sensitivity as number,
+      compatibleScore: compatibleScore as number,
+      confirmedScore: confirmedScore as number,
+      conflictedScore: conflictedScore as number,
+    };
+  }
+
   /** B68.2 — Volume regime config (8 constants per Langston cc-inbox #881). */
   private async refreshVolumeRegimeConfig(): Promise<void> {
     const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
@@ -730,6 +803,11 @@ export class MarketContextEngine {
   /** B68.3 — Pair correlation config accessor. Null only during cold start. */
   getCurrentPairCorrelationConfig(): PairCorrelationConfig | null {
     return this.pairCorrelationConfig;
+  }
+
+  /** B68.1 — Multi-TF agreement config accessor. Null only during cold start. */
+  getCurrentMultiTfAgreementConfig(): MultiTfAgreementConfig | null {
+    return this.multiTfAgreementConfig;
   }
 
   // ─── Core: Compute Context ─────────────────────────────────────────────────
