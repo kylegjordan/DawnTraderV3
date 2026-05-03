@@ -686,7 +686,7 @@ These are the calls that needed to be made before we could scope B67. As of 2026
 **Sequencing decisions:**
 
 5. **Start B67 immediately after compaction?** vs finish other pre-Phase-19 items first (B69 schema, B70 archiving) and do B67 later. [CC view: B67 should go first; the macro modifier compounds with everything else.]
-6. **B68 (Tier-2 external data) — keep as conditional or drop entirely?** Tier-2 is exchange flows + liquidations + DXY + SPX. Useful but additive on top of B67. CC view: keep as conditional, decide based on B67 outcomes.
+6. **B68 (Tier-2 external data) — keep as conditional or drop entirely?** Tier-2 is exchange flows + liquidations + DXY + SPX. Useful but additive on top of B67. CC view: keep as conditional, decide based on B67 outcomes. **DECISION GATE SET 2026-05-03 (Kyle directive):** parked until (a) 14d calibration observation period closes (last window B68.1 ends ~2026-05-17) AND (b) B67.5 consumer wiring lands and the chain becomes operational. At that point with operational chain data, evaluate whether Tier-2 adds measurable lift on top of the now-active 7-modulator chain — go/no-go + slot assignment if go. Tracked in BATCH_CATALOG as "External Data Tier-2" placeholder row.
 
 **Scope decisions:**
 

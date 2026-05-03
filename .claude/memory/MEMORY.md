@@ -71,32 +71,42 @@ Earlier work — see BATCH_CATALOG for B74/B74.1/B73/B73.1/B73.2 + B67.0 through
 
 ---
 
-## ⭐ ACTIVE NEXT MILESTONE — B67.5 consumer wiring
+## ⭐ ACTIVE QUEUE — B69 + B70 in parallel with calibration windows
 
-**Gated on B67.4 calibration check ~2026-05-15.** No active implementation work between now and the calibration window ends. Standing by for calibration data to mature.
+**Kyle directive 2026-05-03:** B69 and B70 are the next batches. **Run them in parallel with the 14d observation period** (windows close 2026-05-15 → 2026-05-17). After observation closes, B67.5 consumer wiring kicks off (gated on B67.4 calibration check pass).
 
-**Read before starting B67.5:**
-1. `Claude Comms and Packages/Batch Completion/BATCH_67_PROGRESS_REPORT.md` — has the B67.5 consumer-wiring spec preview in the close-out section.
-2. Master plan §0.4 / §0.6 in `REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md` — calibration check criteria.
-3. RUNNING_ISSUES #44 (active-path emit hook deferred) + #45 (active-path persist hook deferred) — both fold into B67.5 consumer wiring.
+**B69 — Asset class + standardized schema** (queued, no scope file yet):
+- Add `assetClass` field across all trade/signal tables.
+- Standardize displayed fields = captured fields = archived fields.
+- Prerequisite for equity/FX expansion + asset-class-specific external data routing.
 
-**B67.5 scope at-a-glance:**
-- Wire modulated confidence into 7 consumers (admission gates / position sizing / etc.)
-- Delete RegimeWeight legacy code path
-- Persist modulated confidence on every trade record (active path; VTS already done in B67.2.1)
-- Active-path orchestrator emit hook gets clean OHLC source (resolves RUNNING_ISSUES #44 across all 7 chain factors)
+**B70 — Data archiving update** (queued, no scope file yet):
+- Unified archiver across VTS/Paper/Live.
+- Pair-level scan capture.
+- Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data.
+
+**Numbering note:** master plan §5.4 #8 ML-light is also informally referred to as "B69 ML-Lite" but BATCH_CATALOG B69 is the schema work above. ML-light needs renumbering when it ships (Kyle deferred to end of pre-Phase-16).
+
+## ⭐ Following batches (sequential, post-observation)
+
+1. **B67.5 consumer wiring** — gated on B67.4 calibration check ~2026-05-15. ~1 week. Wires confidence into 7 consumers + deletes RegimeWeight + handles deferred RUNNING_ISSUES #44/#45.
+2. **External Data Tier-2 decision gate** — Kyle directive 2026-05-03: evaluate AFTER (a) 14d observation closes AND (b) B67.5 lands + chain operational. Original framing: exchange flows / liquidations / DXY / SPX cross-asset (~2-3 weeks if go). Tracked in BATCH_CATALOG as "External Data Tier-2" placeholder row.
+3. **B72 — Comprehensive lever-to-module_constants sweep** — final pre-Phase-19 backstop sweep of 51 static + 18 adaptive levers from B63 Item 15 inventory.
+4. **B69 ML-light** (renumbering needed) — deferred to end of pre-Phase-16 per Kyle directive.
+
+## ⭐ B63 Item 13 — CLOSED 2026-05-03
+
+Final decision (Kyle directive 2026-05-03): **KEEP `vwap_pullback` in strong-trend lane. NO dedicated pullback strategy will be created in the strong-trend family. Do not re-raise.** Closure rationale logged in BATCH_CATALOG. Original "Future TBD" re-evaluation slot retired.
 
 ---
 
-## ⭐ Future implementations (post-B67.5)
+## ⭐ Calibration milestones (running in parallel with B69/B70)
 
 1. **B67.4 calibration check 2026-05-15** — if passes, B67.5 consumer wiring kicks off.
 2. **B68.2 + B68.3 calibration checks 2026-05-16** — per-factor analysis. May trigger v2 sensitivity tuning.
 3. **B68.1 calibration check 2026-05-17** — newest factor; per-factor monotonic-WR + lift analysis.
-4. **B69 ML-light** — deferred to end of pre-Phase-16. Trains on data accumulated by B67.x + B68.x.
-5. **B72 lever sweep** — final pre-Phase-19 batch. Sweep all new constants from B67/B68/B69.
-6. **B70 archival** — passive archive aging-off (eventually needed as B74 disk grows).
-7. **B73 ongoing observation** — first variant winner declaration when n=200 total + n=50 per-regime.
+4. **External Data Tier-2 decision** post-B67.5 ship — evaluate go/no-go.
+5. **B73 ongoing observation** — first variant winner declaration when n=200 total + n=50 per-regime.
 
 ---
 
