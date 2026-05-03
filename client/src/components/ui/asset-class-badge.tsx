@@ -7,7 +7,7 @@
  */
 
 import { Badge } from "@/components/ui/badge";
-import { ASSET_CLASS_REGISTRY, type AssetClass } from "../../../shared/asset-classes";
+import { ASSET_CLASS_REGISTRY, type AssetClass } from "@shared/asset-classes";
 
 interface AssetClassBadgeProps {
   assetClass: string | null | undefined;
