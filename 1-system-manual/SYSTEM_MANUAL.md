@@ -10540,3 +10540,159 @@ See §5.1 above for the engine details. Each target hit advances both stop and t
 ---
 
 *End of B65.4.x + REGIME planning appendices.*
+
+---
+
+# Appendix B67/B68 — 7-Modulator Confidence Chain (CLOSED 2026-05-03)
+
+## Architecture summary
+
+The B67/B68 series builds out a 7-modulator multiplicative confidence chain that wraps the rule-based regime classifier. The classifier produces a regime LABEL + raw confidence. The chain then modulates the raw confidence by external context (macro), temporal context (phase, freshness), behavioral context (outcome feedback, volume regime), and structural context (pair correlation, multi-TF agreement), then clamps the result.
+
+```
+raw × macro × phase × freshness × outcome × volume_regime × pair_correlation
+    × multi_tf_agreement → clamp [b67_5_post_composition_floor (0.45), 1.0]
+```
+
+**The classifier label is preserved unchanged.** Only confidence is modulated. This design choice was made deliberately (master plan §7) so that adding external context cannot produce "classifications we can't make sense of" — labels remain interpretable; we simply see the same label with adjusted confidence.
+
+**Pre-B67.5 the chain is observational** — every modulator emits an ablation row but no consumer reads `regime_confidence_modulated` as a gate. Calibration windows attribute per-factor independently per master plan §0.11.C step 5. Post-B67.5 the chain becomes operational and 7 consumers (admission gates, position sizing, etc.) read the modulated value.
+
+## The 7 modulators
+
+| # | Modulator | Input | Range | Cold-start | Batch |
+|---|---|---|---|---|---|
+| 1 | macro modifier | BTC dominance + funding rates + mcap momentum (z-scores over rolling 48-sample baseline) | [`b67_1_modifier_min`, `b67_1_modifier_max`] (default [0.85, 1.05]) | factor=1.0 + fallbackActive=true when baseline n<48 | B67.1 |
+| 2 | phase preference | (strategy, phase) → weight from `b67_2_strategy_phase_weights` JSONB blob; phase ∈ {EARLY < 2h, PRIME 2-12h, LATE > 12h} | strategy-phase weights blob (per-strategy bands) | UNKNOWN strategy → 1.0 | B67.2 |
+| 3 | freshness (regime age) | `regimePhaseStore.peekAgeMs(symbol, now)` vs `b68_4_target_age_hours` | [0.92, 1.05] | factor=1.0 when ageMs undefined | B68.4 |
+| 4 | outcome feedback | EMA of recent (regime, strategy) net P&L %; updated on every trade close (vts-service + paper-execution-engine) | [0.85, 1.05] | factor=1.0 when sample_count<5 | B67.4 |
+| 5 | volume regime | `score = SUM(volume × sign(close[i]-close[i-1])) / SUM(volume)` over rolling N=30 bars; `factor = clamp(min, max, 1 + score × sensitivity)` | [0.92, 1.05] | factor=1.0 when ohlc<30 | B68.2 |
+| 6 | pair correlation | Spearman rank correlation pair vs BTC (XBT/USD universal reference); `decorrelationScore = 1 - \|corr\|`; `factor = clamp(min, max, 1 + decorr × sensitivity)` | [0.95, 1.05] (asymmetric — boost only) | factor=1.0 when pair OR BTC ohlc<30 | B68.3 |
+| 7 | multi-TF agreement | `calculatePairRegime(higherTfOhlc, 0, 0, 1.0, regimeConfig)` on 240-min OHLC; three-state CONFIRMED/COMPATIBLE/CONFLICTED; ST is universally COMPATIBLE | [0.92, 1.05] | factor=1.0 when higher-TF samples<30 (= 5 days of 4h) | B68.1 |
+
+## Three-state agreement classification (B68.1)
+
+The multi-TF agreement modulator (modulator #7) introduces a regime-family abstraction worth documenting at the architectural level.
+
+**Family map** (LOCAL to `server/core/metrics/multi-tf-agreement.ts`):
+- **directional**: `TREND_FRIENDLY_STABLE`, `IMPULSE_EXPANSION` — both express directional movement
+- **range**: `RANGE_BOUND_STABLE` — explicit no-direction
+- **volatile**: `HIGH_VOLATILITY_UNSTABLE` — directional but unstable
+- **transition**: `STRUCTURAL_TRANSITION` — uncertainty; universally COMPATIBLE (never escalates to CONFLICTED on either side)
+
+**Three-state classification:**
+
+| State | Condition | Factor (seed) |
+|---|---|---|
+| CONFIRMED | Active-TF regime label === Higher-TF regime label | 1.05 |
+| COMPATIBLE | Same family OR either side is ST | 1.00 |
+| CONFLICTED | Different families, neither is ST | 0.95 |
+
+**Higher-TF source:** Kraken native 240-min (4h) OHLC via the existing `ohlcCache` infrastructure (new cache key `${symbol}_240`). The B74 DB archive is NOT a runtime dependency for B68.1 — runtime fetch is in-memory cache + Kraken REST cache miss only.
+
+**Higher-TF DBS = 0 in v1** (Path A only — mom + ADX over 30 × 4h candles = 5 days of 4h). v2 follow-up if calibration shows label-agreement is too noisy without 4h DBS. Refinement D.1 (Langston cc-inbox #887) reserves `higher_tf_dbs_score` and `higher_tf_dbs_slope` schema fields in ablation metadata, hardcoded to zero in v1, schema-stable for v2.
+
+## MCE 9-group config orchestrator
+
+`server/services/market-context-engine.ts:refreshAllConfigs()` resolves 9 config groups in parallel via the timer cadence (default 60s):
+
+1. `macro_modifier` (B67.1) — 7 constants
+2. `regime_phase` (B67.2) — 3 constants (early_max_hours, prime_max_hours, strategy_phase_weights blob)
+3. `regime_classifier` (B67.3.5 + B67.5-prep) — 6 constants (5 TFS desat scales + post-composition floor)
+4. `outcome_feedback` (B67.4) — 6 constants
+5. `regime_age` (B68.4) — 4 constants
+6. `path_b_sustainability` (B68.5) — 1 constant (DBS slope min, regime=TFS scoped)
+7. `volume_regime` (B68.2) — 8 constants
+8. `pair_correlation` (B68.3) — 8 constants
+9. `multi_tf_agreement` (B68.1) — 8 constants
+
+**First refresh** uses `Promise.all` with try/catch — hard-fail-on-startup with retry on next timer tick. **Subsequent refreshes** use per-group try/catch with keep-prior-on-failure semantics — a single missing module_constant in one group does NOT take down the entire MCE refresh. The B67.4 hotfix-#2 wrapper pattern is inherited unchanged across all subsequent additions.
+
+**`assembleRegimeConfig()`** merges TFS desat scales + Path B slope min + post-composition floor into the final `RegimeConfig` only when all three sub-states are non-null. Threaded as the 5th param into `calculatePairRegime`.
+
+## Post-composition floor (B67.5-prep)
+
+Original chain clamp was hardcoded `Math.max(confidence, 0.4)` at three sites: `calculatePairRegime` terminal, vts-runner emit hook, signal-orchestrator emit hook. With 7 modulators, worst-case compound `0.85⁴ × 0.92² × 0.95 ≈ 0.419` falls below the 0.40 historical floor.
+
+**B67.5-prep migrated all three clamp sites** to read `regimeConfig.b67_5PostCompositionFloor` from a new `regime_classifier.b67_5_post_composition_floor` module_constant, seeded at 0.45. Cold-start fallback `?? 0.4` in emit hooks preserves legacy behavior until MCE config loads. Tunable via DB UPDATE without redeploy.
+
+**Floor-engagement is intentional + observational.** Worst-case compound binding the floor on a meaningful fraction of trades is signal in itself, captured in ablation metadata via `confidence_with_factor` (clamped) vs `confidence_without_factor` (pre-clamp). Closed Trades UI shows `conf 0.450` widely on recent post-B68.1 trades — confirmed observable in production.
+
+## Per-factor ablation row schema
+
+Every modulator emits a row in `regime_factor_alternates` per signal evaluation:
+
+```jsonb
+{
+  "factor_name": "b68_1_multi_tf_agreement",
+  "factor_state": "alternate_disabled",
+  "alternate_decision": {
+    "regime_label": "<active_tf_regime>",
+    "confidence": <confidence_without_factor>,
+    "admission_possible": true,
+    "metadata": { ... per-factor specific ... }
+  }
+}
+```
+
+**Counterfactual is divide-out:** `confidence_without_factor = realConfidence / factor`. Same approximation across all 7 modulators; same documented limitation at clamp boundaries (Langston OBS-2 cc-inbox #879). Factor-zero safety: when factor=0, alternate falls back to realConfidence (no division-by-zero blowup).
+
+The replay-ablation cron runs nightly at 04:00 UTC, joins ablation rows to closed trades, records realized outcomes, and surfaces tertile WR + predictive lift per factor in the Factor Calibration UI panel (Drift Dashboard tab on the Analytics page) once n ≥ 150 per (factor, tertile) bucket.
+
+## Calibration windows
+
+Each chain factor gets its own ~14-day mini-window starting at deploy. Per master plan §0.11.C step 5, the ablation framework attributes per-factor independently — each factor's calibration check uses only rows where `factor_name = '<factor>'` over the 14 days following its deploy.
+
+Active windows as of 2026-05-03:
+- B67.4 (cheap-tier bundle: outcome_feedback / regime_age / path_b_sustainability + 4 pre-existing factors): Day 2 of 14, ends 2026-05-15
+- B68.2 (volume_regime): Day 1 of 14, ends 2026-05-16
+- B68.3 (pair_correlation): Day 1 of 14, ends 2026-05-16
+- B68.1 (multi_tf_agreement): Day 0 of 14, ends 2026-05-17
+
+**Calibration check pass criteria** per Langston cc-inbox #856: tertile-monotonic WR + ≥7pp HIGH-LOW gap + p<0.05 + n ≥ 150 per bucket. Pass triggers B67.5 consumer wiring (turns the chain operational). Fail triggers per-factor recalibration via DB UPDATE on sensitivity / threshold constants without code redeploy.
+
+## Implementation status of master plan §5.4 levers
+
+7 of 9 originally-planned confidence-modifying levers are SHIPPED, plus 2 bonus levers added during the buildout:
+
+| # | §5.4 Lever | Batch | Status |
+|---|---|---|---|
+| 1 | Macro confidence modifier | B67.1 | ✅ LIVE |
+| 2a | Phase dimension | B67.2 + B67.2.1 | ✅ LIVE |
+| 2b | Concentration gate (Phase 19.5 AMR) | post-Phase-16 | ❌ Separate scope |
+| 3 | Multi-TF agreement | B68.1 | ✅ LIVE 2026-05-03 |
+| 4 | Volume regime | B68.2 | ✅ LIVE |
+| 5 | Per-underlying position limits | B67.3 | ✅ LIVE |
+| 6 | Realized-outcome feedback | B67.4 | ✅ LIVE |
+| 7 | Path B sustainability | B68.5 | ✅ LIVE |
+| 8 | ML-light reliability score | B69 (deferred) | ❌ End of pre-Phase-16 per Kyle directive |
+| 9 | Full ML regime classification | Phase 17/18 | ❌ Post-launch |
+| bonus | Regime-age freshness factor | B68.4 | ✅ LIVE (added in B67.4 cheap-tier) |
+| bonus | Pair correlation (decorrelation from BTC) | B68.3 | ✅ LIVE (added per Kyle 2026-04-29 reorg) |
+
+## Per-modulator file pointers
+
+| Modulator | File | Builds alternate via |
+|---|---|---|
+| macro_modifier | `server/core/metrics/macro-modifier.ts` | `buildB67_1Alternate` (3 per-input split: btc_dominance / funding / mcap) |
+| phase_preference | `applyPhasePreference()` helper + `server/core/metrics/regime-phase.ts` (state) | `buildB67_2Alternate` |
+| outcome_feedback | `server/core/metrics/outcome-feedback-store.ts` (singleton) | `buildB67_4Alternate` |
+| regime_age | `server/core/metrics/regime-age-factor.ts` | `buildB68_4Alternate` |
+| path_b_sustainability | `server/core/metrics/regime-age-factor.ts` (`buildB68_5Alternate` re-runs `calculatePairRegime` with slopeMin=-Infinity) | `buildB68_5Alternate` (label counterfactual) |
+| volume_regime | `server/core/metrics/volume-regime.ts` | `buildB68_2Alternate` |
+| pair_correlation | `server/core/metrics/pair-correlation.ts` (uses `spearmanRankCorrelation` from `strategy-helpers.ts`) | `buildB68_3Alternate` |
+| multi_tf_agreement | `server/core/metrics/multi-tf-agreement.ts` (reuses `calculatePairRegime` for higher-TF) | `buildB68_1Alternate` |
+
+Emit hooks live in `server/services/signal-orchestrator.ts` (active path, currently silent-skip due to `MarketContext.ohlcData` any-cast — resolves in B67.5) and `server/services/vts-runner.ts` (VTS path, uses function-scope `ohlcData` parameter — works correctly post-B68.4 hotfix #3).
+
+## What's still left
+
+- **B67.5 consumer wiring** — gated on B67.4 calibration check 2026-05-15. ~1 week. Wires confidence into 7 consumers + deletes legacy `RegimeWeight` code path + handles deferred RUNNING_ISSUES #44 (active-path orchestrator emit hook OHLC any-cast across all 7 chain factors) + #45 (active-path persist hook). When B67.5 lands, the chain transitions from observational to operational.
+- **Phase 19.5 AMR** (concentration gate + mode-overlay expansion) — post-Phase-16. Universe-level hostile-window detection, complementary to per-pair confidence chain.
+- **External Data Phase 2** (exchange flows / liquidations full / DXY / SPX cross-asset) — post-Phase-16, conditional on B67/B68 measurable lift. B68.2 partially captures liquidations via `has_liquidation_spike` metadata flag (informational only, not in factor formula).
+- **B69 ML-light** — deferred to end of pre-Phase-16 per Kyle directive.
+- **Phase 17/18 full ML regime classification** — post-launch, months.
+
+---
+
+*End of 7-Modulator Confidence Chain appendix. Last updated 2026-05-03 with B68.1 ship.*
