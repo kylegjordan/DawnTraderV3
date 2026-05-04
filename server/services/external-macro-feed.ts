@@ -235,11 +235,24 @@ const COINGECKO_GLOBAL = 'https://api.coingecko.com/api/v3/global';
 const BINANCE_PREMIUM_INDEX = 'https://fapi.binance.com/fapi/v1/premiumIndex';
 const FETCH_TIMEOUT_MS = 8_000;
 
-async function fetchWithTimeout(url: string): Promise<Response> {
+// B69.3 (2026-05-04): CoinGecko Demo API key support per Kyle directive.
+// Without a key, the unauthenticated endpoint shares an IP-pooled rate limit
+// with the rest of the internet and was returning HTTP 429 ~50% of the time
+// (verified via PM2 logs 2026-05-04 16:00-19:59). With a Demo key the request
+// gets the per-key 30 calls/min quota — well above our 60s poll interval.
+// Key lives ONLY in the staging .env file; not committed.
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY ?? '';
+if (COINGECKO_API_KEY) {
+  console.log('[B67.1][feed] CoinGecko Demo API key present — authenticated requests enabled');
+} else {
+  console.warn('[B67.1][feed] COINGECKO_API_KEY env var not set — falling back to unauthenticated requests (subject to shared rate limits)');
+}
+
+async function fetchWithTimeout(url: string, headers?: Record<string, string>): Promise<Response> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
   try {
-    return await fetch(url, { signal: ctl.signal });
+    return await fetch(url, { signal: ctl.signal, headers });
   } finally {
     clearTimeout(t);
   }
@@ -252,28 +265,59 @@ interface CoinGeckoGlobal {
   };
 }
 
+/**
+ * B69.3 (2026-05-04): Single-retry backoff on 429 responses. CoinGecko's
+ * rate-limit response includes a Retry-After header but free/Demo tiers
+ * sometimes don't populate it, so we use a fixed 3s backoff. One retry only —
+ * if both fail, this poll cycle is partial and the next 60s tick will try
+ * fresh. Persistent 429 across both attempts logs LOUDLY so we'd notice if
+ * the API key is wrong / disabled / over quota.
+ */
 async function fetchCoinGeckoGlobal(): Promise<{
   btcDominance?: number;
   totalMarketCapUsd?: number;
 }> {
-  try {
-    const res = await fetchWithTimeout(COINGECKO_GLOBAL);
-    if (!res.ok) {
-      console.warn(`[B67.1][feed] CoinGecko HTTP ${res.status}`);
+  const headers: Record<string, string> = COINGECKO_API_KEY
+    ? { 'x-cg-demo-api-key': COINGECKO_API_KEY }
+    : {};
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetchWithTimeout(COINGECKO_GLOBAL, headers);
+      if (res.ok) {
+        const json = (await res.json()) as CoinGeckoGlobal;
+        return {
+          btcDominance: json.data?.market_cap_percentage?.btc,
+          totalMarketCapUsd: json.data?.total_market_cap?.usd,
+        };
+      }
+      if (res.status === 429 && attempt === 1) {
+        // Backoff once, then retry
+        await new Promise((r) => setTimeout(r, 3_000));
+        continue;
+      }
+      // Non-429 error or 429-after-retry → loud log so we'd see if key is broken
+      const isAuthIssue = res.status === 401 || res.status === 403;
+      const tag = isAuthIssue ? '[B67.1][feed][AUTH]' : '[B67.1][feed]';
+      console.warn(
+        `${tag} CoinGecko HTTP ${res.status} (attempt ${attempt}/${attempt === 1 ? 2 : attempt})${
+          isAuthIssue ? ' — check COINGECKO_API_KEY env var' : ''
+        }`,
+      );
+      return {};
+    } catch (err) {
+      if (attempt === 1) {
+        await new Promise((r) => setTimeout(r, 3_000));
+        continue;
+      }
+      console.warn(
+        '[B67.1][feed] CoinGecko fetch failed:',
+        err instanceof Error ? err.message : err,
+      );
       return {};
     }
-    const json = (await res.json()) as CoinGeckoGlobal;
-    return {
-      btcDominance: json.data?.market_cap_percentage?.btc,
-      totalMarketCapUsd: json.data?.total_market_cap?.usd,
-    };
-  } catch (err) {
-    console.warn(
-      '[B67.1][feed] CoinGecko fetch failed:',
-      err instanceof Error ? err.message : err,
-    );
-    return {};
   }
+  return {};
 }
 
 interface BinancePremiumIndexEntry {
