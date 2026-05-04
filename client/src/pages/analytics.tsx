@@ -1591,6 +1591,161 @@ function PassiveArchiveSection() {
   );
 }
 
+// B70 — Data Archive Section (added 2026-05-05 per Kyle).
+// Surfaces row counts per archive table + in-process batch-writer stats so
+// Kyle can confirm capture is healthy at a glance.
+
+interface DataArchiveTableStat {
+  name: string;
+  rowsInWindow: number;
+  totalRows: number;
+  lastWriteAt: string | null;
+  timedOut: boolean;
+}
+
+interface DataArchiveBatchWriterStat {
+  bufferDepth: number;
+  overflowDrops: number;
+  totalFlushed: number;
+  lastFlushAt: number | null;
+  lastError: string | null;
+}
+
+interface DataArchiveResponse {
+  window: 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest';
+  windowStart: string;
+  windowEnd: string;
+  tables: DataArchiveTableStat[];
+  batchWriter: Record<string, DataArchiveBatchWriterStat>;
+  config: {
+    pairScanEnabled: boolean;
+    signalEvalEnabled: boolean;
+    signalEvalPreFilterEnabled: boolean;
+    exitDecisionEnabled: boolean;
+    macroFeedEnabled: boolean;
+    parquetExportEnabled: boolean;
+    retentionDays: number;
+    archiveWriterQueueMax: number;
+  };
+  currentMode: 'vts' | 'paper_sim' | 'live';
+}
+
+function DataArchiveSection() {
+  const [windowSel, setWindowSel] = useState<
+    'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'
+  >('rolling_24h');
+  const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: DataArchiveResponse }>({
+    queryKey: ['/api/analytics/data-archive-status', windowSel],
+    queryFn: () => apiFetch(`/api/analytics/data-archive-status?window=${windowSel}`),
+    refetchInterval: 30_000,
+  });
+
+  const d = resp?.data;
+  const fmtN = (n: number) => n.toLocaleString();
+  const fmtTimeAgo = (iso: string | null): string => {
+    if (!iso) return '—';
+    const ms = Date.now() - new Date(iso).getTime();
+    if (ms < 60_000) return `${Math.floor(ms / 1000)}s ago`;
+    if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+    if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+    return `${Math.floor(ms / 86_400_000)}d ago`;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" /> Data Archive Capture
+            <span className="text-xs font-normal text-muted-foreground">
+              (B70 — pair-scan + signal-eval + exit-decision + macro-feed)
+            </span>
+          </span>
+          <div className="flex items-center gap-2">
+            {(['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setWindowSel(w)}
+                className={`px-3 py-1 text-xs rounded-md border ${
+                  windowSel === w
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
+                }`}
+              >
+                {w.replace('rolling_', '').replace('cohort_', 'Since ').replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
+        {error && <div className="text-sm text-red-500">Failed to load: {String(error)}</div>}
+        {d && (
+          <div className="space-y-4">
+            <div className="text-xs text-muted-foreground">
+              Current mode:{' '}
+              <span className="font-mono font-semibold text-foreground">{d.currentMode}</span> &middot;
+              Retention {d.config.retentionDays}d &middot; Queue max {fmtN(d.config.archiveWriterQueueMax)} &middot;
+              Pre-filter capture: {d.config.signalEvalPreFilterEnabled ? 'on' : 'off'}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 pr-4">Table</th>
+                    <th className="text-right py-2 pr-4">Rows in window</th>
+                    <th className="text-right py-2 pr-4">Total rows</th>
+                    <th className="text-right py-2 pr-4">Last write</th>
+                    <th className="text-right py-2 pr-4">Buffer depth</th>
+                    <th className="text-right py-2 pr-4">Total flushed</th>
+                    <th className="text-right py-2 pr-4">Drops</th>
+                    <th className="text-left py-2 pr-4">Last error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.tables.map((t) => {
+                    const bw = d.batchWriter[t.name];
+                    return (
+                      <tr key={t.name} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-mono">
+                          {t.name}
+                          {t.timedOut && (
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700">
+                              QUERY TIMEOUT
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-right py-2 pr-4">{fmtN(t.rowsInWindow)}</td>
+                        <td className="text-right py-2 pr-4">{fmtN(t.totalRows)}</td>
+                        <td className="text-right py-2 pr-4">{fmtTimeAgo(t.lastWriteAt)}</td>
+                        <td className="text-right py-2 pr-4">{bw ? fmtN(bw.bufferDepth) : '—'}</td>
+                        <td className="text-right py-2 pr-4">{bw ? fmtN(bw.totalFlushed) : '—'}</td>
+                        <td
+                          className={`text-right py-2 pr-4 ${
+                            bw && bw.overflowDrops > 0
+                              ? 'text-red-500 font-semibold'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          {bw ? fmtN(bw.overflowDrops) : '—'}
+                        </td>
+                        <td className="py-2 pr-4 text-red-500 truncate max-w-xs">
+                          {bw?.lastError ?? '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // B67 — Factor Calibration analysis panel (added 2026-04-30 per Kyle).
 //
 // Sibling to AblationComparisonSection but answers a DIFFERENT question:
@@ -3076,6 +3231,7 @@ export default function AnalyticsPage() {
               <AblationComparisonSection />
               <ExitStrategyAblationSection />
               <PassiveArchiveSection />
+              <DataArchiveSection />
             </div>
           </TabsContent>
           

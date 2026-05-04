@@ -7579,6 +7579,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B70 — Data Archive status endpoint. Powers the Drift Dashboard
+  // DataArchiveSection panel.
+  apiRouter.get('/analytics/data-archive-status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { computeDataArchiveStatus } = await import('./services/drift-dashboard-aggregator.js');
+      const win = (req.query.window as string) || 'rolling_24h';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'. must be one of ${allowed.join(', ')}` });
+      }
+      const data = await computeDataArchiveStatus(win as 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest');
+      res.json({ ok: true, data });
+    } catch (error: any) {
+      console.error('[B70][data-archive-status] error:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // B73 — Exit Strategy Ablation comparison endpoint.
   // Reads exit_strategy_alternates table and returns per-variant statistics
   // including Sharpe-like score (paired-diff vs Variant A baseline) for the

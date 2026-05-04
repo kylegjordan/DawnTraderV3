@@ -684,6 +684,126 @@ export interface PassiveArchiveResponse {
   pidStartedAt: string;               // when current PM2 process began (counter reset reference)
 }
 
+/**
+ * B70 — Data Archive status aggregator (parallel to passive-archive-status)
+ *
+ * Returns per-table row counts within the requested window + in-process
+ * batch-writer stats (buffer depth, overflow drops, total flushed, last
+ * error). Powers the Drift Dashboard `DataArchiveSection` panel.
+ */
+export interface DataArchiveStatusResponse {
+  window: DashboardWindow;
+  windowStart: string;
+  windowEnd: string;
+  tables: Array<{
+    name: string;
+    rowsInWindow: number;
+    totalRows: number;
+    lastWriteAt: string | null;
+    timedOut: boolean;
+  }>;
+  batchWriter: Record<
+    string,
+    {
+      bufferDepth: number;
+      overflowDrops: number;
+      totalFlushed: number;
+      lastFlushAt: number | null;
+      lastError: string | null;
+    }
+  >;
+  config: {
+    pairScanEnabled: boolean;
+    signalEvalEnabled: boolean;
+    signalEvalPreFilterEnabled: boolean;
+    exitDecisionEnabled: boolean;
+    macroFeedEnabled: boolean;
+    parquetExportEnabled: boolean;
+    retentionDays: number;
+    archiveWriterQueueMax: number;
+  };
+  currentMode: 'vts' | 'paper_sim' | 'live';
+}
+
+export async function computeDataArchiveStatus(
+  window: DashboardWindow,
+): Promise<DataArchiveStatusResponse> {
+  const { db } = await import('../db.js');
+  const { sql } = await import('drizzle-orm');
+  const { getArchiveStats } = await import('./data-archive/archive-batch-writer.js');
+  const { getArchiveConfig } = await import('./data-archive/archive-config.js');
+  const { getCurrentMode } = await import('./run-mode-controller.js');
+
+  const now = Date.now();
+  const windowMs = WINDOW_TO_MS[window];
+  const windowStart = new Date(now - windowMs);
+  const windowEnd = new Date(now);
+
+  const TABLES = [
+    'pair_scan_archive',
+    'signal_eval_archive',
+    'exit_decision_archive',
+    'macro_feed_archive',
+  ];
+
+  const QUERY_TIMEOUT_MS = 4000;
+  const tables: DataArchiveStatusResponse['tables'] = [];
+  for (const t of TABLES) {
+    let rowsInWindow = 0;
+    let totalRows = 0;
+    let lastWriteAt: string | null = null;
+    let timedOut = false;
+    try {
+      const wrapped = `BEGIN; SET LOCAL statement_timeout = ${QUERY_TIMEOUT_MS};
+        SELECT
+          (SELECT count(*)::bigint FROM ${t} WHERE captured_at >= '${windowStart.toISOString()}') AS rows_in_window,
+          (SELECT count(*)::bigint FROM ${t}) AS total_rows,
+          (SELECT max(captured_at) FROM ${t}) AS last_write_at;
+        COMMIT;`;
+      const r = await db.execute(sql.raw(wrapped));
+      const rows = (Array.isArray(r) ? r : (r as any).rows ?? []) as Array<{
+        rows_in_window: string | number;
+        total_rows: string | number;
+        last_write_at: string | null;
+      }>;
+      const row = rows[0];
+      if (row) {
+        rowsInWindow = Number(row.rows_in_window);
+        totalRows = Number(row.total_rows);
+        lastWriteAt = row.last_write_at;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('statement timeout') || msg.includes('canceling statement')) {
+        timedOut = true;
+      } else {
+        console.error(`[B70][archive-status] query failed for ${t}:`, msg);
+      }
+    }
+    tables.push({ name: t, rowsInWindow, totalRows, lastWriteAt, timedOut });
+  }
+
+  const cfg = getArchiveConfig();
+  return {
+    window,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    tables,
+    batchWriter: getArchiveStats(),
+    config: {
+      pairScanEnabled: cfg.pairScanEnabled,
+      signalEvalEnabled: cfg.signalEvalEnabled,
+      signalEvalPreFilterEnabled: cfg.signalEvalPreFilterEnabled,
+      exitDecisionEnabled: cfg.exitDecisionEnabled,
+      macroFeedEnabled: cfg.macroFeedEnabled,
+      parquetExportEnabled: cfg.parquetExportEnabled,
+      retentionDays: cfg.retentionDays,
+      archiveWriterQueueMax: cfg.archiveWriterQueueMax,
+    },
+    currentMode: getCurrentMode(),
+  };
+}
+
 export async function computePassiveArchiveStatus(
   window: DashboardWindow,
 ): Promise<PassiveArchiveResponse> {
