@@ -48,35 +48,55 @@ If all four pass → resume B70 workflow. If any fail → diagnose + patch befor
 
 ---
 
-## ACTIVE NEXT BATCH — B70 Data Archiving
+## ACTIVE BATCH — B70 Data Archiving (Step 3.1 NEXT)
 
-Per Kyle directive 2026-05-04 + Trend Mining Engine forward-design notes. **Capture maximally; structure for both human + automated analysis.**
+**Status as of 2026-05-04 end of session:**
+- Step 1 (scope) — APPROVED Langston cc-inbox #893. `Claude Comms and Packages/Scope Files/BATCH_70_SCOPE.md`.
+- Step 2 (pre-audit) — APPROVED Langston cc-inbox #894. `Claude Comms and Packages/Scope Files/BATCH_70_PRE_AUDIT.md`.
+- Mid-Step-2 Kyle directive folded — mode-agnostic capture (scope §M).
+- Langston refinement folded — `mode` + `source` two-column discriminator (Langston cc-inbox #896).
+- Step 3.0 (run-mode accessor strategy) — APPROVED. Plan: create `server/services/run-mode-controller.ts` with `getCurrentMode()` derived from existing `isEngineActiveLive` / `isEngineActivePaper` flags from `trading-state-sync.ts`. Default = `'vts'`. **Don't extend the existing 2-mode `TradingMode` type — Phase 27.4 wiring has high blast radius.**
+- **NEXT: Step 3.1 — migration commit.** 5 partitioned tables + GIN partial indices + 11 module_constants seed rows + 2 cron lines. Mirror B74 partitioning pattern.
 
-### Read before starting B70
+### Step 3 implementation order (from pre-audit §9, locked)
 
-1. `1-system-manual/POST_AUDIT_ROADMAP.md` — B70 entry (line ~119) has the forward-design note about Trend Mining Engine consideration.
-2. `1-system-manual/POST_AUDIT_ROADMAP.md` Phase 17.6 + 18.5 — full Trend Mining Engine architecture (added 2026-05-04).
-3. `Claude Comms and Packages/Batch Completion/BATCH_69_COMPLETION_REPORT.md` — recent B69 + B69.1/2/3 closure context.
-4. `Claude Comms and Packages/Batch Completion/BATCH_73_PROGRESS_REPORT.md` B73.3 section — recent exit-ablation correctness fix context.
-5. `1-system-manual/SYSTEM_IMPACT_MAP.md` for every component touched in pre-audit (Kyle directive 2026-05-03: SIM consultation MANDATORY).
+1. **3.0** Create `getCurrentMode()` accessor (~30 lines, pure derivation).
+2. **3.1** Migration: 5 tables (`pair_scan_archive`, `signal_eval_archive`, `exit_decision_archive`, `macro_feed_archive`, `b62_retroactive_labels`) + rollback + seed.
+3. **3.2** `archive-batch-writer.ts` (mirror B74).
+4. **3.3** `macro-feed-archiver.ts` (lowest cadence, prove pattern).
+5. **3.4** `pair-scan-archiver.ts` (60s cadence, MCE hook with try/catch).
+6. **3.5** `exit-decision-archiver.ts` (low cadence, VTS + paper-engine hooks).
+7. **3.6** `signal-eval-archiver.ts` (highest cadence, kill-switch toggle).
+8. **3.7** `b62-relabel-runner.ts` (one-shot script).
+9. **3.8** Drift Dashboard `DataArchiveSection` panel + API route.
+10. **3.9** Parquet exporter (off-by-default).
 
-### B70 scope at-a-glance (formalize in `BATCH_70_SCOPE.md` at Step 1)
+Each step independently deployable + verifiable.
 
-**Goals:**
-- Unified archiver across VTS / paper-sim / live (when active trading turns on).
-- Pair-level scan capture: every cycle, every pair. Not just admitted; rejects too with rejection reason.
-- Every signal evaluation (admit + reject) with all 30+ feature inputs as a row.
-- Every exit decision with full state snapshot at exit time.
-- Macro feeds at the same cadence, joinable by timestamp.
-- Standardized schema across asset classes (B69 already locked).
-- Storage formats queryable by tsfresh / Featuretools / Qlib / mlfinlab without retrofit (Parquet + Postgres).
-- Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data.
+### Critical design properties (don't lose between sessions)
 
-**Non-goals (deferred):**
-- Trend Mining Engine itself — Phase 17.6 / 18.5, not B70.
-- Cold-storage tier-down (passive archive aging-off) — B70-adjacent but a separate piece.
+- **Mode-agnostic capture** (scope §M, Kyle directive 2026-05-04): hooks land in all three execution paths (signal-orchestrator live, paper-execution-engine paper-sim, vts-runner vts) — they fire when their path activates. No code change at mode transitions.
+- **`mode` + `source` two columns** on every archive table (Langston #896). `mode` = system-state (from accessor). `source` = hook origin (hardcoded per call site). Diverge in VTS-always-on edge case.
+- **JSONB columns** with `schema_version: 1` field embedded inside each blob (D.3). Bump on breaking shape changes.
+- **Kill-switch** `b70_signal_eval_pre_filter_capture` (default `true`) — if 7-day measurement shows worst-case volume (>80M/90d), flip false to capture only post-SQE evals.
+- **Mandatory try/catch + bounded queue** on every archiver hook in MCE / signal-orchestrator / vts-runner / paper-execution-engine. Hot path must NEVER block.
+- **Retention sweep** = batched DELETEs (10k rows + 100ms pause). Never bulk DELETE. Cron at 02:00 UTC.
 
-**Standard 11-step workflow:** Step 1 scope draft → Langston review → Step 2 pre-audit (SIM consultation MANDATORY) → Step 4 code review → push → CI → deploy → verify → governance → close.
+### Files referenced
+
+- Scope: `Claude Comms and Packages/Scope Files/BATCH_70_SCOPE.md`
+- Pre-audit: `Claude Comms and Packages/Scope Files/BATCH_70_PRE_AUDIT.md`
+- Roadmap: `1-system-manual/POST_AUDIT_ROADMAP.md` lines ~119 (B70) + Phase 17.6 + 18.5 (Trend Mining Engine)
+- SIM components consulted: §1.x (math), §4.1 (signal-orchestrator), §5.2.5 (MCE), §6.1 (paper-engine), §7.1 (VTS), §10.4 (TradingModeContext), §1124 (B74 mirror), §1163 (Drift Dashboard aggregator)
+- Trading-mode existing wiring: `server/services/trading-state-sync.ts` (Phase 27.4) — DO NOT modify, just read its flags
+- `cc-inbox` references: #893 scope APPROVED, #894 pre-audit APPROVED, #895 mode-agnostic re-confirmation, #896 mode/source two-column refinement.
+
+### Verification asks status (pre-Step-3.1)
+
+- B69.3 CoinGecko fix — VERIFIED clean (zero 429s since PM2 #141 restart, varied modifier values).
+- B69.2 b67_2 viz — fix correct in code, calibration row still 100% zero (window dominated by pre-fix trades). Will surface as new trades accumulate.
+- B73.3 F/J/K — fix correct in code, F/J/K still identical in 24h window. Next 04:00 UTC cron differentiates.
+- B69.1 Open Trades badge — pending fresh VTS trade.
 
 ---
 
