@@ -323,6 +323,14 @@ app.use((req, res, next) => {
     // Continue server startup even if recovery fails
   }
 
+  // B70 Step 3.0: Initialize run-mode controller (depends on tradingStateSync)
+  try {
+    const { initRunModeController } = await import('./services/run-mode-controller.js');
+    await initRunModeController();
+  } catch (error) {
+    console.error('[B70][run-mode] ⚠️ Init failed, falling back to default mode=vts:', error);
+  }
+
   // Phase 13.0: Seed default ethical principles
   const { seedEthicalPrinciples } = await import('./startup/ethical-principles-seeder');
   await seedEthicalPrinciples();
