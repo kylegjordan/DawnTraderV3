@@ -746,7 +746,6 @@ export async function computeDataArchiveStatus(
     'macro_feed_archive',
   ];
 
-  const QUERY_TIMEOUT_MS = 4000;
   const tables: DataArchiveStatusResponse['tables'] = [];
   for (const t of TABLES) {
     let rowsInWindow = 0;
@@ -754,31 +753,32 @@ export async function computeDataArchiveStatus(
     let lastWriteAt: string | null = null;
     let timedOut = false;
     try {
-      const wrapped = `BEGIN; SET LOCAL statement_timeout = ${QUERY_TIMEOUT_MS};
-        SELECT
-          (SELECT count(*)::bigint FROM ${t} WHERE captured_at >= '${windowStart.toISOString()}') AS rows_in_window,
-          (SELECT count(*)::bigint FROM ${t}) AS total_rows,
-          (SELECT max(captured_at) FROM ${t}) AS last_write_at;
-        COMMIT;`;
-      const r = await db.execute(sql.raw(wrapped));
+      // Single SELECT with three subqueries — partitioned tables are small
+      // (<2.5M rows in 90-day steady-state, mostly empty during early B70).
+      // No statement_timeout wrapper needed; if Supabase ever lags this can
+      // be revisited.
+      const stmt = `SELECT
+          (SELECT count(*)::int FROM ${t} WHERE captured_at >= '${windowStart.toISOString()}') AS rows_in_window,
+          (SELECT count(*)::int FROM ${t}) AS total_rows,
+          (SELECT max(captured_at) FROM ${t}) AS last_write_at`;
+      const r = await db.execute(sql.raw(stmt));
       const rows = (Array.isArray(r) ? r : (r as any).rows ?? []) as Array<{
-        rows_in_window: string | number;
-        total_rows: string | number;
-        last_write_at: string | null;
+        rows_in_window: number | string | null;
+        total_rows: number | string | null;
+        last_write_at: string | Date | null;
       }>;
       const row = rows[0];
       if (row) {
-        rowsInWindow = Number(row.rows_in_window);
-        totalRows = Number(row.total_rows);
-        lastWriteAt = row.last_write_at;
+        rowsInWindow = row.rows_in_window != null ? Number(row.rows_in_window) : 0;
+        totalRows = row.total_rows != null ? Number(row.total_rows) : 0;
+        lastWriteAt =
+          row.last_write_at instanceof Date
+            ? row.last_write_at.toISOString()
+            : (row.last_write_at as string | null);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('statement timeout') || msg.includes('canceling statement')) {
-        timedOut = true;
-      } else {
-        console.error(`[B70][archive-status] query failed for ${t}:`, msg);
-      }
+      console.error(`[B70][archive-status] query failed for ${t}:`, msg);
     }
     tables.push({ name: t, rowsInWindow, totalRows, lastWriteAt, timedOut });
   }
