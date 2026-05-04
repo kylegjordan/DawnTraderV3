@@ -412,6 +412,34 @@ async function pollCycle(): Promise<void> {
   // synchronous fs write is well under the 60s poll cadence.
   persistFeedState();
 
+  // B70 Step 3.3: archive snapshot for downstream analysis. Fire-and-forget,
+  // try/catch wrapped — must never block the macro poll cycle.
+  try {
+    const { archiveMacroSnapshot } = await import('./data-archive/macro-feed-archiver.js');
+    archiveMacroSnapshot({
+      capturedAt: startedAt,
+      btcDominance: cg.btcDominance,
+      mcapMomentum: mcapMomentum,
+      fundingRate: bn.fundingRate,
+      modifierValue: undefined, // modifier computed downstream by MCE; this archive is feed-state, not modifier-state
+      fallbackActive: partial,
+      snapshot: {
+        totalMarketCapUsd: cg.totalMarketCapUsd,
+        windowSizes: {
+          btcDom: state.btcDomWindow.size(),
+          funding: state.fundingWindow.size(),
+          mcapMomentum: state.mcapMomentumWindow.size(),
+        },
+        lastSuccessAt: state.lastSuccessAt,
+      },
+    });
+  } catch (archErr) {
+    console.warn(
+      `[B70][ARCH] macro archive enqueue failed:`,
+      archErr instanceof Error ? archErr.message : archErr,
+    );
+  }
+
   if (partial) {
     console.warn(
       `[B67.1][feed] partial snapshot — btc_dom=${cg.btcDominance ?? 'NA'} ` +

@@ -778,6 +778,15 @@ app.use((req, res, next) => {
       } catch (b74Error) {
         console.error('[B74] ⚠️ Passive archive bootstrap failed (capture disabled, app continues):', b74Error);
       }
+
+      // B70 (2026-05-05): Data archive layer. After B74 since both are non-
+      // critical infrastructure. Catch+log+continue on failure.
+      try {
+        const { bootstrapDataArchive } = await import('./startup/data-archive-bootstrap.js');
+        await bootstrapDataArchive();
+      } catch (b70Error) {
+        console.error('[B70] ⚠️ Data archive bootstrap failed (capture disabled, app continues):', b70Error);
+      }
     }, 1500);
 
     // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)
