@@ -1740,6 +1740,42 @@ async function generatePhase10Signal(
     strategy, // B67.0.1 (2026-04-30): natural-key join in replay-ablation per Langston #864
   );
 
+  // B70 Step 3.6: signal-eval archive — admitted row alongside ablation emit.
+  // Fire-and-forget, try/catch wrapped — must never block the VTS cycle.
+  try {
+    const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+    const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+    archiveSignalEval({
+      symbol,
+      exchange: 'kraken',
+      assetClass: resolveAssetClass(symbol, 'kraken'),
+      source: 'vts-runner',
+      strategy,
+      regimeLabel: regime ?? undefined,
+      rejectStage: 'admitted',
+      finalScore: typeof finalScore === 'number' ? finalScore : undefined,
+      confidenceModulated:
+        typeof _modulatedConfChain === 'number' ? _modulatedConfChain : undefined,
+      features: {
+        sourcePool,
+        regimeWeight,
+        predictiveConfidence,
+      },
+      modulators: {
+        chain_modulated_confidence: _modulatedConfChain,
+      },
+      gateDecision: {
+        gate: 'admitted',
+        accepted: true,
+      },
+    });
+  } catch (b70Err) {
+    console.warn(
+      `[B70][ARCH] vts signal-eval archive enqueue failed:`,
+      b70Err instanceof Error ? b70Err.message : b70Err,
+    );
+  }
+
   return { signal, tradeRecord };
 }
 
@@ -2122,6 +2158,56 @@ async function resolveOpenVirtualTrades(): Promise<{
       console.error(`[11.6C][Error] Failed to persist ${trade.symbol}:`, error);
     }
     
+    // B70 Step 3.5: exit-decision archive — actual exit (parallel to B73 counterfactual).
+    // Fire-and-forget, try/catch wrapped — must never block the VTS exit loop.
+    try {
+      const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
+      const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+      const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'other'> = {
+        stop_hit: 'SL_hit',
+        target_hit: 'TP_target_hit',
+        trailing_stop_hit: 'TRAIL_hit',
+        moonbag_timeout: 'TRAIL_hit',
+        break_even_stop: 'BE_stop',
+        timeout: 'time_stop',
+      };
+      const mappedReason = exitReasonMap[exitReason] ?? 'other';
+      const durationMin = (now - trade.openedAt.getTime()) / 60000;
+      const rMultiple =
+        trade.entryPrice && trade.stopLoss && trade.entryPrice !== trade.stopLoss
+          ? (exitPrice - trade.entryPrice) / Math.abs(trade.entryPrice - trade.stopLoss)
+          : undefined;
+      archiveExitDecision({
+        tradeId: trade.id,
+        symbol: trade.symbol,
+        exchange: 'kraken',
+        assetClass: resolveAssetClass(trade.symbol, 'kraken'),
+        source: 'vts-runner',
+        strategy: trade.strategy,
+        exitReason: mappedReason,
+        entryPrice: trade.entryPrice,
+        exitPrice,
+        pnlPct: pnlPercent !== undefined ? Number(pnlPercent) : undefined,
+        rMultiple,
+        durationMin,
+        regimeAtEntry: trade.regime,
+        dbsAtEntry: trade.pairDirectionalBiasScore,
+        stateSnapshot: {
+          tradeMode: finalTradeMode,
+          ladderRungsHit: trade.ladderRungsHit ?? 0,
+          sourcePool: trade.sourcePool,
+          finalScore: trade.finalScore,
+          predictiveConfidence: trade.predictiveConfidence,
+          regimeConfidenceModulated: trade.regimeConfidenceModulated,
+        },
+      });
+    } catch (b70Err) {
+      console.warn(
+        `[B70][ARCH] vts exit-decision archive enqueue failed:`,
+        b70Err instanceof Error ? b70Err.message : b70Err,
+      );
+    }
+
     // Remove from open trades registry
     openVirtualTrades.delete(id);
     // Batch 45: Record close timestamp for re-entry cooldown

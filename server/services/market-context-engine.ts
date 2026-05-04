@@ -1021,6 +1021,55 @@ export class MarketContextEngine {
       regime: regimeResult.regime,
     });
 
+    // B70 Step 3.4: pair-scan archive — fire-and-forget, try/catch wrapped.
+    // Hot path; MUST NOT block the MCE 60s cycle. Defer the dynamic import
+    // outcome via setImmediate so even module-resolution latency doesn't
+    // touch the cycle.
+    setImmediate(() => {
+      (async () => {
+        try {
+          const { archivePairScan } = await import('./data-archive/pair-scan-archiver.js');
+          const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+          const atrPct = atr && currentPrice ? (atr / currentPrice) * 100 : undefined;
+          archivePairScan({
+            capturedAt: now,
+            symbol,
+            exchange: 'kraken',
+            assetClass: resolveAssetClass(symbol, 'kraken'),
+            regimeLabel: regimeResult.regime,
+            regimeConfidence: regimeResult.confidence,
+            dbsScore: directionalBias.score,
+            dbsCategory: directionalBias.category,
+            atrPct,
+            features: {
+              vwap,
+              sma,
+              currentPrice,
+              volatility: regimeResult.volatility,
+              momentum: regimeResult.momentum,
+              adx: regimeResult.adx,
+              high24h,
+              low24h,
+              volume24h,
+              phase,
+              phaseAgeSeconds,
+              ohlcLen: ohlcData.length,
+            },
+            modulators: {
+              macro_modifier_value: macroModifierValue,
+              dbs_slope: dbsSlope,
+            },
+            scanStageDecision: {
+              stage: 'admitted_to_mce',
+              admitted: true,
+            },
+          });
+        } catch (err) {
+          // Silent — never log on hot path
+        }
+      })();
+    });
+
     return context;
   }
 

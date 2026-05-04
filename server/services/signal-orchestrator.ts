@@ -989,6 +989,44 @@ export class SignalOrchestrator {
       strategyId, // B67.0.1 (2026-04-30): natural-key join in replay-ablation per Langston #864
     );
 
+    // B70 Step 3.6: signal-eval archive — admitted row alongside active-signal
+    // ablation emit. Live trading is currently dormant; this hook fires
+    // automatically when active trading turns on (Phase 21). Mode tag is read
+    // from getCurrentMode() at write time. Fire-and-forget, try/catch wrapped.
+    try {
+      const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+      const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+      archiveSignalEval({
+        symbol: rawSignal.symbol,
+        exchange: 'kraken',
+        assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
+        source: 'signal-orchestrator',
+        strategy: strategyId,
+        regimeLabel: extendedMetrics.regime ?? undefined,
+        rejectStage: 'admitted',
+        finalScore: extendedMetrics.finalScore,
+        confidenceModulated: modulatedConfChain,
+        features: {
+          sourcePool: rawSignal.metadata?.sourcePool,
+          regimeWeight: extendedMetrics.regimeWeight,
+          predictiveConfidence: extendedMetrics.confidence,
+        },
+        modulators: {
+          chain_modulated_confidence: modulatedConfChain,
+        },
+        gateDecision: {
+          gate: 'admitted',
+          accepted: true,
+          path: 'active-signal-orchestrator',
+        },
+      });
+    } catch (b70Err) {
+      console.warn(
+        `[B70][ARCH] signal-orchestrator signal-eval archive enqueue failed:`,
+        b70Err instanceof Error ? b70Err.message : b70Err,
+      );
+    }
+
     // M5B: VTS capture DISABLED - VTS now runs autonomously
     // VTS generates its own signals from pricing service cache when tradingActive=false
     // See: server/services/vts-runner.ts → runAutonomousSimulation()

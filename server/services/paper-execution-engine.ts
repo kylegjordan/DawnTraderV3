@@ -1131,6 +1131,62 @@ export class PaperExecutionEngine {
       quantity: quantity
     }).catch(() => {});
 
+    // B70 Step 3.5: exit-decision archive — actual paper-sim exit. Fire-and-
+    // forget, try/catch wrapped — must never block closePosition.
+    try {
+      const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
+      const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+      const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'manual' | 'other'> = {
+        stop_hit: 'SL_hit',
+        target_hit: 'TP_target_hit',
+        trailing_stop_hit: 'TRAIL_hit',
+        break_even_stop: 'BE_stop',
+        timeout: 'time_stop',
+        manual_stop: 'manual',
+      };
+      const mappedReason = exitReasonMap[exitCondition.type] ?? 'other';
+      const exchange = (position as any).exchange ?? 'kraken';
+      const assetClass =
+        (position as any).assetClass ?? resolveAssetClass(position.symbol, exchange);
+      const rMultiple =
+        position.stopLoss && position.avgPrice && position.avgPrice !== position.stopLoss
+          ? (actualExitPrice - avgPrice) /
+            Math.abs(avgPrice - parseFloat(String(position.stopLoss)))
+          : undefined;
+      archiveExitDecision({
+        tradeId: positionId,
+        symbol: position.symbol,
+        exchange,
+        assetClass,
+        source: 'paper-execution-engine',
+        strategy: position.strategyName ?? undefined,
+        exitReason: mappedReason,
+        entryPrice: avgPrice,
+        exitPrice: actualExitPrice,
+        pnlPct: netPnlPercent,
+        rMultiple,
+        durationMin: holdDurationMs / 60000,
+        stateSnapshot: {
+          mode: this.mode,
+          quantity,
+          entryFee,
+          exitFee,
+          entrySlippage,
+          exitSlippage,
+          totalCost,
+          grossPnl,
+          netPnl,
+          priceSource,
+          sourcePool: (position as any).sourcePool,
+        },
+      });
+    } catch (b70Err) {
+      console.warn(
+        `[B70][ARCH] paper exit-decision archive enqueue failed:`,
+        b70Err instanceof Error ? b70Err.message : b70Err,
+      );
+    }
+
     // Find the corresponding trade record
     const trades = await storage.getPaperSimTradesBySymbol(this.mode,  position.symbol);
     const trade = trades.find(t => t.openedAt && !t.closedAt);
