@@ -590,6 +590,17 @@
 - **Read-only**: Never modifies any values. Provides getBaselineFilterValue(), getBaselineStrategyParam(), compareFiltersToBaseline().
 - **Blast Radius**: **LOW** — read-only, non-blocking, graceful degradation if file missing
 
+### 9.13 Asset-Class Registry & Resolver (B69)
+- **File**: `shared/asset-classes.ts`
+- **What**: 8-entry taxonomy registry (`crypto_spot`, `crypto_perp`, `xstock_spot`, `xstock_perp` + 4 reserved-future). `resolveAssetClass(symbol, exchange?)` uses exchange-first branching: `kraken-equities` → `xstock_spot`; `PF_<TICKER>XUSD` regex → `xstock_perp`; non-PF futures → `crypto_perp`; default → `crypto_spot`. `safeResolveAssetClass()` wraps with null-return for caller safety.
+- **Upstream**: Exchange identity (WS connection context), symbol string
+- **Downstream**: B74 passive archive pipeline (determines which table rows are written to), paper-execution-engine (trade record `assetClass` field), factor-ablation-emitter (ablation row tagging), exit-strategy-replay-service (replay row tagging), UI badge component (`asset-class-badge.tsx`)
+- **Shared State**: `ASSET_CLASSES` const (registry of valid values), `ASSET_CLASS_REGISTRY` (metadata per class)
+- **Execution**: Synchronous — pure function, called per-row at insert time
+- **Blast Radius**: **MEDIUM** — determines schema field values across all trade/archive tables. Incorrect resolution would tag data wrongly, affecting downstream asset-class-filtered queries.
+- **B69 schema additions**: `exchange` + `asset_class` columns on `paper_sim_open_positions` (Drizzle), all 6 B74 archive tables (SQL ALTER), `exit_strategy_alternates` (SQL ALTER)
+- **Tests**: No dedicated unit tests in v1 (resolver logic is straightforward branching; validated via integration on deploy)
+
 ---
 
 ## Layer 10: Frontend & Communication

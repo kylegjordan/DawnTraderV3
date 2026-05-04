@@ -114,9 +114,9 @@ Full detail for all items in `Claude Comms and Packages/Scope Files/POST_B62_PRE
   4. **B65.6 — Strong Bull Pullback build (conditional on B65.5)** — implements new strategy if research recommends BUILD; otherwise becomes a closure batch (canonical map removal + log line) if recommendation is DROP.
   5. **B66 — RETIRED.** Original scope split: SQE recalibration moved to Phase 19.4; data archiving moved to B70; drift dashboard delivered as B71 (now done). Number reserved, no work attached.
   6. **B67 — Coordinated Regime-Confidence Overhaul (REORGANIZED 2026-04-29 per master plan §0.11; original 2026-04-22 framing as "External Data Context Layer Phase 1" superseded).** Confidence-modifier architecture (Langston Option C). LIVE: B67.0 ablation framework / B67.1 macro modifier (BTC dominance + funding + mcap, deployed 2026-04-28) / B67.2 phase dimension EARLY/PRIME/LATE (deployed 2026-04-29) / B67.3 per-underlying limits (shadow). NEXT: pre-window fixes (replay logic + cron, debug B67.2 phase transition log, remove remaining `??` fallbacks, BTC/ETH funding weighting → module_constants), B67.2.1 persistence + UI (modifier + phase + regime confidence on trade records + UI tables with confidence in same column as regime label), B67.3 activation flip, **B67.4 cheap-tier bundle** (B67.4 outcome feedback + B68.4 regime-age first-class metric + B68.5 Path B sustainability tightening — 3 levers in one commit, separate ablation rows per factor). Calibration window starts AFTER cheap-tier deploys (14d). Calibration check → B67.5 wires confidence into 7 consumers if pass. **No shadow flags going forward** — confidence is decorative pre-B67.5; ablation framework collects evidence regardless. Master plan: `REGIME_OVERHAUL_AND_EXTERNAL_DATA_PLAN_2026_04_27.md` §0 + §0.11.
-  7. **B68 — Structural Classifier Improvements (REORGANIZED 2026-04-29 per master plan §0.11; original 2026-04-22 "External Data Phase 2" deferred to a future post-Phase-16 batch slot).** Three sub-batches sequenced after B67.4 cheap-tier bundle's 14d calibration window completes; each gets its own ~14d mini-window for per-factor calibration via the existing ablation framework: **B68.2 Volume regime** (~1 week; needs volume profile infrastructure) → **B68.3 Pair correlation** (~1 week; needs cross-pair matrix; builds on `defensive-hedge.ts` BTC correlation) → **B68.1 Multi-timeframe agreement** (~2 weeks; needs higher-TF OHLC pipeline — heaviest of the three). B68.4 + B68.5 moved into B67.4 cheap-tier bundle, not part of B68 anymore. ML-light (originally Tier 8 of master plan §5.4) stays deferred to end of pre-Phase-16 batches per Kyle directive 2026-04-29.
+  7. **B68 — Structural Classifier Improvements (REORGANIZED 2026-04-29 per master plan §0.11; original 2026-04-22 "External Data Phase 2" deferred to a future post-Phase-16 batch slot).** Three sub-batches sequenced after B67.4 cheap-tier bundle's 14d calibration window completes; each gets its own ~14d mini-window for per-factor calibration via the existing ablation framework: **B68.2 Volume regime** (~1 week; needs volume profile infrastructure) → **B68.3 Pair correlation** (~1 week; needs cross-pair matrix; builds on `defensive-hedge.ts` BTC correlation) → **B68.1 Multi-timeframe agreement** (~2 weeks; needs higher-TF OHLC pipeline — heaviest of the three). B68.4 + B68.5 moved into B67.4 cheap-tier bundle, not part of B68 anymore. ML-light (originally Tier 8 of master plan §5.4) stays deferred to end of pre-Phase-16 batches per Kyle directive 2026-04-29. **Forward-design note (Kyle directive 2026-05-04, "Trend Mining Engine" concept):** ML-light when it ships must be designed as a CONSUMER of curated signals, not as a discovery engine. Specifically: (a) supervised classifier with explicit feature schema + label definition (predicting "is this regime classification wrong?" or "will this trade be profitable?"); (b) feature input list versioned in a registry that can grow over time; (c) training pipeline cleanly separable from inference so a future Trend Mining Engine (see Phase 17/18 notes below) can later propose new candidate features and append them to the registry without redesigning the model. Goal: ML-light is the "supervised reliability score" use case; the Trend Mining Engine is the candidate-generation use case; they're complementary and ship in different phases. Avoid coupling that makes them hard to evolve independently. Use the existing B67.0 ablation framework as the validation pipeline both engines feed into.
   8. **B69 — Asset class field + standardized schema** across all signal/trade tables. 1 batch. Prerequisite for expansion to equities/FX and for asset-class-specific external data routing.
-  9. **B70 — Data archiving update** — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches.
+  9. **B70 — Data archiving update** — pair-level scan + unified trade schema across VTS/Paper/Live, Option B retroactive B62 re-labeling of Mar 6 – Apr 16 VTS data. 1-2 batches. **Forward-design note (Kyle directive 2026-05-04, "Trend Mining Engine" concept):** B70 data-capture decisions must be made with the assumption that a future Trend Mining Engine (see Phase 17/18 notes below) will consume this data to propose candidate signals we never explicitly hypothesized. **Capture maximally and structure for both human + automated analysis.** Specifically: per-pair scan-state snapshots (not just OHLC) at every cycle; every signal evaluation (admit + reject) with all 30+ feature inputs; every exit decision with the full state snapshot at exit; macro feeds at the same cadence joinable by timestamp; standardized schema across asset classes (B69 already locked this in). Storage formats should be queryable by standard pattern-mining tooling (Parquet, Postgres) so tsfresh / Featuretools / Qlib / mlfinlab / custom Python can chew on it without retrofit. Design intent: when the Trend Mining Engine is built (post-launch, Phase 17/18 era), the data is already collected and structured — not requiring a backfill or re-archive batch.
   10. ✅ **B71 — Regime & Strategy Drift Dashboard tab** — DONE 2026-04-25.
   10a. **B73 — Exit-Strategy Ablation Framework (NEW 2026-04-29, Kyle directive)** — observation-only framework that records what 12 BE-stop / trailing-stop variants WOULD have done on every closed trade. No exit-behavior changes, just counterfactual recording. Triggered by 7-day data showing 509 BE_STOP trades (44%) and only 22 take-profit-target hits (2%) — pattern of long winning streaks (20-30 TPs in a row) replaced by BE-stop-streaks. Counterfactual analysis on 87 trades with `originalStopPrice` populated showed 18.4% would have hit TP first, 28.7% would have hit original SL first, 52.9% chopped — net +1.18% per trade vs ~0% with BE-stop. n=87 too small to act on; B73 builds the multi-week observation framework. 12 variants (BE-stop A-F + trailing-stop G-J + combined K-L). Selection criterion: Sharpe-like `(mean_variant_pnl − mean_baseline_pnl) / std × sqrt(n)` to penalize variance. Per-regime breakdown supported. New table `exit_strategy_alternates` parallel to B67.0's `regime_factor_alternates`. 1-min OHLC replay (matches existing replay-ablation.ts pattern). Trailing-stop replay uses simplified state machine (peak_price + trail_level + parameterized ATR multiplier); moonbag/ladder replay deferred to v2. Runs in parallel with B67 calibration window — zero contamination since exits are unchanged. Langston-approved cc-inbox #859 + #860. Scope: `BATCH_73_SCOPE.md` (drafted 2026-04-29).
   10b. **B74 — Equity Passive Data Collection (NEW 2026-04-29, Kyle directive)** — start scanning + storing Kraken X-stocks (tokenized equities) + stock perp futures NOW so we have weeks/months of OHLC by the time Phase 21.5 (equity expansion, post-live) lands. Minimal scope per Kyle: scan + store, no schemas/processing/cohorting. New service file (NOT FX5 extension — coupling-blast risk per Langston cc-inbox #859). Plain dump tables `xstock_ohlc_raw` and `stock_perp_ohlc_raw` with minimal columns (pair, timestamp, OHLCV). No regime classification, no signal routing, no UI. Verify Kraken pair count in pre-audit before committing scan cadence (likely 50-100 X-stocks + handful of perps per Langston, but verify). Continuous polling, append-only writes. Loud `[EQUITY-SCAN]` PM2 logging. Runs in parallel with B73 + B67 calibration. Langston-approved cc-inbox #859 + #860. Scope: `BATCH_74_SCOPE.md` (TBD).
@@ -742,6 +742,26 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 
 **Expected outcome**: Complete ML architecture design. Feature Store schema. Touchpoint Matrix. Infrastructure proposal. Implementation blueprint ready for execution.
 
+### 17.6 Trend Mining Engine — design consideration (Kyle directive 2026-05-04)
+
+**Concept:** A separate engine whose ONLY job is to churn through archived data (B70 + B74 archives + paper-sim trade history + every signal eval) and propose candidate trends/patterns/signals that no human and no narrowly-defined model would surface — across pairs, regimes, strategies, time-of-day, macro context, volume regimes, etc. Not a hypothesis-driven coder writing "I think X matters"; an automated proposer that explores the feature × pair × regime × time-window space and surfaces statistically interesting candidates for the validation pipeline to ablation-test.
+
+**Why it matters:** Supervised ML (including Phase 18 models) only learns trends in the features YOU give it, predicting the labels YOU define. It does not autonomously discover edges in dimensions you didn't think to include. A Trend Mining Engine fills that gap — it's the candidate-generator, the validation pipeline (B67.0 ablation framework, already built) is the gate, and ML / chain modulators / strategy roster are the consumers. Top quant funds (Renaissance, Two Sigma, D.E. Shaw, Citadel) all run "alpha factory" pipelines built around this idea. Open-source precedents exist: tsfresh, Featuretools, Qlib (Microsoft), mlfinlab, WorldQuant Brain, Numerai.
+
+**The trap to design around:** multiple-comparisons / data-dredging / p-hacking. A naive engine that returns 47 patterns/week without rigorous validation is actively worse than useless. Discipline required: Bonferroni / FDR correction, walk-forward holdout, friction-net EV gates, sample-size minimums, Bayesian skeptical priors, explicit null hypotheses per candidate.
+
+**Scope-of-design considerations for Phase 17 to address:**
+- Decide whether to build in-house, integrate Qlib/mlfinlab, or wrap an external service (Numerai-style).
+- Define the "candidate language" — what kinds of patterns the engine searches for (single-feature thresholds, feature interactions, time-conditional signals, regime-conditional signals, motif/shapelet patterns, association rules, anomaly clusters).
+- Define the validation discipline — how the candidate stream gates into the existing B67.0 ablation framework. Realistic throughput target: most weeks the engine outputs zero new signals; rarely (quarterly?) it surfaces 1-2 high-quality candidates that pass validation.
+- Define the kill switch — engines that are too prolific become noise generators; need a "results per quarter" sanity ceiling.
+- Decide whether the engine runs continuously (resource cost, but always-on discovery) or in scheduled passes (cheaper, batchier).
+- Decide whether engine output is auto-deployed (no — too risky) or human-reviewed before activation (yes — Langston/Kyle gate).
+
+**Sequencing:** Trend Mining Engine is an ML-DESIGN-PHASE consideration, not a standalone earlier phase. It belongs in Directive 18.0 as a peer architecture to the supervised ML pipeline, sharing the Feature Store + Validation Pipeline. Concrete build can land in Phase 18 (alongside the Crawl/Walk/Run/Fly milestones) or as a Phase 22+ research track post-launch. Pre-launch: do not build. Pre-launch: ensure B70 data capture is designed so that when we DO build, the data is ready (see B70 forward-design note above).
+
+**Forward-design implication for ML-light:** ML-light must NOT be designed as the system's sole "discovery" engine. It is a supervised classifier consumer. The Trend Mining Engine is the discovery engine. Both feed the validation pipeline. See ML-light forward-design note above.
+
 ---
 
 ## Phase 18: Machine Learning Implementation (Weeks 28-34)
@@ -773,6 +793,50 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 - Rules-based system becomes fallback (Safe Mode)
 - Continuous learning active within 11.8B-E bounds
 - Monitoring dashboards live
+
+### 18.5 Trend Mining Engine — parallel architecture (per Phase 17.6 design)
+
+**Status:** Build per the design produced in Phase 17.6 (see above). Either ships as part of Phase 18 alongside supervised ML, or splits into a Phase 22+ research track post-launch — Directive 18.0 makes the call.
+
+**Architecture (regardless of when it ships):**
+
+```
+        ┌────────────────────────┐
+        │ Trend Mining Engine    │  ← candidate generator
+        │ - tsfresh feature gen  │     (auto-proposes signals)
+        │ - motif discovery      │
+        │ - subgroup mining      │
+        │ - per-pair / per-regime│
+        │   pattern hunting      │
+        └─────────┬──────────────┘
+                  │ proposes candidates
+                  ▼
+        ┌────────────────────────┐
+        │ Validation Pipeline    │  ← gate (already built — B67.0)
+        │ - holdout + FDR        │
+        │ - tertile monotonicity │
+        │ - friction-net EV gate │
+        │ - sample-size gates    │
+        └─────────┬──────────────┘
+                  │ filters down to ~1-2 keepers/quarter
+                  ▼
+        ┌────────────────────────┐
+        │ Confidence Chain       │  ← consumers
+        │ Strategy Roster        │
+        │ ML-light feature set   │
+        │ Supervised ML feature  │
+        │   inputs (Phase 18)    │
+        └────────────────────────┘
+```
+
+**Key principles:**
+- Candidate generation and validation are decoupled. Generators compete; the validator is canonical.
+- ML-light (pre-Phase-16 batch when it ships) is a CONSUMER of validated signals, not a generator.
+- Phase 18 supervised ML is also a consumer — its feature inputs include validated mining outputs.
+- Engine output requires human gate (Langston/Kyle) before activation. No auto-deploy of mined signals.
+- "Results per quarter" sanity ceiling enforced — if the engine is producing >5 keepers/quarter, suspect false positives, tighten discipline.
+
+**Pre-Phase-18 work:** ensure B70 data capture is wide + structured for automated mining tools (already noted in B70 entry above). No engine code lands pre-launch.
 
 ### ML Safety Principles (Throughout):
 - No overwrite without versioning — all static logic remains as fallbacks

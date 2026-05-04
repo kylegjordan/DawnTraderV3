@@ -220,3 +220,69 @@ ORDER BY regime, variant_id;
 ---
 
 *This report is OPEN. Next update when (a) follow-up commits land tomorrow, (b) n=200 threshold met, (c) winner declared.*
+
+---
+
+# B73.3 — F/J Variant Simulator Fix (correctness)
+
+**Status:** SHIPPED 2026-05-04. PM2 #140. Commit `17a35c50` (1 file, +104/-2).
+**Trigger:** Kyle observation 2026-05-04 reviewing the Exit Strategy Ablation table — F (no_BE_stop), J (no_trailing), and K (no_BE_no_trail) all showed identical numbers: +0.315 mean P&L, Sharpe 1.84, 69.5% win rate, 148 min avg duration. Three variants with different definitions producing byte-identical outcomes is a smell that turned out to be a real bug.
+
+## Root cause
+
+All three variants routed to `replayPureSlTp(inputs, id, params)` where `params = { allowBe, trailMultiplier }`. The function destructured `params` but **never used `allowBe` or `trailMultiplier` anywhere in the function body.** The function only checked: target hit / original SL hit / timeout. No BE logic, no trailing logic. F and J ran K's pure-SL/TP semantic regardless of their intended distinct behavior.
+
+## Net effect on prior calibration data
+
+The "remove BE-stop adds 0.090 P&L" finding from earlier reads actually measures **K** (remove BOTH BE + trailing). We had no isolated measurement of "BE alone" vs "trailing alone" effects. K's signal stands as "remove all post-entry protection beats baseline at Sharpe 1.84" — that's still real and meaningful. But the recommendation can't be refined to "BE specifically" or "trailing specifically" until F and J produce real differentiated data.
+
+## Fix
+
+Two new dedicated simulators in `exit-strategy-replay.ts`:
+
+**`replayNoBeWithTrailingTake` (Variant F):**
+- Pre-target phase: walks bars checking only original SL or target hit. **No BE-lock at +1×ATR.**
+- On target hit: switch to trailing-after-target (moonbag) phase.
+- Trailing phase: peak-tracking trail at `trailMultiplier × ATR`. Exit when price retraces to trail level.
+- Distinct from G/H/I which trail INSTEAD of BE (activate trailing at +1×ATR trigger).
+
+**`replayBeOnlyNoTrail` (Variant J):**
+- Pre-trigger phase: SL at original stop, TP at target.
+- Hit +1×ATR favorable → latch BE (stop ratchets to entry).
+- BE-latched phase: SL at entry (BE_stop), TP at target.
+- **Target hit: exit at target. No trailing afterwards.**
+
+K (`replayPureSlTp`) unchanged — its existing pure-SL/TP semantic IS correct for K's intended behavior. K stays as the reference "remove all protection."
+
+## What we'll learn next
+
+After the next 04:00 UTC nightly replay-ablation cron runs, F and J will produce differentiated results from K. Within 7-10 days we'll have clean data to distinguish:
+- "BE-stop is the problem, trailing is fine" → J would beat A but F/K wouldn't
+- "Trailing is the problem, BE is fine" → F would beat A but J/K wouldn't
+- "Both are problems" → all three (F/J/K) beat A by similar margins
+- "The interaction is the problem" → K beats A but F and J alone don't
+
+K's +0.090 / Sharpe 1.84 result is what was previously reported for F/J/K and stands as the "remove all protection" reference. The earlier read "turn off BE-stop" needs to be walked back to "K wins; need F/J data to know which specific layer to remove."
+
+## Verification asks (post-compact)
+
+After the 04:00 UTC replay cron runs:
+1. Check that F, J, K rows in the Exit Strategy Ablation table now show **differentiated** numbers (different Δ vs A, different Sharpe).
+2. Check that K's row still shows roughly +0.090 vs A — that signal should be preserved since K's simulator didn't change.
+3. F's exit-reason distribution should show TRAIL_hit on a meaningful fraction of trades (since F runs trailing after target).
+4. J's exit-reason distribution should show BE_stop and TP_target_hit but no TRAIL_hit (J never trails).
+5. Wait 7-10 days for n to grow before forming any operational decision.
+
+## Final BE/trailing decision deferred
+
+The earlier "turn off BE-stop" recommendation is walked back. Wait for differentiated F/J data to mature, then decide between:
+- Disable BE only (J's answer if J wins)
+- Disable trailing only (F's answer if F wins)
+- Disable both (K — current preliminary read)
+- Keep current (A — if F/J/K all collapse to baseline-level once measured properly)
+
+Earliest defensible decision: ~2026-05-11 if signal holds; ~2026-05-15 to align with the broader B67.4 calibration window.
+
+---
+
+*B73.3 closure section complete 2026-05-04. Report stays OPEN pending winner declaration once n=200 threshold met across all variants.*
