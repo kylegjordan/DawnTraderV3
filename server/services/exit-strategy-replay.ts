@@ -141,11 +141,17 @@ export function replayAllVariants(inputs: ReplayInputs): VirtualExit[] {
     replayBe(inputs, 'C', { trigger: inputs.config.variantCBeTriggerR, atrPad: 0 }),
     replayTrailOnly(inputs, 'D', inputs.config.baselineTrailDistanceAtr),
     replayBeConditional(inputs, 'E'),
-    replayPureSlTp(inputs, 'F', { allowBe: false, trailMultiplier: null }),
+    // B73.3 (2026-05-04): F now uses a dedicated "no BE + trailing after target"
+    // simulator. Pre-fix routed F through replayPureSlTp which ignored its
+    // params and produced K's pure-SL/TP result, making F/J/K identical in
+    // the calibration table. Per Kyle observation 2026-05-04 + investigation.
+    replayNoBeWithTrailingTake(inputs, 'F', inputs.config.baselineTrailDistanceAtr),
     replayTrailing(inputs, 'G', inputs.config.baselineTrailDistanceAtr),
     replayTrailing(inputs, 'H', inputs.config.variantHTrailDistanceAtr),
     replayTrailing(inputs, 'I', inputs.config.variantITrailDistanceAtr),
-    replayPureSlTp(inputs, 'J', { allowBe: true, trailMultiplier: null }),
+    // B73.3 (2026-05-04): J now uses a dedicated "BE-only, no post-target trail"
+    // simulator. Same pre-fix problem as F.
+    replayBeOnlyNoTrail(inputs, 'J', inputs.config.baselineBeTriggerR),
     replayPureSlTp(inputs, 'K', { allowBe: false, trailMultiplier: null }),
     replayCombined(inputs, 'L'),
   ];
@@ -337,6 +343,102 @@ function replayTrailing(inputs: ReplayInputs, id: VariantId, trailMultiplier: nu
     trailMultiplier,
     allowBe: false,
   });
+}
+
+/**
+ * B73.3 (2026-05-04): Variant F — no BE-stop, but trailing-take engages
+ * AFTER target hits (moonbag mode). Pre-fix used `replayPureSlTp` which
+ * ignored its allowBe/trailMultiplier params and produced K's pure-SL/TP
+ * result for F. Per Kyle observation 2026-05-04: F needs distinct logic
+ * that excludes BE-lock at +1×ATR but allows post-target trailing-take so
+ * we can isolate the BE-stop effect from the trailing effect.
+ *
+ * Logic:
+ *   - Pre-target: original SL or original target (no BE lock at +1×ATR).
+ *   - Target hit → flip to trailing-after-target phase (moonbag).
+ *   - Trailing phase: exit when price retraces by trailMultiplier × ATR
+ *     from the favorable extreme.
+ */
+function replayNoBeWithTrailingTake(
+  inputs: ReplayInputs,
+  id: VariantId,
+  trailMultiplier: number,
+): VirtualExit {
+  const { side, entryPrice, target, originalStopPrice, atr, ohlcBars, config } = inputs;
+  let phase: 'pre_target' | 'trailing_after_target' = 'pre_target';
+  let peak = entryPrice;
+
+  for (const bar of ohlcBars) {
+    if (isTimedOut(bar.timestamp, inputs.entryTime, config.maxHoldMs)) {
+      return timeoutExit(id, inputs, { phase });
+    }
+    peak = side === 'BUY' ? Math.max(peak, bar.high) : Math.min(peak, bar.low);
+
+    if (phase === 'pre_target') {
+      // Original SL only (no BE-lock at +1×ATR)
+      if (checkStopHit(side, bar, originalStopPrice)) {
+        return mkExit(id, inputs, originalStopPrice, 'SL_hit', bar.timestamp, { phase });
+      }
+      // Target hit → switch to trailing phase, do NOT take target
+      if (checkTargetHit(side, bar, target)) {
+        phase = 'trailing_after_target';
+        continue; // start trailing on next bar
+      }
+    } else {
+      // Trailing phase — peak-tracking trail at trailMultiplier × ATR
+      const trailLevel = side === 'BUY' ? peak - atr * trailMultiplier : peak + atr * trailMultiplier;
+      if (checkStopHit(side, bar, trailLevel)) {
+        return mkExit(id, inputs, trailLevel, 'TRAIL_hit', bar.timestamp, { phase, peak });
+      }
+    }
+  }
+  return timeoutExit(id, inputs, { phase });
+}
+
+/**
+ * B73.3 (2026-05-04): Variant J — BE-stop active at +1×ATR, but NO
+ * trailing-take after target hits (just take the target and exit). Pre-fix
+ * used `replayPureSlTp` which produced K's result. J's distinct purpose is
+ * to isolate "what if we kept BE protection but turned off the post-target
+ * moonbag trail."
+ *
+ * Logic:
+ *   - Pre-trigger: SL at original stop, TP at target.
+ *   - Hit +1×ATR favorable → latch BE (stop ratchets to entry).
+ *   - BE-latched: SL at entry (BE_stop), TP at target.
+ *   - Target hit → exit at target. No trailing after.
+ */
+function replayBeOnlyNoTrail(
+  inputs: ReplayInputs,
+  id: VariantId,
+  triggerR: number,
+): VirtualExit {
+  const { side, entryPrice, target, originalStopPrice, atr, ohlcBars, config } = inputs;
+  const triggerOffset = atr * triggerR;
+  const triggerLevel = side === 'BUY' ? entryPrice + triggerOffset : entryPrice - triggerOffset;
+  let beLatched = false;
+
+  for (const bar of ohlcBars) {
+    if (isTimedOut(bar.timestamp, inputs.entryTime, config.maxHoldMs)) {
+      return timeoutExit(id, inputs, { be_latched: beLatched });
+    }
+    // Target hit → exit at target (no trailing — J's defining property)
+    if (checkTargetHit(side, bar, target)) {
+      return mkExit(id, inputs, target, 'TP_target_hit', bar.timestamp, { be_latched: beLatched });
+    }
+    // Stop check — BE level if latched, else original SL
+    const stopLevel = beLatched ? entryPrice : originalStopPrice;
+    if (checkStopHit(side, bar, stopLevel)) {
+      const reason = beLatched ? 'BE_stop' : 'SL_hit';
+      return mkExit(id, inputs, stopLevel, reason, bar.timestamp, { be_latched: beLatched });
+    }
+    // Latch BE when +1×ATR trigger reached (after exit checks so the same
+    // bar that retraces doesn't latch + stop on the same step)
+    if (!beLatched && checkTargetHit(side, bar, triggerLevel)) {
+      beLatched = true;
+    }
+  }
+  return timeoutExit(id, inputs, { be_latched: beLatched });
 }
 
 /**
