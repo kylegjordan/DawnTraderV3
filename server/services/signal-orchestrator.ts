@@ -720,12 +720,17 @@ export class SignalOrchestrator {
             const modulated = applyPhasePreference(strategyKey, phase, phaseWeights, baseConf);
             const weight = phaseWeights[`${strategyKey}_${phase}`];
             modulatedConfChain = modulated;
+            // B69.2 quick fix (2026-05-04): see vts-runner.ts companion edit.
+            // Set alt.confidence = modulated (with-factor) so the calibration
+            // aggregator's shift = real - alt = predictiveConfidence × (1 - weight)
+            // surfaces the b67_2 effect. Pre-fix stored baseConf which equals
+            // predictiveConfidence and produced shift = 0 on every trade.
             ablationAlternates.push({
               factorName: 'b67_2_phase_preference',
               factorState: 'alternate_disabled',
               alternateDecision: {
                 regimeLabel,
-                confidence: baseConf, // confidence WITHOUT phase preference
+                confidence: modulated,
                 admissionPossible: true,
                 metadata: {
                   confidence_with_phase_pref: modulated,

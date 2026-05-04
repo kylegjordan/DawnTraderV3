@@ -1483,12 +1483,25 @@ async function generatePhase10Signal(
         const modulated = applyPhasePreference(strategy, phase, _phaseWeights, _baseConf);
         const weight = _phaseWeights[`${strategy}_${phase}`];
         _modulatedConfChain = modulated;
+        // B69.2 quick fix (2026-05-04): set alternateDecision.confidence to the
+        // WITH-factor (modulated) value so the calibration aggregator's
+        // shift = realDecision.confidence - alternateDecision.confidence
+        // collapses to predictiveConfidence × (1 - weight) — correctly capturing
+        // the b67_2 effect direction. Pre-fix used `_baseConf` here (without-
+        // factor), which equals predictiveConfidence (because _baseConf =
+        // predictiveConfidence) and therefore produced shift = 0 on every trade
+        // — making b67_2 look like a no-op in the table. The factor was firing
+        // correctly all along; only the calibration row was hiding it.
+        // Convention deviation noted: other multiplicative factors store
+        // without-factor in alt.confidence; b67_2 uses with-factor because it's
+        // the FIRST factor in the chain (without-factor == baseConf == real),
+        // and the aggregator's REAL field can't distinguish those.
         _b67_1_alternates.push({
           factorName: 'b67_2_phase_preference',
           factorState: 'alternate_disabled',
           alternateDecision: {
             regimeLabel: _regimeLabel,
-            confidence: _baseConf,
+            confidence: modulated,
             admissionPossible: true,
             metadata: {
               confidence_with_phase_pref: modulated,
