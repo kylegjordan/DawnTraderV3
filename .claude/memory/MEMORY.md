@@ -17,11 +17,11 @@
 
 ---
 
-## CURRENT STATE — 2026-05-04 (PM2 #141)
+## CURRENT STATE — 2026-05-05 (PM2 #145)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD:** `c1b2f2b8` (B69.3 CoinGecko Demo API key + 429 backoff)
-- **Live state:** B67.5-prep + full B68.x chain + B69 asset class + B69.1 UI follow-up + B69.2 b67_2 viz fix + B73.3 F/J simulators + B69.3 CoinGecko fix all live. Four calibration windows running.
+- **HEAD:** `3796ae56` (B70 hotfix — simplify dashboard aggregator query)
+- **Live state:** B67.5-prep + full B68.x chain + B69 asset class + B69.1/2/3 + B73.3 + **B70 Unified Data Archiving (5 archive tables + 4 archivers + dashboard panel + retention cron)**. Four calibration windows running.
 
 ---
 
@@ -48,55 +48,41 @@ If all four pass → resume B70 workflow. If any fail → diagnose + patch befor
 
 ---
 
-## ACTIVE BATCH — B70 Data Archiving (Step 3.1 NEXT)
+## B70 CLOSED 2026-05-05 — Unified Data Archiving
 
-**Status as of 2026-05-04 end of session:**
-- Step 1 (scope) — APPROVED Langston cc-inbox #893. `Claude Comms and Packages/Scope Files/BATCH_70_SCOPE.md`.
-- Step 2 (pre-audit) — APPROVED Langston cc-inbox #894. `Claude Comms and Packages/Scope Files/BATCH_70_PRE_AUDIT.md`.
-- Mid-Step-2 Kyle directive folded — mode-agnostic capture (scope §M).
-- Langston refinement folded — `mode` + `source` two-column discriminator (Langston cc-inbox #896).
-- Step 3.0 (run-mode accessor strategy) — APPROVED. Plan: create `server/services/run-mode-controller.ts` with `getCurrentMode()` derived from existing `isEngineActiveLive` / `isEngineActivePaper` flags from `trading-state-sync.ts`. Default = `'vts'`. **Don't extend the existing 2-mode `TradingMode` type — Phase 27.4 wiring has high blast radius.**
-- **NEXT: Step 3.1 — migration commit.** 5 partitioned tables + GIN partial indices + 11 module_constants seed rows + 2 cron lines. Mirror B74 partitioning pattern.
+**Final state:** 5 archive tables + 4 archivers + dashboard panel + retention cron all live and verified accumulating rows. Mode-agnostic per Kyle directive (scope §M). Completion report at `Claude Comms and Packages/Batch Completion/BATCH_70_COMPLETION_REPORT.md`.
 
-### Step 3 implementation order (from pre-audit §9, locked)
+**Step 1+2+4 approvals:** Langston cc-inbox #893, #894, #895, #896, #897, #898.
 
-1. **3.0** Create `getCurrentMode()` accessor (~30 lines, pure derivation).
-2. **3.1** Migration: 5 tables (`pair_scan_archive`, `signal_eval_archive`, `exit_decision_archive`, `macro_feed_archive`, `b62_retroactive_labels`) + rollback + seed.
-3. **3.2** `archive-batch-writer.ts` (mirror B74).
-4. **3.3** `macro-feed-archiver.ts` (lowest cadence, prove pattern).
-5. **3.4** `pair-scan-archiver.ts` (60s cadence, MCE hook with try/catch).
-6. **3.5** `exit-decision-archiver.ts` (low cadence, VTS + paper-engine hooks).
-7. **3.6** `signal-eval-archiver.ts` (highest cadence, kill-switch toggle).
-8. **3.7** `b62-relabel-runner.ts` (one-shot script).
-9. **3.8** Drift Dashboard `DataArchiveSection` panel + API route.
-10. **3.9** Parquet exporter (off-by-default).
+**Verified post-deploy PM2 #145:**
+- pair_scan_archive: 196 rows in first 10min (mode='vts', source='mce-cycle')
+- macro_feed_archive: 17+ rows at 60s cadence
+- signal_eval_archive: 0 (admitted-path; pending first VTS admit)
+- exit_decision_archive: 0 (pending first trade close)
 
-Each step independently deployable + verifiable.
+---
 
-### Critical design properties (don't lose between sessions)
+## ACTIVE NEXT — B70.1 follow-up (small surgical commits)
 
-- **Mode-agnostic capture** (scope §M, Kyle directive 2026-05-04): hooks land in all three execution paths (signal-orchestrator live, paper-execution-engine paper-sim, vts-runner vts) — they fire when their path activates. No code change at mode transitions.
-- **`mode` + `source` two columns** on every archive table (Langston #896). `mode` = system-state (from accessor). `source` = hook origin (hardcoded per call site). Diverge in VTS-always-on edge case.
-- **JSONB columns** with `schema_version: 1` field embedded inside each blob (D.3). Bump on breaking shape changes.
-- **Kill-switch** `b70_signal_eval_pre_filter_capture` (default `true`) — if 7-day measurement shows worst-case volume (>80M/90d), flip false to capture only post-SQE evals.
-- **Mandatory try/catch + bounded queue** on every archiver hook in MCE / signal-orchestrator / vts-runner / paper-execution-engine. Hot path must NEVER block.
-- **Retention sweep** = batched DELETEs (10k rows + 100ms pause). Never bulk DELETE. Cron at 02:00 UTC.
+Per Langston cc-inbox #898 split. Each is independently deployable; no formal scope/pre-audit needed for this size of work (mini-batch per CLAUDE.md §6 small-surface pattern).
 
-### Files referenced
+**RUNNING_ISSUES #56:** Reject-stage signal_eval capture. Hooks at FX5 pre-filter / SQE failure / RTB stale / TCL cooldown / strategy detect-null. Each is a `archiveSignalEval({rejectStage: '<stage>', ...})` call at the existing reject site.
+**RUNNING_ISSUES #57:** B62 retroactive labels runner — one-shot script.
+**RUNNING_ISSUES #58:** Parquet exporter — off-by-default toggle in place.
+**RUNNING_ISSUES #59:** Unit tests for archiver layer.
 
-- Scope: `Claude Comms and Packages/Scope Files/BATCH_70_SCOPE.md`
-- Pre-audit: `Claude Comms and Packages/Scope Files/BATCH_70_PRE_AUDIT.md`
-- Roadmap: `1-system-manual/POST_AUDIT_ROADMAP.md` lines ~119 (B70) + Phase 17.6 + 18.5 (Trend Mining Engine)
-- SIM components consulted: §1.x (math), §4.1 (signal-orchestrator), §5.2.5 (MCE), §6.1 (paper-engine), §7.1 (VTS), §10.4 (TradingModeContext), §1124 (B74 mirror), §1163 (Drift Dashboard aggregator)
-- Trading-mode existing wiring: `server/services/trading-state-sync.ts` (Phase 27.4) — DO NOT modify, just read its flags
-- `cc-inbox` references: #893 scope APPROVED, #894 pre-audit APPROVED, #895 mode-agnostic re-confirmation, #896 mode/source two-column refinement.
+---
 
-### Verification asks status (pre-Step-3.1)
+## Calibration milestones (running in parallel)
 
-- B69.3 CoinGecko fix — VERIFIED clean (zero 429s since PM2 #141 restart, varied modifier values).
-- B69.2 b67_2 viz — fix correct in code, calibration row still 100% zero (window dominated by pre-fix trades). Will surface as new trades accumulate.
-- B73.3 F/J/K — fix correct in code, F/J/K still identical in 24h window. Next 04:00 UTC cron differentiates.
-- B69.1 Open Trades badge — pending fresh VTS trade.
+| Window | Day | Ends | Watch for |
+|---|---|---|---|
+| B67.4 | 3-4 of 14 | 2026-05-15 | Tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket |
+| B68.2 | 2-3 of 14 | 2026-05-16 | Same gate, b68_2_volume_regime |
+| B68.3 | 2-3 of 14 | 2026-05-16 | Same gate, b68_3_pair_correlation |
+| B68.1 | 1-2 of 14 | 2026-05-17 | Same gate, b68_1_multi_tf_agreement |
+
+**B67.5 consumer wiring** kicks off post-2026-05-15 if B67.4 calibration passes.
 
 ---
 

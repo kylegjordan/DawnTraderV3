@@ -1117,6 +1117,55 @@ Observation-only framework parallel to B67.0. Records what 12 BE-stop / trailing
 
 Multi-week observation accumulates in parallel with B67.4 cheap-tier + calibration window.
 
+## B70 — Unified Data Archive Pipeline (2026-05-04 → 2026-05-05, commits `516140bc` → `3796ae56`, PM2 #142 → #145)
+
+5 partitioned archive tables capturing per-pair scan-state, signal evaluations, exit decisions, macro feed snapshots, plus a one-shot B62 retroactive-labels table. Mode-agnostic capture per Kyle directive 2026-05-04 (scope §M): every row carries `mode` (system-state from `getCurrentMode()` accessor) + `source` (per-hook origin, hardcoded). When system flips VTS → paper-sim → live, archive capture continues with no code change.
+
+### B70 components inventory
+
+| # | Component | Path | Status |
+|---|---|---|---|
+| 1 | Run-mode controller (sync getCurrentMode + 5s cache) | `server/services/run-mode-controller.ts` | ✅ LIVE |
+| 2 | Archive batch writer (5s flush, 2-slot semaphore, 50k bounded queue, drop-OLDEST) | `server/services/data-archive/archive-batch-writer.ts` | ✅ LIVE |
+| 3 | Archive config cache (60s refresh of 11 module_constants) | `server/services/data-archive/archive-config.ts` | ✅ LIVE |
+| 4 | Macro feed archiver (hooked into external-macro-feed pollCycle, 60s) | `server/services/data-archive/macro-feed-archiver.ts` | ✅ LIVE — 17+ rows accumulating |
+| 5 | Pair scan archiver (MCE setImmediate hook, ~255k/day) | `server/services/data-archive/pair-scan-archiver.ts` | ✅ LIVE — 196 rows in first 10min |
+| 6 | Signal eval archiver (admitted-only in v1; reject_stage hooks → B70.1) | `server/services/data-archive/signal-eval-archiver.ts` | ✅ LIVE — admitted path |
+| 7 | Exit decision archiver (vts-runner exit-loop + paper-execution-engine.closePosition) | `server/services/data-archive/exit-decision-archiver.ts` | ✅ LIVE — pending first close event |
+| 8 | Bootstrap (LAST in startup after B74) | `server/startup/data-archive-bootstrap.ts` | ✅ LIVE |
+| 9 | Migration + rollback | `drizzle/migrations/2026-05-05-b70-data-archive-tables*.sql` | ✅ Applied |
+| 10 | 5 tables + 48 monthly partitions | `pair_scan_archive`, `signal_eval_archive`, `exit_decision_archive`, `macro_feed_archive`, `b62_retroactive_labels` | ✅ LIVE |
+| 11 | 11 module_constants in `data_archive` module | b70_*_capture_enabled × 4 + parquet/partition/retention/queue knobs + signal_eval kill-switch | ✅ Seeded |
+| 12 | Retention sweep cron (02:00 UTC daily) | `server/scripts/b70-retention-sweep.ts` + crontab | ✅ Installed |
+| 13 | Partition creator cron (28th 02:30 UTC) | `server/scripts/b70-create-monthly-partitions.ts` + crontab | ✅ Installed |
+| 14 | Drift Dashboard data-archive-status aggregator | `drift-dashboard-aggregator.ts:computeDataArchiveStatus` | ✅ LIVE |
+| 15 | API endpoint | `GET /api/analytics/data-archive-status` | ✅ LIVE |
+| 16 | UI panel | `client/src/pages/analytics.tsx:DataArchiveSection` | ✅ LIVE |
+
+### B70 hot-path hooks (all try/catch wrapped, never block host paths)
+
+- `market-context-engine.ts:computeContext()` → `setImmediate` → `archivePairScan(...)` (mode='vts'/'paper_sim'/'live', source='mce-cycle')
+- `vts-runner.ts:emit-ablation site (~L1726)` → `archiveSignalEval({rejectStage: 'admitted', ...})` (source='vts-runner')
+- `vts-runner.ts:exit-loop (~L2161)` → `archiveExitDecision(...)` (source='vts-runner')
+- `paper-execution-engine.ts:closePosition (~L1133)` → `archiveExitDecision(...)` (source='paper-execution-engine')
+- `signal-orchestrator.ts:emit-ablation site (~L975)` → `archiveSignalEval({rejectStage: 'admitted', ...})` (source='signal-orchestrator', dormant until live trading activates)
+- `external-macro-feed.ts:pollCycle (~L413)` → `archiveMacroSnapshot(...)` (source='coingecko-global')
+
+### B70 known limitations / deferred to B70.1
+
+- ~~Reject-stage signal_eval capture (`pre_filter`/`sqe`/`rtb`/`tcl`/`strategy_internal`)~~ — admitted-only in v1. Each reject site needs a small `archiveSignalEval({rejectStage: '<stage>', ...})` call. RUNNING_ISSUES #56.
+- ~~B62 retroactive labels runner~~ — table created, runner script deferred. RUNNING_ISSUES #57.
+- ~~Parquet exporter~~ — off-by-default toggle in place; script deferred. RUNNING_ISSUES #58.
+- ~~Unit tests~~ — live integration verified; synthetic-event tests deferred. RUNNING_ISSUES #59.
+
+### B70 forward-couples
+
+- **Trend Mining Engine (Phase 17.6 / 18.5, post-launch)** — consumes `pair_scan_archive` + `signal_eval_archive` + `exit_decision_archive` joined to B74 OHLC by timestamp. JSONB schema_version field allows feature evolution without retroactive migration.
+- **B67.5 consumer wiring (gated on calibration check ~2026-05-15)** — when active trading turns on, the signal-orchestrator's existing admitted-path archive hook fires automatically with `mode='live'`.
+- **Phase 19 paper-sim activation** — `paper-execution-engine.closePosition` hook fires automatically with `mode='paper_sim'`. No code change.
+
+---
+
 ## B74 — Passive OHLC + Ticker Archive Pipeline (2026-04-30, commits `ce4a7e40` → `bd60add3` → `778cd4ed`, PM2 #119 → #122)
 
 Continuous 1-min OHLC + per-update ticker snapshots captured to month-partitioned dump tables across three asset universes via persistent WebSocket connections. NO signal-pipeline integration; substrate accumulation only. Verified non-impact on FX5 / VTS / signal-orchestrator / B73 hooks per pre-audit §A.3.
