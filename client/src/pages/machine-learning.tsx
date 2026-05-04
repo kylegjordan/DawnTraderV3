@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AssetClassBadge } from "@/components/ui/asset-class-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown, Filter } from "lucide-react";
@@ -12,6 +13,8 @@ import { getFrictionLabel } from "@/utils/frictionColor";
 
 interface OpenTrade {
   symbol: string;
+  // B69.1 (2026-05-04): asset class column on Open Simulated Trades.
+  assetClass?: string;
   regime: string;
   strategy: string;
   signalType: string;
@@ -61,6 +64,8 @@ interface OpenTrade {
 
 interface ClosedTrade {
   symbol: string;
+  // B69.1 (2026-05-04): asset class column on Closed Simulated Trades.
+  assetClass?: string;
   regime: string;
   strategy: string;
   signalType: string;
@@ -539,6 +544,8 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              {/* B69.1 (2026-05-04): asset class column */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Asset Class</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -571,7 +578,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={26} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={27} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
@@ -579,6 +586,10 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.entryTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
+                  {/* B69.1 (2026-05-04): asset class badge */}
+                  <td className="px-3 py-2">
+                    <AssetClassBadge assetClass={trade.assetClass} />
+                  </td>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${isBenchmarkSymbol(trade.symbol) ? 'bg-violet-500/20 text-violet-400 border-violet-500/30' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
                       {isBenchmarkSymbol(trade.symbol) ? 'Benchmark' : 'Standard'}
@@ -845,6 +856,8 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border">
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              {/* B69.1 (2026-05-04): asset class column */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Asset Class</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -876,7 +889,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={25} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={26} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
@@ -884,6 +897,10 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.exitTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
                   <td className="px-3 py-2 font-medium">{trade.symbol}</td>
+                  {/* B69.1 (2026-05-04): asset class badge */}
+                  <td className="px-3 py-2">
+                    <AssetClassBadge assetClass={trade.assetClass} />
+                  </td>
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${isBenchmarkSymbol(trade.symbol) ? 'bg-violet-500/20 text-violet-400 border-violet-500/30' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
                       {isBenchmarkSymbol(trade.symbol) ? 'Benchmark' : 'Standard'}

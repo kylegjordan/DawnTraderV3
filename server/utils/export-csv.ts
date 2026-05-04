@@ -65,6 +65,11 @@ export async function exportVtsDataToCsv(
  */
 export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Array<{
   symbol: string;
+  // B69.1 (2026-05-04): asset class surfaced on Closed Simulated Trades UI.
+  // VTS today handles crypto_spot only; trades closed pre-B69.1 from JSON
+  // logs default to 'crypto_spot' since that was the implicit truth before
+  // the dimension was registered.
+  assetClass: string;
   regime: string;
   strategy: string;
   signalType: string;
@@ -220,6 +225,9 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
           
           trades.push({
             symbol: trade.symbol || trade.signal?.symbol || 'UNKNOWN',
+            // B69.1 (2026-05-04): VTS = crypto_spot. JSON logs pre-B69 don't carry
+            // assetClass; default to crypto_spot which is the implicit pre-B69 truth.
+            assetClass: trade.assetClass || 'crypto_spot',
             regime: trade.regime || trade.signal?.regime || 'UNKNOWN',
             strategy: trade.strategy || trade.signal?.strategy || 'UNKNOWN',
             signalType: trade.signalType || trade.signal?.signalType || 'UNKNOWN',

@@ -3233,6 +3233,11 @@ export async function saveM5CSessionTrades(sessionId?: string): Promise<string> 
  */
 export function getOpenVirtualTradesForML(): Array<{
   symbol: string;
+  // B69.1 (2026-05-04): asset class surfaced on Open Simulated Trades UI.
+  // VTS today handles crypto_spot exclusively; hardcoded here to match the
+  // existing trade-open insert site convention (vts-runner:~1895). When VTS
+  // expands to cover other asset classes, both sites update together.
+  assetClass: string;
   regime: string;
   strategy: string;
   signalType: string;
@@ -3337,6 +3342,8 @@ export function getOpenVirtualTradesForML(): Array<{
     
     trades.push({
       symbol: trade.symbol,
+      // B69.1 (2026-05-04): VTS handles crypto_spot only today.
+      assetClass: 'crypto_spot',
       regime: trade.regime,
       strategy: trade.strategy,
       signalType: trade.signalType,
