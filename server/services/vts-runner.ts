@@ -28,6 +28,8 @@
  */
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
+// B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
+import { getCachedNumberRequired } from './module-constants-service.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
 import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-kernel.js';
 // Note: isSignalProfitable is retained as a regime-aware ROI pre-filter (not EV math)
@@ -406,7 +408,12 @@ interface VTSConfig {
 // Purpose: Increase VTS simulated trade volume for ML learning data.
 // ══════════════════════════════════════════════════════════════════════════════
 const VTS_NET_EV_FLOOR = -0.01;        // Batch 52 Fix 19: Tightened -2.0%→-1.0%. -2% was too permissive (zero rejections). -1% allows boundary-case learning while filtering truly negative-EV trades. Active trading unaffected (strict netEV>0).
-const VTS_MAX_CONCURRENT_PER_COMBO = 1; // Batch 19G HF1: Strict 1-per-combo (was 3). Only 1 open VTS trade per symbol+strategy.
+// B72: VTS_MAX_CONCURRENT_PER_COMBO read from module='vts_runner'.
+// B19G HF1 stabilized at 1 (was 3). Tunable via SQL UPDATE without code redeploy.
+const _VTS_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+function getVtsMaxConcurrentPerCombo(): number {
+  return getCachedNumberRequired('vts_runner', 'max_concurrent_per_symbol_strategy', _VTS_GK);
+}
 // Option C: ROI gate skipped entirely for VTS (see Edit 3)
 // Option D: simulationIntervalSec reduced to 30s (aligned with FX5 scan cycle)
 // Option E: pairsPerCycle increased to 200 (capture all FX5 output)
@@ -576,30 +583,43 @@ interface OpenVirtualTrade {
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
-const MAX_OPEN_TRADES = 500; // Batch 18L: Increased from 300 to accommodate VTS throughput boost (VTS trades don't make Kraken API calls for execution)
+// B72: MAX_OPEN_TRADES from module='vts_runner'.
+function getMaxOpenTrades(): number {
+  return getCachedNumberRequired('vts_runner', 'max_open_vts_trades', _VTS_GK);
+}
 // HF6 Item 3: openVirtualTrades is cleared at startup via vtsService.hf6ClearStaleTrades()
 // which handles the vts-service side. Runner-side Map starts empty on module load.
-console.log(`[11.6E][Registry] Max open trades set to ${MAX_OPEN_TRADES}`);
+// (initial log removed; runtime ceiling read each evaluation via getMaxOpenTrades())
 
 // Batch 45+47f15: Post-close re-entry suppression — prevents same symbol+strategy from reopening
 // with identical setup. Two layers: time cooldown + setup-hash matching.
 const recentCloses: Map<string, number> = new Map(); // key → close timestamp
-const REENTRY_COOLDOWN_MS = 5 * 60 * 1000; // 5 minute cooldown after close
+// B72: cooldown + hash tolerance/expiry from module='vts_runner'.
+function getReentryCooldownMs(): number {
+  return getCachedNumberRequired('vts_runner', 'reentry_cooldown_ms', _VTS_GK);
+}
+function getSetupHashTolerance(): number {
+  return getCachedNumberRequired('vts_runner', 'setup_hash_tolerance', _VTS_GK);
+}
+function getSetupHashExpiryMs(): number {
+  return getCachedNumberRequired('vts_runner', 'setup_hash_expiry_ms', _VTS_GK);
+}
 // Batch 47f15: Setup-hash suppression — block re-entry if entry/stop/target are unchanged
 const lastSetupHash: Map<string, string> = new Map(); // key → "entry|stop|target" hash
-const SETUP_HASH_TOLERANCE = 0.001; // 0.1% tolerance for "same setup"
 
 function computeSetupHash(entry: number, stop: number, _target: number): string {
   // Hash only entry+stop (structural setup). Target varies with ATR each cycle
   // so including it defeats the purpose. Same entry+stop = same trade thesis.
-  const round = (v: number) => Math.round(v / (v * SETUP_HASH_TOLERANCE)) * (v * SETUP_HASH_TOLERANCE);
+  const tol = getSetupHashTolerance();
+  const round = (v: number) => Math.round(v / (v * tol)) * (v * tol);
   return `${round(entry).toFixed(4)}|${round(stop).toFixed(4)}`;
 }
 
 // Memory audit fix: prune stale entries from recentCloses and lastSetupHash
 function pruneReentryMaps(): void {
   const now = Date.now();
-  const HASH_EXPIRY_MS = 30 * 60 * 1000; // 30 min — hashes expire when setup likely changed
+  const HASH_EXPIRY_MS = getSetupHashExpiryMs();
+  const REENTRY_COOLDOWN_MS = getReentryCooldownMs();
   for (const [key, ts] of recentCloses) {
     if (now - ts > REENTRY_COOLDOWN_MS) {
       recentCloses.delete(key);
@@ -1210,10 +1230,10 @@ async function generatePhase10Signal(
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
   console.log(`[11.7S][VTS] ${symbol}: Stop ${stopLoss.toFixed(4)}→${adjustedStopLoss.toFixed(4)} | TP ${takeProfit.toFixed(4)}→${adjustedTakeProfit.toFixed(4)} (mode=${strategyMode})`);
   
-  // Batch 45: Post-close re-entry cooldown
+  // Batch 45: Post-close re-entry cooldown (B72: from module_constants)
   const cooldownKey = `${symbol}:${strategy}`;
   const lastClose = recentCloses.get(cooldownKey);
-  if (lastClose && Date.now() - lastClose < REENTRY_COOLDOWN_MS) {
+  if (lastClose && Date.now() - lastClose < getReentryCooldownMs()) {
     setNullReason('reentry_cooldown');
     return null;
   }
@@ -1253,7 +1273,7 @@ async function generatePhase10Signal(
   const existingTradeCount = Array.from(openVirtualTrades.values()).filter(t =>
     t.symbol === symbol && t.strategy === strategy
   ).length;
-  if (existingTradeCount >= VTS_MAX_CONCURRENT_PER_COMBO) {
+  if (existingTradeCount >= getVtsMaxConcurrentPerCombo()) {
     logSkippedSignal({
       symbol,
       reason: 'Duplicate_Position_Max',
@@ -1290,8 +1310,9 @@ async function generatePhase10Signal(
   const tradeId = `vts_${symbol.replace('/', '_')}_${strategy}_${Date.now()}`;
   
   // Check if we can accept more open trades
-  if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
-    console.log(`[11.6][VTS] Max open trades reached (${MAX_OPEN_TRADES}), skipping new trade for ${symbol}`);
+  const maxOpenTrades = getMaxOpenTrades();
+  if (openVirtualTrades.size >= maxOpenTrades) {
+    console.log(`[11.6][VTS] Max open trades reached (${maxOpenTrades}), skipping new trade for ${symbol}`);
     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
     setNullReason('max_open_trades');
     return null;
@@ -2622,8 +2643,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   for (const pair of pairs) {
     try {
-      // Batch 23: Max open trades check
-      if (openVirtualTrades.size >= MAX_OPEN_TRADES) {
+      // Batch 23: Max open trades check (B72: from module_constants).
+      if (openVirtualTrades.size >= getMaxOpenTrades()) {
         vtsEvalCounters.nullReasons.maxOpenTrades++;
         // Batch 57: Pool-keyed pre-eval skip
         if (pair.sourcePool === 'pattern') {

@@ -26,6 +26,8 @@
 import type { FactorAlternate, RegimeDecision } from '../../services/factor-ablation-emitter.js';
 import type { RegimeAgeConfig } from '../../services/market-context-engine.js';
 import type { OHLCData, RegimeConfig } from '../../types/market-regime.types.js';
+// B72 (2026-05-05): Path A momentum threshold from module='regime_age'.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { calculatePairRegime, computeMomentum, computeADX } from './market-regime.js';
 import { REGIMES } from '../../config/canonical-regime-strategy-map.js';
 
@@ -144,7 +146,9 @@ export function buildB68_5Alternate(
   );
   const gateFlipped = altResult.regime !== realRegimeLabel;
   const realMomentum = computeMomentum(ohlcData);
-  const pathATriggered = realMomentum > 0.003 && computeADX(ohlcData) > 50;
+  const pathAMomentumFloor = getCachedNumberRequired('regime_age', 'momentum_floor_path_a',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+  const pathATriggered = realMomentum > pathAMomentumFloor && computeADX(ohlcData) > 50;
   const pathBWouldHaveTriggeredPreGate =
     Math.abs(dbsScore) >= 0.30 && altResult.regime === REGIMES.TREND_FRIENDLY_STABLE;
   const pathBTriggeredPostGate =

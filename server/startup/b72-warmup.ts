@@ -47,6 +47,9 @@ const PREFETCH_MODULES = [
   'drift_detector',       // drift-descriptions.ts boundaries
   'paper_execution',      // paper-execution-engine.ts intervals
   'signal_orchestrator',  // signal-orchestrator.ts evaluation/refresh intervals
+  // Slice 2d — VTS runner caps + regime age:
+  'vts_runner',           // vts-runner.ts max_concurrent / max_open / cooldown / hash tolerance + expiry
+  'regime_age',           // regime-age-factor.ts Path A momentum floor
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
