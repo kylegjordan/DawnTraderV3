@@ -17,11 +17,28 @@
 
 ---
 
-## CURRENT STATE — 2026-05-05 (PM2 #146)
+## CURRENT STATE — 2026-05-05 (PM2 #147)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD:** `3555f600` (B70.1 SYSTEM_MANUAL appendix)
-- **Live state:** B67.5-prep + full B68.x chain + B69 asset class + B69.1/2/3 + B73.3 + B70 Unified Data Archiving + **B70.1 follow-ups (reject_stage VTS hooks + B62 runner + JSONL exporter + tests + SYSTEM_MANUAL appendix)**. signal_eval_archive accumulating reject-stage rows (137 strategy_internal in first cycle post-deploy). Four calibration windows running.
+- **HEAD:** `5617ad72` (B70.2 gap-fill + storage display + regime archive deprecated)
+- **Live state:** B67.5-prep + full B68.x chain + B69 + B69.1/2/3 + B73.3 + B70 + B70.1 + **B70.2 (gap-fill exit_decision/signal_eval state_snapshot, dashboard storage display, regime archive deprecated)**. B70 = 52.4 MB / B74 passive = 5.12 GB on staging. Four calibration windows running.
+
+**Calibration findings (rolling 7d as of 2026-05-05):**
+- Decision-grade winners: b68_2 volume_regime (+4.6pp lift), b68_3 pair_correlation (+4.1pp), b67_4 outcome_feedback (+2.8pp), b68_4 regime_age (+2.3pp). All READY.
+- Promising but n too small: b68_1 multi_tf_agreement (+6.0pp lift, n=83 — wait for n≥150).
+- **Inert/drag:** b67_2 phase_preference (+0.0pp, 99% zero shift confirms it's noop), b67_1 btc_dominance (-0.4pp).
+- **Actively hurting:** b68_5 path_b_sustainability (-2.0pp lift, |shift|=0.4480 binary cuts). Recommend gate OFF until reformulated.
+- Confidence chain is net-suppressive — every open trade pinned at 0.45 floor on `regimeConfidenceModulated`. Pre-B67.5 wiring this is observational; post-B67.5 expect admission cliff unless floor raised or b68_5 fixed.
+
+**Exit ablation findings (n=743 trades, 7d):**
+- Current baseline (A: BE on, trail on) is 9th of 12 variants at +0.197 mean P&L.
+- Top variant: J no_trailing (BE on, trail off) at +0.293, +0.097 vs A, Sharpe 2.01.
+- Decision pointer: keep BE-stop, drop trailing-after-target. Trailing is over-cutting winners; BE-stop is fine.
+- F (no BE, trail on) and K (no BE, no trail) still nearly identical despite B73.3 fix — investigate before acting on F/K specifically. J vs A is solid.
+
+**Closed-trade pattern observed:** 35 of 41 visible exits = BREAK_EVEN_STOP, 6 = STOP_LOSS, 0 TP, 0 TRAIL. Many BE_STOP fires on profitable trades that turn negative after costs — confirms ablation finding.
+
+**Universe diversity gap:** every open + closed trade in the last week is TFS regime, ~strong_bull_trend. 17 strategies registered, ~2 actively trading. Reject_stage data should explain why.
 
 ---
 
