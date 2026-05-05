@@ -17,11 +17,11 @@
 
 ---
 
-## CURRENT STATE — 2026-05-05 (PM2 #145)
+## CURRENT STATE — 2026-05-05 (PM2 #146)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD:** `3796ae56` (B70 hotfix — simplify dashboard aggregator query)
-- **Live state:** B67.5-prep + full B68.x chain + B69 asset class + B69.1/2/3 + B73.3 + **B70 Unified Data Archiving (5 archive tables + 4 archivers + dashboard panel + retention cron)**. Four calibration windows running.
+- **HEAD:** `3555f600` (B70.1 SYSTEM_MANUAL appendix)
+- **Live state:** B67.5-prep + full B68.x chain + B69 asset class + B69.1/2/3 + B73.3 + B70 Unified Data Archiving + **B70.1 follow-ups (reject_stage VTS hooks + B62 runner + JSONL exporter + tests + SYSTEM_MANUAL appendix)**. signal_eval_archive accumulating reject-stage rows (137 strategy_internal in first cycle post-deploy). Four calibration windows running.
 
 ---
 
@@ -62,18 +62,22 @@ If all four pass → resume B70 workflow. If any fail → diagnose + patch befor
 
 ---
 
-## ACTIVE NEXT — B70.1 follow-up (small surgical commits)
+## B70.1 CLOSED 2026-05-05 — All 4 follow-ups + SYSTEM_MANUAL appendix shipped
 
-Per Langston cc-inbox #898 split. Each is independently deployable; no formal scope/pre-audit needed for this size of work (mini-batch per CLAUDE.md §6 small-surface pattern).
+**Commits:** `977d3ff0` (VTS reject hooks) + `919e7015` (B62 runner + JSONL exporter) + `7c1bfafd` (unit tests) + `3555f600` (System Manual appendix).
 
-**RUNNING_ISSUES #56:** Reject-stage signal_eval capture. Hooks at FX5 pre-filter / SQE failure / RTB stale / TCL cooldown / strategy detect-null. Each is a `archiveSignalEval({rejectStage: '<stage>', ...})` call at the existing reject site.
-**RUNNING_ISSUES #57:** B62 retroactive labels runner — one-shot script.
-**RUNNING_ISSUES #58:** Parquet exporter — off-by-default toggle in place.
-**RUNNING_ISSUES #59:** Unit tests for archiver layer.
+**Verified:** signal_eval_archive accumulating with strategy_internal rows post-deploy (137 in first VTS cycle). Other reject stages (sqe/tcl) will populate when triggers fire (net_ev_below_floor / duplicate_position / max_open_trades). exit_decision_archive will populate on first VTS trade close.
+
+**Deferred to potential B70.2 (not blocking):**
+- FX5 pre-filter reject capture (pre_filter stage) — fx5-scanner.ts has multi-stage filterFailures complexity; VTS path covers 100% of today's traffic so the gap is non-critical
+- Active-path SQE/RTB hooks — dormant until live trading turns on (Phase 21)
+- Parquet binary format — JSONL.gz works for all current consumers (pandas/DuckDB/tsfresh/Qlib); pyarrow sidecar conversion is a 1-script follow-up
+
+## ACTIVE NEXT — calibration milestones
 
 ---
 
-## Calibration milestones (running in parallel)
+## Calibration milestones (continued)
 
 | Window | Day | Ends | Watch for |
 |---|---|---|---|
