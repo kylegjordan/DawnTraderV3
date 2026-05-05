@@ -17,11 +17,31 @@
 
 ---
 
-## CURRENT STATE — 2026-05-05 (PM2 #147)
+## CURRENT STATE — 2026-05-05 (PM2 #150)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD:** `5617ad72` (B70.2 gap-fill + storage display + regime archive deprecated)
-- **Live state:** B67.5-prep + full B68.x chain + B69 + B69.1/2/3 + B73.3 + B70 + B70.1 + **B70.2 (gap-fill exit_decision/signal_eval state_snapshot, dashboard storage display, regime archive deprecated)**. B70 = 52.4 MB / B74 passive = 5.12 GB on staging. Four calibration windows running.
+- **HEAD:** `0423a2be` (B70.3 hotfix — finalTradeMode hoisted)
+- **Live state:** B70 + B70.1 + B70.2 + **B70.3 (Path B slope→momentum gate swap + liquidity_trap iteration-loop exclusion + 3 exit-hook scope hotfixes)**. B70 = 52.4 MB / B74 = 5.12 GB on staging.
+- **Trailing-after-target DISABLED** via module_constant `moonbag_qualifying_strategies = []`. Every trade exits at target. BE-stop unchanged.
+
+**B70.3 changes (Langston #901 + Kyle 2026-05-05):**
+- Path B in TFS classifier: `dbsSlope >= b68_5DbsSlopeMin` → `mom > b68_5PathBMomentumMin` (default 0.002).
+  - Old constant retained for back-compat; runtime reads new one.
+  - Counterfactual builder disables momentum gate (was disabling slope gate).
+- liquidity_trap excluded at iteration in vts-runner via `UNIVERSALLY_DISABLED_STRATEGIES` Set; same exclusion in signal-orchestrator (active path block left empty).
+- 3 hotfixes during B70.x exit-hook construction: `rawSignal` not in scope, `trade.openedAt.getTime` (it's a number), `finalTradeMode` block-scoped. All caught via PM2 log scan.
+
+**Observation queue (24-72h):**
+- TFS share: 51% (24h baseline) → 61% (post-deploy 2 min). Watch for stabilization near 55-58% or stay-elevated at 60+. If 60+ persists 24h, tighten `b68_5_path_b_momentum_min` to 0.003.
+- b68_5 predictive lift: was -2.0pp; should drift toward 0 or positive as new gate enters rolling window.
+- Floor binding: was 100% at 0.45; should drop as the binary suppressor is gone.
+
+**Verification scorecard for B70 hooks (POST hotfix #150):**
+- pair_scan_archive: ✅ ~38k rows (live)
+- signal_eval_archive admitted: ✅ now firing (was 0; broken since B70 deploy until 12:24 UTC fix)
+- signal_eval_archive reject_stage: ✅ ~12k strategy_internal + 1 sqe (organic mix)
+- exit_decision_archive: ⏳ pending first close post-hotfix #150 (no errors)
+- macro_feed_archive: ✅ ~800 rows
 
 **Calibration findings (rolling 7d as of 2026-05-05):**
 - Decision-grade winners: b68_2 volume_regime (+4.6pp lift), b68_3 pair_correlation (+4.1pp), b67_4 outcome_feedback (+2.8pp), b68_4 regime_age (+2.3pp). All READY.
