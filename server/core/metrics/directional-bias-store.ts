@@ -37,6 +37,13 @@
 
 import { computeGlobalDirectionalBias } from './directional-bias';
 import type { GlobalDirectionalBias } from '../../types/directional-bias.types';
+// B72 (2026-05-05): GLOBAL_DBS_MIN_SAMPLE_COUNT moved to module='dbs_calculation'.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+
+function getGlobalDbsMinSampleCount(): number {
+  return getCachedNumberRequired('dbs_calculation', 'min_sample_count',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+}
 
 /**
  * Per-pair store entry. Timestamp is the last time this pair's DBS was updated.
@@ -63,7 +70,15 @@ export interface GlobalDbsSnapshot {
 /** Hard expiry for per-pair entries. Older entries are pruned. */
 const PAIR_HARD_EXPIRY_MS = 5 * 60 * 1000;
 
-/** Fixed floor — do not compute global DBS from fewer than this many pairs. */
+/**
+ * Fixed floor — do not compute global DBS from fewer than this many pairs.
+ *
+ * @deprecated B72: live runtime callers use `getGlobalDbsMinSampleCount()`.
+ * This exported constant exists for tests + non-runtime tooling that runs
+ * before module_constants is warmed. Mirrors the seed value of the
+ * 'dbs_calculation' / 'min_sample_count' module_constants row; if you tune
+ * that row, this constant will NOT auto-update — keep in sync manually.
+ */
 export const GLOBAL_DBS_MIN_SAMPLE_COUNT = 20;
 
 /** Ring-buffer size for snapshot history. 96 entries × 15 min = 24h of history. */
@@ -147,7 +162,8 @@ class DirectionalBiasStore {
     // the semantic expectation that PM2 restart produces a coldStart log through the MCE
     // computeGlobalBias path. Row 3 (partial store but < 20 pairs, no prior) logs `noSnapshot`.
     // Row 2 (below floor but we have a prior snapshot to carry forward) logs `degradedCoverage`.
-    if (freshCount < GLOBAL_DBS_MIN_SAMPLE_COUNT) {
+    const minSampleCount = getGlobalDbsMinSampleCount();
+    if (freshCount < minSampleCount) {
       if (this.latestSnapshot) {
         // Row 2: serve stale prior snapshot
         this.latestSnapshot = {
@@ -155,7 +171,7 @@ class DirectionalBiasStore {
           isStale: true,
         };
         console.log(
-          `[GlobalDBS][degradedCoverage] serving stale snapshot, liveStore=${freshCount}, floor=${GLOBAL_DBS_MIN_SAMPLE_COUNT}`
+          `[GlobalDBS][degradedCoverage] serving stale snapshot, liveStore=${freshCount}, floor=${minSampleCount}`
         );
         return this.latestSnapshot;
       }
@@ -163,7 +179,7 @@ class DirectionalBiasStore {
       if (freshCount === 0) {
         // Row 1: empty store + no prior — true cold start
         console.log(
-          `[GlobalDBS][coldStart] snapshot unavailable, store has 0 pairs, floor ${GLOBAL_DBS_MIN_SAMPLE_COUNT}; returning null`
+          `[GlobalDBS][coldStart] snapshot unavailable, store has 0 pairs, floor ${minSampleCount}; returning null`
         );
       } else {
         // Row 3: partial but below floor, no prior
@@ -269,7 +285,7 @@ class DirectionalBiasStore {
     if (!this.latestSnapshot) {
       // Row 1: cold start
       console.log(
-        `[GlobalDBS][coldStart] snapshot unavailable, store has ${this.store.size} pairs, floor ${GLOBAL_DBS_MIN_SAMPLE_COUNT}`
+        `[GlobalDBS][coldStart] snapshot unavailable, store has ${this.store.size} pairs, floor ${getGlobalDbsMinSampleCount()}`
       );
       return null;
     }

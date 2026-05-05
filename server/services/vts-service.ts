@@ -25,6 +25,8 @@ import path from 'path';
 import { loadCalibration, loadFullCalibration, calibrateFromTradesPerStrategy, type CalibrationCoefficients, type FullCalibration } from '../utils/calibration';
 // Phase 13: Removed L-series imports (market-profiler, regime-performance, reward-evaluator)
 import { SYSTEM_GUARDS } from '../config/system-guards.js';
+// B72 (2026-05-05): CALIBRATION_TRIGGER_INTERVAL moved to module='vts_service'.
+import { getCachedNumberRequired } from './module-constants-service.js';
 import { computeTotalRoundTripCost, getCachedCostMetrics } from '../core/math/cost-model.js';
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
@@ -151,7 +153,11 @@ export interface VTSLearningParams {
 
 const TRADE_DURATION = 3 * 60 * 60 * 1000;
 const VTS_LOGS_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
-const CALIBRATION_TRIGGER_INTERVAL = 10; // Directive 10.6: Trigger calibration every N Hybrid trades
+// B72: now read via module_constants 'vts_service.calibration_trigger_interval_trades'.
+function getCalibrationTriggerInterval(): number {
+  return getCachedNumberRequired('vts_service', 'calibration_trigger_interval_trades',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+}
 
 /**
  * M5B: Session metrics for autonomous simulation tracking
@@ -973,7 +979,7 @@ export class VTSService extends EventEmitter {
     let mlTriggered = false;
     if (normalizedSignalType === 'HYBRID') {
       this.calibrationCounter++;
-      if (this.calibrationCounter >= CALIBRATION_TRIGGER_INTERVAL) {
+      if (this.calibrationCounter >= getCalibrationTriggerInterval()) {
         this.calibrationCounter = 0;
         this.triggerMLCalibration();
         mlTriggered = true;

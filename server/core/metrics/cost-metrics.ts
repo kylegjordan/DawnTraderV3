@@ -27,6 +27,13 @@
 
 import { updateCachedCostMetrics, getCachedCostMetrics as getCostModelMetrics } from '../math/cost-model.js';
 import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE, DEFAULT_SPREAD as CANONICAL_SPREAD } from '../../config/exchange-defaults.js';
+// B72 (2026-05-05): DEFAULT_AVG_RETURN moved to module='cost_model'.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+
+function getDefaultAvgReturn(): number {
+  return getCachedNumberRequired('cost_model', 'default_avg_return',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+}
 
 export interface CostData {
   symbol: string;
@@ -44,7 +51,7 @@ const CACHE_TTL_MS = 60_000;
 const SPREAD_CACHE_TTL_MS = 30_000;
 
 const DEFAULT_SLIPPAGE = CANONICAL_SLIPPAGE;     // Batch 18J: from exchange-defaults.ts (0.05%)
-const DEFAULT_AVG_RETURN = 0.005;
+// DEFAULT_AVG_RETURN now read via getDefaultAvgReturn() (B72).
 const DEFAULT_FEE = DEFAULT_TAKER_FEE;           // Batch 18J: from exchange-defaults.ts (0.26%)
 const DEFAULT_SPREAD = CANONICAL_SPREAD;          // Batch 18J: from exchange-defaults.ts (0.10%)
 
@@ -104,12 +111,12 @@ export function updateCostData(
   symbol: string,
   spread: number,
   slippage: number = DEFAULT_SLIPPAGE,
-  avgReturn: number = DEFAULT_AVG_RETURN,
+  avgReturn: number = getDefaultAvgReturn(),
   fee: number = DEFAULT_FEE
 ): CostData {
   if (avgReturn <= 0) {
     console.warn(`[11.3A][CostMetrics] Invalid avgReturn for ${symbol}: ${avgReturn}`);
-    avgReturn = DEFAULT_AVG_RETURN;
+    avgReturn = getDefaultAvgReturn();
   }
 
   const costFactor = (spread + slippage) / avgReturn;

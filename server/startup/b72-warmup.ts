@@ -34,6 +34,14 @@ const PREFETCH_MODULES = [
   'rtb_ranking',          // ready_to_buy_service finalscore decay + cap
   'rtb_config',           // ready_to_buy_service tcl_warmup_threshold (env-overridable)
   'cost_geometry',        // ready_to_buy_service geometry recalc thresholds
+  // Slice 2b — math kernels + observability + governance:
+  'vts_scoring',          // vts-real-score.ts decay lambda
+  'goals_weighting',      // adaptive-goals-weight.ts AI weight cap
+  'dbs_calculation',      // directional-bias-store.ts global DBS sample floor
+  'paper_sizing',         // paper-position-sizing.ts max position buffer factor
+  'vts_service',          // vts-service.ts calibration trigger interval
+  'cost_model',           // cost-metrics.ts default avg return
+  'learning_governance',  // learning-cooldown.ts min batch size (regime=TRANSITION)
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

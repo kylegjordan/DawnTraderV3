@@ -11,7 +11,7 @@
  * - Uses guardrailsV2 configuration
  * 
  * AJ9 Addition:
- * - MAX_POSITION_BUFFER_FACTOR (0.97) provides 3% wiggle room below max position cap
+ * - getMaxPositionBufferFactor() (0.97) provides 3% wiggle room below max position cap
  * - This prevents legitimate trades from being blocked by MAX_POSITION due to
  *   price changes between RTB sizing and execution
  * 
@@ -27,13 +27,23 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { getScalingFactor } from './risk-concentration.js';
 // Phase 14.5: Pattern pool position sizing guardrails
 import { PATTERN_POOL_GUARDRAILS } from '../config/pattern-filter-profile.js';
+// B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='paper_sizing'.
+import { getCachedNumberRequired } from './module-constants-service.js';
+
+function getMaxPositionBufferFactor(): number {
+  return getCachedNumberRequired('paper_sizing', 'max_position_buffer_factor',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+}
 
 /**
  * AJ9: Buffer factor for max position sizing.
  * Size positions at 97% of max to provide 3% wiggle room for price fluctuations.
  * This prevents trades from being blocked by MAX_POSITION during execution.
+ *
+ * B72: literal removed — value now read via getMaxPositionBufferFactor()
+ * declared above (module_constants 'paper_sizing.max_position_buffer_factor',
+ * seeded at 0.97).
  */
-const MAX_POSITION_BUFFER_FACTOR = 0.97;
 
 export type StrategyType = 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
 
@@ -141,7 +151,7 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
   
   const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);
   const maxNotional = exposureBudget * (effectiveMaxPositionPct / 100);
-  const bufferedMaxNotional = maxNotional * MAX_POSITION_BUFFER_FACTOR;
+  const bufferedMaxNotional = maxNotional * getMaxPositionBufferFactor();
   
   let riskBasedNotional = quantity * entryPrice;
   let estimatedValue = riskBasedNotional;
@@ -180,7 +190,7 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     riskBasedNotional: riskBasedNotional.toFixed(2),
     quantity: quantity.toFixed(8),
     estimatedValue: estimatedValue.toFixed(2),
-    bufferFactor: MAX_POSITION_BUFFER_FACTOR,
+    bufferFactor: getMaxPositionBufferFactor(),
     wasClamped
   });
   
@@ -193,7 +203,7 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     sizedNotional: estimatedValue,
     riskPct: safeRiskPct,
     maxPositionUsd: maxNotional,
-    bufferFactor: MAX_POSITION_BUFFER_FACTOR,
+    bufferFactor: getMaxPositionBufferFactor(),
   });
   
   return {

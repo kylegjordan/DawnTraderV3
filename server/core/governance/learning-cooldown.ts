@@ -22,6 +22,14 @@
 
 import type { RegimeStability } from '../../config/strategy-governance.js';
 import { getCachedStability } from './regime-stability.js';
+// B72 (2026-05-05): MIN_BATCH_SIZE moved to module='learning_governance'
+// (regime-scoped: TRANSITION).
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+
+function getMinBatchSize(): number {
+  return getCachedNumberRequired('learning_governance', 'min_batch_size',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: 'TRANSITION' });
+}
 
 export type LearningUpdateType = 'POSITIVE' | 'NEGATIVE';
 
@@ -42,7 +50,7 @@ export interface DeferredUpdate extends LearningUpdate {
   reason: string;
 }
 
-const MIN_BATCH_SIZE = 5;
+// MIN_BATCH_SIZE: B72 → module_constants 'learning_governance.min_batch_size'.
 const deferredUpdates: DeferredUpdate[] = [];
 const transitionBatch: LearningUpdate[] = [];
 
@@ -101,17 +109,18 @@ export function processLearningUpdate(update: LearningUpdate): {
   
   if (batch) {
     transitionBatch.push(update);
-    
-    if (transitionBatch.length >= MIN_BATCH_SIZE) {
+    const minBatchSize = getMinBatchSize();
+
+    if (transitionBatch.length >= minBatchSize) {
       const batchSize = transitionBatch.length;
       transitionBatch.length = 0;
       learningStats.batchedPositive += batchSize;
       console.log(`[11.7R][Learning] BATCH applied: ${batchSize} positive updates released`);
       return { applied: true, deferred: false, batchPending: false, reason: `Batch threshold met (${batchSize} samples)` };
     }
-    
-    console.log(`[11.7R][Learning] BATCHING positive: ${transitionBatch.length}/${MIN_BATCH_SIZE} samples`);
-    return { applied: false, deferred: false, batchPending: true, reason: `Waiting for batch (${transitionBatch.length}/${MIN_BATCH_SIZE})` };
+
+    console.log(`[11.7R][Learning] BATCHING positive: ${transitionBatch.length}/${minBatchSize} samples`);
+    return { applied: false, deferred: false, batchPending: true, reason: `Waiting for batch (${transitionBatch.length}/${minBatchSize})` };
   }
   
   learningStats.immediatePositive++;

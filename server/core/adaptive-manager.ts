@@ -25,6 +25,12 @@
 
 // B65.2 (2026-04-23): EXECUTION_CONFIG deleted. Prior import was dead (no
 // references in this file) and has been removed along with the config file.
+// B72 (2026-05-05): DEFAULT_DECAY_RATE row seeded in module='adaptive_weights'
+// but source-side wiring deferred — this file instantiates AdaptiveManagerService
+// at MODULE LOAD time (line ~200, `export const adaptiveManager = new ...`),
+// which runs before module_constants warmup. Migrating safely needs an init
+// hook that re-applies the resolved decay rate after warmup. Tracked for
+// follow-up batch. Current literal matches the seeded row exactly (0.05).
 
 export interface AdaptiveWeights {
   [key: string]: number;

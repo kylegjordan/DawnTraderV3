@@ -18,6 +18,8 @@
 import type { MarketIndicators } from '../../types/market-context.js';
 import type { OHLCData } from '../../types/market-regime.types';
 import type { CanonicalRegimeType } from '../../config/canonical-regime-strategy-map.js';
+// B72 (2026-05-05): VTS-specific decay lambda from module='vts_scoring'.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
 } from '../../config/canonical-regime-strategy-map.js';
@@ -211,8 +213,10 @@ export function computeRealDecayPenalty(signalTimestamp?: Date | string): number
   const ageMs = Date.now() - new Date(signalTimestamp).getTime();
   const ageMinutes = ageMs / (60 * 1000);
 
-  // Same lambda as ready_to_buy_service: gentle linear decay
-  const DECAY_LAMBDA = 0.001;
+  // B72: VTS-specific gentle decay (intentional asymmetry vs RTB's 0.03 —
+  // VTS trades are virtual, no real-time urgency; Langston cc-inbox #905).
+  const DECAY_LAMBDA = getCachedNumberRequired('vts_scoring', 'vts_decay_lambda',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
   const rawPenalty = DECAY_LAMBDA * ageMinutes;
   const cappedPenalty = Math.min(rawPenalty, 0.10);
 

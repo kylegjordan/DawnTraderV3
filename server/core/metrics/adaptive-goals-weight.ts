@@ -7,19 +7,33 @@
  * Caps total ML contribution at 40% to prevent AI confidence dominance.
  * 
  * Formula:
- *   aiWeight = min(baseWeight * (1 - volatilityFactor), AI_WEIGHT_CAP)
+ *   aiWeight = min(baseWeight * (1 - volatilityFactor), getAIWeightCap())
  * 
  * Where:
  *   - baseWeight: The configured ML confidence weight (from SCORE_WEIGHTS)
  *   - volatilityFactor: Market volatility 0-1 (higher = more volatile)
- *   - AI_WEIGHT_CAP: Maximum allowed ML contribution (0.40)
+ *   - getAIWeightCap(): Maximum allowed ML contribution (0.40)
  * 
  * DO NOT MODIFY without architectural review.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
 import { SCORE_WEIGHTS } from '../../config/score-weights.config.js';
+// B72 (2026-05-05): getAIWeightCap() from module='goals_weighting'.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 
+function getAIWeightCap(): number {
+  return getCachedNumberRequired('goals_weighting', 'ai_weight_cap',
+    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+}
+
+/**
+ * @deprecated B72: live runtime callers should use `getAIWeightCap()`. This
+ * exported constant exists for non-runtime tooling (e.g. audit scripts that
+ * run before module_constants is warmed) — its value matches the seeded
+ * migration row 2026-05-05-b72-lever-sweep.sql, but if the DB row changes
+ * this constant will NOT update. Keep in sync manually if you tune the row.
+ */
 export const AI_WEIGHT_CAP = 0.40;
 
 export interface AdaptiveWeightResult {
@@ -60,10 +74,10 @@ export function computeAdaptiveGoalsWeights(
   // Reduce ML weight in high volatility conditions
   // High volatility = less predictable = lower ML reliance
   const adjustedMlWeight = baseWeight * (1 - volatilityFactor);
-  const cappedMlWeight = clamp(Math.min(adjustedMlWeight, AI_WEIGHT_CAP), 0, AI_WEIGHT_CAP);
+  const cappedMlWeight = clamp(Math.min(adjustedMlWeight, getAIWeightCap()), 0, getAIWeightCap());
   
   // Check if we had to cap
-  const wasCapped = adjustedMlWeight > AI_WEIGHT_CAP;
+  const wasCapped = adjustedMlWeight > getAIWeightCap();
   
   // Adjust other weights to maintain total of ~1.0 (0.9 positive + 0.1 decay)
   // When ML weight is reduced, redistribute to hybrid and regime
