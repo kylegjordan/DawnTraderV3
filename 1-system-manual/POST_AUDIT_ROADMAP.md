@@ -956,8 +956,30 @@ This makes the ~5% coverage gap explicit and trackable — if specific missing p
 
 **Goal**: Run the complete system end-to-end in Paper Mode with all components active (MCE, real VTS, Directional Bias, Short Trading, Predictive Execution, ML). Find and fix everything before live capital.
 
+### 19.0.5 — Full data-capture coverage for paper-active path (HARD requirement, Kyle directive 2026-05-05)
+
+**Status:** B70 main + B70.1 shipped capture for the VTS path (which was the only active path at B70 time). When paper-active turns on in Phase 19, the system MUST capture EVERYTHING flowing through the paper path with the same fidelity. This is a precondition for Phase 19.1 paper trading run; without it, the paper run produces less data than the VTS run that preceded it, which defeats the whole point.
+
+**Concrete deliverables (must land before Phase 19.1 starts paper-active):**
+
+1. **FX5 pre-filter reject capture** — every pair the FX5 scanner evaluates and rejects pre-strategy (spread/volume/IMF/family-eligibility/etc.) writes a `signal_eval_archive` row with `reject_stage='pre_filter'` and `gate_decision.reason` carrying which stage rejected it. Today this is implicit (a pair that never appears in `signal_eval_archive` for a cycle was rejected pre-filter). When paper-active runs, we want explicit per-pair rejection rows. Surgical work: ~10 reject sites in `fx5-scanner.ts`.
+
+2. **Active-path SQE / RTB / TCL reject hooks** — `signal-orchestrator.ts` currently has the admitted-path hook only (commit `6b63b6bd`, dormant until live activates). Phase 19 needs equivalent reject-stage hooks at:
+   - `signal_quality_evaluator.ts` FinalScore-floor failure → `reject_stage='sqe'`
+   - `ready_to_buy_service.ts` stale / TTL-expired path → `reject_stage='rtb'`
+   - `trading-bootstrap.ts` TCL cooldown / dedup path → `reject_stage='tcl'`
+
+3. **Paper-execution-engine admit hook** — currently paper-engine has only the `closePosition` exit hook. When paper-active opens a position, that admit event should also write a `signal_eval_archive` row with `mode='paper_sim'` and `source='paper-execution-engine'` so the open→close pair joins cleanly by trade_id.
+
+4. **Verification target:** in the first 24h of paper-active running, every one of the 4 partitioned archive tables shows non-zero rows tagged with `mode='paper_sim'`. Drift Dashboard `DataArchiveSection` panel shows the breakdown.
+
+**Why this is in Phase 19.0.5 not B70.2:** Kyle directive 2026-05-05 — "When paper mode active trading turns on, everything flowing through paper mode must be captured." Treating this as "B70.2 maybe-someday" risks the paper-active run going live with a capture gap. Locking it as a Phase 19 precondition guarantees the paper run produces a complete dataset.
+
+**Estimated surface:** ~200-400 lines across fx5-scanner.ts (10 reject sites) + signal_quality_evaluator.ts (1 site) + ready_to_buy_service.ts (1-2 sites) + trading-bootstrap.ts TCL section (1-2 sites) + paper-execution-engine.ts open-position hook (1 site). All hot-path hooks try/catch wrapped, never block host paths (same pattern as B70 main).
+
 ### 19.1 Paper Trading Run
 - Run extended paper trading with full system
+- **Phase 19.0.5 capture coverage verified non-zero across all 4 archive tables for `mode='paper_sim'` (precondition)**
 - All 17+ strategies active (including short strategies)
 - MCE providing real indicators
 - VTS generating real signals
