@@ -33,17 +33,33 @@
 
 ---
 
-## ACTIVE NEXT — B72 lever-to-`module_constants` sweep
+## ACTIVE NEXT — B72 lever-to-`module_constants` sweep (IN PROGRESS, Step 2 partial)
 
-**Why next:** Kyle directive 2026-05-05 — "Out of all the pre-Phase-16 items, B72 lever sweep is the one to do." Final pre-Phase-19 backstop. After B72 → Phase 16 (TS errors + storage.ts modularization).
+**Why next:** Kyle directive 2026-05-05. Final pre-Phase-19 backstop. After B72 → Phase 16 → Phase 19.
 
-**Scope summary** (from POST_AUDIT_ROADMAP.md §B72):
-- Comprehensive audit of all hardcoded levers in active codebase
-- Migrate each to `module_constants` with most-specific-wins resolution scope (regime / strategy / asset_class / exchange)
-- Output `LEVER_INVENTORY.md` listing every promotable constant: current location, candidate module, candidate scope, current value, migration risk
-- Goal: every threshold/weight/multiplier/limit DB-tunable before live trading
+**Step 1 — DONE.** Scope: `Claude Comms and Packages/Scope Files/BATCH_72_SCOPE.md`. Langston APPROVED with answers (cc-inbox #903) — defaults: GLOBAL `(*, *, *, *)` scope, single SQL migration, all 17 strategies in sweep, no preemptive sync-helper, single flat `LEVER_INVENTORY.md`. Addendum (cc-inbox #904): `CURRENT_SETTINGS_REGISTRY.md` live-snapshot deliverable + KEEP examples confirmed.
 
-**11-step workflow.** First step next session = scope draft. Will be a multi-day batch — at least Step 1 (scope) + Step 2 (audit/inventory) + Langston review before any code.
+**Step 2 — PARTIAL.** Inventory `1-system-manual/LEVER_INVENTORY.md` written (CC + 2 sub-agents). Sweeps complete: `server/core/` (70 levers, 52 PROMOTE) + `server/services/` (95 levers, 41 PROMOTE). Combined raw 165, ~80 unique PROMOTE after cross-tier dedup. Langston Step-2-partial review: cc-inbox #905 — all classifications confirmed; HIGH-risk decisions locked in inventory §10; duplicate rule = COLLAPSE TO CANONICAL (each lever appears once at source-of-definition, importers note only).
+
+**Pending sweeps (resume next session):** `server/strategies/`, `server/risk/`, `server/execution/`, `server/api/`+`routes/`, `shared/`. Then cross-tier dedup, then full Step 2 sign-off from Langston, then Step 3 implementation.
+
+**Resumption checklist** (also captured in inventory §11):
+1. Run sub-agents on remaining tiers (strategies → risk+exec → api+routes → shared)
+2. Cross-tier dedup pass per Langston rule
+3. Enumerate already-DB-loaded subset of `DEFAULT_REGIME_CONFIG` (some fields already migrated B70.3/B70.3b)
+4. Send full inventory for Langston Step 2 sign-off
+5. Step 3 — single Drizzle migration `drizzle/migrations/2026-05-XX-b72-lever-sweep.sql`; risk-tier-ordered diffs (LOW→MED→HIGH); `getNumericRequired`-style reads, **no silent fallbacks**
+6. Build `server/scripts/dump-settings-registry.ts` — generates `1-system-manual/CURRENT_SETTINGS_REGISTRY.md`
+7. Step 4-11 standard
+
+**HIGH-risk levers requiring careful Step 3 handling:**
+- B72-CORE-031 `DEFAULT_REGIME_CONFIG` (8 thresholds; some already DB) — ship during calibration window OK (storage not values)
+- B72-SVC-021/022 SQE thresholds — precedence chain: screener_filters → module_constants → source last-resort
+- B72-SVC-004 VTS_MAX_CONCURRENT (recently 3→1) — promote anyway, Kyle wants it tunable
+- B72-SVC-048/CORE-061 FINALSCORE_DECAY_LAMBDA — env override compat: env → module_constants → hardcoded
+- B72-CORE-049 EDGE_SENSITIVITY (4× compounding) — promote, Kyle tunable
+
+**11-step workflow.** Currently mid-Step-2.
 
 **Skipping for now:**
 - Phase 19.0.5 — held until Phase 19 (Kyle 2026-05-05)
