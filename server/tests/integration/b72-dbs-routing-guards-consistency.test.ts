@@ -34,7 +34,14 @@ const CONSTANT_NAME = 'dbs_min_threshold';
 const STRATEGIES = ['strong_bull_trend', 'defensive_hedge', 'reverse_impulse', 'morning_star'] as const;
 const EXPECTED_CANONICAL_VALUE = 0.35;
 
-describe('B72 — DBS routing guards mutual consistency', () => {
+// Skip the live-DB suite if no Postgres connection is available (CI without
+// DATABASE_URL). The integration test exercises a real round-trip; mocking
+// would defeat the purpose. Run via `npm test` against staging DB.
+const dbAvailable = Boolean(
+  process.env.DATABASE_URL || process.env.PGHOST || process.env.PG_DATABASE_URL,
+);
+
+describe.skipIf(!dbAvailable)('B72 — DBS routing guards mutual consistency', () => {
   beforeAll(async () => {
     clearModuleConstantsCache();
     const rowCount = await prefetchModule(MODULE_NAME);
