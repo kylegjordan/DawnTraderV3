@@ -72,6 +72,16 @@ const PREFETCH_MODULES = [
   'guardrail_defaults',   // trade-safety.ts fallbacks (max total exposure pct, max open trades default)
   'goal_alignment',       // pre-execution-validator.ts atomic 4-weight alignment block + thresholds
   'strategy_profiles',    // pre-execution-validator.ts per-strategy risk/consistency profile
+  // B72.2 — in-class quant strategies (detect* methods in strategy-engine.ts):
+  'strategy.vwap_pullback',
+  'strategy.abcd_long',
+  'strategy.sma_trend_ride',
+  'strategy.breakout',
+  'strategy.mean_reversion',
+  'strategy.range_trade',
+  'strategy.vwap_bounce',
+  'strategy.liquidity_trap',  // operationally disabled but params still tunable
+  'strategy.dhma',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
