@@ -195,4 +195,69 @@ Per Kyle directive 2026-04-30: "Deploy after Test+Build+Docker pass — don't wa
 
 ---
 
+## §K. B72.1 — carry-over closure (appended 2026-05-05 post-compact session)
+
+**Status:** B72.1 SHIPPED — all 5 deferred items source-side-wired. Commit `31f4b873` on `migration/aws-supabase`. PM2 #170. Langston Step 4 sign-off cc-inbox #912.
+
+### §K.1 Items closed
+
+| # | File | Module | Pattern |
+|---|---|---|---|
+| 1 | `server/core/adaptive-manager.ts` | `adaptive_weights` | Lazy `get decayRate()` accessor; `_decayRateOverride` for `setDecayRate()` + constructor. DEFAULT_DECAY_RATE constant removed (no silent fallback). |
+| 2 | `server/services/risk-concentration.ts` | `concentration_risk` (3 rows) | Lazy `get config()` accessor; `_configOverride: Partial<RiskConcentrationConfig>`. updateIntervalMs stays hardcoded (KEEP, pure-infra). DEFAULT_CONFIG removed. |
+| 3 | `server/services/trade-safety.ts` | `guardrail_defaults` (2 rows) | Two helper functions wired into 3 fallback callsites (L368/L556/L582). `default_max_total_exposure_pct` stored as 0–1 ratio; `* 100` conversion at the percent-callsite explicitly documented. |
+| 4 | `server/services/pre-execution-validator.ts` | `goal_alignment` (6 rows) + `strategy_profiles` (per-strategy) | HIGH-risk atomic block. `resolveGoalAlignmentConfig()` snapshot ONCE per `validateTrade()` for consistency. `resolveStrategyProfile(strategyKey)` per call. Legacy hardcoded `strategyRiskProfile` map (vwap_pullback / abcd_long / sma_trend_ride) deleted; legacy strategies fall through to neutral 0.5/0.5 default. |
+| 5 | `server/core/governance/strategy-modes.ts` | `governance_modes` (3 rows) | Already shipped under B72 main commit `791e72b5` via `Object.defineProperty` getter on STRATEGY_MODE_OVERLAYS.confidenceFloor. |
+
+**PREFETCH_MODULES warmup list extended** with 5 new modules in `server/startup/b72-warmup.ts` — boot hard-fails if any has zero rows.
+
+### §K.2 Verification (post-deploy 2026-05-05 21:38:45 UTC)
+
+```
+[B72][warmup] prefetched module_constants module='adaptive_weights' rows=1
+[B72][warmup] prefetched module_constants module='concentration_risk' rows=3
+[B72][warmup] prefetched module_constants module='guardrail_defaults' rows=2
+[B72][warmup] prefetched module_constants module='goal_alignment' rows=6
+[B72][warmup] prefetched module_constants module='strategy_profiles' rows=6
+[B72][INIT_OK] module_constants sync-read modules warmed (pre-orchestrator)
+```
+
+No `module ... not warm` errors in error.log post-deploy. PM2 dawntrader online; trading API endpoints responding 200.
+
+CI: Build + Docker GREEN. Test Suite + TypeScript Check pre-existing infrastructure failures (ECONNREFUSED 5432 on test DB; vitest mock-hoisting in `b70-run-mode-controller.test.ts`) identical to prior commit `d4aebecd` — not introduced by B72.1. Per Kyle directive ("Deploy after Test+Build+Docker pass"), legacy baseline failures don't block deploy.
+
+### §K.3 17-vs-9 strategy reconciliation outcome
+
+`server/strategies/` contains **9** active canonical strategy files post-Phase-15b: `adaptive_flow, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, strong_bull_trend, support_bounce, volatility_edge`.
+
+The canonical regime → strategy map (`server/config/canonical-regime-strategy-map.ts`) references **8 additional legacy keys** — `vwap_pullback, mean_reversion, range_trade/range_trading, abcd_long, sma_trend_ride, breakout, vwap_bounce, dhma, liquidity_trap` — that are NOT implemented as standalone strategy files. They appear only as exit-condition `case` branches in `server/services/strategy-engine.ts` (legacy monolith) with NO `detect()` entry point. They cannot enter trades (no detect → no signal → no admission to RTB → no execution).
+
+**Determination:** these 8 are LEGACY exit-only stubs surviving from the pre-Phase-15b era. CLAUDE.md "17 canonical strategies" reference is **stale**; live universe is 9. No B72 levers escaped audit (the 8 legacy keys have no detect-side levers because there are no detect functions for them). Flagged as Phase 16 dead-code candidate. Documented in `LEVER_INVENTORY.md §13.1`.
+
+### §K.4 Known follow-up (NOT B72 scope)
+
+`server/services/trading-engine.ts` `calculateGoalAlignmentScore` (L130–209) contains a duplicate of the alignment logic now migrated in `pre-execution-validator.ts`. SIM-flagged as BUG-012 (pre-existing). NOT migrated this batch — separate cleanup.
+
+### §K.5 Governance updates (B72.1)
+
+| File | Change |
+|---|---|
+| `1-system-manual/BATCH_CATALOG.md` | New `Batch 72.1` row inserted above the `Batch 72` row. |
+| `1-system-manual/PHASE_HISTORY.md` | New "Phase 15c continuation 2026-05-05 (B72.1 source-side wiring SHIPPED)" entry. |
+| `1-system-manual/LEVER_INVENTORY.md` | New `§13` with closure summary + `§13.1` 17-vs-9 outcome. |
+| `Claude Comms and Packages/Batch Completion/BATCH_72_COMPLETION_REPORT.md` | This `§K` appendix. |
+| `MEMORY.md` (truth + repo persistence copy) | CURRENT STATE updated to PM2 #170 / HEAD `31f4b873` / 40 modules / ~180 rows; B72 + B72.1 closure block; carry-over list cleared; next-session pickup updated to Phase 16. 156 lines (under 200 cap). |
+
+### §K.6 Verification recipe (re-runnable)
+
+To verify B72.1 wiring is live in any future session:
+
+1. `ssh root@188.245.193.8 "grep -a 'B72.*adaptive_weights\\|concentration_risk\\|guardrail_defaults\\|goal_alignment\\|strategy_profiles' /var/log/dawntrader/out.log | tail -10"` — should show all 5 modules in latest boot block.
+2. `psql $DATABASE_URL -c "SELECT module_name, COUNT(*) FROM module_constants WHERE module_name IN ('adaptive_weights','concentration_risk','guardrail_defaults','goal_alignment','strategy_profiles') GROUP BY 1;"` — expect counts 1/3/2/6/6.
+3. `git grep -n "DEFAULT_DECAY_RATE\|correlationThreshold: 0.75\|strategyRiskProfile" server/core/adaptive-manager.ts server/services/risk-concentration.ts server/services/pre-execution-validator.ts` — should return no matches (constants deleted).
+
+**B72 + B72.1 BATCH FULLY CLOSED.**
+
+---
+
 *End of BATCH_72_COMPLETION_REPORT.md.*

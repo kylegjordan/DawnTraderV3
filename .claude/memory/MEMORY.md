@@ -16,40 +16,41 @@
 
 ---
 
-## CURRENT STATE — 2026-05-05 (post-B72 close)
+## CURRENT STATE — 2026-05-05 (post-B72.1 close)
 
 - **Branch:** `migration/aws-supabase`
-- **Most recent HEAD:** `791e72b5` (B72 governance + B72.1 strategy-modes naming reseed).
-- **Live:** B70 + B70.1/.2/.3/.3b + B72 main (Slices 1, 2a-d, 3a-b, 4) + 3 post-deploy hotfixes + B72.1 partial. PM2 #163.
+- **Most recent HEAD:** `31f4b873` (B72.1 source-side wiring of 5 carry-over modules).
+- **Live:** B70 + B70.1/.2/.3/.3b + B72 main (Slices 1, 2a-d, 3a-b, 4) + 3 post-deploy hotfixes + B72.1 FULL. PM2 #170.
 - **DB module_constants UPDATEs (no code commits):** `b67_5_post_composition_floor=0.20`, `b68_5_path_b_momentum_min=0.002`, `moonbag_qualifying_strategies=[]`.
 - **Path B (TFS classifier) gate:** `(absDbs >= 0.30 && mom > 0.002)`. Trailing-after-target DISABLED — every trade exits at target.
-- **35 modules / ~166 levers DB-tunable** via SQL UPDATE → 60s wait → behavior change. Live snapshot: `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` (293 module_constants + 28 screener_filters rows).
+- **40 modules / ~180 levers DB-tunable** via SQL UPDATE → 60s wait → behavior change (35 from B72 main + 5 from B72.1: adaptive_weights, concentration_risk, guardrail_defaults, goal_alignment, strategy_profiles). Live snapshot: `1-system-manual/CURRENT_SETTINGS_REGISTRY.md`.
 
 ---
 
-## B72 — CLOSED 2026-05-05 (main shipped + Tier 2 governance + B72.1 partial)
+## B72 + B72.1 — FULLY CLOSED 2026-05-05
 
-**Steps 1-11 all closed.** Completion report: `Claude Comms and Packages/Batch Completion/BATCH_72_COMPLETION_REPORT.md`. Langston sign-offs: cc-inbox #903/#904/#906/#908/#909/#910/#911.
+**Steps 1-11 all closed.** Completion report: `Claude Comms and Packages/Batch Completion/BATCH_72_COMPLETION_REPORT.md` (B72.1 §appended). Langston sign-offs: cc-inbox #903/#904/#906/#908/#909/#910/#911 (B72 main) + #912 (B72.1 Step 4).
 
-**Architecture shipped:** `prefetchModule()` + `getCachedConstant<T>()` + `getCachedNumberRequired()` + `getCachedNumbersForModule()` (bulk) + 60s background refresher in `module-constants-service.ts`. Boot hard-fail in `server/startup/b72-warmup.ts` PREFETCH_MODULES list. **Warmup runs BEFORE `bootOrchestrator.initialize()`** in `server/index.ts` (BUG-2026-05-05-E hotfix).
+**Architecture shipped:** `prefetchModule()` + `getCachedConstant<T>()` + `getCachedNumberRequired()` + `getCachedNumbersForModule()` (bulk) + 60s background refresher in `module-constants-service.ts`. Boot hard-fail in `server/startup/b72-warmup.ts` PREFETCH_MODULES list (now 40 modules). **Warmup runs BEFORE `bootOrchestrator.initialize()`** in `server/index.ts` (BUG-2026-05-05-E hotfix).
 
-**3 post-deploy hotfixes (all RESOLVED):**
-- BUG-2026-05-05-E (`c1afdfac`): warmup wired AFTER Boot Orchestrator → VTS auto-start failed permanently → 1+ hour outage. Moved warmup to pre-orchestrator.
+**B72.1 (commit `31f4b873`) — all 5 carry-over wired source-side:**
+1. `adaptive-manager.ts` → `adaptive_weights.default_decay_rate` via lazy `get decayRate()` accessor + `_decayRateOverride` (constructor / setDecayRate). Singleton-init timing trap solved.
+2. `risk-concentration.ts` → `concentration_risk.{correlation_threshold, max_concentration_score, min_scaling_factor}` via lazy `get config()` + `_configOverride` partial. updateIntervalMs stays KEEP.
+3. `trade-safety.ts` → `guardrail_defaults.{default_max_total_exposure_pct (0–1 ratio), max_open_trades_default}` wired into 3 fallback callsites (L368/L556/L582).
+4. `pre-execution-validator.ts` → `goal_alignment` (6 rows) + `strategy_profiles` (per-strategy) HIGH-risk atomic block. `resolveGoalAlignmentConfig()` snapshot ONCE per `validateTrade()` for consistency. Legacy hardcoded `strategyRiskProfile` map deleted.
+5. `strategy-modes.ts` → `governance_modes.{normal,defensive,survival}_mode_confidence_floor` via Object.defineProperty getter (already shipped under B72 main `791e72b5`).
+- Boot warmup verified (rows: adaptive_weights=1, concentration_risk=3, guardrail_defaults=2, goal_alignment=6, strategy_profiles=6); `[B72][INIT_OK] (pre-orchestrator)` clean.
+- **17-vs-9 reconciliation:** live universe = 9 active strategies; 8 keys (vwap_pullback, mean_reversion, range_trade, abcd_long, sma_trend_ride, breakout, vwap_bounce, dhma, liquidity_trap) are exit-only `case` branches in legacy `strategy-engine.ts` with no `detect()` — cannot enter trades. Phase 16 dead-code candidate. CLAUDE.md "17 canonical" reference is stale.
+
+**3 post-deploy hotfixes from B72 main (all RESOLVED):**
+- BUG-2026-05-05-E (`c1afdfac`): warmup wired AFTER Boot Orchestrator → VTS auto-start failed → 1+ hour outage. Moved warmup to pre-orchestrator.
 - BUG-2026-05-05-F (`4ad40b95`): `VTS_MAX_CONCURRENT_PER_COMBO` undefined at 2 missed callsites in vts-runner.ts.
 - BUG-2026-05-05-G (`1a3038a4`): `FRICTION_SAFETY_BUFFER` / `ROI_MIN` / `ROI_MAX` undefined at 2 missed callsites in expectancy.ts.
-- **Pattern lesson:** post-mass-migration, run `grep -rn "<OLD_CONST>" server/ --include="*.ts"` before push. Recommend `tsc --noEmit` on touched files (legacy TS-baseline failure masks new errors).
+- **Pattern lesson:** post-mass-migration, run `grep -rn "<OLD_CONST>" server/ --include="*.ts"` before push. Recommend `tsc --noEmit -p tsconfig.json | grep <files>` on touched files (legacy TS-baseline failure masks new errors).
 
-**Tier 2 governance shipped:** SYSTEM_MANUAL Configuration Surface appendix · ADJUSTMENT_FRAMEWORK §0 (operator workflow) · CHANGES_AND_FIXES BUG-E/F/G entries · POST_AUDIT_ROADMAP §B72 close mark.
+**Tier 2 governance shipped:** SYSTEM_MANUAL Configuration Surface appendix · ADJUSTMENT_FRAMEWORK §0 (operator workflow) · CHANGES_AND_FIXES BUG-E/F/G entries · POST_AUDIT_ROADMAP §B72 close mark · BATCH_CATALOG B72.1 row · PHASE_HISTORY 2026-05-05 B72.1 entry · LEVER_INVENTORY §13 (B72.1 closure + 17-vs-9 outcome).
 
-**B72.1 carry-over status (1 of 6 done):**
-- ✅ `strategy-modes` confidence-floor naming reseed (`791e72b5`) — 3 new NORMAL/DEFENSIVE/SURVIVAL-named rows; `STRATEGY_MODE_OVERLAYS.confidenceFloor` is `Object.defineProperty` getter.
-- ⏳ `adaptive-manager.ts` DEFAULT_DECAY_RATE — singleton instantiated at module load; needs lazy `getEffectiveConfig()` refactor.
-- ⏳ `risk-concentration.ts` Directive 9.4 guards — same singleton-init pattern.
-- ⏳ `pre-execution-validator.ts` goal_alignment + strategy_profiles — atomic 4-weight `alignmentScore` block (HIGH-risk).
-- ⏳ `trade-safety.ts` guardrail_defaults — pre-existing fallback path; low priority.
-- ⏳ 17-vs-9 strategy reconciliation pass — only 9 files in `server/strategies/`; map remaining 8 canonical strategies.
-
-**Tier 2 governance still pending:** SIM per-source-file annotations across ~25 PROMOTE files (housekeeping; no runtime impact).
+**Known follow-up (NOT B72 scope):** `trading-engine.ts` calculateGoalAlignmentScore (L130–209) duplicates the alignment logic now-migrated in pre-execution-validator. SIM-flagged BUG-012. Separate cleanup batch.
 
 **Critical pattern:** every PROMOTE module read from sync code MUST be in `PREFETCH_MODULES` (`server/startup/b72-warmup.ts`); boot hard-fails otherwise.
 
@@ -101,7 +102,7 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 | B67.4 / B68.2 / B68.3 / B67.5-prep / B68.1 | 2026-05-01 → -03 | Confidence chain (7 modulators) closed observational |
 | B69 + B69.1/2/3 + B73.3 | 2026-05-03 → -04 | Asset class + UI + calibration viz fixes |
 | B70 main + B70.1/.2/.3/.3b | 2026-05-04 → -05 | Unified archive + Path B momentum gate + floor drop |
-| **B72 + B72.1 partial** | 2026-05-05 | CLOSED. Lever sweep — 35 modules / ~166 rows live |
+| **B72 + B72.1 FULL** | 2026-05-05 | CLOSED. Lever sweep — 40 modules / ~180 rows live; B72.1 wired all 5 carry-over modules |
 
 ---
 
@@ -115,14 +116,10 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 
 ## Next session pickup priority
 
-1. **B72.1 carry-over remaining 5 items** (rows seeded; source wiring deferred):
-   - adaptive-manager singleton-init refactor
-   - risk-concentration singleton-init refactor
-   - pre-execution-validator goal_alignment atomic block (HIGH-risk)
-   - trade-safety guardrail_defaults
-   - 17-vs-9 strategy reconciliation pass
-2. **Tier 2 governance housekeeping:** SIM per-source-file annotations across ~25 PROMOTE files
-3. **Phase 16** (TS errors + storage.ts modularization) per POST_AUDIT_ROADMAP — next sequenced batch
+1. **Phase 16** (TS errors + storage.ts modularization) per POST_AUDIT_ROADMAP — next sequenced batch
+2. **trading-engine.ts BUG-012 cleanup:** calculateGoalAlignmentScore (L130–209) is a duplicate of the alignment logic now-migrated in pre-execution-validator. Pre-existing issue, separate cleanup.
+3. **Tier 2 governance housekeeping (deferred from B72):** SIM per-source-file annotations across ~25 PROMOTE files. No runtime impact.
+4. **CLAUDE.md "17 canonical strategies" reference:** stale per B72.1 §13.1; live universe is 9 active. Update next time CLAUDE.md is touched.
 
 ---
 
