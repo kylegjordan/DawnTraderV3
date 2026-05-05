@@ -1286,7 +1286,7 @@ async function generatePhase10Signal(
       strategy,
       source: 'VTS'
     });
-    console.log(`[18L][DUP_GUARD] Skipping ${symbol}/${strategy}: ${existingTradeCount}/${VTS_MAX_CONCURRENT_PER_COMBO} concurrent VTS trades`);
+    console.log(`[18L][DUP_GUARD] Skipping ${symbol}/${strategy}: ${existingTradeCount}/${getVtsMaxConcurrentPerCombo()} concurrent VTS trades`);
     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
     setNullReason('duplicate_position');
     return null;
@@ -2884,7 +2884,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         const dupCheckCount = Array.from(openVirtualTrades.values()).filter(t =>
           t.symbol === pair.symbol && t.strategy === stratDef.strategyKey
         ).length;
-        if (dupCheckCount >= VTS_MAX_CONCURRENT_PER_COMBO) {
+        if (dupCheckCount >= getVtsMaxConcurrentPerCombo()) {
           vtsEvalCounters.totalStrategyEvaluations++;
           if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternStrategyEvaluations = (vtsEvalCounters.patternStrategyEvaluations ?? 0) + 1; } else { vtsEvalCounters.quantStrategyEvaluations = (vtsEvalCounters.quantStrategyEvaluations ?? 0) + 1; }
           if (pair.sourcePool === 'pattern') {
