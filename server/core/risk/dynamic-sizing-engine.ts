@@ -27,7 +27,9 @@
 // B65.2 (2026-04-23): MAX_POSITION_RISK migrated from the deleted
 // execution-config.ts to the module_constants table under module='risk_sizing'.
 // Read through moduleConstantsService with the same 0.1 fallback.
-import { getConstant } from '../../services/module-constants-service.js';
+// B72 (2026-05-05): All other DSE constants migrated to module='position_sizing'.
+// Read via cached sync resolver. Module is prefetched in server/startup/b72-warmup.ts.
+import { getConstant, getCachedNumbersForModule } from '../../services/module-constants-service.js';
 import { loadAdaptiveWeights, type AdaptiveWeights } from '../../services/adaptive-learning-repository.js';
 import { getRecentCostDrift } from '../../services/monitoring/cost-drift-monitor.js';
 
@@ -80,19 +82,36 @@ export interface DSETelemetry {
   timestamp: Date;
 }
 
-const DSE_CONFIG = {
-  MIN_MULTIPLIER: 0.3,
-  MAX_MULTIPLIER: 1.2,
-  BASE_EDGE: 0.05,
-  EDGE_SENSITIVITY: 4,
-  VOL_THRESHOLD: 0.02,
-  VOL_FLOOR: 0.7,
-  COST_THRESHOLD: 0.001,
-  COST_FLOOR: 0.6,
-  CONFIDENCE_BASE: 0.5,
-  DEFAULT_RISK_PCT: 2,
-  COST_PRESSURE_DAMPENING: 0.2,
-};
+// B72 (2026-05-05): DSE constants now read from module_constants
+// (module_name='position_sizing'). The shape of the returned object is
+// preserved so existing call sites (DSE_CONFIG.MIN_MULTIPLIER etc.) work
+// unchanged after replacing static literal access with getDSEConfig().
+//
+// Resolution: GLOBAL `(*, *, *, *)`. Per-strategy or per-regime tuning can
+// be added later by inserting more specific module_constants rows; the
+// most-specific-wins resolver picks them up automatically.
+//
+// Bulk read via getCachedNumbersForModule() = one Map.get + filter pass per
+// call (microseconds). Module must be prefetched at boot — see
+// server/startup/b72-warmup.ts PREFETCH_MODULES list.
+const DSE_GLOBAL_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+
+function getDSEConfig() {
+  const c = getCachedNumbersForModule('position_sizing', DSE_GLOBAL_KEY);
+  return {
+    MIN_MULTIPLIER:           c.min_size_multiplier,
+    MAX_MULTIPLIER:           c.max_size_multiplier,
+    BASE_EDGE:                c.base_edge,
+    EDGE_SENSITIVITY:         c.edge_sensitivity,
+    VOL_THRESHOLD:            c.vol_threshold,
+    VOL_FLOOR:                c.vol_penalty_floor,
+    COST_THRESHOLD:           c.cost_threshold,
+    COST_FLOOR:               c.cost_penalty_floor,
+    CONFIDENCE_BASE:          c.confidence_base,
+    DEFAULT_RISK_PCT:         c.default_risk_pct,
+    COST_PRESSURE_DAMPENING:  c.cost_pressure_dampening,
+  };
+}
 
 /**
  * Directive 11.3C: Get cost pressure factor based on recent drift alerts.
@@ -102,6 +121,7 @@ const DSE_CONFIG = {
  * Range: 0.8 to 1.0
  */
 export function getCostPressureFactor(): number {
+  const DSE_CONFIG = getDSEConfig();
   const costDrift = getRecentCostDrift();
   const costPressure = 1 - (costDrift * DSE_CONFIG.COST_PRESSURE_DAMPENING);
   return Math.max(0.8, Math.min(1.0, costPressure));
@@ -122,6 +142,7 @@ const MAX_HISTORY = 100;
  * - profitRate: Profit rate, converted to edge via ×0.5
  */
 function extractExpectedEdge(weights: AdaptiveWeights | undefined, strategyId: string): number {
+  const DSE_CONFIG = getDSEConfig();
   if (!weights || Object.keys(weights).length === 0) return DSE_CONFIG.BASE_EDGE;
   
   if ('expectedEdge' in weights && typeof weights.expectedEdge === 'number') {
@@ -185,6 +206,7 @@ export async function computeDynamicSize(input: DynamicSizeInput): Promise<Dynam
     balance = 1000,
   } = input;
 
+  const DSE_CONFIG = getDSEConfig();
   const baseRiskPct = DSE_CONFIG.DEFAULT_RISK_PCT;
   const baseSize = balance * (baseRiskPct / 100);
 

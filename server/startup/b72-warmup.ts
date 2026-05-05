@@ -24,6 +24,8 @@ import { prefetchModule } from '../services/module-constants-service.js';
 const PREFETCH_MODULES = [
   // Commit A: DBS routing guards (strong_bull_trend + 3 mutual-exclusion guards).
   'strategy_dbs_routing_guards',
+  // Commit B Slice 1: Dynamic Sizing Engine config.
+  'position_sizing',
   // Future: add additional B72-promoted modules read from sync code here.
 ];
 
