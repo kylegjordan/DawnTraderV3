@@ -54,7 +54,15 @@
 - `924a7c18` Commit A — DBS routing guards (4 rows + sync API + warmup hook + integration test). Step 7 verified, Langston-signed-off.
 - `ca5282e6` Test fix (skipIf no DB).
 - `875ef20f` Commit B migration SQL + bulk resolver. **170 unique rows seeded across 33 modules** on staging Supabase.
-- `c5da0c3b` Commit B Slice 1 — position_sizing source replacement (DSE_CONFIG → getDSEConfig() bulk reader). Live, no errors.
+- `c5da0c3b` Commit B Slice 1 — position_sizing source replacement (DSE_CONFIG → getDSEConfig() bulk reader). Live.
+- `d1397702` Slice 2a — expectancy + RTB (8 modules, 16 levers).
+- `3c7b59d8` Slice 2b — 7 single-lever modules (vts_scoring, goals_weighting, dbs_calculation, paper_sizing, vts_service, cost_model, learning_governance).
+- `4f3826b6` Slice 2c — pattern pool, drift, paper exec, orchestrator (4 modules).
+- `3b9e6d01` Slice 2d — vts_runner (5 levers) + regime_age (1 lever).
+- `8c3866db` Slice 3a — strategies tier 3/9 files (adaptive_flow / volatility_edge / defensive_hedge).
+- `9f30df9a` Slice 3b — strategies tier 6/9 remaining (inside_bar_reversal / morning_star / pivot_shift / reverse_impulse / support_bounce / strong_bull_trend).
+- **31 modules / ~158 rows live in production sync-read paths** (22 cross-strategy + 9 per-strategy).
+- **All 9 strategy files migrated** — every per-strategy lever DB-tunable via `strategy.<key>` module bulk-read.
 
 **Helpers added to module-constants-service.ts:**
 - `prefetchModule()` — async warmup, throws on first prefetch failure
@@ -75,28 +83,29 @@
   - `governance_modes`, `pattern_pool_gates`, `drift_detector`, `concentration_risk`, `guardrail_defaults`, `learning_governance`, `trailing_exit`, `adaptive_weights`
   - For each: add `getCachedNumbersForModule(...)` call OR `getCachedNumberRequired()` per lever; add module to PREFETCH_MODULES list.
 
-- **Slice 3 — Strategy-tier source replacements (9 files, 93 levers).** Each strategy file: replace top-of-file constant block with `const c = getCachedNumbersForModule('strategy.<key>', { exchange:'*', assetClass:'*', strategy:'<key>', regime:'*' })` at top of detect(); rewire references. Pattern proven by Commit A's strong_bull_trend / defensive_hedge / reverse_impulse / morning_star DBS guard work. Add 9 new modules to PREFETCH_MODULES.
+- ~~Slice 3 — Strategy-tier source replacements~~ ✅ DONE (9 files, 91 levers across `strategy.<key>` modules).
 
-- **Slice 4 — HIGH-risk wiring.** SQE precedence chain (screener_filters → sqe_config module_constants → source last-resort). market_regime remaining DEFAULT_REGIME_CONFIG fields wired into MCE's `assembleRegimeConfig()`. VTS_MAX_CONCURRENT, EDGE_SENSITIVITY, FINALSCORE_DECAY_LAMBDA env-fallback compat preserved.
+- **Slice 4 — HIGH-risk wiring (REMAINING).** SQE precedence chain (screener_filters → sqe_config module_constants → source last-resort). market_regime remaining DEFAULT_REGIME_CONFIG fields wired into MCE's `assembleRegimeConfig()`. EDGE_SENSITIVITY (already in DSE_CONFIG migration done in Slice 1). MIN_PWIN/MAX_PWIN/DI_PWIN_FACTOR caller-injection refactor for net-expectancy-kernel (preserve pure-math contract).
+
+- **Deferred from Slice 2 (singleton-init or naming issues):**
+  - `adaptive-manager.ts` DEFAULT_DECAY_RATE — needs init-hook refactor.
+  - `risk-concentration.ts` Directive 9.4 guards — same singleton issue.
+  - `strategy-modes.ts` confidence floors — naming mismatch in seeded migration (NORMAL/DEFENSIVE/SURVIVAL vs conservative/moderate/aggressive); reseed required.
+  - `pre-execution-validator.ts` goal_alignment + strategy_profiles — atomic-block migration deferred.
+  - `trade-safety.ts` guardrail_defaults — pre-existing fallback path; defer.
+
+- **Goal_alignment HIGH-risk** atomic block (4 alignmentScore weights) — deferred; rows seeded in DB but source replacement TBD.
 
 - **Companion: `server/scripts/dump-settings-registry.ts`.** Reads module_constants + screener_filters, outputs `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` sorted by module. Runnable on demand + post-deploy hook.
 
-- **Pre-Step-3 sub-tasks still pending:**
-  1. 17-vs-9 strategy reconciliation — only 9 files in `server/strategies/`; map remaining 8 (likely in `core/strategies/` or as inline detection in services)
-  2. `DEFAULT_REGIME_CONFIG` migration-state enumeration (B70.3/B70.3b already migrated b68_5 + b67_5; Commit B SQL seeded 5 more remaining; verify nothing missed)
-  3. Move strategies-tier 93-row table to companion `LEVER_INVENTORY_STRATEGIES.md`
+- **Pending pre-Step-3 sub-tasks:** 17-vs-9 strategy reconciliation; `DEFAULT_REGIME_CONFIG` migration-state enum; move strategies 93-row table to companion file.
+- **Steps 4-11:** Langston full-diff review; CI verification; governance updates (SYSTEM_MANUAL, SIM, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP §B72 closure, ADJUSTMENT_FRAMEWORK, BATCH_CATALOG, PHASE_HISTORY); `BATCH_72_COMPLETION_REPORT.md`.
 
-- **Steps 4-11 remaining:** Langston full-diff review (Slices 2/3/4), CI verification, governance updates (SYSTEM_MANUAL appendix, SIM annotations, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP §B72 closure, ADJUSTMENT_FRAMEWORK, BATCH_CATALOG, PHASE_HISTORY), `BATCH_72_COMPLETION_REPORT.md`.
+**Critical pattern reminder:** every PROMOTE module read from sync code MUST be added to `PREFETCH_MODULES` list in `server/startup/b72-warmup.ts` BEFORE source consumers ship; boot hard-fails otherwise.
 
-**Critical pattern reminder:** every PROMOTE module read from sync code MUST be added to `PREFETCH_MODULES` list in `server/startup/b72-warmup.ts` BEFORE source consumers ship; otherwise boot hard-fails.
+**11-step workflow.** Steps 1+2 CLOSED. Step 3 ~70% complete (Slices 1+2a-d+3a-b done; Slice 4 remains). Steps 4-11 pending.
 
-**11-step workflow.** Steps 1+2 CLOSED. Step 3 ~30% complete. Steps 4-11 pending.
-
-**Skipping for now:**
-- Phase 19.0.5 — held until Phase 19 (Kyle 2026-05-05)
-- F/K simulator deep-dive — already explained, no action
-- B70.2 follow-ups (Parquet binary + integration tests) — defer
-- liquidity_trap bullish redesign — far post-launch
+**Skipping for now:** Phase 19.0.5 / F/K simulator / B70.2 follow-ups / liquidity_trap bullish redesign.
 
 ---
 
