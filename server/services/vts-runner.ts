@@ -1742,9 +1742,15 @@ async function generatePhase10Signal(
 
   // B70 Step 3.6: signal-eval archive — admitted row alongside ablation emit.
   // Fire-and-forget, try/catch wrapped — must never block the VTS cycle.
+  // NOTE: `_modulatedConfChain` is block-scoped inside the bare `{ ... }`
+  // block above (lines ~1447-1724) — NOT accessible here. Use the
+  // openTrade record's persisted value instead (set at line 1722).
   try {
     const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
     const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+    const persistedTrade = openVirtualTrades.get(tradeId);
+    const chainModulatedConfidence =
+      persistedTrade?.regimeConfidenceModulated ?? predictiveConfidence ?? undefined;
     archiveSignalEval({
       symbol,
       exchange: 'kraken',
@@ -1755,7 +1761,7 @@ async function generatePhase10Signal(
       rejectStage: 'admitted',
       finalScore: typeof finalScore === 'number' ? finalScore : undefined,
       confidenceModulated:
-        typeof _modulatedConfChain === 'number' ? _modulatedConfChain : undefined,
+        typeof chainModulatedConfidence === 'number' ? chainModulatedConfidence : undefined,
       // B70.2 (2026-05-05) — full at-entry context per Kyle directive.
       // Mirrors the open-trades CSV export columns so admitted rows carry
       // every field needed to reconstruct the trade decision.
@@ -1797,7 +1803,7 @@ async function generatePhase10Signal(
         atrAtOpen: tradeRecord.atrAtOpen,
       },
       modulators: {
-        chain_modulated_confidence: _modulatedConfChain,
+        chain_modulated_confidence: chainModulatedConfidence,
         regimeConfidenceModulated: tradeRecord.regimeConfidenceModulated,
       },
       gateDecision: {
