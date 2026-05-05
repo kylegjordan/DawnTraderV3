@@ -10776,3 +10776,50 @@ Drift Dashboard → `DataArchiveSection` panel: per-table row counts in window +
 ---
 
 *End of Data Capture Architecture appendix. Last updated 2026-05-05 with B70.1 ship.*
+
+---
+
+# Appendix: Configuration Surface (B72 — 2026-05-05)
+
+## Architecture
+
+Operator-tunable parameters live in a 5-dimensional DB-driven configuration surface. As of B72, **34 modules / ~163 levers** are DB-tunable without code redeploy. The full inventory + per-row scope rationale lives in `1-system-manual/LEVER_INVENTORY.md`; the live snapshot in `1-system-manual/CURRENT_SETTINGS_REGISTRY.md`.
+
+## Resolution model (`module_constants` table — B65.1 schema)
+
+`(module_name, exchange, asset_class, strategy, regime, constant_name) → value (jsonb)`
+
+Most-specific-wins resolution via `moduleConstantsService.ts`. Dimension scoring weights: regime=8, strategy=4, asset_class=2, exchange=1. If no row matches even global `(*, *, *, *)`, resolver returns undefined and `getCachedNumberRequired` throws.
+
+## Sync-read API (added in B72)
+
+| Helper | Purpose | Throws on |
+|---|---|---|
+| `prefetchModule(moduleName)` | Async warmup at boot | DB error (boot fails) |
+| `getCachedConstant<T>()` | Sync resolver, any type | Cold cache |
+| `getCachedNumberRequired()` | Sync number, no fallback | Cold cache, missing row, non-numeric |
+| `getCachedNumbersForModule()` | Sync bulk Record | Cold cache |
+| 60s background refresher | Re-prefetches warmed modules | Logs + continues on per-module DB error |
+
+**Hard-fail discipline:** every module read from sync code MUST be in `PREFETCH_MODULES` list at `server/startup/b72-warmup.ts`. Server boot throws if any prefetch returns zero rows.
+
+## Boot-order invariant (B72 hotfix)
+
+`b72-warmup` runs BEFORE `bootOrchestrator.initialize()` in `server/index.ts` because Boot Orchestrator's VTS auto-start is the first sync caller. Violating this order causes silent VTS pipeline death (witnessed B72 deploy → 1+ hour outage; resolved by commit `c1afdfac`).
+
+## Operator workflow
+
+See `ADJUSTMENT_FRAMEWORK.md` §0 for the SQL UPDATE → 60s wait → behavior change procedure. Three-layer precedence chains documented there for SQE primary gates, RTB freshness decay, TCL warmup threshold, and net-EV pWin parameters.
+
+## B72.1 carry-over (deferred, non-blocking)
+
+Rows seeded but source-side wiring deferred — each needs different pattern than `getCachedNumberRequired`:
+- `adaptive-manager` / `risk-concentration` — singleton instantiated at module load before warmup; needs lazy `getEffectiveConfig()` refactor.
+- `strategy-modes` confidence floors — naming mismatch (`NORMAL/DEFENSIVE/SURVIVAL` vs migration's `conservative_/moderate_/aggressive_mode_confidence_floor`); reseed needed.
+- `pre-execution-validator` `goal_alignment` + `strategy_profiles` — atomic 4-weight block; HIGH-risk flagged.
+- `trade-safety` `guardrail_defaults` — pre-existing fallback path.
+- 17-vs-9 strategy reconciliation pass — only 9 strategy files in `server/strategies/`; CLAUDE.md cites 17 canonical strategies. Map remaining 8 to actual file locations.
+
+---
+
+*End of Configuration Surface appendix. Last updated 2026-05-05 with B72 main close.*

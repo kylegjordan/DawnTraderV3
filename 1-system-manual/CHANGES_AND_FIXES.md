@@ -31,6 +31,27 @@
 
 ## BUGS
 
+### BUG-2026-05-05-E: B72 warmup wired AFTER Boot Orchestrator initialization — **RESOLVED**
+- **Severity**: HIGH (silent operational failure — VTS pipeline dormant)
+- **Location**: `server/index.ts` ordering of `bootOrchestrator.initialize()` vs `warmModuleConstantsForSyncCallers()`
+- **Problem**: VTS auto-start runs INSIDE `bootOrchestrator.initialize()` and triggers `pruneReentryMaps → getSetupHashExpiryMs → getCachedNumberRequired('vts_runner', ...)` against cold cache. `[BOOT][VTS] Auto-start failed: First cycle failed: module_constants: module 'vts_runner' is not warm`. Server stays online but VTS pipeline never recovers — strategies never evaluated, 0 open simulated trades for 1+ hour windows. Witnessed PM2 #155 → #161.
+- **Root cause**: b72-warmup wired to run after Boot Orchestrator init, but Boot Orchestrator's VTS auto-start is the first sync caller of the new module_constants API. Ordering violated the implicit invariant that warmup precedes any sync caller.
+- **Fix**: commit `c1afdfac` — moved warmup BEFORE `bootOrchestrator.initialize()`. Verified `[B72][INIT_OK] (pre-orchestrator)` precedes `[VTS_RUNNER] INIT_OK` on PM2 #162+.
+- **Lesson**: boot-time hard-fail discipline only works when warmup actually runs first. For any future sync-read API addition, audit the FULL boot sequence — not just the obvious caller.
+
+### BUG-2026-05-05-F: B72 vts-runner.ts `VTS_MAX_CONCURRENT_PER_COMBO` undefined at 2 callsites — **RESOLVED**
+- **Severity**: HIGH (every VTS strategy execution thrown silently)
+- **Location**: `server/services/vts-runner.ts:1289` (DUP_GUARD log) + `:2887` (outer-loop dup pre-check)
+- **Problem**: Slice 2d removed `const VTS_MAX_CONCURRENT_PER_COMBO = 1` and replaced the primary callsite with `getVtsMaxConcurrentPerCombo()`. Two additional sites (a console.log interpolation at L1289 and an outer-loop duplicate-check at L2887) were missed. Every VTS strategy execution raised `ReferenceError: VTS_MAX_CONCURRENT_PER_COMBO is not defined`. detected=15-21 per cycle, signals=0.
+- **Fix**: commit `4ad40b95` — both sites now use `getVtsMaxConcurrentPerCombo()`.
+
+### BUG-2026-05-05-G: B72 expectancy.ts `FRICTION_SAFETY_BUFFER` / `ROI_MIN` / `ROI_MAX` undefined at 2 callsites — **RESOLVED**
+- **Severity**: HIGH (every signal that reached ROI gate threw silently)
+- **Location**: `server/core/calculations/expectancy.ts` `isSignalProfitable` (L291) + `getROIDetails` (L414+)
+- **Problem**: Slice 2a removed the imports for ROI_FLEX_MULTIPLIER / ROI_MIN / ROI_MAX / FRICTION_SAFETY_BUFFER from `adaptive-thresholds.ts` and migrated `getDynamicROIThreshold` to read from module_constants. Two other consumers (`isSignalProfitable` friction floor, `getROIDetails` validation result) were missed. Every signal that reached the ROI gate threw `ReferenceError: FRICTION_SAFETY_BUFFER is not defined` → `signals=0 stratNulls=147` despite 18+ detections per cycle.
+- **Fix**: commit `1a3038a4` — both functions now read via `getCachedNumberRequired('expectancy_gates', ...)`.
+- **Pattern note (E + F + G shared root cause)**: mass-migration grepped primary callsites but missed (a) string-interpolated log lines, (b) sibling functions in the same file, (c) helper functions reachable from migrated entry points. **Mitigation**: post-migration, do `grep -rn "<OLD_CONST_NAME>" server/ --include="*.ts"` on every removed const before push. TypeScript build error would have caught these; the legacy-baseline TS Check failure masks new errors. Recommend `tsc --noEmit` on touched files before push as a personal CI step.
+
 ### BUG-2026-05-03-A: B69 Ticker Snap Retag Statement Timeout on Large Tables — **OPEN (deferred)**
 - **Severity**: MEDIUM (existing rows have stale `equity_spot`/`equity_perp` values; new rows correctly use `xstock_*`)
 - **Location**: `equity_spot_ticker_snap` (~4M rows), `equity_perp_ticker_snap` (~1.8M rows)

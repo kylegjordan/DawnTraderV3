@@ -1,10 +1,63 @@
 # DawnTrader Adjustment Framework (Directive 11.8B-E)
 
-> **Version:** 1.0
+> **Version:** 1.1 (B72 update — module_constants tuning surface added 2026-05-05)
 > **Created:** 2026-04-11 (Batch 58a)
 > **Authority:** This document is the decision constitution for all parameter adjustments in DawnTrader. It defines what may be adjusted, by whom, under what evidence, with what bounds, and with what safety guarantees.
-> **Companion Documents:** AUTHORITY_BASELINE.md (V1.0 known-good snapshot), authority-baseline-v1.json (machine-readable baseline)
+> **Companion Documents:** AUTHORITY_BASELINE.md (V1.0 known-good snapshot), authority-baseline-v1.json (machine-readable baseline), CURRENT_SETTINGS_REGISTRY.md (live DB-tunable lever snapshot), LEVER_INVENTORY.md (B72 lever catalog).
 > **Langston Consensus:** Messages #723-730 (2026-04-11). Three-tier governance, per-family bounds, evidence-source agnostic design, asset-class extensibility, three-mode evidence hierarchy.
+
+---
+
+## 0. module_constants Operator Tuning Surface (B72 — 2026-05-05)
+
+**As of B72, ~163 active levers across 34 modules are DB-tunable without code redeploy.** The operator workflow is: SQL UPDATE → wait 60s background refresh → behavior change.
+
+### Workflow
+
+1. **Find the lever:** consult `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` (auto-generated live snapshot, regenerated on demand via `tsx server/scripts/dump-settings-registry.ts`). The registry lists every DB-tunable setting with current value, scope, last-updated-at, last-updated-by.
+2. **Identify resolution scope** of the row to tune:
+   - `(*, *, *, *)` — global (most common)
+   - `(*, *, *, <REGIME>)` — per-regime (e.g. `roi_gating.min_roi`)
+   - `(*, *, <STRATEGY>, *)` — per-strategy (e.g. `strategy_dbs_routing_guards.dbs_min_threshold`, all `strategy.<key>` modules)
+   - `(<EXCHANGE>, *, *, *)` / `(*, <ASSET_CLASS>, *, *)` — exchange/asset-class scoped (e.g. `cost_model` kraken-only fees, `pattern_pool_gates` crypto_spot-scoped)
+3. **Apply the SQL UPDATE:**
+   ```sql
+   UPDATE module_constants
+      SET value = '<NEW_VALUE>'::jsonb,
+          updated_at = now(),
+          updated_by = '<your-handle> 2026-MM-DD'
+    WHERE module_name = '<module>'
+      AND constant_name = '<name>'
+      AND exchange = '<scope>' AND asset_class = '<scope>'
+      AND strategy = '<scope>' AND regime = '<scope>';
+   ```
+4. **Wait up to 60 seconds** for the background refresher in `module-constants-service.ts` to re-prefetch.
+5. **Verify** by re-running the registry script or checking PM2 logs for behavioral evidence next signal cycle.
+
+### Safety guarantees (B72)
+
+- **No silent fallback** — `getCachedNumberRequired()` throws on missing/non-numeric value. Deleting a required row → next sync read fails loudly → restart hard-fails on the prefetch.
+- **Boot hard-fail discipline** — every PROMOTE module read from sync code is in `PREFETCH_MODULES` list (`server/startup/b72-warmup.ts`); server refuses to start if any prefetch returns zero rows.
+- **Reversible** — every UPDATE captured in `updated_at` / `updated_by`. Roll back via inverse UPDATE.
+- **Auditable** — `dump-settings-registry.ts` regeneration captures the live snapshot at any point.
+
+### Three-layer precedence chains (where applicable)
+
+| Lever family | Precedence (high → low) |
+|---|---|
+| SQE admission gates (`sqe_config.min_final_score`, `min_regime_weight`) | `screener_filters` row → `module_constants` `sqe_config` → `SQE_DEFAULT_THRESHOLDS` static mirror |
+| RTB freshness decay (`rtb_ranking.finalscore_decay_lambda`) | `process.env.FINALSCORE_DECAY_RATE` → `module_constants` `rtb_ranking` |
+| TCL warmup threshold (`rtb_config.tcl_warmup_threshold_signals`) | `process.env.TCL_SIGNAL_THRESHOLD` → `module_constants` `rtb_config` |
+| net-EV pWin parameters (`expectancy_kernel.pwin_floor`/`ceiling`, `directional_integrity.di_pwin_factor`) | Caller-injected from `module_constants` → kernel default seed (kernel pure-math, no DB read) |
+
+### Adding a new lever post-B72
+
+1. Drizzle migration row in `module_constants` (use your batch's `updated_by` tag).
+2. Source-file replacement using `getCachedNumberRequired()` or `getCachedNumbersForModule()`.
+3. Add module name to `PREFETCH_MODULES` in `server/startup/b72-warmup.ts` if read from sync code.
+4. Update `LEVER_INVENTORY.md`.
+5. Re-run `dump-settings-registry.ts` to refresh `CURRENT_SETTINGS_REGISTRY.md`.
+6. **Defensive:** post-migration `grep -rn "<OLD_CONST_NAME>" server/ --include="*.ts"` to catch missed callsites (lesson from BUG-2026-05-05-E/F/G).
 
 ---
 

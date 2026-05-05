@@ -18,6 +18,21 @@
  */
 
 import type { RegimeStability } from '../../config/strategy-governance.js';
+// B72.1 (2026-05-05): per-mode confidence floors moved to module='governance_modes'.
+// Reseed migration 2026-05-05-b72-1-strategy-modes-naming-reseed.sql adds rows
+// keyed by NORMAL/DEFENSIVE/SURVIVAL names matching this file's StrategyMode keys.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+
+const _GOV_MODES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+
+function getConfidenceFloorForMode(mode: StrategyMode): number {
+  const constName = mode === 'NORMAL'
+    ? 'normal_mode_confidence_floor'
+    : mode === 'DEFENSIVE'
+      ? 'defensive_mode_confidence_floor'
+      : 'survival_mode_confidence_floor';
+  return getCachedNumberRequired('governance_modes', constName, _GOV_MODES_KEY);
+}
 
 export type StrategyMode = 'NORMAL' | 'DEFENSIVE' | 'SURVIVAL';
 
@@ -43,30 +58,32 @@ export interface StrategyModeOverlay {
  * DO NOT "tighten stops" in volatile regimes — that causes near-100% stop-out rates.
  * Risk is controlled by position size, not by shrinking stop distance.
  */
+// B72.1: confidenceFloor uses getter property so it resolves from module_constants
+// at read time. Other fields remain static literals (not yet promoted).
 export const STRATEGY_MODE_OVERLAYS: Record<StrategyMode, StrategyModeOverlay> = {
   NORMAL: {
     positionSizeMultiplier: 1.0,
     stopLossDistanceMultiplier: 1.0,
     takeProfitDistanceMultiplier: 1.0,
-    confidenceFloor: 0.60,
+    get confidenceFloor() { return getConfidenceFloorForMode('NORMAL'); },
     entryCooldownMultiplier: 1.0,
-  },
+  } as StrategyModeOverlay,
 
   DEFENSIVE: {
     positionSizeMultiplier: 0.6,
     stopLossDistanceMultiplier: 1.2,
     takeProfitDistanceMultiplier: 0.8,
-    confidenceFloor: 0.70,
+    get confidenceFloor() { return getConfidenceFloorForMode('DEFENSIVE'); },
     entryCooldownMultiplier: 1.5,
-  },
+  } as StrategyModeOverlay,
 
   SURVIVAL: {
     positionSizeMultiplier: 0.25,
     stopLossDistanceMultiplier: 1.5,
     takeProfitDistanceMultiplier: 0.6,
-    confidenceFloor: 0.80,
+    get confidenceFloor() { return getConfidenceFloorForMode('SURVIVAL'); },
     entryCooldownMultiplier: 2.0,
-  },
+  } as StrategyModeOverlay,
 };
 
 export const REGIME_TO_MODE_MAP: Record<RegimeStability, StrategyMode> = {
