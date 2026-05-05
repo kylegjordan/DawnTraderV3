@@ -112,8 +112,14 @@ export interface RegimeAgeConfig {
   factorMax: number;
 }
 
-/** B68.5 — Path B gate config resolved from `path_b_sustainability` module. */
+/**
+ * B68.5 — Path B gate config resolved from `path_b_sustainability` module.
+ * B70.3 (2026-05-05): added `pathBMomentumMin`. The runtime classifier uses
+ * the momentum gate. `dbsSlopeMin` retained as legacy field for back-compat
+ * with the ablation counterfactual builder (set to 0.0 if not present in DB).
+ */
 export interface PathBSustainabilityConfig {
+  pathBMomentumMin: number;
   dbsSlopeMin: number;
 }
 
@@ -352,7 +358,12 @@ export class MarketContextEngine {
     ) {
       this.regimeConfig = {
         ...this.tfsDesatScales,
-        b68_5DbsSlopeMin: this.pathBSlopeMin,
+        // B70.3 (2026-05-05): pathBSlopeMin is now repurposed to carry the
+        // momentum-min value (refreshPathBConfig writes momentumMin into it).
+        // The classifier reads `b68_5PathBMomentumMin`. Old `b68_5DbsSlopeMin`
+        // field is set for back-compat with ablation counterfactual builder.
+        b68_5PathBMomentumMin: this.pathBSlopeMin,
+        b68_5DbsSlopeMin: this.pathBSustainabilityConfig?.dbsSlopeMin ?? 0.0,
         b67_5PostCompositionFloor: this.b67_5PostCompositionFloor,
       };
     }
@@ -693,7 +704,14 @@ export class MarketContextEngine {
     };
   }
 
-  /** B68.5 — Path B sustainability (1 constant). Resolved with regime=TFS. */
+  /**
+   * B68.5 — Path B sustainability (1 constant). Resolved with regime=TFS.
+   * B70.3 (2026-05-05): swapped slope gate → momentum gate. New constant name
+   * is `b68_5_path_b_momentum_min` (default 0.002 = 0.2% momentum). Old
+   * `b68_5_dbs_slope_min` is preserved as an optional read for back-compat
+   * with the ablation counterfactual builder, but the runtime classifier
+   * uses the momentum value.
+   */
   private async refreshPathBConfig(): Promise<void> {
     const REGIME_KEY = {
       exchange: '*',
@@ -701,19 +719,31 @@ export class MarketContextEngine {
       strategy: '*',
       regime: REGIMES.TREND_FRIENDLY_STABLE,
     } as any;
-    const slopeMin = await getConstant<number>(
-      'path_b_sustainability',
-      'b68_5_dbs_slope_min',
-      REGIME_KEY,
-    );
-    if (slopeMin === undefined) {
+    const [momentumMin, slopeMin] = await Promise.all([
+      getConstant<number>(
+        'path_b_sustainability',
+        'b68_5_path_b_momentum_min',
+        REGIME_KEY,
+      ),
+      // back-compat read for the ablation counterfactual builder; silent on miss
+      getConstant<number>(
+        'path_b_sustainability',
+        'b68_5_dbs_slope_min',
+        REGIME_KEY,
+      ),
+    ]);
+    if (momentumMin === undefined) {
       throw new Error(
-        `[B68.5] missing module_constant b68_5_dbs_slope_min in path_b_sustainability module. ` +
-        `Run migration 2026-05-01-b67-4-cheap-tier.sql to seed.`,
+        `[B68.5] missing module_constant b68_5_path_b_momentum_min in path_b_sustainability module. ` +
+        `Run migration 2026-05-05-b70-3-path-b-momentum-gate.sql to seed.`,
       );
     }
-    this.pathBSustainabilityConfig = { dbsSlopeMin: slopeMin as number };
-    this.pathBSlopeMin = slopeMin as number;
+    this.pathBSustainabilityConfig = {
+      pathBMomentumMin: momentumMin as number,
+      // legacy field — populated for back-compat readers but unused at runtime
+      dbsSlopeMin: (slopeMin as number) ?? 0.0,
+    };
+    this.pathBSlopeMin = momentumMin as number;
   }
 
   isRunning(): boolean {

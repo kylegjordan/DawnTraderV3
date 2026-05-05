@@ -37,8 +37,10 @@ export const DEFAULT_REGIME_CONFIG: RegimeConfig = {
   tfsMomentumScale: 0.020,
   tfsVolatilityScale: 0.025,
   tfsDbsScale: 0.7,
-  // B68.5 — non-negative DBS slope to admit Path B (TFS-scoped). Production
-  // resolves from module_constants; advisory paths use this default.
+  // B70.3 (2026-05-05) — Path B momentum gate (replaces b68_5DbsSlopeMin).
+  // Default 0.002 (0.2% momentum). Production resolves from module_constants.
+  b68_5PathBMomentumMin: 0.002,
+  // Deprecated, retained for back-compat readers — no runtime effect.
   b68_5DbsSlopeMin: 0.0,
   // B67.5-prep — post-composition confidence floor (raised from 0.4 to 0.45
   // for expanded chain). Production resolves from module_constants.
@@ -207,19 +209,25 @@ export function calculatePairRegime(
     confidence = 0.65 + (vol - 0.015) * 6 + (dx - 45) * 0.002 + absDbs * 0.1;
   } else if (
     (mom > 0.003 && dx > 50) ||
-    (absDbs >= 0.30 && dbsSlope >= regimeConfig.b68_5DbsSlopeMin)
+    (absDbs >= 0.30 && mom > regimeConfig.b68_5PathBMomentumMin)
   ) {
     // B62: Positive momentum + directional strength OR moderate+ DBS = trend
     // (pre-B62: TFS was 13.2%; now 34.6% as directional pairs correctly routed)
     // Threshold 0.30 is the only tested value that passes 2.0% flicker ceiling.
     //
-    // B68.5 (cheap-tier bundle, 2026-05-01): Path B (`|DBS| >= 0.30`) now
-    // additionally requires `dbsSlope >= b68_5DbsSlopeMin` (default 0.0). This
-    // catches the 04-22 hostile-day failure mode where strong-but-decaying DBS
-    // was admitting aged-out moves into TFS. Path A (mom + ADX) is unchanged.
-    // When Path B fails the slope gate, the regime falls through to ST/HVU
-    // via the remaining branches below — see B68.5 ablation row at the
-    // signal-orchestrator hook for the LABEL counterfactual.
+    // B68.5 (cheap-tier bundle, 2026-05-01): Path B (`|DBS| >= 0.30`) was
+    // originally gated by `dbsSlope >= b68_5DbsSlopeMin`. Designed to catch
+    // strong-but-decaying DBS = exhausted move.
+    //
+    // B70.3 (2026-05-05, Langston cc-inbox #901): replaced with
+    // `mom > b68_5PathBMomentumMin` (default 0.002). 7-day calibration showed
+    // the slope gate at -2.0pp predictive lift + -0.4480 avg shift —
+    // binary-suppressing winning signals. Momentum is the more direct
+    // "is this DBS-strong pair still actually moving" check, forward-looking
+    // and temporally coherent with classifier inputs. Path A (mom + ADX)
+    // unchanged. When Path B fails the momentum gate, the regime falls through
+    // to ST/HVU via the remaining branches below — see B68.5 ablation row at
+    // the signal-orchestrator hook for the LABEL counterfactual.
     regime = REGIMES.TREND_FRIENDLY_STABLE;
     // B67.3.5: continuous mapping replaces step-function. Output [min, max]
     // (default [0.50, 0.90]). Multiplicative — any weak input collapses score

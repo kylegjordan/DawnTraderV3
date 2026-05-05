@@ -61,13 +61,28 @@ export interface RegimeConfig {
    *   Path B — `|DBS| >= 0.30` (directional strength alone)
    *
    * Path B was over-firing on already-exhausted moves on hostile days
-   * (B65.6 deferred work). This threshold gates Path B by requiring the DBS
-   * slope to meet or exceed `b68_5DbsSlopeMin`. Default seed = 0.0 (DBS slope
-   * non-negative; allow stable or rising directional bias). Tunable via DB.
+   * (B65.6 deferred work). The B68.5 gate requires Path B to be
+   * additionally confirmed by a forward-looking signal.
+   *
+   * **B70.3 (2026-05-05, Langston cc-inbox #901):** Original gate was
+   * `dbsSlope >= b68_5DbsSlopeMin` (default 0.0). 7-day calibration data
+   * showed -2.0pp predictive lift + -0.4480 avg shift — slope was binary-
+   * suppressing winning signals. Replaced with momentum-based gate:
+   * `mom > b68_5PathBMomentumMin` (default 0.002 = 0.2% momentum). Momentum
+   * is forward-looking + temporally coherent with classifier inputs.
    *
    * Path A is unaffected — momentum + ADX strong enough on their own to admit.
    */
-  b68_5DbsSlopeMin: number;
+  b68_5PathBMomentumMin: number;
+
+  /**
+   * @deprecated B70.3 (2026-05-05) — replaced by `b68_5PathBMomentumMin`.
+   * Retained as optional field for back-compat during transition; advisory
+   * paths may still seed it with 0.0 but the runtime classifier no longer
+   * reads it. Will be fully removed once B68.5 ablation row format is
+   * updated and no consumers reference the old name.
+   */
+  b68_5DbsSlopeMin?: number;
 
   /**
    * B67.5-prep (2026-05-03) — Post-composition confidence floor.

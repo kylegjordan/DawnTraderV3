@@ -424,6 +424,27 @@ const DEFAULT_CONFIG: VTSConfig = {
   // B54: minVolume24h and minPrice REMOVED — FX5 scanner applies DB-driven filtering upstream.
 };
 
+/**
+ * B70.3 (2026-05-05) — Universally disabled strategies.
+ *
+ * Strategies in this set are SKIPPED at the strategy iteration loop BEFORE
+ * detect() is called. Pre-B70.3 these strategies were evaluated and
+ * immediately rejected with reason `strategy_disabled_bearish` (or similar),
+ * wasting ~7k evaluations/day on liquidity_trap alone in long-only VTS.
+ *
+ * To re-enable a strategy: remove from this set + ensure detect() returns
+ * non-null setups in the current pipeline (long-only check, family map,
+ * regime map, etc.).
+ *
+ * To add a strategy: add the canonical strategy key + a comment explaining
+ * WHY it's disabled (pointer to the directive/batch that disabled it).
+ */
+export const UNIVERSALLY_DISABLED_STRATEGIES: Set<string> = new Set([
+  // Batch 45: bearish failed-breakout fade strategy (stop > entry, target < entry).
+  // Incompatible with long-only system. Bullish redesign deferred.
+  'liquidity_trap',
+]);
+
 let vtsConfig: VTSConfig = { ...DEFAULT_CONFIG };
 
 async function loadVTSConfig(): Promise<VTSConfig> {
@@ -2773,6 +2794,17 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
 
       for (const stratDef of effectiveStrategies) {
+        // B70.3 (2026-05-05): exclude universally-disabled strategies BEFORE
+        // they reach detect(). Per Kyle directive 2026-05-05: liquidity_trap
+        // is a bearish strategy disabled per Batch 45 (long-only VTS).
+        // Pre-B70.3 it was being evaluated 7,342×/24h all returning
+        // `strategy_disabled_bearish` — wasted CPU + log noise. Excluding at
+        // iteration time eliminates the waste. The strategy DEFINITION is
+        // retained (in case bullish redesign happens later); it's just not
+        // iterated against today.
+        if (UNIVERSALLY_DISABLED_STRATEGIES.has(stratDef.strategyKey)) {
+          continue;
+        }
         // Batch 22: Family-aware strategy check
         const stratFamily = STRATEGY_FAMILY_MAP[stratDef.strategyKey];
         const pairFams = vtsSymbolFamilies.get(pair.symbol);

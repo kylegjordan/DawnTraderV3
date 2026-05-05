@@ -104,18 +104,17 @@ export function buildB68_4Alternate(
 
 /**
  * Build the B68.5 ablation alternate row by re-running `calculatePairRegime`
- * with `b68_5DbsSlopeMin = -Infinity` (gate effectively disabled). Compares
- * the resulting regime label against the real classification; emits a 0/1
- * numeric per §D.2 indicating whether the gate flipped the label.
+ * with the Path B gate effectively disabled. Compares the resulting regime
+ * label against the real classification; emits a 0/1 numeric per §D.2
+ * indicating whether the gate flipped the label.
  *
- * `factor_value_with/without` are encoded inside `alternateDecision.metadata`
- * because the FactorAlternate shape only carries one `alternateDecision`. The
- * dashboard aggregator can read `metadata.gate_flipped` (0 or 1) for the
- * tertile-WR + predictive-lift analysis.
+ * **B70.3 (2026-05-05, Langston cc-inbox #901):** Original gate was
+ * `dbsSlope >= b68_5DbsSlopeMin`. Replaced with `mom > b68_5PathBMomentumMin`.
+ * The counterfactual now disables the momentum gate by setting
+ * `b68_5PathBMomentumMin = -Infinity`.
  *
- * Path A (`mom > 0.003 && dx > 50`) admits regardless of slope — gate has no
- * effect there. The flip-detection only fires when Path B was the deciding
- * branch.
+ * Path A (`mom > 0.003 && dx > 50`) admits regardless of either gate — the
+ * flip-detection only fires when Path B was the deciding branch.
  */
 export function buildB68_5Alternate(
   ohlcData: OHLCData[],
@@ -126,11 +125,14 @@ export function buildB68_5Alternate(
   realRegimeLabel: string,
   realConfidence: number,
 ): FactorAlternate {
-  // Re-run classification with the gate effectively disabled (slope min very
-  // permissive). Any pair that was REJECTED by the real classifier's Path B
-  // will now ADMIT to TFS in this alternate — surfacing the label flip.
+  // Re-run classification with the gate effectively disabled (momentum min
+  // very permissive). Any pair that was REJECTED by the real classifier's
+  // Path B will now ADMIT to TFS in this alternate — surfacing the label flip.
   const ungatedConfig: RegimeConfig = {
     ...regimeConfig,
+    b68_5PathBMomentumMin: Number.NEGATIVE_INFINITY,
+    // legacy field — keep deeply permissive too in case any reader still
+    // checks it during transition
     b68_5DbsSlopeMin: Number.NEGATIVE_INFINITY,
   };
   const altResult = calculatePairRegime(
@@ -141,7 +143,8 @@ export function buildB68_5Alternate(
     ungatedConfig,
   );
   const gateFlipped = altResult.regime !== realRegimeLabel;
-  const pathATriggered = computeMomentum(ohlcData) > 0.003 && computeADX(ohlcData) > 50;
+  const realMomentum = computeMomentum(ohlcData);
+  const pathATriggered = realMomentum > 0.003 && computeADX(ohlcData) > 50;
   const pathBWouldHaveTriggeredPreGate =
     Math.abs(dbsScore) >= 0.30 && altResult.regime === REGIMES.TREND_FRIENDLY_STABLE;
   const pathBTriggeredPostGate =
@@ -162,7 +165,12 @@ export function buildB68_5Alternate(
       confidence_without_gate: altResult.confidence,
       dbs_score: dbsScore,
       dbs_slope: dbsSlope,
-      slope_min_threshold: regimeConfig.b68_5DbsSlopeMin,
+      momentum: realMomentum,
+      // B70.3: actual gate threshold + name for downstream analysis
+      momentum_min_threshold: regimeConfig.b68_5PathBMomentumMin,
+      gate_kind: 'momentum_min',
+      // legacy fields preserved for back-compat readers
+      slope_min_threshold: regimeConfig.b68_5DbsSlopeMin ?? 0.0,
       path_a_triggered: pathATriggered,
       path_b_would_have_triggered_pre_gate: pathBWouldHaveTriggeredPreGate,
       path_b_triggered_post_gate: pathBTriggeredPostGate,

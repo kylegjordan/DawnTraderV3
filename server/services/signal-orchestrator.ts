@@ -1613,20 +1613,13 @@ export class SignalOrchestrator {
         }
       }
 
-      if (activeStrategies.has('liquidity_trap')) {
-        const rawSignal = this.strategyEngine.detectLiquidityTrap(ohlcAsAny, {
-          maxTrapExtension: 1.2,
-          trapReturnBars: 2,
-          minStopZoneSize: 'medium',
-          minLevelTouches: 3,
-          volumeRatio: 1.5
-        });
-        if (rawSignal) {
-          rawSignal.symbol = symbol;
-          const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'liquidity_trap', sizingContext);
-          if (sizedSignal) signals.push(sizedSignal);
-        }
-      }
+      // B70.3 (2026-05-05): liquidity_trap is universally disabled (Batch 45 —
+      // bearish failed-breakout fade incompatible with long-only system).
+      // Pre-B70.3 active path would still call detectLiquidityTrap if the
+      // regime-strategy map admitted it. Block at the orchestrator iteration
+      // level so the detector isn't called at all. Mirrors the VTS-runner
+      // exclusion via UNIVERSALLY_DISABLED_STRATEGIES set.
+      // (Block intentionally left empty — liquidity_trap is excluded.)
 
       if (activeStrategies.has('dhma')) {
         const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {
