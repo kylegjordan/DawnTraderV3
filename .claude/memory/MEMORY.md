@@ -4,164 +4,113 @@
 
 ---
 
-## SESSION-START PROTOCOL — DO THIS IMMEDIATELY EVERY NEW SESSION / POST-COMPACT
+## SESSION-START PROTOCOL — DO IMMEDIATELY EVERY NEW SESSION / POST-COMPACT
 
-1. **Read `DawnTraderV3/CLAUDE.md`** end-to-end. 11-step workflow (§2), governance tiers (§3 + 200-line MEMORY cap + 2-file MEMORY pattern), critical rules (§5), Three-way comms protocol (§6), SIM discipline (§9), Kyle preference: visual UI verify via Claude-in-Chrome on UI-touching changes (§11). DO NOT ASK Kyle to remind me.
+1. **Read `DawnTraderV3/CLAUDE.md`** — 11-step workflow, governance tiers, comms protocol, SIM discipline.
 2. **Read this file** for volatile state.
-3. **Read `1-system-manual/POST_AUDIT_ROADMAP.md`** Phase 15c sequencing — focus on B70 (now active) + calibration windows + B67.5 wiring.
-4. **Verify the four 2026-05-04 bug fixes are working** before doing anything else (see "Verification asks" below).
-5. **Start the silent polling chain** for Langston: `ssh root@204.168.141.77 "sleep 30 && cc-poll-once"` with `run_in_background: true`. Relaunch silently each wake.
-6. **Acknowledge readiness to Kyle in one line.** Don't dump context.
+3. **Read `1-system-manual/POST_AUDIT_ROADMAP.md`** Phase 15c + Phase 16 + B72 sections.
+4. **Start the silent polling chain**: `ssh root@204.168.141.77 "sleep 30 && cc-poll-once"` with `run_in_background: true`. Relaunch silently each wake.
+5. **Acknowledge readiness to Kyle in one line.** Don't dump context.
 
-**Do NOT** announce polling status. Do NOT confabulate. Do NOT skip SIM in any pre-audit. Do NOT wait on legacy-TS-baseline CI before deploying — Test Suite + Build + Docker Build pass + Kyle directive 2026-05-04.
+**Do NOT** announce polling status. Do NOT confabulate. Do NOT skip SIM in any pre-audit. Do NOT wait on legacy-TS-baseline CI before deploying — Test Suite + Build + Docker Build pass is enough.
 
 ---
 
-## CURRENT STATE — 2026-05-05 (PM2 #150 + module_constants UPDATE)
+## CURRENT STATE — 2026-05-05 (PM2 #150 + module_constants UPDATEs)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD:** `2af05394` (MEMORY trim) — governance gap-fill commit pending in this turn
-- **Floor:** `b67_5_post_composition_floor` UPDATEd 0.45 → 0.20 via module_constants for chain-output visibility (B70.3b, Langston #902)
-- **Live state:** B70 + B70.1 + B70.2 + **B70.3 (Path B slope→momentum gate swap + liquidity_trap iteration-loop exclusion + 3 exit-hook scope hotfixes)**. B70 = 52.4 MB / B74 = 5.12 GB on staging.
-- **Trailing-after-target DISABLED** via module_constant `moonbag_qualifying_strategies = []`. Every trade exits at target. BE-stop unchanged.
+- **HEAD:** `a2ab2791` (governance gap-fill — B70.2 + B70.3 + B70.3b backfilled across 5 docs)
+- **Live state:** B70 + B70.1 + B70.2 + B70.3 + **B70.3b (post-composition floor 0.45 → 0.20)**. B70 = 52.4 MB / B74 = 5.12 GB on staging.
 
-**B70.3 changes (Langston #901 + Kyle 2026-05-05):**
-- Path B in TFS classifier: `dbsSlope >= b68_5DbsSlopeMin` → `mom > b68_5PathBMomentumMin` (default 0.002).
-  - Old constant retained for back-compat; runtime reads new one.
-  - Counterfactual builder disables momentum gate (was disabling slope gate).
-- liquidity_trap excluded at iteration in vts-runner via `UNIVERSALLY_DISABLED_STRATEGIES` Set; same exclusion in signal-orchestrator (active path block left empty).
-- 3 hotfixes during B70.x exit-hook construction: `rawSignal` not in scope, `trade.openedAt.getTime` (it's a number), `finalTradeMode` block-scoped. All caught via PM2 log scan.
+**Recent module_constants changes (in DB, no code commits):**
+- `b67_5_post_composition_floor` = 0.20 (was 0.45) — pure visibility, B70.3b
+- `b68_5_path_b_momentum_min` = 0.002 (NEW; replaces slope gate) — B70.3
+- `moonbag_qualifying_strategies` = `[]` — disables trailing-after-target
 
-**Observation queue (24-72h):**
-- TFS share: 51% (24h baseline) → 61% (post-deploy 2 min). Watch for stabilization near 55-58% or stay-elevated at 60+. If 60+ persists 24h, tighten `b68_5_path_b_momentum_min` to 0.003.
-- b68_5 predictive lift: was -2.0pp; should drift toward 0 or positive as new gate enters rolling window.
-- Floor binding: was 100% at 0.45; should drop as the binary suppressor is gone.
+**Path B (TFS regime classifier) gate:** `(absDbs >= 0.30 && mom > 0.002)`. Old slope check retired (was -2.0pp predictive lift).
 
-**Verification scorecard for B70 hooks (POST hotfix #150):**
-- pair_scan_archive: ✅ ~38k rows (live)
-- signal_eval_archive admitted: ✅ now firing (was 0; broken since B70 deploy until 12:24 UTC fix)
-- signal_eval_archive reject_stage: ✅ ~12k strategy_internal + 1 sqe (organic mix)
-- exit_decision_archive: ⏳ pending first close post-hotfix #150 (no errors)
-- macro_feed_archive: ✅ ~800 rows
-
-**Calibration / exit-ablation findings (2026-05-05, ACTED ON in B70.3):**
-- Decision-grade winners: b68_2 (+4.6pp), b68_3 (+4.1pp), b67_4 (+2.8pp), b68_4 (+2.3pp). All READY for B67.5 consumer wiring.
-- Promising small-n: b68_1 multi_tf_agreement (+6.0pp lift, n=83 — wait n≥150).
-- Inert: b67_2 phase_preference (0.0pp), b67_1 btc_dominance (-0.4pp).
-- Acted: **b68_5 swapped slope→momentum gate in B70.3** (was -2.0pp lift). Watch lift recovery.
-- Acted: **trailing-after-target disabled** via module_constant (J variant won at +0.097 vs A, Sharpe 2.01). BE-stop kept.
-- F vs K differentiation deferred — 0 trades hit target in 7d window so simulators converge to identical SL/TP behavior.
-- 51% TFS / strong_bull_trend dominance is **correct** — 83% of pairs are UP-direction in current market. Investigation found liquidity_trap waste (eliminated in B70.3); other strategies have organic reject reasons.
+**Trailing-after-target DISABLED** — every trade exits at target. BE-stop unchanged.
 
 ---
 
-## VERIFICATION ASKS — RUN BEFORE STARTING B70
+## ACTIVE NEXT — B72 lever-to-`module_constants` sweep
 
-Four fixes shipped 2026-05-04 still need post-cron verification (next nightly replay-ablation cron at 04:00 UTC). Run these checks:
+**Why next:** Kyle directive 2026-05-05 — "Out of all the pre-Phase-16 items, B72 lever sweep is the one to do." Final pre-Phase-19 backstop. After B72 → Phase 16 (TS errors + storage.ts modularization).
 
-**B69.3 CoinGecko fix (immediate — should already be visible):**
-```bash
-ssh root@188.245.193.8 "su - deploy -c 'pm2 logs dawntrader --lines 200 --nostream 2>&1 | grep -E \"B67\\.1.*feed|Demo API key|HTTP 429\" | tail -20'"
-```
-Expected: `[B67.1][feed] CoinGecko Demo API key present` startup line + recent `btc_dom=58.XX% mcap_mom=Y.YYYYY` real-value snapshots + zero or rare `HTTP 429`. If `[B67.1][feed][AUTH]` appears → key is wrong, check `.env`.
+**Scope summary** (from POST_AUDIT_ROADMAP.md §B72):
+- Comprehensive audit of all hardcoded levers in active codebase
+- Migrate each to `module_constants` with most-specific-wins resolution scope (regime / strategy / asset_class / exchange)
+- Output `LEVER_INVENTORY.md` listing every promotable constant: current location, candidate module, candidate scope, current value, migration risk
+- Goal: every threshold/weight/multiplier/limit DB-tunable before live trading
 
-**B69.2 b67_2 visibility (post-04:00 UTC cron):**
-Open staging Analytics → Drift Dashboard → Factor Calibration. Check `b67_2_phase_preference` row — `avg shift`, `avg |shift|`, `max |shift|` should all be non-zero. `% trades shift = 0` should drop from 100% to ~30-40% (the genuinely weight=1.0 fraction).
+**11-step workflow.** First step next session = scope draft. Will be a multi-day batch — at least Step 1 (scope) + Step 2 (audit/inventory) + Langston review before any code.
 
-**B73.3 F/J variants (post-04:00 UTC cron):**
-Same UI page → Exit Strategy Ablation panel. F, J, K rows should now show **differentiated** Δ vs A and Sharpe. K should still be ≈ +0.090 vs A (its sim didn't change). F's exit reasons should include TRAIL_hit. J's exit reasons should include BE_stop + TP_target_hit but no TRAIL_hit.
-
-**B69.1 UI surfacing (already visually verified Closed Trades; check Open Trades once VTS opens new trades):**
-Machine Learning page → Open Trades tab. Symbol cell should render symbol on top, AssetClassBadge (e.g., orange "Crypto Spot" pill) below. Same on Closed Trades.
-
-If all four pass → resume B70 workflow. If any fail → diagnose + patch before B70 to keep calibration data clean.
+**Skipping for now:**
+- Phase 19.0.5 — held until Phase 19 (Kyle 2026-05-05)
+- F/K simulator deep-dive — already explained, no action
+- B70.2 follow-ups (Parquet binary + integration tests) — defer
+- liquidity_trap bullish redesign — far post-launch
 
 ---
 
-## B70 CLOSED 2026-05-05 — Unified Data Archiving
+## RECURRING ANALYSIS RECIPE (trigger phrase: "**run the calibration review**")
 
-**Final state:** 5 archive tables + 4 archivers + dashboard panel + retention cron all live and verified accumulating rows. Mode-agnostic per Kyle directive (scope §M). Completion report at `Claude Comms and Packages/Batch Completion/BATCH_70_COMPLETION_REPORT.md`.
+When Kyle asks for "the calibration review" / "review the factors" / similar trigger, do this without re-asking what:
 
-**Step 1+2+4 approvals:** Langston cc-inbox #893, #894, #895, #896, #897, #898.
+1. **Hit `GET /api/analytics/factor-calibration?window=rolling_7d`** on staging — render the 10-row factor table:
+   - For each factor: avg shift, |shift|, max |shift|, n, % zero
+   - REAL tertile WR (low/mid/high) + REAL spread
+   - ALT tertile WR + ALT spread
+   - Predictive lift (REAL spread − ALT spread) — the decision-grade column
+   - Status (READY / ACCUMULATING)
+2. **Hit `GET /api/analytics/exit-strategy-ablation?window=rolling_7d`** — render the 12-variant table:
+   - Variant ID + name, n, mean P&L %, Δ vs A baseline, Sharpe, WR%, avg duration, exit-reason breakdown
+   - Highlight A (current baseline) row
+   - Rank by Sharpe descending
+3. **Verify recent changes are reflected:**
+   - b68_5 path_b_sustainability lift should drift from -2.0pp toward 0+ (B70.3 momentum-gate swap, 2026-05-05)
+   - Trailing-after-target exits should drop to ZERO in new closes (moonbag disabled 2026-05-05) — confirm via `exit_reason='TRAIL_hit'` count near zero in last-24h `exit_decision_archive` rows
+   - liquidity_trap rejects (`strategy_disabled_bearish`) should be ABSENT from recent strategy_internal reasons (B70.3 iteration-loop exclusion)
+   - Floor 0.20 should be visible in newer signal_eval_archive admit rows (was 0.45 pinned 100%)
+4. **Plain-language interpretation:**
+   - Which factors are decision-grade vs inert vs hurting (use predictive lift)
+   - Which exit variant the data favors + by how much
+   - Whether recent changes are working as intended
+5. **Recommendations** for any factor that needs intervention before B67.5 wires
 
-**Verified post-deploy PM2 #145:**
-- pair_scan_archive: 196 rows in first 10min (mode='vts', source='mce-cycle')
-- macro_feed_archive: 17+ rows at 60s cadence
-- signal_eval_archive: 0 (admitted-path; pending first VTS admit)
-- exit_decision_archive: 0 (pending first trade close)
+**Standard query CSV:** if Kyle wants fresh sample exports, use `/tmp/b70-csv-flat.cjs` on staging (already in place).
 
 ---
 
-## B70.1 CLOSED 2026-05-05 — All 4 follow-ups + SYSTEM_MANUAL appendix shipped
+## Calibration milestones (running in parallel)
 
-**Commits:** `977d3ff0` (VTS reject hooks) + `919e7015` (B62 runner + JSONL exporter) + `7c1bfafd` (unit tests) + `3555f600` (System Manual appendix).
-
-**Verified:** signal_eval_archive accumulating with strategy_internal rows post-deploy (137 in first VTS cycle). Other reject stages (sqe/tcl) will populate when triggers fire (net_ev_below_floor / duplicate_position / max_open_trades). exit_decision_archive will populate on first VTS trade close.
-
-**Deferred to potential B70.2 (not blocking):**
-- FX5 pre-filter reject capture (pre_filter stage) — fx5-scanner.ts has multi-stage filterFailures complexity; VTS path covers 100% of today's traffic so the gap is non-critical
-- Active-path SQE/RTB hooks — dormant until live trading turns on (Phase 21)
-- Parquet binary format — JSONL.gz works for all current consumers (pandas/DuckDB/tsfresh/Qlib); pyarrow sidecar conversion is a 1-script follow-up
-
-## ACTIVE NEXT — calibration milestones
-
----
-
-## Calibration milestones (continued)
-
-| Window | Day | Ends | Watch for |
+| Window | Day | Ends | Decision-grade gate |
 |---|---|---|---|
-| B67.4 | 3-4 of 14 | 2026-05-15 | Tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket |
-| B68.2 | 2-3 of 14 | 2026-05-16 | Same gate, b68_2_volume_regime |
-| B68.3 | 2-3 of 14 | 2026-05-16 | Same gate, b68_3_pair_correlation |
-| B68.1 | 1-2 of 14 | 2026-05-17 | Same gate, b68_1_multi_tf_agreement |
+| B67.4 cheap-tier | 4-5 of 14 | 2026-05-15 | tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket |
+| B68.2 volume regime | 3-4 of 14 | 2026-05-16 | Same gate |
+| B68.3 pair correlation | 3-4 of 14 | 2026-05-16 | Same gate |
+| B68.1 multi-TF agreement | 2-3 of 14 | 2026-05-17 | Same gate (n=83 currently — wait n≥150) |
 
-**B67.5 consumer wiring** kicks off post-2026-05-15 if B67.4 calibration passes.
-
----
-
-## Following batches (sequential)
-
-1. **B67.5 consumer wiring** — gated on B67.4 calibration check ~2026-05-15. Wires confidence into 7 consumers + deletes RegimeWeight + handles RUNNING_ISSUES #44/#45.
-2. **External Data Tier-2 decision gate** — evaluate AFTER 14d windows close + B67.5 lands.
-3. **B72 lever sweep** — final pre-Phase-19 backstop.
-4. **ML-light** (renumbering needed — collision with B69 schema work; next available number is **B75** since B71/B72/B73/B73.x/B74/B74.1 all taken).
+**B67.5 consumer wiring kicks off post-2026-05-15** if B67.4 calibration passes.
 
 ---
 
-## Calibration milestones (running in parallel with B70)
+## Recent batch history (one-line)
 
-| Window | Day | Ends | Watch for |
+| Batch | Date | HEAD | Note |
 |---|---|---|---|
-| B67.4 | 2-3 of 14 | 2026-05-15 | Tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket |
-| B68.2 | 1-2 of 14 | 2026-05-16 | Same gate, b68_2_volume_regime |
-| B68.3 | 1-2 of 14 | 2026-05-16 | Same gate, b68_3_pair_correlation |
-| B68.1 | 0-1 of 14 | 2026-05-17 | Same gate, b68_1_multi_tf_agreement |
+| B67.4 / B68.2 / B68.3 / B67.5-prep / B68.1 | 2026-05-01 → 2026-05-03 | various | Confidence chain (7 modulators) closed observational |
+| B69 + B69.1/2/3 + B73.3 | 2026-05-03 → 2026-05-04 | `c1b2f2b8` | Asset class + UI + calibration viz fixes |
+| B70 main + B70.1 | 2026-05-04 → 2026-05-05 | `7e059186` | Unified data archive + reject-stage capture |
+| B70.2 + B70.3 + B70.3b + governance gap-fill | 2026-05-05 | `a2ab2791` | Gap-fill trade fields + Path B momentum gate + floor drop + governance |
 
 ---
 
-## Recent batch history (2026-05-01 → 2026-05-04)
+## Open RUNNING_ISSUES (post-B70.3b, snapshot)
 
-| Batch | Date | Commit | Status |
-|---|---|---|---|
-| B67.4 cheap-tier bundle | 2026-05-01 | `24c88702` + 3 hotfixes | LIVE PM2 #126 |
-| B68.2 Volume Regime | 2026-05-02 | `50670465` | LIVE PM2 #128 |
-| B68.3 Pair Correlation | 2026-05-02 | `98751a6c` + fixes | LIVE PM2 #129 |
-| B67.5-prep (floor 0.45) | 2026-05-03 | `1d25cb7c` | LIVE PM2 #130 |
-| B68.1 Multi-TF Agreement | 2026-05-03 | `cb861176` | LIVE PM2 #135 |
-| B69 Asset Class | 2026-05-03 | `18372159` + `eea7c031` | LIVE PM2 #137 |
-| B69.1 Asset Class on Open/Closed Sim Trades | 2026-05-04 | `7fab9306` + `ebe199b5` | LIVE PM2 #138 |
-| B69.2 b67_2 visibility fix | 2026-05-04 | `1efb1599` | LIVE PM2 #139 |
-| B73.3 F/J simulator fix | 2026-05-04 | `17a35c50` | LIVE PM2 #140 |
-| **B69.3 CoinGecko Demo key + 429 backoff** | **2026-05-04** | **`c1b2f2b8`** | **LIVE PM2 #141** |
-
----
-
-## Open RUNNING_ISSUES (7 OPEN, 6 DEFERRED, 1 IN PROGRESS, 0 CRITICAL)
-
-- **OPEN #39** CI TS legacy. **#43 #49 #50 #53** four calibration window observations. **#46** passive archive partition-aware index. **#55** B69.x/B73.3 fix verification.
-- **DEFERRED #12e #40 #44 #45 #52 #54** — to specific future batches. #44 + #45 fold into B67.5. #54 calibration aggregator framework refactor (deeper fix; B69.2 quick fix shipped).
-- **IN PROGRESS #42** narration leak (moot — only topic 21 active).
+- OPEN: #39 CI TS legacy (Phase 16 will clean), #43/#49/#50/#53 four calibration windows running, #46 passive archive partition-aware index
+- DEFERRED: #12e, #40, #44, #45, #52, #54 (#44+#45 fold into B67.5; #54 calibration aggregator framework refactor)
+- RESOLVED: #55, #56-#59 (B70.x closures)
 
 ---
 
@@ -169,32 +118,27 @@ If all four pass → resume B70 workflow. If any fail → diagnose + patch befor
 
 - **Don't pause to ask permission during workflow execution.** Iterate with Langston through 11 steps.
 - **Visual UI verification via Claude-in-Chrome on every UI-touching batch.**
-- **Deploy after Test Suite + Build + Docker Build pass — DON'T wait on legacy TS Check baseline** (Kyle directive 2026-05-04).
-- **VTS broadness is the design.** Don't narrow VTS admission.
-- **NO WORKAROUNDS.** Fix things properly. **No new TypeScript errors.** Legacy → Phase 16.
+- **Deploy after Test+Build+Docker pass — don't wait on legacy TS Check baseline.**
+- **NO WORKAROUNDS.** Fix things properly. **No new TypeScript errors.**
 - **No fallbacks for DB-governed settings.** Cold-start warmup paths are NOT fallbacks.
-- **DM channel for autonomous work:** Telegram chat ID `8734856533` (Kyle's direct).
-- **Sensitive credentials (API keys, etc.) go directly to staging `.env`** via SSH — never paste in chat / commit to repo.
+- **Sensitive credentials → staging `.env` via SSH only.** Never commit / paste in chat.
 
 ---
 
 ## Session Behavior Invariants
 
-- **Iterate with Langston to consensus; don't escalate every response to Kyle.** CLAUDE.md §6.
-- **Telegram 2-step canonical** (`--reply-account default` Step 2). /tmp file → scp → MSG=$(cat). Step 1 (CC speaks via @CCDTCommsBot): `openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "$MSG"`. Step 2 (Langston via @LangstonDTBot): `openclaw agent --deliver --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --message "$MSG" --reply-channel telegram --reply-account default --reply-to "-1003575211453"`.
-- **Mini-batch streamlining:** small surface batches can combine Steps 1/2/4 into one Langston review.
-- **VTS position sizing nominal $1000 base** producing ~$150/trade. Intentional.
-- **Langston brain session UUID:** `16b70816-c63d-4cf0-8c80-bebd9f2cf066` (topic-21, Opus 4.6).
-- **GDrive npm install fails with EBADF** on cold tree — CI is verification gate.
-- **CoinGecko Demo API key in staging `.env`** as `COINGECKO_API_KEY=CG-...` — required for B67.1 macro feed reliability. Don't commit.
+- Iterate with Langston to consensus; escalate to Kyle only on deadlock / scope expansion / new directive needed.
+- **Telegram 2-step canonical:** `/tmp` file → `scp` → `MSG=$(cat)`. Step 1 CC: `openclaw message send --account ccdt-relay --thread-id 21`. Step 2 Langston: `openclaw agent --deliver --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --reply-account default --reply-to "-1003575211453"`.
+- VTS position sizing $1000 base → ~$150/trade. Intentional.
+- GDrive npm install fails EBADF — CI is verification gate.
+- CoinGecko Demo API key in staging `.env` (don't commit).
 
 ---
 
 ## Required pre-reads on session start (in order)
 
 1. `DawnTraderV3/CLAUDE.md`
-2. This file
-3. `1-system-manual/POST_AUDIT_ROADMAP.md` Phase 15c — focus B70 entry + Phase 17.6 / 18.5 Trend Mining Engine notes
-4. `Claude Comms and Packages/Batch Completion/BATCH_69_COMPLETION_REPORT.md` (B69.1/2/3 closure sections)
-5. `Claude Comms and Packages/Batch Completion/BATCH_73_PROGRESS_REPORT.md` (B73.3 closure section)
-6. `1-system-manual/SYSTEM_IMPACT_MAP.md` for any component touched in B70 pre-audit
+2. This file (MEMORY)
+3. `1-system-manual/POST_AUDIT_ROADMAP.md` — focus B72 + Phase 16
+4. `1-system-manual/SYSTEM_IMPACT_MAP.md` — for any component touched in next batch's pre-audit
+5. `Claude Comms and Packages/Batch Completion/BATCH_70_COMPLETION_REPORT.md` (most recent batch context)
