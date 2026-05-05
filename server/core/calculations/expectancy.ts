@@ -287,8 +287,9 @@ export function getROIDetails(
   const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
   const minROI = getMinROIForRegime(regime);
   const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
-  // Directive 11.7C: Friction floor = (fee×2) + slippage×1.1 (apply buffer only to slippage)
-  const frictionFloor = (fee * 2) + (estimatedSlippage * FRICTION_SAFETY_BUFFER);
+  // Directive 11.7C: Friction floor = (fee×2) + slippage×buffer (B72: from module_constants).
+  const frictionBuffer = getCachedNumberRequired('expectancy_gates', 'friction_safety_buffer', _GLOBAL_KEY);
+  const frictionFloor = (fee * 2) + (estimatedSlippage * frictionBuffer);
   const requiredROI = Math.max(dynamicROI, frictionFloor);
   
   return {
@@ -407,24 +408,28 @@ export function validateROIThresholdBounds(
   error?: string;
 } {
   const threshold = getDynamicROIThreshold(regime, confidence);
-  
+
+  // B72: ROI bounds from module_constants ('expectancy_gates').
+  const roiMin = getCachedNumberRequired('expectancy_gates', 'roi_absolute_min', _GLOBAL_KEY);
+  const roiMax = getCachedNumberRequired('expectancy_gates', 'roi_absolute_max', _GLOBAL_KEY);
+
   const result = {
     isValid: true,
     threshold,
-    minBound: ROI_MIN,
-    maxBound: ROI_MAX,
+    minBound: roiMin,
+    maxBound: roiMax,
     error: undefined as string | undefined
   };
-  
-  if (threshold < ROI_MIN) {
+
+  if (threshold < roiMin) {
     result.isValid = false;
-    result.error = `Threshold ${(threshold * 100).toFixed(2)}% below minimum ${(ROI_MIN * 100).toFixed(2)}%`;
+    result.error = `Threshold ${(threshold * 100).toFixed(2)}% below minimum ${(roiMin * 100).toFixed(2)}%`;
     console.warn(`[11.7C][RegressionGuard] VIOLATION: ${result.error}`);
   }
-  
-  if (threshold > ROI_MAX) {
+
+  if (threshold > roiMax) {
     result.isValid = false;
-    result.error = `Threshold ${(threshold * 100).toFixed(2)}% above maximum ${(ROI_MAX * 100).toFixed(2)}%`;
+    result.error = `Threshold ${(threshold * 100).toFixed(2)}% above maximum ${(roiMax * 100).toFixed(2)}%`;
     console.warn(`[11.7C][RegressionGuard] VIOLATION: ${result.error}`);
   }
   
