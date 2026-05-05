@@ -179,21 +179,214 @@ PROMOTE risk profile: LOW 20, MEDIUM 18, HIGH 3.
 
 ---
 
-## §3. `server/strategies/` tier — PENDING
+## §3. `server/strategies/` tier — 101 levers audited (9 strategy files)
 
-Sweep not yet executed. 17 canonical strategies. Expected lever density: medium-high (per-strategy entry/exit thresholds, indicator params). Each strategy's PROMOTE rows will use scope `(*, *, <strategy_key>, *)` per Langston's resolution-scope guidance.
+> **Note on count:** 9 strategy files found in `server/strategies/` (strong_bull_trend, adaptive_flow, volatility_edge, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, support_bounce). The 17-canonical-strategy figure in CLAUDE.md may include strategies defined elsewhere (e.g. quant-side in `core/` or services). Verify in Step 2 final pass that no strategies live in unaudited locations. `strategy-helpers.ts` GLOBAL_CONSTANTS (MIN_RR_RATIO, ATR_PERIOD, VOLUME_BASELINE_PERIOD, MIN_PATTERN_STRENGTH, ENTRY_PREMIUM_BPS, MIN_STOP_DISTANCE_BPS, ATR_MIN_RATIO, ATR_MAX_RATIO) are imported by all 9 — catalog separately as `B72-HELPER-NNN` rows during dedup.
 
-## §4. `server/risk/` + `server/execution/` tier — PENDING
+### §3.1 Summary
 
-Sweep not yet executed. Expected: position-sizing guardrails, per-asset-class exposure caps, hot-leg friction adjusters.
+| Classification | Count |
+|---|---|
+| PROMOTE | 93 |
+| KEEP | 8 |
+| ALREADY_MIGRATED | 0 |
+| DB_GOVERNED_ELSEWHERE | 0 |
+| **Total** | **101** |
 
-## §5. `server/api/` + `server/routes/` tier — PENDING
+PROMOTE risk profile: LOW 48, MEDIUM 37, HIGH 8.
 
-Sweep not yet executed. Mostly KEEP expected (rate limits, page sizes); few PROMOTE candidates.
+### §3.2 Per-strategy lever counts
 
-## §6. `shared/` actively-imported constants — PENDING
+| Strategy | Total | PROMOTE | KEEP |
+|---|---|---|---|
+| strong_bull_trend | 10 | 10 | 0 |
+| adaptive_flow | 14 | 13 | 1 |
+| volatility_edge | 13 | 12 | 1 |
+| defensive_hedge | 14 | 13 | 1 |
+| inside_bar_reversal | 19 | 18 | 1 |
+| morning_star | 13 | 12 | 1 |
+| pivot_shift | 11 | 11 | 0 |
+| reverse_impulse | 11 | 10 | 1 |
+| support_bounce | 14 | 13 | 1 |
 
-Sweep not yet executed. Expected: canonical regime keys, strategy keys, asset-class enums (all KEEP/structural); occasionally a default value worth promoting.
+### §3.3 Lever schema (uniform across strategies)
+
+Every strategy file follows the same constant-block pattern at the top, exporting a struct of `<STRATEGY>_<NAME>` constants. PROMOTE rows fall into 5 archetypes (per-strategy):
+
+| Archetype | Examples | Module bucket | Scope |
+|---|---|---|---|
+| Entry-gate thresholds | DBS_MIN, MIN_INVERSIONS, RSI_MIN, MAX_DISTANCE, MAX_CORRELATION, MIN_STRENGTH | `strategy_entry_gates` | `(*, *, <strategy>, *)` |
+| Volume gates | VOL_MULT, VE_BREAKOUT_VOL_MULT, etc. | `strategy_volume_gates` | `(*, *, <strategy>, *)` |
+| Indicator windows / lookbacks | LOOKBACK, LOOKBACK_CANDLES, CORR_WINDOW, VOL_WINDOW | `strategy_indicators` | `(*, *, <strategy>, *)` |
+| Geometry (stop / target ATR mults, measured-move ratios) | STOP_ATR_MULT, TARGET_ATR_MULT, MEASURED_MOVE_MULT | `strategy_geometry` | `(*, *, <strategy>, *)` |
+| Confidence weights / floors / ceilings / per-component bonuses | BASE_CONFIDENCE, MAX_CONFIDENCE, PATTERN_WEIGHT, RSI_WEIGHT, *_BONUS | `strategy_confidence` | `(*, *, <strategy>, *)` |
+
+KEEP rows in this tier are exclusively **structural geometric buffers**: tiny ratio constants (0.002–0.005) defining "X% above pattern high" / "Y% below support low" — geometric definitions, not tunable risk levers.
+
+### §3.4 PROMOTE rows (strategies/) — full table
+
+Full 93-row table preserved in B72 working transcript. Canonical IDs `B72-STRAT-001` through `B72-STRAT-101` with per-row file/line/value. Risk distribution: 48 LOW, 37 MEDIUM, 8 HIGH. Detailed table content moved to companion file in next session: `1-system-manual/LEVER_INVENTORY_STRATEGIES.md` (canonical strategies-tier table).
+
+### §3.5 HIGH-risk rows in strategies/ tier
+
+| Lever ID | File | Symbol | Value | Why HIGH |
+|---|---|---|---|---|
+| B72-STRAT-001 | strong-bull-trend.ts:42 | SBT_DBS_MIN | 0.35 | Entry classifier; **mutual-exclusion guards in defensive_hedge L92/L100, reverse_impulse L71/L79, morning_star L77/L86 hardcode parallel thresholds** that must move with this lever or signals cross-route. |
+| B72-STRAT-004 | strong-bull-trend.ts:47 | SBT_ANTI_EXHAUSTION_ATR | 1.5 | Blow-off filter; high sensitivity in multi-callsite filtering. |
+| B72-STRAT-012 | adaptive-flow.ts:36 | AF_MIN_INVERSIONS | 3 | Hard gate on inversion count; cascading impact on choppy-regime entry rates. |
+| B72-STRAT-014 | adaptive-flow.ts:38 | AF_MIN_VOL_PERCENTILE | 60 | B18H crypto calibration (70→60); active calibration window. |
+| B72-STRAT-016 | adaptive-flow.ts:40 | AF_ADX_MAX | 30 | B18H crypto calibration (25→30); regime-frozen. |
+| B72-STRAT-039 | defensive-hedge.ts:37 | DH_MAX_CORRELATION | 0.45 | B18H calibration (0.30→0.45); regime-specific. |
+| B72-STRAT-094 | support-bounce.ts:51 | SB_PROXIMITY | 0.035 | B53 expansion (2.5%→3.5%); multi-dimensional gate coupling. |
+
+### §3.6 Cross-strategy ripple (HIGH-risk family)
+
+**B63 DBS Mutual-Exclusion Guards** form a coupled group:
+- `B72-STRAT-001` (strong_bull_trend SBT_DBS_MIN=0.35) — primary
+- defensive_hedge L92/L100 — DBS guard threshold (parallel)
+- reverse_impulse L71/L79 — DBS guard threshold (parallel)
+- morning_star L77/L86 — DBS guard threshold (parallel)
+
+**Migration recommendation:** promote all parallel guards under same `module_name` ("strategy_dbs_routing_guards") with per-strategy `constant_name` variants. Add integration test asserting mutual consistency post-deploy. **Do not migrate B72-STRAT-001 alone** — group migration only.
+
+---
+
+## §4. Risk + Execution tier — 29 levers audited
+
+> **Audit finding:** `server/risk/` and `server/execution/` directories DO NOT EXIST as standalone. All execution/risk code distributes across:
+> - `server/core/risk/` (already swept §1)
+> - `server/services/` (already swept §2 — paper-execution-engine, paper-position-sizing, pre-execution-validator, trade-safety, trailing-exit-controller, risk-concentration)
+> 
+> This sub-sweep walked the services-tier risk/execution files specifically with a risk lens to catch what the broad services sweep may have missed. It found NEW unique PROMOTE rows in `pre-execution-validator.ts` and `risk-concentration.ts` that the original services sweep didn't catalog.
+
+### §4.1 Summary
+
+| Classification | Count |
+|---|---|
+| PROMOTE (NEW unique) | 9 |
+| KEEP | 13 |
+| ALREADY_MIGRATED (cross-tier dups) | 7 |
+| DB_GOVERNED_ELSEWHERE | 0 |
+| **Total** | **29** |
+
+### §4.2 NEW unique PROMOTE rows (pre-execution-validator + risk-concentration)
+
+| Lever ID | File | Line | Symbol | Value | Type | Module | Scope | Constant | Risk | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B72-EXEC-007 | pre-execution-validator.ts | 122 | goalAlignmentThreshold | 75 | percentile | goal_alignment | (*, *, *, *) | goal_alignment_min_percent | MEDIUM | Pre-trade gate |
+| B72-EXEC-008 | pre-execution-validator.ts | 244 | isHighRiskReward threshold | 2.0 | ratio | goal_alignment | (*, *, *, *) | high_risk_reward_threshold | MEDIUM | Triggers risk profile shift |
+| B72-EXEC-009 | pre-execution-validator.ts | 247-249 | strategyRiskProfile weights | 0.5–0.8 | weight | strategy_profiles | (*, *, <strategy>, *) | risk_profile_{risk,consistency} | MEDIUM | 3 strategies hardcoded — extend to all 17 |
+| B72-EXEC-010 | pre-execution-validator.ts | 256-262 | alignmentScore weights | 0.2–0.4 (×4) | weight | goal_alignment | (*, *, *, *) | alignment_score_weight_* | **HIGH** | Tight coupling, atomic block |
+| B72-EXEC-011 | trade-safety.ts | 368 | total_exposure_allocation default | 0.25 | ratio | guardrail_defaults | (*, *, *, *) | default_max_total_exposure_pct | LOW | Mirrors guardrails_v2 — document precedence |
+| B72-EXEC-017 | trade-safety.ts | 556 | maxOpenTrades default | 5 | limit | guardrail_defaults | (*, *, *, *) | max_open_trades_default | LOW | Fallback if guardrail row missing |
+| B72-EXEC-026 | risk-concentration.ts | 44 | correlationThreshold | 0.75 | threshold | concentration_risk | (*, *, *, *) | correlation_threshold | MEDIUM | Directive 9.4 covariance guard |
+| B72-EXEC-027 | risk-concentration.ts | 45 | maxConcentration | 2.5 | ceiling | concentration_risk | (*, *, *, *) | max_concentration_score | MEDIUM | Overexposure cap |
+| B72-EXEC-028 | risk-concentration.ts | 46 | minScalingFactor | 0.25 | floor | concentration_risk | (*, *, *, *) | min_scaling_factor | MEDIUM | Position scaling floor |
+
+### §4.3 Cross-tier duplicates (collapse to canonical per Langston rule §10.3)
+
+| Duplicate | Canonical | Action |
+|---|---|---|
+| B72-EXEC-001 (paper-position-sizing MAX_POSITION_BUFFER_FACTOR) | B72-SVC-019 | Drop EXEC ID; keep SVC canonical |
+| B72-EXEC-003/004 (DSE clamp imports) | B72-CORE-046/047 | Drop EXEC; imports from core/ |
+| B72-EXEC-005/006 (paper-engine MONITOR / PROMOTION intervals) | B72-SVC-014/018 | Drop EXEC; same value |
+| B72-EXEC-018-025 (TEC_DEFAULTS cluster) | B72-SVC-042–046 | Drop EXEC; TEC defaults are seed values for module_constants reads |
+
+### §4.4 HIGH-risk row in risk/exec tier
+
+**B72-EXEC-010** alignmentScore weights — four hardcoded weights (0.4, 0.2, 0.3 × 2) in `calculateGoalAlignmentScore()`. Atomic block. Consider per-governance-mode scope variants if calibration shows per-mode variance — defer the variant decision to post-B72 calibration.
+
+---
+
+## §5. API + Routes + Shared + Config tier — 31 levers audited
+
+> **Scope expansion finding:** Sub-agent followed imports into `server/config/` (not originally listed in scope §A.1) and found 3 PROMOTE candidates there: exchange-defaults.ts (fees/slippage/spread/cost-bound) and drift-descriptions.ts (3 drift thresholds). These are legitimate PROMOTE candidates that would have been missed by api/routes-only sweep. Adding `server/config/` to the canonical sweep scope.
+
+### §5.1 Summary
+
+| Classification | Count |
+|---|---|
+| PROMOTE (NEW unique, after dedup with §1/§2) | 5 |
+| PROMOTE (duplicates of services-tier rows) | 3 |
+| KEEP | 22 |
+| ALREADY_MIGRATED | 0 |
+| **Total** | **31** |
+
+### §5.2 NEW unique PROMOTE rows
+
+| Lever ID | File | Line | Symbol | Value | Type | Module | Scope | Constant | Risk | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B72-CFG-001 | server/config/exchange-defaults.ts | 14 | DEFAULT_TAKER_FEE | 0.0026 | weight | cost_model | (kraken, *, *, *) | default_taker_fee | MEDIUM | Exchange-specific scope |
+| B72-CFG-003 | server/config/exchange-defaults.ts | 16 | DEFAULT_SLIPPAGE | 0.0005 | weight | cost_model | (kraken, *, *, *) | default_slippage | MEDIUM | |
+| B72-CFG-004 | server/config/exchange-defaults.ts | 17 | DEFAULT_SPREAD | 0.0010 | weight | cost_model | (kraken, *, *, *) | default_spread | MEDIUM | |
+| B72-CFG-005 | server/config/exchange-defaults.ts | 18 | MAX_COST_BOUND | 0.01 | ceiling | cost_model | (kraken, *, *, *) | max_cost_bound | **HIGH** | Hard upper bound on transaction cost; exchange-specific |
+| B72-DRI-010 | server/config/drift-descriptions.ts | 48 | DRIFT_ALIGNED_BOUNDARY | 0.5 | threshold | drift_detector | (*, *, *, *) | drift_aligned_boundary | MEDIUM | Affects strategy confidence weighting |
+| B72-DRI-011 | server/config/drift-descriptions.ts | 49 | DRIFT_MINOR_BOUNDARY | 0.8 | threshold | drift_detector | (*, *, *, *) | drift_minor_boundary | MEDIUM | |
+| B72-DRI-012 | server/config/drift-descriptions.ts | 50 | DRIFT_MODERATE_BOUNDARY | 1.5 | threshold | drift_detector | (*, *, *, *) | drift_moderate_boundary | **HIGH** | Rare auto-gate scenario |
+
+### §5.3 Cross-tier duplicates (drop)
+
+| Duplicate | Canonical | Action |
+|---|---|---|
+| B72-CFG-006 (ROI_FLEX_MULTIPLIER 0.6) | B72-SVC-028 | Drop CFG; same `adaptive-thresholds.ts` row |
+| B72-CFG-007 (ROI_MIN 0.010) | B72-SVC-029 | Drop CFG |
+| B72-CFG-008 (ROI_MAX 0.040) | B72-SVC-030 | Drop CFG |
+
+### §5.4 KEEP rows (api/routes/shared/config) — grouped
+
+- **Pagination defaults / max page sizes** (health/dse/regime-archive/vts routes): default 10/20/100 with caps at 100/500/1000 — UI/API ergonomics, non-trading
+- **Diagnostic thresholds** (health route betaDeviation 0.3, stdError 0.05, sampleCount 10) — informational warnings only, do not gate trading
+- **Paper validation defaults** (durationMinutes 60, captureIntervalSeconds 10) — user-overridable
+- **VTS demo telemetry** (training epochs 10, mock loss 0.0134, predicted profit 0.05) — non-production fixtures
+- **shared/asset-classes.ts** — enums + pattern literals, schema/structural
+- **shared/schema.ts** — type definitions, no runtime levers
+- **shared/diagnostic-schema.ts** — type unions only
+- **server/config/adaptive-thresholds.ts FRICTION_SAFETY_BUFFER** (1.1) — informational, not gating per current usage
+
+### §5.5 HIGH-risk rows in api/routes/config tier
+
+| Lever ID | Why HIGH |
+|---|---|
+| B72-CFG-005 MAX_COST_BOUND | Hard transaction-cost ceiling; breach invalidates portfolio guardrails. Exchange-specific scope. |
+| B72-DRI-012 DRIFT_MODERATE_BOUNDARY | 0.8–1.5 zone triggers monitoring + potential realignment; rare auto-gate. |
+
+---
+
+## §6. Updated PROGRESS METRIC (post all-tier sweep)
+
+| Tier | Sweep | PROMOTE raw | After dedup | KEEP | ALREADY_MIGRATED | DB_GOVERNED |
+|---|---|---|---|---|---|---|
+| server/core/ | DONE | 52 | 52 | 15 | 1 | 2 |
+| server/services/ | DONE | 41 | ~30* | 54 | 0 | 0 |
+| server/strategies/ | DONE | 93 | 93 | 8 | 0 | 0 |
+| server/risk/ + execution/ | DONE (folded into services + new unique) | +9 | +9 | 13 | 7 (cross-tier dups) | 0 |
+| server/api/ + routes/ + config/ | DONE | 8 | 5 (3 dups dropped) | 22 | 0 | 0 |
+| shared/ runtime constants | DONE — all KEEP | 0 | 0 | (counted in api/) | 0 | 0 |
+| **TOTAL UNIQUE PROMOTE** | | **~189 raw** | **~189 → ~180 after services-tier internal dedup pass to remove core/-imported rows** | | | |
+
+*Services tier raw 41 includes ~11 rows that duplicate core/ (expectancy ROI per-regime, MIN/MAX_PWIN, DI_PWIN_FACTOR, geometry shift thresholds, FINALSCORE_DECAY_LAMBDA). After collapse-to-canonical: ~30 unique services-tier PROMOTE.
+
+**Final unique PROMOTE estimate (pending precise dedup pass):** **~180 levers across all tiers.** This is significantly larger than the 60-120 estimate in the original scope. Expected breakdown: 52 core + 30 services + 93 strategies + 9 exec + 5 config = 189 raw → ~180 after final dedup.
+
+---
+
+## §7. UPDATED HIGH-RISK migration list (15 rows)
+
+| Lever ID(s) | File | Risk source |
+|---|---|---|
+| B72-CORE-031 | market-regime.ts (8 sub-fields) | Regime classifier; some already DB-loaded |
+| B72-SVC-021 / 022 | signal_quality_evaluator.ts | SQE primary admission gates |
+| B72-SVC-004 | vts-runner.ts | VTS_MAX_CONCURRENT recently stabilized |
+| B72-SVC-048 / B72-CORE-061 | ready_to_buy_service.ts | FINALSCORE_DECAY_LAMBDA env-overridable |
+| B72-CORE-049 | dynamic-sizing-engine.ts | EDGE_SENSITIVITY 4× compounding |
+| B72-STRAT-001 + parallel guards | strong_bull_trend + 3 strategy files | DBS routing guards — group migration |
+| B72-STRAT-004 | strong-bull-trend.ts | Anti-exhaustion blow-off filter |
+| B72-STRAT-012 / 014 / 016 | adaptive-flow.ts | B18H crypto calibrations + regime-lock |
+| B72-STRAT-039 | defensive-hedge.ts | B18H calibration |
+| B72-STRAT-094 | support-bounce.ts | B53 expansion |
+| B72-EXEC-010 | pre-execution-validator.ts | Goal-alignment scoring weights atomic block |
+| B72-CFG-005 | exchange-defaults.ts | MAX_COST_BOUND hard cap |
+| B72-DRI-012 | drift-descriptions.ts | Moderate-drift auto-gate |
 
 ---
 
@@ -235,6 +428,18 @@ After cross-tier dedup pass (sub-agents walked across tier boundaries via import
 
 ---
 
+## §10b. Langston Step 2 FINAL SIGN-OFF — decisions locked (cc-inbox #906, 2026-05-05)
+
+**Step 2 CLOSED.** Coverage approved.
+
+1. **~180 unique PROMOTE / 6-tier coverage approved.** No tier needs a deeper re-pass.
+2. **DBS routing guards group migration — REQUIRED.** `B72-STRAT-001` + 3 parallel guards in `defensive_hedge`, `reverse_impulse`, `morning_star` must move atomically. Schema: `module_name=strategy_dbs_routing_guards` with per-strategy `constant_name`. **Integration test for mutual consistency is non-negotiable** — sync failure breaks B63 mutual-exclusion guarantees.
+3. **`server/config/` in canonical scope — confirmed.** Exchange-default fees/slippage/spread feed cost model → Net EV → admission gate. PROMOTE test passes. Drift thresholds borderline but included.
+4. **17-vs-9 strategy gap re-pass — non-blocking.** Run targeted pass to map all 17 canonical strategies to file locations and confirm no levers escaped the core/services sweeps. Can fold into supplementary commit during Step 3 — does NOT block first migration commit.
+5. **Step 3 sequencing — TWO COMMITS:**
+   - **Commit A:** DBS guards group migration + integration test (atomic, surgical rollback).
+   - **Commit B:** Everything else (~176 levers) in single Drizzle migration, risk-tier-ordered (LOW → MED → HIGH within SQL), unit tests per high-risk row. One transaction either way; ordering is for readability.
+
 ## §10. Langston Step 2 partial review — decisions locked (cc-inbox #905, 2026-05-05)
 
 1. **Classifications confirmed.** PROMOTE/KEEP line correctly applied. Specific notes:
@@ -253,17 +458,50 @@ After cross-tier dedup pass (sub-agents walked across tier boundaries via import
 
 ---
 
-## §11. Resumption checklist for next session
+## §11. Step 3 implementation plan (Langston-approved, cc-inbox #906)
 
-1. Sweep `server/strategies/` (17 canonical strategies — per-strategy scope `(*, *, <strategy>, *)` for entry/exit thresholds).
-2. Sweep `server/risk/` + `server/execution/` (guardrails, exposure caps, hot-leg friction).
-3. Sweep `server/api/` + `server/routes/` (mostly KEEP — rate limits, page sizes).
-4. Sweep `shared/` actively-imported runtime constants (mostly KEEP — enums, structural).
-5. Cross-tier dedup pass per Langston rule §10.3 — collapse all duplicate PROMOTE rows to the canonical source-of-definition file.
-6. Enumerate already-migrated subset of `DEFAULT_REGIME_CONFIG` (B72-CORE-031) — distinguish DB-loaded fields from still-hardcoded ones; produce sub-inventory.
-7. Send completed full inventory to Langston for Step 2 sign-off.
-8. **Step 3 implementation** — single Drizzle migration `drizzle/migrations/2026-05-XX-b72-lever-sweep.sql` seeding all PROMOTE rows at their chosen scope; per-row source replacement using `getNumericRequired`-style reads. Risk-tier-ordered diffs (LOW → MEDIUM → HIGH).
-9. Build `server/scripts/dump-settings-registry.ts` — auto-generates `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` from live `module_constants` + `screener_filters` rows.
+### §11.1 Targeted pre-Step-3 tasks (parallelizable with Commit A)
+
+1. **17-vs-9 strategy reconciliation.** Map all 17 canonical strategies (per CLAUDE.md / SYSTEM_MANUAL.md / canonical-regime-strategy-map.ts) to file locations. Produce sub-inventory: which 8 strategies live where, were their levers caught in core/services sweeps, are any still uninventoried? Output appended to LEVER_INVENTORY.md §3.7. Non-blocking for Commit A.
+
+2. **`DEFAULT_REGIME_CONFIG` migration-state enumeration.** Walk `market-regime.ts` config schema vs `module_constants` live rows. Distinguish: already DB-loaded (b68_5_path_b_momentum_min, b67_5_post_composition_floor, others?), still-hardcoded (TFS desat thresholds, momentum/volatility/DBS scales). Produce sub-table for B72-CORE-031.
+
+3. **Move strategies-tier 93 PROMOTE row table to companion file** `1-system-manual/LEVER_INVENTORY_STRATEGIES.md` (verbatim from B72 working transcript) so the main inventory stays scannable.
+
+### §11.2 Commit A — DBS routing guards group migration
+
+**Files touched:**
+- `drizzle/migrations/2026-05-XX-b72-dbs-guards.sql` — INSERT 4 rows: `(module_name='strategy_dbs_routing_guards', strategy=<each>, constant_name='dbs_min_threshold', value=<current literal>)` for `strong_bull_trend` (0.35) + the 3 parallel guards (values to verify in audit).
+- `server/strategies/strong-bull-trend.ts` — replace `SBT_DBS_MIN` literal with `getNumericRequired({moduleName:'strategy_dbs_routing_guards', strategy:'strong_bull_trend', constantName:'dbs_min_threshold'})`.
+- `server/strategies/defensive-hedge.ts` — replace L92/L100 hardcoded guard.
+- `server/strategies/reverse-impulse.ts` — replace L71/L79.
+- `server/strategies/morning-star.ts` — replace L77/L86.
+- `server/tests/integration/b72-dbs-routing-guards-consistency.test.ts` (NEW) — asserts: (a) all 4 rows seeded; (b) strong_bull_trend admits when DBS >= its threshold; (c) the 3 mutual-exclusion guards block when DBS satisfies strong_bull_trend's threshold; (d) sync failure (manual SQL UPDATE breaking ratio) is caught by the test.
+
+**Why first:** highest-risk group, mutual-exclusion constraint, surgical rollback if anything goes wrong.
+
+### §11.3 Commit B — comprehensive lever sweep
+
+**Files touched:**
+- `drizzle/migrations/2026-05-XX-b72-lever-sweep.sql` — single SQL migration INSERTing all ~176 remaining PROMOTE rows. Order in SQL (for readability): LOW-risk first → MEDIUM → HIGH. Same transaction.
+- One source-replacement edit per PROMOTE row across affected files (~25-30 files: core/calculations, core/metrics, core/rtb, core/risk, core/utils, services/{signal-orchestrator, vts-runner, paper-execution-engine, sqe, adaptive-thresholds, strategy-modes, pattern-filter-profile, ready_to_buy_service, trailing-exit-controller, pre-execution-validator, trade-safety, risk-concentration, paper-position-sizing}, strategies/{9 files for the non-DBS-guard levers}, config/{exchange-defaults, drift-descriptions}).
+- Helpers: extend `module-constants-service.ts` with `getNumericRequired<T>(...)` if not already present (Langston §D.5: only build sync helper if HIGH-risk inner-loop migration concretely needs it; assess per-callsite during implementation).
+- Unit test: `server/tests/unit/b72-lever-resolution.test.ts` — for each HIGH-risk lever, assert seeded value matches old hardcoded literal exactly.
+
+### §11.4 Companion deliverable — `dump-settings-registry.ts`
+
+`server/scripts/dump-settings-registry.ts` — Node script reading `module_constants` + `screener_filters` (and any other canonical config tables) via Drizzle, sorted/grouped by `module_name`, output as markdown to `1-system-manual/CURRENT_SETTINGS_REGISTRY.md`. Columns: module_name, scope dimensions, constant_name, value, updated_at, updated_by. Run on demand + post-deploy hook (PM2 startup or systemd).
+
+### §11.5 Steps 4-11 (post-implementation)
+
+4. Langston code-level review of full diff before push (Commit A and B separately).
+5. GitHub push + CI green (Test Suite + Build + Docker Build min).
+6. Staging deploy: `git pull && npm run build && pm2 restart dawntrader`.
+7. CC first-pass verification: PM2 logs clean, all rows queryable, source literals removed.
+8. Langston second-pass verification.
+9. Iterate if any objective not met.
+10. Governance updates: SYSTEM_MANUAL.md (Configuration Surface appendix), SIM annotations on every PROMOTE source file, CHANGES_AND_FIXES (HIGH-risk per-row entries), POST_AUDIT_ROADMAP §B72 closure, ADJUSTMENT_FRAMEWORK update, BATCH_CATALOG + PHASE_HISTORY.
+11. `BATCH_72_COMPLETION_REPORT.md` with §A.5 governance-files-changed list + classification + risk-tier breakdown.
 
 ---
 
