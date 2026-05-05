@@ -15,6 +15,13 @@
 
 import { covarianceEngine, CorrelationMatrix } from '../utils/covariance-engine.js';
 import { KrakenService } from './kraken.js';
+// B72 (2026-05-05): Directive 9.4 covariance guards SEEDED in module=
+// 'concentration_risk' but source-side wiring deferred — the singleton
+// `riskConcentrationAnalyzer` is instantiated at module load (line ~371,
+// `export const riskConcentrationAnalyzer = new RiskConcentrationAnalyzer()`),
+// before module_constants warmup. Tunable wiring requires a getEffectiveConfig()
+// lazy-resolve refactor on the analyzer. Tracked for follow-up batch. Current
+// DEFAULT_CONFIG literals match seeded rows exactly (0.75/2.5/0.25).
 
 const krakenService = new KrakenService();
 

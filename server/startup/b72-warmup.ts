@@ -42,6 +42,11 @@ const PREFETCH_MODULES = [
   'vts_service',          // vts-service.ts calibration trigger interval
   'cost_model',           // cost-metrics.ts default avg return
   'learning_governance',  // learning-cooldown.ts min batch size (regime=TRANSITION)
+  // Slice 2c — pattern pool, drift, paper exec, orchestrator timing:
+  'pattern_pool_gates',   // pattern-filter-profile.ts RSI bounds + guardrails
+  'drift_detector',       // drift-descriptions.ts boundaries
+  'paper_execution',      // paper-execution-engine.ts intervals
+  'signal_orchestrator',  // signal-orchestrator.ts evaluation/refresh intervals
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

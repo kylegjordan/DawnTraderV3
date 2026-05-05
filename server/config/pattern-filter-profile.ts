@@ -20,13 +20,19 @@
 // These are intentionally relaxed to admit pairs where pattern/hybrid strategies can operate
 
 /**
- * B54 Fix 4: All numeric filter thresholds (LQ_MIN, VN_MAX, DI_TRENDING_MIN, MIN_VOLUME_USD)
- * removed — DB screener_filters is sole authority. Only RSI bounds retained (not yet in DB).
- * No code anywhere imports the removed values; this object is kept only for RSI defaults.
+ * B72 (2026-05-05): RSI bounds + Pattern Pool guardrails moved to
+ * module='pattern_pool_gates' (asset_class=crypto_spot, strategy=pattern).
+ * Backward-compatible accessors (Object.defineProperty getters) preserve the
+ * existing import shape — callers keep using `PATTERN_POOL_THRESHOLDS.RSI_MIN`
+ * etc. without code change; the read goes through the cached resolver.
  */
+import { getCachedNumberRequired } from '../services/module-constants-service.js';
+
+const _PATTERN_KEY = { exchange: '*', assetClass: 'crypto_spot', strategy: 'pattern', regime: '*' };
+
 export const PATTERN_POOL_THRESHOLDS = {
-  RSI_MIN: 15,                  // Not yet in DB — stays hardcoded
-  RSI_MAX: 85,                  // Not yet in DB — stays hardcoded
+  get RSI_MIN(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_rsi_min', _PATTERN_KEY); },
+  get RSI_MAX(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_rsi_max', _PATTERN_KEY); },
 };
 
 // --- Pattern Pool Guardrails ---
@@ -34,8 +40,8 @@ export const PATTERN_POOL_THRESHOLDS = {
 // Position sizing capped to reflect higher uncertainty of pattern-pool pairs
 
 export const PATTERN_POOL_GUARDRAILS = {
-  FINAL_SCORE_FLOOR: 0.45,      // elevated vs 0.35 quant — only best pattern signals pass SQE
-  MAX_POSITION_PCT: 0.15,       // 15% max portfolio per trade (vs 25% quant default)
+  get FINAL_SCORE_FLOOR(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_final_score_min', _PATTERN_KEY); },
+  get MAX_POSITION_PCT(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_max_position_pct', _PATTERN_KEY); },
   // NO MAX_CONCURRENT — merit-based competition within normal risk limits (Kyle decision)
 };
 

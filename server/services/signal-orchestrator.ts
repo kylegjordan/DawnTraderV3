@@ -26,6 +26,8 @@
  */
 
 import { StrategyEngine, StrategySignal } from './strategy-engine';
+// B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
+import { getCachedNumberRequired } from './module-constants-service.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
 // import { FilteredPairsService } from './filtered-pairs-service';
 import { KrakenService } from './kraken';
@@ -194,7 +196,9 @@ export class SignalOrchestrator {
 
   constructor(config: SignalOrchestratorConfig) {
     this.mode = config.mode;
-    this.evaluationIntervalMs = config.evaluationIntervalMs || 30000;
+    this.evaluationIntervalMs = config.evaluationIntervalMs ||
+      getCachedNumberRequired('signal_orchestrator', 'evaluation_interval_ms',
+        { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
     // Directive 12.3.2: All 17 canonical strategies enabled by default
     this.enabledStrategies = new Set(config.enabledStrategies || [
       // Original 9
@@ -284,7 +288,8 @@ export class SignalOrchestrator {
       } catch (err) {
         console.warn(`[L9/L10][CACHE_REFRESH] Failed to refresh caches:`, err);
       }
-    }, 60000); // 60s to match cache TTL
+    }, getCachedNumberRequired('signal_orchestrator', 'weights_cache_refresh_ms',
+      { exchange: '*', assetClass: '*', strategy: '*', regime: '*' })); // 60s to match cache TTL
 
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Started successfully (first evaluation running async)`);
     console.log(`[WARMUP][DEBUG] SignalOrchestrator started successfully`);

@@ -44,10 +44,17 @@ export const DRIFT_DESCRIPTIONS: DriftDescription[] = [
   }
 ];
 
+// B72 (2026-05-05): drift boundaries from module='drift_detector'.
+import { getCachedNumberRequired } from '../services/module-constants-service.js';
+const _DRIFT_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+
 export function getDriftDescription(score: number): DriftDescription {
-  if (score <= 0.5) return DRIFT_DESCRIPTIONS[0];
-  if (score <= 0.8) return DRIFT_DESCRIPTIONS[1];
-  if (score <= 1.5) return DRIFT_DESCRIPTIONS[2];
+  const aligned  = getCachedNumberRequired('drift_detector', 'drift_aligned_boundary',  _DRIFT_KEY);
+  const minor    = getCachedNumberRequired('drift_detector', 'drift_minor_boundary',    _DRIFT_KEY);
+  const moderate = getCachedNumberRequired('drift_detector', 'drift_moderate_boundary', _DRIFT_KEY);
+  if (score <= aligned)  return DRIFT_DESCRIPTIONS[0];
+  if (score <= minor)    return DRIFT_DESCRIPTIONS[1];
+  if (score <= moderate) return DRIFT_DESCRIPTIONS[2];
   return DRIFT_DESCRIPTIONS[3];
 }
 

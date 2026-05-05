@@ -49,6 +49,9 @@
 
 import { storage } from '../storage';
 import { KrakenService } from './kraken';
+// B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
+// moved to module='paper_execution'.
+import { getCachedNumberRequired } from './module-constants-service.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
@@ -121,7 +124,11 @@ export class PaperExecutionEngine {
   // Configuration
   private readonly SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // Batch 18J: from exchange-defaults.ts (0.05%)
   private readonly FEE_PERCENT = DEFAULT_TAKER_FEE * 100; // Batch 18J: from exchange-defaults.ts (0.26%)
-  private readonly MONITOR_INTERVAL_MS = 1500; // Phase 8.8.3-B3.5: Check every 1.5 seconds for real-time TP/SL evaluation
+  // B72: monitoring interval read at setInterval start from module='paper_execution'.
+  private get MONITOR_INTERVAL_MS(): number {
+    return getCachedNumberRequired('paper_execution', 'monitoring_interval_ms',
+      { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+  }
   private readonly MAX_PRICE_HISTORY = 100; // Keep last 100 candles per symbol
   private readonly RTB_TTL_SECONDS = 30; // REB 8.8.3-I: RTB signals expire after one FX5 cycle (30 seconds)
   
@@ -148,7 +155,11 @@ export class PaperExecutionEngine {
 
   // Directive 8.8.8: Continuous promotion loop interval (30 seconds)
   private continuousPromotionInterval: NodeJS.Timeout | null = null;
-  private readonly CONTINUOUS_PROMOTION_INTERVAL_MS = 30000; // 30 seconds
+  // B72: RTB-promotion loop interval from module='paper_execution'.
+  private get CONTINUOUS_PROMOTION_INTERVAL_MS(): number {
+    return getCachedNumberRequired('paper_execution', 'rtb_promotion_loop_interval_ms',
+      { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+  }
 
   constructor(mode: 'live' | 'paper') {
     this.mode = mode;
