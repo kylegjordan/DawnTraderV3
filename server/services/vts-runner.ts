@@ -769,38 +769,18 @@ function callStrategyDetect(
     case 'sma_trend_ride':
       return strategyEngine.detectSMATrendRide(indicators, ohlcData, STRATEGY_CALL_SETTINGS);
     case 'breakout':
-      return strategyEngine.detectBreakout(ohlcData, {
-        minConsolidationBars: 10,
-        maxRangeWidth: 3,
-        breakoutBuffer: 1,
-        volumeMultiplier: 1.5,    // HF8: Relaxed from 2 — 1.5x avg volume still confirms breakout interest
-        maxHoldingHours: 12
-      });
+      // B72.2: detector reads params from module_constants 'strategy.breakout'.
+      return strategyEngine.detectBreakout(ohlcData, {});
     case 'mean_reversion':
-      return strategyEngine.detectMeanReversion(indicators, ohlcData, {
-        meanType: 'vwap',
-        smaLength: 20,
-        deviationThreshold: 2.0,  // HF8: Relaxed from 2.5 — 2% VWAP deviation is significant for 60-min
-        partialExitPercent: 50,
-        stopLossBuffer: 1
-      });
+      // B72.2: detector reads params from module_constants 'strategy.mean_reversion'.
+      return strategyEngine.detectMeanReversion(indicators, ohlcData, {});
     case 'range_trading':
     case 'range_trade':  // HF6B: Alias for canonical strategy map name
-      return strategyEngine.detectRangeTrading(ohlcData, {
-        minRangeDurationHours: 7,   // Batch 48: 12→7, aligned with strategy-engine.ts default (crypto consolidates faster)
-        minRangeWidth: 2,           // HF8: Relaxed from 3 — 2% range width is meaningful
-        minBoundaryTouches: 1,      // Batch 48: 2→1, aligned with strategy-engine.ts (crypto ranges need fewer boundary touches)
-        entryZoneWidth: 0.5,
-        stopLossBeyond: 1
-      });
+      // B72.2: detector reads params from module_constants 'strategy.range_trade'.
+      return strategyEngine.detectRangeTrading(ohlcData, {});
     case 'vwap_bounce':
-      return strategyEngine.detectVWAPBounce(indicators, ohlcData, {
-        vwapProximity: 0.5,
-        minVWAPSlope: 0.3,
-        volumeMultiplier: 1.3,
-        maxPullbackBars: 5,
-        partialExitR: 1.5
-      });
+      // B72.2: detector reads params from module_constants 'strategy.vwap_bounce'.
+      return strategyEngine.detectVWAPBounce(indicators, ohlcData, {});
     case 'liquidity_trap':
       // Batch 45: DISABLED — strategy produces bearish geometry (stop > entry, target < entry)
       // which is incompatible with long-only system. Confirmed by system manual spec and
@@ -809,16 +789,8 @@ function callStrategyDetect(
       setNullReason('strategy_disabled_bearish');
       return null;
     case 'dhma':
-      return strategyEngine.detectDHMA(indicators, ohlcData, {
-        theta_OBI: 0.3,
-        epsilon_micro: 0.2,
-        tau_toxicity: 0.7,
-        maxSpread: 5,
-        k_tp: 1.5,
-        N_flow: 50,
-        N_burst: 10,
-        window_session: 20
-      });
+      // B72.2: detector reads params from module_constants 'strategy.dhma'.
+      return strategyEngine.detectDHMA(indicators, ohlcData, {});
     // ── Pattern + Hybrid strategies ──
     case 'morning_star':
       return strategyEngine.detectMorningStar(indicators, ohlcData, patternInput);

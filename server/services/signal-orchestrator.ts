@@ -1559,13 +1559,8 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('breakout')) {
-        const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {
-          minConsolidationBars: 10,
-          maxRangeWidth: 3,
-          breakoutBuffer: 1,
-          volumeMultiplier: 2,
-          maxHoldingHours: 12
-        });
+        // B72.2: detector reads params from module_constants 'strategy.breakout'.
+        const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {});
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'breakout', sizingContext);
@@ -1574,13 +1569,8 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('mean_reversion')) {
-        const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {
-          meanType: 'vwap',
-          smaLength: 20,
-          deviationThreshold: 2.5,
-          partialExitPercent: 50,
-          stopLossBuffer: 1
-        });
+        // B72.2: detector reads params from module_constants 'strategy.mean_reversion'.
+        const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {});
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'mean_reversion', sizingContext);
@@ -1589,13 +1579,8 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('range_trading')) {
-        const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {
-          minRangeDurationHours: 12,
-          minRangeWidth: 3,
-          minBoundaryTouches: 3,
-          entryZoneWidth: 0.5,
-          stopLossBeyond: 1
-        });
+        // B72.2: detector reads params from module_constants 'strategy.range_trade'.
+        const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {});
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'range_trading', sizingContext);
@@ -1604,13 +1589,8 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('vwap_bounce')) {
-        const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {
-          vwapProximity: 0.5,
-          minVWAPSlope: 0.3,
-          volumeMultiplier: 1.3,
-          maxPullbackBars: 5,
-          partialExitR: 1.5
-        });
+        // B72.2: detector reads params from module_constants 'strategy.vwap_bounce'.
+        const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {});
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'vwap_bounce', sizingContext);
@@ -1627,16 +1607,8 @@ export class SignalOrchestrator {
       // (Block intentionally left empty — liquidity_trap is excluded.)
 
       if (activeStrategies.has('dhma')) {
-        const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {
-          theta_OBI: 0.3,
-          epsilon_micro: 0.2,
-          tau_toxicity: 0.7,
-          maxSpread: 5,
-          k_tp: 1.5,
-          N_flow: 50,
-          N_burst: 10,
-          window_session: 20
-        });
+        // B72.2: detector reads params from module_constants 'strategy.dhma'.
+        const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {});
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'dhma', sizingContext);

@@ -317,83 +317,58 @@ export class StageBValidator {
       if (smaSignal) signals.push({ ...smaSignal, symbol });
       
       // 4. Breakout (ULTRA-RELAXED for validation only)
+      // B72.2: standard branch reads params from module_constants 'strategy.breakout'.
       const breakoutSignal = strategyEngine.detectBreakout(priceData, relaxedMode ? {
         minConsolidationBars: 3,     // Ultra-relaxed: 3 (prod: 10)
         maxRangeWidth: 15,            // Ultra-relaxed: 15% (prod: 3%)
         breakoutBuffer: 0.1,          // Ultra-relaxed: 0.1% (prod: 1%)
         volumeMultiplier: 0.5,        // Ultra-relaxed: 0.5x (prod: 2x)
         targetMultiplier: 2
-      } : {
-        minConsolidationBars: 10,
-        maxRangeWidth: 3,
-        breakoutBuffer: 1,
-        volumeMultiplier: 2,
-        targetMultiplier: 2
-      });
+      } : {});
       if (breakoutSignal) signals.push({ ...breakoutSignal, symbol });
       
       // 5. Mean Reversion (ULTRA-RELAXED for validation only)
+      // B72.2: standard branch reads params from module_constants 'strategy.mean_reversion'.
       const meanRevSignal = strategyEngine.detectMeanReversion(indicators, priceData, relaxedMode ? {
         meanType: 'vwap',
         deviationThreshold: 0.10,     // Ultra-relaxed: 10% (prod: 2%)
         partialExitPercent: 50,
         stopLossBuffer: 0.05,         // Ultra-relaxed: 5% (prod: 1.5%)
         smaLength: 5                  // Ultra-relaxed: 5 (prod: 20)
-      } : {
-        meanType: 'vwap',
-        deviationThreshold: 0.02,
-        partialExitPercent: 50,
-        stopLossBuffer: 0.015,
-        smaLength: 20
-      });
+      } : {});
       if (meanRevSignal) signals.push({ ...meanRevSignal, symbol });
       
       // 6. Range Trading (ULTRA-RELAXED for validation only)
+      // B72.2: standard branch reads params from module_constants 'strategy.range_trade'.
       const rangeSignal = strategyEngine.detectRangeTrading(priceData, relaxedMode ? {
         minRangeDurationHours: 3,     // Ultra-relaxed: 3 hours (prod: 12)
         minRangeWidth: 0.1,           // Ultra-relaxed: 0.1% (prod: 3%) - matches actual 0.1-0.6% ranges
         minBoundaryTouches: 2,        // Ultra-relaxed: 2 touches (prod: 3)
         entryZoneWidth: 1.0,          // Ultra-relaxed: 1% (prod: 0.5%)
         stopLossBeyond: 2.0           // Ultra-relaxed: 2% (prod: 1%)
-      } : {
-        minRangeDurationHours: 12,
-        minRangeWidth: 3,
-        minBoundaryTouches: 3,
-        entryZoneWidth: 0.5,
-        stopLossBeyond: 1
-      });
+      } : {});
       if (rangeSignal) signals.push({ ...rangeSignal, symbol });
       
       // 7. VWAP Bounce (ULTRA-RELAXED for validation only)
+      // B72.2: standard branch reads params from module_constants 'strategy.vwap_bounce'.
       const vwapBounceSignal = strategyEngine.detectVWAPBounce(indicators, priceData, relaxedMode ? {
         vwapProximity: 5.0,           // Ultra-relaxed: 5% (prod: 0.5%)
         minVWAPSlope: -10.0,          // Ultra-relaxed: -10% (allow downtrends, prod: 0.3%)
         volumeMultiplier: 0.5,        // Ultra-relaxed: 0.5x (prod: 1.3x)
         maxPullbackBars: 10,          // Ultra-relaxed: 10 bars (prod: 5)
         partialExitR: 1.5             // Unchanged
-      } : {
-        vwapProximity: 0.5,
-        minVWAPSlope: 0.3,
-        volumeMultiplier: 1.3,
-        maxPullbackBars: 5,
-        partialExitR: 1.5
-      });
+      } : {});
       if (vwapBounceSignal) signals.push({ ...vwapBounceSignal, symbol });
       
       // 8. Liquidity Trap (ULTRA-RELAXED for validation only)
+      // B72.2: standard branch reads params from module_constants 'strategy.liquidity_trap'.
       const liqTrapSignal = strategyEngine.detectLiquidityTrap(priceData, relaxedMode ? {
         maxTrapExtension: 5.0,        // Ultra-relaxed: 5% (prod: 1.2%)
         trapReturnBars: 5,            // Ultra-relaxed: 5 bars (prod: 2)
         minStopZoneSize: 'small',     // Ultra-relaxed: small (prod: medium)
         minLevelTouches: 2,           // Ultra-relaxed: 2 touches (prod: 3)
         volumeRatio: 0.5              // Ultra-relaxed: 0.5x (prod: 1.5x)
-      } : {
-        maxTrapExtension: 1.2,
-        trapReturnBars: 2,
-        minStopZoneSize: 'medium',
-        minLevelTouches: 3,
-        volumeRatio: 1.5
-      });
+      } : {});
       if (liqTrapSignal) signals.push({ ...liqTrapSignal, symbol });
       
       // Process signals (conflict resolution: best score wins)

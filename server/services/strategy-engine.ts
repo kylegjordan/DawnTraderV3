@@ -16,6 +16,10 @@ import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
 import { detectStrongBullTrend } from '../strategies/strong-bull-trend.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+// B72.2: In-class quant strategies read tunable params from module_constants.
+import { getCachedNumbersForModule, getCachedConstant } from './module-constants-service.js';
+
+const _SE_KEY = (strategy: string) => ({ exchange: '*', assetClass: '*', strategy, regime: '*' });
 
 /**
  * Compute ATR (Average True Range) from PriceData array.
@@ -99,16 +103,18 @@ export class StrategyEngine {
     // (pullback-resumption on bullish setups). Firing on strong NEGATIVE DBS pairs means
     // entering LONG against a strong downtrend. 15 mirror-defect trades in B62 72h window
     // per BATCH_63_COUNTERFACTUAL_AUDIT. Block here.
-    if ((indicators.dbsScore ?? 0) <= -0.35) {
+    // B72.2: levers resolved from module_constants 'strategy.vwap_pullback'.
+    const c = getCachedNumbersForModule('strategy.vwap_pullback', _SE_KEY('vwap_pullback'));
+    if ((indicators.dbsScore ?? 0) <= c['counter_trend_long_dbs_floor']) {
       setNullReason('b63b_counter_trend_long_exclusion');
       return null;
     }
     const { currentPrice, vwap, high24h, low24h, volume } = indicators;
 
-    // User-configured settings with defaults
-    const pullbackThreshold = parseFloat(settings.vwapPullbackThreshold || '3.0') / 100; // Crypto-calibrated (Batch 18H): 2% → 3%
-    const volumeMultiplier = parseFloat(settings.vwapVolumeMultiplier || '1.5'); // Default 1.5x
-    const maxHoldingPeriod = settings.vwapMaxHoldingPeriod || 24; // Default 24 bars
+    // User-configured settings with defaults (defaults sourced from module_constants).
+    const pullbackThreshold = parseFloat(settings.vwapPullbackThreshold || c['pullback_threshold_pct_default'].toString()) / 100;
+    const volumeMultiplier = parseFloat(settings.vwapVolumeMultiplier || c['volume_multiplier_default'].toString());
+    const maxHoldingPeriod = settings.vwapMaxHoldingPeriod || c['max_holding_period_bars_default'];
     
     console.log(`[VWAP Strategy] Using settings: pullback=${(pullbackThreshold*100).toFixed(1)}%, volumeMultiplier=${volumeMultiplier}x, maxHold=${maxHoldingPeriod} bars`);
     
@@ -118,15 +124,15 @@ export class StrategyEngine {
     const hasReversalPattern = this.detectBullishReversal(indicators);
     
     // ✅ Volume confirmation using user setting (volumeMultiplier)
-    // Calculate average volume from prior candles (minimum 10 required for reliable comparison)
-    if (!priceHistory || priceHistory.length < 10) {
+    // Calculate average volume from prior candles (minimum required for reliable comparison)
+    if (!priceHistory || priceHistory.length < c['volume_confirm_min_history']) {
       console.log('[VWAP Strategy] ❌ Insufficient history for volume confirmation (need 10+ candles)');
       setNullReason('insufficient_data');
       return null;
     }
-    
-    // Use up to 20 prior candles for average volume calculation
-    const lookbackPeriod = Math.min(20, priceHistory.length);
+
+    // Use up to N prior candles for average volume calculation
+    const lookbackPeriod = Math.min(c['volume_avg_lookback'], priceHistory.length);
     const recentCandles = priceHistory.slice(-lookbackPeriod);
     const totalVolume = recentCandles.reduce((sum, candle) => {
       const vol = parseFloat(candle.volume || '0');
@@ -146,8 +152,8 @@ export class StrategyEngine {
     
     if (priceAboveVWAP && nearVWAP && hasReversalPattern && hasVolumeConfirmation) {
       // Batch 45: ATR-relative entry/stop/target
-      const atr = indicators.atr ?? (high24h - low24h) * 0.1; // Fallback: 10% of daily range
-      const entryPrice = currentPrice + atr * 0.1;
+      const atr = indicators.atr ?? (high24h - low24h) * c['atr_fallback_daily_range_frac']; // Fallback: 10% of daily range
+      const entryPrice = currentPrice + atr * c['entry_atr_premium'];
 
       // B63 Item 12: strong-trend geometry override (Variant E from counterfactual audit).
       // When vts-runner routes this detector via quant-strong_trend sourcePool, it attaches
@@ -163,11 +169,11 @@ export class StrategyEngine {
         console.log(`[VWAP Strategy] [B63 Item 12] Using strong-trend geometry override: stop=${override.stopAtrMultiplier}×ATR, target=${override.targetAsRMultiple}R`);
       } else {
         // Default (pre-B63-Item-12) geometry for low-DBS pullback context
-        stopPrice = Math.min(vwap - atr * 0.5, low24h + atr * 0.1);
-        const targetPrice = high24h - atr * 0.25;
+        stopPrice = Math.min(vwap - atr * c['stop_atr_mult_vwap'], low24h + atr * c['stop_atr_mult_low24h']);
+        const targetPrice = high24h - atr * c['target_atr_offset_high24h'];
         // B3 FIX: For long trades, use Math.max to pick the HIGHER of the two targets (not the lower)
         const riskDistance = entryPrice - stopPrice;
-        const twoRTarget = entryPrice + (riskDistance * 2);
+        const twoRTarget = entryPrice + (riskDistance * c['target_r_multiple_default']);
         finalTarget = Math.max(targetPrice, twoRTarget);
       }
 
@@ -186,7 +192,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice: finalTarget,
-        confidence: 0.7 + (hasReversalPattern ? 0.2 : 0),
+        confidence: c['base_confidence'] + (hasReversalPattern ? c['reversal_confidence_bonus'] : 0),
         metadata: {
           vwap,
           nearVWAPPercent: Math.abs(currentPrice - vwap) / vwap * 100,
@@ -223,13 +229,16 @@ export class StrategyEngine {
     priceHistory: PriceData[], 
     settings: TradingSettings
   ): StrategySignal | null {
-    // User-configured settings with defaults
-    const minConsolidation = settings.abcdMinConsolidation || 10; // Default 10 bars
-    const breakoutThreshold = parseFloat(settings.abcdBreakoutThreshold || '1.5') / 100; // Default 1.5%
-    const volumeMultiplier = parseFloat(settings.abcdVolumeMultiplier || '1.5'); // Default 1.5x
-    const exitType = settings.abcdExitType || 'target'; // Default: fixed target
-    const targetPercent = parseFloat(settings.abcdTargetPercent || '3.0') / 100; // Default 3%
-    const trailingStopPercent = parseFloat(settings.abcdTrailingStopPercent || '2.0') / 100; // Default 2%
+    // B72.2: levers resolved from module_constants 'strategy.abcd_long'.
+    const c = getCachedNumbersForModule('strategy.abcd_long', _SE_KEY('abcd_long'));
+    const exitTypeDefault = getCachedConstant<string>('strategy.abcd_long', 'exit_type_default', _SE_KEY('abcd_long')) ?? 'target';
+    // User-configured settings with defaults (defaults sourced from module_constants).
+    const minConsolidation = settings.abcdMinConsolidation || c['min_consolidation_bars_default'];
+    const breakoutThreshold = parseFloat(settings.abcdBreakoutThreshold || c['breakout_threshold_pct_default'].toString()) / 100;
+    const volumeMultiplier = parseFloat(settings.abcdVolumeMultiplier || c['volume_multiplier_default'].toString());
+    const exitType = settings.abcdExitType || exitTypeDefault;
+    const targetPercent = parseFloat(settings.abcdTargetPercent || c['target_percent_default'].toString()) / 100;
+    const trailingStopPercent = parseFloat(settings.abcdTrailingStopPercent || c['trailing_stop_pct_default'].toString()) / 100;
     
     console.log(`[ABCD Strategy] Using settings: minConsolidation=${minConsolidation} bars, breakout=${(breakoutThreshold*100).toFixed(1)}%, volumeMultiplier=${volumeMultiplier}x, exitType=${exitType}`);
     
@@ -241,10 +250,10 @@ export class StrategyEngine {
     // Simplified ABCD pattern detection
     // A = spike, B = pullback, C = higher low above VWAP, D = breakout
     
-    const aPoint = this.findSpike(recent.slice(0, 10));
+    const aPoint = this.findSpike(recent.slice(0, c['a_point_search_window']));
     if (!aPoint) { setNullReason('abcd_structure_not_found'); return null; }
 
-    const bPoint = this.findPullback(recent.slice(5, 15), aPoint);
+    const bPoint = this.findPullback(recent.slice(c['b_point_search_start'], c['b_point_search_end']), aPoint);
     if (!bPoint) { setNullReason('abcd_structure_not_found'); return null; }
     
     // ✅ Using user-configured consolidation period
@@ -270,8 +279,8 @@ export class StrategyEngine {
     
     if (isBreakout && hasVolumeConfirmation) {
       // Batch 45: ATR-relative entry and stop
-      const entryPrice = cHigh + abcdAtr * 0.3; // Entry: C-high + 0.3 ATR buffer
-      const stopPrice = parseFloat(cPoint.low) - abcdAtr * 0.5; // Stop: below C-low by 0.5 ATR
+      const entryPrice = cHigh + abcdAtr * c['entry_atr_buffer']; // Entry: C-high + ATR buffer
+      const stopPrice = parseFloat(cPoint.low) - abcdAtr * c['stop_atr_buffer']; // Stop: below C-low by ATR buffer
       
       let targetPrice: number;
       
@@ -285,9 +294,9 @@ export class StrategyEngine {
         const abDistance = parseFloat(aPoint.high) - parseFloat(bPoint.low);
         const measuredTarget = entryPrice + abDistance;
         
-        // Alternative: +2R target
+        // Alternative: +NR target (R-multiple from module_constants)
         const riskDistance = entryPrice - stopPrice;
-        const twoRTarget = entryPrice + (riskDistance * 2);
+        const twoRTarget = entryPrice + (riskDistance * c['trailing_target_r_multiple']);
         targetPrice = Math.min(measuredTarget, twoRTarget);
         
         console.log(`[ABCD Strategy] Using TRAILING STOP exit: ${(trailingStopPercent * 100).toFixed(1)}%`);
@@ -301,7 +310,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice,
-        confidence: 0.75,
+        confidence: c['base_confidence'],
         metadata: {
           aPoint: { price: aPoint.high, time: aPoint.timestamp },
           bPoint: { price: bPoint.low, time: bPoint.timestamp },
@@ -348,22 +357,26 @@ export class StrategyEngine {
     // BATCH_63_COUNTERFACTUAL_AUDIT. Block here. (No paired positive-DBS guard needed —
     // high-positive-DBS pairs are routed exclusively to Path D per B63 Item 4 and do not
     // reach sma_trend_ride's quant family.)
-    if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+    // B72.2: levers resolved from module_constants 'strategy.sma_trend_ride'.
+    const c = getCachedNumbersForModule('strategy.sma_trend_ride', _SE_KEY('sma_trend_ride'));
+    const entryConditionDefault = getCachedConstant<string>('strategy.sma_trend_ride', 'entry_condition_default', _SE_KEY('sma_trend_ride')) ?? 'above';
+    const exitConditionDefault = getCachedConstant<string>('strategy.sma_trend_ride', 'exit_condition_default', _SE_KEY('sma_trend_ride')) ?? 'break';
+    if (((indicators as any).dbsScore ?? 0) <= c['counter_trend_long_dbs_floor']) {
       setNullReason('b63b_counter_trend_long_exclusion');
       return null;
     }
 
     const { currentPrice, sma, volume } = indicators;
 
-    // User-configured settings with defaults
-    const entryCondition = settings.smaEntryCondition || 'above'; // Default: above
-    const exitCondition = settings.smaExitCondition || 'break'; // Default: break below
-    const trailingStopPercent = parseFloat(settings.smaTrailingStopPercent || '2.0') / 100; // Default 2%
-    const smaLength = settings.smaLength || 20; // Default 20
+    // User-configured settings with defaults (defaults sourced from module_constants).
+    const entryCondition = settings.smaEntryCondition || entryConditionDefault;
+    const exitCondition = settings.smaExitCondition || exitConditionDefault;
+    const trailingStopPercent = parseFloat(settings.smaTrailingStopPercent || c['trailing_stop_pct_default'].toString()) / 100;
+    const smaLength = settings.smaLength || c['sma_length_default'];
     
     console.log(`[SMA Strategy] Using settings: smaLength=${smaLength}, entryCondition=${entryCondition}, exitCondition=${exitCondition}, trailingStop=${(trailingStopPercent*100).toFixed(1)}%`);
     
-    if (!sma || priceHistory.length < 10) { setNullReason('insufficient_data'); return null; }
+    if (!sma || priceHistory.length < c['min_history_bars']) { setNullReason('insufficient_data'); return null; }
     
     const recentPrices = priceHistory.slice(-10).map(p => parseFloat(p.close));
     const previousPrice = recentPrices[recentPrices.length - 2];
@@ -390,23 +403,23 @@ export class StrategyEngine {
     }
     
     if (entrySignal) {
-      const entryPrice = currentPrice * 1.002; // Small premium for entry
+      const entryPrice = currentPrice * c['entry_premium_mult']; // Small premium for entry
       const priorSwingLow = Math.min(...recentPrices.slice(-5));
-      const stopPrice = Math.min(priorSwingLow * 0.998, sma * 0.995); // Below swing low or SMA
-      
+      const stopPrice = Math.min(priorSwingLow * c['swing_low_stop_mult'], sma * c['sma_stop_mult']); // Below swing low or SMA
+
       let targetPrice: number;
-      
+
       // ✅ Exit condition determines target calculation
       if (exitCondition === 'trailing') {
         // Trailing stop exit - set wider initial target
         const trendStrength = this.calculateTrendStrength(recentPrices);
-        targetPrice = entryPrice * (1 + trendStrength * 0.03); // 3% per strength unit
-        
+        targetPrice = entryPrice * (1 + trendStrength * c['trailing_strength_factor']);
+
         console.log(`[SMA Strategy] Using TRAILING STOP exit: ${(trailingStopPercent * 100).toFixed(1)}%`);
       } else {
-        // Break below SMA exit - use fixed 2R target
+        // Break below SMA exit - use fixed NR target
         const riskDistance = entryPrice - stopPrice;
-        targetPrice = entryPrice + (riskDistance * 2);
+        targetPrice = entryPrice + (riskDistance * c['break_target_r_multiple']);
         
         console.log(`[SMA Strategy] Using BREAK exit: 2R target`);
       }
@@ -419,7 +432,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice,
-        confidence: 0.65,
+        confidence: c['base_confidence'],
         metadata: {
           sma,
           smaLength,
@@ -453,25 +466,27 @@ export class StrategyEngine {
 
   // Breakout Strategy
   detectBreakout(
-    priceHistory: PriceData[], 
+    priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const minConsolidationBars = params.minConsolidationBars || 10;
-    const breakoutBuffer = (params.breakoutBuffer || 1) / 100;
-    const volumeMultiplier = params.volumeMultiplier || 1.5; // Crypto-calibrated (Batch 18H): 2.0 → 1.5
-    const maxHoldingHours = params.maxHoldingHours || 12;
-    
+    // B72.2: levers resolved from module_constants 'strategy.breakout'.
+    const c = getCachedNumbersForModule('strategy.breakout', _SE_KEY('breakout'));
+    const minConsolidationBars = params.minConsolidationBars || c['min_consolidation_bars'];
+    const breakoutBuffer = (params.breakoutBuffer || c['breakout_buffer_pct']) / 100;
+    const volumeMultiplier = params.volumeMultiplier || c['volume_multiplier'];
+    const maxHoldingHours = params.maxHoldingHours || c['max_holding_hours'];
+
     if (priceHistory.length < minConsolidationBars + 5) { setNullReason('insufficient_data'); return null; }
-    
+
     // Batch 18H: ATR-based dynamic range width for crypto markets
     const atr = computeATR(priceHistory);
     const refPrice = parseFloat(priceHistory[priceHistory.length - 1].close);
     const atrPct = refPrice > 0 ? (atr / refPrice) * 100 : 0;
-    const maxRangeWidth = params.maxRangeWidth || Math.max(7, 5.0 * atrPct); // Crypto ceiling: max(7%, 5×ATR%)
-    const touchTolerance = refPrice > 0 ? atr / (4 * refPrice) : 0.003; // ATR/4 tolerance zone
-    
+    const maxRangeWidth = params.maxRangeWidth || Math.max(c['max_range_width_floor_pct'], c['max_range_width_atr_mult'] * atrPct); // Crypto ceiling
+    const touchTolerance = refPrice > 0 ? atr / (c['touch_tolerance_atr_divisor'] * refPrice) : c['touch_tolerance_fallback']; // ATR/N tolerance zone
+
     // Use Range Detection filter to find consolidation
-    const rangeResult = detectRange(priceHistory, minConsolidationBars, maxRangeWidth, 2, touchTolerance); // Crypto: 3→2 touches + ATR/4 tolerance
+    const rangeResult = detectRange(priceHistory, minConsolidationBars, maxRangeWidth, c['min_boundary_touches'], touchTolerance);
     
     if (!rangeResult.isRange) {
       console.log('[Breakout] No valid consolidation range detected');
@@ -488,13 +503,13 @@ export class StrategyEngine {
     const isBreakout = currentPrice > breakoutLevel;
     
     // Volume confirmation - calculate average from recent bars
-    const recentBars = priceHistory.slice(-Math.min(10, priceHistory.length));
+    const recentBars = priceHistory.slice(-Math.min(c['volume_avg_lookback'], priceHistory.length));
     const avgVolume = recentBars.reduce((sum, p) => sum + parseFloat(p.volume), 0) / recentBars.length;
     const hasVolumeSpike = currentVolume >= avgVolume * volumeMultiplier;
-    
+
     if (isBreakout && hasVolumeSpike) {
-      const entryPrice = breakoutLevel * 1.002; // Entry slightly above breakout
-      const stopPrice = rangeResult.rangeLow * 0.998; // Below range support
+      const entryPrice = breakoutLevel * c['entry_premium_mult']; // Entry slightly above breakout
+      const stopPrice = rangeResult.rangeLow * c['stop_below_low_mult']; // Below range support
       const rangeHeight = rangeResult.rangeHigh - rangeResult.rangeLow;
       const targetPrice = entryPrice + rangeHeight; // Measured move target
       
@@ -506,7 +521,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice,
-        confidence: 0.75,
+        confidence: c['base_confidence'],
         metadata: {
           rangeSupport: rangeResult.rangeLow,
           rangeResistance: rangeResult.rangeHigh,
@@ -543,17 +558,20 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const meanType = params.meanType || 'vwap';
-    const smaLength = params.smaLength || 20;
-    // Batch 18H: ATR-based dynamic deviation for crypto markets — max(3%, 1.5×ATR/price)
+    // B72.2: levers resolved from module_constants 'strategy.mean_reversion'.
+    const c = getCachedNumbersForModule('strategy.mean_reversion', _SE_KEY('mean_reversion'));
+    const meanTypeDefault = getCachedConstant<string>('strategy.mean_reversion', 'mean_type_default', _SE_KEY('mean_reversion')) ?? 'vwap';
+    const meanType = params.meanType || meanTypeDefault;
+    const smaLength = params.smaLength || c['sma_length_default'];
+    // Batch 18H: ATR-based dynamic deviation for crypto markets — max(floor, mult×ATR/price)
     const atr = computeATR(priceHistory);
     const deviationThreshold = params.deviationThreshold
       ? params.deviationThreshold / 100
-      : Math.max(0.03, indicators.currentPrice > 0 ? 1.5 * atr / indicators.currentPrice : 0.03);
-    const partialExitPercent = params.partialExitPercent || 50;
-    const stopLossBuffer = (params.stopLossBuffer || 1) / 100;
-    
-    if (priceHistory.length < 20) { setNullReason('insufficient_data'); return null; }
+      : Math.max(c['deviation_threshold_floor'], indicators.currentPrice > 0 ? c['deviation_threshold_atr_mult'] * atr / indicators.currentPrice : c['deviation_threshold_floor']);
+    const partialExitPercent = params.partialExitPercent || c['partial_exit_percent'];
+    const stopLossBuffer = (params.stopLossBuffer || c['stop_loss_buffer_pct']) / 100;
+
+    if (priceHistory.length < c['min_history_bars']) { setNullReason('insufficient_data'); return null; }
     
     const { currentPrice, vwap } = indicators;
     
@@ -562,7 +580,7 @@ export class StrategyEngine {
     if (meanType === 'sma') {
       meanValue = this.calculateSMA(priceHistory, smaLength);
     } else if (meanType === 'midpoint') {
-      const rangeResult = detectRange(priceHistory, 10, 8, 2);
+      const rangeResult = detectRange(priceHistory, c['midpoint_range_min_bars'], c['midpoint_range_max_pct'], c['midpoint_range_min_touches']);
       if (!rangeResult.isRange) { setNullReason('range_not_found'); return null; }
       meanValue = (rangeResult.rangeLow + rangeResult.rangeHigh) / 2;
     } else {
@@ -579,9 +597,9 @@ export class StrategyEngine {
     const hasReversal = this.detectBullishReversal(indicators);
     
     if (isOversold && hasReversal) {
-      const entryPrice = currentPrice * 1.001;
+      const entryPrice = currentPrice * c['entry_premium_mult'];
       const stopPrice = currentPrice * (1 - stopLossBuffer);
-      const targetPrice = meanValue * 0.998; // Target slightly below mean
+      const targetPrice = meanValue * c['target_below_mean_mult']; // Target slightly below mean
       
       console.log(`[MeanReversion] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
@@ -591,7 +609,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice,
-        confidence: 0.7,
+        confidence: c['base_confidence'],
         metadata: {
           meanType,
           meanValue,
@@ -626,30 +644,30 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const minRangeDurationHours = params.minRangeDurationHours || 7; // Batch 47: 10→7, crypto consolidates faster
-    const minBoundaryTouches = params.minBoundaryTouches || 1; // Batch 48: 2→1, crypto ranges form with fewer distinct boundary touches over 7 bars
+    // B72.2: levers resolved from module_constants 'strategy.range_trade'.
+    const c = getCachedNumbersForModule('strategy.range_trade', _SE_KEY('range_trade'));
+    const minRangeDurationHours = params.minRangeDurationHours || c['min_range_duration_hours'];
+    const minBoundaryTouches = params.minBoundaryTouches || c['min_boundary_touches'];
     // Batch 45: Entry zone proportional to range width — bottom 25% of range instead of fixed %.
-    // For a 10% range, entry zone = 2.5% (bottom quarter). For a 5% range, entry zone = 1.25%.
-    // Fallback: 1 ATR above support if range not yet known.
-    const entryZoneWidthParam = (params.entryZoneWidth || 1.5) / 100; // Kept as minimum floor
-    const stopLossBeyond = (params.stopLossBeyond || 1) / 100;
-    
-    if (priceHistory.length < 30) { setNullReason('insufficient_data'); return null; }
-    
+    const entryZoneWidthParam = (params.entryZoneWidth || c['entry_zone_width_pct']) / 100; // Kept as minimum floor
+    const stopLossBeyond = (params.stopLossBeyond || c['stop_loss_beyond_pct']) / 100;
+
+    if (priceHistory.length < c['min_history_bars']) { setNullReason('insufficient_data'); return null; }
+
     // Batch 18H: ATR-based dynamic range width for crypto markets
     const atr = computeATR(priceHistory);
     const refPrice = parseFloat(priceHistory[priceHistory.length - 1].close);
     const atrPct = refPrice > 0 ? atr / refPrice : 0;
     const minRangeWidth = params.minRangeWidth
       ? params.minRangeWidth / 100
-      : Math.max(0.015, 2.0 * atrPct); // Batch 47: 3%→1.5% floor, 2.5→2.0 ATR mult. 2% ranges are tradeable in crypto.
-    const touchTolerance = refPrice > 0 ? atr / (4 * refPrice) : 0.003; // ATR/4 tolerance zone
-    
+      : Math.max(c['min_range_width_floor'], c['min_range_width_atr_mult'] * atrPct);
+    const touchTolerance = refPrice > 0 ? atr / (c['touch_tolerance_atr_divisor'] * refPrice) : 0.003; // ATR/N tolerance zone
+
     // Convert hours to bars (assuming 1h bars)
     const minBars = minRangeDurationHours;
-    
+
     // Detect established range
-    const rangeResult = detectRange(priceHistory, minBars, 20, minBoundaryTouches, touchTolerance);
+    const rangeResult = detectRange(priceHistory, minBars, c['range_detection_max_width'], minBoundaryTouches, touchTolerance);
     
     if (!rangeResult.isRange) { setNullReason('range_not_found'); return null; }
     
@@ -664,18 +682,18 @@ export class StrategyEngine {
     const current = priceHistory[priceHistory.length - 1];
     const currentPrice = parseFloat(current.close);
     
-    // Batch 45: Entry zone = bottom 25% of range, with ATR as minimum width, capped at 40% of range.
+    // Batch 45: Entry zone = bottom fraction of range, with ATR as minimum width, capped at fraction of range.
     const rangeAbsolute = rangeResult.rangeHigh - rangeResult.rangeLow;
-    const entryZoneRaw = Math.max(rangeAbsolute * 0.25, atr, rangeResult.rangeLow * entryZoneWidthParam);
-    const entryZoneWidth = Math.min(entryZoneRaw, rangeAbsolute * 0.4); // Cap: never more than 40% of range
+    const entryZoneRaw = Math.max(rangeAbsolute * c['entry_zone_bottom_frac'], atr, rangeResult.rangeLow * entryZoneWidthParam);
+    const entryZoneWidth = Math.min(entryZoneRaw, rangeAbsolute * c['entry_zone_cap_frac']); // Cap: never more than this fraction of range
     const supportEntryZone = rangeResult.rangeLow + entryZoneWidth;
     const isNearSupport = currentPrice >= rangeResult.rangeLow && currentPrice <= supportEntryZone;
-    
+
     if (isNearSupport) {
       // Batch 45: ATR-relative entry/stop/target
-      const entryPrice = currentPrice + atr * 0.1;
-      const stopPrice = rangeResult.rangeLow - atr * 0.5;
-      const targetPrice = rangeResult.rangeHigh - atr * 0.25;
+      const entryPrice = currentPrice + atr * c['entry_atr_premium'];
+      const stopPrice = rangeResult.rangeLow - atr * c['stop_atr_below_low'];
+      const targetPrice = rangeResult.rangeHigh - atr * c['target_atr_below_high'];
       
       console.log(`[RangeTrading] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
@@ -685,7 +703,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice,
-        confidence: 0.72,
+        confidence: c['base_confidence'],
         metadata: {
           rangeSupport: rangeResult.rangeLow,
           rangeResistance: rangeResult.rangeHigh,
@@ -721,20 +739,22 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const vwapProximity = (params.vwapProximity || 1.5) / 100; // Crypto-calibrated (Batch 18H): 0.5% → 1.5%
-    const minVWAPSlope = (params.minVWAPSlope || 0.3) / 100;
-    const volumeMultiplier = params.volumeMultiplier || 1.3;
-    const maxPullbackBars = params.maxPullbackBars || 5;
-    const partialExitR = params.partialExitR || 1.5;
-    
-    if (priceHistory.length < 20) { setNullReason('insufficient_data'); return null; }
-    
+    // B72.2: levers resolved from module_constants 'strategy.vwap_bounce'.
+    const c = getCachedNumbersForModule('strategy.vwap_bounce', _SE_KEY('vwap_bounce'));
+    const vwapProximity = (params.vwapProximity || c['vwap_proximity_pct']) / 100;
+    const minVWAPSlope = (params.minVWAPSlope || c['min_vwap_slope_pct']) / 100;
+    const volumeMultiplier = params.volumeMultiplier || c['volume_multiplier'];
+    const maxPullbackBars = params.maxPullbackBars || c['max_pullback_bars'];
+    const partialExitR = params.partialExitR || c['partial_exit_r'];
+
+    if (priceHistory.length < c['min_history_bars']) { setNullReason('insufficient_data'); return null; }
+
     const { currentPrice, vwap, volume } = indicators;
-    
+
     if (!vwap || vwap === 0) { setNullReason('insufficient_data'); return null; }
-    
+
     // Check VWAP is trending up
-    const vwapHistory = priceHistory.slice(-10).map(p => parseFloat(p.vwap || '0'));
+    const vwapHistory = priceHistory.slice(-c['vwap_slope_lookback']).map(p => parseFloat(p.vwap || '0'));
     const vwapSlope = (vwapHistory[vwapHistory.length - 1] - vwapHistory[0]) / vwapHistory[0];
     
     if (vwapSlope < minVWAPSlope) {
@@ -757,10 +777,10 @@ export class StrategyEngine {
     const hasVolume = volume >= avgVolume * volumeMultiplier;
     
     if (isNearVWAP && touchedVWAP && nowAboveVWAP && hasVolume) {
-      const entryPrice = currentPrice * 1.001;
-      const stopPrice = vwap * 0.997; // Slightly below VWAP
+      const entryPrice = currentPrice * c['entry_premium_mult'];
+      const stopPrice = vwap * c['stop_below_vwap_mult']; // Slightly below VWAP
       const riskDistance = entryPrice - stopPrice;
-      const targetPrice = entryPrice + (riskDistance * 2); // 2R target
+      const targetPrice = entryPrice + (riskDistance * c['target_r_multiple']); // NR target
       
       console.log(`[VWAPBounce] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
@@ -770,7 +790,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice,
-        confidence: 0.73,
+        confidence: c['base_confidence'],
         metadata: {
           vwap,
           vwapSlope: vwapSlope * 100,
@@ -805,22 +825,25 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const maxTrapExtension = (params.maxTrapExtension || 1.2) / 100;
-    const trapReturnBars = params.trapReturnBars || 2;
-    const minStopZoneSize = params.minStopZoneSize || 'medium';
-    const minLevelTouches = params.minLevelTouches || 2; // Crypto-calibrated (Batch 18H): 3 → 2 touches
-    const volumeRatio = params.volumeRatio || 1.5;
-    
-    if (priceHistory.length < 30) { setNullReason('insufficient_data'); return null; }
-    
+    // B72.2: levers resolved from module_constants 'strategy.liquidity_trap'.
+    const c = getCachedNumbersForModule('strategy.liquidity_trap', _SE_KEY('liquidity_trap'));
+    const minStopZoneSizeDefault = getCachedConstant<string>('strategy.liquidity_trap', 'min_stop_zone_size', _SE_KEY('liquidity_trap')) ?? 'medium';
+    const maxTrapExtension = (params.maxTrapExtension || c['max_trap_extension_pct']) / 100;
+    const trapReturnBars = params.trapReturnBars || c['trap_return_bars'];
+    const minStopZoneSize = params.minStopZoneSize || minStopZoneSizeDefault;
+    const minLevelTouches = params.minLevelTouches || c['min_level_touches'];
+    const volumeRatio = params.volumeRatio || c['volume_ratio'];
+
+    if (priceHistory.length < c['min_history_bars']) { setNullReason('insufficient_data'); return null; }
+
     // First, detect a range
-    const rangeResult = detectRange(priceHistory.slice(0, -5), 10, 5, minLevelTouches);
-    
+    const rangeResult = detectRange(priceHistory.slice(0, -5), c['range_detection_min_bars'], c['range_detection_max_pct'], minLevelTouches);
+
     if (!rangeResult.isRange) { setNullReason('range_not_found'); return null; }
-    
+
     // Check for stop zone near resistance
     const currentPrice = parseFloat(priceHistory[priceHistory.length - 1].close);
-    const stopZone = detectStopZone(priceHistory, currentPrice, 20, minLevelTouches);
+    const stopZone = detectStopZone(priceHistory, currentPrice, c['stop_zone_lookback'], minLevelTouches);
     
     const minClusterStrength = minStopZoneSize === 'small' ? 'weak' : minStopZoneSize === 'large' ? 'strong' : 'medium';
     if (!stopZone.hasStopZone) { setNullReason('range_not_found'); return null; }
@@ -842,9 +865,9 @@ export class StrategyEngine {
     const hasVolumeReversal = currentVolume >= breakoutVolume * volumeRatio;
     
     if (brokeAbove && trapExtension <= maxTrapExtension && returnedToRange && hasVolumeReversal) {
-      const entryPrice = currentBarPrice * 0.999; // Enter on return
-      const stopPrice = breakoutHigh * 1.005; // Above trap high
-      const targetPrice = rangeResult.rangeLow * 1.002; // Target range support
+      const entryPrice = currentBarPrice * c['entry_on_return_mult']; // Enter on return
+      const stopPrice = breakoutHigh * c['stop_above_trap_mult']; // Above trap high
+      const targetPrice = rangeResult.rangeLow * c['target_range_low_mult']; // Target range support
       
       console.log(`[LiquidityTrap] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
@@ -854,7 +877,7 @@ export class StrategyEngine {
         entryPrice,
         stopPrice,
         targetPrice,
-        confidence: 0.68,
+        confidence: c['base_confidence'],
         metadata: {
           trapLevel: rangeResult.rangeHigh,
           trapExtension: trapExtension * 100,
@@ -1015,18 +1038,18 @@ export class StrategyEngine {
   // Helper methods
   private detectBullishReversal(indicators: TechnicalIndicators): boolean {
     // Batch 45: ATR-relative pullback depth check.
-    // Price must have pulled back within 1.5 ATR of VWAP from above.
-    // Replaces the old near-contradictory "within 2% of 24h low" check.
+    // B72.2: thresholds resolved from module_constants 'strategy.vwap_pullback'.
+    const c = getCachedNumbersForModule('strategy.vwap_pullback', _SE_KEY('vwap_pullback'));
     const { currentPrice, vwap, low24h, high24h } = indicators;
-    const atr = indicators.atr ?? (high24h - low24h) * 0.1;
+    const atr = indicators.atr ?? (high24h - low24h) * c['atr_fallback_daily_range_frac'];
     if (atr <= 0 || vwap <= 0) return false;
-    // Pullback depth: price is within 1.5 ATR below a recent high (VWAP acts as anchor)
+    // Pullback depth: price is within N ATR below a recent high (VWAP acts as anchor)
     const pullbackFromVwap = currentPrice - vwap;
     const pullbackDepthATR = Math.abs(pullbackFromVwap) / atr;
-    // Price should be near VWAP (within 2.0 ATR) and not too far above it
-    const nearVwap = pullbackDepthATR <= 2.0;
-    // Price should be in a pullback, not a free-fall (above low by at least 0.5 ATR)
-    const aboveLowByAtr = (currentPrice - low24h) >= atr * 0.5;
+    // Price should be near VWAP and not too far above it
+    const nearVwap = pullbackDepthATR <= c['bullish_reversal_near_vwap_atr'];
+    // Price should be in a pullback, not a free-fall (above low by at least N ATR)
+    const aboveLowByAtr = (currentPrice - low24h) >= atr * c['bullish_reversal_above_low_atr'];
     return nearVwap && aboveLowByAtr;
   }
 
@@ -1158,14 +1181,16 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any
   ): StrategySignal | null {
-    const theta_OBI = params.theta_OBI || 0.3;
-    const epsilon_micro = params.epsilon_micro || 0.2;
-    const tau_toxicity = params.tau_toxicity || 0.7;
-    const maxSpread = params.maxSpread || 5;
-    const k_tp = params.k_tp || 1.5;
-    const N_flow = params.N_flow || 50;
-    const N_burst = params.N_burst || 10; // Candles for burst regime
-    const window_session = params.window_session || 20; // Candles for session regime
+    // B72.2: levers resolved from module_constants 'strategy.dhma'.
+    const c = getCachedNumbersForModule('strategy.dhma', _SE_KEY('dhma'));
+    const theta_OBI = params.theta_OBI || c['theta_obi'];
+    const epsilon_micro = params.epsilon_micro || c['epsilon_micro'];
+    const tau_toxicity = params.tau_toxicity || c['tau_toxicity'];
+    const maxSpread = params.maxSpread || c['max_spread_ticks'];
+    const k_tp = params.k_tp || c['k_tp'];
+    const N_flow = params.N_flow || c['n_flow'];
+    const N_burst = params.N_burst || c['n_burst']; // Candles for burst regime
+    const window_session = params.window_session || c['window_session']; // Candles for session regime
     
     if (!priceHistory || priceHistory.length < window_session) {
       console.log('[DHMA] Insufficient price history');
@@ -1179,7 +1204,7 @@ export class StrategyEngine {
     // In production, these would use real order book + print data
     
     // 1. Order Book Imbalance (simulated from volume and price action)
-    const recentCandles = priceHistory.slice(-5);
+    const recentCandles = priceHistory.slice(-c['obi_lookback_bars']);
     let buyPressure = 0;
     let sellPressure = 0;
     
@@ -1202,7 +1227,7 @@ export class StrategyEngine {
     const recentHigh = Math.max(...recentCandles.map(c => parseFloat(c.high)));
     const recentLow = Math.min(...recentCandles.map(c => parseFloat(c.low)));
     const mid = (recentHigh + recentLow) / 2;
-    const micropriceTilt = (currentPrice - mid) / (recentHigh - recentLow) * 10; // Normalized
+    const micropriceTilt = (currentPrice - mid) / (recentHigh - recentLow) * c['microprice_tilt_norm']; // Normalized
     
     // 3. Signed flow ratio (simulated from volume-weighted price movement)
     let signedFlow = 0;
@@ -1224,7 +1249,7 @@ export class StrategyEngine {
     const signedFlowRatio = totalFlowVol > 0 ? signedFlow / totalFlowVol : 0;
     
     // 4. Toxicity (simulated as volatility ratio - higher vol = higher toxicity)
-    const recentVolatility = this.calculateVolatility(priceHistory.slice(-10));
+    const recentVolatility = this.calculateVolatility(priceHistory.slice(-c['recent_vol_lookback']));
     const baselineVolatility = this.calculateVolatility(priceHistory.slice(-window_session));
     const toxicity = baselineVolatility > 0 ? Math.min(1, recentVolatility / baselineVolatility) : 0.5;
     
@@ -1239,8 +1264,8 @@ export class StrategyEngine {
     const burstReturn = (burstEnd - burstStart) / burstStart;
     
     let burstRegime: 'long' | 'short' | 'neutral';
-    if (burstReturn > 0.01) burstRegime = 'long';
-    else if (burstReturn < -0.01) burstRegime = 'short';
+    if (burstReturn > c['burst_return_threshold']) burstRegime = 'long';
+    else if (burstReturn < -c['burst_return_threshold']) burstRegime = 'short';
     else burstRegime = 'neutral';
     
     // 7. Session regime (longer-term: last window_session candles)
@@ -1253,8 +1278,8 @@ export class StrategyEngine {
                             this.calculateVolatility(sessionCandles.slice(0, 10));
     
     let sessionRegime: 'up' | 'down' | 'chop';
-    if (sessionSlope > 0.02 && currentPrice > sessionVWAP) sessionRegime = 'up';
-    else if (sessionSlope < -0.02 && currentPrice < sessionVWAP) sessionRegime = 'down';
+    if (sessionSlope > c['session_slope_threshold'] && currentPrice > sessionVWAP) sessionRegime = 'up';
+    else if (sessionSlope < -c['session_slope_threshold'] && currentPrice < sessionVWAP) sessionRegime = 'down';
     else sessionRegime = 'chop';
     
     console.log(`[DHMA] Features: OBI=${obi.toFixed(2)}, microTilt=${micropriceTilt.toFixed(2)}, flow=${signedFlowRatio.toFixed(2)}, tox=${toxicity.toFixed(2)}, burst=${burstRegime}, session=${sessionRegime}`);
@@ -1290,16 +1315,16 @@ export class StrategyEngine {
       sessionRegime === 'up' &&
       obi > theta_OBI &&
       micropriceTilt > epsilon_micro &&
-      signedFlowRatio > 0.2
+      signedFlowRatio > c['signed_flow_long_threshold']
     );
-    
+
     // Short entry: burst & session agree, OBI negative, microprice tilt negative
     const shortSignal = (
       burstRegime === 'short' &&
       sessionRegime === 'down' &&
       obi < -theta_OBI &&
       micropriceTilt < -epsilon_micro &&
-      signedFlowRatio < -0.2
+      signedFlowRatio < c['signed_flow_short_threshold']
     );
     
     // Batch 45: Block short signals — system is long-only
@@ -1317,16 +1342,16 @@ export class StrategyEngine {
 
     // Calculate entry/stop/target (long only)
     const realizedVol = recentVolatility;
-    const entryPrice = currentPrice * 1.001;
+    const entryPrice = currentPrice * c['entry_premium_mult'];
     const stopPrice = currentPrice - k_tp * realizedVol;
     const targetPrice = currentPrice + k_tp * realizedVol;
-    
+
     // Confidence calculation
-    let confidence = 0.6;
-    confidence += Math.abs(obi) * 0.15;
-    confidence += Math.abs(signedFlowRatio) * 0.1;
-    confidence -= toxicity * 0.15;
-    confidence = Math.max(0.3, Math.min(0.9, confidence));
+    let confidence = c['base_confidence'];
+    confidence += Math.abs(obi) * c['confidence_weight_obi'];
+    confidence += Math.abs(signedFlowRatio) * c['confidence_weight_flow'];
+    confidence -= toxicity * c['confidence_penalty_toxicity'];
+    confidence = Math.max(c['confidence_floor'], Math.min(c['confidence_ceiling'], confidence));
     
     // REB 2.12D: Multi-timeframe confirmation for DHMA
     // This is called synchronously since we need the adjustment immediately
@@ -1335,13 +1360,13 @@ export class StrategyEngine {
     
     // Apply MTF adjustment based on trend direction matching
     // If burst/session regimes agree with 15m/1h trends, boost confidence
-    const mtfAdjustment = (burstRegime === 'long' && sessionRegime === 'up') || 
-                          (burstRegime === 'short' && sessionRegime === 'down') ? 0.10 : -0.10;
+    const mtfAdjustment = (burstRegime === 'long' && sessionRegime === 'up') ||
+                          (burstRegime === 'short' && sessionRegime === 'down') ? c['mtf_confidence_adjustment'] : -c['mtf_confidence_adjustment'];
     confidence += mtfAdjustment;
-    confidence = Math.max(0.3, Math.min(0.95, confidence));
-    
+    confidence = Math.max(c['confidence_floor'], Math.min(c['post_mtf_confidence_ceiling'], confidence));
+
     const direction = longSignal ? 'long' : 'short';
-    const valid = confidence >= 0.5;
+    const valid = confidence >= c['valid_confidence_threshold'];
     
     console.log(`[REB2.12D][DHMA] { symbol: "${indicators.currentPrice.toFixed(2)}", confidence: ${(confidence * 100).toFixed(0)}%, direction: "${direction}", valid: ${valid} }`);
     console.log(`[DHMA] ✅ Signal ${direction} - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}, Confidence: ${(confidence * 100).toFixed(0)}%`);

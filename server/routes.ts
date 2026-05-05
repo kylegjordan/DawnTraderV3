@@ -9433,32 +9433,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             // Execute each strategy's detect method with mock data
             let result: any = null;
             switch (strategy.id) {
+              // B72.2: detectors read params from module_constants. Pass empty/minimal
+              // overrides so the admin diagnostic exercises the same DB-resolved config
+              // the production paths use. Settings-bearing detectors get an empty
+              // settings object (no operator overrides).
               case 'vwap_pullback':
-                result = strategyEngine.detectVWAPPullback(mockIndicators, { smaLength: 20 }, mockOHLC as any);
+                result = strategyEngine.detectVWAPPullback(mockIndicators, {} as any, mockOHLC as any);
                 break;
               case 'abcd_long':
-                result = strategyEngine.detectABCDLong(mockOHLC as any, { minConsolidation: 10 });
+                result = strategyEngine.detectABCDLong(mockOHLC as any, {} as any);
                 break;
               case 'sma_trend_ride':
-                result = strategyEngine.detectSMATrendRide(mockIndicators, mockOHLC as any, { smaLength: 20 });
+                result = strategyEngine.detectSMATrendRide(mockIndicators, mockOHLC as any, {} as any);
                 break;
               case 'breakout':
-                result = strategyEngine.detectBreakout(mockOHLC as any, { minConsolidationBars: 10, maxRangeWidth: 3, breakoutBuffer: 1, volumeMultiplier: 2, maxHoldingHours: 12 });
+                result = strategyEngine.detectBreakout(mockOHLC as any, {});
                 break;
               case 'mean_reversion':
-                result = strategyEngine.detectMeanReversion(mockIndicators, mockOHLC as any, { meanType: 'vwap', smaLength: 20, deviationThreshold: 2.5, partialExitPercent: 50, stopLossBuffer: 1 });
+                result = strategyEngine.detectMeanReversion(mockIndicators, mockOHLC as any, {});
                 break;
               case 'range_trading':
-                result = strategyEngine.detectRangeTrading(mockOHLC as any, { minRangeDurationHours: 12, minRangeWidth: 3, minBoundaryTouches: 3, entryZoneWidth: 0.5, stopLossBeyond: 1 });
+                result = strategyEngine.detectRangeTrading(mockOHLC as any, {});
                 break;
               case 'vwap_bounce':
-                result = strategyEngine.detectVWAPBounce(mockIndicators, mockOHLC as any, { vwapProximity: 0.5, minVWAPSlope: 0.3, volumeMultiplier: 1.3, maxPullbackBars: 5, partialExitR: 1.5 });
+                result = strategyEngine.detectVWAPBounce(mockIndicators, mockOHLC as any, {});
                 break;
               case 'liquidity_trap':
-                result = strategyEngine.detectLiquidityTrap(mockOHLC as any, { maxTrapExtension: 1.2, trapReturnBars: 2, minStopZoneSize: 'medium', minLevelTouches: 3, volumeRatio: 1.5 });
+                result = strategyEngine.detectLiquidityTrap(mockOHLC as any, {});
                 break;
               case 'dhma':
-                result = strategyEngine.detectDHMA(mockIndicators, mockOHLC as any, { theta_OBI: 0.3, epsilon_micro: 0.2, tau_toxicity: 0.7, maxSpread: 5, k_tp: 1.5, N_flow: 50, N_burst: 10, window_session: 20 });
+                result = strategyEngine.detectDHMA(mockIndicators, mockOHLC as any, {});
                 break;
             }
             executionResult = result ? 'SIGNAL_GENERATED' : 'NO_SIGNAL';
