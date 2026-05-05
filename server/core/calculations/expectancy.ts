@@ -38,15 +38,20 @@ import { calculateDirectionalIntegrity, calculateVolNoise } from '../../utils/an
 import { getCachedCostMetrics, computeTotalRoundTripCost } from '../math/cost-model.js';
 import { covarianceEngine } from '../../utils/covariance-engine.js';
 // Batch 19G VN HF: Unused SYSTEM_GUARDS import removed
-import { 
-  ROI_FLEX_MULTIPLIER, 
-  ROI_MIN, 
-  ROI_MAX, 
-  DEFAULT_FEE, 
+// B72 (2026-05-05): ROI_FLEX_MULTIPLIER, ROI_MIN, ROI_MAX, FRICTION_SAFETY_BUFFER
+// migrated to module_constants (expectancy_gates). DEFAULT_FEE, DEFAULT_SLIPPAGE
+// remain canonical-imported (KEEP — sourced from exchange-defaults).
+import {
+  DEFAULT_FEE,
   DEFAULT_SLIPPAGE,
-  FRICTION_SAFETY_BUFFER 
 } from '../../config/adaptive-thresholds';
 import { REGIMES } from '../../config/canonical-regime-strategy-map';
+// B72 (2026-05-05): per-regime ROI thresholds + winrate boost floors moved to
+// module_constants. Modules 'roi_gating' (per-regime min_roi) +
+// 'expectancy_tuning' (winrate floors) prefetched in b72-warmup.ts.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+
+const _GLOBAL_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 
 export interface ExpectancyParams {
   entry: number;
@@ -176,20 +181,25 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  * @returns Minimum ROI threshold as decimal (e.g., 0.0125 = 1.25%)
  */
 export function getMinROIForRegime(regime: string): number {
-  switch (regime) {
-    case REGIMES.TREND_FRIENDLY_STABLE:
-      return 0.0125;      // 1.25% - Lower threshold in stable trending market
-    case REGIMES.HIGH_VOLATILITY_UNSTABLE:
-      return 0.0250;      // 2.50% - Higher threshold due to elevated risk
-    case REGIMES.RANGE_BOUND_STABLE:
-      return 0.0175;      // 1.75% - Moderate threshold for range-bound conditions
-    case REGIMES.IMPULSE_EXPANSION:
-      return 0.0300;      // 3.00% - Highest threshold for volatile impulse moves
-    case REGIMES.STRUCTURAL_TRANSITION:
-      return 0.0200;      // 2.00% - Default for transitional regimes
-    default:
-      return 0.0200;      // 2.00% - Safe default for unknown regimes
-  }
+  // B72: read regime-specific ROI threshold from module_constants under
+  // module='roi_gating' with regime-dimension scope. Most-specific-wins
+  // resolver returns the row whose regime field matches; if no per-regime
+  // row exists for an unknown regime, fall through to the STRUCTURAL_TRANSITION
+  // row as the safe default (matches pre-B72 default behavior at line below).
+  const known: Record<string, string> = {
+    [REGIMES.TREND_FRIENDLY_STABLE]:    REGIMES.TREND_FRIENDLY_STABLE,
+    [REGIMES.HIGH_VOLATILITY_UNSTABLE]: REGIMES.HIGH_VOLATILITY_UNSTABLE,
+    [REGIMES.RANGE_BOUND_STABLE]:       REGIMES.RANGE_BOUND_STABLE,
+    [REGIMES.IMPULSE_EXPANSION]:        REGIMES.IMPULSE_EXPANSION,
+    [REGIMES.STRUCTURAL_TRANSITION]:    REGIMES.STRUCTURAL_TRANSITION,
+  };
+  const lookupRegime = known[regime] ?? REGIMES.STRUCTURAL_TRANSITION;
+  return getCachedNumberRequired('roi_gating', 'min_roi', {
+    exchange: '*',
+    assetClass: '*',
+    strategy: '*',
+    regime: lookupRegime,
+  });
 }
 
 /**
@@ -205,10 +215,14 @@ export function getMinROIForRegime(regime: string): number {
  * @returns Dynamic ROI threshold bounded within ROI_MIN and ROI_MAX
  */
 export function getDynamicROIThreshold(regime: string, predictiveConfidence: number): number {
+  // B72: ROI flex/min/max read from module_constants (expectancy_gates).
+  const flex = getCachedNumberRequired('expectancy_gates', 'roi_flex_multiplier', _GLOBAL_KEY);
+  const lo   = getCachedNumberRequired('expectancy_gates', 'roi_absolute_min',    _GLOBAL_KEY);
+  const hi   = getCachedNumberRequired('expectancy_gates', 'roi_absolute_max',    _GLOBAL_KEY);
   const base = getMinROIForRegime(regime);
   const boundedConfidence = Math.min(Math.max(predictiveConfidence, 0.0), 1.0);
-  const dynamicROI = base * (1 - (boundedConfidence - 0.5) * ROI_FLEX_MULTIPLIER);
-  return Math.min(Math.max(dynamicROI, ROI_MIN), ROI_MAX);
+  const dynamicROI = base * (1 - (boundedConfidence - 0.5) * flex);
+  return Math.min(Math.max(dynamicROI, lo), hi);
 }
 
 /**
@@ -239,9 +253,11 @@ export function isSignalProfitable(
   const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
   
   const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
-  
-  // Directive 11.7C: Friction floor = (fee×2) + slippage×1.1 (apply buffer only to slippage)
-  const frictionFloor = (fee * 2) + (estimatedSlippage * FRICTION_SAFETY_BUFFER);
+
+  // Directive 11.7C: Friction floor = (fee×2) + slippage×buffer (apply buffer only to slippage).
+  // B72: buffer read from module_constants (expectancy_gates).
+  const frictionBuffer = getCachedNumberRequired('expectancy_gates', 'friction_safety_buffer', _GLOBAL_KEY);
+  const frictionFloor = (fee * 2) + (estimatedSlippage * frictionBuffer);
   const requiredROI = Math.max(dynamicROI, frictionFloor);
   
   return roi >= requiredROI;
@@ -341,16 +357,21 @@ export function getAdjustedMinROI(regime: string, strategy: string): number {
     return baseROI;
   }
   
-  if (adaptive.winRate < 0.4) {
+  // B72: winrate boost thresholds from module_constants (expectancy_tuning).
+  const wrLow  = getCachedNumberRequired('expectancy_tuning', 'winrate_floor_low',        _GLOBAL_KEY);
+  const wrMed  = getCachedNumberRequired('expectancy_tuning', 'winrate_threshold_medium', _GLOBAL_KEY);
+  const wrHigh = getCachedNumberRequired('expectancy_tuning', 'winrate_threshold_high',   _GLOBAL_KEY);
+
+  if (adaptive.winRate < wrLow) {
     return baseROI * 1.3;
   }
-  if (adaptive.winRate < 0.5) {
+  if (adaptive.winRate < wrMed) {
     return baseROI * 1.15;
   }
-  if (adaptive.winRate > 0.6) {
+  if (adaptive.winRate > wrHigh) {
     return baseROI * 0.9;
   }
-  
+
   return baseROI;
 }
 

@@ -25,9 +25,10 @@
  */
 
 import { storage } from '../../storage';
-import { 
-  MIN_QUEUE_CONFIDENCE,
-} from '../metrics/quality_index';
+// B72 (2026-05-05): MIN_QUEUE_CONFIDENCE migrated to module='queue_admission'.
+// Read via cached sync resolver. Module prefetched in b72-warmup.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+const _RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
 import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
@@ -132,16 +133,33 @@ const RTB_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 // Directive 8.8.4-A3.R9.3: TTL removed - lifecycle governed by SQE results only
 // const SIGNAL_TTL_MS removed per R9.3-C
 
-// Directive 8.8.4-A3.R2: TCL Warm-Up threshold (reduced for faster activation)
-const TCL_WARMUP_THRESHOLD = parseInt(process.env.TCL_SIGNAL_THRESHOLD || '15', 10);
+// B72 (2026-05-05): TCL_WARMUP_THRESHOLD and FINALSCORE_DECAY_LAMBDA migrated
+// to module_constants. Precedence preserved (Langston cc-inbox #906):
+//   process.env override (operator)  →  module_constants (DB authority)
+// No hardcoded fallback — module is prefetched at boot in b72-warmup; if the
+// row is missing the resolver throws, matching Kyle's no-silent-fallback rule.
+function getTclWarmupThreshold(): number {
+  const envVal = process.env.TCL_SIGNAL_THRESHOLD;
+  if (envVal !== undefined && envVal !== '') {
+    const parsed = parseInt(envVal, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return getCachedNumberRequired('rtb_config', 'tcl_warmup_threshold_signals', _RTB_GK);
+}
 
 // Directive 8.8.4-A3.R2: TCL failsafe (reduced to 2 minutes)
 const TCL_FAILSAFE_MS = 2 * 60 * 1000; // 2 minutes
 
 // FinalScore decay configuration
 // Decay rate λ = 0.03/min means a signal loses ~3% of its freshness bonus per minute
-const FINALSCORE_DECAY_LAMBDA = parseFloat(process.env.FINALSCORE_DECAY_RATE || '0.03');
-console.log(`[11.0E][CONFIG] FINALSCORE_DECAY_LAMBDA=${FINALSCORE_DECAY_LAMBDA} (per minute)`);
+function getFinalscoreDecayLambda(): number {
+  const envVal = process.env.FINALSCORE_DECAY_RATE;
+  if (envVal !== undefined && envVal !== '') {
+    const parsed = parseFloat(envVal);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return getCachedNumberRequired('rtb_ranking', 'finalscore_decay_lambda', _RTB_GK);
+}
 
 /**
  * Directive 11.0E: Calculate decay penalty for FinalScore
@@ -162,8 +180,10 @@ export function calculateDecayPenalty(queuedAt: Date | string, symbol?: string):
   
   // Linear decay penalty: λ * ageMinutes, capped at 0.10
   // This creates a gentle freshness preference without over-penalizing older signals
-  const rawPenalty = FINALSCORE_DECAY_LAMBDA * ageMinutes;
-  const cappedPenalty = Math.min(rawPenalty, 0.10);
+  const lambda = getFinalscoreDecayLambda();
+  const cap = getCachedNumberRequired('rtb_ranking', 'decay_penalty_cap', _RTB_GK);
+  const rawPenalty = lambda * ageMinutes;
+  const cappedPenalty = Math.min(rawPenalty, cap);
   
   if (symbol && rawPenalty > 0.01) {
     console.log(
@@ -179,14 +199,22 @@ export function calculateDecayPenalty(queuedAt: Date | string, symbol?: string):
  * Returns 1 - decayPenalty for cases where multiplicative decay is needed
  */
 export function getFinalScoreDecayFactor(ageMinutes: number): number {
-  const penalty = Math.min(FINALSCORE_DECAY_LAMBDA * ageMinutes, 0.10);
+  const lambda = getFinalscoreDecayLambda();
+  const cap = getCachedNumberRequired('rtb_ranking', 'decay_penalty_cap', _RTB_GK);
+  const penalty = Math.min(lambda * ageMinutes, cap);
   return 1 - penalty;
 }
 
-// Directive 11.3A: Geometry refresh thresholds
-const GEOMETRY_VOLATILITY_SHIFT_THRESHOLD = 0.05; // 5%
-const GEOMETRY_SPREAD_SHIFT_THRESHOLD = 0.05; // 5%
-const GEOMETRY_MAX_AGE_MS = 180 * 1000; // 180 seconds
+// Directive 11.3A: Geometry refresh thresholds (B72: cost_geometry module)
+function getGeometryVolatilityShiftThreshold(): number {
+  return getCachedNumberRequired('cost_geometry', 'volatility_shift_threshold', _RTB_GK);
+}
+function getGeometrySpreadShiftThreshold(): number {
+  return getCachedNumberRequired('cost_geometry', 'spread_shift_threshold', _RTB_GK);
+}
+function getGeometryMaxAgeMs(): number {
+  return getCachedNumberRequired('cost_geometry', 'geometry_max_age_ms', _RTB_GK);
+}
 
 /**
  * Directive 11.3A: Determine if geometry should be recalculated
@@ -206,17 +234,17 @@ export function shouldRecalculateGeometry(
   const lastSpread = metadata.spread ?? 0.001;
   
   const timeSinceRefresh = Date.now() - lastCostRefresh;
-  if (timeSinceRefresh > GEOMETRY_MAX_AGE_MS) {
+  if (timeSinceRefresh > getGeometryMaxAgeMs()) {
     return true;
   }
-  
+
   const volShift = lastVol > 0 ? Math.abs(currentVol - lastVol) / lastVol : 0;
-  if (volShift > GEOMETRY_VOLATILITY_SHIFT_THRESHOLD) {
+  if (volShift > getGeometryVolatilityShiftThreshold()) {
     return true;
   }
-  
+
   const spreadShift = lastSpread > 0 ? Math.abs(currentSpread - lastSpread) / lastSpread : 0;
-  if (spreadShift > GEOMETRY_SPREAD_SHIFT_THRESHOLD) {
+  if (spreadShift > getGeometrySpreadShiftThreshold()) {
     return true;
   }
   
@@ -1041,9 +1069,10 @@ class ReadyToBuyService {
       return null;
     }
 
-    // Check minimum confidence threshold
-    if (input.confidence < MIN_QUEUE_CONFIDENCE) {
-      console.log(`[RTB] Rejecting signal ${input.symbol}/${input.strategy} - confidence ${input.confidence.toFixed(2)} below threshold ${MIN_QUEUE_CONFIDENCE}`);
+    // Check minimum confidence threshold (B72: from module_constants).
+    const minQueueConfidence = getCachedNumberRequired('queue_admission', 'min_queue_confidence', _RTB_GK);
+    if (input.confidence < minQueueConfidence) {
+      console.log(`[RTB] Rejecting signal ${input.symbol}/${input.strategy} - confidence ${input.confidence.toFixed(2)} below threshold ${minQueueConfidence}`);
       return null;
     }
 
@@ -1408,8 +1437,9 @@ class ReadyToBuyService {
       const age = (Date.now() - new Date(signal.queuedAt).getTime()) / 1000;
 
       // R9.3-C: TTL check removed - lifecycle governed by SQE only
-      // Only remove if confidence is below threshold
-      if (confidence < MIN_QUEUE_CONFIDENCE) {
+      // Only remove if confidence is below threshold (B72: module_constants).
+      const minQueueConfidence = getCachedNumberRequired('queue_admission', 'min_queue_confidence', _RTB_GK);
+      if (confidence < minQueueConfidence) {
         await this.expireSignal(signal.id, `Confidence ${confidence.toFixed(2)} below threshold`);
         removed++;
       }
@@ -1681,13 +1711,14 @@ class ReadyToBuyService {
    */
   async isTCLActive(mode: TradingMode): Promise<boolean> {
     const poolSize = await this.getPoolSize(mode);
-    
-    // Normal activation: ≥100 signals
-    if (poolSize >= TCL_WARMUP_THRESHOLD) {
-      console.log(`[8.8.4-C.5][TCL_ACTIVATE] mode=${mode}, poolSize=${poolSize} >= ${TCL_WARMUP_THRESHOLD}, TCL is active`);
+    const tclWarmupThreshold = getTclWarmupThreshold();
+
+    // Normal activation: ≥threshold signals
+    if (poolSize >= tclWarmupThreshold) {
+      console.log(`[8.8.4-C.5][TCL_ACTIVATE] mode=${mode}, poolSize=${poolSize} >= ${tclWarmupThreshold}, TCL is active`);
       return true;
     }
-    
+
     // Phase 8.8.4-C.6: Check 5-minute failsafe
     const engineStartTime = this.engineStartTimes.get(mode);
     if (engineStartTime) {
@@ -1702,10 +1733,10 @@ class ReadyToBuyService {
         return true;
       } else {
         const remainingMs = TCL_FAILSAFE_MS - elapsedMs;
-        console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${TCL_WARMUP_THRESHOLD}, failsafe in ${(remainingMs/1000).toFixed(0)}s`);
+        console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${tclWarmupThreshold}, failsafe in ${(remainingMs/1000).toFixed(0)}s`);
       }
     } else {
-      console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${TCL_WARMUP_THRESHOLD}, TCL not yet active (no engine start time)`);
+      console.log(`[8.8.4-C.5][TCL_WARMUP] mode=${mode}, poolSize=${poolSize}/${tclWarmupThreshold}, TCL not yet active (no engine start time)`);
     }
     
     return false;
@@ -1741,13 +1772,14 @@ class ReadyToBuyService {
       }
     }
     
-    const isActiveViaThreshold = poolSize >= TCL_WARMUP_THRESHOLD;
+    const tclWarmupThreshold = getTclWarmupThreshold();
+    const isActiveViaThreshold = poolSize >= tclWarmupThreshold;
     const isActive = isActiveViaThreshold || isActiveViaFailsafe;
-    const progressPercent = Math.min(100, (poolSize / TCL_WARMUP_THRESHOLD) * 100);
-    
+    const progressPercent = Math.min(100, (poolSize / tclWarmupThreshold) * 100);
+
     return {
       poolSize,
-      threshold: TCL_WARMUP_THRESHOLD,
+      threshold: tclWarmupThreshold,
       isActive,
       progressPercent: Math.round(progressPercent * 10) / 10,
       failsafeEnabled: engineStartTime !== undefined,

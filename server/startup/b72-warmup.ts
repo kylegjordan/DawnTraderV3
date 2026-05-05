@@ -26,7 +26,15 @@ const PREFETCH_MODULES = [
   'strategy_dbs_routing_guards',
   // Commit B Slice 1: Dynamic Sizing Engine config.
   'position_sizing',
-  // Future: add additional B72-promoted modules read from sync code here.
+  // Commit B Slice 2: cross-strategy modules (math kernels + RTB + sizing).
+  'roi_gating',           // expectancy.ts per-regime ROI thresholds (5 regimes)
+  'expectancy_tuning',    // expectancy.ts winrate boost floors (3)
+  'expectancy_gates',     // adaptive-thresholds → expectancy.ts (4)
+  'queue_admission',      // ready_to_buy_service min queue confidence
+  'rtb_ranking',          // ready_to_buy_service finalscore decay + cap
+  'rtb_config',           // ready_to_buy_service tcl_warmup_threshold (env-overridable)
+  'cost_geometry',        // ready_to_buy_service geometry recalc thresholds
+  // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
 let started = false;

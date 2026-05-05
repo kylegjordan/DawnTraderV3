@@ -55,6 +55,12 @@ export interface NetExpectancyKernelResult {
   distStop: number;
 }
 
+// B72 (2026-05-05): MIN_PWIN, MAX_PWIN, DI_PWIN_FACTOR are PROMOTE candidates
+// but live in a kernel documented as pure-math (no I/O, no DB). Per Langston
+// architectural integrity: deferring these to Slice 4 with a caller-injection
+// refactor (callers resolve from module_constants + pass as kernel input) so
+// the kernel's no-DB-access contract is preserved. Rows already seeded in
+// module_constants under module_name='expectancy_kernel' / 'directional_integrity'.
 const MIN_PWIN = 0.40;
 const MAX_PWIN = 0.60;
 const DI_PWIN_FACTOR = 200;
