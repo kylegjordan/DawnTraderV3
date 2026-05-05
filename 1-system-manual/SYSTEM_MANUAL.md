@@ -10696,3 +10696,83 @@ Emit hooks live in `server/services/signal-orchestrator.ts` (active path, curren
 ---
 
 *End of 7-Modulator Confidence Chain appendix. Last updated 2026-05-03 with B68.1 ship.*
+
+---
+
+# Appendix — Data Capture Architecture (B70 + B70.1, 2026-05-04 → 2026-05-05)
+
+> **Why this exists.** Future ML, Trend Mining Engine, and post-launch analysis need a per-pair, per-cycle context log with all feature inputs and modulator chain values, joinable by timestamp across the system's full lifecycle (VTS today → paper-sim Phase 19 → live Phase 21). Before B70 the system had three disconnected data sources (B74 OHLC archives / B67+B73 ablation rows / VTS counter logs) and none captured per-pair context. B70 added the missing layer.
+
+## Architecture summary
+
+Five archive tables under a unified writer pipeline. Every row carries a **two-column discriminator** so cross-mode queries are clean: `mode` (system-state at write time, from the run-mode controller) and `source` (which code path produced this row, hardcoded per call site). When the system flips VTS → paper-sim → live, the archive layer keeps writing without code change; only the `mode` value flips.
+
+## Tables
+
+| Table | Cadence | What it captures | Partitioned |
+|---|---|---|---|
+| `pair_scan_archive` | 60s × ~177 active pairs ≈ ~255k/day | Per-pair MCE state: regime label + confidence, DBS score + category, ATR%, all 7 modulator inputs, full feature snapshot (vwap/sma/atr/vol/mom/adx/high24h/low24h/phase/age), scan-stage decision | RANGE on `captured_at`, monthly |
+| `signal_eval_archive` | per-evaluation | Per-strategy × per-pair signal evaluation. `reject_stage` enum: `admitted` / `pre_filter` / `sqe` / `rtb` / `tcl` / `strategy_internal`. Today VTS path captures admitted + sqe + tcl + strategy_internal; pre_filter from FX5 + active-path SQE/RTB queued for B70.2. | RANGE on `captured_at`, monthly |
+| `exit_decision_archive` | per-trade-close | Actual exit decision (parallel to B73 counterfactual). `exit_reason` enum, R-multiple, regime/DBS at entry vs exit, full state snapshot. | RANGE on `captured_at`, monthly |
+| `macro_feed_archive` | 60s | B67.1 macro snapshot timeseries — btc_dom, mcap_mom, funding, modifier_value, fallback_active. Joinable by timestamp to per-pair tables. | RANGE on `captured_at`, monthly |
+| `b62_retroactive_labels` | one-shot | Original vs B62-post-audit re-classified label per historical VTS trade. Real re-classify when OHLC available (post-B74 trades), placeholder rows otherwise with `requires_ohlc_backfill=true` flag. | NOT partitioned (~3-5k rows total) |
+
+All JSONB columns embed `schema_version: 1` for forward-evolution safety. Bump on breaking shape changes.
+
+## Hot-path hooks
+
+Six places where the trading code emits archive rows. Every hook is `try/catch` wrapped + non-blocking; the MCE hook additionally uses `setImmediate` so module-resolution latency on dynamic imports cannot block the 60s classification cycle.
+
+| Hook site | File / line | Archives | Mode source |
+|---|---|---|---|
+| MCE cycle end | `market-context-engine.ts:computeContext()` post-emit | `pair_scan_archive` | `getCurrentMode()` |
+| VTS emit-ablation (admitted) | `vts-runner.ts:~L1726` | `signal_eval_archive` `reject_stage='admitted'` | `getCurrentMode()` |
+| VTS evaluator reject paths | `vts-runner.ts:~L2786 + L2851` | `signal_eval_archive` `reject_stage` ∈ {sqe, tcl, strategy_internal} | `getCurrentMode()` |
+| VTS exit loop | `vts-runner.ts:~L2161` | `exit_decision_archive` | `getCurrentMode()` |
+| Paper exit | `paper-execution-engine.ts:closePosition` | `exit_decision_archive` | `getCurrentMode()` (currently dormant; live activates Phase 19) |
+| Signal-orchestrator emit | `signal-orchestrator.ts:~L975` | `signal_eval_archive` `reject_stage='admitted'` | `getCurrentMode()` (currently dormant; live activates Phase 21) |
+| Macro feed pollCycle | `external-macro-feed.ts:pollCycle end` | `macro_feed_archive` | n/a (global feed) |
+
+## Writer pipeline
+
+`server/services/data-archive/archive-batch-writer.ts` — 5s flush interval, 2-slot counting semaphore (separate from B74's pool so neither archive layer can starve the other), 1,000-row chunked INSERTs (Postgres 65,535-param bind-limit safety), bounded queue with drop-OLDEST overflow + `[B70][ARCH][OVERFLOW]` log line. Each archiver registers its column list once at startup; rows are plain objects keyed by column name. Drizzle-`sql` tagged inserts so JSONB columns get proper binding.
+
+`server/services/data-archive/archive-config.ts` — reads 11 `data_archive` module_constants once + every 60s, exposes sync getters for hot-path callers. Toggles for each archiver, retention window, queue-max, and the kill-switch `b70_signal_eval_pre_filter_capture` (drops pre_filter + strategy_internal rows if 7-day measurement shows worst-case volume).
+
+## Run-mode controller
+
+`server/services/run-mode-controller.ts` — `getCurrentMode(): 'vts' | 'paper_sim' | 'live'`. Pure derivation from existing `tradingStateSync.isEngineActive('paper'/'live')` flags. 5-second cache TTL with lazy async refresh + dedup via `refreshInFlight` promise. Default `'vts'`. Hold-previous-value on transient errors with single warn log. **Does NOT extend the existing 2-mode `TradingMode` type** — Phase 27.4 wiring has high blast radius.
+
+## Retention + partition crons
+
+- **Retention sweep** (`server/scripts/b70-retention-sweep.ts`, cron `0 2 * * *` UTC): drops whole monthly partitions older than `b70_postgres_retention_days` (default 90). Per-partition `DROP IF EXISTS` is O(1).
+- **Partition creator** (`server/scripts/b70-create-monthly-partitions.ts`, cron `30 2 28 * *` UTC): self-heals current-month partition + creates 12 months ahead.
+- **Tabular exporter** (`server/scripts/b70-table-export.ts`, cron `0 3 * * *` UTC, off by default until `b70_parquet_export_enabled=true`): exports prior-day rows to `/var/lib/dawntrader/exports/<table>/<YYYY-MM-DD>.jsonl.gz`. JSONL chosen over Parquet for v1 to avoid new npm dep; pandas/DuckDB/tsfresh/Qlib all read JSONL natively.
+
+## B62 retroactive labels runner
+
+`server/scripts/b70-b62-relabel-runner.ts` — iterates `logs/virtual_trades/<YYYY-MM-DD>.json`. For trades with `entryTime ≥ 2026-04-30` AND OHLC available in `crypto_spot_ohlc_1m`, runs `calculatePairRegime()` with the trade's persisted `pairDirectionalBiasScore` + fresh OHLC-derived inputs to produce a real retroactive label. Older trades or symbols missing from B74 archive get placeholder rows with `requires_ohlc_backfill=true`. Idempotent on `trade_id` UNIQUE.
+
+## Module constants (data_archive module)
+
+11 keys, all wildcard scope: `b70_pair_scan_capture_enabled`, `b70_signal_eval_capture_enabled`, `b70_signal_eval_pre_filter_capture` (kill-switch), `b70_exit_decision_capture_enabled`, `b70_macro_feed_capture_enabled`, `b70_parquet_export_enabled` (off by default), `b70_partition_lookhead_months`, `b70_postgres_retention_days`, `b70_retention_sweep_batch_size`, `b70_retention_sweep_pause_ms`, `b70_archive_writer_queue_max`.
+
+## Visibility
+
+Drift Dashboard → `DataArchiveSection` panel: per-table row counts in window + total + last_write_at + buffer depth + overflow drops + last error. Plus current mode + retention window + kill-switch state. Refreshes every 30s via `GET /api/analytics/data-archive-status`.
+
+## Forward-couples
+
+- **Trend Mining Engine** (Phase 17.6 / 18.5, post-launch) — consumes pair_scan + signal_eval + exit_decision joined to B74 OHLC by timestamp.
+- **B67.5 consumer wiring** — when active trading turns on (post-2026-05-15 calibration check), the signal-orchestrator's existing admitted-path archive hook fires automatically with `mode='live'`.
+- **Phase 19 paper-sim activation** — `paper-execution-engine.closePosition` hook fires automatically with `mode='paper_sim'`. No code change required.
+
+## What's not in B70.1 (queued for B70.2 if needed)
+
+- **FX5 pre-filter reject capture** — fx5-scanner.ts has multi-stage `filterFailures` tracking; per-pair archive rows would touch ~10 loops. Today VTS captures rejects that reach strategy `detect()`; pre-filter rejects are captured implicitly via row absence.
+- **Active-path SQE/RTB hooks** — dormant until live trading turns on. Instrument when path activates Phase 21.
+- **Parquet binary format** — JSONL chosen v1 to avoid new npm dep. Pyarrow sidecar can convert if columnar query speedup needed.
+
+---
+
+*End of Data Capture Architecture appendix. Last updated 2026-05-05 with B70.1 ship.*
