@@ -41,22 +41,56 @@
 
 **Step 2 — CLOSED 2026-05-05** (Langston cc-inbox #906). All 6 tiers swept. Final unique PROMOTE: ~180 levers across core (52) + services (~30 dedup'd) + strategies (93) + risk/exec (+9 unique) + config (5 unique). KEEP ~115. ALREADY_MIGRATED 8. DB_GOVERNED_ELSEWHERE 2. Inventory: `1-system-manual/LEVER_INVENTORY.md`. Langston Step-2-closure decisions locked in inventory §10b.
 
-**Step 3 — READY TO START. Two-commit plan (Langston-approved):**
+**Step 3 — IN PROGRESS.** Commit A DONE + Step 7 verified (Langston cc-inbox #908). Commit B migration SQL DONE + Slice 1 source replacement DONE.
 
-- **Commit A — DBS routing guards group migration (atomic).** `B72-STRAT-001` SBT_DBS_MIN=0.35 + 3 parallel mutual-exclusion guards (defensive_hedge L92/L100, reverse_impulse L71/L79, morning_star L77/L86). Schema: `module_name=strategy_dbs_routing_guards`, per-strategy `constant_name`. **Mandatory integration test** asserting mutual consistency (sync break must fail test). 5 files touched (1 migration + 4 strategy files + 1 test).
+**LIVE on staging (PM2 #155 at 15:29:52 UTC):**
+```
+[B72][warmup] prefetched module_constants module='strategy_dbs_routing_guards' rows=4
+[B72][warmup] prefetched module_constants module='position_sizing' rows=11
+[B72][INIT_OK] module_constants sync-read modules warmed
+```
 
-- **Commit B — comprehensive lever sweep.** Single Drizzle migration `drizzle/migrations/2026-05-XX-b72-lever-sweep.sql` with all ~176 remaining PROMOTE rows. Risk-tier-ordered SQL (LOW→MED→HIGH) for readability; one transaction. ~25-30 source files edited with `getNumericRequired`-style reads. Unit test asserting seeded values match old literals exactly.
+**Commits landed on `migration/aws-supabase`:**
+- `924a7c18` Commit A — DBS routing guards (4 rows + sync API + warmup hook + integration test). Step 7 verified, Langston-signed-off.
+- `ca5282e6` Test fix (skipIf no DB).
+- `875ef20f` Commit B migration SQL + bulk resolver. **170 unique rows seeded across 33 modules** on staging Supabase.
+- `c5da0c3b` Commit B Slice 1 — position_sizing source replacement (DSE_CONFIG → getDSEConfig() bulk reader). Live, no errors.
 
-**Companion deliverable: `server/scripts/dump-settings-registry.ts`** — generates `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` (live-snapshot directory). Run on demand + post-deploy.
+**Helpers added to module-constants-service.ts:**
+- `prefetchModule()` — async warmup, throws on first prefetch failure
+- `getCachedConstant<T>()` — sync, throws on cold cache
+- `getCachedNumberRequired()` — sync number, throws on missing/non-numeric
+- `getCachedNumbersForModule()` — sync bulk Record<string, number> for per-module reads
+- 60s background refresher (lazy, no-op in tests)
 
-**Pre-Step-3 sub-tasks (parallelizable with Commit A):**
-1. 17-vs-9 strategy reconciliation — only 9 files in `server/strategies/`; map remaining 8 canonical strategies to their actual file locations; confirm levers caught in core/services sweeps. Output → inventory §3.7.
-2. `DEFAULT_REGIME_CONFIG` migration-state enumeration — walk schema vs live `module_constants` rows; produce sub-table for B72-CORE-031.
-3. Move strategies-tier 93-row table to companion `LEVER_INVENTORY_STRATEGIES.md`.
+**REMAINING Step 3 work for next session:**
 
-**HIGH-risk list (15 rows total)** — full table in inventory §7. Headline: regime classifier 8-field block (CORE-031), SQE primary gates (SVC-021/022), VTS_MAX_CONCURRENT (SVC-004), FINALSCORE_DECAY_LAMBDA, EDGE_SENSITIVITY, DBS routing guards (group), anti-exhaustion blow-off filter, B18H crypto calibrations in adaptive_flow + defensive_hedge, B53 support_bounce expansion, alignmentScore weights atomic block, MAX_COST_BOUND, drift moderate boundary.
+- **Slice 2 — Cross-strategy module source replacements.** ~25 files. Modules already seeded in DB:
+  - `expectancy_kernel` (net-expectancy-kernel.ts: MIN_PWIN, MAX_PWIN, DI_PWIN_FACTOR + → also `directional_integrity`)
+  - `expectancy_tuning` + `expectancy_gates` + `roi_gating` (expectancy.ts: per-regime ROI + winrate floors + ROI flex)
+  - `goals_weighting`, `goal_alignment`, `strategy_profiles` (adaptive-goals-weight, pre-execution-validator)
+  - `dbs_calculation`, `regime_age`, `correlation_matrix` (DB store, regime-age-factor, risk_index)
+  - `cost_model`, `cost_geometry`, `rtb_ranking`, `rtb_config`, `queue_admission` (cost-metrics, ready_to_buy_service, quality_index)
+  - `vts_runner`, `vts_service`, `vts_scoring`, `signal_orchestrator`, `paper_execution`, `paper_sizing`
+  - `governance_modes`, `pattern_pool_gates`, `drift_detector`, `concentration_risk`, `guardrail_defaults`, `learning_governance`, `trailing_exit`, `adaptive_weights`
+  - For each: add `getCachedNumbersForModule(...)` call OR `getCachedNumberRequired()` per lever; add module to PREFETCH_MODULES list.
 
-**11-step workflow.** Steps 1+2 CLOSED. Step 3 implementation pending fresh session.
+- **Slice 3 — Strategy-tier source replacements (9 files, 93 levers).** Each strategy file: replace top-of-file constant block with `const c = getCachedNumbersForModule('strategy.<key>', { exchange:'*', assetClass:'*', strategy:'<key>', regime:'*' })` at top of detect(); rewire references. Pattern proven by Commit A's strong_bull_trend / defensive_hedge / reverse_impulse / morning_star DBS guard work. Add 9 new modules to PREFETCH_MODULES.
+
+- **Slice 4 — HIGH-risk wiring.** SQE precedence chain (screener_filters → sqe_config module_constants → source last-resort). market_regime remaining DEFAULT_REGIME_CONFIG fields wired into MCE's `assembleRegimeConfig()`. VTS_MAX_CONCURRENT, EDGE_SENSITIVITY, FINALSCORE_DECAY_LAMBDA env-fallback compat preserved.
+
+- **Companion: `server/scripts/dump-settings-registry.ts`.** Reads module_constants + screener_filters, outputs `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` sorted by module. Runnable on demand + post-deploy hook.
+
+- **Pre-Step-3 sub-tasks still pending:**
+  1. 17-vs-9 strategy reconciliation — only 9 files in `server/strategies/`; map remaining 8 (likely in `core/strategies/` or as inline detection in services)
+  2. `DEFAULT_REGIME_CONFIG` migration-state enumeration (B70.3/B70.3b already migrated b68_5 + b67_5; Commit B SQL seeded 5 more remaining; verify nothing missed)
+  3. Move strategies-tier 93-row table to companion `LEVER_INVENTORY_STRATEGIES.md`
+
+- **Steps 4-11 remaining:** Langston full-diff review (Slices 2/3/4), CI verification, governance updates (SYSTEM_MANUAL appendix, SIM annotations, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP §B72 closure, ADJUSTMENT_FRAMEWORK, BATCH_CATALOG, PHASE_HISTORY), `BATCH_72_COMPLETION_REPORT.md`.
+
+**Critical pattern reminder:** every PROMOTE module read from sync code MUST be added to `PREFETCH_MODULES` list in `server/startup/b72-warmup.ts` BEFORE source consumers ship; otherwise boot hard-fails.
+
+**11-step workflow.** Steps 1+2 CLOSED. Step 3 ~30% complete. Steps 4-11 pending.
 
 **Skipping for now:**
 - Phase 19.0.5 — held until Phase 19 (Kyle 2026-05-05)
