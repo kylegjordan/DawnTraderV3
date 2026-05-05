@@ -267,6 +267,49 @@ export function getCachedConstant<T = unknown>(
 }
 
 /**
+ * Sync bulk resolver: returns ALL numeric constants for a given (module, key)
+ * as a Record<constantName, number>. Used by per-strategy modules where a
+ * detect() call needs many constants at once (10–19 levers per strategy file).
+ *
+ * Resolves each constant via the same most-specific-wins logic as
+ * getCachedConstant. Skips non-numeric values silently (use getCachedConstant
+ * directly if you need non-numeric or want to detect missing keys).
+ *
+ * Throws on cold cache (module not warmed).
+ */
+export function getCachedNumbersForModule(
+  moduleName: string,
+  key: ResolutionKey,
+): Record<string, number> {
+  const cached = cache.get(moduleName);
+  if (!cached) {
+    throw new Error(
+      `module_constants: module '${moduleName}' is not warm. Call prefetchModule('${moduleName}') at server startup before sync reads.`,
+    );
+  }
+
+  // Group by constantName, pick best per group
+  const byConstant = new Map<string, { row: ModuleConstant; score: number }>();
+  for (const row of cached.rows) {
+    const score = scoreRowForKey(row, key);
+    if (score === null) continue;
+    const existing = byConstant.get(row.constantName);
+    if (!existing || score > existing.score) {
+      byConstant.set(row.constantName, { row, score });
+    }
+  }
+
+  const result: Record<string, number> = {};
+  for (const [name, entry] of byConstant) {
+    const v = entry.row.value;
+    if (typeof v === 'number') {
+      result[name] = v;
+    }
+  }
+  return result;
+}
+
+/**
  * Sync resolver returning a NUMBER. Throws on cold cache, missing row, or
  * non-numeric value. Use this for B72-migrated levers in hot-path code.
  *
