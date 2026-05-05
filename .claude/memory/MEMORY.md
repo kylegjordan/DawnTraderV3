@@ -43,22 +43,14 @@
 - exit_decision_archive: ⏳ pending first close post-hotfix #150 (no errors)
 - macro_feed_archive: ✅ ~800 rows
 
-**Calibration findings (rolling 7d as of 2026-05-05):**
-- Decision-grade winners: b68_2 volume_regime (+4.6pp lift), b68_3 pair_correlation (+4.1pp), b67_4 outcome_feedback (+2.8pp), b68_4 regime_age (+2.3pp). All READY.
-- Promising but n too small: b68_1 multi_tf_agreement (+6.0pp lift, n=83 — wait for n≥150).
-- **Inert/drag:** b67_2 phase_preference (+0.0pp, 99% zero shift confirms it's noop), b67_1 btc_dominance (-0.4pp).
-- **Actively hurting:** b68_5 path_b_sustainability (-2.0pp lift, |shift|=0.4480 binary cuts). Recommend gate OFF until reformulated.
-- Confidence chain is net-suppressive — every open trade pinned at 0.45 floor on `regimeConfidenceModulated`. Pre-B67.5 wiring this is observational; post-B67.5 expect admission cliff unless floor raised or b68_5 fixed.
-
-**Exit ablation findings (n=743 trades, 7d):**
-- Current baseline (A: BE on, trail on) is 9th of 12 variants at +0.197 mean P&L.
-- Top variant: J no_trailing (BE on, trail off) at +0.293, +0.097 vs A, Sharpe 2.01.
-- Decision pointer: keep BE-stop, drop trailing-after-target. Trailing is over-cutting winners; BE-stop is fine.
-- F (no BE, trail on) and K (no BE, no trail) still nearly identical despite B73.3 fix — investigate before acting on F/K specifically. J vs A is solid.
-
-**Closed-trade pattern observed:** 35 of 41 visible exits = BREAK_EVEN_STOP, 6 = STOP_LOSS, 0 TP, 0 TRAIL. Many BE_STOP fires on profitable trades that turn negative after costs — confirms ablation finding.
-
-**Universe diversity gap:** every open + closed trade in the last week is TFS regime, ~strong_bull_trend. 17 strategies registered, ~2 actively trading. Reject_stage data should explain why.
+**Calibration / exit-ablation findings (2026-05-05, ACTED ON in B70.3):**
+- Decision-grade winners: b68_2 (+4.6pp), b68_3 (+4.1pp), b67_4 (+2.8pp), b68_4 (+2.3pp). All READY for B67.5 consumer wiring.
+- Promising small-n: b68_1 multi_tf_agreement (+6.0pp lift, n=83 — wait n≥150).
+- Inert: b67_2 phase_preference (0.0pp), b67_1 btc_dominance (-0.4pp).
+- Acted: **b68_5 swapped slope→momentum gate in B70.3** (was -2.0pp lift). Watch lift recovery.
+- Acted: **trailing-after-target disabled** via module_constant (J variant won at +0.097 vs A, Sharpe 2.01). BE-stop kept.
+- F vs K differentiation deferred — 0 trades hit target in 7d window so simulators converge to identical SL/TP behavior.
+- 51% TFS / strong_bull_trend dominance is **correct** — 83% of pairs are UP-direction in current market. Investigation found liquidity_trap waste (eliminated in B70.3); other strategies have organic reject reasons.
 
 ---
 
