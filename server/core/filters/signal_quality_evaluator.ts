@@ -26,17 +26,39 @@ import { isStrategyEligible } from '../governance/strategy-eligibility.js';
 import { getStrategyDependency } from '../../config/strategy-governance.js';
 // Phase 14.5: Pattern pool elevated quality floor
 import { PATTERN_POOL_GUARDRAILS } from '../../config/pattern-filter-profile.js';
+// B72 (2026-05-05): SQE default thresholds migrated to module='sqe_config'.
+// Three-layer precedence preserved (Langston cc-inbox #906 + #910):
+//   1. screener_filters row (mode-specific runtime authority — DB-overridable per paper/live)
+//   2. module_constants ('sqe_config' — DB fallback default, B72-migrated)
+//   3. Hardcoded mirror in SQE_DEFAULT_THRESHOLDS object below — kept ONLY for the
+//      narrow case where module_constants warmup hasn't completed and a non-runtime
+//      consumer (test/audit script) imports the const for static reference.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+
+const _SQE_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 
 /**
- * Directive 11.0B: SQE Thresholds - Default values used when screener config is unavailable
- * Production values are loaded from screener_filters table
+ * B72 sync resolver. Live runtime callers prefer this — reads the
+ * module_constants row that was seeded by migration. Throws on cold cache.
+ */
+function getSQEModuleDefaults(): { minFinalScore: number; minRegimeWeight: number } {
+  return {
+    minFinalScore:    getCachedNumberRequired('sqe_config', 'min_final_score',   _SQE_GK),
+    minRegimeWeight:  getCachedNumberRequired('sqe_config', 'min_regime_weight', _SQE_GK),
+  };
+}
+
+/**
+ * Directive 11.0B + B72: SQE Thresholds — static-import mirror of the seeded
+ * module_constants row. Live runtime path is `getSQEThresholdsFromConfig(mode)`
+ * which prefers screener_filters → module_constants → this constant.
  */
 export const SQE_DEFAULT_THRESHOLDS = {
-  MIN_FINAL_SCORE: 0.35,
-  MIN_REGIME_WEIGHT: 0.30,
+  MIN_FINAL_SCORE: 0.35,    // mirrors module_constants 'sqe_config.min_final_score'
+  MIN_REGIME_WEIGHT: 0.30,  // mirrors module_constants 'sqe_config.min_regime_weight'
 };
 
-console.log(`[11.0B][SQE_CONFIG] Defaults: FinalScore>=${SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE} RegimeWeight>=${SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT}`);
+console.log(`[11.0B][SQE_CONFIG] Defaults (module_constants mirror): FinalScore>=${SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE} RegimeWeight>=${SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT}`);
 
 export interface SQEInput {
   signalId: string;
@@ -91,21 +113,38 @@ export interface SQEBatchResult {
  * Reads finalScoreMin and regimeWeightMin from screener_filters table
  */
 export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live'): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
+  // B72 precedence chain: screener_filters → module_constants → static mirror.
+  // Layer 2 (module_constants) is the new B72-introduced authority: when
+  // screener_filters has no row OR has a missing field, the seeded
+  // 'sqe_config' module rows are used as the DB fallback default.
+  let mcDefaults: { minFinalScore: number; minRegimeWeight: number };
+  try {
+    mcDefaults = getSQEModuleDefaults();
+  } catch (err) {
+    // module_constants not warm or row missing — fall back to static mirror.
+    // This is the only place in SQE where the static const is consulted at runtime.
+    console.warn(`[SQE][CONFIG] module_constants 'sqe_config' unavailable, using static mirror:`, err);
+    mcDefaults = {
+      minFinalScore: SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE,
+      minRegimeWeight: SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT,
+    };
+  }
+
   try {
     const filters = await storage.getScreenerFilters({ mode });
     if (filters) {
       return {
-        finalScoreMin: parseFloat(filters.finalScoreMin || String(SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE)),
-        regimeWeightMin: parseFloat(filters.regimeWeightMin || String(SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT)),
+        finalScoreMin: parseFloat(filters.finalScoreMin || String(mcDefaults.minFinalScore)),
+        regimeWeightMin: parseFloat(filters.regimeWeightMin || String(mcDefaults.minRegimeWeight)),
       };
     }
   } catch (err) {
-    console.warn(`[SQE][CONFIG] Failed to load screener config for ${mode}, using defaults:`, err);
+    console.warn(`[SQE][CONFIG] Failed to load screener config for ${mode}, using module_constants defaults:`, err);
   }
-  
+
   return {
-    finalScoreMin: SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE,
-    regimeWeightMin: SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT,
+    finalScoreMin: mcDefaults.minFinalScore,
+    regimeWeightMin: mcDefaults.minRegimeWeight,
   };
 }
 

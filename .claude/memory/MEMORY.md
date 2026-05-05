@@ -4,197 +4,136 @@
 
 ---
 
-## SESSION-START PROTOCOL — DO IMMEDIATELY EVERY NEW SESSION / POST-COMPACT
+## SESSION-START PROTOCOL (every new session / post-compact)
 
-1. **Read `DawnTraderV3/CLAUDE.md`** — 11-step workflow, governance tiers, comms protocol, SIM discipline.
-2. **Read this file** for volatile state.
-3. **Read `1-system-manual/POST_AUDIT_ROADMAP.md`** Phase 15c + Phase 16 + B72 sections.
-4. **Start the silent polling chain**: `ssh root@204.168.141.77 "sleep 30 && cc-poll-once"` with `run_in_background: true`. Relaunch silently each wake.
-5. **Acknowledge readiness to Kyle in one line.** Don't dump context.
+1. Read `DawnTraderV3/CLAUDE.md`.
+2. Read this file.
+3. Read `1-system-manual/POST_AUDIT_ROADMAP.md` (B72 + Phase 16) and `1-system-manual/LEVER_INVENTORY.md` §10b/§11.
+4. Start silent polling: `ssh root@204.168.141.77 "sleep 30 && cc-poll-once"` with `run_in_background: true`. Relaunch silently each wake.
+5. Acknowledge readiness in one line. Don't dump context.
 
-**Do NOT** announce polling status. Do NOT confabulate. Do NOT skip SIM in any pre-audit. Do NOT wait on legacy-TS-baseline CI before deploying — Test Suite + Build + Docker Build pass is enough.
+**Do NOT:** announce polling status; confabulate; skip SIM in pre-audit; wait on legacy-TS-baseline CI before deploying — Test+Build+Docker pass is enough.
 
 ---
 
-## CURRENT STATE — 2026-05-05 (PM2 #150 + module_constants UPDATEs)
+## CURRENT STATE — 2026-05-05
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD:** `a2ab2791` (governance gap-fill — B70.2 + B70.3 + B70.3b backfilled across 5 docs)
-- **Live state:** B70 + B70.1 + B70.2 + B70.3 + **B70.3b (post-composition floor 0.45 → 0.20)**. B70 = 52.4 MB / B74 = 5.12 GB on staging.
-
-**Recent module_constants changes (in DB, no code commits):**
-- `b67_5_post_composition_floor` = 0.20 (was 0.45) — pure visibility, B70.3b
-- `b68_5_path_b_momentum_min` = 0.002 (NEW; replaces slope gate) — B70.3
-- `moonbag_qualifying_strategies` = `[]` — disables trailing-after-target
-
-**Path B (TFS regime classifier) gate:** `(absDbs >= 0.30 && mom > 0.002)`. Old slope check retired (was -2.0pp predictive lift).
-
-**Trailing-after-target DISABLED** — every trade exits at target. BE-stop unchanged.
+- **Most recent HEAD:** `e9976287` (B72 Slice 3 done, MEMORY trim queued).
+- **Live:** B70 + B70.1/.2/.3/.3b + B72 Slices 1, 2a-d, 3a-b on PM2 #161.
+- **DB module_constants UPDATEs (no code commits):** `b67_5_post_composition_floor=0.20`, `b68_5_path_b_momentum_min=0.002`, `moonbag_qualifying_strategies=[]`.
+- **Path B (TFS classifier) gate:** `(absDbs >= 0.30 && mom > 0.002)`. Trailing-after-target DISABLED — every trade exits at target.
 
 ---
 
-## ACTIVE NEXT — B72 lever-to-`module_constants` sweep (IN PROGRESS, Step 2 partial)
+## ACTIVE — B72 lever-to-`module_constants` sweep (Step 3 ~70% complete)
 
-**Why next:** Kyle directive 2026-05-05. Final pre-Phase-19 backstop. After B72 → Phase 16 → Phase 19.
+**Step 1 + Step 2** — CLOSED (Langston cc-inbox #903/#904/#906). Inventory at `1-system-manual/LEVER_INVENTORY.md`. ~180 unique PROMOTE levers, 15 HIGH-risk flagged. Decisions locked in inventory §10b.
 
-**Step 1 — DONE.** Scope: `Claude Comms and Packages/Scope Files/BATCH_72_SCOPE.md`. Langston APPROVED with answers (cc-inbox #903) — defaults: GLOBAL `(*, *, *, *)` scope, single SQL migration, all 17 strategies in sweep, no preemptive sync-helper, single flat `LEVER_INVENTORY.md`. Addendum (cc-inbox #904): `CURRENT_SETTINGS_REGISTRY.md` live-snapshot deliverable + KEEP examples confirmed.
+**Step 3 progress:**
 
-**Step 2 — CLOSED 2026-05-05** (Langston cc-inbox #906). All 6 tiers swept. Final unique PROMOTE: ~180 levers across core (52) + services (~30 dedup'd) + strategies (93) + risk/exec (+9 unique) + config (5 unique). KEEP ~115. ALREADY_MIGRATED 8. DB_GOVERNED_ELSEWHERE 2. Inventory: `1-system-manual/LEVER_INVENTORY.md`. Langston Step-2-closure decisions locked in inventory §10b.
+- ✅ Commit A — DBS routing guards (4 strategies, 4 rows, sync API + warmup hook + integration test). Step 7 verified, Langston signed off cc-inbox #908.
+- ✅ Commit B SQL migration applied — 170 rows / 33 modules seeded on staging. Langston signed off cc-inbox #909.
+- ✅ Slice 1 — DSE_CONFIG bulk read (position_sizing, 11 levers).
+- ✅ Slice 2a — expectancy + RTB (8 modules, 16 levers).
+- ✅ Slice 2b — 7 single-lever modules (vts_scoring, goals_weighting, dbs_calculation, paper_sizing, vts_service, cost_model, learning_governance).
+- ✅ Slice 2c — pattern_pool / drift / paper-execution / signal-orchestrator (4 modules).
+- ✅ Slice 2d — vts_runner (5 levers) + regime_age (1 lever).
+- ✅ Slice 3a + 3b — all 9 strategy files (91 levers across `strategy.<key>` modules).
+- **TOTAL LIVE: 31 modules / ~158 rows in production sync paths.** All warming verified in PM2 boot logs.
 
-**Step 3 — IN PROGRESS.** Commit A DONE + Step 7 verified (Langston cc-inbox #908). Commit B migration SQL DONE + Slice 1 source replacement DONE.
+**Step 3 remaining (Slice 4 + deferred):**
 
-**LIVE on staging (PM2 #155 at 15:29:52 UTC):**
-```
-[B72][warmup] prefetched module_constants module='strategy_dbs_routing_guards' rows=4
-[B72][warmup] prefetched module_constants module='position_sizing' rows=11
-[B72][INIT_OK] module_constants sync-read modules warmed
-```
+- **Slice 4 HIGH-risk wiring** (Langston cc-inbox #910):
+  - SQE precedence chain: `screener_filters` → `sqe_config` module_constants → source last-resort. Document 3-layer precedence in code.
+  - `market_regime` `assembleRegimeConfig` extension — wire 5 remaining DEFAULT_REGIME_CONFIG fields (TFS desat/scale).
+  - net-expectancy-kernel: caller-injection refactor (preserve pure-math contract — pass MIN_PWIN/MAX_PWIN/DI_PWIN_FACTOR as input, callers resolve from DB).
+- **Deferred (need different patterns):**
+  - `adaptive-manager.ts` DEFAULT_DECAY_RATE — singleton instantiated at module load; needs init-hook refactor.
+  - `risk-concentration.ts` Directive 9.4 — same singleton issue.
+  - `strategy-modes.ts` confidence floors — naming mismatch (NORMAL/DEFENSIVE/SURVIVAL vs migration's conservative/moderate/aggressive); reseed needed.
+  - `pre-execution-validator.ts` goal_alignment + strategy_profiles — atomic-block migration.
+  - `trade-safety.ts` guardrail_defaults — pre-existing fallback path.
+- **Companion:** `server/scripts/dump-settings-registry.ts` → `1-system-manual/CURRENT_SETTINGS_REGISTRY.md`.
+- **Pre-Step-3 sub-tasks pending:** 17-vs-9 strategy reconciliation; `DEFAULT_REGIME_CONFIG` migration-state enum.
+- **Steps 4-11:** Langston full-diff review per slice; CI verification; governance updates (SYSTEM_MANUAL, SIM, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP §B72 closure, ADJUSTMENT_FRAMEWORK, BATCH_CATALOG, PHASE_HISTORY); `BATCH_72_COMPLETION_REPORT.md`.
 
-**Commits landed on `migration/aws-supabase`:**
-- `924a7c18` Commit A — DBS routing guards (4 rows + sync API + warmup hook + integration test). Step 7 verified, Langston-signed-off.
-- `ca5282e6` Test fix (skipIf no DB).
-- `875ef20f` Commit B migration SQL + bulk resolver. **170 unique rows seeded across 33 modules** on staging Supabase.
-- `c5da0c3b` Commit B Slice 1 — position_sizing source replacement (DSE_CONFIG → getDSEConfig() bulk reader). Live.
-- `d1397702` Slice 2a — expectancy + RTB (8 modules, 16 levers).
-- `3c7b59d8` Slice 2b — 7 single-lever modules (vts_scoring, goals_weighting, dbs_calculation, paper_sizing, vts_service, cost_model, learning_governance).
-- `4f3826b6` Slice 2c — pattern pool, drift, paper exec, orchestrator (4 modules).
-- `3b9e6d01` Slice 2d — vts_runner (5 levers) + regime_age (1 lever).
-- `8c3866db` Slice 3a — strategies tier 3/9 files (adaptive_flow / volatility_edge / defensive_hedge).
-- `9f30df9a` Slice 3b — strategies tier 6/9 remaining (inside_bar_reversal / morning_star / pivot_shift / reverse_impulse / support_bounce / strong_bull_trend).
-- **31 modules / ~158 rows live in production sync-read paths** (22 cross-strategy + 9 per-strategy).
-- **All 9 strategy files migrated** — every per-strategy lever DB-tunable via `strategy.<key>` module bulk-read.
+**Critical pattern:** every PROMOTE module read from sync code MUST be added to `PREFETCH_MODULES` in `server/startup/b72-warmup.ts` BEFORE source consumers ship; boot hard-fails otherwise.
 
-**Helpers added to module-constants-service.ts:**
-- `prefetchModule()` — async warmup, throws on first prefetch failure
-- `getCachedConstant<T>()` — sync, throws on cold cache
-- `getCachedNumberRequired()` — sync number, throws on missing/non-numeric
-- `getCachedNumbersForModule()` — sync bulk Record<string, number> for per-module reads
-- 60s background refresher (lazy, no-op in tests)
+**Helpers in module-constants-service.ts:** `prefetchModule()`, `getCachedConstant<T>()`, `getCachedNumberRequired()`, `getCachedNumbersForModule()` (bulk), 60s background refresher.
 
-**REMAINING Step 3 work for next session:**
-
-- **Slice 2 — Cross-strategy module source replacements.** ~25 files. Modules already seeded in DB:
-  - `expectancy_kernel` (net-expectancy-kernel.ts: MIN_PWIN, MAX_PWIN, DI_PWIN_FACTOR + → also `directional_integrity`)
-  - `expectancy_tuning` + `expectancy_gates` + `roi_gating` (expectancy.ts: per-regime ROI + winrate floors + ROI flex)
-  - `goals_weighting`, `goal_alignment`, `strategy_profiles` (adaptive-goals-weight, pre-execution-validator)
-  - `dbs_calculation`, `regime_age`, `correlation_matrix` (DB store, regime-age-factor, risk_index)
-  - `cost_model`, `cost_geometry`, `rtb_ranking`, `rtb_config`, `queue_admission` (cost-metrics, ready_to_buy_service, quality_index)
-  - `vts_runner`, `vts_service`, `vts_scoring`, `signal_orchestrator`, `paper_execution`, `paper_sizing`
-  - `governance_modes`, `pattern_pool_gates`, `drift_detector`, `concentration_risk`, `guardrail_defaults`, `learning_governance`, `trailing_exit`, `adaptive_weights`
-  - For each: add `getCachedNumbersForModule(...)` call OR `getCachedNumberRequired()` per lever; add module to PREFETCH_MODULES list.
-
-- ~~Slice 3 — Strategy-tier source replacements~~ ✅ DONE (9 files, 91 levers across `strategy.<key>` modules).
-
-- **Slice 4 — HIGH-risk wiring (REMAINING).** SQE precedence chain (screener_filters → sqe_config module_constants → source last-resort). market_regime remaining DEFAULT_REGIME_CONFIG fields wired into MCE's `assembleRegimeConfig()`. EDGE_SENSITIVITY (already in DSE_CONFIG migration done in Slice 1). MIN_PWIN/MAX_PWIN/DI_PWIN_FACTOR caller-injection refactor for net-expectancy-kernel (preserve pure-math contract).
-
-- **Deferred from Slice 2 (singleton-init or naming issues):**
-  - `adaptive-manager.ts` DEFAULT_DECAY_RATE — needs init-hook refactor.
-  - `risk-concentration.ts` Directive 9.4 guards — same singleton issue.
-  - `strategy-modes.ts` confidence floors — naming mismatch in seeded migration (NORMAL/DEFENSIVE/SURVIVAL vs conservative/moderate/aggressive); reseed required.
-  - `pre-execution-validator.ts` goal_alignment + strategy_profiles — atomic-block migration deferred.
-  - `trade-safety.ts` guardrail_defaults — pre-existing fallback path; defer.
-
-- **Goal_alignment HIGH-risk** atomic block (4 alignmentScore weights) — deferred; rows seeded in DB but source replacement TBD.
-
-- **Companion: `server/scripts/dump-settings-registry.ts`.** Reads module_constants + screener_filters, outputs `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` sorted by module. Runnable on demand + post-deploy hook.
-
-- **Pending pre-Step-3 sub-tasks:** 17-vs-9 strategy reconciliation; `DEFAULT_REGIME_CONFIG` migration-state enum; move strategies 93-row table to companion file.
-- **Steps 4-11:** Langston full-diff review; CI verification; governance updates (SYSTEM_MANUAL, SIM, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP §B72 closure, ADJUSTMENT_FRAMEWORK, BATCH_CATALOG, PHASE_HISTORY); `BATCH_72_COMPLETION_REPORT.md`.
-
-**Critical pattern reminder:** every PROMOTE module read from sync code MUST be added to `PREFETCH_MODULES` list in `server/startup/b72-warmup.ts` BEFORE source consumers ship; boot hard-fails otherwise.
-
-**11-step workflow.** Steps 1+2 CLOSED. Step 3 ~70% complete (Slices 1+2a-d+3a-b done; Slice 4 remains). Steps 4-11 pending.
-
-**Skipping for now:** Phase 19.0.5 / F/K simulator / B70.2 follow-ups / liquidity_trap bullish redesign.
+**Skipping:** Phase 19.0.5 / F/K simulator / B70.2 follow-ups / liquidity_trap bullish redesign.
 
 ---
 
 ## RECURRING ANALYSIS RECIPE (trigger phrase: "**run the calibration review**")
 
-When Kyle asks for "the calibration review" / "review the factors" / similar trigger, do this without re-asking what:
+When Kyle says "run the calibration review" / "review the factors" / similar:
 
-1. **Hit `GET /api/analytics/factor-calibration?window=rolling_7d`** on staging — render the 10-row factor table:
-   - For each factor: avg shift, |shift|, max |shift|, n, % zero
-   - REAL tertile WR (low/mid/high) + REAL spread
-   - ALT tertile WR + ALT spread
-   - Predictive lift (REAL spread − ALT spread) — the decision-grade column
-   - Status (READY / ACCUMULATING)
-2. **Hit `GET /api/analytics/exit-strategy-ablation?window=rolling_7d`** — render the 12-variant table:
-   - Variant ID + name, n, mean P&L %, Δ vs A baseline, Sharpe, WR%, avg duration, exit-reason breakdown
-   - Highlight A (current baseline) row
-   - Rank by Sharpe descending
-3. **Verify recent changes are reflected:**
-   - b68_5 path_b_sustainability lift should drift from -2.0pp toward 0+ (B70.3 momentum-gate swap, 2026-05-05)
-   - Trailing-after-target exits should drop to ZERO in new closes (moonbag disabled 2026-05-05) — confirm via `exit_reason='TRAIL_hit'` count near zero in last-24h `exit_decision_archive` rows
-   - liquidity_trap rejects (`strategy_disabled_bearish`) should be ABSENT from recent strategy_internal reasons (B70.3 iteration-loop exclusion)
-   - Floor 0.20 should be visible in newer signal_eval_archive admit rows (was 0.45 pinned 100%)
-4. **Plain-language interpretation:**
-   - Which factors are decision-grade vs inert vs hurting (use predictive lift)
-   - Which exit variant the data favors + by how much
-   - Whether recent changes are working as intended
-5. **Recommendations** for any factor that needs intervention before B67.5 wires
+1. `GET /api/analytics/factor-calibration?window=rolling_7d` — render 10-row factor table (avg shift, |shift|, max |shift|, n, % zero, REAL tertile WR, ALT tertile WR, predictive lift = REAL − ALT spread, status READY/ACCUMULATING).
+2. `GET /api/analytics/exit-strategy-ablation?window=rolling_7d` — render 12-variant table (id, name, n, mean P&L %, Δ vs A, Sharpe, WR%, avg duration, exit-reason breakdown). Highlight A row, sort by Sharpe desc.
+3. **Verify recent changes:**
+   - b68_5 path_b_sustainability lift drifting from -2.0pp toward 0+ (B70.3 momentum-gate swap)
+   - `exit_reason='TRAIL_hit'` ≈ 0 in last-24h `exit_decision_archive` (moonbag disabled)
+   - `liquidity_trap` `strategy_disabled_bearish` ABSENT from recent strategy_internal reasons (B70.3 iteration-loop exclusion)
+   - Floor 0.20 visible in newer signal_eval_archive admit rows (was 0.45 pinned 100%)
+4. **Plain-language interpretation:** which factors decision-grade vs inert vs hurting (use predictive lift); which exit variant the data favors + by how much; whether recent changes are working.
+5. **Recommendations** for any factor needing intervention before B67.5 wires.
 
-**Standard query CSV:** if Kyle wants fresh sample exports, use `/tmp/b70-csv-flat.cjs` on staging (already in place).
+**Sample CSVs:** `/tmp/b70-csv-flat.cjs` on staging.
 
 ---
 
-## Calibration milestones (running in parallel)
+## Calibration windows (running in parallel)
 
-| Window | Day | Ends | Decision-grade gate |
-|---|---|---|---|
-| B67.4 cheap-tier | 4-5 of 14 | 2026-05-15 | tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket |
-| B68.2 volume regime | 3-4 of 14 | 2026-05-16 | Same gate |
-| B68.3 pair correlation | 3-4 of 14 | 2026-05-16 | Same gate |
-| B68.1 multi-TF agreement | 2-3 of 14 | 2026-05-17 | Same gate (n=83 currently — wait n≥150) |
-
-**B67.5 consumer wiring kicks off post-2026-05-15** if B67.4 calibration passes.
+B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3 pair correlation ends 2026-05-16 · B68.1 multi-TF agreement ends 2026-05-17. All gate: tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket. **B67.5 consumer wiring** kicks off post-2026-05-15 if B67.4 passes.
 
 ---
 
-## Recent batch history (one-line)
+## Recent batch history
 
-| Batch | Date | HEAD | Note |
-|---|---|---|---|
-| B67.4 / B68.2 / B68.3 / B67.5-prep / B68.1 | 2026-05-01 → 2026-05-03 | various | Confidence chain (7 modulators) closed observational |
-| B69 + B69.1/2/3 + B73.3 | 2026-05-03 → 2026-05-04 | `c1b2f2b8` | Asset class + UI + calibration viz fixes |
-| B70 main + B70.1 | 2026-05-04 → 2026-05-05 | `7e059186` | Unified data archive + reject-stage capture |
-| B70.2 + B70.3 + B70.3b + governance gap-fill | 2026-05-05 | `a2ab2791` | Gap-fill trade fields + Path B momentum gate + floor drop + governance |
+| Batch | Date | Note |
+|---|---|---|
+| B67.4 / B68.2 / B68.3 / B67.5-prep / B68.1 | 2026-05-01 → -03 | Confidence chain (7 modulators) closed observational |
+| B69 + B69.1/2/3 + B73.3 | 2026-05-03 → -04 | Asset class + UI + calibration viz fixes |
+| B70 main + B70.1/.2/.3/.3b | 2026-05-04 → -05 | Unified archive + Path B momentum gate + floor drop |
+| **B72 (active)** | 2026-05-05 → ongoing | Lever sweep — 31 modules / ~158 rows live |
 
 ---
 
-## Open RUNNING_ISSUES (post-B70.3b, snapshot)
+## Open RUNNING_ISSUES (snapshot)
 
-- OPEN: #39 CI TS legacy (Phase 16 will clean), #43/#49/#50/#53 four calibration windows running, #46 passive archive partition-aware index
-- DEFERRED: #12e, #40, #44, #45, #52, #54 (#44+#45 fold into B67.5; #54 calibration aggregator framework refactor)
-- RESOLVED: #55, #56-#59 (B70.x closures)
+- OPEN: #39 (CI TS legacy → Phase 16), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index)
+- DEFERRED: #12e, #40, #44, #45, #52, #54
+- RESOLVED: #55, #56–#59
 
 ---
 
 ## Kyle Operating Directives (active)
 
-- **Don't pause to ask permission during workflow execution.** Iterate with Langston through 11 steps.
-- **Visual UI verification via Claude-in-Chrome on every UI-touching batch.**
-- **Deploy after Test+Build+Docker pass — don't wait on legacy TS Check baseline.**
-- **NO WORKAROUNDS.** Fix things properly. **No new TypeScript errors.**
+- Don't pause to ask permission during workflow execution. Iterate with Langston through 11 steps.
+- Visual UI verification via Claude-in-Chrome on every UI-touching batch.
+- Deploy after Test+Build+Docker pass — don't wait on legacy TS Check baseline.
+- **NO WORKAROUNDS.** Fix things properly. No new TypeScript errors.
 - **No fallbacks for DB-governed settings.** Cold-start warmup paths are NOT fallbacks.
-- **Sensitive credentials → staging `.env` via SSH only.** Never commit / paste in chat.
+- Sensitive credentials → staging `.env` via SSH only. Never commit / paste in chat.
 
 ---
 
 ## Session Behavior Invariants
 
-- Iterate with Langston to consensus; escalate to Kyle only on deadlock / scope expansion / new directive needed.
-- **Telegram 2-step canonical:** `/tmp` file → `scp` → `MSG=$(cat)`. Step 1 CC: `openclaw message send --account ccdt-relay --thread-id 21`. Step 2 Langston: `openclaw agent --deliver --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --reply-account default --reply-to "-1003575211453"`.
+- Iterate with Langston to consensus; escalate to Kyle only on deadlock / scope expansion / new directive.
+- **Telegram 2-step:** `/tmp` file → `scp` → `MSG=$(cat)`. Step 1 CC: `openclaw message send --account ccdt-relay --thread-id 21`. Step 2 Langston: `openclaw agent --deliver --session-id 16b70816-c63d-4cf0-8c80-bebd9f2cf066 --reply-account default --reply-to "-1003575211453"`.
 - VTS position sizing $1000 base → ~$150/trade. Intentional.
 - GDrive npm install fails EBADF — CI is verification gate.
 - CoinGecko Demo API key in staging `.env` (don't commit).
 
 ---
 
-## Required pre-reads on session start (in order)
+## Required pre-reads on session start
 
 1. `DawnTraderV3/CLAUDE.md`
-2. This file (MEMORY)
-3. `1-system-manual/POST_AUDIT_ROADMAP.md` — focus B72 + Phase 16
-4. `1-system-manual/SYSTEM_IMPACT_MAP.md` — for any component touched in next batch's pre-audit
-5. `Claude Comms and Packages/Batch Completion/BATCH_70_COMPLETION_REPORT.md` (most recent batch context)
+2. This file
+3. `1-system-manual/POST_AUDIT_ROADMAP.md` — B72 + Phase 16
+4. `1-system-manual/LEVER_INVENTORY.md` §10b (Langston decisions) + §11 (resumption checklist)
+5. `1-system-manual/SYSTEM_IMPACT_MAP.md` for any component touched in next batch

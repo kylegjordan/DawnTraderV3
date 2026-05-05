@@ -60,6 +60,8 @@ const PREFETCH_MODULES = [
   'strategy.reverse_impulse',
   'strategy.support_bounce',
   'strategy.strong_bull_trend',
+  // Slice 4 — HIGH-risk:
+  'sqe_config',           // SQE primary admission gates (precedence: screener_filters → sqe_config → static mirror)
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
