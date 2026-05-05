@@ -549,15 +549,51 @@ Rows for these are already seeded in `module_constants`; only source-side wiring
 
 PREFETCH_MODULES warmup list extended with: `adaptive_weights`, `concentration_risk`, `guardrail_defaults`, `goal_alignment`, `strategy_profiles`. Boot hard-fails if any of these have zero rows (prevents silent cold-start fallback).
 
-### §13.1 17-vs-9 strategy reconciliation — outcome
+### §13.1 17-vs-9 reconciliation — REVISED 2026-05-06 (was wrong; corrected by B72.2)
 
-`server/strategies/` contains **9** strategy files (canonical post-Phase-15b):
-`adaptive_flow, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, strong_bull_trend, support_bounce, volatility_edge`.
+**The §13.1 finding shipped under B72.1 was incorrect.** Audit triggered by Kyle 2026-05-06 produced this corrected picture:
 
-The canonical regime → strategy map (`server/config/canonical-regime-strategy-map.ts`) references **8 additional legacy strategy keys** — `vwap_pullback, mean_reversion, range_trade/range_trading, abcd_long, sma_trend_ride, breakout, vwap_bounce, dhma, liquidity_trap` — that are NOT implemented as standalone strategy files. They appear only as exit-condition `case` branches in `server/services/strategy-engine.ts` (legacy monolith, no `detect()` entry point).
+**Live universe is 18 canonical strategies** (verified in `STRATEGY_DISPLAY_NAMES`, `server/config/canonical-regime-strategy-map.ts:365–385`):
+- **9 file-based** (covered by B72 main): `adaptive_flow, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, strong_bull_trend, support_bounce, volatility_edge`.
+- **9 in-class quant** (MISSED by B72 main, covered by B72.2): `vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trade, vwap_bounce, liquidity_trap, dhma`.
 
-**Determination:** these 8 keys are LEGACY exit-only stubs surviving from the pre-Phase-15b era. They cannot enter trades (no detect() → no signal generation → no admission to RTB → no execution). They are NOT canonical 17 active strategies. CLAUDE.md "17 canonical strategies" is a stale reference; the live universe is 9.
+The 9 in-class quant strategies have full `detect*` methods at `strategy-engine.ts:87–1344` (vwap_pullback@87, abcd_long@222, sma_trend_ride@340, breakout@455, mean_reversion@541, range_trade@625, vwap_bounce@719, liquidity_trap@804, dhma@1156). They are dispatched from 6 production sites: `vts-runner.ts`, `signal-orchestrator.ts`, `historic-signal-generator.ts`, `stage-b-validator.ts`, `strategy-validator.ts`, `paper-sim-diagnostic.ts`. They are the system's primary quant-side entry path — `vwap_pullback` alone produced 26,540 evaluations / 108 admits in the 7-day audit window pre-B72.2.
 
-**Action:** none required for B72 lever migration (no levers escaped audit — the 8 legacy keys have no detect-side levers because there are no detect() functions for them). Flagged for governance update: SYSTEM_MANUAL.md should reflect "9 active canonical strategies (post-Phase-15b)" and CLAUDE.md updated when the 17-figure reference is next touched. The legacy exit-condition `case` branches in strategy-engine.ts are dead code candidates for Phase 16 cleanup.
+`liquidity_trap` is operationally disabled (bullish strategy + system has no short support); rows seeded for re-enablement readiness.
 
-**B72.1 CLOSED.** Carry-over list cleared.
+**The original §13.1 was wrong on every key claim:**
+- "9 active strategies" → actually 18.
+- "8 legacy exit-only stubs" → the 8 (+ liquidity_trap) are active entry strategies with full detect* methods.
+- "Cannot enter trades / dead code" → these are the highest-volume entry strategies in the system.
+- "No B72 levers escaped audit" → 131 levers were missing.
+- "CLAUDE.md '17 canonical' is stale, live universe is 9" → CLAUDE.md "17" is stale because actual count is **18** (B63 added strong_bull_trend), NOT because the universe shrank to 9.
+
+**Root cause** of the bad audit: surface grep of `server/strategies/` filesystem missed in-class methods; B72.1 audit then read only the exit-condition `switch` block at `strategy-engine.ts:903` and didn't read the `detect*` methods in the same file. Logged in `CHANGES_AND_FIXES.md` as `BUG-2026-05-06-A`.
+
+**Action taken:** B72.2 (commit `6c42dc370`) seeded 131 rows + wired all 9 in-class detectors + stripped dispatcher param-object literals. See `BATCH_72_2_COMPLETION_REPORT.md`.
+
+---
+
+## §14. B72.2 closure (2026-05-06)
+
+**B72.2 SHIPPED.** All 9 in-class quant strategies now DB-tunable.
+
+| Strategy | detect line | Module | Rows | Risk profile |
+|---|---|---|---|---|
+| vwap_pullback | 87 | strategy.vwap_pullback | 16 | 7H/7M/2L |
+| abcd_long | 222 | strategy.abcd_long | 13 | 5H/6M/2L |
+| sma_trend_ride | 340 | strategy.sma_trend_ride | 12 | 6H/4M/2L |
+| breakout | 455 | strategy.breakout | 13 | 4H/6M/3L |
+| mean_reversion | 541 | strategy.mean_reversion | 13 | 5H/7M/1L |
+| range_trade | 625 | strategy.range_trade | 15 | 8H/6M/1L |
+| vwap_bounce | 719 | strategy.vwap_bounce | 11 | 5H/5M/1L |
+| liquidity_trap | 804 | strategy.liquidity_trap | 13 | 5H/7M/1L |
+| dhma | 1156 | strategy.dhma | 25 | 12H/12M/1L |
+| **Total** | | | **131** | **57H / 60M / 14L** |
+
+**Coverage milestones:**
+- **18 of 18** canonical strategies DB-tunable (was 9/18 pre-B72.2).
+- **49 modules / ~311 rows** live in `module_constants` (was 40/~180).
+- Both production dispatchers (vts-runner, signal-orchestrator) collapse to the same canonical DB rows; 5 prior parameter discrepancies eliminated.
+
+**B72 + B72.1 + B72.2 BATCH FAMILY FULLY CLOSED.**

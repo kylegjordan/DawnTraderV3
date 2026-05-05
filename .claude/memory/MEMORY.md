@@ -16,18 +16,30 @@
 
 ---
 
-## CURRENT STATE — 2026-05-05 (post-B72.1 close)
+## CURRENT STATE — 2026-05-06 (post-B72.2 close)
 
 - **Branch:** `migration/aws-supabase`
-- **Most recent HEAD:** `31f4b873` (B72.1 source-side wiring of 5 carry-over modules).
-- **Live:** B70 + B70.1/.2/.3/.3b + B72 main (Slices 1, 2a-d, 3a-b, 4) + 3 post-deploy hotfixes + B72.1 FULL. PM2 #170.
+- **Most recent HEAD:** `6c42dc370` (B72.2 Slices 2-5 wiring) on top of `eeabb7147` (Slice 1 SQL seed).
+- **Live:** B70 + B70.1/.2/.3/.3b + B72 main + 3 post-deploy hotfixes + B72.1 FULL + B72.2 FULL. PM2 #171.
+- **18 canonical strategies, ALL DB-tunable** (was 9/18 pre-B72.2). 49 modules / ~311 rows live in `module_constants`.
 - **DB module_constants UPDATEs (no code commits):** `b67_5_post_composition_floor=0.20`, `b68_5_path_b_momentum_min=0.002`, `moonbag_qualifying_strategies=[]`.
 - **Path B (TFS classifier) gate:** `(absDbs >= 0.30 && mom > 0.002)`. Trailing-after-target DISABLED — every trade exits at target.
-- **40 modules / ~180 levers DB-tunable** via SQL UPDATE → 60s wait → behavior change (35 from B72 main + 5 from B72.1: adaptive_weights, concentration_risk, guardrail_defaults, goal_alignment, strategy_profiles). Live snapshot: `1-system-manual/CURRENT_SETTINGS_REGISTRY.md`.
+- **B72.2 collapsed 5 vts-runner-vs-orchestrator parameter discrepancies** to canonical vts-runner values (breakout.volume_multiplier=1.5, mean_reversion deviation 0.03/1.5, range_trade triplet 7/2/1).
+- Live snapshot: `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` (regenerate via `dump-settings-registry.ts`).
 
 ---
 
-## B72 + B72.1 — FULLY CLOSED 2026-05-05
+## B72 + B72.1 + B72.2 — FULLY CLOSED 2026-05-06
+
+**B72.2** (commit `eeabb7147` SQL + `6c42dc370` wiring) closed the gap missed by B72 main and incorrectly dismissed by B72.1 §13.1: live universe is **18 canonical strategies**, not 9. The 9 in-class quant strategies (`vwap_pullback`, `abcd_long`, `sma_trend_ride`, `breakout`, `mean_reversion`, `range_trade`, `vwap_bounce`, `liquidity_trap`, `dhma`) live as `detect*` methods in `strategy-engine.ts:87–1344`; B72 main missed them because the inventory pass surface-grepped only `server/strategies/`. `vwap_pullback` is the highest-volume strategy in the system (26,540 evals/7d).
+
+**B72.2 deliverables:** 131 rows seeded under 9 new `strategy.<key>` modules; all 9 detect methods refactored to read from module_constants (4 string enums via `getCachedConstant<string>`); dispatcher param-object literals stripped from `vts-runner.ts`, `signal-orchestrator.ts`, `stage-b-validator.ts` standard branches, and `routes.ts` admin diagnostic; 5 vts-vs-orchestrator parameter discrepancies collapsed to canonical vts values per Langston cc-inbox #914. liquidity_trap migrated for re-enablement readiness (operationally disabled — bullish-only system). Boot warmup verified (16/13/12/13/13/15/11/13/25 rows); `[B72][INIT_OK]` confirmed; signal regression check showed in-class quants emitting at consistent rates post-deploy. CLAUDE.md "17 canonical" stale — actual is **18**.
+
+**Audit-process bug** logged as `BUG-2026-05-06-A`: filesystem-grep audits miss in-class methods. Strategy enumeration must use `STRATEGY_DISPLAY_NAMES` SSOT + class-wide grep. Audit conclusions contradicting production telemetry (e.g. "dead code" on a 26k-evals/7d strategy) must trigger re-audit, not shipping. Kyle's pushback caught this.
+
+---
+
+## B72 + B72.1 — closed 2026-05-05
 
 **Steps 1-11 all closed.** Completion report: `Claude Comms and Packages/Batch Completion/BATCH_72_COMPLETION_REPORT.md` (B72.1 §appended). Langston sign-offs: cc-inbox #903/#904/#906/#908/#909/#910/#911 (B72 main) + #912 (B72.1 Step 4).
 
@@ -102,7 +114,7 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 | B67.4 / B68.2 / B68.3 / B67.5-prep / B68.1 | 2026-05-01 → -03 | Confidence chain (7 modulators) closed observational |
 | B69 + B69.1/2/3 + B73.3 | 2026-05-03 → -04 | Asset class + UI + calibration viz fixes |
 | B70 main + B70.1/.2/.3/.3b | 2026-05-04 → -05 | Unified archive + Path B momentum gate + floor drop |
-| **B72 + B72.1 FULL** | 2026-05-05 | CLOSED. Lever sweep — 40 modules / ~180 rows live; B72.1 wired all 5 carry-over modules |
+| **B72 + B72.1 + B72.2 FULL** | 2026-05-05/06 | CLOSED. 18/18 canonical strategies DB-tunable. 49 modules / ~311 rows. B72.2 closed 9 in-class quant gap missed by B72 main |
 
 ---
 
@@ -119,7 +131,7 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 1. **Phase 16** (TS errors + storage.ts modularization) per POST_AUDIT_ROADMAP — next sequenced batch
 2. **trading-engine.ts BUG-012 cleanup:** calculateGoalAlignmentScore (L130–209) is a duplicate of the alignment logic now-migrated in pre-execution-validator. Pre-existing issue, separate cleanup.
 3. **Tier 2 governance housekeeping (deferred from B72):** SIM per-source-file annotations across ~25 PROMOTE files. No runtime impact.
-4. **CLAUDE.md "17 canonical strategies" reference:** stale per B72.1 §13.1; live universe is 9 active. Update next time CLAUDE.md is touched.
+4. **CLAUDE.md update:** correct "17 canonical strategies" → **18 canonical** (file-based 9 + in-class quant 9). Per B72.2 audit. Kyle confirmed 2026-05-06.
 
 ---
 

@@ -260,4 +260,25 @@ To verify B72.1 wiring is live in any future session:
 
 ---
 
+## §L. Correction (appended 2026-05-06 by B72.2)
+
+**§K.3 above was WRONG and is corrected here.**
+
+The 17-vs-9 reconciliation finding shipped in §K.3 of this report was based on an incomplete audit. The correct picture:
+
+- **18 canonical strategies** (verified: `STRATEGY_DISPLAY_NAMES` in `server/config/canonical-regime-strategy-map.ts:365–385`). The CLAUDE.md "17 canonical" reference is stale — actual count is 18 (B63 added `strong_bull_trend` to the original 17).
+- **9 file-based** strategies in `server/strategies/` were covered by B72 main.
+- **9 in-class quant** strategies (`vwap_pullback`, `abcd_long`, `sma_trend_ride`, `breakout`, `mean_reversion`, `range_trade`, `vwap_bounce`, `liquidity_trap`, `dhma`) live as instance `detect*` methods inside `server/services/strategy-engine.ts` (lines 87–1344). They were **MISSED by B72 main** despite being actively dispatched from 6 production sites (`vts-runner.ts`, `signal-orchestrator.ts`, `historic-signal-generator.ts`, `stage-b-validator.ts`, `strategy-validator.ts`, `paper-sim-diagnostic.ts`).
+- The §K.3 claim that these were "exit-only stubs" / "cannot enter trades" / "Phase 16 dead-code candidate" was based on reading only the exit-condition `switch` block at `strategy-engine.ts:903` and missing the entry `detect*` methods in the same file. **The 9 in-class quants are the system's primary quant-side entry-signal flow:** `vwap_pullback` alone produced 26,540 evaluations / 108 admitted signals in the 7-day audit window prior to B72.2 — the highest-volume strategy in the system.
+- **131 lever rows for these strategies were never migrated by B72 main.** B72's "comprehensive lever sweep" claim was materially incomplete.
+- **`liquidity_trap`** is operationally disabled (bullish strategy + system has no short support), but it is a canonical strategy with tunable parameters — those parameters need DB-tunability for re-enablement readiness.
+
+**B72.2 (commit `6c42dc370`) closed this gap:** seeded 131 rows under 9 new `strategy.<key>` modules, refactored all 9 detect* methods to read from `module_constants`, stripped dispatcher param-object literals across 4 dispatcher files (collapsing 5 vts-runner-vs-orchestrator value discrepancies), and extended boot warmup hard-fail to all 18 strategies.
+
+**Coverage now complete:** 18 canonical strategies, all DB-tunable. See `BATCH_72_2_COMPLETION_REPORT.md` for full details. Root-cause analysis of the audit gap logged in `CHANGES_AND_FIXES.md` as `BUG-2026-05-06-A`.
+
+The §K.3 conclusion above ("no B72 levers escaped audit", "Phase 16 dead-code candidate") is **superseded** by this correction and should not be referenced as authoritative.
+
+---
+
 *End of BATCH_72_COMPLETION_REPORT.md.*
