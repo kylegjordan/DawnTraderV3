@@ -15,13 +15,14 @@
 
 import { covarianceEngine, CorrelationMatrix } from '../utils/covariance-engine.js';
 import { KrakenService } from './kraken.js';
-// B72 (2026-05-05): Directive 9.4 covariance guards SEEDED in module=
-// 'concentration_risk' but source-side wiring deferred — the singleton
-// `riskConcentrationAnalyzer` is instantiated at module load (line ~371,
-// `export const riskConcentrationAnalyzer = new RiskConcentrationAnalyzer()`),
-// before module_constants warmup. Tunable wiring requires a getEffectiveConfig()
-// lazy-resolve refactor on the analyzer. Tracked for follow-up batch. Current
-// DEFAULT_CONFIG literals match seeded rows exactly (0.75/2.5/0.25).
+import { getCachedNumberRequired } from './module-constants-service.js';
+// B72.1 (2026-05-05): Directive 9.4 covariance guards now read from
+// module='concentration_risk' (correlation_threshold, max_concentration_score,
+// min_scaling_factor). Singleton-init refactored to lazy `get config()` so the
+// values resolve from the warm cache after b72-warmup runs. updateIntervalMs
+// stays hardcoded (KEEP — pure-infra poll cadence).
+
+const _CONCENTRATION_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 
 const krakenService = new KrakenService();
 
@@ -47,22 +48,31 @@ export interface PortfolioExposure {
   overexposedSymbols: string[];
 }
 
-const DEFAULT_CONFIG: RiskConcentrationConfig = {
-  correlationThreshold: 0.75,
-  maxConcentration: 2.5,
-  minScalingFactor: 0.25,
-  updateIntervalMs: 60000
-};
+// updateIntervalMs is KEEP (pure-infra poll cadence). Other 3 fields PROMOTE
+// resolve from module_constants on every read.
+const _UPDATE_INTERVAL_MS = 60000;
 
 class RiskConcentrationAnalyzer {
-  private config: RiskConcentrationConfig;
+  private _configOverride: Partial<RiskConcentrationConfig> = {};
   private positionWeights: Map<string, number> = new Map();
   private concentrationScores: Map<string, ConcentrationScore> = new Map();
   private lastUpdateTime: Date | null = null;
   private updateInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: Partial<RiskConcentrationConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this._configOverride = config;
+  }
+
+  private get config(): RiskConcentrationConfig {
+    return {
+      correlationThreshold: this._configOverride.correlationThreshold
+        ?? getCachedNumberRequired('concentration_risk', 'correlation_threshold', _CONCENTRATION_KEY),
+      maxConcentration: this._configOverride.maxConcentration
+        ?? getCachedNumberRequired('concentration_risk', 'max_concentration_score', _CONCENTRATION_KEY),
+      minScalingFactor: this._configOverride.minScalingFactor
+        ?? getCachedNumberRequired('concentration_risk', 'min_scaling_factor', _CONCENTRATION_KEY),
+      updateIntervalMs: this._configOverride.updateIntervalMs ?? _UPDATE_INTERVAL_MS,
+    };
   }
 
   /**
@@ -328,8 +338,8 @@ class RiskConcentrationAnalyzer {
    * Update configuration
    */
   updateConfig(config: Partial<RiskConcentrationConfig>): void {
-    this.config = { ...this.config, ...config };
-    console.log(`[9.4][RISK] Config updated:`, this.config);
+    this._configOverride = { ...this._configOverride, ...config };
+    console.log(`[9.4][RISK] Config override updated:`, this._configOverride);
   }
 
   /**

@@ -4,6 +4,48 @@ import { TradeSignal } from './trading-engine';
 import { nanoid } from 'nanoid';
 import { provenanceLogger } from './provenance-logger';
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from './trade-safety';
+import { getCachedNumbersForModule, getCachedNumberRequired } from './module-constants-service.js';
+
+// B72.1 (2026-05-05): goal_alignment + strategy_profiles atomic block.
+// Read all weights/thresholds + strategy profile in ONE pass at top of
+// validateTrade() so a single validation call sees a consistent snapshot.
+// HIGH-risk because mutating any subset between resolve calls would skew the
+// alignment math.
+const _GOAL_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+const _STRAT_PROFILE_KEY_BASE = { exchange: '*', assetClass: '*', regime: '*' } as const;
+
+interface GoalAlignmentConfig {
+  weightHiRrProfit: number;       // alignment_score_weight_hi_rr_profit
+  weightLoRrProfit: number;       // alignment_score_weight_lo_rr_profit
+  weightConsistencyA: number;     // alignment_score_weight_consistency_a
+  weightConsistencyB: number;     // alignment_score_weight_consistency_b
+  highRiskRewardThreshold: number;// high_risk_reward_threshold
+  goalAlignmentMinPercent: number;// goal_alignment_min_percent
+}
+
+function resolveGoalAlignmentConfig(): GoalAlignmentConfig {
+  const m = getCachedNumbersForModule('goal_alignment', _GOAL_KEY);
+  return {
+    weightHiRrProfit: m['alignment_score_weight_hi_rr_profit'] ?? getCachedNumberRequired('goal_alignment', 'alignment_score_weight_hi_rr_profit', _GOAL_KEY),
+    weightLoRrProfit: m['alignment_score_weight_lo_rr_profit'] ?? getCachedNumberRequired('goal_alignment', 'alignment_score_weight_lo_rr_profit', _GOAL_KEY),
+    weightConsistencyA: m['alignment_score_weight_consistency_a'] ?? getCachedNumberRequired('goal_alignment', 'alignment_score_weight_consistency_a', _GOAL_KEY),
+    weightConsistencyB: m['alignment_score_weight_consistency_b'] ?? getCachedNumberRequired('goal_alignment', 'alignment_score_weight_consistency_b', _GOAL_KEY),
+    highRiskRewardThreshold: m['high_risk_reward_threshold'] ?? getCachedNumberRequired('goal_alignment', 'high_risk_reward_threshold', _GOAL_KEY),
+    goalAlignmentMinPercent: m['goal_alignment_min_percent'] ?? getCachedNumberRequired('goal_alignment', 'goal_alignment_min_percent', _GOAL_KEY),
+  };
+}
+
+function resolveStrategyProfile(strategyKey: string): { risk: number; consistency: number } {
+  const key = { ..._STRAT_PROFILE_KEY_BASE, strategy: strategyKey };
+  const m = getCachedNumbersForModule('strategy_profiles', key);
+  // Fallback to neutral 0.5/0.5 if no row for this strategy. Legacy strategies
+  // not present in strategy_profiles (e.g. vwap_pullback retired pre-Phase-15b)
+  // fall through to this safe-default.
+  return {
+    risk: m['risk_profile_risk'] ?? 0.5,
+    consistency: m['risk_profile_consistency'] ?? 0.5,
+  };
+}
 
 export interface ValidationRequest {
   userId: string;
@@ -48,10 +90,14 @@ export class PreExecutionValidator {
       const riskPct = parseFloat(settings.riskPerTradePct);
       const riskAmount = calculateRiskAmount(portfolioValue, riskPct);
 
+      // B72.1: snapshot goal_alignment config ONCE per validation call
+      const goalCfg = resolveGoalAlignmentConfig();
+
       const goalAlignmentScore = await this.calculateGoalAlignmentScore(
         request.userId,
         request.signal,
-        request.mode
+        request.mode,
+        goalCfg
       );
 
       const goalAlignmentPercent = Math.round(goalAlignmentScore * 100);
@@ -119,7 +165,8 @@ export class PreExecutionValidator {
       details.push(`Net expected gain: ${netExpectedGainPct.toFixed(3)}%`);
       details.push(`Min net profit threshold: ${minNetProfitPct.toFixed(3)}%`);
 
-      const goalAlignmentThreshold = 75;
+      // B72.1: goal_alignment_min_percent from module_constants
+      const goalAlignmentThreshold = goalCfg.goalAlignmentMinPercent;
       const goalAlignmentPassed = goalAlignmentPercent >= goalAlignmentThreshold;
       const feeProfitabilityPassed = netExpectedGainPct >= minNetProfitPct;
 
@@ -203,7 +250,8 @@ export class PreExecutionValidator {
   private async calculateGoalAlignmentScore(
     userId: string,
     signal: TradeSignal,
-    mode: 'live' | 'paper'
+    mode: 'live' | 'paper',
+    goalCfg: GoalAlignmentConfig
   ): Promise<number> {
     try {
       const goals = mode === 'live' 
@@ -241,35 +289,34 @@ export class PreExecutionValidator {
         return 1.0;
       }
 
-      const isHighRiskReward = riskRewardRatio >= 2.0;
-      
-      const strategyRiskProfile: { [key: string]: { risk: number; consistency: number } } = {
-        'vwap_pullback': { risk: 0.5, consistency: 0.8 },
-        'abcd_long': { risk: 0.7, consistency: 0.6 },
-        'sma_trend_ride': { risk: 0.6, consistency: 0.7 },
-      };
+      // B72.1: high_risk_reward_threshold and weights from goal_alignment;
+      // strategy profile from strategy_profiles (per-strategy scope).
+      const isHighRiskReward = riskRewardRatio >= goalCfg.highRiskRewardThreshold;
 
-      const profile = strategyRiskProfile[signal.strategy] || { risk: 0.5, consistency: 0.5 };
+      const profile = resolveStrategyProfile(signal.strategy);
 
       let alignmentScore = 0;
 
+      // Branch 1: hi-RR-profit weight if matched, lo-RR-profit weight otherwise.
       if (profitabilityFocus > 0.6 && isHighRiskReward) {
-        alignmentScore += 0.4;
-      } else if (consistencyFocus > 0.6 && riskRewardRatio < 2.0) {
-        alignmentScore += 0.4;
+        alignmentScore += goalCfg.weightHiRrProfit;
+      } else if (consistencyFocus > 0.6 && riskRewardRatio < goalCfg.highRiskRewardThreshold) {
+        alignmentScore += goalCfg.weightHiRrProfit;
       } else {
-        alignmentScore += 0.2;
+        alignmentScore += goalCfg.weightLoRrProfit;
       }
 
+      // Branch 2: strategy-profile alignment, weighted by consistency-A.
       const strategyAlignment = (profitabilityFocus * profile.risk) + (consistencyFocus * profile.consistency);
-      alignmentScore += strategyAlignment * 0.3;
+      alignmentScore += strategyAlignment * goalCfg.weightConsistencyA;
 
+      // Branch 3: confidence/RR bonus, weighted by consistency-B.
       if (consistencyFocus > 0.6 && signal.confidence > 0.7) {
-        alignmentScore += 0.3;
+        alignmentScore += goalCfg.weightConsistencyB;
       } else if (profitabilityFocus > 0.6 && isHighRiskReward) {
-        alignmentScore += 0.3;
+        alignmentScore += goalCfg.weightConsistencyB;
       } else {
-        alignmentScore += signal.confidence * 0.3;
+        alignmentScore += signal.confidence * goalCfg.weightConsistencyB;
       }
 
       const finalAlignmentScore = Math.max(0, Math.min(1, alignmentScore));

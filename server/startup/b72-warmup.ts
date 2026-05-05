@@ -66,6 +66,12 @@ const PREFETCH_MODULES = [
   'directional_integrity',// DI→pWin scaling factor (caller-injected)
   // B72.1 — strategy-modes naming reseed:
   'governance_modes',     // strategy-modes confidence floors (NORMAL/DEFENSIVE/SURVIVAL)
+  // B72.1 — carry-over source-side wiring (rows pre-seeded under B72 main):
+  'adaptive_weights',     // adaptive-manager.ts default_decay_rate (lazy getter)
+  'concentration_risk',   // risk-concentration.ts Directive 9.4 covariance guards
+  'guardrail_defaults',   // trade-safety.ts fallbacks (max total exposure pct, max open trades default)
+  'goal_alignment',       // pre-execution-validator.ts atomic 4-weight alignment block + thresholds
+  'strategy_profiles',    // pre-execution-validator.ts per-strategy risk/consistency profile
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

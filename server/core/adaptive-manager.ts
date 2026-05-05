@@ -25,12 +25,18 @@
 
 // B65.2 (2026-04-23): EXECUTION_CONFIG deleted. Prior import was dead (no
 // references in this file) and has been removed along with the config file.
-// B72 (2026-05-05): DEFAULT_DECAY_RATE row seeded in module='adaptive_weights'
-// but source-side wiring deferred — this file instantiates AdaptiveManagerService
-// at MODULE LOAD time (line ~200, `export const adaptiveManager = new ...`),
-// which runs before module_constants warmup. Migrating safely needs an init
-// hook that re-applies the resolved decay rate after warmup. Tracked for
-// follow-up batch. Current literal matches the seeded row exactly (0.05).
+// B72.1 (2026-05-05): DEFAULT_DECAY_RATE migrated to module='adaptive_weights'
+// constant_name='default_decay_rate'. The singleton (line ~200) is
+// instantiated at module load time — BEFORE module_constants warmup runs —
+// so resolution must be lazy. We use a getter that reads from the warm cache
+// on every access. An optional `_decayRateOverride` is preserved to support
+// `setDecayRate()` (test/diagnostic path) and the legacy constructor arg.
+// Default fallback literal removed per Kyle directive: no silent fallbacks
+// for DB-governed settings — boot warmup must seed the row.
+
+import { getCachedNumberRequired } from '../services/module-constants-service.js';
+
+const _ADAPTIVE_WEIGHTS_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 
 export interface AdaptiveWeights {
   [key: string]: number;
@@ -41,16 +47,19 @@ export interface TimestampedWeightEntry {
   updatedAt: Date;
 }
 
-const DEFAULT_DECAY_RATE = 0.05;
-
 class AdaptiveManagerService {
   private internalWeights: Map<string, AdaptiveWeights> = new Map();
   private weightTimestamps: Map<string, Date> = new Map();
-  private decayRate: number;
+  private _decayRateOverride: number | undefined;
   private initialized: boolean = false;
 
-  constructor(decayRate: number = DEFAULT_DECAY_RATE) {
-    this.decayRate = decayRate;
+  constructor(decayRate?: number) {
+    this._decayRateOverride = decayRate;
+  }
+
+  private get decayRate(): number {
+    if (this._decayRateOverride !== undefined) return this._decayRateOverride;
+    return getCachedNumberRequired('adaptive_weights', 'default_decay_rate', _ADAPTIVE_WEIGHTS_KEY);
   }
 
   /**
@@ -195,7 +204,7 @@ class AdaptiveManagerService {
    * Set decay rate (for configuration)
    */
   setDecayRate(rate: number): void {
-    this.decayRate = rate;
+    this._decayRateOverride = rate;
     console.log(`[Learning] Decay rate updated to ${rate}`);
   }
 }

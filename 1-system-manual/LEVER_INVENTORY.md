@@ -532,3 +532,32 @@ Rows for these are already seeded in `module_constants`; only source-side wiring
 **Live settings answer:** *"What is X currently set to?"* → `CURRENT_SETTINGS_REGISTRY.md`. *"Where in source does X live + how is it scoped?"* → `LEVER_INVENTORY.md`.
 
 **Carry-over to B72.1** (rows already in DB, source wiring deferred): adaptive-manager, risk-concentration, strategy-modes, pre-execution-validator, trade-safety; 17-vs-9 strategy reconciliation pass.
+
+---
+
+## §13. B72.1 closure (2026-05-05, post-compact session)
+
+**B72.1 source-side wiring SHIPPED.** All 5 deferred items now read live from `module_constants`:
+
+| Item | File | Module | Pattern |
+|---|---|---|---|
+| 1 | `server/core/adaptive-manager.ts` | `adaptive_weights` | Lazy `get decayRate()` accessor + `_decayRateOverride` for setDecayRate / constructor arg |
+| 2 | `server/services/risk-concentration.ts` | `concentration_risk` | Lazy `get config()` accessor + `_configOverride` partial override |
+| 3 | `server/services/trade-safety.ts` | `guardrail_defaults` | Two helper functions (`getDefaultMaxTotalExposurePct`, `getMaxOpenTradesDefault`) at fallback callsites |
+| 4 | `server/services/pre-execution-validator.ts` | `goal_alignment` + `strategy_profiles` | One `resolveGoalAlignmentConfig()` snapshot per validate() call (atomic), per-strategy `resolveStrategyProfile()` |
+| 5 | `server/strategies/strategy-modes.ts` (already shipped under B72 main commit `791e72b5`) | `governance_modes` | Object.defineProperty getter on STRATEGY_MODE_OVERLAYS.confidenceFloor |
+
+PREFETCH_MODULES warmup list extended with: `adaptive_weights`, `concentration_risk`, `guardrail_defaults`, `goal_alignment`, `strategy_profiles`. Boot hard-fails if any of these have zero rows (prevents silent cold-start fallback).
+
+### §13.1 17-vs-9 strategy reconciliation — outcome
+
+`server/strategies/` contains **9** strategy files (canonical post-Phase-15b):
+`adaptive_flow, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, strong_bull_trend, support_bounce, volatility_edge`.
+
+The canonical regime → strategy map (`server/config/canonical-regime-strategy-map.ts`) references **8 additional legacy strategy keys** — `vwap_pullback, mean_reversion, range_trade/range_trading, abcd_long, sma_trend_ride, breakout, vwap_bounce, dhma, liquidity_trap` — that are NOT implemented as standalone strategy files. They appear only as exit-condition `case` branches in `server/services/strategy-engine.ts` (legacy monolith, no `detect()` entry point).
+
+**Determination:** these 8 keys are LEGACY exit-only stubs surviving from the pre-Phase-15b era. They cannot enter trades (no detect() → no signal generation → no admission to RTB → no execution). They are NOT canonical 17 active strategies. CLAUDE.md "17 canonical strategies" is a stale reference; the live universe is 9.
+
+**Action:** none required for B72 lever migration (no levers escaped audit — the 8 legacy keys have no detect-side levers because there are no detect() functions for them). Flagged for governance update: SYSTEM_MANUAL.md should reflect "9 active canonical strategies (post-Phase-15b)" and CLAUDE.md updated when the 17-figure reference is next touched. The legacy exit-condition `case` branches in strategy-engine.ts are dead code candidates for Phase 16 cleanup.
+
+**B72.1 CLOSED.** Carry-over list cleared.

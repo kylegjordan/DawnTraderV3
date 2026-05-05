@@ -27,6 +27,21 @@ import { rtbMetricsService } from './rtb-metrics-service.js';
 import { getGlobalPaperSimManager } from './paper-sim-service.js';
 import { signalLifecycleAudit, type RejectionReason } from '../core/audit/signal_lifecycle_audit.js';
 import { isCorrelatedExposure, riskConcentrationAnalyzer } from './risk-concentration.js';
+import { getCachedNumberRequired } from './module-constants-service.js';
+
+// B72.1 (2026-05-05): guardrail_defaults — fallback values used when the
+// guardrails_v2 settings row is missing or fields are unset. These do NOT
+// override explicit settings; they only paper over a cold/empty settings
+// table. Promoted to module_constants so operators can tune defaults without
+// a redeploy. Pre-existing fallback path (LOW-risk).
+const _GUARDRAIL_DEFAULTS_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+function getDefaultMaxTotalExposurePct(): number {
+  // Stored as a 0–1 ratio (0.25 == 25%). Callers convert to whatever scale they need.
+  return getCachedNumberRequired('guardrail_defaults', 'default_max_total_exposure_pct', _GUARDRAIL_DEFAULTS_KEY);
+}
+function getMaxOpenTradesDefault(): number {
+  return getCachedNumberRequired('guardrail_defaults', 'max_open_trades_default', _GUARDRAIL_DEFAULTS_KEY);
+}
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -365,7 +380,7 @@ async function checkPositionSizeCap(
     entry_price: trade.entryPrice,
     portfolio_balance: portfolioValue,
     max_single_position_allowed: maxPositionValue,
-    max_total_exposure_allowed: portfolioValue * 0.25, // 25% default total exposure
+    max_total_exposure_allowed: portfolioValue * getDefaultMaxTotalExposurePct(), // B72.1: from guardrail_defaults.default_max_total_exposure_pct
     current_total_exposure: 0, // Would need open positions to calculate
     calculated_quantity: trade.preComputedNotional ? trade.preComputedNotional / trade.entryPrice : 0,
     calculated_notional: positionValue,
@@ -553,7 +568,8 @@ async function checkMaxOpenTrades(
   settings: TradingSettings
 ): Promise<TradeSafetyResult> {
   const activePositions = await getActivePositions(mode);
-  const maxOpenTrades = (settings as any).maxOpenTrades || 5;
+  // B72.1: fallback resolved from guardrail_defaults.max_open_trades_default
+  const maxOpenTrades = (settings as any).maxOpenTrades || getMaxOpenTradesDefault();
 
   if (activePositions.length >= maxOpenTrades) {
     console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:MAX_TRADES, current:${activePositions.length}, max:${maxOpenTrades}`);
@@ -579,7 +595,11 @@ async function checkMaxTotalExposure(
 ): Promise<TradeSafetyResult> {
   try {
     const portfolioBalance = await getPortfolioBalanceV2(mode);
-    const maxTotalExposurePct = parseFloat((settings as any).maxTotalExposurePct?.toString() || '25');
+    // B72.1: fallback (settings missing) resolved from guardrail_defaults.default_max_total_exposure_pct (stored as ratio, converted to percentage here)
+    const maxTotalExposurePct = parseFloat(
+      (settings as any).maxTotalExposurePct?.toString()
+      || (getDefaultMaxTotalExposurePct() * 100).toString()
+    );
     const maxTotalExposureUSD = portfolioBalance * (maxTotalExposurePct / 100);
     
     const activePositions = await getActivePositions(mode);
