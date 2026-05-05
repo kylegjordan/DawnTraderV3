@@ -1137,6 +1137,10 @@ async function generatePhase10Signal(
     // B63: Path-aware pWin for Path D. Strong-trend signals use DBS magnitude (not DI) for win probability.
     sourcePool,
     dbsScore: propagatedDbs?.score,
+    // B72: caller-injected pWin params (preserves kernel purity).
+    minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _VTS_GK),
+    maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _VTS_GK),
+    diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _VTS_GK),
   });
   
   // Batch 52 Fix 19C: All byStrategy counter increments moved to caller (runPhase10SimulationCycle)

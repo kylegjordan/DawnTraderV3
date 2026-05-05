@@ -546,6 +546,9 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): T
   const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
   const friction = frictionPct * tradeMeta.entryPrice;
   
+  // B72: Inject pWin parameters from module_constants so the kernel stays
+  // pure-math while values become DB-tunable. Modules: 'expectancy_kernel'
+  // (pwin_floor, pwin_ceiling) + 'directional_integrity' (di_pwin_factor).
   const kernelResult = computeNetExpectancyKernel({
     entryPrice: tradeMeta.entryPrice,
     stopPrice: tradeMeta.stopPrice,
@@ -556,6 +559,10 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): T
     // B63: Forward sourcePool + dbsScore so the kernel can apply path-aware pWin for Path D.
     sourcePool: tradeMeta.sourcePool,
     dbsScore: tradeMeta.dbsScore,
+    // B72: caller-injected pWin params (from module_constants).
+    minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _GLOBAL_KEY),
+    maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _GLOBAL_KEY),
+    diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _GLOBAL_KEY),
   });
   
   const { netEV, rawEV, pWin, pLoss } = kernelResult;

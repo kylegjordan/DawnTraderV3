@@ -42,6 +42,15 @@ export interface NetExpectancyKernelInput {
   // (DBS supersedes DI for strong trends — matches the filter-layer philosophy).
   sourcePool?: string;
   dbsScore?: number;
+  // B72 (2026-05-05): caller-injected pWin parameters. Optional for backward
+  // compatibility — when omitted, the kernel uses the static seed defaults
+  // (matching the module_constants 'expectancy_kernel' / 'directional_integrity'
+  // seeded values exactly). Live runtime callers SHOULD inject these from
+  // module_constants via getCachedNumberRequired() to enable DB tuning without
+  // code redeploy. Kernel itself stays pure-math: no DB access, no I/O.
+  minPWin?: number;
+  maxPWin?: number;
+  diPWinFactor?: number;
 }
 
 export interface NetExpectancyKernelResult {
@@ -55,15 +64,14 @@ export interface NetExpectancyKernelResult {
   distStop: number;
 }
 
-// B72 (2026-05-05): MIN_PWIN, MAX_PWIN, DI_PWIN_FACTOR are PROMOTE candidates
-// but live in a kernel documented as pure-math (no I/O, no DB). Per Langston
-// architectural integrity: deferring these to Slice 4 with a caller-injection
-// refactor (callers resolve from module_constants + pass as kernel input) so
-// the kernel's no-DB-access contract is preserved. Rows already seeded in
-// module_constants under module_name='expectancy_kernel' / 'directional_integrity'.
-const MIN_PWIN = 0.40;
-const MAX_PWIN = 0.60;
-const DI_PWIN_FACTOR = 200;
+// B72 (2026-05-05): caller-injection refactor. The defaults here are SEED
+// values matching the module_constants 'expectancy_kernel' / 'directional_integrity'
+// rows. Callers may override via input.minPWin/maxPWin/diPWinFactor to use the
+// DB-tunable values; kernel stays pure-math (no DB access, no I/O).
+// See LEVER_INVENTORY.md §11 — Slice 4.
+const DEFAULT_MIN_PWIN = 0.40;
+const DEFAULT_MAX_PWIN = 0.60;
+const DEFAULT_DI_PWIN_FACTOR = 200;
 
 /**
  * Pure math kernel for Net Expectancy calculation.
@@ -83,6 +91,9 @@ export function computeNetExpectancyKernel(input: NetExpectancyKernelInput): Net
     DI = 50,
     sourcePool,
     dbsScore,
+    minPWin = DEFAULT_MIN_PWIN,
+    maxPWin = DEFAULT_MAX_PWIN,
+    diPWinFactor = DEFAULT_DI_PWIN_FACTOR,
   } = input;
 
   const distTarget = Math.abs(targetPrice - entryPrice);
@@ -94,9 +105,9 @@ export function computeNetExpectancyKernel(input: NetExpectancyKernelInput): Net
   let pWin: number;
   if (sourcePool === 'quant-strong_trend') {
     const absDbs = Math.abs(dbsScore ?? 0);
-    pWin = Math.min(MAX_PWIN, Math.max(MIN_PWIN, MIN_PWIN + (absDbs / 2)));
+    pWin = Math.min(maxPWin, Math.max(minPWin, minPWin + (absDbs / 2)));
   } else {
-    pWin = Math.min(MAX_PWIN, Math.max(MIN_PWIN, MIN_PWIN + (DI / DI_PWIN_FACTOR)));
+    pWin = Math.min(maxPWin, Math.max(minPWin, minPWin + (DI / diPWinFactor)));
   }
   const pLoss = 1 - pWin;
 

@@ -62,6 +62,8 @@ const PREFETCH_MODULES = [
   'strategy.strong_bull_trend',
   // Slice 4 — HIGH-risk:
   'sqe_config',           // SQE primary admission gates (precedence: screener_filters → sqe_config → static mirror)
+  'expectancy_kernel',    // pWin floor/ceiling (caller-injected into pure-math kernel)
+  'directional_integrity',// DI→pWin scaling factor (caller-injected)
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

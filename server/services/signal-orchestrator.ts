@@ -1953,6 +1953,10 @@ export class SignalOrchestrator {
             targetPrice: target,
             totalFriction: frictionPerUnit,
             DI,
+            // B72: caller-injected pWin params (preserves kernel purity).
+            minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     { exchange: '*', assetClass: '*', strategy: '*', regime: '*' }),
+            maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   { exchange: '*', assetClass: '*', strategy: '*', regime: '*' }),
+            diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' }),
           });
 
           if (kernelResult.netEV <= 0) {
