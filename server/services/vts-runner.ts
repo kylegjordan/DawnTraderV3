@@ -2788,6 +2788,46 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           const detailReason = getNullReason();
           const isPostSignalRejection = detailReason === 'net_ev_rejected' || detailReason === 'duplicate_position' || detailReason === 'max_open_trades';
 
+          // B70.1 Step 3.6b: signal-eval reject archive. Map VTS reject reasons
+          // to the canonical reject_stage enum.
+          //   net_ev_rejected     → 'sqe' (EV gate is the SQE-equivalent in VTS)
+          //   duplicate_position  → 'tcl' (TCL semantics — already-have-position dedup)
+          //   max_open_trades     → 'tcl' (TCL semantics — capacity gate)
+          //   conditions_not_met  → 'strategy_internal'
+          //   anything else null  → 'strategy_internal'
+          try {
+            const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+            const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+            const stageMap: Record<string, 'sqe' | 'tcl' | 'strategy_internal'> = {
+              net_ev_rejected: 'sqe',
+              duplicate_position: 'tcl',
+              max_open_trades: 'tcl',
+            };
+            const mappedStage =
+              stageMap[detailReason] ?? (isPostSignalRejection ? 'sqe' : 'strategy_internal');
+            archiveSignalEval({
+              symbol: pair.symbol,
+              exchange: 'kraken',
+              assetClass: resolveAssetClass(pair.symbol, 'kraken'),
+              source: 'vts-runner',
+              strategy: stratDef.strategyKey,
+              regimeLabel: pairRegime ?? undefined,
+              rejectStage: mappedStage,
+              gateDecision: {
+                gate: mappedStage,
+                accepted: false,
+                reason: detailReason,
+                isPostSignalRejection,
+              },
+              features: {
+                sourcePool: pair.sourcePool,
+                detailReason,
+              },
+            });
+          } catch (b70Err) {
+            // Silent on hot path
+          }
+
           if (isPostSignalRejection) {
             // Batch 52 Fix 19: Signal WAS produced but rejected after — count as rejection, not null
             // Batch 52 Fix 19C: Caller is single source of truth for all post-signal rejection counters
@@ -2849,6 +2889,31 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         // Note: Most Net EV rejections are caught INSIDE generatePhase10Signal and return null.
         // This catch handles edge cases where signal has netEV but wasn't checked inside.
         if (signal && signal.netEV !== undefined && signal.netEV < VTS_NET_EV_FLOOR) {
+          // B70.1 Step 3.6b: caller-side Net-EV reject → reject_stage='sqe'
+          try {
+            const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+            const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+            archiveSignalEval({
+              symbol: pair.symbol,
+              exchange: 'kraken',
+              assetClass: resolveAssetClass(pair.symbol, 'kraken'),
+              source: 'vts-runner',
+              strategy: stratDef.strategyKey,
+              regimeLabel: pairRegime ?? undefined,
+              rejectStage: 'sqe',
+              finalScore: signal.finalScore,
+              gateDecision: {
+                gate: 'net_ev_floor',
+                accepted: false,
+                reason: 'net_ev_below_floor',
+                netEv: signal.netEV,
+                netEvFloor: VTS_NET_EV_FLOOR,
+              },
+              features: { sourcePool: pair.sourcePool },
+            });
+          } catch (b70Err) {
+            // Silent on hot path
+          }
           if (!vtsEvalCounters.rejectedReasons) { vtsEvalCounters.rejectedReasons = { netEvBelowFloor: 0 }; }
           vtsEvalCounters.rejectedReasons.netEvBelowFloor++;
           vtsEvalCounters.signalsRejected = (vtsEvalCounters.signalsRejected ?? 0) + 1;
