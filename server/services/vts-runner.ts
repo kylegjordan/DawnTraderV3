@@ -1772,8 +1772,7 @@ async function generatePhase10Signal(
         pool: tradeRecord.pool,
         sourcePool,
         filterTier: tradeRecord.filterTier,
-        // Scoring
-        rankingScore: rawSignal?.metadata?.rankingScore,
+        // Scoring (rankingScore is computed downstream in RTB; not in vts-runner scope)
         hybridScore: tradeRecord.hybridScore,
         predictiveConfidence,
         regimeWeight,
@@ -2209,7 +2208,14 @@ async function resolveOpenVirtualTrades(): Promise<{
         timeout: 'time_stop',
       };
       const mappedReason = exitReasonMap[exitReason] ?? 'other';
-      const durationMin = (now - trade.openedAt.getTime()) / 60000;
+      // openedAt is stored as a number (ms epoch) per OpenVirtualTrade interface,
+      // not a Date — calling .getTime() throws and silently failed every exit
+      // until 2026-05-05.
+      const openedAtMs =
+        typeof trade.openedAt === 'number'
+          ? trade.openedAt
+          : new Date(trade.openedAt as any).getTime();
+      const durationMin = (now - openedAtMs) / 60000;
       const rMultiple =
         trade.entryPrice && trade.stopLoss && trade.entryPrice !== trade.stopLoss
           ? (exitPrice - trade.entryPrice) / Math.abs(trade.entryPrice - trade.stopLoss)
