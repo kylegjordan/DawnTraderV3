@@ -1151,6 +1151,27 @@ Multi-week observation accumulates in parallel with B67.4 cheap-tier + calibrati
 - `signal-orchestrator.ts:emit-ablation site (~L975)` → `archiveSignalEval({rejectStage: 'admitted', ...})` (source='signal-orchestrator', dormant until live trading activates)
 - `external-macro-feed.ts:pollCycle (~L413)` → `archiveMacroSnapshot(...)` (source='coingecko-global')
 
+### B70.2 (2026-05-05) — gap-fill + storage display + regime archive deprecation
+
+- `exit_decision_archive.state_snapshot` JSONB expanded from 6 fields to 30+, mirroring every column in the closed-trades CSV export.
+- `signal_eval_archive` admitted-row `features` JSONB expanded similarly, mirroring open-trades CSV.
+- Drift Dashboard `DataArchiveSection` + `PassiveArchiveSection` now display per-table + total disk usage (B70=52.4MB / B74=5.12GB live).
+- Regime archiver (legacy filesystem JSON, 136KB on disk) DEPRECATED — `archival-scheduler` bootstrap commented out. Reader endpoints retained for historical access. B70 supersedes via `pair_scan_archive` + `exit_decision_archive` + `regime_factor_alternates`.
+- 4 silent-failure bugs caught + fixed (BUG-2026-05-05-A/B/C/D in CHANGES_AND_FIXES) — admit + exit hooks were non-functional from B70 deploy 2026-05-04 until 2026-05-05 12:24 UTC fix series.
+
+### B70.3 (2026-05-05) — Path B momentum gate swap + liquidity_trap exclusion
+
+- **Path B regime classification gate swapped:** in `market-regime.ts:209-210`, `(absDbs >= 0.30 && dbsSlope >= b68_5DbsSlopeMin)` → `(absDbs >= 0.30 && mom > b68_5PathBMomentumMin)` (new module_constant default 0.002). 7-day calibration showed -2.0pp predictive lift on the old slope gate; momentum is forward-looking + temporally coherent.
+- **Updates SIM §5.1 `calculatePairRegime`:** the upstream `mom` reading is now consumed by Path B in addition to Path A. Counterfactual builder (`buildB68_5Alternate`) updated to disable momentum gate.
+- **liquidity_trap iteration exclusion:** new `UNIVERSALLY_DISABLED_STRATEGIES` Set in `vts-runner.ts` skips at top of strategy iteration loop. Same in `signal-orchestrator.ts` (active-path block removed). Eliminates ~7,342 wasted evaluations/24h. Strategy DEFINITION retained.
+- Updates SIM §4.1 + §7.1 — strategy iteration short-circuit before `detect()`.
+
+### B70.3b (2026-05-05) — Post-composition floor drop for visibility
+
+- `b67_5_post_composition_floor` module_constant: 0.45 → 0.20 via DB UPDATE. No code change.
+- Updates SIM §5.1 `calculatePairRegime` terminal clamp behavior (floor at 0.20 instead of 0.45 until B67.5 lands and re-tunes based on real distribution data).
+- Pure visibility — no consumer reads `regimeConfidenceModulated` until B67.5.
+
 ### B70 known limitations / deferred to B70.1
 
 - ~~Reject-stage signal_eval capture (`pre_filter`/`sqe`/`rtb`/`tcl`/`strategy_internal`)~~ — admitted-only in v1. Each reject site needs a small `archiveSignalEval({rejectStage: '<stage>', ...})` call. RUNNING_ISSUES #56.

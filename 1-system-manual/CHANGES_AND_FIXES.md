@@ -2034,6 +2034,33 @@ Triggered by Kyle review of the open + closed simulated trades exports + screens
 
 - **B70 SHIPPED 2026-05-04 → 2026-05-05.** Unified data-capture infrastructure across VTS / paper-sim / live execution paths. 5 partitioned archive tables (`pair_scan_archive` ~255k/day, `signal_eval_archive` admitted-only in v1, `exit_decision_archive` per-trade-close, `macro_feed_archive` 60s, `b62_retroactive_labels` one-shot) + 48 monthly partitions + 11 module_constants in new `data_archive` module + new `server/services/data-archive/` service module (6 files) + bootstrap + Drift Dashboard `DataArchiveSection` panel + retention/partition crons. Mode-agnostic capture per Kyle directive 2026-05-04 (scope §M): every row carries `mode` (system-state from `getCurrentMode()` accessor) + `source` (per-hook origin, hardcoded). Two-column discriminator decouples system mode from hook origin (Langston cc-inbox #896). When system flips VTS→paper-sim→live no archiver code change needed. Hot-path hooks all try/catch wrapped + bounded-queue drop-OLDEST. Retention sweep cron 02:00 UTC drops monthly partitions older than 90d. Verified end-to-end: 196 pair_scan rows + 17+ macro rows accumulating with live regime/DBS values. **Deferred to B70.1** (RUNNING_ISSUES #56-#59): reject-stage signal_eval capture, B62 retroactive labels runner, Parquet exporter, unit tests.
 
+### B70.2 silent-failure bugs (caught 2026-05-05 via PM2 log scan)
+
+- **BUG-2026-05-05-A: B70 admit-hook ReferenceError on `rawSignal`** (commit `5617ad72` introduced, `03d704cb` fixed). The admit-archive hook in `vts-runner.ts:generatePhase10Signal` referenced `rawSignal?.metadata?.rankingScore` but `rawSignal` is a parameter to `signal-orchestrator.ts`, not vts-runner. ReferenceError caught by try/catch wrapper, every admit silently failed. Net effect: `signal_eval_archive` admitted-row count was 0 from B70 deploy 2026-05-04 until fix 2026-05-05 ~12:24 UTC. Lesson: cross-file hook copy-paste introduces scope errors that try/catch hides.
+
+- **BUG-2026-05-05-B: B70 exit-hook TypeError on `trade.openedAt.getTime()`** (introduced in B70 main `6b63b6bd`, fixed in `03d704cb`). The exit-archive hook called `.getTime()` on `trade.openedAt` but the `OpenVirtualTrade` interface declares it as `number` (ms epoch). TypeError caught by try/catch, every exit silently failed. Net effect: `exit_decision_archive` had 0 rows despite 41+ trades closing. Wrapped to handle both number and Date defensively.
+
+- **BUG-2026-05-05-C: B70 admit-hook ReferenceError on `_modulatedConfChain`** (introduced in B70.2 expansion, surfaced after BUG-A fix, fixed in `f799f701`). The variable was declared with `let` inside a bare `{ ... }` block at lines ~1447-1724 in vts-runner.ts (the B67.x ablation factor builder block). The admit hook is OUTSIDE that block. Replaced with read from `openVirtualTrades.get(tradeId)?.regimeConfidenceModulated` which IS function-scoped.
+
+- **BUG-2026-05-05-D: B70 exit-hook ReferenceError on `finalTradeMode`** (introduced in B70 main, fixed in `0423a2be`). Const-declared inside the persist-trade try block at line ~2159, so the B70 exit hook below couldn't reference it. Hoisted out to closePosition function scope. Trailing snapshot read is cheap (in-memory map).
+
+**Net diagnostic pattern:** all four were silent failures hidden by the hot-path try/catch wrappers. The wrappers prevented host-path crashes (correct design) but masked the data-capture failures. Detected only when Kyle questioned why `signal_eval_archive admitted` and `exit_decision_archive` were empty — log scan immediately surfaced the errors. Mitigation for future hook batches: include a synthetic-event integration test that asserts row writes through the full pipeline, not just the queue side.
+
+### B70.3 — Path B momentum gate swap (2026-05-05, commit `decf5b80`)
+
+7-day calibration data showed `b68_5_path_b_sustainability` at -2.0pp predictive lift + -0.4480 avg shift — the slope-derivative gate was binary-suppressing winning signals (consolidation pauses produce temporarily negative slope while the underlying trend is healthy). Replaced with momentum-based gate per Langston cc-inbox #901 review:
+
+- **Old:** `(absDbs >= 0.30 && dbsSlope >= regimeConfig.b68_5DbsSlopeMin)` — slope-derivative gate
+- **New:** `(absDbs >= 0.30 && mom > regimeConfig.b68_5PathBMomentumMin)` — forward-looking momentum gate
+- New module_constant `b68_5_path_b_momentum_min = 0.002` (regime=TFS scope) tunable via DB
+- Old `b68_5_dbs_slope_min` retained for back-compat with ablation counterfactual reader; runtime classifier reads new constant
+- B68.5 ablation counterfactual builder updated to disable momentum gate (was disabling slope gate); emits new metadata fields `momentum`, `momentum_min_threshold`, `gate_kind`
+- liquidity_trap iteration-loop exclusion: new `UNIVERSALLY_DISABLED_STRATEGIES` Set in vts-runner skips at top of strategy iteration BEFORE `detect()` is called; same exclusion in signal-orchestrator. Eliminates ~7,342 wasted evaluations/24h that returned `strategy_disabled_bearish`.
+
+### B70.3b — Post-composition floor dropped 0.45 → 0.20 (2026-05-05, no code — module_constants UPDATE)
+
+Per Kyle directive + Langston cc-inbox #902. Pre-B70.3b every open trade showed `regimeConfidenceModulated = 0.45` (floor binding 100%) — true compressed chain output hidden by the clamp. Since no consumer reads the value until B67.5 wires it, lowering the floor is pure visibility (zero behavioral impact). 0.20 well below the worst-case compound `0.85⁴ × 0.92² × 0.95 ≈ 0.42` so any realistic chain output now lands in visible range. Floor will be raised back to an empirically-correct value during B67.5 consumer wiring once we have real distribution data.
+
 ### B70 lessons (carried forward)
 
 1. **Drizzle `db.execute(sql.raw(BEGIN; ...; COMMIT))` only returns the last result set.** Postgres-js exposes only the trailing COMMIT row (empty), so the SELECT in the middle is lost. Hotfix `3796ae56` dropped the wrapper. For B-tree partition counts on small tables there's no statement-timeout need; revisit if Supabase ever lags.

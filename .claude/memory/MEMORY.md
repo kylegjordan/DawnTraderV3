@@ -17,10 +17,11 @@
 
 ---
 
-## CURRENT STATE — 2026-05-05 (PM2 #150)
+## CURRENT STATE — 2026-05-05 (PM2 #150 + module_constants UPDATE)
 
 - **Branch:** `migration/aws-supabase`
-- **HEAD:** `0423a2be` (B70.3 hotfix — finalTradeMode hoisted)
+- **HEAD:** `2af05394` (MEMORY trim) — governance gap-fill commit pending in this turn
+- **Floor:** `b67_5_post_composition_floor` UPDATEd 0.45 → 0.20 via module_constants for chain-output visibility (B70.3b, Langston #902)
 - **Live state:** B70 + B70.1 + B70.2 + **B70.3 (Path B slope→momentum gate swap + liquidity_trap iteration-loop exclusion + 3 exit-hook scope hotfixes)**. B70 = 52.4 MB / B74 = 5.12 GB on staging.
 - **Trailing-after-target DISABLED** via module_constant `moonbag_qualifying_strategies = []`. Every trade exits at target. BE-stop unchanged.
 
