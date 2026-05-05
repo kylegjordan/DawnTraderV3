@@ -119,6 +119,22 @@ app.use((req, res, next) => {
    */
   console.log('[A4.R10R-3] 🔁 Starting synchronized service bootstrap sequence');
 
+  // B72 (2026-05-05): Warm module_constants BEFORE Boot Orchestrator runs.
+  // BootOrchestrator.initializeVTSWithAutoStart kicks off VTS first-cycle which
+  // triggers pruneReentryMaps -> getSetupHashExpiryMs -> getCachedNumberRequired
+  // against the 'vts_runner' module. If that module is cold, VTS auto-start
+  // fails permanently (witnessed PM2 #161-#163 silent failure 2026-05-05 19:33).
+  // Warmup MUST happen first so any sync caller invoked by Boot Orchestrator
+  // can resolve cleanly. Hard-fails if a prefetched module is missing rows.
+  try {
+    const { warmModuleConstantsForSyncCallers } = await import('./startup/b72-warmup.js');
+    await warmModuleConstantsForSyncCallers();
+    console.log('[B72][INIT_OK] module_constants sync-read modules warmed (pre-orchestrator)');
+  } catch (b72Err) {
+    console.error('[B72] ❌ Module-constants warmup failed:', b72Err);
+    throw b72Err;
+  }
+
   /**
    * 8.8.4-L3: Initialize Boot Orchestrator FIRST
    * Manages Python ML microservice lifecycle and health checks
@@ -185,18 +201,8 @@ app.use((req, res, next) => {
   const { dataAggregator } = await import('./services/data-aggregator.js');
   console.log('[8.8.4-L1][INIT_OK] Data Aggregator initialized (flush=30s, aggregate=15m)');
 
-  // B72 Step 3 (2026-05-05): Warm module_constants for sync-read callers
-  // (strategy DBS routing guards, etc.). MUST complete before FX5 scanner +
-  // signal pipeline start. Hard-fails if migration not applied or rows
-  // missing — no silent fallback per Kyle directive.
-  try {
-    const { warmModuleConstantsForSyncCallers } = await import('./startup/b72-warmup.js');
-    await warmModuleConstantsForSyncCallers();
-    console.log('[B72][INIT_OK] module_constants sync-read modules warmed');
-  } catch (b72Err) {
-    console.error('[B72] ❌ Module-constants warmup failed:', b72Err);
-    throw b72Err; // Re-throw: server must not start if sync-read levers cannot resolve.
-  }
+  // (B72 module_constants warmup moved EARLIER in this file — runs before
+  // Boot Orchestrator so VTS auto-start can resolve sync-read modules.)
 
   // R9.3.HF-5: Force FX5 Scanner reinitialization (non-blocking)
   import('./startup/fx5-scanner-bootstrap.js')
