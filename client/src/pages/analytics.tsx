@@ -1458,6 +1458,8 @@ interface PassiveArchiveUniverseStatsUI {
   ohlcStoreFraction: number | null;
   tickerStoreFraction: number | null;
   status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING';
+  diskBytes: number;
+  diskPretty: string;
 }
 
 interface PassiveArchiveData {
@@ -1466,6 +1468,8 @@ interface PassiveArchiveData {
   windowEnd: string;
   universes: PassiveArchiveUniverseStatsUI[];
   pidStartedAt: string;
+  totalDiskBytes: number;
+  totalDiskPretty: string;
 }
 
 function PassiveArchiveSection() {
@@ -1530,6 +1534,7 @@ function PassiveArchiveSection() {
               Window: <span className="font-mono">{d.window.replace('rolling_', '')}</span>
               · PID started: <span className="font-mono">{new Date(d.pidStartedAt).toISOString().slice(0, 19)}Z</span>
               <span className="ml-2 text-[10px]">(cumulative-scanned counters reset at PID start)</span>
+              <span className="ml-2 font-semibold text-foreground">· Total disk: {d.totalDiskPretty}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -1540,6 +1545,7 @@ function PassiveArchiveSection() {
                     <th className="px-2 py-2 text-right">Active in window</th>
                     <th className="px-2 py-2 text-right" colSpan={3}>OHLC (1-min bars)</th>
                     <th className="px-2 py-2 text-right" colSpan={3}>Ticker snapshots</th>
+                    <th className="px-2 py-2 text-right">Disk</th>
                     <th className="px-2 py-2">Status</th>
                   </tr>
                   <tr className="text-left text-[10px] text-muted-foreground">
@@ -1552,6 +1558,7 @@ function PassiveArchiveSection() {
                     <th className="px-2 py-1 text-right">stored (window)</th>
                     <th className="px-2 py-1 text-right">scanned (since PID)</th>
                     <th className="px-2 py-1 text-right">store %</th>
+                    <th className="px-2 py-1 text-right">all partitions</th>
                     <th className="px-2 py-1"></th>
                   </tr>
                 </thead>
@@ -1567,6 +1574,7 @@ function PassiveArchiveSection() {
                       <td className="px-2 py-2 text-right font-mono">{fmtN(u.tickerRowsInWindow)}</td>
                       <td className="px-2 py-2 text-right font-mono text-muted-foreground">{fmtN(u.cumulativeTickerScanned)}</td>
                       <td className="px-2 py-2 text-right font-mono text-[10px]">{fmtPct(u.tickerStoreFraction)}</td>
+                      <td className="px-2 py-2 text-right font-mono">{u.diskPretty}</td>
                       <td className="px-2 py-2">{statusBadge(u.status)}</td>
                     </tr>
                   ))}
@@ -1599,6 +1607,8 @@ interface DataArchiveTableStat {
   name: string;
   rowsInWindow: number;
   totalRows: number;
+  diskBytes: number;
+  diskPretty: string;
   lastWriteAt: string | null;
   timedOut: boolean;
 }
@@ -1616,6 +1626,8 @@ interface DataArchiveResponse {
   windowStart: string;
   windowEnd: string;
   tables: DataArchiveTableStat[];
+  totalDiskBytes: number;
+  totalDiskPretty: string;
   batchWriter: Record<string, DataArchiveBatchWriterStat>;
   config: {
     pairScanEnabled: boolean;
@@ -1687,7 +1699,8 @@ function DataArchiveSection() {
               Current mode:{' '}
               <span className="font-mono font-semibold text-foreground">{d.currentMode}</span> &middot;
               Retention {d.config.retentionDays}d &middot; Queue max {fmtN(d.config.archiveWriterQueueMax)} &middot;
-              Pre-filter capture: {d.config.signalEvalPreFilterEnabled ? 'on' : 'off'}
+              Pre-filter capture: {d.config.signalEvalPreFilterEnabled ? 'on' : 'off'} &middot;
+              <span className="font-semibold text-foreground"> Total disk: {d.totalDiskPretty}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -1696,6 +1709,7 @@ function DataArchiveSection() {
                     <th className="text-left py-2 pr-4">Table</th>
                     <th className="text-right py-2 pr-4">Rows in window</th>
                     <th className="text-right py-2 pr-4">Total rows</th>
+                    <th className="text-right py-2 pr-4">Disk</th>
                     <th className="text-right py-2 pr-4">Last write</th>
                     <th className="text-right py-2 pr-4">Buffer depth</th>
                     <th className="text-right py-2 pr-4">Total flushed</th>
@@ -1718,6 +1732,7 @@ function DataArchiveSection() {
                         </td>
                         <td className="text-right py-2 pr-4">{fmtN(t.rowsInWindow)}</td>
                         <td className="text-right py-2 pr-4">{fmtN(t.totalRows)}</td>
+                        <td className="text-right py-2 pr-4">{t.diskPretty}</td>
                         <td className="text-right py-2 pr-4">{fmtTimeAgo(t.lastWriteAt)}</td>
                         <td className="text-right py-2 pr-4">{bw ? fmtN(bw.bufferDepth) : '—'}</td>
                         <td className="text-right py-2 pr-4">{bw ? fmtN(bw.totalFlushed) : '—'}</td>

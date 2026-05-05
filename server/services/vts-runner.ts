@@ -1756,13 +1756,50 @@ async function generatePhase10Signal(
       finalScore: typeof finalScore === 'number' ? finalScore : undefined,
       confidenceModulated:
         typeof _modulatedConfChain === 'number' ? _modulatedConfChain : undefined,
+      // B70.2 (2026-05-05) — full at-entry context per Kyle directive.
+      // Mirrors the open-trades CSV export columns so admitted rows carry
+      // every field needed to reconstruct the trade decision.
       features: {
+        // Signal economics
+        entryPrice: tradeRecord.entryPrice,
+        target: tradeRecord.takeProfit,
+        stopLoss: tradeRecord.stopLoss,
+        positionSize: tradeRecord.positionSize,
+        quantity: tradeRecord.quantity,
+        // Signal classification
+        signalType: tradeRecord.signalType,
+        patternType: tradeRecord.patternType,
+        pool: tradeRecord.pool,
         sourcePool,
-        regimeWeight,
+        filterTier: tradeRecord.filterTier,
+        // Scoring
+        rankingScore: rawSignal?.metadata?.rankingScore,
+        hybridScore: tradeRecord.hybridScore,
         predictiveConfidence,
+        regimeWeight,
+        expectedEdge: tradeRecord.expectedEdge,
+        decayPenalty: tradeRecord.decayPenalty,
+        // Regime + bias
+        globalRegime: tradeRecord.globalRegime,
+        pairFriction: tradeRecord.pairFriction,
+        globalFriction: tradeRecord.globalFriction,
+        pairDirectionalBias: tradeRecord.pairDirectionalBias,
+        globalDirectionalBias: tradeRecord.globalDirectionalBias,
+        pairDirectionalBiasScore: tradeRecord.pairDirectionalBiasScore,
+        globalDirectionalBiasScore: tradeRecord.globalDirectionalBiasScore,
+        // Phase
+        regimeConfidenceRaw: tradeRecord.regimeConfidenceRaw,
+        macroModifierValue: tradeRecord.macroModifierValue,
+        phase: tradeRecord.phase,
+        phaseAgeSeconds: tradeRecord.phaseAgeSeconds,
+        strategyPhaseWeight: tradeRecord.strategyPhaseWeight,
+        // Cohort marker + ATR
+        pairIdHash: tradeRecord.pairIdHash,
+        atrAtOpen: tradeRecord.atrAtOpen,
       },
       modulators: {
         chain_modulated_confidence: _modulatedConfChain,
+        regimeConfidenceModulated: tradeRecord.regimeConfidenceModulated,
       },
       gateDecision: {
         gate: 'admitted',
@@ -2192,13 +2229,56 @@ async function resolveOpenVirtualTrades(): Promise<{
         durationMin,
         regimeAtEntry: trade.regime,
         dbsAtEntry: trade.pairDirectionalBiasScore,
+        // B70.2 (2026-05-05) — full closed-trade context per Kyle directive.
+        // Capture every field that appears in the closed-trades CSV export.
         stateSnapshot: {
+          // Exit semantics
+          rawExitReason: exitReason,
           tradeMode: finalTradeMode,
           ladderRungsHit: trade.ladderRungsHit ?? 0,
+          originalStopPrice: trade.originalStopPrice,
+          latchTriggerPrice: trade.latchTriggerPrice,
+          rungTargetHistory: trade.rungTargetHistory,
+          // Trade economics (raw values; pnlPct flat already)
+          dollarValue: trade.positionSize,
+          quantity: trade.quantity,
+          target: trade.takeProfit,
+          stopLoss: trade.stopLoss,
+          grossPnl,
+          netPnl,
+          fees: trade.fees ?? null,
+          // Signal context at entry
+          signalType: trade.signalType,
+          patternType: trade.patternType,
+          pool: trade.pool,
           sourcePool: trade.sourcePool,
+          filterTier: trade.filterTier,
+          // Scoring
           finalScore: trade.finalScore,
+          hybridScore: trade.hybridScore,
           predictiveConfidence: trade.predictiveConfidence,
+          expectedEdge: trade.expectedEdge,
+          decayPenalty: trade.decayPenalty,
+          // Regime + bias context
+          globalRegime: trade.globalRegime,
+          pairFriction: trade.pairFriction,
+          globalFriction: trade.globalFriction,
+          pairDirectionalBias: trade.pairDirectionalBias,
+          globalDirectionalBias: trade.globalDirectionalBias,
+          pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
+          globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
+          // Confidence chain (raw + modulated)
+          regimeWeight: trade.regimeWeight,
+          regimeConfidenceRaw: trade.regimeConfidenceRaw,
           regimeConfidenceModulated: trade.regimeConfidenceModulated,
+          macroModifierValue: trade.macroModifierValue,
+          phase: trade.phase,
+          phaseAgeSeconds: trade.phaseAgeSeconds,
+          strategyPhaseWeight: trade.strategyPhaseWeight,
+          // Cohort marker
+          pairIdHash: trade.pairIdHash,
+          // ATR at open (B73.1)
+          atrAtOpen: trade.atrAtOpen,
         },
       });
     } catch (b70Err) {

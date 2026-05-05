@@ -656,6 +656,20 @@ const MIN_N_PER_BUCKET = 150;       // Langston calibration check threshold (cc-
 //
 // Read-only DB queries + per-archiver stats getters; no admission impact.
 
+// B70.2 (2026-05-05) — pretty bytes formatter, shared by passive + data archive panels
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes < 0) return '0 bytes';
+  if (bytes < 1024) return `${bytes} bytes`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = bytes / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)} ${units[i]}`;
+}
+
 export interface PassiveArchiveUniverseStats {
   universe: 'equity_spot' | 'equity_perp' | 'crypto_spot';
   // Universe sizing
@@ -674,6 +688,9 @@ export interface PassiveArchiveUniverseStats {
   tickerStoreFraction: number | null;
   // Health note
   status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING';
+  // B70.2 — disk usage per universe (sum of OHLC + ticker partition sizes)
+  diskBytes: number;
+  diskPretty: string;
 }
 
 export interface PassiveArchiveResponse {
@@ -682,6 +699,8 @@ export interface PassiveArchiveResponse {
   windowEnd: string;
   universes: PassiveArchiveUniverseStats[];
   pidStartedAt: string;               // when current PM2 process began (counter reset reference)
+  totalDiskBytes: number;
+  totalDiskPretty: string;
 }
 
 /**
@@ -699,9 +718,13 @@ export interface DataArchiveStatusResponse {
     name: string;
     rowsInWindow: number;
     totalRows: number;
+    diskBytes: number;
+    diskPretty: string;
     lastWriteAt: string | null;
     timedOut: boolean;
   }>;
+  totalDiskBytes: number;
+  totalDiskPretty: string;
   batchWriter: Record<
     string,
     {
@@ -747,30 +770,40 @@ export async function computeDataArchiveStatus(
   ];
 
   const tables: DataArchiveStatusResponse['tables'] = [];
+  let totalDiskBytes = 0;
   for (const t of TABLES) {
     let rowsInWindow = 0;
     let totalRows = 0;
+    let diskBytes = 0;
+    let diskPretty = '0 bytes';
     let lastWriteAt: string | null = null;
     let timedOut = false;
     try {
-      // Single SELECT with three subqueries — partitioned tables are small
-      // (<2.5M rows in 90-day steady-state, mostly empty during early B70).
-      // No statement_timeout wrapper needed; if Supabase ever lags this can
-      // be revisited.
+      // Counts + last-write timestamp + total-relation-size (includes all
+      // monthly partitions). Partitioned-parent size walks every partition
+      // via pg_partition_tree, summing pg_total_relation_size on each child.
       const stmt = `SELECT
           (SELECT count(*)::int FROM ${t} WHERE captured_at >= '${windowStart.toISOString()}') AS rows_in_window,
           (SELECT count(*)::int FROM ${t}) AS total_rows,
-          (SELECT max(captured_at) FROM ${t}) AS last_write_at`;
+          (SELECT max(captured_at) FROM ${t}) AS last_write_at,
+          COALESCE((
+            SELECT sum(pg_total_relation_size(p.relid))::bigint
+            FROM pg_partition_tree('${t}'::regclass) p
+          ), pg_total_relation_size('${t}'::regclass)) AS disk_bytes`;
       const r = await db.execute(sql.raw(stmt));
       const rows = (Array.isArray(r) ? r : (r as any).rows ?? []) as Array<{
         rows_in_window: number | string | null;
         total_rows: number | string | null;
         last_write_at: string | Date | null;
+        disk_bytes: number | string | null;
       }>;
       const row = rows[0];
       if (row) {
         rowsInWindow = row.rows_in_window != null ? Number(row.rows_in_window) : 0;
         totalRows = row.total_rows != null ? Number(row.total_rows) : 0;
+        diskBytes = row.disk_bytes != null ? Number(row.disk_bytes) : 0;
+        diskPretty = formatBytes(diskBytes);
+        totalDiskBytes += diskBytes;
         lastWriteAt =
           row.last_write_at instanceof Date
             ? row.last_write_at.toISOString()
@@ -780,7 +813,7 @@ export async function computeDataArchiveStatus(
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[B70][archive-status] query failed for ${t}:`, msg);
     }
-    tables.push({ name: t, rowsInWindow, totalRows, lastWriteAt, timedOut });
+    tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut });
   }
 
   const cfg = getArchiveConfig();
@@ -789,6 +822,8 @@ export async function computeDataArchiveStatus(
     windowStart: windowStart.toISOString(),
     windowEnd: windowEnd.toISOString(),
     tables,
+    totalDiskBytes,
+    totalDiskPretty: formatBytes(totalDiskBytes),
     batchWriter: getArchiveStats(),
     config: {
       pairScanEnabled: cfg.pairScanEnabled,
@@ -859,7 +894,24 @@ export async function computePassiveArchiveStatus(
     }
   }
 
+  // B70.2 — disk-size lookup helper. Sums all monthly partitions for a parent.
+  async function diskBytesForParent(parent: string): Promise<number> {
+    try {
+      const r = await db.execute(
+        sql.raw(`SELECT COALESCE((
+          SELECT sum(pg_total_relation_size(p.relid))::bigint
+          FROM pg_partition_tree('${parent}'::regclass) p
+        ), pg_total_relation_size('${parent}'::regclass)) AS bytes`),
+      );
+      const rows = (Array.isArray(r) ? r : (r as any).rows ?? []) as Array<{ bytes: number | string | null }>;
+      return rows[0]?.bytes != null ? Number(rows[0].bytes) : 0;
+    } catch {
+      return 0;
+    }
+  }
+
   const universes: PassiveArchiveUniverseStats[] = [];
+  let passiveTotalDiskBytes = 0;
   for (const cfg of universeConfigs) {
     const ohlc = await safeCount(
       `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
@@ -898,6 +950,14 @@ export async function computePassiveArchiveStatus(
       status = 'NO_TICKER_DATA';
     }
 
+    // B70.2 — disk usage = sum of OHLC + ticker partition sizes for this universe
+    const [ohlcBytes, tickerBytes] = await Promise.all([
+      diskBytesForParent(cfg.ohlcTable),
+      diskBytesForParent(cfg.tickerTable),
+    ]);
+    const universeBytes = ohlcBytes + tickerBytes;
+    passiveTotalDiskBytes += universeBytes;
+
     universes.push({
       universe: cfg.name,
       configuredSymbols: cfg.stats.configuredSymbols,
@@ -910,6 +970,8 @@ export async function computePassiveArchiveStatus(
       ohlcStoreFraction,
       tickerStoreFraction,
       status,
+      diskBytes: universeBytes,
+      diskPretty: formatBytes(universeBytes),
     });
   }
 
@@ -922,6 +984,8 @@ export async function computePassiveArchiveStatus(
     windowEnd: windowEnd.toISOString(),
     universes,
     pidStartedAt,
+    totalDiskBytes: passiveTotalDiskBytes,
+    totalDiskPretty: formatBytes(passiveTotalDiskBytes),
   };
 }
 

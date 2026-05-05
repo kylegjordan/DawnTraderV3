@@ -749,14 +749,21 @@ app.use((req, res, next) => {
       const { startAdaptiveProfiler } = await import('./services/gemini-adaptive-profiler');
       startAdaptiveProfiler();
       
-      // Directive 11.7I-03: Initialize Regime Archive Scheduler
-      try {
-        const { initArchivalScheduler } = await import('./core/archival/archival-scheduler');
-        initArchivalScheduler();
-        console.log('[11.7I-03] ✅ Archival scheduler initialized');
-      } catch (archiveError) {
-        console.error('[11.7I-03] ⚠️ Archival scheduler init failed:', archiveError);
-      }
+      // Directive 11.7I-03: Regime Archive Scheduler — DEPRECATED 2026-05-05 (Kyle directive).
+      // Superseded by B70 unified data archive: pair_scan_archive (per-pair × per-cycle MCE
+      // snapshots) + exit_decision_archive (per-trade-close) + regime_factor_alternates
+      // (B67.0 ablation rows) collectively capture every regime metric the regime-archiver
+      // was capturing, at higher granularity. The on-disk filesystem JSON archive
+      // (logs/regime_archive/) is no longer written. Reader endpoints return a
+      // deprecation notice. See regime-archiver.ts for the deletion plan.
+      // try {
+      //   const { initArchivalScheduler } = await import('./core/archival/archival-scheduler');
+      //   initArchivalScheduler();
+      //   console.log('[11.7I-03] ✅ Archival scheduler initialized');
+      // } catch (archiveError) {
+      //   console.error('[11.7I-03] ⚠️ Archival scheduler init failed:', archiveError);
+      // }
+      console.log('[11.7I-03] Regime archival scheduler DEPRECATED (B70 supersedes — Kyle directive 2026-05-05)');
       
       // Directive 11.7I-04: Initialize ML Calibration Scheduler (8-hour cadence)
       try {
