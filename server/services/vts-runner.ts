@@ -2150,13 +2150,15 @@ async function resolveOpenVirtualTrades(): Promise<{
       caller: 'vts'
     });
     
+    // B65.2 + B70.3 (2026-05-05): hoisted out of the persist-try block so
+    // the B70 exit-decision hook below can reference finalTradeMode without
+    // a scope error. The trailing snapshot read is cheap (in-memory map).
+    const { getTrailingState } = await import('./trailing-exit-controller.js');
+    const trailingSnapshot = getTrailingState(trade.symbol);
+    const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = trailingSnapshot?.tradeMode ?? 'TARGET';
+
     // Directive 11.6C: Persist to legacy VTS storage and ML pipeline
     try {
-      // B65.2: extract trade_mode snapshot from the trailing engine so the
-      // closed-trade log preserves whether the trade ended in moonbag mode.
-      const { getTrailingState } = await import('./trailing-exit-controller.js');
-      const trailingSnapshot = getTrailingState(trade.symbol);
-      const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = trailingSnapshot?.tradeMode ?? 'TARGET';
       const result = await vtsService.persistRealPriceTrade({
         // B67.0 follow-up: thread the original VTS signal id (matches the
         // vts_trade_id stored on ablation rows at emit time) so the
