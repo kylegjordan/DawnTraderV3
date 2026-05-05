@@ -27,25 +27,17 @@ import {
 } from './strategy-helpers';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+// B72 (2026-05-05): all strategy levers moved to module='strategy.adaptive_flow'.
+// Read in bulk via getCachedNumbersForModule at top of detect(). Module is
+// prefetched at server boot in server/startup/b72-warmup.ts.
+// AF_STOP_BUFFER (0.003) remains hardcoded — KEEP per LEVER_INVENTORY (structural geometric buffer).
+import { getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ═══════════════════════════════════════════════════════════════
-// Strategy Constants
+// Strategy Constants — pre-B72 hardcoded literals migrated to
+// module_constants. The structural buffer below is KEEP per inventory.
 // ═══════════════════════════════════════════════════════════════
-
-const AF_LOOKBACK              = 20;
-const AF_MIN_INVERSIONS        = 3;
-const AF_VOL_PERCENTILE_WINDOW = 50;
-const AF_MIN_VOL_PERCENTILE    = 60;   // Crypto-calibrated (Batch 18H): 70 → 60
-const AF_VOL_MULT              = 1.3;
-const AF_ADX_MAX               = 30;   // Crypto-calibrated (Batch 18H): 25 → 30
-const AF_STOP_ATR_MULT         = 1.5;
 const AF_STOP_BUFFER           = 0.003;
-const AF_TARGET_ATR_MULT       = 3.0;
-const AF_PATTERN_WEIGHT        = 0.35;
-const AF_INVERSION_RATE        = 0.05;
-const AF_MAX_INVERSION_BONUS   = 0.20;
-const AF_VOL_PCT_WEIGHT        = 0.25;
-const AF_HIGH_VOL_BONUS        = 0.08;
 
 const STRATEGY_KEY = 'adaptive_flow';
 const LOG_PREFIX   = '[12.3.2][ADAPTIVE_FLOW]';
@@ -71,6 +63,24 @@ export function detectAdaptiveFlow(
   candles: any[],
   patternSignal: PatternInput | null
 ): StrategySignal | null {
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.adaptive_flow', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const AF_LOOKBACK              = c.momentum_inversion_lookback_bars;
+  const AF_MIN_INVERSIONS        = c.min_momentum_inversions;
+  const AF_VOL_PERCENTILE_WINDOW = c.volatility_percentile_window_bars;
+  const AF_MIN_VOL_PERCENTILE    = c.min_volatility_percentile;
+  const AF_VOL_MULT              = c.volume_threshold_multiplier;
+  const AF_ADX_MAX               = c.max_adx_trending_threshold;
+  const AF_STOP_ATR_MULT         = c.stop_loss_atr_multiplier;
+  const AF_TARGET_ATR_MULT       = c.target_exit_atr_multiplier;
+  const AF_PATTERN_WEIGHT        = c.pattern_strength_confidence_weight;
+  const AF_INVERSION_RATE        = c.inversion_count_confidence_rate;
+  const AF_MAX_INVERSION_BONUS   = c.inversion_confidence_bonus_max;
+  const AF_VOL_PCT_WEIGHT        = c.volatility_percentile_confidence_weight;
+  const AF_HIGH_VOL_BONUS        = c.high_volume_confidence_bonus;
+
   // ── Parse candles ──────────────────────────────────────────
   const ohlc = parseCandles(candles);
   if (ohlc.length < AF_VOL_PERCENTILE_WINDOW + 15) {

@@ -27,7 +27,7 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
-import { getCachedNumberRequired } from '../services/module-constants-service.js';
+import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -37,18 +37,9 @@ import { getCachedNumberRequired } from '../services/module-constants-service.js
 // Group migrated atomically with strong_bull_trend, reverse_impulse,
 // morning_star. See server/tests/integration/b72-dbs-routing-guards-consistency.test.ts.
 
-const DH_CORR_WINDOW        = 30;
-const DH_VOL_WINDOW         = 20;
-const DH_MAX_CORRELATION    = 0.45;  // Crypto-calibrated (Batch 18H): 0.30 → 0.45
-const DH_MIN_VOL_OFFSET     = 0.10;
-const DH_VOL_MULT           = 1.3;
+// B72 (2026-05-05): all strategy levers moved to module='strategy.defensive_hedge'.
+// DH_STOP_BUFFER (0.005) remains hardcoded — KEEP per LEVER_INVENTORY (geometric buffer).
 const DH_STOP_BUFFER        = 0.005;
-const DH_TARGET_ATR_MULT    = 1.8;
-const DH_PATTERN_WEIGHT     = 0.45;
-const DH_DECORR_WEIGHT      = 0.25;
-const DH_VOL_OFFSET_RATE    = 0.15;
-const DH_MAX_VOL_BONUS      = 0.15;
-const DH_STRONG_ENGULF_BONUS = 0.08;
 
 const STRATEGY_KEY = 'defensive_hedge';
 const LOG_PREFIX   = '[12.3.2][DEFENSIVE_HEDGE]';
@@ -93,6 +84,22 @@ export function detectDefensiveHedge(
   patternSignal: PatternInput | null,
   btcCandles?: any[]
 ): StrategySignal | null {
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.defensive_hedge', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const DH_CORR_WINDOW         = c.correlation_lookback_bars;
+  const DH_VOL_WINDOW          = c.volatility_lookback_bars;
+  const DH_MAX_CORRELATION     = c.max_btc_correlation_threshold;
+  const DH_MIN_VOL_OFFSET      = c.min_idiosyncratic_volatility_offset;
+  const DH_VOL_MULT            = c.volume_threshold_multiplier;
+  const DH_TARGET_ATR_MULT     = c.target_exit_atr_multiplier;
+  const DH_PATTERN_WEIGHT      = c.pattern_strength_confidence_weight;
+  const DH_DECORR_WEIGHT       = c.correlation_offset_confidence_weight;
+  const DH_VOL_OFFSET_RATE     = c.volatility_offset_confidence_rate;
+  const DH_MAX_VOL_BONUS       = c.volume_confidence_bonus_max;
+  const DH_STRONG_ENGULF_BONUS = c.strong_engulfing_pattern_bonus;
+
   // B63 + B72: Belt-and-braces for Path D LONG-only leak.
   // Threshold sourced from module_constants (group with strong_bull_trend).
   const dbsGuardThreshold = getCachedNumberRequired(

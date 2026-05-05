@@ -50,6 +50,10 @@ const PREFETCH_MODULES = [
   // Slice 2d — VTS runner caps + regime age:
   'vts_runner',           // vts-runner.ts max_concurrent / max_open / cooldown / hash tolerance + expiry
   'regime_age',           // regime-age-factor.ts Path A momentum floor
+  // Slice 3 — per-strategy modules (10-19 levers each, bulk-read via getCachedNumbersForModule):
+  'strategy.adaptive_flow',
+  'strategy.volatility_edge',
+  'strategy.defensive_hedge',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

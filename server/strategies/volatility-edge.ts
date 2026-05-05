@@ -31,23 +31,15 @@ import {
 } from './strategy-helpers';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+// B72 (2026-05-05): all strategy levers moved to module='strategy.volatility_edge'.
+// VE_BREAKOUT_BUFFER + VE_STOP_BUFFER remain hardcoded — KEEP per LEVER_INVENTORY (structural geometric buffers).
+import { getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ═══════════════════════════════════════════════════════════════
-// Strategy Constants
+// Strategy Constants — structural geometric buffers (KEEP)
 // ═══════════════════════════════════════════════════════════════
-
-const VE_A_VOL_MULT          = 1.3; // Batch 53: 1.5→1.3. (B47: 2.0→1.5)
-const VE_MIN_VOL_PERCENTILE  = 70;   // Crypto-calibrated (Batch 18H): 80 → 70
 const VE_BREAKOUT_BUFFER     = 0.002;
-const VE_BREAKOUT_VOL_MULT   = 1.3; // Batch 53: 1.5→1.3, symmetric with A-point relaxation
 const VE_STOP_BUFFER         = 0.003;
-const VE_MEASURED_MOVE_MULT  = 0.85;
-const VE_TARGET_ATR_MULT     = 2.5;
-const VE_BASE_CONFIDENCE     = 0.40;
-const VE_VOL_PCT_WEIGHT      = 0.20;
-const VE_FIB_WEIGHT          = 0.20;
-const VE_VOL_SCORE_RATE      = 0.05;
-const VE_MAX_VOL_BONUS       = 0.15;
 
 const STRATEGY_KEY = 'volatility_edge';
 const LOG_PREFIX   = '[12.3.2][VOLATILITY_EDGE]';
@@ -76,6 +68,21 @@ export function detectVolatilityEdge(
   candles: any[],
   patternSignal: PatternInput | null
 ): StrategySignal | null {
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.volatility_edge', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const VE_A_VOL_MULT          = c.a_point_volume_threshold_multiplier;
+  const VE_MIN_VOL_PERCENTILE  = c.min_volatility_percentile;
+  const VE_BREAKOUT_VOL_MULT   = c.breakout_volume_threshold_multiplier;
+  const VE_MEASURED_MOVE_MULT  = c.measured_move_retracement_ratio;
+  const VE_TARGET_ATR_MULT     = c.target_exit_atr_multiplier;
+  const VE_BASE_CONFIDENCE     = c.base_confidence_score;
+  const VE_VOL_PCT_WEIGHT      = c.volatility_percentile_confidence_weight;
+  const VE_FIB_WEIGHT          = c.fibonacci_quality_confidence_weight;
+  const VE_VOL_SCORE_RATE      = c.a_point_volume_confidence_rate;
+  const VE_MAX_VOL_BONUS       = c.volume_confidence_bonus_max;
+
   // B63: Belt-and-braces for Path D LONG-only leak.
   if (((indicators as any).dbsScore ?? 0) >= 0.35) {
     setNullReason('b63_strong_dbs_exclusion');
