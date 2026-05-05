@@ -54,6 +54,12 @@ const PREFETCH_MODULES = [
   'strategy.adaptive_flow',
   'strategy.volatility_edge',
   'strategy.defensive_hedge',
+  'strategy.inside_bar_reversal',
+  'strategy.morning_star',
+  'strategy.pivot_shift',
+  'strategy.reverse_impulse',
+  'strategy.support_bounce',
+  'strategy.strong_bull_trend',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

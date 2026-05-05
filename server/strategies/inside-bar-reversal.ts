@@ -33,21 +33,15 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+// B72 (2026-05-05): all strategy levers moved to module='strategy.inside_bar_reversal'.
+// IB_BREAKOUT_BUFFER + IB_STOP_BUFFER remain hardcoded — KEEP per LEVER_INVENTORY (geometric buffers).
+import { getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ============================================================================
-// Strategy Constants
+// Strategy Constants — geometric buffers (KEEP)
 // ============================================================================
-
-const IB_MAX_COMPRESSION    = 0.85;  // Batch 53: 0.80→0.85. Crypto candles noisier. (B18H: 0.75→0.80)
-const IB_BREAKOUT_BUFFER    = 0.002; // 0.2% breakout buffer above/below parent
-const IB_VOL_MULT           = 1.3;   // Batch 47: 1.5→1.3, inside bar breakouts can occur on moderate volume
-const IB_STOP_BUFFER        = 0.003; // 0.3% buffer beyond parent extreme
-const IB_TARGET_ATR_MULT    = 2.0;   // Target = entry +/- 2.0 * ATR
-const IB_COMPRESSION_WEIGHT = 0.35;  // Weight of compression score in confidence
-const IB_STRENGTH_WEIGHT    = 0.45;  // Weight of pattern strength in confidence
-const IB_VOL_SCORE_RATE     = 0.10;  // Rate at which excess volume adds confidence
-const IB_MAX_VOL_BONUS      = 0.20;  // Maximum volume-based confidence bonus
-const IB_SELL_RSI_MIN       = 45;    // Minimum RSI for SELL (filters oversold)
+const IB_BREAKOUT_BUFFER    = 0.002;
+const IB_STOP_BUFFER        = 0.003;
 
 const STRATEGY_KEY = 'inside_bar_reversal';
 const LOG_PREFIX = '[12.3.2][INSIDE_BAR_REVERSAL]';
@@ -73,6 +67,19 @@ export function detectInsideBarReversal(
   patternSignal: PatternInput | null
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
+
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.inside_bar_reversal', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const IB_MAX_COMPRESSION    = c.max_compression_ratio;
+  const IB_VOL_MULT           = c.volume_threshold_multiplier;
+  const IB_TARGET_ATR_MULT    = c.target_exit_atr_multiplier;
+  const IB_COMPRESSION_WEIGHT = c.compression_quality_confidence_weight;
+  const IB_STRENGTH_WEIGHT    = c.pattern_strength_confidence_weight;
+  const IB_VOL_SCORE_RATE     = c.volume_confidence_rate;
+  const IB_MAX_VOL_BONUS      = c.volume_confidence_bonus_max;
+  const IB_SELL_RSI_MIN       = c.sell_rsi_min_threshold;
 
   // ── Guard: Parse candles ─────────────────────────────────────────────────
   const ohlc = parseCandles(candles);

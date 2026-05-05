@@ -37,7 +37,7 @@
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import { parseCandles } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
-import { getCachedNumberRequired } from '../services/module-constants-service.js';
+import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // Strategy constants
 // B72 (2026-05-05): SBT_DBS_MIN moved to module_constants.
@@ -49,18 +49,8 @@ import { getCachedNumberRequired } from '../services/module-constants-service.js
 //   Reads via cached sync API; module is prefetched at server boot in
 //   server/startup/b72-warmup.ts (no silent fallback per Kyle directive).
 
-// (SBT_DBS_MIN removed; now read via getCachedNumberRequired)
-// B63.1: N reduced 12 → 6 after forensics showed 41% of real nulls at N12 (pair in sustained
-// uptrend rarely makes new 12-bar highs; 6-bar lookback catches continuation breakouts within trend).
-const SBT_DONCHIAN_N = 6;              // N-bar lookback for breakout high
-const SBT_BREAKOUT_BUFFER_ATR = 0.15;  // Min ATR fraction above N-bar high for valid breakout
-const SBT_ANTI_EXHAUSTION_ATR = 1.5;   // Max bar body as multiple of ATR (reject blow-offs)
-const SBT_STOP_ATR_MULT = 3.0;         // Initial stop: entry - 3*ATR
-const SBT_TARGET_ATR_MULT = 6.0;       // Interim target (pre-TEC): entry + 6*ATR (2:1 RR)
-const SBT_BASE_CONFIDENCE = 0.70;
-const SBT_MAX_CONFIDENCE = 0.95;
-const SBT_MIN_CONFIDENCE = 0.60;
-const SBT_DBS_CONFIDENCE_WEIGHT = 0.25;
+// (SBT_DBS_MIN + remaining 9 levers all migrated to module='strategy.strong_bull_trend';
+// read in bulk at top of detect() below.)
 
 const STRATEGY_KEY = 'strong_bull_trend';
 const LOG_PREFIX = '[B63][STRONG_BULL_TREND]';
@@ -81,6 +71,20 @@ export function detectStrongBullTrend(
   const dbs = indicators.dbsScore ?? 0;
   const dbsSlope = indicators.dbsSlope ?? 0;
   const atr = indicators.atr ?? 0;
+
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.strong_bull_trend', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const SBT_DONCHIAN_N            = c.donchian_lookback_bars;
+  const SBT_BREAKOUT_BUFFER_ATR   = c.breakout_buffer_atr_mult;
+  const SBT_ANTI_EXHAUSTION_ATR   = c.anti_exhaustion_atr_mult;
+  const SBT_STOP_ATR_MULT         = c.stop_loss_atr_multiplier;
+  const SBT_TARGET_ATR_MULT       = c.target_exit_atr_multiplier;
+  const SBT_BASE_CONFIDENCE       = c.base_confidence_score;
+  const SBT_MAX_CONFIDENCE        = c.max_confidence_ceiling;
+  const SBT_MIN_CONFIDENCE        = c.min_confidence_floor;
+  const SBT_DBS_CONFIDENCE_WEIGHT = c.dbs_magnitude_confidence_weight;
 
   // B72: DBS routing-guard threshold from module_constants (group with the
   // 3 parallel guards in defensive_hedge / reverse_impulse / morning_star).

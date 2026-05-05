@@ -32,7 +32,7 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
-import { getCachedNumberRequired } from '../services/module-constants-service.js';
+import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ============================================================================
 // Strategy Constants
@@ -42,14 +42,9 @@ import { getCachedNumberRequired } from '../services/module-constants-service.js
 // Group migrated atomically with strong_bull_trend, defensive_hedge,
 // reverse_impulse. See server/tests/integration/b72-dbs-routing-guards-consistency.test.ts.
 
-const MS_MIN_STRENGTH      = 0.55;   // Minimum pattern strength — Crypto-calibrated (Batch 18H): 0.60 → 0.55
-const MS_VOL_MULT          = 1.2;    // Volume must be >= avgVol * this
-const MS_STOP_BUFFER       = 0.003;  // 0.3% buffer below stop reference
-const MS_TARGET_ATR_MULT   = 2.5;    // Target = entry + 2.5 * ATR
-const MS_STRENGTH_WEIGHT   = 0.80;   // Weight for pattern strength in confidence
-const MS_HIGH_VOL_BONUS    = 0.08;   // Bonus when volume >= 2x average
-const MS_GAP_BONUS         = 0.07;   // Bonus when gap present in pattern
-const MS_MAX_RECOVERY_BONUS = 0.05;  // Max bonus for candle body recovery ratio
+// B72 (2026-05-05): all strategy levers moved to module='strategy.morning_star'.
+// MS_STOP_BUFFER (0.003) remains hardcoded — KEEP per LEVER_INVENTORY (geometric buffer).
+const MS_STOP_BUFFER       = 0.003;
 
 const STRATEGY_KEY = 'morning_star';
 const LOG_PREFIX = '[12.3.2][MORNING_STAR]';
@@ -75,6 +70,18 @@ export function detectMorningStar(
   patternSignal: PatternInput | null
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
+
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.morning_star', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const MS_MIN_STRENGTH      = c.min_pattern_strength;
+  const MS_VOL_MULT          = c.volume_threshold_multiplier;
+  const MS_TARGET_ATR_MULT   = c.target_exit_atr_multiplier;
+  const MS_STRENGTH_WEIGHT   = c.pattern_strength_confidence_weight;
+  const MS_HIGH_VOL_BONUS    = c.high_volume_confidence_bonus;
+  const MS_GAP_BONUS         = c.gap_presence_confidence_bonus;
+  const MS_MAX_RECOVERY_BONUS = c.recovery_ratio_confidence_bonus_max;
 
   // B63 + B72: Belt-and-braces for Path D LONG-only leak.
   // Threshold sourced from module_constants (group with strong_bull_trend).

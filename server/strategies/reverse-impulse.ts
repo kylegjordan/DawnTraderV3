@@ -26,7 +26,7 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
-import { getCachedNumberRequired } from '../services/module-constants-service.js';
+import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
@@ -36,18 +36,9 @@ import { getCachedNumberRequired } from '../services/module-constants-service.js
 // Group migrated atomically with strong_bull_trend, defensive_hedge,
 // morning_star. See server/tests/integration/b72-dbs-routing-guards-consistency.test.ts.
 
-const RI_MIN_STRENGTH       = 0.58;  // Crypto-calibrated (Batch 18H): 0.65 → 0.58
-const RI_MOMENTUM_THRESHOLD = -0.01;
-const RI_LOOKBACK           = 5;
-const RI_VOL_MULT           = 1.2; // Batch 47: 1.5→1.2, pinbar reversals don't always need volume spikes
-const RI_RSI_MAX            = 40;    // Batch 53: 38→40. (B18H: 35→38)
+// B72 (2026-05-05): all strategy levers moved to module='strategy.reverse_impulse'.
+// RI_STOP_BUFFER (0.005) remains hardcoded — KEEP per LEVER_INVENTORY (geometric buffer).
 const RI_STOP_BUFFER        = 0.005;
-const RI_TARGET_ATR_MULT    = 2.0;
-const RI_PATTERN_WEIGHT     = 0.40;
-const RI_MOMENTUM_RATE      = 10.0;
-const RI_MAX_MOMENTUM_BONUS = 0.20;
-const RI_RSI_WEIGHT         = 0.25;
-const RI_EXTREME_VOL_BONUS  = 0.10;
 
 const STRATEGY_KEY = 'reverse_impulse';
 const LOG_PREFIX   = '[12.3.2][REVERSE_IMPULSE]';
@@ -72,6 +63,22 @@ export function detectReverseImpulse(
   candles: any[],
   patternSignal: PatternInput | null
 ): StrategySignal | null {
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.reverse_impulse', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const RI_MIN_STRENGTH       = c.min_pattern_strength;
+  const RI_MOMENTUM_THRESHOLD = c.momentum_threshold_negative;
+  const RI_LOOKBACK           = c.momentum_lookback_bars;
+  const RI_VOL_MULT           = c.volume_threshold_multiplier;
+  const RI_RSI_MAX            = c.max_rsi_oversold_threshold;
+  const RI_TARGET_ATR_MULT    = c.target_exit_atr_multiplier;
+  const RI_PATTERN_WEIGHT     = c.pattern_strength_confidence_weight;
+  const RI_MOMENTUM_RATE      = c.momentum_exhaustion_confidence_rate;
+  const RI_MAX_MOMENTUM_BONUS = c.momentum_confidence_bonus_max;
+  const RI_RSI_WEIGHT         = c.rsi_oversold_confidence_weight;
+  const RI_EXTREME_VOL_BONUS  = c.extreme_volume_confidence_bonus;
+
   // B63 + B72: Belt-and-braces for Path D LONG-only leak.
   // Threshold sourced from module_constants (group with strong_bull_trend).
   const dbsGuardThreshold = getCachedNumberRequired(

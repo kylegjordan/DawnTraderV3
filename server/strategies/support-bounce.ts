@@ -39,23 +39,16 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+// B72 (2026-05-05): all strategy levers moved to module='strategy.support_bounce'.
+import { getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ============================================================================
 // Strategy Constants
 // ============================================================================
 
-const SB_LOOKBACK_CANDLES       = 50;    // Candles to scan for local minima
-const SB_CLUSTER_TOLERANCE_BASE = 0.007; // 0.7% base cluster tolerance (B57: widened from 0.5% for broader crypto support zones)
-const SB_MIN_TOUCHES            = 2;     // Minimum touches — Crypto-calibrated (Batch 18H): 3 → 2
-const SB_MAX_DISTANCE           = 0.03;  // Support must be within 3% of price
-const SB_PROXIMITY              = 0.035; // Batch 53: 2.5%→3.5%. Crypto support zones wider. (B41: 1.5%→2.5%)
-const SB_VOL_MULT               = 1.2;   // Volume must be >= avgVol * this
-const SB_STOP_BELOW_SUPPORT     = 0.005; // 0.5% below support for stop
-const SB_TARGET_ATR_MULT        = 2.0;   // Target = entry + 2.0 * ATR
-const SB_PATTERN_WEIGHT         = 0.40;  // Weight of pattern strength
-const SB_SUPPORT_WEIGHT         = 0.30;  // Weight of support quality score
-const SB_PROXIMITY_WEIGHT       = 0.15;  // Weight of proximity to support
-const SB_HIGH_VOL_BONUS         = 0.08;  // Bonus when volume >= 2x average
+// B72 (2026-05-05): all strategy levers moved to module='strategy.support_bounce'.
+// SB_STOP_BELOW_SUPPORT (0.005) remains hardcoded — KEEP per LEVER_INVENTORY (geometric buffer).
+const SB_STOP_BELOW_SUPPORT     = 0.005;
 
 const STRATEGY_KEY = 'support_bounce';
 const LOG_PREFIX = '[12.3.2][SUPPORT_BOUNCE]';
@@ -89,6 +82,15 @@ function identifySupportLevels(
   currentPrice: number,
   effectiveATR: number
 ): SupportCluster[] {
+  // B72: bulk read — same module as detectSupportBounce.
+  const c = getCachedNumbersForModule('strategy.support_bounce', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const SB_LOOKBACK_CANDLES       = c.support_level_lookback_bars;
+  const SB_CLUSTER_TOLERANCE_BASE = c.support_cluster_tolerance_base;
+  const SB_MIN_TOUCHES            = c.min_support_touches_required;
+  const SB_MAX_DISTANCE           = c.max_support_distance_from_price;
+
   // Step 1: Find local minima
   const minima = findLocalMinima(ohlc, SB_LOOKBACK_CANDLES);
   if (minima.length === 0) return [];
@@ -156,6 +158,19 @@ export function detectSupportBounce(
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
 
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.support_bounce', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const SB_LOOKBACK_CANDLES       = c.support_level_lookback_bars;
+  const SB_PROXIMITY              = c.min_support_proximity_required;
+  const SB_VOL_MULT               = c.volume_threshold_multiplier;
+  const SB_TARGET_ATR_MULT        = c.target_exit_atr_multiplier;
+  const SB_PATTERN_WEIGHT         = c.pattern_strength_confidence_weight;
+  const SB_SUPPORT_WEIGHT         = c.support_quality_confidence_weight;
+  const SB_PROXIMITY_WEIGHT       = c.proximity_confidence_weight;
+  const SB_HIGH_VOL_BONUS         = c.high_volume_confidence_bonus;
+
   // ── Guard: Parse candles ─────────────────────────────────────────────────
   const ohlc = parseCandles(candles);
   if (ohlc.length < SB_LOOKBACK_CANDLES) {
@@ -175,7 +190,7 @@ export function detectSupportBounce(
   // ── Condition 1: Valid support level exists ──────────────────────────────
   const supportLevels = identifySupportLevels(ohlc, currentPrice, effectiveATR);
   if (supportLevels.length === 0) {
-    console.log(`${LOG_PREFIX} No valid support level found within ${(SB_MAX_DISTANCE * 100).toFixed(1)}%. Skipping.`);
+    console.log(`${LOG_PREFIX} No valid support level found within ${(c.max_support_distance_from_price * 100).toFixed(1)}%. Skipping.`);
     setNullReason('range_not_found');
     return null;
   }

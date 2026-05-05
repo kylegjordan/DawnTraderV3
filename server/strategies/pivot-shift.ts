@@ -32,22 +32,14 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+// B72 (2026-05-05): all strategy levers moved to module='strategy.pivot_shift'.
+import { getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ============================================================================
 // Strategy Constants
 // ============================================================================
 
-const PS_RSI_LOW           = 35;    // RSI lower bound — Crypto-calibrated (Batch 18H): 40 → 35
-const PS_RSI_HIGH          = 65;    // RSI upper bound — Crypto-calibrated (Batch 18H): 60 → 65
-const PS_ADX_SLOPE_MIN     = 0.5;   // Minimum positive ADX slope per period
-const PS_VOL_MULT          = 1.3;   // Volume must be >= avgVol * this
-const PS_STOP_ATR_MULT     = 1.5;   // ATR-based stop = entry - 1.5 * ATR
-const PS_TARGET_ATR_MULT   = 3.0;   // Target = entry + 3.0 * ATR
-const PS_PATTERN_WEIGHT    = 0.40;  // Weight of pattern strength
-const PS_RSI_WEIGHT        = 0.25;  // Weight of RSI neutrality score
-const PS_ADX_SCORE_RATE    = 0.05;  // Rate at which ADX slope adds confidence
-const PS_MAX_ADX_BONUS     = 0.20;  // Maximum ADX-slope confidence bonus
-const PS_HIGH_VOL_BONUS    = 0.08;  // Bonus when volume >= 2x average
+// B72 (2026-05-05): all strategy levers moved to module='strategy.pivot_shift'.
 
 const STRATEGY_KEY = 'pivot_shift';
 const LOG_PREFIX = '[12.3.2][PIVOT_SHIFT]';
@@ -73,6 +65,22 @@ export function detectPivotShift(
   patternSignal: PatternInput | null
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
+
+  // B72: bulk read all strategy levers from module_constants.
+  const c = getCachedNumbersForModule('strategy.pivot_shift', {
+    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+  });
+  const PS_RSI_LOW           = c.rsi_neutral_zone_low;
+  const PS_RSI_HIGH          = c.rsi_neutral_zone_high;
+  const PS_ADX_SLOPE_MIN     = c.min_adx_slope_per_period;
+  const PS_VOL_MULT          = c.volume_threshold_multiplier;
+  const PS_STOP_ATR_MULT     = c.stop_loss_atr_multiplier;
+  const PS_TARGET_ATR_MULT   = c.target_exit_atr_multiplier;
+  const PS_PATTERN_WEIGHT    = c.pattern_strength_confidence_weight;
+  const PS_RSI_WEIGHT        = c.rsi_neutrality_confidence_weight;
+  const PS_ADX_SCORE_RATE    = c.adx_slope_confidence_rate;
+  const PS_MAX_ADX_BONUS     = c.adx_slope_confidence_bonus_max;
+  const PS_HIGH_VOL_BONUS    = c.high_volume_confidence_bonus;
 
   // ── Guard: Parse candles ─────────────────────────────────────────────────
   const ohlc = parseCandles(candles);
