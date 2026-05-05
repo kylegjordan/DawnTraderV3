@@ -203,6 +203,119 @@ export function clearModuleConstantsCache(): void {
   cache.clear();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// B72 — Sync-read API for hot-path callers (signal-pipeline strategies, MCE
+// per-pair classifiers, etc.) where converting the whole call chain to async
+// would blast-radius the signal pipeline. Pattern: warm the module ONCE at
+// startup via `prefetchModule()`, then call `getCachedNumberRequired()` from
+// any sync code path. Background interval re-warms every CACHE_TTL_MS so
+// values picked up from SQL UPDATEs become visible within ~60s without
+// requiring callers to await.
+//
+// Hard-fail policy (Kyle directive 2026-05-01): no silent fallback for
+// DB-governed settings. `getCachedNumberRequired` THROWS on cold cache,
+// missing row, or wrong type. Bootstrap must call `prefetchModule()` for
+// every module a sync caller will read.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Async warmup: forces a fresh DB read into the cache. Call at server boot
+ * (and as needed) for every module whose constants are read from sync code.
+ * Returns the number of rows loaded.
+ */
+export async function prefetchModule(moduleName: string): Promise<number> {
+  // Bypass TTL — always force a fresh read on prefetch.
+  cache.delete(moduleName);
+  const rows = await loadModule(moduleName);
+  ensureBackgroundRefresher();
+  return rows.length;
+}
+
+/**
+ * Sync resolver against the in-memory cache. Returns the value of the most-
+ * specific matching row, or undefined if no row matches.
+ *
+ * Throws if the module has not been prefetched (cold cache). Use
+ * `prefetchModule()` at startup before any sync caller hits this.
+ */
+export function getCachedConstant<T = unknown>(
+  moduleName: string,
+  constantName: string,
+  key: ResolutionKey,
+): T | undefined {
+  const cached = cache.get(moduleName);
+  if (!cached) {
+    throw new Error(
+      `module_constants: module '${moduleName}' is not warm. Call prefetchModule('${moduleName}') at server startup before sync reads.`,
+    );
+  }
+
+  let best: ModuleConstant | undefined;
+  let bestScore = -1;
+
+  for (const row of cached.rows) {
+    if (row.constantName !== constantName) continue;
+    const score = scoreRowForKey(row, key);
+    if (score === null) continue;
+    if (score > bestScore) {
+      bestScore = score;
+      best = row;
+    }
+  }
+
+  return best ? (best.value as T) : undefined;
+}
+
+/**
+ * Sync resolver returning a NUMBER. Throws on cold cache, missing row, or
+ * non-numeric value. Use this for B72-migrated levers in hot-path code.
+ *
+ * Per Kyle directive 2026-05-01: no silent fallback. The throw is the design.
+ */
+export function getCachedNumberRequired(
+  moduleName: string,
+  constantName: string,
+  key: ResolutionKey,
+): number {
+  const v = getCachedConstant<unknown>(moduleName, constantName, key);
+  if (v === undefined) {
+    throw new Error(
+      `module_constants: required row missing for ${moduleName}.${constantName} key=${JSON.stringify(key)}. Seed via Drizzle migration.`,
+    );
+  }
+  if (typeof v !== 'number') {
+    throw new Error(
+      `module_constants: ${moduleName}.${constantName} expected number, got ${typeof v} (${String(v)})`,
+    );
+  }
+  return v;
+}
+
+/**
+ * Background refresh interval — re-prefetches every warmed module every
+ * CACHE_TTL_MS so SQL UPDATEs propagate to sync callers within ~60s.
+ * Started lazily on first prefetchModule() call. No-op in test env.
+ */
+let refresherStarted = false;
+function ensureBackgroundRefresher(): void {
+  if (refresherStarted) return;
+  if (process.env.NODE_ENV === 'test') return;
+  refresherStarted = true;
+  setInterval(() => {
+    const moduleNames = Array.from(cache.keys());
+    for (const moduleName of moduleNames) {
+      prefetchModule(moduleName).catch((err) => {
+        // Don't crash the loop — log and continue. Stale cache is preferable
+        // to a crashed refresher; if the DB is unhealthy the consumer reads
+        // will throw on missing data anyway.
+        // eslint-disable-next-line no-console
+        console.error(`[module-constants] background refresh failed for '${moduleName}':`, err);
+      });
+    }
+  }, CACHE_TTL_MS).unref?.();
+}
+
+
 /**
  * Administrative write path. Upserts a constant into the DB and invalidates
  * the cache so the next read picks up the new value.

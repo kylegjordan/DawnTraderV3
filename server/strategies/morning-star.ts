@@ -32,10 +32,15 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+import { getCachedNumberRequired } from '../services/module-constants-service.js';
 
 // ============================================================================
 // Strategy Constants
 // ============================================================================
+// B72 (2026-05-05): the |DBS| >= 0.35 mutual-exclusion guards below now read
+// from module_constants ('strategy_dbs_routing_guards' / 'dbs_min_threshold').
+// Group migrated atomically with strong_bull_trend, defensive_hedge,
+// reverse_impulse. See server/tests/integration/b72-dbs-routing-guards-consistency.test.ts.
 
 const MS_MIN_STRENGTH      = 0.55;   // Minimum pattern strength — Crypto-calibrated (Batch 18H): 0.60 → 0.55
 const MS_VOL_MULT          = 1.2;    // Volume must be >= avgVol * this
@@ -71,10 +76,14 @@ export function detectMorningStar(
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
 
-  // B63: Belt-and-braces for Path D LONG-only leak. Strong POSITIVE DBS pairs should
-  // route exclusively to quant-strong_trend per FX5 routing — this guard is a second
-  // safety net if a leak occurs.
-  if (((indicators as any).dbsScore ?? 0) >= 0.35) {
+  // B63 + B72: Belt-and-braces for Path D LONG-only leak.
+  // Threshold sourced from module_constants (group with strong_bull_trend).
+  const dbsGuardThreshold = getCachedNumberRequired(
+    'strategy_dbs_routing_guards',
+    'dbs_min_threshold',
+    { exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*' },
+  );
+  if (((indicators as any).dbsScore ?? 0) >= dbsGuardThreshold) {
     setNullReason('b63_strong_dbs_exclusion');
     return null;
   }
@@ -83,7 +92,7 @@ export function detectMorningStar(
   // and opens on reversal setups; firing on strong NEGATIVE DBS pairs means entering LONG
   // against a strong downtrend — this is the mirror of the positive-DBS leak and produced
   // 22 losing trades in the B62 72h window per BATCH_63_COUNTERFACTUAL_AUDIT. Block here.
-  if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+  if (((indicators as any).dbsScore ?? 0) <= -dbsGuardThreshold) {
     setNullReason('b63b_counter_trend_long_exclusion');
     return null;
   }

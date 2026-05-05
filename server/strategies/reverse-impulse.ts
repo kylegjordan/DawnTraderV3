@@ -26,10 +26,15 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+import { getCachedNumberRequired } from '../services/module-constants-service.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
 // ═══════════════════════════════════════════════════════════════
+// B72 (2026-05-05): the |DBS| >= 0.35 mutual-exclusion guards below now read
+// from module_constants ('strategy_dbs_routing_guards' / 'dbs_min_threshold').
+// Group migrated atomically with strong_bull_trend, defensive_hedge,
+// morning_star. See server/tests/integration/b72-dbs-routing-guards-consistency.test.ts.
 
 const RI_MIN_STRENGTH       = 0.58;  // Crypto-calibrated (Batch 18H): 0.65 → 0.58
 const RI_MOMENTUM_THRESHOLD = -0.01;
@@ -67,8 +72,14 @@ export function detectReverseImpulse(
   candles: any[],
   patternSignal: PatternInput | null
 ): StrategySignal | null {
-  // B63: Belt-and-braces for Path D LONG-only leak. Strong positive DBS = routed to path 6.
-  if (((indicators as any).dbsScore ?? 0) >= 0.35) {
+  // B63 + B72: Belt-and-braces for Path D LONG-only leak.
+  // Threshold sourced from module_constants (group with strong_bull_trend).
+  const dbsGuardThreshold = getCachedNumberRequired(
+    'strategy_dbs_routing_guards',
+    'dbs_min_threshold',
+    { exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*' },
+  );
+  if (((indicators as any).dbsScore ?? 0) >= dbsGuardThreshold) {
     setNullReason('b63_strong_dbs_exclusion');
     return null;
   }
@@ -76,7 +87,7 @@ export function detectReverseImpulse(
   // and fires on pinbar-reversal setups; firing on strong NEGATIVE DBS pairs means entering
   // LONG against a strong downtrend. This strategy was the LARGEST contributor to the mirror
   // defect — 54 losing trades in the B62 72h window per BATCH_63_COUNTERFACTUAL_AUDIT. Block.
-  if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+  if (((indicators as any).dbsScore ?? 0) <= -dbsGuardThreshold) {
     setNullReason('b63b_counter_trend_long_exclusion');
     return null;
   }

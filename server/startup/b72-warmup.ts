@@ -1,0 +1,49 @@
+/**
+ * B72 Step 3 — Module-Constants Warmup Bootstrap
+ *
+ * Prefetches every module_constants module that has sync-read callers (hot-
+ * path strategies, MCE classifiers, etc.) so the in-memory cache is populated
+ * before any sync caller hits getCachedNumberRequired/getCachedConstant.
+ *
+ * Pattern per B72 scope §A.3: no silent fallback. If a module read fails
+ * here, we throw — the server should not start with cold caches that would
+ * blow up at first signal evaluation.
+ *
+ * Add new modules to PREFETCH_MODULES as B72 promotes more levers from
+ * sync-read code paths. The async getConstant() callers do not need to be
+ * listed here (they self-prime through loadModule on first read).
+ */
+
+import { prefetchModule } from '../services/module-constants-service.js';
+
+/**
+ * Modules whose constants are read from synchronous code paths (strategy
+ * detect functions, hot-path classifiers, etc.). Each module here MUST be
+ * warmed before the corresponding consumer runs.
+ */
+const PREFETCH_MODULES = [
+  // Commit A: DBS routing guards (strong_bull_trend + 3 mutual-exclusion guards).
+  'strategy_dbs_routing_guards',
+  // Future: add additional B72-promoted modules read from sync code here.
+];
+
+let started = false;
+
+export async function warmModuleConstantsForSyncCallers(): Promise<void> {
+  if (started) return;
+  for (const moduleName of PREFETCH_MODULES) {
+    const rowCount = await prefetchModule(moduleName);
+    // eslint-disable-next-line no-console
+    console.log(`[B72][warmup] prefetched module_constants module='${moduleName}' rows=${rowCount}`);
+    if (rowCount === 0) {
+      // Hard fail per Kyle directive: no silent fallback. If the migration
+      // didn't seed rows, server should not start.
+      throw new Error(
+        `[B72][warmup] module '${moduleName}' has zero rows — ` +
+        `Drizzle migration drizzle/migrations/2026-05-05-b72-dbs-routing-guards.sql ` +
+        `has not been applied to this database. Apply migration before starting server.`,
+      );
+    }
+  }
+  started = true;
+}

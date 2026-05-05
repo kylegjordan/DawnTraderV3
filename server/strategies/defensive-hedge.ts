@@ -27,10 +27,15 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+import { getCachedNumberRequired } from '../services/module-constants-service.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants
 // ═══════════════════════════════════════════════════════════════
+// B72 (2026-05-05): the |DBS| >= 0.35 mutual-exclusion guards below now read
+// from module_constants ('strategy_dbs_routing_guards' / 'dbs_min_threshold').
+// Group migrated atomically with strong_bull_trend, reverse_impulse,
+// morning_star. See server/tests/integration/b72-dbs-routing-guards-consistency.test.ts.
 
 const DH_CORR_WINDOW        = 30;
 const DH_VOL_WINDOW         = 20;
@@ -88,8 +93,14 @@ export function detectDefensiveHedge(
   patternSignal: PatternInput | null,
   btcCandles?: any[]
 ): StrategySignal | null {
-  // B63: Belt-and-braces for Path D LONG-only leak.
-  if (((indicators as any).dbsScore ?? 0) >= 0.35) {
+  // B63 + B72: Belt-and-braces for Path D LONG-only leak.
+  // Threshold sourced from module_constants (group with strong_bull_trend).
+  const dbsGuardThreshold = getCachedNumberRequired(
+    'strategy_dbs_routing_guards',
+    'dbs_min_threshold',
+    { exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*' },
+  );
+  if (((indicators as any).dbsScore ?? 0) >= dbsGuardThreshold) {
     setNullReason('b63_strong_dbs_exclusion');
     return null;
   }
@@ -97,7 +108,7 @@ export function detectDefensiveHedge(
   // (direction: 'BUY'); firing on strong NEGATIVE DBS pairs means entering LONG against a
   // strong downtrend. 2 mirror-defect trades in the B62 72h window per
   // BATCH_63_COUNTERFACTUAL_AUDIT. Block here.
-  if (((indicators as any).dbsScore ?? 0) <= -0.35) {
+  if (((indicators as any).dbsScore ?? 0) <= -dbsGuardThreshold) {
     setNullReason('b63b_counter_trend_long_exclusion');
     return null;
   }

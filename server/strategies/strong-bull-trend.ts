@@ -37,9 +37,19 @@
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import { parseCandles } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+import { getCachedNumberRequired } from '../services/module-constants-service.js';
 
 // Strategy constants
-const SBT_DBS_MIN = 0.35;              // Entry threshold (positive — LONG only)
+// B72 (2026-05-05): SBT_DBS_MIN moved to module_constants.
+//   module_name='strategy_dbs_routing_guards', strategy='strong_bull_trend',
+//   constant_name='dbs_min_threshold', current value=0.35.
+//   Group migrated atomically with parallel mutual-exclusion guards in
+//   defensive_hedge.ts, reverse_impulse.ts, morning_star.ts.
+//   Integration test: server/tests/integration/b72-dbs-routing-guards-consistency.test.ts
+//   Reads via cached sync API; module is prefetched at server boot in
+//   server/startup/b72-warmup.ts (no silent fallback per Kyle directive).
+
+// (SBT_DBS_MIN removed; now read via getCachedNumberRequired)
 // B63.1: N reduced 12 → 6 after forensics showed 41% of real nulls at N12 (pair in sustained
 // uptrend rarely makes new 12-bar highs; 6-bar lookback catches continuation breakouts within trend).
 const SBT_DONCHIAN_N = 6;              // N-bar lookback for breakout high
@@ -72,8 +82,16 @@ export function detectStrongBullTrend(
   const dbsSlope = indicators.dbsSlope ?? 0;
   const atr = indicators.atr ?? 0;
 
+  // B72: DBS routing-guard threshold from module_constants (group with the
+  // 3 parallel guards in defensive_hedge / reverse_impulse / morning_star).
+  const sbtDbsMin = getCachedNumberRequired(
+    'strategy_dbs_routing_guards',
+    'dbs_min_threshold',
+    { exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*' },
+  );
+
   // ── Gate 1: DBS magnitude + sign (LONG only) ─────────────────────────────
-  if (dbs < SBT_DBS_MIN) {
+  if (dbs < sbtDbsMin) {
     setNullReason('dbs_below_threshold');
     return null;
   }

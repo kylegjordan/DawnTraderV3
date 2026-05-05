@@ -185,6 +185,19 @@ app.use((req, res, next) => {
   const { dataAggregator } = await import('./services/data-aggregator.js');
   console.log('[8.8.4-L1][INIT_OK] Data Aggregator initialized (flush=30s, aggregate=15m)');
 
+  // B72 Step 3 (2026-05-05): Warm module_constants for sync-read callers
+  // (strategy DBS routing guards, etc.). MUST complete before FX5 scanner +
+  // signal pipeline start. Hard-fails if migration not applied or rows
+  // missing — no silent fallback per Kyle directive.
+  try {
+    const { warmModuleConstantsForSyncCallers } = await import('./startup/b72-warmup.js');
+    await warmModuleConstantsForSyncCallers();
+    console.log('[B72][INIT_OK] module_constants sync-read modules warmed');
+  } catch (b72Err) {
+    console.error('[B72] ❌ Module-constants warmup failed:', b72Err);
+    throw b72Err; // Re-throw: server must not start if sync-read levers cannot resolve.
+  }
+
   // R9.3.HF-5: Force FX5 Scanner reinitialization (non-blocking)
   import('./startup/fx5-scanner-bootstrap.js')
     .then(({ bootstrapFX5Scanner }) => {
