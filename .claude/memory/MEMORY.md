@@ -40,11 +40,11 @@ OpenClaw decommissioned. Two systemd bridges on Hetzner `204.168.141.77`:
 
 ---
 
-## CURRENT STATE — 2026-05-06 (post-B76)
+## CURRENT STATE — 2026-05-07 (post-B77)
 
 - **Branch:** `migration/aws-supabase`
-- **Most recent HEAD:** `235237ffd` (B76 Step-3 push). Earlier `f4e6a73f6` (B75).
-- **Live:** B70 family + B72 family + B75 (data lifecycle/tiered storage) + **B76 (chain-final calibration framework)**. 18/18 canonical strategies DB-tunable. 51 modules / ~332 rows in `module_constants` (no new module_constants in B76).
+- **Most recent HEAD:** `ee7522b4d` (B77 ship). Earlier `65c17bfd3` (B76 closure), `235237ffd` (B76 Step-3 push), `f4e6a73f6` (B75).
+- **Live:** B70 family + B72 family + B75 (data lifecycle/tiered storage) + B76 (chain-final calibration framework) + **B77 (`isBreakEvenTriggered` no-op fix, RUNNING_ISSUES #71 RESOLVED)**. 18/18 canonical strategies DB-tunable. 51 modules / ~332 rows in `module_constants` (no new module_constants in B76 or B77).
 - **DB-only UPDATEs (no commits):** `b67_5_post_composition_floor=0.20`, `b68_5_path_b_momentum_min=0.001` (B75 close), `moonbag_qualifying_strategies=[]`, `break_even_enabled=false` (variant K). Trailing-after-target DISABLED.
 - **DatabaseMonitor:** alarm NORMAL (5.2% / 200 GB plan cap).
 - **Calibration framework version marker:** every new `regime_factor_alternates` row stamped `realDecision.metadata.calibrationFrameworkVersion = 'b76_chain_final'` post-B76 deploy.
@@ -65,9 +65,9 @@ Closes RUNNING_ISSUES #54. Two-pass stash-then-build pattern in both orchestrato
 
 ---
 
-## Sequencing after B76
+## Sequencing after B77
 
-1. **B77 — Fix `isBreakEvenTriggered` no-op (RUNNING_ISSUES #71)** — Kyle directive 2026-05-06. Thread `breakEvenTriggerR` multiplier through the function. ~1 hour code + unit tests. Standalone batch immediately after B76 close (NOT bundled per Langston).
+1. **24-48h forward monitor on B76:** confirm b67_1_*/b67_2 accumulate non-zero shifts as macro modifier varies away from 1.0 fallback; B68.1/.2/.3/B67.4 lifts preserve sign + stay within ±1pp of pre-B76 anchors (b67_4 +2.95, b68_1 +5.71, b68_2 +4.13, b68_3 +4.13, b68_4 +2.94, b68_5 -1.78). If any flip → `git revert c8b8709ed 235237ffd` (hotfix first per Langston Step-8 correction).
 2. Phase 16 (TS errors + storage.ts modularization).
 3. B75.x deferrals (#K.5 partition ctx-bridge, #K.6 partition audit/walter, #K.7 B70 knob registry migration).
 4. B67.5 consumer wiring opens 2026-05-15 (gated on calibration windows passing). B76 enables trustworthy lift measurement for the gating decision.
@@ -96,20 +96,21 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 | B70 family + B72 family | 2026-05-04 → -06 | Unified archive + 18/18 canonical strategies DB-tunable. Comms migration to CC Max bridges. |
 | **B75 (Data Lifecycle / Tiered Storage)** | 2026-05-06 | CLOSED. Hot/warm/cold tiered. DatabaseMonitor alarm CRITICAL→NORMAL. Originally drafted as B73; renumbered after pre-audit grep. |
 | **B76 (Chain-Final Calibration Framework)** | 2026-05-06 | CLOSED. Two-pass stash-then-build dispatch. Closes RUNNING_ISSUES #54. Enables trustworthy per-factor predictive lift before B67.5 wiring. |
+| **B77 (`isBreakEvenTriggered` no-op fix)** | 2026-05-07 | CLOSED. Closes RUNNING_ISSUES #71. Threads `breakEvenTriggerR` 4th arg with default 1.0 (preserves pre-B77 behavior). Single live caller updated. Zero behavioral change at current settings (variant K keeps BE off). |
 
 ---
 
 ## Open RUNNING_ISSUES
 
-- OPEN: #39 (CI TS legacy → Phase 16), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index), #71 (isBreakEvenTriggered no-op → B77 next)
+- OPEN: #39 (CI TS legacy → Phase 16), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index)
 - DEFERRED: #12e, #40, #44, #45, #52
-- RESOLVED: #54 (B76), #55, #56–#59, #60–#69 (B75 + hotfixes), #70/#72 (B75 close), BUG-2026-05-05-E/F/G, BUG-2026-05-06-A
+- RESOLVED: #54 (B76), #55, #56–#59, #60–#69 (B75 + hotfixes), #70/#72 (B75 close), **#71 (B77)**, BUG-2026-05-05-E/F/G, BUG-2026-05-06-A
 
 ---
 
 ## Next session pickup priority
 
-1. **B77** — `isBreakEvenTriggered` no-op fix (RUNNING_ISSUES #71). ~1hr code + unit tests.
+1. **24-48h B76 forward-monitor verify** (b67_1_*/b67_2 accumulating non-zero shifts; B68.x/B67.4 lifts within ±1pp of pre-B76 anchors).
 2. **trading-engine.ts BUG-012 cleanup** (calculateGoalAlignmentScore duplicates pre-execution-validator's alignment block).
 3. **Tier 2 governance housekeeping:** SIM per-source-file annotations across ~25 PROMOTE files.
 4. **Phase 16** (TS errors + storage.ts modularization).

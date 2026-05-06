@@ -2,6 +2,26 @@
 
 ---
 
+## OPS-2026-05-07-A — B77 `isBreakEvenTriggered` no-op fix (RESOLVED 2026-05-07)
+
+**Trigger:** RUNNING_ISSUES #71 — `break_even_trigger_r` `module_constants` row plumbed through `TrailingExitConfig` + `TECExitDecision.resolvedConstants` for diagnostics since B65.1 but **never consulted by runtime**. `isBreakEvenTriggered(currentPrice, entryPrice, ATR)` in `server/utils/analysis-utils.ts:357-364` hardcoded `gain >= ATR` (1×ATR exactly). The constant has been a silent no-op for ~2 weeks. Surfaced during B75 close variant-K implementation. Variant K (`break_even_enabled=false`) keeps BE off in production today, so there's no live trader-impacting bug — but #71 had to close before any future BE re-enable to avoid silent miscalibration on non-1.0 trigger thresholds.
+
+Kyle directive 2026-05-06: "I'd like issue 71 fixed so it works as intended either as a part of B76 or just after, otherwise we forget about it." Standalone batch per Langston single-purpose discipline.
+
+**Fix shipped (commit `ee7522b4d`):** Threaded `breakEvenTriggerR: number = 1.0` 4th argument explicitly through `isBreakEvenTriggered`. Gate becomes `gain >= ATR * breakEvenTriggerR`. Default 1.0 preserves pre-B77 behavior for any caller that omits the argument. Single live caller `trailing-exit-controller.ts:451` updated to pass `cachedConfig.breakEvenTriggerR` (already DB-governed via `pick('break_even_trigger_r', TEC_DEFAULTS.breakEvenTriggerR)` at L111 — no new wiring needed; Langston Step-8 nit on B76 confirmed). Console log line updated to print actual multiplier value (was hardcoded "1×ATR gain").
+
+**Tests:** 3 new cases in `server/tests/unit/trailing-exit.test.ts` cover (a) multiplier > 1.0 (1.5×ATR threshold; gain=3 against ATR=2 triggers; gain=2.99 doesn't), (b) multiplier < 1.0 (0.5×ATR threshold; gain=1 triggers; gain=0.99 doesn't), (c) default-arg back-compat (omitting matches passing 1.0). Plus updated existing 1×ATR test description. All 3 passed in CI alongside existing trailing-exit suite.
+
+**Zero behavioral change at current settings.** `module_constants.trailing_exit.break_even_trigger_r = 1.0` (seeded value) AND `break_even_enabled = false` (variant K) — the BE-latch path doesn't even execute today. The fix only matters when (a) BE is later re-enabled AND (b) `break_even_trigger_r` is set to a value other than 1.0.
+
+**Langston review trail:** Step-1+2+4 combined. **APPROVED.** Math + boundary tests verified by inspection. Surface area matches B76 Step-8 spec exactly. Recommended-not-blocking smoke test (briefly re-enable BE with `break_even_trigger_r=1.5` to observe latch line print "1.5×ATR gain") — performed in Step-7 verification. Non-blocking nit filed for future cleanup batch (`.toFixed(2)` on console-interpolated multiplier to avoid FP-representation drift on values like 1.7 → 1.6999999999999998).
+
+**Verify post-deploy:** Smoke test pattern — `UPDATE module_constants` `break_even_trigger_r` 1.0 → 1.5; wait 60s for sync-read refresh; `break_even_enabled` false → true; observe BE-latch fires in PM2 logs with "1.5×ATR gain" line; revert both settings.
+
+**Lesson:** "plumbed but not consumed" is a class of bug worth grepping for. The constant existed in three places (DB row, `TrailingExitConfig` interface, `TECExitDecision.resolvedConstants`) but the function that should have consulted it never did. Future audits should grep config-resolution code for "constant declared in module_constants ↔ constant actually referenced in runtime path" to catch silent regressions early. A `module_constants` row whose value never changes from its default could be a legitimate stable knob OR an unconsumed constant — disambiguate by greping the runtime path.
+
+---
+
 ## INFRA-2026-05-06-C — B76 Chain-Final Calibration Framework Refactor (RESOLVED 2026-05-06)
 
 **Trigger:** RUNNING_ISSUES #54 — calibration aggregator's `shift = real - alt` metric was structurally not measuring per-factor effect. Pre-B76 `realDecision.confidence` stored raw classifier value while each `buildXAlternate` was called with `_modulatedConfChain` AT THE TIME the factor fired (mid-chain), then divided out its own factor. That captured "remove this factor up to here, then never apply later factors" — NOT "as-if-this-factor-absent-but-all-others-still-applied". `b67_2_phase_preference` showed +0.0pp predictive lift by construction (FIRST in chain → without-factor == baseConf == real). `b67_1_macro_modifier` same problem. Multiplicative B68.x factors had non-zero shifts but magnitude was not a clean per-factor measurement. Predictive-lift column (REAL spread − ALT spread) was the only trustworthy per-factor metric because it cancels first-order bias inside each factor's bucket distribution. **B67.5 consumer wiring window opens 2026-05-15 — without trustworthy per-factor lift, the gating decision (which factors graduate from observational to active) is being made on structurally biased data.**
