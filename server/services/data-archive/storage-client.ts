@@ -258,6 +258,7 @@ export class StorageClient {
     apiUrl: string;
     downloadUrl: string;
     accountAuthToken: string;
+    accountId: string;
     bucketId: string | null;
     expiresAt: number; // epoch ms
   } | null = null;
@@ -285,6 +286,7 @@ export class StorageClient {
       throw new Error(`[B75 storage-client] B2 authorize failed: ${res.status} ${res.statusText} — ${body}`);
     }
     const j = (await res.json()) as {
+      accountId: string;
       apiInfo: { storageApi: { apiUrl: string; downloadUrl: string } };
       authorizationToken: string;
     };
@@ -292,6 +294,7 @@ export class StorageClient {
       apiUrl: j.apiInfo.storageApi.apiUrl,
       downloadUrl: j.apiInfo.storageApi.downloadUrl,
       accountAuthToken: j.authorizationToken,
+      accountId: j.accountId,
       bucketId: null,
       expiresAt: Date.now() + 23 * 60 * 60 * 1000,
     };
@@ -301,6 +304,13 @@ export class StorageClient {
   private async b2ResolveBucketId(bucketName: string): Promise<string> {
     const auth = await this.b2Authorize();
     if (auth.bucketId) return auth.bucketId;
+    // Allow B2_BUCKET_ID env override to skip list_buckets entirely (faster + works
+    // even with bucket-restricted application keys that lack list-buckets capability)
+    const envBucketId = process.env.B2_BUCKET_ID;
+    if (envBucketId) {
+      auth.bucketId = envBucketId;
+      return envBucketId;
+    }
     const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_buckets`, {
       method: 'POST',
       headers: {
@@ -308,7 +318,7 @@ export class StorageClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        accountId: requireEnv('B2_KEY_ID').replace(/^00\w+/, '').slice(0, 12) || requireEnv('B2_KEY_ID'),
+        accountId: auth.accountId,
         bucketName,
       }),
     });
