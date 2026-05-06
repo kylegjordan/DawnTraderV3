@@ -123,6 +123,7 @@ export class StorageClient {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
+        apikey: this.serviceKey,
         Authorization: `Bearer ${this.serviceKey}`,
         'Content-Type': contentType,
         'x-upsert': 'true',
@@ -151,6 +152,7 @@ export class StorageClient {
     const res = await fetch(url, {
       method: 'GET',
       headers: {
+        apikey: this.serviceKey,
         Authorization: `Bearer ${this.serviceKey}`,
       },
     });
@@ -177,6 +179,7 @@ export class StorageClient {
     const res = await fetch(url, {
       method: 'DELETE',
       headers: {
+        apikey: this.serviceKey,
         Authorization: `Bearer ${this.serviceKey}`,
       },
     });
@@ -202,6 +205,7 @@ export class StorageClient {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
+        apikey: this.serviceKey,
         Authorization: `Bearer ${this.serviceKey}`,
         'Content-Type': 'application/json',
       },
