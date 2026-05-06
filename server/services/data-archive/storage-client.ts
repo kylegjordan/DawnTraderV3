@@ -106,22 +106,22 @@ export class StorageClient {
     data: Buffer,
     contentType: string = 'application/gzip',
   ): Promise<UploadResult> {
-    // Supabase Storage REST documented soft-limit was historically ~50 MB
-    // single-call but service-role uploads in practice accept much larger
-    // (verified ~250 MB during B75 first sweep when historical context_bridge_log
-    // archives produced 99+ MB compressed monthly files). Guard set high to
-    // catch only obviously-wrong huge payloads; multipart/TUS upgrade still
-    // a B75.x follow-up if we hit Supabase's actual hard limit.
-    const MAX_SINGLE_CALL_BYTES = 500 * 1024 * 1024; // 500 MB safety cap
-    if (data.length > MAX_SINGLE_CALL_BYTES) {
+    // Supabase Storage hard-limits single-call REST upload at ~50 MB even
+    // for service-role keys (verified empirically by the B75 first sweep:
+    // a 99 MB Dec ctx-bridge archive returned 413 'Payload too large').
+    // Files > 40 MB route to TUS resumable upload (Supabase's documented
+    // protocol for large files; chunks at 6 MiB per their recommendation).
+    const SINGLE_CALL_THRESHOLD = 40 * 1024 * 1024; // 40 MB
+    const HARD_CAP = 5 * 1024 * 1024 * 1024;        // 5 GB ceiling on any one warm object
+    if (data.length > HARD_CAP) {
       throw new Error(
-        `[B75 storage-client] warm upload payload too large: ${data.length} bytes > ${MAX_SINGLE_CALL_BYTES} (45 MB). ` +
-          `Supabase Storage single-call REST upload soft-limits ~50 MB. ` +
-          `Multipart upload not yet implemented — log as B75.x follow-up. ` +
-          `Workaround: split the source partition into smaller date ranges before export.`,
+        `[B75 storage-client] warm upload payload exceeds 5 GB hard cap: ${data.length} bytes`,
       );
     }
     const checksum = sha256Hex(data);
+    if (data.length > SINGLE_CALL_THRESHOLD) {
+      return await this.uploadWarmTus(bucket, path, data, contentType, checksum);
+    }
     const url = `${this.projectUrl}/storage/v1/object/${bucket}/${encodePath(path)}`;
     const res = await fetch(url, {
       method: 'POST',
@@ -139,6 +139,101 @@ export class StorageClient {
         `[B75 storage-client] warm upload failed: ${res.status} ${res.statusText} — ${body}`,
       );
     }
+    return {
+      bytes: data.length,
+      checksum,
+      uri: `supabase://${bucket}/${path}`,
+    };
+  }
+
+  /**
+   * Supabase TUS resumable upload (https://supabase.com/docs/guides/storage/uploads/resumable-uploads).
+   *
+   * Protocol:
+   *   1. POST <project>/storage/v1/upload/resumable with Tus-Resumable, Upload-Length,
+   *      Upload-Metadata (base64 of bucketName, objectName, contentType, cacheControl).
+   *      → 201 Created with Location: <upload-url> header.
+   *   2. PATCH <upload-url> with Tus-Resumable, Upload-Offset, Content-Type:
+   *      application/offset+octet-stream + chunk body.
+   *      → 204 No Content with Upload-Offset: <new-offset>.
+   *   3. Repeat PATCH until Upload-Offset == Upload-Length.
+   *
+   * Auth identical to other Storage REST calls (apikey + Authorization Bearer).
+   */
+  private async uploadWarmTus(
+    bucket: string,
+    path: string,
+    data: Buffer,
+    contentType: string,
+    checksum: string,
+  ): Promise<UploadResult> {
+    const CHUNK_SIZE = 6 * 1024 * 1024; // 6 MiB per Supabase recommendation
+    const tusUrl = `${this.projectUrl}/storage/v1/upload/resumable`;
+
+    // Step 1: create the upload (POST)
+    const meta = [
+      `bucketName ${Buffer.from(bucket).toString('base64')}`,
+      `objectName ${Buffer.from(path).toString('base64')}`,
+      `contentType ${Buffer.from(contentType).toString('base64')}`,
+      `cacheControl ${Buffer.from('no-cache').toString('base64')}`,
+    ].join(',');
+    const createRes = await fetch(tusUrl, {
+      method: 'POST',
+      headers: {
+        apikey: this.serviceKey,
+        Authorization: `Bearer ${this.serviceKey}`,
+        'Tus-Resumable': '1.0.0',
+        'Upload-Length': String(data.length),
+        'Upload-Metadata': meta,
+        'x-upsert': 'true',
+      },
+    });
+    if (createRes.status !== 201) {
+      const body = await createRes.text().catch(() => '');
+      throw new Error(
+        `[B75 storage-client] TUS create failed: ${createRes.status} ${createRes.statusText} — ${body}`,
+      );
+    }
+    let location = createRes.headers.get('location') || createRes.headers.get('Location');
+    if (!location) {
+      throw new Error('[B75 storage-client] TUS create returned no Location header');
+    }
+    // Some Supabase deployments return absolute, others return path-only relative
+    if (location.startsWith('/')) location = `${this.projectUrl}${location}`;
+    else if (!location.startsWith('http')) location = `${this.projectUrl}/${location}`;
+
+    // Step 2-3: PATCH chunks
+    let offset = 0;
+    while (offset < data.length) {
+      const chunkEnd = Math.min(offset + CHUNK_SIZE, data.length);
+      const chunk = data.subarray(offset, chunkEnd);
+      const patchRes = await fetch(location, {
+        method: 'PATCH',
+        headers: {
+          apikey: this.serviceKey,
+          Authorization: `Bearer ${this.serviceKey}`,
+          'Tus-Resumable': '1.0.0',
+          'Upload-Offset': String(offset),
+          'Content-Type': 'application/offset+octet-stream',
+          'Content-Length': String(chunk.length),
+        },
+        body: chunk,
+      });
+      if (patchRes.status !== 204) {
+        const body = await patchRes.text().catch(() => '');
+        throw new Error(
+          `[B75 storage-client] TUS PATCH failed at offset=${offset} chunk=${chunk.length}: ${patchRes.status} ${patchRes.statusText} — ${body}`,
+        );
+      }
+      const serverOffset = Number(patchRes.headers.get('upload-offset') || patchRes.headers.get('Upload-Offset') || '0');
+      if (serverOffset !== chunkEnd) {
+        throw new Error(
+          `[B75 storage-client] TUS PATCH offset drift: expected=${chunkEnd} server-reported=${serverOffset}`,
+        );
+      }
+      offset = chunkEnd;
+    }
+
     return {
       bytes: data.length,
       checksum,
