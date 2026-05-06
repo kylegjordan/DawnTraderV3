@@ -45,6 +45,28 @@ import { regimeFactorAlternates, type InsertRegimeFactorAlternate } from '../../
 import { getConstant } from './module-constants-service.js';
 
 /**
+ * B76 (2026-05-06) — Calibration framework version marker.
+ *
+ * Stamped into `realDecision.metadata.calibrationFrameworkVersion` on every
+ * row written post-B76. Distinguishes chain-final rows (this version) from
+ * pre-B76 rows where `realDecision.confidence` was raw classifier output and
+ * each alternate's confidence was mid-chain at point-of-fire (structurally
+ * mixing raw-vs-mid-chain values).
+ *
+ * Aggregator queries that surface b67_1_*/b67_2_phase_dimension MUST filter
+ * on this marker — those factors are FIRST in the chain, so pre-B76 rows had
+ * shift = 0 by construction; mixing pre/post-B76 contaminates the post-B76
+ * window with structurally-biased noise. Other 7 factors don't need the
+ * filter — predictive lift cancels first-order bias by construction.
+ *
+ * If a future framework version revises the chain composition or alternate-
+ * computation contract, bump this constant and add the new value to the
+ * aggregator's accepted version set.
+ */
+export const CALIBRATION_FRAMEWORK_VERSION = 'b76_chain_final' as const;
+export type CalibrationFrameworkVersion = typeof CALIBRATION_FRAMEWORK_VERSION;
+
+/**
  * The real (or alternate) regime classification decision.
  *
  * Captures the minimum information needed to (a) describe what the classifier
@@ -106,9 +128,23 @@ export type AblationSource =
  * caller really does need confirmation of write, it can read back the rows
  * from regime_factor_alternates.)
  *
+ * **B76 contract (chain-final, 2026-05-06):** callers MUST pass
+ * `realDecision.confidence` = chain-final modulated confidence (after all
+ * factor multiplications + post-composition floor clamp), NOT raw classifier
+ * output. Each alternate's `alternateDecision.confidence` is the
+ * "as-if-this-factor-absent-but-all-others-still-applied" value, computed by
+ * the factor's `buildXAlternate` helper from the same chain-final reference
+ * (alt.conf = realConfidenceFinal / factor for divide-out factors; B68.5
+ * uses label counterfactual semantics). The raw classifier value should be
+ * preserved in `realDecision.metadata.predictiveConfidenceRaw` for any
+ * downstream that wants raw semantics. The persister stamps every row with
+ * `metadata.calibrationFrameworkVersion = CALIBRATION_FRAMEWORK_VERSION` so
+ * aggregators can distinguish pre-B76 vs post-B76 rows where required (b67_1
+ * + b67_2 specifically).
+ *
  * @param source       — discriminated source identity (active signal or VTS trade)
  * @param pairSymbol   — pair identifier for filtering / grouping
- * @param realDecision — what the classifier actually decided (committed to RTB / VTS / paper / etc.)
+ * @param realDecision — what the classifier actually decided (committed to RTB / VTS / paper / etc.); confidence MUST be chain-final per above
  * @param alternates   — zero or more factor-level alternates; emit is a no-op when empty
  */
 export function emitAblationRecord(
@@ -173,6 +209,18 @@ async function persistRecord(
       ? { sourceType: 'active_signal' as const, signalId: source.signalId, vtsTradeId: null }
       : { sourceType: 'vts_trade' as const, signalId: null, vtsTradeId: source.vtsTradeId };
 
+  // B76 (2026-05-06): stamp every row with the framework version marker so
+  // aggregators can filter pre/post-B76 rows where the chain-final shift
+  // changes interpretation (b67_1_*, b67_2_phase_dimension specifically).
+  // We do NOT mutate the caller's RegimeDecision object — clone metadata.
+  const realDecisionStamped: RegimeDecision = {
+    ...realDecision,
+    metadata: {
+      ...(realDecision.metadata ?? {}),
+      calibrationFrameworkVersion: CALIBRATION_FRAMEWORK_VERSION,
+    },
+  };
+
   const rows: InsertRegimeFactorAlternate[] = alternates.map((alt) => ({
     ...sourceFields,
     pairSymbol,
@@ -187,7 +235,7 @@ async function persistRecord(
     assetClass: 'crypto_spot',
     factorName: alt.factorName,
     factorState: alt.factorState,
-    realDecision: realDecision as unknown as Record<string, unknown>,
+    realDecision: realDecisionStamped as unknown as Record<string, unknown>,
     alternateDecision: alt.alternateDecision as unknown as Record<string, unknown>,
   }));
 

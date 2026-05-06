@@ -99,31 +99,27 @@ import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
 // Batch 19G Fix 5: Shared hybrid compatibility registry (single source of truth)
 import { findHybridMatch, HYBRID_COMPATIBILITY } from '../config/hybrid-compatibility-registry.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
-import { emitAblationRecord, type FactorAlternate } from './factor-ablation-emitter.js';
-// B67.1 — per-input macro modifier alternate row builder (split into 3 factors per Kyle 2026-04-29)
-import { buildB67_1Alternates } from '../core/metrics/macro-modifier.js';
+import { emitAblationRecord } from './factor-ablation-emitter.js';
+// B76 — Two-pass stash-then-build: input records collected at point-of-fire
+// then dispatched to build helpers AFTER chain-final clamp.
+import { buildAllAlternates, type FactorAlternateInput } from './factor-ablation-builders.js';
 // B67.2 — phase preference application
 import { applyPhasePreference, regimePhaseStore } from '../core/metrics/regime-phase.js';
 // B67.4 cheap-tier bundle (2026-05-01): outcome feedback + regime age + path B gate
 import {
   outcomeFeedbackStore,
   computeOutcomeFeedbackFactor,
-  buildB67_4Alternate,
 } from '../core/metrics/outcome-feedback-store.js';
 import {
   computeFreshnessFactor,
-  buildB68_4Alternate,
-  buildB68_5Alternate,
 } from '../core/metrics/regime-age-factor.js';
 // B68.2 (2026-05-02): volume regime as second confidence dimension
 import {
   computeVolumeRegime,
-  buildB68_2Alternate,
 } from '../core/metrics/volume-regime.js';
 // B68.3 (2026-05-02): pair correlation as third orthogonal confidence dimension
 import {
   computePairCorrelation,
-  buildB68_3Alternate,
 } from '../core/metrics/pair-correlation.js';
 // B68.1 (2026-05-03): multi-TF agreement as 7th and final B68.x chain modulator.
 // Higher-TF (240-min / 4h) regime classification reuses calculatePairRegime
@@ -131,7 +127,6 @@ import {
 // `${symbol}_240`). Family map LOCAL to multi-tf-agreement.ts.
 import {
   computeMultiTfAgreement,
-  buildB68_1Alternate,
 } from '../core/metrics/multi-tf-agreement.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
@@ -679,7 +674,18 @@ export class SignalOrchestrator {
     // Cold-start null window is the brief moment between MCE.start() and the
     // first refreshMacroContext — no signals reach this hook during that
     // window. Defensive null checks retained only for that edge.
-    const ablationAlternates: FactorAlternate[] = [];
+    // B76 (2026-05-06): two-pass stash-then-build pattern.
+    //   PASS 1 — at each factor's fire point: compute factor, multiply into
+    //   `modulatedConfChain`, push a `FactorAlternateInput` record onto the
+    //   stash. NO build helper called here.
+    //   PASS 2 — after final clamp on `modulatedConfChain`: dispatch every
+    //   stashed input via `buildAllAlternates(stash, chainFinal, regimeLabel)`,
+    //   producing alternates whose `confidence = chainFinal / factor` (or
+    //   label-counterfactual for B68.5). Then `emitAblationRecord` with
+    //   chain-final `realDecision.confidence` and the built alternates.
+    // This restructure is the calibration framework refactor — see B76 scope §3.
+    const alternateInputs: FactorAlternateInput[] = [];
+    let modulatedConfChain = extendedMetrics.confidence ?? 0.5;
     {
       const mce = getMarketContextEngine();
       const macro = mce.getCurrentMacroContext();
@@ -690,14 +696,15 @@ export class SignalOrchestrator {
       if (macro === null || macroConfig === null) {
         console.warn('[B67.1][orchestrator] macro context/config null at ablation hook — cold-start race');
       } else {
-        const perInputAlternates = buildB67_1Alternates(
-          extendedMetrics.confidence ?? 0.5,
-          macro.modifier,
-          extendedMetrics.regime ?? 'UNKNOWN',
-          true,
-          macroConfig,
-        );
-        ablationAlternates.push(...perInputAlternates);
+        // B67.1 macro modifier already applied to baseConf upstream by
+        // calculatePairRegime — chain math unchanged. Stash the input record
+        // for chain-final dispatch in Pass 2.
+        alternateInputs.push({
+          kind: 'b67_1',
+          modifier: macro.modifier,
+          admissionPossible: true,
+          config: macroConfig,
+        });
       }
 
       // B67.2 phase preference alternate
@@ -711,7 +718,7 @@ export class SignalOrchestrator {
       const strategyKey = (rawSignal as any).strategy ?? 'unknown';
       const regimeLabel = extendedMetrics.regime ?? 'UNKNOWN';
       const baseConf = extendedMetrics.confidence ?? 0.5;
-      let modulatedConfChain = baseConf;
+      // modulatedConfChain initialized above; Pass 1 multiplies factors into it
 
       if (phaseWeights === null) {
         console.warn('[B67.2][orchestrator] phase weights null at ablation hook — cold-start race');
@@ -725,27 +732,13 @@ export class SignalOrchestrator {
             const modulated = applyPhasePreference(strategyKey, phase, phaseWeights, baseConf);
             const weight = phaseWeights[`${strategyKey}_${phase}`];
             modulatedConfChain = modulated;
-            // B69.2 quick fix (2026-05-04): see vts-runner.ts companion edit.
-            // Set alt.confidence = modulated (with-factor) so the calibration
-            // aggregator's shift = real - alt = predictiveConfidence × (1 - weight)
-            // surfaces the b67_2 effect. Pre-fix stored baseConf which equals
-            // predictiveConfidence and produced shift = 0 on every trade.
-            ablationAlternates.push({
-              factorName: 'b67_2_phase_preference',
-              factorState: 'alternate_disabled',
-              alternateDecision: {
-                regimeLabel,
-                confidence: modulated,
-                admissionPossible: true,
-                metadata: {
-                  confidence_with_phase_pref: modulated,
-                  confidence_without_phase_pref: baseConf,
-                  phase,
-                  phase_age_seconds: phaseAgeSeconds,
-                  strategy_phase_weight: weight,
-                  regime_label: regimeLabel,
-                },
-              },
+            // B76: stash; alt.conf computed in Pass 2 from chain-final.
+            alternateInputs.push({
+              kind: 'b67_2',
+              phase,
+              phaseAgeSeconds,
+              strategy: strategyKey,
+              phaseWeight: weight,
             });
           } catch (err) {
             // applyPhasePreference throws on missing weight key. Log loudly.
@@ -758,21 +751,15 @@ export class SignalOrchestrator {
       }
 
       // ── B68.4 freshness factor ────────────────────────────────────────
-      // Reads regimePhaseStore age via the new peekAgeMs accessor (read-only,
-      // does not tick). Cold-start (pair untracked) returns factor=1.0
-      // legitimately; logged for diagnostics on first eval.
       if (regimeAgeConfig !== null) {
         const ageMs = regimePhaseStore.peekAgeMs(rawSignal.symbol, Date.now());
         const freshness = computeFreshnessFactor(ageMs, regimeAgeConfig);
         modulatedConfChain *= freshness.factor;
-        ablationAlternates.push(
-          buildB68_4Alternate(
-            modulatedConfChain,
-            regimeLabel,
-            freshness,
-            regimeAgeConfig.targetAgeHours,
-          ),
-        );
+        alternateInputs.push({
+          kind: 'b68_4',
+          result: freshness,
+          targetAgeHours: regimeAgeConfig.targetAgeHours,
+        });
         console.log(
           `[B68.4][freshness] pair=${rawSignal.symbol} age_hours=${freshness.ageHours.toFixed(2)} factor=${freshness.factor.toFixed(4)}`,
         );
@@ -781,19 +768,15 @@ export class SignalOrchestrator {
       }
 
       // ── B67.4 outcome feedback ────────────────────────────────────────
-      // Per-(regime, strategy) tuple EMA of net P&L. Cold-start (sample_count
-      // < min_samples) returns factor=1.0; legitimate runtime state.
       if (outcomeFeedbackConfig !== null) {
         const entry = outcomeFeedbackStore.peek(regimeLabel, strategyKey);
         const outcome = computeOutcomeFeedbackFactor(entry, outcomeFeedbackConfig);
         modulatedConfChain *= outcome.factor;
-        ablationAlternates.push(
-          buildB67_4Alternate(modulatedConfChain, regimeLabel, outcome, {
-            regime: regimeLabel,
-            strategy: strategyKey,
-            entry,
-          }),
-        );
+        alternateInputs.push({
+          kind: 'b67_4',
+          result: outcome,
+          context: { regime: regimeLabel, strategy: strategyKey, entry },
+        });
       } else {
         console.warn('[B67.4][orchestrator] outcome feedback config null at ablation hook — cold-start race');
       }
@@ -813,9 +796,7 @@ export class SignalOrchestrator {
           try {
             const result = computeVolumeRegime(ohlc, volumeRegimeConfig);
             modulatedConfChain *= result.factor;
-            ablationAlternates.push(
-              buildB68_2Alternate(modulatedConfChain, regimeLabel, result, volumeRegimeConfig),
-            );
+            alternateInputs.push({ kind: 'b68_2', result, config: volumeRegimeConfig });
             console.log(
               `[B68.2][volume] pair=${rawSignal.symbol} score=${result.score.toFixed(3)} ` +
                 `factor=${result.factor.toFixed(4)} label=${result.label}` +
@@ -861,9 +842,7 @@ export class SignalOrchestrator {
               pairCorrelationConfig,
             );
             modulatedConfChain *= result.factor;
-            ablationAlternates.push(
-              buildB68_3Alternate(modulatedConfChain, regimeLabel, result, pairCorrelationConfig),
-            );
+            alternateInputs.push({ kind: 'b68_3', result, config: pairCorrelationConfig });
             console.log(
               `[B68.3][correlation] pair=${rawSignal.symbol} corr=${result.correlationToBtc.toFixed(3)} ` +
                 `decorr=${result.decorrelationScore.toFixed(3)} factor=${result.factor.toFixed(4)} ` +
@@ -911,9 +890,7 @@ export class SignalOrchestrator {
               fullRegimeConfig ?? undefined,
             );
             modulatedConfChain *= result.factor;
-            ablationAlternates.push(
-              buildB68_1Alternate(modulatedConfChain, regimeLabel, result, multiTfConfig),
-            );
+            alternateInputs.push({ kind: 'b68_1', result, config: multiTfConfig });
             console.log(
               `[B68.1][multi-tf] pair=${rawSignal.symbol} active=${result.activeTfRegime} ` +
                 `higher=${result.higherTfRegime ?? 'COLD'} agree=${result.agreement} ` +
@@ -931,63 +908,67 @@ export class SignalOrchestrator {
       }
 
       // ── B68.5 Path B sustainability ablation row ──────────────────────
-      // Ablation re-runs classifier with gate disabled (slopeMin=-Infinity)
-      // and records whether the gate flipped the label. Numeric 0/1 per §D.2.
-      // We have access to OHLC + DBS via the MCE cached context and pair object.
+      // Stash inputs; B68.5 builder re-runs classifier with gate disabled
+      // (label-counterfactual, not divide-out). Built in Pass 2 below.
       if (fullRegimeConfig !== null && symbolCtx !== null) {
         const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
         const dbsScore = symbolCtx.directionalBias?.score ?? 0;
         const dbsSlope = (symbolCtx.directionalBias as any)?.slope ?? 0;
         const macroValue = macro?.modifier.value ?? 1.0;
         if (ohlc && Array.isArray(ohlc) && ohlc.length >= 30) {
-          try {
-            ablationAlternates.push(
-              buildB68_5Alternate(
-                ohlc,
-                dbsScore,
-                dbsSlope,
-                macroValue,
-                fullRegimeConfig,
-                regimeLabel,
-                baseConf,
-              ),
-            );
-            console.log(
-              `[B68.5][gate] pair=${rawSignal.symbol} dbs=${dbsScore.toFixed(3)} ` +
-                `slope=${dbsSlope.toFixed(4)} gate_admitted=${regimeLabel === REGIMES.TREND_FRIENDLY_STABLE} ` +
-                `regime_label=${regimeLabel}`,
-            );
-          } catch (err) {
-            console.error(
-              '[B68.5][orchestrator] gate ablation rebuild failed:',
-              err instanceof Error ? err.message : err,
-            );
-          }
+          alternateInputs.push({
+            kind: 'b68_5',
+            ohlcData: ohlc,
+            dbsScore,
+            dbsSlope,
+            macroModifier: macroValue,
+            regimeConfig: fullRegimeConfig,
+          });
+          console.log(
+            `[B68.5][gate] pair=${rawSignal.symbol} dbs=${dbsScore.toFixed(3)} ` +
+              `slope=${dbsSlope.toFixed(4)} gate_admitted=${regimeLabel === REGIMES.TREND_FRIENDLY_STABLE} ` +
+              `regime_label=${regimeLabel}`,
+          );
         }
       }
 
       // ── Final clamp on full-chain modulated confidence ────────────────
       // B67.5-prep (2026-05-03): floor from module_constant; default 0.4
       // cold-start fallback matching legacy pre-B67.5 behavior.
+      // Note: floor constant is `b67_5_post_composition_floor` (DB-governed
+      // via module_constants). The constant is named with B67.5 in mind but
+      // its consumer (this clamp) has been live since B70.3/B72-family.
       const orchFloor = fullRegimeConfig?.b67_5PostCompositionFloor ?? 0.4;
       modulatedConfChain = Math.max(orchFloor, Math.min(1.0, modulatedConfChain));
-      // Persisted via tradeRecord downstream; signal-orchestrator's active
-      // path doesn't currently maintain a per-record persistence hook for
-      // regimeConfidenceModulated (vts-runner does). The chain value is
-      // captured in B67.4's metadata for ablation analysis.
     }
+
+    // ── B76 PASS 2: dispatch stashed inputs with chain-final reference ──
+    // chainFinalConfidence is the post-clamp value above; ablation alternates
+    // built from it satisfy `alt.conf = chainFinal / factor` for divide-out
+    // factors (or label-counterfactual semantics for B68.5).
+    const chainFinalConfidence = modulatedConfChain;
+    const regimeLabelForEmit = extendedMetrics.regime ?? 'UNKNOWN';
+    const ablationAlternates = buildAllAlternates(
+      alternateInputs,
+      chainFinalConfidence,
+      regimeLabelForEmit,
+    );
 
     emitAblationRecord(
       { kind: 'active_signal', signalId },
       rawSignal.symbol,
       {
-        regimeLabel: extendedMetrics.regime ?? 'UNKNOWN',
-        confidence: extendedMetrics.confidence ?? 0.5,
+        regimeLabel: regimeLabelForEmit,
+        // B76: chain-final, NOT raw classifier value. Raw preserved in metadata.
+        confidence: chainFinalConfidence,
         admissionPossible: true, // we got here past SQE gate
         metadata: {
           finalScore: extendedMetrics.finalScore,
           regimeWeight: extendedMetrics.regimeWeight, // pre-B67.5; replaced by regimeConfidence after Consumer #1 ships
           sourcePool: rawSignal.metadata?.sourcePool,
+          // B76: preserve raw classifier output for any downstream that wants
+          // raw semantics (none today per Step-2 grep audit; future-proof).
+          predictiveConfidenceRaw: extendedMetrics.confidence ?? 0.5,
         },
       },
       ablationAlternates,

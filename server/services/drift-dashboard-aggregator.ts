@@ -500,14 +500,14 @@ export async function computeAblationComparison(
                ELSE NULL END)::float AS "realAdmitAltRejectAvgPnlUsdLost"
     FROM regime_factor_alternates
     WHERE evaluated_at >= ${windowStart}
-      -- B67.0 follow-up 2026-04-29 (Kyle directive): hide pre-split legacy
-      -- factor names from the dashboard so only the 4 active per-input + phase
-      -- factors are surfaced. Legacy rows (b67_1_macro_modifier emitted before
-      -- the per-input split commit ed9a1a08; b67_2_phase_dimension renamed to
-      -- b67_2_phase_preference in the same commit) are frozen — they never
-      -- grow further. Filtering them in the dashboard query keeps the data
-      -- in DB for forensics while removing UI noise.
-      AND factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')
+      -- B76 (2026-05-06): legacy frozen factor-name filter REMOVED.
+      -- After the chain-final refactor, b67_1_macro_modifier (pre-split) and
+      -- b67_2_phase_dimension (pre-rename) rows are pre-B76 by construction
+      -- and have shift = 0 by structural bug (FIRST in chain). They no longer
+      -- contaminate the post-B76 dashboard because the per-factor predictive-
+      -- lift query (computeFactorCalibration) version-filters them.
+      -- This summary query is replay-status counts (pending/replayed/unreplayable);
+      -- legacy factor-name rows showing up here is expected forensic data.
     GROUP BY factor_name
     ORDER BY factor_name ASC
   `);
@@ -1052,7 +1052,19 @@ export async function computeFactorCalibration(
     FROM regime_factor_alternates
     WHERE evaluated_at >= ${windowStart}
       AND replay_completed_at IS NOT NULL
-      AND factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')
+      -- B76 (2026-05-06): legacy frozen-factor filter REMOVED. Per Langston
+      -- §4 review revision: for b67_1_* (3 per-input rows) and b67_2_phase_*
+      -- (incl. legacy `b67_2_phase_dimension` and current `b67_2_phase_preference`)
+      -- we instead version-filter to chain-final rows so pre-B76 structurally-
+      -- biased rows don't contaminate post-B76 lift measurements. Other 7
+      -- factors don't need the filter — predictive-lift cancels first-order bias.
+      AND (
+        factor_name NOT IN (
+          'b67_1_btc_dominance', 'b67_1_funding_rates', 'b67_1_mcap_momentum',
+          'b67_1_macro_modifier', 'b67_2_phase_preference', 'b67_2_phase_dimension'
+        )
+        OR real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final'
+      )
       AND real_decision->>'confidence' IS NOT NULL
       AND alternate_decision->>'confidence' IS NOT NULL
     ORDER BY factor_name, evaluated_at

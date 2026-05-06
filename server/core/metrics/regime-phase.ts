@@ -373,3 +373,56 @@ export function applyPhasePreference(
   }
   return baseConfidence * weight;
 }
+
+// ─── B76 (2026-05-06) — Phase preference ablation builder ─────────────────
+
+import type { FactorAlternate, RegimeDecision } from '../../services/factor-ablation-emitter.js';
+
+/**
+ * Build the B67.2 phase-preference ablation alternate row.
+ *
+ * **B76 contract (chain-final):** caller MUST pass `realConfidenceFinal` =
+ * the chain-final modulated confidence (post-clamp). Counterfactual
+ * "as-if-phase-preference-absent" =
+ *   alt.confidence = realConfidenceFinal × (1 / phaseWeight)
+ * because phase preference is a multiplicative factor on the chain
+ * (`baseConf × weight × ...other factors...`). Dividing by weight recovers
+ * "what the chain-final value would have been without this multiplier".
+ *
+ * Edge case: weight === 0 → return realConfidenceFinal unchanged (no division).
+ *
+ * Replaces the inline ablation block previously duplicated in
+ * `signal-orchestrator.ts:733` and `vts-runner.ts:1517`.
+ */
+export function buildB67_2Alternate(
+  realConfidenceFinal: number,
+  realRegimeLabel: string,
+  phase: RegimePhase,
+  phaseAgeSeconds: number,
+  strategy: string,
+  phaseWeight: number,
+): FactorAlternate {
+  const confidenceWithoutFactor =
+    phaseWeight > 0 ? realConfidenceFinal / phaseWeight : realConfidenceFinal;
+
+  const alternate: RegimeDecision = {
+    regimeLabel: realRegimeLabel,
+    confidence: confidenceWithoutFactor,
+    admissionPossible: true,
+    metadata: {
+      // B76: chain-final reference + counterfactual
+      confidence_with_factor: realConfidenceFinal,
+      confidence_without_factor: confidenceWithoutFactor,
+      phase,
+      phase_age_seconds: phaseAgeSeconds,
+      strategy_phase_weight: phaseWeight,
+      regime_label: realRegimeLabel,
+    },
+  };
+
+  return {
+    factorName: 'b67_2_phase_preference',
+    factorState: 'alternate_disabled',
+    alternateDecision: alternate,
+  };
+}
