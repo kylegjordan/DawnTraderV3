@@ -53,8 +53,9 @@ import { getConstant } from './module-constants-service.js';
  * each alternate's confidence was mid-chain at point-of-fire (structurally
  * mixing raw-vs-mid-chain values).
  *
- * Aggregator queries that surface b67_1_*/b67_2_phase_dimension MUST filter
- * on this marker — those factors are FIRST in the chain, so pre-B76 rows had
+ * Aggregator queries that surface the b67_1 per-input factors and
+ * b67_2_phase_dimension MUST filter on this marker — those factors are FIRST
+ * in the chain, so pre-B76 rows had
  * shift = 0 by construction; mixing pre/post-B76 contaminates the post-B76
  * window with structurally-biased noise. Other 7 factors don't need the
  * filter — predictive lift cancels first-order bias by construction.

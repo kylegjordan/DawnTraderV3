@@ -1053,11 +1053,11 @@ export async function computeFactorCalibration(
     WHERE evaluated_at >= ${windowStart}
       AND replay_completed_at IS NOT NULL
       -- B76 (2026-05-06): legacy frozen-factor filter REMOVED. Per Langston
-      -- §4 review revision: for b67_1_* (3 per-input rows) and b67_2_phase_*
-      -- (incl. legacy `b67_2_phase_dimension` and current `b67_2_phase_preference`)
-      -- we instead version-filter to chain-final rows so pre-B76 structurally-
-      -- biased rows don't contaminate post-B76 lift measurements. Other 7
-      -- factors don't need the filter — predictive-lift cancels first-order bias.
+      -- review revision: for b67_1 per-input rows and b67_2 phase rows
+      -- (legacy b67_2_phase_dimension and current b67_2_phase_preference) we
+      -- instead version-filter to chain-final rows so pre-B76 structurally-
+      -- biased rows do not contaminate post-B76 lift measurements. Other 7
+      -- factors do not need the filter — predictive-lift cancels first-order bias.
       AND (
         factor_name NOT IN (
           'b67_1_btc_dominance', 'b67_1_funding_rates', 'b67_1_mcap_momentum',
