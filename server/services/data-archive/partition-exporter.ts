@@ -108,23 +108,53 @@ export async function exportPartition(
   let maxTs: Date | null = null;
 
   try {
-    // Stream rows in batches to keep memory bounded. LIMIT/OFFSET pagination
-    // is correct under REPEATABLE READ since the snapshot is stable.
+    // Stream rows in batches via KEYSET pagination, not LIMIT/OFFSET.
+    //
+    // LIMIT/OFFSET becomes O(N²) for large partitions because each batch
+    // re-scans past `offset` rows under the snapshot. On Supabase Pro with
+    // 60s pooler statement_timeout, OFFSET ~80K+ on a wide JSONB-toasted
+    // table starts failing. Keyset uses a (timestamp, id) cursor — each
+    // batch scans only the next BATCH rows directly via the timestamp index.
+    //
+    // The cursor pair (timestamp, id) handles equal-timestamp rows:
+    //   first batch:  WHERE ts >= rangeStart AND ts < rangeEnd
+    //   subsequent:   WHERE (ts, id) > (lastTs, lastId) AND ts < rangeEnd
+    //
+    // PK on context_bridge_log + B74 tables is `id` (uuid) — string compare
+    // is correct + stable. For B74 tables with composite PKs, the keyset
+    // tiebreaker still works since the PK is unique.
     const BATCH = 5000;
-    let offset = 0;
 
     const out = fs.createWriteStream(localPath);
     const gzip = zlib.createGzip({ level: compressionLevel });
     gzip.pipe(out);
 
+    let lastTs: Date | null = null;
+    let lastId: string | null = null;
+    let firstBatch = true;
+
     while (true) {
-      const r = await client.query(
-        `SELECT * FROM ${quoteIdent(target)}
-         WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2
-         ORDER BY ${quoteIdent(tsCol)} ASC
-         LIMIT ${BATCH} OFFSET ${offset}`,
-        [req.rangeStart, req.rangeEnd],
-      );
+      let r;
+      if (firstBatch) {
+        r = await client.query(
+          `SELECT * FROM ${quoteIdent(target)}
+           WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2
+           ORDER BY ${quoteIdent(tsCol)} ASC, id ASC
+           LIMIT ${BATCH}`,
+          [req.rangeStart, req.rangeEnd],
+        );
+        firstBatch = false;
+      } else {
+        r = await client.query(
+          `SELECT * FROM ${quoteIdent(target)}
+           WHERE ${quoteIdent(tsCol)} < $3
+             AND (${quoteIdent(tsCol)} > $1
+                  OR (${quoteIdent(tsCol)} = $1 AND id > $2))
+           ORDER BY ${quoteIdent(tsCol)} ASC, id ASC
+           LIMIT ${BATCH}`,
+          [lastTs, lastId, req.rangeEnd],
+        );
+      }
       if (r.rows.length === 0) break;
 
       for (const row of r.rows) {
@@ -143,8 +173,13 @@ export async function exportPartition(
         rowCount++;
       }
 
+      // Advance the keyset cursor from the last row of this batch
+      const lastRow = r.rows[r.rows.length - 1];
+      const lastRowTs = lastRow[tsCol];
+      lastTs = lastRowTs instanceof Date ? lastRowTs : new Date(lastRowTs);
+      lastId = String(lastRow.id);
+
       if (r.rows.length < BATCH) break;
-      offset += BATCH;
     }
 
     gzip.end();
