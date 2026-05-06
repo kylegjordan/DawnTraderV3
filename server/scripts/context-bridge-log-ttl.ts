@@ -287,12 +287,13 @@ async function markMonthsActive(
   monthLabels: string[],
 ): Promise<void> {
   if (monthLabels.length === 0) return;
+  // Update across BOTH tiers — cold-fallback rows (large historical archives
+  // that hit Supabase 413 and went direct to B2) need state='active' too.
   await client.query(
     `UPDATE data_archive_manifest
        SET state = 'active', hot_partition_dropped_at = NOW()
      WHERE source_table = $1
        AND partition_label = ANY($2::text[])
-       AND tier = 'warm'
        AND state = 'verified'`,
     [SOURCE_TABLE, monthLabels],
   );
