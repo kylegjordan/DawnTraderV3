@@ -35,6 +35,7 @@ interface Cfg {
   pauseMs: number;
   warmBucket: string;
   warmPrefix: string;
+  coldBucket: string;
 }
 
 async function loadConfig(client: pg.Client): Promise<Cfg> {
@@ -65,6 +66,7 @@ async function loadConfig(client: pg.Client): Promise<Cfg> {
     pauseMs: reqNum('sweep_pause_ms'),
     warmBucket: reqStr('warm_bucket'),
     warmPrefix: reqStr('warm_prefix'),
+    coldBucket: reqStr('cold_bucket'),
   };
 }
 
@@ -170,22 +172,52 @@ async function exportAndUploadMonth(
     manifestId = r.rows[0].id;
   }
 
-  // Upload + verify
+  // Upload + verify. If warm rejects with 413 (Supabase project file_size_limit
+  // exceeded), fall back to cold tier (B2 supports 5 GB single-call).
   const data = fs.readFileSync(exportRes.localPath);
   const storage = getStorageClient();
-  const upload = await storage.uploadWarm(
-    cfg.warmBucket,
-    `${cfg.warmPrefix}/${SOURCE_TABLE}/${month.label}.jsonl.gz`,
-    data,
-  );
-  const readBack = await storage.downloadWarm(
-    cfg.warmBucket,
-    `${cfg.warmPrefix}/${SOURCE_TABLE}/${month.label}.jsonl.gz`,
-  );
-  if (upload.checksum !== exportRes.checksum || readBack.checksum !== exportRes.checksum) {
-    throw new Error(
-      `[B75 ctx-bridge] ${month.label}: checksum mismatch ` +
-        `local=${exportRes.checksum} upload=${upload.checksum} readback=${readBack.checksum}`,
+  let upload;
+  let actualBucket = cfg.warmBucket;
+  let actualPath = `${cfg.warmPrefix}/${SOURCE_TABLE}/${month.label}.jsonl.gz`;
+  let actualTier: 'warm' | 'cold' = 'warm';
+  let actualUri = storageUri;
+
+  try {
+    upload = await storage.uploadWarm(actualBucket, actualPath, data);
+    const readBack = await storage.downloadWarm(actualBucket, actualPath);
+    if (upload.checksum !== exportRes.checksum || readBack.checksum !== exportRes.checksum) {
+      throw new Error(
+        `[B75 ctx-bridge] ${month.label}: checksum mismatch ` +
+          `local=${exportRes.checksum} upload=${upload.checksum} readback=${readBack.checksum}`,
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const is413 = msg.includes('413') || msg.includes('Payload Too Large') || msg.includes('Maximum size exceeded') || msg.includes('exceeded the maximum allowed size');
+    if (!is413 || !storage.isColdConfigured()) {
+      throw err;
+    }
+    console.log(
+      `[B75 ctx-bridge] ${month.label}: warm tier rejected (413). Falling back to cold tier (B2). Reason: ${msg.slice(0, 120)}`,
+    );
+    actualBucket = cfg.coldBucket || 'dt-archive-cold';
+    actualPath = `${SOURCE_TABLE}/${month.label}.jsonl.gz`;
+    actualTier = 'cold';
+    actualUri = `b2://${actualBucket}/${actualPath}`;
+    upload = await storage.uploadCold(actualBucket, actualPath, data);
+    const readBack = await storage.downloadCold(actualBucket, actualPath);
+    if (readBack.checksum !== exportRes.checksum) {
+      throw new Error(
+        `[B75 ctx-bridge] ${month.label}: cold checksum mismatch ` +
+          `local=${exportRes.checksum} readback=${readBack.checksum}`,
+      );
+    }
+    // Update the manifest row to reflect cold tier (it was inserted as 'warm pending' earlier)
+    await ctlClient.query(
+      `UPDATE data_archive_manifest
+         SET tier = 'cold', storage_uri = $2
+       WHERE id = $1`,
+      [manifestId, actualUri],
     );
   }
 

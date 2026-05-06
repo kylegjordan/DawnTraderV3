@@ -111,6 +111,11 @@ export class StorageClient {
     // a 99 MB Dec ctx-bridge archive returned 413 'Payload too large').
     // Files > 40 MB route to TUS resumable upload (Supabase's documented
     // protocol for large files; chunks at 6 MiB per their recommendation).
+    //
+    // Project-level file_size_limit also caps warm uploads. If the project
+    // cap is below the archive size, BOTH single-call and TUS will 413.
+    // We catch the 413 and let the caller decide whether to fall back to
+    // cold tier (B2 native API supports up to 5 GB single-call).
     const SINGLE_CALL_THRESHOLD = 40 * 1024 * 1024; // 40 MB
     const HARD_CAP = 5 * 1024 * 1024 * 1024;        // 5 GB ceiling on any one warm object
     if (data.length > HARD_CAP) {
