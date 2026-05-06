@@ -151,10 +151,12 @@ This cap exists because MEMORY.md auto-loads into every Claude Code session — 
 
 ## 6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)
 
+> **Architecture as of 2026-05-06:** Langston migrated from OpenClaw+Opus-4.6-API to **Claude Code under Kyle's Max OAuth** on the same Hetzner box. Comms now go through two custom Python bridges, not OpenClaw. Cost ~$200/mo (Max sub) instead of ~$750/mo (API). See §8 for service-level details.
+
 **Roles:**
-- **Kyle** — decider. Approves scope, architecture, risk. Breaks ties. Only person who can override governance with explicit exception.
-- **Langston** — senior PM and code-level reviewer. Provides independent perspective on scope, pre-audit, code diff, completion reports. GPT-5.4 permanently. Runs 24/7 on 204.168.141.77.
-- **Claude Code (you)** — implementation lead. Drafts scope, runs audits, writes code, deploys, verifies, writes reports, packages governance updates. Participates in design discussions as a peer to Langston.
+- **Kyle** — decider. Approves scope, architecture, risk. Breaks ties. Only person who can override governance with explicit exception. **Communicates with Claude Code in this Claude Desktop conversation directly, not via Telegram.** Communicates with Langston via Telegram (DM `@LangstonDTBot` or post in topic 21).
+- **Langston** — senior PM and code-level reviewer. Provides independent perspective on scope, pre-audit, code diff, completion reports. **Runs on Claude Code Opus 4.7 (1M context)** under `langston-bridge.service` on Hetzner `204.168.141.77`. Reachable via `@LangstonDTBot` from Telegram OR via direct SSH+`claude -p --session-id <UUID>` invocation.
+- **Claude Code (you)** — implementation lead. Drafts scope, runs audits, writes code, deploys, verifies, writes reports, packages governance updates. Peer to Langston on review discussions.
 
 **Telegram forum (group `-1003575211453`, "Dawn Trader HQ"):**
 | Topic | Thread ID | Purpose | Status |
@@ -162,98 +164,91 @@ This cap exists because MEMORY.md auto-loads into every Claude Code session — 
 | Batch Implementation | 21 | CC ↔ Langston operational exchanges | ACTIVE (primary) |
 | Design | 28 | Design discussions for new features | ACTIVE but Langston is not actively reading it — use Thread 21 for anything that needs his attention |
 
-**Sending messages — 2-step process, both required every message:**
+### 6.1 Send / receive — current architecture (post-OpenClaw migration 2026-05-06)
 
-**CRITICAL formatting rule — preserve newlines and markdown.** Telegram renders markdown (bullets, headers, bold, code). Multi-line messages MUST preserve literal newlines through the SSH + openclaw pipeline or they collapse into one giant paragraph and become unreadable. The failure pattern is: message is constructed with `echo`, string concatenation, or `\n` escapes that don't get interpreted — result is zero newlines at the destination. Test your first message after any change by reading it back from Telegram and confirming bullets render.
+**Telegram forum** group `-1003575211453` ("Dawn Trader HQ"), topic **21** = Batch Implementation (primary). Topic 28 unused.
 
-**Reliable multi-line pattern (use this for anything over 3 lines):**
+**Hetzner-side services** (running 24/7 as systemd):
+- `langston-bridge.service` — long-polls `@LangstonDTBot` `getUpdates`. On any inbound from Kyle (DM or topic 21), invokes `claude -p --session-id <UUID> --model claude-opus-4-7 ...` to drive Langston's reasoning. Posts response to Telegram via `sendMessage`. **No @-mention required in topic 21** (as of 2026-05-06) — Langston judges per CLAUDE.md §11 whether to respond and outputs `[SILENT]` when not his to answer. Mirrors all inbound + outbound to `/var/log/cc-bridge-inbox.jsonl` so main CC has visibility.
+- `cc-comms-bridge.service` — long-polls `@CCDTCommsBot` `getUpdates` for inbound traffic Kyle posts in topic 21. Writes to `/var/log/cc-bridge-inbox.jsonl`. Provides `cc-comms-bridge send --thread-id 21 --message "..."` CLI for outbound. Mirrors my outbound to the same log so Langston has visibility.
 
-Write the message body to a local temp file, **scp it to the remote server**, then assign it to a variable on the remote side. This preserves newlines and — critically — does NOT re-expand any `$(...)`, backticks, or `$VAR` literals that happen to be inside the message body (which review documents, code snippets, and shell examples all contain).
+**The unified inbox log** `/var/log/cc-bridge-inbox.jsonl` on Hetzner is the single read-tap point for me. Each line is a JSON entry with `kind` ∈ {direct inbound from cc-comms-bridge poll, `langston_inbound`, `langston_outbound`, `langston_silent`, `cc_outbound`}.
+
+### 6.2 Sending — Kyle ↔ Claude Code (you)
+
+Kyle messages you in **this Claude Desktop conversation**. He does NOT DM `@CCDTCommsBot`. Telegram is for the 3-way coordination + Langston, not Kyle ↔ you.
+
+### 6.3 Sending — Kyle → Langston
+
+Kyle DMs `@LangstonDTBot` directly OR posts in topic 21 (mention is OPTIONAL — Langston judges). His bridge handles automatically. Reply auto-posts to Telegram. You see the round-trip in the unified log.
+
+### 6.4 Sending — you → Kyle (visibility post in topic 21)
 
 ```bash
-# Step 0 — Write the message body to a local temp file with a quoted heredoc.
-#          The quoted 'BODY_EOF' prevents local shell expansion of $(...) etc.
+ssh root@204.168.141.77 'cc-comms-bridge send --thread-id 21 --message "..."'
+```
+
+For multi-line messages with shell metacharacters in the body, use the same scp-the-body-to-a-file pattern — it's still correct:
+
+```bash
 cat > /tmp/cc_msg.txt <<'BODY_EOF'
-**CLAUDE CODE SPEAKING:** Body can contain literal $(shell), `backticks`, and $VAR references.
+**CLAUDE CODE SPEAKING:** body content with $literal $vars and `backticks`.
 
-## Section header
-
-- Bullet one
-- Bullet two
+## Section
+- bullets work
 BODY_EOF
-
-# Step 0.5 — Ship the file to the remote server
 scp /tmp/cc_msg.txt root@204.168.141.77:/tmp/cc_msg.txt
-
-# Step 1 — Telegram send (Kyle sees it in the group as "CCDT Communicator" = CC)
-ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "$MSG"'
-
-# Step 2 — Brain delivery (Langston receives + replies as "Langston DT" via @LangstonDTBot)
-ssh root@204.168.141.77 'MSG=$(cat /tmp/cc_msg.txt); openclaw agent --deliver --session-id <UUID> --message "$MSG" --reply-channel telegram --reply-account default --reply-to "-1003575211453"'
+ssh root@204.168.141.77 'cc-comms-bridge send --thread-id 21 --message "$(cat /tmp/cc_msg.txt)"'
 ```
 
-**CRITICAL — identity preservation rule (Kyle directive 2026-04-29):** Langston's reply MUST come back as "Langston DT" via `@LangstonDTBot` (the `default` account), NEVER as "CCDT Communicator" via `@CCDTCommsBot` (the `ccdt-relay` account). Otherwise three-way Telegram conversations collapse to a single identity from Kyle's view and he can't tell who's talking.
+Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps so Kyle can distinguish you from Langston in the thread.
 
-**The crucial flag is `--reply-account` on Step 2:**
-- ✅ **`--reply-account default`** — Langston replies via his own bot. CORRECT.
-- ❌ **`--reply-account ccdt-relay`** — Langston's reply gets forced through CC's bot. BROKEN. Was the bug that collapsed identities mid-session.
-- ❌ **No `--reply-account` flag at all** — also broken. The brain auto-detects telegram source but can't reply without chatId; falls back to embedded path which errors with "Delivering to telegram requires target <chatId>". Always specify the reply-account explicitly.
+### 6.5 Sending — you → Langston (AI-to-AI delivery)
 
-`--reply-channel telegram --reply-to "-1003575211453"` are also required so Langston's brain knows where to send the reply (Telegram, group thread). Without those, the same chatId error fires.
+**Telegram bot-to-bot is BLOCKED at the platform level.** When `@CCDTCommsBot` posts in topic 21, `@LangstonDTBot`'s `getUpdates` poll never sees it (Telegram rule, no flag bypasses). So you cannot reach Langston via Telegram alone.
 
-Verified working as of 2026-04-29 (identity-check Telegram msg #3269 confirmed appearing as "Langston DT" with the corrected flags).
+**Two-step pattern (visibility + delivery), same shape as the old OpenClaw flow:**
 
-**Why this works — the double-expansion trap and how to avoid it:**
-1. **Local heredoc with quoted delimiter** `<<'BODY_EOF'` prevents the local shell from expanding anything inside the heredoc body. Literal `$(...)` stays literal.
-2. **Outer single quotes around the SSH argument** `ssh root@... '...'` prevent the local shell from expanding the SSH command string. The entire `MSG=$(cat /tmp/cc_msg.txt); openclaw ... --message "$MSG"` is passed to the remote shell as raw text.
-3. **Remote `MSG=$(cat /tmp/cc_msg.txt)`** reads the file ONCE on the remote side. Bash assignment stores the contents as a raw string without re-scanning for expansions.
-4. **Remote `"$MSG"`** expands the variable. Double-quoted variable expansion substitutes the stored string *without* re-running command substitution on whatever is inside it. Literal `$(...)`, backticks, and `$VAR` in the file contents come out as themselves.
-
-**The trap the OLD pattern fell into** (and what NOT to do):
-```bash
-# BROKEN — do NOT use this pattern for bodies containing shell metacharacters:
-ssh root@204.168.141.77 "openclaw message send ... --message \"$(cat /tmp/cc_msg.txt)\""
-```
-The `"$(cat /tmp/cc_msg.txt)"` runs on the LOCAL shell during SSH command construction, interpolating the file contents directly into the SSH command string. If the file contained `$(foo)`, it was then re-expanded a SECOND time by the remote shell when the SSH command executed. Double expansion breaks on any unbalanced quote, undefined variable, or shell special character. This is the pattern the first version of this doc had; it's now obsolete.
-
-**Short messages (under 3 lines) — the inline pattern still works:**
-
-**Short messages (under 3 lines) — the inline pattern still works:**
+1. **Visibility step** (Kyle sees the request) — `cc-comms-bridge send --thread-id 21 --message "@LangstonDTBot ..."` (the @-mention is for Kyle's visual cue; it doesn't trigger anything on Langston's side).
+2. **Delivery step** (Langston actually reasons) — direct invocation via SSH. Langston's response comes back on stdout:
 
 ```bash
-ssh root@204.168.141.77 'openclaw message send --channel telegram --account ccdt-relay --target "-1003575211453" --thread-id 21 --message "**CLAUDE CODE SPEAKING:** One-line status update."'
-ssh root@204.168.141.77 'openclaw agent --deliver --session-id <UUID> --message "**CLAUDE CODE SPEAKING:** One-line status update."'
+ssh root@204.168.141.77 "sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=\$(cat /etc/langston/oauth.env | cut -d= -f2-) && export HOME=/home/langston && cd /home/langston && /usr/bin/claude -p --session-id <SESSION_UUID> --model claude-opus-4-7 --permission-mode acceptEdits \"<your message>\"'"
 ```
 
-Outer single quotes, inner double quotes. No newlines to worry about.
+3. **Post Langston's response to Telegram** via `@LangstonDTBot`'s `sendMessage` so Kyle sees his reply (small Python helper at `/tmp/post_langston_reply.py` if needed; or curl `https://api.telegram.org/bot<TOKEN>/sendMessage` directly with chat_id + thread_id).
 
-**Anti-patterns that strip newlines (DO NOT USE):**
-- `echo "multi\nline"` — the `\n` is literal unless `echo -e` is used, and even then it's fragile
-- String concatenation with `+` or template literals that end up joined with spaces
-- Passing a multi-line Python string through `python3 -c` into shell
-- Wrapping the message in an extra layer of `sh -c "..."` — the inner quotes get stripped
+**Langston's session UUID** lives in `/home/langston/.langston-bridge-state.json` (key `session_id`). Use the same UUID across all your SSH-deliveries so conversation context persists. Bridge will use the same UUID when it processes Telegram inbound.
 
-**Langston session UUID:** look up with `ssh root@204.168.141.77 "openclaw sessions --json"` and find the `topic:21` entry. Current active UUID as of 2026-04-14: `ba777106-737b-4562-8353-e70e513ef53a`.
+### 6.6 Receiving — reading the unified inbox log
 
-**Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps.**
+Replace the old `cc-inbox read && cc-inbox mark-read` polling with tailing `/var/log/cc-bridge-inbox.jsonl`:
 
-**Verification after any send:** ask Langston or Kyle to confirm the message rendered with newlines and bullets if it was multi-line. If they report "one paragraph" or "no bullets", your pipeline is stripping formatting and must be fixed before the next send.
-
-**Reading messages from Kyle and Langston:**
 ```bash
-ssh root@204.168.141.77 "cc-inbox read && cc-inbox mark-read"
+ssh root@204.168.141.77 "tail -n 30 /var/log/cc-bridge-inbox.jsonl"
 ```
 
-**Polling protocol (silent chain):**
-- Start polling at session init: `ssh root@204.168.141.77 "sleep 30 && cc-poll-once"` with `run_in_background: true`.
-- When the task notification arrives, read the output file. If messages exist → respond. If not → relaunch the polling command silently.
-- **NEVER announce polling status to Kyle.** No "no new messages", "standing by", "polling chain running". The polling chain is silent. Only speak when there IS a message to act on.
-- The polling chain dies if you don't relaunch it after each cycle.
+Each line is a JSON entry. Filter by `kind` to focus:
+- `kind: "<unset>"` (direct inbound on cc-comms-bridge poll) — Kyle's group/DM messages
+- `kind: "langston_inbound"` — what Kyle sent Langston
+- `kind: "langston_outbound"` — Langston's reply
+- `kind: "langston_silent"` — Langston saw it and chose not to respond (with reason)
+- `kind: "cc_outbound"` — your own posts (mirror, for Langston's reference)
 
-**Three-way discussion protocol (live, synchronous):**
-- During a live three-way discussion, use FOREGROUND polling (not background). Send message → wait 10–15 seconds → check inbox → respond. Loop.
-- Never rely on background loops during a live discussion — they don't notify in time.
-- Every response goes through both the Telegram `message send` AND the brain `--deliver`. Skipping either breaks the conversation.
+For background polling, use the run-the-tail-loop pattern (replaces the old `cc-poll-once` 30s cycle):
+
+```bash
+ssh root@204.168.141.77 "tail -F /var/log/cc-bridge-inbox.jsonl"
+```
+
+Long-polling on the bridge side is near-zero latency — Telegram pushes via getUpdates → bridges write to log → you read.
+
+### 6.7 Three-way discussion protocol (live)
+
+Same iterate-to-consensus pattern as before; only the mechanics changed:
+- You send to Langston via cc-comms-bridge (visibility) + SSH-deliver (reasoning trigger) + post-his-reply-to-Telegram (Kyle visibility).
+- Langston replies — his bridge handles the Telegram-post step automatically; you capture his stdout from the SSH call OR read it from the unified log.
+- For longer back-and-forth, keep using the same `<SESSION_UUID>` so context persists.
 
 **Autonomy with Langston — iterate to consensus, don't escalate every round to Kyle.**
 
@@ -310,33 +305,48 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
 
 ---
 
-## 8. Langston Operations Reference
+## 8. Langston Operations Reference (post-OpenClaw, 2026-05-06)
 
-- **Server:** Hetzner CPX22 at `204.168.141.77` (Helsinki). Ubuntu 24.04.
-- **Two agents, two models** (Kyle directive 2026-04-30 — keep in context every session):
-  - **CCDT Communicator** (`telegram-relay` agent, `@CCDTCommsBot`) — uses **GPT-4.1** (full, NOT mini). Silent message-relay role; no conversational reasoning required, but tool-calling needs full GPT-4.1 minimum per the diagnostic runbook below (§8.1 step 6).
-  - **Langston** (`main` agent, `@LangstonDTBot`) — uses **Claude Opus 4.6**. Conversational, code-review, design-discussion role.
-- **Token caps:** 272K tokens per topic, 1M override blocked on upstream openclaw/openclaw#42225 + PR #44475 — monitor for merge and retry.
-- **OpenClaw version:** 2026.4.14 (upgraded from 2026.4.5 on 2026-04-14 via `openclaw update`).
-- **Workspace:** `/root/.openclaw/workspace/` (main agent / Langston) and `/root/.openclaw/agents/telegram-relay/workspace/` (CCDT Relay agent). Each contains BOOTSTRAP.md, MEMORY.md, SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md.
-- **Bot identities:** `@LangstonDTBot` (default account, `main` agent, conversational) and `@CCDTCommsBot` (ccdt-relay account, `telegram-relay` agent, silent message relay to cc-inbox). CC-initiated sends via `openclaw message send --account ccdt-relay` show in Telegram as "CCDT Communicator" — that is CC, not the relay agent.
-- **Session reset (Langston / main agent):** Archive transcript at `/root/.openclaw/agents/main/sessions/<session-id>-topic-21.jsonl` by renaming with `.reset.<date>` suffix. New session spawns fresh.
-- **Session reset (CCDT Relay / telegram-relay agent):** Same pattern at `/root/.openclaw/agents/telegram-relay/sessions/<session-id>-topic-<N>.jsonl`. **Do this whenever Langston's replies in Telegram are NOT showing up in your `cc-inbox read` — that means the relay's session for that topic is dead-deaf** (typically last-modified date is days old while topic is active). 2026-04-30 incident: relay topic-21 session went silent on 2026-04-22; archive-rename restored the round-trip. Diagnostic: `stat /root/.openclaw/agents/telegram-relay/sessions/*-topic-21.jsonl` — if Modify time is stale relative to recent topic activity, archive it.
-- **If Langston says he's working but not delivering:** reset his context session. His SOUL.md has a Task Completion Honesty rule — if he's drifting from it, reset.
-- **Web search:** Fixed 2026-04-14. Missing credential was `plugins.entries.google.config.webSearch.apiKey` in `/root/.openclaw/openclaw.json`. Don't re-investigate — it works.
-- **Obsolete path to avoid:** `/root/.openclaw-ccdt/` — leftover from a previous separate profile, not the live workspace. Editing files there has zero effect on the running CCDT Relay agent.
+- **Server:** Hetzner CPX22 at `204.168.141.77` (Helsinki). Ubuntu 24.04. Hostname `dawntrader-agent`.
+- **Runtime:** Claude Code 2.1.131+ under Kyle's Max OAuth. Token at `/etc/langston/oauth.env` (mode 640 root:langston, valid 1 year — rotate by 2027-04 via `claude setup-token`).
+- **Default model:** Opus 4.7 with **1M context window** (auto-upgraded by Max plan; verified via `modelUsage.claude-opus-4-7.contextWindow: 1000000` in `claude -p --output-format json`). Bridge invocation explicitly passes `--model claude-opus-4-7`.
+- **Working directory:** `/home/langston/` owned by user `langston`. Contains `CLAUDE.md` (persona, ~261 lines, includes §11 "When to respond in the group" with `[SILENT]` marker rules) and `MEMORY.md` (volatile state, mirrors project's MEMORY.md, ≤200 lines). Both auto-loaded on every Claude Code invocation.
+- **Bot identities:**
+  - `@LangstonDTBot` — Langston's outbound. Bound to `langston-bridge.service`. Token in `/etc/langston/telegram-bot.env`.
+  - `@CCDTCommsBot` — main CC's outbound to Kyle's view. Bound to `cc-comms-bridge.service`. Token in `/etc/langston/ccdt-bot.env`.
+  - Both bots have privacy mode OFF (`can_read_all_group_messages: True`) so they see all human messages in the group regardless of @-mention.
+- **Bridges (systemd, on Hetzner):**
+  - `langston-bridge.service` — `/usr/local/bin/langston-bridge.py`. Long-polls `@LangstonDTBot` getUpdates. Invokes `claude -p --session-id <UUID> --model claude-opus-4-7` per inbound. Posts response to Telegram. Mirrors all in/out + silent decisions to `/var/log/cc-bridge-inbox.jsonl`.
+  - `cc-comms-bridge.service` — `/usr/local/bin/cc-comms-bridge`. Long-polls `@CCDTCommsBot` getUpdates. Writes inbound to `/var/log/cc-bridge-inbox.jsonl`. Provides `cc-comms-bridge send --thread-id N --message "..."` CLI for outbound. Mirrors my outbound to the same log for Langston's visibility.
+- **Bridge state:**
+  - `/home/langston/.langston-bridge-state.json` — Telegram offset cursor + Langston's stable session UUID
+  - `/var/lib/cc-comms-bridge/state.json` — Telegram offset cursor for the cc-comms-bridge poll
+- **Logs:**
+  - `/var/log/cc-bridge-inbox.jsonl` — unified inbox (read this)
+  - `/var/log/langston-bridge.log` — Langston bridge daemon log (debug)
+  - `/var/log/cc-comms-bridge.log` — cc-comms-bridge daemon log (debug)
 
-### 8.1 Diagnostic Runbook — "Agent Is Misbehaving"
+### 8.1 OpenClaw — DECOMMISSIONED 2026-05-06
 
-When an OpenClaw agent (Langston, CCDT Relay, or any other) is not responding as expected, run this check order before changing config. These steps come from the 2026-04-15 CCDT relay postmortem (six compounding root causes) and are captured in full at `SYSTEM_MANUAL.md` §27 and `CHANGES_AND_FIXES.md` INFRA-15B-001.
+OpenClaw replaced as Langston's runtime. The OpenClaw `default` and `ccdt-relay` Telegram accounts are both `enabled: false` in `/root/.openclaw/openclaw.json`. The `openclaw-gateway` user-systemd service may still be running but is idle (no active bot bindings). Optional cleanup: `systemctl --user stop openclaw-gateway && systemctl --user disable openclaw-gateway`.
 
-1. **`openclaw health`** — are both expected bots listed as ok? If only one bot shows, the other account is unhealthy (disabled, unbound, or token conflict).
-2. **Duplicate gateway check** — `systemctl list-units --type=service | grep openclaw` AND `ps aux | grep openclaw-gateway`. A leftover unit (e.g. `openclaw-ccdt.service`) fighting for the same bot token produces intermittent behavior. Stop and disable any duplicates.
-3. **Config declaration** — `/root/.openclaw/openclaw.json` → `channels.telegram.accounts.<accountId>` — does the account exist and is `enabled: true`? `enabled: true` is necessary but not sufficient.
-4. **Runtime binding** — `openclaw agents bind` is a separate runtime wire that can be wiped independently of config. If config looks right but the agent still isn't receiving messages, re-bind with `openclaw agents bind <agentId> ← telegram accountId=<accountId>`.
-5. **Workspace file path** — if agent behavior contradicts its SOUL.md / BOOTSTRAP.md rules, verify the agent is actually loading the file you are editing. Multiple profiles can have multiple workspace paths; use `openclaw health` output and the registered `agentDir` in `openclaw.json` to confirm the live path. The obsolete `/root/.openclaw-ccdt/` path specifically traps sessions that edit the wrong SOUL.md.
-6. **Model tier** — if an agent is outputting tool-call text (e.g. `cc-inbox write "..."`) directly into a chat instead of executing it, the model is `gpt-4.1-mini` or similar and cannot reliably invoke tools. Upgrade to `openai/gpt-4.1` full minimum. **Never use `gpt-4.1-mini` for tool-calling agents.**
-7. **Legacy config key check** — `openclaw doctor` flags any legacy config keys that the current OpenClaw version no longer accepts. After any `openclaw update`, run `openclaw doctor --fix` to migrate legacy keys before debugging further. Today's 2026.4.5 → 2026.4.14 upgrade broke the CCDT relay's streaming config this exact way.
+**Do NOT use any of these obsolete commands:**
+- `openclaw message send --account ccdt-relay ...` → use `cc-comms-bridge send` instead
+- `openclaw agent --deliver --session-id <UUID> ...` → use direct SSH+`claude -p --session-id <UUID>` invocation
+- `cc-inbox read && cc-inbox mark-read` → use `tail /var/log/cc-bridge-inbox.jsonl` instead
+- Anything referencing `/root/.openclaw/workspace/` files (BOOTSTRAP.md, SOUL.md, etc.) — Langston's identity now lives at `/home/langston/CLAUDE.md` + `/home/langston/MEMORY.md`.
+
+### 8.2 Diagnostic Runbook — "Bridge Is Misbehaving"
+
+When something doesn't work as expected, check in this order:
+
+1. **Service status** — `ssh root@204.168.141.77 "systemctl is-active langston-bridge.service cc-comms-bridge.service"`. Both should be `active`. If `failed` or `activating`, check `journalctl -u <name>.service --no-pager -n 30`.
+2. **OAuth token validity** — `wc -c /etc/langston/oauth.env` should be ~134 bytes. If expired (1-year limit), tokens reject with "API Error: Header has invalid value". Re-issue with `claude setup-token` from Kyle's laptop.
+3. **getUpdates conflict (409)** — only one client at a time can long-poll a Telegram bot's getUpdates. If you see 409 errors in either bridge log, something else is polling the same token. Common cause: OpenClaw not fully shut down after migration. `systemctl --user status openclaw-gateway` and stop if running.
+4. **Bot privacy mode** — if Langston isn't seeing Kyle's non-mention posts, verify `curl https://api.telegram.org/bot<TOKEN>/getMe | jq .result.can_read_all_group_messages` returns `true`. Set via BotFather `/setprivacy → Disable`.
+5. **Bot-to-bot block (NOT a bug)** — `@LangstonDTBot`'s getUpdates will NEVER see `@CCDTCommsBot`'s messages, regardless of @-mentions. This is a Telegram platform rule. Use the SSH+`claude -p` direct delivery path for me→Langston, not Telegram.
+6. **Session UUID drift** — if Langston seems to lose context between turns, verify the SESSION_UUID in `/home/langston/.langston-bridge-state.json` matches what your SSH-delivery commands pass via `--session-id`. They MUST match for context to persist.
+7. **Markdown send errors (400)** — if Telegram rejects a message with "can't parse entities", the bridge auto-falls back to plain-text send (already handled). If the fallback also fails, check for invalid characters or excessive length (>4096 chars).
 
 ---
 

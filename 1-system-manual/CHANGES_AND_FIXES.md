@@ -31,6 +31,22 @@
 
 ## BUGS
 
+### INFRA-2026-05-06: Langston runtime migrated OpenClaw → Claude Code under Max OAuth — **SHIPPED**
+- **Severity**: INFRA (cost + capability optimization, not a bug fix)
+- **Trigger**: Langston via OpenClaw was costing ~$50/2-day in Anthropic API charges (~$750/mo). Kyle wanted to leverage his existing Max subscription.
+- **Action**: Built two custom Python long-polling bridges on Hetzner `204.168.141.77`:
+  - `langston-bridge.service` (`/usr/local/bin/langston-bridge.py`) — polls `@LangstonDTBot` getUpdates, invokes `claude -p --session-id <UUID> --model claude-opus-4-7` per inbound, posts replies, mirrors all in/out/silent to `/var/log/cc-bridge-inbox.jsonl`. No @-mention required in topic 21; Langston judges per his CLAUDE.md §11 and outputs `[SILENT]` to skip Telegram post.
+  - `cc-comms-bridge.service` (`/usr/local/bin/cc-comms-bridge`) — polls `@CCDTCommsBot` getUpdates, writes inbound to shared log, provides `cc-comms-bridge send` CLI for outbound. Mirrors my outbound for Langston's visibility.
+- **OpenClaw decommissioned**: both Telegram accounts (`default`, `ccdt-relay`) disabled in `/root/.openclaw/openclaw.json`. Gateway idle but not stopped (optional cleanup).
+- **Bot-to-bot Telegram block**: documented as a platform constraint, not a bug. Workaround: shared filesystem log + SSH+`claude -p --session-id <UUID>` for AI-to-AI delivery (replaces OpenClaw `--deliver`).
+- **Cost**: $200/mo Max sub replaces ~$750/mo API. Savings ~$550/mo.
+- **Model**: Opus 4.7 with 1M context (auto-upgraded by Max plan; verified via SDK `modelUsage.contextWindow: 1000000`).
+- **OAuth token**: `/etc/langston/oauth.env`, valid 1 year (issued 2026-05-06). Rotate by 2027-04 via `claude setup-token` from Kyle's laptop.
+- **Persona migration**: 7 OpenClaw identity files (BOOTSTRAP/SOUL/IDENTITY/USER/AGENTS/TOOLS/MEMORY, 1368 lines total) compressed into `/home/langston/CLAUDE.md` (261 lines, includes §11 "When to respond in the group" rules) + `/home/langston/MEMORY.md` (mirrors project MEMORY.md, ≤200 lines).
+- **Smoke test**: Kyle DM'd `@LangstonDTBot` with status check; coherent identity-aware response in <2 min. 1M-context research task delivered via SSH (Langston confirmed Max auto-upgrades Opus to 1M context, no flag needed).
+- **Governance**: project `CLAUDE.md` §6 + §8 rewritten with new send/receive protocol + operations + diagnostic runbook. SYSTEM_MANUAL.md §27 marked SUPERSEDED with pointer to new canonical reference. MEMORY.md updated. Langston's CLAUDE.md/MEMORY.md updated.
+- **Lesson**: Max plan supports headless agentic loops via OAuth tokens (`claude setup-token`) and supports Opus 4.7 1M context in `claude -p` mode without flag. Trust SDK `modelUsage.contextWindow` over the model's text self-description.
+
 ### BUG-2026-05-06-A: B72 main shipped without covering 9 in-class quant strategies; B72.1 audit reinforced wrong conclusion — **RESOLVED**
 - **Severity**: HIGH (governance + materially incomplete lever sweep on highest-volume strategy in the system)
 - **Location**: `server/services/strategy-engine.ts:87–1344` (the missed `detect*` methods); `LEVER_INVENTORY.md §13.1` and `BATCH_72_COMPLETION_REPORT.md §K.3` (the wrong conclusions that needed correction)

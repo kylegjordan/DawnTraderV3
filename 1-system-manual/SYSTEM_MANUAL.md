@@ -7139,7 +7139,9 @@ Any service not directly tied to signal generation, risk management, execution, 
 
 ---
 
-## 27. Telegram / OpenClaw Agent Infrastructure (Post-B15b Operational Rules)
+## 27. Telegram / OpenClaw Agent Infrastructure (Post-B15b Operational Rules) — **SUPERSEDED 2026-05-06**
+
+> **Status:** This entire section is HISTORICAL as of 2026-05-06. OpenClaw was decommissioned and replaced with two custom Python long-polling bridges running Claude Code under Kyle's Max OAuth. The diagnostic runbook below remains useful only when troubleshooting any pre-2026-05-06 incident reports referencing OpenClaw. **For the current canonical comms protocol, see project `CLAUDE.md` §6 (send/receive) and §8 (operations + diagnostic runbook).** New stack: `langston-bridge.service` + `cc-comms-bridge.service`, unified inbox at `/var/log/cc-bridge-inbox.jsonl`, no `openclaw` / `cc-inbox` / `--deliver` commands.
 
 **Added 2026-04-15** after a 14-hour CCDT relay outage traced to six compounding root causes. See `CHANGES_AND_FIXES.md` INFRA-15B-001 for the full postmortem. This section captures the operational rules that came out of that incident so they are surfaced in the System Manual rather than buried in a fix log.
 
