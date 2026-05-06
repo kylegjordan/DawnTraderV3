@@ -185,16 +185,19 @@ export async function exportPartition(
 /**
  * Compute SHA-256 of a file by streaming. Used for the local-file checksum
  * captured immediately after export, before upload.
+ *
+ * B75 hotfix 2026-05-06: previous version used `pipeline(src, async function*)`
+ * pattern with `yield chunk` but no downstream destination — caused the
+ * generator to block waiting for a consumer that never arrived (first manual
+ * sweep hung in this function for 30+ minutes). Replaced with a plain
+ * for-await loop over the read stream.
  */
 export async function sha256OfFile(filePath: string): Promise<string> {
   const hash = crypto.createHash('sha256');
   const stream = fs.createReadStream(filePath);
-  await pipeline(stream, async function* (source) {
-    for await (const chunk of source) {
-      hash.update(chunk as Buffer);
-      yield chunk;
-    }
-  });
+  for await (const chunk of stream) {
+    hash.update(chunk as Buffer);
+  }
   return hash.digest('hex');
 }
 

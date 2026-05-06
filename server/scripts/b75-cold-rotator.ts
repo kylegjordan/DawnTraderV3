@@ -169,14 +169,110 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Phase 2: real rotation logic. For each candidate:
+  // Phase 2: real rotation. For each candidate:
   //   1. downloadWarm → buffer
-  //   2. uploadCold → verify checksum match
+  //   2. uploadCold (B2) → verify by re-download + checksum match
   //   3. INSERT new manifest row (tier='cold', state='active') with cold_storage_uri
   //   4. UPDATE warm manifest row → state='migrated', tier_changed_at=NOW()
   //   5. deleteWarm
-  console.log('[B75 rotator] Phase 2 (real rotation) not yet implemented');
-  console.log(`[B75 rotator] DONE candidates=${candidates.length} duration_ms=${Date.now() - startedAt.getTime()}`);
+  //
+  // If any step fails after upload but before warm delete, the next run
+  // detects via NOT EXISTS … tier='cold' filter (cold row exists or doesn't —
+  // no half-state). The crashed warm row stays state='active' (not deleted)
+  // for safe retry.
+
+  let rotated = 0;
+  let failed = 0;
+  let bytesMoved = 0;
+  for (const c of candidates) {
+    const itemStart = Date.now();
+    try {
+      const { bucket: warmBucket, path: warmPath } = parseSupabaseUri(c.storage_uri);
+      console.log(
+        `[B75 rotator] rotating ${c.source_table}/${c.partition_label} (${c.bytes_compressed} bytes)`,
+      );
+
+      // Step 1: download from warm
+      const warmObj = await storage.downloadWarm(warmBucket, warmPath);
+      if (warmObj.checksum !== c.checksum) {
+        throw new Error(
+          `[B75 rotator] warm-tier checksum drift: manifest=${c.checksum} actual=${warmObj.checksum}`,
+        );
+      }
+
+      // Step 2: upload to cold (B2). Cold path mirrors warm structure but no 'warm/' prefix
+      const coldPath = `${c.source_table}/${c.partition_label}.jsonl.gz`;
+      await storage.uploadCold(cfg.coldBucket, coldPath, warmObj.data);
+
+      // Verify by re-download
+      const coldObj = await storage.downloadCold(cfg.coldBucket, coldPath);
+      if (coldObj.checksum !== c.checksum) {
+        throw new Error(
+          `[B75 rotator] cold-tier post-upload checksum mismatch: expected=${c.checksum} got=${coldObj.checksum}`,
+        );
+      }
+
+      // Step 3: INSERT cold manifest row
+      const coldUri = `b2://${cfg.coldBucket}/${coldPath}`;
+      const ctlClient = new Client({ connectionString: process.env.DATABASE_URL });
+      await ctlClient.connect();
+      try {
+        await ctlClient.query(
+          `INSERT INTO data_archive_manifest (
+             source_table, partition_label, tier, state, storage_uri,
+             min_ts, max_ts, date_range_start, date_range_end,
+             row_count, bytes_compressed, original_partition_size_bytes,
+             checksum, format, compression
+           ) SELECT source_table, partition_label, 'cold', 'active', $3,
+                    min_ts, max_ts, date_range_start, date_range_end,
+                    row_count, bytes_compressed, original_partition_size_bytes,
+                    checksum, format, compression
+              FROM data_archive_manifest
+             WHERE id = $1
+             ON CONFLICT (source_table, partition_label, tier) DO UPDATE
+               SET state = 'active', storage_uri = EXCLUDED.storage_uri`,
+          [c.id, null, coldUri],
+        );
+
+        // Step 4: UPDATE warm row → migrated
+        await ctlClient.query(
+          `UPDATE data_archive_manifest
+             SET state = 'migrated', tier_changed_at = NOW()
+           WHERE id = $1`,
+          [c.id],
+        );
+      } finally {
+        await ctlClient.end().catch(() => {});
+      }
+
+      // Step 5: deleteWarm (only after manifest cold-row + warm-row update committed)
+      await storage.deleteWarm(warmBucket, warmPath);
+
+      rotated++;
+      bytesMoved += c.bytes_compressed;
+      console.log(
+        `[B75 rotator] ${c.source_table}/${c.partition_label}: rotated bytes=${c.bytes_compressed} duration_ms=${Date.now() - itemStart}`,
+      );
+    } catch (err) {
+      failed++;
+      console.error(
+        `[B75 rotator] ${c.source_table}/${c.partition_label}: FAILED — ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Continue with next candidate; failed rotations retry next month.
+    }
+  }
+
+  console.log(
+    `[B75 rotator] DONE candidates=${candidates.length} rotated=${rotated} failed=${failed} ` +
+      `bytes_moved=${bytesMoved} duration_ms=${Date.now() - startedAt.getTime()}`,
+  );
+  if (failed > 0) process.exit(1);
+}
+
+function parseSupabaseUri(uri: string): { bucket: string; path: string } {
+  const m = /^supabase:\/\/([^/]+)\/(.+)$/.exec(uri);
+  if (!m) throw new Error(`[B75 rotator] cannot parse supabase URI: ${uri}`);
+  return { bucket: m[1], path: m[2] };
 }
 
 main().catch((err) => {

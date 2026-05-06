@@ -181,11 +181,24 @@ async function main(): Promise<void> {
         skippedCold++;
         continue;
       }
-      // Phase 2: implement cold download
-      console.warn(
-        `[B75 rehydrate] ${label} (cold): cold download not yet implemented (Phase 2); skipping`,
+      // Cold URI format: 'b2://<bucket>/<path>'
+      const m = /^b2:\/\/([^/]+)\/(.+)$/.exec(cold.storage_uri);
+      if (!m) {
+        console.warn(`[B75 rehydrate] ${label} (cold): cannot parse cold URI: ${cold.storage_uri}`);
+        skippedCold++;
+        continue;
+      }
+      const data = await storage.downloadCold(m[1], m[2]);
+      const localPath = path.join(args.out, `${args.table}_${label}.jsonl.gz`);
+      fs.writeFileSync(localPath, data.data);
+      const localChecksum = sha256Hex(data.data);
+      const checksumOk = localChecksum === cold.checksum;
+      console.log(
+        `[B75 rehydrate] ${label} (cold): rows=${cold.row_count} bytes=${data.bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${localPath}`,
       );
-      skippedCold++;
+      downloaded++;
+      totalRows += cold.row_count;
+      totalBytes += data.bytes;
     } else {
       console.warn(
         `[B75 rehydrate] ${label} (cold): use --restore-cold to attempt cold-tier download`,

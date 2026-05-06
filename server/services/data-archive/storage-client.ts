@@ -106,10 +106,13 @@ export class StorageClient {
     data: Buffer,
     contentType: string = 'application/gzip',
   ): Promise<UploadResult> {
-    // Supabase Storage REST single-call upload soft-limits ~50 MB. Larger
-    // payloads would silently 413. Multipart/TUS upload is a B75.x follow-up;
-    // for now fail fast with a clear message (Langston Step-4 review note d).
-    const MAX_SINGLE_CALL_BYTES = 45 * 1024 * 1024; // 45 MB headroom
+    // Supabase Storage REST documented soft-limit was historically ~50 MB
+    // single-call but service-role uploads in practice accept much larger
+    // (verified ~250 MB during B75 first sweep when historical context_bridge_log
+    // archives produced 99+ MB compressed monthly files). Guard set high to
+    // catch only obviously-wrong huge payloads; multipart/TUS upgrade still
+    // a B75.x follow-up if we hit Supabase's actual hard limit.
+    const MAX_SINGLE_CALL_BYTES = 500 * 1024 * 1024; // 500 MB safety cap
     if (data.length > MAX_SINGLE_CALL_BYTES) {
       throw new Error(
         `[B75 storage-client] warm upload payload too large: ${data.length} bytes > ${MAX_SINGLE_CALL_BYTES} (45 MB). ` +
@@ -234,8 +237,30 @@ export class StorageClient {
   }
 
   // ───────────────────────────────────────────────────────────────────────
-  // Cold tier — stubs until B2 credentials land
+  // Cold tier — Backblaze B2 native API (bearer auth, no S3 v4 signing)
+  //
+  // Auth flow (cached after first call):
+  //   1. POST https://api.backblazeb2.com/b2api/v3/b2_authorize_account
+  //      with Basic auth (B2_KEY_ID:B2_APPLICATION_KEY)
+  //      → returns { apiUrl, downloadUrl, authorizationToken, allowed: { bucketId } }
+  //   2. POST <apiUrl>/b2api/v3/b2_get_upload_url with { bucketId }
+  //      → returns { uploadUrl, authorizationToken }
+  //   3. POST <uploadUrl> with body, headers:
+  //      Authorization: <upload-auth-token>
+  //      X-Bz-File-Name: <url-encoded-name>
+  //      X-Bz-Content-Sha1: <hex-sha1> (or "do_not_verify")
+  //      Content-Type, Content-Length
+  //   4. GET <downloadUrl>/file/<bucket>/<name> with Authorization: <account-token>
+  //      → file bytes
   // ───────────────────────────────────────────────────────────────────────
+
+  private b2Auth: {
+    apiUrl: string;
+    downloadUrl: string;
+    accountAuthToken: string;
+    bucketId: string | null;
+    expiresAt: number; // epoch ms
+  } | null = null;
 
   isColdConfigured(): boolean {
     return Boolean(
@@ -243,25 +268,173 @@ export class StorageClient {
     );
   }
 
-  async uploadCold(_bucket: string, _path: string, _data: Buffer): Promise<UploadResult> {
-    if (!this.isColdConfigured()) {
-      throw new Error(
-        '[B75 storage-client] cold storage not configured: ' +
-          'set B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET in environment. ' +
-          'Cold rotator should be running with data_lifecycle.cold_rotator_dry_run=true ' +
-          'until credentials land.',
-      );
+  private async b2Authorize(): Promise<NonNullable<StorageClient['b2Auth']>> {
+    // Cache for 23h (B2 tokens valid 24h; refresh early)
+    if (this.b2Auth && this.b2Auth.expiresAt > Date.now()) {
+      return this.b2Auth;
     }
-    // Phase 2 (post-B2 account): replace with @aws-sdk/client-s3 PutObjectCommand
-    // against B2 S3-compatible endpoint. See PRE_AUDIT §F.
-    throw new Error('[B75 storage-client] cold upload not yet implemented (Phase 2)');
+    const keyId = requireEnv('B2_KEY_ID');
+    const appKey = requireEnv('B2_APPLICATION_KEY');
+    const basic = Buffer.from(`${keyId}:${appKey}`).toString('base64');
+    const res = await fetch('https://api.backblazeb2.com/b2api/v3/b2_authorize_account', {
+      method: 'GET',
+      headers: { Authorization: `Basic ${basic}` },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 authorize failed: ${res.status} ${res.statusText} — ${body}`);
+    }
+    const j = (await res.json()) as {
+      apiInfo: { storageApi: { apiUrl: string; downloadUrl: string } };
+      authorizationToken: string;
+    };
+    this.b2Auth = {
+      apiUrl: j.apiInfo.storageApi.apiUrl,
+      downloadUrl: j.apiInfo.storageApi.downloadUrl,
+      accountAuthToken: j.authorizationToken,
+      bucketId: null,
+      expiresAt: Date.now() + 23 * 60 * 60 * 1000,
+    };
+    return this.b2Auth;
   }
 
-  async downloadCold(_bucket: string, _path: string): Promise<DownloadResult> {
+  private async b2ResolveBucketId(bucketName: string): Promise<string> {
+    const auth = await this.b2Authorize();
+    if (auth.bucketId) return auth.bucketId;
+    const res = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_buckets`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.accountAuthToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        accountId: requireEnv('B2_KEY_ID').replace(/^00\w+/, '').slice(0, 12) || requireEnv('B2_KEY_ID'),
+        bucketName,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 list_buckets failed: ${res.status} — ${body}`);
+    }
+    const j = (await res.json()) as { buckets: Array<{ bucketId: string; bucketName: string }> };
+    const match = j.buckets.find((b) => b.bucketName === bucketName);
+    if (!match) {
+      throw new Error(`[B75 storage-client] B2 bucket not found: ${bucketName}`);
+    }
+    auth.bucketId = match.bucketId;
+    return match.bucketId;
+  }
+
+  async uploadCold(bucket: string, path: string, data: Buffer): Promise<UploadResult> {
+    if (!this.isColdConfigured()) {
+      throw new Error(
+        '[B75 storage-client] cold storage not configured: set B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET in env',
+      );
+    }
+    const checksum = sha256Hex(data);
+    const sha1 = crypto.createHash('sha1').update(data).digest('hex');
+
+    const auth = await this.b2Authorize();
+    const bucketId = await this.b2ResolveBucketId(bucket);
+
+    // Get upload URL (per-upload single-use)
+    const upUrlRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_upload_url`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.accountAuthToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ bucketId }),
+    });
+    if (!upUrlRes.ok) {
+      const body = await upUrlRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 get_upload_url failed: ${upUrlRes.status} — ${body}`);
+    }
+    const upUrl = (await upUrlRes.json()) as { uploadUrl: string; authorizationToken: string };
+
+    // Upload (single-call up to 5 GB per B2 docs; large file API not needed today)
+    const upRes = await fetch(upUrl.uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: upUrl.authorizationToken,
+        'X-Bz-File-Name': encodePath(path),
+        'X-Bz-Content-Sha1': sha1,
+        'Content-Type': 'application/gzip',
+        'Content-Length': String(data.length),
+      },
+      body: data,
+    });
+    if (!upRes.ok) {
+      const body = await upRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 upload failed: ${upRes.status} — ${body}`);
+    }
+    return {
+      bytes: data.length,
+      checksum, // SHA-256 (matches warm-tier convention; B2 also tracks SHA-1 internally)
+      uri: `b2://${bucket}/${path}`,
+    };
+  }
+
+  async downloadCold(bucket: string, path: string): Promise<DownloadResult> {
     if (!this.isColdConfigured()) {
       throw new Error('[B75 storage-client] cold storage not configured');
     }
-    throw new Error('[B75 storage-client] cold download not yet implemented (Phase 2)');
+    const auth = await this.b2Authorize();
+    const url = `${auth.downloadUrl}/file/${bucket}/${encodePath(path)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: auth.accountAuthToken },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 download failed: ${res.status} — ${body}`);
+    }
+    const data = Buffer.from(await res.arrayBuffer());
+    return {
+      bytes: data.length,
+      checksum: sha256Hex(data),
+      data,
+    };
+  }
+
+  async deleteCold(bucket: string, path: string): Promise<void> {
+    // B2 deletes go by fileId, not by name. Need to first list_file_versions to get fileId.
+    if (!this.isColdConfigured()) {
+      throw new Error('[B75 storage-client] cold storage not configured');
+    }
+    const auth = await this.b2Authorize();
+    // Find the file's fileId
+    const listRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_file_names`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.accountAuthToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bucketId: await this.b2ResolveBucketId(bucket),
+        startFileName: path,
+        maxFileCount: 1,
+      }),
+    });
+    if (!listRes.ok) {
+      const body = await listRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 list_file_names failed: ${listRes.status} — ${body}`);
+    }
+    const lj = (await listRes.json()) as { files: Array<{ fileId: string; fileName: string }> };
+    const file = lj.files.find((f) => f.fileName === path);
+    if (!file) return; // already gone
+    const delRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.accountAuthToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fileId: file.fileId, fileName: path }),
+    });
+    if (!delRes.ok) {
+      const body = await delRes.text().catch(() => '');
+      throw new Error(`[B75 storage-client] B2 delete failed: ${delRes.status} — ${body}`);
+    }
   }
 }
 
