@@ -1,0 +1,185 @@
+/**
+ * ═════════════════════════════════════════════════════════════════════════════
+ * B75 — Warm → Cold Rotator
+ * ═════════════════════════════════════════════════════════════════════════════
+ *
+ * Monthly 03:00 UTC on the 1st. For each manifest row in tier='warm' with
+ * `created_at < now() - <warm_retention_days>`, copy the JSONL.gz from the
+ * warm bucket to cold tier (Backblaze B2), verify, then delete the warm copy.
+ *
+ * Cron line:
+ *   0 3 1 * * deploy cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-cold-rotator.ts >> /var/log/dawntrader/b75-cold-rotator.log 2>&1
+ *
+ * Until B2 credentials are provisioned (B2_KEY_ID / B2_APPLICATION_KEY /
+ * B2_BUCKET) AND `data_lifecycle.cold_rotator_dry_run = false`, this script
+ * runs in dry-run mode: enumerates candidates, logs them, performs no I/O.
+ *
+ * Reference: BATCH_75_SCOPE.md §C.10 + BATCH_75_PRE_AUDIT.md §F
+ * ═════════════════════════════════════════════════════════════════════════════
+ */
+
+import 'dotenv/config';
+import pg from 'pg';
+import { getStorageClient } from '../services/data-archive/storage-client.js';
+
+const { Client } = pg;
+
+interface Cfg {
+  warmRetentionDays: number;
+  coldRotatorDryRun: boolean;
+  warmBucket: string;
+  warmPrefix: string;
+  coldBucket: string;
+  coldPrefix: string;
+  coldProvider: string;
+}
+
+async function loadConfig(client: pg.Client): Promise<Cfg> {
+  const r = await client.query(
+    `SELECT constant_name, value FROM module_constants WHERE module_name = 'data_lifecycle'`,
+  );
+  const map = new Map<string, unknown>();
+  for (const row of r.rows) map.set(row.constant_name, row.value);
+
+  function reqStr(key: string): string {
+    const v = map.get(key);
+    if (typeof v !== 'string') {
+      throw new Error(`[B75 rotator] missing or non-string data_lifecycle.${key}`);
+    }
+    return v;
+  }
+  function reqNum(key: string): number {
+    const v = map.get(key);
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+      throw new Error(`[B75 rotator] missing or invalid numeric data_lifecycle.${key}`);
+    }
+    return v;
+  }
+  function reqBool(key: string): boolean {
+    const v = map.get(key);
+    if (typeof v !== 'boolean') {
+      throw new Error(`[B75 rotator] missing or non-boolean data_lifecycle.${key}`);
+    }
+    return v;
+  }
+
+  return {
+    warmRetentionDays: reqNum('default_warm_retention_days'),
+    coldRotatorDryRun: reqBool('cold_rotator_dry_run'),
+    warmBucket: reqStr('warm_bucket'),
+    warmPrefix: reqStr('warm_prefix'),
+    coldBucket: reqStr('cold_bucket'),
+    coldPrefix: reqStr('cold_prefix'),
+    coldProvider: reqStr('cold_provider'),
+  };
+}
+
+interface Candidate {
+  id: string;
+  source_table: string;
+  partition_label: string;
+  storage_uri: string;
+  row_count: number;
+  bytes_compressed: number;
+  checksum: string;
+  created_at: Date;
+}
+
+async function listCandidates(client: pg.Client, cfg: Cfg): Promise<Candidate[]> {
+  const cutoff = new Date(Date.now() - cfg.warmRetentionDays * 86_400_000);
+  const r = await client.query(
+    `SELECT id, source_table, partition_label, storage_uri, row_count, bytes_compressed,
+            checksum, created_at
+       FROM data_archive_manifest
+      WHERE tier = 'warm'
+        AND state = 'active'
+        AND created_at < $1
+        -- Skip if a cold row already exists for this partition (rotation in flight or done)
+        AND NOT EXISTS (
+          SELECT 1 FROM data_archive_manifest m2
+           WHERE m2.source_table = data_archive_manifest.source_table
+             AND m2.partition_label = data_archive_manifest.partition_label
+             AND m2.tier = 'cold'
+        )
+      ORDER BY created_at ASC`,
+    [cutoff],
+  );
+  return r.rows;
+}
+
+async function main(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    console.error('[B75 rotator] DATABASE_URL not set');
+    process.exit(1);
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[B75 rotator] SUPABASE_SERVICE_ROLE_KEY not set');
+    process.exit(1);
+  }
+
+  const startedAt = new Date();
+  const ctl = new Client({ connectionString: process.env.DATABASE_URL });
+  await ctl.connect();
+
+  let cfg: Cfg;
+  try {
+    cfg = await loadConfig(ctl);
+  } finally {
+    await ctl.end();
+  }
+
+  const storage = getStorageClient();
+  const coldConfigured = storage.isColdConfigured();
+
+  // Resolve dry-run mode: explicitly via constant OR implicitly when cold creds missing
+  const dryRun = cfg.coldRotatorDryRun || !coldConfigured;
+  console.log(
+    `[B75 rotator] started at ${startedAt.toISOString()} ` +
+      `dry_run=${dryRun} cold_provider=${cfg.coldProvider} cold_configured=${coldConfigured} ` +
+      `warm_retention_days=${cfg.warmRetentionDays}`,
+  );
+
+  const listClient = new Client({ connectionString: process.env.DATABASE_URL });
+  await listClient.connect();
+  let candidates: Candidate[];
+  try {
+    candidates = await listCandidates(listClient, cfg);
+  } finally {
+    await listClient.end();
+  }
+
+  if (candidates.length === 0) {
+    console.log('[B75 rotator] no candidates older than warm retention window');
+    return;
+  }
+
+  console.log(`[B75 rotator] candidates=${candidates.length}`);
+  for (const c of candidates) {
+    console.log(
+      `[B75 rotator] candidate: table=${c.source_table} partition=${c.partition_label} ` +
+        `bytes=${c.bytes_compressed} created_at=${c.created_at.toISOString()}`,
+    );
+  }
+
+  if (dryRun) {
+    console.log(
+      '[B75 rotator] DRY RUN — no rotations performed. ' +
+        'Set data_lifecycle.cold_rotator_dry_run=false AND configure B2 credentials to enable.',
+    );
+    return;
+  }
+
+  // Phase 2: real rotation logic. For each candidate:
+  //   1. downloadWarm → buffer
+  //   2. uploadCold → verify checksum match
+  //   3. INSERT new manifest row (tier='cold', state='active') with cold_storage_uri
+  //   4. UPDATE warm manifest row → state='migrated', tier_changed_at=NOW()
+  //   5. deleteWarm
+  console.log('[B75 rotator] Phase 2 (real rotation) not yet implemented');
+  console.log(`[B75 rotator] DONE candidates=${candidates.length} duration_ms=${Date.now() - startedAt.getTime()}`);
+}
+
+main().catch((err) => {
+  console.error('[B75 rotator] fatal:', err);
+  process.exit(1);
+});

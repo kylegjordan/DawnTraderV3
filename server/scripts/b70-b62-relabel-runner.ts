@@ -3,6 +3,18 @@
  * B70.1 — B62 Retroactive Labels Runner
  * ═════════════════════════════════════════════════════════════════════════════
  *
+ * ⚠️  B75 NOTE: this script reads `crypto_spot_ohlc_1m` (see fetchOhlcForRelabel
+ *     below). Under the B75 tiered-storage architecture, OHLC partitions older
+ *     than `data_lifecycle.crypto_spot_ohlc_1m.hot_retention_days` (default 365)
+ *     are exported to warm tier and DROPped from the hot tier. BEFORE
+ *     RE-RUNNING this script against a date range whose partitions have been
+ *     dropped, you MUST first restore the data via
+ *         npx tsx server/scripts/b75-rehydrate.ts \
+ *           --table crypto_spot_ohlc_1m --from <date> --to <date> --out /tmp/r/
+ *     and load the JSONL.gz back into a temporary partition (or query directly
+ *     via duckdb). Otherwise relabel results for those dates will silently
+ *     fall to path 2 (`requires_ohlc_backfill=true`).
+ *
  * Re-classifies historical VTS closed trades under the current B62-post-audit
  * regime classifier and populates `b62_retroactive_labels` with the original
  * vs retroactive comparison.
