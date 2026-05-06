@@ -919,6 +919,50 @@ The regime classifier overhaul + external data integration plan lives at `Claude
 
 ---
 
+## B76 — Chain-Final Calibration Framework Refactor (2026-05-06, commit `235237ffd` + hotfix `c8b8709ed`)
+
+**Architectural change to the B67.0 ablation framework — see B67.0 section below for the underlying emitter contract that B76 amends.**
+
+**Two-pass stash-then-build pattern** added to both orchestrator emit paths (`signal-orchestrator.ts:682-995` + `vts-runner.ts:1456-1759`). PASS 1 at each factor's fire point pushes a `FactorAlternateInput` discriminated-union record onto a stash; PASS 2 after the post-floor clamp on `_modulatedConfChain` calls `buildAllAlternates(stash, chainFinalConfidence, regimeLabel)`. **`emitAblationRecord` contract amended (signature unchanged):** callers MUST pass chain-final `realDecision.confidence`. Raw classifier value preserved at `realDecision.metadata.predictiveConfidenceRaw`. Every row stamped `realDecision.metadata.calibrationFrameworkVersion = CALIBRATION_FRAMEWORK_VERSION` (exported TS const = `'b76_chain_final'`).
+
+**New file:** `server/services/factor-ablation-builders.ts` (~210 LOC). Discriminated-union `FactorAlternateInput` (8 kinds: `b67_1`, `b67_2`, `b67_4`, `b68_1`, `b68_2`, `b68_3`, `b68_4`, `b68_5`). `buildAllAlternates(inputs, realConfidenceFinal, realRegimeLabel)` dispatcher with TS-exhaustiveness check. b67_1 expands to 3 alternates; others 1:1. B68.5 special-cases label-counterfactual (re-runs `calculatePairRegime` with gate disabled; chain-final reference attached for completeness but not used in divide-out math).
+
+**New helper:** `buildB67_2Alternate` in `server/core/metrics/regime-phase.ts` (extracted from inline blocks duplicated in both orchestrators). Divide-by-weight semantics; metadata key rename `confidence_with_phase_pref` → `confidence_with_factor` for uniformity.
+
+**Drift-dashboard-aggregator changes** (`server/services/drift-dashboard-aggregator.ts`): two `factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')` filters at L504 (computeAblationComparison) + L1052 (computeFactorCalibration) REMOVED. L1052 replaced with version-filter logic per Langston Step-1 §4 revision: keep row IF (factor not in 6 sensitive names) OR (has chain-final marker). Other 7 factors don't need the filter — predictive lift cancels first-order bias.
+
+### Forward-couples (post-B76)
+
+- **Edit `factor-ablation-emitter.ts` chain-final contract** → must update `emitAblationRecord` JSDoc + every `emitAblationRecord(...)` call site to maintain "callers pass chain-final" invariant. 2 call sites: `signal-orchestrator.ts:963` + `vts-runner.ts:1701`.
+- **Edit `factor-ablation-builders.ts` discriminated union** → must update each orchestrator's `_alternateInputs.push({ kind: ..., ... })` site + `buildOneAlternate` switch arm. TS exhaustiveness check catches missing kinds at compile time.
+- **Add a new factor producer post-B76** → (a) add `kind` to `FactorAlternateInput` union, (b) add dispatch arm in `buildOneAlternate`, (c) add `buildXAlternate` helper (positional first arg = realConfidenceFinal), (d) add stash push at fire point in BOTH orchestrators. Do NOT call build helper inline at fire point — that's the pre-B76 anti-pattern.
+- **Edit `drift-dashboard-aggregator.ts:1052` factor calibration query** → if you add a new factor name, decide whether it needs the version filter. Rule: factors that are FIRST in chain (b67_1_*, b67_2_*) DO need it; later-chain factors typically don't.
+- **Bump CALIBRATION_FRAMEWORK_VERSION** (future framework rev) → must (a) add the new value to the aggregator's accepted version set, (b) update unit-test fixtures, (c) document the cohort cutover in MEMORY + CHANGES_AND_FIXES.
+
+### Blast radius
+
+**MEDIUM-LOW.** Confined to calibration framework (1 emitter + 1 new dispatcher + 9 helpers + 2 orchestrator emit sites + 1 aggregator file). **Zero trading-path consumers** (live trading is OFF; even when ON, factor-ablation-emitter is observability infrastructure, not decision input). Reversibility: pure code revert (no schema migration). Risk to running positions = 0.
+
+### Cohort distinguishability
+
+Pre-B76 `regime_factor_alternates` rows: missing `realDecision.metadata.calibrationFrameworkVersion`. Post-B76 rows: present with value `'b76_chain_final'`. Use this marker to filter cohorts wherever the chain-final shift changes interpretation (b67_1_* + b67_2_* — first-in-chain factors). Aggregator `computeFactorCalibration` already enforces this filter for those 6 factor names. Other 7 factors (b67_4, b68_1, b68_2, b68_3, b68_4, b68_5) safe to mix cohorts because predictive lift (REAL spread − ALT spread) cancels first-order bias by construction.
+
+### Verification (live)
+
+```sql
+-- All 10 factor names should appear within 24h post-deploy
+SELECT factor_name, COUNT(*)
+FROM regime_factor_alternates
+WHERE real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final'
+GROUP BY factor_name;
+```
+
+Expected: b67_1_btc_dominance, b67_1_funding_rates, b67_1_mcap_momentum, b67_2_phase_preference, b67_4_outcome_feedback, b68_1_multi_tf_agreement, b68_2_volume_regime, b68_3_pair_correlation, b68_4_regime_age, b68_5_path_b_sustainability.
+
+Within 24-48h: drift-dashboard factor calibration table should show non-zero shift on `b67_1_*` + `b67_2_phase_preference` rows (was 0 by construction pre-B76). Predictive lift on B68.1 (+5.7), B68.2 (+4.1), B68.3 (+4.1), B67.4 (+3.0) should preserve sign + stay within ±1pp of pre-B76 values.
+
+---
+
 ## B67.0 — Telemetry & Ablation Framework (2026-04-28, commit `105d2b53`)
 
 **New service:** `server/services/factor-ablation-emitter.ts`. Fire-and-forget `emitAblationRecord(source, pairSymbol, realDecision, alternates)` API with discriminated `AblationSource = { kind: 'active_signal'; signalId: number } | { kind: 'vts_trade'; vtsTradeId: string }` union. Gated on `module_constants.ablation_framework.b67_0_ablation_emit_enabled` (default true). Bulk insert one row per (source, factor); empty alternates short-circuits to no-op. Errors caught + logged; classifier never blocks on emit.
