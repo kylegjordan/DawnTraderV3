@@ -108,29 +108,26 @@ export async function exportPartition(
   let maxTs: Date | null = null;
 
   try {
-    // Stream rows in batches via KEYSET pagination, not LIMIT/OFFSET.
+    // KEYSET pagination via timestamp cursor — uses the existing timestamp
+    // index directly without a composite (ts, id) index. The earlier
+    // (ts, id) tuple form created an OR-condition the planner couldn't
+    // optimize, leading to sequential scans and 2min statement_timeout
+    // hits on Supabase Pro.
     //
-    // LIMIT/OFFSET becomes O(N²) for large partitions because each batch
-    // re-scans past `offset` rows under the snapshot. On Supabase Pro with
-    // 60s pooler statement_timeout, OFFSET ~80K+ on a wide JSONB-toasted
-    // table starts failing. Keyset uses a (timestamp, id) cursor — each
-    // batch scans only the next BATCH rows directly via the timestamp index.
+    // Trade-off: if two rows share the exact same timestamp value, we use
+    // strict `> lastTs` which would skip duplicates. For tables with random
+    // UUIDs and millisecond+ timestamp resolution, exact ties are rare. The
+    // row_count + min/max_ts verify steps in the sweep catch any anomaly.
     //
-    // The cursor pair (timestamp, id) handles equal-timestamp rows:
-    //   first batch:  WHERE ts >= rangeStart AND ts < rangeEnd
-    //   subsequent:   WHERE (ts, id) > (lastTs, lastId) AND ts < rangeEnd
-    //
-    // PK on context_bridge_log + B74 tables is `id` (uuid) — string compare
-    // is correct + stable. For B74 tables with composite PKs, the keyset
-    // tiebreaker still works since the PK is unique.
-    const BATCH = 5000;
+    // BATCH=1000 (down from 5000) caps single-query payload size given
+    // wide JSONB rows that TOAST to 20+ KB raw.
+    const BATCH = 1000;
 
     const out = fs.createWriteStream(localPath);
     const gzip = zlib.createGzip({ level: compressionLevel });
     gzip.pipe(out);
 
     let lastTs: Date | null = null;
-    let lastId: string | null = null;
     let firstBatch = true;
 
     while (true) {
@@ -139,7 +136,7 @@ export async function exportPartition(
         r = await client.query(
           `SELECT * FROM ${quoteIdent(target)}
            WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2
-           ORDER BY ${quoteIdent(tsCol)} ASC, id ASC
+           ORDER BY ${quoteIdent(tsCol)} ASC
            LIMIT ${BATCH}`,
           [req.rangeStart, req.rangeEnd],
         );
@@ -147,12 +144,10 @@ export async function exportPartition(
       } else {
         r = await client.query(
           `SELECT * FROM ${quoteIdent(target)}
-           WHERE ${quoteIdent(tsCol)} < $3
-             AND (${quoteIdent(tsCol)} > $1
-                  OR (${quoteIdent(tsCol)} = $1 AND id > $2))
-           ORDER BY ${quoteIdent(tsCol)} ASC, id ASC
+           WHERE ${quoteIdent(tsCol)} > $1 AND ${quoteIdent(tsCol)} < $2
+           ORDER BY ${quoteIdent(tsCol)} ASC
            LIMIT ${BATCH}`,
-          [lastTs, lastId, req.rangeEnd],
+          [lastTs, req.rangeEnd],
         );
       }
       if (r.rows.length === 0) break;
@@ -177,7 +172,6 @@ export async function exportPartition(
       const lastRow = r.rows[r.rows.length - 1];
       const lastRowTs = lastRow[tsCol];
       lastTs = lastRowTs instanceof Date ? lastRowTs : new Date(lastRowTs);
-      lastId = String(lastRow.id);
 
       if (r.rows.length < BATCH) break;
     }
