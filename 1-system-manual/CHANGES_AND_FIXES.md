@@ -1,5 +1,32 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+---
+
+## INFRA-2026-05-06-B — B75 Data Lifecycle / Tiered Storage shipped (RESOLVED 2026-05-06)
+
+**Trigger:** Supabase auto-expanded staging DB disk 12 → 18 GB on 2026-05-06 05:10 UTC. DB at 10.0 GB / 18 GB. Daily growth ~1.4 GB/day, ~75% from B74 passive-archive tables. At current rate hits 200 GB Pro auto-expand cap by ~September 2026. Internal `DatabaseMonitor` alarm firing "88.7% of 10 GiB" because hardcoded threshold was stale post-auto-expand.
+
+**Resolution (B75):** Tiered hot/warm/cold storage architecture per Kyle directive: "we don't ever drop data." Move-not-delete tiers preserving full-fidelity data indefinitely at ~$0.001/GB-month cold-tier cost. HOT=Supabase disk (30d ticker / 365d OHLC / 14d ctx-bridge). WARM=Supabase Storage JSONL.gz (~6× cheaper, 365d retention). COLD=Backblaze B2 (~125× cheaper, indefinite, never deleted).
+
+**Components shipped (commits `f4e6a73f6` + hotfix `b2f9f531a`, PM2 #172 → #174):** `data_archive_manifest` table with state machine (`pending → uploaded → verified → active → migrating → migrated`); `data_lifecycle` module (18 rows); `database_monitor` module (3 rows; `plan_cap_mb=204800` against 200 GB Pro cap, stable across auto-expansions); `b75-retention-sweep.ts` (cron 02:15 UTC, export-then-drop fence with REPEATABLE READ snapshot + post-upload re-read checksum verify + min/max_ts verify); `context-bridge-log-ttl.ts` (cron 02:30 UTC, month-grouped export + DELETE rounded to month-start so partial-month rows never deleted, tail VACUUM); `b75-rehydrate.ts` CLI (manifest-driven analytics restore); `b75-cold-rotator.ts` (cron 03:00 UTC monthly, dry-run until B2 creds); `storage-client.ts` (native fetch wrapper, zero new npm deps, 45 MB upload guard); `database-monitor.ts` parameterized — **alarm transitioned CRITICAL (88.7% / 10 GiB stale) → NORMAL (5.2% / 200 GB plan cap)** verified live; `b70-b62-relabel-runner.ts` header guard added.
+
+**Renumber note:** Originally drafted as B73. Step 2 pre-audit grep found B73 was already shipped 2026-04-29 (Exit-Strategy Ablation Framework + B73.1/.2/.3 + 5 source files using `b73-` prefix). Kyle confirmed renumber to B75. Original B73 scope file restored.
+
+**Hotfix `b2f9f531a`:** Supabase rolled out new Publishable/Secret API key system mid-2025. The new `sb_secret_*` format is not a JWT — Storage API rejects it as "Invalid Compact JWS" if sent only as `Authorization: Bearer`. Fix is sending both `apikey` and `Authorization: Bearer` headers. Caught during dt-archive bucket provisioning post-PM2 #173.
+
+**Pending external (non-blocking):**
+- ~~SUPABASE_SERVICE_ROLE_KEY in staging .env~~ — RESOLVED 2026-05-06 (Kyle action via SSH).
+- Backblaze B2 account + 4 env vars + flip `data_lifecycle.cold_rotator_dry_run=false` — pending Kyle action; cold rotator stays dry-run until.
+
+**B75.x deferred follow-ups (logged for future batches):** keyset pagination (LIMIT/OFFSET → keyset cursor) for performance with 10M+ row partitions; multipart/TUS upload for >45 MB warm objects; partition `context_bridge_log` (B75.1); partition `execution_attempt_audit` + `walter_memory` (B75.2); Phase 2 cold-rotator wiring; migrate `data_archive.b70_postgres_retention_days` into `data_lifecycle` registry.
+
+**Langston review trail:** Step 1 rev 1 + rev 2 + Step 2 pre-audit + Step 4 code review (B1 drop `updated_at` + B2 round delete cutoff to month-start fixes applied pre-push). **First batch end-to-end on the new Langston-on-Claude-Code bridge architecture.** SDK session-lock contention discovered + workaround documented in CLAUDE.md §8.2.
+
+**Linked records:** scope `BATCH_75_SCOPE.md` (rev 3); pre-audit `BATCH_75_PRE_AUDIT.md`; completion report `BATCH_75_COMPLETION_REPORT.md`; PHASE_HISTORY entry under "Phase 15c continuation 2026-05-06"; BATCH_CATALOG row.
+
+---
+
+
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-15
 > **Purpose**: Tracks all bugs, architectural issues, inefficiencies, and recommended changes discovered during the systematic repository audit. Each item includes severity, location, verification status, and recommended timing (pre-MCE vs during-MCE vs post-MCE).

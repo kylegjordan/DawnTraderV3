@@ -10825,3 +10825,63 @@ Rows seeded but source-side wiring deferred — each needs different pattern tha
 ---
 
 *End of Configuration Surface appendix. Last updated 2026-05-05 with B72 main close.*
+
+---
+
+# Data Lifecycle Policy (B75 — 2026-05-06)
+
+> Governs how operational data ages out of the live SQL database into colder, cheaper, longer-retention storage. **Operating principle (Kyle directive 2026-05-06):** *"we don't ever drop data, especially not now when we're not sure what data is going to be valuable and when."* Data is **moved** between tiers, never deleted at any tier boundary.
+
+## Tier definitions
+
+| Tier | Storage | Cost / GB-month | Latency | Use |
+|---|---|---|---|---|
+| HOT | Supabase Postgres disk | ~$0.125 | ms (indexed SQL) | Live trading paths, dashboard panels, recent backtests |
+| WARM | Supabase Storage `dt-archive` (private, service-role) | ~$0.021 (~6× cheaper) | seconds (HTTPS download → duckdb / polars / pandas) | Analytics jobs, training-set assembly, mid-range backtests |
+| COLD | Backblaze B2 `dt-archive-cold` (us-east-005, private) | ~$0.006 (~125× cheaper than disk) | seconds (B2 native API download) | Multi-year retros, scheduled ML training pulls |
+
+Cost projection at current ingest (~511 GB/year B74 substrate): 5 years full-fidelity in cold ≈ $2.55/month total.
+
+## Per-table hot retention
+
+Defined in `module_constants.module_name = 'data_lifecycle'`:
+
+| Table | Hot retention | Rationale |
+|---|---|---|
+| `equity_spot_ticker_snap` / `equity_perp_ticker_snap` / `crypto_spot_ticker_snap` | 30d | High-churn tick data; older redundant with OHLC |
+| `equity_spot_ohlc_1m` / `equity_perp_ohlc_1m` / `crypto_spot_ohlc_1m` | 365d | Trend Mining Engine annual-cycle requirement (Phase 17.6/18.5) |
+| `context_bridge_log` | 14d | WebSocket broadcast audit trail; observability sink |
+
+## Manifest (rehydration seam)
+
+Single source of truth: `data_archive_manifest`. State machine `pending → uploaded → verified → active → migrating → migrated`. Crash recovery resumes from last good state. UNIQUE on `(source_table, partition_label, tier)` allows warm + cold rows to coexist during rotation.
+
+Future ML/analytics schedulers query the manifest once instead of needing to know storage layout. Rehydrate via `b75-rehydrate.ts --table X --from D1 --to D2 --out PATH [--restore-cold]`.
+
+## Sweep schedule
+
+| Cron | Script | Action |
+|---|---|---|
+| `0 2 * * *` | `b70-retention-sweep.ts` | B70 archive tables (signal pipeline events) — UNCHANGED |
+| `15 2 * * *` | `b75-retention-sweep.ts` | B74 6 tables export-then-drop fence |
+| `30 2 * * *` | `context-bridge-log-ttl.ts` | Month-grouped export + DELETE rounded to month-start + tail VACUUM |
+| `0 3 1 * *` | `b75-cold-rotator.ts` | Monthly warm→cold rotation (objects > `default_warm_retention_days=365`) |
+
+## Format + protocol
+
+- **JSONL.gz** (gzip level 6) — inherited from B70 (zero new npm deps; universally readable).
+- **Warm uploads** route by size: ≤40 MB single-call REST, >40 MB TUS resumable (6 MiB chunks). 5 GB hard cap per object. Required because Supabase Storage REST hard-limits single-call at ~50 MB even for service-role keys.
+- **Storage REST auth** — both `apikey` and `Authorization: Bearer` headers (Supabase rolled out `sb_secret_*` non-JWT format mid-2025 that's rejected as "Invalid Compact JWS" if sent only as Bearer).
+- **Cold tier** — Backblaze B2 native bearer-auth API; 23h auth-token cache. Up to 5 GB single-call.
+
+## Database monitor
+
+`module_constants.database_monitor.*` — `plan_cap_mb=204800` (Supabase Pro 200 GB cap, **stable across disk auto-expansions**), `warning_threshold_pct=0.65`, `critical_threshold_pct=0.80`. Pre-B75 thresholds hardcoded against obsolete 10 GiB cap; alarm transitioned CRITICAL → NORMAL post-deploy.
+
+## Forward-couples
+
+- **Trend Mining Engine** (Phase 17.6/18.5, post-launch) — B74 OHLC tables + manifest+warm rehydration for older periods.
+- **Future ML/analytics scheduler** — wraps `b75-rehydrate.ts`.
+- **B70 retention sweep** — UNCHANGED in B75 (purely additive). Future B75.x can migrate B70 knob into per-table `data_lifecycle.*` registry.
+
+*End of Data Lifecycle Policy. Last updated 2026-05-06 with B75 close.*

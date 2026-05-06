@@ -1293,3 +1293,80 @@ Worst-case 7-modulator compound `0.85⁴ × 0.92² × 0.95 ≈ 0.419` engages th
 
 **B67.5 consumer wiring** — gated on B67.4 calibration check ~2026-05-15. Wires confidence into 7 consumers + deletes legacy `RegimeWeight` code path + handles deferred RUNNING_ISSUES #44 (active-path orchestrator emit hook OHLC any-cast across all 7 chain factors) + #45 (active-path persist hook). When B67.5 lands, the chain transitions from observational to operational.
 
+---
+
+## B75 — Data Lifecycle / Tiered Storage (2026-05-06, commits `f4e6a73f6` → `1ee802fd3` → `23865757e`, PM2 #172 → #175)
+
+Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don't ever drop data, especially not now when we're not sure what data is going to be valuable and when." **Move-not-delete at every tier boundary**; full-fidelity historical data preserved indefinitely at ~$0.001/GB-month cold-tier cost.
+
+| Tier | Storage | Retention | Cost / GB-month |
+|---|---|---|---|
+| HOT | Supabase disk (live SQL) | 30d ticker / 365d OHLC / 14d ctx-bridge | ~$0.125 |
+| WARM | Supabase Storage `dt-archive` (JSONL.gz) | 365d, then rotated to cold | ~$0.021 |
+| COLD | Backblaze B2 `dt-archive-cold` (JSONL.gz, B2 native API bearer auth) | indefinite — never deleted | ~$0.006 |
+
+**Originally drafted as B73**; renumbered to B75 in Step 2 pre-audit after grep found B73 was already shipped 2026-04-29 (Exit-Strategy Ablation Framework + B73.1/.2/.3 + 5 source files using `b73-` prefix).
+
+### B75 components inventory
+
+| # | Component | Path | Status |
+|---|---|---|---|
+| 1 | data_archive_manifest table (single source of truth, state machine `pending → uploaded → verified → active → migrating → migrated`, UNIQUE on `(source_table, partition_label, tier)`) | `drizzle/migrations/2026-05-06-b75-data-lifecycle.sql` | ✅ LIVE |
+| 2 | data_lifecycle module_constants (18 rows: per-table hot retention + warm retention + bucket config + sweep tunables + format) | `module_constants.module_name='data_lifecycle'` | ✅ Seeded |
+| 3 | database_monitor module (3 rows: `plan_cap_mb=204800` against 200 GB Supabase Pro cap, `warning_threshold_pct=0.65`, `critical_threshold_pct=0.80`) | `module_constants.module_name='database_monitor'` | ✅ Seeded |
+| 4 | Storage client (Supabase Storage warm via fetch + REST; Backblaze B2 cold via native bearer-auth API; 23h auth-token cache; B2_BUCKET_ID env override; 500 MB single-call upload guard; SHA-256 + SHA-1 helpers) | `server/services/data-archive/storage-client.ts` | ✅ LIVE |
+| 5 | Partition exporter (REPEATABLE READ snapshot + LIMIT/OFFSET batched export → /tmp gzip → SHA-256 of file) | `server/services/data-archive/partition-exporter.ts` | ✅ LIVE |
+| 6 | B74 export-then-drop sweep (cron 02:15 UTC, full fence: insert pending → snapshot+export → upload → re-read+verify checksum → min/max_ts verify → manifest verified → DROP partition → manifest active) | `server/scripts/b75-retention-sweep.ts` | ✅ LIVE |
+| 7 | context_bridge_log export-then-TTL+VACUUM (cron 02:30 UTC, month-grouped export + DELETE rounded to month-start → tail VACUUM no-FULL) | `server/scripts/context-bridge-log-ttl.ts` | ✅ LIVE |
+| 8 | Rehydrate CLI (`--table X --from D1 --to D2 --out PATH [--restore-cold]`; tstzrange overlap query; SHA-256 verify on download; warm + cold paths) | `server/scripts/b75-rehydrate.ts` | ✅ LIVE |
+| 9 | Cold rotator (cron 03:00 UTC monthly 1st, full Phase-2 wiring: download warm → upload cold → verify by re-download checksum match → INSERT cold manifest row → UPDATE warm to migrated → deleteWarm; dry-run when `cold_rotator_dry_run=true` OR cold creds missing) | `server/scripts/b75-cold-rotator.ts` | ✅ LIVE |
+| 10 | DatabaseMonitor parameterized (reads `database_monitor.*` constants; **alarm CRITICAL→NORMAL**: 88.7% / 10 GiB stale → 5.2% / 200 GB plan cap, verified PM2 #172 logs) | `server/services/database-monitor.ts` | ✅ LIVE |
+| 11 | b70-b62-relabel-runner header guard ("BEFORE RE-RUNNING confirm partitions hot or rehydrate first" — Langston Step-2 F4 ask) | `server/scripts/b70-b62-relabel-runner.ts` | ✅ LIVE |
+| 12 | Supabase Storage `dt-archive` bucket (private, service-role write) | provisioned via Storage REST POST /bucket | ✅ LIVE |
+| 13 | Backblaze B2 `dt-archive-cold` bucket (us-east-005, private, encryption enabled, keep-all-versions) | Kyle action 2026-05-06 | ✅ LIVE |
+| 14 | B2 cold-tier round-trip smoke test (60-byte upload + download + checksum verify + delete) | `server/scripts/b75-b2-smoke.ts` | ✅ PASS 2026-05-06 |
+
+### B75 hot-path / cron impact
+
+- **Cron entries** (Hetzner staging, `/etc/cron.d/dawntrader`):
+  - `15 2 * * *` — `b75-retention-sweep.ts` (B74 6 tables export-then-drop)
+  - `30 2 * * *` — `context-bridge-log-ttl.ts` (export-then-TTL+VACUUM)
+  - `0 3 1 * *` — `b75-cold-rotator.ts` (monthly warm→cold)
+- **Hot-path side-effects:** ZERO new hot-path consumers. Sweeps run as off-hours batch crons; DELETE/DROP doesn't block concurrent INSERT writers; VACUUM is plain (no-FULL) so no exclusive locks. `database-monitor.ts` runs once at startup + every 24h (existing cadence).
+
+### B75 forward-couples
+
+- **Trend Mining Engine (Phase 17.6 / 18.5, post-launch)** — consumes B74 OHLC tables (1m candles). Hot retention (365d) + manifest+warm rehydration covers any analytical window. Trend Mining Engine queries the manifest first to know what's available where; pulls from warm (or rehydrates from cold) for older periods. **Schema-stable** via `archive_schema_version=1` in manifest rows.
+- **Future ML/analytics scheduler (post-launch)** — wraps `b75-rehydrate.ts` CLI. Manifest is the rehydration seam: scheduler queries `data_archive_manifest` for "what exists, where" without needing to know storage layout. Cold-tier rehydration is the slow path (B2 download is sec-latency, not min-latency).
+- **B70 retention sweep** — UNCHANGED. Continues running on `b70_postgres_retention_days=90` global knob. Migration of B70 sweep into per-table `data_lifecycle.<table>.hot_retention_days` registry deferred to a future B75.x.
+
+### B75 known limitations / deferred to B75.x
+
+- **Keyset pagination** — partition-exporter currently uses LIMIT/OFFSET. Acceptable for first sweeps but becomes O(N²) for B74 ticker partitions ~10M rows expected late June. B75.x follow-up: replace with `(timestamp, id)` keyset cursor.
+- **Multipart/TUS upload** — single-call upload guard at 500 MB. Service-role REST tested up to ~99 MB single-call without issue. If we ever hit a real Supabase hard limit, B75.x adds TUS resumable.
+- **Phase 2 cold rotator UNFAILED RECOVERY** — if upload completes but warm-delete fails, next run sees cold row exists + skips correctly. But if upload completes + warm-row UPDATE to migrated completes + warm-delete fails, next run still skips (NOT EXISTS … tier='cold' filter). **Manual cleanup needed** in that edge case (delete warm bucket object). Logged for future automation.
+
+### B75 cron timing (full schedule on Hetzner staging)
+
+```
+0  2 * * * deploy ... b70-retention-sweep.ts ...      (B70 archive tables, unchanged)
+15 2 * * * deploy ... b75-retention-sweep.ts ...      (B74 export-then-drop)
+30 2 * * * deploy ... context-bridge-log-ttl.ts ...   (export-then-TTL+VACUUM)
+45 2 * * * deploy ... pg_dump data_archive_manifest ... (manifest backup, deferred install)
+0  3 1 * * deploy ... b75-cold-rotator.ts ...         (monthly warm→cold)
+```
+
+### B75 hotfix history (within batch close window)
+
+- **commit `b2f9f531a`** — storage-client adds `apikey` header alongside `Authorization: Bearer` for Supabase's new `sb_secret_*` API key format (rolled out mid-2025; new keys aren't JWTs and Storage API rejects them as "Invalid Compact JWS" if sent only as Bearer).
+- **commit `1ee802fd3`** — sha256OfFile pipeline bug fix (was hanging in broken `pipeline(src, async function*)` pattern); warm-tier upload guard relaxed 45 → 500 MB; cold tier Phase 2 implemented (uploadCold/downloadCold/deleteCold via B2 native API); cold rotator real rotation logic; rehydrate `--restore-cold` path.
+- **commit `23865757e`** — B2 accountId capture from authorize response (was hacky regex returning invalid value); B2_BUCKET_ID env override.
+
+### "If I Change X, Check Y" — B75 additions
+
+- **`data_lifecycle.<table>.hot_retention_days` UPDATE** → next 02:15/02:30 UTC sweep uses new value. Affects which partitions get exported. Lower → more archived per night; higher → less. Does NOT affect rows already archived.
+- **`data_lifecycle.cold_rotator_dry_run` UPDATE** → flips cold rotator between dry-run (logs candidates only) and real rotation. Cold rotator runs monthly so flip takes effect on next 03:00 UTC on 1st.
+- **`database_monitor.plan_cap_mb` UPDATE** → DatabaseMonitor next 24h tick re-computes alarm against new cap. Should ONLY change if Supabase plan changes (Free 0.5GB / Pro 200GB / Team 1TB / Enterprise unlimited).
+- **Add a new periodic table to retention** → INSERT one row in `data_lifecycle` (e.g. `mytable.hot_retention_days=N`) + add table spec to `B74_TABLES` array in `b75-retention-sweep.ts` if partitioned, or fold into `context-bridge-log-ttl.ts` pattern if unpartitioned. Otherwise no code change.
+- **Move to S3 instead of B2** → swap `storage-client.ts` `uploadCold`/`downloadCold` to use `@aws-sdk/client-s3`. Manifest URI scheme changes from `b2://` to `s3://`. `b75-rehydrate.ts` URI parser already prefix-aware; one-line fix there too. UPDATE `data_lifecycle.cold_provider='s3'` for human-readable tracking.
+

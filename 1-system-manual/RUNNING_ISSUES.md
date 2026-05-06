@@ -139,9 +139,24 @@
 | 58 | **B70.1 — Parquet exporter.** Off-by-default toggle `b70_parquet_export_enabled` in module_constants. Cron at 03:00 UTC daily, writes prior-day rows to `/var/lib/dawntrader/parquet/<table>/<YYYY-MM-DD>.parquet`. Use `parquetjs-lite` per Langston cc-inbox #893 B.3. Off until 7-day Postgres-side capture proven. | RESOLVED 2026-05-05 commit `919e7015` — shipped as JSONL.gz (not Parquet) to avoid new npm dep (`parquetjs-lite` is unmaintained + GDrive npm install EBADF). JSONL is universally readable by pandas / DuckDB / tsfresh / mlfinlab / Qlib. Pyarrow sidecar can convert JSONL → Parquet later if columnar speedup needed. | Toggle name `b70_parquet_export_enabled` retained even though format is JSONL — semantic is "off-host archival exports enabled". |
 | 59 | **B70.1 — Unit tests for archiver layer.** Per-archiver synthetic-event tests + integration test (joinable-by-timestamp across all 4 tables). Deferred from B70 main because hot-path hooks are try/catch wrapped and live integration on staging proved end-to-end. | RESOLVED 2026-05-05 commits `7c1bfafd` + `3555f600`. Two test files: `b70-archive-batch-writer.test.ts` (registerArchiveTable idempotency / enqueue / drop-OLDEST overflow / JSONB column detection / per-table independent stats) + `b70-run-mode-controller.test.ts` (default 'vts' / live > paper > vts precedence / hold-on-error / sync getter). | Plus SYSTEM_MANUAL.md "Data Capture Architecture" appendix added per Langston cc-inbox #899. |
 
-## Summary Counts (updated 2026-05-04 post-B69.x + B73.3)
-- **RESOLVED:** 40 (no new resolutions in B69.x/B73.3 — all four fixes are deferred-to-verification status)
-- **DEFERRED:** 6 (#44 active-path emit OHLC; #45 active-path persist hook; #12e regime-gated dormancy; #40 other 4 regime-branch desat; #52 OHLC-shape map duplication tech debt; #54 calibration aggregator framework refactor)
+## B75 — New Issues Logged 2026-05-06
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 60 | **DatabaseMonitor stale 10 GiB threshold** — alarm firing "88.7% of 10 GiB" since Supabase auto-expanded staging disk 12 → 18 GB on 2026-05-06. Hardcoded thresholds in `database-monitor.ts:31-37` against an obsolete cap. | RESOLVED 2026-05-06 (B75 commit `f4e6a73f6`) | Parameterized against `database_monitor` module: `plan_cap_mb=204800` (200 GB Pro plan cap, stable across auto-expansions per Langston rec #3). Verified live PM2 #172: alarm CRITICAL → NORMAL (5.2% / 200 GB plan cap). |
+| 61 | **B73 number reuse collision** — Step 2 grep found B73 was already shipped 2026-04-29 (Exit-Strategy Ablation Framework + sub-batches + 5 source files). | RESOLVED 2026-05-06 | Renumbered data-lifecycle batch to B75. Original B73 scope file restored. Audit discipline: every new batch's Step 2 must grep for the proposed batch number. |
+| 62 | **B75.x — Keyset pagination** — `partition-exporter.ts` LIMIT/OFFSET becomes O(N²) for B74 ticker partitions ~10M rows expected late June 2026. | DEFERRED — B75.x | Replace with `(timestamp, id)` keyset cursor when first B74 ticker partition becomes sweep candidate. |
+| 63 | **B75.x — Multipart/TUS upload for warm tier** — single-call guard 500 MB. If Supabase enforces a real hard limit, add TUS resumable. | DEFERRED — B75.x | Not blocking; current sweeps tested up to 99 MB without issue. |
+| 64 | **B75.x — Cold-rotator unfailed-recovery edge case** — if upload + warm-UPDATE complete but warm-delete fails, manual cleanup needed. | DEFERRED — B75.x | Mitigated by deleteWarm being last step. |
+| 65 | **B75.1 — Partition `context_bridge_log` going forward.** No-downtime migration. | DEFERRED — separate batch | After B75 the table has TTL retention so size stays bounded. |
+| 66 | **B75.2 — Partition `execution_attempt_audit` (153 MB) + `walter_memory` (139 MB).** | DEFERRED — separate batch | Low-priority compared to B74 ticker snaps. |
+| 67 | **B75.x — Migrate `b70_postgres_retention_days` knob into `data_lifecycle.<table>.hot_retention_days` registry.** | DEFERRED — separate batch | B75 leaves B70 sweep untouched (additive). |
+| 68 | **Supabase new `sb_secret_*` API key format** rejected by Storage REST as "Invalid Compact JWS" if sent only via `Authorization: Bearer`. | RESOLVED 2026-05-06 (B75 hotfix `b2f9f531a`) | `storage-client.ts` sends both `apikey` and `Authorization: Bearer` headers. |
+| 69 | **B75 sha256OfFile pipeline hang bug** — `pipeline(src, async function*) { yield chunk; }` blocks forever (no downstream sink). First manual sweep hung 30+ min after Dec archive completed. | RESOLVED 2026-05-06 (B75 hotfix `1ee802fd3`) | Replaced with plain `for await` loop over stream. Verified via re-run + B2 round-trip smoke test. |
+
+## Summary Counts (updated 2026-05-06 post-B75)
+- **RESOLVED:** 43 (added 2026-05-06: #60 DatabaseMonitor stale alarm; #61 B73→B75 renumber; #68 Supabase new key format; #69 sha256 hang bug)
+- **DEFERRED:** 12 (added 2026-05-06: #62 keyset pagination; #63 multipart/TUS; #64 cold-rotator edge case; #65 B75.1 partition ctx-bridge; #66 B75.2 partition audit/walter; #67 B70 knob registry migration)
 - **CRITICAL:** 0
 - **IN PROGRESS:** 1 (#42 — narration leak)
-- **OPEN:** 7 (#39 CI TS legacy; #43 B67.4 calibration observation; #46 passive archive partition-aware index; #49 B68.2 calibration observation; #50 B68.3 calibration observation; #53 B68.1 calibration observation; #55 B69.x/B73.3 fix verification)
+- **OPEN:** 7 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification)

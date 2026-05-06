@@ -49,9 +49,11 @@
 ## CURRENT STATE — 2026-05-06
 
 - **Branch:** `migration/aws-supabase`
-- **Most recent HEAD:** `6c42dc370` (B72.2 wiring) on top of `eeabb7147` (B72.2 SQL seed). PM2 #171.
-- **Live:** B70 family + B72 + B72.1 + B72.2 FULL. **18/18 canonical strategies DB-tunable.** 49 modules / ~311 rows in `module_constants`.
-- **DB-only UPDATEs (no commits):** `b67_5_post_composition_floor=0.20`, `b68_5_path_b_momentum_min=0.002`, `moonbag_qualifying_strategies=[]`. Path B gate: `(absDbs ≥ 0.30 && mom > 0.002)`. Trailing-after-target DISABLED.
+- **Most recent HEAD:** `f4e6a73f6` (B75 Step 3 ship). PM2 #172.
+- **Live:** B70 family + B72 family + **B75 Data Lifecycle (tiered storage)**. 18/18 canonical strategies DB-tunable. 49 + 2 = 51 modules / ~332 rows in `module_constants`.
+- **DB-only UPDATEs (no commits):** `b67_5_post_composition_floor=0.20`, **`b68_5_path_b_momentum_min=0.001`** (lowered 0.002→0.001 per B75 close Langston consensus), `moonbag_qualifying_strategies=[]`. Path B gate: `(absDbs ≥ 0.30 && mom > 0.001)`. Trailing-after-target DISABLED.
+- **DatabaseMonitor:** alarm CRITICAL→NORMAL (5.2% of 200 GB plan cap, was 88.7% of stale 10 GiB).
+- **B75 sweep verified end-to-end 2026-05-06:** 1,548,341 rows archived (1 cold + 3 warm), 1.16 GB recovered, all 4 manifest rows active. Cold-tier auto-fallback fired correctly on Dec 99 MB archive.
 
 ---
 
@@ -67,21 +69,31 @@ Completion reports: `BATCH_72_COMPLETION_REPORT.md` (with §L correcting the wro
 
 ---
 
-## B73 — NEXT BATCH (data lifecycle / storage cost)
+## B75 — SHIPPED 2026-05-06 (data lifecycle / tiered storage)
 
-**Trigger:** Supabase auto-expanded disk 12 → 18 GB on 2026-05-06 (email 5:10 AM). Current DB 9.5 GB / 18 GB allocated. Daily growth ~1.4 GB/day, mostly from equity_spot_ticker_snap (~670 MB/day, 60% of growth). At current rate hits 200 GB Pro auto-expand cap ~Sep 2026.
+> **Renumber note:** Originally drafted as B73. Step 2 pre-audit grep found B73 was already shipped 2026-04-29 (Exit-Strategy Ablation Framework + B73.1/.2/.3 + 5 source files). Kyle confirmed renumber to B75. Original B73 scope file restored.
 
-**Scope (queued):**
-1. Define retention policies per archive table (equity_spot_ticker_snap, equity_perp_ticker_snap, equity_spot_ohlc_1m, crypto_spot_ohlc_1m, signal_eval_archive, etc.).
-2. Build partition-drop / cold-storage job (older partitions → Supabase Storage at ~$0.021/GB-month, 6× cheaper than disk).
-3. **Fix internal `DatabaseMonitor` 10 GB stale alarm threshold** — currently fires "88.7% of 10 GiB" since auto-expand made 10 GB obsolete.
-4. **TTL `context_bridge_log` rows older than 14 days** — recovers ~1.2 GB immediately. Currently 1.65M rows back to 2025-12-26 (~5 months retention with no TTL job). It's the WebSocket broadcast audit trail (`server/services/context-bridge.ts`) — observability sink, NOT load-bearing for trading.
-5. Partition `context_bridge_log` going forward; same for `execution_attempt_audit` (153 MB, no partition) and `walter_memory` (139 MB, static legacy).
-6. **Target:** cut daily growth from ~1.4 GB/day to <500 MB/day; recover ~3-4 GB historical bloat.
+**Architecture (Kyle directive: "we don't ever drop data"):** tiered hot/warm/cold. HOT=Supabase disk (30d ticker / 365d OHLC / 14d ctx-bridge). WARM=Supabase Storage JSONL.gz (~6× cheaper, sec latency, 365d retention). COLD=Backblaze B2 JSONL.gz (~125× cheaper, indefinite, never deleted). 5y full-fidelity B74 in cold ≈ $2.55/mo. Move-not-delete at every boundary.
 
-**B73 is the live test of the new Langston-on-Claude-Code setup.** First batch run end-to-end with the new bridges. Round-trip validation happens organically via Step 2/4/8 review gates.
+**Live:** PM2 #172, HEAD `f4e6a73f6`. 12 files / 2,653 LOC. Migration applied: 18 `data_lifecycle` rows + 3 `database_monitor` rows + 0 manifest rows. **DatabaseMonitor alarm CRITICAL→NORMAL** (5.2% / 200 GB plan cap). All 3 sweeps + rehydrate CLI + cold rotator deployed (cold rotator stays dry-run until B2 creds land).
 
-**Sequencing after B73:** Phase 16 (TS errors + storage.ts modularization) per POST_AUDIT_ROADMAP.
+**Manifest seam:** `data_archive_manifest` table with state machine (pending→uploaded→verified→active→migrating→migrated), UNIQUE(source_table, partition_label, tier) supporting warm+cold coexistence. Future ML/analytics rehydration schedulers query manifest once instead of needing to know storage layout. CLI `b75-rehydrate.ts --table X --from D1 --to D2 --out PATH [--restore-cold]`.
+
+**Pending Kyle external (non-blocking):**
+1. `SUPABASE_SERVICE_ROLE_KEY` to staging .env — needed for sweeps to run. Source: `https://supabase.com/dashboard/project/vqqyisaudwenrdhnmjwt/settings/api` (service_role, NOT anon).
+2. Backblaze B2 account + 4 env vars (B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET, B2_ENDPOINT) + flip `data_lifecycle.cold_rotator_dry_run=false`. Cold rotator stays dry-run until.
+
+**B75.x deferrals (logged):** keyset pagination (LIMIT/OFFSET acceptable for first sweeps; becomes O(N²) hot for B74 ticker partitions ~10M rows expected late June); multipart upload for >45MB warm objects; partition `context_bridge_log` (B75.1); partition `execution_attempt_audit` + `walter_memory` (B75.2); Phase 2 cold-rotator wiring; B70 `b70_postgres_retention_days` migration into `data_lifecycle` registry.
+
+**Bridge architecture validated end-to-end** in this batch (Langston Steps 1 rev1+rev2, 2, 4 all completed via SSH+claude-cli delivery). SDK session-lock contention discovered: when bridge daemon polls Telegram, the canonical session UUID is locked; SSH delivery must either (a) stop bridge first, OR (b) use fresh UUID for one-off delivery. Bridge restart resumes Kyle↔Langston Telegram on canonical UUID without context loss. Documented in CLAUDE.md §8.2.
+
+**Sequencing after B75:**
+1. **B76 — Calibration aggregator framework refactor** (RUNNING_ISSUES #54, Langston consensus). Must land BEFORE B67.5 wiring (~2026-05-15). 1-2 day focused batch. Refactor `emitAblationRecord` to take chain-final values across all 10 buildXAlternate helpers so per-factor predictive lift becomes trustworthy on first chain modulator (b67_2_phase_preference shows +0.0pp lift today purely due to measurement bug).
+2. **K.1 — Disable BE-stop** (per B75 close exit-ablation finding: variant K Sharpe 2.13 vs current J Sharpe 0.39, ~+98 P&L%/week extrapolated). Likely Kyle-driven separate batch.
+3. Phase 16 (TS errors + storage.ts modularization).
+4. B75.x deferrals (#K.5 partition ctx-bridge, #K.6 partition audit/walter, #K.7 B70 knob registry migration) — interleave when triggered.
+
+**B75 close pending external Kyle action (non-blocking):** bump Supabase project Storage 'Maximum file size' at https://supabase.com/dashboard/project/vqqyisaudwenrdhnmjwt/settings/storage to 5 GB. Currently caps every upload regardless of bucket; with it bumped, future archives consistently land in warm tier.
 
 ---
 
@@ -117,6 +129,7 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 | B70 + B70.1/.2/.3/.3b | 2026-05-04 → -05 | Unified archive + Path B momentum gate + floor drop |
 | **B72 + B72.1 + B72.2** | 2026-05-05/06 | CLOSED. 18/18 canonical strategies DB-tunable. 49 modules / ~311 rows |
 | **Comms migration (Langston OpenClaw → CC Max)** | 2026-05-06 | Custom Python bridges replace OpenClaw. ~$550/mo savings. New send protocol per CLAUDE.md §6. |
+| **B75 (Data Lifecycle / Tiered Storage)** | 2026-05-06 | CLOSED. Hot/warm/cold tiered architecture per Kyle's "never drop data" directive. DatabaseMonitor alarm CRITICAL→NORMAL. Originally drafted as B73; renumbered after pre-audit found B73 was already shipped 2026-04-29. |
 
 ---
 
