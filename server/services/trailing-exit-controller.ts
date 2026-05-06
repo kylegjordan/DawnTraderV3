@@ -448,11 +448,14 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   // When false (variant K post-ablation winner), trades track original SL → TP
   // only and never latch break-even. Reversible via DB UPDATE.
   if (cachedConfig.breakEvenEnabled && !state.breakEvenLatched && state.ATR > 0) {
-    if (isBreakEvenTriggered(update.currentPrice, state.entryPrice, state.ATR)) {
+    // B77 (2026-05-07, RUNNING_ISSUES #71 fix): pass breakEvenTriggerR explicitly
+    // so the trailing_exit.break_even_trigger_r module_constant actually drives
+    // the gate (was a no-op since B65.1).
+    if (isBreakEvenTriggered(update.currentPrice, state.entryPrice, state.ATR, cachedConfig.breakEvenTriggerR)) {
       state.breakEvenLatched = true;
       // Directive 11.3A: Use net breakeven (accounts for costs) instead of gross entry
       newStopPrice = Math.max(newStopPrice, netBreakeven);
-      console.log(`[9.2][LOCK] ${update.symbol} BREAK-EVEN latched @ ${netBreakeven.toFixed(4)} (net, 1×ATR gain)`);
+      console.log(`[9.2][LOCK] ${update.symbol} BREAK-EVEN latched @ ${netBreakeven.toFixed(4)} (net, ${cachedConfig.breakEvenTriggerR}×ATR gain)`);
     }
   }
   

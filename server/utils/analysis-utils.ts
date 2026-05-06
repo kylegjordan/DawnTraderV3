@@ -347,20 +347,33 @@ export type TradeMode = 'TARGET' | 'TRAILING_TAKE';
 
 /**
  * Directive 9.2.C: Break-Even trigger calculation
- * Returns true if price has reached 1×ATR gain from entry.
+ * Returns true if price has reached `breakEvenTriggerR × ATR` gain from entry.
+ *
+ * **B77 (2026-05-07, RUNNING_ISSUES #71 fix):** previously this function
+ * hardcoded `gain >= ATR` (1×ATR exactly), making the
+ * `trailing_exit.break_even_trigger_r` `module_constants` row a no-op since
+ * B65.1 (~2026-04-23). The constant was plumbed into `TrailingExitConfig`
+ * + `TECExitDecision.resolvedConstants` for diagnostics but never consulted
+ * by the runtime. Surfaced during B75 close variant-K implementation.
+ * **Resolution:** thread the multiplier explicitly so future re-enables for
+ * non-crypto asset classes (or with non-1.0 trigger thresholds) work as
+ * intended. Default 1.0 preserves pre-B77 behavior for any caller that
+ * omits the argument.
  *
  * @param currentPrice - Current market price
  * @param entryPrice - Trade entry price
  * @param ATR - Average True Range
+ * @param breakEvenTriggerR - Multiplier on ATR (default 1.0). `gain >= ATR * breakEvenTriggerR` triggers BE.
  * @returns true if break-even trigger is reached
  */
 export function isBreakEvenTriggered(
   currentPrice: number,
   entryPrice: number,
-  ATR: number
+  ATR: number,
+  breakEvenTriggerR: number = 1.0,
 ): boolean {
   const gain = currentPrice - entryPrice;
-  return gain >= ATR;
+  return gain >= ATR * breakEvenTriggerR;
 }
 
 /**

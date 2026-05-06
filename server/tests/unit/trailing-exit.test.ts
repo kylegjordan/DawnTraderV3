@@ -57,9 +57,29 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
   });
 
   describe('9.2.C: Break-Even & Target Lock Latch', () => {
-    it('should trigger break-even at 1×ATR gain', () => {
+    it('should trigger break-even at 1×ATR gain (default multiplier)', () => {
       expect(isBreakEvenTriggered(102, 100, 2)).toBe(true);
       expect(isBreakEvenTriggered(101, 100, 2)).toBe(false);
+    });
+
+    // B77 (2026-05-07, RUNNING_ISSUES #71): explicit breakEvenTriggerR multiplier
+    // now drives the gate. Previously hardcoded to 1×ATR — was a no-op since B65.1.
+    it('should respect breakEvenTriggerR multiplier > 1.0', () => {
+      // 1.5×ATR threshold = 3.0 gain required against ATR=2
+      expect(isBreakEvenTriggered(103, 100, 2, 1.5)).toBe(true);   // gain=3 == 1.5×2
+      expect(isBreakEvenTriggered(102.99, 100, 2, 1.5)).toBe(false);
+      expect(isBreakEvenTriggered(102, 100, 2, 1.5)).toBe(false);  // gain=2 < 3
+    });
+
+    it('should respect breakEvenTriggerR multiplier < 1.0', () => {
+      // 0.5×ATR threshold = 1.0 gain required against ATR=2
+      expect(isBreakEvenTriggered(101, 100, 2, 0.5)).toBe(true);
+      expect(isBreakEvenTriggered(100.99, 100, 2, 0.5)).toBe(false);
+    });
+
+    it('omitting breakEvenTriggerR defaults to 1.0 (back-compat)', () => {
+      expect(isBreakEvenTriggered(102, 100, 2)).toBe(isBreakEvenTriggered(102, 100, 2, 1.0));
+      expect(isBreakEvenTriggered(101, 100, 2)).toBe(isBreakEvenTriggered(101, 100, 2, 1.0));
     });
 
     it('should trigger target lock when price hits target', () => {
