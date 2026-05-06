@@ -154,9 +154,20 @@
 | 68 | **Supabase new `sb_secret_*` API key format** rejected by Storage REST as "Invalid Compact JWS" if sent only via `Authorization: Bearer`. | RESOLVED 2026-05-06 (B75 hotfix `b2f9f531a`) | `storage-client.ts` sends both `apikey` and `Authorization: Bearer` headers. |
 | 69 | **B75 sha256OfFile pipeline hang bug** — `pipeline(src, async function*) { yield chunk; }` blocks forever (no downstream sink). First manual sweep hung 30+ min after Dec archive completed. | RESOLVED 2026-05-06 (B75 hotfix `1ee802fd3`) | Replaced with plain `for await` loop over stream. Verified via re-run + B2 round-trip smoke test. |
 
-## Summary Counts (updated 2026-05-06 post-B75)
-- **RESOLVED:** 43 (added 2026-05-06: #60 DatabaseMonitor stale alarm; #61 B73→B75 renumber; #68 Supabase new key format; #69 sha256 hang bug)
-- **DEFERRED:** 12 (added 2026-05-06: #62 keyset pagination; #63 multipart/TUS; #64 cold-rotator edge case; #65 B75.1 partition ctx-bridge; #66 B75.2 partition audit/walter; #67 B70 knob registry migration)
+## B75 close — additional issues 2026-05-06
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 70 | **Variant K (BE-stop disable) shipped** — Exit Strategy Ablation 7d window decisive (Sharpe 2.13 vs current J 0.39). Code commit `d6d2430ce` adds `break_even_enabled` flag to TEC config; DB UPDATE flips it to false. PM2 #177. | RESOLVED 2026-05-06 | See OPS-2026-05-06-A in CHANGES_AND_FIXES. Forward-monitor: 24h ablation should show J→K trend over 1-3 days. |
+| 71 | **`isBreakEvenTriggered` no-op since B65.1** — `break_even_trigger_r` module_constant plumbed but never consulted by runtime. `gain >= ATR` hardcoded in `utils/analysis-utils.ts:357-364`. ~2 weeks of constant-as-no-op surfaced during variant K implementation. | DEFERRED — future batch | Not fixed in B75 close because variant K disables BE entirely; multiplier moot. Future batch: thread `breakEvenTriggerR` through `isBreakEvenTriggered` OR deprecate the constant as documented no-op. |
+| 72 | **Supabase project Storage Maximum file size raised to 5 GB** by Kyle (2026-05-06). Future archives can land in warm tier without triggering cold-fallback. Cold-fallback path retained for >5 GB cases or B2-only routing. | RESOLVED 2026-05-06 | Done via dashboard UI. |
+
+## Summary Counts (updated 2026-05-06 post-B75 close + variant K)
+- **RESOLVED:** 46 (added 2026-05-06: #60 stale alarm; #61 renumber; #68 new key format; #69 sha256 hang; #70 variant K shipped; #72 Supabase file_size_limit bump)
+- **DEFERRED:** 13 (added 2026-05-06: #62 keyset pagination; #63 multipart/TUS; #64 cold-rotator edge case; #65 B75.1 partition ctx-bridge; #66 B75.2 partition audit/walter; #67 B70 knob registry migration; #71 isBreakEvenTriggered no-op)
+- **CRITICAL:** 0
+- **IN PROGRESS:** 1 (#42 — narration leak)
+- **OPEN:** 7 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification)
 - **CRITICAL:** 0
 - **IN PROGRESS:** 1 (#42 — narration leak)
 - **OPEN:** 7 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification)

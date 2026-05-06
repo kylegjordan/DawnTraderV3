@@ -2,6 +2,27 @@
 
 ---
 
+## OPS-2026-05-06-A — Variant K applied (BE-stop disabled) + latent isBreakEvenTriggered no-op surfaced (RESOLVED 2026-05-06)
+
+**Trigger:** B75 close Exit Strategy Ablation calibration analysis. 7-day window n=1256 per variant, READY status. Variant K (`no_BE_no_trail`) showed Sharpe 2.13 / mean +0.482% / WR 68.6% vs current state J (BE on, trailing-after-target off) at Sharpe 0.39 / mean +0.428% / WR 55.7%. Δ vs A baseline +0.078% per trade × 1256 trades/week ≈ +98 P&L%/week extrapolated. Kyle directive 2026-05-06: implement variant K.
+
+**Latent bug discovered during implementation:** the `trailing_exit.break_even_trigger_r` module_constant (seeded B65.1, value 1.0) was being plumbed into `TrailingExitConfig.breakEvenTriggerR` and into `TECExitDecision.resolvedConstants` for diagnostics — but **never actually consulted by the runtime**. `isBreakEvenTriggered(currentPrice, entryPrice, ATR)` in `server/utils/analysis-utils.ts:357-364` hardcodes `gain >= ATR` (1×ATR exactly), no R multiplier. So the constant has been a no-op since B65.1 (~2026-04-23, ~2 weeks). All BE-latch behavior matched the seeded value of 1.0 by coincidence. If the constant had been changed to e.g. 1.5 expecting the BE-latch to fire later, it would have silently continued at 1.0. Logged but **not fixed in B75 close** — variant K disables BE entirely so the multiplier becomes moot. Future batch can either (a) thread `breakEvenTriggerR` through `isBreakEvenTriggered`, or (b) deprecate the constant as a documented no-op.
+
+**Resolution (B75 close):**
+- Code commit `d6d2430ce`: added `breakEvenEnabled: boolean` to `TrailingExitConfig` (default `true` for back-compat). Trailing-exit-controller's BE-latch block at `trailing-exit-controller.ts:438` now gated on `cachedConfig.breakEvenEnabled`. Single point of control; the only place `breakEvenLatched` flips true.
+- DB UPDATE: `INSERT module_constants` (`trailing_exit`, `break_even_enabled`, `false`, `kyle-2026-05-06-disable-be-stop-variant-k`).
+- PM2 #177 restart (clears 60s TEC config cache + reloads bundle).
+
+**Reversibility:** seconds via `UPDATE module_constants SET value='true' WHERE module_name='trailing_exit' AND constant_name='break_even_enabled'`. Cache picks up within 60s OR PM2 restart for instant.
+
+**Verification at deploy:** PM2 logs grep `BREAK-EVEN latched` post-#177 should show zero new latch firings (open trades from pre-#177 retain `breakEvenLatched=true` state). New trades opened post-#177 must never log a BE-latch.
+
+**Forward monitoring:** 24h window of Exit Strategy Ablation should show variant J stats trend toward variant K stats over the next 1-3 days as the live system's exit-reason distribution shifts away from `break_even_stop` toward `target_hit` and `stop_hit`. If trend doesn't materialize → revert via DB UPDATE and investigate.
+
+**Linked:** B75 close exit-ablation finding §H.1 of `BATCH_75_COMPLETION_REPORT.md`. Future batch should either fix the no-op `break_even_trigger_r` consultation OR deprecate the constant.
+
+---
+
 ## INFRA-2026-05-06-B — B75 Data Lifecycle / Tiered Storage shipped (RESOLVED 2026-05-06)
 
 **Trigger:** Supabase auto-expanded staging DB disk 12 → 18 GB on 2026-05-06 05:10 UTC. DB at 10.0 GB / 18 GB. Daily growth ~1.4 GB/day, ~75% from B74 passive-archive tables. At current rate hits 200 GB Pro auto-expand cap by ~September 2026. Internal `DatabaseMonitor` alarm firing "88.7% of 10 GiB" because hardcoded threshold was stale post-auto-expand.

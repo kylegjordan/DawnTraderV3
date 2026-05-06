@@ -51,7 +51,7 @@
 - **Branch:** `migration/aws-supabase`
 - **Most recent HEAD:** `f4e6a73f6` (B75 Step 3 ship). PM2 #172.
 - **Live:** B70 family + B72 family + **B75 Data Lifecycle (tiered storage)**. 18/18 canonical strategies DB-tunable. 49 + 2 = 51 modules / ~332 rows in `module_constants`.
-- **DB-only UPDATEs (no commits):** `b67_5_post_composition_floor=0.20`, **`b68_5_path_b_momentum_min=0.001`** (lowered 0.002→0.001 per B75 close Langston consensus), `moonbag_qualifying_strategies=[]`. Path B gate: `(absDbs ≥ 0.30 && mom > 0.001)`. Trailing-after-target DISABLED.
+- **DB-only UPDATEs (no commits):** `b67_5_post_composition_floor=0.20`, **`b68_5_path_b_momentum_min=0.001`** (lowered 0.002→0.001 per B75 close Langston consensus), `moonbag_qualifying_strategies=[]`. Path B gate: `(absDbs ≥ 0.30 && mom > 0.001)`. Trailing-after-target DISABLED. **`break_even_enabled=false`** (post-B75 variant K — disable BE-stop per Exit Strategy Ablation 7d window: variant K Sharpe 2.13 vs current J at 0.39, ~+98 P&L%/week; required code change `d6d2430ce` because existing `break_even_trigger_r` constant was a no-op since B65.1, then DB UPDATE).
 - **DatabaseMonitor:** alarm CRITICAL→NORMAL (5.2% of 200 GB plan cap, was 88.7% of stale 10 GiB).
 - **B75 sweep verified end-to-end 2026-05-06:** 1,548,341 rows archived (1 cold + 3 warm), 1.16 GB recovered, all 4 manifest rows active. Cold-tier auto-fallback fired correctly on Dec 99 MB archive.
 
@@ -93,7 +93,7 @@ Completion reports: `BATCH_72_COMPLETION_REPORT.md` (with §L correcting the wro
 3. Phase 16 (TS errors + storage.ts modularization).
 4. B75.x deferrals (#K.5 partition ctx-bridge, #K.6 partition audit/walter, #K.7 B70 knob registry migration) — interleave when triggered.
 
-**B75 close pending external Kyle action (non-blocking):** bump Supabase project Storage 'Maximum file size' at https://supabase.com/dashboard/project/vqqyisaudwenrdhnmjwt/settings/storage to 5 GB. Currently caps every upload regardless of bucket; with it bumped, future archives consistently land in warm tier.
+**B75 close pending external Kyle action: RESOLVED 2026-05-06.** Kyle bumped Supabase project Storage Global file size limit to 5 GB. Future archives will land in warm tier consistently (cold-fallback path remains for >5 GB or B2 native ≤5 GB).
 
 ---
 
