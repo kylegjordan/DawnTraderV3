@@ -88,10 +88,11 @@ Completion reports: `BATCH_72_COMPLETION_REPORT.md` (with §L correcting the wro
 **Bridge architecture validated end-to-end** in this batch (Langston Steps 1 rev1+rev2, 2, 4 all completed via SSH+claude-cli delivery). SDK session-lock contention discovered: when bridge daemon polls Telegram, the canonical session UUID is locked; SSH delivery must either (a) stop bridge first, OR (b) use fresh UUID for one-off delivery. Bridge restart resumes Kyle↔Langston Telegram on canonical UUID without context loss. Documented in CLAUDE.md §8.2.
 
 **Sequencing after B75:**
-1. **B76 — Calibration aggregator framework refactor** (RUNNING_ISSUES #54, Langston consensus). Must land BEFORE B67.5 wiring (~2026-05-15). 1-2 day focused batch. Refactor `emitAblationRecord` to take chain-final values across all 10 buildXAlternate helpers so per-factor predictive lift becomes trustworthy on first chain modulator (b67_2_phase_preference shows +0.0pp lift today purely due to measurement bug).
-2. **K.1 — Disable BE-stop** (per B75 close exit-ablation finding: variant K Sharpe 2.13 vs current J Sharpe 0.39, ~+98 P&L%/week extrapolated). Likely Kyle-driven separate batch.
-3. Phase 16 (TS errors + storage.ts modularization).
-4. B75.x deferrals (#K.5 partition ctx-bridge, #K.6 partition audit/walter, #K.7 B70 knob registry migration) — interleave when triggered.
+1. **B76 — Calibration aggregator framework refactor** (RUNNING_ISSUES #54, Langston consensus). Must land BEFORE B67.5 wiring (~2026-05-15). 1-2 day focused batch. Refactor `emitAblationRecord` to take chain-final values across all 10 buildXAlternate helpers so per-factor predictive lift becomes trustworthy on first chain modulator (b67_2_phase_preference shows +0.0pp lift today purely due to measurement bug). **Langston discipline: do NOT bundle anything else into B76.**
+2. **B77 — Fix `isBreakEvenTriggered` no-op (RUNNING_ISSUES #71)** — Kyle directive 2026-05-06. Thread `breakEvenTriggerR` multiplier through the function so future re-enables for non-crypto asset classes or with non-1.0 thresholds work correctly. ~1 hour code + unit tests. Standalone batch immediately after B76 close (NOT bundled per Langston). **Variant K's `break_even_enabled=false` keeps BE off in the meantime — there's no live trader-impacting bug, but #71 must close before any future BE re-enable.**
+3. ~~K.1 — Disable BE-stop~~ — RESOLVED 2026-05-06 in B75 close (variant K applied via code commit `d6d2430ce` + DB UPDATE).
+4. Phase 16 (TS errors + storage.ts modularization).
+5. B75.x deferrals (#K.5 partition ctx-bridge, #K.6 partition audit/walter, #K.7 B70 knob registry migration) — interleave when triggered.
 
 **B75 close pending external Kyle action: RESOLVED 2026-05-06.** Kyle bumped Supabase project Storage Global file size limit to 5 GB. Future archives will land in warm tier consistently (cold-fallback path remains for >5 GB or B2 native ≤5 GB).
 
