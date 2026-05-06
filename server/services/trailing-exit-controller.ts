@@ -51,6 +51,13 @@ export function getConcurrentMoonbagCount(mode: CallerMode): number {
 // B65.2: cached trailing_exit module constants with 60s TTL to avoid
 // hammering the service per cycle per trade.
 interface TrailingExitConfig {
+  // Post-B75 (2026-05-06): operator kill-switch for the BE-stop latch. When
+  // false, BE never latches and the trade tracks original SL → TP only
+  // (matches Exit Strategy Ablation variant K). Set via DB UPDATE on
+  // `trailing_exit.break_even_enabled` (default true). Adopted after the
+  // 7d ablation showed variant K (no BE) at Sharpe 2.13 vs current J
+  // (BE on, trail off) at Sharpe 0.39.
+  breakEvenEnabled: boolean;
   breakEvenTriggerR: number;
   targetLockR: number;
   trailDistanceAtrMultiplier: number;
@@ -67,6 +74,7 @@ interface TrailingExitConfig {
 }
 
 const TEC_DEFAULTS: TrailingExitConfig = {
+  breakEvenEnabled: true, // historical default; live setting will be flipped to false post-B75 ablation
   breakEvenTriggerR: 1.0,
   targetLockR: 1.5,
   trailDistanceAtrMultiplier: 1.0,
@@ -99,6 +107,7 @@ async function resolveTECConfig(strategy?: string, regime?: string): Promise<Tra
       rows[key] !== undefined ? (rows[key] as T) : fallback;
 
     cachedConfig = {
+      breakEvenEnabled: pick('break_even_enabled', TEC_DEFAULTS.breakEvenEnabled),
       breakEvenTriggerR: pick('break_even_trigger_r', TEC_DEFAULTS.breakEvenTriggerR),
       targetLockR: pick('target_lock_r', TEC_DEFAULTS.targetLockR),
       trailDistanceAtrMultiplier: pick('trail_distance_atr_multiplier', TEC_DEFAULTS.trailDistanceAtrMultiplier),
@@ -435,7 +444,10 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   const rungFloorMult = cachedConfig.rungFloorSlippageBufferMultiplier;
   const netTargetFloor = computeNetTargetFloor(state.targetPrice, costMetrics, rungFloorMult);
   
-  if (!state.breakEvenLatched && state.ATR > 0) {
+  // Post-B75 (2026-05-06): BE-latch gated by `trailing_exit.break_even_enabled`.
+  // When false (variant K post-ablation winner), trades track original SL → TP
+  // only and never latch break-even. Reversible via DB UPDATE.
+  if (cachedConfig.breakEvenEnabled && !state.breakEvenLatched && state.ATR > 0) {
     if (isBreakEvenTriggered(update.currentPrice, state.entryPrice, state.ATR)) {
       state.breakEvenLatched = true;
       // Directive 11.3A: Use net breakeven (accounts for costs) instead of gross entry
