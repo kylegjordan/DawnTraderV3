@@ -18,17 +18,23 @@
 
 ---
 
-## CURRENT STATE — 2026-05-07 (post-B78.2 close)
+## CURRENT STATE — 2026-05-07 evening (B79 Step 1+2 closed; Step 3 deferred to next session)
 
 - **Branch:** `migration/aws-supabase`
-- **Most recent HEAD:** `5ec57cbd3` (B78.2 ping hotfix). Previous: `5c3ce00b3` (B78.2 initial), `5348fd005` (B78.1 governance close).
-- **Live:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + **B78.2 (Kraken WS v1→v2 ping/subscribe format fix; RUNNING_ISSUES #76 RESOLVED).**
-- **Watchdog:** `/usr/local/bin/langston-call` on Hetzner. Validated under load: 3 round-trips for B78.2 with 25s/35s/2m45s response times. **Tuning learning (B79):** default 60s first-byte timeout TOO TIGHT for substantive scope reviews (>200 lines + multi-file reads). Use `--first-byte-timeout 180` for substantive batches; default OK for surgical fixes.
-- **Sequencing reset:** B79 (xstock_spot) is next.
-- **DB-only UPDATEs (no commits):** all unchanged. No-touch fence holds.
+- **Most recent HEAD (LOCAL, NOT pushed):** `d7ca57340` (B79 PIA + workflow doc + schema migrations bundle). Previous remote HEAD: `ab73edee9` (B79 rev 7 scope final).
+- **Live:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + B78.2. (B79 NOT yet deployed — only Step 1+2 closed locally.)
+- **Watchdog:** `/usr/local/bin/langston-call`. **Tuning:** `--first-byte-timeout 240` for substantive (>200-line) reviews; default 60s OK for surgical. Saw a 240s first-byte hang on PIA round 1; auto-retry succeeded ~3min later.
+- **B79 status:** Step 1 (scope rev 7) + Step 2 (PIA) **CLOSED** with Langston greenlight (2 PIA review rounds; concession on Q6 to separate-instance partitioning over CC's initial param-plumbing lean). Step 3 implementation **DEFERRED** to next session — see "next session pickup" below.
+- **No-touch fence:** holds. d7ca57340 commit is LOCAL ONLY; nothing pushed/deployed.
+
+### B79 Step 1+2 deliverable (commit d7ca57340)
+- `Claude Comms and Packages/Scope Files/BATCH_79_PRE_AUDIT.md` — PIA per CLAUDE.md §2 Step 2; 3 telemetry partitioning hard blockers identified, resolution = two-instance pattern (separate aggregator + ratio-manager + failure-tracker per asset class)
+- `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — NEW Tier-2 governance, full template + xstock_spot worked example
+- `drizzle/migrations/2026-05-07-b79-screener-filters-asset-class.sql` (+ rollback) — adds asset_class + tunable_status columns to screener_filters; seeds xstock_spot row with NO max_price cap
+- `drizzle/migrations/2026-05-07-b79-xstock-module-constants.sql` (+ rollback) — macro_modifier=1.0 (B79.3 deferred), orb_enabled=false (Q-D-gated), pattern-pool guardrails inherit-from-crypto
 
 ### B78/B78.1/B78.2 quick reference (all shipped 2026-05-07)
-B78=modularization scaffold. B78.1=cycle break (EventEmitter inversion of ws-adapter↔live-pricing). B78.2=Kraken WS v1→v2 ping fix (RUNNING_ISSUES #76 RESOLVED). Forward-watch #74 tomorrow at T+24h. See BATCH_CATALOG entries for full details.
+B78=modularization scaffold. B78.1=cycle break. B78.2=Kraken WS v1→v2 ping fix. Forward-watch #74 at T+24h tomorrow.
 
 ---
 
@@ -83,18 +89,14 @@ Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-
 
 ---
 
-## RECURRING ANALYSIS RECIPE (trigger: "**run the calibration review**")
-
-1. `GET /api/analytics/factor-calibration?window=rolling_7d` — 10-row factor table. Post-B76: aggregator filters chain-final cohort. **Post-B78: aggregator scoped to `asset_class='crypto_spot'`.**
+## RECURRING ANALYSIS RECIPE ("run the calibration review")
+1. `GET /api/analytics/factor-calibration?window=rolling_7d` — 10-row factor table. Post-B78 scoped `asset_class='crypto_spot'`.
 2. `GET /api/analytics/exit-strategy-ablation?window=rolling_7d` — 12-variant table sorted by Sharpe.
-3. **Verify recent fixes:** b68_5 lift drift; trailing-after-target DISABLED; liquidity_trap exclusion; floor 0.20; B72 sync-read API healthy; B76 marker present.
+3. Verify recent fixes: b68_5 lift drift; trailing-after-target DISABLED; liquidity_trap exclusion; floor 0.20; B72 sync-read API healthy; B76 marker present.
 4. Plain-language interpretation + recommendations for B67.5 wiring (~2026-05-15).
 
----
-
-## Calibration windows (active, LOCKED through 2026-05-15)
-
-B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi-TF — gates: tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket. **Pre-B76 reference lifts (24-48h ±1pp anchor):** b67_4 +2.95pp, b68_1 +5.71pp, b68_2 +4.13pp, b68_3 +4.13pp, b68_4 +2.94pp, b68_5 −1.78pp. If any flip post-B76/B78 → revert.
+## Calibration windows (LOCKED through 2026-05-15)
+B67.4/B68.1/B68.2/B68.3/B68.4 — gates: tertile-monotonic WR, ≥7pp gap, p<0.05, n≥150/bucket. Pre-B76 lifts: b67_4 +2.95pp, b68_1 +5.71pp, b68_2 +4.13pp, b68_3 +4.13pp, b68_4 +2.94pp, b68_5 −1.78pp. If any flip post-B76/B78 → revert.
 
 ---
 
@@ -106,7 +108,8 @@ B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi
 | B75 | 2026-05-06 | Hot/warm/cold tiered storage |
 | B76 | 2026-05-06 | Chain-final calibration framework. RUNNING_ISSUES #54 RESOLVED |
 | B77 | 2026-05-07 | `isBreakEvenTriggered` no-op fix. RUNNING_ISSUES #71 RESOLVED |
-| **B78** | **2026-05-07** | **Modularization scaffold. Asset_class + exchange extraction. Pure refactor.** |
+| B78 | 2026-05-07 | Modularization scaffold. Asset_class + exchange extraction. |
+| **B79 Step 1+2** | **2026-05-07 evening** | **PIA Langston-greenlit + workflow doc + schema migrations. Local commit d7ca57340. Step 3 deferred.** |
 
 ---
 
@@ -118,44 +121,37 @@ B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi
 
 ---
 
-## Next session pickup priority (POST-COMPACT 2026-05-07 evening)
+## Next session pickup priority — B79 STEP 3 (post-2026-05-07-night session)
 
-**B79 RE-SCOPED to canonical asset-class onboarding lab per Kyle directive 2026-05-07 evening. Phase 24 NEW.**
+**B79 Step 1+2 CLOSED as of commit d7ca57340 (LOCAL ONLY, not pushed). Phase 24 NEW. Step 3 picks up from here.**
 
-1. **Pre-implementation audit (PIA) per CLAUDE.md §2 Step 2** — gate before B79 implementation kickoff. Read these in order:
-   - `Claude Comms and Packages/Scope Files/BATCH_79_SCOPE.md` **rev 6** (~900 lines) — CONSENSUS reached with Langston (rev 3 deep review + rev 5 pushback iteration; no Kyle escalation needed).
-   - `Claude Comms and Packages/Scope Files/BATCH_79_PLAIN_LANGUAGE_SUMMARY.md` — Kyle's plain-language summary.
-   - `1-system-manual/SYSTEM_IMPACT_MAP.md` for all components in PIA list (rev 4 §10):
-     market-scanner.ts, adaptive-scan-manager.ts, pair-failure-tracker.ts, adaptive-ratio-manager.ts, directional-bias.ts, market-regime.ts, market-context-engine.ts, signal-quality-evaluator, cost-model.ts, paper-execution-engine.ts, trailing-exit-controller.ts, live-pricing-adapter (scope-clarification only), equity-spot-archiver.ts, drift-dashboard-aggregator.ts, portfolio-risk-manager.ts.
-   - Schemas to audit: screener_filters (col add), module_constants, paper_sim_trades, signal_eval_archive, regime_factor_alternates, paper_sim_open_positions.
-   - **TELEMETRY PARTITIONING AUDIT (Langston rev 3 PIA blocker):** PairFailureTracker / AdaptiveRatioManager / predictiveConfidence rolling-window — verify all partition by asset_class. Any non-partitioning component is a B79 hard blocker.
-2. Write PIA report at `Claude Comms and Packages/Scope Files/BATCH_79_PRE_AUDIT.md`. Send to Langston via watchdog `--first-byte-timeout 240` for deep review.
-3. **Build NEW Tier-2 governance doc:** `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — template per scope §6.2. Section H.1 worked example = xstock_spot (B79). Reusable for B80 + future asset classes.
-4. **Implement B79 single-batch per Langston rev 3 §F.** Sub-batches B79.1/.2/.3 trigger ONLY on shadow-mode evidence, not pre-scheduled.
-5. **Confirm B78 + B78.2 forward-watch (RUNNING_ISSUES #74):** at +24h from B78.2 deploy at 14:18 UTC 2026-05-07 — re-run no-touch fence SQL + grep for `Method(s) not found` recurrence. If clean → close #74.
+### CONSENSUS POSITIONS LOCKED (do not relitigate)
+- Telemetry partitioning resolution = **two-instance pattern** (Langston rev 7 + PIA round 2 GREENLIT). Separate AdaptiveScanManager + TelemetryAggregator + AdaptiveRatioManager + PairFailureTracker per asset class. NOT param-plumbing. Rationale: silent-corruption failure-mode resistance.
+- Subagent's 10 uncommitted files vs rev 7: **RIP universe-merge in market-scanner.ts** (Langston rev 7); reconcile other 9.
+- Pattern path 3 strategies Day 1: `inside_bar_reversal`, `morning_star`, `pivot_shift`. Q3 regime-compatibility documented in PIA round-2 reply.
+- ORB Q-D-gated via `module_constants.strategy_gates.xstock_spot.orb.enabled = false` (DB-tunable, no redeploy).
+- TEC stop-freeze placement = top of `evaluateStop()`.
+- Pre-deploy load test = replay 1.3× historical scan cycles (NOT stress-shim).
+- Static-state hazard: TelemetryAggregator disk-persist path module-scoped (line 1600-1602). Xstock instance runs IN-MEMORY ONLY Day 1 (no disk persist) to sidestep clash. Promote persistence in B79.x if needed.
+- Schema audit: 5 of 6 critical tables already have asset_class column; only screener_filters needed migration (committed in d7ca57340).
+- xstock_spot screener_filters row defaults: NO max_price cap, universe_size=50, confidence_threshold=70 tunable_status='pending_layer_3'.
 
-**Phase 24 = B79 + sub-batches.** Phase 25 = B80 + sub-batches. Out-of-sequence with 15c (consistent with roadmap pattern).
+### STEP 3 IMPLEMENTATION QUEUE (concise; full detail in BATCH_79_PRE_AUDIT.md)
 
-**Subagent already implemented (in working tree, NOT committed):** initial code from B79 rev 2 scope. **Subagent work needs reconciliation against rev 6 scope BEFORE commit** — rev 6 added: pattern-pool path now ENABLED with 3 file-based strategies (was scope-disabled in rev 2), ORB strategy file gated on Q-D, dedicated scanner architecture, scripted sector mapping, etc.
+1. New `server/services/asset-class-instances.ts` factory: `getAssetClassInstances(class)` → `{telemetry, ratioManager, failureTracker, scanManager}`. Crypto returns existing globals; xstock lazy-instantiates fresh triad, in-memory only.
+2. AdaptiveRatioManager + AdaptiveScanManager: add optional constructor injection (telemetry / ratioManager); lazy fallback to globals for backward compat.
+3. Reconcile subagent's 10 working-tree files vs rev 7. RIP universe-merge in `market-scanner.ts` (Langston-directed). Verify the other 9 against rev 7 specs (esp. canonical-regime-strategy-map for 6 quant + 3 pattern + ORB Q-D-gated; family-path SSOT keys `xstock_spot.tfs` per rev 7 §-2.5).
+4. New files: `server/utils/symbol-normalize.ts`, `server/asset_classes/xstock_spot/pattern-pool-filters.ts`, `server/strategies/orb.ts` (DB-gate dormant).
+5. TEC stop-freeze guard at top of `evaluateStop()`. Asset-class-aware freshness gate helper.
+6. Verify `server/asset_classes/types.ts` (untracked) matches rev 7 §1.X failure-mode taxonomy.
+7. Apply migrations to Supabase: screener_filters + xstock module_constants. Verify xstock row count = 1.
+8. Step 4 Langston code review (watchdog `--first-byte-timeout 240`). Step 5 push (broad-pattern pre-flight kraken-import grep per B78 lesson). Wait 4 CI checks green.
+9. Step 6 deploy. Step 7+8 verify: PM2 `[B79][BOOT]` log line; no-touch fence SQL on crypto_spot regime_factor_alternates (±10%); xstock_spot screener_filters row; UI Settings render via Claude-in-Chrome; Langston second-pass.
+10. Step 10 governance: BATCH_CATALOG + PHASE_HISTORY (Phase 24 NEW) + plan-doc §9+§12 + SIM + SYSTEM_MANUAL + RUNNING_ISSUES + CHANGES_AND_FIXES + Langston MEMORY sync. Step 11 completion report + plain-language summary.
 
-**Q-D AAPLx-vs-AAPL probe is its own pre-implementation stage** — must run BEFORE implementation push. Methodology in scope §-2 + §3 (yfinance 1m underlying, 4-window correlation, 3-tier decision tree).
+**Deferred to dedicated sub-batches:** Q-D AAPLx-vs-AAPL probe (yfinance, B79.0a candidate); sector-classification yfinance script (B79.x); live equity WS pricing (B79.5).
 
-**Post-PIA implementation key items (not yet done):**
-- screener_filters schema migration (asset_class + tunable_status cols) + xstock_spot row (NO max_price cap per Kyle)
-- Dedicated equity scanner instance (Langston rev 3 §C)
-- Telemetry partitioning fixes (per audit findings)
-- Stage-by-stage threshold seeds (multi_tf_agreement, correlation_matrix, macro_modifier=1.0; rest pending_layer_3-tagged)
-- Symbol-normalizer utility (server/utils/symbol-normalize.ts)
-- Asset-class-aware data-freshness gate
-- Forward-watch dashboard requirement
-- Failure mode taxonomy (LULD halts, circuit breakers, dividends, splits, earnings)
-- TEC stop-freeze for market-closed periods
-- Sector classification per xStock for portfolio-cluster
-
---- Run pre-flight no-touch fence. Layer 1 domain-knowledge thresholds (~1-2h), Layer 2 cross-asset shadow-classify (~2-3h), Layer 3 shadow-mode VTS (48-72h, ongoing during B80/B81). Weekend-pause logic gate. Strategy detect audit per asset class.
-3. Draft `BATCH_79_SCOPE.md` per plan doc §6.
-4. Send to Langston combined Step-1+2.
-5. Per Langston review → push → CI → deploy → verify → governance (incl. plan-doc §9 threshold table population + SIM update + Langston MEMORY sync).
+**B78 + B78.2 forward-watch (RUNNING_ISSUES #74)** at +24h from B78.2 deploy 14:18 UTC 2026-05-07 — tomorrow.
 
 ---
 
