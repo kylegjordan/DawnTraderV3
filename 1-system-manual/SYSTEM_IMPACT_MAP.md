@@ -107,7 +107,7 @@
 ## Layer 2: Market Data & Price Feeds
 
 ### 2.1 Kraken WebSocket Adapter
-- **File**: `server/exchanges/kraken/kraken.ts` (B78 — moved from `server/services/kraken.ts`) (WebSocket section), `server/services/live-pricing-adapter.ts`
+- **File**: `server/exchanges/kraken/kraken.ts` (B78 — moved from `server/services/kraken.ts`) (REST section); `server/exchanges/kraken/kraken-websocket-adapter.ts` (B78.1 — moved from `server/services/kraken-websocket-adapter.ts`; cycle with `live-pricing-adapter.ts` broken via EventEmitter inversion); `server/services/live-pricing-adapter.ts` (subscribes to ws-adapter `priceTick` events at module-load post-B78.1)
 - **What**: Real-time price feed from Kraken exchange. Maintains persistent WebSocket connection with heartbeat (30s) and staleness detection (2s threshold).
 - **Upstream**: Kraken exchange (external)
 - **Downstream**: Price Cache (primary data source), MicroExecutionService, frontend WebSocket layer

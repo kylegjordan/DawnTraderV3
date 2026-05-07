@@ -169,6 +169,18 @@
 | 73 | **Re-export shims at deprecated B78 paths.** Old paths `server/services/{kraken,kraken-pair-metadata-service,kraken-data-documenter}.ts` and `server/config/pattern-filter-profile.ts` exist as shims (re-export from new locations) in working tree but were not committed in B78 push. Functionally unused — all 24 callers updated to new paths. | OPEN — REMOVE IN B81 | Per BATCH_78_SCOPE.md §6 Risk #3: 1-batch grace policy. Either commit the shims now and remove them in B81, OR confirm they're untracked-and-ignored. Decision: leave untracked (file system safety net only); B81 governance step removes any remaining shim files explicitly. Langston Step-4 cleared "no shims, acceptable on strength of CI build gate." |
 | 74 | **24-hr forward-watch window:** B78 modularization is pure refactor with zero behavioral change claimed. Window: confirm crypto_spot ablation cadence recovers to ~9-10 rows/factor/hr post-deploy (initial 12-min sample shows 2/factor; expected to fill the 1h window over 30-45 min from PM2 restart at ~22:58 UTC 2026-05-07). | OPEN — 24-48h FORWARD-WATCH | Re-run no-touch fence SQL at +30min, +24h. If cadence drops materially → halt + revert via `git revert 57220ab4b e814461d6`. |
 
+## B78.1 close 2026-05-07
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 75 | **Cycle break shipped (kraken-ws-adapter ↔ live-pricing).** EventEmitter inversion + ws-adapter move to `server/exchanges/kraken/`. Madge 47 → 46 cycles (cycle #10 absent). | RESOLVED 2026-05-07 (B78.1) | See INFRA-2026-05-07-D in CHANGES_AND_FIXES. |
+| 76 | **Pre-existing kraken-websocket-adapter subscribe failure SURFACED during B78.1 verify.** ws-adapter has been a silent no-op for ~5 weeks. Evidence: (a) **49,175 historical PM2 health-check log lines all show "Subscribed Symbols: 0"** (no health check since 2026-04-03 has reported any subscribed symbols; 100% of ~49K data points), (b) **142,079 historical "[I7-WS-RAW] Method(s) not found" subscribe-rejection log lines**, (c) **first such error: 2026-04-03 07:01:34** (~5 weeks before B78.1), (d) zero recent `[WS_TICK]` price-flow lines. System functions because B74 passive archivers (separate WS connections via `equity-spot-archiver`, `equity-perp-archiver`, crypto-spot shards) carry their own data and `live-pricing-adapter.fetchFromKrakenRest` REST fallback fills price gaps for top-tier pairs. VTS evaluation continues via REST + B74 paths; ablation cadence on crypto_spot remains healthy at 25/factor/hr. | OPEN — NOT B78.1 SCOPE | Kraken WS v2 protocol changed the `subscribe` method format (likely between when ws-adapter was last validated and 2026-04-03 when failures started). Needs targeted investigation: compare the actual JSON message ws-adapter sends vs Kraken WS v2 docs at `https://docs.kraken.com/api/docs/websocket-v2/subscribe/`. Likely 1-line fix (correct method name or payload shape). Independent of B78.1 cycle break — the EventEmitter wiring is verified correct (B78.1 markers logged successfully + getter bound + rate metric firing) but no ticks flow because upstream subscribe is rejected. **HIGH DISCOVERY VALUE — surfaced a real bug that was hidden by REST fallback graceful degradation; no observable impact on VTS cadence but represents an architectural blind spot.** Action: scope as B78.2 (parallel with B79 Day 0), low risk, ~1-2hr fix + verify. Do not block B78.1 close. |
+
+## B78 close 2026-05-07
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+
 ## B76 close 2026-05-06
 
 | # | Issue | Status | Notes |

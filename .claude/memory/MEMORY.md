@@ -18,11 +18,13 @@
 
 ---
 
-## CURRENT STATE — 2026-05-07 (post-B78 close)
+## CURRENT STATE — 2026-05-07 (post-B78.1 close)
 
 - **Branch:** `migration/aws-supabase`
-- **Most recent HEAD:** `57220ab4b` (B78 hotfix). Previous: `e814461d6` (B78 initial), `2ef708de4` (xstock_spot rename).
-- **Live:** B70 + B72 + B75 + B76 + B77 + **B78 (Modularization Phase scaffold).**
+- **Most recent HEAD:** `fb9a58667` (B78.1 hotfix2). Previous: `ee7c8dc3e` (B78.1 hotfix), `bcbea1896` (B78.1 initial), `3ed304d2c` (B78.1 prep), `de827f37b` (B78 governance close).
+- **Live:** B70 + B72 + B75 + B76 + B77 + B78 + **B78.1 (cycle break + watchdog).**
+- **Watchdog:** `/usr/local/bin/langston-call` on Hetzner. Auto-retries hung CC↔Langston SSH calls (60s first-byte / 30s idle / 5 max attempts). Brought Step-8 from 22-min hang → 35-sec success.
+- **Sequencing change:** B78.2 (Kraken WS subscribe fix per RUNNING_ISSUES #76) inserted BEFORE B79 Day 0 per Langston Step-8 call.
 - **DB-only UPDATEs (no commits):** all unchanged. No-touch fence holds.
 
 ### B78 quick reference (just shipped)
@@ -127,8 +129,9 @@ B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi
 
 ## Next session pickup priority
 
-1. **Confirm B78 forward-watch:** crypto_spot ablation cadence at +24h (re-run no-touch fence SQL). If healthy → close #74.
-2. **B79 — xstock_spot.** Read plan doc §6 first. Run pre-flight no-touch fence. Layer 1 domain-knowledge thresholds (~1-2h), Layer 2 cross-asset shadow-classify (~2-3h), Layer 3 shadow-mode VTS (48-72h, ongoing during B80/B81). Weekend-pause logic gate. Strategy detect audit per asset class.
+1. **B78.2 — Kraken WS subscribe fix** (RUNNING_ISSUES #76). Pre-existing 5-week-old subscribe failure surfaced during B78.1 verify. Compare ws-adapter outbound JSON against current Kraken WS v2 spec at `https://docs.kraken.com/api/docs/websocket-v2/subscribe/`; likely 1-line message-shape fix. ETA 1-2hr. Must precede B79 per Langston Step-8 sequencing.
+2. **Confirm B78 forward-watch:** crypto_spot ablation cadence at +24h (re-run no-touch fence SQL). If healthy → close #74.
+3. **B79 — xstock_spot.** Read plan doc §6 first. Run pre-flight no-touch fence. Layer 1 domain-knowledge thresholds (~1-2h), Layer 2 cross-asset shadow-classify (~2-3h), Layer 3 shadow-mode VTS (48-72h, ongoing during B80/B81). Weekend-pause logic gate. Strategy detect audit per asset class.
 3. Draft `BATCH_79_SCOPE.md` per plan doc §6.
 4. Send to Langston combined Step-1+2.
 5. Per Langston review → push → CI → deploy → verify → governance (incl. plan-doc §9 threshold table population + SIM update + Langston MEMORY sync).

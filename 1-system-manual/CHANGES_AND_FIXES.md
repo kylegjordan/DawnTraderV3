@@ -2,6 +2,51 @@
 
 ---
 
+## INFRA-2026-05-07-D — B78.1 Cycle break + watchdog + RUNNING_ISSUES #76 discovery (SHIPPED 2026-05-07)
+
+**Trigger:** Kyle no-deferrals directive 2026-05-07 evening — address all 3 B78 deferrals via named batches. B78.1 = cycle break (own batch because data-feed surgery doesn't fit B79 asset-class population).
+
+**Shipped (commits `bcbea1896` + 2 hotfixes `ee7c8dc3e` + `fb9a58667`; PM2 #181):**
+- **EventEmitter inversion** of `kraken-websocket-adapter ↔ live-pricing-adapter` (madge cycle #10 of 47, present since at least 2026-04-03 per log archaeology). ws-adapter `extends EventEmitter`, emits `priceTick` events at 3 sites (replacing `livePricingAdapter.updateFromWebSocket(...)` calls). Trading-mode label resolved via injected getter (`bindTradingModeGetter`); warns ONCE if unbound (per CLAUDE.md §8.10 no-silent-fallbacks). live-pricing-adapter at module-load registers `krakenWebSocketAdapter.on('priceTick', updateFromWebSocket)` + `bindTradingModeGetter(() => getTradingMode())`. Reverse direction (live-pricing → ws-adapter for `incrementRestFallback*`) STAYS — that was the kept import direction; not a cycle anymore.
+- **ws-adapter moved** from `server/services/kraken-websocket-adapter.ts` to `server/exchanges/kraken/kraken-websocket-adapter.ts` (the original B78 plan, now safely possible). Internal imports re-pathed (one level deeper from new location).
+- **8 caller files updated** to new import path: `server/index.ts`, `server/routes.ts`, `server/services/live-pricing-adapter.ts`, `server/services/paper-execution-engine.ts`, `server/services/paper-session-reset.ts`, `server/services/paper-sim-service.ts`, `server/services/verification-test-protocol.ts`, `server/services/monitoring/mini-book-integrity-monitor.ts`.
+- **NEW priceTickEventsPerMinute metric** — `[B78.1][WS_TICK_RATE]` log line every 60s reporting tick emission rate. Future regression detection without log archaeology.
+- **NEW infrastructure: watchdog `langston-call`** — `/usr/local/bin/langston-call` on Hetzner. Auto-detects API hangs (60s first-byte / 30s idle / 5 max attempts; fresh UUID per attempt). Brought Step-8 review latency from 22-min hang → 35-sec success. Source archived at `Claude Comms and Packages/Langston/langston-call.sh`. Logs every attempt to `/var/log/langston-call.log` for hang-rate observability.
+
+**Hotfix history within B78.1 close window:**
+- `ee7c8dc3e` — fix 2 dynamic-import paths missed by sed (L1736 + L2455). Static `import { } from '...'` lines were updated by sed but `await import('...')` dynamic imports use a different syntax shape and the sed pattern didn't catch them.
+- `fb9a58667` — fix remaining 2 dynamic kraken-symbol-resolver imports (L1813 + L1967). Edit's default replace-once mode silently fixed one when there were two on different sites.
+
+**Madge HARD GATE (per Langston rev 1 tightened acceptance):** 47 → 46 cycles. Cycle #10 ABSENT from list. Strict-`<47` criterion met. Baseline saved at `Claude Comms and Packages/Change Lists/BATCH_78_1_MADGE_POSTMOVE.txt`.
+
+**Behavioral verify post-deploy:** B78.1 wiring exercised live in PM2 logs:
+- `[B78.1][WS_ADAPTER] tradingMode getter bound by consumer` ✓
+- `[B78.1][PRICING] subscribed to ws-adapter priceTick events + bound tradingMode getter` ✓
+- `[B78.1][WS_TICK_RATE] priceTickEventsPerMinute=0` firing every 60s ✓
+- NO warn-once spam (getter bound successfully)
+- HTTP 200, ablation cadence 25/factor/hr on crypto_spot (healthy, B78 baseline)
+- No-touch fence holds.
+
+**NEW DISCOVERY filed as RUNNING_ISSUES #76 — pre-existing kraken-websocket-adapter subscribe failure (5+ weeks old, surfaced during B78.1 behavioral verify):**
+- `priceTickEventsPerMinute=0` reflects an upstream Kraken WS subscribe bug, NOT a B78.1 regression.
+- Evidence: 49,175 PM2 health-check log lines all show "Subscribed Symbols: 0"; 142,079 historical "[I7-WS-RAW] Method(s) not found" subscribe-rejection lines; first such error at **2026-04-03 07:01:34** (~5 weeks before B78.1).
+- System functions because B74 passive archivers (separate WS connections) carry their own data and `live-pricing-adapter.fetchFromKrakenRest` REST fallback fills price gaps for top-tier pairs. VTS evaluation continues via REST + B74 paths.
+- **B78.2 owns the fix** (per Langston Step-8 sequencing call) — must precede B79 Day 0 because (a) without flowing ticks B78.1 inversion isn't end-to-end-validated, (b) stacking xstock_spot on a broken WS path adds confounding variables. ETA 1-2hr; Kraken WS v2 protocol likely changed the `subscribe` method format; targeted message-shape fix.
+
+**Langston review trail (new watchdog path):**
+- Step-1+2 rev 1: REVISE with 2 minor revisions (warn-once on unbound mode getter; tighten madge gate to strictly <47; ±20% with 8/10 pair floor; add priceTickEventsPerMinute metric). Initial Step-1+2 invocation hung at 22min — strace evidence showed pure epoll wait, zero file reads on staged content. Killed; retried with lean prompt + watchdog scaffold; came back in 5min.
+- Step-1+2 rev 2: APPROVED via watchdog.
+- Step-4 (combined into Step-8 since the diff is mechanical and re-export-shim-free per B78 precedent): no separate code review.
+- Step-8: **APPROVED to close** in 35s via watchdog. Sequencing call: B78.2 must PRECEDE B79 Day 0 (not parallel) — at 1-2hr it won't materially delay B79; xstock_spot on broken WS path adds confounding variables.
+
+**Lessons logged:**
+1. **Pre-flight grep for moves needs both static AND dynamic import patterns.** Static `import { } from '...'` and `await import('...')` use different syntax shapes; sed pattern that matches one misses the other. Future modularization batches grep BOTH `import\(.*\)from` AND `await import\(` separately.
+2. **Watchdog scaffolds for AI-as-oracle workflows pay back fast.** ~30 min build cost recovered immediately on the first prevented hang. The OpenClaw architecture was effectively this pattern (single-turn oracle, no agentic loop overhead); we re-discovered why that shape works for review tasks.
+3. **Behavioral verify can surface pre-existing bugs.** Without B78.1's `[WS_TICK_RATE]` metric we'd never have noticed the 5-week-old WS subscribe failure — it was masked by REST fallback graceful degradation. The metric paid for itself on its first day of life.
+4. **Edit tool replace_all=false is silent on multi-match.** Future grep-then-Edit workflows on multiple-occurrence strings should use replace_all=true OR add unique context to the old_string. The 2nd hotfix in B78.1 was caused by this gotcha.
+
+---
+
 ## INFRA-2026-05-07-B — B78 Modularization Phase: asset-class + exchange extraction (SHIPPED 2026-05-07)
 
 **Trigger:** Kyle directive 2026-05-07 — skip Phase 16 cleanup; use the 8-day observational window (until 2026-05-15) to ship B78 (Modularization) + B79 (xstock_spot) + B80 (crypto_perp) + B81 (RTB ranking parity). B78 is the structural prerequisite — without it, B79/B80 would shoehorn new asset-class logic into crypto-shaped files. Pre-existing modularization driver: synthesis doc `Claude Comms and Packages/Scope Files/MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` Part II + Part V (asset_class + exchange + filter as orthogonal dimensions in the resolution hierarchy).
