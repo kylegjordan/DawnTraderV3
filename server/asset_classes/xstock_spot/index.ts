@@ -11,6 +11,7 @@
 export * from './regime-thresholds.js';
 export * from './friction.js';
 export * from './market-hours.js';
+export * from './pattern-pool-filters.js';
 
 export class NotImplementedError extends Error {
   constructor(feature: string) {
