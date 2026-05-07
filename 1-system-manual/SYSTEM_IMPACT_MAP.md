@@ -85,7 +85,7 @@
 - **Tests**: None yet (new component, validated via integration)
 
 ### 1.6 Pattern Filter Profile — (Phase 14.5, Batch 19; updated Batch 19C; partially superseded Batch 19G)
-- **File**: `server/config/pattern-filter-profile.ts` (~120 lines)
+- **File**: `server/asset_classes/crypto_spot/pattern-pool-filters.ts` (~120 lines; B78 — moved + renamed from `server/config/pattern-filter-profile.ts`. Old path may exist as untracked re-export shim until B81 removal.)
 - **What**: Configuration for the pattern pool pipeline. Defines: PATTERN_POOL_GUARDRAILS (elevated FinalScore floor 0.45, max position 15%), PATTERN_POOL_STRATEGIES (3 pattern + 5 hybrid = 8 strategies), SourcePool/AssetClass types. **Batch 19G**: PATTERN_POOL_THRESHOLDS and REGIME_PATTERN_THRESHOLDS are now **superseded by DB** — `screener_filters` table rows with `filter_path='active_pattern'` and `filter_path='vts_pattern'` provide these values. The file still exports guardrails and strategy list constants (not in DB). `getPatternPoolThresholds()` function may still be called as fallback but DB is primary source.
 - **Upstream**: None — static configuration (guardrails/strategies), DB `screener_filters` table (thresholds — Batch 19G)
 - **Downstream**: FX5 Scanner (pattern pool filtering — now via DB since Batch 19G), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (strategy list), VTS Runner (PATTERN_POOL_STRATEGIES for dual-path — Batch 19C)
@@ -107,7 +107,7 @@
 ## Layer 2: Market Data & Price Feeds
 
 ### 2.1 Kraken WebSocket Adapter
-- **File**: `server/services/kraken.ts` (WebSocket section), `server/services/live-pricing-adapter.ts`
+- **File**: `server/exchanges/kraken/kraken.ts` (B78 — moved from `server/services/kraken.ts`) (WebSocket section), `server/services/live-pricing-adapter.ts`
 - **What**: Real-time price feed from Kraken exchange. Maintains persistent WebSocket connection with heartbeat (30s) and staleness detection (2s threshold).
 - **Upstream**: Kraken exchange (external)
 - **Downstream**: Price Cache (primary data source), MicroExecutionService, frontend WebSocket layer
@@ -127,7 +127,7 @@
 - **Tests**: None specific
 
 ### 2.3 Symbol Normalization
-- **File**: `server/services/kraken.ts` (symbol resolution functions)
+- **File**: `server/exchanges/kraken/kraken.ts` (B78 — moved from `server/services/kraken.ts`) (symbol resolution functions)
 - **What**: Translates between DawnTrader internal format and Kraken formats (REST: `XAVAXZUSD`, WebSocket: `AVAX/USD`). BTC ↔ XBT translation.
 - **Upstream**: None — utility functions
 - **Downstream**: FX5 Scanner, Cost Cache, WebSocket subscriptions, all Kraken API calls
@@ -137,7 +137,7 @@
 - **Tests**: Symbol resolution tests
 
 ### 2.4 Market Data REST Polling
-- **File**: `server/services/kraken.ts` (REST API section)
+- **File**: `server/exchanges/kraken/kraken.ts` (B78 — moved from `server/services/kraken.ts`) (REST API section)
 - **What**: Periodic REST calls for ticker, OHLC, asset pairs, depth, trades. Tier A symbols (BTC, ETH, SOL, XRP) updated every 30 seconds. Cache TTLs: 60s (most), 24h (history), 5min (cost metrics).
 - **Upstream**: Kraken REST API (external)
 - **Downstream**: Volume cache, cost cache, OHLC data for regime classification and analysis
@@ -701,7 +701,7 @@
 | **ML Calibration** | Python microservice, drift detector, retraining freeze, VTS service |
 | **Pattern Filter Profile** | FX5 Scanner (pattern pool thresholds — now DB-driven, Batch 19G), SQE (elevated FinalScore floor), Paper Position Sizing (15% cap), Signal Orchestrator (PATTERN_POOL_STRATEGIES list), VTS Runner (pattern pool fetch — Batch 19E), Paper Execution Engine (sourcePool persistence — Batch 19E). **Batch 37**: sourcePool is now family-qualified (`quant-trend`, `quant-reversal`, `quant-breakout`, `quant-oscillation`, `pattern`). Total quant survivors = sum of family survivors (not deduplicated). |
 | **Ranking Weights** | RTB getTopSignal() (queue ordering), Signal Orchestrator (context bonus computation), FINAL_SCORE_GAP_OVERRIDE safety rule |
-| **Active Filter Pool (pattern pool)** | FX5 Scanner (populates), Signal Orchestrator (reads pattern pool), pattern-filter-profile.ts config |
+| **Active Filter Pool (pattern pool)** | FX5 Scanner (populates), Signal Orchestrator (reads pattern pool), `asset_classes/crypto_spot/pattern-pool-filters.ts` config (B78 — relocated from `config/pattern-filter-profile.ts`) |
 | **screener_filters DB table** | FX5 Scanner (reads 8 rows for 4-path filtering — Batch 19G), filters-with-override.tsx (displays 4-column table — Batch 19G). **Columns**: id, mode, filter_path, volume_min, spread_max, history_days, lq_min, vn_max, corr_max, di_min. **Rows**: 8 total (active_quant, active_pattern, vts_quant, vts_pattern per paper/live mode). Replaces hardcoded configs in pattern-global-filters.ts (DELETED) and system-guards.ts (DEPRECATED for filters, guardrails kept). |
 | **Hybrid Compatibility Registry** | Signal Orchestrator (hybrid confluence), VTS Runner (hybrid confluence buffer — Batch 19G) |
 

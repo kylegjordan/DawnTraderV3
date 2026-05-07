@@ -162,19 +162,23 @@
 | 71 | **`isBreakEvenTriggered` no-op since B65.1** — `break_even_trigger_r` module_constant plumbed but never consulted by runtime. `gain >= ATR` hardcoded in `utils/analysis-utils.ts:357-364`. ~2 weeks of constant-as-no-op surfaced during variant K implementation. | RESOLVED 2026-05-07 (B77) | **Fix shipped:** threaded `breakEvenTriggerR: number = 1.0` through `isBreakEvenTriggered(currentPrice, entryPrice, ATR, breakEvenTriggerR)`; gate becomes `gain >= ATR * breakEvenTriggerR`. Default 1.0 preserves pre-B77 behavior. Single live caller `trailing-exit-controller.ts:451` updated to pass `cachedConfig.breakEvenTriggerR` (already DB-governed via `pick('break_even_trigger_r', ...)` at L111 — no new wiring needed; Langston Step-8 nit confirmed). Console log line updated to print actual multiplier. 3 new unit tests + 1 back-compat assertion in `trailing-exit.test.ts`. Variant K keeps BE off in production today, so zero behavioral change at current settings; future re-enable for non-crypto asset classes / non-1.0 trigger thresholds will work as designed. |
 | 72 | **Supabase project Storage Maximum file size raised to 5 GB** by Kyle (2026-05-06). Future archives can land in warm tier without triggering cold-fallback. Cold-fallback path retained for >5 GB cases or B2-only routing. | RESOLVED 2026-05-06 | Done via dashboard UI. |
 
+## B78 close 2026-05-07
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 73 | **Re-export shims at deprecated B78 paths.** Old paths `server/services/{kraken,kraken-pair-metadata-service,kraken-data-documenter}.ts` and `server/config/pattern-filter-profile.ts` exist as shims (re-export from new locations) in working tree but were not committed in B78 push. Functionally unused — all 24 callers updated to new paths. | OPEN — REMOVE IN B81 | Per BATCH_78_SCOPE.md §6 Risk #3: 1-batch grace policy. Either commit the shims now and remove them in B81, OR confirm they're untracked-and-ignored. Decision: leave untracked (file system safety net only); B81 governance step removes any remaining shim files explicitly. Langston Step-4 cleared "no shims, acceptable on strength of CI build gate." |
+| 74 | **24-hr forward-watch window:** B78 modularization is pure refactor with zero behavioral change claimed. Window: confirm crypto_spot ablation cadence recovers to ~9-10 rows/factor/hr post-deploy (initial 12-min sample shows 2/factor; expected to fill the 1h window over 30-45 min from PM2 restart at ~22:58 UTC 2026-05-07). | OPEN — 24-48h FORWARD-WATCH | Re-run no-touch fence SQL at +30min, +24h. If cadence drops materially → halt + revert via `git revert 57220ab4b e814461d6`. |
+
 ## B76 close 2026-05-06
 
 | # | Issue | Status | Notes |
 |---|-------|--------|-------|
 | 54 | **Calibration aggregator "shift" metric is structurally not measuring per-factor effect.** `realDecision.confidence` stored raw classifier value while alternates were built with mid-chain partial confidences captured at point-of-fire — mixing raw-vs-mid-chain values. b67_2_phase_preference showed +0.0pp predictive lift by construction (FIRST in chain → without-factor == baseConf == real). | RESOLVED 2026-05-06 (B76 commit `235237ffd`) | Two-pass stash-then-build pattern. Each factor's fire point pushes a `FactorAlternateInput` discriminated-union record onto a stash; after final post-floor clamp on `_modulatedConfChain`, `buildAllAlternates(stash, chainFinal, regimeLabel)` dispatches via TS-exhaustiveness-checked switch. `emitAblationRecord` persists chain-final `realDecision.confidence` (raw preserved at metadata.predictiveConfidenceRaw). Every row stamped `realDecision.metadata.calibrationFrameworkVersion = 'b76_chain_final'`. Drift-dashboard-aggregator `computeFactorCalibration` version-filters b67_1_*/b67_2_* to chain-final cohort only (other 7 factors don't need filter — predictive lift cancels first-order bias). NEW `factor-ablation-builders.ts` dispatcher; NEW `buildB67_2Alternate` extracted from inline blocks. Zero formula/weight/threshold change. **Verify within 24h: b67_1_*/b67_2_phase_preference rows show non-zero shift; predictive lift on B68.1/.2/.3/B67.4 preserves sign + stays within ±1pp of pre-B76.** |
 
-## Summary Counts (updated 2026-05-07 post-B77 close)
-- **RESOLVED:** 48 (added 2026-05-07: **#71 isBreakEvenTriggered no-op fix**)
+## Summary Counts (updated 2026-05-07 post-B78 close)
+- **RESOLVED:** 48 (unchanged — B78 added 2 new tracking issues #73/#74, no resolutions)
 - **DEFERRED:** 12
 - **SCHEDULED:** 0
 - **CRITICAL:** 0
 - **IN PROGRESS:** 1 (#42 — narration leak)
-- **OPEN:** 7 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification)
-- **CRITICAL:** 0
-- **IN PROGRESS:** 1 (#42 — narration leak)
-- **OPEN:** 7 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification)
+- **OPEN:** 9 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification; **#73 B78 shim cleanup in B81; #74 B78 24-48h cadence forward-watch**)

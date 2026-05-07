@@ -2,6 +2,47 @@
 
 ---
 
+## INFRA-2026-05-07-B — B78 Modularization Phase: asset-class + exchange extraction (SHIPPED 2026-05-07)
+
+**Trigger:** Kyle directive 2026-05-07 — skip Phase 16 cleanup; use the 8-day observational window (until 2026-05-15) to ship B78 (Modularization) + B79 (xstock_spot) + B80 (crypto_perp) + B81 (RTB ranking parity). B78 is the structural prerequisite — without it, B79/B80 would shoehorn new asset-class logic into crypto-shaped files. Pre-existing modularization driver: synthesis doc `Claude Comms and Packages/Scope Files/MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` Part II + Part V (asset_class + exchange + filter as orthogonal dimensions in the resolution hierarchy).
+
+**Critical contract:** ZERO behavioral change on `asset_class='crypto_spot'`. Pure file/import refactor + one aggregator-query scope filter. No-touch fence on crypto_spot calibration windows (per Kyle directive: B67.5 consumer-wiring window opens 2026-05-15; until then no threshold/factor-chain/regime-classifier-math changes for crypto_spot).
+
+**Shipped (commits `e814461d6` initial + `57220ab4b` hotfix):**
+- **Created module scaffolding:** `server/asset_classes/{crypto_spot,crypto_perp,xstock_spot}/{pattern-pool-filters,regime-thresholds,friction,index}.ts` (12 files; crypto_perp and xstock_spot get `NotImplementedError` placeholders for B79/B80 population). `server/exchanges/kraken/` directory.
+- **Moved kraken cohort:** `server/services/kraken.ts`, `kraken-pair-metadata-service.ts`, `kraken-data-documenter.ts` → `server/exchanges/kraken/` (git renames, history preserved).
+- **Moved + renamed pattern-filter-profile:** `server/config/pattern-filter-profile.ts` → `server/asset_classes/crypto_spot/pattern-pool-filters.ts` (specific filename leaves room for future `regime-filters.ts`, `liquidity-filters.ts`, `market-hours-filter.ts` per Synthesis §3.3 first-class filter family — not yet promoted to first-class `module_name='filter:X'` rows; deferred past B81).
+- **Extracted regime-classifier branch-condition constants** into `server/asset_classes/crypto_spot/regime-thresholds.ts` (leaf module — `// NO IMPORTS ALLOWED` invariant). 14 named exports: RBS_VOL_MAX/RBS_DX_MAX/RBS_DBS_MAX, IE_VOL_MIN_PATH_A/IE_DX_MIN_PATH_A/IE_VOL_MIN_PATH_B/IE_DBS_STRONG, TFS_MOM_MIN_PATH_A/TFS_DX_MIN/TFS_DBS_MODERATE, HVU_VOL_MIN/HVU_MOM_NEG_PATH_A/HVU_DX_STRONG/HVU_MOM_NEG_PATH_B. **Threshold-vs-formula trap respected:** literals `0.012`, `0.015` (×2), `0.45` appear in BOTH branch CONDITIONS and confidence FORMULAS — only branch-condition instances replaced; formula-anchor instances preserved inline (Langston Step-4 confirmed verified per-line replace-vs-stay sites; e.g. `0.012` at line 200 (branch) → `RBS_VOL_MAX`, but `0.012` at line ~216 in `0.75 + (0.012 - vol) * 12` STAYS).
+- **Aggregator scope filter:** `server/services/drift-dashboard-aggregator.ts` `computeFactorCalibration` query at L1054 gets `AND asset_class = 'crypto_spot'` — locks calibration cohort to crypto_spot regardless of B79+ xstock/perp data accumulation. B76 chain-final filter at L504 untouched.
+- **Updated 24 caller import paths** across `server/services/`, `server/services/market-data/`, `server/services/monitoring/`, `server/scripts/`, `server/index.ts`, `server/routes.ts`, `server/startup/portfolio-initializer.ts`, `server/core/filters/signal_quality_evaluator.ts`, `server/core/metrics/cost-metrics.ts`. Initial commit missed 23 intra-services callers (pre-flight grep used pattern `(\\.\\.?/)+services/kraken` which doesn't match bare `./kraken[.js]`); hotfix added them.
+
+**Deferred per Langston rev 1 review:**
+- **`kraken-websocket-adapter.ts` move** — `madge --circular` confirmed bidirectional cycle with `live-pricing-adapter.ts` (cycle #10 of 47). Currently masked because both intra-package in `server/services/`. The B78 move would have converted it into a cross-package cycle (Vite production build at risk). Cycle break gets its own dedicated batch where DI inversion is the explicit objective, not a side-effect of a directory move.
+- **Per-pair friction extraction** — `cost-model.ts` is at `server/core/math/` (not `server/utils/` as scope rev 1 claimed) and imports cross-cutting defaults from `server/config/exchange-defaults.ts`. Both are exchange-keyed not asset-class-keyed; extracting now would invert the resolution hierarchy (`exchange` is more specific than `asset_class` per Synthesis §3.2). B79 and B80 will introduce per-asset-class friction modules when xstock_spot/crypto_perp friction shape becomes real.
+
+**Madge HARD GATE (Langston §D item 5):** baseline 47 cycles captured pre-move (`Claude Comms and Packages/Change Lists/BATCH_78_MADGE_BASELINE.txt`); post-move 47 cycles, zero diff in cycle list. No new cross-package cycles introduced.
+
+**Re-export shims** at old paths exist in working tree (deprecation comments noting B81 removal) but were not committed — all 24 callers updated to new paths so functionally unused. Langston Step-4 cleared "no shims acceptable, CI build is the gate." See RUNNING_ISSUES #73 for B81 cleanup tracking.
+
+**B74 file misattribution:** scope listed `kraken-futures-*` movable but no such file exists on disk. B74 work is at `server/services/passive-archive/equity-perp-archiver.ts` — different cohort, naming convention, and module boundary. Not moved.
+
+**Langston review trail (4 rounds total — same-session caching kept latency minutes per round once Step-1+2 baseline loaded):**
+- Step-1+2 combined (scope + import-graph delegated cycle audit): **REVISE rev 1** with 6 items (ws-adapter cycle defer, friction defer, risk row #6, pattern-pool-filters rename, madge HARD GATE, threshold-vs-formula trap table); **REVISE rev 2** (2 propagation misses A+B — naming unification across all 3 sections + stale cost-model row); **REVISE rev 3** (line 69 brace-expansion + footer rev/status); **APPROVED rev 4**.
+- Step-4 code review (full diff + new files + repo-wide grep for stale old-path references): **APPROVED**, no revisions. Confirmed (a) per-line trap-table replace sites correct, (b) zero residual grep, (c) crypto_spot/regime-thresholds.ts is leaf, (d) aggregator filter at the L1054 query (not L504), (e) placeholder scaffolds inert (no throw on import), (f) crypto_spot/index.ts re-exports the 3 submodules.
+- Step-8 second-pass verify: TBD post-deploy.
+
+**CI gate (run `25491625912` on hotfix):** Build ✓, Docker Build ✓, Test Suite identical to baseline (59 failed / 995 passed / 5 skipped from 1059 — same exact counts as B77 close), TypeScript Check pre-existing legacy. Per Kyle directive: Build+Docker+Test green = clear to deploy. Confirmed.
+
+**Live verify (post-deploy):** PM2 restart #180 at ~22:58 UTC. Clean boot; HTTP 200; PM2 errors are pre-existing noise only (EACCES /home/runner from MarketDataHealthCheck + ethical-reasoner audit-trail warnings — both pre-date B78). Post-deploy no-touch fence SQL: 10 factors arriving on `asset_class='crypto_spot'` (2/factor at ~12min into 1h window — recovers as window fills). 24-48h forward-watch tracked at RUNNING_ISSUES #74.
+
+**Enables B79 (xstock_spot — Days 4-5)** to populate `server/asset_classes/xstock_spot/*` with weekend-pause logic (24/5 calendar), threshold derivation (3-layer: domain-knowledge → cross-asset shadow-classify → 48-72h shadow-mode VTS), strategy gate audit (some strategies don't apply to equity microstructure), SQE asset-class threshold rows, friction model. **Enables B80 (crypto_perp — Days 5-6)** to populate `server/asset_classes/crypto_perp/*` with funding-rate per-pair extension to macro modifier (B67.1).
+
+**Lesson — pre-flight grep precision matters.** The pre-flight caller-fan-out grep used `(\\.\\.?/)+services/kraken` which only matches `services/kraken*` patterns (e.g. callers in `server/scripts/` using `../services/kraken`). Intra-services callers using bare `./kraken` or `./kraken.js` were missed. The CI Build job caught this (would have crashed at runtime); but a tighter pre-flight pattern (`['"](\\.\\.?/)+kraken(?:\\.|$|['"])`) would have caught all 24 callers in one pass. Future modularization batches should use the broader pattern.
+
+**Lesson — scope contradictions surface after multiple revisions.** B78 went 4 review rounds, each catching a real propagation/contradiction miss I owned: (1) ws-adapter cycle, (2) cost-model path + naming inconsistency between §2 #1 / §2 #3 / §5, (3) line 69 brace expansion still using rejected name, (4) footer rev label stale. Lesson: after each revision, search-and-replace ALL instances of the changed concept, not just the section the reviewer pointed at. Same-name strings in scope docs can drift across sections invisibly.
+
+---
+
 ## OPS-2026-05-07-A — B77 `isBreakEvenTriggered` no-op fix (RESOLVED 2026-05-07)
 
 **Trigger:** RUNNING_ISSUES #71 — `break_even_trigger_r` `module_constants` row plumbed through `TrailingExitConfig` + `TECExitDecision.resolvedConstants` for diagnostics since B65.1 but **never consulted by runtime**. `isBreakEvenTriggered(currentPrice, entryPrice, ATR)` in `server/utils/analysis-utils.ts:357-364` hardcoded `gain >= ATR` (1×ATR exactly). The constant has been a silent no-op for ~2 weeks. Surfaced during B75 close variant-K implementation. Variant K (`break_even_enabled=false`) keeps BE off in production today, so there's no live trader-impacting bug — but #71 had to close before any future BE re-enable to avoid silent miscalibration on non-1.0 trigger thresholds.

@@ -10990,3 +10990,70 @@ Predictive lift on B68.1, B68.2, B68.3, B67.4 must preserve sign and stay within
 If any flips sign → revert via `git revert c8b8709ed 235237ffd` (hotfix first per Langston Step-8 correction, then main). Pure code revert; no schema migration.
 
 *End of Calibration Aggregator Framework appendix. Last updated 2026-05-07 with B76 + B77 close.*
+
+---
+
+# Modularization Phase Architecture (post-B78)
+
+## Why this exists
+
+DawnTrader was implicitly crypto-spot-and-Kraken-only through phase 15c. Adding xstock_spot (Kraken XStocks Pro tokenized equities) and crypto_perp (Kraken Futures perpetuals) required a structural answer to "how does the same scoring pipeline serve different asset classes with different thresholds, friction profiles, and trading calendars?" The Modularization Phase synthesis (`Claude Comms and Packages/Scope Files/MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md`) documented the 5-dimensional `(exchange, asset_class, filter, strategy, regime)` resolution hierarchy as the architectural answer; B78 implements the file-system shape that makes the hierarchy ergonomic to populate.
+
+## File-system layout (post-B78)
+
+```
+server/
+├── asset_classes/
+│   ├── crypto_spot/
+│   │   ├── pattern-pool-filters.ts         ← live (moved from server/config/pattern-filter-profile.ts)
+│   │   ├── regime-thresholds.ts            ← live, leaf module (no imports allowed); 14 named branch-condition exports
+│   │   ├── friction.ts                     ← placeholder; populated B79/B80 when multi-asset friction shape is real
+│   │   └── index.ts                        ← re-exports the 3 submodules
+│   ├── crypto_perp/                        ← scaffolded; populated in B80
+│   │   └── {pattern-pool-filters,regime-thresholds,friction,index}.ts (placeholders + NotImplementedError)
+│   └── xstock_spot/                        ← scaffolded; populated in B79
+│       └── {pattern-pool-filters,regime-thresholds,friction,index}.ts (placeholders + NotImplementedError)
+├── exchanges/
+│   └── kraken/
+│       ├── kraken.ts                       ← REST + WebSocket primitives (moved from services/)
+│       ├── kraken-pair-metadata-service.ts ← AssetPairs metadata (moved from services/)
+│       └── kraken-data-documenter.ts       ← debug utility (moved from services/)
+└── (existing folders unchanged — services/, core/, config/, types/, etc.)
+```
+
+**Conceptual modules vs file layout.** The Modularization Synthesis Part II names 8 conceptual modules (Exchange Adapter, Filter Module Family, Context Provider, Eligibility, Scoring Kernel, Threshold, Profitability, Ranking). B78 ships the **physical file partition** that mirrors them, but does not yet promote filters to first-class `module_name='filter:X'` rows in `module_constants` (deferred past B81). The conceptual modules remain represented in code by existing service files (`market-context-engine.ts` = Context Provider, `signal_quality_evaluator.ts` = Eligibility + Threshold, etc.); B78 introduces the **asset-class** + **exchange** axes as orthogonal partitions, leaving the conceptual-module axis for follow-up batches.
+
+## Resolution hierarchy (DB schema, unchanged from B69; surfaced in code by B78 layout)
+
+`module_constants` rows resolve in **most-specific-wins** order:
+
+```
+(exact exchange, exact asset_class, exact strategy, exact regime, exact constant_name)
+  → (exact exchange, exact asset_class, exact strategy, *)
+    → (exact exchange, exact asset_class, *, *)
+      → (exact exchange, *, *, *)
+        → (*, exact asset_class, *, *)
+          → (*, *, *, *)  [global default]
+```
+
+Spawning a new asset class = inserting rows for whatever differs from the defaults, plus implementing the asset-class submodule code (regime thresholds, filters, friction). No hard-coded constants to edit, no cross-system refactor.
+
+## What B78 specifically did NOT change
+
+- **Regime classifier branch logic** stays in `server/core/metrics/market-regime.ts`. Only the literal threshold constants (RBS_VOL_MAX, IE_VOL_MIN_PATH_A, etc.) moved to `regime-thresholds.ts`. The if/else cascade order (RBS → IE → TFS → HVU → ST default), the AND/OR combinator structure, and all confidence formulas are unchanged. The threshold-vs-formula trap (literals appearing in both branch conditions and formulas) was respected per pre-audit `BATCH_78_PRE_AUDIT.md` §2 — only branch-condition instances replaced, formula-anchor instances preserved inline.
+- **`kraken-websocket-adapter.ts` location** stays in `server/services/`. Bidirectional cycle with `live-pricing-adapter.ts` (madge cycle #10 of 47); moving it would convert the intra-package cycle into a cross-package cycle (Vite production build at risk). Cycle break is its own follow-up batch where DI inversion is the explicit objective.
+- **Per-pair friction model.** `server/core/math/cost-model.ts` and `server/config/exchange-defaults.ts` are exchange-keyed not asset-class-keyed. Extracting per-asset-class friction now would invert the resolution hierarchy. Defer until B79 (xstock_spot) and B80 (crypto_perp) make the multi-asset shape real.
+
+## Calibration cohort scope (post-B78)
+
+`drift-dashboard-aggregator.ts` `computeFactorCalibration` query at L1054 now filters `WHERE asset_class = 'crypto_spot'`. This locks the calibration window to crypto_spot regardless of how much xstock_spot/crypto_perp data accumulates from B79+ shadow-mode VTS. Without this filter, B79 would silently contaminate the rolling 7d calibration tables that the B67.5 consumer-wiring decision (2026-05-15) depends on. The B76 chain-final filter at L504 (`computeAblationComparison`) is independently scoped and untouched.
+
+## Forward path
+
+- **B79** populates `server/asset_classes/xstock_spot/*` with weekend-pause logic (24/5 calendar), threshold derivation (3-layer: domain-knowledge baseline → cross-asset shadow-classify → 48-72h shadow-mode VTS), strategy gate audit, SQE asset-class threshold rows, friction model.
+- **B80** populates `server/asset_classes/crypto_perp/*` similarly, with funding-rate per-pair extension to the B67.1 macro modifier (perpetuals have a per-pair funding rate that's a stronger directional signal than the aggregate funding-rate term used for crypto_spot).
+- **B81** introduces the `expectedNetReturnR` ranking primitive with pool-relative normalization, leveling the playing field between asset classes by friction-adjusted opportunity score. SQE asset-class threshold rows for xstock_spot + crypto_perp.
+- **Cycle-break batch (TBD)** moves `kraken-websocket-adapter.ts` to `exchanges/kraken/` after DI inversion of the `live-pricing-adapter` dependency.
+- **Filter-as-first-class batch (B82/B83 TBD)** promotes filters to `module_name='filter:X'` rows in `module_constants` (Synthesis §3.3 first-class filter family).
+
+*End of Modularization Phase Architecture appendix. Last updated 2026-05-07 with B78 close.*
