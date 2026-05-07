@@ -34,7 +34,7 @@
 
 **Sequencing — 4 batches in the next 8 days:**
 1. **B78** — Modularization phase. 8-module extraction across `(exchange, asset_class, filter, strategy, regime)`. Pure file/import refactor. Adds `AND asset_class='crypto_spot'` filter to drift-dashboard-aggregator's `computeFactorCalibration` to lock crypto_spot calibration window. Days 1-3. **Critical path.**
-2. **B79** — Equity_spot (Kraken XStocks Pro) into VTS + active-path wire-in (dormant). 24/5 weekend pause. Threshold derivation 3-layer (domain → cross-asset shadow-classify → 48-72h shadow-mode VTS). Days 4-5.
+2. **B79** — Xstock_spot (Kraken XStocks Pro) into VTS + active-path wire-in (dormant). 24/5 weekend pause. Threshold derivation 3-layer (domain → cross-asset shadow-classify → 48-72h shadow-mode VTS). Days 4-5.
 3. **B80** — Crypto_perp (Kraken Futures) into VTS + active-path wire-in (dormant). Funding-rate per-pair extension to macro modifier. Days 5-6.
 4. **B81** — RTB ranking parity (`expectedNetReturnR` primitive, pool-relative normalization) + SQE asset-class threshold rows. Days 6-7.
 

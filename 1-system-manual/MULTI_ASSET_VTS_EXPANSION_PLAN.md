@@ -12,7 +12,7 @@
 
 Kyle directive 2026-05-07: **skip Phase 16 (legacy cleanup) for now and use the 8-day observational period to ship the Modularization phase + Multi-Asset VTS expansion.** Phase 16 stays parked.
 
-**Active-trading wire-in is IN SCOPE for this stretch — but cannot be tested live yet.** Per Kyle clarification 2026-05-07 evening: we DO wire equity_spot + crypto_perp into the active trading path (signal-orchestrator emit, paper-execution-engine, RTB pool, etc.) so the codepath is end-to-end ready. We just don't flip the active-trading switch on the new asset classes during this stretch — testing those wire-ins lives in **Phase 19** (component-by-component active trading audit), and the live-trading enablement gate is later still. Net effect: the new asset-class code paths exist in production but are dormant for active trading until Phase 19 reaches them.
+**Active-trading wire-in is IN SCOPE for this stretch — but cannot be tested live yet.** Per Kyle clarification 2026-05-07 evening: we DO wire xstock_spot + crypto_perp into the active trading path (signal-orchestrator emit, paper-execution-engine, RTB pool, etc.) so the codepath is end-to-end ready. We just don't flip the active-trading switch on the new asset classes during this stretch — testing those wire-ins lives in **Phase 19** (component-by-component active trading audit), and the live-trading enablement gate is later still. Net effect: the new asset-class code paths exist in production but are dormant for active trading until Phase 19 reaches them.
 
 Reason for the pivot: every prerequisite for adding the new asset classes is now in place — B69 asset-class plumbing live, Kraken XStocks + Kraken Futures feed already scanning + archiving, B72-family lever migration complete, B76 chain-final calibration framework working. The 8 days are wasted if we sit on legacy cleanup when we could ship this expansion observationally.
 
@@ -24,7 +24,7 @@ Confidence in 8-day fit: HIGH (Kyle ground-truth: CC consistently does in hours/
 
 **In scope (this stretch):**
 - B78 — Modularization phase (8-module extraction across `(exchange, asset_class, filter, strategy, regime)`).
-- B79 — Equity_spot (Kraken XStocks Pro) integration into VTS.
+- B79 — Xstock_spot (Kraken XStocks Pro) integration into VTS.
 - B80 — Crypto_perp (Kraken Futures) integration into VTS.
 - B81 — RTB ranking parity + SQE asset-class evaluation in VTS.
 
@@ -35,7 +35,7 @@ Confidence in 8-day fit: HIGH (Kyle ground-truth: CC consistently does in hours/
 - Anything that touches the chain-final calibration framework on crypto_spot.
 
 **In scope (wire-in only, not tested live):**
-- `signal-orchestrator.ts` emit hooks for equity_spot + crypto_perp signals.
+- `signal-orchestrator.ts` emit hooks for xstock_spot + crypto_perp signals.
 - `paper-execution-engine.ts` admission path for new asset classes.
 - RTB pool insertion + ranking for new asset classes.
 - VTS evaluation for new asset classes (THIS is what gets behaviorally verified during this stretch).
@@ -53,9 +53,9 @@ Confidence in 8-day fit: HIGH (Kyle ground-truth: CC consistently does in hours/
 
 ## §3. Why the observation period is safer than it looks
 
-The B67.4/B68.x calibration windows measure per-factor predictive lift on `asset_class='crypto_spot'` rows. Every `regime_factor_alternates` row carries its `asset_class` tag (B69 work, 2026-05-03 ship). Adding equity_spot/crypto_perp rows to that table does NOT contaminate the crypto_spot calibration windows — the aggregator filters by asset_class.
+The B67.4/B68.x calibration windows measure per-factor predictive lift on `asset_class='crypto_spot'` rows. Every `regime_factor_alternates` row carries its `asset_class` tag (B69 work, 2026-05-03 ship). Adding xstock_spot/crypto_perp rows to that table does NOT contaminate the crypto_spot calibration windows — the aggregator filters by asset_class.
 
-**Mandatory aggregator-query update (lands in B78 governance):** `drift-dashboard-aggregator.ts` `computeFactorCalibration` query gets `AND asset_class = 'crypto_spot'` added to the WHERE clause. One line, no schema change. Ensures pre-2026-05-15 calibration analysis stays scoped to crypto_spot regardless of how much equity_spot/crypto_perp data accumulates in the table.
+**Mandatory aggregator-query update (lands in B78 governance):** `drift-dashboard-aggregator.ts` `computeFactorCalibration` query gets `AND asset_class = 'crypto_spot'` added to the WHERE clause. One line, no schema change. Ensures pre-2026-05-15 calibration analysis stays scoped to crypto_spot regardless of how much xstock_spot/crypto_perp data accumulates in the table.
 
 **No-touch fence — Step 0 of every batch in this stretch (mandatory pre-flight + post-deploy check):**
 
@@ -77,7 +77,7 @@ Confirms crypto_spot ablation continues at expected cadence (~10 factors × ~12 
 | Batch | Days | Description | Active-trading impact | Critical path? |
 |---|---|---|---|---|
 | **B78** | 1-3 | Modularization phase. 8-module extraction. Pure file/import refactor. CI green is the gate. Adds asset-class filter on aggregator query. | None | YES |
-| **B79** | 4-5 | Equity_spot (Kraken XStocks Pro): VTS evaluation + active-path wire-in (signal-orchestrator emit, paper-execution-engine admission, RTB insertion). Threshold derivation, regime mapping, strategy gates. 24/5 calendar handling. **Live-trading test deferred to Phase 19; VTS path is what gets behaviorally verified now.** | wire-in only (dormant for live trading until Phase 19) | medium |
+| **B79** | 4-5 | Xstock_spot (Kraken XStocks Pro): VTS evaluation + active-path wire-in (signal-orchestrator emit, paper-execution-engine admission, RTB insertion). Threshold derivation, regime mapping, strategy gates. 24/5 calendar handling. **Live-trading test deferred to Phase 19; VTS path is what gets behaviorally verified now.** | wire-in only (dormant for live trading until Phase 19) | medium |
 | **B80** | 5-6 | Crypto_perp (Kraken Futures): same shape as B79 — VTS + active wire-in (dormant). Funding-rate handling joins macro modifier on perps. | wire-in only | medium |
 | **B81** | 6-7 | RTB ranking parity (`expectedNetReturnR` primitive). SQE asset-class threshold rows. Friction-normalized cross-asset opportunity scoring. Applies to BOTH VTS and active path (active path inert until Phase 19 enables). | wire-in only | LOW (most deferrable) |
 | Slack | 7-8 | Bug-fix + Langston Step-8 second-pass on whichever batches need it. Buffer. | — | — |
@@ -88,7 +88,7 @@ If B78 or B79 slips: B81 moves to post-Phase-16 per Kyle directive. B80 also def
 
 ## §5. B78 — Modularization phase (Day 1-3)
 
-**Goal:** structural refactor of `server/` so per-asset-class logic lives in proper modules. With this scaffolding, B79/B80 become "implement the equity_spot module" and "implement the crypto_perp module" rather than "shoehorn new logic into crypto-shaped files."
+**Goal:** structural refactor of `server/` so per-asset-class logic lives in proper modules. With this scaffolding, B79/B80 become "implement the xstock_spot module" and "implement the crypto_perp module" rather than "shoehorn new logic into crypto-shaped files."
 
 **8-module target** (per `MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` §V):
 
@@ -102,7 +102,7 @@ server/
 │   │   └── index.ts                        ← public surface
 │   ├── crypto_perp/                        ← scaffolded, populated in B80
 │   │   └── (placeholder + index.ts)
-│   └── equity_spot/                        ← scaffolded, populated in B79
+│   └── xstock_spot/                        ← scaffolded, populated in B79
 │       └── (placeholder + index.ts)
 ├── exchanges/
 │   ├── kraken/
@@ -132,12 +132,12 @@ server/
 
 ---
 
-## §6. B79 — Equity_spot (Kraken XStocks Pro) into VTS (Day 4-5)
+## §6. B79 — Xstock_spot (Kraken XStocks Pro) into VTS (Day 4-5)
 
 **Pre-existing infrastructure to verify (not rebuild):**
 - Kraken XStocks pairs already scanning + archiving (Kyle confirmed 2026-05-07).
-- B69 asset-class plumbing live: `resolveAssetClass(symbol, 'kraken')` returns `'equity_spot'` for XStocks pairs (verify in pre-audit).
-- `regime_factor_alternates` already accepts `asset_class='equity_spot'` (no schema change).
+- B69 asset-class plumbing live: `resolveAssetClass(symbol, 'kraken')` returns `'xstock_spot'` for XStocks pairs (verify in pre-audit).
+- `regime_factor_alternates` already accepts `asset_class='xstock_spot'` (no schema change).
 
 **What's new in B79:**
 
@@ -145,62 +145,62 @@ server/
 
 - **Tokenized equities**, 1:1 backed by underlying stocks/ETFs.
 - **Fractional buying supported** down to **$1 minimum**. Same sizing semantics as crypto — no "must buy whole share" constraint. Position-sizing convention from crypto carries over: $1000 base → ~$150/trade.
-- **Trading hours: 24/5** (24h Mon-Fri, closed weekend). NOT 24/7. **VTS must pause equity_spot evaluations on weekends** to avoid stale-price evaluations and false signals during the gap.
+- **Trading hours: 24/5** (24h Mon-Fri, closed weekend). NOT 24/7. **VTS must pause xstock_spot evaluations on weekends** to avoid stale-price evaluations and false signals during the gap.
 - **Settlement: Solana on-chain** (SPL tokens). Affects Phase 19 active trading wire-in (custody / withdrawal / transfer) but NOT VTS.
 - **100 listings as of 2026-05-07**, growing toward 500 by year-end. Pair list is dynamic.
 - **Geographic restriction:** not accessible US/Canada/UK/Australia. Kyle in UAE — clear.
 
-**Action item:** weekend-pause logic is the only NEW execution-flow concern for VTS. Implementation: SQE evaluation gate checks `assetClass==='equity_spot' && isWeekendUTC()` early-return with a `pairsSkippedWeekendClosure` null-reason counter. ~10 LOC.
+**Action item:** weekend-pause logic is the only NEW execution-flow concern for VTS. Implementation: SQE evaluation gate checks `assetClass==='xstock_spot' && isWeekendUTC()` early-return with a `pairsSkippedWeekendClosure` null-reason counter. ~10 LOC.
 
 ### §6.2 Threshold derivation — three-layer approach
 
 **Layer 1: Domain-knowledge baseline (Day 4 morning, 1-2h):**
-- Equity_spot intraday ATR%: ~0.5-2% vs crypto's 2-8% → halve volatility-regime thresholds for equity_spot.
+- Xstock_spot intraday ATR%: ~0.5-2% vs crypto's 2-8% → halve volatility-regime thresholds for xstock_spot.
 - Tighter spreads (~5-15 bps vs crypto's 10-50 bps) → friction model uses tighter spread distribution.
 - Trends slower-moving but more persistent → ADX threshold can drop 25-30 → 15-20 because trends are weaker but more reliable.
 - DI threshold tighter (less directional noise).
 - Volume profile U-shaped (open + close peaks, midday flat) → liquidity_min threshold time-of-day aware.
 
 **Layer 2: Cross-asset shadow-classify (Day 4 afternoon, 2-3h):**
-- Run `calculatePairRegime` on equity_spot historical OHLC (B70 archive has this since 2026-05-04).
+- Run `calculatePairRegime` on xstock_spot historical OHLC (B70 archive has this since 2026-05-04).
 - Inspect 100-200 historical bars per pair across 10-15 representative XStocks pairs (AAPLx, NVDAx, MSFTx, SPYx, QQQx, etc.).
 - TFS detection sanity check: does it fire on clearly-trending stocks (AAPL Q1 2024-style behavior) without firing on whipsaws?
-- RBS sensitivity check: stocks tend to range-bound midday — does RBS over-fire? If yes, tighten RBS confidence threshold for equity_spot.
-- Output: `asset_classes/equity_spot/regime-thresholds.ts` with deltas vs crypto baseline.
+- RBS sensitivity check: stocks tend to range-bound midday — does RBS over-fire? If yes, tighten RBS confidence threshold for xstock_spot.
+- Output: `asset_classes/xstock_spot/regime-thresholds.ts` with deltas vs crypto baseline.
 
 **Layer 3: Shadow-mode VTS collection (Day 5-7, ongoing during B80/B81):**
-- VTS evaluates equity_spot signals in shadow mode (no admission, no active trades).
+- VTS evaluates xstock_spot signals in shadow mode (no admission, no active trades).
 - 48-72h window collects: signals/day per pair, regime distribution, factor lift comparable to crypto baselines.
 - Calibration discipline matches B67.4 — tertile-monotonic WR + ≥7pp HIGH-LOW gap gate before Phase 19 considers active.
 - Compressed to 48-72h vs crypto's 14-day windows because thresholds start from a known-correlated baseline rather than scratch.
 
 ### §6.3 Strategy gates per asset class
 
-`MULTI_FAMILY_ELIGIBILITY` map in `canonical-regime-strategy-map.ts` is asset-class-agnostic in v1. For equity_spot:
+`MULTI_FAMILY_ELIGIBILITY` map in `canonical-regime-strategy-map.ts` is asset-class-agnostic in v1. For xstock_spot:
 - `vwap_pullback`, `breakout`, `mean_reversion`, `range_trade`, `sma_trend_ride`, `vwap_bounce` should map cleanly. Same regime detection inputs (OHLC + ADX + momentum) work on equity bars.
 - `liquidity_trap`, `dhma`, `abcd_long` may not detect properly — pattern-based, depends on crypto-specific microstructure. **B79 Step-2 audit:** pattern-match each strategy's detect logic against equity behavior; either keep or scope-disable per asset class.
-- New module_constants rows: `module='strategy.<key>', asset_class='equity_spot'` for any threshold that varies. Most-specific-wins resolver picks them up automatically.
+- New module_constants rows: `module='strategy.<key>', asset_class='xstock_spot'` for any threshold that varies. Most-specific-wins resolver picks them up automatically.
 
 ### §6.4 SQE evaluation per asset class
 
 `sqe_config` module already supports `asset_class` resolution dimension (B69). New rows seeded:
-- `sqe_config.di_min` for `asset_class='equity_spot'`: tighter than crypto (e.g., 15-20 vs 25-30).
-- `sqe_config.adx_min` for `asset_class='equity_spot'`: 15-20 vs 25-30.
-- `sqe_config.momentum_min` for `asset_class='equity_spot'`: scaled by ATR% ratio.
+- `sqe_config.di_min` for `asset_class='xstock_spot'`: tighter than crypto (e.g., 15-20 vs 25-30).
+- `sqe_config.adx_min` for `asset_class='xstock_spot'`: 15-20 vs 25-30.
+- `sqe_config.momentum_min` for `asset_class='xstock_spot'`: scaled by ATR% ratio.
 
 NO code change to SQE itself. Just module_constants seeds.
 
 ### §6.5 Friction model per asset class
 
-`server/asset_classes/equity_spot/friction.ts` — fees + slippage tuned for tokenized equities. Kraken XStocks fee schedule per pair (need to verify on-chain Solana settlement adds anything beyond Kraken's spread). Spread distribution from B70 archive (already capturing tick data).
+`server/asset_classes/xstock_spot/friction.ts` — fees + slippage tuned for tokenized equities. Kraken XStocks fee schedule per pair (need to verify on-chain Solana settlement adds anything beyond Kraken's spread). Spread distribution from B70 archive (already capturing tick data).
 
 ### §6.6 Numbered objectives for B79
 
 1. Weekend-pause logic in VTS evaluation gate.
-2. Equity_spot threshold rows seeded in `module_constants` (regime, sqe, friction).
+2. Xstock_spot threshold rows seeded in `module_constants` (regime, sqe, friction).
 3. Strategy detect functions audited against equity microstructure; non-applicable strategies scope-disabled per asset class.
-4. VTS shadow-mode emits equity_spot signals into `signal_eval_archive` AND `regime_factor_alternates` (no admission).
-5. Verify `asset_class='equity_spot'` rows accumulating in both archive tables.
+4. VTS shadow-mode emits xstock_spot signals into `signal_eval_archive` AND `regime_factor_alternates` (no admission).
+5. Verify `asset_class='xstock_spot'` rows accumulating in both archive tables.
 6. Verify NO impact on `asset_class='crypto_spot'` row cadence (no-touch fence).
 7. Governance + Langston MEMORY sync.
 
@@ -286,13 +286,13 @@ score = predictiveConfidence × normalizedNetR + CONTEXT_BONUS;
 ### §8.3 SQE asset-class evaluation
 
 SQE primary admission gates (DI, ADX, momentum floor) need asset-class-scoped thresholds. Already supported by `module_constants.sqe_config` per-`(exchange, asset_class, strategy, regime)` resolution. B81 ships:
-- New `sqe_config` rows for each `asset_class IN ('equity_spot', 'crypto_perp')` × each gate.
+- New `sqe_config` rows for each `asset_class IN ('xstock_spot', 'crypto_perp')` × each gate.
 - NO code change to SQE itself. SQE already reads from module_constants per scope. Verifies it works in shadow mode for new asset classes during B79/B80.
 
 ### §8.4 Open architectural questions (Langston review at B81 Step-1)
 
 1. **Pool-relative vs absolute normalization:** pool-relative means rankings shift as the pool composition changes. Cleaner alternative: absolute scale `expectedNetReturnR / typical_winning_R(asset_class)`. Pool-relative is simpler; absolute is more interpretable in dashboards. Langston should weigh in.
-2. **CONTEXT_BONUS asset-class scoping:** does the regime-pool fit bonus translate cleanly to equity_spot? CONTEXT_BONUS rewards signals that match the global regime context. Whose global regime — crypto's or equity market's? B81 Step-2 audit needs to surface this. Probably needs per-asset-class context bonus values.
+2. **CONTEXT_BONUS asset-class scoping:** does the regime-pool fit bonus translate cleanly to xstock_spot? CONTEXT_BONUS rewards signals that match the global regime context. Whose global regime — crypto's or equity market's? B81 Step-2 audit needs to surface this. Probably needs per-asset-class context bonus values.
 3. **Position-sizing parity:** $1000 base → $150/trade works for crypto and tokenized equities (same fractional sizing). Does it work for perps too (~10x leverage native to perps)? Default to "yes, same dollar notional" but flag for Langston review.
 4. **Friction in R-units vs $:** R-units make ranking comparable; $ makes P&L direct. Probably store both, rank on R, P&L-track on $.
 
@@ -301,7 +301,7 @@ SQE primary admission gates (DI, ADX, momentum floor) need asset-class-scoped th
 1. `expectedNetReturnR` computed at signal admission per signal in RTB pool.
 2. Pool-relative normalization within RTB cycle.
 3. New ranking formula deployed; old formula removed (no fallback).
-4. SQE asset-class threshold rows seeded for equity_spot + crypto_perp.
+4. SQE asset-class threshold rows seeded for xstock_spot + crypto_perp.
 5. Verify: VTS RTB pool ranks signals across asset classes by friction-adjusted opportunity score.
 6. Verify: no-touch fence holds. crypto_spot ranking behavior changes ONLY in the friction-normalization, not in confidence math.
 7. Governance + Langston MEMORY sync.
@@ -312,7 +312,7 @@ SQE primary admission gates (DI, ADX, momentum floor) need asset-class-scoped th
 
 This is what gets populated as we work through B79/B80 thresholds. **Update this table at the close of each batch.**
 
-| Threshold | crypto_spot (locked) | equity_spot (B79) | crypto_perp (B80) | Source / rationale |
+| Threshold | crypto_spot (locked) | xstock_spot (B79) | crypto_perp (B80) | Source / rationale |
 |---|---|---|---|---|
 | `regime.adx_min_tfs` | 25 | TBD (~15-20) | inherit crypto_spot | B79 Layer 2 shadow-classify |
 | `regime.adx_min_ie` | 30 | TBD | inherit | same |
