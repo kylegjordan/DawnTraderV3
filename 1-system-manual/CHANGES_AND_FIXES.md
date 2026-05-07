@@ -2,6 +2,45 @@
 
 ---
 
+## INFRA-2026-05-07-E — B78.2 Kraken WS v1→v2 format fix (RUNNING_ISSUES #76 RESOLVED) (SHIPPED 2026-05-07)
+
+**Trigger:** RUNNING_ISSUES #76 surfaced during B78.1 behavioral verify — kraken-websocket-adapter has been generating "Method(s) not found" rejection log lines every ~21s since 2026-04-03 (49,175 health-checks all reporting "Subscribed Symbols: 0"; 142,079 historical rejection lines). System silently functioning via B74 archivers + REST fallback. Per Langston Step-8 sequencing call (B78.1): B78.2 must precede B79 Day 0.
+
+**Investigation path (instructive):**
+1. Initial scope assumed `subscribeToBookChannel` at L2292 (only v1-format `{event:'subscribe', pair, subscription:{name,depth}}` site found via grep) was the failing path. Risk #4 in scope §4 pre-emptively flagged: "if errors continue at same rate, issue is elsewhere."
+2. Initial deploy `5c3ce00b3` (L2292 v1→v2 fix). Error stream **continued unchanged**. Risk #4 materialized.
+3. Diagnosis: error cadence `~21s` ≈ matched `PING_INACTIVITY_MS = 20000` exactly. Source identified as ping at L2767 (`{event:'ping'}` v1 envelope). The v2 endpoint's generic rejection echo uses `method:"subscribe"` label regardless of intended method (Kraken default), which had misled the initial scope.
+4. Hotfix `5ec57cbd3` (L2767 ping v1→v2). Error stream STOPPED at deploy boundary.
+
+**Shipped (commits `5c3ce00b3` + `5ec57cbd3`; PM2 #182 → #183):**
+- `server/exchanges/kraken/kraken-websocket-adapter.ts:2292-2299` — `subscribeToBookChannel` v1→v2 (`{event:'subscribe', pair:[krakenPair], subscription:{name:'book', depth:1}}` → `{method:'subscribe', params:{channel:'book', symbol:[krakenPair], depth:1}}`). Latent bug; would have surfaced when channel-switch path activated.
+- `server/exchanges/kraken/kraken-websocket-adapter.ts:2767` — keep-alive ping v1→v2 (`{event:'ping'}` → `{method:'ping'}` per [Kraken WS v2 ping spec](https://docs.kraken.com/api/docs/websocket-v2/ping)). **The actual root cause** — fired every 20s for 5 weeks generating ~142K rejection log lines.
+
+**Behavioral verify post-deploy:**
+- Last v1-rejection error: 14:16:48 UTC (pre-deploy)
+- First v2-format ping accepted: 14:20:09 UTC (post-deploy)
+- Zero "Method(s) not found" since deploy
+- v2 pings flowing every 20s as expected: `[8.8.5][PING] Sent keep-alive ping (v2 format)`
+- No-touch fence healthy throughout (27-28/factor/hr crypto_spot)
+- B78.1 wiring + EventEmitter inversion unaffected (markers logged, getter bound)
+
+**"Subscribed Symbols: 0" REFRAMED as NOT-A-BUG:** SQL query confirmed `paper_sim_open_positions` is empty on staging. The I8C subscribe path (`i8cSubscribeAllOpenPositions`) is position-gated by design — with 0 open positions, no subscriptions are needed. When positions open, B78.1's EventEmitter wiring will exercise the path naturally and `priceTickEventsPerMinute > 0` will follow. **This was Risk #4 secondary case; reframed correctly to remove the apparent symptom from #76's scope. No B78.3 needed.**
+
+**Langston review trail (compressed workflow per scope §7):**
+- Step-1+2 combined: APPROVED rev 1 in ~2m45s via watchdog. Risk #4 honestly named in scope; reviewer noted "that's the right disclosure."
+- Step-4 folded into Step-8 per scope decision (8-line block; equivalence verified against working in-file paths + Kraken docs).
+- Step-8: APPROVED to close in 25 SECONDS via watchdog. Three pre-close items: (1) ≥1hr clean-log window (deferred to T+24h forward-watch alongside #74), (2) governance bundle (this entry), (3) #76 closure cites Kraken WS v2 ping spec (cited inline above).
+
+**Watchdog `langston-call` validated under load:** 3 round-trips for B78.2 with 35s/2m45s/25s response times (vs prior-path 22-min hang on B78.1 Step-1+2 first attempt). Hang-rate observability now persistent at `/var/log/langston-call.log`.
+
+**Lessons:**
+1. **Kraken's v2 generic rejection echo uses `method:"subscribe"` label regardless of intended method.** The error response shape misled initial diagnosis — we assumed the failing message had `method:"subscribe"` in its request, when actually any unrecognized envelope (including v1 ping) gets that response. **Future:** when Kraken v2 returns "Method(s) not found", do NOT assume the failing send was a subscribe. Consider all v1-format senders in the file.
+2. **Risk #4 honesty paid off.** The scope explicitly named "fix doesn't resolve the failures because the actual sender is a different path I haven't found" as a medium-likelihood risk. When that materialized post-deploy, the response was "diagnose deeper, hotfix in same batch" rather than "scope creep into B78.3." Outcome: same-batch resolution in ~30 min.
+3. **Compressed workflow accelerates surgical fixes.** B78.2 Step-1+2 + Step-8 combined ran in ~3 minutes total review time via watchdog. The full 11-step workflow is calibrated for higher-risk batches; surgical fixes can compress safely when risk register honestly captures the failure modes.
+4. **Behavioral verify must define "success" precisely.** Initial scope's success criterion was `priceTickEventsPerMinute > 0`. Post-fix that stayed at 0 — but for a CORRECT reason (no positions to subscribe). The "fix the noise" goal was satisfied; the "make ticks flow" goal was misframed (it's gated on a different system state). **Future:** when defining behavioral verify, separate "fix the symptom" from "exercise the new path" — they're independent.
+
+---
+
 ## INFRA-2026-05-07-D — B78.1 Cycle break + watchdog + RUNNING_ISSUES #76 discovery (SHIPPED 2026-05-07)
 
 **Trigger:** Kyle no-deferrals directive 2026-05-07 evening — address all 3 B78 deferrals via named batches. B78.1 = cycle break (own batch because data-feed surgery doesn't fit B79 asset-class population).
