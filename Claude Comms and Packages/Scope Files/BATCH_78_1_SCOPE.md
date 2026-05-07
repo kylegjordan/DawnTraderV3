@@ -1,6 +1,6 @@
 # BATCH 78.1 — Cycle break (DI inversion of ws-adapter ↔ live-pricing) + ws-adapter move
 
-**Status:** DRAFT (rev 1) — pending Langston Step 1+2 review
+**Status:** rev 2 — APPROVED by Langston (rev 1 → 2 minor revisions applied: warn-once on unbound mode getter; tighten madge gate to strictly <47; ±20% with 8/10 pair floor; add priceTickEventsPerMinute metric)
 **Workflow:** 11-step canonical
 **Branch:** `migration/aws-supabase`
 **Trigger:** Kyle no-deferrals directive 2026-05-07. B78 deferred this work; addressing it now while the modularization context is hot, before B79 starts.
@@ -20,19 +20,20 @@ Langston rev 1 review (B78) called this HIGH-confidence: "the cycle break deserv
 
 1. **`server/services/kraken-websocket-adapter.ts` becomes leaf.** No imports of `live-pricing-adapter`. Cycle is broken on that side.
 2. **`livePricingAdapter.updateFromWebSocket(...)` → emit `priceTick` event.** 4 call sites in ws-adapter (L569, L708, L841, plus broadcast site at L874 indirectly). The event payload is `{symbol: string, price: number, source: 'kraken_ws', traceId?: string, bid?: number, ask?: number, midpoint?: number}` — pass through whatever `updateFromWebSocket` already accepts.
-3. **`livePricingAdapter.getTradingMode()` → injected getter callback.** ws-adapter exposes `bindTradingModeGetter(getter: () => 'paper' | 'live')`. Default behavior if no getter bound: `'paper'` (safe default — all today's live-trading is gated downstream of ws-adapter anyway).
+3. **`livePricingAdapter.getTradingMode()` → injected getter callback.** ws-adapter exposes `bindTradingModeGetter(getter: () => 'paper' | 'live')`. Default behavior if no getter bound: `'paper'` (safe default — all today's live-trading is gated downstream of ws-adapter anyway). **Per Langston rev 1: log warn-once when the unbound-default fallback is hit** (per CLAUDE.md §8.10 no-silent-fallbacks rule). Don't spam, but don't be invisible.
 4. **`live-pricing-adapter.ts` subscribes once at module-load.** Adds at the bottom of file (or at a designated init function): `krakenWebSocketAdapter.on('priceTick', livePricingAdapter.handleKrakenWsTick.bind(livePricingAdapter))` and `krakenWebSocketAdapter.bindTradingModeGetter(() => livePricingAdapter.currentTradingMode)`. The `handleKrakenWsTick` method is the renamed body of `updateFromWebSocket` — no behavioral change.
 5. **`incrementRestFallbackBlocked()` and `incrementRestFallbackAllowed()` calls in `live-pricing-adapter.ts` (L449/L454) STAY** — they are calls FROM live-pricing TO ws-adapter, which is the kept direction post-cycle-break. No change needed there.
 6. **ws-adapter MOVES to `server/exchanges/kraken/kraken-websocket-adapter.ts`** AFTER the cycle is broken, in the same commit. Internal imports re-pathed (e.g. `./context-bridge.js` → `../../services/context-bridge.js`; `./live-pricing-adapter.js` → REMOVED entirely; `../exchanges/kraken/kraken-pair-metadata-service.js` → `./kraken-pair-metadata-service.js` since both intra-package post-move).
 7. **All callers of `kraken-websocket-adapter` updated to new path.** Pre-flight grep used B78 broader pattern: `from\s+['"](\\.\\.?/)+kraken-websocket-adapter`. Estimate: 5-10 caller files. Updated explicitly; re-export shim at old path is OPTIONAL safety net.
-8. **Madge HARD GATE:** post-move cycle count must DROP from 47 (since cycles #10, #11, #12 all routed through ws-adapter). Acceptance criterion: ≤ 47 cycles AND cycle #10 absent from list. Save updated baseline at `Claude Comms and Packages/Change Lists/BATCH_78_1_MADGE_BASELINE.txt`.
+8. **Madge HARD GATE:** post-move cycle count must DROP from 47 (since cycles #10, #11, #12 all routed through ws-adapter). **Acceptance criterion (per Langston rev 1, tightened): cycle #10 ABSENT from list AND total cycles STRICTLY < 47.** The original `≤47` allowed a regression where #10 is fixed but a new cycle is introduced. Save updated baseline at `Claude Comms and Packages/Change Lists/BATCH_78_1_MADGE_BASELINE.txt`.
 9. **No-touch fence holds.** Pre-flight + post-deploy SQL on `asset_class='crypto_spot'` ablation cadence. Baseline post-B78 recovery: 24-29 rows/factor/hr. Acceptance: stays in 20-35 range post-B78.1.
 10. **Behavioral verify (THIS IS DATA-FEED SURGERY — required, not optional):**
-    - PM2 log side-by-side diff against pre-deploy baseline (~10 min window). Tick counts per pair must match within ±20% tolerance (price-tick rate is high, exact match unrealistic; magnitude check is the bar).
+    - PM2 log side-by-side diff against pre-deploy baseline (~10 min window). **Tolerance: ±20% per pair AND at least 8 of top-10 pairs must be within tolerance** (per Langston rev 1: the 8/10 floor prevents one anomalous pair passing the gate while flagging actual feed degradation; ±10% alone is false-alarm bait given Kraken's natural burst/quiet variance, ±30% alone masks real regressions).
     - VTS 30s scan loop continues without missed cycles.
     - `live_prices:<symbol>` cache freshness ≤ 5s for top 10 pairs (no new staleness regression).
     - WebSocket broadcasts to clients still labeled with correct `mode: 'paper'|'live'` payload.
     - HTTP endpoint smoke: `/api/prices/<symbol>` returns within 200ms.
+    - **NEW per Langston Q4 YES:** `priceTickEventsPerMinute` counter on ws-adapter + 60s log line. ~5 lines. Makes future regressions immediately visible without log archaeology.
 11. **Governance updates landed:** SIM (ws-adapter path moved), CHANGES_AND_FIXES, BATCH_CATALOG, PHASE_HISTORY, RUNNING_ISSUES (close any tracking; #73 + #74 from B78 stay open per their own timelines), plan doc §12 update-log row, all 3 MEMORY copies + Langston MEMORY sync per CLAUDE.md §2 Step 10.b.
 
 ## §3. Out of scope (explicit)

@@ -1,0 +1,48 @@
+Processed 580 files (22.9s) (38 warnings)
+
+1) core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/fx5-scanner.ts
+2) storage.ts > services/guardrail-policy.ts > services/fx5-scanner.ts > services/active-filter-pool.ts
+3) services/market-context-engine.ts > services/data-archive/pair-scan-archiver.ts > services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/fx5-scanner.ts
+4) services/fx5-scanner.ts > services/market-scanner.ts > services/adaptive-scan-manager.ts
+5) storage.ts > services/guardrail-policy.ts > services/fx5-scanner.ts > services/market-scanner.ts
+6) storage.ts > services/guardrail-policy.ts > services/fx5-scanner.ts
+7) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/c5-financial-diagnostics.ts
+8) services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/guardrail-settings.ts
+9) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/guardrail-settings.ts
+10) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/live-pricing-adapter.ts > services/system-health-service.ts
+11) services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts
+12) services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts
+13) services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts
+14) core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts
+15) core/metrics/regime-age-factor.ts > services/market-context-engine.ts > services/data-archive/pair-scan-archiver.ts > services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts
+16) core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts
+17) services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts > services/data-archive/signal-eval-archiver.ts
+18) core/metrics/regime-age-factor.ts > services/market-context-engine.ts > services/data-archive/pair-scan-archiver.ts > services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts > services/factor-ablation-builders.ts
+19) services/market-context-engine.ts > services/data-archive/pair-scan-archiver.ts > services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts
+20) core/boot_orchestrator.ts > services/vts-runner.ts > core/metrics/regime-age-factor.ts > services/market-context-engine.ts > services/data-archive/pair-scan-archiver.ts > services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts > services/ml-service-client.ts
+21) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts > services/paper-sim-diagnostic.ts > services/strategy-engine.ts > services/strategy-features.ts
+22) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts > services/paper-sim-diagnostic.ts > services/strategy-engine.ts
+23) services/strategy-engine.ts > strategies/adaptive-flow.ts
+24) services/strategy-engine.ts > strategies/defensive-hedge.ts
+25) services/strategy-engine.ts > strategies/inside-bar-reversal.ts
+26) services/strategy-engine.ts > strategies/morning-star.ts
+27) services/strategy-engine.ts > strategies/pivot-shift.ts
+28) services/strategy-engine.ts > strategies/reverse-impulse.ts
+29) services/strategy-engine.ts > strategies/strong-bull-trend.ts
+30) services/strategy-engine.ts > strategies/support-bounce.ts
+31) services/strategy-engine.ts > strategies/volatility-edge.ts
+32) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts > services/paper-sim-diagnostic.ts
+33) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts > services/signal-orchestrator.ts
+34) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > services/paper-portfolio-manager.ts
+35) services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts
+36) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts
+37) storage.ts > services/guardrail-policy.ts > services/paper-sim-service.ts > utils/operation-queue.ts
+38) services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > core/rtb/ready_to_buy_service.ts > core/filters/signal_quality_evaluator.ts > storage.ts > services/guardrail-policy.ts
+39) storage.ts > services/guardrail-policy.ts
+40) services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > services/data-archive/exit-decision-archiver.ts
+41) services/market-context-engine.ts > services/data-archive/pair-scan-archiver.ts > services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts
+42) services/trailing-exit-controller.ts > services/trade-safety.ts
+43) services/vts-runner.ts > core/metrics/regime-age-factor.ts > services/market-context-engine.ts > services/data-archive/pair-scan-archiver.ts > services/run-mode-controller.ts > services/trading-state-sync.ts > services/mode-registry.ts > services/micro-execution-service.ts > services/paper-execution-engine.ts > services/vts-live-comparison-audit.ts
+44) services/market-indicators.ts > utils/market-events.ts
+45) services/autonomy-controller.ts > services/unified-core.ts
+

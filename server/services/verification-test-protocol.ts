@@ -7,7 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 
 interface VTPMetrics {

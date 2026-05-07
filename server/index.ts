@@ -659,7 +659,7 @@ app.use((req, res, next) => {
       
       // Phase 8.8.3-I7-WS-E: Register WebSocket subscription checker
       try {
-        const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+        const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
         livePricingAdapter.setWsSubscriptionChecker(() => krakenWebSocketAdapter.getSubscribedSymbols());
         console.log('[I7-WS-E] ✅ WebSocket subscription checker registered');
         

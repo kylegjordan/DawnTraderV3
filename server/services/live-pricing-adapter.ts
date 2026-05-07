@@ -3,7 +3,7 @@ import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js'
 import { priceTraceService } from './price-trace-service';
 import { priceCache } from './price-cache.js';
 import { restRateLimiter } from './market-data/rest-rate-limiter.js';
-import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { trackPipelineTime } from './system-health-service.js';
 
 /**
@@ -999,3 +999,21 @@ export class LivePricingAdapter {
 
 // Singleton instance
 export const livePricingAdapter = new LivePricingAdapter();
+
+// B78.1: Cycle-break wiring. ws-adapter no longer imports live-pricing-adapter;
+// instead it emits 'priceTick' events. live-pricing subscribes here at module-load
+// and binds its tradingMode getter back so ws-adapter can label broadcast payloads
+// without a reverse import. Subscription is registered ONCE (singleton import side
+// effect); removeAllListeners defensive in case of HMR/test re-import.
+import type { PriceTickEvent } from '../exchanges/kraken/kraken-websocket-adapter.js';
+krakenWebSocketAdapter.removeAllListeners('priceTick');
+krakenWebSocketAdapter.on('priceTick', (evt: PriceTickEvent) => {
+  try {
+    livePricingAdapter.updateFromWebSocket(evt.symbol, evt.price, evt.source, evt.traceId);
+  } catch (err) {
+    // Subscriber error must not propagate back to ws-adapter (fire-and-forget invariant)
+    console.error('[B78.1][PRICING_TICK_HANDLER] error processing priceTick event:', err);
+  }
+});
+krakenWebSocketAdapter.bindTradingModeGetter(() => livePricingAdapter.getTradingMode());
+console.log('[B78.1][PRICING] subscribed to ws-adapter priceTick events + bound tradingMode getter');

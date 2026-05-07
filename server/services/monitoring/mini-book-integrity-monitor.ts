@@ -9,7 +9,7 @@
  * triggers a soft resync via the WebSocket adapter.
  */
 
-import { krakenWebSocketAdapter } from '../kraken-websocket-adapter.js';
+import { krakenWebSocketAdapter } from '../../exchanges/kraken/kraken-websocket-adapter.js';
 import { KrakenService } from '../../exchanges/kraken/kraken.js';
 import { normalizeToInternalSymbol, toKrakenRest } from '../../markets/kraken-symbol-resolver.js';
 import fs from 'fs';

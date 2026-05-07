@@ -16,7 +16,7 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
-import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');

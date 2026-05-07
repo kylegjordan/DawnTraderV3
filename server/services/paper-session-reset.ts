@@ -17,7 +17,7 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { getGlobalPaperSimManager, clearGlobalPaperSimManager, getEngineByMode, getOrchestratorByMode } from './paper-sim-service.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
-import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
 import { clearReadyToBuy } from '../utils/clear-routines.js';
 

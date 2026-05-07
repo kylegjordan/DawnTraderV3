@@ -72,7 +72,7 @@ import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter } from './live-pricing-adapter';
-import { krakenWebSocketAdapter } from './kraken-websocket-adapter.js';
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';

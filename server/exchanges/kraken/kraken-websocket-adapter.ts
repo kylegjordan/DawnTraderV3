@@ -1,7 +1,13 @@
 import WebSocket from 'ws';
-import { contextBridge } from './context-bridge.js';
-import { livePricingAdapter } from './live-pricing-adapter.js';
-import { krakenPairMetadataService } from '../exchanges/kraken/kraken-pair-metadata-service.js';
+import { EventEmitter } from 'events';
+import { contextBridge } from '../../services/context-bridge.js';
+// B78.1: removed `import { livePricingAdapter } from './live-pricing-adapter.js'`.
+// Cycle break: ws-adapter is now a leaf in the exchange layer. live-pricing-adapter
+// subscribes to ws-adapter's 'priceTick' events at module-load instead of
+// ws-adapter calling livePricingAdapter.updateFromWebSocket(...). For the broadcast
+// payload's `mode` field, ws-adapter exposes bindTradingModeGetter(getter); if no
+// getter is bound it defaults to 'paper' and warns ONCE.
+import { krakenPairMetadataService } from './kraken-pair-metadata-service.js';
 import { 
   resolveByKrakenWsPair, 
   normalizeToInternalSymbol, 
@@ -9,12 +15,12 @@ import {
   mapKrakenPairToInternal, 
   isMappable,
   getSymbolMappingDetails
-} from '../markets/kraken-symbol-resolver.js';
-import { priceTraceService } from './price-trace-service.js';
-import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
-import { priceCache } from './price-cache.js';
-import { volumeClassifier, VolumeTier, TIER_THRESHOLDS } from './market-data/volume-classifier.js';
-import { translateV2ToV1, isValidV2TickerUpdate, KrakenV2TickerUpdate } from './market-data/kraken-v2-translator.js';
+} from '../../markets/kraken-symbol-resolver.js';
+import { priceTraceService } from '../../services/price-trace-service.js';
+import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
+import { priceCache } from '../../services/price-cache.js';
+import { volumeClassifier, VolumeTier, TIER_THRESHOLDS } from '../../services/market-data/volume-classifier.js';
+import { translateV2ToV1, isValidV2TickerUpdate, KrakenV2TickerUpdate } from '../../services/market-data/kraken-v2-translator.js';
 import * as fs from 'fs';
 
 /**
@@ -81,7 +87,15 @@ interface PerSymbolTimingStats {
   updateCount: number;
 }
 
-export class KrakenWebSocketAdapter {
+// B78.1: 'priceTick' event payload (matches livePricingAdapter.updateFromWebSocket signature)
+export interface PriceTickEvent {
+  symbol: string;
+  price: number;
+  source: 'kraken_ws';
+  traceId?: string;
+}
+
+export class KrakenWebSocketAdapter extends EventEmitter {
   private ws: WebSocket | null = null;
   private isConnected: boolean = false;
   private isConnecting: boolean = false;
@@ -92,6 +106,13 @@ export class KrakenWebSocketAdapter {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private lastPongTime: number = Date.now();
+
+  // B78.1: cycle-break inversion state
+  private tradingModeGetter: (() => 'paper' | 'live') | null = null;
+  private tradingModeWarnedOnce: boolean = false;
+  private priceTickCount: number = 0;
+  private priceTickWindowStart: number = Date.now();
+  private priceTickRateInterval: NodeJS.Timeout | null = null;
   
   // Phase 8.8.3-I7-WS-A: Diagnostic tracking for subscription and tick flow audit
   private firstTickReceived: Set<string> = new Set(); // Track which symbols have received first tick
@@ -198,7 +219,59 @@ export class KrakenWebSocketAdapter {
   private readonly instanceId = `ws-adapter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   
   constructor() {
+    super();
+    // B78.1: increase max listeners from default (10) since multiple consumers
+    // may subscribe to 'priceTick' over time (live-pricing primarily; future
+    // observability listeners possible). 50 is generous; we expect 1-3 in practice.
+    this.setMaxListeners(50);
     console.log(`[${this.MODULE_NAME}] Kraken WebSocket Adapter initialized (instanceId: ${this.instanceId})`);
+
+    // B78.1: priceTick rate metric. Logs total ticks emitted in the last 60s
+    // window so future regressions become visible without log archaeology.
+    this.priceTickRateInterval = setInterval(() => {
+      const now = Date.now();
+      const windowMs = now - this.priceTickWindowStart;
+      const ratePerMin = windowMs > 0 ? Math.round((this.priceTickCount * 60_000) / windowMs) : 0;
+      console.log(`[B78.1][WS_TICK_RATE] priceTickEventsPerMinute=${ratePerMin} (count=${this.priceTickCount} over ${Math.round(windowMs / 1000)}s)`);
+      this.priceTickCount = 0;
+      this.priceTickWindowStart = now;
+    }, 60_000);
+  }
+
+  /**
+   * B78.1: Bind a getter for the current trading mode. Called once by
+   * live-pricing-adapter at module-load. Replaces the pre-B78.1 direct
+   * import + livePricingAdapter.getTradingMode() call from this module
+   * (which created the bidirectional cycle with live-pricing-adapter).
+   */
+  bindTradingModeGetter(getter: () => 'paper' | 'live'): void {
+    this.tradingModeGetter = getter;
+    console.log(`[B78.1][WS_ADAPTER] tradingMode getter bound by consumer.`);
+  }
+
+  /**
+   * B78.1: Resolve the current trading mode for broadcast-payload labeling.
+   * Default: 'paper' (CLAUDE.md §8.10 no-silent-fallbacks rule applies — we
+   * warn ONCE if the getter is unbound; live trading is gated downstream
+   * regardless so the default is safe).
+   */
+  private resolveTradingMode(): 'paper' | 'live' {
+    if (this.tradingModeGetter) {
+      try {
+        return this.tradingModeGetter();
+      } catch (err) {
+        if (!this.tradingModeWarnedOnce) {
+          console.warn(`[B78.1][WS_ADAPTER] tradingModeGetter threw; defaulting to 'paper'. Error:`, err);
+          this.tradingModeWarnedOnce = true;
+        }
+        return 'paper';
+      }
+    }
+    if (!this.tradingModeWarnedOnce) {
+      console.warn(`[B78.1][WS_ADAPTER] tradingModeGetter NOT BOUND — broadcasts will be labeled 'paper'. live-pricing-adapter must call bindTradingModeGetter() at startup.`);
+      this.tradingModeWarnedOnce = true;
+    }
+    return 'paper';
   }
 
   async start(): Promise<void> {
@@ -565,10 +638,12 @@ export class KrakenWebSocketAdapter {
       
       console.log(`[8.9.0-B][WS_TICK] ${internalSymbol} price=${lastPrice}`);
       
-      // Update LivePricingAdapter with price
-      livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws');
-      
-      // priceCache is already updated by livePricingAdapter.updateFromWebSocket
+      // B78.1: emit priceTick event instead of direct call to livePricingAdapter.
+      // live-pricing-adapter subscribes via .on('priceTick', ...) at module-load.
+      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws' } as PriceTickEvent);
+      this.priceTickCount++;
+
+      // priceCache is updated by live-pricing-adapter's priceTick handler (cycle-broken)
       
       // Update tick frequency tracking
       this.updateTickFrequency(internalSymbol, intervalMs);
@@ -704,8 +779,9 @@ export class KrakenWebSocketAdapter {
         console.log(`[8.9.4-P][WS_BOOK_TICK] FIRST: ${internalSymbol} bid=${bestBid} ask=${bestAsk} mid=${midpoint.toFixed(6)}`);
       }
       
-      // Update LivePricingAdapter with midpoint price (using 'kraken_ws' source type)
-      livePricingAdapter.updateFromWebSocket(internalSymbol, midpoint, 'kraken_ws');
+      // B78.1: emit priceTick event instead of direct call to livePricingAdapter.
+      this.emit('priceTick', { symbol: internalSymbol, price: midpoint, source: 'kraken_ws' } as PriceTickEvent);
+      this.priceTickCount++;
       
       // Broadcast to connected clients (throttled - using separate throttle key for book updates)
       const lastBroadcast = this.lastBroadcastTime.get(internalSymbol) || 0;
@@ -834,11 +910,11 @@ export class KrakenWebSocketAdapter {
         console.log(`[I7-WS-A][FIRST_TICK] kraken_ws_pair=${pair} internal_symbol=${internalSymbol} price=${lastPrice}`);
       }
       
-      // Phase 8.8.4: Update LivePricingAdapter cache with properly normalized symbol
-      // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 3 logging
-      // Phase 8.8.3-I7-WS-D: updateFromWebSocket now handles both cache update AND broadcast
-      // This ensures 1:1 Stage-3 → Stage-4 parity (D3)
-      livePricingAdapter.updateFromWebSocket(internalSymbol, lastPrice, 'kraken_ws', traceId);
+      // Phase 8.8.4: live-pricing-adapter cache update + Stage-3→Stage-4 broadcast handled
+      // by live-pricing-adapter's priceTick subscriber (post-B78.1 cycle break).
+      // Phase 8.8.3-I7-WS-C: traceId passed in event payload for Stage 3 logging.
+      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', traceId } as PriceTickEvent);
+      this.priceTickCount++;
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
       priceCache.updateFromWebSocket(internalSymbol, lastPrice);
@@ -870,8 +946,9 @@ export class KrakenWebSocketAdapter {
     
     this.lastBroadcastTime.set(symbol, now);
     
-    // Phase 8.8.3-I6-FIX: Get current trading mode from LivePricingAdapter
-    const currentMode = livePricingAdapter.getTradingMode();
+    // Phase 8.8.3-I6-FIX (revised B78.1): resolve trading mode via injected getter
+    // (cycle-broken; was direct livePricingAdapter.getTradingMode() call).
+    const currentMode = this.resolveTradingMode();
     
     try {
       await contextBridge.broadcast({

@@ -56,7 +56,7 @@ import { activeFilterPool } from './services/active-filter-pool.js';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter } from './services/live-pricing-adapter.js';
-import { krakenWebSocketAdapter } from './services/kraken-websocket-adapter.js';
+import { krakenWebSocketAdapter } from './exchanges/kraken/kraken-websocket-adapter.js';
 import { slippageFeeModel } from './services/slippage-fee-model.js';
 import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
 import { clearReadyToBuy } from './utils/clear-routines.js';
@@ -6782,7 +6782,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Phase 8.8.3-I4 B2: Enhanced with per-symbol timing stats
   apiRouter.get('/diagnostics/ws-price-engine', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       const diagnostics = krakenWebSocketAdapter.getDiagnostics();
       const includeRaw = req.query.raw === '1';
@@ -6855,7 +6855,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i8e/ws-health - Get per-symbol WebSocket health status
   apiRouter.get('/diagnostics/i8e/ws-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       const healthData = krakenWebSocketAdapter.getI8EWsHealth();
       
@@ -7979,7 +7979,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/diagnostics/open-position-ws-linkage', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as 'paper' | 'live') || 'paper';
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       const openPositions = await storage.getPaperSimOpenPositions(mode);
       const wsSubscribed = krakenWebSocketAdapter.getSubscribedSymbols();
@@ -8027,7 +8027,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/diagnostics/i7-ws/subscription-map', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as 'paper' | 'live') || 'paper';
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // Get open positions for the current mode
       const openPositions = await storage.getPaperSimOpenPositions(mode);
@@ -8091,7 +8091,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws/reset-tracking - Reset first tick tracking for fresh diagnostic run
   apiRouter.post('/diagnostics/i7-ws/reset-tracking', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.clearFirstTickTracking();
       res.json({ ok: true, message: 'I7-WS-A diagnostic tracking reset' });
     } catch (error: any) {
@@ -8176,7 +8176,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i7-ws-f/coverage - Phase 8.8.3-I7-WS-F: Get WebSocket coverage status
   apiRouter.get('/diagnostics/i7-ws-f/coverage', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
@@ -8219,7 +8219,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws-f/audit - Phase 8.8.3-I7-WS-F: Run coverage audit
   apiRouter.post('/diagnostics/i7-ws-f/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
@@ -8250,7 +8250,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws-f/auto-subscribe - Phase 8.8.3-I7-WS-F: Auto-subscribe missing symbols
   apiRouter.post('/diagnostics/i7-ws-f/auto-subscribe', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
@@ -8280,7 +8280,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i7-ws-f/validate-map - Phase 8.8.3-I7-WS-F: Validate symbol map integrity
   apiRouter.get('/diagnostics/i7-ws-f/validate-map', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
@@ -8310,7 +8310,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i7-ws-f/health - Phase 8.8.3-I7-WS-F: Get subscription health status
   apiRouter.get('/diagnostics/i7-ws-f/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       const healthStatus = krakenWebSocketAdapter.getSubscriptionHealthStatus();
       
       res.json({
@@ -8335,7 +8335,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws-f/start-monitoring - Phase 8.8.3-I7-WS-F: Start health monitoring
   apiRouter.post('/diagnostics/i7-ws-f/start-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.startSubscriptionHealthMonitoring();
       res.json({ ok: true, message: 'I7-WS-F subscription health monitoring started' });
     } catch (error: any) {
@@ -8347,7 +8347,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws-f/stop-monitoring - Phase 8.8.3-I7-WS-F: Stop health monitoring
   apiRouter.post('/diagnostics/i7-ws-f/stop-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.stopSubscriptionHealthMonitoring();
       res.json({ ok: true, message: 'I7-WS-F subscription health monitoring stopped' });
     } catch (error: any) {
@@ -8361,7 +8361,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i8c/subscription-health - Phase 8.8.3-I8C: Get comprehensive subscription health
   apiRouter.get('/diagnostics/i8c/subscription-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // Get open positions from both paper and live
       const [paperPositions, liveTrades] = await Promise.all([
@@ -8400,7 +8400,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i8c/force-audit - Phase 8.8.3-I8C: Force run subscription audit
   apiRouter.post('/diagnostics/i8c/force-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // Get open positions to audit
       const [paperPositions, liveTrades] = await Promise.all([
@@ -8442,7 +8442,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i8c/start-audit - Phase 8.8.3-I8C: Start subscription audit interval
   apiRouter.post('/diagnostics/i8c/start-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.startI8CSubscriptionAudit();
       res.json({ ok: true, phase: '8.8.3-I8C', message: 'I8C subscription audit started (5-second interval)' });
     } catch (error: any) {
@@ -8454,7 +8454,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i8c/stop-audit - Phase 8.8.3-I8C: Stop subscription audit interval
   apiRouter.post('/diagnostics/i8c/stop-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.stopI8CSubscriptionAudit();
       res.json({ ok: true, phase: '8.8.3-I8C', message: 'I8C subscription audit stopped' });
     } catch (error: any) {
@@ -9053,7 +9053,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i7-ws-g/frequency - Phase 8.8.3-I7-WS-G (G4.1): Get tick frequency metrics
   apiRouter.get('/diagnostics/i7-ws-g/frequency', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       const metrics = krakenWebSocketAdapter.getTickFrequencyMetrics();
       
       const summary = {
@@ -9087,7 +9087,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws-g/reset - Phase 8.8.3-I7-WS-G (G4.2): Reset tick frequency data
   apiRouter.post('/diagnostics/i7-ws-g/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.resetTickFrequencyData();
       res.json({
         ok: true,
@@ -9104,7 +9104,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i7-ws-g/unstable - Phase 8.8.3-I7-WS-G (G4.3): Get unstable symbols
   apiRouter.get('/diagnostics/i7-ws-g/unstable', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       const unstable = krakenWebSocketAdapter.getUnstableSymbols();
       
       res.json({
@@ -9124,7 +9124,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws-g/start-monitoring - Phase 8.8.3-I7-WS-G: Start frequency monitoring
   apiRouter.post('/diagnostics/i7-ws-g/start-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.startTickFrequencyMonitoring();
       res.json({
         ok: true,
@@ -9141,7 +9141,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/i7-ws-g/stop-monitoring - Phase 8.8.3-I7-WS-G: Stop frequency monitoring
   apiRouter.post('/diagnostics/i7-ws-g/stop-monitoring', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.stopTickFrequencyMonitoring();
       res.json({
         ok: true,
@@ -9158,7 +9158,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i7-ws-g/channel-hints - Phase 8.8.3-I7-WS-G (G3): Get channel hints configuration
   apiRouter.get('/diagnostics/i7-ws-g/channel-hints', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       const hints = krakenWebSocketAdapter.getChannelHints();
       
       res.json({
@@ -9181,7 +9181,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/8.8.5/health - Get WebSocket health metrics
   apiRouter.get('/diagnostics/8.8.5/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       const metrics = krakenWebSocketAdapter.getHealthMetrics();
       
       res.json({
@@ -9280,7 +9280,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // POST /api/diagnostics/8.8.5/reset-health-metrics - Reset WebSocket health metrics
   apiRouter.post('/diagnostics/8.8.5/reset-health-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       krakenWebSocketAdapter.resetHealthMetrics();
       const metrics = krakenWebSocketAdapter.getHealthMetrics();
       
@@ -10501,7 +10501,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       
       // Phase 8.8.3-I9: Import services for frequency and volume data
-      const { krakenWebSocketAdapter } = await import('./services/kraken-websocket-adapter.js');
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       const { activeFilterPool } = await import('./services/active-filter-pool.js');
       
       // Get open positions from paper_sim_open_positions

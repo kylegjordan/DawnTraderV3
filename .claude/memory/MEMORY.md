@@ -79,7 +79,7 @@ Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-
 - Kyle ↔ main CC: this Claude Desktop conversation only.
 - Kyle → Langston: DM `@LangstonDTBot` or post in topic 21.
 - main CC → Kyle: `cc-comms-bridge send --thread-id 21`.
-- main CC → Langston: 3 STEPS. (a) `cc-comms-bridge send` for visibility, (b) SSH `claude -p --session-id <UUID> --model claude-opus-4-7` (use fresh UUID if canonical bridge UUID locked), (c) **MANDATORY** post Langston's verbatim stdout reply to Telegram via `@LangstonDTBot`'s sendMessage prefixed `**LANGSTON SPEAKING:**`. Pattern in CLAUDE.md §6.5 Step 3.
+- main CC → Langston: 3 STEPS. (a) `cc-comms-bridge send` for visibility, (b) SSH-deliver via watchdog wrapper `sudo -u langston /usr/local/bin/langston-call /tmp/prompt.txt /tmp/reply.txt` — auto-retries on hang (60s first-byte / 30s idle / 5 max attempts; logs `/var/log/langston-call.log`). Defaults to fresh UUID per attempt. (c) **MANDATORY** post Langston's verbatim stdout reply to Telegram via `@LangstonDTBot`'s sendMessage prefixed `**LANGSTON SPEAKING:**`. Pattern in CLAUDE.md §6.5 Step 3.
 - Receiving: tail unified inbox log.
 
 **Hetzner GDrive FUSE mount is BROKEN for recursive ops.** Stage diffs/files at `/tmp/` via scp. Tell Langston explicitly NOT to use `ls -R` or `git status`.
