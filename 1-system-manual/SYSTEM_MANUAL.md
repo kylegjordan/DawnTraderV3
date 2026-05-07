@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Consolidated**: 2026-02-17
-> **Last Updated**: 2026-04-16 (B62 — DBS-integrated regime classifier redesign, Layer 1 + Layer 1b updates)
+> **Last Updated**: 2026-05-07 (B76 — Chain-Final Calibration Framework Refactor; B77 — `isBreakEvenTriggered` no-op fix). See "Calibration Aggregator Framework (post-B76)" appendix below.
 > **Source**: Systematic 11-phase repository audit
 > **Companion Documents**: CHANGES_AND_FIXES.md, LEGACY_DEPRECATION_PLAN.md, POST_AUDIT_ROADMAP.md, ADJUSTMENT_FRAMEWORK.md (parameter governance), AUTHORITY_BASELINE.md (V1.0 snapshot)
 > **Status**: Complete (all 11 phases consolidated)
@@ -10885,3 +10885,108 @@ Future ML/analytics schedulers query the manifest once instead of needing to kno
 - **B70 retention sweep** — UNCHANGED in B75 (purely additive). Future B75.x can migrate B70 knob into per-table `data_lifecycle.*` registry.
 
 *End of Data Lifecycle Policy. Last updated 2026-05-06 with B75 close.*
+
+---
+
+# Appendix — Calibration Aggregator Framework (post-B76, 2026-05-06)
+
+## What this appendix documents
+
+The chain-final calibration framework refactor shipped in B76 changes how the system measures per-factor predictive lift. This is an **architectural change to the ablation-framework data shape** that downstream analytics consumers must understand.
+
+## The bug B76 fixed (RUNNING_ISSUES #54)
+
+Pre-B76 the calibration aggregator's `shift = real - alt` metric was structurally NOT measuring per-factor effect:
+
+- `realDecision.confidence` stored the raw classifier value (`predictiveConfidence`).
+- Each factor's `alternateDecision.confidence` was built from `_modulatedConfChain` AT THE TIME the factor fired — so mid-chain, with later factors not yet applied.
+- For divide-out factors: `alt.conf = mid_chain_value / factor`. Subtracting that from raw gives `real - alt = raw - (mid_chain / factor)` — a mix of raw vs partial-chain values, not a clean per-factor measurement.
+- For factors FIRST in chain (b67_2_phase_preference, b67_1_macro_modifier): `alt.conf = baseConf` which equals raw `real.conf`, so shift = 0 by construction. b67_2 showed +0.0pp predictive lift through B69.2 era purely as a measurement artifact.
+
+The predictive-lift column (`REAL spread − ALT spread`) was the only trustworthy decision-grade metric pre-B76 because it cancels first-order bias inside each factor's bucket distribution. But absolute "shift" was not trustworthy.
+
+## The B76 fix — two-pass stash-then-build pattern
+
+Both orchestrator emit paths (`server/services/signal-orchestrator.ts` + `server/services/vts-runner.ts`) restructured to:
+
+```
+PASS 1 — at each factor's fire point:
+  - compute factor value
+  - multiply into running `_modulatedConfChain`
+  - push `FactorAlternateInput` discriminated-union record onto a stash array
+  - NO `buildXAlternate` helper called yet
+
+PASS 2 — after final post-floor clamp on `_modulatedConfChain`:
+  - call `buildAllAlternates(stash, chainFinalConfidence, regimeLabel)` from
+    `server/services/factor-ablation-builders.ts`
+  - dispatcher (TS-exhaustiveness-checked switch) calls existing `buildXAlternate`
+    helpers, each computing `alt.conf = chainFinalConfidence / factor`
+    (or label-counterfactual semantics for B68.5)
+  - `emitAblationRecord(source, pair, {confidence: chainFinalConfidence,
+    metadata: {predictiveConfidenceRaw: rawConf, ...}}, alternates, strategy)`
+```
+
+**Discriminated-union dispatcher** (`FactorAlternateInput`): 8 kinds (`b67_1`, `b67_2`, `b67_4`, `b68_1`, `b68_2`, `b68_3`, `b68_4`, `b68_5`). Pure data — no closure capture of orchestrator-frame state. Adding a new factor requires (a) extending the union, (b) adding a dispatch arm, (c) pushing inputs at the fire point in BOTH orchestrators. TS exhaustiveness check catches missing kinds at compile time.
+
+**Cohort version marker** — every row written post-B76 is stamped with:
+
+```ts
+realDecision.metadata.calibrationFrameworkVersion = CALIBRATION_FRAMEWORK_VERSION;
+// where CALIBRATION_FRAMEWORK_VERSION = 'b76_chain_final' as const
+```
+
+Exported from `server/services/factor-ablation-emitter.ts`. Aggregator queries that surface b67_1_*/b67_2_phase_dimension/b67_2_phase_preference MUST filter on this marker — those factors are FIRST in chain, so pre-B76 rows have shift=0 by construction; mixing pre/post-B76 contaminates the post-B76 window with structurally-biased noise. The other 7 factors don't need the version filter because predictive lift cancels first-order bias by construction.
+
+## Aggregator query updates
+
+`server/services/drift-dashboard-aggregator.ts`:
+
+- **L504 (`computeAblationComparison`)**: legacy `factor_name NOT IN ('b67_1_macro_modifier', 'b67_2_phase_dimension')` filter REMOVED. This query computes replay-status counts (pending / replayed / unreplayable) — no shift math involved, so legacy factor-name rows showing up here is expected forensic data.
+- **L1052 (`computeFactorCalibration`)**: `NOT IN` REMOVED, replaced with version-filter logic:
+  ```sql
+  AND (
+    factor_name NOT IN (
+      'b67_1_btc_dominance', 'b67_1_funding_rates', 'b67_1_mcap_momentum',
+      'b67_1_macro_modifier', 'b67_2_phase_preference', 'b67_2_phase_dimension'
+    )
+    OR real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final'
+  )
+  ```
+  Keeps row IF (factor not in the 6 sensitive names) OR (has chain-final marker).
+
+## What B77 fixed
+
+`server/utils/analysis-utils.ts:isBreakEvenTriggered` was hardcoded `gain >= ATR` since B65.1, ignoring the `module_constants.trailing_exit.break_even_trigger_r` row that was plumbed through `TrailingExitConfig` for diagnostics. B77 threaded `breakEvenTriggerR: number = 1.0` 4th arg explicitly so the gate becomes `gain >= ATR * breakEvenTriggerR`. Default 1.0 preserves pre-B77 behavior. Single live caller `trailing-exit-controller.ts:451` updated. Variant K (`break_even_enabled=false`) keeps BE off in production today, so zero behavioral change at current settings; future re-enables for non-crypto asset classes / non-1.0 trigger thresholds will work as designed.
+
+## Verification SQL (post-B76)
+
+```sql
+-- All 10 factor names should appear in chain-final cohort
+SELECT factor_name, COUNT(*),
+       ROUND(AVG((real_decision->>'confidence')::float - (alternate_decision->>'confidence')::float)::numeric, 5) AS avg_shift
+FROM regime_factor_alternates
+WHERE real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final'
+GROUP BY factor_name
+ORDER BY factor_name;
+```
+
+Expected post-B76: b67_1_btc_dominance, b67_1_funding_rates, b67_1_mcap_momentum, b67_2_phase_preference, b67_4_outcome_feedback, b68_1_multi_tf_agreement, b68_2_volume_regime, b68_3_pair_correlation, b68_4_regime_age, b68_5_path_b_sustainability.
+
+**Critical proof-of-life:** `b67_2_phase_preference` shows non-zero shift. Pre-B76 was 0.0000 by construction.
+
+## Forward-monitor invariant (24-48h post-B76 deploy)
+
+Predictive lift on B68.1, B68.2, B68.3, B67.4 must preserve sign and stay within ±1pp of pre-B76 anchor values:
+
+| Factor | Pre-B76 anchor (rolling_7d) |
+|---|---|
+| b67_4_outcome_feedback | +2.95pp |
+| b68_1_multi_tf_agreement | +5.71pp |
+| b68_2_volume_regime | +4.13pp |
+| b68_3_pair_correlation | +4.13pp |
+| b68_4_regime_age | +2.94pp |
+| b68_5_path_b_sustainability | -1.78pp |
+
+If any flips sign → revert via `git revert c8b8709ed 235237ffd` (hotfix first per Langston Step-8 correction, then main). Pure code revert; no schema migration.
+
+*End of Calibration Aggregator Framework appendix. Last updated 2026-05-07 with B76 + B77 close.*

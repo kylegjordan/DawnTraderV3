@@ -49,7 +49,20 @@
 8. **Second-Pass Verification (Langston)** — Independent UI and evidence verification. Mandatory, not optional.
 9. **Iterate** — If any scope objective is not met: fix → Langston reviews → push → deploy → verify. Repeat until all objectives are green.
 10. **Governance Updates** — Update ALL applicable Tier 1 + Tier 2 docs in the repo. See section 3 below. **If the batch touched architecture or math, update `SYSTEM_MANUAL.md`. If the batch touched components, update `SYSTEM_IMPACT_MAP.md`.** Failing to update SIM or System Manual creates the problem of small important details getting buried and forgotten — do not defer this.
-11. **Completion Report** — Scope objectives checklist with YES / NO / PARTIAL + evidence for each. List the governance files that were changed. Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md`. Langston reviews and confirms. Batch is CLOSED only after Kyle's acknowledgment.
+
+    **MANDATORY 10.b — Langston memory sync (Kyle directive 2026-05-07):** at the same time you update your own `MEMORY.md`, also update Langston's `/home/langston/MEMORY.md` on Hetzner with the batch closure block, sequencing changes, and any operational invariants he needs to know. Langston's MEMORY auto-loads on every `claude -p` invocation; if it's stale, his next review will start from the wrong baseline. Mirror your MEMORY structure: state block, recent-batch row, sequencing update, open-issue diff. Keep his MEMORY ≤200 lines too. Update via SSH+heredoc:
+
+    ```bash
+    cat > /tmp/langston_memory.md <<'EOF'
+    [paste new MEMORY content]
+    EOF
+    scp /tmp/langston_memory.md root@204.168.141.77:/tmp/langston_memory.md
+    ssh root@204.168.141.77 'sudo -u langston cp /tmp/langston_memory.md /home/langston/MEMORY.md && wc -l /home/langston/MEMORY.md'
+    ```
+
+    Update `/home/langston/CLAUDE.md` ONLY when the comms protocol or his persona changes (rare). System Manual / BATCH_CATALOG / PHASE_HISTORY / RUNNING_ISSUES on the repo side are auto-visible to Langston via his GDrive mount (when not hung) — no explicit copy needed.
+
+11. **Completion Report** — Scope objectives checklist with YES / NO / PARTIAL + evidence for each. List the governance files that were changed (including `/home/langston/MEMORY.md` per 10.b). Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md`. Langston reviews and confirms. Batch is CLOSED only after Kyle's acknowledgment.
 
 ---
 
@@ -216,9 +229,19 @@ Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps so Kyl
 ssh root@204.168.141.77 "sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=\$(cat /etc/langston/oauth.env | cut -d= -f2-) && export HOME=/home/langston && cd /home/langston && /usr/bin/claude -p --session-id <SESSION_UUID> --model claude-opus-4-7 --permission-mode acceptEdits \"<your message>\"'"
 ```
 
-3. **Post Langston's response to Telegram** via `@LangstonDTBot`'s `sendMessage` so Kyle sees his reply (small Python helper at `/tmp/post_langston_reply.py` if needed; or curl `https://api.telegram.org/bot<TOKEN>/sendMessage` directly with chat_id + thread_id).
+3. **Post Langston's response to Telegram — MANDATORY (Kyle directive 2026-05-07)** via `@LangstonDTBot`'s `sendMessage` so Kyle sees his reply in topic 21. **This is non-negotiable** — Kyle pointed out that when CC delivers to Langston via SSH+claude-cli with a fresh UUID (the workaround when the canonical bridge UUID is locked), the response goes to CC's stdout but the Telegram bridge daemon never sees it. CC MUST relay it manually using the curl pattern below. Otherwise Kyle has zero visibility into what Langston actually said — only CC's summary, which can drift from what Langston wrote.
 
-**Langston's session UUID** lives in `/home/langston/.langston-bridge-state.json` (key `session_id`). Use the same UUID across all your SSH-deliveries so conversation context persists. Bridge will use the same UUID when it processes Telegram inbound.
+   ```bash
+   # After capturing Langston's stdout reply to a file (e.g. /tmp/langston_reply.txt):
+   BOT_TOKEN=$(ssh root@204.168.141.77 'cat /etc/langston/telegram-bot.env | grep -oP "(?<=TOKEN=).*"')
+   ssh root@204.168.141.77 "cat /tmp/langston_reply.txt | curl -s -X POST 'https://api.telegram.org/bot${BOT_TOKEN}/sendMessage' \
+     -d 'chat_id=-1003575211453' -d 'message_thread_id=21' \
+     --data-urlencode 'text@-' -d 'parse_mode=Markdown' | jq .ok"
+   ```
+
+   For long replies, chunk at 4000 chars. Prefix the relayed message with `**LANGSTON SPEAKING:**` so Kyle can distinguish Langston's verbatim text from CC's interpretation. **CC's own summary post (separately) is supplementary — it does NOT replace this verbatim relay.**
+
+**Langston's session UUID** lives in `/home/langston/.langston-bridge-state.json` (key `session_id`). Use the same UUID across all your SSH-deliveries so conversation context persists. Bridge will use the same UUID when it processes Telegram inbound. **When the canonical UUID is locked (bridge daemon polling), use a fresh one-off UUID — but step 3 above STILL applies to relay the response.**
 
 ### 6.6 Receiving — reading the unified inbox log
 
