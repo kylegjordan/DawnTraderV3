@@ -78,6 +78,7 @@
 > **Note:** `1-system-manual/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) was RETIRED on 2026-04-20. Its role was absorbed by this `CLAUDE.md` file (auto-loaded at session start) + `MEMORY.md` (volatile state) + `BATCH_CATALOG.md` + `PHASE_HISTORY.md`. Historical copy preserved at `1-system-manual/_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` — do not edit, do not cite as live governance.
 
 **Tier 2 — When applicable (update if the batch affects these domains):**
+- `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md` — **living plan document for the B78-B81 stretch (created 2026-05-07).** Update BEFORE each batch (sanity-check assumptions still hold) and AFTER (record what landed, deltas vs plan, threshold table population in §9, update log row in §12). Move to `_archive/` only when Phase 19 closes.
 - `1-system-manual/SYSTEM_MANUAL.md` — **architecture + math documentation.** Any change to system architecture, strategy logic, regime detection, filter design, signal pipeline, or quantitative math MUST be reflected here. This is how we avoid burying important details like the DBS orphan situation.
 - `1-system-manual/SYSTEM_IMPACT_MAP.md` — **file-level dependency map.** Any change that adds, removes, or modifies a component MUST be reflected here. This is consulted in Step 2 (pre-audit) of every batch to prevent cascade bugs.
 - `1-system-manual/CHANGES_AND_FIXES.md` — bug/risk registry, add entries for fixes
