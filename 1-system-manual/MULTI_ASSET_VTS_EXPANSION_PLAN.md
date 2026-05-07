@@ -74,15 +74,18 @@ Confirms crypto_spot ablation continues at expected cadence (~10 factors × ~12 
 
 ## §4. Sequencing (8 days, working backward from 2026-05-15)
 
+> **2026-05-07 update (Kyle directive):** No deferrals in this stretch. The three B78 deferrals (ws-adapter cycle break, friction extraction, filter-as-first-class) are folded into named batches below — none left as orphan "address later" items.
+
 | Batch | Days | Description | Active-trading impact | Critical path? |
 |---|---|---|---|---|
-| **B78** | 1-3 | Modularization phase. 8-module extraction. Pure file/import refactor. CI green is the gate. Adds asset-class filter on aggregator query. | None | YES |
-| **B79** | 4-5 | Xstock_spot (Kraken XStocks Pro): VTS evaluation + active-path wire-in (signal-orchestrator emit, paper-execution-engine admission, RTB insertion). Threshold derivation, regime mapping, strategy gates. 24/5 calendar handling. **Live-trading test deferred to Phase 19; VTS path is what gets behaviorally verified now.** | wire-in only (dormant for live trading until Phase 19) | medium |
-| **B80** | 5-6 | Crypto_perp (Kraken Futures): same shape as B79 — VTS + active wire-in (dormant). Funding-rate handling joins macro modifier on perps. | wire-in only | medium |
-| **B81** | 6-7 | RTB ranking parity (`expectedNetReturnR` primitive). SQE asset-class threshold rows. Friction-normalized cross-asset opportunity scoring. Applies to BOTH VTS and active path (active path inert until Phase 19 enables). | wire-in only | LOW (most deferrable) |
+| **B78** | 1 (DONE 2026-05-07) | Modularization scaffold. Pure file/import refactor + aggregator scope filter. SHIPPED at HEAD `de827f37b`. | None | YES |
+| **B78.1** | 1-2 | **Cycle break: DI inversion for `kraken-websocket-adapter ↔ live-pricing-adapter`.** Event-emitter pattern (ws-adapter emits `priceTick` events; live-pricing subscribes; neither imports the other). Move ws-adapter into `server/exchanges/kraken/` after the cycle is broken. Behavioral verify required (data-feed surgery; PM2 log side-by-side diff against pre-deploy baseline). Was deferred from B78; addressed now per Kyle no-deferrals directive 2026-05-07. | None (data-feed plumbing only) | YES |
+| **B79** | 3-5 | Xstock_spot (Kraken XStocks Pro): **Day 0 — per-asset-class friction extraction** (was deferred from B78; folded here per no-deferrals directive). Then VTS evaluation + active-path wire-in (signal-orchestrator emit, paper-execution-engine admission, RTB insertion). Threshold derivation, regime mapping, strategy gates. 24/5 calendar handling. **Live-trading test deferred to Phase 19; VTS path is what gets behaviorally verified now.** | wire-in only (dormant for live trading until Phase 19) | medium |
+| **B80** | 5-6 | Crypto_perp (Kraken Futures): same shape as B79 — VTS + active wire-in (dormant). Funding-rate handling joins macro modifier on perps. crypto_perp friction.ts populated (interface defined in B79 Day 0). | wire-in only | medium |
+| **B81** | 6-7 | **Day 0 — filter-as-first-class promotion** (was deferred from B78; folded here per no-deferrals directive): each filter (`volume_min`, `price_min`, `spread_max`, `liquidity_min`, etc.) becomes a `module_name='filter:<name>'` row in `module_constants`; `pattern-pool-filters.ts` becomes a thin consumer reading from `module_constants` instead of holding TS constants. Then RTB ranking parity (`expectedNetReturnR` primitive). SQE asset-class threshold rows. Friction-normalized cross-asset opportunity scoring. Removes B78 re-export shims (RUNNING_ISSUES #73). | wire-in only | medium (was LOW pre-no-deferrals) |
 | Slack | 7-8 | Bug-fix + Langston Step-8 second-pass on whichever batches need it. Buffer. | — | — |
 
-If B78 or B79 slips: B81 moves to post-Phase-16 per Kyle directive. B80 also deferrable. The minimum viable end-state for this stretch is "B78 + B79 shipped, B80 + B81 either shipped or scoped-and-deferred."
+**No-deferrals directive impact on slack:** B78.1 consumes 1-2 days that were originally slack. B79/B81 each absorb a Day 0 prerequisite. Net stretch still fits within the 8-day window because B81 was originally rated "LOW critical path / most deferrable" — meaning it had room to absorb its Day 0. Risk if any single batch slips ≥2 days: tradeoff conversation with Kyle, NOT silent re-defer.
 
 ---
 
@@ -348,6 +351,38 @@ This is what gets populated as we work through B79/B80 thresholds. **Update this
 
 ---
 
+## §10b. B78.1 design (cycle break — DI inversion)
+
+**Goal:** Break the `kraken-websocket-adapter.ts ↔ live-pricing-adapter.ts` bidirectional import cycle (madge cycle #10 of 47, confirmed B78 pre-flight) BEFORE moving ws-adapter into `server/exchanges/kraken/`. Result: ws-adapter becomes a clean leaf in the exchange layer, live-pricing remains in services/ as the cross-source price abstraction.
+
+**Current shape:**
+- `kraken-websocket-adapter.ts:3` imports `livePricingAdapter` from `./live-pricing-adapter.js`.
+- `live-pricing-adapter.ts:6` imports `krakenWebSocketAdapter` from `./kraken-websocket-adapter.js`.
+- Cycle is invisible today because both intra-package; ESM tolerates intra-package cycles via mutable bindings.
+
+**Target shape (event-emitter inversion):**
+- `kraken-websocket-adapter.ts` extends `EventEmitter` (or exposes `.on('priceTick', cb)` surface). Emits events when it receives Kraken WS price ticks. **Imports nothing from live-pricing-adapter.**
+- `live-pricing-adapter.ts` at startup calls `krakenWebSocketAdapter.on('priceTick', ...)`. Subscribes once. **No call sites from ws-adapter back into live-pricing.**
+- ws-adapter MOVES to `server/exchanges/kraken/kraken-websocket-adapter.ts` (the original B78 plan, now safely possible).
+
+**Behavioral verify (required — this is data-feed surgery, NOT pure refactor):**
+1. PM2 log side-by-side diff against pre-deploy baseline (~10 min window). Tick counts per pair must match within tolerance (price-tick rate is high; exact match unrealistic but order of magnitude must hold).
+2. VTS scan loop (30s) must continue evaluating without missed cycles.
+3. `live-pricing-adapter` price freshness metric (if exists) within normal range.
+4. No-touch fence post-deploy SQL: ablation cadence on crypto_spot must hold (B78 baseline ~24/factor/hr post-recovery).
+
+**Risks:**
+- **EventEmitter listener leak:** if subscriber is registered multiple times (e.g. on hot-reload), tick callback runs N times. Mitigation: subscription is registered ONCE at module-load; documented invariant.
+- **Subscription order race:** if live-pricing subscribes BEFORE ws-adapter is initialized, no events flow. Mitigation: ws-adapter initializes synchronously at import time; live-pricing import order in `index.ts` startup chain ensures correct ordering.
+- **Behavioral drift in error paths:** today, errors propagate through the direct method-call chain; with events, errors in subscribers don't bubble back to ws-adapter. Mitigation: subscriber wraps callback in try/catch + logs; ws-adapter doesn't depend on subscriber success.
+
+**Out of scope for B78.1:**
+- Generalizing the event-emitter pattern to other adapters (Binance, etc.) — when those land.
+- Funding-rate WS feed (B80 territory).
+- Active-trading order placement events (Phase 19).
+
+---
+
 ## §11. Open questions log
 
 Items requiring decision before / during the relevant batch.
@@ -371,6 +406,7 @@ Items requiring decision before / during the relevant batch.
 | 2026-05-07 | CC | Document created per Kyle directive 2026-05-07. Initial scope per CC's earlier message + Kyle's pivot reply. RTB ranking parity (§8) captured per Kyle's explicit ask. xStocks operational facts (§6.1) verified via web research. |
 | 2026-05-07 | CC | Sequencing caveat per Kyle: active-trading wire-in IS in scope (codepath end-to-end ready); live-trading testing of new asset classes deferred to Phase 19. Updated §1, §2, §4 table accordingly. |
 | 2026-05-07 | CC | **B78 kickoff.** Pre-flight no-touch fence SQL run — healthy baseline (10 factors × 9–10 rows/hr each on `asset_class='crypto_spot'`). Fixed §3 typo: column is `evaluated_at`, not `captured_at` (verified against schema). BATCH_78_SCOPE.md drafted (rev 1) — file-system layout per §5, mandatory aggregator-query update on `drift-dashboard-aggregator.ts:1055`, re-export-shim grace policy = 1 batch (cleared in B81). Sent to Langston for Step 1+2 combined review. |
+| 2026-05-07 | CC | **No-deferrals directive (Kyle 2026-05-07):** the three B78 deferrals (ws-adapter cycle break, friction extraction, filter-as-first-class) are folded into named batches per §4 update. No orphan defer-list. New B78.1 batch added for cycle break (own batch because data-feed surgery doesn't fit B79 asset-class population). B79 Day 0 absorbs friction extraction. B81 Day 0 absorbs filter-as-first-class promotion. Slack-budget tradeoff: B78.1 consumes 1-2 days originally slack; B81 was rated "most deferrable" so can absorb its Day 0. If any batch slips ≥2 days, escalate — do NOT re-defer silently. |
 | 2026-05-07 | CC | **B78 SHIPPED** (commits `e814461d6` + `57220ab4b` hotfix; PM2 #180). 4 review rounds (REVISE rev 1 with 6 items → REVISE rev 2 propagation A+B → REVISE rev 3 line 69 + footer → APPROVED rev 4). Step-4 code review APPROVED. Step-8 verify APPROVED to close (cadence math extrapolates to 10 rows/factor/hr, matches baseline). **Deltas vs plan §5:** (a) `kraken-websocket-adapter.ts` deferred out of B78 — bidirectional cycle with `live-pricing-adapter.ts` confirmed via madge; cycle break gets its own batch where DI inversion is the explicit objective. (b) Friction extraction deferred to B79/B80 — `cost-model.ts` is at `server/core/math/` (not `server/utils/` as plan/scope wrote pre-fix), exchange-keyed not asset-class-keyed; resolution-hierarchy inversion risk. Plan §5 file path corrected. (c) `kraken-futures-*` was a misattribution — B74 work is at `server/services/passive-archive/equity-perp-archiver.ts`, not moved. (d) `pattern-pool-filters.ts` filename used (not generic `filters.ts`) per Langston Q2. **§9 threshold-table population: stays empty for B78** — xstock/perp threshold rows enter in B79 (Layer 1 domain knowledge → Layer 2 cross-asset shadow-classify → Layer 3 shadow-mode VTS) and B80 (inherit-from-crypto-spot + funding-rate per-pair extension). **Forward-watch RUNNING_ISSUES #74:** confirm crypto_spot ablation cadence ~9-10/factor/hr at +30 min and +24h; revert `git revert 57220ab4b e814461d6` if drop. **Lessons:** (i) pre-flight grep needs broader pattern — `(\\.\\.?/)+services/kraken` missed 23 intra-services callers using bare `./kraken[.js]`; CI Build caught it. (ii) scope-doc revision discipline — same-name strings can drift across sections invisibly; after each revision, search-replace ALL instances. |
 | _(append rows here at every batch close, plus any mid-batch finding that changes the plan)_ | | |
 

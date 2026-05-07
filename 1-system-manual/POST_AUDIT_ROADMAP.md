@@ -29,6 +29,28 @@
 **Phase 15b NEW status**: LOCKED 2026-04-14 — Regime/DBS/Strategy/Filter Restructure. Five sub-phases (A-E), five batches (B61-B65). Three-way consensus reached.
 **Running Issues**: 37 RESOLVED, 1 DEFERRED, 1 OPEN (#39 CI TS Check).
 **Next phase**: Phase 15b (NEW — Regime/DBS/Strategy/Filter Restructure, B61-B65), then Phase 16 (DB/Legacy Cleanup)
+
+---
+
+### 2026-05-07 update — Multi-Asset VTS Expansion stretch (B78-B81 + B78.1)
+
+Per Kyle directive 2026-05-07: skip Phase 16 cleanup for now and use the 8-day observational window (until 2026-05-15) for the Multi-Asset VTS Expansion stretch. Phase 16 stays parked. Living plan doc: `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md`.
+
+**No-deferrals directive (Kyle 2026-05-07 evening):** the three structural items deferred from B78 (ws-adapter cycle break, friction extraction, filter-as-first-class) are folded into named batches — none left as orphan "address later" items.
+
+| Batch | Status | Description |
+|---|---|---|
+| **B78** | SHIPPED 2026-05-07 (`de827f37b`) | Modularization scaffold. `server/asset_classes/{crypto_spot,crypto_perp,xstock_spot}/` + `server/exchanges/kraken/`. crypto_spot regime-thresholds extracted (leaf module). Aggregator scoped to crypto_spot. Madge 47→47. |
+| **B78.1** | NEXT | **Cycle break only.** DI inversion of `kraken-websocket-adapter ↔ live-pricing-adapter` via event-emitter pattern. Move ws-adapter into `exchanges/kraken/` after cycle is broken. Behavioral verify required (data-feed surgery — PM2 log side-by-side diff against pre-deploy baseline). |
+| **B79** | After B78.1 | Xstock_spot (Kraken XStocks Pro). **Day 0:** per-asset-class friction extraction (`asset_classes/<class>/friction.ts` populated; `cost-model.ts` consumes per-asset-class overlays via module_constants resolution hierarchy). Then xstock_spot weekend-pause logic, 3-layer threshold derivation, strategy gate audit, SQE asset-class threshold rows. |
+| **B80** | After B79 | Crypto_perp (Kraken Futures). Funding-rate per-pair extension to B67.1 macro modifier. crypto_perp friction.ts populated (interface defined in B79 Day 0). |
+| **B81** | After B80 | **Day 0:** filter-as-first-class promotion (`module_name='filter:<name>'` rows in `module_constants`; `pattern-pool-filters.ts` becomes a thin DB consumer). Then RTB ranking parity (`expectedNetReturnR` primitive, pool-relative normalization) + SQE asset-class threshold rows. Removes B78 re-export shims (RUNNING_ISSUES #73). |
+
+This stretch is **observational** for the new asset classes — VTS-path is what gets behaviorally verified. Live-trading testing of xstock_spot / crypto_perp is Phase 19 territory (component-by-component active trading audit). Live-trading enablement is downstream of Phase 19.
+
+**Hard fence on crypto_spot calibration through 2026-05-15** — no threshold/factor-chain/regime-classifier-math changes for crypto_spot during this window. B67.5 consumer-wiring decision opens 2026-05-15.
+
+After this stretch closes, the regular roadmap (Phase 16 → Phase 17 → ... → Phase 21.4 Modularization formal extraction) resumes. Phase 21.4 still owns the **conceptual-module** axis (Exchange Adapter / Filter Module Family / Context Provider / Eligibility / Scoring Kernel / Threshold / Profitability / Ranking); B78-B81 establishes the **asset-class + exchange** axes only.
 **Code freeze in effect**: Regime classifier (`server/core/metrics/market-regime.ts`) and DBS module (`server/core/metrics/directional-bias.ts`) are FROZEN during Phase 15b audit, EXCEPT instrumentation needed to collect evidence. No threshold or formula changes permitted until Phase 15b completes.
 
 ---
