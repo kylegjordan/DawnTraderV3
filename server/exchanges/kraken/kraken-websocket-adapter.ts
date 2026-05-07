@@ -2452,7 +2452,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   async ensureCoverageForOpenPositions(reason: string): Promise<void> {
     console.log('[I7-ROOT-FIX][WS_COVERAGE]', { reason });
     // Use existing auditWebSocketCoverage and autoSubscribeMissingSymbols
-    const { storage } = await import('../storage.js');
+    const { storage } = await import('../../storage.js');
     const openPositions = await storage.getPaperSimOpenPositions('paper');
     const livePositions = await storage.getPaperSimOpenPositions('live');
     const allSymbols = [...new Set([...openPositions.map(p => p.symbol), ...livePositions.map(p => p.symbol)])];
