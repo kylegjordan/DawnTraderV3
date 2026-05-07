@@ -39,6 +39,24 @@ import {
   HVU_DX_STRONG,
   HVU_MOM_NEG_PATH_B,
 } from '../../asset_classes/crypto_spot/regime-thresholds.js';
+// B79: xstock_spot threshold constants — read only when assetClass='xstock_spot'.
+// Crypto_spot path uses the existing constants above (no-touch fence).
+import {
+  RBS_VOL_MAX_XSTOCK,
+  RBS_DX_MAX_XSTOCK,
+  RBS_DBS_MAX_XSTOCK,
+  IE_VOL_MIN_PATH_A_XSTOCK,
+  IE_DX_MIN_PATH_A_XSTOCK,
+  IE_VOL_MIN_PATH_B_XSTOCK,
+  IE_DBS_STRONG_XSTOCK,
+  TFS_MOM_MIN_PATH_A_XSTOCK,
+  TFS_DX_MIN_XSTOCK,
+  TFS_DBS_MODERATE_XSTOCK,
+  HVU_VOL_MIN_XSTOCK,
+  HVU_MOM_NEG_PATH_A_XSTOCK,
+  HVU_DX_STRONG_XSTOCK,
+  HVU_MOM_NEG_PATH_B_XSTOCK,
+} from '../../asset_classes/xstock_spot/regime-thresholds.js';
 
 /**
  * B67.3.5 — Default RegimeConfig matching the migration seed values.
@@ -194,11 +212,41 @@ export function calculatePairRegime(
   dbsSlope: number,
   macroModifier: number,
   regimeConfig: RegimeConfig,
+  assetClass: string = 'crypto_spot',
 ): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
   const mom = computeMomentum(ohlcData);
   const dx = computeADX(ohlcData);
   const absDbs = Math.abs(dbsScore);
+
+  // B79: per-asset-class threshold dispatch. Crypto_spot path math + branch
+  // logic + thresholds UNCHANGED (no-touch fence). Only the threshold values
+  // resolved into `t` differ when assetClass='xstock_spot'. Confidence
+  // formulas (e.g. trap-table literals at line ~220, 225, etc.) stay inline
+  // — only branch CONDITIONS swap thresholds.
+  const t = assetClass === 'xstock_spot'
+    ? {
+        RBS_VOL_MAX: RBS_VOL_MAX_XSTOCK,
+        RBS_DX_MAX: RBS_DX_MAX_XSTOCK,
+        RBS_DBS_MAX: RBS_DBS_MAX_XSTOCK,
+        IE_VOL_MIN_PATH_A: IE_VOL_MIN_PATH_A_XSTOCK,
+        IE_DX_MIN_PATH_A: IE_DX_MIN_PATH_A_XSTOCK,
+        IE_VOL_MIN_PATH_B: IE_VOL_MIN_PATH_B_XSTOCK,
+        IE_DBS_STRONG: IE_DBS_STRONG_XSTOCK,
+        TFS_MOM_MIN_PATH_A: TFS_MOM_MIN_PATH_A_XSTOCK,
+        TFS_DX_MIN: TFS_DX_MIN_XSTOCK,
+        TFS_DBS_MODERATE: TFS_DBS_MODERATE_XSTOCK,
+        HVU_VOL_MIN: HVU_VOL_MIN_XSTOCK,
+        HVU_MOM_NEG_PATH_A: HVU_MOM_NEG_PATH_A_XSTOCK,
+        HVU_DX_STRONG: HVU_DX_STRONG_XSTOCK,
+        HVU_MOM_NEG_PATH_B: HVU_MOM_NEG_PATH_B_XSTOCK,
+      }
+    : {
+        RBS_VOL_MAX, RBS_DX_MAX, RBS_DBS_MAX,
+        IE_VOL_MIN_PATH_A, IE_DX_MIN_PATH_A, IE_VOL_MIN_PATH_B, IE_DBS_STRONG,
+        TFS_MOM_MIN_PATH_A, TFS_DX_MIN, TFS_DBS_MODERATE,
+        HVU_VOL_MIN, HVU_MOM_NEG_PATH_A, HVU_DX_STRONG, HVU_MOM_NEG_PATH_B,
+      };
 
   let regime: MarketRegimeType;
   let confidence: number;
@@ -213,19 +261,19 @@ export function calculatePairRegime(
   // Momentum (30-candle price change ratio): |mom| < 0.003 = noise, > 0.005 = meaningful
   // DBS (B62): |dbs| < 0.10 = neutral, >= 0.30 = moderate+, >= 0.50 = strong
 
-  if (vol < RBS_VOL_MAX && dx < RBS_DX_MAX && absDbs < RBS_DBS_MAX) {
+  if (vol < t.RBS_VOL_MAX && dx < t.RBS_DX_MAX && absDbs < t.RBS_DBS_MAX) {
     // B62: Low vol + low ADX + low DBS = genuine ranging market
     // (pre-B62: no DBS gate, 70% of RBS was drift-contaminated)
     regime = REGIMES.RANGE_BOUND_STABLE;
     confidence = 0.75 + (0.012 - vol) * 12;
-  } else if ((vol > IE_VOL_MIN_PATH_A && dx > IE_DX_MIN_PATH_A) || (vol > IE_VOL_MIN_PATH_B && absDbs >= IE_DBS_STRONG)) {
+  } else if ((vol > t.IE_VOL_MIN_PATH_A && dx > t.IE_DX_MIN_PATH_A) || (vol > t.IE_VOL_MIN_PATH_B && absDbs >= t.IE_DBS_STRONG)) {
     // B62: High vol + strong direction OR moderate vol + very strong DBS = impulse
     // (pre-B62: IE was 0.9% of cycles; now ~2.0% with the DBS-based entry)
     regime = REGIMES.IMPULSE_EXPANSION;
     confidence = 0.65 + (vol - 0.015) * 6 + (dx - 45) * 0.002 + absDbs * 0.1;
   } else if (
-    (mom > TFS_MOM_MIN_PATH_A && dx > TFS_DX_MIN) ||
-    (absDbs >= TFS_DBS_MODERATE && mom > regimeConfig.b68_5PathBMomentumMin)
+    (mom > t.TFS_MOM_MIN_PATH_A && dx > t.TFS_DX_MIN) ||
+    (absDbs >= t.TFS_DBS_MODERATE && mom > regimeConfig.b68_5PathBMomentumMin)
   ) {
     // B62: Positive momentum + directional strength OR moderate+ DBS = trend
     // (pre-B62: TFS was 13.2%; now 34.6% as directional pairs correctly routed)
@@ -256,7 +304,7 @@ export function calculatePairRegime(
     confidence = regimeConfig.tfsDesatMin
       + (regimeConfig.tfsDesatMax - regimeConfig.tfsDesatMin)
         * (momentumFactor * dbsStrength * volInverse);
-  } else if ((vol > HVU_VOL_MIN && mom < HVU_MOM_NEG_PATH_A) || (dx > HVU_DX_STRONG && mom < HVU_MOM_NEG_PATH_B)) {
+  } else if ((vol > t.HVU_VOL_MIN && mom < t.HVU_MOM_NEG_PATH_A) || (dx > t.HVU_DX_STRONG && mom < t.HVU_MOM_NEG_PATH_B)) {
     // Elevated vol in decline OR very strong downward direction -> volatile/unstable
     regime = REGIMES.HIGH_VOLATILITY_UNSTABLE;
     confidence = 0.65 + Math.min(Math.abs(mom) * 8, 0.2);

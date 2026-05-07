@@ -309,6 +309,14 @@ export interface PositionUpdate {
    * Default true for backward compatibility.
    */
   moonbagQualified?: boolean;
+  /**
+   * B79: asset class of the position. When omitted, defaults to crypto_spot
+   * (back-compat — existing crypto callers don't need to pass this).
+   * For xstock_spot positions, the TEC short-circuits stop evaluation when
+   * the equity market is closed — no stop can fire on stale prices during
+   * weekend/holiday windows.
+   */
+  assetClass?: string;
 }
 
 export interface TrailingUpdateResult {
@@ -343,6 +351,12 @@ export interface TrailingUpdateResult {
 }
 
 const trailingStates = new Map<string, TrailingState>();
+
+// B79: TEC stop-freeze counter for market-closed periods on xstock_spot positions.
+// Increments on every updatePosition() call that's short-circuited because the
+// equity market is closed. Logged every 100 occurrences so PM2 logs surface the
+// rate without spam.
+let _b79TecFreezeCount = 0;
 
 /**
  * Directive 9.2.A: Initialize trailing state for a new position
@@ -407,8 +421,44 @@ export function getTrailingState(symbol: string): TrailingState | undefined {
  * - Stage 2 (Target Lock): When price hits target, stop locks to target, mode → TRAILING_TAKE
  */
 export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
+  // ───── B79: market-closed stop-freeze (Langston PIA Q5 placement) ─────
+  // For xstock_spot positions, when the equity market is closed (ARCA
+  // hours; weekend; future-extension US holidays), short-circuit the entire
+  // stop-evaluation. No price action means stops can't fire correctly, and
+  // running the evaluation would just spam noise. Crypto_spot defaults
+  // pass-through (no gate) to preserve no-touch fence.
+  const assetClass = update.assetClass ?? 'crypto_spot';
+  if (assetClass === 'xstock_spot') {
+    // Lazy-import market-hours to avoid a static cycle into asset_classes/.
+    // Synchronous require pattern matches existing code conventions in this file.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { isXstockMarketOpenUTC } = require('../asset_classes/xstock_spot/market-hours.js');
+    if (!isXstockMarketOpenUTC()) {
+      _b79TecFreezeCount++;
+      if (_b79TecFreezeCount % 100 === 1) {
+        console.log(`[B79][TEC_FREEZE] ${update.symbol} (xstock_spot, market closed) — skipping stop-eval (count=${_b79TecFreezeCount})`);
+      }
+      // Return current state unchanged — no stop movement, no mode change.
+      const existing = trailingStates.get(update.symbol);
+      const mode = existing?.tradeMode ?? 'PROTECT_GAINS' as TradeMode;
+      return {
+        symbol: update.symbol,
+        previousMode: mode,
+        newMode: mode,
+        modeChanged: false,
+        newStopPrice: existing?.currentStopPrice ?? update.currentStopPrice,
+        stopMoved: false,
+        breakEvenLatched: existing?.breakEvenLatched ?? false,
+        targetLatched: existing?.targetLatched ?? false,
+        highWaterMark: existing?.highWaterMark ?? update.currentPrice,
+        ladderRungsHit: existing?.ladderRung ?? 0,
+      };
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────
+
   let state = trailingStates.get(update.symbol);
-  
+
   if (!state) {
     state = initializeTrailingState(
       update.symbol,

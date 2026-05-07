@@ -34,6 +34,15 @@ import { PATTERN_POOL_GUARDRAILS } from '../../asset_classes/crypto_spot/pattern
 //      narrow case where module_constants warmup hasn't completed and a non-runtime
 //      consumer (test/audit script) imports the const for static reference.
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+// B79: xstock_spot weekend-pause + per-asset-class strategy whitelist.
+// safeResolveAssetClass returns null on unknown — we treat null as
+// crypto_spot back-compat to keep existing behavior identical.
+import { safeResolveAssetClass } from '../../../shared/asset-classes.js';
+import { isXstockMarketOpenUTC } from '../../asset_classes/xstock_spot/market-hours.js';
+import { isStrategyEnabledForAssetClass } from '../../config/canonical-regime-strategy-map.js';
+
+let _b79WeekendSkipCount = 0;
+let _b79StrategyDisabledCount = 0;
 
 const _SQE_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 
@@ -158,8 +167,53 @@ export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live'): Promis
  */
 export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): Promise<SQEResult> {
   const failures: string[] = [];
-  
+
   const canonicalSymbol = normalizeInternal(input.symbol);
+
+  // ───── B79: per-asset-class gates ──────────────────────────────────────
+  // Resolve assetClass from symbol; null (unknown pattern) → treat as
+  // crypto_spot for back-compat. Crypto_spot path skips all xstock_spot
+  // gates explicitly (no-touch fence).
+  const resolvedAssetClass = safeResolveAssetClass(input.symbol, 'kraken') ?? 'crypto_spot';
+
+  if (resolvedAssetClass === 'xstock_spot') {
+    // (a) Weekend-pause — ARCA hours.
+    if (!isXstockMarketOpenUTC()) {
+      _b79WeekendSkipCount++;
+      if (_b79WeekendSkipCount % 50 === 1) {
+        console.log(`[B79][XSTOCK_WEEKEND_PAUSE] skipping ${canonicalSymbol}/${input.strategy} — ARCA closed (count=${_b79WeekendSkipCount})`);
+      }
+      return {
+        passed: false,
+        signalId: input.signalId,
+        symbol: canonicalSymbol,
+        strategy: input.strategy,
+        metrics: { finalScore: 0, regimeWeight: 0 },
+        thresholds: { finalScoreMin: 0, regimeWeightMin: 0 },
+        failures: ['xstock_weekend_closure'],
+        reason: 'xstock_weekend_closure',
+      };
+    }
+    // (b) Strategy whitelist — only the 6 well-understood, regime-based
+    // strategies are enabled for xstock_spot in B79 (Langston Q2 conservative ship).
+    if (input.strategy && !isStrategyEnabledForAssetClass(input.strategy, resolvedAssetClass)) {
+      _b79StrategyDisabledCount++;
+      if (_b79StrategyDisabledCount % 50 === 1) {
+        console.log(`[B79][XSTOCK_STRATEGY_DISABLED] skipping ${canonicalSymbol}/${input.strategy} — not in xstock_spot whitelist (count=${_b79StrategyDisabledCount})`);
+      }
+      return {
+        passed: false,
+        signalId: input.signalId,
+        symbol: canonicalSymbol,
+        strategy: input.strategy,
+        metrics: { finalScore: 0, regimeWeight: 0 },
+        thresholds: { finalScoreMin: 0, regimeWeightMin: 0 },
+        failures: ['asset_class_disabled'],
+        reason: `asset_class_disabled:${resolvedAssetClass}`,
+      };
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────
   
   // Phase 14: FinalScore and RegimeWeight must be pre-computed by extended metrics
   // Backfill removed — callers must provide these values

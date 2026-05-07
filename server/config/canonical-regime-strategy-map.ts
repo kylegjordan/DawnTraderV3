@@ -858,3 +858,70 @@ export const HYBRID_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
 export const MULTI_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
   vwap_pullback: ['strong_trend'],
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// B79 — per-asset-class strategy whitelist
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Per BATCH_79_SCOPE.md §2.5 + Langston Q2 conservative-ship answer: only
+// 6 well-understood, regime-based strategies are enabled for xstock_spot in
+// B79. The other 12 (pattern recognizers tuned for crypto microstructure,
+// liquidity-trap shorts already disabled, etc.) are scope-disabled per
+// asset class until shadow-mode evidence supports re-enabling.
+//
+// crypto_spot: ALL strategies enabled (back-compat — no change).
+// xstock_spot: only the 6 listed below.
+// other asset classes (crypto_perp, etc.): default open (no gate yet —
+//   gate added when each asset class lands per its own batch).
+//
+// Revisit in B82+ once xstock_spot has 1-2 weeks of shadow-mode data on
+// the disabled 12, with enough sample to evaluate per-strategy false-
+// positive rates on equity bars.
+// B79 rev 7 update: pattern path is ENABLED for xstock_spot with 3 specific
+// file-based pattern strategies (Langston rev 5 specific list, Q3 regime-
+// compatibility appendix approved in PIA round-2). These run in PARALLEL
+// with the 6 quant strategies per Stage 5 architecture (rev 5 correction).
+//
+// `orb` is included here so its detect path is permitted to run and surface
+// a candidate; ACTIVATION is gated separately by the DB row
+// `module_constants.strategy_gates.xstock_spot.orb.enabled` (default false,
+// flipped after the Q-D AAPLx-vs-AAPL probe outcome supports it).
+const XSTOCK_SPOT_ENABLED_STRATEGIES: ReadonlySet<string> = new Set([
+  // Quant whitelist (6) — well-understood regime-based strategies
+  'vwap_pullback',
+  'breakout',
+  'mean_reversion',
+  'range_trade',
+  'sma_trend_ride',
+  'vwap_bounce',
+  // File-based pattern path (3) — classical equity-TA patterns per
+  // Langston rev 5 + PIA round-2 Q3 regime-compatibility appendix:
+  //   inside_bar_reversal — TFS continuation + RBS breakout fits
+  //   morning_star        — HVU/IE reversal at session lows
+  //   pivot_shift         — TFS/IE on pivot break
+  'inside_bar_reversal',
+  'morning_star',
+  'pivot_shift',
+  // Equity-specific (1) — Q-D-gated; activation via DB flag
+  'orb',
+]);
+
+/**
+ * B79: returns true iff `strategy` is enabled for `assetClass`. The SQE
+ * eligibility gate (server/core/filters/signal_quality_evaluator.ts) calls
+ * this and rejects with reason 'asset_class_disabled' when false.
+ *
+ * Default-open for unknown asset classes (back-compat) — adding a new
+ * asset class without touching this helper does not silently disable any
+ * strategy. Conservative gating only when an asset class is explicitly
+ * registered with a whitelist.
+ */
+export function isStrategyEnabledForAssetClass(
+  strategy: string,
+  assetClass: string,
+): boolean {
+  if (assetClass === 'xstock_spot') {
+    return XSTOCK_SPOT_ENABLED_STRATEGIES.has(strategy);
+  }
+  return true; // crypto_spot + everything else: default open
+}

@@ -181,6 +181,53 @@ const XSTOCK_PERP_RAW = /^PF_[A-Z]{2,6}X(USD|EUR|GBP)$/;
  *  context. This pattern is kept for documentation + optional explicit tagging. */
 const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
 
+/**
+ * B79: explicit allow-list of xstock_spot canonical symbols.
+ *
+ * The WS feed and the canonical pair-universe form (used by the scanner) is
+ * `<TICKER>/<QUOTE>` without an x-suffix — indistinguishable by regex from
+ * crypto_spot canonical (`BASE/QUOTE`). When the scanner's pair universe is
+ * merged from `server/config/xstocks-universe.json`, the resolveAssetClass
+ * call will see an `exchange='kraken'` symbol that we MUST classify as
+ * xstock_spot, not crypto_spot.
+ *
+ * This Set is loaded eagerly at module import time. It mirrors the JSON
+ * file. Adding a symbol = edit the JSON + this list together (or refactor
+ * to import the JSON directly; kept inline for shared/ → no dynamic import).
+ *
+ * Membership check is O(1). Resolution dispatches to XSTOCK_SPOT before
+ * the crypto_spot regex paths in `resolveAssetClass` for `exchange='kraken'`.
+ */
+export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set([
+  'AAPL/USD','ABBV/USD','ABNB/USD','ADBE/USD','AEP/USD','AFL/USD','AIG/USD','ALL/USD','ALNY/USD','AMAT/USD',
+  'AMC/USD','AMD/USD','AMGN/USD','AMT/USD','AMZN/USD','AON/USD','ARCT/USD','ARKG/USD','ARKK/USD','ASML/USD',
+  'AUR/USD','AVB/USD','AXP/USD','BABA/USD','BAC/USD','BAX/USD','BBBY/USD','BCC/USD','BDX/USD','BE/USD',
+  'BHC/USD','BIDU/USD','BIIB/USD','BILI/USD','BITF/USD','BLDP/USD','BLNK/USD','BMBL/USD','BMY/USD','BNTX/USD',
+  'BTBT/USD','BTI/USD','BUD/USD','CB/USD','CBOE/USD','CCI/USD','CHPT/USD','CI/USD','CIFR/USD','CL/USD',
+  'CLSK/USD','CMCSA/USD','CME/USD','CNC/USD','COIN/USD','COP/USD','COST/USD','CRCL/USD','CRWD/USD','CSCO/USD',
+  'CVS/USD','CVX/USD','D/USD','DASH/USD','DE/USD','DEO/USD','DFDV/USD','DHR/USD','DIS/USD','DLR/USD',
+  'DTE/USD','DUK/USD','ED/USD','EDU/USD','EIX/USD','ELV/USD','EMR/USD','EQIX/USD','EQR/USD','EQT/USD',
+  'ESS/USD','EVGO/USD','EWA/USD','EWC/USD','EWG/USD','EWI/USD','EWL/USD','EWN/USD','EWP/USD','EWQ/USD',
+  'EWS/USD','EWU/USD','EWZ/USD','EXC/USD','F/USD','FAST/USD','FCEL/USD','FOX/USD','FOXA/USD','GEV/USD',
+  'GILD/USD','GLD/USD','GLOB/USD','GLXY/USD','GM/USD','GME/USD','GOOGL/USD','GOTU/USD','GS/USD','GWW/USD',
+  'HCA/USD','HD/USD','HIG/USD','HIVE/USD','HOLX/USD','HOOD/USD','HUM/USD','HUT/USD','IBM/USD','ICE/USD',
+  'IEMG/USD','INTC/USD','JD/USD','JNJ/USD','JPM/USD','KO/USD','LCID/USD','LECO/USD','LI/USD','LIDR/USD',
+  'LLY/USD','LMND/USD','LMT/USD','LNC/USD','LOW/USD','LRCX/USD','LYFT/USD','MAA/USD','MCD/USD','MCK/USD',
+  'MCO/USD','MDB/USD','MDLZ/USD','MDT/USD','MET/USD','META/USD','MMM/USD','MO/USD','MOH/USD','MPC/USD',
+  'MRK/USD','MRNA/USD','MRVL/USD','MS/USD','MSCI/USD','MSFT/USD','MSTR/USD','MTCH/USD','NBIX/USD','NDAQ/USD',
+  'NEE/USD','NET/USD','NFLX/USD','NIO/USD','NKE/USD','NOW/USD','NTES/USD','NTNX/USD','NVAX/USD','NVDA/USD',
+  'NVO/USD','NVT/USD','NWS/USD','NWSA/USD','O/USD','OPEN/USD','ORCL/USD','OXY/USD','PANW/USD','PARA/USD',
+  'PATH/USD','PCG/USD','PDD/USD','PEP/USD','PFE/USD','PG/USD','PGR/USD','PH/USD','PLD/USD','PLTR/USD',
+  'PLUG/USD','PM/USD','PNR/USD','PRU/USD','PSA/USD','PSX/USD','PWR/USD','PYPL/USD','QCOM/USD','QQQ/USD',
+  'RBLX/USD','REGN/USD','RGEN/USD','RIVN/USD','RKT/USD','RMD/USD','ROK/USD','ROOT/USD','ROP/USD','RTX/USD',
+  'SAGE/USD','SAP/USD','SHEL/USD','SHOP/USD','SLB/USD','SNDK/USD','SNOW/USD','SO/USD','SOFI/USD','SPG/USD',
+  'SPGI/USD','SPY/USD','SRE/USD','STZ/USD','SUI/USD','SUPN/USD','T/USD','TAL/USD','TAP/USD','TER/USD',
+  'TEVA/USD','TGT/USD','THC/USD','TME/USD','TMO/USD','TMUS/USD','TONX/USD','TOTL/USD','TRV/USD','TSLA/USD',
+  'TT/USD','TXN/USD','UBER/USD','UHS/USD','UL/USD','UPS/USD','URI/USD','UWMC/USD','VIA/USD','VICI/USD',
+  'VLO/USD','VOYA/USD','VRTX/USD','VTRS/USD','VZ/USD','WBA/USD','WBD/USD','WFC/USD','XBI/USD','XEL/USD',
+  'XOM/USD','XPEV/USD','XYL/USD','XYZ/USD','ZTS/USD',
+]);
+
 /** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. */
 const CRYPTO_SPOT_CANONICAL = /^[A-Z0-9]{2,10}\/[A-Z0-9]{3,4}$/;
 
@@ -232,6 +279,11 @@ export function resolveAssetClass(symbol: string, exchange: string): AssetClass 
     // Check for explicit xstock_spot display form (AAPLx/USD) — optional
     // path if caller passes the Kraken Pro display format.
     if (XSTOCK_SPOT_DISPLAY.test(symbol)) return ASSET_CLASSES.XSTOCK_SPOT;
+    // B79: explicit xstock_spot allow-list lookup. The canonical pair-universe
+    // form for xStocks is `<TICKER>/<QUOTE>` (no x-suffix), which would
+    // otherwise match CRYPTO_SPOT_KRAKEN_RAW_2 below. Membership-set lookup
+    // is the conservative path — it cannot accidentally re-tag any crypto pair.
+    if (XSTOCK_SPOT_SYMBOLS.has(symbol)) return ASSET_CLASSES.XSTOCK_SPOT;
     // crypto_spot: canonical BASE/QUOTE (uppercase).
     if (CRYPTO_SPOT_CANONICAL.test(symbol)) return ASSET_CLASSES.CRYPTO_SPOT;
     // crypto_spot: Kraken raw forms (XXBTZUSD or SOLUSD).
