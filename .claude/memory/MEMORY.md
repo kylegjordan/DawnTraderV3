@@ -6,86 +6,93 @@
 
 ## SESSION-START PROTOCOL (every new session / post-compact)
 
-1. Read `DawnTraderV3/CLAUDE.md` (especially §6 + §8 — comms protocol changed 2026-05-06).
+1. Read `DawnTraderV3/CLAUDE.md` (especially §6 + §8 — comms; §2 Step 10.b — Langston MEMORY sync mandatory; §6.5 Step 3 — Telegram verbatim relay mandatory).
 2. Read this file.
-3. Read `1-system-manual/POST_AUDIT_ROADMAP.md` for current phase.
-4. **Receive messages from Kyle in this Claude Desktop conversation.** No Telegram polling on Kyle's behalf.
-5. **For Kyle ↔ Langston traffic visibility,** tail the unified log when relevant: `ssh root@204.168.141.77 "tail /var/log/cc-bridge-inbox.jsonl"`. No 30s background polling chain.
-6. Acknowledge readiness in one line. Don't dump context.
+3. Read `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md` — **this is the active living plan for B78-B81.** Update before AND after every batch in this stretch.
+4. Read `1-system-manual/POST_AUDIT_ROADMAP.md` for current phase.
+5. Receive messages from Kyle in this Claude Desktop conversation. No Telegram polling on Kyle's behalf.
+6. For Kyle ↔ Langston traffic visibility, tail `/var/log/cc-bridge-inbox.jsonl` on Hetzner.
+7. Acknowledge readiness in one line. Don't dump context.
 
-**Do NOT:** confabulate; skip SIM in pre-audit; wait on legacy-TS-baseline CI before deploying — Test+Build+Docker pass is enough.
+**Do NOT:** confabulate; skip SIM in pre-audit; wait on legacy-TS-baseline CI before deploying — Test+Build+Docker pass is enough; forget the no-touch fence on crypto_spot during B78-B81 stretch.
+
+---
+
+## CURRENT STATE — 2026-05-07 (post-B77 close + plan pivot)
+
+- **Branch:** `migration/aws-supabase`
+- **Most recent HEAD:** `98e9024b9` (plan-doc commit). Earlier `4c340f9a4` (B76/B77 governance follow-up), `ed972a603` (B77 closure), `65c17bfd3` (B76 closure).
+- **Live:** B70 + B72 + B75 + B76 (chain-final calibration framework) + B77 (`isBreakEvenTriggered` no-op fix).
+- **DB-only UPDATEs (no commits):** `b67_5_post_composition_floor=0.20`, `b68_5_path_b_momentum_min=0.001`, `moonbag_qualifying_strategies=[]`, `break_even_enabled=false` (variant K). All FROZEN through 2026-05-15 per no-touch fence.
+- **B76 chain-final marker live:** `realDecision.metadata.calibrationFrameworkVersion = 'b76_chain_final'` on every new ablation row. Verified: b67_2 shift = -0.01555 across 128 samples (was 0.0000 by construction pre-B76).
+
+---
+
+## THE PIVOT (2026-05-07 evening Kyle directive)
+
+**Skip Phase 16 (legacy cleanup). Use the 8-day observational window (until 2026-05-15) for Modularization + Multi-Asset VTS expansion.**
+
+**Sequencing — 4 batches in the next 8 days:**
+1. **B78** — Modularization phase. 8-module extraction across `(exchange, asset_class, filter, strategy, regime)`. Pure file/import refactor. Adds `AND asset_class='crypto_spot'` filter to drift-dashboard-aggregator's `computeFactorCalibration` to lock crypto_spot calibration window. Days 1-3. **Critical path.**
+2. **B79** — Equity_spot (Kraken XStocks Pro) into VTS + active-path wire-in (dormant). 24/5 weekend pause. Threshold derivation 3-layer (domain → cross-asset shadow-classify → 48-72h shadow-mode VTS). Days 4-5.
+3. **B80** — Crypto_perp (Kraken Futures) into VTS + active-path wire-in (dormant). Funding-rate per-pair extension to macro modifier. Days 5-6.
+4. **B81** — RTB ranking parity (`expectedNetReturnR` primitive, pool-relative normalization) + SQE asset-class threshold rows. Days 6-7.
+
+**Active-trading wire-in IS in scope** for B79-B81 (codepath end-to-end ready). **Live-trading testing of new asset classes is NOT** — that's Phase 19. Phase 16 stays parked. Phase 19 picks up component-by-component after Phase 16.
+
+**Hard fence (§2 of plan doc):** no-touch list on crypto_spot through 2026-05-15. Step-0 pre-flight + post-deploy SQL on every batch:
+
+```sql
+SELECT factor_name, COUNT(*) FROM regime_factor_alternates
+WHERE asset_class='crypto_spot' AND captured_at > NOW() - INTERVAL '1 hour'
+GROUP BY factor_name;
+```
+
+If cadence drops post-deploy → halt and revert.
+
+**Living plan doc:** `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md`. Update before each batch (sanity-check) and after (record what landed, threshold table population in §9, update log row in §12). Now Tier 2 mandatory per CLAUDE.md §3.
+
+---
+
+## OPERATIONAL FACTS (verified 2026-05-07)
+
+- **Kraken XStocks Pro** = equity exchange. Tokenized 1:1 backed equities. **Fractional buying $1 minimum** → same `$1000 base → ~$150/trade` sizing as crypto. **24/5 trading** (closed weekends — VTS needs weekend-pause gate). Solana-settled (affects Phase 19 active-path custody, NOT VTS). Geographically clear from UAE.
+- **Kraken Futures** = perp exchange (B74 KNOWN_NONEXISTENT_NAMES log: REST endpoint `https://futures.kraken.com/api/charts/v1/trade/<sym>/1m`). 24/7 trading. Funding rate is per-pair signal (NEW input to crypto_perp's macro modifier in B80).
+- Both feeds **already scanning + archiving** in production (B69 + B74 work).
 
 ---
 
 ## LANGSTON RUNTIME + COMMS (since 2026-05-06)
 
-OpenClaw decommissioned. Two systemd bridges on Hetzner `204.168.141.77`:
-- `langston-bridge.service` polls `@LangstonDTBot`, invokes `claude -p --session-id <UUID> --model claude-opus-4-7`. `[SILENT]` to skip Telegram post.
-- `cc-comms-bridge.service` polls `@CCDTCommsBot`, provides `cc-comms-bridge send --thread-id N --message "..."` CLI for my outbound.
-
-**Unified inbox log:** `/var/log/cc-bridge-inbox.jsonl`. Single tail-point.
+Two systemd bridges on Hetzner `204.168.141.77`: `langston-bridge.service` + `cc-comms-bridge.service`. Unified inbox log `/var/log/cc-bridge-inbox.jsonl`.
 
 **Send protocol:**
-- Kyle ↔ main CC: this Claude Desktop conversation only. Telegram NOT used.
-- Kyle → Langston: DM `@LangstonDTBot` or post in topic 21 (mention optional).
+- Kyle ↔ main CC: this Claude Desktop conversation only.
+- Kyle → Langston: DM `@LangstonDTBot` or post in topic 21.
 - main CC → Kyle (visibility): `ssh root@204.168.141.77 'cc-comms-bridge send --thread-id 21 --message "..."'`
-- main CC → Langston: TWO STEPS. (a) `cc-comms-bridge send` for visibility, (b) `ssh ... claude -p --session-id <FRESH_UUID> --model claude-opus-4-7 "..."` for delivery (Telegram bot-to-bot is BLOCKED at platform level; canonical UUID often locked by bridge daemon — fresh UUID for one-offs is fine).
-- Receiving: `tail /var/log/cc-bridge-inbox.jsonl`.
+- main CC → Langston: TWO STEPS. (a) `cc-comms-bridge send` for visibility, (b) `ssh ... claude -p --session-id <FRESH_UUID> --model claude-opus-4-7 "..."` for delivery (Telegram bot-to-bot is BLOCKED). **(c) MANDATORY (Kyle directive 2026-05-07): post Langston's verbatim stdout reply to Telegram via `@LangstonDTBot`'s sendMessage** prefixed with `**LANGSTON SPEAKING:**`. CC summary (separately) supplements but does not replace verbatim relay. Pattern documented in CLAUDE.md §6.5 Step 3.
+- Receiving: tail unified inbox log.
 
-**Hetzner GDrive FUSE mount is BROKEN for recursive ops** (find / git-against-tree). When delivering review requests to Langston that reference repo files, **stage diffs/files at `/tmp/` via `scp` first** and tell him explicitly NOT to touch `/mnt/gdrive/` or run `git`. His Read tool against absolute `/tmp/` paths works fine. Discovered B76 Step-4: stuck git processes hung 30+ min in disk-wait.
+**Hetzner GDrive FUSE mount is BROKEN for recursive ops.** When delivering review requests to Langston referencing repo files, **stage diffs/files at `/tmp/` via scp first** and tell him explicitly NOT to touch `/mnt/gdrive/` or run `git`. His Read tool on absolute `/tmp/` paths works.
 
-**OAuth token:** `/etc/langston/oauth.env`, valid 1 year (issued 2026-05-06). Rotate by 2027-04 via `claude setup-token`. Cost ~$200/mo (Max sub) replacing ~$750/mo (OpenClaw+API).
+**Langston MEMORY sync per batch — MANDATORY (Kyle directive 2026-05-07):** Step 10.b in CLAUDE.md §2. Mirror CC's MEMORY.md to `/home/langston/MEMORY.md` via SSH+scp at every batch close. Same 200-line cap. His MEMORY auto-loads on every claude -p invocation.
 
-**Full canonical reference:** project `CLAUDE.md` §6 + §8.
-
----
-
-## CURRENT STATE — 2026-05-07 (post-B77)
-
-- **Branch:** `migration/aws-supabase`
-- **Most recent HEAD:** `ee7522b4d` (B77 ship). Earlier `65c17bfd3` (B76 closure), `235237ffd` (B76 Step-3 push), `f4e6a73f6` (B75).
-- **Live:** B70 family + B72 family + B75 (data lifecycle/tiered storage) + B76 (chain-final calibration framework) + **B77 (`isBreakEvenTriggered` no-op fix, RUNNING_ISSUES #71 RESOLVED)**. 18/18 canonical strategies DB-tunable. 51 modules / ~332 rows in `module_constants` (no new module_constants in B76 or B77).
-- **DB-only UPDATEs (no commits):** `b67_5_post_composition_floor=0.20`, `b68_5_path_b_momentum_min=0.001` (B75 close), `moonbag_qualifying_strategies=[]`, `break_even_enabled=false` (variant K). Trailing-after-target DISABLED.
-- **DatabaseMonitor:** alarm NORMAL (5.2% / 200 GB plan cap).
-- **Calibration framework version marker:** every new `regime_factor_alternates` row stamped `realDecision.metadata.calibrationFrameworkVersion = 'b76_chain_final'` post-B76 deploy.
-
----
-
-## B76 — SHIPPED 2026-05-06 (chain-final calibration framework)
-
-Closes RUNNING_ISSUES #54. Two-pass stash-then-build pattern in both orchestrator emit paths (signal-orchestrator + vts-runner). Each factor's fire point pushes a `FactorAlternateInput` discriminated-union record onto a stash; after final post-floor clamp on `_modulatedConfChain`, `buildAllAlternates(stash, chainFinal, regimeLabel)` dispatches to existing `buildXAlternate` helpers. `emitAblationRecord` now persists chain-final `realDecision.confidence`; raw classifier value preserved at `realDecision.metadata.predictiveConfidenceRaw`.
-
-**Files:** `factor-ablation-emitter.ts` (+`CALIBRATION_FRAMEWORK_VERSION` const), NEW `factor-ablation-builders.ts` (~210 LOC dispatcher with TS exhaustiveness check), `regime-phase.ts` (+NEW `buildB67_2Alternate` extracted from inline blocks), `signal-orchestrator.ts` + `vts-runner.ts` restructured, `drift-dashboard-aggregator.ts` (removed two `factor_name NOT IN (...)` filters; `computeFactorCalibration` now version-filters b67_1_*/b67_2_* to chain-final cohort only), NEW `b76-chain-final-emit.test.ts`. Zero formula/weight/threshold change. No DB migration. No new module_constants.
-
-**Pre-B76 vs post-B76 row distinction:** aggregator queries surfacing b67_1_*/b67_2_* now require the chain-final marker (Langston Step-1 §4 revision); other 7 factors don't need version filter (predictive lift cancels first-order bias).
-
-**Langston review trail:** Step-1 scope APPROVED-WITH-REVISIONS (architecture two-pass dispatch + version-filter + TS const validated). Step-2 pre-audit + Step-4 code review combined APPROVED-WITH-REVISIONS — one blocker (.js ESM extensions on two new/modified files) fixed pre-push.
-
-**Verify post-deploy:** SQL spot-check `SELECT factor_name, COUNT(*) FROM regime_factor_alternates WHERE real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final' GROUP BY factor_name`. Within 24h, b67_1_*/b67_2_phase_preference rows should show non-zero shift (was 0 by construction pre-B76). Predictive lift on B68.1/.2/.3/B67.4 should preserve sign + stay within ±1pp of pre-B76.
-
----
-
-## Sequencing after B77
-
-1. **24-48h forward monitor on B76:** confirm b67_1_*/b67_2 accumulate non-zero shifts as macro modifier varies away from 1.0 fallback; B68.1/.2/.3/B67.4 lifts preserve sign + stay within ±1pp of pre-B76 anchors (b67_4 +2.95, b68_1 +5.71, b68_2 +4.13, b68_3 +4.13, b68_4 +2.94, b68_5 -1.78). If any flip → `git revert c8b8709ed 235237ffd` (hotfix first per Langston Step-8 correction).
-2. Phase 16 (TS errors + storage.ts modularization).
-3. B75.x deferrals (#K.5 partition ctx-bridge, #K.6 partition audit/walter, #K.7 B70 knob registry migration).
-4. B67.5 consumer wiring opens 2026-05-15 (gated on calibration windows passing). B76 enables trustworthy lift measurement for the gating decision.
+**OAuth token:** `/etc/langston/oauth.env`, valid 1 year (issued 2026-05-06).
 
 ---
 
 ## RECURRING ANALYSIS RECIPE (trigger: "**run the calibration review**")
 
-1. **Factor calibration table.** `GET /api/analytics/factor-calibration?window=rolling_7d` — 10-row factor table: avg/abs/max shift, n, %zero, REAL tertile WR (low/mid/high) + spread, ALT tertile WR + spread, **predictive lift** (REAL−ALT spread), status. Post-B76: b67_1_*/b67_2_phase_preference now filterable to chain-final cohort.
-2. **Exit-strategy ablation table.** `GET /api/analytics/exit-strategy-ablation?window=rolling_7d` — 12-variant table sorted by Sharpe.
-3. **Verify recent fixes:** b68_5 lift drift; trailing-after-target DISABLED (`exit_reason='TRAIL_hit'` near-zero); liquidity_trap exclusion; floor 0.20; B72 sync-read API healthy; **B76 marker** present on every new ablation row.
-4. **Plain-language interpretation + recommendations** for B67.5 wiring (~2026-05-15).
+1. `GET /api/analytics/factor-calibration?window=rolling_7d` — 10-row factor table with predictive lift. Post-B76: aggregator filters chain-final cohort for b67_1_*/b67_2_*. Post-B78: aggregator scoped to `asset_class='crypto_spot'`.
+2. `GET /api/analytics/exit-strategy-ablation?window=rolling_7d` — 12-variant table sorted by Sharpe.
+3. **Verify recent fixes:** b68_5 lift drift; trailing-after-target DISABLED; liquidity_trap exclusion; floor 0.20; B72 sync-read API healthy; **B76 marker** present.
+4. Plain-language interpretation + recommendations for B67.5 wiring (~2026-05-15).
 
 ---
 
-## Calibration windows (active)
+## Calibration windows (active, LOCKED through 2026-05-15)
 
-B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3 pair correlation ends 2026-05-16 · B68.1 multi-TF ends 2026-05-17. Gate: tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket. **B67.5 consumer wiring** post-2026-05-15 if B67.4 passes — now backed by trustworthy chain-final lift data thanks to B76.
+B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi-TF — gates: tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket. **Pre-B76 reference lifts (24-48h ±1pp anchor):** b67_4 +2.95pp, b68_1 +5.71pp, b68_2 +4.13pp, b68_3 +4.13pp, b68_4 +2.94pp, b68_5 −1.78pp. If any flip post-B76 → revert via `git revert c8b8709ed 235237ffd` (hotfix first per Langston Step-8 correction).
 
 ---
 
@@ -93,10 +100,11 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 
 | Batch | Date | Note |
 |---|---|---|
-| B70 family + B72 family | 2026-05-04 → -06 | Unified archive + 18/18 canonical strategies DB-tunable. Comms migration to CC Max bridges. |
-| **B75 (Data Lifecycle / Tiered Storage)** | 2026-05-06 | CLOSED. Hot/warm/cold tiered. DatabaseMonitor alarm CRITICAL→NORMAL. Originally drafted as B73; renumbered after pre-audit grep. |
-| **B76 (Chain-Final Calibration Framework)** | 2026-05-06 | CLOSED. Two-pass stash-then-build dispatch. Closes RUNNING_ISSUES #54. Enables trustworthy per-factor predictive lift before B67.5 wiring. |
-| **B77 (`isBreakEvenTriggered` no-op fix)** | 2026-05-07 | CLOSED. Closes RUNNING_ISSUES #71. Threads `breakEvenTriggerR` 4th arg with default 1.0 (preserves pre-B77 behavior). Single live caller updated. Zero behavioral change at current settings (variant K keeps BE off). |
+| B70 + B72 | 2026-05-04→06 | Unified archive + 18/18 strategies DB-tunable |
+| **B75** | 2026-05-06 | Hot/warm/cold tiered storage. DatabaseMonitor alarm CRITICAL→NORMAL |
+| **B76** | 2026-05-06 | Chain-final calibration framework. RUNNING_ISSUES #54 RESOLVED |
+| **B77** | 2026-05-07 | `isBreakEvenTriggered` no-op fix. RUNNING_ISSUES #71 RESOLVED |
+| _B78-B81 in progress per plan doc_ | 2026-05-07→15 | Modularization + Multi-Asset VTS expansion |
 
 ---
 
@@ -104,38 +112,41 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 
 - OPEN: #39 (CI TS legacy → Phase 16), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index)
 - DEFERRED: #12e, #40, #44, #45, #52
-- RESOLVED: #54 (B76), #55, #56–#59, #60–#69 (B75 + hotfixes), #70/#72 (B75 close), **#71 (B77)**, BUG-2026-05-05-E/F/G, BUG-2026-05-06-A
+- RESOLVED 2026-05-06/07: #54 (B76), #55, #56–#69 (B70+B75 + hotfixes), #70/#71/#72 (B75 close + B77)
 
 ---
 
-## Next session pickup priority
+## Next session pickup priority (post-compact)
 
-1. **24-48h B76 forward-monitor verify** (b67_1_*/b67_2 accumulating non-zero shifts; B68.x/B67.4 lifts within ±1pp of pre-B76 anchors).
-2. **trading-engine.ts BUG-012 cleanup** (calculateGoalAlignmentScore duplicates pre-execution-validator's alignment block).
-3. **Tier 2 governance housekeeping:** SIM per-source-file annotations across ~25 PROMOTE files.
-4. **Phase 16** (TS errors + storage.ts modularization).
+1. **B78 — Modularization phase** (per plan doc §5). Read plan doc first.
+2. Run no-touch fence pre-flight SQL (§3 of plan doc) BEFORE first commit.
+3. Read `MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` §V to confirm 8-module target hasn't drifted.
+4. Draft `BATCH_78_SCOPE.md` per plan doc §5.
+5. Send to Langston combined Step-1+2 (with import-graph cycle ask).
+6. Per Langston review → push → CI → deploy → verify (no-touch fence post-deploy) → governance (incl. plan-doc update + Langston MEMORY sync per CLAUDE.md §2 Step 10.b).
 
 ---
 
 ## Kyle Operating Directives (active)
 
-- Don't pause to ask permission during workflow execution. Iterate with Langston through 11 steps.
-- Visual UI verification via Claude-in-Chrome on every UI-touching batch.
-- Deploy after Test+Build+Docker pass — don't wait on legacy TS Check baseline.
-- **NO WORKAROUNDS.** Fix things properly. No new TypeScript errors.
+- Don't pause to ask permission. Iterate with Langston through 11 steps.
+- Visual UI verification via Claude-in-Chrome on UI-touching batches.
+- Deploy after Test+Build+Docker pass — don't wait on legacy TS baseline.
+- **NO WORKAROUNDS.** Fix things properly.
 - **No fallbacks for DB-governed settings.** Cold-start warmup paths are NOT fallbacks.
-- Sensitive credentials → staging `.env` via SSH only. Never commit / paste in chat.
-- **Post-mass-migration discipline:** `grep -rn "<OLD_CONST>" server/ --include="*.ts"` on every removed const before push. `tsc --noEmit` on touched files (or trust CI when local tsc unavailable).
+- Sensitive credentials → staging `.env` via SSH only.
+- **Post-mass-migration discipline:** grep for removed const + tsc check on touched files (or trust CI).
 - Iterate with Langston to consensus; escalate to Kyle only on deadlock / scope expansion / new directive.
-- Kyle messages me here in Claude Desktop. Not via Telegram. CCDTCommsBot is for outbound visibility only.
+- **Kyle messages me here in Claude Desktop.** Telegram is for Kyle ↔ Langston + CC outbound visibility.
+- **No-touch fence on crypto_spot through 2026-05-15.** No threshold/factor-chain/regime-classifier-math changes for crypto_spot.
 
 ---
 
 ## Session Behavior Invariants
 
-- **New comms:** see CLAUDE.md §6.4–6.7. `cc-comms-bridge send` for outbound; SSH+`claude -p --session-id <FRESH_UUID>` for AI-to-AI delivery to Langston; tail `/var/log/cc-bridge-inbox.jsonl` for inbound. NO `openclaw`, NO `cc-inbox`.
-- **Hetzner GDrive FUSE broken for recursive ops** — stage diffs/files at `/tmp/` via scp before delivering Langston review requests. Tell him explicitly NOT to touch `/mnt/gdrive/` or run `git`.
-- VTS position sizing $1000 base → ~$150/trade. Intentional.
+- **New comms:** see CLAUDE.md §6.4–6.7. Telegram verbatim relay of Langston responses MANDATORY.
+- **Hetzner GDrive FUSE broken for recursive ops** — stage diffs at /tmp/ via scp.
+- VTS position sizing $1000 base → ~$150/trade. Same for tokenized equities.
 - GDrive npm install fails EBADF — CI is verification gate.
 - CoinGecko Demo API key in staging `.env` (don't commit).
 
@@ -143,9 +154,10 @@ B67.4 cheap-tier ends 2026-05-15 · B68.2 volume regime ends 2026-05-16 · B68.3
 
 ## Required pre-reads on session start
 
-1. `DawnTraderV3/CLAUDE.md` (especially §6 + §8 — new comms)
+1. `DawnTraderV3/CLAUDE.md` (especially §6 + §8 + §2 Step 10.b + §6.5 Step 3)
 2. This file
-3. `1-system-manual/POST_AUDIT_ROADMAP.md`
-4. `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` — live DB-tunable settings
-5. `Claude Comms and Packages/Batch Completion/BATCH_76_COMPLETION_REPORT.md` — most recent closure
-6. `1-system-manual/SYSTEM_IMPACT_MAP.md` for any component touched in next batch
+3. `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md` — active living plan
+4. `1-system-manual/POST_AUDIT_ROADMAP.md`
+5. `1-system-manual/CURRENT_SETTINGS_REGISTRY.md` — live DB-tunable settings
+6. `Claude Comms and Packages/Batch Completion/BATCH_77_COMPLETION_REPORT.md` — most recent closure
+7. `1-system-manual/SYSTEM_IMPACT_MAP.md` for any component touched in next batch

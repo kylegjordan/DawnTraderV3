@@ -10,7 +10,9 @@
 
 ## §1. The pivot — what changed and why
 
-Kyle directive 2026-05-07: **skip Phase 16 (legacy cleanup) for now and use the 8-day observational period to ship the Modularization phase + Multi-Asset VTS expansion.** Phase 16 stays parked. Active trading is NOT in scope for this stretch — work stops at "fully working in VTS" for the new asset classes. Active-trading wire-in waits for **Phase 19** (component-by-component active trading audit).
+Kyle directive 2026-05-07: **skip Phase 16 (legacy cleanup) for now and use the 8-day observational period to ship the Modularization phase + Multi-Asset VTS expansion.** Phase 16 stays parked.
+
+**Active-trading wire-in is IN SCOPE for this stretch — but cannot be tested live yet.** Per Kyle clarification 2026-05-07 evening: we DO wire equity_spot + crypto_perp into the active trading path (signal-orchestrator emit, paper-execution-engine, RTB pool, etc.) so the codepath is end-to-end ready. We just don't flip the active-trading switch on the new asset classes during this stretch — testing those wire-ins lives in **Phase 19** (component-by-component active trading audit), and the live-trading enablement gate is later still. Net effect: the new asset-class code paths exist in production but are dormant for active trading until Phase 19 reaches them.
 
 Reason for the pivot: every prerequisite for adding the new asset classes is now in place — B69 asset-class plumbing live, Kraken XStocks + Kraken Futures feed already scanning + archiving, B72-family lever migration complete, B76 chain-final calibration framework working. The 8 days are wasted if we sit on legacy cleanup when we could ship this expansion observationally.
 
@@ -27,10 +29,16 @@ Confidence in 8-day fit: HIGH (Kyle ground-truth: CC consistently does in hours/
 - B81 — RTB ranking parity + SQE asset-class evaluation in VTS.
 
 **Out of scope:**
-- Active trading wire-in for any new asset class (Phase 19).
+- Live-trading **testing** of any new asset class (Phase 19 owns the component-by-component active trading audit; live trading enablement is downstream of that).
 - Phase 16 (legacy cleanup).
 - Crypto_spot threshold tuning (LOCKED through 2026-05-15 per calibration window).
 - Anything that touches the chain-final calibration framework on crypto_spot.
+
+**In scope (wire-in only, not tested live):**
+- `signal-orchestrator.ts` emit hooks for equity_spot + crypto_perp signals.
+- `paper-execution-engine.ts` admission path for new asset classes.
+- RTB pool insertion + ranking for new asset classes.
+- VTS evaluation for new asset classes (THIS is what gets behaviorally verified during this stretch).
 
 **Hard fence — no-touch list during this stretch:**
 - `b67_5PostCompositionFloor` (currently 0.20, DB-only).
@@ -69,9 +77,9 @@ Confirms crypto_spot ablation continues at expected cadence (~10 factors × ~12 
 | Batch | Days | Description | Active-trading impact | Critical path? |
 |---|---|---|---|---|
 | **B78** | 1-3 | Modularization phase. 8-module extraction. Pure file/import refactor. CI green is the gate. Adds asset-class filter on aggregator query. | None | YES |
-| **B79** | 4-5 | Equity_spot (Kraken XStocks Pro) into VTS. Threshold derivation, regime mapping, strategy gates, VTS-only path. 24/5 calendar handling. | None (VTS only) | medium |
-| **B80** | 5-6 | Crypto_perp (Kraken Futures) into VTS. Same shape as B79; funding-rate handling joins macro modifier on perps. | None (VTS only) | medium |
-| **B81** | 6-7 | RTB ranking parity (`expectedNetReturnR` primitive). SQE asset-class threshold rows. Friction-normalized cross-asset opportunity scoring. | None (RTB-only ranking change) | LOW (most deferrable) |
+| **B79** | 4-5 | Equity_spot (Kraken XStocks Pro): VTS evaluation + active-path wire-in (signal-orchestrator emit, paper-execution-engine admission, RTB insertion). Threshold derivation, regime mapping, strategy gates. 24/5 calendar handling. **Live-trading test deferred to Phase 19; VTS path is what gets behaviorally verified now.** | wire-in only (dormant for live trading until Phase 19) | medium |
+| **B80** | 5-6 | Crypto_perp (Kraken Futures): same shape as B79 — VTS + active wire-in (dormant). Funding-rate handling joins macro modifier on perps. | wire-in only | medium |
+| **B81** | 6-7 | RTB ranking parity (`expectedNetReturnR` primitive). SQE asset-class threshold rows. Friction-normalized cross-asset opportunity scoring. Applies to BOTH VTS and active path (active path inert until Phase 19 enables). | wire-in only | LOW (most deferrable) |
 | Slack | 7-8 | Bug-fix + Langston Step-8 second-pass on whichever batches need it. Buffer. | — | — |
 
 If B78 or B79 slips: B81 moves to post-Phase-16 per Kyle directive. B80 also deferrable. The minimum viable end-state for this stretch is "B78 + B79 shipped, B80 + B81 either shipped or scoped-and-deferred."
@@ -361,6 +369,7 @@ Items requiring decision before / during the relevant batch.
 | Date | Author | Change |
 |---|---|---|
 | 2026-05-07 | CC | Document created per Kyle directive 2026-05-07. Initial scope per CC's earlier message + Kyle's pivot reply. RTB ranking parity (§8) captured per Kyle's explicit ask. xStocks operational facts (§6.1) verified via web research. |
+| 2026-05-07 | CC | Sequencing caveat per Kyle: active-trading wire-in IS in scope (codepath end-to-end ready); live-trading testing of new asset classes deferred to Phase 19. Updated §1, §2, §4 table accordingly. |
 | _(append rows here at every batch close, plus any mid-batch finding that changes the plan)_ | | |
 
 ---
