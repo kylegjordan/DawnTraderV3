@@ -1,9 +1,99 @@
 # BATCH 79 — Xstock_spot (Kraken XStocks Pro) into VTS — RE-SCOPED as **canonical asset-class onboarding lab**
 
-**Status:** rev 6 — CONSENSUS REACHED with Langston rev 5 review. All pushbacks resolved without escalation to Kyle. Final scope before commit + compact + post-compact PIA.
+**Status:** rev 7 — Kyle round 3 corrections: (a) define Q-D upfront (was shorthand throughout), (b) extend separate-pool architecture from pattern-pool to ALL FOUR quant family paths, (c) NEW §11 Resource Management section, (d) clarify "DBS formula direct" semantics. Sent to Langston for ack on quant-path expansion.
+
+## §-2.5. Family-path SSOT scoping (Langston rev 7 add — MUST lock in code before B79 implementation)
+
+**Implementation discipline:** explicit asset-class scoping on family-path keys + SSOT. `crypto_spot.tfs` vs `xstock_spot.tfs` — never bare `tfs` — so the engine can't pull "tfs" and silently get whichever asset class was last loaded. SSOT is `STRATEGY_DISPLAY_NAMES` in `server/config/canonical-regime-strategy-map.ts:365-385`. **B79 implementation must verify all family-path lookups use asset-class-prefixed keys; CC adds this to the PIA verification list.**
+
+## §-3. Glossary (NEW rev 7 — define shorthand upfront)
+
+- **Q-D** — "Question D" from CC's Q-A through Q-H to Langston in rev 5: **AAPLx-vs-AAPL behavior probe.** Investigates whether tokenized AAPLx on Kraken trades like actual AAPL on NYSE. Methodology (rev 6 §-2 + §3): pull underlying minute data via yfinance, compare 4-window correlation (RTH/pre/AH/overnight+weekend), 3-tier decision tree (>0.95 / 0.70-0.95 / <0.70). **Biggest unknown in scope; dedicated B79 pre-implementation stage. Shapes everything downstream.** When you see "Q-D outcome" or "Q-D probe" or "Q-D-gated" elsewhere in this scope, this is the referent.
+- **DBS — "formula direct" Day 1** — apply the existing `directional-bias.ts` multi-timeframe-agreement math to xStock OHLC data using the SAME coefficients calibrated on crypto. NO equity-specific coefficient tuning Day 1. NOT hardcoded-vs-DB (the formula is code; coefficients are math constants; per-asset-class regime thresholds are DB-backed independently). Observe in shadow-mode; tune coefficients in B79.1 if behavior diverges from crypto baseline.
+- **Separate pool architecture** — Stage 2 dedicated scanner + Stage 5 separate pattern pool + (rev 7 NEW) separate quant family paths per asset class. Same telemetry-isolation principle: equity behavior + crypto behavior are different signal distributions; mixing them corrupts ranking + calibration for both.
+- **Phase 24** — NEW phase containing B79 + B79.1 + B79.2 + B79.3 + B79.4 + B79.5 + B79.6 sub-batches as triggered by observation. Out-of-sequence with current Phase 15c (consistent with existing roadmap pattern).
+- **Layer 1 / Layer 2 / Layer 3** — calibration tiers per plan doc §6.2: Layer 1 = domain-knowledge baseline (this batch), Layer 2 = cross-asset shadow-classify sanity check, Layer 3 = live shadow-mode observation 48-72h+ producing tuned values from telemetry.
+
+---
 **Workflow:** 11-step canonical (full workflow). Will likely split into B79 + B79.1 + B79.2 sub-batches.
 **Branch:** `migration/aws-supabase`
 **Trigger:** Kyle directive 2026-05-07 evening. Quote: *"What we are doing with these X-Stocks, this needs to be our experimentation lab, our learning example for how we set up asset classes in the future. ... we need to document and design a workflow for how we add other asset classes in the future."*
+
+---
+
+## §11. Resource Management Budget (NEW rev 7 per Kyle round 3)
+
+Adding parallel xStocks scanner + 4 separate quant family paths + separate pattern pool + RTB refresh + all running concurrently has compute / API / memory cost. Must budget before push.
+
+### §11.1 API call budget
+
+| Source | Crypto today | xStock add | Total |
+|---|---|---|---|
+| Kraken Spot REST `/0/public/Ticker` | ~1/30s scan cycle (batch ticker fetch) | n/a (xStocks not on Spot REST) | unchanged |
+| Kraken Spot REST `/0/public/AssetPairs` | ~1/12hr | n/a | unchanged |
+| Kraken Spot REST `/0/public/OHLC` | per-pair on demand (cached) | n/a | unchanged |
+| Kraken xStocks WS subscribe | n/a | B74 archiver already subscribes 275 symbols (passive); B79 verifies VTS uses archive lookup, no new subscribes | **0 new WS subscribes for B79** |
+| yfinance (Q-D probe) | n/a | one-shot ~5min during pre-implementation; then never | one-shot |
+| yfinance (sector mapping) | n/a | one-shot ~5min during B79 setup; annual cron refresh | annual cron |
+| Solana on-chain (Phase 19 only) | n/a | DEFER to B79.5 / Phase 19 | n/a for B79 |
+
+**API risk for B79: LOW.** Reuses existing B74 archiver data; no new subscribe load on Kraken; one-shot probes for setup only.
+
+### §11.2 Compute budget
+
+| Workload | Crypto today | xStock add (Day 1) | Notes |
+|---|---|---|---|
+| Scanner cycles | ~30s, 100-pair batch | +30s, 30-pair batch (Langston rev 3 §F batch size) | dedicated scanner; runs only during equity market-open (24/5 not 24/7) so off-hours = zero compute |
+| DBS computation | ~100 pairs × multi-TF math per cycle | +30 pairs × multi-TF math per cycle | additive; xStocks scan size smaller than crypto |
+| Regime classification | ~100 pairs × `calculatePairRegime` | +30 pairs × `calculatePairRegime` (xstock_spot dispatch) | additive; same complexity per pair |
+| 4 quant family paths | ~100 pairs × 4 family filters | +30 pairs × 4 family filters (xstock_spot scope) | rev 7 expansion: separate xstock paths but same complexity per pair |
+| Pattern pool path | ~100 pairs × pattern filters | +30 pairs × pattern filters (xstock_spot scope) | additive; same complexity |
+| SQE evaluation | per-strategy detect on survivors | per-strategy detect on xStock survivors (3 file-based + 6 quant + ORB-gated = 10 strategies) | additive |
+| Cost-model lookup | per-signal | per-signal (asset-class lookup) | additive; trivial |
+| RTB refresh | ongoing | xStock signals enter same pool until B81 ranking parity | minor RAM/CPU bump |
+| Telemetry writes | ongoing per-trade | per-asset-class-partitioned (telemetry partitioning audit blocker) | minor I/O bump |
+
+**Compute risk for B79: LOW-MEDIUM.** xStocks scan during market-open hours only (~16hrs/day × 5 days = 80hr/week, vs crypto's 168hr). Wall-clock additive load ~30% of crypto's during market-open, ZERO during market-closed. Hetzner CPX22 (current production) has been comfortable with crypto load; ~30% additive during peak windows is within typical headroom.
+
+**§11.2 baseline pinning (Langston rev 7 add):** CPX22 spec is **2 vCPU / 4 GB**. If crypto-vol-event baseline runs 50-60% CPU, +30% additive at equity open = 80-90% sustained — risk of sustained saturation during overlap windows (US equity open + crypto vol expansion + VTS training-data flush). Explicit baseline must be measured pre-deploy, not just the delta.
+
+**§11.2 backpressure policy (Langston rev 7 add):** when overlap event saturates compute, what's the explicit drop/defer behavior? Options: (a) skip xstock cycles (preserve crypto), (b) defer telemetry writes to deferred queue, (c) extend cycle interval. **B79 must declare a policy explicitly**, not leave it to implicit overload behavior. Lean: (a) skip xstock cycles + emit `[B79][BACKPRESSURE_SKIP]` log line for visibility; xstock_spot scan is observation-only so skipped cycles aren't trade-impacting. Confirm pre-deploy.
+
+**§11.2 pre-deploy load test (Langston rev 7 add):** throttle-without-redeploy escape hatch (§11.5) is a SAFETY NET, not the gate. Real gate: synthetic 1.3× load test on staging BEFORE xstock signals flow live. Must be a B79 verify checklist item.
+
+**Mitigation if Layer 3 shows compute pressure:** scanner cycle interval can extend (60s instead of 30s for xStocks), batch size can shrink (15-pair instead of 30-pair).
+
+### §11.3 Memory budget
+
+| Cache / buffer | Crypto today | xStock add | Notes |
+|---|---|---|---|
+| MCE per-pair context (60s TTL) | ~100 entries | +30 entries | trivial |
+| priceCache | ~100 entries | +30 entries | trivial |
+| Telemetry ring buffers per asset class | per-pair × N samples | per-pair × N samples (xstock scope) | small |
+| Module-constants cache | ~few KB | +xstock_spot-scoped rows ~few KB | trivial |
+
+**Memory risk: NEGLIGIBLE.** Per-pair state is small; +30 pairs adds linear, not multiplicative.
+
+### §11.4 DB connection pool budget
+
+Supabase plan has connection limit. Current crypto path: signal_eval_archive writes (~191K/24h crypto), regime_factor_alternates writes, paper_sim_open_positions writes, paper_sim_trades writes. xStock add: same write profile scaled by ~30/100 = 30% of crypto write rate. **Risk: LOW.** Verify with `pg_stat_activity` post-deploy that pool isn't saturating.
+
+### §11.4b Additional resource surfaces (Langston rev 7 add — minor)
+
+- **WebSocket connection count** — xstock WS provider sockets, heartbeat/reconnect surface added.
+- **Log-egress volume at equity open** — burst window may saturate log-write throughput; monitor.
+- **Cache-key sprawl from asset-class scoping** — `crypto_spot.tfs` vs `xstock_spot.tfs` keys multiply; verify cache eviction policy + memory ceiling.
+
+### §11.5 Resource-watch metrics (post-deploy verify)
+
+Add to PIA + B79 verify checklist:
+- Hetzner load average pre vs post-deploy (acceptance: <2× baseline during equity-market-open hours)
+- PM2 process memory growth pre vs post (acceptance: <10% per hour)
+- Supabase connection count (acceptance: stays under plan ceiling)
+- API rate-limit errors (acceptance: zero new error types)
+- Scan cycle duration (acceptance: <40s p95 during equity market-open; current crypto p95 is ~30s)
+
+If any metric breaches acceptance, throttle xStock scanner cadence (60s) or batch size (15-pair) without redeploy via module_constants.
 
 ---
 
