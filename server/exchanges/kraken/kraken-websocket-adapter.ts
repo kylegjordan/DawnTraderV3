@@ -1733,7 +1733,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     subscription_status: 'subscribed' | 'pending' | 'never_requested';
   }>> {
     // Import resolver functions dynamically to avoid circular deps (ESM compatible)
-    const { getKrakenWsPair, getKrakenRestPair } = await import('../markets/kraken-symbol-resolver.js');
+    const { getKrakenWsPair, getKrakenRestPair } = await import('../../markets/kraken-symbol-resolver.js');
     
     return activePositionSymbols.map(internalSymbol => {
       const normalizedInternal = normalizeToInternalSymbol(internalSymbol);
@@ -1810,7 +1810,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     last_tick_age_ms: number | null;
     pair_resolve_error: string | null;
   }[]> {
-    const { getKrakenWsPair } = await import('../markets/kraken-symbol-resolver.js');
+    const { getKrakenWsPair } = await import('../../markets/kraken-symbol-resolver.js');
     const now = Date.now();
     
     return activeSymbols.map(symbol => {
@@ -1964,7 +1964,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     missing_ws_mapping: string[];
     format_mismatches: Array<{ symbol: string; expected: string; actual: string }>;
   }> {
-    const { getKrakenWsPair, resolveByInternalSymbol } = await import('../markets/kraken-symbol-resolver.js');
+    const { getKrakenWsPair, resolveByInternalSymbol } = await import('../../markets/kraken-symbol-resolver.js');
     
     const missingWsMapping: string[] = [];
     const formatMismatches: Array<{ symbol: string; expected: string; actual: string }> = [];
@@ -2019,7 +2019,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     last_tick_age_ms: number | null;
     pair_resolve_error: string | null;
   }>> {
-    const { getKrakenWsPair, getKrakenRestPair } = await import('../markets/kraken-symbol-resolver.js');
+    const { getKrakenWsPair, getKrakenRestPair } = await import('../../markets/kraken-symbol-resolver.js');
     const now = Date.now();
     
     return activePositionSymbols.map(internalSymbol => {
