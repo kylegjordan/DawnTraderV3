@@ -127,10 +127,37 @@ B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi
 
 ---
 
-## Next session pickup priority
+## Next session pickup priority (POST-COMPACT 2026-05-07 evening)
 
-1. **Confirm B78 + B78.2 forward-watch (RUNNING_ISSUES #74):** crypto_spot ablation cadence at +24h AND ≥1hr clean-log on `Method(s) not found` post-B78.2 deploy 14:18 UTC 2026-05-07. If healthy → close #74. (B78.2 #76 already RESOLVED but Langston Step-8 §C deferred 1hr/24h confirmations to this watch.)
-2. **B79 — xstock_spot.** Read plan doc §6 first. Day 0 = per-asset-class friction extraction. Run pre-flight no-touch fence. Layer 1 domain-knowledge thresholds (~1-2h), Layer 2 cross-asset shadow-classify (~2-3h), Layer 3 shadow-mode VTS (48-72h, ongoing during B80/B81). Weekend-pause logic gate. Strategy detect audit per asset class.
+**B79 RE-SCOPED to canonical asset-class onboarding lab per Kyle directive 2026-05-07 evening.**
+
+1. **Pre-implementation audit (PIA) per CLAUDE.md §2 Step 2** — gate before B79 implementation kickoff. Read these in order:
+   - `Claude Comms and Packages/Scope Files/BATCH_79_SCOPE.md` rev 4 (~700 lines) — APPROVED via Langston rev 3 deep review (3m21s via watchdog).
+   - `Claude Comms and Packages/Scope Files/BATCH_79_PLAIN_LANGUAGE_SUMMARY.md` — Kyle's plain-language summary.
+   - `1-system-manual/SYSTEM_IMPACT_MAP.md` for all components in PIA list (rev 4 §10):
+     market-scanner.ts, adaptive-scan-manager.ts, pair-failure-tracker.ts, adaptive-ratio-manager.ts, directional-bias.ts, market-regime.ts, market-context-engine.ts, signal-quality-evaluator, cost-model.ts, paper-execution-engine.ts, trailing-exit-controller.ts, live-pricing-adapter (scope-clarification only), equity-spot-archiver.ts, drift-dashboard-aggregator.ts, portfolio-risk-manager.ts.
+   - Schemas to audit: screener_filters (col add), module_constants, paper_sim_trades, signal_eval_archive, regime_factor_alternates, paper_sim_open_positions.
+   - **TELEMETRY PARTITIONING AUDIT (Langston rev 3 PIA blocker):** PairFailureTracker / AdaptiveRatioManager / predictiveConfidence rolling-window — verify all partition by asset_class. Any non-partitioning component is a B79 hard blocker.
+2. Write PIA report at `Claude Comms and Packages/Scope Files/BATCH_79_PRE_AUDIT.md`. Send to Langston via watchdog `--first-byte-timeout 240` for deep review.
+3. **Build NEW Tier-2 governance doc:** `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — template per scope §6.2. Section H.1 worked example = xstock_spot (B79). Reusable for B80 + future asset classes.
+4. **Implement B79 single-batch per Langston rev 3 §F.** Sub-batches B79.1/.2/.3 trigger ONLY on shadow-mode evidence, not pre-scheduled.
+5. **Confirm B78 + B78.2 forward-watch (RUNNING_ISSUES #74):** at +24h from B78.2 deploy at 14:18 UTC 2026-05-07 — re-run no-touch fence SQL + grep for `Method(s) not found` recurrence. If clean → close #74.
+
+**Subagent already implemented (in working tree, NOT committed):** initial code from B79 rev 2 scope: regime-thresholds.ts (14 *_XSTOCK constants), friction.ts populated, market-scanner xstocks merge, signal_quality_evaluator gates, market-hours.ts, sqe seed migration. **Subagent work needs reconciliation against rev 4 scope BEFORE commit.**
+
+**Post-PIA implementation key items (not yet done):**
+- screener_filters schema migration (asset_class + tunable_status cols) + xstock_spot row (NO max_price cap per Kyle)
+- Dedicated equity scanner instance (Langston rev 3 §C)
+- Telemetry partitioning fixes (per audit findings)
+- Stage-by-stage threshold seeds (multi_tf_agreement, correlation_matrix, macro_modifier=1.0; rest pending_layer_3-tagged)
+- Symbol-normalizer utility (server/utils/symbol-normalize.ts)
+- Asset-class-aware data-freshness gate
+- Forward-watch dashboard requirement
+- Failure mode taxonomy (LULD halts, circuit breakers, dividends, splits, earnings)
+- TEC stop-freeze for market-closed periods
+- Sector classification per xStock for portfolio-cluster
+
+--- Run pre-flight no-touch fence. Layer 1 domain-knowledge thresholds (~1-2h), Layer 2 cross-asset shadow-classify (~2-3h), Layer 3 shadow-mode VTS (48-72h, ongoing during B80/B81). Weekend-pause logic gate. Strategy detect audit per asset class.
 3. Draft `BATCH_79_SCOPE.md` per plan doc §6.
 4. Send to Langston combined Step-1+2.
 5. Per Langston review → push → CI → deploy → verify → governance (incl. plan-doc §9 threshold table population + SIM update + Langston MEMORY sync).
