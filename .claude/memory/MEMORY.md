@@ -23,7 +23,7 @@
 - **Branch:** `migration/aws-supabase`
 - **Most recent HEAD:** `5ec57cbd3` (B78.2 ping hotfix). Previous: `5c3ce00b3` (B78.2 initial), `5348fd005` (B78.1 governance close).
 - **Live:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + **B78.2 (Kraken WS v1→v2 ping/subscribe format fix; RUNNING_ISSUES #76 RESOLVED).**
-- **Watchdog:** `/usr/local/bin/langston-call` on Hetzner. Validated under load: 3 round-trips for B78.2 with 25s/35s/2m45s response times.
+- **Watchdog:** `/usr/local/bin/langston-call` on Hetzner. Validated under load: 3 round-trips for B78.2 with 25s/35s/2m45s response times. **Tuning learning (B79):** default 60s first-byte timeout TOO TIGHT for substantive scope reviews (>200 lines + multi-file reads). Use `--first-byte-timeout 180` for substantive batches; default OK for surgical fixes.
 - **Sequencing reset:** B79 (xstock_spot) is next.
 - **DB-only UPDATEs (no commits):** all unchanged. No-touch fence holds.
 
