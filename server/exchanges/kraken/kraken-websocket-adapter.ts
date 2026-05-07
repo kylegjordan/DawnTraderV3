@@ -2764,9 +2764,15 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     if (!this.ws || !this.isConnected) return;
     
     try {
-      const pingMessage = JSON.stringify({ event: 'ping' });
+      // B78.2: ping uses v2 format. Pre-B78.2 sent {event:'ping'} (v1 envelope) to
+      // the v2 endpoint, which Kraken rejected every 20s (PING_INACTIVITY_MS) with
+      // a generic "Method(s) not found" labeled as method:"subscribe" (Kraken's
+      // default rejection echo when shape is unrecognizable). Triggered the
+      // 142,079 historical rejection log lines. v2 ping is {method:'ping'} per
+      // https://docs.kraken.com/api/docs/websocket-v2/ping
+      const pingMessage = JSON.stringify({ method: 'ping' });
       this.ws.send(pingMessage);
-      console.log('[8.8.5][PING] Sent keep-alive ping');
+      console.log('[8.8.5][PING] Sent keep-alive ping (v2 format)');
     } catch (error) {
       console.error('[8.8.5][PING] Failed to send keep-alive:', error);
     }
