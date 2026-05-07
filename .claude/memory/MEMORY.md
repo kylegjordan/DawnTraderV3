@@ -27,17 +27,8 @@
 - **Sequencing reset:** B79 (xstock_spot) is next.
 - **DB-only UPDATEs (no commits):** all unchanged. No-touch fence holds.
 
-### B78 quick reference (just shipped)
-
-- **Created:** `server/asset_classes/{crypto_spot,crypto_perp,xstock_spot}/{pattern-pool-filters,regime-thresholds,friction,index}.ts` + `server/exchanges/kraken/`. crypto_spot live; perp + xstock are placeholders for B79/B80.
-- **Moved:** `kraken{,-pair-metadata-service,-data-documenter}.ts` to `exchanges/kraken/`; `pattern-filter-profile.ts` to `asset_classes/crypto_spot/pattern-pool-filters.ts`.
-- **Extracted:** 14 regime-classifier branch-condition constants to `crypto_spot/regime-thresholds.ts` (leaf, no imports). Threshold-vs-formula trap respected per pre-audit §2.
-- **Aggregator filter:** `drift-dashboard-aggregator.ts` L1054 `AND asset_class='crypto_spot'`. Locks calibration cohort.
-- **Deferred:** ws-adapter move (cycle with live-pricing-adapter); friction extraction (cost-model is exchange-keyed; defer to B79/B80).
-- **Madge:** 47 → 47 cycles. HARD GATE green.
-- **CI:** Build+Docker green; Test 59/995/5/1059 (identical to baseline). PM2 #180.
-- **Langston:** 4 review rounds (rev 4 APPROVED), Step-4 APPROVED, Step-8 APPROVED to close.
-- **Forward-watch:** RUNNING_ISSUES #74 — verify crypto_spot ablation cadence ~9-10/factor/hr at +30min and +24h. Revert via `git revert 57220ab4b e814461d6` if drop.
+### B78/B78.1/B78.2 quick reference (all shipped 2026-05-07)
+B78=modularization scaffold. B78.1=cycle break (EventEmitter inversion of ws-adapter↔live-pricing). B78.2=Kraken WS v1→v2 ping fix (RUNNING_ISSUES #76 RESOLVED). Forward-watch #74 tomorrow at T+24h. See BATCH_CATALOG entries for full details.
 
 ---
 
