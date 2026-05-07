@@ -2288,14 +2288,19 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     const krakenPair = this.normalToKrakenSymbol(symbol);
     if (!krakenPair || !this.isConnected || !this.ws) return;
     
-    // Subscribe to book channel with depth 1
+    // B78.2: Subscribe to book channel with depth 1.
+    // Pre-B78.2 used the Kraken WS v1 format ({event, pair, subscription}) which
+    // the v2 endpoint (wss://ws.kraken.com/v2) silently rejects with "Method(s)
+    // not found" since 2026-04-03 (RUNNING_ISSUES #76). Converted to v2 format:
+    // {method, params:{channel,symbol,depth}} matching the working ticker/book
+    // subscribe path at L1100-1117.
     const subscribeMessage = {
-      event: 'subscribe',
-      pair: [krakenPair],
-      subscription: {
-        name: 'book',
-        depth: 1
-      }
+      method: 'subscribe',
+      params: {
+        channel: 'book',
+        symbol: [krakenPair],
+        depth: 1,
+      },
     };
     
     try {
