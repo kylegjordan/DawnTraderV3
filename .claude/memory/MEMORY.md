@@ -129,10 +129,10 @@ B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi
 
 ## Next session pickup priority (POST-COMPACT 2026-05-07 evening)
 
-**B79 RE-SCOPED to canonical asset-class onboarding lab per Kyle directive 2026-05-07 evening.**
+**B79 RE-SCOPED to canonical asset-class onboarding lab per Kyle directive 2026-05-07 evening. Phase 24 NEW.**
 
 1. **Pre-implementation audit (PIA) per CLAUDE.md §2 Step 2** — gate before B79 implementation kickoff. Read these in order:
-   - `Claude Comms and Packages/Scope Files/BATCH_79_SCOPE.md` rev 4 (~700 lines) — APPROVED via Langston rev 3 deep review (3m21s via watchdog).
+   - `Claude Comms and Packages/Scope Files/BATCH_79_SCOPE.md` **rev 6** (~900 lines) — CONSENSUS reached with Langston (rev 3 deep review + rev 5 pushback iteration; no Kyle escalation needed).
    - `Claude Comms and Packages/Scope Files/BATCH_79_PLAIN_LANGUAGE_SUMMARY.md` — Kyle's plain-language summary.
    - `1-system-manual/SYSTEM_IMPACT_MAP.md` for all components in PIA list (rev 4 §10):
      market-scanner.ts, adaptive-scan-manager.ts, pair-failure-tracker.ts, adaptive-ratio-manager.ts, directional-bias.ts, market-regime.ts, market-context-engine.ts, signal-quality-evaluator, cost-model.ts, paper-execution-engine.ts, trailing-exit-controller.ts, live-pricing-adapter (scope-clarification only), equity-spot-archiver.ts, drift-dashboard-aggregator.ts, portfolio-risk-manager.ts.
@@ -143,7 +143,11 @@ B67.4 cheap-tier · B68.2 volume regime · B68.3 pair correlation · B68.1 multi
 4. **Implement B79 single-batch per Langston rev 3 §F.** Sub-batches B79.1/.2/.3 trigger ONLY on shadow-mode evidence, not pre-scheduled.
 5. **Confirm B78 + B78.2 forward-watch (RUNNING_ISSUES #74):** at +24h from B78.2 deploy at 14:18 UTC 2026-05-07 — re-run no-touch fence SQL + grep for `Method(s) not found` recurrence. If clean → close #74.
 
-**Subagent already implemented (in working tree, NOT committed):** initial code from B79 rev 2 scope: regime-thresholds.ts (14 *_XSTOCK constants), friction.ts populated, market-scanner xstocks merge, signal_quality_evaluator gates, market-hours.ts, sqe seed migration. **Subagent work needs reconciliation against rev 4 scope BEFORE commit.**
+**Phase 24 = B79 + sub-batches.** Phase 25 = B80 + sub-batches. Out-of-sequence with 15c (consistent with roadmap pattern).
+
+**Subagent already implemented (in working tree, NOT committed):** initial code from B79 rev 2 scope. **Subagent work needs reconciliation against rev 6 scope BEFORE commit** — rev 6 added: pattern-pool path now ENABLED with 3 file-based strategies (was scope-disabled in rev 2), ORB strategy file gated on Q-D, dedicated scanner architecture, scripted sector mapping, etc.
+
+**Q-D AAPLx-vs-AAPL probe is its own pre-implementation stage** — must run BEFORE implementation push. Methodology in scope §-2 + §3 (yfinance 1m underlying, 4-window correlation, 3-tier decision tree).
 
 **Post-PIA implementation key items (not yet done):**
 - screener_filters schema migration (asset_class + tunable_status cols) + xstock_spot row (NO max_price cap per Kyle)

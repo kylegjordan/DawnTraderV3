@@ -1,11 +1,26 @@
 # BATCH 79 — Plain-language summary
 
 **For:** Kyle
-**Status of full scope:** rev 4, APPROVED by Langston rev 3 with 5 stage additions + 4 process additions applied.
+**Status of full scope:** rev 6, CONSENSUS REACHED with Langston after 2 iteration rounds. No deadlocks escalated.
 **Companion to:** `BATCH_79_SCOPE.md` (technical, ~700 lines).
 **Date:** 2026-05-07.
 
 ---
+
+## Updates since rev 4 — what changed from your round-2 directive
+
+You corrected three things and asked seven new questions. Net result of CC ↔ Langston iteration:
+
+1. **Stage 5 architecture corrected.** I had pattern pool as a sequential fallback (pairs that fail quant filter try pattern). You corrected: pairs go through BOTH paths in parallel, both sets of survivors feed VTS. xStocks will follow the same pattern. **xStocks get their OWN pattern pool** (separate from crypto's) — telemetry-isolation reasoning.
+2. **This is a Phase, not a Batch.** Reframed B79 + sub-batches into NEW **Phase 24 — Multi-Asset VTS Onboarding**. B80 (crypto_perp) becomes **Phase 25**. Out-of-sequence with current Phase 15c is fine; the roadmap already has out-of-sequence phases.
+3. **Opening Range Breakout (ORB) — partial concession from Langston.** I argued ship it; he argued strict-observe-first; consensus: **ship the strategy FILE in B79, but gate activation on the AAPLx-vs-AAPL behavior probe outcome.** If the probe shows AAPLx mirrors AAPL during NYSE 9:30 ET open, enable ORB; if AAPLx has Solana-native price discovery and 9:30 ET is just another minute, ORB stays gated off. This way we don't defer the obvious AND we don't fire signals on noise.
+4. **AAPLx vs AAPL behavior probe — elevated to dedicated pre-implementation stage** in B79. This is the biggest unknown. Methodology: pull underlying minute data via yfinance, compare across 4 windows (regular trading hours, pre-market, after-hours, overnight+weekend), produce a correlation decision tree. If correlation >0.95 in regular hours, equity intuition holds. If 0.70-0.95, hybrid asset; need session-aware tuning. If <0.70, Solana-native price discovery — treat as a new asset class entirely. **The shape of B79's later sub-batches depends on this answer.**
+5. **3 specific file-based pattern strategies enabled Day 1:** `inside_bar_reversal`, `morning_star`, `pivot_shift` — all canonical equity patterns that predate crypto by decades. (Plus the 6 quant strategies from rev 4 makes 9 total + ORB gated = 10.)
+6. **DBS for xStocks: yes, applied directly Day 1.** Formula is multi-timeframe-agreement-based; portable. Coefficient tuning happens in B79.1 once Layer 3 has data.
+7. **Strong-trend coverage:** `breakout` + `sma_trend_ride` cover this. Complementary — breakout is ignition entry on range expansion, sma_trend_ride is continuation entry on pullback-into-trend.
+8. **Sector classification: scripted via yfinance.** `Ticker(symbol).info['sector']` + `['industry']`. ~5 min for 275 symbols. Annual cron refresh. Stored as `gics_sector` + `gics_industry` columns in xstocks-universe.json or DB.
+9. **Exit observation metrics specified:** time-to-target distribution, MAE before profit, MFE at exit, ATR-vs-%-stop performance, partial-take impact, hold-time by regime, stop-out-on-wick-vs-reversal. All become Layer 3 calibration targets per your "exits will behave differently for less volatile equities" point.
+10. **Strategy-gap monitoring criteria specified** (5 concrete triggers): fire-rate by regime <50% of crypto's, ≥80% concentration in ≤2 strategies, win-rate clustering 40-50%, identifiable temporal windows with low fire-rate but observable directional moves, named pattern recurrence not captured. Each trigger maps to a B79.x candidate batch. Now in workflow doc Section G.
 
 ## What we're actually doing
 

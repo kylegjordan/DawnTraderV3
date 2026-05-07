@@ -1,9 +1,56 @@
 # BATCH 79 — Xstock_spot (Kraken XStocks Pro) into VTS — RE-SCOPED as **canonical asset-class onboarding lab**
 
-**Status:** rev 4 — APPROVED rev 3 with Langston's 5 stage additions + 4 process additions + workflow-doc structure additions applied.
+**Status:** rev 6 — CONSENSUS REACHED with Langston rev 5 review. All pushbacks resolved without escalation to Kyle. Final scope before commit + compact + post-compact PIA.
 **Workflow:** 11-step canonical (full workflow). Will likely split into B79 + B79.1 + B79.2 sub-batches.
 **Branch:** `migration/aws-supabase`
 **Trigger:** Kyle directive 2026-05-07 evening. Quote: *"What we are doing with these X-Stocks, this needs to be our experimentation lab, our learning example for how we set up asset classes in the future. ... we need to document and design a workflow for how we add other asset classes in the future."*
+
+---
+
+## §-2. CONSENSUS DECISIONS (rev 6 — Langston rev 5 counters accepted)
+
+After CC/Langston iteration through rev 5 pushbacks. All resolved without Kyle escalation.
+
+| Item | rev 5 CC position | Langston counter | rev 6 ACCEPTED |
+|---|---|---|---|
+| ORB strategy in B79 | Ship and run | Ship strategy file in B79; **gate activation on Q-D outcome** (AAPLx vs AAPL behavior probe) | **Langston's gated approach.** Code in place; activation conditioned on observation evidence. Best of both. |
+| Pattern pool architecture | Separate xstock_spot pool | Concede — separate xstock_spot pool | Separate. |
+| Pattern strategies enabled Day 1 (Q-A) | 0-3 (vague) | 3 specific: `inside_bar_reversal`, `morning_star`, `pivot_shift` (canonical equity patterns, predate crypto). Defer `defensive_hedge`, `adaptive_flow`, `reverse_impulse`, `strong_bull_trend`, `volatility_edge`. | Langston's specific 3. (Note: I undercounted; 9 file-based not 8; SSOT is `STRATEGY_DISPLAY_NAMES` in canonical-regime-strategy-map.ts.) |
+| DBS Day 1 (Q-B) | Formula-direct | Concede formula-direct; tune in B79.1 | Formula-direct Day 1; coefficient-tune via B79.1 once Layer 3 has data. |
+| Strong-trend coverage (Q-C) | breakout + sma_trend_ride | Both belong; complementary (breakout=ignition, sma_trend_ride=continuation) | Both. Sufficient Day 1. |
+| Tokenized vs underlying (Q-D) | Side investigation | **Dedicated pre-implementation B79 stage with full methodology + decision tree** | **Q-D is its own stage.** Methodology: yfinance 1m underlying + 4-window correlation (RTH/pre/AH/overnight-weekend) + decision tree (>0.95 / 0.70-0.95 / <0.70 → 3 different routing strategies). |
+| Exit observation metrics (Q-E) | "Trailing + BE" generic | 6 specific metrics: time-to-target, MAE-before-profit, MFE-at-exit, ATR-vs-%-stop perf, partial-take impact, hold-time by regime, stop-out-on-wick-vs-reversal | Langston's 6 metrics in workflow doc Section F (Layer 1/2/3 protocol) + Stage 14a Layer 3 calibration scope. |
+| Sector mapping (Q-F) | Manual mapping ~1hr 275 symbols | **Script via yfinance — `Ticker(symbol).info['sector']` + `['industry']`. 5 min, deterministic.** Annual cron refresh. | Langston's scripted approach. Manual is tech debt. |
+| Strategy-gap criteria (Q-G) | Vague threshold "<5% fire-rate" | 5 concrete triggers: fire-rate by regime <50% of crypto, ≥80% concentration in ≤2 strategies, win-rate clustering 40-50%, identifiable temporal windows, named pattern recurrence | Langston's 5 in workflow doc Section G. |
+| Phase number (Q-H) | 24 | Confirm 24; B80 perp = 25 | Phase 24 = B79 + sub-batches; Phase 25 = B80 + sub-batches. |
+
+**No items escalated to Kyle.** Iterated to consensus per Kyle's directive.
+
+---
+
+## §-1. Phase container reframe (NEW per Kyle 2026-05-07 round 2)
+
+**This is NOT a Phase 15c continuation. This is its own PHASE.** Kyle's directive 2026-05-07 round 2:
+
+> *"This whole thing is a phase. It should be broken up into multiple batches... it needs to sit in a phase container and not in 15. We can call it a later phase number. I don't know where we're at, but maybe 24, 25... we're doing our phases out of sequence in our roadmap, so that's OK."*
+
+**Proposal:** Phase 24 — "Multi-Asset VTS Onboarding (xstock_spot worked example + reusable workflow)". Out-of-sequence with current Phase 15c is consistent with the roadmap's existing pattern (Phase 19.0 was pulled forward as documented in `POST_AUDIT_ROADMAP.md`).
+
+Phase 24 batches (proposed):
+- **B79** — workflow doc + xstock_spot foundational scaffold + screener_filters schema + dedicated scanner + telemetry-partitioning audit + parallel pattern path (per rev 5 §1 Stage 5 correction) + **Q-D AAPLx-vs-AAPL pre-implementation investigation stage** (per rev 6 consensus) + ORB strategy file shipped Q-D-gated + 3 file-based pattern strategies enabled (`inside_bar_reversal`, `morning_star`, `pivot_shift`) + scripted sector mapping (yfinance) + exit observation metrics framework
+- **B79.1** — Layer 1/2 threshold derivation deepenings as PIA findings dictate
+- **B79.2** — equity-specific strategies (ORB, Gap-Fill, etc.) — TRIGGERED by shadow-mode strategy-gap observation (per Kyle directive: explicit gap-watching criteria, not silent observation)
+- **B79.3** — equity macro modifier (VIX, S&P, sector rotation, yield curve) — TRIGGERED by Layer 3 evidence of macro-input value
+- **B79.4** — equity exit observation calibration (trailing stops, BE stops re-derivation per Kyle: "they're less volatile than crypto, exits will behave differently")
+- **B79.5** — live-pricing adapter for `wss://ws-equities.kraken.com` — TRIGGERED by Phase 19 active-trading prerequisite
+- **B79.6** — sector-aware portfolio cluster prevention (Stage 12.5)
+- **B79.x** — failure-mode taxonomy implementation (LULD halts, circuit breakers, dividends, splits, earnings windows)
+
+**Phase 24 success criteria:** xstock_spot in production VTS shadow-mode + ASSET_CLASS_ONBOARDING_WORKFLOW.md battle-tested through B79 + ready for Phase 25 (crypto_perp, was B80) to execute the workflow as its second worked example.
+
+**Phase 25 reframe:** B80 (crypto_perp) becomes Phase 25's first batch. Same workflow doc, perp-specific deltas (funding rate, leverage, liquidation, perpetual settlement). Phase 25 batches: B80, B80.1, B80.2 etc. as observation dictates.
+
+**Phase 26+ later:** B81 (RTB ranking parity + filter-as-first-class) might warrant its own phase, OR be batches at the end of Phase 25, depending on how Phase 24+25 reveal cross-asset ranking architecture decisions. Defer to mid-Phase-24 to decide.
 
 ---
 
@@ -103,8 +150,19 @@ Before scoping xstock_spot work, this section traces what every crypto pair expe
 
 **Reusable workflow question:** *for any new asset class, what global filter values apply, and does the schema need an asset_class dimension if not already present?*
 
-### Stage 5 — Pattern Pool Filter (relaxed thresholds for pattern-pool pairs)
-**What happens:** pairs failing quant filter but passing relaxed pattern thresholds enter the pattern pool for evaluation by PATTERN/HYBRID strategies. Pattern pool guardrails: lower DI/Volume bars, elevated `FINAL_SCORE_FLOOR=0.45`, capped position sizing.
+### Stage 5 — Pattern Pool Filter (PARALLEL with quant path — CORRECTED rev 5 per Kyle 2026-05-07 round 2)
+
+**Architecture correction:** rev 4 incorrectly described pattern pool as sequential-fallback for pairs that FAILED quant filter. Correct architecture per Kyle: **all scanned pairs go through BOTH the quant path (all 4 quant families) AND the pattern path SIMULTANEOUSLY in parallel.** A pair can survive both paths — both sets of survivors feed into the VTS together. Pattern path has its own relaxed thresholds optimized for pattern/hybrid strategies; quant path has stricter thresholds optimized for quant strategies.
+
+**Crypto_spot configuration:** parallel quant + pattern paths. Pattern pool guardrails (lower DI/Volume bars, elevated `FINAL_SCORE_FLOOR=0.45`, capped position sizing) apply to pattern survivors. `module_constants` `pattern_pool_gates` with `asset_class='crypto_spot'` scope.
+
+**xstock_spot decisions needed (rev 5):**
+- Q5.1: **Same architecture for xstock_spot — parallel quant + pattern paths.** This is a Kyle directive: "however it is set up to work in the active trading path for crypto, it needs to work the same for the x-stocks." So xStocks ALSO go through both paths simultaneously.
+- Q5.2: **Shared pattern pool with crypto, or separate xstock_spot pattern pool?** **Kyle's open question — Langston needs to weigh in.**
+   - **Shared pool argument:** simpler, less code; cross-asset signal competition is healthy.
+   - **Separate pool argument:** equity microstructure differs from crypto; pattern detect-logic was tuned for crypto, equity false-positives could pollute the shared pool's ranking; isolated calibration data. **CC lean: separate xstock_spot pattern pool.** Aligns with the Stage 2 dedicated-scanner decision (telemetry isolation). Prepared to push back if Langston disagrees.
+- Q5.3: **Pattern pool thresholds for xstock_spot** — `pattern_pool_gates` `asset_class='xstock_spot'` rows need to be seeded. Inherit-and-tag pending_layer_3 OR derive Day 1 baselines? Same answer pattern as Stage 4 global filters per Langston rev 3 §C: ship inherit-and-tag.
+- Q5.4: **Pattern strategies applicable to equity microstructure** — many existing pattern strategies (`liquidity_trap`, `dhma`, `abcd_long`) are crypto-microstructure-tuned and may produce false positives on equity bars. **CC's strategy-whitelist (6 from §2.5) addresses this from the strategy-gate side; Stage 5 thresholds are independent.** Pattern path can be ENABLED with the 0-3 pattern-applicable strategies (review needed) instead of being scope-disabled per rev 3.
 
 **Crypto_spot configuration:** `module_constants` `pattern_pool_gates` with `asset_class='crypto_spot'` scope. Per `PATTERN_POOL_THRESHOLDS` + `PATTERN_POOL_GUARDRAILS` accessors.
 
@@ -309,6 +367,27 @@ These are repeated from §1 stages but pulled together for emphasis:
 3. **Own family filter path or share?** (Stage 6). Lean: share for B79; revisit if needed.
 4. **Do we have all the right strategies, or do we need to add more?** (Stage 9). Lean: defer all new strategies; observe first.
 5. **Per-pair characteristics gathered** — need to enumerate what we gather for each crypto pair and ensure xStock equivalents exist.
+
+## §2.X Kyle round-2 additional questions (NEW rev 5)
+
+These came in Kyle's 2026-05-07 round-2 directive. Each needs Langston's input — and CC pushback where appropriate per Kyle's framing: *"I want you to push back where you see fit in dealing with Langston. I don't want you to just go along with everything that he says."*
+
+1. **Stage 5 architecture correction** — verified above (parallel quant + pattern paths). Resolves rev 3 mistake.
+2. **Pattern pool: shared vs separate xstock_spot pool?** — open. CC lean: separate (telemetry isolation aligns with dedicated-scanner decision); will push back if Langston disagrees without strong rationale.
+3. **DBS evaluation applicable to xStocks?** — Kyle's question. DBS formula is multi-timeframe-agreement-based; should formula-port. **But:** crypto DBS coefficients calibrated on crypto data. Equity intraday volatility profile differs (opening burst, lunch lull, close auction). Does DBS need equity-specific coefficient tuning Day 1, or apply formula directly + tune in Layer 3? CC lean: apply formula directly Day 1; defer coefficient tuning to Layer 3.
+4. **Strong directional trend coverage by 6 enabled strategies?** — Kyle's question. Of vwap_pullback, breakout, mean_reversion, range_trade, sma_trend_ride, vwap_bounce: which leverage strong-trend signals? **CC analysis:** `breakout` and `sma_trend_ride` are the trend-leveraging strategies in this list. `vwap_pullback` and `vwap_bounce` are pullback-vs-trend (need trend context but trade against). `mean_reversion` and `range_trade` are explicitly counter-trend / non-trend. **Conclusion: yes, breakout and sma_trend_ride cover strong directional trend** for xstock_spot.
+5. **Equity-specific strategies — any OBVIOUS no-brainers to ship in B79 instead of deferring?** — Kyle's directive: don't defer obvious gaps. CC's review of the 6 candidate equity-specific strategies:
+   - **Opening Range Breakout (ORB):** equity day-trading staple, uses first 15-30 min range to identify breakout direction. Highly correlated with TFS regime + breakout strategy logic. **CC's view: ORB is OBVIOUS and should be in B79.** It addresses a specific equity-microstructure feature (opening-bell volatility-discovery period) that no crypto strategy targets.
+   - **Gap-Fill Reversion:** overnight gap reverts to fill. Uniquely session-bound; crypto has no equivalent. **CC's view: less obvious.** Gap-fill works some markets, fails on news-driven gaps. Lean: defer to observation.
+   - **End-of-Day Mean Reversion:** last-hour pullback against intraday trend. Equity-specific but possibly redundant with `mean_reversion` + `range_trade` in late-day regimes. Lean: defer to observation.
+   - **VWAP Tagging:** distinct from `vwap_pullback` and `vwap_bounce` (touch + reject vs pullback + continuation). May be redundant. Lean: defer.
+   - **Earnings Drift:** post-earnings momentum continuation. Requires earnings calendar wiring. Strong evidence in academic finance. Lean: defer to B79.x once earnings calendar is wired.
+   - **Sector Rotation:** long outperforming sector / short underperforming. Requires sector classification (Stage 12.5 work) + relative-strength comparator. Lean: defer to B79.6.
+   - **CC recommendation: ship ORB in B79.** Defer the others with explicit gap-watching criteria during shadow-mode (per Kyle: don't defer silently).
+6. **Tokenized vs underlying behavior** — Kyle's question: do AAPLx and AAPL trade similarly? **CC's investigation needed:** B70 archive has both equity_spot_ohlc (xStocks) and possibly underlying via external data feed? If we can compare, we know whether xStocks are a price-tracker (high-fidelity to underlying) or have their own discovery (Solana liquidity may diverge). **This is a critical unknown.** If xStocks diverge from underlying, our equity-derived intuitions about sector correlation, earnings behavior, etc. may not apply to xStocks specifically. Need to probe before scope-lock. **Question for Langston: investigation methodology + what data we can get?**
+7. **Exit observation as Layer 3 calibration scope** — Kyle's directive: include trailing stops, BE stops in calibration since equities are less volatile. **CC: agreed.** Stage 14a position-management triggers (already added rev 4) become explicit Layer 3 calibration targets. Add to workflow doc Section F (Layer 1/2/3 protocol).
+8. **Sector classification source** — Kyle's question: does Kraken assign sectors? **CC investigation:** Kraken Pro API doesn't include sector info AFAIK. Sources: GICS classification (S&P standard), public APIs (Yahoo Finance, Alpha Vantage), manual mapping in xstocks-universe.json. **Question for Langston: best source + how to wire?** Lean: extend `xstocks-universe.json` with `sector` field; manual mapping for 275 symbols (~1hr work) using public sector lookups; refresh annually.
+9. **Strategy-gap monitoring discipline (NEW Kyle directive)** — Kyle: *"if we are delaying creating new equity-specific strategies until after we have a period to observe data, then we need to make a very specific note in our plan that indicates that while we are observing, we are looking for gaps where our current strategies are not."* **B79 deliverable addition: explicit gap-watching criteria during shadow-mode.** Workflow doc Section G (Forward-Watch) adds: "what strategy gaps to look for + decision criteria for adding new strategies." E.g.: "if shadow-mode TFS regime on xstock_spot shows <5% strategy fire-rate vs crypto's typical 15-20%, missing-trend-strategy gap confirmed → trigger B79.2."
 
 ## §3. Additional questions CC surfaces
 
