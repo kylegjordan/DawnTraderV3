@@ -70,7 +70,7 @@ export async function getCurrentSpread(symbol: string): Promise<number> {
   }
   
   try {
-    const { KrakenService } = await import('../../services/kraken.js');
+    const { KrakenService } = await import('../../exchanges/kraken/kraken.js');
     const kraken = new KrakenService();
     const orderBookRecord = await kraken.getOrderBook(symbol, 1);
     

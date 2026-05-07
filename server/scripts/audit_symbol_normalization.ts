@@ -11,7 +11,7 @@
  */
 
 import { getSymbolMappingDetails, isMappable, getAllInternalSymbols } from '../markets/kraken-symbol-resolver.js';
-import { KrakenService } from '../services/kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import fs from 'fs/promises';
 import path from 'path';
 

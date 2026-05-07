@@ -21,7 +21,7 @@
  */
 
 import { storage } from '../storage.js';
-import type { SourcePool, AssetClass } from '../config/pattern-filter-profile.js';
+import type { SourcePool, AssetClass } from '../asset_classes/crypto_spot/pattern-pool-filters.js';
 
 // REB 2.2: TTL from truth state (Nov 20 chat archive)
 const SYMBOL_COOLDOWN_TTL_MS = 5 * 60 * 1000; // 5 minutes

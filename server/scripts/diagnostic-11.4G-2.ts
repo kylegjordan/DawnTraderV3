@@ -12,7 +12,7 @@
  */
 
 import { krakenAssetPairsService, AutoMappingEntry } from '../markets/kraken-asset-pairs-service';
-import { KrakenService } from '../services/kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { volumeClassifier } from '../services/market-data/volume-classifier';
 
 interface BlueChipAuditResult {

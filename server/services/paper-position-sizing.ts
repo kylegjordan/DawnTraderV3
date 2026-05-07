@@ -26,7 +26,7 @@ import type { GuardrailsV2 } from '@shared/schema';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { getScalingFactor } from './risk-concentration.js';
 // Phase 14.5: Pattern pool position sizing guardrails
-import { PATTERN_POOL_GUARDRAILS } from '../config/pattern-filter-profile.js';
+import { PATTERN_POOL_GUARDRAILS } from '../asset_classes/crypto_spot/pattern-pool-filters.js';
 // B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='paper_sizing'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 

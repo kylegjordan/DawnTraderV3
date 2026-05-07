@@ -1,5 +1,5 @@
 import { storage } from '../storage';
-import { KrakenService } from '../services/kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 
 export async function initializePortfolioState(): Promise<void> {
   console.log('[PortfolioInit] Checking portfolio_state table...');

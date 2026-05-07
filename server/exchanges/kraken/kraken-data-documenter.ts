@@ -3,8 +3,8 @@
  * Generates comprehensive documentation of all Kraken API fields and screener filters
  */
 
-import { KrakenService } from './kraken';
-import { storage } from '../storage';
+import { KrakenService } from './kraken.js';
+import { storage } from '../../storage.js';
 
 export class KrakenDataDocumenter {
   private kraken: KrakenService;

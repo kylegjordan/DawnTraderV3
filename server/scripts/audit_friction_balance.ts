@@ -8,7 +8,7 @@
  */
 
 import { computeAdaptiveFrictionBands, getAdaptiveFrictionTier, getCachedFrictionBands, type FrictionBands, type FrictionTier } from '../core/metrics/cost-metrics.js';
-import { KrakenService } from '../services/kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import fs from 'fs/promises';
 import path from 'path';
 

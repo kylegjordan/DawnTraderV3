@@ -122,25 +122,25 @@ export class FormulaAuditService {
       },
       {
         name: 'Volume USD',
-        file: 'server/services/kraken.ts',
+        file: 'server/exchanges/kraken/kraken.ts',
         line: 689,
         expression: 'volume24h × lastPriceUSD'
       },
       {
         name: 'Bid-Ask Spread',
-        file: 'server/services/kraken.ts',
+        file: 'server/exchanges/kraken/kraken.ts',
         line: 697,
         expression: '((ask - bid) / bid) × 100'
       },
       {
         name: 'Daily Range',
-        file: 'server/services/kraken.ts',
+        file: 'server/exchanges/kraken/kraken.ts',
         line: 692,
         expression: '((high24h - low24h) / low24h) × 100'
       },
       {
         name: 'Volatility (Daily Range Proxy)',
-        file: 'server/services/kraken.ts',
+        file: 'server/exchanges/kraken/kraken.ts',
         line: 758,
         expression: 'dailyRange (as proxy)'
       },

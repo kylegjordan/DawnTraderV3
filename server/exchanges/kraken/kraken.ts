@@ -7,7 +7,7 @@
  * Previous: A4.R10R-1. Rate governance and caching handled by price-cache.ts
  */
 import crypto from "crypto";
-import { canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
+import { canonicalFromPairInfo, normalizeSymbolArray } from '../../services/utils/symbol-canonicalizer.js';
 
 // REB 2.9D: History days cache for minimum history filter
 const historyDaysCache = new Map<string, { days: number | null; fetchedAt: number }>();

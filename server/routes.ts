@@ -6,7 +6,7 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, eq, and, desc } from "drizzle-orm";
-import { KrakenService } from "./services/kraken";
+import { KrakenService } from "./exchanges/kraken/kraken.js";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
 import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
@@ -11494,7 +11494,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const mode = (req.query.mode as 'paper' | 'live') || 'paper';
       const { activeFilterPool } = await import('./services/active-filter-pool.js');
       // Batch 48: Regime override imports removed — DB is sole authority for thresholds
-      const { PATTERN_POOL_THRESHOLDS, PATTERN_POOL_GUARDRAILS, PATTERN_POOL_STRATEGIES } = await import('./config/pattern-filter-profile.js');
+      const { PATTERN_POOL_THRESHOLDS, PATTERN_POOL_GUARDRAILS, PATTERN_POOL_STRATEGIES } = await import('./asset_classes/crypto_spot/pattern-pool-filters.js');
 
       const patternPool = activeFilterPool.getPatternPool(mode);
       const patternPoolSize = activeFilterPool.getPatternPoolSize(mode);
@@ -19686,7 +19686,7 @@ Please:
   // Kraken API Data Documentation Endpoint
   apiRouter.get('/diagnostics/kraken-documentation', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
-      const { KrakenDataDocumenter } = await import('./services/kraken-data-documenter.js');
+      const { KrakenDataDocumenter } = await import('./exchanges/kraken/kraken-data-documenter.js');
       const documenter = new KrakenDataDocumenter();
       
       console.log('\n📊 Generating Kraken API Documentation...');

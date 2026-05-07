@@ -64,7 +64,7 @@ The B67.4/B68.x calibration windows measure per-factor predictive lift on `asset
 SELECT factor_name, COUNT(*) AS n_last_hour
 FROM regime_factor_alternates
 WHERE asset_class='crypto_spot'
-  AND captured_at > NOW() - INTERVAL '1 hour'
+  AND evaluated_at > NOW() - INTERVAL '1 hour'
 GROUP BY factor_name;
 ```
 
@@ -370,6 +370,7 @@ Items requiring decision before / during the relevant batch.
 |---|---|---|
 | 2026-05-07 | CC | Document created per Kyle directive 2026-05-07. Initial scope per CC's earlier message + Kyle's pivot reply. RTB ranking parity (§8) captured per Kyle's explicit ask. xStocks operational facts (§6.1) verified via web research. |
 | 2026-05-07 | CC | Sequencing caveat per Kyle: active-trading wire-in IS in scope (codepath end-to-end ready); live-trading testing of new asset classes deferred to Phase 19. Updated §1, §2, §4 table accordingly. |
+| 2026-05-07 | CC | **B78 kickoff.** Pre-flight no-touch fence SQL run — healthy baseline (10 factors × 9–10 rows/hr each on `asset_class='crypto_spot'`). Fixed §3 typo: column is `evaluated_at`, not `captured_at` (verified against schema). BATCH_78_SCOPE.md drafted (rev 1) — file-system layout per §5, mandatory aggregator-query update on `drift-dashboard-aggregator.ts:1055`, re-export-shim grace policy = 1 batch (cleared in B81). Sent to Langston for Step 1+2 combined review. |
 | _(append rows here at every batch close, plus any mid-batch finding that changes the plan)_ | | |
 
 ---

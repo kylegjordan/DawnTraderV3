@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { contextBridge } from './context-bridge.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
-import { krakenPairMetadataService } from './kraken-pair-metadata-service.js';
+import { krakenPairMetadataService } from '../exchanges/kraken/kraken-pair-metadata-service.js';
 import { 
   resolveByKrakenWsPair, 
   normalizeToInternalSymbol, 

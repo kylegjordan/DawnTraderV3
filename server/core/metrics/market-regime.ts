@@ -23,6 +23,22 @@
 import type { OHLCData, MarketRegimeType, RegimeCalculationResult, RegimeConfig } from '../../types/market-regime.types';
 import { REGIME_WEIGHTS } from '../../types/market-regime.types';
 import { REGIMES } from '../../config/canonical-regime-strategy-map';
+import {
+  RBS_VOL_MAX,
+  RBS_DX_MAX,
+  RBS_DBS_MAX,
+  IE_VOL_MIN_PATH_A,
+  IE_DX_MIN_PATH_A,
+  IE_VOL_MIN_PATH_B,
+  IE_DBS_STRONG,
+  TFS_MOM_MIN_PATH_A,
+  TFS_DX_MIN,
+  TFS_DBS_MODERATE,
+  HVU_VOL_MIN,
+  HVU_MOM_NEG_PATH_A,
+  HVU_DX_STRONG,
+  HVU_MOM_NEG_PATH_B,
+} from '../../asset_classes/crypto_spot/regime-thresholds.js';
 
 /**
  * B67.3.5 — Default RegimeConfig matching the migration seed values.
@@ -197,19 +213,19 @@ export function calculatePairRegime(
   // Momentum (30-candle price change ratio): |mom| < 0.003 = noise, > 0.005 = meaningful
   // DBS (B62): |dbs| < 0.10 = neutral, >= 0.30 = moderate+, >= 0.50 = strong
 
-  if (vol < 0.012 && dx < 45 && absDbs < 0.10) {
+  if (vol < RBS_VOL_MAX && dx < RBS_DX_MAX && absDbs < RBS_DBS_MAX) {
     // B62: Low vol + low ADX + low DBS = genuine ranging market
     // (pre-B62: no DBS gate, 70% of RBS was drift-contaminated)
     regime = REGIMES.RANGE_BOUND_STABLE;
     confidence = 0.75 + (0.012 - vol) * 12;
-  } else if ((vol > 0.020 && dx > 55) || (vol > 0.015 && absDbs >= 0.50)) {
+  } else if ((vol > IE_VOL_MIN_PATH_A && dx > IE_DX_MIN_PATH_A) || (vol > IE_VOL_MIN_PATH_B && absDbs >= IE_DBS_STRONG)) {
     // B62: High vol + strong direction OR moderate vol + very strong DBS = impulse
     // (pre-B62: IE was 0.9% of cycles; now ~2.0% with the DBS-based entry)
     regime = REGIMES.IMPULSE_EXPANSION;
     confidence = 0.65 + (vol - 0.015) * 6 + (dx - 45) * 0.002 + absDbs * 0.1;
   } else if (
-    (mom > 0.003 && dx > 50) ||
-    (absDbs >= 0.30 && mom > regimeConfig.b68_5PathBMomentumMin)
+    (mom > TFS_MOM_MIN_PATH_A && dx > TFS_DX_MIN) ||
+    (absDbs >= TFS_DBS_MODERATE && mom > regimeConfig.b68_5PathBMomentumMin)
   ) {
     // B62: Positive momentum + directional strength OR moderate+ DBS = trend
     // (pre-B62: TFS was 13.2%; now 34.6% as directional pairs correctly routed)
@@ -240,7 +256,7 @@ export function calculatePairRegime(
     confidence = regimeConfig.tfsDesatMin
       + (regimeConfig.tfsDesatMax - regimeConfig.tfsDesatMin)
         * (momentumFactor * dbsStrength * volInverse);
-  } else if ((vol > 0.015 && mom < -0.003) || (dx > 60 && mom < -0.005)) {
+  } else if ((vol > HVU_VOL_MIN && mom < HVU_MOM_NEG_PATH_A) || (dx > HVU_DX_STRONG && mom < HVU_MOM_NEG_PATH_B)) {
     // Elevated vol in decline OR very strong downward direction -> volatile/unstable
     regime = REGIMES.HIGH_VOLATILITY_UNSTABLE;
     confidence = 0.65 + Math.min(Math.abs(mom) * 8, 0.2);

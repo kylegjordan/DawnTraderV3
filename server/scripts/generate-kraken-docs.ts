@@ -3,7 +3,7 @@
  * Run with: npx tsx server/scripts/generate-kraken-docs.ts
  */
 
-import { KrakenDataDocumenter } from '../services/kraken-data-documenter';
+import { KrakenDataDocumenter } from '../exchanges/kraken/kraken-data-documenter.js';
 import * as fs from 'fs';
 import * as path from 'path';
 

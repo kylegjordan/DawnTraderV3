@@ -276,7 +276,7 @@ app.use((req, res, next) => {
 
   // Phase 8.8.3: Initialize Kraken Pair Metadata Service for symbol normalization
   try {
-    const { krakenPairMetadataService } = await import('./services/kraken-pair-metadata-service');
+    const { krakenPairMetadataService } = await import('./exchanges/kraken/kraken-pair-metadata-service.js');
     const success = await krakenPairMetadataService.loadAssetPairs();
     if (success) {
       console.log('[KrakenPairMetadata] ✅ Asset pairs loaded successfully');

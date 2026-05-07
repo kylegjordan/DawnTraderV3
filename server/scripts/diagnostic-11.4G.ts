@@ -14,7 +14,7 @@
 
 import { fx5Scanner } from '../services/fx5-scanner.js';
 import { scanPatterns } from '../services/pattern-recognizer.js';
-import { KrakenService } from '../services/kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { calculatePairRegime, DEFAULT_REGIME_CONFIG } from '../core/metrics/market-regime.js';
 import { 
   CANONICAL_REGIME_STRATEGY_MAP,

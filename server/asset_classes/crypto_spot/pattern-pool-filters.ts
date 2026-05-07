@@ -26,7 +26,7 @@
  * existing import shape — callers keep using `PATTERN_POOL_THRESHOLDS.RSI_MIN`
  * etc. without code change; the read goes through the cached resolver.
  */
-import { getCachedNumberRequired } from '../services/module-constants-service.js';
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 
 const _PATTERN_KEY = { exchange: '*', assetClass: 'crypto_spot', strategy: 'pattern', regime: '*' };
 

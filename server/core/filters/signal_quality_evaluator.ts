@@ -25,7 +25,7 @@ import type { RegimeStability } from '../../config/strategy-governance.js';
 import { isStrategyEligible } from '../governance/strategy-eligibility.js';
 import { getStrategyDependency } from '../../config/strategy-governance.js';
 // Phase 14.5: Pattern pool elevated quality floor
-import { PATTERN_POOL_GUARDRAILS } from '../../config/pattern-filter-profile.js';
+import { PATTERN_POOL_GUARDRAILS } from '../../asset_classes/crypto_spot/pattern-pool-filters.js';
 // B72 (2026-05-05): SQE default thresholds migrated to module='sqe_config'.
 // Three-layer precedence preserved (Langston cc-inbox #906 + #910):
 //   1. screener_filters row (mode-specific runtime authority — DB-overridable per paper/live)

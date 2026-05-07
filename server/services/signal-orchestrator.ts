@@ -92,7 +92,7 @@ import { getMarketContextEngine } from './market-context-engine.js';
 // Phase 15b B61: DBS telemetry emitter (observational, feature-flagged, no behavior change)
 import { emitConsumerTelemetry } from './phase15b-dbs-telemetry.js';
 // Phase 14.5: Pattern pool configuration
-import { PATTERN_POOL_STRATEGIES, PATTERN_POOL_GUARDRAILS, DEFAULT_ASSET_CLASS } from '../config/pattern-filter-profile.js';
+import { PATTERN_POOL_STRATEGIES, PATTERN_POOL_GUARDRAILS, DEFAULT_ASSET_CLASS } from '../asset_classes/crypto_spot/pattern-pool-filters.js';
 import { computeRankingScore, normalizeNetReturn, CONTEXT_BONUS } from '../config/ranking-weights.js';
 // Batch 19F: Hybrid confluence buffer for pattern+quant signal matching
 import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
