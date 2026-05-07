@@ -23,7 +23,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 
 /**
  * Mirror of KrakenOHLCData from kraken.ts (not exported there).

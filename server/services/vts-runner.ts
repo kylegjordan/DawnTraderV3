@@ -53,7 +53,7 @@ import { hybridConfluenceBuffer, type BufferedPatternSignal } from './hybrid-con
 import { findHybridMatch as findVTSHybridMatch } from '../config/hybrid-compatibility-registry.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { fx5Scanner, type ScanBatchPair } from './fx5-scanner.js';
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 // Batch 18: OHLC cache (5-min TTL) eliminates redundant per-symbol OHLC fetches
 import { ohlcCache } from './ohlc-cache.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';

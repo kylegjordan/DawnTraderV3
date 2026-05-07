@@ -9,7 +9,7 @@
  */
 
 import { storage } from '../storage.js';
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getPassiveLearningBuffer, type REB210CycleRecord } from './market-scanner.js';
 import type { ScreenerFilters } from '@shared/schema';

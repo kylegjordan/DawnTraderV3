@@ -14,7 +14,7 @@
  */
 
 import { covarianceEngine, CorrelationMatrix } from '../utils/covariance-engine.js';
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B72.1 (2026-05-05): Directive 9.4 covariance guards now read from
 // module='concentration_risk' (correlation_threshold, max_concentration_score,

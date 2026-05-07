@@ -10,7 +10,7 @@
  */
 
 import { storage } from '../storage.js';
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import type { PriceData } from '@shared/schema';
 
 const krakenService = new KrakenService();

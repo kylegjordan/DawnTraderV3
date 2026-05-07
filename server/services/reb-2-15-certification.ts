@@ -12,7 +12,7 @@
  * - No duplicate survivors, no phantom entries
  */
 
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { storage } from '../storage.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getPassiveLearningBuffer, type REB210CycleRecord } from './market-scanner.js';

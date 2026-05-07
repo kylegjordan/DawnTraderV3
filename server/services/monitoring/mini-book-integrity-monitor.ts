@@ -10,7 +10,7 @@
  */
 
 import { krakenWebSocketAdapter } from '../kraken-websocket-adapter.js';
-import { KrakenService } from '../kraken.js';
+import { KrakenService } from '../../exchanges/kraken/kraken.js';
 import { normalizeToInternalSymbol, toKrakenRest } from '../../markets/kraken-symbol-resolver.js';
 import fs from 'fs';
 import path from 'path';

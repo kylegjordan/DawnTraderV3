@@ -30,7 +30,7 @@ import { StrategyEngine, StrategySignal } from './strategy-engine';
 import { getCachedNumberRequired } from './module-constants-service.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
 // import { FilteredPairsService } from './filtered-pairs-service';
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData, GuardrailsV2 } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';

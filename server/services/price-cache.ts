@@ -20,7 +20,7 @@
  * A4.R10R-1: Uses canonical normalizeToInternalSymbol from kraken-symbol-resolver.
  */
 
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kraken-symbol-resolver';
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';

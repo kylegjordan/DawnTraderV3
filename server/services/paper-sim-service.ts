@@ -9,7 +9,7 @@ import { nanoid } from 'nanoid';
 import { storage } from '../storage.js';
 import type { InsertPaperSimSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { paperOperationQueue } from '../utils/operation-queue.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { b4Diagnostics } from './b4-diagnostics.js';

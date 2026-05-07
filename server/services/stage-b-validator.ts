@@ -4,7 +4,7 @@
  * Validates signal generation, trade execution, and telemetry in realistic conditions
  */
 
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { StrategyEngine } from './strategy-engine';
 import { storage } from '../storage';
 import type { TradingSettings } from '@shared/schema';

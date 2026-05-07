@@ -3,7 +3,7 @@
 // Manages asset type detection and fractional trading capabilities
 
 import { storage } from '../storage';
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import type { AssetCapability, InsertAssetCapability } from '@shared/schema';
 
 export interface AssetInfo {

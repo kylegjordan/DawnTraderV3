@@ -25,7 +25,7 @@ import fs from 'fs';
 import path from 'path';
 import { storage } from '../storage.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused import
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { updateStage3Cache } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
 import { collectAdaptiveBatch, BatchResult } from './market-scanner.js';

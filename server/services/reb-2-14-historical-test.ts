@@ -14,7 +14,7 @@
  * - Minimum history days filter compatibility
  */
 
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 
 export interface TimeframeConfig {
   interval: number;

@@ -10,7 +10,7 @@
  * - LOW:  Low-liquidity pairs - tick every 15-60s, warn at 90s, reset at 180s
  */
 
-import { KrakenService } from '../kraken.js';
+import { KrakenService } from '../../exchanges/kraken/kraken.js';
 
 export type VolumeTier = 'HIGH' | 'MID' | 'LOW';
 

@@ -1,4 +1,4 @@
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { checkGuardrailRisk, type TradeCandidate } from './trade-safety';
 import { buildSettingsFromGuardrails } from './guardrail-settings';
 import { StrategyEngine, StrategySignal } from './strategy-engine';

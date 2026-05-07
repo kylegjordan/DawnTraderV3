@@ -3,7 +3,7 @@
  * Read-only diagnostic service to verify end-to-end filtering without starting engines
  */
 
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { StrategyEngine, type TechnicalIndicators } from './strategy-engine.js';
 import { storage } from '../storage.js';
 import { toCanonical, canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';

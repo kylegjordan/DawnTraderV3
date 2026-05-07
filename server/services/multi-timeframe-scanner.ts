@@ -21,7 +21,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { KrakenService } from './kraken.js';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import type { Timeframe, Candle } from '../types.js';
 import { 
   TIMEFRAME_CONFIG, 

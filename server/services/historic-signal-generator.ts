@@ -1,4 +1,4 @@
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { StrategyEngine, type TechnicalIndicators, type StrategySignal } from './strategy-engine';
 import { storage } from '../storage';
 import type { TradingSettings, InsertHistoricSignal, PriceData } from '@shared/schema';

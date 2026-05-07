@@ -48,7 +48,7 @@
  */
 
 import { storage } from '../storage';
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 // B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
 // moved to module='paper_execution'.
 import { getCachedNumberRequired } from './module-constants-service.js';

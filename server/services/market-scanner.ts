@@ -1,4 +1,4 @@
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { storage } from '../storage';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getAdaptiveScanManager, type AdaptiveScanBatch } from './adaptive-scan-manager.js';

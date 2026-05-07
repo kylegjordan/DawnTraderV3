@@ -1,7 +1,7 @@
 import { storage } from '../storage';
 import { PaperExecutionEngine } from './paper-execution-engine';
 import { MicroExecutionService } from './micro-execution-service';
-import { KrakenService } from './kraken';
+import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { registerEngine, registerMicroService } from './mode-registry';
 import { SignalOrchestrator } from './signal-orchestrator';
 import type { StrategySignal } from './strategy-engine';
