@@ -25,8 +25,10 @@
  * through `getXstockSpotInstances()` factory — NEVER the crypto globals.
  *
  * Backpressure: scope §1 Obj 11 — `[B79.0a][BACKPRESSURE_OBSERVED]` log
- * when cycle duration exceeds budget. NEVER triggers cycle skipping
- * (per RUNNING_ISSUES #81). Hostile-sim env flag
+ * when cycle duration exceeds budget. NEVER triggers asset-class shedding
+ * (per RUNNING_ISSUES #81); the in-progress mutex skip (`reason=scan_in_progress`)
+ * is normal serialization — same precedent as `fx5-scanner.ts:577` — and
+ * is distinct from the forbidden asset-class shed. Hostile-sim env flag
  * `BACKPRESSURE_TEST_MODE=1` (dev/staging only — gated `NODE_ENV !==
  * 'production'`) artificially sleeps the scan to validate the no-shed
  * posture in Step 7+8 hostile sim.
@@ -47,7 +49,12 @@ import { sql } from 'drizzle-orm';
 const SCAN_INTERVAL_SECONDS = 30;
 
 // Hostile-sim sleep duration (Langston Q5 lock — gated by NODE_ENV check).
-const HOSTILE_SIM_SLEEP_MS = 35_000; // exceeds central-clock budget intentionally
+// 28s — exceeds the 25s `[B79.0a][BACKPRESSURE_OBSERVED]` threshold so the
+// telemetry signal trips, but stays under the 30s `SCAN_INTERVAL_SECONDS`
+// tick anchor so cycles continue firing every 30 ticks (no in-progress-skip).
+// Per Langston Step 4 Finding #2: preserves the strict "no skip" verification
+// surface in PIA §3 hostile-sim acceptance.
+const HOSTILE_SIM_SLEEP_MS = 28_000;
 
 interface ScannerDiagnostics {
   isRunning: boolean;
@@ -192,7 +199,14 @@ class XstockSpotScannerService {
         ORDER BY symbol, captured_at DESC
       `);
       const dbDurationMs = Date.now() - dbStart;
-      const rows = (result as any).rows ?? (result as unknown as TickerSnapRow[]);
+      // Langston Step 4 Finding #7 nit: defensive cast hardened with runtime
+      // Array guard so a drizzle shape regression fails loudly instead of
+      // silently iterating over a non-array.
+      const rawRows = (result as any).rows ?? (result as unknown as TickerSnapRow[]);
+      if (!Array.isArray(rawRows)) {
+        throw new Error(`[B79.0a] equity_spot_ticker_snap query returned non-array shape; got ${typeof rawRows}`);
+      }
+      const rows = rawRows;
 
       // Per-pair freshness gate + telemetry.
       const xstockInstances = getXstockSpotInstances();

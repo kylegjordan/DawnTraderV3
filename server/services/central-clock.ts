@@ -201,4 +201,4 @@ class CentralClockService extends EventEmitter {
 }
 
 export const centralClock = new CentralClockService();
-export type { ClockTick, ClockHealth };
+export type { ClockHealth };

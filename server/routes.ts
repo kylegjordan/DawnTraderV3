@@ -7004,7 +7004,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // diagnostics. Returns isRunning + isScanning + lastTickAt +
   // lastCycleDurationMs + cyclesCompleted + pairsScannedLastCycle (fresh/stale)
   // + lastError + hostileSimActive. Public (no auth) — operational pattern
-  // matches central-clock + tec-bootstrap.
+  // matches tec-bootstrap (central-clock requires authenticateToken; this is
+  // intentionally a different precedent — Langston Step 4 Finding #7).
   apiRouter.get('/diagnostics/xstock-scanner', async (_req, res) => {
     try {
       const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
