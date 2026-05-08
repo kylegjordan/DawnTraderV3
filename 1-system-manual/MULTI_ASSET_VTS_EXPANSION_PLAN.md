@@ -385,6 +385,65 @@ This is what gets populated as we work through B79/B80 thresholds. **Update this
 
 ---
 
+## §10c. Phase 24 commitments locked 2026-05-08 (Kyle directives)
+
+These are corrections + locked-in commitments from the 2026-05-07 evening / 2026-05-08 morning session post-B79 ship. They drive sub-batches B79.4 + B79.TEC (or whatever number lands per CC/Langston sequencing call) and update the workflow doc Section F + I.
+
+### §10c.1 NO PATCHES doctrine (CLAUDE.md §5 #15 added)
+
+Every fix and feature must be a long-term, sustainable, stable, scalable solution. No duct tape. No "good enough for now." No "yeah it sometimes fires accidentally." Surfaced bugs trigger root-cause investigation + design-then-implement, not patches. **Cold-start warmup is acceptable** (1-5 minute deterministic startup beats instant-on with stale-cache races). Production restarts will be infrequent — sacrifice immediate functioning for clean startup. **Every architecture decision discussed gets documented BEFORE implementation** in the relevant governance doc (scope / plan / workflow / RUNNING_ISSUES / roadmap) the same session it's discussed. Verbal commitments without paper-trail are rejected.
+
+### §10c.2 Backpressure policy revised — vertical-scale, never asset-class shedding
+
+Previous scope §11.2 said "skip xstock cycles when overloaded." **Wrong.** Asset-class shedding is a load-shedding cop-out, not a strategy. Corrected policy:
+
+- **First-line response:** computational-distribution refactor IF possible without weeks of work (e.g. cycle interleaving, off-hour batching, smarter scheduler tick allocation across asset classes). If a cleaner distribution is identifiable + bounded in implementation effort, do that.
+- **Default response:** vertical scale. Hetzner CPX22 → CPX31 → CCX23 / Supabase Pro tier upgrade. Predictable cost steps ($30-100/mo), fast change, no architectural risk. **The tier upgrade is the answer when there's no smarter distribution available.**
+- **NEVER:** drop asset-class scanner cycles, throttle scan cadence on a live asset class, defer telemetry writes silently. Resource ceilings are infrastructure problems with infrastructure solutions.
+
+The pre-deploy 1.3× synthetic load test becomes a **sizing decision-gate**: it tells us "are you on the right tier for this asset class to ship?" — not "can we squeeze it in?" If headroom <30% on any surface (CPU / memory / DB connections / API rate / log throughput) at projected post-deploy load, gate is **upgrade hardware tier before ship**.
+
+`[B79][RESOURCE_PRESSURE]` log line stays as a TELEMETRY signal that triggers a hardware-upgrade evaluation, not as a runtime drop-cycles action.
+
+### §10c.3 TEC configuration per-asset-class — proper architecture, not a patch
+
+The B79 ship surfaced that BE-latch is firing for new trades despite `break_even_enabled = 'false'` (DB wildcard row). Two structural issues:
+
+1. **TEC config resolution hardcodes `assetClass: 'crypto_spot'` at `trailing-exit-controller.ts:104`** — even though `module_constants` supports asset_class scoping with most-specific-wins, the TEC never asks for a per-asset-class lookup. Once we onboard xstock_spot trades that flow through TEC, they get the crypto config silently. Wrong.
+2. **`cachedConfig` initial value is `TEC_DEFAULTS` (with `breakEvenEnabled: true`) until first async call refreshes it.** `primeTECConfig()` exists for cold-start warmup but is never called by app bootstrap. Sync `updatePosition` reads stale defaults during the warm-up window. Combined with #1, NEW trades after PM2 restart can BE-latch incorrectly.
+
+**Locked architectural fix (no patch):**
+- TEC config cache becomes per-asset-class: `Map<AssetClass, TrailingExitConfig>`
+- `resolveTECConfig` accepts `assetClass` parameter; `updatePosition` plumbs `update.assetClass` through
+- `primeTECConfig()` called in app bootstrap for ALL registered asset classes (warm cache for crypto_spot + xstock_spot pre-first-trade)
+- Per-asset-class DB rows seeded: `(trailing_exit, *, crypto_spot, *, *, break_even_enabled) = false` (current Variant K winner) + `(trailing_exit, *, xstock_spot, *, *, break_even_enabled) = false` (Day 1 default; flip after B73 exit-strategy ablation evidence per §10c.4)
+- Wildcard `(*, *, *, *)` row for `break_even_enabled` removed once all live asset classes have explicit rows. No silent fallback.
+- TEC defaults (`TEC_DEFAULTS.breakEvenEnabled`) revisited — fail-closed (false) for the warmup window even if cache miss, since fail-open silently re-enables a behaviorally-disabled feature
+
+**The 4 zombie BE-latched trades** in `/tmp/trailing-states.json` from 2026-04-25 era (Q/USD, RAIN/USD, UMXM/USD, RENDER/EUR) are LEFT AS-IS per Kyle directive 2026-05-08. They run through their existing state to natural close. Not worth clearing.
+
+**Sequencing:** B79.TEC (whatever batch number CC/Langston settle on — could be a Phase-24 sub-batch alongside B79.0a, or its own slot) carries the architectural fix. Iterates with Langston Step 1 design review before implementation.
+
+### §10c.4 Exit-strategy ablation extended to every new asset class — workflow standard
+
+The B73 exit-strategy ablation framework (12 variants: BE A-F + Trail G-J + Combined K-L, `exit_strategy_alternates` table with asset_class column from B69) currently observes crypto_spot only. Extending to xstock_spot was missing from B79's plan. **Now locked as part of every new asset class onboarding:**
+
+- **Workflow doc Section F (Layer 1/2/3 protocol)** updated to say: every new asset class gets BOTH (a) factor-calibration ablation (existing B67.0 framework) AND (b) exit-strategy ablation (B73 framework) running during shadow-mode observation. Both deliver Layer 3 evidence; calibration drives confidence-modifier decisions, exit-ablation drives BE/trail/target-only decisions per asset class.
+- B73 hook in `vts-service.persistRealPriceTrade` is asset-class-agnostic in framework — extending to xstock_spot is one new emit-call + per-asset-class aggregator (parallel to drift-dashboard which is currently B78-scoped to crypto_spot). No replacement of crypto's B73 — it's a parallel add.
+- **Per-asset-class observation period.** Crypto's standard is 14 days for B67/B68 calibration windows + 2 weeks for B73 exit ablation. xstock_spot may be different — equities trade 24/5 (~80hr/wk) vs crypto 24/7 (168hr/wk), so equivalent sample volume takes longer wall-clock. Workflow doc adds a Section F.X "Observation Period Sizing" subsection where each new asset class declares its target sample-count + matching wall-clock estimate. xstock_spot Day 1 estimate: TBD, populated during PIA when sample-rate-per-day evidence accumulates first 24-48h post-live-wire.
+
+**Sequencing:** B79.4 (already in scope as "equity exit observation calibration") carries this deliverable. Was underspecified; now explicit per this entry.
+
+### §10c.5 Documentation discipline (rule, not just a reminder)
+
+Kyle directive: discussions get forgotten when implementation happens 3-4 phases later. To prevent yes-yes-yes-then-not-done failure mode:
+- Every architectural decision goes into the right governance doc the SAME SESSION it's discussed
+- Every commitment gets a numbered home (sub-batch, RUNNING_ISSUES entry, scope-doc section, workflow-doc section)
+- Verbal "we'll do that later" without paper-trail is rejected — if it's worth doing, it's worth filing
+- This document (§10c) is itself the artifact of that discipline — these 4 corrections are filed BEFORE the corresponding implementation batches start
+
+---
+
 ## §11. Open questions log
 
 Items requiring decision before / during the relevant batch.

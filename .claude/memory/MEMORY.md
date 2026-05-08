@@ -115,7 +115,7 @@ B67.4/B68.1/B68.2/B68.3/B68.4 — gates: tertile-monotonic WR, ≥7pp gap, p<0.0
 
 ## Open RUNNING_ISSUES
 
-- OPEN: #39 (CI TS legacy), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index), #55 (B69.x/B73.3 verification), #73 (B78 shim cleanup B81), #74 (B78 24-48h cadence forward-watch tomorrow), **#77 (B79.0a tracker — live xstock scanner wire-in + ARM injection + Q-D probe + N1-N4 cleanup)**, **#78 (B79 24-48h cadence forward-watch tomorrow)**
+- OPEN: #39 (CI TS legacy), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index), #55 (B69.x/B73.3 verification), #73 (B78 shim cleanup B81), #74 (B78 24-48h cadence forward-watch), **#77 (B79.0a tracker — live xstock scanner via centralClock + ARM injection + Q-D probe + N1-N4)**, **#78 (B79 24-48h cadence forward-watch)**, **#79 (B79.TEC tracker — per-asset-class TEC config + cold-start warmup via primeTECConfig + cache by AssetClass + zombies LEFT AS-IS per Kyle; iterate with Langston Step 1 BEFORE code)**, **#80 (B79.4 tracker — extend B73 exit-strategy ablation to xstock_spot, parallel not replacement)**, **#81 (backpressure policy revised — vertical-scale only, never asset-class shedding; first execution B79.0a load test)**
 - DEFERRED: #12e, #40, #44, #45, #52
 - RESOLVED 2026-05-06/07: #54 (B76), #55, #56–#69, #70/#71/#72
 
@@ -157,10 +157,13 @@ B67.4/B68.1/B68.2/B68.3/B68.4 — gates: tertile-monotonic WR, ≥7pp gap, p<0.0
 
 ## Kyle Operating Directives (active)
 
+- **NO PATCHES (2026-05-08, CLAUDE.md §5 #15).** Every fix is a long-term sustainable scalable solution. No duct tape. No "good enough for now." Bugs trigger root-cause + design-then-implement, not patches. Cold-start warmup 1-5min OK; sacrifice immediate functioning for clean startup. Architecture decisions get documented BEFORE implementation, same session. Verbal commitments without paper-trail are rejected.
+- **Backpressure: vertical-scale, never asset-class shedding (2026-05-08).** Tier upgrade Hetzner/Supabase OR computational-distribution refactor; never throttle/drop a live asset class.
+- **Per-asset-class config is the default for behavioral knobs.** Wildcard rows only as starting placeholders; replaced with explicit per-class rows the moment any class needs different value.
+- Both ablation frameworks run during shadow-mode for every new asset class: factor-calibration (B67.0) AND exit-strategy (B73). Parallel, not replacement.
 - Don't pause to ask permission. Iterate with Langston through 11 steps.
 - Visual UI verification via Claude-in-Chrome on UI-touching batches.
 - Deploy after Test+Build+Docker pass — don't wait on legacy TS baseline.
-- **NO WORKAROUNDS.** Fix things properly.
 - **No fallbacks for DB-governed settings.**
 - Sensitive credentials → staging `.env` via SSH only.
 - Iterate with Langston to consensus; escalate to Kyle only on deadlock / scope expansion / new directive.
