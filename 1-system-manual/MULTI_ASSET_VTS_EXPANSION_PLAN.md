@@ -456,6 +456,54 @@ Three flags on B79.4 scope before formal scope-doc draft:
 2. **xstock panel operational from t=0 with sparse data.** Empty observation windows during early Layer 3 are EXPECTED, not bugs. Workflow doc Section G "Forward-Watch" should make this explicit so the panel isn't mis-flagged as broken when sample-count is low in the first 24-72h. (Langston flag.)
 3. **xstock_spot ablation UI gets its OWN dedicated tab on the staging server, NOT stacked under the existing Drift Dashboard tab** (Kyle directive 2026-05-08). The current Drift Dashboard tab is already long with multiple crypto-scoped tables (Factor Calibration, Factor Ablation Comparison, Exit Strategy Ablation, Regime Distribution, Family Flicker, RBS Drift, DBS Distribution, Global DBS). Adding xstock-equivalent panels to that same tab makes it unwieldy. **New tab name TBD in B79.4 scope** — likely "Multi-Asset Observation" or "xStock Observation" — containing both the xstock-scoped factor-calibration ablation panel AND the xstock-scoped exit-strategy ablation panel side-by-side. Crypto's existing Drift Dashboard tab stays unchanged. Pattern locks into the workflow doc Section D / Section H — every new asset class onboarding gets its own dedicated observation tab, not appended to existing tabs.
 
+### §10c.4d B79.TEC architectural refinements LOCKED (Langston Q1-Q5 reply 2026-05-08 08:03 UTC)
+
+Reply lives at `Claude Comms and Packages/Langston Design Asks/B79_TEC_design_ask_rev1_reply.md` (10032 bytes, verbatim Telegram-relayed in 3 chunks). Five locked refinements over CC's architectural lean — all to be reflected in upcoming B79.TEC scope-doc draft + PIA + System Manual entry:
+
+**Q1 cache structure:**
+- `Map<AssetClass, TrailingExitConfig>` confirmed.
+- `resolveTECConfig(assetClass: AssetClass): TrailingExitConfig` — drop optional `strategy?` / `regime?` params from CC's lean (decorative if not in cache key; future strategy/regime axes is a refactor batch, not a backdoor signature extension).
+- Snapshots immutable wholesale (refresh on TTL, not per-field invalidation). "When was this snapshot taken" has a single answer per class.
+- Document the intentional limitation in scope doc + System Manual: "Strategy and regime axes are intentionally NOT cache keys — current TEC params are policy-level per asset class."
+
+**Q2 cold-start ordering:**
+- primeTECConfig BEFORE loadTrailingStates. Definitively.
+- Canonical boot order: (1) DB connectivity → (2) primeTECConfig populates cache for ALL registered classes (and HARD-FAILS if any class's row not found — see Q3) → (3) loadTrailingStates rehydrates open trade states from disk → (4) market data feed connects → (5) updatePosition becomes callable.
+- **State vs config rehydrate boundary** written into scope doc: `state.*` (`breakEvenLatched`, peak price, trailing-active flag) rehydrate from disk verbatim — path-dependent on the trade's lived history; `config.*` (whether to latch, trailing multipliers, lock thresholds) re-resolve from current DB rows on rehydrate. Practical effect: trade open through a config change continues with accumulated state but its policy gates reflect operator's current intent. Matches Kyle changing module_constants meaning "apply going forward, including in-flight trades."
+
+**Q3 fail-closed default flip:**
+- `TEC_DEFAULTS.breakEvenEnabled` default flips `true` → `false`. Asymmetric risk: accidentally-on costs real money on BE-stopped trades meant to ride through pullbacks (current state); accidentally-off is degraded but functional TEC.
+- Fail-closed default is NOT a silent fallback per CLAUDE.md §11 — it is explicit, documented, intentional safe-state for a pathological condition. primeTECConfig is the deterministic path that should make the default unreachable in normal operation.
+- "Log loud" defined operationally:
+  - `console.error('[TEC_BOOTSTRAP_FAIL] primeTECConfig failed for assetClass=X reason=Y')` — grep-friendly prefix in PM2.
+  - Health endpoint returns degraded status until primeTECConfig succeeds for ALL registered classes — failure visible at ops surface, not buried in PM2 logs.
+  - Cache-miss path in `resolveTECConfig` ALSO logs loud (not silently return defaults) — missed asset class produces visible signal, not quiet behavior change.
+- **`[KYLE_DECISION]` open question:** should app boot HARD-FAIL if primeTECConfig fails, or boot in degraded mode? Langston lean: production hard-fail; dev tolerates degraded boot for iteration speed via env flag `TEC_BOOTSTRAP_REQUIRED=true` (prod) / `false` (dev). Surfaced for Kyle's call before scope-doc lock.
+
+**Q4 zombie trades during transition:**
+- Substantive answer agreed: 4 zombies retain `breakEvenLatched=true`, line-503 latch-gate skips because already-latched, BE-stop fires on price reversal, trades close per Kyle's directive.
+- Audit must LINE-CITE not assume (lesson from BUG-2026-05-06-A in CHANGES_AND_FIXES). PIA acceptance criteria:
+  - Cite exact conditional at latch gate (file:line, quoted code)
+  - Cite BE-stop exit logic separately (file:line, quoted) — must NOT consult `config.breakEvenEnabled`
+  - Grep-confirm `config.breakEvenEnabled` checked at exactly one site (the latch gate), not multiple sites
+- Adjacent risk flagged (NOT B79.TEC scope): other state-vs-config entanglements in TEC (trailing-active flag, lock-threshold-hit flag, etc.). If PIA surfaces any, log to RUNNING_ISSUES as candidate for future batch — do NOT scope-creep into B79.TEC.
+
+**Q5 wildcard-row removal migration:**
+- Two-step retained. CC's writeup said "operational `scripts/` UPDATE that DELETEs" — make it `DELETE` cleanly.
+- Step 2 idempotent + signature-guarded:
+  - Pre-check `SELECT COUNT(*)` returns exactly 1 (assert, abort if 0 or >1)
+  - Capture row before DELETE for rollback (`SELECT * INTO log` or equivalent)
+  - DELETE with signature WHERE clause: `AND value = false AND created_at < <step1_deploy_timestamp>` so we're not deleting a freshly-inserted wildcard
+- Verification gate between Step 1 + Step 2:
+  - Instrument resolveTECConfig with resolution-path-by-class counter / log line
+  - After Step 1 deploys, monitor for `[TEC]` resolution events
+  - Confirm resolution hits explicit-class rows for crypto + xstock, never falls through to wildcard
+  - Telemetry, then act. Audit-then-cut.
+- **Minimum 48-hour gap** between Step 1 deploy and Step 2 execution. Resource-cheap insurance. Captures full intraday cycle + ideally one weekend liquidity behavior window.
+- Rollback path documented in Step 2 script header: "If this DELETE turns out wrong, run `INSERT INTO module_constants (...) VALUES (<captured row>);`."
+
+**Next:** CC drafts formal B79.TEC scope-doc + PIA reflecting all 5 refinements. Kyle answers Q3 `[KYLE_DECISION]` (hard-fail vs degraded boot) before scope-doc lock. Langston greenlights scope before any code.
+
 ### §10c.5 Documentation discipline (rule, not just a reminder)
 
 Kyle directive: discussions get forgotten when implementation happens 3-4 phases later. To prevent yes-yes-yes-then-not-done failure mode:
