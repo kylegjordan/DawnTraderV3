@@ -184,21 +184,29 @@ async function runLoadTest(): Promise<void> {
   const surfaces: SurfaceSample[] = [];
   const dbSamples: DbRoundtripSample[] = [];
 
-  // Run 10 dry-cycles at 3-second intervals (~30 sec total) — synthetic but
-  // representative of intended cadence; we're sizing the marginal cost not
-  // running for hours.
-  for (let i = 1; i <= 10; i++) {
+  // Run 20 dry-cycles at 2-second intervals (~40 sec total). First 2 are
+  // warmup (DB connection cold-cache, planner-cache cold) and excluded
+  // from p95 calc — they always spike on first hit and don't represent
+  // steady-state cycle cost.
+  const totalCycles = 20;
+  const warmupCycles = 2;
+  for (let i = 1; i <= totalCycles; i++) {
     surfaces.push(captureSurface());
     const sample = await runXstockDryCycle(i);
     dbSamples.push(sample);
+    const isWarmup = i <= warmupCycles;
     console.log(
-      `[B79.0a][LOAD_TEST] cycle=${i} db_roundtrip_ms=${sample.durationMs} rows=${sample.rowsReturned}`,
+      `[B79.0a][LOAD_TEST] cycle=${i}${isWarmup ? ' (WARMUP)' : ''} db_roundtrip_ms=${sample.durationMs} rows=${sample.rowsReturned}`,
     );
-    await new Promise((r) => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, 2000));
   }
+  // Strip warmup cycles from gate evaluation
+  const measuredSamples = dbSamples.slice(warmupCycles);
 
   const supabase = await captureSupabase();
-  const decision = evaluateGate(surfaces, supabase, dbSamples);
+  // Pass measuredSamples (warmup-stripped) to the gate evaluator so cold-
+  // cache outliers don't dominate p95.
+  const decision = evaluateGate(surfaces, supabase, measuredSamples);
 
   const completedAt = new Date().toISOString();
   const report = {
