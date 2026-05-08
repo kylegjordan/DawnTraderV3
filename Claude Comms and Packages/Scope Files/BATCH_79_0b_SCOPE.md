@@ -1,6 +1,6 @@
 # BATCH 79.0b — N3+N4 cleanup + B79.0a SQE wildcard DELETE (Phase 24)
 
-**Status:** rev 1 — CC draft. Awaiting Langston Step 1 review.
+**Status:** rev 2 — Langston Step 1 review APPROVE WITH REVISIONS applied (review at `/tmp/lang_b790b_scope_reply.txt` 2026-05-08; verbatim Telegram-relayed msg 3743+3744). Q1 expanded (line 285 also fixed); Q2 expanded (4th test file added); Q3+Q4 confirmed.
 **Workflow:** 11-step canonical (full).
 **Branch:** `migration/aws-supabase`.
 **Sequencing:** THIRD sub-batch in Phase 24 (after B79 dormant scaffold + B79.TEC + B79.0a). Mini-deploy post-B79.0a verify.
@@ -18,11 +18,12 @@
 **This batch closes the B79.0a deferral list cleanly.** Specifically:
 
 ✅ In scope:
-- N3 fix: drop redundant `input.strategy &&` truthy check at `server/core/filters/signal_quality_evaluator.ts:199` (input.strategy is typed `string` non-optional; truthy guard is dead).
-- N4 tests: 3 new test files covering the B79-era surfaces:
+- N3 fix (rev 2 — both occurrences per Langston Q1): drop redundant `input.strategy &&` truthy at `signal_quality_evaluator.ts:199` AND `:285` (input.strategy is typed `string` non-optional; truthy guard is dead at both sites). Line 285 keeps `input.regimeStability` truthy (load-bearing, optional field).
+- N4 tests (rev 2 — 4 files per Langston Q2): test files covering the B79-era surfaces:
   - `b79-0b-market-hours.test.ts` — `isXstockMarketOpenUTC` weekday-during-hours / weekday-outside-hours / Saturday / Sunday-before-open / Friday-after-close
   - `b79-0b-asset-class-instances.test.ts` — `bootstrapXstockSpotInstances` idempotency (multiple calls return same triad); inactive class throws
   - `b79-0b-safe-resolve-asset-class.test.ts` — `safeResolveAssetClass` returns null on unknown patterns + does not throw + logs WARN
+  - `b79-0b-strategy-asset-class-gate.test.ts` (rev 2 added) — `isStrategyEnabledForAssetClass` whitelist coverage (10 strategies expected) + non-whitelisted rejection + crypto_spot no-touch fence + unknown asset class default-open back-compat
 - B79.0a SQE wildcard DELETE migration script: removes `(sqe_config, *, *, *, *, min_final_score)` AND `(sqe_config, *, *, *, *, min_regime_weight)` rows. Wildcards are now redundant since per-class explicit rows landed in B79.0a Migration 2. Mirror of B79.TEC.b pattern — committed-not-executed; manual operator step at +48h gate.
 - Verify checklist artifact `BATCH_79_0b_VERIFY_CHECKLIST.md` for the wildcard-DELETE manual deploy gate.
 
@@ -82,7 +83,7 @@
 | 2 | Test files reference unstable internal helpers (`_testResetXstockSpotInstances`) | LOW | Helper already exists with `_test` prefix indicating test-only API |
 | 3 | Wildcard DELETE script accidentally fires in B79.0b deploy | MEDIUM | Committed-not-executed pattern + verify checklist + signature-guarded WHERE clause + manual operator step at +48h |
 | 4 | Per-class rows from B79.0a Migration 2 not yet exercised in production resolution path → wildcard DELETE prematurely cuts the safety net | MEDIUM | 48h gate ensures resolution-path traffic flows through explicit per-class rows; verify checklist precondition checks `[TEC_RESOLVE_AGGR]`-equivalent log signals (sqe_config has its own resolution-path; PIA enumerates) |
-| 5 | Test additions surface a real bug in B79-era code | LOW | If they do, that's the value of the cleanup batch — fix or document |
+| 5 | Test additions surface a real bug in B79-era code | EXPECTED OUTCOME (rev 2 per Langston note) — not a risk; that's the cleanup-batch value | If they do, fix or document |
 
 ---
 

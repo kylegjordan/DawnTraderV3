@@ -287,7 +287,11 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   // HF9 Item B: Governance gate (migrated from paper-execution-engine Directive 11.7R-E)
   // Checks strategy eligibility based on regime stability and dependency level.
   // VTS signals pass skipGovernanceGate=true (VTS has its own inline governance checks).
-  if (!options.skipGovernanceGate && input.strategy && input.regimeStability) {
+  // B79.0b N3 cleanup (Langston Q1 revise): dropped `input.strategy &&` from
+  // the &&-chain — same dead-truthy reasoning as line 199 (input.strategy is
+  // typed `string` non-optional). `input.regimeStability` truthy IS
+  // load-bearing (typed `RegimeStability?` optional at line 86); leave that.
+  if (!options.skipGovernanceGate && input.regimeStability) {
     const dependency = getStrategyDependency(input.strategy);
     if (!isStrategyEligible(input.strategy, input.regimeStability, dependency)) {
       failures.push(`Governance: ${input.strategy} (${dependency} dep) blocked in ${input.regimeStability}`);
