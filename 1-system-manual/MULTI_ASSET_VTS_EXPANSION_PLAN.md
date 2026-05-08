@@ -434,6 +434,27 @@ The B73 exit-strategy ablation framework (12 variants: BE A-F + Trail G-J + Comb
 
 **Sequencing:** B79.4 (already in scope as "equity exit observation calibration") carries this deliverable. Was underspecified; now explicit per this entry.
 
+### §10c.4b Phase 24 sub-batch sequencing LOCKED (Langston design call 2026-05-08 07:44 UTC)
+
+After CC's condensed design ask + Langston's architectural reply (relayed verbatim to Telegram), Phase 24 sequencing locked:
+
+1. **B79.TEC FIRST** — per-asset-class TEC config + `primeTECConfig` at bootstrap + per-class DB rows + fail-closed defaults. Before B79.0a live wire-in.
+2. **B79.0a** — live xstock scanner via `centralClock` + ARM constructor injection + Q-D AAPLx-vs-AAPL yfinance probe + Step-4 N2-N4 cleanup.
+3. **B79.4** — extend B73 exit-strategy ablation to xstock_spot (parallel panel, NOT replacement of crypto). Per-asset-class observation period sizing.
+4. **B79.1/.2/.3/.5/.6/.x** — per scope §-1 (observation-triggered).
+
+**Why B79.TEC first** (Langston counter to CC's lean of B79.TEC AFTER B79.0a):
+> "CC's 'benign window' argument relies on crypto's BE value coinciding with xstock's Day 1 value. True for `break_even_enabled` — doesn't extend to the rest of TEC config (trailing ATR multipliers, lock thresholds, etc.). xstock's Day 1 row will likely copy crypto's params as starting placeholders, but routing xstock through the hardcoded-crypto path is architecturally wrong even when values happen to match. Kyle locked NO PATCHES yesterday; sequencing that depends on value coincidence is exactly the reasoning that doctrine guards against. Also: xstock's earliest VTS observations are the B79.4 baseline. Running them on a hardcoded-crypto path — even briefly — contaminates the data ablation will need."
+
+CC concedes. The architectural rule: don't route a new asset class through hardcoded-other-class config even briefly, regardless of whether values happen to coincide.
+
+### §10c.4c B79.4 design flags (Langston call-outs 2026-05-08)
+
+Two flags Langston raised on B79.4 scope before formal scope-doc draft:
+
+1. **`exit_strategy_alternates` aggregator key likely needs a schema lift** from `(regime, strategy)` → `(regime, strategy, asset_class)`. Non-trivial migration. Must be called out explicitly in B79.4 scope doc — not a minor wiring task.
+2. **xstock panel operational from t=0 with sparse data.** Empty observation windows during early Layer 3 are EXPECTED, not bugs. Workflow doc Section G "Forward-Watch" should make this explicit so the panel isn't mis-flagged as broken when sample-count is low in the first 24-72h.
+
 ### §10c.5 Documentation discipline (rule, not just a reminder)
 
 Kyle directive: discussions get forgotten when implementation happens 3-4 phases later. To prevent yes-yes-yes-then-not-done failure mode:
