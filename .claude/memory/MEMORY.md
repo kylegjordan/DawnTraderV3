@@ -18,24 +18,38 @@
 
 ---
 
-## CURRENT STATE — 2026-05-08 (B79.TEC SHIPPED, PM2 #190)
+## CURRENT STATE — 2026-05-08 night (B79.0a CLOSED, all 11 steps verified)
 
-- **Branch:** `migration/aws-supabase` HEAD `7eb4f5452`. Chain: `01fa39912` (Step 3 impl) → `7eb4f5452` (Step 5 test-fix).
-- **Live on staging PM2 #190:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + B78.2 + B79 dormant scaffold + **B79.TEC (per-class TEC config + HARD-FAIL boot + 4 active classes ready)**.
-- **Migration 1 applied:** 4 explicit per-class `break_even_enabled=false` rows (crypto_spot, crypto_perp, xstock_spot, xstock_perp) + 1 wildcard preserved (B79.TEC.b removes after 48h).
-- **Watchdog v2 SHIPPED 2026-05-08:** `/usr/local/bin/langston-call` → stream-json sidecar NDJSON + jq result-extract. v1 backed up. Canonical script at `Claude Comms and Packages/comms-infra/langston-call.sh`. RUNNING_ISSUES #84 RESOLVED.
-- **Hostile sim PASSED:** DELETE crypto_spot row → PM2 crash loop (#185→186→187, `[TEC_BOOTSTRAP_FAIL]` confirmed) → restore → clean boot at #190.
-- **No-touch fence:** crypto_spot regime_factor_alternates 3/factor/hr at +3min post-restart (consistent with fresh restart cadence; will normalize as window fills).
-- **B79.TEC status:** Steps 1-7 CLOSED + hostile sim PASS. Step 8 Langston second-pass watchdog in flight at session close. Step 10 governance partially done (RUNNING_ISSUES #79 RESOLVED, #84 RESOLVED, #85 OPEN; completion report finalized). Next session: confirm Langston Step 8 ACK, finalize remaining governance (BATCH_CATALOG, PHASE_HISTORY, plan-doc §9, SIM TEC entries, SYSTEM_MANUAL TEC architecture section, CHANGES_AND_FIXES), Telegram plain-language summary post.
+**B79.0a closure 2026-05-08 night (PM2 #197+, branch `migration/aws-supabase` HEAD `ef77f7374`):**
+- Steps 1-11 complete; all gates green; Langston Step 4 + Step 8 APPROVE WITH/CONDITIONAL APPROVE
+- Load test DECISION:SHIP (steady-state ~72ms/cycle, p95 well under 100ms gate)
+- Hostile sim VERIFIED: BACKPRESSURE_OBSERVED fires every cycle with 28s sleep; cycles continue (no-skip surface preserved); flags unset post-test → hostileSimActive:false
+- TEC bootstrap unaffected (all 4 classes ready); crypto_spot factor cadence increased post-deploy (not decreased)
+- 7 new test files passing; 59 baseline failures unchanged; CI Build+Docker green
+- Q-D probe ran (xstock side captured all 7 tickers; Yahoo null deferred to RUNNING_ISSUES #86 B79.x continuous probe with alternate API)
+- 3 bonus hotfixes captured as INFRA-2026-05-08-A/B/C/D in CHANGES_AND_FIXES (column `last` vs `price`, drizzle PG-array binding, 5min recency for partition timeout, HOSTILE_SIM_OVERRIDE staging escape)
+- Governance: SIM 12 entries added (Kyle directive); BATCH_CATALOG entry; CHANGES_AND_FIXES 4 entries; RUNNING_ISSUES #77 RESOLVED, #81 first-execution complete, #86 OPEN
+- Completion report at `Claude Comms and Packages/Batch Completion/BATCH_79_0a_COMPLETION_REPORT.md` (§5 plain-language summary)
 
-### B79 Phase 24 deliverables (commits d7ca57340 + a991f40a4 + 260cc8cc5 + 871038509)
-- `Claude Comms and Packages/Scope Files/BATCH_79_PRE_AUDIT.md` — PIA per CLAUDE.md §2 Step 2; 3 telemetry partitioning hard blockers identified, resolution = two-instance pattern (separate aggregator + ratio-manager + failure-tracker per asset class)
-- `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — NEW Tier-2 governance, full template + xstock_spot worked example
-- `drizzle/migrations/2026-05-07-b79-screener-filters-asset-class.sql` (+ rollback) — adds asset_class + tunable_status columns to screener_filters; seeds xstock_spot row with NO max_price cap
-- `drizzle/migrations/2026-05-07-b79-xstock-module-constants.sql` (+ rollback) — macro_modifier=1.0 (B79.3 deferred), orb_enabled=false (Q-D-gated), pattern-pool guardrails inherit-from-crypto
+**Next sub-batches Phase 24:**
+1. **B79.0b** mini-deploy after 48h verify gate: SQE wildcard row DELETE; N3 redundant truthy strategy guard removal; N4 boundary tests
+2. **B79.4** extend B73 exit-strategy ablation framework to xstock_spot (drives Layer-3 evidence; new dedicated UI tab per Kyle directive)
+3. **B79.x signal-orchestrator wiring** post-Layer-3 calibration
+4. **B79.x continuous Q-D probe** with alternate API (RUNNING_ISSUES #86)
+5. **B80** crypto_perp onboarding using ASSET_CLASS_ONBOARDING_WORKFLOW template
 
-### B78/B78.1/B78.2 quick reference (all shipped 2026-05-07)
-B78=modularization scaffold. B78.1=cycle break. B78.2=Kraken WS v1→v2 ping fix. Forward-watch #74 at T+24h tomorrow.
+**B79.TEC + B79.0a quick reference (all SHIPPED 2026-05-08):**
+- B79.TEC: per-class TEC config + HARD-FAIL boot + 4 active classes ready (commits 01fa39912 + 7eb4f5452 + e3c7dbe3d, PM2 #190)
+- B79.0a: live xstock_spot scanner via centralClock + ARM injection + freshness helper + Q-D probe + load test + hostile-sim VERIFIED (commits b205fc283 → eb71555e5 → a327964a5 → ... → ef77f7374; PM2 #197+)
+
+Watchdog v2 working reliably with `--idle-timeout 600` for substantive reviews. RUNNING_ISSUES #84 reopened then re-resolved via the calibration tweak — default tuning guidance to be folded into CLAUDE.md §6.5.0 next session.
+
+---
+
+## SHIPPED PREDECESSORS (archive)
+
+**B79.0a status 2026-05-08 night:**
+(B79.0a steps 1-11 all closed. Details in `Claude Comms and Packages/Batch Completion/BATCH_79_0a_COMPLETION_REPORT.md`.)
 
 ---
 
@@ -43,12 +57,9 @@ B78=modularization scaffold. B78.1=cycle break. B78.2=Kraken WS v1→v2 ping fix
 
 | Batch | Status | Description |
 |---|---|---|
-| **B78** | **SHIPPED 2026-05-07** | Modularization scaffolding. Critical path. |
-| **B79** | NEXT | xstock_spot (Kraken XStocks): VTS + active-path wire-in (dormant). 24/5 weekend-pause. 3-layer threshold derivation. Days 4-5. |
-| **B80** | After B79 | crypto_perp (Kraken Futures): VTS + active-path wire-in. Funding-rate per-pair extension to macro modifier. Days 5-6. |
-| **B81** | After B80 | RTB ranking parity (`expectedNetReturnR` primitive, pool-relative normalization) + SQE asset-class thresholds. Days 6-7. Removes B78 re-export shims (RUNNING_ISSUES #73). |
-
-**Active-trading wire-in IS in scope** for B79-B81 (codepath end-to-end). Live-trading testing of new asset classes is Phase 19.
+| **B78 + B78.1 + B78.2** | SHIPPED 2026-05-07 | Modularization scaffolding + cycle break + Kraken WS v2 ping fix |
+| **B79 + B79.TEC + B79.0a** | SHIPPED 2026-05-08 | xstock_spot dormant + per-class TEC config + LIVE observability scanner |
+| **B79.0b / B79.4 / B79.x / B80 / B81** | QUEUED | See completion reports for sequencing |
 
 **Hard fence:** no-touch on crypto_spot through 2026-05-15. Step-0 pre-flight + post-deploy SQL on every batch (column is `evaluated_at`, not `captured_at`):
 
@@ -62,12 +73,12 @@ If cadence drops post-deploy → halt and revert.
 
 ---
 
-## OPERATIONAL FACTS (verified 2026-05-07)
+## OPERATIONAL FACTS
 
-- **Kraken XStocks Pro** = equity exchange. Tokenized 1:1 backed equities. **Fractional buying $1 minimum** → same `$1000 base → ~$150/trade` sizing as crypto. **24/5 trading** (closed weekends — VTS needs weekend-pause gate). Solana-settled (affects Phase 19 active-path custody, NOT VTS).
-- **Kraken Futures** = perp exchange. REST endpoint `https://futures.kraken.com/api/charts/v1/trade/<sym>/1m` (B74). 24/7 trading. Funding rate is per-pair signal (NEW input to crypto_perp's macro modifier in B80).
-- Both feeds **already scanning + archiving** in production (B69 + B74).
-- **B74 file note:** Kraken Futures work lives at `server/services/passive-archive/equity-perp-archiver.ts` — not a `kraken-futures-*` file. Plan/scope misattribution corrected in B78 governance.
+- xstocks 24/5 (closed weekends; VTS weekend-pause gate via `isXstockMarketOpenUTC`). $1000 base → ~$150/trade sizing.
+- Kraken Futures REST `https://futures.kraken.com/api/charts/v1/trade/<sym>/1m` 24/7. Funding rate per-pair signal for B80.
+- xstock + perp feeds already archiving in production (B69 + B74).
+- B74 Kraken Futures lives at `server/services/passive-archive/equity-perp-archiver.ts`.
 
 ---
 
@@ -101,41 +112,11 @@ B67.4/B68.1/B68.2/B68.3/B68.4 — gates: tertile-monotonic WR, ≥7pp gap, p<0.0
 
 ---
 
-## Recent batch history
+## Open RUNNING_ISSUES (as of B79.0a close 2026-05-08)
 
-| Batch | Date | Note |
-|---|---|---|
-| B70 + B72 | 2026-05-04→06 | Unified archive + 18/18 strategies DB-tunable |
-| B75 | 2026-05-06 | Hot/warm/cold tiered storage |
-| B76 | 2026-05-06 | Chain-final calibration framework. RUNNING_ISSUES #54 RESOLVED |
-| B77 | 2026-05-07 | `isBreakEvenTriggered` no-op fix. RUNNING_ISSUES #71 RESOLVED |
-| B78 | 2026-05-07 | Modularization scaffold. Asset_class + exchange extraction. |
-| **B79 (Phase 24)** | **2026-05-07 evening** | **xstock_spot dormant scaffold + ASSET_CLASS_ONBOARDING_WORKFLOW.md. PM2 #184. Live wire-in B79.0a.** |
-
----
-
-## Open RUNNING_ISSUES
-
-- OPEN: #39 (CI TS legacy), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index), #55 (B69.x/B73.3 verification), #73 (B78 shim cleanup B81), #74 (B78 24-48h cadence forward-watch), **#77 (B79.0a tracker — live xstock scanner via centralClock + ARM injection + Q-D probe + N1-N4)**, **#78 (B79 24-48h cadence forward-watch)**, **#79 (B79.TEC Step 1+2 CLOSED 2026-05-08 09:20 UTC. Scope rev 2 + PIA rev 1 Langston-APPROVED. **Step 3 implementation NEXT.** PIA gap-closure 2026-05-08 09:50 UTC: SIM consultation actually verified at lines 791/806/820/834/855/890/1485; PositionUpdate construction site audit found TWO HARDCODED `assetClass: 'crypto_spot'` literals (paper-execution-engine.ts:927 + vts-runner.ts:1962) that PIA §1.9 had deferred — load-bearing fix in Step 3. Plus tec-evaluator.ts:273 must add assetClass to PositionUpdate construction. b65-tec-parity.test.ts must be updated for signature change per SIM line 820. Step 3 sequence per scope §9 + clarifications: ACTIVE_ASSET_CLASSES subset (4 classes); Migration 1 seeds all 4; Map<AssetClass, TrailingExitConfig>; resolveTECConfig sync; primeTECConfig retry 2s/4s/8s transient-only; aggregate-error; primeTECConfig BEFORE server.listen + before loadTrailingStates; TEC_DEFAULTS flip + primeTECConfig wire SAME COMMIT; /api/diagnostics/tec-bootstrap at routes.ts:7003; PositionUpdate.assetClass non-optional; **fix the 3 context-construction hardcodes** (PE:927, VTS:1962, tec-evaluator:273); update b65-tec-parity.test.ts; wildcard-removal script committed-not-executed; B79.TEC.b verify checklist artifact)**, **#80 (B79.4 tracker — extend B73 exit-strategy ablation to xstock_spot, parallel not replacement. Langston flags: aggregator key needs schema lift `(regime,strategy)→(regime,strategy,asset_class)` — non-trivial; xstock panel operational from t=0 with sparse data, empty windows expected not bugs)**, **#81 (backpressure policy revised — vertical-scale only, never asset-class shedding; first execution B79.0a load test)**
-- DEFERRED: #12e, #40, #44, #45, #52
-- RESOLVED 2026-05-06/07: #54 (B76), #55, #56–#69, #70/#71/#72
-
----
-
-## Next session pickup priority — B79 STEP 3 (post-2026-05-07-night session)
-
-**B79 Step 1+2 CLOSED as of commit d7ca57340 (LOCAL ONLY, not pushed). Phase 24 NEW. Step 3 picks up from here.**
-
-### CONSENSUS POSITIONS LOCKED (do not relitigate)
-- Telemetry partitioning resolution = **two-instance pattern** (Langston rev 7 + PIA round 2 GREENLIT). Separate AdaptiveScanManager + TelemetryAggregator + AdaptiveRatioManager + PairFailureTracker per asset class. NOT param-plumbing. Rationale: silent-corruption failure-mode resistance.
-- Subagent's 10 uncommitted files vs rev 7: **RIP universe-merge in market-scanner.ts** (Langston rev 7); reconcile other 9.
-- Pattern path 3 strategies Day 1: `inside_bar_reversal`, `morning_star`, `pivot_shift`. Q3 regime-compatibility documented in PIA round-2 reply.
-- ORB Q-D-gated via `module_constants.strategy_gates.xstock_spot.orb.enabled = false` (DB-tunable, no redeploy).
-- TEC stop-freeze placement = top of `evaluateStop()`.
-- Pre-deploy load test = replay 1.3× historical scan cycles (NOT stress-shim).
-- Static-state hazard: TelemetryAggregator disk-persist path module-scoped (line 1600-1602). Xstock instance runs IN-MEMORY ONLY Day 1 (no disk persist) to sidestep clash. Promote persistence in B79.x if needed.
-- Schema audit: 5 of 6 critical tables already have asset_class column; only screener_filters needed migration (committed in d7ca57340).
-- xstock_spot screener_filters row defaults: NO max_price cap, universe_size=50, confidence_threshold=70 tunable_status='pending_layer_3'.
+- OPEN: #39 (CI TS legacy), #43/#49/#50/#53 (calibration windows), #46 (passive archive index), #55, #73, #74, #78, #80 (B79.4), #82 (B79.TEC arch refinements LOCKED), #85 (B79.x extend HARD-FAIL to all TEC keys), #86 (B79.x continuous Q-D probe with alternate API)
+- RESOLVED 2026-05-08: #77 (B79.0a closed), #79 (B79.TEC closed), #84 (watchdog v2 + calibration), #81 first-execution complete
+- DEFERRED: #12e, #40, #44, #45, #52, #83 (Phase 19.x Boot Coordinator)
 
 ### STEP 3 IMPLEMENTATION QUEUE (concise; full detail in BATCH_79_PRE_AUDIT.md)
 

@@ -1417,6 +1417,88 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 
 ---
 
+## Recent additions (B79.0a — Phase 24 — 2026-05-08)
+
+**B79.0a turns the dormant xstock_spot scaffold (B79 ship) into a LIVE observability scanner.** Per scope §0, signal-orchestrator wiring is deferred to B79.x post-Layer-3 — Day 1 = scanner runs, reads xstock prices from `equity_spot_ticker_snap` (single batched query), tracks per-pair freshness, increments xstock TelemetryAggregator instance counters. Comprehensive component impact:
+
+### `server/asset_classes/xstock_spot/scanner.ts` (NEW, B79.0a)
+
+**Layer:** 3 (Scanner)
+**Purpose:** Live xstock_spot scanner subscribed to `centralClock` (NOT a parallel `setInterval` — same tick-source pattern as `Fx5ScannerService`). Per-cycle batched DB read of `equity_spot_ticker_snap` (single round-trip, last 5min recency window to avoid 13-partition statement-timeout); per-pair freshness gate via `isPairDataFresh`; market-open gate (`isXstockMarketOpenUTC`) bypassable via hostile-sim flags.
+**Upstream:** centralClock (tick trigger); `xstocks-universe.json` symbol set via `XSTOCK_SPOT_SYMBOLS`; `equity_spot_ticker_snap` (DB table written by equity-spot-archiver); `getXstockSpotInstances()` factory.
+**Downstream:** xstock TelemetryAggregator instance counters (in-memory only Day 1 per design); `/api/diagnostics/xstock-scanner` reads via `getDiagnostics()`.
+**Shared state:** `_isScanning` mutex flag; `_clockTickHandler`; `diag` object; `_hostileSimActive`. NO writes to crypto globals.
+**Background execution:** every 30 ticks (30s) via centralClock subscription; HARD-FAIL boot via `start()` throw → `process.exit(1)` in `server/index.ts`.
+**Blast radius:** **HIGH** — live signal-source for xstock_spot. Day 1 scope-limited to observability (no signal-orchestrator wiring). Future B79.x batches add signal-pipeline wiring after Layer-3 evidence.
+**Hostile-sim flags (Langston Q5 + staging-override):** `BACKPRESSURE_TEST_MODE=1` + `HOSTILE_SIM_OVERRIDE=1` (the latter is required when `NODE_ENV=production` — staging escape; double-flag prevents accidental enablement). Documented in scanner.ts header.
+
+### `server/utils/data-freshness.ts` (NEW, B79.0a)
+
+**Layer:** 9 (Utility)
+**Purpose:** Asset-class-aware data-freshness helper. `isPairDataFresh(symbol, assetClass, lastTickMs, now): Promise<boolean>`. Resolves window from `module_constants.market_data.<assetClass>.data_freshness_window_ms`; closed-market for `xstock_spot` returns `true` (Langston Q2 belt-and-suspenders); 60s in-process per-class cache.
+**Upstream:** `module_constants` table; `isXstockMarketOpenUTC()` predicate.
+**Downstream:** scanner cycle path; future signal-pipeline freshness gates.
+**Shared state:** `_windowCache: Map<AssetClass, CachedWindow>` (60s TTL).
+**Blast radius:** **LOW** (pure async function with cache).
+
+### `server/services/adaptive-ratio-manager.ts` (MODIFIED, B79.0a)
+
+**Layer:** 4 (Adaptive)
+**Change:** Constructor extended to `(config?: Partial<RatioConfig>, telemetry?: TelemetryAggregatorService)` — back-compat (default-arg `telemetry=undefined` preserves crypto path). `computeAdaptiveRatio` line 93 prefers `this.telemetry ?? getTelemetryAggregator()`.
+**Blast radius:** **MEDIUM** — affects pair selection bias on xstock path; crypto path unchanged.
+**B79 caveat closed:** SIM line 1432-1433 documented `_xstockSpotInstances` Day-1 in-memory-only; that's now the runtime path with explicit per-class telemetry injection.
+
+### `server/services/asset-class-instances.ts` (MODIFIED, B79.0a)
+
+**Layer:** 9 (Bootstrap)
+**Change:** `bootstrapXstockSpotInstances` now constructs ARM via `new AdaptiveRatioManager({}, telemetry)` injecting xstock telemetry instance. B79 caveat block at lines 94-101 closed.
+**Blast radius:** **LOW** (factory-only).
+
+### `server/services/central-clock.ts` (MODIFIED, B79.0a)
+
+**Change:** `ClockTick` interface explicitly `export interface` (was implicit; needed by scanner type import).
+**Blast radius:** **ZERO** at runtime (type-only export).
+
+### `server/index.ts` (MODIFIED, B79.0a)
+
+**Change:** Boot sequence: `primeTECConfig → loadTrailingStates → xstockSpotScanner.start() → server.listen`. HARD-FAIL on `start()` throw via `process.exit(1)`. Matches B79.TEC pattern exactly.
+**Blast radius:** **HIGH** (boot path).
+
+### `server/routes.ts` (MODIFIED, B79.0a)
+
+**Change:** New `GET /api/diagnostics/xstock-scanner` endpoint (no-auth public, mirrors tec-bootstrap pattern — NOT central-clock which uses `authenticateToken`).
+**Blast radius:** **LOW** (read-only diagnostic).
+
+### `drizzle/migrations/2026-05-08-b79-0a-data-freshness-window.sql` (NEW)
+
+`(market_data, *, xstock_spot, *, *, data_freshness_window_ms) = 90000`. Empirical: p99 inter-tick max 77s on low-liq country ETFs (6h sample of `equity_spot_ticker_snap` 2026-05-08). Assertion includes `value IS NOT NULL` guard (Langston rev 1 #2).
+
+### `drizzle/migrations/2026-05-08-b79-0a-sqe-wildcard-promotion.sql` (NEW)
+
+N2 cleanup: 2 `sqe_config` wildcard rows (`min_final_score=0.35`, `min_regime_weight=0.30`) promoted to explicit per-class for crypto_spot + xstock_spot. Wildcards preserved (B79.0b removes after 48h gate). Value-comparison assertion explicit in SQL (Langston rev 1 #3).
+
+### `scripts/b79-0a-qd-probe.ts` (NEW)
+
+One-shot AAPLx-vs-AAPL diagnostic. Probe set per Langston Q1 (mega-caps + NVDA/TSLA + BHC/ARCT). Yahoo Finance side currently null → continuous Q-D probe with alternate API tracked as RUNNING_ISSUES #86.
+
+### `scripts/b79-0a-load-test.ts` (NEW)
+
+Pre-deploy sizing-gate (RUNNING_ISSUES #81 first execution). 20-cycle replay with 2-cycle warmup strip; surfaces: PM2 CPU/RSS/loadavg, Hetzner cores, Supabase pool utilization, per-cycle DB-roundtrip ms (Langston rev 2 #1). Decision-gate logic: SHIP / SHIP_AFTER_INFRA_UPGRADE / HALT. **First-run 2026-05-08: DECISION:SHIP** (steady-state cycles ~72ms, p95 well under 100ms gate, Supabase pool unproblematic).
+
+### `server/tests/unit/b79-0a-arm-injection.test.ts` + `b79-0a-data-freshness.test.ts` (NEW)
+
+Coverage for ARM constructor back-compat + data-freshness helper edge cases (closed-market belt-and-suspenders + window + Infinity sentinel + lastTick=0).
+
+### "If I Change X, Check Y" — B79.0a additions
+
+- **Modify scanner cycle frequency** → match `SCAN_INTERVAL_SECONDS` constant + verify HOSTILE_SIM_SLEEP_MS stays under tick anchor (preserves no-skip surface per Langston Step 4 #2)
+- **Modify scanner DB query** → re-run load test (`scripts/b79-0a-load-test.ts`); p95 must stay under 100ms
+- **Toggle hostile-sim** → BOTH `BACKPRESSURE_TEST_MODE=1` AND `HOSTILE_SIM_OVERRIDE=1` (when `NODE_ENV=production` for staging); never set in real prod
+- **Adjust freshness window** → update `module_constants.market_data.<assetClass>.data_freshness_window_ms` row; `isPairDataFresh` 60s cache picks up automatically; xstock_spot closed-market always returns true
+- **Add new asset class scanner** → mirror `xstock-spot/scanner.ts` shape; ASSET_CLASS_ONBOARDING_WORKFLOW.md §F captures the location rule (asset-class folder, not services/)
+
+---
+
 ## Recent additions (B79 — Phase 24 — 2026-05-07 evening)
 
 ### `server/services/asset-class-instances.ts` (NEW, B79)

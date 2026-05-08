@@ -2,6 +2,63 @@
 
 ---
 
+## INFRA-2026-05-08-A — B79.0a column-name bug (last vs. price)
+
+**Trigger:** First load-test run on staging (post-B79.0a Step 3 push) returned `error: column "price" does not exist`. Surfaced during process-gap backfill (deploy had pre-empted the load-test gate per Langston Step 4 #1).
+
+**Root cause:** B79.0a scanner.ts + Q-D probe + load test all wrote `SELECT … price::text AS price` against `equity_spot_ticker_snap`. Schema has NO `price` column — the price field is `last numeric(20,8)`. Initial draft was authored from memory of crypto-spot ticker tables which use `price`; B69+ equity-spot schema uses `last`.
+
+**Fix (commit `11b7ab0ff`):** all 3 query sites updated to `last::text AS price` (alias preserves the contract for callers iterating `row.price`).
+
+**Lesson:** when authoring queries against unfamiliar schemas, run `\d <table>` FIRST. Memory-from-pattern is the trap.
+
+---
+
+## INFRA-2026-05-08-B — B79.0a drizzle PG-array binding (literal IN-list)
+
+**Trigger:** Post column-fix, load test surfaced `error: op ANY/ALL (array) requires array on right side` and then `cannot cast type record to text[]` when attempting `${symbolList}::text[]`.
+
+**Root cause:** Drizzle's `sql` template tag interpolates JS arrays as positional parameter tuples, not as PostgreSQL `text[]` arrays. Casting `${symbolList}::text[]` doesn't help because the inner shape is still a record.
+
+**Fix (commit `7ec3aa4ef`):** literal IN-list with `sql.raw` injection. `XSTOCK_SPOT_SYMBOLS` is a hardcoded `const Set` (not user input) so injection is safe.
+
+**Lesson:** drizzle's `sql` template ≠ pg-pool's parameter binding. For multi-element arrays in raw SQL, use the literal-list-with-escaping pattern OR drizzle's query-builder `inArray()` operator (not both).
+
+---
+
+## INFRA-2026-05-08-C — B79.0a statement timeout on 13-partition table (5-min recency constraint)
+
+**Trigger:** Post array-binding fix, load test threw `canceling statement due to statement timeout` on every cycle. Query had to scan 13 monthly partitions of `equity_spot_ticker_snap` for the latest tick across 265 symbols.
+
+**Root cause:** `SELECT DISTINCT ON (symbol) … ORDER BY symbol, captured_at DESC` against the partitioned table planned a multi-partition scan that exceeded the default 15s `statement_timeout`.
+
+**Fix (commit `f27fb5b63`):** added `WHERE captured_at > NOW() - INTERVAL '5 minutes'` recency constraint. Reduces the partition-scan horizon to the most-recent partition (13 → 1) and lets the per-partition index handle the per-symbol latest-row lookup. Post-fix load test: 20-cycle run with steady-state ~72ms / cycle (DECISION: SHIP).
+
+**Why 5 minutes:** the freshness gate (`isPairDataFresh`) rejects anything > 90s old, so any tick older than ~5min is already stale by definition. 5min covers any reasonable future freshness ceiling B79.x calibration might pick.
+
+**Lesson:** partition-pruning is a planner heuristic that needs an explicit time bound on the partition key. `DISTINCT ON` without recency constraint defeats partition pruning.
+
+---
+
+## INFRA-2026-05-08-D — B79.0a hostile-sim staging-override (HOSTILE_SIM_OVERRIDE)
+
+**Trigger:** Step 7+8 hostile-sim verify on staging hit `[HOSTILE_SIM_BLOCKED]` because Langston's Q5 design checked `NODE_ENV !== 'production'` — staging uses `NODE_ENV=production` for parity with real prod. The double-flag goal (prevent accidental enablement in prod) was sound but had no escape hatch for staging tests.
+
+**Fix (commit `ef77f7374`):** added `HOSTILE_SIM_OVERRIDE=1` second flag. Activation requires BOTH `BACKPRESSURE_TEST_MODE=1` AND `(NODE_ENV !== 'production' OR HOSTILE_SIM_OVERRIDE=1)`. The double-flag preserves the prod-safety intent: a single env-var leak still can't enable the test in real production.
+
+**Activation contract (per Langston Step 8 #2 — capture in ops doc):**
+- **Real production:** never set either flag. Verify via `[HOSTILE_SIM_ACTIVE]` log absence.
+- **Staging (NODE_ENV=production for parity):** set both `BACKPRESSURE_TEST_MODE=1` AND `HOSTILE_SIM_OVERRIDE=1`. Confirm `[HOSTILE_SIM_ACTIVE]` log fires at boot. Unset both + restart to disable.
+- **Dev (NODE_ENV != production):** `BACKPRESSURE_TEST_MODE=1` alone is sufficient.
+
+**Behavioral verify post-deploy 2026-05-08:**
+- `[HOSTILE_SIM_ACTIVE]` log fired at 21:53:44.
+- `[B79.0a][SCAN_CYCLE_DONE] tick=60 duration_ms=28074` — cycle ran the artificial 28s sleep + ~74ms DB round-trip; total stayed under the 30s tick anchor (no skip per Langston Step 4 #2 design).
+- `[B79.0a][BACKPRESSURE_OBSERVED] tick=30 duration_ms=28143 exceeded 25s budget …` fired on every cycle as designed.
+- Cycles continued emitting (verified `tick=30` and `tick=60` both completed); no skipping per `#81` policy.
+
+---
+
 ## INFRA-2026-05-07-E — B78.2 Kraken WS v1→v2 format fix (RUNNING_ISSUES #76 RESOLVED) (SHIPPED 2026-05-07)
 
 **Trigger:** RUNNING_ISSUES #76 surfaced during B78.1 behavioral verify — kraken-websocket-adapter has been generating "Method(s) not found" rejection log lines every ~21s since 2026-04-03 (49,175 health-checks all reporting "Subscribed Symbols: 0"; 142,079 historical rejection lines). System silently functioning via B74 archivers + REST fallback. Per Langston Step-8 sequencing call (B78.1): B78.2 must precede B79 Day 0.
