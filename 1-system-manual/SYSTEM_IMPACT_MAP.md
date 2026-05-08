@@ -1414,3 +1414,82 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 - **Add a new periodic table to retention** → INSERT one row in `data_lifecycle` (e.g. `mytable.hot_retention_days=N`) + add table spec to `B74_TABLES` array in `b75-retention-sweep.ts` if partitioned, or fold into `context-bridge-log-ttl.ts` pattern if unpartitioned. Otherwise no code change.
 - **Move to S3 instead of B2** → swap `storage-client.ts` `uploadCold`/`downloadCold` to use `@aws-sdk/client-s3`. Manifest URI scheme changes from `b2://` to `s3://`. `b75-rehydrate.ts` URI parser already prefix-aware; one-line fix there too. UPDATE `data_lifecycle.cold_provider='s3'` for human-readable tracking.
 
+
+---
+
+## Recent additions (B79 — Phase 24 — 2026-05-07 evening)
+
+### `server/services/asset-class-instances.ts` (NEW, B79)
+
+**Layer:** 9 (Infrastructure / Bootstrap)
+
+**Purpose:** Per-asset-class telemetry / scanner / ratio-manager bootstrap factory. Exports `getAssetClassInstances(assetClass) | null` returning `{telemetry, ratioManager, failureTracker, scanManager, inMemoryOnly}`. Crypto_spot returns null (callers use existing global singletons; no-touch fence). Xstock_spot lazy-bootstraps a fresh in-memory triad on first call.
+
+**Upstream:** none (factory; called by future xstock scanner loop in B79.0a).
+**Downstream:** when invoked, instantiates `TelemetryAggregatorService` + `AdaptiveRatioManager` + `PairFailureTracker` + `AdaptiveScanManager` (the latter accepts injected telemetry + failureTracker via existing constructor signature).
+**Shared state:** `_xstockSpotInstances` module-scoped cached triad (lazy singleton).
+**Background execution:** none Day 1 (dormant). When B79.0a wires the live xstock scanner setInterval, that loop becomes the consumer.
+**Blast radius:** LOW. Crypto path UNTOUCHED (returns null, callers use existing globals). xstock callers explicitly opt-in to new triad via `getXstockSpotInstances()`.
+**Safety hazard documented:** `TelemetryAggregatorService` has a module-scoped disk-persist path at `server/services/telemetry-aggregator.ts:1600-1602`. Naive second instance would clash on disk write. Resolution Day 1: xstock instance runs in-memory only (no disk persist). Promote persistence in B79.x if Layer 3 evidence requires.
+
+### `server/utils/symbol-normalize.ts` (NEW, B79)
+
+**Layer:** 9 (Infrastructure / Utilities)
+
+**Purpose:** Cross-asset/cross-exchange symbol-form normalization. `normalize(symbol, assetClass, opts?) → canonical`. Idempotent + fail-soft on unknown forms (warn-once and return input). Strict mode throws on unrecognized.
+
+**Upstream:** consumed by future scanner / SQE / archiver call sites where multiple symbol forms can arrive.
+**Downstream:** none directly; pure function.
+**Shared state:** `_unknownFormWarnCount` warn-once counter module-scoped (cosmetic).
+**Blast radius:** LOW (pure function, callers opt in).
+
+### `server/strategies/orb.ts` (NEW, B79)
+
+**Layer:** 4 (Signal Generation / Strategies)
+
+**Purpose:** Opening Range Breakout strategy — equity-microstructure-targeting first-15-30min open-range breakout. **DORMANT Day 1**: detect path returns null until DB flag `module_constants.strategy_gates.xstock_spot.orb.enabled` flips to true (via Q-D AAPLx-vs-AAPL probe outcome).
+
+**Upstream:** would be called by strategy-engine dispatch table once registered (not registered Day 1).
+**Downstream:** none Day 1.
+**Shared state:** `_disabledLogCount` module-scoped (cosmetic).
+**Background execution:** none.
+**Blast radius:** ZERO Day 1 (function never invoked).
+
+### `server/asset_classes/xstock_spot/market-hours.ts` (NEW, B79)
+
+**Layer:** 5 (Regime Classification / Asset-Class Config)
+
+**Purpose:** ARCA-aligned 24/5 schedule predicate `isXstockMarketOpenUTC(now?)`. NO IMPORTS — leaf module.
+
+**Upstream:** consumed by SQE weekend-pause gate + TEC stop-freeze guard + future xstock scanner cadence gate (B79.0a).
+**Downstream:** none.
+**Shared state:** none.
+**Blast radius:** LOW (pure predicate). Crypto path doesn't import this.
+**Limitation:** does NOT include US market holidays Day 1. Future enhancement: module_constant `xstockMarketHoursOverride` for holiday calendar (Langston Q5 answer; B79.x).
+
+### `server/asset_classes/types.ts` (NEW, B79)
+
+**Layer:** 5 (Asset-Class Type Definitions)
+
+**Purpose:** `AssetClassFrictionModel` interface — shared shape for per-asset-class friction modules. Decimal-fraction unit consistency (e.g. 0.0026 = 0.26%) per Langston B79 rev 1 callout.
+
+**Upstream:** none (type-only).
+**Downstream:** consumed by `crypto_spot/friction.ts`, `xstock_spot/friction.ts`, `cost-model.ts` `getFrictionForAssetClass`.
+**Blast radius:** ZERO at runtime (types erased at build).
+
+### Modified components (B79)
+
+- **`server/core/metrics/market-regime.ts`** `calculatePairRegime` now accepts optional `assetClass: string = 'crypto_spot'`. Crypto path threshold dispatch UNCHANGED. xstock_spot dispatch added (vol/DX/momentum thresholds halved per scope §2.3 Layer 1; DBS scale-invariant).
+- **`server/core/math/cost-model.ts`** new `getFrictionForAssetClass(assetClass)` + `getDefaultCostComponentsForAssetClass(assetClass, symbol?)` dispatch. `getCachedCostMetrics(symbol, assetClass='crypto_spot')` extends signature; crypto path unchanged.
+- **`server/core/filters/signal_quality_evaluator.ts`** xstock_spot weekend-pause + strategy-whitelist gates added at top of `evaluateSignalQuality`. Crypto_spot signals bypass these gates entirely.
+- **`server/services/trailing-exit-controller.ts`** TEC stop-freeze guard at top of `updatePosition` (Langston PIA Q5 placement). Returns no-op state preservation when xstock_spot market closed.
+- **`server/config/canonical-regime-strategy-map.ts`** `XSTOCK_SPOT_ENABLED_STRATEGIES` set with 6 quant + 3 file pattern + ORB Q-D-gated.
+- **`shared/asset-classes.ts`** `XSTOCK_SPOT_SYMBOLS` allow-list (275 syms, canonical `BASE/USD` form). `resolveAssetClass` dispatches xstock allow-list lookup BEFORE crypto regex (since canonical forms collide).
+
+### "If I Change X, Check Y" — B79 additions
+
+- **Add new xstock symbol** → INSERT into `xstocks-universe.json` + INSERT into `XSTOCK_SPOT_SYMBOLS` set in `shared/asset-classes.ts`. Both must stay in sync (TODO: dynamic load from JSON in B79.x).
+- **Flip ORB activation** → UPDATE `module_constants` row `(module_name='strategy_gates', asset_class='xstock_spot', strategy='orb', constant_name='enabled')` value `true`. Requires Q-D probe outcome supports activation. Also requires registering ORB in strategy-engine dispatch (B79.x).
+- **Enable xstock_spot equity macro modifier** → currently 1.0 placeholder. B79.3 ships VIX/S&P/sector-rotation/yield-curve composition + module_constants seed. UPDATE `mce_config.macro_modifier` xstock_spot row to flip from neutral.
+- **Add new asset class** → walk `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` Section A through G. Add `server/asset_classes/<class>/` files + `getAssetClassInstances` switch case + `XSTOCK_SPOT_ENABLED_STRATEGIES`-equivalent set + schema migrations + module_constants seeds.
+- **Tune xstock_spot regime thresholds** → currently TS constants in `server/asset_classes/xstock_spot/regime-thresholds.ts` (Layer 1 baseline). Layer 3 calibration may promote to module_constants in B79.1.

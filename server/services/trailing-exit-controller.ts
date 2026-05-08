@@ -26,6 +26,9 @@ import {
 } from '../utils/analysis-utils.js';
 import { getCachedCostMetrics, computeNetBreakeven, computeNetTargetFloor } from '../core/math/cost-model.js';
 import { getModuleConstants } from './module-constants-service.js';
+// B79: market-hours is a leaf module (no imports) — safe static import.
+// Used by the TEC stop-freeze guard at top of updatePosition() for xstock_spot.
+import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
 
 // Debounce persistence writes to avoid excessive I/O.
 // B65.2: tunable via `module_constants.trailing_exit.persistence_debounce_ms`.
@@ -427,12 +430,12 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   // stop-evaluation. No price action means stops can't fire correctly, and
   // running the evaluation would just spam noise. Crypto_spot defaults
   // pass-through (no gate) to preserve no-touch fence.
+  // (B79 Step 4 N1 cleanup: market-hours is a leaf module with NO imports —
+  // there is no cycle hazard; static import is the ESM-native, type-checked
+  // path. The earlier `require()` was a defensive hold-over and has been
+  // removed in favor of the static import at the top of the file.)
   const assetClass = update.assetClass ?? 'crypto_spot';
   if (assetClass === 'xstock_spot') {
-    // Lazy-import market-hours to avoid a static cycle into asset_classes/.
-    // Synchronous require pattern matches existing code conventions in this file.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { isXstockMarketOpenUTC } = require('../asset_classes/xstock_spot/market-hours.js');
     if (!isXstockMarketOpenUTC()) {
       _b79TecFreezeCount++;
       if (_b79TecFreezeCount % 100 === 1) {

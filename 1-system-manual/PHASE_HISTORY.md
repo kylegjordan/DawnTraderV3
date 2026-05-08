@@ -532,3 +532,30 @@ Adaptive Market Response concept document `1-system-manual/ADAPTIVE_MARKET_RESPO
 - **B63 Item 13 verdict reframed as INCONCLUSIVE — INSUFFICIENT EVIDENCE** (provisional; original BUILD_DEDICATED closure stands as historical record). Methodology gap: pre-registered thresholds did not include sibling-strategy WR control. Reframe lands as 2026-04-26 addendum to BATCH_63_COMPLETION_REPORT.md §12.
 - **Recurrence finding (Langston cc-inbox #821):** 04-22 is the SECOND instance in one week of the 04-18 streakiness pattern (both globalRegime=TFS while market disagreed catastrophically). Two recurring failure-mode events motivate Phase 19.5 AMR detection-layer build rather than per-strategy detector redesign.
 - **New queued slot:** future TBD-numbered batch to re-evaluate Item 13 with cleaner cohort data + explicit window controls in the threshold definition. Earliest cleanly-comparable data is post-Phase-19 paper audit.
+
+---
+
+### Phase 24: Multi-Asset VTS Onboarding (xstock_spot + reusable workflow) — Batch 79+ — 2026-05-07 onwards
+
+**Phase 24 NEW per Kyle directive 2026-05-07 round 2.** Out-of-sequence with current Phase 15c/16/19, consistent with the roadmap pattern (Phase 19.0 was pulled forward as documented; xStocks onboarding similarly sits in its own phase container). Phase 25 = B80 (crypto_perp) with same workflow doc applied as second worked example.
+
+**Trigger (Kyle 2026-05-07):** *"What we are doing with these X-Stocks, this needs to be our experimentation lab, our learning example for how we set up asset classes in the future. We need to document and design a workflow for how we add other asset classes in the future."*
+
+**Phase 24 deliverables:**
+- B79: workflow doc + xstock_spot foundational scaffold + screener_filters schema + dedicated scanner + telemetry-partitioning audit + parallel pattern path + Q-D AAPLx-vs-AAPL pre-implementation investigation stage + ORB strategy file shipped Q-D-gated + 3 file-based pattern strategies enabled (`inside_bar_reversal`, `morning_star`, `pivot_shift`) + scripted sector mapping (yfinance) + exit observation metrics framework
+- B79.0a: live xstock scanner setInterval wire-in + ARM constructor injection + Q-D probe + freshness-gate helper + load test
+- B79.1: Layer 1/2 threshold derivation deepenings as PIA findings dictate
+- B79.2: equity-specific strategies (Gap-Fill, EOD-MR, etc.) — observation-triggered
+- B79.3: equity macro modifier (VIX, S&P, sector rotation, yield curve) — Layer 3 evidence trigger
+- B79.4: equity exit observation calibration (trailing stops, BE stops re-derivation)
+- B79.5: live-pricing adapter for `wss://ws-equities.kraken.com` — Phase 19 prerequisite
+- B79.6: sector-aware portfolio cluster prevention (Stage 12.5)
+- B79.x: failure-mode taxonomy implementation (LULD halts, circuit breakers, dividends, splits, earnings)
+
+**Phase 24 success criteria:** xstock_spot in production VTS shadow-mode + ASSET_CLASS_ONBOARDING_WORKFLOW.md battle-tested through B79 + ready for Phase 25 (crypto_perp) to execute the workflow as second worked example.
+
+**B79 ship 2026-05-07 evening (commits `d7ca57340` + `a991f40a4` + `260cc8cc5` + `871038509`; PM2 #184).** Step 1+2 PIA Langston-greenlit through 2 review rounds with concession to separate-instance partitioning architecture. Step 4 code review PUSH_GREENLIT with 4 non-blocking notes for B79.0a. Step 6 deploy verified: HTTP 200, no B79 errors, no-touch fence on crypto_spot regime_factor_alternates 12 emissions/factor/hr (within ±10% post-restart-window-fill). NEW Tier-2 governance doc `ASSET_CLASS_ONBOARDING_WORKFLOW.md` is the canonical reusable template for future asset-class onboarding. xstock_spot pipeline ships DORMANT — code paths exist, schema migrations applied (NO max_price cap per Kyle), telemetry isolation pattern in place; live xstock scanner setInterval is B79.0a follow-on. Layer 3 shadow-mode VTS observation 48-72h+ begins when B79.0a wires the live loop.
+
+**Phase 25 reframe:** B80 (crypto_perp) becomes Phase 25's first batch. Same workflow doc, perp-specific deltas (funding rate, leverage, liquidation, perpetual settlement). Phase 25 batches: B80, B80.1, B80.2 etc. as observation dictates.
+
+**Phase 26+ later:** B81 (RTB ranking parity + filter-as-first-class) might warrant its own phase, OR be batches at the end of Phase 25, depending on how Phase 24+25 reveal cross-asset ranking architecture decisions. Defer to mid-Phase-24 to decide.

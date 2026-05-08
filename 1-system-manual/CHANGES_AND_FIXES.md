@@ -2337,3 +2337,38 @@ Per Kyle directive + Langston cc-inbox #902. Pre-B70.3b every open trade showed 
 4. **Same-day fix discipline.** Four bugs surfaced from one review session, all fixed and deployed within 6 hours. The B73 + B67.0 ablation frameworks are working — surfacing real issues that hand-reviewing 622 closed trades would never catch.
 5. **Recommendation walk-backs are a feature, not a failure.** The "turn off BE-stop" call was based on an apparent F/J/K convergence that turned out to be a bug. Caught before any operational change.
 
+
+---
+
+## INFRA-2026-05-07-F: B79 — Phase 24 NEW + xstock_spot dormant scaffold + ASSET_CLASS_ONBOARDING_WORKFLOW.md (2026-05-07 evening)
+
+**Trigger:** Kyle directive 2026-05-07 round 2 — *"What we are doing with these X-Stocks, this needs to be our experimentation lab, our learning example for how we set up asset classes in the future."* B79 reframed mid-flight from "implement xstock_spot quickly" to "canonical asset-class-onboarding lab driving a reusable workflow."
+
+**Phase reframe:** Phase 24 NEW (B79 + sub-batches B79.0a/.1/.2/.3/.4/.5/.6/.x); Phase 25 = B80 + sub-batches; out-of-sequence with current Phase 15c, consistent with Phase 19.0 pull-forward pattern.
+
+**Scope iterations:** rev 1 → rev 7 across 4 Langston review rounds + 2 Kyle round directives (max_price cap removed; Stage 5 parallel quant+pattern correction; Q-D AAPLx-vs-AAPL probe elevated to dedicated pre-implementation stage; ORB Q-D-gated; resource management §11 added; quant family paths separate-pool extension; family-path SSOT scoping per rev 7 §-2.5).
+
+**PIA findings (Langston PIA round-2 GREENLIT):** 3 hard blockers in telemetry partitioning resolved via two-instance pattern (separate AdaptiveScanManager + TelemetryAggregator + AdaptiveRatioManager + PairFailureTracker per asset class). CC's initial param-plumbing lean conceded to Langston's silent-corruption argument. Static-state hazard surfaced (TelemetryAggregator disk-persist module-scoped at line 1600-1602) — xstock instance runs in-memory only Day 1; promote persistence in B79.x if needed.
+
+**Schema migrations applied to Supabase:**
+- `screener_filters` add `asset_class` + `tunable_status` columns + xstock_spot row with **NO max_price cap** per Kyle (NULL = no cap; mirrors crypto's no-cap convention)
+- `module_constants` xstock seeds: macro_modifier=1.0 (B79.3 deferred), pattern_pool_gates {final_score_floor=0.45, max_position_pct=0.50}, strategy_gates.orb.enabled=false (Q-D-gated), sqe_config {di_min_quant=18, adx_min=18, momentum_min=0.002, di_min_pattern=10}
+- 5 of 6 critical tables already had asset_class column from B65/B70 era; only screener_filters needed migration
+
+**Files (5 new + 11 modified, +1759/-84):**
+- NEW: `server/asset_classes/types.ts` (AssetClassFrictionModel interface), `server/asset_classes/xstock_spot/market-hours.ts` (ARCA 24/5 schedule), `server/services/asset-class-instances.ts` (bootstrap factory; Langston Q1+Q6 separate-instance pattern), `server/strategies/orb.ts` (Q-D-gated dormant skeleton), `server/utils/symbol-normalize.ts` (cross-asset normalizer; Langston rev 3 §G)
+- MODIFIED (all back-compat for crypto): shared/asset-classes.ts (XSTOCK_SPOT_SYMBOLS allow-list 275 syms), crypto_spot/friction.ts (populated from exchange-defaults.ts; no semantic change), xstock_spot/{friction,index,pattern-pool-filters,regime-thresholds}.ts (Layer 1 baselines), canonical-regime-strategy-map.ts (XSTOCK_SPOT_ENABLED_STRATEGIES = 6 quant + 3 file pattern + ORB), signal_quality_evaluator.ts (weekend pause + strategy whitelist gates), cost-model.ts (getFrictionForAssetClass dispatch), market-regime.ts (calculatePairRegime accepts assetClass), trailing-exit-controller.ts (TEC stop-freeze guard top of updatePosition per Langston PIA Q5 placement)
+
+**NEW Tier-2 governance doc:** `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — full Section A.0 through K reusable template with xstock_spot worked example in Section H.1. By the time B80 (crypto_perp) starts, the implementer reads this doc, walks Sections A-G, identifies perp-specific deltas (funding rate, leverage, liquidation), updates Section H.2 with crypto_perp as second worked example.
+
+**Step 4 PUSH_GREENLIT** (Langston watchdog reply 2026-05-07 21:43 UTC, after one 240s API-hang retry): 4 non-blocking notes queued for B79.0a — (N1) replace require() with static import for market-hours.ts; (N2) SQE pattern-pool floor still reads crypto_spot static; (N3) drop redundant truthy strategy guard; (N4) unit tests for boundaries deferred. Telegram-relayed verbatim per CLAUDE.md §6.5 Step 3.
+
+**Step 6 deploy verified:** PM2 #184 restart at 21:49 UTC; HTTP 200; no B79 errors in PM2 logs; pre-existing infrastructure errors unchanged. **No-touch fence SQL on crypto_spot regime_factor_alternates:** 12 emissions/factor/hr across all 10 factors trailing-hour (within ±10% of pre-deploy 9/factor/hr post-restart-window-fill). Crypto pipeline UNDISTURBED.
+
+**Explicit deferrals to B79.0a:** live xstock scanner setInterval, ARM constructor injection of telemetry, Q-D AAPLx-vs-AAPL yfinance probe, sector-classification yfinance script, asset-class-aware data-freshness gate helper, pre-deploy 1.3× synthetic load test (replay historical scan cycles per Langston Q7), N1-N4 cleanups.
+
+**Lessons from this batch:**
+1. **Multi-batch phase framing matters.** Trying to ship "all of B79" as a single batch would have invited corner-cutting. The scope's own §7 sub-batch breakdown + Kyle's Phase 24 reframe gave permission to ship dormant scaffolding properly + defer live wire-in to B79.0a with focused review. Result: clean Step 4 PUSH_GREENLIT, clean deploy, no-touch fence absolute.
+2. **Langston's "bulletproof > elegant" partitioning argument** (silent-corruption resistance via separate-instance pattern over CC's param-plumbing lean) is the kind of architectural pushback the workflow exists to surface. CC's initial design risked the future-call-site-forgets-the-arg failure mode; Langston's separate-instance shape eliminates the failure mode by construction.
+3. **Static-state hazard on singleton refactors** — TelemetryAggregator's module-scoped disk-persist path at line 1600-1602 is a foot-gun for the two-instance pattern. Day 1 sidestepped via in-memory-only xstock instance; full persistence parameterization deferred to B79.x with explicit tracking.
+4. **NO max_price cap** on xstock_spot mirrors crypto's no-cap convention (we don't cap BTC at $150K, so we don't cap AAPLx at $2000). Removing the cap was a Kyle round-2 directive; the migration sets NULL for xstock_spot row while crypto_spot rows preserve their numeric defaults.

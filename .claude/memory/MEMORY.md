@@ -18,16 +18,16 @@
 
 ---
 
-## CURRENT STATE — 2026-05-07 evening (B79 Step 1+2 closed; Step 3 deferred to next session)
+## CURRENT STATE — 2026-05-07 evening (B79 Phase 24 SHIPPED dormant scaffold)
 
-- **Branch:** `migration/aws-supabase`
-- **Most recent HEAD (LOCAL, NOT pushed):** `d7ca57340` (B79 PIA + workflow doc + schema migrations bundle). Previous remote HEAD: `ab73edee9` (B79 rev 7 scope final).
-- **Live:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + B78.2. (B79 NOT yet deployed — only Step 1+2 closed locally.)
-- **Watchdog:** `/usr/local/bin/langston-call`. **Tuning:** `--first-byte-timeout 240` for substantive (>200-line) reviews; default 60s OK for surgical. Saw a 240s first-byte hang on PIA round 1; auto-retry succeeded ~3min later.
-- **B79 status:** Step 1 (scope rev 7) + Step 2 (PIA) **CLOSED** with Langston greenlight (2 PIA review rounds; concession on Q6 to separate-instance partitioning over CC's initial param-plumbing lean). Step 3 implementation **DEFERRED** to next session — see "next session pickup" below.
-- **No-touch fence:** holds. d7ca57340 commit is LOCAL ONLY; nothing pushed/deployed.
+- **Branch:** `migration/aws-supabase` (pushed to GitHub)
+- **Remote HEAD:** `871038509` (B79 Step 4 prep + completion report draft). Build chain: `d7ca57340` (PIA + workflow doc + 4 migrations) → `a991f40a4` (MEMORY mirror) → `260cc8cc5` (Step 3 implementation 5+11 files +1759/-84) → `871038509` (Step 4 prep).
+- **Live:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + B78.2 + **B79 dormant scaffold (PM2 #184 deployed 21:49 UTC).**
+- **Watchdog:** `/usr/local/bin/langston-call`. **Tuning:** `--first-byte-timeout 240` for substantive reviews. B79 saw 1 hang + 1 success retry (PIA) and 1 hang + 1 success retry (Step 4).
+- **B79 status:** Steps 1-7 CLOSED. Step 8 sign-off pinged via Telegram (Langston said "ping me on green" in Step 4). Step 10 governance complete. Step 11 completion report drafted + plain-language summary delivered.
+- **No-touch fence:** absolute. Post-deploy SQL on crypto_spot regime_factor_alternates returns 12 emissions/factor/hr (within ±10% of pre-deploy 9/factor/hr post-restart-window-fill).
 
-### B79 Step 1+2 deliverable (commit d7ca57340)
+### B79 Phase 24 deliverables (commits d7ca57340 + a991f40a4 + 260cc8cc5 + 871038509)
 - `Claude Comms and Packages/Scope Files/BATCH_79_PRE_AUDIT.md` — PIA per CLAUDE.md §2 Step 2; 3 telemetry partitioning hard blockers identified, resolution = two-instance pattern (separate aggregator + ratio-manager + failure-tracker per asset class)
 - `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — NEW Tier-2 governance, full template + xstock_spot worked example
 - `drizzle/migrations/2026-05-07-b79-screener-filters-asset-class.sql` (+ rollback) — adds asset_class + tunable_status columns to screener_filters; seeds xstock_spot row with NO max_price cap
@@ -109,13 +109,13 @@ B67.4/B68.1/B68.2/B68.3/B68.4 — gates: tertile-monotonic WR, ≥7pp gap, p<0.0
 | B76 | 2026-05-06 | Chain-final calibration framework. RUNNING_ISSUES #54 RESOLVED |
 | B77 | 2026-05-07 | `isBreakEvenTriggered` no-op fix. RUNNING_ISSUES #71 RESOLVED |
 | B78 | 2026-05-07 | Modularization scaffold. Asset_class + exchange extraction. |
-| **B79 Step 1+2** | **2026-05-07 evening** | **PIA Langston-greenlit + workflow doc + schema migrations. Local commit d7ca57340. Step 3 deferred.** |
+| **B79 (Phase 24)** | **2026-05-07 evening** | **xstock_spot dormant scaffold + ASSET_CLASS_ONBOARDING_WORKFLOW.md. PM2 #184. Live wire-in B79.0a.** |
 
 ---
 
 ## Open RUNNING_ISSUES
 
-- OPEN: #39 (CI TS legacy), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index), #55 (B69.x/B73.3 verification), **#73 (B78 shim cleanup B81), #74 (B78 24-48h cadence forward-watch)**
+- OPEN: #39 (CI TS legacy), #43/#49/#50/#53 (4 calibration windows), #46 (passive archive index), #55 (B69.x/B73.3 verification), #73 (B78 shim cleanup B81), #74 (B78 24-48h cadence forward-watch tomorrow), **#77 (B79.0a tracker — live xstock scanner wire-in + ARM injection + Q-D probe + N1-N4 cleanup)**, **#78 (B79 24-48h cadence forward-watch tomorrow)**
 - DEFERRED: #12e, #40, #44, #45, #52
 - RESOLVED 2026-05-06/07: #54 (B76), #55, #56–#69, #70/#71/#72
 
