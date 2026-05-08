@@ -118,7 +118,8 @@ async function runXstockDryCycle(cycleNumber: number): Promise<DbRoundtripSample
       last::text AS price,
       captured_at AS "capturedAt"
     FROM equity_spot_ticker_snap
-    WHERE symbol IN (${sql.raw(symbolListSql)})
+    WHERE captured_at > NOW() - INTERVAL '5 minutes'
+      AND symbol IN (${sql.raw(symbolListSql)})
     ORDER BY symbol, captured_at DESC
   `);
   const durationMs = Date.now() - start;

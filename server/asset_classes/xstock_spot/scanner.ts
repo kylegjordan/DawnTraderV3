@@ -193,13 +193,18 @@ class XstockSpotScannerService {
       // XSTOCK_SPOT_SYMBOLS is a hardcoded const Set (not user input) so
       // literal-list injection is safe and avoids the parameter-binding pitfall.
       const symbolListSql = symbolList.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
+      // Constrain to last 5 minutes — freshness gate rejects anything > 90s
+      // old anyway, so wider scans waste time + risk statement timeout on
+      // the 13-partition table. 5min window covers any reasonable freshness
+      // ceiling future B79.x calibration might pick.
       const result = await db.execute<TickerSnapRow>(sql`
         SELECT DISTINCT ON (symbol)
           symbol::text AS symbol,
           last::text AS price,
           captured_at AS "capturedAt"
         FROM equity_spot_ticker_snap
-        WHERE symbol IN (${sql.raw(symbolListSql)})
+        WHERE captured_at > NOW() - INTERVAL '5 minutes'
+          AND symbol IN (${sql.raw(symbolListSql)})
         ORDER BY symbol, captured_at DESC
       `);
       const dbDurationMs = Date.now() - dbStart;
