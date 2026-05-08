@@ -158,6 +158,8 @@ B67.4/B68.1/B68.2/B68.3/B68.4 — gates: tertile-monotonic WR, ≥7pp gap, p<0.0
 ## Kyle Operating Directives (active)
 
 - **NO PATCHES (2026-05-08, CLAUDE.md §5 #15).** Every fix is a long-term sustainable scalable solution. No duct tape. No "good enough for now." Bugs trigger root-cause + design-then-implement, not patches. Cold-start warmup 1-5min OK; sacrifice immediate functioning for clean startup. Architecture decisions get documented BEFORE implementation, same session. Verbal commitments without paper-trail are rejected.
+- **File-first comms with Langston for any large content (CLAUDE.md §6.5.0, 2026-05-08).** Design asks, scope drafts, multi-question reviews go in `Claude Comms and Packages/Langston Design Asks/<batch>_<topic>_<rev>.md`. Telegram + watchdog prompt is SHORT (under 1KB) pointer to the file. NEVER shorten content to fit a prompt — putting it on disk is the proper solution. Empirical: 7702-byte prompt hung API twice; PING/PONG returned 3s; 2825-byte hit on attempt 1 in 60s. Pattern locks: any content >~3KB → file on disk + pointer.
+- **Each new asset class gets its OWN dedicated observation UI tab** (Kyle directive 2026-05-08). Don't stack new ablation panels under existing tabs.
 - **Backpressure: vertical-scale, never asset-class shedding (2026-05-08).** Tier upgrade Hetzner/Supabase OR computational-distribution refactor; never throttle/drop a live asset class.
 - **Per-asset-class config is the default for behavioral knobs.** Wildcard rows only as starting placeholders; replaced with explicit per-class rows the moment any class needs different value.
 - Both ablation frameworks run during shadow-mode for every new asset class: factor-calibration (B67.0) AND exit-strategy (B73). Parallel, not replacement.

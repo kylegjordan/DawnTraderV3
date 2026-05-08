@@ -448,12 +448,13 @@ After CC's condensed design ask + Langston's architectural reply (relayed verbat
 
 CC concedes. The architectural rule: don't route a new asset class through hardcoded-other-class config even briefly, regardless of whether values happen to coincide.
 
-### §10c.4c B79.4 design flags (Langston call-outs 2026-05-08)
+### §10c.4c B79.4 design flags (Langston call-outs 2026-05-08 + Kyle UI directive 2026-05-08)
 
-Two flags Langston raised on B79.4 scope before formal scope-doc draft:
+Three flags on B79.4 scope before formal scope-doc draft:
 
-1. **`exit_strategy_alternates` aggregator key likely needs a schema lift** from `(regime, strategy)` → `(regime, strategy, asset_class)`. Non-trivial migration. Must be called out explicitly in B79.4 scope doc — not a minor wiring task.
-2. **xstock panel operational from t=0 with sparse data.** Empty observation windows during early Layer 3 are EXPECTED, not bugs. Workflow doc Section G "Forward-Watch" should make this explicit so the panel isn't mis-flagged as broken when sample-count is low in the first 24-72h.
+1. **`exit_strategy_alternates` aggregator key likely needs a schema lift** from `(regime, strategy)` → `(regime, strategy, asset_class)`. Non-trivial migration. Must be called out explicitly in B79.4 scope doc — not a minor wiring task. (Langston flag.)
+2. **xstock panel operational from t=0 with sparse data.** Empty observation windows during early Layer 3 are EXPECTED, not bugs. Workflow doc Section G "Forward-Watch" should make this explicit so the panel isn't mis-flagged as broken when sample-count is low in the first 24-72h. (Langston flag.)
+3. **xstock_spot ablation UI gets its OWN dedicated tab on the staging server, NOT stacked under the existing Drift Dashboard tab** (Kyle directive 2026-05-08). The current Drift Dashboard tab is already long with multiple crypto-scoped tables (Factor Calibration, Factor Ablation Comparison, Exit Strategy Ablation, Regime Distribution, Family Flicker, RBS Drift, DBS Distribution, Global DBS). Adding xstock-equivalent panels to that same tab makes it unwieldy. **New tab name TBD in B79.4 scope** — likely "Multi-Asset Observation" or "xStock Observation" — containing both the xstock-scoped factor-calibration ablation panel AND the xstock-scoped exit-strategy ablation panel side-by-side. Crypto's existing Drift Dashboard tab stays unchanged. Pattern locks into the workflow doc Section D / Section H — every new asset class onboarding gets its own dedicated observation tab, not appended to existing tabs.
 
 ### §10c.5 Documentation discipline (rule, not just a reminder)
 

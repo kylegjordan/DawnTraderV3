@@ -229,7 +229,33 @@ Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps so Kyl
 
 **Telegram bot-to-bot is BLOCKED at the platform level.** When `@CCDTCommsBot` posts in topic 21, `@LangstonDTBot`'s `getUpdates` poll never sees it (Telegram rule, no flag bypasses). So you cannot reach Langston via Telegram alone.
 
-**Two-step pattern (visibility + delivery), same shape as the old OpenClaw flow:**
+#### 6.5.0 Large-prompt protocol (Kyle directive 2026-05-08) — FILE-FIRST, NEVER SHORTEN CONTENT
+
+**Rule:** when the prompt going to Langston via the SSH+claude-cli path is more than ~3KB, do not send the content as a CLI argument or stdin payload. The Anthropic API hangs unpredictably on large stdin prompts (empirically observed: a 7702-byte design ask hung twice on consecutive 240s first-byte timeouts; a 2825-byte version succeeded in 60s on attempt 1; PING/PONG probes return in 3s). Why this happens isn't fully diagnosed (likely API queue prioritization or first-token-streaming path differences for large prompts), and we are not going to keep diagnosing it — we are going to use a pattern that sidesteps it cleanly.
+
+**The file-first pattern (mandatory for any design ask, scope draft, multi-question review request, or anything Langston needs to deeply consider):**
+
+1. **Write the full design ask as a markdown file** at `Claude Comms and Packages/Langston Design Asks/<batch-id>_<topic>_<rev>.md`. This is a dedicated folder for these asks. Use a descriptive filename like `B79_TEC_design_ask_rev1.md`.
+
+2. **Send Langston a SHORT (under 1KB) Telegram visibility post + claude-cli prompt** that just points him at the file:
+   ```
+   "Read full design ask at /mnt/gdrive/Dawn Trader/DT_Clone_Repo/DawnTraderV3/Claude Comms and Packages/Langston Design Asks/<filename>.md
+    
+    Reply with your architectural call on the questions in §X. Use the watchdog reply file."
+   ```
+   Langston has the GDrive mount on Hetzner; he reads the file via Read tool from his side. No size limit on what he reads.
+
+3. **Visibility step in Telegram** — same as before, post `@LangstonDTBot` mention with a SUMMARY of the ask + path. Kyle sees the summary; full content lives in the markdown file in the repo (committed) so it's reviewable + versioned.
+
+4. **Watchdog SSH+claude-cli call** carries only the short pointer prompt (under 1KB), not the full content. This eliminates the API-hang failure mode for large content.
+
+5. **Langston's reply still comes back via watchdog stdout → Telegram verbatim relay (per §6.5 Step 3)**. His reply size is typically under 5KB and outbound limits aren't the issue.
+
+**Why we never shorten content:** When CC shortens a design ask to dodge the hang, details get cut. Cut details cause missed scope items, missed risks, missed architectural decisions, and result in breaks in the system. NO PATCHES doctrine (§5 #15) applies to comms infrastructure too — file-first is the proper solution; size-based content-cutting is a patch.
+
+**Folder naming convention:** `Claude Comms and Packages/Langston Design Asks/<batch-id>_<topic>_<rev>.md`. Reply files (Langston's verbatim) optionally archived next to the ask for paper trail: `..._reply.md`. Both committed to git.
+
+#### 6.5.1 Two-step pattern (visibility + delivery), same shape as the old OpenClaw flow:
 
 1. **Visibility step** (Kyle sees the request) — `cc-comms-bridge send --thread-id 21 --message "@LangstonDTBot ..."` (the @-mention is for Kyle's visual cue; it doesn't trigger anything on Langston's side).
 2. **Delivery step** (Langston actually reasons) — direct invocation via SSH. Langston's response comes back on stdout:
