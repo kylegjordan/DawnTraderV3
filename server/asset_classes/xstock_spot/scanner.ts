@@ -63,7 +63,7 @@ interface ScannerDiagnostics {
   hostileSimActive: boolean;
 }
 
-interface TickerSnapRow {
+interface TickerSnapRow extends Record<string, unknown> {
   symbol: string;
   price: string;        // numeric stored as string in pg
   capturedAt: Date;
