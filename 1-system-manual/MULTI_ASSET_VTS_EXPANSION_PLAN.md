@@ -504,6 +504,20 @@ Reply lives at `Claude Comms and Packages/Langston Design Asks/B79_TEC_design_as
 
 **Next:** CC drafts formal B79.TEC scope-doc + PIA reflecting all 5 refinements. Kyle answers Q3 `[KYLE_DECISION]` (hard-fail vs degraded boot) before scope-doc lock. Langston greenlights scope before any code.
 
+### §10c.4e Boot Readiness Coordinator DEFERRED to Phase 19 (Kyle directive 2026-05-08)
+
+CC surveyed the current boot architecture and found it is a patchwork: 12 separate bootstrap files in `server/startup/`, 8 separate health/monitor files in `server/services/`, the existing SystemHealthMonitor itself broken (`startPeriodicChecks is not a function` per PM2 logs), bootstraps run AFTER `server.listen()` so the app accepts traffic before subsystems are ready, and per-component error-handling is inconsistent (B74/B70 catch-and-continue, others throw, others silently degrade).
+
+CC proposed building a unified Boot Readiness Coordinator as its own batch BEFORE B79.TEC, citing NO PATCHES doctrine.
+
+**Kyle directive 2026-05-08:** Defer the Boot Readiness Coordinator to **Phase 19** (Paper Mode Audit). The TEC bootstrap is no bigger of an issue than any other subsystem during the patchwork era. For B79.TEC specifically, ship with **hard-fail-on-boot** (no env-flag carve-out — both production and dev hard-fail). If patchwork issues compound during Phase 19 paper-mode testing, address them then with the coordinator design.
+
+**Q3 [KYLE_DECISION] — RESOLVED:** TEC hard-fails on boot if `primeTECConfig` fails for any registered asset class. No degraded-boot path. No env flag. Same behavior in production and development. App refuses to start until DB connectivity + module_constants warmup succeed for all registered classes.
+
+**Phase 19 follow-on:** Boot Readiness Coordinator is added to `POST_AUDIT_ROADMAP.md` as a Phase 19.x sub-phase deliverable (number TBD when Phase 19 work formally begins). Scope: unified coordinator registering all critical subsystems with declared dependencies + readiness checks + diagnostic providers + smart-wait-with-ETA + single consolidated status surface. Replaces the patchwork of 12 bootstrap files + 8 health monitors. Fixes the broken SystemHealthMonitor. Enforces "all-green-before-traffic" gate.
+
+**Why deferring is acceptable:** the patchwork has been running for many batches. We are not at the point where we have hard data showing it's the cause of recurring failures. B79.TEC's hard-fail handles its own correctness regardless of the broader boot architecture. If Phase 19 surfaces compounding issues, the coordinator becomes urgent; if not, it ships as planned cleanup work.
+
 ### §10c.5 Documentation discipline (rule, not just a reminder)
 
 Kyle directive: discussions get forgotten when implementation happens 3-4 phases later. To prevent yes-yes-yes-then-not-done failure mode:

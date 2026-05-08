@@ -1438,3 +1438,30 @@ The revised roadmap captures all of this. The tradeoff is timeline: ~43 weeks vs
 ---
 
 *Roadmap v2 complete. Incorporates all four source documents. Ready for Kyle's review and approval before Phase 12 Directive 12.1 is written.*
+
+---
+
+## Phase 19.x — Boot Readiness Coordinator (added 2026-05-08, Kyle directive)
+
+**Status:** DEFERRED to Phase 19. NOT pre-launch.
+
+**Trigger:** B79.TEC scope work (2026-05-08) surfaced that the current boot architecture is a patchwork — 12 separate bootstrap files in `server/startup/`, 8 separate health/monitor files in `server/services/`, the existing `SystemHealthMonitor` itself broken (`startPeriodicChecks is not a function` per PM2 logs), bootstraps run AFTER `server.listen()` so the app accepts traffic before subsystems are ready, and per-component error-handling is inconsistent (B74/B70 catch-and-continue, others throw, others silently degrade).
+
+**Kyle directive 2026-05-08:** the patchwork is no bigger of an issue than any other subsystem during the patchwork era. Defer the unified coordinator to Phase 19. For B79.TEC specifically, ship hard-fail-on-boot with no env-flag carve-out (both production and dev hard-fail). If patchwork issues compound during Phase 19 paper-mode testing, address with the coordinator design then.
+
+**Phase 19.x scope (number TBD when Phase 19 work formally begins):**
+
+1. **Single Boot Readiness Coordinator service** registering all critical subsystems with declared dependencies.
+2. **Per-subsystem readiness contract:** `register({name, dependsOn[], readinessCheck(), diagnose(), waitPolicy})`. Each subsystem declares its dependencies + how to check it's healthy + a diagnostic provider for failure cases + retry/wait policy (hard-fail, retry-with-backoff, retry-with-eta-from-external).
+3. **Dependency-ordered boot.** Coordinator runs subsystems in topological order — `db_pool_ready` before `module_constants_warmup`, `module_constants_warmup` before `tec_config`, `tec_config` before `fx5_scanner`, etc.
+4. **Single consolidated status surface.** Operator (Kyle) gets one Telegram message per state transition: "Booting... 11/14 green, waiting on Supabase (ETA 8 min based on retry response), full operation will resume when complete." Not noise from individual subsystems.
+5. **All-green-before-traffic gate.** App refuses to accept production traffic until all subsystems green. Server.listen() moved BEHIND the coordinator's all-green signal.
+6. **Continuous operation monitoring.** After full-green, coordinator continues to monitor — if a subsystem flips red mid-operation, alert with diagnosis.
+7. **Replaces the patchwork:** consolidates the 12 bootstrap files + 8 health monitors. Fixes the broken `SystemHealthMonitor`. Standardizes error-handling across all subsystems.
+
+**Why deferring is acceptable:** the patchwork has been running for many batches without recurring boot failures. B79.TEC's hard-fail handles its own correctness regardless of the broader boot architecture. The coordinator is cleanup work that benefits long-term maintainability, not a critical-path fix.
+
+**Trigger conditions to escalate ahead of Phase 19:**
+- Phase 19.0 VTS partition surfaces multiple boot-coordination bugs
+- Phase 19.1 paper-trading run shows boot-related cascading failures
+- Any new asset class onboarding (B80+) is significantly delayed by patchwork integration
