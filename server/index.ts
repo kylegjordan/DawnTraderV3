@@ -622,6 +622,37 @@ app.use((req, res, next) => {
   printRoutes(app);
   dumpRoutes(app);
 
+  // ─── B79.TEC: TEC bootstrap sequence (HARD-FAIL gates) ──────────────────
+  // Sequence (Langston Q3 review): primeTECConfig BEFORE loadTrailingStates,
+  // and BOTH BEFORE server.listen so we never accept traffic while either
+  // the per-class config cache OR the trailing-state map is still hydrating.
+  // The original code had loadTrailingStates inside the listen callback —
+  // race window where a paper-fill could land before its TEC state was
+  // restored, causing the engine to either (a) initialize a fresh state at
+  // entry price (losing latched flags) or (b) skip the position. Both wrong.
+  //
+  // No degraded boot, no env-flag override (CLAUDE.md §5 #15 NO PATCHES +
+  // §11 NO_FALLBACK). Scope: BATCH_79_TEC_SCOPE.md §1 #4, #5, #15.
+  try {
+    const { primeTECConfig } = await import('./services/trailing-exit-controller.js');
+    await primeTECConfig();
+  } catch (tecBootErr) {
+    console.error('[TEC_BOOTSTRAP_FAIL] primeTECConfig threw on boot:', tecBootErr);
+    console.error('[TEC_BOOTSTRAP_FAIL] App must not start with a partial TEC config cache. Exiting.');
+    process.exit(1);
+  }
+
+  try {
+    const { loadTrailingStates } = await import('./services/trade-safety.js');
+    loadTrailingStates();
+    console.log('[B79.TEC] ✅ Trailing exit states loaded from persistence (pre-listen)');
+  } catch (loadErr) {
+    console.error('[TEC_BOOTSTRAP_FAIL] loadTrailingStates threw on boot:', loadErr);
+    console.error('[TEC_BOOTSTRAP_FAIL] Cannot accept traffic without rehydrated trailing states. Exiting.');
+    process.exit(1);
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
 
@@ -682,15 +713,12 @@ app.use((req, res, next) => {
           console.warn('[8.8.7] ⚠️ ActiveFilterPool init failed:', afpError);
         }
         
-        // Directive 9.2: Load persisted trailing states from file
-        try {
-          const { loadTrailingStates } = await import('./services/trade-safety.js');
-          loadTrailingStates();
-          console.log('[9.2] ✅ Trailing exit states loaded from persistence');
-        } catch (trailingError) {
-          console.warn('[9.2] ⚠️ Failed to load trailing states:', trailingError);
-        }
-        
+        // Directive 9.2 / B79.TEC: loadTrailingStates moved out of this
+        // listen callback to BEFORE server.listen (see boot block above) per
+        // Langston Q3 review — closes the race where traffic could be
+        // accepted before trailing states finished rehydrating.
+
+
         // Phase 8.8.3-I7-WS-STARTUP: Start WebSocket adapter during server boot
         // This enables real-time pricing for all clients immediately, not just when engine starts
         await krakenWebSocketAdapter.start();

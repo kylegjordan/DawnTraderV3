@@ -54,6 +54,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
+import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
@@ -913,6 +914,18 @@ export class PaperExecutionEngine {
       const currentOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
       const currentSlotTotal = currentOpenPositions.length;
 
+      // B79.TEC (2026-05-08): assetClass MUST come from the position record,
+      // not a hardcoded literal. paper_sim_open_positions.asset_class has
+      // been populated since B69 — we read it directly. If a row somehow
+      // lacks it (legacy data), throw rather than silently default to
+      // crypto_spot (CLAUDE.md §11 NO_FALLBACK doctrine).
+      const positionAssetClass = (position as any).assetClass as AssetClass | undefined;
+      if (!positionAssetClass) {
+        throw new Error(
+          `[TEC_PE_MISSING_ASSET_CLASS] paper position id=${position.id} symbol=${position.symbol} ` +
+          `has no assetClass. Backfill via the B69 schema migration before retrying.`,
+        );
+      }
       const decision = await evaluateTECExit({
         symbol: position.symbol,
         entryPrice: avgPrice,
@@ -924,7 +937,7 @@ export class PaperExecutionEngine {
         maxHoldMs: Infinity, // disable global timeout branch here
         context: {
           exchange: 'kraken',
-          assetClass: 'crypto_spot',
+          assetClass: positionAssetClass,
           strategy: position.strategyName,
           regime: (position as any).regime,
         },
@@ -2068,8 +2081,12 @@ export class PaperExecutionEngine {
         patternType: patternType as any,
         patternStrength: patternStrength,
         // B69: asset class dimensions — explicit, not DB-default-reliant (Kyle §11)
+        // B79.TEC (2026-05-08, Langston Finding 2): resolve from symbol+exchange
+        // instead of hardcoding 'crypto_spot'. Otherwise the new per-class TEC
+        // dispatch (line ~927) becomes a silent no-op the moment any non-crypto
+        // symbol enters paper — exactly the latent failure mode this batch fights.
         exchange: 'kraken',
-        assetClass: 'crypto_spot',
+        assetClass: resolveAssetClass(signal.symbol, 'kraken'),
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         metadata: {

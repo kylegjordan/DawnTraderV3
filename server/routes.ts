@@ -6999,7 +6999,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // ==================== R9.3.HF-5: Central Clock & FX5 Scanner Diagnostics ====================
-  
+
+  // GET /api/diagnostics/tec-bootstrap - B79.TEC: per-asset-class TEC config
+  // bootstrap status. Returns ready=true once primeTECConfig() has warmed
+  // every ACTIVE asset class. Used by Step 7 first-pass verify + ops health
+  // checks. Public (no auth) so external monitors can read it without a
+  // bearer token, matching the operational pattern of other diagnostic
+  // endpoints in this section.
+  apiRouter.get('/diagnostics/tec-bootstrap', async (_req, res) => {
+    try {
+      const { getTECBootstrapStatus } = await import('./services/trailing-exit-controller.js');
+      const status = getTECBootstrapStatus();
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        ...status,
+      });
+    } catch (error: any) {
+      console.error('[B79.TEC][API] tec-bootstrap diagnostics failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/diagnostics/central-clock - Get Central Clock health status
   apiRouter.get('/diagnostics/central-clock', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

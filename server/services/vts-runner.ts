@@ -28,6 +28,7 @@
  */
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
+import { resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
@@ -507,6 +508,10 @@ interface Phase10TradeRecord {
 interface OpenVirtualTrade {
   id: string;
   symbol: string;
+  // B79.TEC (2026-05-08): assetClass on the open-trade record so the TEC
+  // exit loop can route to the correct per-class config without a lookup.
+  // Populated at trade-open via resolveAssetClass(symbol, exchange).
+  assetClass: AssetClass;
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;
@@ -1304,9 +1309,23 @@ async function generatePhase10Signal(
   
   // Directive 11.6: Create open virtual trade for real-price resolution
   // Directive 11.7S: Uses adjusted stop/target based on mode overlay
+  // B79.TEC (2026-05-08, Langston Finding 3): use SAFE resolver so a single
+  // unrecognized symbol can't crash the VTS cycle at trade-open. If
+  // resolution fails, skip the trade open entirely with a loud log — same
+  // policy as B69 §A.2 directive on B69 INSERT sites.
+  const tradeAssetClass = safeResolveAssetClass(symbol, 'kraken');
+  if (!tradeAssetClass) {
+    console.error(
+      `[B79.TEC][VTS] symbol=${symbol} failed asset-class resolution at trade-open — skipping. ` +
+      `Pattern not registered in shared/asset-classes.ts.`,
+    );
+    return null;
+  }
+
   const openTrade: OpenVirtualTrade = {
     id: tradeId,
     symbol,
+    assetClass: tradeAssetClass,
     entryPrice,
     stopLoss: adjustedStopLoss,       // 11.7S: Mode-adjusted stop loss
     takeProfit: adjustedTakeProfit,   // 11.7S: Mode-adjusted take profit
@@ -1948,6 +1967,17 @@ async function resolveOpenVirtualTrades(): Promise<{
     const priceData = priceDataMap.get(trade.symbol);
     const currentPrice = priceData && priceData.price > 0 ? priceData.price : null;
 
+    // B79.TEC (2026-05-08): assetClass MUST come from the trade record,
+    // not a hardcoded literal. OpenVirtualTrade.assetClass is populated at
+    // open via resolveAssetClass(symbol, exchange) (vts-runner:1733). No
+    // silent fallback (CLAUDE.md §11).
+    if (!trade.assetClass) {
+      console.error(
+        `[TEC_VTS_MISSING_ASSET_CLASS] trade ${tradeId} symbol=${trade.symbol} ` +
+        `has no assetClass — skipping TEC eval to avoid wrong-class config lookup.`,
+      );
+      continue;
+    }
     const decision = await evaluateTECExit({
       symbol: trade.symbol,
       entryPrice: trade.entryPrice,
@@ -1959,7 +1989,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       maxHoldMs: MAX_HOLD_MS,
       context: {
         exchange: 'kraken',
-        assetClass: 'crypto_spot',
+        assetClass: trade.assetClass,
         strategy: trade.strategy,
         regime: trade.regime,
       },
@@ -3587,8 +3617,10 @@ export function getOpenVirtualTradesForML(): Array<{
     
     trades.push({
       symbol: trade.symbol,
-      // B69.1 (2026-05-04): VTS handles crypto_spot only today.
-      assetClass: 'crypto_spot',
+      // B79.TEC (2026-05-08): read from trade record; was hardcoded 'crypto_spot'.
+      // VTS now handles multi-asset-class trades; the hardcoded literal would
+      // misclassify xstock_spot / crypto_perp Open Simulated Trades on the UI.
+      assetClass: trade.assetClass,
       regime: trade.regime,
       strategy: trade.strategy,
       signalType: trade.signalType,

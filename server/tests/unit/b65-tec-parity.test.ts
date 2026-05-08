@@ -70,12 +70,19 @@ import {
   clearTrailingState,
   getConcurrentMoonbagCount,
   getResolvedTECConfig,
+  primeTECConfig,
+  _testClearEngineConfigCache,
 } from '../../services/trailing-exit-controller.js';
 import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
 
-// --- Helper: seed the module_constants rowset with all B65.1 + B65.2 defaults.
+// --- Helper: seed the module_constants rowset with all B65.1 + B65.2 defaults
+// PLUS the B79.TEC per-class break_even_enabled rows. Per B79.TEC scope §1 #5,
+// primeTECConfig requires an explicit per-asset-class row for `break_even_enabled`
+// for every ACTIVE class — without one, hasExplicitAssetClassRow returns false
+// and the bootstrap aborts. The test seeds rows for crypto_spot AND crypto_perp
+// AND xstock_spot AND xstock_perp so primeTECConfig() succeeds for all four.
 function seedAllConstants() {
-  const base = {
+  const wildcard = {
     moduleName: 'trailing_exit',
     exchange: '*',
     assetClass: '*',
@@ -84,24 +91,36 @@ function seedAllConstants() {
     updatedAt: new Date(),
     updatedBy: 'test',
   };
+  const perClassBE = (cls: string) => ({
+    ...wildcard,
+    assetClass: cls,
+    constantName: 'break_even_enabled',
+    value: false,
+  });
   mockRows.current = [
-    { ...base, constantName: 'break_even_trigger_r', value: 1.0 },
-    { ...base, constantName: 'target_lock_r', value: 1.5 },
-    { ...base, constantName: 'trail_distance_atr_multiplier', value: 1.0 },
-    { ...base, constantName: 'persistence_debounce_ms', value: 5000 },
+    // B79.TEC per-class break_even_enabled rows (required by hasExplicitAssetClassRow)
+    perClassBE('crypto_spot'),
+    perClassBE('crypto_perp'),
+    perClassBE('xstock_spot'),
+    perClassBE('xstock_perp'),
+    // B65.1 / B65.2 wildcard knobs (resolved per-class via wildcard fallback)
+    { ...wildcard, constantName: 'break_even_trigger_r', value: 1.0 },
+    { ...wildcard, constantName: 'target_lock_r', value: 1.5 },
+    { ...wildcard, constantName: 'trail_distance_atr_multiplier', value: 1.0 },
+    { ...wildcard, constantName: 'persistence_debounce_ms', value: 5000 },
     {
-      ...base,
+      ...wildcard,
       constantName: 'moonbag_qualifying_strategies',
       value: ['strong_bull_trend', 'sma_trend_ride', 'vwap_pullback', 'breakout'],
     },
     {
-      ...base,
+      ...wildcard,
       constantName: 'moonbag_qualifying_source_pools',
       value: { vwap_pullback: ['quant-strong_trend'] },
     },
-    { ...base, constantName: 'moonbag_max_duration_ms', value: 14400000 },
-    { ...base, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
-    { ...base, constantName: 'moonbag_reserved_slots', value: 1 },
+    { ...wildcard, constantName: 'moonbag_max_duration_ms', value: 14400000 },
+    { ...wildcard, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
+    { ...wildcard, constantName: 'moonbag_reserved_slots', value: 1 },
   ];
 }
 
@@ -113,9 +132,14 @@ const context = {
 };
 
 describe('B65.2 — evaluateTECExit end-to-end', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     clearModuleConstantsCache();
     seedAllConstants();
+    // B79.TEC: reset + re-warm per-class config cache so resolveTECConfig
+    // (now sync) hits a populated map. Without primeTECConfig the test
+    // throws [TEC_CACHE_MISS_FATAL] on every TEC eval.
+    _testClearEngineConfigCache();
+    await primeTECConfig();
     // Reset engine state between tests.
     clearTrailingState('BTC/USD');
     clearTrailingState('ETH/USD');
@@ -275,7 +299,8 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
   });
 
   it('Scenario 10: resolved constants include all B65.1 + B65.2 seeds', async () => {
-    const cfg = await getResolvedTECConfig();
+    // B79.TEC: getResolvedTECConfig now sync + requires AssetClass.
+    const cfg = getResolvedTECConfig('crypto_spot');
     expect(cfg.breakEvenTriggerR).toBe(1.0);
     expect(cfg.targetLockR).toBe(1.5);
     expect(cfg.trailDistanceAtrMultiplier).toBe(1.0);

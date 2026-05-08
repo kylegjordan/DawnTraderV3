@@ -71,12 +71,18 @@ import {
   type TrailingUpdateResult,
   type CallerMode,
 } from './trailing-exit-controller.js';
+import type { AssetClass } from '../../shared/asset-classes.js';
 
 export interface TECExitContext {
   /** Exchange code, e.g. 'kraken'. Passed through to module_constants resolution. */
   exchange?: string;
-  /** Asset class, e.g. 'crypto_spot'. Passed through to module_constants resolution. */
-  assetClass?: string;
+  /**
+   * B79.TEC (2026-05-08): Asset class is now NON-OPTIONAL and a typed
+   * `AssetClass`. Drives per-class TEC config resolution. Every caller
+   * MUST resolve the actual class of the position from its row data —
+   * NO hardcoded `'crypto_spot'` literals (CLAUDE.md §11).
+   */
+  assetClass: AssetClass;
   /** Strategy key, e.g. 'strong_bull_trend'. Passed through to module_constants resolution. */
   strategy?: string;
   /** Canonical regime key. Passed through to module_constants resolution. */
@@ -167,7 +173,7 @@ async function resolveTECConstants(
 ): Promise<TECExitDecision['resolvedConstants']> {
   const key = {
     exchange: context.exchange ?? '*',
-    assetClass: context.assetClass ?? '*',
+    assetClass: context.assetClass, // B79.TEC: non-optional AssetClass; never '*'
     strategy: context.strategy ?? '*',
     regime: context.regime ?? '*',
   };
@@ -259,16 +265,21 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
   if (input.useTrailing && input.atr > 0) {
     const callerMode: CallerMode = input.callerMode ?? 'paper';
 
-    // Moonbag gate checks — both async, both use the engine's config cache.
-    const [moonbagQualified, moonbagAllowed] = await Promise.all([
-      isMoonbagQualifier(input.context.strategy ?? '', input.sourcePool, input.context.regime),
-      canEnterMoonbag(
-        callerMode,
-        input.currentSlotTotal ?? Number.POSITIVE_INFINITY,
-        input.context.strategy,
-        input.context.regime,
-      ),
-    ]);
+    // B79.TEC: moonbag gates are now SYNC (cache pre-warmed by primeTECConfig).
+    // Both calls take an explicit `assetClass` from the context.
+    const moonbagQualified = isMoonbagQualifier(
+      input.context.assetClass,
+      input.context.strategy ?? '',
+      input.sourcePool,
+      input.context.regime,
+    );
+    const moonbagAllowed = canEnterMoonbag(
+      input.context.assetClass,
+      callerMode,
+      input.currentSlotTotal ?? Number.POSITIVE_INFINITY,
+      input.context.strategy,
+      input.context.regime,
+    );
 
     const update: TrailingUpdateResult = tecUpdatePosition({
       symbol: input.symbol,
@@ -282,6 +293,11 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       strategy: input.context.strategy,
       sourcePool: input.sourcePool,
       regime: input.context.regime,
+      // B79.TEC: load-bearing fix — assetClass must propagate to TEC config
+      // lookup so per-class settings (BE enable, moonbag knobs) are honored.
+      // Was missing; constructed PositionUpdate inherited crypto_spot defaults
+      // because the TEC global cache was hardcoded to crypto_spot.
+      assetClass: input.context.assetClass,
       callerMode,
       moonbagQualified,
       moonbagAllowed,

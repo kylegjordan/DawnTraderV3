@@ -189,6 +189,36 @@ export async function getModuleConstants(
 }
 
 /**
+ * B79.TEC (2026-05-08): assert that an EXPLICIT per-asset-class row exists
+ * for the given (module, asset_class, constant_name). Used by the boot-time
+ * TEC primer to enforce HARD-FAIL semantics: every ACTIVE asset class must
+ * have an explicit `break_even_enabled` row, not just inherit from the
+ * `(*,*,*,*)` wildcard. Without this assertion, primeTECConfig would
+ * silently succeed via wildcard fallback even when the operator's
+ * per-class kill-switch row is missing — exactly the failure mode B79.TEC
+ * is designed to prevent.
+ *
+ * Returns true iff at least one row exists with that explicit asset_class
+ * (any exchange/strategy/regime — they may all be wildcards on that side,
+ * what matters is the asset_class dimension is concrete).
+ *
+ * Bypasses the standard wildcard precedence — this is a structural check,
+ * not a value resolution. Reads from the same per-module cache populated
+ * by `getModuleConstants`, so no extra DB round-trip when called after
+ * the first read.
+ */
+export async function hasExplicitAssetClassRow(
+  moduleName: string,
+  assetClass: string,
+  constantName: string,
+): Promise<boolean> {
+  const rows = await loadModule(moduleName);
+  return rows.some(
+    (r) => r.assetClass === assetClass && r.constantName === constantName,
+  );
+}
+
+/**
  * Invalidate cache for a module. Call when a row is inserted/updated via admin
  * API so subsequent reads see the new value without waiting for TTL.
  */

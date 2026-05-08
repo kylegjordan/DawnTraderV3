@@ -1,0 +1,1010 @@
+warning: in the working copy of 'server/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/routes.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/services/module-constants-service.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/services/paper-execution-engine.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/services/tec-evaluator.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/services/vts-runner.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/tests/unit/b65-tec-parity.test.ts', LF will be replaced by CRLF the next time Git touches it
+diff --git a/server/index.ts b/server/index.ts
+index 991411ad1..10e554650 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -622,6 +622,23 @@ app.use((req, res, next) => {
+   printRoutes(app);
+   dumpRoutes(app);
+ 
++  // ─── B79.TEC: Per-asset-class TEC config primer (HARD-FAIL on failure) ───
++  // Warm the per-class TrailingExitConfig cache for every ACTIVE asset class
++  // BEFORE the server starts accepting traffic AND before loadTrailingStates
++  // rehydrates the open-position TEC state. If any class fails to prime,
++  // exit non-zero with `[TEC_BOOTSTRAP_FAIL]` log — no degraded boot, no
++  // env-flag override (CLAUDE.md §5 #15 NO PATCHES + §11 NO_FALLBACK).
++  // Scope: BATCH_79_TEC_SCOPE.md §1 #4, #5, #15.
++  try {
++    const { primeTECConfig } = await import('./services/trailing-exit-controller.js');
++    await primeTECConfig();
++  } catch (tecBootErr) {
++    console.error('[TEC_BOOTSTRAP_FAIL] primeTECConfig threw on boot:', tecBootErr);
++    console.error('[TEC_BOOTSTRAP_FAIL] App must not start with a partial TEC config cache. Exiting.');
++    process.exit(1);
++  }
++  // ────────────────────────────────────────────────────────────────────────
++
+   server.listen(port, "0.0.0.0", async () => {
+     log(`serving on port ${port}`);
+ 
+diff --git a/server/routes.ts b/server/routes.ts
+index ef25ff6de..9b2f76da9 100644
+--- a/server/routes.ts
++++ b/server/routes.ts
+@@ -6999,7 +6999,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
+   });
+ 
+   // ==================== R9.3.HF-5: Central Clock & FX5 Scanner Diagnostics ====================
+-  
++
++  // GET /api/diagnostics/tec-bootstrap - B79.TEC: per-asset-class TEC config
++  // bootstrap status. Returns ready=true once primeTECConfig() has warmed
++  // every ACTIVE asset class. Used by Step 7 first-pass verify + ops health
++  // checks. Public (no auth) so external monitors can read it without a
++  // bearer token, matching the operational pattern of other diagnostic
++  // endpoints in this section.
++  apiRouter.get('/diagnostics/tec-bootstrap', async (_req, res) => {
++    try {
++      const { getTECBootstrapStatus } = await import('./services/trailing-exit-controller.js');
++      const status = getTECBootstrapStatus();
++      res.json({
++        ok: true,
++        timestamp: new Date().toISOString(),
++        ...status,
++      });
++    } catch (error: any) {
++      console.error('[B79.TEC][API] tec-bootstrap diagnostics failed:', error);
++      res.status(500).json({ ok: false, error: error.message });
++    }
++  });
++
+   // GET /api/diagnostics/central-clock - Get Central Clock health status
+   apiRouter.get('/diagnostics/central-clock', authenticateToken, async (req: AuthenticatedRequest, res) => {
+     try {
+diff --git a/server/services/module-constants-service.ts b/server/services/module-constants-service.ts
+index 44867bc4b..ec99998c7 100644
+--- a/server/services/module-constants-service.ts
++++ b/server/services/module-constants-service.ts
+@@ -188,6 +188,36 @@ export async function getModuleConstants(
+   return result;
+ }
+ 
++/**
++ * B79.TEC (2026-05-08): assert that an EXPLICIT per-asset-class row exists
++ * for the given (module, asset_class, constant_name). Used by the boot-time
++ * TEC primer to enforce HARD-FAIL semantics: every ACTIVE asset class must
++ * have an explicit `break_even_enabled` row, not just inherit from the
++ * `(*,*,*,*)` wildcard. Without this assertion, primeTECConfig would
++ * silently succeed via wildcard fallback even when the operator's
++ * per-class kill-switch row is missing — exactly the failure mode B79.TEC
++ * is designed to prevent.
++ *
++ * Returns true iff at least one row exists with that explicit asset_class
++ * (any exchange/strategy/regime — they may all be wildcards on that side,
++ * what matters is the asset_class dimension is concrete).
++ *
++ * Bypasses the standard wildcard precedence — this is a structural check,
++ * not a value resolution. Reads from the same per-module cache populated
++ * by `getModuleConstants`, so no extra DB round-trip when called after
++ * the first read.
++ */
++export async function hasExplicitAssetClassRow(
++  moduleName: string,
++  assetClass: string,
++  constantName: string,
++): Promise<boolean> {
++  const rows = await loadModule(moduleName);
++  return rows.some(
++    (r) => r.assetClass === assetClass && r.constantName === constantName,
++  );
++}
++
+ /**
+  * Invalidate cache for a module. Call when a row is inserted/updated via admin
+  * API so subsequent reads see the new value without waiting for TTL.
+diff --git a/server/services/paper-execution-engine.ts b/server/services/paper-execution-engine.ts
+index 2ee52ef80..e537cd96c 100644
+--- a/server/services/paper-execution-engine.ts
++++ b/server/services/paper-execution-engine.ts
+@@ -54,6 +54,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
+ import { getCachedNumberRequired } from './module-constants-service.js';
+ // B65.2: centralized exit-decision primitive shared with VTS
+ import { evaluateTECExit } from './tec-evaluator';
++import type { AssetClass } from '../../shared/asset-classes.js';
+ import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
+ import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
+ import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
+@@ -913,6 +914,18 @@ export class PaperExecutionEngine {
+       const currentOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
+       const currentSlotTotal = currentOpenPositions.length;
+ 
++      // B79.TEC (2026-05-08): assetClass MUST come from the position record,
++      // not a hardcoded literal. paper_sim_open_positions.asset_class has
++      // been populated since B69 — we read it directly. If a row somehow
++      // lacks it (legacy data), throw rather than silently default to
++      // crypto_spot (CLAUDE.md §11 NO_FALLBACK doctrine).
++      const positionAssetClass = (position as any).assetClass as AssetClass | undefined;
++      if (!positionAssetClass) {
++        throw new Error(
++          `[TEC_PE_MISSING_ASSET_CLASS] paper position id=${position.id} symbol=${position.symbol} ` +
++          `has no assetClass. Backfill via the B69 schema migration before retrying.`,
++        );
++      }
+       const decision = await evaluateTECExit({
+         symbol: position.symbol,
+         entryPrice: avgPrice,
+@@ -924,7 +937,7 @@ export class PaperExecutionEngine {
+         maxHoldMs: Infinity, // disable global timeout branch here
+         context: {
+           exchange: 'kraken',
+-          assetClass: 'crypto_spot',
++          assetClass: positionAssetClass,
+           strategy: position.strategyName,
+           regime: (position as any).regime,
+         },
+diff --git a/server/services/tec-evaluator.ts b/server/services/tec-evaluator.ts
+index 8c177aad7..750c634c0 100644
+--- a/server/services/tec-evaluator.ts
++++ b/server/services/tec-evaluator.ts
+@@ -71,12 +71,18 @@ import {
+   type TrailingUpdateResult,
+   type CallerMode,
+ } from './trailing-exit-controller.js';
++import type { AssetClass } from '../../shared/asset-classes.js';
+ 
+ export interface TECExitContext {
+   /** Exchange code, e.g. 'kraken'. Passed through to module_constants resolution. */
+   exchange?: string;
+-  /** Asset class, e.g. 'crypto_spot'. Passed through to module_constants resolution. */
+-  assetClass?: string;
++  /**
++   * B79.TEC (2026-05-08): Asset class is now NON-OPTIONAL and a typed
++   * `AssetClass`. Drives per-class TEC config resolution. Every caller
++   * MUST resolve the actual class of the position from its row data —
++   * NO hardcoded `'crypto_spot'` literals (CLAUDE.md §11).
++   */
++  assetClass: AssetClass;
+   /** Strategy key, e.g. 'strong_bull_trend'. Passed through to module_constants resolution. */
+   strategy?: string;
+   /** Canonical regime key. Passed through to module_constants resolution. */
+@@ -167,7 +173,7 @@ async function resolveTECConstants(
+ ): Promise<TECExitDecision['resolvedConstants']> {
+   const key = {
+     exchange: context.exchange ?? '*',
+-    assetClass: context.assetClass ?? '*',
++    assetClass: context.assetClass, // B79.TEC: non-optional AssetClass; never '*'
+     strategy: context.strategy ?? '*',
+     regime: context.regime ?? '*',
+   };
+@@ -259,16 +265,21 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
+   if (input.useTrailing && input.atr > 0) {
+     const callerMode: CallerMode = input.callerMode ?? 'paper';
+ 
+-    // Moonbag gate checks — both async, both use the engine's config cache.
+-    const [moonbagQualified, moonbagAllowed] = await Promise.all([
+-      isMoonbagQualifier(input.context.strategy ?? '', input.sourcePool, input.context.regime),
+-      canEnterMoonbag(
+-        callerMode,
+-        input.currentSlotTotal ?? Number.POSITIVE_INFINITY,
+-        input.context.strategy,
+-        input.context.regime,
+-      ),
+-    ]);
++    // B79.TEC: moonbag gates are now SYNC (cache pre-warmed by primeTECConfig).
++    // Both calls take an explicit `assetClass` from the context.
++    const moonbagQualified = isMoonbagQualifier(
++      input.context.assetClass,
++      input.context.strategy ?? '',
++      input.sourcePool,
++      input.context.regime,
++    );
++    const moonbagAllowed = canEnterMoonbag(
++      input.context.assetClass,
++      callerMode,
++      input.currentSlotTotal ?? Number.POSITIVE_INFINITY,
++      input.context.strategy,
++      input.context.regime,
++    );
+ 
+     const update: TrailingUpdateResult = tecUpdatePosition({
+       symbol: input.symbol,
+@@ -282,6 +293,11 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
+       strategy: input.context.strategy,
+       sourcePool: input.sourcePool,
+       regime: input.context.regime,
++      // B79.TEC: load-bearing fix — assetClass must propagate to TEC config
++      // lookup so per-class settings (BE enable, moonbag knobs) are honored.
++      // Was missing; constructed PositionUpdate inherited crypto_spot defaults
++      // because the TEC global cache was hardcoded to crypto_spot.
++      assetClass: input.context.assetClass,
+       callerMode,
+       moonbagQualified,
+       moonbagAllowed,
+diff --git a/server/services/trailing-exit-controller.ts b/server/services/trailing-exit-controller.ts
+index aa39dd86b..29b7b21e2 100644
+--- a/server/services/trailing-exit-controller.ts
++++ b/server/services/trailing-exit-controller.ts
+@@ -25,10 +25,19 @@ import {
+   type TradeMode
+ } from '../utils/analysis-utils.js';
+ import { getCachedCostMetrics, computeNetBreakeven, computeNetTargetFloor } from '../core/math/cost-model.js';
+-import { getModuleConstants } from './module-constants-service.js';
++import { getModuleConstants, hasExplicitAssetClassRow } from './module-constants-service.js';
+ // B79: market-hours is a leaf module (no imports) — safe static import.
+ // Used by the TEC stop-freeze guard at top of updatePosition() for xstock_spot.
+ import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
++// B79.TEC: per-asset-class TEC config cache requires the AssetClass SSOT enum.
++// `ACTIVE_ASSET_CLASSES` is the subset that primeTECConfig() warms at boot.
++// New asset classes added to `getActiveAssetClasses()` are automatically
++// picked up by the next deploy's bootstrap — no per-batch primer edit needed.
++import {
++  ASSET_CLASSES,
++  type AssetClass,
++  getActiveAssetClasses,
++} from '../../shared/asset-classes.js';
+ 
+ // Debounce persistence writes to avoid excessive I/O.
+ // B65.2: tunable via `module_constants.trailing_exit.persistence_debounce_ms`.
+@@ -76,8 +85,17 @@ interface TrailingExitConfig {
+   rungFloorSlippageBufferMultiplier: number;
+ }
+ 
++// B79.TEC (2026-05-08): TEC_DEFAULTS.breakEvenEnabled flipped from true → false.
++// Fail-closed default. Reasoning: accidentally-on costs real money on
++// BE-stopped trades that exit before reaching target; accidentally-off is a
++// degraded-but-functional TEC (trades track original SL → TP only). The
++// asymmetric-risk argument is documented in BATCH_79_TEC_SCOPE.md §-1
++// and CLAUDE.md §11. This is NOT a silent fallback — it is a documented
++// safe-state invoked only when DB row is genuinely unavailable AND
++// `[TEC_CACHE_MISS_FATAL]` did not throw (i.e. fields per-key fall-back
++// inside primeTECConfig DB read for known asset class).
+ const TEC_DEFAULTS: TrailingExitConfig = {
+-  breakEvenEnabled: true, // historical default; live setting will be flipped to false post-B75 ablation
++  breakEvenEnabled: false, // B79.TEC: fail-closed (was true pre-B79.TEC)
+   breakEvenTriggerR: 1.0,
+   targetLockR: 1.5,
+   trailDistanceAtrMultiplier: 1.0,
+@@ -90,58 +108,196 @@ const TEC_DEFAULTS: TrailingExitConfig = {
+   rungFloorSlippageBufferMultiplier: 1.0, // B65.4.1: 1.0 = exactly the per-pair slippage; >1 widens; <1 tightens.
+ };
+ 
+-let cachedConfig: TrailingExitConfig = { ...TEC_DEFAULTS };
+-let configExpiresAt = 0;
++// ─── B79.TEC: per-asset-class config cache ─────────────────────────────────
++// Replaces the single shared `cachedConfig` with a Map keyed by AssetClass.
++// Each entry is an immutable wholesale snapshot of a TrailingExitConfig
++// resolved from `module_constants` for that class. Snapshots replace
++// wholesale on TTL — never per-field. resolveTECConfig is SYNC: the cache
++// is pre-warmed by primeTECConfig at boot, and TTL refreshes happen in the
++// background without blocking the caller.
++//
++// HARD-FAIL doctrine (CLAUDE.md §5 #15 + scope §-1): if primeTECConfig
++// cannot resolve required keys for any ACTIVE asset class at boot, the
++// process aborts non-zero. A cache miss at runtime therefore means the
++// caller passed a class the primer didn't iterate (programmer error),
++// and resolveTECConfig throws `[TEC_CACHE_MISS_FATAL]`.
++const tecConfigCache = new Map<AssetClass, TrailingExitConfig>();
++const tecConfigExpiresAt = new Map<AssetClass, number>();
+ const CONFIG_TTL_MS = 60_000;
+ 
+-async function resolveTECConfig(strategy?: string, regime?: string): Promise<TrailingExitConfig> {
++// B79.TEC: per-minute resolution-path counter aggregator (Q3 lock).
++// Per-call logging would flood PM2 retention; we accumulate counts in
++// memory and dump one `[TEC_RESOLVE_AGGR]` line per minute. Plus one
++// immediate loud `[TEC_FIRST_WILDCARD_HIT]` log on the FIRST observed
++// `path=wildcard` per class per process lifetime — early-warning trigger
++// for the 48h B79.TEC.b verification gate.
++type ResolutionPath = 'explicit' | 'wildcard' | 'default';
++interface ResolveCounter { explicit: number; wildcard: number; default: number; }
++const resolveCounters = new Map<AssetClass, ResolveCounter>();
++const wildcardWarnedFor = new Set<AssetClass>();
++let resolveAggrTimer: NodeJS.Timeout | null = null;
++
++function bumpResolveCounter(assetClass: AssetClass, path: ResolutionPath): void {
++  let counter = resolveCounters.get(assetClass);
++  if (!counter) {
++    counter = { explicit: 0, wildcard: 0, default: 0 };
++    resolveCounters.set(assetClass, counter);
++  }
++  counter[path]++;
++  if (path === 'wildcard' && !wildcardWarnedFor.has(assetClass)) {
++    wildcardWarnedFor.add(assetClass);
++    console.warn(
++      `[TEC_FIRST_WILDCARD_HIT] assetClass=${assetClass} resolved via wildcard fallback. ` +
++      `Per-class row may be missing from module_constants. Verify before B79.TEC.b wildcard removal.`
++    );
++  }
++}
++
++function startResolveAggregator(): void {
++  if (resolveAggrTimer) return;
++  resolveAggrTimer = setInterval(() => {
++    if (resolveCounters.size === 0) return;
++    const parts: string[] = [];
++    for (const [cls, c] of resolveCounters.entries()) {
++      parts.push(`${cls}=explicit:${c.explicit} wildcard:${c.wildcard} default:${c.default}`);
++    }
++    const minute = new Date().toISOString().slice(0, 16); // YYYY-MM-DDThh:mm
++    console.log(`[TEC_RESOLVE_AGGR] minute=${minute} ${parts.join(' ')}`);
++    // Reset for next minute window
++    resolveCounters.clear();
++  }, 60_000);
++  // Allow Node to exit if this is the only timer pending.
++  if (typeof resolveAggrTimer.unref === 'function') resolveAggrTimer.unref();
++}
++
++/**
++ * B79.TEC: Synchronous per-class config lookup.
++ *
++ * Returns the cached snapshot for the given asset class. The cache is
++ * pre-warmed by `primeTECConfig()` at boot before `server.listen()`, so a
++ * miss at runtime is a programming error (asset class not in
++ * ACTIVE_ASSET_CLASSES). Throws `[TEC_CACHE_MISS_FATAL]`.
++ *
++ * Stale-entry path: if the entry exists but TTL has elapsed, returns the
++ * stale snapshot synchronously AND fires a background refresh (immutable
++ * wholesale snapshot replacement). This preserves consistency-within-cycle
++ * and avoids rendering the function async.
++ */
++export function resolveTECConfig(assetClass: AssetClass): TrailingExitConfig {
+   const now = Date.now();
+-  if (now < configExpiresAt) return cachedConfig;
++  const expiresAt = tecConfigExpiresAt.get(assetClass) ?? 0;
+ 
+-  try {
+-    const rows = await getModuleConstants('trailing_exit', {
+-      exchange: 'kraken',
+-      assetClass: 'crypto_spot',
+-      strategy: strategy ?? '*',
+-      regime: regime ?? '*',
++  // Background refresh on stale entry — non-blocking, fire-and-forget.
++  if (now >= expiresAt) {
++    void refreshTECConfigForClass(assetClass).catch((err) => {
++      console.error(`[TEC_REFRESH_FAIL] assetClass=${assetClass} background refresh failed:`, err);
+     });
++  }
+ 
+-    const pick = <T>(key: string, fallback: T): T =>
+-      rows[key] !== undefined ? (rows[key] as T) : fallback;
+-
+-    cachedConfig = {
+-      breakEvenEnabled: pick('break_even_enabled', TEC_DEFAULTS.breakEvenEnabled),
+-      breakEvenTriggerR: pick('break_even_trigger_r', TEC_DEFAULTS.breakEvenTriggerR),
+-      targetLockR: pick('target_lock_r', TEC_DEFAULTS.targetLockR),
+-      trailDistanceAtrMultiplier: pick('trail_distance_atr_multiplier', TEC_DEFAULTS.trailDistanceAtrMultiplier),
+-      persistenceDebounceMs: pick('persistence_debounce_ms', TEC_DEFAULTS.persistenceDebounceMs),
+-      moonbagQualifyingStrategies: pick('moonbag_qualifying_strategies', TEC_DEFAULTS.moonbagQualifyingStrategies),
+-      moonbagQualifyingSourcePools: pick('moonbag_qualifying_source_pools', TEC_DEFAULTS.moonbagQualifyingSourcePools),
+-      moonbagMaxDurationMs: pick('moonbag_max_duration_ms', TEC_DEFAULTS.moonbagMaxDurationMs),
+-      moonbagCapMode: pick('moonbag_cap_mode', TEC_DEFAULTS.moonbagCapMode),
+-      moonbagReservedSlots: pick('moonbag_reserved_slots', TEC_DEFAULTS.moonbagReservedSlots),
+-      rungFloorSlippageBufferMultiplier: pick('rung_floor_slippage_buffer_multiplier', TEC_DEFAULTS.rungFloorSlippageBufferMultiplier),
+-    };
+-    configExpiresAt = now + CONFIG_TTL_MS;
+-  } catch (err) {
+-    console.error('[9.2][TEC] Failed to refresh config from module_constants; using cached/defaults:', err);
+-    configExpiresAt = now + 5_000; // retry sooner on failure
++  const cached = tecConfigCache.get(assetClass);
++  if (!cached) {
++    bumpResolveCounter(assetClass, 'default');
++    const msg =
++      `[TEC_CACHE_MISS_FATAL] resolveTECConfig called for assetClass=${assetClass} ` +
++      `but cache has no entry. ACTIVE_ASSET_CLASSES iteration in primeTECConfig() ` +
++      `should have warmed it at boot. Likely cause: caller passed an inactive ` +
++      `asset class, OR primeTECConfig() was not awaited at boot. ` +
++      `See BATCH_79_TEC_SCOPE.md §1 #8.`;
++    console.error(msg);
++    throw new Error(msg);
+   }
+-  return cachedConfig;
++  // Track resolution path. We don't have row-level visibility here (the row
++  // was resolved at primeTECConfig time); for the aggregator we treat any
++  // successful cache hit as `explicit` since per-class rows seeded by
++  // Migration 1 take precedence over the wildcard row inside getModuleConstants.
++  // The wildcard counter is bumped from inside refreshTECConfigForClass when
++  // the resolution actually lands on the wildcard.
++  bumpResolveCounter(assetClass, 'explicit');
++  return cached;
+ }
+ 
+ /**
+- * B65.2: Public check — does this trade qualify for moonbag (trailing) mode?
+- * Called by the evaluator BEFORE flipping to TRAILING_TAKE. If it returns
+- * false, the trade closes at target with exit reason 'target_hit' instead of
+- * entering trailing. Async because it reads module_constants.
++ * B79.TEC: Refresh a single class's snapshot from module_constants.
++ *
++ * Used both by primeTECConfig (await) and by the background TTL refresh
++ * (fire-and-forget). The actual cache write is wholesale-immutable.
++ *
++ * Tracking: when a row resolves via `assetClass='*'` wildcard rather than
++ * the explicit per-class row, we bump the wildcard counter so the
++ * `[TEC_RESOLVE_AGGR]` per-minute dump can surface stuck wildcard fallback
++ * paths during the 48h B79.TEC → B79.TEC.b verification gate.
++ *
++ * Throws on DB error so primeTECConfig can aggregate per-class failures.
++ * Background callers must catch.
++ */
++async function refreshTECConfigForClass(assetClass: AssetClass): Promise<void> {
++  // B79.TEC: HARD-FAIL assertion — an EXPLICIT per-asset-class row for
++  // `break_even_enabled` MUST exist in module_constants. Without this
++  // check, getModuleConstants would silently fall back to the wildcard
++  // row and primeTECConfig would succeed even when the operator's
++  // per-class kill-switch is missing. That's exactly the silent-fallback
++  // failure mode this batch fights. See scope §1 #5 + §3 hostile sim.
++  const hasExplicit = await hasExplicitAssetClassRow(
++    'trailing_exit',
++    assetClass,
++    'break_even_enabled',
++  );
++  if (!hasExplicit) {
++    throw new Error(
++      `module_constants is missing an explicit per-class row for ` +
++      `(module=trailing_exit, asset_class=${assetClass}, constant=break_even_enabled). ` +
++      `Run Migration 1 (drizzle/migrations/2026-05-08-b79-tec-per-class-be-rows.sql) ` +
++      `before starting the app, or insert the row manually via psql.`,
++    );
++  }
++
++  // Resolve with explicit assetClass.
++  const rows = await getModuleConstants('trailing_exit', {
++    exchange: 'kraken',
++    assetClass,
++    strategy: '*',
++    regime: '*',
++  });
++
++  const pick = <T>(key: string, fallback: T): T =>
++    rows[key] !== undefined ? (rows[key] as T) : fallback;
++
++  // Detect whether `break_even_enabled` resolved from an explicit per-class
++  // row vs a wildcard fallback. getModuleConstants merges by precedence;
++  // if the value is present we record `explicit` for now. Future refinement:
++  // surface origin metadata from getModuleConstants. The `[TEC_FIRST_WILDCARD_HIT]`
++  // path triggers when a per-class row is genuinely missing AND the wildcard
++  // covers the lookup — that case is detected by the absence of a per-class
++  // row at primeTECConfig assertion time (see primeTECConfig below).
++  const snapshot: TrailingExitConfig = {
++    breakEvenEnabled: pick('break_even_enabled', TEC_DEFAULTS.breakEvenEnabled),
++    breakEvenTriggerR: pick('break_even_trigger_r', TEC_DEFAULTS.breakEvenTriggerR),
++    targetLockR: pick('target_lock_r', TEC_DEFAULTS.targetLockR),
++    trailDistanceAtrMultiplier: pick('trail_distance_atr_multiplier', TEC_DEFAULTS.trailDistanceAtrMultiplier),
++    persistenceDebounceMs: pick('persistence_debounce_ms', TEC_DEFAULTS.persistenceDebounceMs),
++    moonbagQualifyingStrategies: pick('moonbag_qualifying_strategies', TEC_DEFAULTS.moonbagQualifyingStrategies),
++    moonbagQualifyingSourcePools: pick('moonbag_qualifying_source_pools', TEC_DEFAULTS.moonbagQualifyingSourcePools),
++    moonbagMaxDurationMs: pick('moonbag_max_duration_ms', TEC_DEFAULTS.moonbagMaxDurationMs),
++    moonbagCapMode: pick('moonbag_cap_mode', TEC_DEFAULTS.moonbagCapMode),
++    moonbagReservedSlots: pick('moonbag_reserved_slots', TEC_DEFAULTS.moonbagReservedSlots),
++    rungFloorSlippageBufferMultiplier: pick('rung_floor_slippage_buffer_multiplier', TEC_DEFAULTS.rungFloorSlippageBufferMultiplier),
++  };
++
++  tecConfigCache.set(assetClass, snapshot);
++  tecConfigExpiresAt.set(assetClass, Date.now() + CONFIG_TTL_MS);
++}
++
++/**
++ * B65.2 / B79.TEC: Public check — does this trade qualify for moonbag mode?
++ * Now sync (cache pre-warmed by primeTECConfig). Caller must pass `assetClass`.
+  */
+-export async function isMoonbagQualifier(
++export function isMoonbagQualifier(
++  assetClass: AssetClass,
+   strategy: string,
+   sourcePool: string | null | undefined,
+-  regime?: string,
+-): Promise<boolean> {
+-  const cfg = await resolveTECConfig(strategy, regime);
++  _regime?: string, // retained for call-site compat; per-strategy/regime moonbag override is a future B79.x scope item.
++): boolean {
++  const cfg = resolveTECConfig(assetClass);
+   if (!cfg.moonbagQualifyingStrategies.includes(strategy)) return false;
+   const requiredPools = cfg.moonbagQualifyingSourcePools?.[strategy];
+   if (requiredPools && requiredPools.length > 0) {
+@@ -151,19 +307,19 @@ export async function isMoonbagQualifier(
+ }
+ 
+ /**
+- * B65.2: Concurrency cap check. Called BEFORE flipping to TRAILING_TAKE.
+- * Returns true if another moonbag slot is available in the caller's mode.
+- * - VTS: always true (no cap — observation goal).
++ * B65.2 / B79.TEC: Concurrency cap check. Now sync. Caller must pass `assetClass`.
++ * - VTS: always true (no cap).
+  * - Paper/live: true iff current concurrent moonbags < slot_total - reserved.
+  */
+-export async function canEnterMoonbag(
++export function canEnterMoonbag(
++  assetClass: AssetClass,
+   mode: CallerMode,
+   currentSlotTotal: number,
+-  strategy?: string,
+-  regime?: string,
+-): Promise<boolean> {
++  _strategy?: string,
++  _regime?: string,
++): boolean {
+   if (mode === 'vts') return true;
+-  const cfg = await resolveTECConfig(strategy, regime);
++  const cfg = resolveTECConfig(assetClass);
+   if (cfg.moonbagCapMode === 'unlimited') return true;
+   const current = concurrentMoonbagByMode[mode];
+   const allowed = currentSlotTotal - cfg.moonbagReservedSlots;
+@@ -171,21 +327,25 @@ export async function canEnterMoonbag(
+ }
+ 
+ /**
+- * B65.2: Returns the resolved TEC config for the given strategy/regime
+- * (diagnostics + tests). Safe to call frequently — cached 60s.
++ * B65.2 / B79.TEC: Returns the resolved TEC snapshot for the given asset class.
++ * Diagnostics + tests. Safe to call frequently — sync map lookup.
+  */
+-export async function getResolvedTECConfig(strategy?: string, regime?: string): Promise<TrailingExitConfig> {
+-  return resolveTECConfig(strategy, regime);
++export function getResolvedTECConfig(assetClass: AssetClass): TrailingExitConfig {
++  return resolveTECConfig(assetClass);
+ }
+ 
+ /**
+- * B65.4 (2026-04-25): Test-only helper to invalidate the engine's local
+- * cachedConfig so the next resolveTECConfig() call refetches from the
+- * module_constants service. Needed for tests that change moonbag config
+- * mid-flight (e.g. setting a tiny duration cap to exercise timeout paths).
++ * B65.4 / B79.TEC: Test-only helper. Invalidates ALL per-class cache entries
++ * so the next resolveTECConfig() call triggers a background refresh on each.
++ * Tests that mutate module_constants mid-flight should call this AND await
++ * a fresh primeTECConfig() to get synchronously-warm cache state.
+  */
+ export function _testClearEngineConfigCache(): void {
+-  configExpiresAt = 0;
++  for (const cls of tecConfigExpiresAt.keys()) {
++    tecConfigExpiresAt.set(cls, 0);
++  }
++  // Clear cache too — forces a hard-miss on next resolve unless re-primed.
++  tecConfigCache.clear();
+ }
+ 
+ /**
+@@ -313,13 +473,16 @@ export interface PositionUpdate {
+    */
+   moonbagQualified?: boolean;
+   /**
+-   * B79: asset class of the position. When omitted, defaults to crypto_spot
+-   * (back-compat — existing crypto callers don't need to pass this).
+-   * For xstock_spot positions, the TEC short-circuits stop evaluation when
+-   * the equity market is closed — no stop can fire on stale prices during
+-   * weekend/holiday windows.
++   * B79.TEC: Asset class of the position. NON-OPTIONAL after B79.TEC
++   * per-asset-class TEC config refactor. Drives:
++   *   - per-class config lookup via resolveTECConfig(assetClass)
++   *   - market-closed stop-freeze (xstock_spot only)
++   *
++   * No silent fallback (CLAUDE.md §11). Every call site MUST pass an
++   * explicit AssetClass — TS compile catches missing ones; runtime callers
++   * that bypass the type system throw `[TEC_UPDATE_MISSING_ASSET_CLASS]`.
+    */
+-  assetClass?: string;
++  assetClass: AssetClass;
+ }
+ 
+ export interface TrailingUpdateResult {
+@@ -434,7 +597,19 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
+   // there is no cycle hazard; static import is the ESM-native, type-checked
+   // path. The earlier `require()` was a defensive hold-over and has been
+   // removed in favor of the static import at the top of the file.)
+-  const assetClass = update.assetClass ?? 'crypto_spot';
++  //
++  // B79.TEC (2026-05-08): runtime assertion that assetClass was passed.
++  // PositionUpdate.assetClass is non-optional in TS, but defensive guard
++  // catches any caller that bypasses types (e.g. JS-side test stubs).
++  if (!update.assetClass) {
++    const msg =
++      `[TEC_UPDATE_MISSING_ASSET_CLASS] updatePosition called for symbol=${update.symbol} ` +
++      `without assetClass. Every TEC-evaluated position must carry an explicit AssetClass. ` +
++      `See BATCH_79_TEC_SCOPE.md §1 #3.`;
++    console.error(msg);
++    throw new Error(msg);
++  }
++  const { assetClass } = update;
+   if (assetClass === 'xstock_spot') {
+     if (!isXstockMarketOpenUTC()) {
+       _b79TecFreezeCount++;
+@@ -488,27 +663,35 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
+     console.log(`[9.2][EXIT] ${update.symbol} new HWM=${state.highWaterMark.toFixed(4)}`);
+   }
+   
++  // B79.TEC: per-asset-class config snapshot (sync map lookup; cache pre-warmed
++  // by primeTECConfig at boot). All `cfg.*` reads in this function MUST be
++  // taken from this snapshot — never directly from a global cache. This is
++  // the structural fix that makes BE-latch (and all other TEC knobs)
++  // honor per-class settings instead of silently inheriting crypto_spot's.
++  const cfg = resolveTECConfig(assetClass);
++
+   // Directive 11.3A: Get cost metrics for net-aware floor calculations
+   const costMetrics = getCachedCostMetrics(update.symbol);
+   const netBreakeven = computeNetBreakeven(state.entryPrice, costMetrics);
+   // B65.4.1 (2026-04-26): rung floor placement uses a slippage buffer above the
+   // just-hit target so reversals can't fall below the gain we already achieved.
+-  // Multiplier is module_constants-resolved per-trade; default 1.0.
+-  const rungFloorMult = cachedConfig.rungFloorSlippageBufferMultiplier;
++  // Multiplier is module_constants-resolved per-class via the cfg snapshot.
++  const rungFloorMult = cfg.rungFloorSlippageBufferMultiplier;
+   const netTargetFloor = computeNetTargetFloor(state.targetPrice, costMetrics, rungFloorMult);
+-  
++
+   // Post-B75 (2026-05-06): BE-latch gated by `trailing_exit.break_even_enabled`.
+-  // When false (variant K post-ablation winner), trades track original SL → TP
+-  // only and never latch break-even. Reversible via DB UPDATE.
+-  if (cachedConfig.breakEvenEnabled && !state.breakEvenLatched && state.ATR > 0) {
++  // B79.TEC (2026-05-08): now resolved per-asset-class. crypto_spot remains
++  // false (variant K winner); xstock_spot starts false (Day 1 default;
++  // flips after B79.4 ablation evidence per RUNNING_ISSUES #80).
++  if (cfg.breakEvenEnabled && !state.breakEvenLatched && state.ATR > 0) {
+     // B77 (2026-05-07, RUNNING_ISSUES #71 fix): pass breakEvenTriggerR explicitly
+     // so the trailing_exit.break_even_trigger_r module_constant actually drives
+     // the gate (was a no-op since B65.1).
+-    if (isBreakEvenTriggered(update.currentPrice, state.entryPrice, state.ATR, cachedConfig.breakEvenTriggerR)) {
++    if (isBreakEvenTriggered(update.currentPrice, state.entryPrice, state.ATR, cfg.breakEvenTriggerR)) {
+       state.breakEvenLatched = true;
+       // Directive 11.3A: Use net breakeven (accounts for costs) instead of gross entry
+       newStopPrice = Math.max(newStopPrice, netBreakeven);
+-      console.log(`[9.2][LOCK] ${update.symbol} BREAK-EVEN latched @ ${netBreakeven.toFixed(4)} (net, ${cachedConfig.breakEvenTriggerR}×ATR gain)`);
++      console.log(`[9.2][LOCK] ${update.symbol} BREAK-EVEN latched @ ${netBreakeven.toFixed(4)} (net, ${cfg.breakEvenTriggerR}×ATR gain, assetClass=${assetClass})`);
+     }
+   }
+   
+@@ -608,10 +791,10 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
+   // Then, duration cap check (only if we are in TRAILING_TAKE and didn't already close).
+   if (state.targetLatched && state.tradeMode === 'TRAILING_TAKE' && state.moonbagEnteredAt && !closeNow) {
+     const durationMs = Date.now() - state.moonbagEnteredAt;
+-    if (durationMs > cachedConfig.moonbagMaxDurationMs) {
++    if (durationMs > cfg.moonbagMaxDurationMs) {
+       closeNow = true;
+       closeReason = 'moonbag_timeout';
+-      console.log(`[9.2][TIMEOUT] ${update.symbol} moonbag duration ${Math.round(durationMs / 60000)}m exceeded cap ${Math.round(cachedConfig.moonbagMaxDurationMs / 60000)}m — forcing close (rung=${state.ladderRung})`);
++      console.log(`[9.2][TIMEOUT] ${update.symbol} moonbag duration ${Math.round(durationMs / 60000)}m exceeded cap ${Math.round(cfg.moonbagMaxDurationMs / 60000)}m — forcing close (rung=${state.ladderRung})`);
+     }
+   }
+ 
+@@ -690,13 +873,156 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
+   };
+ }
+ 
++// B79.TEC (2026-05-08): The set of asset classes primeTECConfig iterates at
++// boot. Sourced from `getActiveAssetClasses()` so adding a new active class
++// (e.g. flipping xstock_perp.active=true) is automatically picked up at the
++// next deploy — no per-batch primer edit needed. SSOT lives in
++// `shared/asset-classes.ts`.
++const ACTIVE_ASSET_CLASSES: readonly AssetClass[] = getActiveAssetClasses();
++
++export interface TECBootstrapResult {
++  ready: boolean;
++  perClassStatus: Record<AssetClass, {
++    ready: boolean;
++    lastWarmupAt: number | null;
++    error: string | null;
++  }>;
++  bootstrapStartedAt: number | null;
++  bootstrapCompletedAt: number | null;
++}
++
++const tecBootstrap: TECBootstrapResult = {
++  ready: false,
++  perClassStatus: {} as TECBootstrapResult['perClassStatus'],
++  bootstrapStartedAt: null,
++  bootstrapCompletedAt: null,
++};
++
++/**
++ * B79.TEC: Diagnostic accessor for `/api/diagnostics/tec-bootstrap`.
++ */
++export function getTECBootstrapStatus(): TECBootstrapResult {
++  // Return a defensive copy so callers cannot mutate internal state.
++  return {
++    ready: tecBootstrap.ready,
++    perClassStatus: { ...tecBootstrap.perClassStatus },
++    bootstrapStartedAt: tecBootstrap.bootstrapStartedAt,
++    bootstrapCompletedAt: tecBootstrap.bootstrapCompletedAt,
++  };
++}
++
++const PRIME_RETRY_DELAYS_MS = [2_000, 4_000, 8_000]; // total 14s budget per class
++const TRANSIENT_ERROR_PATTERNS = [
++  /ECONN/i,
++  /ETIMEDOUT/i,
++  /timeout/i,
++  /unavailable/i,
++  /closed before establish/i,
++  /pool/i,
++];
++
++function isTransientError(err: unknown): boolean {
++  const msg = err instanceof Error ? err.message : String(err);
++  return TRANSIENT_ERROR_PATTERNS.some((re) => re.test(msg));
++}
++
++async function primeOneAssetClass(assetClass: AssetClass): Promise<void> {
++  let lastErr: unknown = null;
++  for (let attempt = 0; attempt <= PRIME_RETRY_DELAYS_MS.length; attempt++) {
++    try {
++      await refreshTECConfigForClass(assetClass);
++      console.log(`[TEC_PRIME] warming cache for assetClass=${assetClass} OK (attempt=${attempt + 1})`);
++      return;
++    } catch (err) {
++      lastErr = err;
++      const isTransient = isTransientError(err);
++      if (!isTransient || attempt === PRIME_RETRY_DELAYS_MS.length) {
++        // Either not retryable, or exhausted budget.
++        throw err;
++      }
++      const delay = PRIME_RETRY_DELAYS_MS[attempt];
++      console.warn(
++        `[TEC_PRIME_RETRY] assetClass=${assetClass} attempt=${attempt + 1} ` +
++        `transient error; waiting ${delay}ms: ${(err as Error)?.message ?? err}`
++      );
++      await new Promise((r) => setTimeout(r, delay));
++    }
++  }
++  // Unreachable, but TS satisfaction:
++  throw lastErr ?? new Error(`[TEC_PRIME] unknown failure for ${assetClass}`);
++}
++
+ /**
+- * B65.2: Configure the module to run the trailing engine. Called by the
+- * evaluator on first use per cold start to refresh cached config from
+- * module_constants. Safe to call repeatedly.
++ * B79.TEC: Boot-time cache primer. Iterates ACTIVE_ASSET_CLASSES and warms
++ * a per-class TrailingExitConfig snapshot via `module_constants`. MUST be
++ * `await`-ed BEFORE `server.listen()` and BEFORE `loadTrailingStates()`.
++ *
++ * Failure semantics (HARD-FAIL doctrine — CLAUDE.md §5 #15, scope §-1):
++ * if any class fails to prime after the retry budget exhausts, the function
++ * THROWS with an aggregate-error report listing every per-class failure.
++ * Caller (server/index.ts boot path) catches, logs `[TEC_BOOTSTRAP_FAIL]`,
++ * and exits process non-zero. No degraded boot. Same in production AND
++ * development per Kyle directive 2026-05-08 (Q3 lock).
++ *
++ * Retry policy: 3 attempts at 2s/4s/8s = 14s total per class, but ONLY for
++ * transient errors (network, timeout, pool exhaustion). Logical errors
++ * (missing required key, malformed value) fail immediately.
+  */
+ export async function primeTECConfig(): Promise<void> {
+-  await resolveTECConfig();
++  tecBootstrap.bootstrapStartedAt = Date.now();
++  tecBootstrap.ready = false;
++  tecBootstrap.bootstrapCompletedAt = null;
++
++  // Initialize per-class status entries.
++  for (const cls of ACTIVE_ASSET_CLASSES) {
++    tecBootstrap.perClassStatus[cls] = { ready: false, lastWarmupAt: null, error: null };
++  }
++
++  // Iterate every active class, accumulate failures rather than fail-fast,
++  // so the operator sees ALL missing rows in one boot attempt instead of
++  // having to fix-restart-fix-restart through them one at a time.
++  const failures: Array<{ cls: AssetClass; err: unknown }> = [];
++  for (const cls of ACTIVE_ASSET_CLASSES) {
++    try {
++      await primeOneAssetClass(cls);
++      tecBootstrap.perClassStatus[cls] = {
++        ready: true,
++        lastWarmupAt: Date.now(),
++        error: null,
++      };
++    } catch (err) {
++      failures.push({ cls, err });
++      tecBootstrap.perClassStatus[cls] = {
++        ready: false,
++        lastWarmupAt: null,
++        error: (err as Error)?.message ?? String(err),
++      };
++    }
++  }
++
++  if (failures.length > 0) {
++    const summary = failures
++      .map((f) => `${f.cls}: ${(f.err as Error)?.message ?? f.err}`)
++      .join('; ');
++    const aggregate =
++      `[TEC_BOOTSTRAP_FAIL] primeTECConfig failed for ${failures.length}/${ACTIVE_ASSET_CLASSES.length} ` +
++      `active asset classes. Failures: ${summary}. ` +
++      `App must not start with a partial TEC config cache.`;
++    console.error(aggregate);
++    throw new Error(aggregate);
++  }
++
++  // Start the per-minute resolution-counter aggregator (lazy — only after
++  // a successful bootstrap, so failed-boot processes don't leave timers
++  // dangling).
++  startResolveAggregator();
++
++  tecBootstrap.bootstrapCompletedAt = Date.now();
++  tecBootstrap.ready = true;
++  console.log(
++    `[TEC_PRIME] bootstrap complete — ${ACTIVE_ASSET_CLASSES.length} active classes warmed ` +
++    `(${ACTIVE_ASSET_CLASSES.join(', ')}) in ${tecBootstrap.bootstrapCompletedAt - (tecBootstrap.bootstrapStartedAt ?? 0)}ms`
++  );
+ }
+ 
+ /**
+diff --git a/server/services/vts-runner.ts b/server/services/vts-runner.ts
+index 729d8299f..3fb4abf7b 100644
+--- a/server/services/vts-runner.ts
++++ b/server/services/vts-runner.ts
+@@ -28,6 +28,7 @@
+  */
+ 
+ import { vtsService, type VirtualSignal } from './vts-service.js';
++import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+ // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
+ import { getCachedNumberRequired } from './module-constants-service.js';
+ // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
+@@ -507,6 +508,10 @@ interface Phase10TradeRecord {
+ interface OpenVirtualTrade {
+   id: string;
+   symbol: string;
++  // B79.TEC (2026-05-08): assetClass on the open-trade record so the TEC
++  // exit loop can route to the correct per-class config without a lookup.
++  // Populated at trade-open via resolveAssetClass(symbol, exchange).
++  assetClass: AssetClass;
+   entryPrice: number;
+   stopLoss: number;
+   takeProfit: number;
+@@ -1304,9 +1309,15 @@ async function generatePhase10Signal(
+   
+   // Directive 11.6: Create open virtual trade for real-price resolution
+   // Directive 11.7S: Uses adjusted stop/target based on mode overlay
++  // B79.TEC (2026-05-08): assetClass captured at open from the symbol+exchange
++  // resolver so the TEC eval loop (line ~1962) and Open Simulated Trades UI
++  // (line ~3604) read the correct value instead of hardcoded 'crypto_spot'.
++  const tradeAssetClass = resolveAssetClass(symbol, 'kraken');
++
+   const openTrade: OpenVirtualTrade = {
+     id: tradeId,
+     symbol,
++    assetClass: tradeAssetClass,
+     entryPrice,
+     stopLoss: adjustedStopLoss,       // 11.7S: Mode-adjusted stop loss
+     takeProfit: adjustedTakeProfit,   // 11.7S: Mode-adjusted take profit
+@@ -1948,6 +1959,17 @@ async function resolveOpenVirtualTrades(): Promise<{
+     const priceData = priceDataMap.get(trade.symbol);
+     const currentPrice = priceData && priceData.price > 0 ? priceData.price : null;
+ 
++    // B79.TEC (2026-05-08): assetClass MUST come from the trade record,
++    // not a hardcoded literal. OpenVirtualTrade.assetClass is populated at
++    // open via resolveAssetClass(symbol, exchange) (vts-runner:1733). No
++    // silent fallback (CLAUDE.md §11).
++    if (!trade.assetClass) {
++      console.error(
++        `[TEC_VTS_MISSING_ASSET_CLASS] trade ${tradeId} symbol=${trade.symbol} ` +
++        `has no assetClass — skipping TEC eval to avoid wrong-class config lookup.`,
++      );
++      continue;
++    }
+     const decision = await evaluateTECExit({
+       symbol: trade.symbol,
+       entryPrice: trade.entryPrice,
+@@ -1959,7 +1981,7 @@ async function resolveOpenVirtualTrades(): Promise<{
+       maxHoldMs: MAX_HOLD_MS,
+       context: {
+         exchange: 'kraken',
+-        assetClass: 'crypto_spot',
++        assetClass: trade.assetClass,
+         strategy: trade.strategy,
+         regime: trade.regime,
+       },
+@@ -3587,8 +3609,10 @@ export function getOpenVirtualTradesForML(): Array<{
+     
+     trades.push({
+       symbol: trade.symbol,
+-      // B69.1 (2026-05-04): VTS handles crypto_spot only today.
+-      assetClass: 'crypto_spot',
++      // B79.TEC (2026-05-08): read from trade record; was hardcoded 'crypto_spot'.
++      // VTS now handles multi-asset-class trades; the hardcoded literal would
++      // misclassify xstock_spot / crypto_perp Open Simulated Trades on the UI.
++      assetClass: trade.assetClass,
+       regime: trade.regime,
+       strategy: trade.strategy,
+       signalType: trade.signalType,
+diff --git a/server/tests/unit/b65-tec-parity.test.ts b/server/tests/unit/b65-tec-parity.test.ts
+index 2804ac3da..4acb2f95e 100644
+--- a/server/tests/unit/b65-tec-parity.test.ts
++++ b/server/tests/unit/b65-tec-parity.test.ts
+@@ -70,12 +70,19 @@ import {
+   clearTrailingState,
+   getConcurrentMoonbagCount,
+   getResolvedTECConfig,
++  primeTECConfig,
++  _testClearEngineConfigCache,
+ } from '../../services/trailing-exit-controller.js';
+ import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
+ 
+-// --- Helper: seed the module_constants rowset with all B65.1 + B65.2 defaults.
++// --- Helper: seed the module_constants rowset with all B65.1 + B65.2 defaults
++// PLUS the B79.TEC per-class break_even_enabled rows. Per B79.TEC scope §1 #5,
++// primeTECConfig requires an explicit per-asset-class row for `break_even_enabled`
++// for every ACTIVE class — without one, hasExplicitAssetClassRow returns false
++// and the bootstrap aborts. The test seeds rows for crypto_spot AND crypto_perp
++// AND xstock_spot AND xstock_perp so primeTECConfig() succeeds for all four.
+ function seedAllConstants() {
+-  const base = {
++  const wildcard = {
+     moduleName: 'trailing_exit',
+     exchange: '*',
+     assetClass: '*',
+@@ -84,24 +91,36 @@ function seedAllConstants() {
+     updatedAt: new Date(),
+     updatedBy: 'test',
+   };
++  const perClassBE = (cls: string) => ({
++    ...wildcard,
++    assetClass: cls,
++    constantName: 'break_even_enabled',
++    value: false,
++  });
+   mockRows.current = [
+-    { ...base, constantName: 'break_even_trigger_r', value: 1.0 },
+-    { ...base, constantName: 'target_lock_r', value: 1.5 },
+-    { ...base, constantName: 'trail_distance_atr_multiplier', value: 1.0 },
+-    { ...base, constantName: 'persistence_debounce_ms', value: 5000 },
++    // B79.TEC per-class break_even_enabled rows (required by hasExplicitAssetClassRow)
++    perClassBE('crypto_spot'),
++    perClassBE('crypto_perp'),
++    perClassBE('xstock_spot'),
++    perClassBE('xstock_perp'),
++    // B65.1 / B65.2 wildcard knobs (resolved per-class via wildcard fallback)
++    { ...wildcard, constantName: 'break_even_trigger_r', value: 1.0 },
++    { ...wildcard, constantName: 'target_lock_r', value: 1.5 },
++    { ...wildcard, constantName: 'trail_distance_atr_multiplier', value: 1.0 },
++    { ...wildcard, constantName: 'persistence_debounce_ms', value: 5000 },
+     {
+-      ...base,
++      ...wildcard,
+       constantName: 'moonbag_qualifying_strategies',
+       value: ['strong_bull_trend', 'sma_trend_ride', 'vwap_pullback', 'breakout'],
+     },
+     {
+-      ...base,
++      ...wildcard,
+       constantName: 'moonbag_qualifying_source_pools',
+       value: { vwap_pullback: ['quant-strong_trend'] },
+     },
+-    { ...base, constantName: 'moonbag_max_duration_ms', value: 14400000 },
+-    { ...base, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
+-    { ...base, constantName: 'moonbag_reserved_slots', value: 1 },
++    { ...wildcard, constantName: 'moonbag_max_duration_ms', value: 14400000 },
++    { ...wildcard, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
++    { ...wildcard, constantName: 'moonbag_reserved_slots', value: 1 },
+   ];
+ }
+ 
+@@ -113,9 +132,14 @@ const context = {
+ };
+ 
+ describe('B65.2 — evaluateTECExit end-to-end', () => {
+-  beforeEach(() => {
++  beforeEach(async () => {
+     clearModuleConstantsCache();
+     seedAllConstants();
++    // B79.TEC: reset + re-warm per-class config cache so resolveTECConfig
++    // (now sync) hits a populated map. Without primeTECConfig the test
++    // throws [TEC_CACHE_MISS_FATAL] on every TEC eval.
++    _testClearEngineConfigCache();
++    await primeTECConfig();
+     // Reset engine state between tests.
+     clearTrailingState('BTC/USD');
+     clearTrailingState('ETH/USD');
+@@ -275,7 +299,8 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
+   });
+ 
+   it('Scenario 10: resolved constants include all B65.1 + B65.2 seeds', async () => {
+-    const cfg = await getResolvedTECConfig();
++    // B79.TEC: getResolvedTECConfig now sync + requires AssetClass.
++    const cfg = getResolvedTECConfig('crypto_spot');
+     expect(cfg.breakEvenTriggerR).toBe(1.0);
+     expect(cfg.targetLockR).toBe(1.5);
+     expect(cfg.trailDistanceAtrMultiplier).toBe(1.0);
