@@ -18,7 +18,23 @@
 
 ---
 
-## CURRENT STATE — 2026-05-08 night (B79.0a CLOSED, all 11 steps verified)
+## CURRENT STATE — 2026-05-09 (B79.0b SHIPPED + verified, awaiting Langston Step 4/8 ACK)
+
+**B79.0b status (PM2 #198, branch `migration/aws-supabase` HEAD `54201bd32`):**
+- Steps 1-3+5-7 complete; Steps 4+8 pending Langston ACK (Step 4 review hit GDrive-mount-stale + Bash tool permission hang; v2 dispatched with bypassPermissions)
+- N3 fix: signal_quality_evaluator.ts:199 + :290 (both `input.strategy &&` truthy guards stripped per Langston Q1 expansion)
+- N4 tests: 4 files (market-hours 12 cases, asset-class-instances 6, safe-resolve 6, strategy-asset-class-gate 19); all pass on CI; zero new regressions (1058/59/5 vs B79.0a baseline 1002/59/5)
+- B79.0a SQE wildcard DELETE script committed-not-executed: `scripts/b79-0a-sqe-remove-wildcards.sql` mirror of B79.TEC.b pattern; manual operator step at +48h gate (2026-05-10 21:38 UTC) per `BATCH_79_0b_VERIFY_CHECKLIST.md`
+- Deploy verified: xstock-scanner ready, tec-bootstrap ready (B79.TEC + B79.0a unaffected), no-touch fence 68/factor/30min ≈ 136/hr
+- Governance: BATCH_CATALOG entry added; RUNNING_ISSUES #87 OPEN (manual operator gate for SQE wildcard DELETE due 2026-05-10 21:38 UTC)
+
+**Two manual operator gates due 2026-05-10:**
+- ~11:24 UTC: B79.TEC.b — `break_even_enabled` wildcard DELETE per `BATCH_79_TEC_b_VERIFY_CHECKLIST.md`
+- ~21:38 UTC: B79.0a SQE wildcards — `min_final_score` + `min_regime_weight` DELETE per `BATCH_79_0b_VERIFY_CHECKLIST.md`
+
+---
+
+## B79.0a archive — 2026-05-08 (CLOSED, all 11 steps verified)
 
 **B79.0a closure 2026-05-08 night (PM2 #197+, branch `migration/aws-supabase` HEAD `ef77f7374`):**
 - Steps 1-11 complete; all gates green; Langston Step 4 + Step 8 APPROVE WITH/CONDITIONAL APPROVE
