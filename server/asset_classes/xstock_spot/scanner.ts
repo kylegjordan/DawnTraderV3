@@ -172,8 +172,11 @@ class XstockSpotScannerService {
     try {
       console.log(`[B79.0a][SCAN_CYCLE_START] tick=${tick.tickNumber}`);
 
-      // Market-open gate.
-      if (!isXstockMarketOpenUTC()) {
+      // Market-open gate. Bypass during hostile-sim so the no-shed posture
+      // test can run regardless of when (e.g. weekend) Step 7+8 verify
+      // happens. Hostile-sim is gated behind NODE_ENV !== 'production' +
+      // explicit env flag — can't accidentally bypass in prod.
+      if (!isXstockMarketOpenUTC() && !this.diag.hostileSimActive) {
         this.diag.cyclesSkippedMarketClosed++;
         if (this.diag.cyclesSkippedMarketClosed % 30 === 1) {
           console.log(`[B79.0a][MARKET_CLOSED] tick=${tick.tickNumber} cycles_skipped_total=${this.diag.cyclesSkippedMarketClosed}`);
