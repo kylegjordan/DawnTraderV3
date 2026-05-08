@@ -110,6 +110,7 @@ async function captureSupabase(): Promise<SupabaseSample> {
 
 async function runXstockDryCycle(cycleNumber: number): Promise<DbRoundtripSample> {
   const symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
+  const symbolListSql = symbolList.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
   const start = Date.now();
   const result = await db.execute(sql`
     SELECT DISTINCT ON (symbol)
@@ -117,7 +118,7 @@ async function runXstockDryCycle(cycleNumber: number): Promise<DbRoundtripSample
       last::text AS price,
       captured_at AS "capturedAt"
     FROM equity_spot_ticker_snap
-    WHERE symbol = ANY(${symbolList}::text[])
+    WHERE symbol IN (${sql.raw(symbolListSql)})
     ORDER BY symbol, captured_at DESC
   `);
   const durationMs = Date.now() - start;
