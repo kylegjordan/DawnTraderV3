@@ -107,7 +107,9 @@ server/services/trailing-exit-controller.ts:503: if (cachedConfig.breakEvenEnabl
 
 **Adjacent risk surfaced (Langston flag — NOT B79.TEC scope):** `targetLatched` activation depends on `cfg.moonbagQualifyingStrategies` and `cfg.moonbagQualifyingSourcePools` via `isMoonbagQualifier`. After B79.TEC ships, those config knobs ALSO benefit from per-class scoping IF xstock_spot's moonbag qualifying set differs from crypto's. Day 1 they're identical; B79.4 evidence may surface that they should diverge. **Action: log to RUNNING_ISSUES as adjacent-risk candidate; do NOT add to B79.TEC scope.** (Per Langston rev 2 instruction.)
 
-### §1.6 — SIM consultation (PIA item 6)
+### §1.6 — SIM consultation (PIA item 6) — VERIFIED via grep + read
+
+Verified by reading SIM entries at lines 791, 806, 820, 834, 855, 890, 1485 (TEC + Trailing State + B79 entries) on 2026-05-08:
 
 Per `1-system-manual/SYSTEM_IMPACT_MAP.md`:
 
@@ -131,7 +133,11 @@ Per `1-system-manual/SYSTEM_IMPACT_MAP.md`:
 - Consumes `decision.exitReason` from tec-evaluator (line 2005-2017 `switch`). NOT a hidden second BE config read; pure mapping.
 - Blast radius: HIGH.
 
-**SIM update required at Step 10:** trailing-exit-controller.ts entry shows new per-class cache structure; new `/api/diagnostics/tec-bootstrap` endpoint registered.
+**SIM update required at Step 10:** trailing-exit-controller.ts entry shows new per-class cache structure; tec-evaluator.ts entry adds the assetClass plumbing through context.assetClass to PositionUpdate; paper-execution-engine.ts:927 + vts-runner.ts:1962 entries show hardcoded-crypto fix to read from `position.assetClass`/`trade.assetClass`; new `/api/diagnostics/tec-bootstrap` endpoint registered.
+
+**SIM line 820 confirms downstream impact:** "If you edit trailing-exit-controller.ts → check tec-evaluator (caller), vts-runner exit loop, paper-execution-engine.checkExitConditions, parity test b65-tec-parity.test.ts. PositionUpdate now carries optional strategy/sourcePool/regime/callerMode/moonbagAllowed/moonbagQualified." This batch promotes assetClass to non-optional + adds it as a required field. **Parity test `b65-tec-parity.test.ts` at `server/tests/unit/` MUST be updated** to reflect the signature change — adding to Step 3 implementation order.
+
+**B79 entry at SIM line 1485** confirms TEC stop-freeze guard already in place at top of updatePosition (B79 ship); B79.TEC integrates the per-class cache lookup BEFORE the stop-freeze guard since the freeze guard reads from `update.assetClass` already (which the bug-fix work above now correctly populates).
 
 ### §1.7 — Schema audit + paper-execution-engine `break_even_stop` consumer (PIA item 7, expanded)
 
@@ -179,23 +185,74 @@ server/tests/unit/b65-tec-parity.test.ts: ...                                   
 
 **Open question for implementation:** `resolveTECConfig` is currently async (line 97 `async function`) because it calls `getModuleConstants` which is DB-async. Post-refactor: cache is pre-warmed by primeTECConfig at boot, so `resolveTECConfig` becomes a SYNCHRONOUS map lookup (`cache.get(assetClass)`). The async signature becomes unnecessary. **Decision for implementation: make `resolveTECConfig` synchronous** — simplifies callers (`isMoonbagQualifier` / `canEnterMoonbag` no longer need `await`); aligns with the "snapshot is immutable wholesale" framing. Document as part of Q1 cache-structure intentional-limitation note.
 
-### §1.9 — `PositionUpdate` construction site audit (PIA item 9, Langston rev 2 add)
+### §1.9 — `PositionUpdate` construction site audit (PIA item 9, Langston rev 2 add) — CODE-CITATIONS COMPLETED
 
+`PositionUpdate` interface declared at `trailing-exit-controller.ts:286`. **Direct** PositionUpdate construction sites (passed to `updatePosition()` synchronously) — actual code citations:
+
+1. **`tec-evaluator.ts:273-288`** (inside `evaluateTECExit`):
+```ts
+const update: TrailingUpdateResult = tecUpdatePosition({
+  symbol: input.symbol,
+  entryPrice: input.entryPrice,
+  targetPrice: input.targetPrice,
+  currentPrice,
+  DI: input.DI ?? 50,
+  VolNoise: input.volNoise ?? 0.3,
+  ATR: input.atr,
+  currentStopPrice: input.stopPrice,
+  strategy: input.context.strategy,
+  sourcePool: input.sourcePool,
+  regime: input.context.regime,
+  callerMode,
+  moonbagQualified,
+  moonbagAllowed,
+});
 ```
-$ grep -rn "PositionUpdate\|symbol.*entryPrice.*targetPrice\|update.*currentPrice.*currentStopPrice" server/ --include="*.ts" | grep -v "\.test\." | head -20
+Currently passes 14 fields; **does NOT pass `assetClass`** even though `input.context.assetClass` is available on the input. Refactor: add `assetClass: input.context.assetClass`.
+
+2. **THE UPSTREAM CONTEXT-CONSTRUCTION SITES that feed `evaluateTECExit` via `context.assetClass`** — these are the load-bearing sites where the BUG ACTUALLY LIVES TODAY:
+
+**`paper-execution-engine.ts:916-937`:**
+```ts
+const decision = await evaluateTECExit({
+  symbol: position.symbol,
+  ...
+  context: {
+    exchange: 'kraken',
+    assetClass: 'crypto_spot',          // ← HARDCODED. BUG.
+    strategy: position.strategyName,
+    regime: (position as any).regime,
+  },
+  ...
+});
 ```
 
-`PositionUpdate` interface declared at `trailing-exit-controller.ts:286`. Construction sites:
+**`vts-runner.ts:1951-1972`:**
+```ts
+const decision = await evaluateTECExit({
+  symbol: trade.symbol,
+  ...
+  context: {
+    exchange: 'kraken',
+    assetClass: 'crypto_spot',          // ← HARDCODED. BUG.
+    strategy: trade.strategy,
+    regime: trade.regime,
+  },
+  ...
+});
+```
 
-1. **`tec-evaluator.ts:273`** — `tecUpdatePosition({...})`. Currently passes: symbol, entryPrice, targetPrice, currentPrice, DI, VolNoise, ATR, currentStopPrice, strategy, sourcePool, regime, callerMode, moonbagQualified, moonbagAllowed. **Must add `assetClass`** post-refactor (will be set from caller's input.context.assetClass or similar).
+**Both sites hardcode `assetClass: 'crypto_spot'`** even though the underlying `position` (paper) and `trade` (vts) records BOTH carry `asset_class` / `assetClass` from B69 schema work + B79 wiring. Today the bug is masked because only crypto_spot positions actually flow through these paths — but the moment B79.0a wires xstock_spot live, those positions would inherit crypto_spot TEC config silently (the exact failure mode B79.TEC is designed to prevent).
 
-2. **`paper-execution-engine.ts`** — `updatePosition(...)` is called from the position-evaluation loop. Source of `assetClass` is the position record's asset_class column (already populated by B69 schema work + B79 wiring). Construction site to be located + amended.
+**Refactor required (B79.TEC scope, NOT a future batch):**
+- `paper-execution-engine.ts:927` → `assetClass: position.assetClass` (with assertion that the field is populated; throw `[TEC_PE_MISSING_ASSET_CLASS]` if not)
+- `vts-runner.ts:1962` → `assetClass: trade.assetClass` (same assertion pattern)
+- `tec-evaluator.ts:273-288` → add `assetClass: input.context.assetClass` to the PositionUpdate construction
+- TS strict-typing `PositionUpdate.assetClass: AssetClass` (Objective 3) catches any path that constructs Update without assetClass; the assertion adds runtime defense for the context-construction layer where TS can't reach (string field on interface).
 
-3. **`vts-runner.ts`** — calls TEC via tec-evaluator (not directly), so the assetClass plumbing is at the tec-evaluator boundary not the vts-runner boundary. But the `OpenVirtualTrade` shape must have assetClass — needs verification at code-review time.
+**Action for implementation Step 3:** these three call sites are the load-bearing fix. Without them, B79.TEC would have improved the cache architecture but left the asset-class bug unfixed at the upstream context-construction layer. Step 3 sequence #4 ("Plumb `update.assetClass` through `updatePosition`") explicitly covers all three.
 
-**Action for implementation Step 3:** make `assetClass: AssetClass` non-optional on `PositionUpdate`; let TS compile error guide the discovery of every call site. Add `assetClass` to each construction site reading from the trade/position record.
-
-**Adjacent risk (Langston Risk 8):** The `OpenVirtualTrade` interface in vts-runner already has assetClass per B79 work — verify it's populated at trade-open time consistently. If any path constructs an OpenVirtualTrade without assetClass, the TS strict-typing fix surfaces it.
+**Adjacent risk closed:** `OpenVirtualTrade` (vts-runner trade record) already has `assetClass: AssetClass` per B79 work. `paper_sim_open_positions.asset_class` column has been populated since B69. Both records have the field; the bug is purely the hardcoded literal at the call site, NOT a missing data path.
 
 ---
 
