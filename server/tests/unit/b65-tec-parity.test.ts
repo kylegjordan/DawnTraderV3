@@ -472,8 +472,10 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       r.constantName === 'moonbag_max_duration_ms' ? { ...r, value: 50 } : r
     );
     clearModuleConstantsCache();
-    const { _testClearEngineConfigCache } = await import('../../services/trailing-exit-controller.js');
+    // B79.TEC: clear AND re-prime so the per-class cache picks up the new value.
+    // (resolveTECConfig is now sync + throws [TEC_CACHE_MISS_FATAL] on empty cache.)
     _testClearEngineConfigCache();
+    await primeTECConfig();
 
     const sym = 'LADDER7/USD';
     // rung 1 (price slightly above target so trade stays alive)

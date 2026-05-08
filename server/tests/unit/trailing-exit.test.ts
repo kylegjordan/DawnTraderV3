@@ -1,10 +1,43 @@
 /**
  * Directive 9.2.H — TrailingExitController Unit Tests
- * 
+ *
  * Tests for adaptive trailing exit logic, latch system, and persistence.
+ *
+ * B79.TEC (2026-05-08): updated to seed per-class break_even_enabled rows
+ * and prime the per-asset-class TEC config cache via primeTECConfig before
+ * exercising updatePosition. Also adds `assetClass: 'crypto_spot'` to every
+ * PositionUpdate call (now non-optional per scope §1 #3).
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// --- B79.TEC: DB mock so primeTECConfig can resolve module_constants. ---
+const mockRows = { current: [] as any[] };
+vi.mock('../../db.js', () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: async () => mockRows.current,
+      }),
+    }),
+  },
+}));
+vi.mock('../../core/math/cost-model.js', () => ({
+  getCachedCostMetrics: () => ({ fee: 0, slippage: 0, spread: 0, takerFee: 0, totalCost: 0 }),
+  computeNetBreakeven: (entry: number) => entry,
+  computeNetTargetFloor: (target: number) => target,
+  computeTotalRoundTripCost: () => 0,
+}));
+vi.mock('../../storage.js', () => ({
+  storage: {
+    getPaperSimOpenPositions: async () => [],
+    updatePaperSimOpenPosition: async () => undefined,
+  },
+}));
+vi.mock('../../services/trade-safety.js', () => ({
+  persistTrailingStates: () => undefined,
+}));
+
 import {
   calculateDynamicStopDistance,
   calculateTrailingStopPrice,
@@ -19,8 +52,39 @@ import {
   exportAllStates,
   importStates,
   getDiagnostics,
+  primeTECConfig,
+  _testClearEngineConfigCache,
   type TrailingState
 } from '../../services/trailing-exit-controller.js';
+import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
+
+const wildcardBase = {
+  moduleName: 'trailing_exit',
+  exchange: '*',
+  assetClass: '*',
+  strategy: '*',
+  regime: '*',
+  updatedAt: new Date(),
+  updatedBy: 'test',
+};
+
+function seedB79TECRows() {
+  mockRows.current = [
+    { ...wildcardBase, assetClass: 'crypto_spot', constantName: 'break_even_enabled', value: true },
+    { ...wildcardBase, assetClass: 'crypto_perp', constantName: 'break_even_enabled', value: true },
+    { ...wildcardBase, assetClass: 'xstock_spot', constantName: 'break_even_enabled', value: true },
+    { ...wildcardBase, assetClass: 'xstock_perp', constantName: 'break_even_enabled', value: true },
+    { ...wildcardBase, constantName: 'break_even_trigger_r', value: 1.0 },
+    { ...wildcardBase, constantName: 'target_lock_r', value: 1.5 },
+    { ...wildcardBase, constantName: 'trail_distance_atr_multiplier', value: 1.0 },
+    { ...wildcardBase, constantName: 'persistence_debounce_ms', value: 5000 },
+    { ...wildcardBase, constantName: 'moonbag_qualifying_strategies', value: ['strong_bull_trend', 'sma_trend_ride', 'vwap_pullback', 'breakout'] },
+    { ...wildcardBase, constantName: 'moonbag_qualifying_source_pools', value: { vwap_pullback: ['quant-strong_trend'] } },
+    { ...wildcardBase, constantName: 'moonbag_max_duration_ms', value: 14400000 },
+    { ...wildcardBase, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
+    { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
+  ];
+}
 
 describe('Directive 9.2 — Dynamic Trade Management', () => {
   describe('9.2.B: Dynamic Stop Distance Formula', () => {
@@ -89,7 +153,11 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
   });
 
   describe('9.2.A: TrailingExitController', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+      clearModuleConstantsCache();
+      seedB79TECRows();
+      _testClearEngineConfigCache();
+      await primeTECConfig();
       clearTrailingState('TEST/USD');
       clearTrailingState('BTC/USD');
     });
@@ -115,7 +183,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         DI: 50,
         VolNoise: 0.3,
         ATR: 2,
-        currentStopPrice: 95
+        currentStopPrice: 95,
+        assetClass: 'crypto_spot',
       });
       expect(result.highWaterMark).toBe(105);
     });
@@ -130,7 +199,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         DI: 50,
         VolNoise: 0.3,
         ATR: 2,
-        currentStopPrice: 95
+        currentStopPrice: 95,
+        assetClass: 'crypto_spot',
       });
       expect(result.breakEvenLatched).toBe(true);
       expect(result.newStopPrice).toBeGreaterThanOrEqual(100);
@@ -146,7 +216,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         DI: 50,
         VolNoise: 0.3,
         ATR: 2,
-        currentStopPrice: 95
+        currentStopPrice: 95,
+        assetClass: 'crypto_spot',
       });
       const result = updatePosition({
         symbol: 'TEST/USD',
@@ -156,7 +227,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         DI: 50,
         VolNoise: 0.3,
         ATR: 2,
-        currentStopPrice: 100
+        currentStopPrice: 100,
+        assetClass: 'crypto_spot',
       });
       expect(result.targetLatched).toBe(true);
       expect(result.modeChanged).toBe(true);
@@ -179,7 +251,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         DI: 50,
         VolNoise: 0.3,
         ATR: 2,
-        currentStopPrice: 95
+        currentStopPrice: 95,
+        assetClass: 'crypto_spot',
       });
       const state1 = getTrailingState('TEST/USD');
       const stop1 = state1?.currentStopPrice || 0;
@@ -192,7 +265,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         DI: 50,
         VolNoise: 0.3,
         ATR: 2,
-        currentStopPrice: 110
+        currentStopPrice: 110,
+        assetClass: 'crypto_spot',
       });
       const state2 = getTrailingState('TEST/USD');
       expect(state2?.currentStopPrice).toBeGreaterThanOrEqual(110);
@@ -200,7 +274,11 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
   });
 
   describe('9.2.D: State Persistence', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+      clearModuleConstantsCache();
+      seedB79TECRows();
+      _testClearEngineConfigCache();
+      await primeTECConfig();
       clearTrailingState('TEST/USD');
       clearTrailingState('BTC/USD');
     });
@@ -251,7 +329,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         DI: 50,
         VolNoise: 0.3,
         ATR: 2,
-        currentStopPrice: 95
+        currentStopPrice: 95,
+        assetClass: 'crypto_spot',
       });
       
       const diag = getDiagnostics();
