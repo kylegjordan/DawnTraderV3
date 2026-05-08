@@ -1,6 +1,6 @@
 # BATCH 79.TEC — Per-asset-class TEC configuration architecture (Phase 24)
 
-**Status:** rev 1 — initial draft for Langston Step 1+2 review.
+**Status:** rev 2 — Langston Step 1+2 review APPROVE WITH REVISIONS applied (review at `Claude Comms and Packages/Langston Design Asks/B79_TEC_scope_rev1_review.md`). Rev 2 deltas folded with PIA cover per Langston's suggestion ("fold rev 2 deltas into PIA cover and close both in one review pass").
 **Workflow:** 11-step canonical (full).
 **Branch:** `migration/aws-supabase`.
 **Sequencing:** FIRST sub-batch in Phase 24 (per Langston design call 2026-05-08 07:44 UTC). Precedes B79.0a (live xstock scanner wire-in) + B79.4 (exit-strategy ablation extension).
@@ -66,7 +66,7 @@ A batch is done when every objective below is verifiably achieved on staging + L
 
 2. **`resolveTECConfig` signature simplified.** `resolveTECConfig(assetClass: AssetClass, strategy?, regime?)` → `resolveTECConfig(assetClass: AssetClass)`. Optional args removed. Verification: TypeScript compile + grep all call sites pass exactly one arg.
 
-3. **`updatePosition` plumbs assetClass.** `update.assetClass ?? 'crypto_spot'` resolved at the top of `updatePosition`, used to fetch the per-class config. Verification: line-cited at the BE-latch gate (file:line, quoted) showing `cfg = resolveTECConfig(assetClass)`.
+3. **`updatePosition` plumbs assetClass — non-optional, no fallback.** `PositionUpdate.assetClass` is changed from `assetClass?: string` to `assetClass: AssetClass` (non-optional, typed). TypeScript catches every call site that doesn't pass it. `updatePosition` reads `update.assetClass` directly — NO `?? 'crypto_spot'` fallback (silent fallback would reproduce the original bug pattern; rejected per CLAUDE.md §11). If a legacy code path can't supply assetClass, that path HARD-FAILS with `[TEC_UPDATE_MISSING_ASSET_CLASS]` log + throw. Verification: TS compile succeeds with strict typing + grep confirms no fallback expression survives. (Langston rev 2 adjustment.)
 
 4. **`primeTECConfig` wired into app bootstrap.** Called BEFORE `loadTrailingStates` in `server/index.ts`. Iterates `ASSET_CLASSES` enum (or registered subset) and warms the cache for each. Verification: log line `[TEC_PRIME] warming cache for assetClass=X` per class on boot; PM2 logs show ALL registered classes warmed before `loadTrailingStates` runs.
 
@@ -76,7 +76,7 @@ A batch is done when every objective below is verifiably achieved on staging + L
 
 7. **Per-class DB rows seeded.** New rows: `(trailing_exit, *, crypto_spot, *, *, break_even_enabled) = false` + `(trailing_exit, *, xstock_spot, *, *, break_even_enabled) = false`. Migration file in `drizzle/migrations/`. Verification: psql `SELECT` post-migration shows both rows present + values false.
 
-8. **Cache-miss path logs loud.** When `resolveTECConfig` is called for an asset class not in the cache (pathological), warn-loud log line + return `TEC_DEFAULTS` fail-closed. NOT silent. Verification: grep `[TEC_CACHE_MISS]` in PM2 + unit test exercising the path.
+8. **Cache-miss path THROWS, does NOT default.** Since `primeTECConfig` HARD-FAILs at boot for any registered asset class, the cache cannot legitimately miss for a registered class at runtime. A cache miss therefore means the caller passed an asset class NOT in the registered `ASSET_CLASSES` set — a programming error. Action: throw with `[TEC_CACHE_MISS_FATAL]` log line + explicit error message. Returning `TEC_DEFAULTS` silently here would be the same anti-pattern Objective 3 fights. Verification: unit test exercises the path; production never hits it. (Langston rev 2 adjustment — clarifies cache-miss semantics vs HARD-FAIL doctrine.)
 
 9. **Health endpoint reflects boot state.** `/api/diagnostics/tec-bootstrap` (or equivalent existing health endpoint) returns `{ ready: false, reason: 'primeTECConfig pending' }` until ALL registered asset classes are warmed; `{ ready: true }` after. Verification: curl pre-warmup vs post-warmup.
 
@@ -89,6 +89,10 @@ A batch is done when every objective below is verifiably achieved on staging + L
 13. **Behavioral regression check on currently-open trades.** The 4 zombie BE-latched trades (Q/USD, RAIN/USD, UMXM/USD, RENDER/EUR) continue to behave correctly under the new architecture — `breakEvenLatched: true` state preserved on rehydrate, line-503 latch-gate skips because already-latched, BE-stop fires on price reversal. Verification: PIA line-cites the rehydrate path + post-deploy PM2 log shows the 4 zombies tracking correctly (not re-evaluated as if config changed their state).
 
 14. **Zero new BE-latch on POST-deploy crypto trades.** After deploy, NEW crypto VTS trades that would have BE-latched under the old broken cache do NOT latch BE under the new architecture. Verification: query `signal_eval_archive` (or VTS JSONL) for trades opened post-deploy + closed within first 24h; count `exitReason = break_even_stop` should be ZERO for crypto_spot (excluding the 4 pre-existing zombies).
+
+15. **`ASSET_CLASSES` SSOT iteration.** `primeTECConfig` iterates over a single source-of-truth enum/constant (`ASSET_CLASSES` from `shared/asset-classes.ts`), NOT a locally-hardcoded list. Reason: when B79.0a wires xstock_spot live and future asset classes are added, the primer picks them up automatically — otherwise the next class's first deploy reproduces this exact bug. Verification: `grep -rn "ASSET_CLASSES" server/services/trailing-exit-controller.ts` shows primeTECConfig consumes the SSOT enum + grep confirms exactly one definition site for `ASSET_CLASSES` in `shared/asset-classes.ts`. (Langston rev 2 addition.)
+
+16. **CI TS Check explicit pass criterion.** The signature change to `resolveTECConfig` + non-optional `assetClass` typing on `PositionUpdate` will ripple through call sites. **TS Check CI gate must be GREEN on the B79.TEC push** — this is a behavioral change (the previous batches accepted legacy TS Check baseline failures because they were unrelated; this batch's TS errors WOULD be related). New errors introduced by signature changes must be fixed before push, not deferred to legacy-baseline. Verification: TS Check CI job conclusion = success on push run. (Langston rev 2 addition.)
 
 ---
 
@@ -139,10 +143,14 @@ Step 2 is its own mini-deploy, not folded into B79.TEC's Step 6. Tracked as a B7
 
 ## §3 — DB migrations
 
-### Migration 1 (B79.TEC ship)
+### Migration 1 (B79.TEC ship — Langston rev 2: ON CONFLICT DO NOTHING + assertion)
 
 ```sql
 -- B79.TEC: per-asset-class break_even_enabled rows
+-- NO ON CONFLICT DO UPDATE (rev 2 fix per Langston Risk 9): silent overwrite of
+-- a manual experimental value would be lossy. Use DO NOTHING + post-INSERT
+-- assertion. If a conflict row exists with a DIFFERENT value, the assertion
+-- fails loudly and operator decides — intentional override or stale cleanup.
 BEGIN;
 
 INSERT INTO module_constants
@@ -151,10 +159,35 @@ VALUES
   ('trailing_exit', '*', 'crypto_spot',  '*', '*', 'break_even_enabled', 'false'::jsonb, 'B79.TEC'),
   ('trailing_exit', '*', 'xstock_spot',  '*', '*', 'break_even_enabled', 'false'::jsonb, 'B79.TEC')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)
-  DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW();
+  DO NOTHING;
+
+-- Post-INSERT assertion: both rows exist AND have value = false. If any row
+-- already existed with a different value, this fails the migration loudly.
+DO $$
+DECLARE row_count int;
+BEGIN
+  SELECT COUNT(*) INTO row_count FROM module_constants
+   WHERE module_name = 'trailing_exit'
+     AND constant_name = 'break_even_enabled'
+     AND asset_class IN ('crypto_spot', 'xstock_spot')
+     AND value = 'false'::jsonb;
+  IF row_count != 2 THEN
+    -- Log the conflicting row(s) for operator review
+    RAISE EXCEPTION 'B79.TEC migration assertion failed: expected 2 false rows for crypto_spot+xstock_spot break_even_enabled, found %. Pre-existing intentional override may exist; manual review required.', row_count;
+  END IF;
+END $$;
 
 COMMIT;
 ```
+
+### Deploy ordering for §6 Step 6 (Langston Risk 10)
+
+Migration 1 MUST run BEFORE PM2 restart on new code. Sequence:
+1. Apply Migration 1 to staging Supabase (psql).
+2. Verify via psql `SELECT` that both per-class rows present + `value = false`.
+3. THEN `git pull && npm run build && pm2 restart dawntrader` on Hetzner.
+
+If steps reversed (code first), the app refuses to start because TEC_DEFAULTS is false + primeTECConfig HARD-FAILs on missing per-class rows. Recovery is to apply migration immediately then `pm2 restart`. Documented but to-be-avoided.
 
 ### Wildcard removal script (B79.TEC.b — separate deploy, min 48h gap)
 
@@ -208,7 +241,11 @@ COMMIT;
 | 4 | Wildcard row removal Step 2 deletes a row some other resolution path silently relied on | MEDIUM | 48h `[TEC_RESOLVE]` instrumentation gate before Step 2; signature-guarded DELETE; documented rollback |
 | 5 | Adjacent state-vs-config entanglements (trailing-active, lock-threshold-hit) surface during PIA but get scope-creeped into B79.TEC | LOW | Langston flag respected: if PIA surfaces these, log to RUNNING_ISSUES + dedicated future batch; do NOT add to B79.TEC scope |
 | 6 | Health endpoint + diagnostic endpoint conflict with existing surfaces (system-health-monitor, etc.) | LOW | PIA surveys existing health-surface files; new endpoint added in least-overlap location; do NOT touch the broken `SystemHealthMonitor.startPeriodicChecks` path (Phase 19.x cleanup) |
-| 7 | Test failures count climbs above 59/995/5/1059 baseline | LOW | New unit tests added are expected to pass; if any existing test breaks, diagnose before push |
+| 7 | Test failures count climbs above 59/995/5/1059 baseline | LOW | New unit tests added are expected to pass; if any existing test breaks, diagnose before push. **Re-capture baseline at PIA time** (Langston rev 2 — the 59/995/5/1059 number was captured at B79 ship; drift since possible). Treat freshly-captured baseline as comparison line. |
+| 8 | `update.assetClass` not set at every call site that builds an Update | MEDIUM | PIA acceptance criterion §5 #9 audits every site that constructs/mutates a `PositionUpdate`; non-optional type per Objective 3 makes TS compile catch most; manual grep verifies remaining state-construction paths. (Langston rev 2 addition.) |
+| 9 | Migration 1 `ON CONFLICT DO UPDATE` clobbers manual experimental values someone set between scope-time and deploy-time | MEDIUM | **Change to `ON CONFLICT DO NOTHING` + post-INSERT assertion** that 2 rows now exist with `value = false`. If a conflicting row exists with a different value, migration logs the conflict and either passes (row already correct) or fails (intentional override exists — operator decides). Loud, not silent. (Langston rev 2 addition; §3 Migration 1 rewrite below.) |
+| 10 | Deploy ordering: code-before-migration causes app refusal-to-start because TEC_DEFAULTS is false + primeTECConfig HARD-FAILs on missing per-class rows | MEDIUM | Step 6 deploy sequence explicitly applies migration FIRST, verifies psql shows both per-class rows present, THEN PM2 restart on new code. Add explicit ordering assertion to §6 Step 7 first-pass criteria. (Langston rev 2 addition.) |
+| 11 | Boot-failure alert wiring not yet in place — `[TEC_BOOTSTRAP_FAIL]` log emits but no one is paged | MEDIUM | Risk 2 mitigation made explicit (Langston rev 2): PM2 boot failure on Hetzner emits `[TEC_BOOTSTRAP_FAIL]` log; alert wiring (Telegram bot? log-watch script? Kyle ping?) is **NOT in scope for B79.TEC**. Risk explicitly accepted. Wiring tracked as a follow-up line item — to be folded into Phase 19.x Boot Readiness Coordinator OR a B79.TEC.c minor batch if Phase 19.x is too distant. |
 
 ---
 
@@ -228,7 +265,11 @@ The PIA must include the following line-citation work per Langston Q4:
 
 6. **SIM consultation:** read SYSTEM_IMPACT_MAP.md entries for trailing-exit-controller, tec-evaluator, vts-runner, paper-execution-engine. Trace upstream + downstream + shared state + blast radius. Document any cascade risks not already covered in §4.
 
-7. **Schema audit:** verify `module_constants` is the right table; confirm no other place is reading `break_even_enabled` (e.g. paper trade close-reason mapping at `paper-execution-engine.ts:972`). If yes, those paths must respect the same per-class resolution.
+7. **Schema audit:** verify `module_constants` is the right table; confirm no other place is reading `break_even_enabled` (e.g. paper trade close-reason mapping at `paper-execution-engine.ts:972`). If yes, those paths must respect the same per-class resolution. **Explicit confirmation (Langston rev 2):** PIA must verify `paper-execution-engine.ts:972` consumes `update.exitReason` produced by tec-evaluator and does NOT independently re-resolve `break_even_enabled` — a hidden second call site that the per-class refactor wouldn't catch would be a silent failure mode.
+
+8. **`resolveTECConfig` call-site audit (Langston rev 2 addition).** `grep -rn "resolveTECConfig" server/ --include="*.ts"` — every hit must pass exactly one arg (`assetClass`), no leftover calls passing `strategy`/`regime`, no calls without an explicit assetClass. Required since signature simplification is a breaking change.
+
+9. **`PositionUpdate` construction site audit (Langston rev 2 addition).** Every place a `PositionUpdate` (or state object passed to TEC) is constructed must set `assetClass` explicitly. Grep all call sites that construct or mutate Update; confirm assetClass is set. With non-optional typing per Objective 3, TS compile catches most — manual grep verifies remaining state-construction paths (paper-execution-engine, signal-orchestrator, vts-runner, tec-evaluator, anywhere downstream).
 
 PIA written at `Claude Comms and Packages/Scope Files/BATCH_79_TEC_PRE_AUDIT.md`. Sent to Langston via file-first protocol per CLAUDE.md §6.5.0.
 
@@ -278,21 +319,22 @@ Per Langston design call 2026-05-08 + Kyle 2026-05-08:
 
 **Why B79.TEC first:** routing xstock_spot through hardcoded-crypto TEC config even briefly is architecturally wrong + contaminates B79.4 ablation baseline. NO PATCHES doctrine.
 
+**B79.TEC.b artifact (Langston rev 2):** at B79.TEC Step 11 close, CC creates `Claude Comms and Packages/Scope Files/BATCH_79_TEC_b_VERIFY_CHECKLIST.md` containing the 48h gate criteria + audit SQL + rollback path. This file is the trigger artifact when 48h elapses — Kyle or CC opens it, runs the audit, gives go/no-go. Without an explicit artifact the gate gets dropped.
+
 ---
 
-## §8 — Outstanding questions for Langston (Step 1+2 review)
+## §8 — Q1-Q6 LOCKED via Langston rev 2 review
 
-1. **Cache TTL value:** current TEC cache TTL is 60s. Keep at 60s per-class? Or tune (xstock_spot may not need refresh as frequently since BE_enabled flips post-evidence in B79.4)?
+All 6 outstanding questions answered + folded as locked decisions:
 
-2. **Diagnostic endpoint location:** new `/api/diagnostics/tec-bootstrap` vs extending an existing `/api/diagnostics/*` surface. CC lean: new endpoint to keep concerns clean. Confirm.
-
-3. **`[TEC_RESOLVE]` instrumentation log volume:** per-call log line could be high-volume during normal operation (each TEC eval triggers a resolve). Sample (every Nth call) vs full? CC lean: full for the 48h verification gate, then turn down via env flag or sampling. Or roll into a counter aggregated per-minute. Confirm preference.
-
-4. **Wildcard removal script execution authority:** CC executes against staging Supabase via psql per existing pattern? Or human-in-loop confirmation required? CC lean: B79.TEC ship deploys Step 1; B79.TEC.b execution is a deliberate separate operator action with explicit go/no-go decision based on the 48h log audit.
-
-5. **Health endpoint integration:** which existing health surface is the right one to extend? PIA surveys; CC has a tentative answer but wants Langston's read since he reviewed the existing `system-health-*` files in his recent audits.
-
-6. **Test failures baseline:** is 59/995/5/1059 stable or has it shifted recently? CC adds new tests for B79.TEC; net effect should be N+59/995+N/5/1059+N. Confirm baseline.
+| Q | Locked decision |
+|---|---|
+| Q1 Cache TTL | **60s uniform across classes.** Variable TTLs add complexity without payoff + create cross-class skew. The point of immutable wholesale snapshots is consistency. One number. |
+| Q2 Diagnostic endpoint | **New `/api/diagnostics/tec-bootstrap`.** Existing health surfaces are partly broken (Risk 6 + Phase 19.x deferral). Don't build atop fragility. |
+| Q3 `[TEC_RESOLVE]` log volume | **Per-minute aggregated counter, NOT per-call.** Per-call would flood PM2 retention. Aggregator dump: `[TEC_RESOLVE_AGGR] minute=… crypto_spot=explicit:N wildcard:0 default:0 xstock_spot=…`. PLUS one immediate loud log on the FIRST `path=wildcard` hit per asset class per process lifetime (early-warning). Clean post-48h audit + no missed wildcard event + no log volume issue. |
+| Q4 Wildcard removal authority | **B79.TEC ship deploys Step 1 (automated). B79.TEC.b is deliberate operator action with explicit go/no-go after 48h audit.** Codify preconditions in script header: 48h elapsed since `<step1_deploy_timestamp>`, zero `path=wildcard` events for crypto_spot AND xstock_spot, signature-guarded `SELECT COUNT(*) = 1`. Gate isn't a vibe — explicit checks. |
+| Q5 Health endpoint integration | **Defer to PIA, but constrained.** Don't extend `system-health-monitor` (broken `startPeriodicChecks` is on Phase 19.x rip-list). Don't extend `SystemHealthMonitor` either. Acceptable: dedicated `/api/diagnostics/tec-bootstrap` AND/OR a minimal hook into a lightweight health summary endpoint IF PIA confirms one exists and is non-fragile. PIA must name the file + line + confirm health surface isn't on the Phase 19.x rip-list before extending. |
+| Q6 Test baseline | **Re-capture at PIA time.** 59/995/5/1059 was B79 ship; drift since possible. Run suite once at PIA, capture fresh numbers, treat THAT as comparison line. Objective wording: post-B79.TEC = baseline + N new tests, all new pass, zero existing regressions. |
 
 ---
 
