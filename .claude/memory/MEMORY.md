@@ -18,14 +18,15 @@
 
 ---
 
-## CURRENT STATE — 2026-05-07 evening (B79 Phase 24 SHIPPED dormant scaffold)
+## CURRENT STATE — 2026-05-08 (B79.TEC SHIPPED, PM2 #190)
 
-- **Branch:** `migration/aws-supabase` (pushed to GitHub)
-- **Remote HEAD:** `871038509` (B79 Step 4 prep + completion report draft). Build chain: `d7ca57340` (PIA + workflow doc + 4 migrations) → `a991f40a4` (MEMORY mirror) → `260cc8cc5` (Step 3 implementation 5+11 files +1759/-84) → `871038509` (Step 4 prep).
-- **Live:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + B78.2 + **B79 dormant scaffold (PM2 #184 deployed 21:49 UTC).**
-- **Watchdog:** `/usr/local/bin/langston-call`. **Tuning:** `--first-byte-timeout 240` for substantive reviews. B79 saw 1 hang + 1 success retry (PIA) and 1 hang + 1 success retry (Step 4).
-- **B79 status:** Steps 1-7 CLOSED. Step 8 sign-off pinged via Telegram (Langston said "ping me on green" in Step 4). Step 10 governance complete. Step 11 completion report drafted + plain-language summary delivered.
-- **No-touch fence:** absolute. Post-deploy SQL on crypto_spot regime_factor_alternates returns 12 emissions/factor/hr (within ±10% of pre-deploy 9/factor/hr post-restart-window-fill).
+- **Branch:** `migration/aws-supabase` HEAD `7eb4f5452`. Chain: `01fa39912` (Step 3 impl) → `7eb4f5452` (Step 5 test-fix).
+- **Live on staging PM2 #190:** B70 + B72 + B75 + B76 + B77 + B78 + B78.1 + B78.2 + B79 dormant scaffold + **B79.TEC (per-class TEC config + HARD-FAIL boot + 4 active classes ready)**.
+- **Migration 1 applied:** 4 explicit per-class `break_even_enabled=false` rows (crypto_spot, crypto_perp, xstock_spot, xstock_perp) + 1 wildcard preserved (B79.TEC.b removes after 48h).
+- **Watchdog v2 SHIPPED 2026-05-08:** `/usr/local/bin/langston-call` → stream-json sidecar NDJSON + jq result-extract. v1 backed up. Canonical script at `Claude Comms and Packages/comms-infra/langston-call.sh`. RUNNING_ISSUES #84 RESOLVED.
+- **Hostile sim PASSED:** DELETE crypto_spot row → PM2 crash loop (#185→186→187, `[TEC_BOOTSTRAP_FAIL]` confirmed) → restore → clean boot at #190.
+- **No-touch fence:** crypto_spot regime_factor_alternates 3/factor/hr at +3min post-restart (consistent with fresh restart cadence; will normalize as window fills).
+- **B79.TEC status:** Steps 1-7 CLOSED + hostile sim PASS. Step 8 Langston second-pass watchdog in flight at session close. Step 10 governance partially done (RUNNING_ISSUES #79 RESOLVED, #84 RESOLVED, #85 OPEN; completion report finalized). Next session: confirm Langston Step 8 ACK, finalize remaining governance (BATCH_CATALOG, PHASE_HISTORY, plan-doc §9, SIM TEC entries, SYSTEM_MANUAL TEC architecture section, CHANGES_AND_FIXES), Telegram plain-language summary post.
 
 ### B79 Phase 24 deliverables (commits d7ca57340 + a991f40a4 + 260cc8cc5 + 871038509)
 - `Claude Comms and Packages/Scope Files/BATCH_79_PRE_AUDIT.md` — PIA per CLAUDE.md §2 Step 2; 3 telemetry partitioning hard blockers identified, resolution = two-instance pattern (separate aggregator + ratio-manager + failure-tracker per asset class)
