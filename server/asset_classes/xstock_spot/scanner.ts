@@ -109,16 +109,25 @@ class XstockSpotScannerService {
     // Force lazy-init of the xstock instances triad. Throws on construction failure.
     getXstockSpotInstances();
 
-    // Hostile-sim flag — Langston Q5 conditions.
-    const hostileSimEnabled =
-      process.env.BACKPRESSURE_TEST_MODE === '1' &&
-      process.env.NODE_ENV !== 'production';
+    // Hostile-sim flag — Langston Q5 conditions + staging override.
+    // Default: refuse in production. Staging override:
+    //   `HOSTILE_SIM_OVERRIDE=1` AND `BACKPRESSURE_TEST_MODE=1`
+    // lets the no-shed posture test run on staging (which is itself
+    // NODE_ENV=production-named for parity with prod). The double-flag
+    // prevents accidental enablement — both must be set explicitly.
+    const testFlagSet = process.env.BACKPRESSURE_TEST_MODE === '1';
+    const isProdEnv = process.env.NODE_ENV === 'production';
+    const stagingOverride = process.env.HOSTILE_SIM_OVERRIDE === '1';
+    const hostileSimEnabled = testFlagSet && (!isProdEnv || stagingOverride);
     if (hostileSimEnabled) {
       this.diag.hostileSimActive = true;
-      console.warn('[B79.0a][HOSTILE_SIM_ACTIVE] BACKPRESSURE_TEST_MODE=1 detected; scanner cycles will artificially sleep to validate no-shed posture');
-    }
-    if (process.env.BACKPRESSURE_TEST_MODE === '1' && process.env.NODE_ENV === 'production') {
-      console.error('[B79.0a][HOSTILE_SIM_BLOCKED] BACKPRESSURE_TEST_MODE=1 set in production — refusing to enable. Unset the flag.');
+      console.warn(
+        `[B79.0a][HOSTILE_SIM_ACTIVE] BACKPRESSURE_TEST_MODE=1 detected (NODE_ENV=${process.env.NODE_ENV}, OVERRIDE=${stagingOverride}); scanner cycles will artificially sleep to validate no-shed posture`,
+      );
+    } else if (testFlagSet && isProdEnv && !stagingOverride) {
+      console.error(
+        '[B79.0a][HOSTILE_SIM_BLOCKED] BACKPRESSURE_TEST_MODE=1 set in production without HOSTILE_SIM_OVERRIDE=1 — refusing to enable. Unset the flag, or set HOSTILE_SIM_OVERRIDE=1 if this is staging.',
+      );
     }
 
     this.clockTickHandler = async (tick: ClockTick) => {
