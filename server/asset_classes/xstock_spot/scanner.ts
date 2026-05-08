@@ -195,7 +195,7 @@ class XstockSpotScannerService {
           last::text AS price,
           captured_at AS "capturedAt"
         FROM equity_spot_ticker_snap
-        WHERE symbol = ANY(${symbolList})
+        WHERE symbol = ANY(${symbolList}::text[])
         ORDER BY symbol, captured_at DESC
       `);
       const dbDurationMs = Date.now() - dbStart;

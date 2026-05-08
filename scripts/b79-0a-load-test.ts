@@ -117,7 +117,7 @@ async function runXstockDryCycle(cycleNumber: number): Promise<DbRoundtripSample
       last::text AS price,
       captured_at AS "capturedAt"
     FROM equity_spot_ticker_snap
-    WHERE symbol = ANY(${symbolList})
+    WHERE symbol = ANY(${symbolList}::text[])
     ORDER BY symbol, captured_at DESC
   `);
   const durationMs = Date.now() - start;
