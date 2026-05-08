@@ -114,7 +114,7 @@ async function runXstockDryCycle(cycleNumber: number): Promise<DbRoundtripSample
   const result = await db.execute(sql`
     SELECT DISTINCT ON (symbol)
       symbol::text AS symbol,
-      price::text AS price,
+      last::text AS price,
       captured_at AS "capturedAt"
     FROM equity_spot_ticker_snap
     WHERE symbol = ANY(${symbolList})

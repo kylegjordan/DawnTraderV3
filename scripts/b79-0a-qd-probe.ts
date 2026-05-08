@@ -97,7 +97,7 @@ async function runProbe(): Promise<void> {
     let xstockCapturedAt: Date | null = null;
     try {
       const result = await db.execute<TickerSnapRow>(sql`
-        SELECT symbol::text AS symbol, price::text AS price, captured_at AS "capturedAt"
+        SELECT symbol::text AS symbol, last::text AS price, captured_at AS "capturedAt"
         FROM equity_spot_ticker_snap
         WHERE symbol = ${ticker}
         ORDER BY captured_at DESC
