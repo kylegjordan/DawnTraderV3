@@ -7000,6 +7000,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ==================== R9.3.HF-5: Central Clock & FX5 Scanner Diagnostics ====================
 
+  // GET /api/diagnostics/xstock-scanner - B79.0a: live xstock_spot scanner
+  // diagnostics. Returns isRunning + isScanning + lastTickAt +
+  // lastCycleDurationMs + cyclesCompleted + pairsScannedLastCycle (fresh/stale)
+  // + lastError + hostileSimActive. Public (no auth) — operational pattern
+  // matches central-clock + tec-bootstrap.
+  apiRouter.get('/diagnostics/xstock-scanner', async (_req, res) => {
+    try {
+      const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
+      const diag = xstockSpotScanner.getDiagnostics();
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        ...diag,
+      });
+    } catch (error: any) {
+      console.error('[B79.0a][API] xstock-scanner diagnostics failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/diagnostics/tec-bootstrap - B79.TEC: per-asset-class TEC config
   // bootstrap status. Returns ready=true once primeTECConfig() has warmed
   // every ACTIVE asset class. Used by Step 7 first-pass verify + ops health

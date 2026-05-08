@@ -651,6 +651,20 @@ app.use((req, res, next) => {
     console.error('[TEC_BOOTSTRAP_FAIL] Cannot accept traffic without rehydrated trailing states. Exiting.');
     process.exit(1);
   }
+
+  // ─── B79.0a: Live xstock_spot scanner (HARD-FAIL on boot per Langston rev 1 #4) ───
+  // Subscribes to centralClock; observability scanner Day 1 (no signal-orchestrator
+  // wiring yet — that's B79.x post-Layer-3). Runs BEFORE server.listen so the
+  // app refuses traffic until the scanner triad (telemetry + ARM + scanner)
+  // is initialized.
+  try {
+    const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
+    await xstockSpotScanner.start();
+  } catch (xstockErr) {
+    console.error('[B79.0a][BOOT_FAIL] xstockSpotScanner.start threw on boot:', xstockErr);
+    console.error('[B79.0a][BOOT_FAIL] Cannot accept traffic without xstock scanner initialized. Exiting.');
+    process.exit(1);
+  }
   // ────────────────────────────────────────────────────────────────────────
 
   server.listen(port, "0.0.0.0", async () => {

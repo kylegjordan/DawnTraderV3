@@ -91,15 +91,12 @@ function bootstrapXstockSpotInstances(): AssetClassInstances {
   // uses the same defaults as crypto. Each instance holds its own
   // currentRatio + lastComparison state on the instance.
   //
-  // NOTE: AdaptiveRatioManager.computeAdaptiveRatio() currently calls
-  // getTelemetryAggregator() (the global singleton) internally on line 93
-  // of adaptive-ratio-manager.ts. For Day 1 dormant scaffolding this is
-  // acceptable because the xstock scan loop is not yet wired — the xstock
-  // ratioManager is constructed but never invoked. Once the live xstock
-  // loop wires up in B79.0a, ARM constructor injection of telemetry must
-  // be added so the xstock ARM consumes its own telemetry instance, not
-  // the global singleton. Tracked in MEMORY's Step 3 implementation queue.
-  const ratioManager = new AdaptiveRatioManager();
+  // B79.0a (2026-05-08): constructor now accepts injected telemetry — the
+  // xstock ARM consumes its own per-class TelemetryAggregator instance so
+  // pool-performance reads NEVER bleed into the global crypto telemetry.
+  // Earlier B79-ship caveat at this site (which warned that ARM was still
+  // hitting the global singleton) is now CLOSED.
+  const ratioManager = new AdaptiveRatioManager({}, telemetry);
 
   // AdaptiveScanManager already accepts injected telemetry + failureTracker
   // via its constructor (server/services/adaptive-scan-manager.ts:169).

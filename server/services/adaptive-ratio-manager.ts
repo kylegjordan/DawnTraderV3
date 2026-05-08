@@ -23,7 +23,7 @@ import {
   type PoolPerformance,
   type PoolComparison 
 } from './telemetry-repository.js';
-import { getTelemetryAggregator, type PoolPerformanceAggregate } from './telemetry-aggregator.js';
+import { getTelemetryAggregator, type PoolPerformanceAggregate, type TelemetryAggregatorService } from './telemetry-aggregator.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE } from '../config/schema-version.js';
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
@@ -63,9 +63,16 @@ export class AdaptiveRatioManager {
   private config: RatioConfig;
   private currentRatio: AdaptiveRatio;
   private lastComparison: PoolComparison | null = null;
-  
-  constructor(config: Partial<RatioConfig> = {}) {
+  // B79.0a (2026-05-08): optional injected telemetry instance. Crypto path
+  // omits this arg → falls back to `getTelemetryAggregator()` global singleton
+  // (back-compat). xstock path passes the per-class TelemetryAggregator from
+  // `bootstrapXstockSpotInstances()` so per-class telemetry never bleeds into
+  // the global crypto telemetry.
+  private telemetry: TelemetryAggregatorService | null = null;
+
+  constructor(config: Partial<RatioConfig> = {}, telemetry?: TelemetryAggregatorService) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.telemetry = telemetry ?? null;
     this.currentRatio = {
       idealRatio: this.config.defaultRatio,
       rotationalRatio: 1 - this.config.defaultRatio,
@@ -74,8 +81,8 @@ export class AdaptiveRatioManager {
       adjustedAt: Date.now(),
       reasoning: 'Initial default ratio - no performance data yet',
     };
-    
-    console.log(`[11.2R1][RatioManager] Initialized | schemaVersion=${SCHEMA_VERSION} | directive=${SCHEMA_DIRECTIVE}`);
+
+    console.log(`[11.2R1][RatioManager] Initialized | schemaVersion=${SCHEMA_VERSION} | directive=${SCHEMA_DIRECTIVE} | telemetry_source=${telemetry ? 'injected' : 'global_singleton'}`);
   }
   
   /**
@@ -90,7 +97,10 @@ export class AdaptiveRatioManager {
     try {
       // First, try in-memory pool performance from TelemetryAggregator
       // Directive 11.4C.1: Telemetry now only contains VTS-generated data (no FX5 seeding)
-      const telemetry = getTelemetryAggregator();
+      // B79.0a: prefer injected per-class telemetry instance over global singleton.
+      // Crypto path: this.telemetry is null → falls back to getTelemetryAggregator() (back-compat).
+      // Xstock path: this.telemetry is the per-class instance from bootstrapXstockSpotInstances().
+      const telemetry = this.telemetry ?? getTelemetryAggregator();
       const inMemoryComparison = telemetry.getPoolPerformanceComparison();
       
       // Check if we have sufficient in-memory data

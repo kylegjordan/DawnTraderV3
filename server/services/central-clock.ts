@@ -18,7 +18,7 @@
 
 import { EventEmitter } from 'events';
 
-interface ClockTick {
+export interface ClockTick {
   timestamp: number;
   tickNumber: number;
   drift: number;
