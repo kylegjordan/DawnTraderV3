@@ -196,7 +196,12 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     }
     // (b) Strategy whitelist — only the 6 well-understood, regime-based
     // strategies are enabled for xstock_spot in B79 (Langston Q2 conservative ship).
-    if (input.strategy && !isStrategyEnabledForAssetClass(input.strategy, resolvedAssetClass)) {
+    // B79.0b N3 cleanup: dropped redundant `input.strategy &&` truthy guard —
+    // SQEInput.strategy is typed `string` non-optional (line 75), so the
+    // truthy check was dead code (TS guarantees it's never undefined; an
+    // empty-string strategy name would be a type-violation upstream, not a
+    // runtime contingency this gate needs to handle).
+    if (!isStrategyEnabledForAssetClass(input.strategy, resolvedAssetClass)) {
       _b79StrategyDisabledCount++;
       if (_b79StrategyDisabledCount % 50 === 1) {
         console.log(`[B79][XSTOCK_STRATEGY_DISABLED] skipping ${canonicalSymbol}/${input.strategy} — not in xstock_spot whitelist (count=${_b79StrategyDisabledCount})`);
