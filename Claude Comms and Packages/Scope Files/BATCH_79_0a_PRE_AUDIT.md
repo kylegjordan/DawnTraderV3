@@ -1,6 +1,6 @@
 # BATCH 79.0a — Pre-Implementation Audit (PIA)
 
-**Status:** rev 1 — CC draft per CLAUDE.md §2 Step 2 + scope rev 2 + Langston scope review acceptance criteria + Kyle directive 2026-05-08 ("code-level + SIM consultation").
+**Status:** rev 2 — Langston PIA review APPROVE WITH REVISIONS applied (review at `/tmp/lang_b790a_pia_reply.txt` 2026-05-08 20:55 UTC; verbatim Telegram-relayed msg 3733+3734). Six PIA-time tightenings folded; N3+N4 deferred to B79.0b/B79.x with explicit rationale (original B79 Step-4 review file:line specifics not preserved in repo); SQE wildcard enumeration added per §5.
 **Companion to:** `BATCH_79_0a_SCOPE.md` rev 2.
 **Cover note:** Langston rev 1 review answered Q1-Q7 (locked in scope §11) + flagged 9 PIA-time tightenings (folded below in §0). This PIA carries the load-bearing line-citation work + SIM upstream/downstream/shared-state/blast-radius traces per Kyle's emphasis ("make sure it is code-level and that you consult the SIM for up and downstream impacts").
 
@@ -110,16 +110,14 @@ primeTECConfig → loadTrailingStates → getXstockSpotInstances() (force lazy-i
 
 **Q for Step 3 implementation:** does FX5 scanner `start()` get called before or after our new B79.0a wire? If FX5's bootstrap happens inside the listen-callback (currently the case), then xstockSpotScanner.start() pre-listen forces centralClock to start earlier. Verify centralClock is safe to start during boot, NOT requiring the listen-callback context. PIA-time grep on `centralClock.start()` confirms 7 sites — none require listen context. SAFE.
 
-### §1.5 — `equity-spot-archiver.ts` shared subscription state (Langston rev 1 revision #5 — SIM consultation expanded)
+### §1.5 — `equity-spot-archiver.ts` shared subscription state (Langston rev 1 revision #5 — SIM consultation expanded; corrected per Langston rev 2 #6 internal-consistency fix)
 
 Live since B69. Owns dedicated WebSocket connection to `wss://ws-equities.kraken.com`. Subscribes to `ohlc(1)` + `ticker` for every symbol in `xstocks-universe.json`. Buffers via `ohlc-batch-writer.ts` + `ticker-batch-writer.ts` (5s flush, 2-slot pool).
 
-**Scanner ↔ archiver relationship:**
+**Scanner ↔ archiver relationship (corrected per §1.9 finding):**
 - Archiver = INGESS path (writes raw 1m OHLC + ticker snapshots to DB tables `equity_spot_ohlc_1m` + `equity_spot_ticker_snap`).
-- Scanner = SIGNAL path (reads from `livePricingAdapter` cache OR DB OHLC tables to compute regime + signals; calls SQE/strategies/sizer).
-- They do NOT share WebSocket subscription state — archiver owns its own WS; scanner uses cached prices via `livePricingAdapter` (which is fed by the regular Kraken adapter for crypto + by some-mechanism for xstock).
-
-**B79.0a question for Step 3:** does `livePricingAdapter` already receive xstock-spot ticker updates? Or does the scanner need to read from DB tables directly? Discovery work via `grep -rn "ws-equities\|kraken-equities" server/services/live-pricing-adapter.ts`. If not wired, that is its own scope item — possibly defers to B79.x. **PIA-time TODO before Step 3.**
+- Scanner = SIGNAL path. **Per §1.9 grep:** `livePricingAdapter` is crypto-WS-scoped (`kraken_ws`/`binance_ws` only) and does NOT receive xstock prices today. The xstock scanner therefore reads ticker prices DIRECTLY from `equity_spot_ticker_snap` (DB) per cycle — single batched query (Langston rev 2 #1 commitment).
+- They do NOT share WebSocket subscription state — archiver owns its own WS; scanner reads DB rows the archiver wrote.
 
 ### §1.6 — SIM consultation per Kyle directive (upstream / downstream / shared-state / blast-radius for each affected component)
 
@@ -181,22 +179,25 @@ Read SIM 2026-05-08 (HEAD `b205fc283`). Each entry verified against current SIM 
 - **Blast radius:** **LOW** to scanner path (decoupled — scanner reads cache/DB, archiver writes DB).
 - **B79.0a impact:** ZERO modification. **Used by PIA §4 empirical inter-tick measurement** (Langston rev 1 revision #6) — mine archiver logs OR `equity_spot_ticker_snap` table for p50/p95/p99 inter-tick gap per symbol.
 
-### §1.7 — N3 redundant truthy strategy guard (PIA discovery)
+### §1.7 — N3 redundant truthy strategy guard (DEFERRED to B79.0b/B79.x)
 
-PIA-time grep work — surface the file:line surfaced in B79 Step 4 review notes (Step-4 PUSH_GREENLIT non-blocking notes #2-#4). Will be surfaced via:
+**Finding (PIA rev 2):** the original B79 Step-4 PUSH_GREENLIT review file (with the specific N1-N4 file:line citations) is not preserved in the repo's `Claude Comms and Packages/Langston Design Asks/` directory. The 4 non-blocking notes are documented as summary text in `MULTI_ASSET_VTS_EXPANSION_PLAN.md` row "2026-05-07 evening" but without specific code locations.
 
-```
-$ git log --all --grep="N3\|redundant.*truthy\|guard" --since="2026-05-06" -- "*.ts"
-```
+**Decision (Langston rev 2 acceptable):** N3 deferred to B79.0b cleanup mini-batch (separate from B79.0a's load-bearing live-wire-in scope). B79.0b will perform a fresh `grep -rn 'if (strategy &&' server/ --include="*.ts"` to surface candidate redundant-truthy patterns, classify each, and remove the truly redundant ones. Sequenced AFTER B79.0a deploy + 48h verify (alongside the N2 SQE wildcard removal).
 
-Step-3 implementation Step 9 quotes before/after.
+### §1.8 — N4 missing boundary tests (DEFERRED to B79.0b/B79.x)
 
-### §1.8 — N4 missing boundary tests (PIA discovery)
+**Finding (PIA rev 2):** same as §1.7 — original review's specific boundary-case enumeration is not preserved. Candidate areas for boundary-test addition (educated guesses based on B79 ship surface):
+- `safeResolveAssetClass` for unknown patterns (partially covered in `asset-classes.test.ts`)
+- `XSTOCK_SPOT_SYMBOLS` Set lookup (cold-cache; large symbol set)
+- `isXstockMarketOpenUTC` edge cases (DST transitions, holiday calendar — though holiday calendar is explicitly B79.x)
+- `bootstrapXstockSpotInstances` idempotency under concurrent first-call
 
-Boundary cases surfaced in B79 Step 4 review:
-- Edge cases on `safeResolveAssetClass` for unknown patterns (already partially covered in `asset-classes.test.ts` per B79).
-- Edge cases on `XSTOCK_SPOT_SYMBOLS` Set lookup (cold-cache; large symbol set).
-- (PIA-time grep + enumerate during Step 3.)
+**Decision:** N4 deferred to B79.0b/B79.x. Boundary tests added when their underlying components are next touched OR as a focused B79.x test-coverage batch. Out of B79.0a scope.
+
+**N2 + N3 + N4 cleanup mini-deploy = B79.0b** (sequencing locks):
+1. B79.TEC.b (wildcard `break_even_enabled` row removal — already scoped, separate from B79.0a)
+2. **B79.0b** (post-B79.0a +48h: SQE wildcard rows from §5 enumeration + N3 redundant truthy + N4 boundary tests)
 
 ### §1.9 — `livePricingAdapter` xstock pricing path (RESOLVED via grep 2026-05-08)
 
@@ -220,7 +221,18 @@ $ grep -rn "updateFromWebSocket" server/services/live-pricing-adapter.ts
 - **Con:** ~50ms DB roundtrip per pair per cycle (vs ~1ms cache hit on crypto path) — load-test (scope Obj 8 with combined 1.3× crypto + xstock dry-run) measures actual impact; gate decides.
 - **Alternative (if Langston counters):** extend livePricingAdapter with an `'equities_ws'` source type + hook into archiver's WS to push ticker events into both DB AND cache. More invasive (touches livePricingAdapter — ~no-touch-fence-adjacent); could be B79.x cleanup.
 
-**Action:** Step 3 implementation reads from DB unless Langston signals otherwise in PIA review.
+**Action:** Step 3 implementation reads from DB. Langston rev 2 CONFIRMED + ADDED tightening: per-cycle xstock pricing read MUST be a single BATCHED query, not N round-trips. Required SQL pattern:
+
+```sql
+SELECT DISTINCT ON (symbol) symbol, price, captured_at
+FROM equity_spot_ticker_snap
+WHERE symbol = ANY($1)
+ORDER BY symbol, captured_at DESC;
+```
+
+**Load-test surface** (Langston rev 2 #1 + scope Obj 8): per-cycle DB-roundtrip ms reported as its own surface in load-test output (NOT just rolled into Supabase pool %). If trends >100ms/cycle OR roundtrip exceeds central-clock budget headroom, that's a B79.x adapter-extension batch BEFORE more asset classes onboard — NEVER a backpressure shed (per #81 policy).
+
+**Alternative deferred:** extend `livePricingAdapter` with an `'equities_ws'` source type + hook into archiver's WS. More invasive (touches livePricingAdapter — no-touch-fence-adjacent); could be B79.x cleanup IF load-test shows DB-roundtrip is a problem.
 
 ---
 
@@ -246,6 +258,10 @@ $ grep -rn "updateFromWebSocket" server/services/live-pricing-adapter.ts
 ## §3 — Hostile-sim plan (scope §6 + Langston rev 1 revision #7 quantified)
 
 ### Procedure
+
+**Q5 conditions (Langston rev 2 #5 — was missing in PIA rev 1):**
+- Hostile-sim env flag `BACKPRESSURE_TEST_MODE` MUST be gated behind `NODE_ENV !== 'production'` so the flag cannot silently linger in prod config.
+- When the flag is set + the gate passes, scanner emits `[B79.0a][HOSTILE_SIM_ACTIVE]` startup log line (grep-friendly cosmetic insurance).
 
 1. Pre-deploy: capture pre-flight baseline of:
    - Crypto factor cadence (1h rolling) — same SQL pattern as B79.TEC.
@@ -281,6 +297,8 @@ $ grep -rn "updateFromWebSocket" server/services/live-pricing-adapter.ts
 To choose `data_freshness_window_ms` for xstock_spot Day 1:
 
 ```sql
+-- Langston rev 2 #4: dropped time filter; archive activity itself defines market-open
+-- (cleaner than EDT-specific 13:30-20:00 which fails on DST transitions).
 WITH inter_tick AS (
   SELECT
     symbol,
@@ -288,7 +306,6 @@ WITH inter_tick AS (
     LAG(captured_at) OVER (PARTITION BY symbol ORDER BY captured_at) AS prev_at
   FROM equity_spot_ticker_snap
   WHERE captured_at > NOW() - INTERVAL '6 hours'
-    AND captured_at::time BETWEEN '13:30:00' AND '20:00:00' -- ARCA market hours UTC
   ORDER BY symbol, captured_at
 )
 SELECT
@@ -341,23 +358,71 @@ END $$;
 COMMIT;
 ```
 
-### Migration 2 — N2 SQE wildcard cleanup
+### Migration 2 — N2 SQE wildcard cleanup (PIA rev 2 enumeration complete)
 
-PIA-time TODO: enumerate ALL SQE wildcard rows (Langston rev 1 Q4 expansion) — not just `pattern_pool_floor`. Per-class explicit + wildcard preserved (B79.0b removes wildcards after 48h gate). Each row's per-class value comparison assertion explicit in SQL (Langston rev 1 #3):
+**Live psql query against staging Supabase 2026-05-08 confirms current state:**
+
+| module_name | asset_class | constant_name | value | Action B79.0a |
+|---|---|---|---|---|
+| sqe_config | * | min_final_score | 0.35 | **Add explicit crypto_spot=0.35 + xstock_spot=0.35** (Day 1 starting placeholder) |
+| sqe_config | * | min_regime_weight | 0.30 | **Add explicit crypto_spot=0.30 + xstock_spot=0.30** (Day 1 starting placeholder) |
+| sqe_config | xstock_spot | adx_min | 18 | EXPLICIT row already exists (B79 ship); leave |
+| sqe_config | xstock_spot | di_min_pattern | 10 | EXPLICIT row already exists; leave |
+| sqe_config | xstock_spot | di_min_quant | 18 | EXPLICIT row already exists; leave |
+| sqe_config | xstock_spot | momentum_min | 0.002 | EXPLICIT row already exists; leave |
+| pattern_pool_gates | crypto_spot | * (4 keys) | (already explicit) | Leave |
+| pattern_pool_gates | xstock_spot | * (2 keys) | (already explicit; B79 ship) | Leave |
+
+**Wildcard rows requiring per-class promotion in Migration 2:** ONLY the two `sqe_config` keys above (`min_final_score`, `min_regime_weight`). All other SQE/pattern-pool keys already have explicit per-class rows from B79.
+
+**Migration 2 SQL (PIA rev 2):**
 
 ```sql
--- Pseudo-template; populated at Step 3 with PIA-enumerated key list:
+BEGIN;
+
+INSERT INTO module_constants
+  (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
+VALUES
+  -- min_final_score per-class promotion (wildcard 0.35 preserved)
+  ('sqe_config', '*', 'crypto_spot', '*', '*', 'min_final_score', '0.35'::jsonb, 'B79.0a'),
+  ('sqe_config', '*', 'xstock_spot', '*', '*', 'min_final_score', '0.35'::jsonb, 'B79.0a'),
+  -- min_regime_weight per-class promotion (wildcard 0.30 preserved)
+  ('sqe_config', '*', 'crypto_spot', '*', '*', 'min_regime_weight', '0.30'::jsonb, 'B79.0a'),
+  ('sqe_config', '*', 'xstock_spot', '*', '*', 'min_regime_weight', '0.30'::jsonb, 'B79.0a')
+ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
+
+-- Langston rev 1 #3: explicit value-comparison assertion in SQL.
+-- Verifies each new explicit row exists AND has value matching the current wildcard.
+-- Fails loud if pre-existing operator override doesn't match (manual review required).
 DO $$
-DECLARE expected_value jsonb := '<wildcard-current-value>'::jsonb;
-DECLARE crypto_value jsonb;
+DECLARE
+  wildcard_min_final_score jsonb;
+  wildcard_min_regime_weight jsonb;
+  expected_count int := 4;
+  actual_count int;
 BEGIN
-  SELECT value INTO crypto_value FROM module_constants
-   WHERE module_name='sqe' AND asset_class='crypto_spot' AND constant_name='<key>';
-  IF crypto_value IS NOT NULL AND crypto_value != expected_value THEN
-    RAISE EXCEPTION 'B79.0a Migration 2 value mismatch on crypto_spot.<key>: pre-existing value % != wildcard %', crypto_value, expected_value;
+  SELECT value INTO wildcard_min_final_score FROM module_constants
+   WHERE module_name='sqe_config' AND asset_class='*' AND constant_name='min_final_score';
+  SELECT value INTO wildcard_min_regime_weight FROM module_constants
+   WHERE module_name='sqe_config' AND asset_class='*' AND constant_name='min_regime_weight';
+
+  -- Count of explicit per-class rows now matching the wildcard values.
+  SELECT COUNT(*) INTO actual_count FROM module_constants
+   WHERE module_name='sqe_config'
+     AND asset_class IN ('crypto_spot', 'xstock_spot')
+     AND constant_name IN ('min_final_score', 'min_regime_weight')
+     AND ((constant_name='min_final_score' AND value=wildcard_min_final_score)
+       OR (constant_name='min_regime_weight' AND value=wildcard_min_regime_weight));
+
+  IF actual_count != expected_count THEN
+    RAISE EXCEPTION 'B79.0a Migration 2 assertion failed: expected % matching rows, found %. Pre-existing override may exist; manual review required.', expected_count, actual_count;
   END IF;
 END $$;
+
+COMMIT;
 ```
+
+**B79.0b mini-deploy** (after 48h verify gate, mirroring B79.TEC.b pattern): DELETE the two `sqe_config` wildcard rows once explicit per-class rows are confirmed in production resolution path.
 
 ---
 
