@@ -1,0 +1,648 @@
+diff --git a/server/config/canonical-regime-strategy-map.ts b/server/config/canonical-regime-strategy-map.ts
+index eb984c525..9604be2b6 100644
+--- a/server/config/canonical-regime-strategy-map.ts
++++ b/server/config/canonical-regime-strategy-map.ts
+@@ -299,6 +299,16 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
+         signalType: 'QUANT',
+         patternType: null,
+         secondaryMetrics: 'DBS \u2265 0.35 \u2022 N6 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR (B63.1: slope gate dropped, N 12\u21926)'
++      },
++      {
++        // B79.0d \u2014 Opening Range Breakout (ORB). xstock_spot ONLY.
++        // Triple-defense asset-class guard: detect-internal + signal-orchestrator
++        // dispatch-guard + SQE whitelist. Crypto signals never reach detect.
++        strategy: 'Opening Range Breakout',
++        strategyKey: 'orb',
++        signalType: 'QUANT',
++        patternType: null,
++        secondaryMetrics: 'xstock_spot 24/5 only \u2022 14:30\u201315:00 UTC range \u2022 0.15\u00d7ATR breakout buffer \u2022 1.5\u00d7 vol multiple \u2022 R:R 2:1'
+       }
+     ],
+     riskMultiplier: 0.8,
+@@ -327,6 +337,15 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
+         signalType: 'PATTERN',
+         patternType: 'MORNING_STAR',
+         secondaryMetrics: '3-bar sequence; momentum flip > 0.3%'
++      },
++      {
++        // B79.0d — Opening Range Breakout (ORB). xstock_spot ONLY (regime-boundary
++        // breakout natural fit). Triple-defense asset-class guard same as IE entry.
++        strategy: 'Opening Range Breakout',
++        strategyKey: 'orb',
++        signalType: 'QUANT',
++        patternType: null,
++        secondaryMetrics: 'xstock_spot 24/5 only • 14:30–15:00 UTC range • 0.15×ATR breakout buffer • 1.5× vol multiple • R:R 2:1'
+       }
+     ],
+     riskMultiplier: 0.85,
+diff --git a/server/services/signal-orchestrator.ts b/server/services/signal-orchestrator.ts
+index 610fe69c6..fd1f7c2d1 100644
+--- a/server/services/signal-orchestrator.ts
++++ b/server/services/signal-orchestrator.ts
+@@ -28,6 +28,8 @@
+ import { StrategyEngine, StrategySignal } from './strategy-engine';
+ // B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
+ import { getCachedNumberRequired } from './module-constants-service.js';
++// B79.0d: synchronous resolveAssetClass for ORB dispatch guard.
++import { resolveAssetClass } from '../../shared/asset-classes.js';
+ // Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
+ // import { FilteredPairsService } from './filtered-pairs-service';
+ import { KrakenService } from '../exchanges/kraken/kraken.js';
+@@ -1784,6 +1786,28 @@ export class SignalOrchestrator {
+         }
+       }
+ 
++      // B79.0d: ORB (Opening Range Breakout) — xstock_spot only.
++      // Dispatch-layer guard (Q6 triple-defense layer 2): only call detect when
++      // the resolved asset class is xstock_spot. Detect's own guards then
++      // enforce 24/7-symbol exclusion + DB gate. SQE whitelist (layer 3) ensures
++      // any signal that does fire is kept off crypto_spot at the filter layer.
++      if (activeStrategies.has('orb')) {
++        const orbAssetClass = resolveAssetClass(symbol, 'kraken');
++        if (orbAssetClass === 'xstock_spot') {
++          const rawSignal = this.strategyEngine.detectORB(
++            symbol,
++            ohlcAsAny,
++            indicators,
++            { assetClass: orbAssetClass, symbol },
++          );
++          if (rawSignal) {
++            rawSignal.symbol = symbol;
++            const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'orb' as any, sizingContext);
++            if (sizedSignal) signals.push(sizedSignal);
++          }
++        }
++      }
++
+       console.log(`[12.3.2][EVAL] ${symbol}: ${signals.length} signals from ${activeStrategies.size} strategies (pattern=${bestPattern?.pattern ?? 'none'})`);
+ 
+       // Convert pattern signals to trade signals and add to queue
+diff --git a/server/services/strategy-engine.ts b/server/services/strategy-engine.ts
+index e8aa133df..c9f993f83 100644
+--- a/server/services/strategy-engine.ts
++++ b/server/services/strategy-engine.ts
+@@ -14,6 +14,7 @@ import { detectAdaptiveFlow } from '../strategies/adaptive-flow.js';
+ import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
+ // B63: Strong Bull Trend (Path D) QUANT strategy
+ import { detectStrongBullTrend } from '../strategies/strong-bull-trend.js';
++import { detectORB } from '../strategies/orb.js';
+ import type { PatternInput } from '../strategies/strategy-helpers.js';
+ import { setNullReason } from '../utils/null-reason-tracker.js';
+ // B72.2: In-class quant strategies read tunable params from module_constants.
+@@ -55,7 +56,7 @@ export interface StrategySignal {
+     | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma'
+     | 'morning_star' | 'inside_bar_reversal' | 'support_bounce' | 'pivot_shift'
+     | 'reverse_impulse' | 'defensive_hedge' | 'adaptive_flow' | 'volatility_edge'
+-    | 'strong_bull_trend';
++    | 'strong_bull_trend' | 'orb';
+   entryPrice: number;
+   stopPrice: number;
+   targetPrice: number;
+@@ -1523,6 +1524,21 @@ export class StrategyEngine {
+     return detectStrongBullTrend(indicators, candles, patternSignal);
+   }
+ 
++  /**
++   * B79.0d: Opening Range Breakout (ORB) — xstock_spot only, 14:30–17:00 UTC active window.
++   * Triple-defense asset-class guard (detect-internal + this method's caller in
++   * signal-orchestrator + SQE whitelist). Default ctx assetClass='xstock_spot'
++   * but signal-orchestrator passes the resolved class explicitly.
++   */
++  detectORB(
++    symbol: string,
++    candles: PriceData[],
++    indicators: TechnicalIndicators,
++    ctx?: { assetClass: string; symbol: string; now?: Date }
++  ): StrategySignal | null {
++    return detectORB(symbol, candles, indicators, ctx);
++  }
++
+   private calculateVolatility(data: PriceData[]): number {
+     if (data.length < 2) return 0;
+     
+diff --git a/server/strategies/orb.ts b/server/strategies/orb.ts
+index dbadb275f..0c6a4ce8a 100644
+--- a/server/strategies/orb.ts
++++ b/server/strategies/orb.ts
+@@ -1,110 +1,274 @@
+ /**
+- * B79 — Opening Range Breakout (ORB) strategy.
++ * B79.0d — Opening Range Breakout (ORB) strategy — REAL IMPLEMENTATION.
+  *
+  * Type:      EQUITY-MICROSTRUCTURE
+  * Direction: BUY and SELL
+  * Key:       orb
+- * Asset:     xstock_spot only
++ * Asset:     xstock_spot only (24/5 names — explicitly NOT 24/7 names which have no "open bell")
+  *
+  * ════════════════════════════════════════════════════════════════════════════
+- * Q-D-GATED ACTIVATION (per BATCH_79_SCOPE.md §-3 glossary + §-2 row 1)
++ * DESIGN (Langston B79.0d Q1-Q7 lock 2026-05-09)
+  * ════════════════════════════════════════════════════════════════════════════
+  *
+- * This file SHIPS in B79 with the detect path scaffolded but ACTIVATION
+- * gated by the DB row:
+- *   `module_constants.strategy_gates.xstock_spot.orb.enabled`
++ *   Q1: Open-range window = calendar-fixed 14:30–15:00 UTC (US RTH first 30min).
++ *   Q2: Breakout buffer = 0.15 × ATR (regime-adaptive, mirrors SBT pattern).
++ *   Q3: Active breakout window = 15:00–17:00 UTC (2 hours; late-day filtered out).
++ *   Q4: Confidence = clamp(0.65 + 0.20*min(range/atr, 3.0) + 0.10*(volMult-1), [0.55, 0.90]).
++ *   Q5: Regime mapping = IMPULSE_EXPANSION + STRUCTURAL_TRANSITION (vol-discovery natural fits).
++ *   Q6: Triple-defense asset-class guard: detect-internal + dispatch-block + SQE whitelist.
++ *   Q7: B73 ablation registered now (n=0 OK; cleaner audit trail than retrofit).
+  *
+- * Default value: false. Flipped to true ONLY after the Q-D AAPLx-vs-AAPL
+- * behavior probe outcome (yfinance 1m underlying + 4-window correlation +
+- * 3-tier decision tree per scope §3) supports it. If xStocks track their
+- * underlyings tightly (correlation tier 1: >0.95), ORB's equity-day-trading
+- * intuition transfers directly. Tier 2 (0.70-0.95) requires routing
+- * adjustments. Tier 3 (<0.70) means ORB's design intuition is broken for
+- * tokenized equities and the strategy stays disabled until B79.x re-derives.
++ * Layer-1 thresholds in module_constants `strategy.orb` (xstock_spot scope):
++ *   open_range_minutes        = 30
++ *   breakout_buffer_atr_mult  = 0.15
++ *   risk_reward_ratio         = 2.0
++ *   volume_multiple_min       = 1.5
++ *   confidence_base           = 0.65
++ *   range_atr_clamp_max       = 3.0  (Q4 nit lock)
++ *   active_window_hours       = 2     (15:00–17:00 UTC)
+  *
+- * The DB-tunable gate means activation is ZERO REDEPLOY — flipping the
+- * module_constant flips the strategy on/off live.
+- *
+- * ════════════════════════════════════════════════════════════════════════════
+- * STRATEGY DESIGN (full implementation deferred)
+- * ════════════════════════════════════════════════════════════════════════════
+- *
+- * ORB targets the opening-bell volatility-discovery period — a specific
+- * equity-microstructure feature that no crypto strategy targets:
+- *
+- *   - Open-range window: first 15-30 minutes of US RTH (14:30-15:00 UTC).
+- *   - Range = (high - low) of those bars.
+- *   - Breakout signal: BUY if subsequent bar closes above range high +
+- *     buffer; SELL if closes below range low - buffer.
+- *   - Stop: opposite range extreme.
+- *   - Target: 2x range height (1:2 R:R; configurable).
+- *   - Confidence: scales with range size (volatility-discovery proxy) and
+- *     volume-multiple (liquidity confirmation).
+- *
+- * Day 1 ships the dormant scaffolding. Full detect implementation lands
+- * post-Q-D-probe in a B79.x sub-batch with calibrated parameters.
++ * GATE: `module_constants.strategy_gates.xstock_spot.orb.enabled` — flipped TRUE in B79.0d.
+  *
++ * ROLLBACK: DB-only. `UPDATE module_constants SET value=false WHERE strategy='orb' AND constant_name='enabled'`
++ * neutralizes ORB on next tick (cached sync API picks up the change). No code revert needed.
+  * ════════════════════════════════════════════════════════════════════════════
+  */
+ 
+ import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
+ import type { PriceData } from '@shared/schema';
+-import { getCachedConstant } from '../services/module-constants-service.js';
++import {
++  getCachedConstant,
++  getCachedNumbersForModule,
++} from '../services/module-constants-service.js';
++import { XSTOCK_SPOT_24_7_SYMBOLS } from '../../shared/asset-classes.js';
+ 
+ const STRATEGY_KEY = 'orb';
+-const LOG_PREFIX = '[B79][ORB]';
++const LOG_PREFIX = '[B79.0d][ORB]';
++
++// Calendar-fixed UTC window constants (Q1+Q3 lock).
++const RTH_OPEN_HOUR_UTC = 14;       // 14:30 UTC = 09:30 ET (DST handles itself in winter)
++const RTH_OPEN_MINUTE_UTC = 30;
++const ACTIVE_WINDOW_END_HOUR_UTC = 17; // 17:00 UTC end of active breakout window
+ 
+ let _disabledLogCount = 0;
++let _no24_7LogCount = 0;
++let _outsideWindowLogCount = 0;
++
++interface OrbContext {
++  assetClass: string;
++  symbol: string;
++  now?: Date; // injectable for tests; defaults Date.now()
++}
++
++/** Returns true if `now` is inside the 30-min open-range formation window. */
++function isInOpenRangeFormation(now: Date, openRangeMinutes: number): boolean {
++  const h = now.getUTCHours();
++  const m = now.getUTCMinutes();
++  const totalMins = h * 60 + m;
++  const openTotalMins = RTH_OPEN_HOUR_UTC * 60 + RTH_OPEN_MINUTE_UTC;
++  return totalMins >= openTotalMins && totalMins < openTotalMins + openRangeMinutes;
++}
++
++/** Returns true if `now` is inside the post-formation active breakout window. */
++function isInActiveBreakoutWindow(now: Date, openRangeMinutes: number, activeWindowHours: number): boolean {
++  const h = now.getUTCHours();
++  const m = now.getUTCMinutes();
++  const totalMins = h * 60 + m;
++  const formationEnd = RTH_OPEN_HOUR_UTC * 60 + RTH_OPEN_MINUTE_UTC + openRangeMinutes;
++  const activeEnd = formationEnd + activeWindowHours * 60;
++  return totalMins >= formationEnd && totalMins < activeEnd;
++}
++
++/** Compute high/low range from 1m candles inside the open-range formation window. */
++function computeOpeningRange(
++  candles: PriceData[],
++  now: Date,
++  openRangeMinutes: number,
++): { high: number; low: number; volSum: number } | null {
++  if (!candles || candles.length === 0) return null;
++
++  const today = new Date(Date.UTC(
++    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
++    RTH_OPEN_HOUR_UTC, RTH_OPEN_MINUTE_UTC, 0, 0,
++  ));
++  const startMs = today.getTime();
++  const endMs = startMs + openRangeMinutes * 60 * 1000;
++
++  let high = -Infinity;
++  let low = Infinity;
++  let volSum = 0;
++  let bars = 0;
++
++  for (const bar of candles) {
++    const ts = new Date(bar.timestamp).getTime();
++    if (ts < startMs || ts >= endMs) continue;
++    const bh = parseFloat(bar.high as unknown as string);
++    const bl = parseFloat(bar.low as unknown as string);
++    const bv = parseFloat(bar.volume as unknown as string);
++    if (Number.isFinite(bh)) high = Math.max(high, bh);
++    if (Number.isFinite(bl)) low = Math.min(low, bl);
++    if (Number.isFinite(bv)) volSum += bv;
++    bars++;
++  }
++
++  if (bars === 0 || !Number.isFinite(high) || !Number.isFinite(low)) return null;
++  return { high, low, volSum };
++}
+ 
+ /**
+- * B79 ORB detect — DORMANT Day 1.
+- *
+- * Reads the Q-D-gated DB flag `strategy_gates.xstock_spot.orb.enabled`. When
+- * false (default Day 1), returns null without computing anything. When true,
+- * the full detection logic runs (deferred to B79.x).
++ * B79.0d ORB detect — REAL IMPLEMENTATION.
+  *
+- * The function signature matches other strategy detect functions so it can
+- * be wired into the strategy-engine dispatch table once ready.
++ * @param symbol - canonical xstock_spot symbol (e.g. 'AMZN/USD')
++ * @param priceData - 1m candle history (chronological, latest last)
++ * @param indicators - TechnicalIndicators with atr + volume + currentPrice
++ * @param ctx - optional context for asset-class guard + injected clock for tests
+  */
+ export function detectORB(
+   symbol: string,
+   priceData: PriceData[],
+   indicators: TechnicalIndicators,
+-  // additional context params (regime, dbs, etc.) added when full impl lands
++  ctx?: OrbContext,
+ ): StrategySignal | null {
+-  // Q-D-gated activation. The cached DB lookup throws if 'strategy_gates'
+-  // isn't pre-warmed at server startup (warmup happens at boot for active
+-  // modules). For the dormant ORB scaffold, we treat any error / non-true
+-  // value as 'disabled' — this is the safe default until B79.x activates
+-  // the strategy and prefetchModule('strategy_gates') is added to startup.
++  // ── Triple-defense guard (Q6) — detect-internal layer ───────────────────
++  // (a) Asset-class: xstock_spot only.
++  const assetClass = ctx?.assetClass ?? 'xstock_spot'; // dispatch passes; default for back-compat
++  if (assetClass !== 'xstock_spot') return null;
++
++  // (b) 24/7 names have no opening bell (Langston scope review concern #1).
++  if (XSTOCK_SPOT_24_7_SYMBOLS.has(symbol)) {
++    _no24_7LogCount++;
++    if (_no24_7LogCount === 1 || _no24_7LogCount % 1000 === 0) {
++      console.log(`${LOG_PREFIX} ${symbol} skipped — 24/7 name has no opening bell (count=${_no24_7LogCount})`);
++    }
++    return null;
++  }
++
++  // ── DB gate (cached sync API; B79.0d flipped to true) ───────────────────
+   let enabled: boolean | undefined;
+   try {
+     enabled = getCachedConstant<boolean>(
+-      'strategy_gates',
+-      'enabled',
+-      {
+-        exchange: '*',
+-        assetClass: 'xstock_spot',
+-        strategy: STRATEGY_KEY,
+-        regime: '*',
+-      },
++      'strategy_gates', 'enabled',
++      { exchange: '*', assetClass: 'xstock_spot', strategy: STRATEGY_KEY, regime: '*' },
+     );
+   } catch {
+-    enabled = undefined; // module not warm — treat as disabled
++    enabled = undefined;
+   }
+-
+   if (enabled !== true) {
+     _disabledLogCount++;
+     if (_disabledLogCount === 1) {
+-      console.log(`${LOG_PREFIX} dormant — DB flag strategy_gates.xstock_spot.orb.enabled=false (Q-D probe pending)`);
++      console.log(`${LOG_PREFIX} dormant — DB flag strategy_gates.xstock_spot.orb.enabled !== true`);
+     }
+     return null;
+   }
+ 
+-  // FULL IMPLEMENTATION DEFERRED to B79.x post-Q-D-probe.
+-  // Skeleton returns null; live logic populates here.
+-  console.log(`${LOG_PREFIX} ENABLED but full detect logic not yet shipped — B79.x deferred`);
+-  return null;
++  // ── Time-window check (Q1+Q3) — uses injectable clock for tests ─────────
++  const now = ctx?.now ?? new Date();
++
++  // Read Layer-1 thresholds in bulk (B72 pattern).
++  let c: Record<string, number>;
++  try {
++    c = getCachedNumbersForModule('strategy.orb', {
++      exchange: '*', assetClass: 'xstock_spot', strategy: STRATEGY_KEY, regime: '*',
++    });
++  } catch {
++    return null; // module not warm — fail-soft
++  }
++
++  const ORB_OPEN_RANGE_MINUTES   = c['open_range_minutes'] ?? 30;
++  const ORB_BREAKOUT_BUFFER_ATR  = c['breakout_buffer_atr_mult'] ?? 0.15;
++  const ORB_RR_RATIO             = c['risk_reward_ratio'] ?? 2.0;
++  const ORB_VOL_MULT_MIN         = c['volume_multiple_min'] ?? 1.5;
++  const ORB_CONF_BASE            = c['confidence_base'] ?? 0.65;
++  const ORB_RANGE_ATR_CLAMP_MAX  = c['range_atr_clamp_max'] ?? 3.0;
++  const ORB_ACTIVE_WINDOW_HOURS  = c['active_window_hours'] ?? 2;
++
++  // Range-formation phase: no signals (range still being established).
++  if (isInOpenRangeFormation(now, ORB_OPEN_RANGE_MINUTES)) {
++    return null;
++  }
++  // Outside active window: no signals.
++  if (!isInActiveBreakoutWindow(now, ORB_OPEN_RANGE_MINUTES, ORB_ACTIVE_WINDOW_HOURS)) {
++    _outsideWindowLogCount++;
++    if (_outsideWindowLogCount % 100 === 1) {
++      console.log(`${LOG_PREFIX} ${symbol} outside active window (now ${now.toISOString()}; count=${_outsideWindowLogCount})`);
++    }
++    return null;
++  }
++
++  // ── Compute opening range from candles ──────────────────────────────────
++  const orRange = computeOpeningRange(priceData, now, ORB_OPEN_RANGE_MINUTES);
++  if (!orRange) return null;
++
++  const { high: rangeHigh, low: rangeLow, volSum: orVolume } = orRange;
++  const rangeHeight = rangeHigh - rangeLow;
++  if (rangeHeight <= 0) return null;
++
++  const atr = indicators.atr ?? 0;
++  if (atr <= 0) return null;
++  const buffer = ORB_BREAKOUT_BUFFER_ATR * atr;
++
++  // ── Breakout detection ──────────────────────────────────────────────────
++  const currentPrice = indicators.currentPrice;
++  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return null;
++
++  const upBreak = currentPrice > rangeHigh + buffer;
++  const downBreak = currentPrice < rangeLow - buffer;
++  if (!upBreak && !downBreak) return null;
++
++  // ── Volume confirmation ─────────────────────────────────────────────────
++  const currentVolume = indicators.volume ?? 0;
++  // Estimate the "normal" 1m volume across the open-range window for a relative multiple.
++  const orMinutes = Math.max(1, ORB_OPEN_RANGE_MINUTES);
++  const avgOrBarVol = orVolume / orMinutes;
++  const volumeMultiple = avgOrBarVol > 0 ? currentVolume / avgOrBarVol : 0;
++  if (volumeMultiple < ORB_VOL_MULT_MIN) return null;
++
++  // ── Geometry (entry/stop/target) ────────────────────────────────────────
++  let entryPrice: number;
++  let stopPrice: number;
++  let targetPrice: number;
++  let direction: 'BUY' | 'SELL';
++
++  if (upBreak) {
++    direction = 'BUY';
++    entryPrice = currentPrice;
++    stopPrice = rangeLow;                                 // opposite range extreme
++    targetPrice = entryPrice + ORB_RR_RATIO * rangeHeight; // R:R based on range height
++  } else {
++    direction = 'SELL';
++    entryPrice = currentPrice;
++    stopPrice = rangeHigh;
++    targetPrice = entryPrice - ORB_RR_RATIO * rangeHeight;
++  }
++
++  // ── Confidence (Q4 with Langston nit: clamp range/atr term) ─────────────
++  const rangeAtrNormRaw = rangeHeight / atr;
++  const rangeAtrNorm = Math.min(rangeAtrNormRaw, ORB_RANGE_ATR_CLAMP_MAX);
++  const confRaw = ORB_CONF_BASE + 0.20 * rangeAtrNorm + 0.10 * Math.max(0, volumeMultiple - 1);
++  const confidence = Math.max(0.55, Math.min(0.90, confRaw));
++
++  console.log(`${LOG_PREFIX} ${symbol} ${direction} signal | range=[${rangeLow.toFixed(4)},${rangeHigh.toFixed(4)}] (h=${rangeHeight.toFixed(4)}, atr=${atr.toFixed(4)}, n=${rangeAtrNorm.toFixed(2)}) | px=${currentPrice.toFixed(4)} buf=${buffer.toFixed(4)} | volMult=${volumeMultiple.toFixed(2)} | conf=${confidence.toFixed(3)} | stop=${stopPrice.toFixed(4)} tp=${targetPrice.toFixed(4)}`);
++
++  return {
++    symbol,
++    strategy: STRATEGY_KEY as any, // 'orb' added to enum in strategy-engine.ts
++    entryPrice,
++    stopPrice,
++    targetPrice,
++    confidence,
++    metadata: {
++      direction,
++      rangeHigh,
++      rangeLow,
++      rangeHeight,
++      buffer,
++      atr,
++      volumeMultiple,
++      rangeAtrNorm,
++      windowStart: `${RTH_OPEN_HOUR_UTC}:${RTH_OPEN_MINUTE_UTC.toString().padStart(2,'0')} UTC`,
++      activeUntilHourUTC: ACTIVE_WINDOW_END_HOUR_UTC,
++    },
++  };
+ }
+ 
+ /** Convenience alias matching the file/index export pattern. */
+diff --git a/server/tests/unit/b79-0d-orb.test.ts b/server/tests/unit/b79-0d-orb.test.ts
+new file mode 100644
+index 000000000..1d271bf21
+--- /dev/null
++++ b/server/tests/unit/b79-0d-orb.test.ts
+@@ -0,0 +1,177 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0d — Opening Range Breakout (ORB) detect logic tests
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Coverage (Langston Q1-Q7 lock + scope concerns #1-#5):
++ *   (a) Range-formation phase returns null
++ *   (b) Breakout-up generates BUY with correct stop/target/confidence
++ *   (c) Breakout-down generates SELL
++ *   (d) No-breakout returns null
++ *   (e) Gate-disabled returns null even on valid breakout
++ *   (f) Crypto_spot symbol returns null (asset-class guard)
++ *   (g) 24/7 symbol returns null — "no_open_bell" semantics (Langston scope #2)
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { describe, it, expect, beforeEach, vi } from 'vitest';
++
++// Mock module_constants service so we control the gate + thresholds.
++const gateValue = { value: true };
++const thresholds = {
++  open_range_minutes: 30,
++  breakout_buffer_atr_mult: 0.15,
++  risk_reward_ratio: 2.0,
++  volume_multiple_min: 1.5,
++  confidence_base: 0.65,
++  range_atr_clamp_max: 3.0,
++  active_window_hours: 2,
++};
++
++vi.mock('../../services/module-constants-service.js', () => ({
++  getCachedConstant: <T>(_module: string, _name: string) => gateValue.value as unknown as T,
++  getCachedNumbersForModule: () => ({ ...thresholds }),
++}));
++
++import { detectORB } from '../../strategies/orb.js';
++import type { TechnicalIndicators } from '../../services/strategy-engine';
++import type { PriceData } from '@shared/schema';
++
++// Helper — synthesize 1m candle for a given UTC minute offset from 14:30 UTC.
++function makeCandle(minuteOffset: number, high: number, low: number, volume: number): PriceData {
++  const ts = new Date(Date.UTC(2026, 4, 11, 14, 30 + minuteOffset, 0)); // Mon 2026-05-11
++  return {
++    id: `t${minuteOffset}`,
++    symbol: 'AMZN/USD',
++    timestamp: ts,
++    open: low.toString(),
++    high: high.toString(),
++    low: low.toString(),
++    close: ((high + low) / 2).toString(),
++    volume: volume.toString(),
++    vwap: null,
++    sma: null,
++  } as unknown as PriceData;
++}
++
++// Build 30-min open-range OHLC: high=100, low=99, vol=1000/min ⇒ totalOR vol=30000.
++function makeOpenRangeBars(): PriceData[] {
++  const bars: PriceData[] = [];
++  for (let i = 0; i < 30; i++) bars.push(makeCandle(i, 100, 99, 1000));
++  return bars;
++}
++
++const baseIndicators: TechnicalIndicators = {
++  vwap: 99.5,
++  sma: 99.5,
++  currentPrice: 99.5,
++  volume: 1000,
++  high24h: 100,
++  low24h: 99,
++  atr: 0.50, // 50¢ ATR — buffer = 0.15 × 0.50 = 7.5¢
++};
++
++const NOW_AFTER_RANGE = new Date(Date.UTC(2026, 4, 11, 15, 30, 0)); // 15:30 UTC — 1h post-formation
++const NOW_DURING_RANGE = new Date(Date.UTC(2026, 4, 11, 14, 45, 0)); // 14:45 UTC — mid-formation
++const NOW_LATE_DAY = new Date(Date.UTC(2026, 4, 11, 18, 0, 0)); // 18:00 UTC — past 17:00 active end
++
++describe('B79.0d — ORB detect', () => {
++  beforeEach(() => {
++    gateValue.value = true;
++  });
++
++  it('(a) range-formation phase returns null even with apparent breakout', () => {
++    const indicators = { ...baseIndicators, currentPrice: 110, volume: 5000 };
++    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_DURING_RANGE,
++    });
++    expect(result).toBeNull();
++  });
++
++  it('(b) breakout-UP after window with sufficient volume generates BUY', () => {
++    const indicators = { ...baseIndicators, currentPrice: 100.50, volume: 2000 };
++    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
++    });
++    expect(result).not.toBeNull();
++    expect(result!.metadata.direction).toBe('BUY');
++    expect(result!.entryPrice).toBeCloseTo(100.50, 2);
++    expect(result!.stopPrice).toBeCloseTo(99, 2);                    // range low
++    expect(result!.targetPrice).toBeCloseTo(100.50 + 2 * 1, 2);       // entry + 2×rangeHeight
++    expect(result!.confidence).toBeGreaterThanOrEqual(0.55);
++    expect(result!.confidence).toBeLessThanOrEqual(0.90);
++  });
++
++  it('(c) breakout-DOWN generates SELL with stop above range', () => {
++    const indicators = { ...baseIndicators, currentPrice: 98.50, volume: 2000 };
++    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
++    });
++    expect(result).not.toBeNull();
++    expect(result!.metadata.direction).toBe('SELL');
++    expect(result!.entryPrice).toBeCloseTo(98.50, 2);
++    expect(result!.stopPrice).toBeCloseTo(100, 2);                    // range high
++    expect(result!.targetPrice).toBeCloseTo(98.50 - 2 * 1, 2);
++  });
++
++  it('(d) inside-range price returns null', () => {
++    const indicators = { ...baseIndicators, currentPrice: 99.5, volume: 2000 };
++    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
++    });
++    expect(result).toBeNull();
++  });
++
++  it('(d2) breakout above range but volume below 1.5× returns null', () => {
++    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 1000 }; // exactly avg, volMult=1.0
++    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
++    });
++    expect(result).toBeNull();
++  });
++
++  it('(d3) breakout outside active window (after 17:00 UTC) returns null', () => {
++    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 2000 };
++    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_LATE_DAY,
++    });
++    expect(result).toBeNull();
++  });
++
++  it('(e) gate-disabled returns null even on valid breakout', () => {
++    gateValue.value = false;
++    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 2000 };
++    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
++    });
++    expect(result).toBeNull();
++  });
++
++  it('(f) crypto_spot asset class returns null (detect-internal guard)', () => {
++    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 2000 };
++    const result = detectORB('BTC/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'crypto_spot', symbol: 'BTC/USD', now: NOW_AFTER_RANGE,
++    });
++    expect(result).toBeNull();
++  });
++
++  it('(g) 24/7 symbol (TSLA/USD) returns null — no opening bell semantics', () => {
++    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 2000 };
++    const result = detectORB('TSLA/USD', makeOpenRangeBars(), indicators, {
++      assetClass: 'xstock_spot', symbol: 'TSLA/USD', now: NOW_AFTER_RANGE,
++    });
++    expect(result).toBeNull();
++  });
++
++  it('(g2) all 10 24/7 names skipped during active window', () => {
++    const names = ['AAPL/USD', 'CRCL/USD', 'GLD/USD', 'GOOGL/USD', 'HOOD/USD',
++                   'MSTR/USD', 'NVDA/USD', 'QQQ/USD', 'SPY/USD', 'TSLA/USD'];
++    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 2000 };
++    for (const sym of names) {
++      const result = detectORB(sym, makeOpenRangeBars(), indicators, {
++        assetClass: 'xstock_spot', symbol: sym, now: NOW_AFTER_RANGE,
++      });
++      expect(result).toBeNull();
++    }
++  });
++});

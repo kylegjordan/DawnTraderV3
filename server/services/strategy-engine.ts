@@ -14,6 +14,7 @@ import { detectAdaptiveFlow } from '../strategies/adaptive-flow.js';
 import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
 // B63: Strong Bull Trend (Path D) QUANT strategy
 import { detectStrongBullTrend } from '../strategies/strong-bull-trend.js';
+import { detectORB } from '../strategies/orb.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72.2: In-class quant strategies read tunable params from module_constants.
@@ -55,7 +56,7 @@ export interface StrategySignal {
     | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma'
     | 'morning_star' | 'inside_bar_reversal' | 'support_bounce' | 'pivot_shift'
     | 'reverse_impulse' | 'defensive_hedge' | 'adaptive_flow' | 'volatility_edge'
-    | 'strong_bull_trend';
+    | 'strong_bull_trend' | 'orb';
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -1521,6 +1522,21 @@ export class StrategyEngine {
     patternSignal: PatternInput | null
   ): StrategySignal | null {
     return detectStrongBullTrend(indicators, candles, patternSignal);
+  }
+
+  /**
+   * B79.0d: Opening Range Breakout (ORB) — xstock_spot only, 14:30–17:00 UTC active window.
+   * Triple-defense asset-class guard (detect-internal + this method's caller in
+   * signal-orchestrator + SQE whitelist). Default ctx assetClass='xstock_spot'
+   * but signal-orchestrator passes the resolved class explicitly.
+   */
+  detectORB(
+    symbol: string,
+    candles: PriceData[],
+    indicators: TechnicalIndicators,
+    ctx?: { assetClass: string; symbol: string; now?: Date }
+  ): StrategySignal | null {
+    return detectORB(symbol, candles, indicators, ctx);
   }
 
   private calculateVolatility(data: PriceData[]): number {

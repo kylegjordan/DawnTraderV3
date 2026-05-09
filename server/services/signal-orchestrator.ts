@@ -28,6 +28,8 @@
 import { StrategyEngine, StrategySignal } from './strategy-engine';
 // B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
 import { getCachedNumberRequired } from './module-constants-service.js';
+// B79.0d: synchronous resolveAssetClass for ORB dispatch guard.
+import { resolveAssetClass } from '../../shared/asset-classes.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
 // import { FilteredPairsService } from './filtered-pairs-service';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -1781,6 +1783,28 @@ export class SignalOrchestrator {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'strong_bull_trend' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
+        }
+      }
+
+      // B79.0d: ORB (Opening Range Breakout) — xstock_spot only.
+      // Dispatch-layer guard (Q6 triple-defense layer 2): only call detect when
+      // the resolved asset class is xstock_spot. Detect's own guards then
+      // enforce 24/7-symbol exclusion + DB gate. SQE whitelist (layer 3) ensures
+      // any signal that does fire is kept off crypto_spot at the filter layer.
+      if (activeStrategies.has('orb')) {
+        const orbAssetClass = resolveAssetClass(symbol, 'kraken');
+        if (orbAssetClass === 'xstock_spot') {
+          const rawSignal = this.strategyEngine.detectORB(
+            symbol,
+            ohlcAsAny,
+            indicators,
+            { assetClass: orbAssetClass, symbol },
+          );
+          if (rawSignal) {
+            rawSignal.symbol = symbol;
+            const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'orb' as any, sizingContext);
+            if (sizedSignal) signals.push(sizedSignal);
+          }
         }
       }
 

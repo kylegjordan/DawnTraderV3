@@ -299,6 +299,16 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         signalType: 'QUANT',
         patternType: null,
         secondaryMetrics: 'DBS \u2265 0.35 \u2022 N6 Donchian breakout + 0.15\u00d7ATR \u2022 body \u2264 1.5\u00d7ATR (B63.1: slope gate dropped, N 12\u21926)'
+      },
+      {
+        // B79.0d \u2014 Opening Range Breakout (ORB). xstock_spot ONLY.
+        // Triple-defense asset-class guard: detect-internal + signal-orchestrator
+        // dispatch-guard + SQE whitelist. Crypto signals never reach detect.
+        strategy: 'Opening Range Breakout',
+        strategyKey: 'orb',
+        signalType: 'QUANT',
+        patternType: null,
+        secondaryMetrics: 'xstock_spot 24/5 only \u2022 14:30\u201315:00 UTC range \u2022 0.15\u00d7ATR breakout buffer \u2022 1.5\u00d7 vol multiple \u2022 R:R 2:1'
       }
     ],
     riskMultiplier: 0.8,
@@ -327,6 +337,15 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
         signalType: 'PATTERN',
         patternType: 'MORNING_STAR',
         secondaryMetrics: '3-bar sequence; momentum flip > 0.3%'
+      },
+      {
+        // B79.0d — Opening Range Breakout (ORB). xstock_spot ONLY (regime-boundary
+        // breakout natural fit). Triple-defense asset-class guard same as IE entry.
+        strategy: 'Opening Range Breakout',
+        strategyKey: 'orb',
+        signalType: 'QUANT',
+        patternType: null,
+        secondaryMetrics: 'xstock_spot 24/5 only • 14:30–15:00 UTC range • 0.15×ATR breakout buffer • 1.5× vol multiple • R:R 2:1'
       }
     ],
     riskMultiplier: 0.85,
