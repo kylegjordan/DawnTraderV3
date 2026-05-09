@@ -645,7 +645,9 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   }
   const { assetClass } = update;
   if (assetClass === 'xstock_spot') {
-    if (!isXstockMarketOpenUTC()) {
+    // B79.0c: per-symbol — 24/7 names (Kraken Phase 1) get normal stop-eval
+    // through the weekend; only ARCA-aligned 24/5 names freeze.
+    if (!isXstockMarketOpenUTC(update.symbol)) {
       _b79TecFreezeCount++;
       if (_b79TecFreezeCount % 100 === 1) {
         console.log(`[B79][TEC_FREEZE] ${update.symbol} (xstock_spot, market closed) — skipping stop-eval (count=${_b79TecFreezeCount})`);

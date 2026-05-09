@@ -228,6 +228,35 @@ export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set([
   'XOM/USD','XPEV/USD','XYL/USD','XYZ/USD','ZTS/USD',
 ]);
 
+/**
+ * B79.0c — xstock_spot symbols that trade 24/7 on Kraken Pro.
+ *
+ * Per Kraken Phase 1 announcement (2025-12-03) at
+ * https://blog.kraken.com/news/xstocks-247-trading — ten xStock tokens trade
+ * around the clock, not the ARCA-aligned 24/5 schedule the rest follow.
+ * Canonical form (no "x" suffix; matches XSTOCK_SPOT_SYMBOLS shape).
+ *
+ * Reference data, NOT a behavioral knob — Phase-2 expansion is a Kraken
+ * product event that requires a code change here AND in XSTOCK_SPOT_SYMBOLS,
+ * so a DB-resolved row would only add coupling without shipping flexibility.
+ *
+ * Consumed by `isXstockMarketOpenUTC(symbol, now?)` to bypass the ARCA
+ * weekend gate for these names. All 10 must already exist in
+ * XSTOCK_SPOT_SYMBOLS — assertion enforced by a unit test.
+ */
+export const XSTOCK_SPOT_24_7_SYMBOLS: ReadonlySet<string> = new Set([
+  'AAPL/USD',
+  'CRCL/USD',
+  'GLD/USD',
+  'GOOGL/USD',
+  'HOOD/USD',
+  'MSTR/USD',
+  'NVDA/USD',
+  'QQQ/USD',
+  'SPY/USD',
+  'TSLA/USD',
+]);
+
 /** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. */
 const CRYPTO_SPOT_CANONICAL = /^[A-Z0-9]{2,10}\/[A-Z0-9]{3,4}$/;
 

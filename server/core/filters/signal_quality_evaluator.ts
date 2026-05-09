@@ -177,8 +177,9 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   const resolvedAssetClass = safeResolveAssetClass(input.symbol, 'kraken') ?? 'crypto_spot';
 
   if (resolvedAssetClass === 'xstock_spot') {
-    // (a) Weekend-pause — ARCA hours.
-    if (!isXstockMarketOpenUTC()) {
+    // (a) Weekend-pause — ARCA hours. B79.0c: per-symbol — 24/7 names
+    // (Kraken Phase 1) bypass the ARCA gate.
+    if (!isXstockMarketOpenUTC(canonicalSymbol)) {
       _b79WeekendSkipCount++;
       if (_b79WeekendSkipCount % 50 === 1) {
         console.log(`[B79][XSTOCK_WEEKEND_PAUSE] skipping ${canonicalSymbol}/${input.strategy} — ARCA closed (count=${_b79WeekendSkipCount})`);

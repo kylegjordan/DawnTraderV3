@@ -1,0 +1,545 @@
+diff --git a/server/asset_classes/xstock_spot/market-hours.ts b/server/asset_classes/xstock_spot/market-hours.ts
+index a516f51f3..f28df455c 100644
+--- a/server/asset_classes/xstock_spot/market-hours.ts
++++ b/server/asset_classes/xstock_spot/market-hours.ts
+@@ -1,37 +1,80 @@
+ /**
+- * Xstock-spot market hours utility (B79).
++ * Xstock-spot market hours utility (B79 + B79.0c per-symbol 24/7).
+  *
+  * Kraken XStocks are tokenized 1:1 backed equities tracking ARCA-listed
+  * underlyings. ARCA opens Sunday 22:00 UTC and closes Friday 22:00 UTC,
+  * giving a ~24/5 schedule with a weekend gap.
+  *
++ * B79.0c (2026-05-09) — per-symbol predicate: a subset of xStocks announced
++ * by Kraken on 2025-12-03 trade 24/7 (Phase 1: AAPL, CRCL, GLD, GOOGL, HOOD,
++ * MSTR, NVDA, QQQ, SPY, TSLA — see XSTOCK_SPOT_24_7_SYMBOLS). For those
++ * names this predicate returns true regardless of weekday/hour. For all
++ * other xStocks it applies the ARCA 24/5 schedule.
++ *
+  * The VTS evaluation gate calls this on every xstock_spot signal — when
+  * closed, the signal is skipped (early-return + counter increment) so VTS
+  * does not write spurious shadow-mode rows for closed-market periods.
+  *
+- * NOT included in B79: US equity holidays (Thanksgiving, etc.) and
+- * partially-shortened sessions. Both produce false-open results for a
+- * handful of days/year. A future enhancement can override via a
+- * module_constant `xstockMarketHoursOverride` (Langston Q5 answer); the
+- * shape would be a list of (date, status) overrides consulted before this
+- * default. Out of scope for B79.
++ * NOT included: US equity holidays (Thanksgiving, etc.) and partially-
++ * shortened sessions. Both produce false-open results for a handful of
++ * days/year. A future enhancement can override via a module_constant
++ * `xstockMarketHoursOverride` (Langston Q5 from B79); the shape would be
++ * a list of (date, status) overrides consulted before this default.
+  *
+- * NO IMPORTS — leaf module by design (avoids cycles).
++ * Imports: XSTOCK_SPOT_24_7_SYMBOLS from shared/asset-classes (single
++ * dependency on a constant, no transitive cycles — shared/* is leaf).
+  */
+ 
++import { XSTOCK_SPOT_24_7_SYMBOLS } from '../../../shared/asset-classes.js';
++
+ /**
+- * Returns true iff the xstock_spot market is open for trading at `now` (UTC).
++ * Normalize a symbol to the canonical `BASE/USD` form used by
++ * XSTOCK_SPOT_SYMBOLS / XSTOCK_SPOT_24_7_SYMBOLS. Belt-and-suspenders for
++ * any caller that might pass Kraken-pair-form `TSLAxUSD` or bare `TSLAx`
++ * (Langston Q2 review). Idempotent on already-canonical input.
++ */
++function normalizeXstockSymbol(symbol: string): string {
++  if (!symbol) return symbol;
++  // Already canonical?
++  if (symbol.includes('/')) {
++    // Strip "x" suffix on base if present (TSLAx/USD → TSLA/USD).
++    return symbol.replace(/^([A-Z]+)x\/(USD[A-Z]?)$/i, '$1/$2');
++  }
++  // Kraken-pair form: TSLAxUSD or AAPLxUSDC. Mandatory lowercase `x` —
++  // do NOT make it optional. With case-insensitive `i` flag and `x?`, the
++  // greedy `[A-Z]+` would consume the `x` itself (Langston Step 4 F1) and
++  // produce wrong group: `TSLAxUSD` → group1=`TSLAx` instead of `TSLA`.
++  // The `x` is REQUIRED here (we're in the Kraken-pair branch precisely
++  // because canonical `BASE/USD` was already handled above).
++  const krakenMatch = symbol.match(/^([A-Z]+)x(USD[A-Z]?)$/i);
++  if (krakenMatch) {
++    return `${krakenMatch[1].toUpperCase()}/${krakenMatch[2].toUpperCase()}`;
++  }
++  return symbol;
++}
++
++/**
++ * Returns true iff the xstock_spot market is open for `symbol` at `now` (UTC).
+  *
+  * Schedule (ARCA-aligned, UTC):
+- *   - CLOSED all day Saturday (UTC day 6)
+- *   - CLOSED Friday from 22:00 UTC onward
+- *   - CLOSED Sunday before 22:00 UTC
+- *   - OPEN otherwise
++ *   - 24/7 names (XSTOCK_SPOT_24_7_SYMBOLS): always OPEN.
++ *   - All other xstocks:
++ *     - CLOSED all day Saturday (UTC day 6)
++ *     - CLOSED Friday from 22:00 UTC onward
++ *     - CLOSED Sunday before 22:00 UTC
++ *     - OPEN otherwise
+  *
++ * @param symbol - xstock_spot symbol. REQUIRED (B79.0c rev 2 / Langston Q4):
++ *                 fail-loud rather than silent ARCA-only fallback. Accepts
++ *                 canonical `BASE/USD` form preferred; Kraken-pair forms
++ *                 like `TSLAxUSD` and bare `TSLAx` are also handled.
+  * @param now - reference time. Defaults to `new Date()` for production calls.
+  *              Tests inject a controlled clock for boundary verification.
+  */
+-export function isXstockMarketOpenUTC(now: Date = new Date()): boolean {
++export function isXstockMarketOpenUTC(symbol: string, now: Date = new Date()): boolean {
++  const normalized = normalizeXstockSymbol(symbol);
++  if (XSTOCK_SPOT_24_7_SYMBOLS.has(normalized)) return true;
++
+   const day = now.getUTCDay();   // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+   const hour = now.getUTCHours();
+ 
+diff --git a/server/asset_classes/xstock_spot/scanner.ts b/server/asset_classes/xstock_spot/scanner.ts
+index 6bc112863..30583d524 100644
+--- a/server/asset_classes/xstock_spot/scanner.ts
++++ b/server/asset_classes/xstock_spot/scanner.ts
+@@ -41,7 +41,7 @@ import { centralClock, type ClockTick } from '../../services/central-clock.js';
+ import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
+ import { isXstockMarketOpenUTC } from './market-hours.js';
+ import { isPairDataFresh } from '../../utils/data-freshness.js';
+-import { XSTOCK_SPOT_SYMBOLS } from '../../../shared/asset-classes.js';
++import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS } from '../../../shared/asset-classes.js';
+ import { db } from '../../db.js';
+ import { sql } from 'drizzle-orm';
+ 
+@@ -68,6 +68,9 @@ interface ScannerDiagnostics {
+   pairsStaleLastCycle: number;
+   lastError: string | null;
+   hostileSimActive: boolean;
++  // B79.0c — universe-split telemetry for diagnostics endpoint.
++  lastUniverseSize: number;
++  lastArcaOpen: boolean;
+ }
+ 
+ interface TickerSnapRow extends Record<string, unknown> {
+@@ -92,6 +95,8 @@ class XstockSpotScannerService {
+     pairsFreshLastCycle: 0,
+     pairsStaleLastCycle: 0,
+     lastError: null,
++    lastUniverseSize: 0,
++    lastArcaOpen: false,
+     hostileSimActive: false,
+   };
+ 
+@@ -181,16 +186,28 @@ class XstockSpotScannerService {
+     try {
+       console.log(`[B79.0a][SCAN_CYCLE_START] tick=${tick.tickNumber}`);
+ 
+-      // Market-open gate. Bypass during hostile-sim so the no-shed posture
+-      // test can run regardless of when (e.g. weekend) Step 7+8 verify
+-      // happens. Hostile-sim is gated behind NODE_ENV !== 'production' +
+-      // explicit env flag — can't accidentally bypass in prod.
+-      if (!isXstockMarketOpenUTC() && !this.diag.hostileSimActive) {
+-        this.diag.cyclesSkippedMarketClosed++;
++      // B79.0c: per-symbol ARCA-open gate. The 24/7 names (Kraken Phase 1
++      // — TSLA/AAPL/etc.) trade through the weekend; full universe scans
++      // when ARCA-open + restricted to the 24/7 set when ARCA-closed.
++      // Cycle is fully skipped only when EVERY name in the universe is
++      // closed (impossible while XSTOCK_SPOT_24_7_SYMBOLS is non-empty).
++      // Hostile-sim bypasses entirely so the no-shed posture test can run
++      // regardless of when (e.g. weekend) Step 7+8 verify happens.
++      // Hostile-sim is gated behind NODE_ENV !== 'production' + explicit
++      // env flag — can't accidentally bypass in prod.
++      const arcaOpenSampleSym = 'NON_24_7_SAMPLE/USD'; // any non-24/7 sym → ARCA schedule
++      const arcaOpen = isXstockMarketOpenUTC(arcaOpenSampleSym);
++      // Build per-cycle universe: full when ARCA open, 24/7-only otherwise.
++      const symbolList = arcaOpen || this.diag.hostileSimActive
++        ? Array.from(XSTOCK_SPOT_SYMBOLS)
++        : Array.from(XSTOCK_SPOT_24_7_SYMBOLS);
++      this.diag.lastUniverseSize = symbolList.length;
++      this.diag.lastArcaOpen = arcaOpen;
++      if (!arcaOpen && !this.diag.hostileSimActive) {
++        this.diag.cyclesSkippedMarketClosed++; // legacy counter, retained for compat
+         if (this.diag.cyclesSkippedMarketClosed % 30 === 1) {
+-          console.log(`[B79.0a][MARKET_CLOSED] tick=${tick.tickNumber} cycles_skipped_total=${this.diag.cyclesSkippedMarketClosed}`);
++          console.log(`[B79.0c][SCAN_24_7_ONLY] tick=${tick.tickNumber} universe=${symbolList.length} (10 names; ARCA closed)`);
+         }
+-        return;
+       }
+ 
+       // Hostile-sim sleep (no-op in production — flag is gated).
+@@ -199,7 +216,6 @@ class XstockSpotScannerService {
+       }
+ 
+       // Batched DB read — Langston rev 2 #1 commitment.
+-      const symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
+       const dbStart = Date.now();
+       // Drizzle's sql template can't bind a JS array directly to PG ANY().
+       // XSTOCK_SPOT_SYMBOLS is a hardcoded const Set (not user input) so
+diff --git a/server/core/filters/signal_quality_evaluator.ts b/server/core/filters/signal_quality_evaluator.ts
+index 032049ed3..f9568928a 100644
+--- a/server/core/filters/signal_quality_evaluator.ts
++++ b/server/core/filters/signal_quality_evaluator.ts
+@@ -177,8 +177,9 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
+   const resolvedAssetClass = safeResolveAssetClass(input.symbol, 'kraken') ?? 'crypto_spot';
+ 
+   if (resolvedAssetClass === 'xstock_spot') {
+-    // (a) Weekend-pause — ARCA hours.
+-    if (!isXstockMarketOpenUTC()) {
++    // (a) Weekend-pause — ARCA hours. B79.0c: per-symbol — 24/7 names
++    // (Kraken Phase 1) bypass the ARCA gate.
++    if (!isXstockMarketOpenUTC(canonicalSymbol)) {
+       _b79WeekendSkipCount++;
+       if (_b79WeekendSkipCount % 50 === 1) {
+         console.log(`[B79][XSTOCK_WEEKEND_PAUSE] skipping ${canonicalSymbol}/${input.strategy} — ARCA closed (count=${_b79WeekendSkipCount})`);
+diff --git a/server/services/trailing-exit-controller.ts b/server/services/trailing-exit-controller.ts
+index df4bfa4a9..a87769761 100644
+--- a/server/services/trailing-exit-controller.ts
++++ b/server/services/trailing-exit-controller.ts
+@@ -645,7 +645,9 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
+   }
+   const { assetClass } = update;
+   if (assetClass === 'xstock_spot') {
+-    if (!isXstockMarketOpenUTC()) {
++    // B79.0c: per-symbol — 24/7 names (Kraken Phase 1) get normal stop-eval
++    // through the weekend; only ARCA-aligned 24/5 names freeze.
++    if (!isXstockMarketOpenUTC(update.symbol)) {
+       _b79TecFreezeCount++;
+       if (_b79TecFreezeCount % 100 === 1) {
+         console.log(`[B79][TEC_FREEZE] ${update.symbol} (xstock_spot, market closed) — skipping stop-eval (count=${_b79TecFreezeCount})`);
+diff --git a/server/tests/unit/b79-0a-data-freshness.test.ts b/server/tests/unit/b79-0a-data-freshness.test.ts
+index a43dbeb3e..1b4b591be 100644
+--- a/server/tests/unit/b79-0a-data-freshness.test.ts
++++ b/server/tests/unit/b79-0a-data-freshness.test.ts
+@@ -21,10 +21,12 @@ vi.mock('../../db.js', () => ({
+   },
+ }));
+ 
+-// Mock isXstockMarketOpenUTC so we can flip it.
++// Mock isXstockMarketOpenUTC so we can flip it. B79.0c: signature now
++// requires symbol param; mock accepts and ignores it (per-symbol logic
++// covered by b79-0c-market-hours-per-symbol.test.ts).
+ const marketOpenMock = { value: true };
+ vi.mock('../../asset_classes/xstock_spot/market-hours.js', () => ({
+-  isXstockMarketOpenUTC: () => marketOpenMock.value,
++  isXstockMarketOpenUTC: (_symbol: string, _now?: Date) => marketOpenMock.value,
+ }));
+ 
+ import { isPairDataFresh, _testClearFreshnessCache } from '../../utils/data-freshness.js';
+diff --git a/server/tests/unit/b79-0b-market-hours.test.ts b/server/tests/unit/b79-0b-market-hours.test.ts
+index 7ef951393..21f5e58e9 100644
+--- a/server/tests/unit/b79-0b-market-hours.test.ts
++++ b/server/tests/unit/b79-0b-market-hours.test.ts
+@@ -1,14 +1,19 @@
+ /**
+  * ════════════════════════════════════════════════════════════════════════════
+- * B79.0b — N4 boundary tests for `isXstockMarketOpenUTC`
++ * B79.0b — N4 boundary tests for `isXstockMarketOpenUTC` (ARCA 24/5 schedule)
+  * ════════════════════════════════════════════════════════════════════════════
+  *
+- * Schedule under test (ARCA-aligned, UTC):
++ * Schedule under test for non-24/7 names (ARCA-aligned, UTC):
+  *   - CLOSED Saturday all day
+  *   - CLOSED Friday from 22:00 UTC onward
+  *   - CLOSED Sunday before 22:00 UTC
+  *   - OPEN otherwise
+  *
++ * 24/7-name behavior is covered by b79-0c-market-hours-per-symbol.test.ts.
++ *
++ * B79.0c (2026-05-09) — signature changed: symbol is now REQUIRED
++ * (Langston Q4 push-back). Tests pass a non-24/7 sample symbol (`AMZN/USD`).
++ *
+  * Tests inject controlled clocks (no `new Date()` at runtime) for deterministic
+  * boundary verification.
+  * ════════════════════════════════════════════════════════════════════════════
+@@ -23,62 +28,65 @@ function utc(year: number, monthZero: number, day: number, hour: number, min: nu
+   return new Date(Date.UTC(year, monthZero, day, hour, min));
+ }
+ 
+-describe('B79.0b — isXstockMarketOpenUTC boundary cases', () => {
++// Sample non-24/7 xstock symbol — AMZN trades 24/5 on Kraken (not in
++// XSTOCK_SPOT_24_7_SYMBOLS), so applies the ARCA schedule under test.
++const ARCA_SYM = 'AMZN/USD';
++
++describe('B79.0b — isXstockMarketOpenUTC boundary cases (ARCA 24/5)', () => {
+   describe('Weekday during market hours', () => {
+     it('Monday 14:30 UTC — open', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 4, 14, 30))).toBe(true);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 4, 14, 30))).toBe(true);
+     });
+     it('Wednesday 16:00 UTC — open', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 6, 16, 0))).toBe(true);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 6, 16, 0))).toBe(true);
+     });
+     it('Friday 14:30 UTC (before close) — open', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 14, 30))).toBe(true);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 14, 30))).toBe(true);
+     });
+   });
+ 
+   describe('Friday close transition', () => {
+     it('Friday 21:59 UTC — open (one minute before close)', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 21, 59))).toBe(true);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 21, 59))).toBe(true);
+     });
+     it('Friday 22:00 UTC — closed (close boundary)', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 22, 0))).toBe(false);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 22, 0))).toBe(false);
+     });
+     it('Friday 23:00 UTC — closed', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 23, 0))).toBe(false);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 23, 0))).toBe(false);
+     });
+   });
+ 
+   describe('Saturday — fully closed', () => {
+     it('Saturday 00:00 UTC — closed', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 9, 0, 0))).toBe(false);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 9, 0, 0))).toBe(false);
+     });
+     it('Saturday 14:30 UTC — closed', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 9, 14, 30))).toBe(false);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 9, 14, 30))).toBe(false);
+     });
+     it('Saturday 23:59 UTC — closed', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 9, 23, 59))).toBe(false);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 9, 23, 59))).toBe(false);
+     });
+   });
+ 
+   describe('Sunday open transition', () => {
+     it('Sunday 14:30 UTC — closed (before open)', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 14, 30))).toBe(false);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 14, 30))).toBe(false);
+     });
+     it('Sunday 21:59 UTC — closed (one minute before open)', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 21, 59))).toBe(false);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 21, 59))).toBe(false);
+     });
+     it('Sunday 22:00 UTC — open (open boundary)', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 22, 0))).toBe(true);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 22, 0))).toBe(true);
+     });
+     it('Sunday 23:00 UTC — open', () => {
+-      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 23, 0))).toBe(true);
++      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 23, 0))).toBe(true);
+     });
+   });
+ 
+-  describe('Default-arg fallback', () => {
+-    it('No-arg call uses new Date() — returns boolean', () => {
+-      // Smoke test only — actual value depends on wall-clock at test run.
+-      const result = isXstockMarketOpenUTC();
++  describe('Wall-clock smoke (no injected time)', () => {
++    it('returns a boolean for non-24/7 sample symbol', () => {
++      const result = isXstockMarketOpenUTC(ARCA_SYM);
+       expect(typeof result).toBe('boolean');
+     });
+   });
+diff --git a/server/tests/unit/b79-0c-market-hours-per-symbol.test.ts b/server/tests/unit/b79-0c-market-hours-per-symbol.test.ts
+new file mode 100644
+index 000000000..c3d6723a2
+--- /dev/null
++++ b/server/tests/unit/b79-0c-market-hours-per-symbol.test.ts
+@@ -0,0 +1,131 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0c — Per-symbol 24/7 boundary tests for `isXstockMarketOpenUTC`
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Verifies that the 10 Kraken Phase 1 24/7 names (XSTOCK_SPOT_24_7_SYMBOLS)
++ * bypass the ARCA 24/5 schedule, while non-24/7 names still respect it.
++ *
++ * Also asserts:
++ *   - All 10 24/7 names exist in the master XSTOCK_SPOT_SYMBOLS set
++ *   - Symbol normalization (canonical / Kraken-pair-form / bare-with-x)
++ *   - Required-symbol signature: callsites compile with symbol arg
++ *
++ * ARCA 24/5 schedule itself is covered by b79-0b-market-hours.test.ts.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { describe, it, expect } from 'vitest';
++import { isXstockMarketOpenUTC } from '../../asset_classes/xstock_spot/market-hours.js';
++import {
++  XSTOCK_SPOT_SYMBOLS,
++  XSTOCK_SPOT_24_7_SYMBOLS,
++} from '../../../shared/asset-classes.js';
++
++function utc(year: number, monthZero: number, day: number, hour: number, min: number = 0): Date {
++  return new Date(Date.UTC(year, monthZero, day, hour, min));
++}
++
++// Anchored times for boundary cases.
++const SAT_14_30 = utc(2026, 4, 9, 14, 30);   // Saturday — ARCA closed
++const SAT_03_00 = utc(2026, 4, 9, 3, 0);     // Saturday early — ARCA closed
++const FRI_23_00 = utc(2026, 4, 8, 23, 0);    // Friday after close — ARCA closed
++const SUN_18_00 = utc(2026, 4, 10, 18, 0);   // Sunday before open — ARCA closed
++const MON_15_00 = utc(2026, 4, 4, 15, 0);    // Monday RTH — ARCA open
++
++const ARCA_SYM = 'AMZN/USD';   // 24/5 (in master set, NOT in 24/7 set)
++const SYM_24_7  = 'TSLA/USD';  // 24/7 sample
++const SYM_24_7_2 = 'AAPL/USD';
++
++describe('B79.0c — XSTOCK_SPOT_24_7_SYMBOLS membership integrity', () => {
++  it('contains exactly 10 names (Kraken Phase 1, 2025-12-03)', () => {
++    expect(XSTOCK_SPOT_24_7_SYMBOLS.size).toBe(10);
++  });
++
++  it('every 24/7 name is also in master XSTOCK_SPOT_SYMBOLS', () => {
++    for (const sym of XSTOCK_SPOT_24_7_SYMBOLS) {
++      expect(XSTOCK_SPOT_SYMBOLS.has(sym)).toBe(true);
++    }
++  });
++
++  it('contains the canonical Kraken Phase-1 names', () => {
++    const expected = ['AAPL/USD', 'CRCL/USD', 'GLD/USD', 'GOOGL/USD', 'HOOD/USD',
++                      'MSTR/USD', 'NVDA/USD', 'QQQ/USD', 'SPY/USD', 'TSLA/USD'];
++    for (const sym of expected) {
++      expect(XSTOCK_SPOT_24_7_SYMBOLS.has(sym)).toBe(true);
++    }
++  });
++});
++
++describe('B79.0c — 24/7 names bypass ARCA schedule', () => {
++  it('TSLA/USD open Saturday 14:30 UTC (ARCA closed)', () => {
++    expect(isXstockMarketOpenUTC(SYM_24_7, SAT_14_30)).toBe(true);
++  });
++
++  it('AAPL/USD open Friday 23:00 UTC (ARCA closed)', () => {
++    expect(isXstockMarketOpenUTC(SYM_24_7_2, FRI_23_00)).toBe(true);
++  });
++
++  it('SPY/USD open Sunday 18:00 UTC (ARCA pre-reopen)', () => {
++    expect(isXstockMarketOpenUTC('SPY/USD', SUN_18_00)).toBe(true);
++  });
++
++  it('GOOGL/USD open Saturday 03:00 UTC (deep closed window)', () => {
++    expect(isXstockMarketOpenUTC('GOOGL/USD', SAT_03_00)).toBe(true);
++  });
++
++  it('all 10 24/7 names open during full ARCA-closed window', () => {
++    for (const sym of XSTOCK_SPOT_24_7_SYMBOLS) {
++      expect(isXstockMarketOpenUTC(sym, SAT_14_30)).toBe(true);
++    }
++  });
++});
++
++describe('B79.0c — non-24/7 names still respect ARCA schedule', () => {
++  it('AMZN/USD closed Saturday 14:30 UTC', () => {
++    expect(isXstockMarketOpenUTC(ARCA_SYM, SAT_14_30)).toBe(false);
++  });
++
++  it('AMZN/USD open Monday 15:00 UTC (RTH)', () => {
++    expect(isXstockMarketOpenUTC(ARCA_SYM, MON_15_00)).toBe(true);
++  });
++
++  it('AMZN/USD closed Friday 23:00 UTC (post-22:00)', () => {
++    expect(isXstockMarketOpenUTC(ARCA_SYM, FRI_23_00)).toBe(false);
++  });
++});
++
++describe('B79.0c — symbol normalization', () => {
++  // Langston Step 4 F1 regression-lock: greedy [A-Z]+ + case-insensitive
++  // flag was consuming the `x` itself (TSLAxUSD → TSLAx/USD), silently
++  // bypassing the 24/7 set. Mandatory `x` (no `?`) forces correct backtrack.
++  it('Kraken-pair form `TSLAxUSD` → 24/7 (always open) [F1 regression-lock]', () => {
++    expect(isXstockMarketOpenUTC('TSLAxUSD', SAT_14_30)).toBe(true);
++  });
++
++  it('Kraken-pair form `AAPLxUSDC` → 24/7 (always open)', () => {
++    expect(isXstockMarketOpenUTC('AAPLxUSDC', SAT_14_30)).toBe(true);
++  });
++
++  it('Kraken-pair form `MSTRxUSD` → 24/7 (always open)', () => {
++    expect(isXstockMarketOpenUTC('MSTRxUSD', SAT_14_30)).toBe(true);
++  });
++
++  it('canonical-with-x form `TSLAx/USD` → 24/7 (always open)', () => {
++    expect(isXstockMarketOpenUTC('TSLAx/USD', SAT_14_30)).toBe(true);
++  });
++
++  it('non-24/7 Kraken-pair form `AMZNxUSD` → ARCA-closed Saturday', () => {
++    expect(isXstockMarketOpenUTC('AMZNxUSD', SAT_14_30)).toBe(false);
++  });
++});
++
++describe('B79.0c — unknown / non-xstock symbols default to ARCA schedule', () => {
++  it('unknown symbol returns ARCA-closed during weekend', () => {
++    expect(isXstockMarketOpenUTC('UNKNOWN/USD', SAT_14_30)).toBe(false);
++  });
++
++  it('unknown symbol returns ARCA-open during RTH', () => {
++    expect(isXstockMarketOpenUTC('UNKNOWN/USD', MON_15_00)).toBe(true);
++  });
++});
+diff --git a/server/utils/data-freshness.ts b/server/utils/data-freshness.ts
+index 200ef2352..f6ec7bcb4 100644
+--- a/server/utils/data-freshness.ts
++++ b/server/utils/data-freshness.ts
+@@ -12,7 +12,7 @@
+  * a 6h sample (90,000 ms = max(p99_max + buffer, central_clock_interval)).
+  *
+  * Closed-market behavior: when the asset class is xstock_spot and the
+- * market is closed (`isXstockMarketOpenUTC() === false`), helper returns
++ * market is closed (`isXstockMarketOpenUTC(symbol) === false`), helper returns
+  * `true` (treat as fresh — explicit contract beats null per Langston Q2).
+  * Scanner short-circuits on market-closed gate before reaching this site
+  * anyway; this is belt-and-suspenders.
+@@ -86,13 +86,15 @@ async function _resolveWindowMs(assetClass: AssetClass): Promise<number> {
+  * against this stale data.
+  */
+ export async function isPairDataFresh(
+-  _symbol: string,
++  symbol: string,
+   assetClass: AssetClass,
+   lastTickTimestampMs: number,
+   now: number = Date.now(),
+ ): Promise<boolean> {
+-  // Belt-and-suspenders for closed market (Langston Q2 lock).
+-  if (assetClass === ASSET_CLASSES.XSTOCK_SPOT && !isXstockMarketOpenUTC()) {
++  // Belt-and-suspenders for closed market (Langston Q2 lock from B79).
++  // B79.0c: per-symbol — 24/7 names (Kraken Phase 1) keep normal staleness
++  // semantics (don't auto-mark fresh just because it's the weekend).
++  if (assetClass === ASSET_CLASSES.XSTOCK_SPOT && !isXstockMarketOpenUTC(symbol)) {
+     return true;
+   }
+ 
+diff --git a/shared/asset-classes.ts b/shared/asset-classes.ts
+index 14e023753..c6a91d4fb 100644
+--- a/shared/asset-classes.ts
++++ b/shared/asset-classes.ts
+@@ -228,6 +228,35 @@ export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set([
+   'XOM/USD','XPEV/USD','XYL/USD','XYZ/USD','ZTS/USD',
+ ]);
+ 
++/**
++ * B79.0c — xstock_spot symbols that trade 24/7 on Kraken Pro.
++ *
++ * Per Kraken Phase 1 announcement (2025-12-03) at
++ * https://blog.kraken.com/news/xstocks-247-trading — ten xStock tokens trade
++ * around the clock, not the ARCA-aligned 24/5 schedule the rest follow.
++ * Canonical form (no "x" suffix; matches XSTOCK_SPOT_SYMBOLS shape).
++ *
++ * Reference data, NOT a behavioral knob — Phase-2 expansion is a Kraken
++ * product event that requires a code change here AND in XSTOCK_SPOT_SYMBOLS,
++ * so a DB-resolved row would only add coupling without shipping flexibility.
++ *
++ * Consumed by `isXstockMarketOpenUTC(symbol, now?)` to bypass the ARCA
++ * weekend gate for these names. All 10 must already exist in
++ * XSTOCK_SPOT_SYMBOLS — assertion enforced by a unit test.
++ */
++export const XSTOCK_SPOT_24_7_SYMBOLS: ReadonlySet<string> = new Set([
++  'AAPL/USD',
++  'CRCL/USD',
++  'GLD/USD',
++  'GOOGL/USD',
++  'HOOD/USD',
++  'MSTR/USD',
++  'NVDA/USD',
++  'QQQ/USD',
++  'SPY/USD',
++  'TSLA/USD',
++]);
++
+ /** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. */
+ const CRYPTO_SPOT_CANONICAL = /^[A-Z0-9]{2,10}\/[A-Z0-9]{3,4}$/;
+ 

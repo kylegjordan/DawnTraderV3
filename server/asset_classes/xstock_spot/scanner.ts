@@ -41,7 +41,7 @@ import { centralClock, type ClockTick } from '../../services/central-clock.js';
 import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
 import { isPairDataFresh } from '../../utils/data-freshness.js';
-import { XSTOCK_SPOT_SYMBOLS } from '../../../shared/asset-classes.js';
+import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS } from '../../../shared/asset-classes.js';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 
@@ -68,6 +68,9 @@ interface ScannerDiagnostics {
   pairsStaleLastCycle: number;
   lastError: string | null;
   hostileSimActive: boolean;
+  // B79.0c — universe-split telemetry for diagnostics endpoint.
+  lastUniverseSize: number;
+  lastArcaOpen: boolean;
 }
 
 interface TickerSnapRow extends Record<string, unknown> {
@@ -92,6 +95,8 @@ class XstockSpotScannerService {
     pairsFreshLastCycle: 0,
     pairsStaleLastCycle: 0,
     lastError: null,
+    lastUniverseSize: 0,
+    lastArcaOpen: false,
     hostileSimActive: false,
   };
 
@@ -181,16 +186,28 @@ class XstockSpotScannerService {
     try {
       console.log(`[B79.0a][SCAN_CYCLE_START] tick=${tick.tickNumber}`);
 
-      // Market-open gate. Bypass during hostile-sim so the no-shed posture
-      // test can run regardless of when (e.g. weekend) Step 7+8 verify
-      // happens. Hostile-sim is gated behind NODE_ENV !== 'production' +
-      // explicit env flag — can't accidentally bypass in prod.
-      if (!isXstockMarketOpenUTC() && !this.diag.hostileSimActive) {
-        this.diag.cyclesSkippedMarketClosed++;
+      // B79.0c: per-symbol ARCA-open gate. The 24/7 names (Kraken Phase 1
+      // — TSLA/AAPL/etc.) trade through the weekend; full universe scans
+      // when ARCA-open + restricted to the 24/7 set when ARCA-closed.
+      // Cycle is fully skipped only when EVERY name in the universe is
+      // closed (impossible while XSTOCK_SPOT_24_7_SYMBOLS is non-empty).
+      // Hostile-sim bypasses entirely so the no-shed posture test can run
+      // regardless of when (e.g. weekend) Step 7+8 verify happens.
+      // Hostile-sim is gated behind NODE_ENV !== 'production' + explicit
+      // env flag — can't accidentally bypass in prod.
+      const arcaOpenSampleSym = 'NON_24_7_SAMPLE/USD'; // any non-24/7 sym → ARCA schedule
+      const arcaOpen = isXstockMarketOpenUTC(arcaOpenSampleSym);
+      // Build per-cycle universe: full when ARCA open, 24/7-only otherwise.
+      const symbolList = arcaOpen || this.diag.hostileSimActive
+        ? Array.from(XSTOCK_SPOT_SYMBOLS)
+        : Array.from(XSTOCK_SPOT_24_7_SYMBOLS);
+      this.diag.lastUniverseSize = symbolList.length;
+      this.diag.lastArcaOpen = arcaOpen;
+      if (!arcaOpen && !this.diag.hostileSimActive) {
+        this.diag.cyclesSkippedMarketClosed++; // legacy counter, retained for compat
         if (this.diag.cyclesSkippedMarketClosed % 30 === 1) {
-          console.log(`[B79.0a][MARKET_CLOSED] tick=${tick.tickNumber} cycles_skipped_total=${this.diag.cyclesSkippedMarketClosed}`);
+          console.log(`[B79.0c][SCAN_24_7_ONLY] tick=${tick.tickNumber} universe=${symbolList.length} (10 names; ARCA closed)`);
         }
-        return;
       }
 
       // Hostile-sim sleep (no-op in production — flag is gated).
@@ -199,7 +216,6 @@ class XstockSpotScannerService {
       }
 
       // Batched DB read — Langston rev 2 #1 commitment.
-      const symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
       const dbStart = Date.now();
       // Drizzle's sql template can't bind a JS array directly to PG ANY().
       // XSTOCK_SPOT_SYMBOLS is a hardcoded const Set (not user input) so

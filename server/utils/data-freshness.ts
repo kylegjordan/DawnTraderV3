@@ -12,7 +12,7 @@
  * a 6h sample (90,000 ms = max(p99_max + buffer, central_clock_interval)).
  *
  * Closed-market behavior: when the asset class is xstock_spot and the
- * market is closed (`isXstockMarketOpenUTC() === false`), helper returns
+ * market is closed (`isXstockMarketOpenUTC(symbol) === false`), helper returns
  * `true` (treat as fresh — explicit contract beats null per Langston Q2).
  * Scanner short-circuits on market-closed gate before reaching this site
  * anyway; this is belt-and-suspenders.
@@ -86,13 +86,15 @@ async function _resolveWindowMs(assetClass: AssetClass): Promise<number> {
  * against this stale data.
  */
 export async function isPairDataFresh(
-  _symbol: string,
+  symbol: string,
   assetClass: AssetClass,
   lastTickTimestampMs: number,
   now: number = Date.now(),
 ): Promise<boolean> {
-  // Belt-and-suspenders for closed market (Langston Q2 lock).
-  if (assetClass === ASSET_CLASSES.XSTOCK_SPOT && !isXstockMarketOpenUTC()) {
+  // Belt-and-suspenders for closed market (Langston Q2 lock from B79).
+  // B79.0c: per-symbol — 24/7 names (Kraken Phase 1) keep normal staleness
+  // semantics (don't auto-mark fresh just because it's the weekend).
+  if (assetClass === ASSET_CLASSES.XSTOCK_SPOT && !isXstockMarketOpenUTC(symbol)) {
     return true;
   }
 

@@ -21,10 +21,12 @@ vi.mock('../../db.js', () => ({
   },
 }));
 
-// Mock isXstockMarketOpenUTC so we can flip it.
+// Mock isXstockMarketOpenUTC so we can flip it. B79.0c: signature now
+// requires symbol param; mock accepts and ignores it (per-symbol logic
+// covered by b79-0c-market-hours-per-symbol.test.ts).
 const marketOpenMock = { value: true };
 vi.mock('../../asset_classes/xstock_spot/market-hours.js', () => ({
-  isXstockMarketOpenUTC: () => marketOpenMock.value,
+  isXstockMarketOpenUTC: (_symbol: string, _now?: Date) => marketOpenMock.value,
 }));
 
 import { isPairDataFresh, _testClearFreshnessCache } from '../../utils/data-freshness.js';
