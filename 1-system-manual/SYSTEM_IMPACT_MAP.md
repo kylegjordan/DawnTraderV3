@@ -1529,13 +1529,15 @@ Coverage for ARM constructor back-compat + data-freshness helper edge cases (clo
 
 **Layer:** 4 (Signal Generation / Strategies)
 
-**Purpose:** Opening Range Breakout strategy — equity-microstructure-targeting first-15-30min open-range breakout. **DORMANT Day 1**: detect path returns null until DB flag `module_constants.strategy_gates.xstock_spot.orb.enabled` flips to true (via Q-D AAPLx-vs-AAPL probe outcome).
+**Purpose:** Opening Range Breakout strategy — equity-microstructure-targeting first-30min open-range breakout. **B79.0d ACTIVATION (2026-05-09):** dormant scaffold replaced with full ~210-line implementation. Calendar-fixed 14:30–15:00 UTC opening range (per Q1 lock); 15:00–17:00 UTC active breakout window (Q3); 0.15×ATR buffer (Q2); 1.5× volume multiple confirmation; R:R 2× rangeHeight target (label nit per RUNNING_ISSUES #90); confidence 0.55–0.90 with range/atr clamp at 3.0 (Q4 Langston nit).
 
-**Upstream:** would be called by strategy-engine dispatch table once registered (not registered Day 1).
-**Downstream:** none Day 1.
-**Shared state:** `_disabledLogCount` module-scoped (cosmetic).
-**Background execution:** none.
-**Blast radius:** ZERO Day 1 (function never invoked).
+**Upstream:** strategy-engine `detectORB` wrapper → file detect (B79.0d). Signal-orchestrator dispatch block at line 1786+ (gated by `resolveAssetClass(symbol,'kraken') === 'xstock_spot'`). Module_constants 7-row threshold set at `strategy.orb` scope. Module_constants gate row at `strategy_gates.xstock_spot.orb.enabled` (true post-B79.0d). XSTOCK_SPOT_24_7_SYMBOLS set imported for opening-bell guard.
+**Downstream:** SQE filter (xstock_spot whitelist already includes 'orb' per B79); paper-execution-engine (active path dormant pending Phase 19); B73 exit-strategy ablation (auto-included — replay-service is strategy-agnostic).
+**Shared state:** 3 module-scoped log-throttle counters (`_disabledLogCount`, `_no24_7LogCount`, `_outsideWindowLogCount`).
+**Background execution:** invoked synchronously by signal-orchestrator on every evaluation tick when activeStrategies.has('orb') AND assetClass === 'xstock_spot'.
+**Blast radius:** MEDIUM — fires only on xstock_spot 24/5 names (24/7 names skipped by detect's `XSTOCK_SPOT_24_7_SYMBOLS.has(symbol)` guard). Crypto path triple-defense: detect-internal asset_class guard + signal-orchestrator dispatch-guard + SQE whitelist.
+**Rollback path:** DB-only — `UPDATE module_constants SET value='false'::jsonb WHERE module_name='strategy_gates' AND asset_class='xstock_spot' AND strategy='orb' AND constant_name='enabled'`. Cached sync API picks up on next tick. No code revert needed.
+**First-fire expected:** Monday 2026-05-11 14:30 UTC (range formation start) → 15:00 UTC (first breakout candidates).
 
 ### `server/asset_classes/xstock_spot/market-hours.ts` (B79; B79.0c per-symbol)
 
