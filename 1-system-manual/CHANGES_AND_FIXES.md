@@ -2,6 +2,68 @@
 
 ---
 
+## INFRA-2026-05-09-A — Langston bridge "Session ID already in use" (UUID rotation)
+
+**Trigger:** Kyle messaged `@LangstonDTBot` (DM + topic 21 mentions); bridge daemon replied with `Error: Session ID 128e2dff-12d9-481c-b6cb-89e352c106eb is already in use` instead of Langston's actual response. Visible in screenshots 2026-05-09 ~11:46 UTC.
+
+**Root cause:** Earlier in 2026-05-09 work, my CC watchdog calls used the canonical Langston session UUID `128e2dff-...` which wrote to `~/.claude/projects/-home-langston/128e2dff-12d9-481c-b6cb-89e352c106eb.jsonl`. The claude-cli's session-lock check sees that file, treats the session as "in use," and refuses to start a new instance — even after the prior process exited cleanly. Bridge daemon caught the error, posted it back to Telegram as Langston's "reply."
+
+**Fix (live on Hetzner; permission-only change, no code commit):**
+- Generated fresh UUID via `python3 -c "import uuid; print(uuid.uuid4())"` → `f8dd5e4c-a381-44c4-b8ab-183eec0517e8`
+- Updated `/home/langston/.langston-bridge-state.json` `session_id` field
+- `systemctl restart langston-bridge` — daemon picks up new UUID
+- PING test: 5s roundtrip success
+
+**Standing rule (added to `CLAUDE.md` §6.5 and `MEMORY.md` invariants on next pass):** CC's watchdog calls MUST use FRESH per-call UUIDs (already the design, but the bridge state's canonical UUID was being reused once for context-persistence). NEVER pass Langston's bridge canonical UUID to a CC-side call — it locks the session-state file and the bridge can't recover until rotation.
+
+**Lesson:** the claude-cli's "session-already-in-use" check is permanent until the session-state file is moved/deleted. There is no graceful timeout. Treat session UUIDs as exclusive-write locks.
+
+---
+
+## INFRA-2026-05-09-B — `/var/log/cc-bridge-inbox.jsonl` permission denied (langston user mirror writes)
+
+**Trigger:** Earlier today's investigation noticed `langston-bridge.log` showing `mirror write failed: [Errno 13] Permission denied: '/var/log/cc-bridge-inbox.jsonl'` after every Langston handle. CC could see Kyle's inbound messages (cc-comms-bridge wrote them as root) but NEVER saw Langston's outbound or my own CC outbound — those mirrors were silently dropped.
+
+**Root cause:** `/var/log/cc-bridge-inbox.jsonl` was created by `cc-comms-bridge.service` running as root → file mode 644 root:root. The `langston-bridge.service` runs as user `langston` and tried to append mirror lines → EACCES.
+
+**Fix (live on Hetzner):**
+- `chgrp langston /var/log/cc-bridge-inbox.jsonl`
+- `chmod g+w` → mode 664 root:langston
+- Both daemons can now append; verified via subsequent outbound mirrors landing in the log
+
+**Standing rule:** when adding a new bridge daemon that writes to a shared log, ensure the log file's group is set to a group both users belong to (or grant write via ACL). Document the expected file mode in the bridge's source-controlled script.
+
+---
+
+## INFRA-2026-05-09-C — `cc-comms-bridge.py` missing auto-ACK (OpenClaw-era feature regression)
+
+**Trigger:** Kyle's UX report 2026-05-09 ~22:00 UTC: "the CCDT communicator was supposed to copy and paste all messages that I sent in the group into your inbox so that you knew about them... and when he did that, he would always leave a quick message saying, I've received this message and I'm pasting it into the inbox."
+
+**Root cause:** OpenClaw (decommissioned 2026-05-06 per CLAUDE.md §8.1) had an auto-ACK behavior on inbound messages. When migrating to the Python `cc-comms-bridge.py`, the inbox-log-write logic was carried over but the auto-ACK reply logic was NOT. Silent feature regression — Kyle's messages were captured but he received zero UX confirmation.
+
+**Fix (committed to repo at `Claude Comms and Packages/comms-infra/cc-comms-bridge.py`; live on Hetzner via scp + systemctl restart):**
+- Added auto-ACK call after `append_inbox(entry)` in the poll loop. Reply text: `"✅ Logged (msg <id>) — CC will see this at next session start. For real-time, use the Claude Desktop conversation."`
+- Skips bot messages (`entry["sender_is_bot"]`) so we don't loop on CCDTCommsBot's own outbound or LangstonDTBot's responses
+- Topic-21 fallback: if the originating thread is bot-locked (e.g. Telegram returns 400 `TOPIC_CLOSED` for forum supergroup `# General` topic), the ACK falls back to topic 21 (Batch Implementations) with a reference back to the original chat/thread. Guarantees Kyle gets an ACK SOMEWHERE.
+
+**Verification:** Kyle re-tested in topic 21 (msg 3756 → CCDTCommsBot ACK msg 3757 → Langston response "Yes, receiving you loud and clear" landed). End-to-end working.
+
+**Standing rule (codify in CLAUDE.md §6.6 next governance pass):** any bridge daemon migration MUST preserve user-facing UX behaviors of the predecessor. Auto-ACK is part of the comms-infra contract Kyle relies on; future migrations test for it before decommissioning.
+
+---
+
+## INFRA-2026-05-09-D — `# General` topic in forum supergroup blocks bot replies (TOPIC_CLOSED)
+
+**Trigger:** First auto-ACK patch (INFRA-2026-05-09-C above) initially failed for messages sent in the `# General` topic of the Dawn Trader HQ supergroup. Telegram returned `400 Bad Request: TOPIC_CLOSED`. Kyle's first re-test failed silently because the ACK couldn't post.
+
+**Root cause:** Telegram forum supergroups have a special pseudo-topic `# General` (the default thread). Admins can lock it to bot replies. In Dawn Trader HQ, `# General` is admin-locked; bots can READ but not POST.
+
+**Fix (folded into INFRA-2026-05-09-C patch via topic-21 fallback):** ACK code attempts the originating thread first; on any 400 (TOPIC_CLOSED or otherwise) for supergroup chats, falls back to topic 21 with a reference link back to the original message. Verified working on Kyle's re-test.
+
+**Lesson:** when implementing a bot reply that mirrors arbitrary inbound, never assume bot has write permission in the originating thread of a forum supergroup. Always have a known-good fallback channel.
+
+---
+
 ## INFRA-2026-05-08-A — B79.0a column-name bug (last vs. price)
 
 **Trigger:** First load-test run on staging (post-B79.0a Step 3 push) returned `error: column "price" does not exist`. Surfaced during process-gap backfill (deploy had pre-empted the load-test gate per Langston Step 4 #1).
