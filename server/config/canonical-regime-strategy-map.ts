@@ -400,7 +400,9 @@ export const STRATEGY_DISPLAY_NAMES: Record<string, string> = {
   dhma: 'DHMA',
   liquidity_trap: 'Liquidity Trap',
   // B63: Strong Bull Trend (Path D) — QUANT, LONG-only Donchian breakout
-  strong_bull_trend: 'Strong Bull Trend'
+  strong_bull_trend: 'Strong Bull Trend',
+  // B79.0d: Opening Range Breakout — xstock_spot QUANT, calendar-fixed 14:30-15:00 UTC range
+  orb: 'Opening Range Breakout'
 };
 
 /**
