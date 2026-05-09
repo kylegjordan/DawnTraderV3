@@ -103,8 +103,13 @@ describe('B79.0c — symbol normalization', () => {
     expect(isXstockMarketOpenUTC('TSLAxUSD', SAT_14_30)).toBe(true);
   });
 
-  it('Kraken-pair form `AAPLxUSDC` → 24/7 (always open)', () => {
-    expect(isXstockMarketOpenUTC('AAPLxUSDC', SAT_14_30)).toBe(true);
+  it('Kraken-pair USDC quote `AAPLxUSDC` normalizes to AAPL/USDC — NOT in 24/7 set (which is /USD-only)', () => {
+    // XSTOCK_SPOT_24_7_SYMBOLS holds the canonical /USD form only (matches
+    // XSTOCK_SPOT_SYMBOLS shape). USDC-quote variants would need to be
+    // explicitly added to the 24/7 set if Kraken expands Phase-1 across
+    // quote currencies. For now, /USDC inputs fall through to the ARCA
+    // schedule.
+    expect(isXstockMarketOpenUTC('AAPLxUSDC', SAT_14_30)).toBe(false);
   });
 
   it('Kraken-pair form `MSTRxUSD` → 24/7 (always open)', () => {
