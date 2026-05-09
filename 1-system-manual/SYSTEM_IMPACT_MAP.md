@@ -1537,17 +1537,18 @@ Coverage for ARM constructor back-compat + data-freshness helper edge cases (clo
 **Background execution:** none.
 **Blast radius:** ZERO Day 1 (function never invoked).
 
-### `server/asset_classes/xstock_spot/market-hours.ts` (NEW, B79)
+### `server/asset_classes/xstock_spot/market-hours.ts` (B79; B79.0c per-symbol)
 
 **Layer:** 5 (Regime Classification / Asset-Class Config)
 
-**Purpose:** ARCA-aligned 24/5 schedule predicate `isXstockMarketOpenUTC(now?)`. NO IMPORTS — leaf module.
+**Purpose:** Per-symbol market-hours predicate `isXstockMarketOpenUTC(symbol, now?)`. **B79.0c update (2026-05-09):** REQUIRED-symbol signature (Langston Q4 push-back vs original optional). 10 Kraken Phase-1 24/7 names (`XSTOCK_SPOT_24_7_SYMBOLS`: AAPL, CRCL, GLD, GOOGL, HOOD, MSTR, NVDA, QQQ, SPY, TSLA — canonical /USD form) bypass ARCA gate; all other xstocks apply ARCA 24/5 schedule. Internal `normalizeXstockSymbol` handles 3 input forms: canonical (`AAPL/USD`), canonical-with-x (`TSLAx/USD`), Kraken-pair (`TSLAxUSD`, `AAPLxUSDC`).
 
-**Upstream:** consumed by SQE weekend-pause gate + TEC stop-freeze guard + future xstock scanner cadence gate (B79.0a).
-**Downstream:** none.
+**Upstream:** `XSTOCK_SPOT_24_7_SYMBOLS` from `shared/asset-classes`. Single dependency — shared/* is leaf.
+**Downstream (4 callsites):** `xstock_spot/scanner.ts` (universe filter), `core/filters/signal_quality_evaluator.ts:182` (weekend-pause gate), `utils/data-freshness.ts:97` (closed-market belt-and-suspenders), `services/trailing-exit-controller.ts:650` (stop-freeze guard).
 **Shared state:** none.
-**Blast radius:** LOW (pure predicate). Crypto path doesn't import this.
-**Limitation:** does NOT include US market holidays Day 1. Future enhancement: module_constant `xstockMarketHoursOverride` for holiday calendar (Langston Q5 answer; B79.x).
+**Blast radius:** MEDIUM (every xstock_spot signal evaluation passes through this; symbol arg now mandatory — TS catches no-arg callsites at compile). Crypto path doesn't import this.
+**Limitations:** does NOT include US market holidays. Live-data flow for the 10 24/7 names blocked upstream (Kraken WS-equities silent on weekends regardless of 24/7 marker — RUNNING_ISSUES #89 for B79.x follow-up).
+**Test coverage:** `b79-0b-market-hours.test.ts` (13 ARCA boundary cases), `b79-0c-market-hours-per-symbol.test.ts` (19 cases — membership integrity + 24/7 bypass + non-24/7 ARCA + 3-form normalization w/ F1 regression-lock + USDC quote NOT-in-set + unknown-symbol fallback).
 
 ### `server/asset_classes/types.ts` (NEW, B79)
 

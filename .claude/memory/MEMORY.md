@@ -18,16 +18,19 @@
 
 ---
 
-## CURRENT STATE — 2026-05-09 night (B79.0b CLOSED; B79.0c + B79.0d are NEXT, calendar-gated to Sunday 22:00 UTC ARCA reopen)
+## CURRENT STATE — 2026-05-09 night (B79.0c CLOSED on staging; B79.0d NEXT)
 
-**Next two sub-batches (Kyle directive 2026-05-09 night, FINAL):**
-- **B79.0c — 24/7 xstock support.** AFTER COMPACT, with scope+PIA review by Langston BEFORE implementation (Kyle re-confirmed 2026-05-09 night — don't just ship). Kraken Pro Phase 1 (announced 2025-12-03): 10 xstock_spot tokens trade 24/7 — TSLAx, QQQx, SPYx, NVDAx, CRCLx, AAPLx, HOODx, MSTRx, GLDx, GOOGLx. Current `isXstockMarketOpenUTC()` is symbol-blind → blocks the 24/7 names from scanner/SQE/freshness/TEC during weekends. Scope: per-symbol predicate + 4 callsite updates (scanner.ts:188 + signal_quality_evaluator.ts:181 + data-freshness.ts:95 + trailing-exit-controller.ts:648) + scanner per-symbol filtering during weekend window + boundary tests. **Also investigate the xstock_spot WS archiver gap** (silent since 2026-05-09 11:12 UTC ticker, 00:15 UTC OHLC) — likely Kraken WS goes silent weekends regardless of 24/7 marker, but the 10 names should still flow; needs WS-side reconnect/subscribe verification.
-- **B79.0d — ORB strategy IMPLEMENTATION for xstock_spot (Kyle locked 2026-05-09 night, framing corrected).** What exists today is SCAFFOLDING ONLY: file `server/strategies/orb.ts` with an empty `detectORB()` that returns null even when the gate is flipped, DB row `module_constants.strategy_gates.xstock_spot.orb.enabled=false`, and a whitelist entry at `canonical-regime-strategy-map.ts:906`. **NOT in strategy-engine dispatch (engine doesn't know ORB exists). NOT in regime mapping. NO threshold parameters seeded.** Real B79.0d work: (1) write actual detect logic — identify opening 15-30min window, compute high/low range, watch for breakout above/below + buffer, generate BUY/SELL StrategySignal with stop/target/confidence (~100-150 lines new code); (2) register in strategy-engine dispatch (~5-10 lines); (3) add ORB to regime-strategy map for xstock_spot regimes — natural fits are IMPULSE_EXPANSION + STRUCTURAL_TRANSITION (vol-discovery); (4) seed Layer-1 thresholds in module_constants for xstock_spot (open-range minutes, breakout buffer in ATR units, R:R ratio, volume-multiple); (5) flip DB gate `enabled` to true; (6) register ORB in B73 exit-strategy ablation. Estimate 3-5 hours including scope+PIA+impl+tests+deploy+verify. Both VTS + active-path wire-in (active dormant until Phase 19). ORB doesn't apply to 24/7 names (no "open"); applies to 24/5 names at Sunday-reopen + weekday-open boundaries. Target: in place before Sunday 2026-05-10 22:00 UTC reopen.
-- **Coverage scope clarification:** every B79.x batch hits BOTH VTS shadow-mode evaluation AND active-trading wire-in (signal-orchestrator → paper-execution-engine → RTB → TEC). Active path is wire-in-only-no-trades until Phase 19. Plan-doc filename `MULTI_ASSET_VTS_EXPANSION_PLAN.md` is misleading; rename queued as low-priority cleanup.
+**B79.0c CLOSED 2026-05-09 22:38 UTC.** Per-symbol 24/7 xstock support. Commits `651540cd4` (impl + Step 4 F1 fix) → `666812ca7` (test fix). PM2 #202. CI Build+Docker green; Test 1076/59/5 (baseline 59 unchanged from B79.0b; +18 new passing tests). Deploy verified: `/api/diagnostics/xstock-scanner` returns `lastUniverseSize=10, lastArcaOpen=false, cyclesCompleted=1, pairsScannedLastCycle=10`. No-touch fence on crypto_spot: 6 emissions/factor/30min post-deploy (vs 3 pre-deploy — held). **Langston Step 4 caught real F1 regex bug** (greedy `[A-Z]+` + `i` flag + optional `x?` → silent fall-through); fix shipped. **WS-equities silent on weekends CONFIRMED** (pre-ship probe + post-deploy DB query: 24/7 names get 1 burst on reconnect then quiet). Filed RUNNING_ISSUES #89 for B79.x follow-up (Kraken Pro / REST polling / support query). Predicate + scanner filter ship correctly; live data flow blocked upstream — completion report says so honestly per Langston rev 2 #5.
 
-**B79.0e (NEW) — xstock_spot/perp table rename `equity_*` → `xstock_*` (Kyle directive 2026-05-09 night).** B69 retagged the asset-class field VALUES from `equity_spot` → `xstock_spot`, but the actual DB TABLES still use the legacy `equity_spot_ohlc_1m` / `equity_spot_ticker_snap` / `equity_perp_*` naming. This violates the B69 naming convention which explicitly preserves the `equity_*` namespace for FUTURE real (non-tokenized) equities. Cross-cutting rename: shared/schema.ts (Drizzle), shared/asset-classes.ts registry, 4 server scripts (B74 partition + B75 retention/rehydrate), drift-dashboard-aggregator, storage-client, passive-archive-bootstrap, 5 drizzle migrations (legacy refs in older SQL files OK to leave as-is — they're historical), 2 B79.0a scripts, scanner.ts + data-freshness.ts. Plus actual DB cutover (1.2M+ row tables; rename via `ALTER TABLE`, not data copy — fast). Sequence AFTER B79.0c + B79.0d. Own scope+PIA+impl batch — schema migration with alias view for transition + then cutover.
+**B79.0d NEXT — ORB strategy IMPLEMENTATION for xstock_spot.** What exists today is SCAFFOLDING ONLY: file `server/strategies/orb.ts` with empty `detectORB()` returning null even when gate flipped, DB row `module_constants.strategy_gates.xstock_spot.orb.enabled=false`, whitelist entry at `canonical-regime-strategy-map.ts:906`. **NOT in strategy-engine dispatch. NOT in regime mapping. NO thresholds seeded.** Real B79.0d work: (1) write actual detect logic (~100-150 lines), (2) register in strategy-engine dispatch (~5-10 lines), (3) add to regime-strategy map IE + ST, (4) seed Layer-1 thresholds in module_constants, (5) flip DB gate, (6) register in B73 ablation. Estimate 3-5 hours. Scope already drafted at `Claude Comms and Packages/Scope Files/BATCH_79_0d_SCOPE.md` rev 1 — needs Langston pre-impl review per same protocol as 0c. ORB applies to 24/5 names at weekday-open boundaries; doesn't apply to 24/7 names (no "open"). Target: in place before Sunday 2026-05-10 22:00 UTC reopen (still ~24h window).
 
-**xstock_spot WS archiver health concern (flagged 2026-05-09 ~21:20 UTC):** `equity_spot_ticker_snap` last write 2026-05-09 11:12 UTC (10h stale). `equity_spot_ohlc_1m` last write 2026-05-09 00:15 UTC (21h stale). Meanwhile `xstock_perp_ticker` flushing every 5s healthily. Either (a) Kraken equity WS goes silent on weekends regardless of the 24/7 marker — needs WS-side investigation, OR (b) connection dropped + reconnect failing silently. Possibly intersects with B79.0c scope.
+**B79.0e (queued, low-priority) — `equity_*` → `xstock_*` table rename.** Cross-cutting rename across schema, scripts, migrations, services. Sequence AFTER B79.0d.
+
+**Two operator gates Sunday 2026-05-10:**
+- ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per `BATCH_79_TEC_b_VERIFY_CHECKLIST.md`
+- ~21:38 UTC — B79.0a SQE wildcards DELETE per `BATCH_79_0b_VERIFY_CHECKLIST.md`
+
+**xstock_spot WS archiver weekend silence — root cause confirmed 2026-05-09 22:30 UTC.** WS probe: 60s subscribe to `wss://ws-equities.kraken.com` ticker+ohlc for all 10 24/7 names returned 201 msgs (heartbeats + subscribe-acks) + ZERO ticker / ZERO OHLC. Hypothesis (a): Kraken WS-equities silent weekends regardless of 24/7 marker. Documented in CHANGES_AND_FIXES.md INFRA-2026-05-09-E + RUNNING_ISSUES #89.
 
 **Two operator gates Sunday 2026-05-10:**
 - ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per `BATCH_79_TEC_b_VERIFY_CHECKLIST.md`
@@ -44,21 +47,10 @@
 
 ---
 
-## B79.0b archive — 2026-05-09 (CLOSED)
+## SHIPPED PREDECESSORS this session
 
-**Original entry from B79.0b session (now archived):**
-
-**B79.0b status (PM2 #198, branch `migration/aws-supabase` HEAD `54201bd32`):**
-- Steps 1-3+5-7 complete; Steps 4+8 pending Langston ACK (Step 4 review hit GDrive-mount-stale + Bash tool permission hang; v2 dispatched with bypassPermissions)
-- N3 fix: signal_quality_evaluator.ts:199 + :290 (both `input.strategy &&` truthy guards stripped per Langston Q1 expansion)
-- N4 tests: 4 files (market-hours 12 cases, asset-class-instances 6, safe-resolve 6, strategy-asset-class-gate 19); all pass on CI; zero new regressions (1058/59/5 vs B79.0a baseline 1002/59/5)
-- B79.0a SQE wildcard DELETE script committed-not-executed: `scripts/b79-0a-sqe-remove-wildcards.sql` mirror of B79.TEC.b pattern; manual operator step at +48h gate (2026-05-10 21:38 UTC) per `BATCH_79_0b_VERIFY_CHECKLIST.md`
-- Deploy verified: xstock-scanner ready, tec-bootstrap ready (B79.TEC + B79.0a unaffected), no-touch fence 68/factor/30min ≈ 136/hr
-- Governance: BATCH_CATALOG entry added; RUNNING_ISSUES #87 OPEN (manual operator gate for SQE wildcard DELETE due 2026-05-10 21:38 UTC)
-
-**Two manual operator gates due 2026-05-10:**
-- ~11:24 UTC: B79.TEC.b — `break_even_enabled` wildcard DELETE per `BATCH_79_TEC_b_VERIFY_CHECKLIST.md`
-- ~21:38 UTC: B79.0a SQE wildcards — `min_final_score` + `min_regime_weight` DELETE per `BATCH_79_0b_VERIFY_CHECKLIST.md`
+- **B79.0c** SHIPPED 2026-05-09 22:38 UTC. Per-symbol 24/7 xstock predicate. PM2 #202. Details above + `BATCH_79_0c_COMPLETION_REPORT.md`.
+- **B79.0b** CLOSED 2026-05-09. N3+N4 cleanup + B79.0a SQE wildcard DELETE script. PM2 #198 → #202.
 
 ---
 

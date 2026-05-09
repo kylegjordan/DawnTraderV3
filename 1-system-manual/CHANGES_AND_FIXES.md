@@ -2,6 +2,20 @@
 
 ---
 
+## INFRA-2026-05-09-E — Kraken WS-equities silent on weekends (incl. 24/7 names)
+
+**Trigger:** B79.0c WS probe pre-ship 2026-05-09 22:30 UTC. Subscribed to `wss://ws-equities.kraken.com` ticker+ohlc channels for all 10 Kraken Phase-1 24/7 names (TSLA, AAPL, SPY, QQQ, GLD, GOOGL, HOOD, MSTR, NVDA, CRCL — `BASExUSD` form). 60-second window returned 201 messages but ZERO ticker / ZERO OHLC. CLOSE 1006 (abnormal closure) at end of window. Pre-test DB freshness: `equity_spot_ticker_snap` last write 2026-05-09 11:12 UTC (10h+ stale); `equity_spot_ohlc_1m` last write 2026-05-09 00:15 UTC (22h+ stale). Concurrent flows healthy: `crypto_spot` 8/cycle, `xstock_perp` 38/cycle.
+
+**Root cause (hypothesis):** Kraken WS-equities feed sends WS-protocol heartbeats + subscribe-acks but no actual ticker/OHLC data on weekends, regardless of the 24/7 trading marker on the 10 Phase-1 names. The exchange's matching engine accepts trades on these names 24/7, but the public WS data feed appears to be ARCA-aligned. Post-deploy verification observed a single tick burst per name on WS reconnect (post-restart), then silence — consistent with the same hypothesis.
+
+**B79.0c shipped:** the per-symbol predicate + scanner universe-filter (system handles 24/7 names CORRECTLY when WS data resumes). What B79.0c did NOT do: unblock the upstream feed. Until Kraken's feed is investigated/fixed/replaced, the 10 24/7 names will be functionally stale during weekends just like the other 265 names (freshness gate rejects after 90s).
+
+**Follow-up (RUNNING_ISSUES #89, B79.x candidate):** investigate alternative paths — (a) Kraken Pro account credentials may unlock a different feed-tier; (b) REST polling fallback (mirror B74's Kraken Futures REST pattern using equities REST endpoint if it exists); (c) direct probe to Kraken support/docs.
+
+**Standing rule:** completion reports for any sub-batch claiming "asset class X live" must verify with post-deploy DB query showing fresh ticks for the actual symbol set. Don't infer live-data status from "WS connected" alone — connection != data flow.
+
+---
+
 ## INFRA-2026-05-09-A — Langston bridge "Session ID already in use" (UUID rotation)
 
 **Trigger:** Kyle messaged `@LangstonDTBot` (DM + topic 21 mentions); bridge daemon replied with `Error: Session ID 128e2dff-12d9-481c-b6cb-89e352c106eb is already in use` instead of Langston's actual response. Visible in screenshots 2026-05-09 ~11:46 UTC.
