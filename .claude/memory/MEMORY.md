@@ -18,7 +18,33 @@
 
 ---
 
-## CURRENT STATE — 2026-05-09 (B79.0b SHIPPED + verified, awaiting Langston Step 4/8 ACK)
+## CURRENT STATE — 2026-05-09 night (B79.0b CLOSED; B79.0c + B79.0d are NEXT, calendar-gated to Sunday 22:00 UTC ARCA reopen)
+
+**Next two sub-batches (Kyle directive 2026-05-09 night):**
+- **B79.0c — 24/7 xstock support.** Kraken Pro Phase 1 (announced 2025-12-03): 10 xstock_spot tokens trade 24/7 — TSLAx, QQQx, SPYx, NVDAx, CRCLx, AAPLx, HOODx, MSTRx, GLDx, GOOGLx. Our `isXstockMarketOpenUTC()` is symbol-blind → blocks the 24/7 names from scanner/SQE/freshness/TEC during weekends. Scope: per-symbol predicate + 4 callsite updates + scanner per-symbol filtering during weekend window + boundary tests. **Plan-doc + roadmap updated; needs scope+PIA+impl.**
+- **B79.0d — xstock-specific strategy Layer-1.** Hypothesis pending Kyle directive (candidates: ORB activation, weekend-regime stratification, gap-fade, crypto-correlated-beta). Both VTS + active-path wire-in. Target: in place before Sunday 22:00 UTC market reopen.
+- **Coverage scope clarification:** every B79.x batch hits BOTH VTS shadow-mode evaluation AND active-trading wire-in (signal-orchestrator → paper-execution-engine → RTB → TEC). Active path is wire-in-only-no-trades until Phase 19. Plan-doc filename `MULTI_ASSET_VTS_EXPANSION_PLAN.md` is misleading; rename queued as low-priority cleanup.
+
+**xstock_spot WS archiver health concern (flagged 2026-05-09 ~21:20 UTC):** `equity_spot_ticker_snap` last write 2026-05-09 11:12 UTC (10h stale). `equity_spot_ohlc_1m` last write 2026-05-09 00:15 UTC (21h stale). Meanwhile `xstock_perp_ticker` flushing every 5s healthily. Either (a) Kraken equity WS goes silent on weekends regardless of the 24/7 marker — needs WS-side investigation, OR (b) connection dropped + reconnect failing silently. Possibly intersects with B79.0c scope.
+
+**Two operator gates Sunday 2026-05-10:**
+- ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per `BATCH_79_TEC_b_VERIFY_CHECKLIST.md`
+- ~21:38 UTC — B79.0a SQE wildcards DELETE per `BATCH_79_0b_VERIFY_CHECKLIST.md`
+
+**Calibration analysis snapshot 2026-05-09 21:20 UTC (verified via `/api/analytics/factor-calibration?window=rolling_7d`):**
+- DECISION-GRADE factors (n≥150 per tertile): b67_4 +5.19pp, b68_2 +4.14pp, b68_3 +4.11pp, b68_4 **+0.57pp (degraded from +2.94pp pre-B76)**, b68_5 **-7.79pp (regression from -1.78pp pre-B76; NEGATIVE predictive lift, factor is HURTING)**.
+- ACCUMULATING: b67_2 +100pp at n=4 (low), b68_1 +7.73pp at n=388 (almost decision-grade).
+- Action item per MEMORY locked thresholds: **if any flip post-B76/B78 → revert.** b68_5 went 4× more negative; b68_4 dropped 80%. Both warrant investigation before next chain modification. NOT actionable tonight (deferred to post-Sunday-reopen window when calibration windows refresh).
+
+**Exit-ablation snapshot 2026-05-09 21:20 UTC:** B73 framework reports total trades 1248 / 14935 variant rows. Variant F (no_BE_stop) Sharpe 3.07 mean P&L +1.172% — confirmed PRODUCTION winner per B79.TEC ship 2026-05-08. Variant A (current_BE_stop_baseline) Sharpe null because it IS the baseline reference; meanPnlPct +1.046%. Production trades since 2026-05-08 11:24 UTC running variant F: closed-trade exit-reason distribution confirms (2026-05-09 = 66 target_hit + 49 stop_hit + 9 trailing_stop_hit + 2 break_even_stop; vs pre-removal 2026-05-02 to 2026-05-07 = 731 BE_stop dominant).
+
+**176 open trades at session-time:** 173 crypto_spot + 3 xstock_spot. Top 96 trades open 17h+, peak 22-23h. Concentration in `strong_bull_trend` + `TREND_FRIENDLY_STABLE`. **By design** post-BE-removal — without BE-protect, trades track original SL→TP only; slow-moving TFS-regime pairs neither hit target nor stop within typical hold windows. Pre-B79.TEC mean duration 152min; post-B79.TEC longer holds expected. Not a bug.
+
+---
+
+## B79.0b archive — 2026-05-09 (CLOSED)
+
+**Original entry from B79.0b session (now archived):**
 
 **B79.0b status (PM2 #198, branch `migration/aws-supabase` HEAD `54201bd32`):**
 - Steps 1-3+5-7 complete; Steps 4+8 pending Langston ACK (Step 4 review hit GDrive-mount-stale + Bash tool permission hang; v2 dispatched with bypassPermissions)
@@ -34,38 +60,9 @@
 
 ---
 
-## B79.0a archive — 2026-05-08 (CLOSED, all 11 steps verified)
+## SHIPPED PREDECESSORS (archive — full details in completion reports)
 
-**B79.0a closure 2026-05-08 night (PM2 #197+, branch `migration/aws-supabase` HEAD `ef77f7374`):**
-- Steps 1-11 complete; all gates green; Langston Step 4 + Step 8 APPROVE WITH/CONDITIONAL APPROVE
-- Load test DECISION:SHIP (steady-state ~72ms/cycle, p95 well under 100ms gate)
-- Hostile sim VERIFIED: BACKPRESSURE_OBSERVED fires every cycle with 28s sleep; cycles continue (no-skip surface preserved); flags unset post-test → hostileSimActive:false
-- TEC bootstrap unaffected (all 4 classes ready); crypto_spot factor cadence increased post-deploy (not decreased)
-- 7 new test files passing; 59 baseline failures unchanged; CI Build+Docker green
-- Q-D probe ran (xstock side captured all 7 tickers; Yahoo null deferred to RUNNING_ISSUES #86 B79.x continuous probe with alternate API)
-- 3 bonus hotfixes captured as INFRA-2026-05-08-A/B/C/D in CHANGES_AND_FIXES (column `last` vs `price`, drizzle PG-array binding, 5min recency for partition timeout, HOSTILE_SIM_OVERRIDE staging escape)
-- Governance: SIM 12 entries added (Kyle directive); BATCH_CATALOG entry; CHANGES_AND_FIXES 4 entries; RUNNING_ISSUES #77 RESOLVED, #81 first-execution complete, #86 OPEN
-- Completion report at `Claude Comms and Packages/Batch Completion/BATCH_79_0a_COMPLETION_REPORT.md` (§5 plain-language summary)
-
-**Next sub-batches Phase 24:**
-1. **B79.0b** mini-deploy after 48h verify gate: SQE wildcard row DELETE; N3 redundant truthy strategy guard removal; N4 boundary tests
-2. **B79.4** extend B73 exit-strategy ablation framework to xstock_spot (drives Layer-3 evidence; new dedicated UI tab per Kyle directive)
-3. **B79.x signal-orchestrator wiring** post-Layer-3 calibration
-4. **B79.x continuous Q-D probe** with alternate API (RUNNING_ISSUES #86)
-5. **B80** crypto_perp onboarding using ASSET_CLASS_ONBOARDING_WORKFLOW template
-
-**B79.TEC + B79.0a quick reference (all SHIPPED 2026-05-08):**
-- B79.TEC: per-class TEC config + HARD-FAIL boot + 4 active classes ready (commits 01fa39912 + 7eb4f5452 + e3c7dbe3d, PM2 #190)
-- B79.0a: live xstock_spot scanner via centralClock + ARM injection + freshness helper + Q-D probe + load test + hostile-sim VERIFIED (commits b205fc283 → eb71555e5 → a327964a5 → ... → ef77f7374; PM2 #197+)
-
-Watchdog v2 working reliably with `--idle-timeout 600` for substantive reviews. RUNNING_ISSUES #84 reopened then re-resolved via the calibration tweak — default tuning guidance to be folded into CLAUDE.md §6.5.0 next session.
-
----
-
-## SHIPPED PREDECESSORS (archive)
-
-**B79.0a status 2026-05-08 night:**
-(B79.0a steps 1-11 all closed. Details in `Claude Comms and Packages/Batch Completion/BATCH_79_0a_COMPLETION_REPORT.md`.)
+**B79 + B79.TEC + B79.0a + B79.0b** all CLOSED 2026-05-07 → 2026-05-09. Latest HEAD `04bb6b2be` (B79.0b governance close + comms-infra hardening). Details in `Claude Comms and Packages/Batch Completion/BATCH_79_*_COMPLETION_REPORT.md`. Comms-infra v2 watchdog (`--idle-timeout 600` for substantive reviews) + auto-ACK on cc-comms-bridge live and verified.
 
 ---
 
