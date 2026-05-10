@@ -33,9 +33,9 @@
 
 ---
 
-## NEXT STEP — Kyle directive needed on B79.0k path forward + B79.0g-tx (#91) Step 2 pre-audit ready
+## NEXT STEP — B79.0g-tx (#91) Step 2 pre-audit + impl
 
-**B79.0k (#89) findings (combined Step 1+2 SHIPPED 2026-05-10, no code):** Path B (REST polling fallback) DEAD via empirical probe — Kraken's `/0/public/AssetPairs` has ZERO xstock entries; no public REST endpoint exists for xStocks. Path A (Kraken Pro feed-tier subscription) is the only Kraken-native option remaining — **requires Kyle directive on commercial commitment**. Path C (Kraken support query) needs Kyle approval to send. Sub-batches B79.0k.1/.2/.3 conditional on directive. See `BATCH_79_0k_COMPLETION_REPORT.md`.
+**B79.0L SHIPPED 2026-05-10:** RUNNING_ISSUES #89 RESOLVED via schedule correction. The B79.0k investigation was based on a misframing — the Saturday WS-equities silence was correct intentional market closure (xStocks closed Fri 8PM ET → Sun 8PM ET per Kyle directive 2026-05-10). The bug was in our schedule code, which has now been corrected with DST-aware Intl.DateTimeFormat ET conversion + unified weekend close applied to ALL xStocks. Scanner now correctly skips empty universe during the weekend window. PM2 #214. Crypto no-touch fence holds. Path A/B/C investigation tree from B79.0k is moot; #89 closed.
 
 **B79.0g-tx (#91) status:** Langston Step 1 APPROVED Option B (closed-flag soft-delete) with 5 specific adjustments. Adjustments applied to scope file. Step 2 pre-audit ready to draft. Implementation ~50-80 LOC: schema migration (closed_at TIMESTAMPTZ + closed BOOLEAN + partial index) + replace `deleteOpenTrade` with `markOpenTradeClosed` (AWAITED, not fire-and-log) + bootstrap filter `WHERE closed=false` + `module_constants`-resolved GC retention (default 90 days). Deferred to next session for proper pre-audit + impl.
 
@@ -82,6 +82,7 @@ Per Kyle pushback evening 2026-05-10, xStocks tab EXPANDED beyond the initial B7
 | B79.0i.b | `5dde28f52`+`cdbd2a04b`+`b9a1cdd4e` | #210 | xStocks tab: Filter Diagnostics mirror + rich ExitStrategyAblationSection + FactorCalibrationSection (reused via export+endpointBase prop). Aggregators parameterized with optional asset_class. "Shadow-mode" → "VTS Observation". |
 | B79.0j | `418088c7a`+`fa4cbabdc` | #212 | ORB rename `risk_reward_ratio` → `target_range_multiple` (resolves RUNNING_ISSUES #90) + bonus VTS dispatch bug fix (B79.0d had missed `vts-runner.ts:callStrategyDetect` dispatch site for ORB — silently 100%-nulling on VTS path). |
 | B79.0k | (governance only) | n/a | Investigation batch — Kraken WS-equities weekend silence. Decision matrix: Path B DEAD via probe (no public REST endpoint for xStocks), Path A needs Kyle directive (commercial), Path C needs Kyle approval (free). |
+| B79.0L | `fe47ba370`+`e92839f34` | #214 | xStock market-hours unified Fri 8PM ET → Sun 8PM ET close. Resolves RUNNING_ISSUES #89 — REFRAMED. The Saturday WS-equities silence findings were correct observations of intentional market closure; the bug was in our schedule code. DST-aware Intl.DateTimeFormat ET conversion. Langston R1 catch: non-extended Sunday reopen wrong by 2 hours. Scanner.ts also fixed (Langston caveat) + hotfix for empty-universe SQL `IN ()` syntax error. |
 
 **Pending operator gates Sunday 2026-05-10/11:**
 - ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per checklist
