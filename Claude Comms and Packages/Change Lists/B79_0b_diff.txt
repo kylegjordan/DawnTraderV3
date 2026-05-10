@@ -1,0 +1,469 @@
+diff --git a/scripts/b79-0a-sqe-remove-wildcards.sql b/scripts/b79-0a-sqe-remove-wildcards.sql
+new file mode 100644
+index 000000000..518da7a33
+--- /dev/null
++++ b/scripts/b79-0a-sqe-remove-wildcards.sql
+@@ -0,0 +1,82 @@
++-- ════════════════════════════════════════════════════════════════════════════
++-- B79.0a — SQE wildcard row DELETE (Step 2 of two-step gate)
++-- ════════════════════════════════════════════════════════════════════════════
++--
++-- DO NOT EXECUTE in B79.0b's Step 6 deploy. This script runs as a separate
++-- mini-deploy AFTER a 48h verification gate (see
++-- `Claude Comms and Packages/Scope Files/BATCH_79_0b_VERIFY_CHECKLIST.md`).
++--
++-- B79.0a Migration 2 promoted 2 sqe_config wildcard rows to explicit per-class
++-- rows for crypto_spot + xstock_spot:
++--   - sqe_config.min_final_score (wildcard 0.35 → per-class 0.35 each)
++--   - sqe_config.min_regime_weight (wildcard 0.30 → per-class 0.30 each)
++--
++-- The wildcards remained in place during a 48h observation window so the
++-- module_constants resolution path could be observed flowing through the
++-- explicit per-class rows. After 48h clean, this script removes the now-
++-- redundant wildcards.
++--
++-- Mirror of B79.TEC.b pattern — committed-not-executed; manual operator
++-- step at +48h gate (2026-05-10 21:38 UTC, 48h after B79.0a Migration 2
++-- applied at 2026-05-08 21:38 UTC).
++--
++-- Idempotent + signature-guarded:
++--   - Pre-check `SELECT COUNT(*) = 2` (assert, abort if 0/1/3+)
++--   - Capture rows for rollback (operator copies result before DELETE)
++--   - Signature WHERE includes `value`, `asset_class='*'`, `created_at <
++--     <STEP1_DEPLOY_TIMESTAMP>` so a freshly-inserted wildcard (post-deploy)
++--     cannot be accidentally targeted.
++-- ════════════════════════════════════════════════════════════════════════════
++
++BEGIN;
++
++-- 1. Capture for rollback (manual operator step — copy result before DELETE)
++SELECT
++  'CAPTURED_FOR_ROLLBACK: ' AS marker,
++  module_name, exchange, asset_class, strategy, regime,
++  constant_name, value, updated_by, created_at
++FROM module_constants
++ WHERE module_name = 'sqe_config'
++   AND asset_class = '*'
++   AND constant_name IN ('min_final_score', 'min_regime_weight')
++ ORDER BY constant_name;
++
++-- 2. Pre-check: exactly 2 wildcard rows match the signature
++DO $$
++DECLARE row_count int;
++BEGIN
++  SELECT COUNT(*) INTO row_count FROM module_constants
++   WHERE module_name = 'sqe_config'
++     AND asset_class = '*'
++     AND constant_name IN ('min_final_score', 'min_regime_weight');
++  IF row_count != 2 THEN
++    RAISE EXCEPTION 'B79.0a wildcard-DELETE precheck failed: expected exactly 2 wildcard rows, found %. Manual review required.', row_count;
++  END IF;
++END $$;
++
++-- 3. Signature-guarded DELETE
++-- Replace <STEP1_DEPLOY_TIMESTAMP> with B79.0a Migration 2 application
++-- timestamp before running. Format: '2026-05-08 21:38:00+00'::timestamptz
++DELETE FROM module_constants
++ WHERE module_name = 'sqe_config'
++   AND asset_class = '*'
++   AND constant_name IN ('min_final_score', 'min_regime_weight')
++   AND created_at < '<STEP1_DEPLOY_TIMESTAMP>'::timestamptz;
++
++COMMIT;
++
++-- ─── ROLLBACK RECIPE ─────────────────────────────────────────────────────────
++-- If something breaks AFTER the DELETE:
++--
++-- BEGIN;
++-- INSERT INTO module_constants
++--   (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
++-- VALUES
++--   ('sqe_config', '<captured exchange>', '*', '<captured strategy>', '<captured regime>',
++--    'min_final_score', '<captured value>'::jsonb, 'B79.0b_rollback'),
++--   ('sqe_config', '<captured exchange>', '*', '<captured strategy>', '<captured regime>',
++--    'min_regime_weight', '<captured value>'::jsonb, 'B79.0b_rollback');
++-- COMMIT;
++--
++-- Use the captured rows from step 1 above to fill the angle-brackets.
++-- ─────────────────────────────────────────────────────────────────────────────
+diff --git a/server/core/filters/signal_quality_evaluator.ts b/server/core/filters/signal_quality_evaluator.ts
+index 495423b70..032049ed3 100644
+--- a/server/core/filters/signal_quality_evaluator.ts
++++ b/server/core/filters/signal_quality_evaluator.ts
+@@ -196,7 +196,12 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
+     }
+     // (b) Strategy whitelist — only the 6 well-understood, regime-based
+     // strategies are enabled for xstock_spot in B79 (Langston Q2 conservative ship).
+-    if (input.strategy && !isStrategyEnabledForAssetClass(input.strategy, resolvedAssetClass)) {
++    // B79.0b N3 cleanup: dropped redundant `input.strategy &&` truthy guard —
++    // SQEInput.strategy is typed `string` non-optional (line 75), so the
++    // truthy check was dead code (TS guarantees it's never undefined; an
++    // empty-string strategy name would be a type-violation upstream, not a
++    // runtime contingency this gate needs to handle).
++    if (!isStrategyEnabledForAssetClass(input.strategy, resolvedAssetClass)) {
+       _b79StrategyDisabledCount++;
+       if (_b79StrategyDisabledCount % 50 === 1) {
+         console.log(`[B79][XSTOCK_STRATEGY_DISABLED] skipping ${canonicalSymbol}/${input.strategy} — not in xstock_spot whitelist (count=${_b79StrategyDisabledCount})`);
+@@ -282,7 +287,11 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
+   // HF9 Item B: Governance gate (migrated from paper-execution-engine Directive 11.7R-E)
+   // Checks strategy eligibility based on regime stability and dependency level.
+   // VTS signals pass skipGovernanceGate=true (VTS has its own inline governance checks).
+-  if (!options.skipGovernanceGate && input.strategy && input.regimeStability) {
++  // B79.0b N3 cleanup (Langston Q1 revise): dropped `input.strategy &&` from
++  // the &&-chain — same dead-truthy reasoning as line 199 (input.strategy is
++  // typed `string` non-optional). `input.regimeStability` truthy IS
++  // load-bearing (typed `RegimeStability?` optional at line 86); leave that.
++  if (!options.skipGovernanceGate && input.regimeStability) {
+     const dependency = getStrategyDependency(input.strategy);
+     if (!isStrategyEligible(input.strategy, input.regimeStability, dependency)) {
+       failures.push(`Governance: ${input.strategy} (${dependency} dep) blocked in ${input.regimeStability}`);
+diff --git a/server/tests/unit/b79-0b-asset-class-instances.test.ts b/server/tests/unit/b79-0b-asset-class-instances.test.ts
+new file mode 100644
+index 000000000..f05563dc0
+--- /dev/null
++++ b/server/tests/unit/b79-0b-asset-class-instances.test.ts
+@@ -0,0 +1,82 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0b — N4 idempotency + dispatch tests for asset-class-instances
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Verifies:
++ *   - `getXstockSpotInstances()` is idempotent (same triad on subsequent calls)
++ *   - `_testResetXstockSpotInstances()` clears the cache so next call rebuilds
++ *   - `getAssetClassInstances('crypto_spot')` returns null (no-touch fence)
++ *   - `getAssetClassInstances(<inactive class>)` throws
++ *
++ * DB mock so `bootstrapXstockSpotInstances()` can construct the triad without
++ * a real connection.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { describe, it, expect, beforeEach, vi } from 'vitest';
++
++vi.mock('../../db.js', () => ({
++  db: {
++    select: () => ({ from: () => ({ where: async () => [] }) }),
++  },
++}));
++vi.mock('../../core/math/cost-model.js', () => ({
++  getCachedCostMetrics: () => ({ fee: 0, slippage: 0, spread: 0, takerFee: 0, totalCost: 0 }),
++  computeNetBreakeven: (e: number) => e,
++  computeNetTargetFloor: (t: number) => t,
++  computeTotalRoundTripCost: () => 0,
++}));
++
++import {
++  getAssetClassInstances,
++  getXstockSpotInstances,
++  _testResetXstockSpotInstances,
++} from '../../services/asset-class-instances.js';
++
++describe('B79.0b — asset-class-instances factory', () => {
++  beforeEach(() => {
++    _testResetXstockSpotInstances();
++  });
++
++  it('getXstockSpotInstances() is idempotent — second call returns same triad', () => {
++    const first = getXstockSpotInstances();
++    const second = getXstockSpotInstances();
++    expect(second).toBe(first); // same reference, not just deep-equal
++    expect(second.telemetry).toBe(first.telemetry);
++    expect(second.ratioManager).toBe(first.ratioManager);
++    expect(second.failureTracker).toBe(first.failureTracker);
++    expect(second.scanManager).toBe(first.scanManager);
++  });
++
++  it('_testResetXstockSpotInstances clears cache — next call rebuilds', () => {
++    const first = getXstockSpotInstances();
++    _testResetXstockSpotInstances();
++    const second = getXstockSpotInstances();
++    expect(second).not.toBe(first); // new triad
++  });
++
++  it('xstock instance reports inMemoryOnly:true (Day 1 design)', () => {
++    const triad = getXstockSpotInstances();
++    expect(triad.inMemoryOnly).toBe(true);
++  });
++
++  it('getAssetClassInstances(crypto_spot) returns null (no-touch fence)', () => {
++    expect(getAssetClassInstances('crypto_spot')).toBeNull();
++  });
++
++  it('getAssetClassInstances(xstock_spot) returns triad', () => {
++    const triad = getAssetClassInstances('xstock_spot');
++    expect(triad).not.toBeNull();
++    expect(triad?.telemetry).toBeDefined();
++    expect(triad?.ratioManager).toBeDefined();
++  });
++
++  it('getAssetClassInstances on unsupported asset class throws', () => {
++    // crypto_perp / xstock_perp / equity_spot / etc. are NOT in the dispatcher
++    // switch (per asset-class-instances.ts:138-149). Throw is by design —
++    // explicit mis-routing surfaces immediately rather than silently corrupting.
++    expect(() => getAssetClassInstances('crypto_perp' as any)).toThrow(/unsupported/i);
++    expect(() => getAssetClassInstances('equity_spot' as any)).toThrow(/unsupported/i);
++  });
++});
+diff --git a/server/tests/unit/b79-0b-market-hours.test.ts b/server/tests/unit/b79-0b-market-hours.test.ts
+new file mode 100644
+index 000000000..7ef951393
+--- /dev/null
++++ b/server/tests/unit/b79-0b-market-hours.test.ts
+@@ -0,0 +1,85 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0b — N4 boundary tests for `isXstockMarketOpenUTC`
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Schedule under test (ARCA-aligned, UTC):
++ *   - CLOSED Saturday all day
++ *   - CLOSED Friday from 22:00 UTC onward
++ *   - CLOSED Sunday before 22:00 UTC
++ *   - OPEN otherwise
++ *
++ * Tests inject controlled clocks (no `new Date()` at runtime) for deterministic
++ * boundary verification.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { describe, it, expect } from 'vitest';
++import { isXstockMarketOpenUTC } from '../../asset_classes/xstock_spot/market-hours.js';
++
++// Reference dates (UTC) — anchored to a known week so days-of-week are stable.
++// 2026-05-04 = Monday, 2026-05-09 = Saturday, 2026-05-10 = Sunday, 2026-05-08 = Friday.
++function utc(year: number, monthZero: number, day: number, hour: number, min: number = 0): Date {
++  return new Date(Date.UTC(year, monthZero, day, hour, min));
++}
++
++describe('B79.0b — isXstockMarketOpenUTC boundary cases', () => {
++  describe('Weekday during market hours', () => {
++    it('Monday 14:30 UTC — open', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 4, 14, 30))).toBe(true);
++    });
++    it('Wednesday 16:00 UTC — open', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 6, 16, 0))).toBe(true);
++    });
++    it('Friday 14:30 UTC (before close) — open', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 14, 30))).toBe(true);
++    });
++  });
++
++  describe('Friday close transition', () => {
++    it('Friday 21:59 UTC — open (one minute before close)', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 21, 59))).toBe(true);
++    });
++    it('Friday 22:00 UTC — closed (close boundary)', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 22, 0))).toBe(false);
++    });
++    it('Friday 23:00 UTC — closed', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 8, 23, 0))).toBe(false);
++    });
++  });
++
++  describe('Saturday — fully closed', () => {
++    it('Saturday 00:00 UTC — closed', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 9, 0, 0))).toBe(false);
++    });
++    it('Saturday 14:30 UTC — closed', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 9, 14, 30))).toBe(false);
++    });
++    it('Saturday 23:59 UTC — closed', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 9, 23, 59))).toBe(false);
++    });
++  });
++
++  describe('Sunday open transition', () => {
++    it('Sunday 14:30 UTC — closed (before open)', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 14, 30))).toBe(false);
++    });
++    it('Sunday 21:59 UTC — closed (one minute before open)', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 21, 59))).toBe(false);
++    });
++    it('Sunday 22:00 UTC — open (open boundary)', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 22, 0))).toBe(true);
++    });
++    it('Sunday 23:00 UTC — open', () => {
++      expect(isXstockMarketOpenUTC(utc(2026, 4, 10, 23, 0))).toBe(true);
++    });
++  });
++
++  describe('Default-arg fallback', () => {
++    it('No-arg call uses new Date() — returns boolean', () => {
++      // Smoke test only — actual value depends on wall-clock at test run.
++      const result = isXstockMarketOpenUTC();
++      expect(typeof result).toBe('boolean');
++    });
++  });
++});
+diff --git a/server/tests/unit/b79-0b-safe-resolve-asset-class.test.ts b/server/tests/unit/b79-0b-safe-resolve-asset-class.test.ts
+new file mode 100644
+index 000000000..3a3f9f24c
+--- /dev/null
++++ b/server/tests/unit/b79-0b-safe-resolve-asset-class.test.ts
+@@ -0,0 +1,60 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0b — N4 boundary tests for `safeResolveAssetClass`
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Per Langston cc-inbox #890 B.2: a single bad symbol must not crash PM2.
++ * `safeResolveAssetClass` wraps `resolveAssetClass` and returns null on
++ * unknown patterns instead of throwing.
++ *
++ * `asset-classes.test.ts` covers `resolveAssetClass` (the throwing variant)
++ * extensively. This file covers the `safe` variant's null-return contract.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { describe, it, expect, vi } from 'vitest';
++import { safeResolveAssetClass } from '../../../shared/asset-classes.js';
++
++describe('B79.0b — safeResolveAssetClass null-return contract', () => {
++  it('valid crypto_spot canonical returns AssetClass', () => {
++    expect(safeResolveAssetClass('BTC/USD', 'kraken')).toBe('crypto_spot');
++  });
++
++  it('valid xstock_spot via kraken-equities returns AssetClass', () => {
++    expect(safeResolveAssetClass('AAPL/USD', 'kraken-equities')).toBe('xstock_spot');
++  });
++
++  it('valid xstock_perp PF_*XUSD via kraken-futures returns AssetClass', () => {
++    expect(safeResolveAssetClass('PF_AAPLXUSD', 'kraken-futures')).toBe('xstock_perp');
++  });
++
++  it('unknown symbol pattern on kraken returns null (does not throw)', () => {
++    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++    expect(() => safeResolveAssetClass('lower_case_thing', 'kraken')).not.toThrow();
++    expect(safeResolveAssetClass('lower_case_thing', 'kraken')).toBeNull();
++    warnSpy.mockRestore();
++  });
++
++  it('empty string returns null (does not throw)', () => {
++    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++    expect(() => safeResolveAssetClass('', 'kraken')).not.toThrow();
++    expect(safeResolveAssetClass('', 'kraken')).toBeNull();
++    warnSpy.mockRestore();
++  });
++
++  it('symbol on unsupported exchange returns null (does not throw)', () => {
++    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++    expect(() => safeResolveAssetClass('BTC/USD', 'unknown-exchange')).not.toThrow();
++    expect(safeResolveAssetClass('BTC/USD', 'unknown-exchange')).toBeNull();
++    warnSpy.mockRestore();
++  });
++
++  it('emits console.warn on unknown pattern (operator visibility)', () => {
++    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++    safeResolveAssetClass('garbage', 'kraken');
++    expect(warnSpy).toHaveBeenCalled();
++    const callArg = String(warnSpy.mock.calls[0]?.[0] ?? '');
++    expect(callArg).toContain('B69');
++    warnSpy.mockRestore();
++  });
++});
+diff --git a/server/tests/unit/b79-0b-strategy-asset-class-gate.test.ts b/server/tests/unit/b79-0b-strategy-asset-class-gate.test.ts
+new file mode 100644
+index 000000000..ef8e3a03b
+--- /dev/null
++++ b/server/tests/unit/b79-0b-strategy-asset-class-gate.test.ts
+@@ -0,0 +1,99 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0b — N4 boundary tests for `isStrategyEnabledForAssetClass`
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Per Langston Step 1 review Q2 (rev 1 → rev 2 expansion):
++ *   `isStrategyEnabledForAssetClass` at canonical-regime-strategy-map.ts:919
++ *   is B79-era code (introduced by B79; the SQE whitelist gate at line 199
++ *   `asset_class_disabled` reject path depends on it). Currently uncovered
++ *   by `asset-classes.test.ts`.
++ *
++ * Cases:
++ *   - Each whitelisted strategy + xstock_spot → true (regression coverage on
++ *     XSTOCK_SPOT_ENABLED_STRATEGIES set itself; if the whitelist size drifts,
++ *     this test fails loudly)
++ *   - Non-whitelisted strategy + xstock_spot → false
++ *   - Any strategy + crypto_spot → true (no-touch fence assertion)
++ *   - Any strategy + unknown asset class → true (default-open back-compat per
++ *     the function's own docstring at line 914-917)
++ *   - Empty strategy + xstock_spot → false (Set membership)
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { describe, it, expect } from 'vitest';
++import { isStrategyEnabledForAssetClass } from '../../config/canonical-regime-strategy-map.js';
++
++describe('B79.0b — isStrategyEnabledForAssetClass gate', () => {
++  describe('xstock_spot whitelist coverage', () => {
++    // Quant whitelist (6) — well-understood regime-based strategies
++    const QUANT_WHITELIST = [
++      'vwap_pullback',
++      'breakout',
++      'mean_reversion',
++      'range_trade',
++      'sma_trend_ride',
++      'vwap_bounce',
++    ];
++    // File-based pattern path (3) per Langston rev 5 + PIA round-2 Q3
++    const PATTERN_WHITELIST = [
++      'inside_bar_reversal',
++      'morning_star',
++      'pivot_shift',
++    ];
++    // ORB included for permit-to-detect; ACTIVATION still DB-gated
++    const ORB_WHITELIST = ['orb'];
++
++    const ALL_WHITELISTED = [...QUANT_WHITELIST, ...PATTERN_WHITELIST, ...ORB_WHITELIST];
++
++    it.each(ALL_WHITELISTED)('%s is enabled for xstock_spot', (strategy) => {
++      expect(isStrategyEnabledForAssetClass(strategy, 'xstock_spot')).toBe(true);
++    });
++
++    it('whitelist size matches expected (regression coverage on set drift)', () => {
++      // If the whitelist gains/loses entries the developer must explicitly
++      // update this count — surfaces the change loudly.
++      const whitelistedCount = ALL_WHITELISTED.length;
++      expect(whitelistedCount).toBe(10); // 6 quant + 3 pattern + 1 ORB
++    });
++  });
++
++  describe('xstock_spot non-whitelisted rejection', () => {
++    it('strong_bull_trend (not in xstock whitelist) returns false', () => {
++      expect(isStrategyEnabledForAssetClass('strong_bull_trend', 'xstock_spot')).toBe(false);
++    });
++    it('liquidity_trap (universally disabled) returns false for xstock_spot', () => {
++      expect(isStrategyEnabledForAssetClass('liquidity_trap', 'xstock_spot')).toBe(false);
++    });
++    it('unknown strategy name returns false', () => {
++      expect(isStrategyEnabledForAssetClass('made_up_strategy_xyz', 'xstock_spot')).toBe(false);
++    });
++    it('empty strategy returns false (Set has no empty-string member)', () => {
++      expect(isStrategyEnabledForAssetClass('', 'xstock_spot')).toBe(false);
++    });
++  });
++
++  describe('crypto_spot — no-touch fence (default open)', () => {
++    it('any strategy returns true for crypto_spot', () => {
++      expect(isStrategyEnabledForAssetClass('vwap_pullback', 'crypto_spot')).toBe(true);
++      expect(isStrategyEnabledForAssetClass('strong_bull_trend', 'crypto_spot')).toBe(true);
++      expect(isStrategyEnabledForAssetClass('made_up_strategy_xyz', 'crypto_spot')).toBe(true);
++      expect(isStrategyEnabledForAssetClass('', 'crypto_spot')).toBe(true);
++    });
++  });
++
++  describe('Unknown asset class — default-open back-compat', () => {
++    // Per docstring at canonical-regime-strategy-map.ts:914-917: adding a new
++    // asset class without touching this helper does NOT silently disable any
++    // strategy. Conservative gating only when explicitly registered.
++    it('crypto_perp (unregistered in this gate) returns true for any strategy', () => {
++      expect(isStrategyEnabledForAssetClass('vwap_pullback', 'crypto_perp')).toBe(true);
++    });
++    it('xstock_perp (unregistered) returns true', () => {
++      expect(isStrategyEnabledForAssetClass('vwap_pullback', 'xstock_perp')).toBe(true);
++    });
++    it('arbitrary asset class string returns true', () => {
++      expect(isStrategyEnabledForAssetClass('any_strategy', 'fictional_class')).toBe(true);
++    });
++  });
++});

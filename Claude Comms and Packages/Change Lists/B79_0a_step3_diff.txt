@@ -1,0 +1,634 @@
+diff --git a/drizzle/migrations/2026-05-08-b79-0a-data-freshness-window.sql b/drizzle/migrations/2026-05-08-b79-0a-data-freshness-window.sql
+new file mode 100644
+index 000000000..87f1348cc
+--- /dev/null
++++ b/drizzle/migrations/2026-05-08-b79-0a-data-freshness-window.sql
+@@ -0,0 +1,42 @@
++-- ════════════════════════════════════════════════════════════════════════════
++-- B79.0a Migration 1 — xstock_spot data_freshness_window_ms
++-- ════════════════════════════════════════════════════════════════════════════
++--
++-- Empirical inter-tick measurement on staging (2026-05-08, 6h window):
++--   - p50 across symbols: 2.5-5.4 seconds
++--   - p95: 12-37 seconds
++--   - p99: 33-77 seconds (worst case 77s on EWP/USD low-liquidity country ETF)
++--
++-- Langston Q2 formula: value = max(p99_max + buffer, central_clock_interval).
++-- p99_max ≈ 77s + 13s buffer = 90s (rounded up).
++--
++-- Crypto wildcard for the same key falls back via getModuleConstants
++-- precedence; no explicit crypto_spot row added (out of B79.0a scope —
++-- crypto path uses existing in-memory cache freshness, not this gate).
++-- ════════════════════════════════════════════════════════════════════════════
++
++BEGIN;
++
++INSERT INTO module_constants
++  (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
++VALUES
++  ('market_data', '*', 'xstock_spot', '*', '*', 'data_freshness_window_ms', '90000'::jsonb, 'B79.0a')
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)
++  DO NOTHING;
++
++-- Langston rev 1 #2: assertion includes value-not-null check.
++DO $$
++DECLARE row_count int;
++BEGIN
++  SELECT COUNT(*) INTO row_count FROM module_constants
++   WHERE module_name='market_data'
++     AND asset_class='xstock_spot'
++     AND constant_name='data_freshness_window_ms'
++     AND value IS NOT NULL
++     AND value::text != 'null';
++  IF row_count != 1 THEN
++    RAISE EXCEPTION 'B79.0a Migration 1 assertion failed: expected 1 valid (non-null) row, found %', row_count;
++  END IF;
++END $$;
++
++COMMIT;
+diff --git a/drizzle/migrations/2026-05-08-b79-0a-sqe-wildcard-promotion.sql b/drizzle/migrations/2026-05-08-b79-0a-sqe-wildcard-promotion.sql
+new file mode 100644
+index 000000000..c7c88d306
+--- /dev/null
++++ b/drizzle/migrations/2026-05-08-b79-0a-sqe-wildcard-promotion.sql
+@@ -0,0 +1,56 @@
++-- ════════════════════════════════════════════════════════════════════════════
++-- B79.0a Migration 2 — SQE wildcard per-class promotion (N2 cleanup)
++-- ════════════════════════════════════════════════════════════════════════════
++--
++-- Promotes the 2 sqe_config wildcard rows (min_final_score, min_regime_weight)
++-- to explicit per-class rows for crypto_spot + xstock_spot. The wildcard
++-- rows REMAIN preserved for now; B79.0b (after 48h verify gate) DELETEs
++-- them — same two-step pattern as B79.TEC + B79.TEC.b.
++--
++-- All other SQE/pattern_pool keys already have explicit per-class rows
++-- from B79 ship (verified via live psql 2026-05-08).
++--
++-- Per Langston rev 1 #3: value-comparison assertion explicit in SQL —
++-- migration fails loudly if pre-existing operator override doesn't match
++-- the current wildcard value (manual review required).
++-- ════════════════════════════════════════════════════════════════════════════
++
++BEGIN;
++
++INSERT INTO module_constants
++  (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
++VALUES
++  -- min_final_score per-class promotion (wildcard 0.35 preserved)
++  ('sqe_config', '*', 'crypto_spot', '*', '*', 'min_final_score', '0.35'::jsonb, 'B79.0a'),
++  ('sqe_config', '*', 'xstock_spot', '*', '*', 'min_final_score', '0.35'::jsonb, 'B79.0a'),
++  -- min_regime_weight per-class promotion (wildcard 0.30 preserved)
++  ('sqe_config', '*', 'crypto_spot', '*', '*', 'min_regime_weight', '0.30'::jsonb, 'B79.0a'),
++  ('sqe_config', '*', 'xstock_spot', '*', '*', 'min_regime_weight', '0.30'::jsonb, 'B79.0a')
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
++
++-- Langston rev 1 #3: explicit value-comparison assertion in SQL.
++DO $$
++DECLARE
++  wildcard_min_final_score jsonb;
++  wildcard_min_regime_weight jsonb;
++  expected_count int := 4;
++  actual_count int;
++BEGIN
++  SELECT value INTO wildcard_min_final_score FROM module_constants
++   WHERE module_name='sqe_config' AND asset_class='*' AND constant_name='min_final_score';
++  SELECT value INTO wildcard_min_regime_weight FROM module_constants
++   WHERE module_name='sqe_config' AND asset_class='*' AND constant_name='min_regime_weight';
++
++  SELECT COUNT(*) INTO actual_count FROM module_constants
++   WHERE module_name='sqe_config'
++     AND asset_class IN ('crypto_spot', 'xstock_spot')
++     AND constant_name IN ('min_final_score', 'min_regime_weight')
++     AND ((constant_name='min_final_score' AND value=wildcard_min_final_score)
++       OR (constant_name='min_regime_weight' AND value=wildcard_min_regime_weight));
++
++  IF actual_count != expected_count THEN
++    RAISE EXCEPTION 'B79.0a Migration 2 assertion failed: expected % matching rows, found %. Pre-existing override may exist; manual review required.', expected_count, actual_count;
++  END IF;
++END $$;
++
++COMMIT;
+diff --git a/server/asset_classes/xstock_spot/scanner.ts b/server/asset_classes/xstock_spot/scanner.ts
+new file mode 100644
+index 000000000..ce9210bd8
+--- /dev/null
++++ b/server/asset_classes/xstock_spot/scanner.ts
+@@ -0,0 +1,252 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0a — xstock_spot Live Scanner
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Purpose: per-cycle live scan of xstock_spot pairs. Subscribes to centralClock
++ * (NOT a parallel setInterval — same tick-source pattern as Fx5ScannerService
++ * per Kyle directive 2026-05-08). Runs every 30 ticks (30 seconds) during ARCA
++ * market hours; short-circuits on market-closed.
++ *
++ * Day 1 (B79.0a) minimum-viable shape: OBSERVABILITY scanner, not active-
++ * trading scanner. Per cycle:
++ *   1. Market-open gate (`isXstockMarketOpenUTC`) — short-circuit if closed.
++ *   2. Batched DB read of latest ticker prices for ALL xstock_spot symbols
++ *      from `equity_spot_ticker_snap` (single round-trip, Langston rev 2 #1).
++ *   3. Per-pair freshness gate via `isPairDataFresh` (window=90s for Day 1,
++ *      empirical p99 + buffer per Langston Q2).
++ *   4. Update xstock TelemetryAggregator instance counters (cycle count,
++ *      fresh-pair count). NO signal-orchestrator / strategy-engine path
++ *      activation — that's a B79.x downstream batch gated on Layer-3
++ *      threshold calibration evidence.
++ *   5. `[B79.0a][SCAN_CYCLE_DONE]` log + diagnostic surface update.
++ *
++ * Two-instance pattern: ALL telemetry / ARM / failure-tracker reads go
++ * through `getXstockSpotInstances()` factory — NEVER the crypto globals.
++ *
++ * Backpressure: scope §1 Obj 11 — `[B79.0a][BACKPRESSURE_OBSERVED]` log
++ * when cycle duration exceeds budget. NEVER triggers cycle skipping
++ * (per RUNNING_ISSUES #81). Hostile-sim env flag
++ * `BACKPRESSURE_TEST_MODE=1` (dev/staging only — gated `NODE_ENV !==
++ * 'production'`) artificially sleeps the scan to validate the no-shed
++ * posture in Step 7+8 hostile sim.
++ *
++ * SIM update at Step 10: new entry mirroring fx5-scanner; layer 3.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { centralClock, type ClockTick } from '../../services/central-clock.js';
++import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
++import { isXstockMarketOpenUTC } from './market-hours.js';
++import { isPairDataFresh } from '../../utils/data-freshness.js';
++import { XSTOCK_SPOT_SYMBOLS } from '../../../shared/asset-classes.js';
++import { db } from '../../db.js';
++import { sql } from 'drizzle-orm';
++
++// 30 seconds — same as FX5 scanner. Aligned with central-clock budget.
++const SCAN_INTERVAL_SECONDS = 30;
++
++// Hostile-sim sleep duration (Langston Q5 lock — gated by NODE_ENV check).
++const HOSTILE_SIM_SLEEP_MS = 35_000; // exceeds central-clock budget intentionally
++
++interface ScannerDiagnostics {
++  isRunning: boolean;
++  isScanning: boolean;
++  lastTickAt: number | null;
++  lastCycleDurationMs: number | null;
++  cyclesCompleted: number;
++  cyclesSkippedMarketClosed: number;
++  pairsScannedLastCycle: number;
++  pairsFreshLastCycle: number;
++  pairsStaleLastCycle: number;
++  lastError: string | null;
++  hostileSimActive: boolean;
++}
++
++interface TickerSnapRow {
++  symbol: string;
++  price: string;        // numeric stored as string in pg
++  capturedAt: Date;
++}
++
++class XstockSpotScannerService {
++  private isRunning = false;
++  private isScanning = false;
++  private clockTickHandler: ((tick: ClockTick) => Promise<void>) | null = null;
++
++  private diag: ScannerDiagnostics = {
++    isRunning: false,
++    isScanning: false,
++    lastTickAt: null,
++    lastCycleDurationMs: null,
++    cyclesCompleted: 0,
++    cyclesSkippedMarketClosed: 0,
++    pairsScannedLastCycle: 0,
++    pairsFreshLastCycle: 0,
++    pairsStaleLastCycle: 0,
++    lastError: null,
++    hostileSimActive: false,
++  };
++
++  /**
++   * Start the scanner. Subscribes to centralClock; idempotent if already running.
++   * Throws on bootstrap failure so server/index.ts can HARD-FAIL the boot
++   * (Langston rev 1 #4).
++   */
++  async start(): Promise<void> {
++    if (this.isRunning) {
++      console.log('[B79.0a][BOOT] XstockSpotScanner already running');
++      return;
++    }
++
++    // Force lazy-init of the xstock instances triad. Throws on construction failure.
++    getXstockSpotInstances();
++
++    // Hostile-sim flag — Langston Q5 conditions.
++    const hostileSimEnabled =
++      process.env.BACKPRESSURE_TEST_MODE === '1' &&
++      process.env.NODE_ENV !== 'production';
++    if (hostileSimEnabled) {
++      this.diag.hostileSimActive = true;
++      console.warn('[B79.0a][HOSTILE_SIM_ACTIVE] BACKPRESSURE_TEST_MODE=1 detected; scanner cycles will artificially sleep to validate no-shed posture');
++    }
++    if (process.env.BACKPRESSURE_TEST_MODE === '1' && process.env.NODE_ENV === 'production') {
++      console.error('[B79.0a][HOSTILE_SIM_BLOCKED] BACKPRESSURE_TEST_MODE=1 set in production — refusing to enable. Unset the flag.');
++    }
++
++    this.clockTickHandler = async (tick: ClockTick) => {
++      this.diag.lastTickAt = tick.timestamp;
++      if (!this.isRunning || this.isScanning) {
++        if (this.isScanning) {
++          console.log(`[B79.0a][SKIP] tickNumber=${tick.tickNumber} reason=scan_in_progress`);
++        }
++        return;
++      }
++      // Run every 30 ticks (30 seconds).
++      if (tick.tickNumber > 0 && tick.tickNumber % SCAN_INTERVAL_SECONDS === 0) {
++        await this.runCycle(tick);
++      }
++    };
++
++    centralClock.subscribe('XstockSpotScanner', this.clockTickHandler);
++    if (!centralClock.getIsRunning()) {
++      centralClock.start();
++      console.log('[B79.0a][BOOT] Started Central Clock from XstockSpotScanner');
++    }
++
++    this.isRunning = true;
++    this.diag.isRunning = true;
++    console.log(`[B79.0a][BOOT] XstockSpotScanner started (interval=${SCAN_INTERVAL_SECONDS}s; universe=${XSTOCK_SPOT_SYMBOLS.size} symbols; hostile_sim=${hostileSimEnabled})`);
++  }
++
++  stop(): void {
++    if (!this.isRunning) return;
++    if (this.clockTickHandler) {
++      centralClock.unsubscribe('XstockSpotScanner');
++      this.clockTickHandler = null;
++    }
++    this.isRunning = false;
++    this.isScanning = false;
++    this.diag.isRunning = false;
++    this.diag.isScanning = false;
++    console.log('[B79.0a][SHUTDOWN] XstockSpotScanner stopped');
++  }
++
++  /**
++   * Per-cycle scan. Market-open gated. Reads ALL xstock prices in one
++   * batched query (Langston rev 2 #1), gates each by freshness, updates
++   * telemetry. Logs `[B79.0a][SCAN_CYCLE_DONE]` with metrics.
++   */
++  private async runCycle(tick: ClockTick): Promise<void> {
++    this.isScanning = true;
++    this.diag.isScanning = true;
++    const cycleStart = Date.now();
++
++    try {
++      console.log(`[B79.0a][SCAN_CYCLE_START] tick=${tick.tickNumber}`);
++
++      // Market-open gate.
++      if (!isXstockMarketOpenUTC()) {
++        this.diag.cyclesSkippedMarketClosed++;
++        if (this.diag.cyclesSkippedMarketClosed % 30 === 1) {
++          console.log(`[B79.0a][MARKET_CLOSED] tick=${tick.tickNumber} cycles_skipped_total=${this.diag.cyclesSkippedMarketClosed}`);
++        }
++        return;
++      }
++
++      // Hostile-sim sleep (no-op in production — flag is gated).
++      if (this.diag.hostileSimActive) {
++        await new Promise((r) => setTimeout(r, HOSTILE_SIM_SLEEP_MS));
++      }
++
++      // Batched DB read — Langston rev 2 #1 commitment.
++      const symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
++      const dbStart = Date.now();
++      const result = await db.execute<TickerSnapRow>(sql`
++        SELECT DISTINCT ON (symbol)
++          symbol::text AS symbol,
++          price::text AS price,
++          captured_at AS "capturedAt"
++        FROM equity_spot_ticker_snap
++        WHERE symbol = ANY(${symbolList})
++        ORDER BY symbol, captured_at DESC
++      `);
++      const dbDurationMs = Date.now() - dbStart;
++      const rows = (result as any).rows ?? (result as unknown as TickerSnapRow[]);
++
++      // Per-pair freshness gate + telemetry.
++      const xstockInstances = getXstockSpotInstances();
++      const now = Date.now();
++      let freshCount = 0;
++      let staleCount = 0;
++      for (const row of rows as TickerSnapRow[]) {
++        const lastTickMs = new Date(row.capturedAt).getTime();
++        const fresh = await isPairDataFresh(row.symbol, 'xstock_spot', lastTickMs, now);
++        if (fresh) freshCount++;
++        else staleCount++;
++      }
++
++      // TODO B79.x: route fresh pairs into signal-orchestrator / strategy-engine.
++      // Day 1 = observability only; Layer-3 threshold calibration drives the
++      // downstream wiring decision.
++
++      const cycleDurationMs = Date.now() - cycleStart;
++      this.diag.lastCycleDurationMs = cycleDurationMs;
++      this.diag.cyclesCompleted++;
++      this.diag.pairsScannedLastCycle = (rows as TickerSnapRow[]).length;
++      this.diag.pairsFreshLastCycle = freshCount;
++      this.diag.pairsStaleLastCycle = staleCount;
++
++      console.log(
++        `[B79.0a][SCAN_CYCLE_DONE] tick=${tick.tickNumber} duration_ms=${cycleDurationMs} ` +
++        `db_roundtrip_ms=${dbDurationMs} pairs_scanned=${(rows as TickerSnapRow[]).length} ` +
++        `fresh=${freshCount} stale=${staleCount}`,
++      );
++
++      // Backpressure observation — telemetry signal only, NEVER triggers shedding.
++      if (cycleDurationMs > 25_000) {
++        console.warn(
++          `[B79.0a][BACKPRESSURE_OBSERVED] tick=${tick.tickNumber} duration_ms=${cycleDurationMs} ` +
++          `exceeded 25s budget; vertical-scale or computational-distribution refactor required (#81 policy). ` +
++          `NEVER skip cycles.`,
++        );
++      }
++
++      // Touch xstock instances to keep them warm + verify two-instance pattern.
++      void xstockInstances.telemetry; // observability tap
++    } catch (err) {
++      const msg = err instanceof Error ? err.message : String(err);
++      this.diag.lastError = msg;
++      console.error(`[B79.0a][SCAN_CYCLE_ERROR] tick=${tick.tickNumber}:`, err);
++    } finally {
++      this.isScanning = false;
++      this.diag.isScanning = false;
++    }
++  }
++
++  getDiagnostics(): ScannerDiagnostics {
++    return { ...this.diag };
++  }
++}
++
++export const xstockSpotScanner = new XstockSpotScannerService();
+diff --git a/server/index.ts b/server/index.ts
+index 0a1fe8578..e3661af43 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -651,6 +651,20 @@ app.use((req, res, next) => {
+     console.error('[TEC_BOOTSTRAP_FAIL] Cannot accept traffic without rehydrated trailing states. Exiting.');
+     process.exit(1);
+   }
++
++  // ─── B79.0a: Live xstock_spot scanner (HARD-FAIL on boot per Langston rev 1 #4) ───
++  // Subscribes to centralClock; observability scanner Day 1 (no signal-orchestrator
++  // wiring yet — that's B79.x post-Layer-3). Runs BEFORE server.listen so the
++  // app refuses traffic until the scanner triad (telemetry + ARM + scanner)
++  // is initialized.
++  try {
++    const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
++    await xstockSpotScanner.start();
++  } catch (xstockErr) {
++    console.error('[B79.0a][BOOT_FAIL] xstockSpotScanner.start threw on boot:', xstockErr);
++    console.error('[B79.0a][BOOT_FAIL] Cannot accept traffic without xstock scanner initialized. Exiting.');
++    process.exit(1);
++  }
+   // ────────────────────────────────────────────────────────────────────────
+ 
+   server.listen(port, "0.0.0.0", async () => {
+diff --git a/server/routes.ts b/server/routes.ts
+index 9b2f76da9..a6abb52bc 100644
+--- a/server/routes.ts
++++ b/server/routes.ts
+@@ -7000,6 +7000,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
+ 
+   // ==================== R9.3.HF-5: Central Clock & FX5 Scanner Diagnostics ====================
+ 
++  // GET /api/diagnostics/xstock-scanner - B79.0a: live xstock_spot scanner
++  // diagnostics. Returns isRunning + isScanning + lastTickAt +
++  // lastCycleDurationMs + cyclesCompleted + pairsScannedLastCycle (fresh/stale)
++  // + lastError + hostileSimActive. Public (no auth) — operational pattern
++  // matches central-clock + tec-bootstrap.
++  apiRouter.get('/diagnostics/xstock-scanner', async (_req, res) => {
++    try {
++      const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
++      const diag = xstockSpotScanner.getDiagnostics();
++      res.json({
++        ok: true,
++        timestamp: new Date().toISOString(),
++        ...diag,
++      });
++    } catch (error: any) {
++      console.error('[B79.0a][API] xstock-scanner diagnostics failed:', error);
++      res.status(500).json({ ok: false, error: error.message });
++    }
++  });
++
+   // GET /api/diagnostics/tec-bootstrap - B79.TEC: per-asset-class TEC config
+   // bootstrap status. Returns ready=true once primeTECConfig() has warmed
+   // every ACTIVE asset class. Used by Step 7 first-pass verify + ops health
+diff --git a/server/services/adaptive-ratio-manager.ts b/server/services/adaptive-ratio-manager.ts
+index dcb8386a3..fb84f1b90 100644
+--- a/server/services/adaptive-ratio-manager.ts
++++ b/server/services/adaptive-ratio-manager.ts
+@@ -23,7 +23,7 @@ import {
+   type PoolPerformance,
+   type PoolComparison 
+ } from './telemetry-repository.js';
+-import { getTelemetryAggregator, type PoolPerformanceAggregate } from './telemetry-aggregator.js';
++import { getTelemetryAggregator, type PoolPerformanceAggregate, type TelemetryAggregatorService } from './telemetry-aggregator.js';
+ import { SCHEMA_VERSION, SCHEMA_DIRECTIVE } from '../config/schema-version.js';
+ import { REGIMES } from '../config/canonical-regime-strategy-map.js';
+ 
+@@ -63,9 +63,16 @@ export class AdaptiveRatioManager {
+   private config: RatioConfig;
+   private currentRatio: AdaptiveRatio;
+   private lastComparison: PoolComparison | null = null;
+-  
+-  constructor(config: Partial<RatioConfig> = {}) {
++  // B79.0a (2026-05-08): optional injected telemetry instance. Crypto path
++  // omits this arg → falls back to `getTelemetryAggregator()` global singleton
++  // (back-compat). xstock path passes the per-class TelemetryAggregator from
++  // `bootstrapXstockSpotInstances()` so per-class telemetry never bleeds into
++  // the global crypto telemetry.
++  private telemetry: TelemetryAggregatorService | null = null;
++
++  constructor(config: Partial<RatioConfig> = {}, telemetry?: TelemetryAggregatorService) {
+     this.config = { ...DEFAULT_CONFIG, ...config };
++    this.telemetry = telemetry ?? null;
+     this.currentRatio = {
+       idealRatio: this.config.defaultRatio,
+       rotationalRatio: 1 - this.config.defaultRatio,
+@@ -74,8 +81,8 @@ export class AdaptiveRatioManager {
+       adjustedAt: Date.now(),
+       reasoning: 'Initial default ratio - no performance data yet',
+     };
+-    
+-    console.log(`[11.2R1][RatioManager] Initialized | schemaVersion=${SCHEMA_VERSION} | directive=${SCHEMA_DIRECTIVE}`);
++
++    console.log(`[11.2R1][RatioManager] Initialized | schemaVersion=${SCHEMA_VERSION} | directive=${SCHEMA_DIRECTIVE} | telemetry_source=${telemetry ? 'injected' : 'global_singleton'}`);
+   }
+   
+   /**
+@@ -90,7 +97,10 @@ export class AdaptiveRatioManager {
+     try {
+       // First, try in-memory pool performance from TelemetryAggregator
+       // Directive 11.4C.1: Telemetry now only contains VTS-generated data (no FX5 seeding)
+-      const telemetry = getTelemetryAggregator();
++      // B79.0a: prefer injected per-class telemetry instance over global singleton.
++      // Crypto path: this.telemetry is null → falls back to getTelemetryAggregator() (back-compat).
++      // Xstock path: this.telemetry is the per-class instance from bootstrapXstockSpotInstances().
++      const telemetry = this.telemetry ?? getTelemetryAggregator();
+       const inMemoryComparison = telemetry.getPoolPerformanceComparison();
+       
+       // Check if we have sufficient in-memory data
+diff --git a/server/services/asset-class-instances.ts b/server/services/asset-class-instances.ts
+index f3713804d..46de1cbf0 100644
+--- a/server/services/asset-class-instances.ts
++++ b/server/services/asset-class-instances.ts
+@@ -91,15 +91,12 @@ function bootstrapXstockSpotInstances(): AssetClassInstances {
+   // uses the same defaults as crypto. Each instance holds its own
+   // currentRatio + lastComparison state on the instance.
+   //
+-  // NOTE: AdaptiveRatioManager.computeAdaptiveRatio() currently calls
+-  // getTelemetryAggregator() (the global singleton) internally on line 93
+-  // of adaptive-ratio-manager.ts. For Day 1 dormant scaffolding this is
+-  // acceptable because the xstock scan loop is not yet wired — the xstock
+-  // ratioManager is constructed but never invoked. Once the live xstock
+-  // loop wires up in B79.0a, ARM constructor injection of telemetry must
+-  // be added so the xstock ARM consumes its own telemetry instance, not
+-  // the global singleton. Tracked in MEMORY's Step 3 implementation queue.
+-  const ratioManager = new AdaptiveRatioManager();
++  // B79.0a (2026-05-08): constructor now accepts injected telemetry — the
++  // xstock ARM consumes its own per-class TelemetryAggregator instance so
++  // pool-performance reads NEVER bleed into the global crypto telemetry.
++  // Earlier B79-ship caveat at this site (which warned that ARM was still
++  // hitting the global singleton) is now CLOSED.
++  const ratioManager = new AdaptiveRatioManager({}, telemetry);
+ 
+   // AdaptiveScanManager already accepts injected telemetry + failureTracker
+   // via its constructor (server/services/adaptive-scan-manager.ts:169).
+diff --git a/server/services/central-clock.ts b/server/services/central-clock.ts
+index bb09b7848..a79d7422d 100644
+--- a/server/services/central-clock.ts
++++ b/server/services/central-clock.ts
+@@ -18,7 +18,7 @@
+ 
+ import { EventEmitter } from 'events';
+ 
+-interface ClockTick {
++export interface ClockTick {
+   timestamp: number;
+   tickNumber: number;
+   drift: number;
+diff --git a/server/utils/data-freshness.ts b/server/utils/data-freshness.ts
+new file mode 100644
+index 000000000..200ef2352
+--- /dev/null
++++ b/server/utils/data-freshness.ts
+@@ -0,0 +1,110 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0a — Asset-class-aware data-freshness helper
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Single read-site for "is the price/data we have for this pair recent enough
++ * to evaluate signals against." Per-class window resolved from
++ * `module_constants` `(market_data, *, <assetClass>, *, *, data_freshness_window_ms)`.
++ *
++ * Per Langston Q2 lock (BATCH_79_0a_SCOPE.md §11): xstock_spot Day 1 value
++ * empirically derived from `equity_spot_ticker_snap` p99 inter-tick gap on
++ * a 6h sample (90,000 ms = max(p99_max + buffer, central_clock_interval)).
++ *
++ * Closed-market behavior: when the asset class is xstock_spot and the
++ * market is closed (`isXstockMarketOpenUTC() === false`), helper returns
++ * `true` (treat as fresh — explicit contract beats null per Langston Q2).
++ * Scanner short-circuits on market-closed gate before reaching this site
++ * anyway; this is belt-and-suspenders.
++ *
++ * Crypto path: no behavioral change — crypto callers either never invoked
++ * this helper (and continue to use existing in-memory cache freshness math)
++ * OR pass `assetClass='crypto_spot'` and resolve via the wildcard or
++ * explicit per-class row in `module_constants`. Day 1 only xstock_spot has
++ * a row; crypto wildcard fallback returns the wildcard window if any.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { getModuleConstants } from '../services/module-constants-service.js';
++import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
++import { ASSET_CLASSES, type AssetClass } from '../../shared/asset-classes.js';
++
++// In-process cache of resolved window per asset class. TTL 60s mirrors
++// the module_constants service cache. Avoids hitting the resolver on
++// every per-pair freshness check inside a hot scan loop.
++interface CachedWindow { value: number; expiresAt: number; }
++const _windowCache = new Map<AssetClass, CachedWindow>();
++const _CACHE_TTL_MS = 60_000;
++
++// Sentinel for "no per-class row found AND no wildcard fallback" — caller
++// receives `Infinity` so the freshness gate degrades to "always-fresh"
++// instead of always-stale. This is INTENTIONAL — a missing window row
++// should NOT block signal evaluation. The B79.0a config enforces an
++// explicit xstock_spot row exists; crypto path leaves Infinity until a
++// future batch promotes it.
++const _NO_WINDOW = Number.POSITIVE_INFINITY;
++
++async function _resolveWindowMs(assetClass: AssetClass): Promise<number> {
++  const now = Date.now();
++  const cached = _windowCache.get(assetClass);
++  if (cached && now < cached.expiresAt) return cached.value;
++
++  try {
++    const rows = await getModuleConstants('market_data', {
++      exchange: 'kraken',
++      assetClass,
++      strategy: '*',
++      regime: '*',
++    });
++    const raw = rows['data_freshness_window_ms'];
++    const value = typeof raw === 'number' ? raw : _NO_WINDOW;
++    _windowCache.set(assetClass, { value, expiresAt: now + _CACHE_TTL_MS });
++    return value;
++  } catch (err) {
++    console.warn(`[B79.0a][FRESHNESS] resolve failed for assetClass=${assetClass}; defaulting to always-fresh:`, err);
++    _windowCache.set(assetClass, { value: _NO_WINDOW, expiresAt: now + 5_000 });
++    return _NO_WINDOW;
++  }
++}
++
++/**
++ * B79.0a: Asset-class-aware freshness gate.
++ *
++ * @param symbol — pair identifier (used only for logging context; the
++ *                 per-pair age comparison happens at the call site that
++ *                 also has the lastTickTimestamp)
++ * @param assetClass — typed AssetClass; drives window lookup
++ * @param lastTickTimestampMs — Date.now()-style ms when this pair's price was
++ *                               last refreshed (from cache or DB row)
++ * @param now — current ms (defaulted, but injectable for testability)
++ *
++ * Closed-market for xstock_spot: returns `true` (fresh) — staleness is
++ * meaningless during weekend/holiday windows.
++ *
++ * Returns: `true` iff `now - lastTickTimestampMs <= window_ms` for the
++ * resolved per-class window. `false` means signal should NOT evaluate
++ * against this stale data.
++ */
++export async function isPairDataFresh(
++  _symbol: string,
++  assetClass: AssetClass,
++  lastTickTimestampMs: number,
++  now: number = Date.now(),
++): Promise<boolean> {
++  // Belt-and-suspenders for closed market (Langston Q2 lock).
++  if (assetClass === ASSET_CLASSES.XSTOCK_SPOT && !isXstockMarketOpenUTC()) {
++    return true;
++  }
++
++  const windowMs = await _resolveWindowMs(assetClass);
++  if (!Number.isFinite(windowMs)) return true; // no window configured = always-fresh
++  if (lastTickTimestampMs <= 0) return false; // never seen a tick = stale
++  return (now - lastTickTimestampMs) <= windowMs;
++}
++
++/**
++ * B79.0a: Test-only helper to clear the per-class window cache.
++ */
++export function _testClearFreshnessCache(): void {
++  _windowCache.clear();
++}
