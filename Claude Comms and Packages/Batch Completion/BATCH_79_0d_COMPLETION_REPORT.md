@@ -109,4 +109,16 @@
 
 ---
 
-*End BATCH_79_0d_COMPLETION_REPORT.md (DRAFT, pending CI + Step 7).*
+*End BATCH_79_0d_COMPLETION_REPORT.md.*
+
+---
+
+## Post-closure addenda (added 2026-05-10 post-B79.0j)
+
+**Step 4 F1 rename landed.** RUNNING_ISSUES #90 (Langston Step 4 F1 finding — `risk_reward_ratio` → `target_range_multiple` rename) was resolved in **B79.0j** commits `418088c7a` (rename) + `fa4cbabdc` (VTS dispatch fix). The constant now honors what it actually IS (a multiplier of range height for target distance, not a realized reward-to-risk ratio). Pure rename, same value 2.0, no math change. See `BATCH_79_0j_COMPLETION_REPORT.md`.
+
+**B79.0d retrospective: VTS dispatch site missed.** During B79.0j staging verify, PM2 logs surfaced a flood of `[HF6][VTS] Unknown strategy: orb, no detect function available` warnings. Root cause: B79.0d's "6-step strategy activation pattern" added ORB to the strategy-engine direct dispatch (signal-orchestrator path) but did NOT add the case to the parallel `vts-runner.ts:callStrategyDetect` switch. Since active trading is OFF until Phase 19, the only path that runs is VTS — meaning ORB was silently 100%-nulling on VTS path and would have shown 100% nulls in the xStocks tab strategy-fire-rate table from Monday 14:30 UTC ORB go-hot onward.
+
+The B79.0d test suite tested the strategy-engine wrapper directly, which is why the gap wasn't caught. **Future-strategy lesson: every new strategy add needs BOTH dispatch sites updated** — strategy-engine direct + `vts-runner.ts:callStrategyDetect` — AND a VTS-path integration test going through `callStrategyDetect`. This lesson is now logged in `BATCH_CATALOG.md` B79.0j row + this addendum.
+
+The bug was fixed in B79.0j followup commit `fa4cbabdc`.

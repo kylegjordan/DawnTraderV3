@@ -18,9 +18,9 @@
 
 ---
 
-## CURRENT STATE — 2026-05-10 (Phase 24 CLOSED + B79.0i.b CLOSED — rich ablation tables + Filter Diagnostics mirror)
+## CURRENT STATE — 2026-05-10 (Phase 24 CLOSED + B79.0i.b CLOSED + B79.0j CLOSED — ORB rename + VTS dispatch fix)
 
-**xstock_spot fully onboarded** + B79.0i.b (3-revision arc per Kyle pushbacks) shipped. xStocks tab now mirrors Filter Diagnostics in full + reuses the rich crypto ExitStrategyAblationSection + FactorCalibrationSection components via export+endpointBase prop. PM2 #210 on `migration/aws-supabase` HEAD `b9a1cdd4e`. G3 walkthrough verified rich tables render. "Shadow-mode" terminology removed per Kyle directive.
+**xstock_spot fully onboarded** + B79.0i.b (Filter Diagnostics + rich ablation tables) + B79.0j (ORB rename `risk_reward_ratio` → `target_range_multiple` + bonus VTS dispatch bug fix). PM2 #212 on `migration/aws-supabase` HEAD `fa4cbabdc`. RUNNING_ISSUES #90 RESOLVED. Crypto no-touch fence holds.
 
 **Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — post-Kyle-directive 2026-05-10, contains ONLY standing rules + procedural checklist. Trial-and-error history lives in per-batch completion reports, not the workflow doc.
 
@@ -33,7 +33,15 @@
 
 ---
 
-## NEXT STEP — Section M procedural recipe in ASSET_CLASS_ONBOARDING_WORKFLOW.md
+## NEXT STEP — B79.0g-tx (#91) atomic close-time DELETE+INSERT, then B79.0k (#89) Kraken WS-equities investigation
+
+After B79.0j shipped (#90 resolved) the next two open B79.x running issues:
+1. **B79.0g-tx (#91)** — substantial refactor plumbing tx handle through `persistRealPriceTrade` in `vts-service.ts:697`. Wraps close-time DELETE-from-vts_open_trades + INSERT-to-paper_sim_trades + B73 hooks + B70 archive in single transaction. Affects multiple call sites. Needs proper Step 1 + 2 separate scope (not combined) given surface area.
+2. **B79.0k (#89)** — Kraken WS-equities weekend silence investigation. Three paths to evaluate (Kraken Pro feed-tier / REST polling fallback mirror B74 pattern / direct Kraken support query). Investigation + decision; implementation depends on findings.
+
+**#92 deferred to Phase 19** per Kyle clarification 2026-05-10: active trading not until Phase 19, so xstockSpotScanner orchestration wiring (which would populate funnel-rejection counters) isn't a near-term batch.
+
+## Section M procedural recipe in ASSET_CLASS_ONBOARDING_WORKFLOW.md (still queued for B80)
 
 Add Section M "Stand up the dedicated observation tab" with the procedural recipe B80 (crypto_perp) implementer follows: (1) export FilterDiagnosticsPanel from machine-learning.tsx if not done, (2) build new sibling endpoints under `/api/<asset_class>/` returning FilterDiagnosticsData v2.0 shape from the asset-class-specific scanner + signal_eval_archive, (3) add 2 ablation sibling endpoints (exit-strategy-ablation + factor-calibration) querying tables filtered by asset_class, (4) build new `<asset_class>-tab.tsx` with 5 sections, (5) wire tab into machine-learning.tsx Tabs group LAST. Defer until B80 actually starts.
 
@@ -66,6 +74,7 @@ Per Kyle pushback evening 2026-05-10, xStocks tab EXPANDED beyond the initial B7
 | B79.0h | `963475be9` | n/a | Workflow + SIM/SYSTEM_MANUAL retrospective |
 | B79.0i.a | `c927924df` | #207 | xStocks tab (Phase 1: Panel A scanner-cycle + Panel E freshness + 2 new endpoints) |
 | B79.0i.b | `5dde28f52`+`cdbd2a04b`+`b9a1cdd4e` | #210 | xStocks tab: Filter Diagnostics mirror + rich ExitStrategyAblationSection + FactorCalibrationSection (reused via export+endpointBase prop). Aggregators parameterized with optional asset_class. "Shadow-mode" → "VTS Observation". |
+| B79.0j | `418088c7a`+`fa4cbabdc` | #212 | ORB rename `risk_reward_ratio` → `target_range_multiple` (resolves RUNNING_ISSUES #90) + bonus VTS dispatch bug fix (B79.0d had missed `vts-runner.ts:callStrategyDetect` dispatch site for ORB — silently 100%-nulling on VTS path). |
 
 **Pending operator gates Sunday 2026-05-10/11:**
 - ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per checklist
