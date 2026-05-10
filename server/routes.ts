@@ -7311,11 +7311,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         cohort_latest: '7 days',
       };
       const interval = intervalMap[win];
-      // Per-factor count + avg confidence shift
+      // Per-factor count + avg confidence shift extracted from jsonb decisions
       const factorAgg = await db.execute(sql.raw(`
         SELECT factor_name,
                COUNT(*)::text AS n,
-               AVG(real_confidence - alt_confidence)::text AS avg_shift
+               AVG(
+                 COALESCE((real_decision->>'confidence')::numeric, 0)
+                 - COALESCE((alternate_decision->>'confidence')::numeric, 0)
+               )::text AS avg_shift,
+               COUNT(CASE WHEN replay_completed_at IS NOT NULL THEN 1 END)::text AS replays_done
         FROM regime_factor_alternates
         WHERE asset_class = 'xstock_spot'
           AND evaluated_at > NOW() - INTERVAL '${interval}'
@@ -7326,6 +7330,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         factor: r.factor_name,
         n: parseInt(r.n, 10) || 0,
         avgConfidenceShift: parseFloat(r.avg_shift) || 0,
+        replaysDone: parseInt(r.replays_done, 10) || 0,
       }));
       const totalN = factors.reduce((a, b) => a + b.n, 0);
       res.json({
