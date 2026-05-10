@@ -28,10 +28,10 @@ INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regi
 VALUES
   ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'open_range_minutes',       '30'::jsonb,   'b79.0d-seed', NOW()),
   ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'breakout_buffer_atr_mult', '0.15'::jsonb, 'b79.0d-seed', NOW()),
-  -- NOTE (Langston Step 4 F1): this is target-multiple-of-rangeHeight, NOT realized R:R.
-  -- Realized R:R drifts ~1.3:1 because actual risk = entry−rangeLow > rangeHeight
-  -- once breakout has cleared. Rename to target_range_multiple queued for B79.x.
-  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'risk_reward_ratio',        '2.0'::jsonb,  'b79.0d-seed', NOW()),
+  -- NOTE: target_range_multiple is a multiplier of rangeHeight for target distance
+  -- (targetPrice = entry ± target_range_multiple × rangeHeight). NOT a realized R:R.
+  -- Renamed from `risk_reward_ratio` in B79.0j 2026-05-10 (Langston B79.0d Step 4 F1).
+  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'target_range_multiple',    '2.0'::jsonb,  'b79.0d-seed', NOW()),
   ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'volume_multiple_min',      '1.5'::jsonb,  'b79.0d-seed', NOW()),
   ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'confidence_base',          '0.65'::jsonb, 'b79.0d-seed', NOW()),
   ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'range_atr_clamp_max',      '3.0'::jsonb,  'b79.0d-seed', NOW()),

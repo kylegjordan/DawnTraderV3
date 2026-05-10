@@ -21,7 +21,7 @@ const gateValue = { value: true };
 const thresholds = {
   open_range_minutes: 30,
   breakout_buffer_atr_mult: 0.15,
-  risk_reward_ratio: 2.0,
+  target_range_multiple: 2.0,
   volume_multiple_min: 1.5,
   confidence_base: 0.65,
   range_atr_clamp_max: 3.0,

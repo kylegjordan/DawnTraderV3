@@ -24,14 +24,17 @@
  * Layer-1 thresholds in module_constants `strategy.orb` (xstock_spot scope):
  *   open_range_minutes        = 30
  *   breakout_buffer_atr_mult  = 0.15
- *   risk_reward_ratio         = 2.0   (Langston B79.0d Step 4 F1: misnomer —
- *                                      this is target-multiple-of-rangeHeight,
- *                                      NOT realized R:R. Realized R:R drifts
- *                                      ~1.3:1 because actual risk =
- *                                      entry−rangeLow > rangeHeight once
- *                                      breakout has cleared. Rename to
- *                                      `target_range_multiple` queued via
- *                                      RUNNING_ISSUES #90 for B79.x.)
+ *   target_range_multiple     = 2.0   (multiplier of rangeHeight for target
+ *                                      distance — i.e. targetPrice = entry ±
+ *                                      target_range_multiple × rangeHeight.
+ *                                      NOT a realized reward-to-risk ratio.
+ *                                      Realized R:R drifts ~1.3:1 because
+ *                                      actual risk = entry−rangeLow >
+ *                                      rangeHeight once breakout has cleared.
+ *                                      Renamed from `risk_reward_ratio` in
+ *                                      B79.0j 2026-05-10; resolves
+ *                                      RUNNING_ISSUES #90, Langston B79.0d
+ *                                      Step 4 F1.)
  *   volume_multiple_min       = 1.5
  *   confidence_base           = 0.65
  *   range_atr_clamp_max       = 3.0  (Q4 nit lock)
@@ -190,7 +193,7 @@ export function detectORB(
 
   const ORB_OPEN_RANGE_MINUTES   = c['open_range_minutes'] ?? 30;
   const ORB_BREAKOUT_BUFFER_ATR  = c['breakout_buffer_atr_mult'] ?? 0.15;
-  const ORB_RR_RATIO             = c['risk_reward_ratio'] ?? 2.0;
+  const ORB_TARGET_RANGE_MULT    = c['target_range_multiple'] ?? 2.0;
   const ORB_VOL_MULT_MIN         = c['volume_multiple_min'] ?? 1.5;
   const ORB_CONF_BASE            = c['confidence_base'] ?? 0.65;
   const ORB_RANGE_ATR_CLAMP_MAX  = c['range_atr_clamp_max'] ?? 3.0;
@@ -247,12 +250,12 @@ export function detectORB(
     direction = 'BUY';
     entryPrice = currentPrice;
     stopPrice = rangeLow;                                 // opposite range extreme
-    targetPrice = entryPrice + ORB_RR_RATIO * rangeHeight; // R:R based on range height
+    targetPrice = entryPrice + ORB_TARGET_RANGE_MULT * rangeHeight; // target distance = mult × range height (NOT realized R:R)
   } else {
     direction = 'SELL';
     entryPrice = currentPrice;
     stopPrice = rangeHigh;
-    targetPrice = entryPrice - ORB_RR_RATIO * rangeHeight;
+    targetPrice = entryPrice - ORB_TARGET_RANGE_MULT * rangeHeight;
   }
 
   // ── Confidence (Q4 with Langston nit: clamp range/atr term) ─────────────
