@@ -33,7 +33,13 @@
 
 ---
 
-## NEXT STEP — B79.0g-tx (#91) atomic close-time DELETE+INSERT, then B79.0k (#89) Kraken WS-equities investigation
+## NEXT STEP — Kyle directive needed on B79.0k path forward + B79.0g-tx (#91) Step 2 pre-audit ready
+
+**B79.0k (#89) findings (combined Step 1+2 SHIPPED 2026-05-10, no code):** Path B (REST polling fallback) DEAD via empirical probe — Kraken's `/0/public/AssetPairs` has ZERO xstock entries; no public REST endpoint exists for xStocks. Path A (Kraken Pro feed-tier subscription) is the only Kraken-native option remaining — **requires Kyle directive on commercial commitment**. Path C (Kraken support query) needs Kyle approval to send. Sub-batches B79.0k.1/.2/.3 conditional on directive. See `BATCH_79_0k_COMPLETION_REPORT.md`.
+
+**B79.0g-tx (#91) status:** Langston Step 1 APPROVED Option B (closed-flag soft-delete) with 5 specific adjustments. Adjustments applied to scope file. Step 2 pre-audit ready to draft. Implementation ~50-80 LOC: schema migration (closed_at TIMESTAMPTZ + closed BOOLEAN + partial index) + replace `deleteOpenTrade` with `markOpenTradeClosed` (AWAITED, not fire-and-log) + bootstrap filter `WHERE closed=false` + `module_constants`-resolved GC retention (default 90 days). Deferred to next session for proper pre-audit + impl.
+
+## B79.0g-tx Section M procedural recipe in ASSET_CLASS_ONBOARDING_WORKFLOW.md (still queued for B80)
 
 After B79.0j shipped (#90 resolved) the next two open B79.x running issues:
 1. **B79.0g-tx (#91)** — substantial refactor plumbing tx handle through `persistRealPriceTrade` in `vts-service.ts:697`. Wraps close-time DELETE-from-vts_open_trades + INSERT-to-paper_sim_trades + B73 hooks + B70 archive in single transaction. Affects multiple call sites. Needs proper Step 1 + 2 separate scope (not combined) given surface area.
@@ -75,6 +81,7 @@ Per Kyle pushback evening 2026-05-10, xStocks tab EXPANDED beyond the initial B7
 | B79.0i.a | `c927924df` | #207 | xStocks tab (Phase 1: Panel A scanner-cycle + Panel E freshness + 2 new endpoints) |
 | B79.0i.b | `5dde28f52`+`cdbd2a04b`+`b9a1cdd4e` | #210 | xStocks tab: Filter Diagnostics mirror + rich ExitStrategyAblationSection + FactorCalibrationSection (reused via export+endpointBase prop). Aggregators parameterized with optional asset_class. "Shadow-mode" → "VTS Observation". |
 | B79.0j | `418088c7a`+`fa4cbabdc` | #212 | ORB rename `risk_reward_ratio` → `target_range_multiple` (resolves RUNNING_ISSUES #90) + bonus VTS dispatch bug fix (B79.0d had missed `vts-runner.ts:callStrategyDetect` dispatch site for ORB — silently 100%-nulling on VTS path). |
+| B79.0k | (governance only) | n/a | Investigation batch — Kraken WS-equities weekend silence. Decision matrix: Path B DEAD via probe (no public REST endpoint for xStocks), Path A needs Kyle directive (commercial), Path C needs Kyle approval (free). |
 
 **Pending operator gates Sunday 2026-05-10/11:**
 - ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per checklist
