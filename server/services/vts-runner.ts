@@ -783,7 +783,11 @@ function callStrategyDetect(
   strategy: string,
   indicators: any,
   ohlcData: any[],
-  patternInput: PatternInput | null
+  patternInput: PatternInput | null,
+  // B79.0j (2026-05-10): added for ORB which requires symbol + assetClass ctx.
+  // Pre-existing dispatchers ignore these — additive, no behavior change.
+  symbol?: string,
+  assetClass?: string,
 ): StrategySignal | null {
   switch (strategy) {
     // ── Quant strategies ──
@@ -837,6 +841,18 @@ function callStrategyDetect(
     // B63: Strong Bull Trend (Path D) — QUANT, LONG-only
     case 'strong_bull_trend':
       return strategyEngine.detectStrongBullTrend(indicators, ohlcData, patternInput);
+    // B79.0d strategy registered in B79.0j VTS dispatch (was silently
+    // 100%-nulling on VTS path; orchestrator path was already correct).
+    // ORB needs symbol + assetClass ctx; both are passed by caller at
+    // line ~1010 once their threading is added.
+    case 'orb':
+      if (!symbol || !assetClass) {
+        // Fail-safe: if caller hasn't been updated to thread symbol/assetClass,
+        // log once and null-return rather than silently mis-dispatching.
+        console.warn(`[B79.0j][VTS] orb dispatch missing symbol/assetClass ctx; null-return`);
+        return null;
+      }
+      return strategyEngine.detectORB(symbol, ohlcData as any, indicators, { assetClass, symbol });
     default:
       console.warn(`[HF6][VTS] Unknown strategy: ${strategy}, no detect function available`);
       return null;
@@ -1007,7 +1023,9 @@ async function generatePhase10Signal(
 
   // Call strategy-specific detect function (replaces generic volatility formula)
   const ohlcAsAny = ohlcData as any[];
-  const strategySignal = callStrategyDetect(strategy, stratDetectIndicators, ohlcAsAny, stratPatternInput);
+  // B79.0j: thread symbol + assetClass for ORB (other strategies ignore them).
+  const _resolvedAssetClass = safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot';
+  const strategySignal = callStrategyDetect(strategy, stratDetectIndicators, ohlcAsAny, stratPatternInput, symbol, _resolvedAssetClass);
 
   if (!strategySignal) {
     console.log(`[HF6][VTS] ${symbol}: Strategy ${strategy} returned null - conditions not met, skipping`);
