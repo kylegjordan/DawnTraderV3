@@ -1,31 +1,27 @@
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * B79.0i.a — xStocks observation tab
+ * B79.0i.a (REVISED 2026-05-10 per Kyle pushback)
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Single tab inside the Machine Learning page. Sibling to "Filter Diagnostics"
- * + "DBS Pair Tracking". Shadow-mode observability surface for xstock_spot —
- * NO live-trading visualization here (that's Phase 19+). Panels stack
- * vertically on this one tab.
+ * Mirrors the Filter Diagnostics tab in full for xstock_spot, plus adds B73
+ * Exit Strategy Ablation + B67.0 Factor Calibration Ablation panels. Single
+ * tab inside Machine Learning page. Reuses crypto's `FilterDiagnosticsPanel`
+ * by importing it (data shape preserved); xstock-scoped data flows through
+ * `/api/xstocks/filter-diagnostics`.
  *
- * Panels in B79.0i.a:
- *  - A: Scanner Cycle Metrics (header strip + body + 24h aggregate)
- *  - E: Per-pair Fresh-Tick Latency (sorted stalest-first)
+ * Panels (all on this one tab):
+ *   1. Scanner Cycle Header Strip — xstock-specific (running, ARCA, cycles, etc.)
+ *   2. Per-Pair Fresh-Tick Latency — xstock-specific (RUNNING_ISSUES #89 visibility)
+ *   3. FilterDiagnosticsPanel (FULL) — Pipeline Summary + Last Scan + 24h Rolling
+ *      + VTS Evaluation Detail by-strategy + Setup Nulls + Pre-Eval Skips
+ *      + Post-Signal Rejections + Filter Metric Ranges. Mirrors crypto exactly,
+ *      scoped to xstock_spot via /api/xstocks/filter-diagnostics endpoint.
+ *   4. B73 Exit Strategy Ablation Panel
+ *   5. B67.0 Factor Calibration Ablation Panel (with mandatory caveat banner)
  *
- * Panels in B79.0i.b (deferred, Tue/Wed):
- *  - B: B73 Exit Strategy Ablation (asset_class-scoped via ?asset_class= param)
- *  - C: B67.0 Factor Calibration Ablation (with mandatory caveat banner)
- *  - D: Strategy Fire-Rate by Regime
- *
- * Per pre-audit Finding #1: xstockSpotScanner does NOT track IMF/family/SQE/
- * trade per-stage funnel counters (line 260 TODO confirms Day 1 = observability-
- * only). Panel A is scanner-cycle metrics ONLY. Full funnel deferred to a
- * future B79.x batch when the scanner is wired through orchestration.
- *
- * Cache key isolation (Finding #9 / Langston O1): when this tab calls a
- * shared endpoint with ?asset_class=, the param MUST be part of the
- * useQuery `queryKey` so the response doesn't collide with the existing
- * crypto Drift Dashboard caller.
+ * Crypto regression posture: all xstock data flows through NEW /api/xstocks/*
+ * sibling endpoints. No modifications to /api/vts/* or /api/analytics/*.
+ * No-touch fence on crypto_spot through 2026-05-15 preserved by-construction.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
@@ -34,36 +30,32 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Activity, Wifi, WifiOff, AlertCircle } from "lucide-react";
+import { Activity, Wifi, WifiOff, AlertCircle, BarChart3, LineChart as LineChartIcon } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { format } from "date-fns";
+import { FilterDiagnosticsPanel, type FilterDiagnosticsData } from "@/pages/machine-learning";
 
 // ---------------------------------------------------------------------------
-// Types — match server schemas xstocks-filter-diagnostics/v1.0 + xstocks-freshness/v1.0
+// Types
 // ---------------------------------------------------------------------------
 
-interface XstocksFilterDiagnostics {
-  ok: boolean;
-  timestamp: string;
-  schema: string;
-  scanner: {
+interface XstocksFilterDiagnostics extends FilterDiagnosticsData {
+  xstockScanner: {
     isRunning: boolean;
     isScanning: boolean;
     lastTickAt: number | null;
     lastCycleDurationMs: number | null;
     cyclesCompleted: number;
     cyclesSkippedMarketClosed: number;
+    lastUniverseSize: number;
+    lastArcaOpen: boolean;
     pairsScannedLastCycle: number;
     pairsFreshLastCycle: number;
     pairsStaleLastCycle: number;
     lastError: string | null;
     hostileSimActive: boolean;
-    lastUniverseSize: number;
-    lastArcaOpen: boolean;
-  };
-  rolling24h: {
-    approxCycles: number;
-    approxPairsScanned: number;
+    rolling24hApproxCycles: number;
+    rolling24hApproxPairsScanned: number;
   };
 }
 
@@ -77,165 +69,50 @@ interface XstockFreshnessRow {
 
 interface XstocksFreshnessResponse {
   ok: boolean;
-  timestamp: string;
-  schema: string;
-  thresholds: {
-    freshUpToSeconds: number;
-    staleUpToSeconds: number;
-  };
+  thresholds: { freshUpToSeconds: number; staleUpToSeconds: number };
   symbols: XstockFreshnessRow[];
 }
 
+interface ExitAblationVariant {
+  variantId: string;
+  variantName: string;
+  n: number;
+  avgPnL: number;
+  avgBaseline: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+}
+interface ExitAblationResponse {
+  ok: boolean;
+  window: string;
+  variants: ExitAblationVariant[];
+}
+
+interface CalibrationFactor {
+  factor: string;
+  n: number;
+  avgConfidenceShift: number;
+}
+interface CalibrationResponse {
+  ok: boolean;
+  window: string;
+  decisionGradeThreshold: number;
+  totalN: number;
+  factors: CalibrationFactor[];
+}
+
 // ---------------------------------------------------------------------------
-// Reusable: empty-state + caveat banner (co-located per Langston Q3/Q4)
+// Reusable atoms
 // ---------------------------------------------------------------------------
 
-interface EmptyPanelStateProps {
-  message: string;
-  secondary?: string;
-}
-function EmptyPanelState({ message, secondary }: EmptyPanelStateProps) {
+function EmptyPanelState({ message, secondary }: { message: string; secondary?: string }) {
   return (
-    <div
-      className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground"
-      data-testid="xstocks-empty-state"
-    >
+    <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground" data-testid="xstocks-empty-state">
       <AlertCircle className="w-8 h-8 mb-3 opacity-50" />
       <p className="text-sm font-medium">{message}</p>
       {secondary && <p className="text-xs mt-1 opacity-75">{secondary}</p>}
     </div>
-  );
-}
-
-/**
- * B79.0i.a ships this banner shell with no rendered output (n undefined),
- * since Panel C (its consumer) lands in B79.0i.b. Renders a visually
- * unmissable amber/yellow alert in .b once `n` is bound.
- *
- * Per Langston Finding #11: must render NOTHING when no data is bound.
- */
-interface CalibrationCaveatBannerProps {
-  n?: number;
-}
-export function CalibrationCaveatBanner({ n }: CalibrationCaveatBannerProps) {
-  if (n === undefined) return null;
-  return (
-    <Alert
-      className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-950 dark:border-amber-700"
-      data-testid="xstocks-calibration-caveat-banner"
-    >
-      <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-      <AlertTitle className="text-amber-900 dark:text-amber-200">
-        Current n={n}. Decision-grade requires n≥150 per regime × factor-tertile bucket.
-      </AlertTitle>
-      <AlertDescription className="text-amber-800 dark:text-amber-300">
-        Given xstock_spot's ~50% lower signal volume vs crypto_spot and TFS-regime concentration,
-        expected timeline 3–6 months. Treat as system-health telemetry, not signal.
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Panel A — Scanner Cycle Metrics
-// ---------------------------------------------------------------------------
-
-function ScannerCyclePanel({ data, isLoading }: { data: XstocksFilterDiagnostics | undefined; isLoading: boolean }) {
-  if (isLoading) {
-    return (
-      <Card data-testid="xstocks-scanner-panel">
-        <CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
-        <CardContent>
-          <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!data?.ok || !data.scanner) {
-    return (
-      <Card data-testid="xstocks-scanner-panel">
-        <CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
-        <CardContent>
-          <EmptyPanelState message="Failed to load scanner diagnostics." secondary="Check server logs." />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const s = data.scanner;
-  const r = data.rolling24h;
-
-  // Cold-scanner empty state per Finding #10 (Langston O4)
-  if (s.cyclesCompleted === 0) {
-    return (
-      <Card data-testid="xstocks-scanner-panel">
-        <CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
-        <CardContent>
-          <EmptyPanelState
-            message="Scanner has not completed first cycle yet — refresh in ~30s"
-            secondary={`Running=${s.isRunning ? 'yes' : 'no'} · Universe=${s.lastUniverseSize}`}
-          />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const lastCycleAt = s.lastTickAt ? new Date(s.lastTickAt) : null;
-
-  return (
-    <Card data-testid="xstocks-scanner-panel">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Activity className="w-5 h-5" />
-            Scanner Cycle Metrics
-          </CardTitle>
-          <div className="flex items-center gap-2 text-xs">
-            <Badge variant={s.isRunning ? "default" : "destructive"}>{s.isRunning ? "Running" : "Stopped"}</Badge>
-            <Badge variant={s.lastArcaOpen ? "default" : "secondary"}>{s.lastArcaOpen ? "ARCA Open" : "ARCA Closed"}</Badge>
-            {s.hostileSimActive && <Badge variant="destructive">Hostile Sim Active</Badge>}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {/* Header strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-muted/30 rounded-md">
-          <Stat label="Cycles Completed" value={s.cyclesCompleted.toLocaleString()} />
-          <Stat label="Last Cycle At" value={lastCycleAt ? format(lastCycleAt, "HH:mm:ss") : "—"} />
-          <Stat label="Last Universe" value={s.lastUniverseSize.toString()} sub={s.lastArcaOpen ? "ARCA open" : "24/7 only"} />
-          <Stat label="Last Cycle Duration" value={s.lastCycleDurationMs !== null ? `${s.lastCycleDurationMs} ms` : "—"} />
-        </div>
-
-        {/* Body — per-cycle counts */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <Stat label="Pairs Scanned (last cycle)" value={s.pairsScannedLastCycle.toString()} />
-          <Stat label="Fresh (last cycle)" value={s.pairsFreshLastCycle.toString()} />
-          <Stat label="Stale (last cycle)" value={s.pairsStaleLastCycle.toString()} />
-        </div>
-
-        {/* 24h aggregate */}
-        <div className="border-t pt-4">
-          <div className="text-sm font-semibold mb-2">Rolling 24h (approximate, derived from xstock_spot_ticker_snap)</div>
-          <div className="grid grid-cols-2 gap-4">
-            <Stat label="Cycles (~)" value={r.approxCycles.toLocaleString()} />
-            <Stat label="Pairs Scanned (~)" value={r.approxPairsScanned.toLocaleString()} />
-          </div>
-        </div>
-
-        {s.lastError && (
-          <div className="mt-4 p-3 border border-destructive/50 bg-destructive/5 rounded text-sm">
-            <span className="font-semibold text-destructive">Last Error:</span> {s.lastError}
-          </div>
-        )}
-
-        {s.cyclesSkippedMarketClosed > 0 && (
-          <div className="mt-3 text-xs text-muted-foreground">
-            ARCA-closed full-universe skips: {s.cyclesSkippedMarketClosed.toLocaleString()} (24/7 names continue scanning)
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -249,59 +126,115 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
+function CalibrationCaveatBanner({ n }: { n: number }) {
+  return (
+    <Alert className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-950 dark:border-amber-700" data-testid="xstocks-calibration-caveat-banner">
+      <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+      <AlertTitle className="text-amber-900 dark:text-amber-200">
+        Current n={n}. Decision-grade requires n≥150 per regime × factor-tertile bucket.
+      </AlertTitle>
+      <AlertDescription className="text-amber-800 dark:text-amber-300">
+        Given xstock_spot's ~50% lower signal volume vs crypto_spot and TFS-regime concentration,
+        expected timeline 3–6 months. Treat as system-health telemetry, not signal.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Panel E — Per-pair Fresh-Tick Latency
+// Panel: Scanner Cycle Header (xstock-specific)
+// ---------------------------------------------------------------------------
+
+function ScannerCycleHeader({ data, isLoading }: { data: XstocksFilterDiagnostics | undefined; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <Card data-testid="xstocks-scanner-panel"><CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
+        <CardContent><div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div></CardContent>
+      </Card>
+    );
+  }
+  if (!data?.ok || !data.xstockScanner) {
+    return (
+      <Card data-testid="xstocks-scanner-panel"><CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
+        <CardContent><EmptyPanelState message="Failed to load scanner diagnostics." secondary="Check server logs." /></CardContent>
+      </Card>
+    );
+  }
+  const s = data.xstockScanner;
+  if (s.cyclesCompleted === 0) {
+    return (
+      <Card data-testid="xstocks-scanner-panel"><CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
+        <CardContent><EmptyPanelState message="Scanner has not completed first cycle yet — refresh in ~30s" secondary={`Running=${s.isRunning ? 'yes' : 'no'} · Universe=${s.lastUniverseSize}`} /></CardContent>
+      </Card>
+    );
+  }
+  const lastCycleAt = s.lastTickAt ? new Date(s.lastTickAt) : null;
+  return (
+    <Card data-testid="xstocks-scanner-panel">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2"><Activity className="w-5 h-5" />Scanner Cycle Metrics</CardTitle>
+          <div className="flex items-center gap-2 text-xs">
+            <Badge variant={s.isRunning ? "default" : "destructive"}>{s.isRunning ? "Running" : "Stopped"}</Badge>
+            <Badge variant={s.lastArcaOpen ? "default" : "secondary"}>{s.lastArcaOpen ? "ARCA Open" : "ARCA Closed"}</Badge>
+            {s.hostileSimActive && <Badge variant="destructive">Hostile Sim Active</Badge>}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-muted/30 rounded-md">
+          <Stat label="Cycles Completed" value={s.cyclesCompleted.toLocaleString()} />
+          <Stat label="Last Cycle At" value={lastCycleAt ? format(lastCycleAt, "HH:mm:ss") : "—"} />
+          <Stat label="Last Universe" value={s.lastUniverseSize.toString()} sub={s.lastArcaOpen ? "ARCA open" : "24/7 only"} />
+          <Stat label="Last Cycle Duration" value={s.lastCycleDurationMs !== null ? `${s.lastCycleDurationMs} ms` : "—"} />
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <Stat label="Pairs Scanned (last cycle)" value={s.pairsScannedLastCycle.toString()} />
+          <Stat label="Fresh (last cycle)" value={s.pairsFreshLastCycle.toString()} />
+          <Stat label="Stale (last cycle)" value={s.pairsStaleLastCycle.toString()} />
+        </div>
+        <div className="border-t pt-4">
+          <div className="text-sm font-semibold mb-2">Rolling 24h (approximate, derived from xstock_spot_ticker_snap)</div>
+          <div className="grid grid-cols-2 gap-4">
+            <Stat label="Cycles (~)" value={s.rolling24hApproxCycles.toLocaleString()} />
+            <Stat label="Pairs Scanned (~)" value={s.rolling24hApproxPairsScanned.toLocaleString()} />
+          </div>
+        </div>
+        {s.lastError && (
+          <div className="mt-4 p-3 border border-destructive/50 bg-destructive/5 rounded text-sm">
+            <span className="font-semibold text-destructive">Last Error:</span> {s.lastError}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Panel: Per-Pair Fresh-Tick Latency (xstock-specific)
 // ---------------------------------------------------------------------------
 
 function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | undefined; isLoading: boolean }) {
   if (isLoading) {
-    return (
-      <Card data-testid="xstocks-freshness-panel">
-        <CardHeader><CardTitle className="text-lg">Per-Pair Fresh-Tick Latency</CardTitle></CardHeader>
-        <CardContent>
-          <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div>
-        </CardContent>
-      </Card>
-    );
+    return (<Card data-testid="xstocks-freshness-panel"><CardHeader><CardTitle className="text-lg">Per-Pair Fresh-Tick Latency</CardTitle></CardHeader><CardContent><div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div></CardContent></Card>);
   }
-
   if (!data?.ok) {
-    return (
-      <Card data-testid="xstocks-freshness-panel">
-        <CardHeader><CardTitle className="text-lg">Per-Pair Fresh-Tick Latency</CardTitle></CardHeader>
-        <CardContent>
-          <EmptyPanelState message="Failed to load freshness data." secondary="Check server logs." />
-        </CardContent>
-      </Card>
-    );
+    return (<Card data-testid="xstocks-freshness-panel"><CardHeader><CardTitle className="text-lg">Per-Pair Fresh-Tick Latency</CardTitle></CardHeader><CardContent><EmptyPanelState message="Failed to load freshness data." /></CardContent></Card>);
   }
-
-  if (!data.symbols || data.symbols.length === 0) {
-    return (
-      <Card data-testid="xstocks-freshness-panel">
-        <CardHeader><CardTitle className="text-lg">Per-Pair Fresh-Tick Latency</CardTitle></CardHeader>
-        <CardContent>
-          <EmptyPanelState message="No xstock_spot symbols configured." />
-        </CardContent>
-      </Card>
-    );
+  if (!data.symbols?.length) {
+    return (<Card data-testid="xstocks-freshness-panel"><CardHeader><CardTitle className="text-lg">Per-Pair Fresh-Tick Latency</CardTitle></CardHeader><CardContent><EmptyPanelState message="No xstock_spot symbols configured." /></CardContent></Card>);
   }
-
   const dead = data.symbols.filter((s) => s.state === 'dead').length;
   const stale = data.symbols.filter((s) => s.state === 'stale').length;
   const fresh = data.symbols.filter((s) => s.state === 'fresh').length;
-
   return (
     <Card data-testid="xstocks-freshness-panel">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Wifi className="w-5 h-5" />
-            Per-Pair Fresh-Tick Latency
-          </CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2"><Wifi className="w-5 h-5" />Per-Pair Fresh-Tick Latency</CardTitle>
           <div className="flex items-center gap-2 text-xs">
-            <Badge variant="default" className="bg-green-600 hover:bg-green-600">Fresh: {fresh}</Badge>
-            <Badge variant="secondary" className="bg-amber-500 hover:bg-amber-500 text-white">Stale: {stale}</Badge>
+            <Badge className="bg-green-600 hover:bg-green-600">Fresh: {fresh}</Badge>
+            <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Stale: {stale}</Badge>
             <Badge variant="destructive">Dead: {dead}</Badge>
           </div>
         </div>
@@ -311,9 +244,9 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
           <table className="w-full text-sm" data-testid="xstocks-freshness-table">
-            <thead>
+            <thead className="sticky top-0 bg-background">
               <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="text-left p-3">Symbol</th>
                 <th className="text-left p-3">Class</th>
@@ -326,21 +259,13 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
               {data.symbols.map((row) => (
                 <tr key={row.symbol} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="p-3 font-mono">{row.symbol}</td>
-                  <td className="p-3">
-                    {row.is24_7 ? (
-                      <Badge variant="outline" className="text-xs">24/7</Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">ARCA</span>
-                    )}
-                  </td>
-                  <td className="p-3 text-right font-mono text-xs">
-                    {row.lastTickAt ? format(new Date(row.lastTickAt), "MM-dd HH:mm:ss") : "—"}
-                  </td>
-                  <td className="p-3 text-right font-mono">
-                    {row.staleSeconds !== null ? row.staleSeconds.toLocaleString() : "—"}
-                  </td>
+                  <td className="p-3">{row.is24_7 ? <Badge variant="outline" className="text-xs">24/7</Badge> : <span className="text-xs text-muted-foreground">ARCA</span>}</td>
+                  <td className="p-3 text-right font-mono text-xs">{row.lastTickAt ? format(new Date(row.lastTickAt), "MM-dd HH:mm:ss") : "—"}</td>
+                  <td className="p-3 text-right font-mono">{row.staleSeconds !== null ? row.staleSeconds.toLocaleString() : "—"}</td>
                   <td className="p-3 text-center">
-                    <FreshnessBadge state={row.state} />
+                    {row.state === 'fresh' && <Badge className="bg-green-600 hover:bg-green-600">Fresh</Badge>}
+                    {row.state === 'stale' && <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Stale</Badge>}
+                    {row.state === 'dead' && <Badge variant="destructive" className="gap-1"><WifiOff className="w-3 h-3" />Dead</Badge>}
                   </td>
                 </tr>
               ))}
@@ -352,14 +277,113 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
   );
 }
 
-function FreshnessBadge({ state }: { state: 'fresh' | 'stale' | 'dead' }) {
-  if (state === 'fresh') return <Badge className="bg-green-600 hover:bg-green-600">Fresh</Badge>;
-  if (state === 'stale') return <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Stale</Badge>;
+// ---------------------------------------------------------------------------
+// Panel: B73 Exit Strategy Ablation
+// ---------------------------------------------------------------------------
+
+function ExitAblationPanel({ data, isLoading }: { data: ExitAblationResponse | undefined; isLoading: boolean }) {
+  if (isLoading) {
+    return (<Card data-testid="xstocks-exit-ablation-panel"><CardHeader><CardTitle className="text-lg">B73 Exit Strategy Ablation</CardTitle></CardHeader><CardContent><div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div></CardContent></Card>);
+  }
+  if (!data?.ok) {
+    return (<Card data-testid="xstocks-exit-ablation-panel"><CardHeader><CardTitle className="text-lg">B73 Exit Strategy Ablation</CardTitle></CardHeader><CardContent><EmptyPanelState message="Failed to load exit ablation data." /></CardContent></Card>);
+  }
+  const totalN = data.variants.reduce((a, b) => a + b.n, 0);
+  if (totalN === 0) {
+    return (
+      <Card data-testid="xstocks-exit-ablation-panel">
+        <CardHeader><CardTitle className="text-lg flex items-center gap-2"><BarChart3 className="w-5 h-5" />B73 Exit Strategy Ablation</CardTitle></CardHeader>
+        <CardContent>
+          <EmptyPanelState message="No closed xstock_spot trades yet — populates after first ORB fire closes." secondary="Waiting on Monday 2026-05-11 14:30 UTC ARCA open + first breakout." />
+        </CardContent>
+      </Card>
+    );
+  }
   return (
-    <Badge variant="destructive" className="gap-1">
-      <WifiOff className="w-3 h-3" />
-      Dead
-    </Badge>
+    <Card data-testid="xstocks-exit-ablation-panel">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2"><BarChart3 className="w-5 h-5" />B73 Exit Strategy Ablation</CardTitle>
+        <div className="text-xs text-muted-foreground mt-1">
+          12 exit variants per closed xstock_spot trade. Window: {data.window}. Total samples: {totalN}.
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="xstocks-exit-ablation-table">
+            <thead>
+              <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="text-left p-3">Variant</th>
+                <th className="text-right p-3">n</th>
+                <th className="text-right p-3">Avg P/L %</th>
+                <th className="text-right p-3">Avg Baseline %</th>
+                <th className="text-right p-3">Diff vs Baseline</th>
+                <th className="text-right p-3">Win Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.variants.map((v) => {
+                const diff = v.avgPnL - v.avgBaseline;
+                return (
+                  <tr key={v.variantId} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="p-3 font-medium">{v.variantName}</td>
+                    <td className="p-3 text-right font-mono">{v.n}</td>
+                    <td className={`p-3 text-right font-mono ${v.avgPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>{v.avgPnL.toFixed(2)}%</td>
+                    <td className={`p-3 text-right font-mono ${v.avgBaseline >= 0 ? 'text-green-600' : 'text-red-600'}`}>{v.avgBaseline.toFixed(2)}%</td>
+                    <td className={`p-3 text-right font-mono ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff.toFixed(2)}%</td>
+                    <td className="p-3 text-right font-mono">{(v.winRate * 100).toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Panel: B67.0 Factor Calibration Ablation
+// ---------------------------------------------------------------------------
+
+function CalibrationAblationPanel({ data, isLoading }: { data: CalibrationResponse | undefined; isLoading: boolean }) {
+  if (isLoading) {
+    return (<Card data-testid="xstocks-calibration-panel"><CardHeader><CardTitle className="text-lg">B67.0 Factor Calibration Ablation</CardTitle></CardHeader><CardContent><div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div></CardContent></Card>);
+  }
+  const totalN = data?.totalN ?? 0;
+  return (
+    <Card data-testid="xstocks-calibration-panel">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2"><LineChartIcon className="w-5 h-5" />B67.0 Factor Calibration Ablation</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <CalibrationCaveatBanner n={totalN} />
+        {!data?.ok ? <EmptyPanelState message="Failed to load calibration data." /> :
+         data.factors.length === 0 ? <EmptyPanelState message="No factor alternates captured for xstock_spot yet." secondary={`Window: ${data.window}. Populates as ORB + future strategy fires accumulate.`} /> :
+         (<div className="overflow-x-auto">
+           <table className="w-full text-sm" data-testid="xstocks-calibration-table">
+             <thead>
+               <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
+                 <th className="text-left p-3">Factor</th>
+                 <th className="text-right p-3">n</th>
+                 <th className="text-right p-3">Avg Confidence Shift</th>
+                 <th className="text-right p-3">Decision-Grade Progress</th>
+               </tr>
+             </thead>
+             <tbody>
+               {data.factors.map((f) => (
+                 <tr key={f.factor} className="border-b last:border-0 hover:bg-muted/30">
+                   <td className="p-3 font-medium">{f.factor}</td>
+                   <td className="p-3 text-right font-mono">{f.n}</td>
+                   <td className="p-3 text-right font-mono">{f.avgConfidenceShift >= 0 ? '+' : ''}{f.avgConfidenceShift.toFixed(4)}</td>
+                   <td className="p-3 text-right font-mono">{Math.min(100, (f.n / data.decisionGradeThreshold) * 100).toFixed(0)}%</td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+         </div>)}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -368,9 +392,6 @@ function FreshnessBadge({ state }: { state: 'fresh' | 'stale' | 'dead' }) {
 // ---------------------------------------------------------------------------
 
 export function XstocksTab() {
-  // Cache-key isolation: include 'xstocks' namespace + the asset_class scope
-  // so future B79.0i.b queries against shared endpoints don't collide with
-  // the crypto Drift Dashboard's queryKeys (Finding #9 / Langston O1).
   const { data: filterData, isLoading: filterLoading } = useQuery<XstocksFilterDiagnostics>({
     queryKey: ['/api/xstocks/filter-diagnostics', { asset_class: 'xstock_spot' }],
     queryFn: () => apiFetch('/api/xstocks/filter-diagnostics'),
@@ -385,23 +406,59 @@ export function XstocksTab() {
     staleTime: 10000,
   });
 
+  const { data: exitData, isLoading: exitLoading } = useQuery<ExitAblationResponse>({
+    queryKey: ['/api/xstocks/exit-strategy-ablation', { asset_class: 'xstock_spot', window: 'rolling_7d' }],
+    queryFn: () => apiFetch('/api/xstocks/exit-strategy-ablation?window=rolling_7d'),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+
+  const { data: calibData, isLoading: calibLoading } = useQuery<CalibrationResponse>({
+    queryKey: ['/api/xstocks/factor-calibration', { asset_class: 'xstock_spot', window: 'rolling_7d' }],
+    queryFn: () => apiFetch('/api/xstocks/factor-calibration?window=rolling_7d'),
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+
   return (
     <div className="space-y-4" data-testid="xstocks-tab">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold">xStocks (xstock_spot) — Shadow-mode Observability</h2>
           <p className="text-sm text-muted-foreground">
-            Phase 24 closed 2026-05-10 · Live-trading enablement is Phase 19 territory · Panels expand in B79.0i.b
+            Phase 24 closed 2026-05-10 · Live-trading enablement is Phase 19 territory · Monday 2026-05-11 14:30 UTC = ORB strategy goes hot
           </p>
         </div>
       </div>
 
-      <ScannerCyclePanel data={filterData} isLoading={filterLoading} />
+      {/* 1. Scanner Cycle Header (xstock-specific) */}
+      <ScannerCycleHeader data={filterData} isLoading={filterLoading} />
 
+      {/* 2. Per-Pair Freshness (xstock-specific) */}
       <FreshnessPanel data={freshnessData} isLoading={freshnessLoading} />
 
-      {/* Banner shell ships in .a but renders nothing until n is bound in .b — Finding #11 */}
-      <CalibrationCaveatBanner />
+      {/* 3. Filter Diagnostics — REUSED from crypto, scoped to xstock_spot */}
+      <Card data-testid="xstocks-filter-diagnostics-section">
+        <CardHeader>
+          <CardTitle className="text-lg">Filter Pipeline Diagnostics (xstock_spot)</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Mirrors the crypto Filter Diagnostics tab, scoped to xstock_spot. Pipeline Summary, Last Scan Filter Breakdown,
+            24h Rolling Aggregates, VTS Evaluation Detail (by-strategy), Setup Nulls, Pre-Eval Skips, Post-Signal Rejections,
+            and Filter Metric Ranges. Funnel-stage rejection counters are zero until xstockSpotScanner is wired through
+            signal-orchestration in a future B79.x batch — strategy-level + null-reason aggregates are real (from
+            <code className="px-1">signal_eval_archive</code>).
+          </p>
+        </CardHeader>
+        <CardContent>
+          <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} />
+        </CardContent>
+      </Card>
+
+      {/* 4. B73 Exit Strategy Ablation */}
+      <ExitAblationPanel data={exitData} isLoading={exitLoading} />
+
+      {/* 5. B67.0 Factor Calibration Ablation */}
+      <CalibrationAblationPanel data={calibData} isLoading={calibLoading} />
     </div>
   );
 }

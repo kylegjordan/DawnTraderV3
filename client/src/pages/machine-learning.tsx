@@ -1818,7 +1818,9 @@ function PredictiveAdjustmentsPanel({
 
 
 // Batch 19H: Filter Pipeline Diagnostics Panel
-function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsData | undefined; isLoading: boolean }) {
+// B79.0i.a: exported so xstocks-tab can re-render same panel with xstock-scoped data
+export type { FilterDiagnosticsData };
+export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsData | undefined; isLoading: boolean }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">

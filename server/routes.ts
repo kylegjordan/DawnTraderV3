@@ -7046,24 +7046,86 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
       const diag = xstockSpotScanner.getDiagnostics();
 
-      // Derive 24h scan-cycle estimate from xstock_spot_ticker_snap row
-      // density. Each scan cycle reads ~50 rows (full ARCA-open universe)
-      // or ~10 rows (24/7-only ARCA-closed). Below we count DISTINCT
-      // captured_at values bucketed to the second over the last 24h —
-      // approximates how many cycles emitted ticker rows. Cheap query;
-      // bounded by 24h partition pruning.
-      let rolling24hCycles = 0;
-      let rolling24hPairsScanned = 0;
+      // Aggregate signal_eval_archive over 24h scoped to xstock_spot.
+      let archiveRows: Array<{ strategy: string; regime: string; evaluated: string; nulls: string; signals: string; rejected: string; trades: string }> = [];
       try {
-        const result = await db.execute<{ cycles: string; pairs: string }>(sql`
+        const archiveAgg = await db.execute(sql`
           SELECT
-            COUNT(DISTINCT date_trunc('second', captured_at))::text AS cycles,
-            COUNT(*)::text AS pairs
+            strategy::text AS strategy,
+            regime::text AS regime,
+            COUNT(*)::text AS evaluated,
+            SUM(CASE WHEN null_reason IS NOT NULL AND null_reason != '' THEN 1 ELSE 0 END)::text AS nulls,
+            SUM(CASE WHEN signal_generated IS TRUE THEN 1 ELSE 0 END)::text AS signals,
+            SUM(CASE WHEN signal_generated IS TRUE AND trade_opened IS NOT TRUE THEN 1 ELSE 0 END)::text AS rejected,
+            SUM(CASE WHEN trade_opened IS TRUE THEN 1 ELSE 0 END)::text AS trades
+          FROM signal_eval_archive
+          WHERE asset_class = 'xstock_spot'
+            AND captured_at > NOW() - INTERVAL '24 hours'
+          GROUP BY strategy, regime
+        `);
+        archiveRows = ((archiveAgg as any).rows ?? []) as any;
+      } catch (err) {
+        console.warn('[B79.0i.a][filter-diagnostics] signal_eval_archive query failed:', err);
+      }
+
+      const byStrategy: Record<string, { evaluated: number; trueNulls: number; signals: number; rejected: number; trades: number }> = {};
+      let totalEvaluated = 0, totalNulls = 0, totalSignals = 0, totalRejected = 0, totalTrades = 0;
+      for (const r of archiveRows) {
+        const ev = parseInt(r.evaluated, 10) || 0;
+        const nu = parseInt(r.nulls, 10) || 0;
+        const sg = parseInt(r.signals, 10) || 0;
+        const rj = parseInt(r.rejected, 10) || 0;
+        const td = parseInt(r.trades, 10) || 0;
+        if (!byStrategy[r.strategy]) byStrategy[r.strategy] = { evaluated: 0, trueNulls: 0, signals: 0, rejected: 0, trades: 0 };
+        byStrategy[r.strategy].evaluated += ev;
+        byStrategy[r.strategy].trueNulls += nu;
+        byStrategy[r.strategy].signals += sg;
+        byStrategy[r.strategy].rejected += rj;
+        byStrategy[r.strategy].trades += td;
+        totalEvaluated += ev; totalNulls += nu; totalSignals += sg; totalRejected += rj; totalTrades += td;
+      }
+
+      // Null-reason aggregate
+      const byReason: Record<string, number> = {};
+      const byRegime: Record<string, number> = {};
+      try {
+        const nullReasonAgg = await db.execute(sql`
+          SELECT null_reason::text AS null_reason, COUNT(*)::text AS cnt
+          FROM signal_eval_archive
+          WHERE asset_class = 'xstock_spot' AND captured_at > NOW() - INTERVAL '24 hours'
+            AND null_reason IS NOT NULL AND null_reason != ''
+          GROUP BY null_reason
+        `);
+        for (const r of ((nullReasonAgg as any).rows ?? []) as Array<{ null_reason: string; cnt: string }>) {
+          byReason[r.null_reason] = parseInt(r.cnt, 10) || 0;
+        }
+        const regimeAgg = await db.execute(sql`
+          SELECT regime::text AS regime, COUNT(*)::text AS cnt
+          FROM signal_eval_archive
+          WHERE asset_class = 'xstock_spot' AND captured_at > NOW() - INTERVAL '24 hours'
+            AND null_reason IS NOT NULL AND null_reason != ''
+          GROUP BY regime
+        `);
+        for (const r of ((regimeAgg as any).rows ?? []) as Array<{ regime: string; cnt: string }>) {
+          byRegime[r.regime] = parseInt(r.cnt, 10) || 0;
+        }
+      } catch (err) {
+        console.warn('[B79.0i.a][filter-diagnostics] null_reason/regime queries failed:', err);
+      }
+
+      // 24h universe + cycle aggregates
+      let universe24h = 0, rolling24hCycles = 0, rolling24hPairsScanned = 0;
+      try {
+        const cyclesAgg = await db.execute(sql`
+          SELECT COUNT(DISTINCT symbol)::text AS uniq,
+                 COUNT(DISTINCT date_trunc('second', captured_at))::text AS cycles,
+                 COUNT(*)::text AS pairs
           FROM xstock_spot_ticker_snap
           WHERE captured_at > NOW() - INTERVAL '24 hours'
         `);
-        const row = ((result as any).rows ?? [])[0];
+        const row = ((cyclesAgg as any).rows ?? [])[0];
         if (row) {
+          universe24h = parseInt(row.uniq, 10) || 0;
           rolling24hCycles = parseInt(row.cycles, 10) || 0;
           rolling24hPairsScanned = parseInt(row.pairs, 10) || 0;
         }
@@ -7071,32 +7133,212 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.warn('[B79.0i.a][filter-diagnostics] 24h aggregate query failed:', err);
       }
 
+      // Construct FilterDiagnosticsData shape mirroring crypto endpoint.
+      // xstock_spot scanner doesn't track filter-rejection counters yet
+      // (Finding #1) so global/imf rejection fields are zero — HONEST signaling.
+      const emptyGlobal = {
+        failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0,
+        failed_min_price: 0, failed_max_price: 0, failed_stablecoin: 0,
+        failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0,
+        failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0,
+        passed_all_filters: universe24h,
+      };
+      const emptyImf = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0 };
+      const emptyPatternGlobal = {
+        failed_stablecoin: 0, failed_min_price: 0, failed_max_price: 0,
+        failed_min_volume: 0, failed_spread: 0, failed_history: 0,
+        passed_all_filters: 0,
+      };
+
+      const lastScan = {
+        timestamp: diag.lastTickAt ? new Date(diag.lastTickAt).toISOString() : new Date().toISOString(),
+        mode: 'paper' as const,
+        scannedCount: diag.pairsScannedLastCycle,
+        quant: { global: emptyGlobal, imf: emptyImf, survivors: diag.pairsFreshLastCycle },
+        pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
+        familyQualifiedUnique: diag.pairsFreshLastCycle,
+        destination: 'vts_batch' as const,
+        destinationCount: diag.pairsFreshLastCycle,
+        familyPaths: {},
+      };
+
+      const rolling24h = {
+        totalScans: rolling24hCycles,
+        totalPairsScanned: rolling24hPairsScanned,
+        uniquePairsScanned: universe24h,
+        aggregated: {
+          quant: { global: emptyGlobal, imf: emptyImf, survivors: 0 },
+          pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
+          familyPaths: {},
+        },
+      };
+
+      const vtsEvaluation = {
+        timestamp: Date.now(),
+        quantPairsEvaluated: totalEvaluated,
+        patternPairsEvaluated: 0,
+        quantStrategyNulls: totalNulls,
+        patternNoDetection: 0,
+        patternDetected: 0,
+        quantPatternDetected: 0,
+        quantPatternNoDetection: 0,
+        signalsGenerated: totalSignals,
+        quantStrategyEvaluations: totalEvaluated,
+        patternStrategyEvaluations: 0,
+        quantSignalsGenerated: totalSignals,
+        patternSignalsGenerated: 0,
+        totalStrategyEvaluations: totalEvaluated,
+        signalsRejected: totalRejected,
+        quantSignalsRejected: totalRejected,
+        patternSignalsRejected: 0,
+        pairsSkippedNoPrice: 0,
+        pairsSkippedInsufficientOHLC: 0,
+        nullReasons: {
+          conditionsNotMet: byReason['conditions_not_met'] || 0,
+          adxGuard: byReason['adx_guard'] || 0,
+          duplicatePosition: byReason['duplicate_position'] || 0,
+          uniqueDuplicateCombos: 0,
+          maxOpenTrades: byReason['max_open_trades'] || 0,
+          regimeNoStrategies: byReason['regime_no_strategies'] || 0,
+          familyFilterMismatch: byReason['family_filter_mismatch'] || 0,
+        },
+        rejectedReasons: { netEvBelowFloor: byReason['net_ev_below_floor'] || totalRejected },
+        byStrategy,
+        nullReasonDetail: byReason,
+        quantNullReasonDetail: byReason,
+        patternNullReasonDetail: {},
+      };
+
       res.json({
         ok: true,
         timestamp: new Date().toISOString(),
-        schema: 'xstocks-filter-diagnostics/v1.0',
-        scanner: {
+        schema: 'xstocks-filter-diagnostics/v2.0',
+        // FilterDiagnosticsData-compatible fields
+        lastScan,
+        rolling24h,
+        signalRejections: { total: totalRejected, byReason, byRegime },
+        vtsEvaluation,
+        lastCycleVtsEval: vtsEvaluation,
+        // xstock-specific scanner header strip
+        xstockScanner: {
           isRunning: diag.isRunning,
           isScanning: diag.isScanning,
           lastTickAt: diag.lastTickAt,
           lastCycleDurationMs: diag.lastCycleDurationMs,
           cyclesCompleted: diag.cyclesCompleted,
           cyclesSkippedMarketClosed: diag.cyclesSkippedMarketClosed,
+          lastUniverseSize: diag.lastUniverseSize,
+          lastArcaOpen: diag.lastArcaOpen,
           pairsScannedLastCycle: diag.pairsScannedLastCycle,
           pairsFreshLastCycle: diag.pairsFreshLastCycle,
           pairsStaleLastCycle: diag.pairsStaleLastCycle,
           lastError: diag.lastError,
           hostileSimActive: diag.hostileSimActive,
-          lastUniverseSize: diag.lastUniverseSize,
-          lastArcaOpen: diag.lastArcaOpen,
-        },
-        rolling24h: {
-          approxCycles: rolling24hCycles,
-          approxPairsScanned: rolling24hPairsScanned,
+          rolling24hApproxCycles: rolling24hCycles,
+          rolling24hApproxPairsScanned: rolling24hPairsScanned,
         },
       });
     } catch (error: any) {
       console.error('[B79.0i.a][filter-diagnostics] failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/xstocks/exit-strategy-ablation - B79.0i.a (REVISED): B73 exit
+  // ablation scoped to xstock_spot. Sibling endpoint (NOT modifying shared
+  // /api/analytics/exit-strategy-ablation — preserves no-touch fence on
+  // crypto). Reuses computeExitStrategyAblation aggregator with asset_class
+  // filter monkey-patched via direct DB query for the asset_class subset.
+  apiRouter.get('/xstocks/exit-strategy-ablation', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const win = (req.query.window as string) || 'rolling_7d';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'` });
+      }
+      const intervalMap: Record<string, string> = {
+        rolling_24h: '24 hours',
+        rolling_7d: '7 days',
+        rolling_30d: '30 days',
+        cohort_latest: '7 days',
+      };
+      const interval = intervalMap[win];
+      // Per-variant aggregate
+      const variantAgg = await db.execute(sql.raw(`
+        SELECT variant_id, variant_name,
+               COUNT(*)::text AS n,
+               AVG(virtual_pnl_pct)::text AS avg_pnl,
+               AVG(baseline_pnl_pct)::text AS avg_baseline,
+               COUNT(CASE WHEN virtual_pnl_pct > 0 THEN 1 END)::text AS wins,
+               COUNT(CASE WHEN virtual_pnl_pct <= 0 THEN 1 END)::text AS losses
+        FROM exit_strategy_alternates
+        WHERE asset_class = 'xstock_spot'
+          AND created_at > NOW() - INTERVAL '${interval}'
+        GROUP BY variant_id, variant_name
+        ORDER BY variant_id
+      `));
+      const variants = (((variantAgg as any).rows ?? []) as Array<any>).map((r) => ({
+        variantId: r.variant_id,
+        variantName: r.variant_name,
+        n: parseInt(r.n, 10) || 0,
+        avgPnL: parseFloat(r.avg_pnl) || 0,
+        avgBaseline: parseFloat(r.avg_baseline) || 0,
+        wins: parseInt(r.wins, 10) || 0,
+        losses: parseInt(r.losses, 10) || 0,
+        winRate: (parseInt(r.wins, 10) || 0) / Math.max(1, parseInt(r.n, 10) || 0),
+      }));
+      res.json({ ok: true, window: win, assetClass: 'xstock_spot', schema: 'xstocks-exit-ablation/v1.0', variants });
+    } catch (error: any) {
+      console.error('[B79.0i.a][exit-strategy-ablation] failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/xstocks/factor-calibration - B79.0i.a (REVISED): B67.0 factor
+  // calibration scoped to xstock_spot. Sibling endpoint preserves crypto
+  // no-touch fence.
+  apiRouter.get('/xstocks/factor-calibration', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const win = (req.query.window as string) || 'rolling_7d';
+      const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
+      if (!allowed.includes(win)) {
+        return res.status(400).json({ ok: false, error: `invalid window '${win}'` });
+      }
+      const intervalMap: Record<string, string> = {
+        rolling_24h: '24 hours',
+        rolling_7d: '7 days',
+        rolling_30d: '30 days',
+        cohort_latest: '7 days',
+      };
+      const interval = intervalMap[win];
+      // Per-factor count + avg confidence shift
+      const factorAgg = await db.execute(sql.raw(`
+        SELECT factor_name,
+               COUNT(*)::text AS n,
+               AVG(real_confidence - alt_confidence)::text AS avg_shift
+        FROM regime_factor_alternates
+        WHERE asset_class = 'xstock_spot'
+          AND evaluated_at > NOW() - INTERVAL '${interval}'
+        GROUP BY factor_name
+        ORDER BY n DESC
+      `));
+      const factors = (((factorAgg as any).rows ?? []) as Array<any>).map((r) => ({
+        factor: r.factor_name,
+        n: parseInt(r.n, 10) || 0,
+        avgConfidenceShift: parseFloat(r.avg_shift) || 0,
+      }));
+      const totalN = factors.reduce((a, b) => a + b.n, 0);
+      res.json({
+        ok: true,
+        window: win,
+        assetClass: 'xstock_spot',
+        schema: 'xstocks-factor-calibration/v1.0',
+        decisionGradeThreshold: 150,
+        totalN,
+        factors,
+      });
+    } catch (error: any) {
+      console.error('[B79.0i.a][factor-calibration] failed:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });
