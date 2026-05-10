@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { AssetClassBadge } from "@/components/ui/asset-class-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown, Filter } from "lucide-react";
+import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown, Filter, LineChart } from "lucide-react";
+// B79.0i.a: dedicated xStocks observation tab
+import { XstocksTab } from "@/components/machine-learning/xstocks-tab";
 import { apiFetch } from "@/lib/api";
 import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
@@ -3280,6 +3282,11 @@ export default function MachineLearningPage() {
               <Filter className="w-4 h-4" />
               DBS Pair Tracking
             </TabsTrigger>
+            {/* B79.0i.a: xStocks observation tab (last per Langston Q7) */}
+            <TabsTrigger value="xstocks" className="flex items-center gap-2" data-testid="tab-xstocks">
+              <LineChart className="w-4 h-4" />
+              xStocks
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
@@ -3403,6 +3410,11 @@ export default function MachineLearningPage() {
             data={diagnosticsData}
             isLoading={diagnosticsLoading}
           />
+        </TabsContent>
+
+        {/* B79.0i.a: xStocks observation tab content. All 5 panels stack in this single component. */}
+        <TabsContent value="xstocks">
+          <XstocksTab />
         </TabsContent>
       </Tabs>
     </div>

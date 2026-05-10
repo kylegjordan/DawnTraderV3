@@ -7021,6 +7021,163 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== B79.0i.a: xStocks observation tab endpoints ====================
+  //
+  // These endpoints feed the dedicated xStocks tab inside the Machine
+  // Learning page. Read-only, scoped to asset_class='xstock_spot'. No
+  // crypto-side regression risk — these are NEW siblings, not modifications
+  // to existing endpoints. (B79.0i.b adds OPTIONAL ?asset_class= to existing
+  // shared endpoints with a structural-equivalence + SQL-string-equivalence
+  // contract; that work is gated on shadow-mode evidence accumulation and
+  // ships Tue/Wed.)
+  //
+  // All require auth — the xStocks tab lives behind login same as ML page.
+
+  // GET /api/xstocks/filter-diagnostics - B79.0i.a: xstock_spot scanner-cycle
+  // metrics for Panel A (header strip + body + 24h aggregate). Mirrors the
+  // crypto Filter Diagnostics endpoint in spirit but with the FLAT shape
+  // xstockSpotScanner.getDiagnostics() emits. NOTE per pre-audit Finding #1:
+  // xstockSpotScanner does NOT track IMF/family/SQE/trade per-stage funnel
+  // counters (Day 1 = observability-only, line 260 TODO). Full funnel
+  // deferred to a future B79.x batch when scanner is wired through
+  // orchestration. Panel A in B79.0i.a is scanner-cycle metrics ONLY.
+  apiRouter.get('/xstocks/filter-diagnostics', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
+      const diag = xstockSpotScanner.getDiagnostics();
+
+      // Derive 24h scan-cycle estimate from xstock_spot_ticker_snap row
+      // density. Each scan cycle reads ~50 rows (full ARCA-open universe)
+      // or ~10 rows (24/7-only ARCA-closed). Below we count DISTINCT
+      // captured_at values bucketed to the second over the last 24h —
+      // approximates how many cycles emitted ticker rows. Cheap query;
+      // bounded by 24h partition pruning.
+      let rolling24hCycles = 0;
+      let rolling24hPairsScanned = 0;
+      try {
+        const result = await db.execute<{ cycles: string; pairs: string }>(sql`
+          SELECT
+            COUNT(DISTINCT date_trunc('second', captured_at))::text AS cycles,
+            COUNT(*)::text AS pairs
+          FROM xstock_spot_ticker_snap
+          WHERE captured_at > NOW() - INTERVAL '24 hours'
+        `);
+        const row = ((result as any).rows ?? [])[0];
+        if (row) {
+          rolling24hCycles = parseInt(row.cycles, 10) || 0;
+          rolling24hPairsScanned = parseInt(row.pairs, 10) || 0;
+        }
+      } catch (err) {
+        console.warn('[B79.0i.a][filter-diagnostics] 24h aggregate query failed:', err);
+      }
+
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        schema: 'xstocks-filter-diagnostics/v1.0',
+        scanner: {
+          isRunning: diag.isRunning,
+          isScanning: diag.isScanning,
+          lastTickAt: diag.lastTickAt,
+          lastCycleDurationMs: diag.lastCycleDurationMs,
+          cyclesCompleted: diag.cyclesCompleted,
+          cyclesSkippedMarketClosed: diag.cyclesSkippedMarketClosed,
+          pairsScannedLastCycle: diag.pairsScannedLastCycle,
+          pairsFreshLastCycle: diag.pairsFreshLastCycle,
+          pairsStaleLastCycle: diag.pairsStaleLastCycle,
+          lastError: diag.lastError,
+          hostileSimActive: diag.hostileSimActive,
+          lastUniverseSize: diag.lastUniverseSize,
+          lastArcaOpen: diag.lastArcaOpen,
+        },
+        rolling24h: {
+          approxCycles: rolling24hCycles,
+          approxPairsScanned: rolling24hPairsScanned,
+        },
+      });
+    } catch (error: any) {
+      console.error('[B79.0i.a][filter-diagnostics] failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/xstocks/freshness - B79.0i.a: per-symbol last-tick freshness for
+  // Panel E. Returns one row per xstock_spot symbol with the most recent
+  // captured_at from xstock_spot_ticker_snap, plus staleSeconds + staleness
+  // state. Sorted by staleSeconds DESC (stalest first). Distinguishes the
+  // 10 Kraken Phase-1 24/7 names from the 24/5 ARCA-aligned set so the UI
+  // can label them.
+  apiRouter.get('/xstocks/freshness', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS } = await import('../shared/asset-classes.js');
+
+      // Per-symbol most-recent captured_at over last 24h (window bounds the
+      // partition scan). Symbols with no row in 24h are still included via
+      // the LEFT JOIN below so the UI can render "dead" state.
+      const symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
+      const symbolListSql = symbolList.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
+
+      const result = await db.execute<{ symbol: string; lastTickAt: string | null }>(sql`
+        SELECT u.symbol::text AS symbol,
+               MAX(t.captured_at) AS "lastTickAt"
+        FROM (VALUES ${sql.raw(symbolList.map((s) => `('${s.replace(/'/g, "''")}')`).join(','))}) AS u(symbol)
+        LEFT JOIN xstock_spot_ticker_snap t
+          ON t.symbol = u.symbol
+          AND t.captured_at > NOW() - INTERVAL '24 hours'
+        WHERE u.symbol IN (${sql.raw(symbolListSql)})
+        GROUP BY u.symbol
+      `);
+      const rawRows = (result as any).rows ?? [];
+      if (!Array.isArray(rawRows)) {
+        throw new Error('[B79.0i.a] freshness query returned non-array shape');
+      }
+
+      const now = Date.now();
+      const FRESH_THRESHOLD_S = 90;     // matches B79.0a freshness window 90,000 ms
+      const STALE_THRESHOLD_S = 600;    // 10 minutes — beyond this is "dead"
+      const rows = rawRows.map((r: any) => {
+        const lastTickAt = r.lastTickAt ? new Date(r.lastTickAt).getTime() : null;
+        const staleSeconds = lastTickAt !== null ? Math.floor((now - lastTickAt) / 1000) : null;
+        let state: 'fresh' | 'stale' | 'dead';
+        if (staleSeconds === null) state = 'dead';
+        else if (staleSeconds <= FRESH_THRESHOLD_S) state = 'fresh';
+        else if (staleSeconds <= STALE_THRESHOLD_S) state = 'stale';
+        else state = 'dead';
+        return {
+          symbol: r.symbol,
+          lastTickAt: lastTickAt !== null ? new Date(lastTickAt).toISOString() : null,
+          staleSeconds,
+          state,
+          is24_7: XSTOCK_SPOT_24_7_SYMBOLS.has(r.symbol),
+        };
+      });
+
+      // Sort: dead first, then stale, then fresh; within each group, oldest first.
+      const stateOrder: Record<string, number> = { dead: 0, stale: 1, fresh: 2 };
+      rows.sort((a: any, b: any) => {
+        const so = stateOrder[a.state] - stateOrder[b.state];
+        if (so !== 0) return so;
+        const aS = a.staleSeconds ?? Number.POSITIVE_INFINITY;
+        const bS = b.staleSeconds ?? Number.POSITIVE_INFINITY;
+        return bS - aS;
+      });
+
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        schema: 'xstocks-freshness/v1.0',
+        thresholds: {
+          freshUpToSeconds: FRESH_THRESHOLD_S,
+          staleUpToSeconds: STALE_THRESHOLD_S,
+        },
+        symbols: rows,
+      });
+    } catch (error: any) {
+      console.error('[B79.0i.a][freshness] failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/diagnostics/tec-bootstrap - B79.TEC: per-asset-class TEC config
   // bootstrap status. Returns ready=true once primeTECConfig() has warmed
   // every ACTIVE asset class. Used by Step 7 first-pass verify + ops health
