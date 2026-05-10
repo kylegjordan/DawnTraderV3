@@ -556,6 +556,33 @@ Adaptive Market Response concept document `1-system-manual/ADAPTIVE_MARKET_RESPO
 
 **B79 ship 2026-05-07 evening (commits `d7ca57340` + `a991f40a4` + `260cc8cc5` + `871038509`; PM2 #184).** Step 1+2 PIA Langston-greenlit through 2 review rounds with concession to separate-instance partitioning architecture. Step 4 code review PUSH_GREENLIT with 4 non-blocking notes for B79.0a. Step 6 deploy verified: HTTP 200, no B79 errors, no-touch fence on crypto_spot regime_factor_alternates 12 emissions/factor/hr (within ±10% post-restart-window-fill). NEW Tier-2 governance doc `ASSET_CLASS_ONBOARDING_WORKFLOW.md` is the canonical reusable template for future asset-class onboarding. xstock_spot pipeline ships DORMANT — code paths exist, schema migrations applied (NO max_price cap per Kyle), telemetry isolation pattern in place; live xstock scanner setInterval is B79.0a follow-on. Layer 3 shadow-mode VTS observation 48-72h+ begins when B79.0a wires the live loop.
 
-**Phase 25 reframe:** B80 (crypto_perp) becomes Phase 25's first batch. Same workflow doc, perp-specific deltas (funding rate, leverage, liquidation, perpetual settlement). Phase 25 batches: B80, B80.1, B80.2 etc. as observation dictates.
+**Phase 24 sub-batch progression 2026-05-07 → 2026-05-10 (full close):**
+
+| Batch | Closed | Commit | Summary |
+|---|---|---|---|
+| B79 | 2026-05-07 | `d7ca57340`+`260cc8cc5`+`871038509` | Dormant scaffold + workflow doc + screener_filters + canonical regime/strategy whitelist |
+| B79.TEC | 2026-05-08 | `01fa39912`+`7eb4f5452` | Per-asset-class TEC config + HARD-FAIL boot + state-vs-config rehydrate boundary |
+| B79.0a | 2026-05-08 | `a327964a5` (chain) | Live xstock_spot scanner via centralClock; telemetry partitioning triad; data-freshness helper; pre-deploy load test |
+| B79.0b | 2026-05-09 | `54201bd32` | N3+N4 cleanup pattern (truthy-guard removal + retroactive boundary tests) + B79.0a SQE wildcard DELETE script |
+| B79.0c | 2026-05-09 | `666812ca7`+`e37679ebc` | Per-symbol 24/7 predicate (Kraken Phase 1 names) + WS-archiver weekend-silence empirical confirmation |
+| B79.0d | 2026-05-09 | `13178e9b5` | ORB strategy real implementation (~210 lines) + 6-step activation pattern + triple-defense asset-class guard |
+| B79.0f | 2026-05-10 | `e6fd7350f`+`3ba99237a` | Asset-class collision disambiguation (the SUI bug class) + 4862-row backfill + WARN log + provenance + standing quarterly re-audit rule |
+| B79.0g | 2026-05-10 | `6542dccb6`+`fb42335f7` | Persistence-at-trade-open (`vts_open_trades` table + service); INSERT-before-Map.set; bootstrap-with-re-resolve; rehydrate-on-boot |
+| B79.0e | 2026-05-10 | `aca52acdc` | `equity_*` → `xstock_*` namespace cleanup (172 DB objects in single transaction; rollback symmetry) |
+| **B79.0h** | 2026-05-10 | (this commit) | **Governance retrospective** — ASSET_CLASS_ONBOARDING_WORKFLOW H.1.x post-mortem + H.1.y decision rules + SIM/SYSTEM_MANUAL/PHASE_HISTORY updates |
+
+**Phase 24 success criteria — MET 2026-05-10:**
+- ✅ xstock_spot in production VTS shadow-mode (PM2 #206; archiver flushing to xstock_* renamed tables; no-touch fence on crypto_spot held)
+- ✅ ASSET_CLASS_ONBOARDING_WORKFLOW.md battle-tested through 9 sub-batches (Sections H.1.x post-mortem + H.1.y updated decision rules)
+- ✅ Ready for Phase 25 (crypto_perp) to execute the workflow as second worked example
+
+**Open follow-ups carrying into post-Phase-24:**
+- RUNNING_ISSUES #89 — Kraken WS-equities weekend silence (24/7 names not flowing; needs Kraken Pro feed-tier investigation OR REST polling fallback)
+- RUNNING_ISSUES #90 — ORB module_constant `risk_reward_ratio` rename to `target_range_multiple` (Layer-3 calibration sub-batch)
+- RUNNING_ISSUES #91 — B79.0g-tx (close-time atomic DELETE+INSERT through `persistRealPriceTrade`; affects B73 + B70 hooks; substantial refactor)
+- B79.x calibration sub-batches (Layer-1 → Layer-3 promotion of xstock_spot thresholds based on shadow-mode evidence)
+- B79.5 (live-pricing adapter for ws-equities — Phase 19 prerequisite)
+
+**Phase 25 reframe:** B80 (crypto_perp) becomes Phase 25's first batch. Same workflow doc — implementer reads ASSET_CLASS_ONBOARDING_WORKFLOW.md Sections H.1.x and H.1.y FIRST, then walks Section A-G applying the H.1.x checklist explicitly. Perp-specific deltas (funding rate, leverage, liquidation, perpetual settlement). Phase 25 batches: B80, B80.1, B80.2 etc. as observation dictates.
 
 **Phase 26+ later:** B81 (RTB ranking parity + filter-as-first-class) might warrant its own phase, OR be batches at the end of Phase 25, depending on how Phase 24+25 reveal cross-asset ranking architecture decisions. Defer to mid-Phase-24 to decide.

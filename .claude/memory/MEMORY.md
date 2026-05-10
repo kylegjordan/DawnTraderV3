@@ -18,37 +18,40 @@
 
 ---
 
-## CURRENT STATE — 2026-05-10 (B79.0f+0g+0e ALL CLOSED; awaiting Sunday operator gates)
+## CURRENT STATE — 2026-05-10 (Phase 24 CLOSED; B79.0h governance retrospective shipped)
 
-**B79.0e CLOSED 2026-05-10.** equity_*→xstock_* table rename. Commit `aca52acdc`. **172 DB objects renamed in single transaction** (4 parents + 52 partitions + 4 parent indexes + 108 partition indexes + 4 module_constants `data_lifecycle.equity_*.hot_retention_days` keys). 15 code files updated (Drizzle schema const + literals; archiver maps; scanner/freshness/storage-client/drift-aggregator/passive-archive-bootstrap/B74+B75 scripts/B79.0a scripts/test). Type aliases retained pointing at new consts (cosmetic modernization queued). Langston Step 4 F1: rollback symmetry — extended with reverse DO blocks + UPDATE.
+**B79.0h — Phase 24 governance retrospective.** ASSET_CLASS_ONBOARDING_WORKFLOW.md MAJOR update with H.1.x post-mortem (lessons by sub-batch incl. comms-infra protocols) + H.1.y updated decision rules (10 new if-then triggers from B79.0a-0g). SIM updated with collision-set + vts_open_trades + table renames entries. SYSTEM_MANUAL appendix with 10 cross-cutting architectural patterns. PHASE_HISTORY sub-batch table populated. POST_AUDIT_ROADMAP Phase 24 closure recorded. **Phase 24 success criteria MET — xstock_spot fully onboarded across 9 sub-batches + onboarding workflow battle-tested + ready for Phase 25 (B80 crypto_perp).**
 
-**B79.0g CLOSED 2026-05-10.** Open VTS trade persistence per Langston Q4 lock from B79.0f review. Commits `6542dccb6` → `fb42335f7`. PM2 #205. New `vts_open_trades` table (hybrid 14 cols + jsonb context); new `vts-trade-persistence.ts` service (insert/delete/rehydrate/bootstrap); vts-runner trade-open AWAITS INSERT BEFORE Map.set per Langston F1 invert (no observer-divergence); trade-close fire-and-log DELETE (Q5 deviation tracked as B79.0g-tx in RUNNING_ISSUES #91 — full tx integration through persistRealPriceTrade affects B73+B70 hooks, deferred); rehydrate at boot (after loadTrailingStates, before scanner.start; soft-fail). Bootstrap-from-memory RE-RESOLVES asset_class — defeats stale legacy values from pre-B79.0f resolver (Langston Q4 add'l #1 critical lock).
+**Forward path post-Phase-24:**
+- Phase 25 = B80 (crypto_perp) — implementer reads ASSET_CLASS_ONBOARDING_WORKFLOW.md H.1.x + H.1.y FIRST, then walks Sections A-G with checklist applied explicitly.
+- B79.0g-tx (RUNNING_ISSUES #91) — close-time atomic transaction through persistRealPriceTrade refactor; affects B73+B70 hooks. Sequence after B80 ships.
+- B79.x calibration sub-batches — Layer-1→Layer-3 promotion of xstock_spot thresholds based on shadow-mode evidence.
+- B79.5 — live-pricing adapter for ws-equities (Phase 19 prerequisite).
+- B79.6 — sector-aware portfolio cluster prevention (Stage 12.5).
+- Kraken WS-equities weekend silence (RUNNING_ISSUES #89) — Kraken Pro feed-tier investigation OR REST polling fallback.
 
-**B79.0f CLOSED 2026-05-10.** Asset-class collision disambiguation. Commit `e6fd7350f`. PM2 #204. Live bug: SUI/USD crypto displaying as xStock Spot. Root cause: 9 USD collision tickers (BDX, CVX, DASH, EDU, MET, OPEN, PEP, SUI, T) exist in BOTH Kraken xStocks + crypto. Resolver hardened with `XSTOCK_SPOT_KRAKEN_COLLISIONS` set + WARN log + provenance comment + quarterly re-audit standing rule. Backfilled 4862 mis-tagged rows in signal_eval_archive (DASH/USD 337 + MET/USD 1598 + OPEN/USD 44 + SUI/USD 2883). Other tables clean. Crypto no-touch fence held.
+---
 
-**Pending operator gates (Sunday 2026-05-10 / 11):**
-- ~11:24 UTC: B79.TEC.b `break_even_enabled` wildcard DELETE
-- ~21:38 UTC: B79.0a SQE wildcards DELETE
+## PHASE 24 ARCHIVE (CLOSED 2026-05-10)
 
-**Open follow-ups in RUNNING_ISSUES:** #89 Kraken WS-equities weekend silence, #90 ORB risk_reward_ratio rename, #91 B79.0g-tx (close-time tx integration through persistRealPriceTrade — affects B73+B70).
+| Sub-batch | Commit | PM2 | Summary |
+|---|---|---|---|
+| B79 | `260cc8cc5` | #184 | Dormant scaffold + workflow doc |
+| B79.TEC | `7eb4f5452` | #190 | Per-class TEC config + HARD-FAIL boot |
+| B79.0a | `a327964a5` | #197 | Live scanner + telemetry triad + freshness helper |
+| B79.0b | `54201bd32` | #198 | N3+N4 cleanup + SQE wildcard DELETE script |
+| B79.0c | `e37679ebc` | #202 | Per-symbol 24/7 predicate (Kraken Phase 1) |
+| B79.0d | `13178e9b5` | #203 | ORB real implementation (~210 lines) |
+| B79.0f | `3ba99237a` | #204 | Collision disambiguation + 4862-row backfill |
+| B79.0g | `fb42335f7` | #205 | vts_open_trades persistence + bootstrap-with-re-resolve |
+| B79.0e | `aca52acdc` | #206 | equity_*→xstock_* (172 DB objects) |
+| B79.0h | (gov) | n/a | Workflow retrospective + SIM/SYSTEM_MANUAL/PHASE_HISTORY |
 
-**B79.0d CLOSED 2026-05-09 23:10 UTC.** ORB strategy real implementation. Commits `16e0743c7` → `2e9006985` → `13178e9b5`. PM2 #203. F1/F2/F3 doc fixes were LOST in commit cycle (Edit applied to working tree but never `git add`-ed); re-applied under B79.0f sha `e6fd7350f`. First ORB signal expected Monday 2026-05-11 14:30 UTC.
+**Pending operator gates (Sunday 2026-05-10/11):**
+- ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per checklist
+- ~21:38 UTC — B79.0a SQE wildcards DELETE per checklist
 
-**B79.0c CLOSED 2026-05-09 22:38 UTC.** Per-symbol 24/7 xstock support. Commits `651540cd4` → `666812ca7` → `e37679ebc`. Langston Step 4 caught regex bug; fix shipped. WS-equities silent weekends CONFIRMED (RUNNING_ISSUES #89).
-
-**B79.x calibration follow-ups in RUNNING_ISSUES:** #89 (Kraken WS-equities weekend silence — REST polling fallback or Kraken Pro investigation), #90 (rename ORB `risk_reward_ratio` → `target_range_multiple` per Langston B79.0d Step 4 F1).
-
-**B79.0e (queued, low-priority) — `equity_*` → `xstock_*` table rename.** Cross-cutting rename across schema, scripts, migrations, services. Sequence AFTER B79.0d.
-
-**Two operator gates Sunday 2026-05-10:**
-- ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per `BATCH_79_TEC_b_VERIFY_CHECKLIST.md`
-- ~21:38 UTC — B79.0a SQE wildcards DELETE per `BATCH_79_0b_VERIFY_CHECKLIST.md`
-
-**xstock_spot WS archiver weekend silence — root cause confirmed 2026-05-09 22:30 UTC.** WS probe: 60s subscribe to `wss://ws-equities.kraken.com` ticker+ohlc for all 10 24/7 names returned 201 msgs (heartbeats + subscribe-acks) + ZERO ticker / ZERO OHLC. Hypothesis (a): Kraken WS-equities silent weekends regardless of 24/7 marker. Documented in CHANGES_AND_FIXES.md INFRA-2026-05-09-E + RUNNING_ISSUES #89.
-
-**Two operator gates Sunday 2026-05-10:**
-- ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per `BATCH_79_TEC_b_VERIFY_CHECKLIST.md`
-- ~21:38 UTC — B79.0a SQE wildcards DELETE per `BATCH_79_0b_VERIFY_CHECKLIST.md`
+**Open RUNNING_ISSUES post-Phase-24:** #89 Kraken WS-equities weekend silence, #90 ORB risk_reward_ratio rename, #91 B79.0g-tx atomic close-time tx
 
 **Calibration analysis snapshot 2026-05-09 21:20 UTC (verified via `/api/analytics/factor-calibration?window=rolling_7d`):**
 - DECISION-GRADE factors (n≥150 per tertile): b67_4 +5.19pp, b68_2 +4.14pp, b68_3 +4.11pp, b68_4 **+0.57pp (degraded from +2.94pp pre-B76)**, b68_5 **-7.79pp (regression from -1.78pp pre-B76; NEGATIVE predictive lift, factor is HURTING)**.
@@ -61,28 +64,9 @@
 
 ---
 
-## SHIPPED PREDECESSORS this session
+## NO-TOUCH FENCE on crypto_spot through 2026-05-15
 
-- **B79.0c** SHIPPED 2026-05-09 22:38 UTC. Per-symbol 24/7 xstock predicate. PM2 #202. Details above + `BATCH_79_0c_COMPLETION_REPORT.md`.
-- **B79.0b** CLOSED 2026-05-09. N3+N4 cleanup + B79.0a SQE wildcard DELETE script. PM2 #198 → #202.
-
----
-
-## SHIPPED PREDECESSORS (archive — full details in completion reports)
-
-**B79 + B79.TEC + B79.0a + B79.0b** all CLOSED 2026-05-07 → 2026-05-09. Latest HEAD `04bb6b2be` (B79.0b governance close + comms-infra hardening). Details in `Claude Comms and Packages/Batch Completion/BATCH_79_*_COMPLETION_REPORT.md`. Comms-infra v2 watchdog (`--idle-timeout 600` for substantive reviews) + auto-ACK on cc-comms-bridge live and verified.
-
----
-
-## SEQUENCING — B78–B81 stretch (8 days, until 2026-05-15)
-
-| Batch | Status | Description |
-|---|---|---|
-| **B78 + B78.1 + B78.2** | SHIPPED 2026-05-07 | Modularization scaffolding + cycle break + Kraken WS v2 ping fix |
-| **B79 + B79.TEC + B79.0a** | SHIPPED 2026-05-08 | xstock_spot dormant + per-class TEC config + LIVE observability scanner |
-| **B79.0b / B79.4 / B79.x / B80 / B81** | QUEUED | See completion reports for sequencing |
-
-**Hard fence:** no-touch on crypto_spot through 2026-05-15. Step-0 pre-flight + post-deploy SQL on every batch (column is `evaluated_at`, not `captured_at`):
+Step-0 pre-flight + post-deploy SQL on every batch (column is `evaluated_at`, not `captured_at`):
 
 ```sql
 SELECT factor_name, COUNT(*) FROM regime_factor_alternates

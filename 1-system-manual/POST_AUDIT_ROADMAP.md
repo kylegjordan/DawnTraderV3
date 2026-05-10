@@ -32,6 +32,34 @@
 
 ---
 
+### 2026-05-10 update — Phase 24 (xstock_spot onboarding) CLOSED
+
+Phase 24 (B79 + B79.TEC + B79.0a-0g + B79.0h governance retrospective) closed 2026-05-10. xstock_spot fully onboarded across 9 sub-batches + governance retrospective. **Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` is now battle-tested through this stretch — Sections H.1.x (post-mortem) and H.1.y (updated decision rules) are the high-value content for B80 (crypto_perp / Phase 25) implementer.
+
+**10 architectural patterns established as cross-cutting standards** for future asset class onboarding:
+1. Per-asset-class behavioral config is the default (DB-resolved, asset_class-scoped, HARD-FAIL on missing rows)
+2. Telemetry partitioning via separate-instance triad
+3. Asset-class resolution is exchange-disambiguated, never canonical-form-disambiguated
+4. Persistence-at-trade-open (read from row, never re-resolve)
+5. Ticker collisions checked at scope time (live AssetPairs intersection + provenance + quarterly re-audit)
+6. Per-symbol predicates when class is not monolithic
+7. Strategy real-implementation = 6 steps (detect → dispatch → orchestrator → regime-map → thresholds → gate)
+8. Namespace reservation (tokenized representations get own namespace)
+9. Two parallel ablation frameworks during shadow-mode (B67.0 + B73)
+10. Each new asset class gets dedicated observation UI tab
+
+**Phase 24 follow-ups carrying into post-Phase-24:**
+- B79.0g-tx (RUNNING_ISSUES #91) — close-time atomic DELETE+INSERT through `persistRealPriceTrade` (substantial refactor; affects B73 + B70 hooks)
+- B79.x calibration sub-batches — Layer-1 → Layer-3 promotion of xstock_spot thresholds (post-shadow-mode-evidence)
+- B79.5 — live-pricing adapter for `wss://ws-equities.kraken.com` (Phase 19 prerequisite)
+- B79.6 — sector-aware portfolio cluster prevention (Stage 12.5)
+- B79.x — Kraken WS-equities weekend silence investigation (RUNNING_ISSUES #89; Kraken Pro feed-tier OR REST polling fallback)
+- B79.x — failure-mode taxonomy implementation (LULD halts, circuit breakers, dividends, splits, earnings)
+
+**Phase 25 (B80 crypto_perp) — apply the workflow.** First batch in Phase 25; same workflow doc with H.1.x checklist applied explicitly before code; perp-specific deltas (funding rate per-pair, leverage/liquidation, perpetual settlement, 8-hour funding windows). Phase 25 batches B80, B80.1+ as observation dictates.
+
+---
+
 ### 2026-05-07 update — Multi-Asset VTS Expansion stretch (B78-B81 + B78.1)
 
 Per Kyle directive 2026-05-07: skip Phase 16 cleanup for now and use the 8-day observational window (until 2026-05-15) for the Multi-Asset VTS Expansion stretch. Phase 16 stays parked. Living plan doc: `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md`.

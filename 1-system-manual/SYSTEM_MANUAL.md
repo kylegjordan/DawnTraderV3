@@ -11056,4 +11056,41 @@ Spawning a new asset class = inserting rows for whatever differs from the defaul
 - **Cycle-break batch (TBD)** moves `kraken-websocket-adapter.ts` to `exchanges/kraken/` after DI inversion of the `live-pricing-adapter` dependency.
 - **Filter-as-first-class batch (B82/B83 TBD)** promotes filters to `module_name='filter:X'` rows in `module_constants` (Synthesis §3.3 first-class filter family).
 
-*End of Modularization Phase Architecture appendix. Last updated 2026-05-07 with B78 close.*
+## Phase 24 retrospective — xstock_spot full onboarding (2026-05-10)
+
+Phase 24 closed with xstock_spot fully integrated across 9 sub-batches: **B79** (dormant scaffold + canonical regime/strategy whitelist + 18-stage walkthrough), **B79.TEC** (per-asset-class TEC config with HARD-FAIL boot), **B79.0a** (live observability scanner via centralClock subscription, telemetry partitioning via separate-instance triad, asset-class-aware data-freshness gate), **B79.0b** (N3+N4 cleanup pattern + signature-guarded wildcard DELETE), **B79.0c** (per-symbol predicate for 24/7 vs 24/5 within an asset class — Kraken Phase 1 names), **B79.0d** (ORB strategy real implementation — detect logic + strategy-engine dispatch + regime mapping + Layer-1 thresholds + ablation auto-include + DB-tunable rollback), **B79.0f** (ticker-collision disambiguation — the SUI bug class — with `XSTOCK_SPOT_KRAKEN_COLLISIONS` set + WARN log + provenance + 4862-row backfill), **B79.0g** (persistence-at-trade-open with `vts_open_trades` table + bootstrap-with-re-resolve + atomic-close-time-deferred-as-pinned-batch), **B79.0e** (`equity_*` → `xstock_*` namespace cleanup — 172 DB objects in single transaction).
+
+The **canonical onboarding workflow** lives at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md`. Sections H.1.x (post-mortem) and H.1.y (updated decision rules) capture every architectural lesson surfaced. Required pre-read for B80 (crypto_perp) + future asset class implementers.
+
+### Architectural patterns established (high-blast-radius, applies to ALL future asset classes)
+
+1. **Per-asset-class behavioral config is the default.** Trading-policy decisions (BE enable, trailing rules, regime thresholds, confidence floors, friction) are DB-resolved with `asset_class` as a first-class scoping dimension. Wildcard `*` is acceptable as a starting placeholder ONLY when the value is genuinely identical across all classes; the moment any class needs a different value, the wildcard is replaced with explicit per-class rows. HARD-FAIL on boot if any registered class lacks an explicit row (no silent fallbacks per CLAUDE.md §5 #15).
+
+2. **Telemetry partitioning via separate-instance triad** when signal distributions differ between asset classes. Factory `getAssetClassInstances(class)` returns `{telemetry, ratioManager, failureTracker, scanManager}`. Crypto path returns existing globals (back-compat); each new class lazy-instantiates fresh triad.
+
+3. **Asset-class resolution is exchange-disambiguated, never canonical-form-disambiguated.** The data-ingestion path (which WS endpoint or REST domain the data arrived from) IS the authoritative signal — `kraken-equities` routes to xstock_spot, `kraken` to crypto_spot. After a symbol is canonicalized post-ingestion, it can be ambiguous between asset classes (the SUI bug class). Downstream consumers READ `asset_class` from the persisted row, never re-resolve.
+
+4. **Persistence-at-trade-open** so display + downstream consumers read from the persisted row. INSERT-before-Map.set order at trade-open (no observer-divergence half-state); atomic close-time DELETE+INSERT (single tx) at trade-close. Bootstrap-from-memory for first-deploy migrations RE-RESOLVES asset_class via `safeResolveAssetClass` to defeat stale legacy values.
+
+5. **Ticker collisions checked at scope time** for every new asset class. Live `/0/public/AssetPairs` intersection against existing-class universes; documented with provenance (URL + date verified) + standing quarterly re-audit. Resolver gates collision-set tickers off the new-class fast-path. WARN log on disambiguation drift so future violations surface immediately.
+
+6. **Per-symbol predicates** when an asset class is not monolithic. Asset classes with mixed trading hours (24/7 names within a 24/5 class), halt-able names, or pre/post-market windows need required-symbol-arg predicates from Day 1. Optional-with-silent-fallback creates a silent-bug class.
+
+7. **Strategy real-implementation = 6 steps, not a gate flip.** Detect logic + strategy-engine dispatch + signal-orchestrator dispatch block + regime-strategy map entries + module_constants Layer-1 threshold seed + DB gate flip. Triple-defense asset-class guard (detect-internal + dispatch + SQE whitelist). Replay-service is strategy-agnostic — no registration code needed for B73 ablation.
+
+8. **Namespace reservation.** Tokenized representations get their own namespace (`xstock_*`); original namespace (`equity_*`) reserved for FUTURE non-tokenized feeds. Don't burn the original namespace on the wrong concept. Migration via `ALTER TABLE RENAME` is metadata-only; partition children + indexes don't auto-rename (DO block sweep required); module_constants key strings carry table names too.
+
+9. **Two parallel ablation frameworks during shadow-mode.** Factor-calibration ablation (B67.0) AND exit-strategy ablation (B73). Both required, both contribute Layer-3 evidence to per-asset-class trading-policy decisions. Replacement of an existing class's ablation is never the answer — parallel observation is.
+
+10. **Each new asset class gets its own dedicated observation UI tab.** Don't stack new ablation panels under existing tabs.
+
+### Forward path (post-Phase-24)
+
+- **B80 (crypto_perp)** — apply onboarding workflow Sections A-G; H.2 worked example; identify perp-specific deltas (funding rate per-pair, leverage/liquidation, perpetual settlement, 8-hour funding windows). Run H.1.x checklist explicitly before writing code.
+- **B81** — `expectedNetReturnR` ranking primitive with pool-relative normalization for cross-asset parity.
+- **B79.0g-tx** (RUNNING_ISSUES #91) — full transactional integration of close-time DELETE+INSERT through `persistRealPriceTrade` (affects B73 + B70 hooks; substantial refactor).
+- **B79.x calibration sub-batches** — promote ORB + xstock_spot Layer-1 placeholders to Layer-3-evidence-backed values; rename `risk_reward_ratio` → `target_range_multiple` (RUNNING_ISSUES #90).
+- **Cycle-break batch (TBD)** moves `kraken-websocket-adapter.ts` to `exchanges/kraken/` after DI inversion of the `live-pricing-adapter` dependency.
+- **Filter-as-first-class batch (B82/B83 TBD)** promotes filters to `module_name='filter:X'` rows in `module_constants`.
+
+*End of Modularization Phase Architecture appendix. Last updated 2026-05-10 with Phase 24 close (B79 + B79.TEC + B79.0a-0g).*

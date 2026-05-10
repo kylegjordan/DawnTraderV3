@@ -4,6 +4,8 @@
 
 **Living doc.** Every asset class onboarded adds a new Section H entry + iterates the template based on what was learned. By the time a fifth asset class lands, the doc is battle-tested.
 
+**Phase 24 status (2026-05-10):** xstock_spot has been fully onboarded across 9 sub-batches (B79 + B79.TEC + B79.0a + B79.0b + B79.0c + B79.0d + B79.0f + B79.0g + B79.0e). The post-mortem (Section H.1.x) and updated decision rules (Section H.1.y) capture every lesson. **Read H.1.x and H.1.y first** before starting any new asset class — they're the highest-value content in this doc.
+
 **Scope:** asset-class onboarding, not exchange onboarding. Exchange differences (API, symbol normalization, fee schedule) are mostly mechanical. Asset-class differences (regime classification, strategy applicability, friction model, market hours, telemetry partitioning) ripple deep into the system. Exchange-onboarding is a separate, simpler doc — flagged here as future work.
 
 ---
@@ -288,9 +290,107 @@ Per scope §1 / scope §2.X. Cross-references stages 0-16 + cross-cutting failur
 - 24h post-deploy: confirm shadow-mode VTS emission for xstock_spot pairs, factor-ablation counts populating in `regime_factor_alternates`, no-touch fence SQL on crypto_spot still green.
 - 7d post-deploy: strategy-gap monitoring (5 triggers from Section G); resource-watch metrics from scope §11.5.
 
-#### H.1.x What we'd do differently — POST-MORTEM (populated at T+7d post-go-live)
+#### H.1.x POST-MORTEM — lessons learned from the full Phase 24 stretch (B79 + B79.TEC + B79.0a–0g)
 
-To be filled in 7 days after B79 ships.
+Populated 2026-05-10 after the entire 9-sub-batch stretch landed. xstock_spot is now the canonical worked example referenced by every section in this doc. The post-mortem groups lessons by where they bite next time.
+
+**SCAFFOLD-VS-LIVE separation (B79 → B79.0a):**
+- Day-1 dormant scaffold ships PROVED its worth: zero blast radius until the live wire-in runs.
+- Don't conflate "scaffold ships dormant" with "code is correct." B79.0a's pre-deploy load test surfaced cycle-runtime overshoot that was invisible until centralClock-driven evaluation actually fired.
+- **Lesson:** scaffold-ship-then-go-live as separate sub-batches IS the right pattern. Resist pressure to compress into one batch.
+
+**TELEMETRY PARTITIONING (B79.0a):**
+- AdaptiveRatioManager + TelemetryAggregator + AdaptiveRatioManager + PairFailureTracker were all module-scoped singletons pre-B79.0a. xstock_spot needed its own cohort without polluting crypto's signal-quality history.
+- **The pattern:** instantiate `getAssetClassInstances(class)` factory returning a TRIAD (telemetry + ratioManager + failureTracker + scanManager). Crypto path returns the existing globals (back-compat). Each new asset class lazy-instantiates its own.
+- Constructor-injection-with-default is the cross-cutting plumb. NOT param-plumbing through every callsite (Langston rejected that lean — silent-corruption risk).
+
+**PER-ASSET-CLASS BEHAVIORAL CONFIG (B79.TEC):**
+- TEC config (`break_even_enabled`, trailing distances, BE-trigger-R, etc.) was wildcard-only. xstock_spot's exit profile differs from crypto's — wildcards leak crypto's policy onto the new asset class.
+- **The pattern:** `Map<AssetClass, TrailingExitConfig>` cache. `resolveTECConfig(assetClass)` looks up by class. `primeTECConfig()` warmup at boot HARD-FAILS if any registered asset class lacks an explicit row (no silent fallback).
+- **Generalization:** ANY behavioral knob (regime thresholds, confidence floors, friction values, BE-protection rules, trailing rules) must be DB-resolved with `asset_class` as a first-class scoping dimension. A wildcard `*` row is a starting placeholder ONLY when the value is genuinely identical across all classes; the moment any class needs a different value, the wildcard is replaced with explicit per-class rows.
+
+**STATE-VS-CONFIG REHYDRATE BOUNDARY (B79.TEC):**
+- `state.*` (latched flags, peaks, trailing-active) rehydrates verbatim from disk.
+- `config.*` (whether to latch, multipliers, thresholds) re-resolves from current DB rows.
+- **Lesson:** when a feature has both runtime state AND configuration, the rehydrate path must distinguish them. State persists; config gets re-resolved on every restart so DB changes take effect deterministically.
+
+**N3+N4 CLEANUP DISCIPLINE (B79.0b):**
+- N3 — dead-code truthy guards on TS-guaranteed-non-undefined fields: `if (input.strategy && ...)` when `strategy: string` is the type. Cleaner code; future readers don't ask "why is this still here." Cleanup is 0-blast-radius and should ride along on the next sub-batch.
+- N4 — boundary tests for surfaces SHIPPED WITHOUT TEST COVERAGE at time of ship. Catches nothing the first time (best-case outcome) AND establishes regression coverage going forward.
+- **Generalization:** every new asset class onboarding ships with at least one boundary-test sub-batch retroactively covering surfaces that didn't have tests at original ship.
+
+**24/7 VS 24/5 WITHIN AN ASSET CLASS (B79.0c):**
+- A subset of xStock tokens trades 24/7 (Kraken Phase 1, announced 2025-12-03). Treating the whole asset class as 24/5 silently rejects valid weekend signals on those names.
+- **The pattern:** per-symbol predicate `isMarketOpen(symbol, now?)` instead of class-wide `isMarketOpen(now?)`. Required-symbol signature (Langston Q4 push-back) — optional with silent ARCA fallback creates a silent-bug class.
+- **Generalization:** asset classes are NOT necessarily monolithic. If the exchange treats some symbols differently (24/7 names; halted-but-listed names; pre/post-market windows), the predicate must be per-symbol from Day 1.
+- **Pre-ship probe pattern.** Don't trust documentation alone. Empirically probe the WS feed for the documented behavior. B79.0c's 60-second probe to ws-equities for the 10 24/7 names returned 0 ticker / 0 OHLC — Kraken's WS goes silent on weekends regardless of the 24/7 marker. Filed RUNNING_ISSUES #89 and explicitly avoided claiming "live data flow."
+
+**STRATEGY REAL-IMPLEMENTATION PATTERN (B79.0d):**
+- Scaffolding ≠ implementation. ORB shipped in B79 as a 7-line scaffold returning null. B79.0d wrote the actual ~210-line detect logic.
+- **The 6-step pattern for activating a strategy on a new asset class:**
+  1. Write detect logic (range, breakout, confidence formula, geometry)
+  2. Register in strategy-engine dispatch (import + enum + wrapper method)
+  3. Wire into signal-orchestrator dispatch loop (gated on activeStrategies + asset-class)
+  4. Add to `CANONICAL_REGIME_STRATEGY_MAP` for applicable regimes
+  5. Seed Layer-1 thresholds in `module_constants.strategy.<key>` for the asset class
+  6. Flip DB gate `module_constants.strategy_gates.<class>.<strategy>.enabled` true
+- **Triple-defense asset-class guard.** detect-internal guard + dispatch-block guard + SQE whitelist. Any single missed gate could fire the strategy on the wrong asset class. Belt-and-suspenders.
+- **Strategy-agnostic ablation.** B73 replay-service is strategy-agnostic — new strategies flow through automatically once `persistRealPriceTrade` runs with their key. No registration code needed (just verify `asset_class_disabled` whitelist enforcement and STRATEGY_DISPLAY_NAMES coverage).
+- **DB-tunable rollback.** UPDATE `module_constants.strategy_gates.*.<strategy>.enabled = false` neutralizes the strategy on next tick. No code revert needed.
+
+**TICKER COLLISIONS (B79.0f) — the SUI bug class:**
+- A single base-symbol exists in BOTH the new asset class's universe AND an existing asset class's universe. The same canonical form (e.g. `SUI/USD`) maps to two different assets.
+- **Discovery process:** at scope time for any new asset class, run a live intersection: `<new-class-symbols> ∩ <existing-class-symbols-on-same-exchange>` via `/0/public/AssetPairs` (or equivalent). Document the collision set with PROVENANCE (source URL + date verified).
+- **Resolver gating:** the new asset class's membership-set fast-path must be GATED on collision-set non-membership. Tickers in the collision set fall through to the existing asset class on the regular exchange path; explicit display-form (e.g. `SUIx/USD`) routes to the new class.
+- **WARN log on collision drift.** When a collision ticker hits the regular path without disambiguating form, emit a `[<batch>][COLLISION_RESOLVE]` log so the data-source invariant gets exercised and any future drift in upstream behavior surfaces immediately.
+- **Standing rule:** quarterly re-audit of the collision set. New tokens added by exchanges create new collisions over time.
+- **Backfill discipline.** When the collision-bug existed in production, do an audit + remediation:
+  1. READ-ONLY audit script first (SELECT-only across all tables with asset_class column).
+  2. Backfill UPDATE statements COMMENTED OUT in the audit script. Manual uncomment after Kyle reviews counts.
+  3. Per-table row counts paper-trailed in CHANGES_AND_FIXES.md (not just RUNNING_ISSUES).
+- **Don't trust documentation.** Crypto SUI = Sui Network; Kraken xStock SUI = Sun Communities equity (NYSE: SUI). The collision was non-obvious until the live API query made it visible.
+
+**PERSISTENCE-AT-TRADE-OPEN ARCHITECTURE (B79.0g):**
+- The principle. Every consumer of asset_class (or any other trade-derived field) reads from the persisted ROW, never re-resolves from a canonical form. Re-resolution from canonical form is fundamentally ambiguous when collisions exist.
+- **Trade-open path:** AWAIT INSERT BEFORE Map.set. Any fire-and-forget pattern at trade-open creates an observer-divergence window where downstream observers (TEC, scanner cycle, signal logging) see the trade live before persistence completes — and if persistence fails, you get a half-state.
+- **Trade-close path:** atomic single transaction wrapping DELETE-from-open + INSERT-to-closed. If `persistRealPriceTrade` doesn't expose a tx handle (current state), accept fire-and-log as deviation BUT pin a follow-up numbered batch (e.g. B79.0g-tx) — RUNNING_ISSUES alone is not sufficient paper trail (Langston rule).
+- **Bootstrap from memory:** when first-deploying persistence-at-open into a system that has in-memory open trades from before the deploy, RE-RESOLVE asset_class via `safeResolveAssetClass(symbol, exchange)` BEFORE INSERT. Critical: the in-memory record may carry a stale value baked in by an earlier (buggy) resolver; blindly snapshotting freezes the wrong value into DB and defeats the purpose.
+- **Rehydrate-on-boot:** read all open-trade rows back into the in-memory Map after the existing trailing-engine state restoration but BEFORE scanner.start so cycle 1 sees correct state. Soft-fail policy (log + continue with empty Map) keeps boot non-blocking.
+
+**NAMESPACE HYGIENE (B79.0e):**
+- Legacy field-VALUE renames (e.g. `equity_spot` → `xstock_spot` for the asset_class column) DON'T automatically rename TABLE names that were created with the old naming convention.
+- **The cutover pattern:** `ALTER TABLE RENAME` is metadata-only — sub-second on multi-million-row tables; live archiver buffers absorb the gap.
+- **Don't forget the children.** Partition-children + indexes don't auto-rename with parent. `DO $$ FOR r IN SELECT tablename FROM pg_tables WHERE tablename LIKE 'old_prefix%' LOOP ... ALTER TABLE %I RENAME TO %I ... END LOOP $$;` — same DO block for indexes via pg_indexes.
+- **Module_constants key strings carry table names too.** `data_lifecycle.equity_spot_*.hot_retention_days` keys would orphan from the renamed parents. Same `UPDATE module_constants SET constant_name = REPLACE(...)` pattern.
+- **Reserve the namespace.** `equity_*` reserved for FUTURE real (non-tokenized) US equities. xStocks are tokenized representations — own namespace `xstock_*`. Don't burn the original namespace on the wrong concept.
+- **Rollback symmetry.** Forward + rollback must touch the SAME 4 surfaces (parents, parent indexes, partitions/children via DO block, indexes via DO block, module_constants UPDATE). Any asymmetry is a future foot-gun.
+
+**COMMS-INFRA PROTOCOLS (process, not architecture — but critical for the workflow):**
+- **File-first for any large content (>3KB).** Design asks, scope drafts, multi-question reviews go in `Claude Comms and Packages/Langston Design Asks/<batch>_<topic>_<rev>.md`; Telegram + watchdog prompt is the SHORT (under 1KB) pointer to the file. Never shorten content to dodge API hang on large prompts — putting it on disk is the proper solution.
+- **Watchdog v2 stream-json sidecar.** Tool-use cycles count as liveness; first-byte timeout 60s + idle timeout 600s for substantive reviews; sidecar NDJSON for forensics. v1 watchdog (text output) confused tool-use stalls with API hangs.
+- **`bypassPermissions` for code-review work.** `acceptEdits` mode hangs on Bash tool use because watchdog doesn't auto-accept. Code-review prompts that need ad-hoc grep/Bash require bypass mode (Langston runs in sandboxed user account anyway).
+- **GDrive FUSE recursive-grep timeout on Hetzner.** Tell Langston explicitly "Read tool only, no Bash/Grep recursive ops." If he runs `rg` against the FUSE mount, it times out at 20s and the watchdog stalls.
+- **Telegram bot-to-bot platform block.** When `@CCDTCommsBot` posts in a topic, `@LangstonDTBot`'s getUpdates poll never sees it — Telegram rule, no flag bypass. Use SSH+claude-cli direct delivery for me→Langston, not Telegram.
+- **MANDATORY verbatim Telegram relay of Langston responses** (CLAUDE.md §6.5 Step 3). Watchdog-via-SSH responses don't auto-post to Telegram; CC manually curls them via `@LangstonDTBot`'s sendMessage prefixed `**LANGSTON SPEAKING:**`. Otherwise Kyle has zero visibility into what Langston actually said.
+
+---
+
+#### H.1.y Updated decision-framework rules (post-Phase-24)
+
+These extend Section I.0 and Section I's if/then table with rules surfaced by B79.0a–0g.
+
+| Rule (new, post-B79.0a-0g) | What triggers it | What to do |
+|---|---|---|
+| Telemetry partitioning required when signal distributions differ | Asset-class signal/null-rate distributions are NOT equivalent to existing classes | Build separate-instance triad (Telemetry + ARM + scanner + PFT) via `getAssetClassInstances` factory. Crypto returns global singletons; new class lazy-instantiates fresh triad. |
+| Per-asset-class behavioral config required | Asset class needs ANY behavioral knob different from defaults | DB-resolve with explicit `asset_class` rows. Wildcard ONLY when truly identical. HARD-FAIL on boot if any registered class lacks explicit rows. |
+| State-vs-config rehydrate boundary | Feature has both runtime state + configuration | State persists from disk; config re-resolves from current DB rows. |
+| N4 boundary tests retroactively | Surfaces shipped without test coverage | Sub-batch retroactively adds tests; catches nothing first time = best case. |
+| Per-symbol predicates | Asset class has 24/7 + 24/5 mix OR halt-able names | Required-symbol signature (no optional silent-fallback). Pre-ship empirical probe to verify upstream documented behavior. |
+| Strategy real-implementation pattern | Activating a strategy for a new asset class | 6-step: detect → dispatch → orchestrator → regime-map → thresholds → gate-flip. Triple-defense asset-class guard. |
+| Ticker-collision-set discovery | Two asset classes share an exchange | Live intersection via `/AssetPairs`. Document with provenance (URL + date). Resolver gates on collision-set non-membership. WARN log + standing quarterly re-audit. |
+| Persistence-at-trade-open | Anywhere downstream consumers might re-resolve from canonical form | INSERT-before-Map.set. Atomic close-time DELETE+INSERT (single tx). Bootstrap-from-memory RE-RESOLVES before INSERT. |
+| Namespace reserve | Adding a tokenized representation of existing asset class | Reserve original namespace (`equity_*`) for FUTURE non-tokenized; new namespace (`xstock_*`) for the tokenized. Don't conflate. |
+| File-first comms with Langston | Any prompt content >3KB OR any multi-question review | Stage at `Langston Design Asks/<batch>_<topic>_<rev>.md`. Watchdog prompt is short pointer. |
 
 ### Section H.2 — crypto_perp (B80, Phase 25)
 
@@ -334,15 +434,22 @@ If/then rules surfaced from xstock_spot worked example. Apply on every new asset
 
 When B80 (crypto_perp) implementer starts:
 
-1. Open this doc.
+1. Open this doc. **Read Sections H.1.x (post-mortem) and H.1.y (updated decision rules) first** — they encode every lesson from the 9-sub-batch xstock_spot stretch.
 2. Walk Section A through G for crypto_perp.
 3. Identify perp-specific deltas:
    - Funding rate (per-pair signal, NEW input to macro modifier composition)
    - Leverage + liquidation
    - Perpetual settlement
    - Funding-time clustering (8-hour funding windows)
-4. Update Section H.2 with crypto_perp as worked example.
-5. Iterate the template based on what crypto_perp reveals (e.g. Section A.0 may need a "leverage profile" row added).
+4. **Run the H.1.x checklist explicitly** — for each lesson, ask "does this apply to crypto_perp?" Most will. Items in scope confirmed BEFORE writing code:
+   - Telemetry partitioning triad (yes — perp signal distributions ≠ spot)
+   - Per-asset-class TEC config (yes — perp exit thresholds differ from spot)
+   - Per-symbol predicates (yes — funding-window-related quirks may need per-symbol)
+   - Ticker collision check (mandatory — run live intersection vs crypto_spot + xstock_spot universes; document collision set + provenance)
+   - Persistence-at-trade-open (yes — perp trades go through same vts-runner trade-open path)
+   - Namespace hygiene (perp namespace is `crypto_perp_*` for archive tables — confirm B69 alignment)
+5. Update Section H.2 with crypto_perp as worked example. Add new H.2.x post-mortem at T+7d post-go-live.
+6. Iterate the template based on what crypto_perp reveals (e.g. Section A.0 may need a "leverage profile" row added).
 
 **Compounding value:** every new asset class strengthens the workflow. By the time we add FX (Phase later), the doc is battle-tested against equity, perp, and existing crypto-spot baselines.
 

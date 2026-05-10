@@ -1539,6 +1539,59 @@ Coverage for ARM constructor back-compat + data-freshness helper edge cases (clo
 **Rollback path:** DB-only — `UPDATE module_constants SET value='false'::jsonb WHERE module_name='strategy_gates' AND asset_class='xstock_spot' AND strategy='orb' AND constant_name='enabled'`. Cached sync API picks up on next tick. No code revert needed.
 **First-fire expected:** Monday 2026-05-11 14:30 UTC (range formation start) → 15:00 UTC (first breakout candidates).
 
+### `shared/asset-classes.ts` `XSTOCK_SPOT_KRAKEN_COLLISIONS` (NEW, B79.0f)
+
+**Layer:** 0 (Shared / Asset-Class Registry)
+
+**Purpose:** 17-entry set (9 USD + 8 EUR pre-emptive) of base symbols that exist BOTH in `XSTOCK_SPOT_SYMBOLS` (xStock equity universe) AND on Kraken's crypto-spot universe per `/0/public/AssetPairs`. Provenance comment cites Kraken `/AssetPairs` query 2026-05-10. **Why it matters:** without this gate the resolver's `XSTOCK_SPOT_SYMBOLS.has(symbol)` fast-path returns xstock_spot for canonical-form crypto signals like `SUI/USD` — silently misclassifying every crypto signal whose ticker matches an equity (e.g. SUI = Sui Network crypto vs Sun Communities equity).
+
+**Upstream:** referenced only by `resolveAssetClass` in same file.
+**Downstream:** behavior gating in resolver `kraken` exchange branch.
+**Standing rule:** quarterly re-audit via live `/AssetPairs` intersection. Kraken adds tokens regularly; new collisions can emerge.
+**Test coverage:** `b79-0f-asset-class-collisions.test.ts` 33 cases — collision-set integrity (size, contents, USD+EUR coverage, master-set parity), 9 USD + 8 EUR collision crypto-resolves, disambiguating-form (SUIx/USD) xstock-resolves, non-collision xStock fast-path, pure-crypto.
+
+### `resolveAssetClass` `kraken` branch behavior change (B79.0f update to B69-era resolver)
+
+**Layer:** 0 (Shared / Asset-Class Registry)
+
+**Purpose update (B79.0f):** the historical `kraken`-spot branch returned `xstock_spot` for any symbol in `XSTOCK_SPOT_SYMBOLS`. This was correct for non-collision tickers but silently mis-tagged the 9 collision tickers as xstock_spot when in fact the regular `kraken` exchange path serves the crypto pair. New behavior: collision-set membership PRECEDES the xStock fast-path → routes to crypto_spot + emits `[B79.0f][COLLISION_RESOLVE]` WARN log so future drift in the data-ingestion invariant is observable. xStock signal DOES route to xstock_spot via the `kraken-equities` exchange branch OR via the `XSTOCK_SPOT_DISPLAY` x-suffix form (`SUIx/USD`).
+
+**Backfill applied 2026-05-10:** 4862 mis-tagged rows in `signal_eval_archive` flipped `xstock_spot` → `crypto_spot` (DASH/USD 337 + MET/USD 1598 + OPEN/USD 44 + SUI/USD 2883). Other tables (trading_signals, regime_factor_alternates, exit_strategy_alternates, paper_sim_trades) had 0 mis-tagged rows.
+
+### `vts_open_trades` table (NEW, B79.0g)
+
+**Layer:** 8 (Persistence / Database)
+
+**Purpose:** durable persistence of open VTS trades so they survive PM2 restarts and so downstream consumers can read `asset_class` from the row instead of re-resolving from canonical symbol form (which is fundamentally ambiguous post-canonicalization for the 9 collision tickers). Hybrid schema: 14 explicit columns (id, symbol, asset_class, prices, sizing, regime, signal_type, strategy, pool, opened_at) + jsonb `context` for the ~20 optional fields on `OpenVirtualTrade` interface.
+
+**Upstream:** written by `vts-trade-persistence.ts` from vts-runner trade-open path (await INSERT before Map.set). Bootstrap-from-memory writer re-resolves asset_class via `safeResolveAssetClass` before INSERT — defeats stale legacy values.
+**Downstream:** rehydrate-on-boot from `server/index.ts` after `loadTrailingStates` and BEFORE `xstockSpotScanner.start`. Rehydrated rows seed `openVirtualTrades` Map. TEC trailing states rejoin via existing `tec_trailing_states` rehydrate path.
+**Indexes:** symbol, asset_class, opened_at.
+**Atomicity caveat:** close-time DELETE is fire-and-log async (post `persistRealPriceTrade`) NOT wrapped in single transaction. Sub-millisecond inconsistency window; orphan rows cleared on next rehydrate boot. RUNNING_ISSUES #91 (B79.0g-tx) tracks the proper transactional integration through `persistRealPriceTrade`.
+**Blast radius:** MEDIUM — touches every trade-open path. INSERT failure aborts trade-open cleanly (no half-state). Rehydrate failure soft-fails (boot continues with empty Map).
+
+### `server/services/vts-trade-persistence.ts` (NEW, B79.0g)
+
+**Layer:** 8 (Persistence / Database)
+
+**Purpose:** encapsulates the 4 ops on `vts_open_trades`: `insertOpenTrade` / `deleteOpenTrade` / `rehydrateOpenTrades` / `bootstrapOpenTradesFromMemory`. Bootstrap path is one-shot first-deploy migration that snapshots in-memory `openVirtualTrades` Map into the empty table WITH RE-RESOLVE of `asset_class` via `safeResolveAssetClass(symbol, 'kraken')` — critical to defeat stale legacy values from any pre-B79.0f resolver state on the in-memory record (Langston Q4 add'l #1 lock).
+
+**Upstream:** vts-runner imports + calls all 4 ops.
+**Downstream:** writes to `vts_open_trades` table.
+**Test coverage:** `b79-0g-vts-trade-persistence.test.ts` 8 cases incl. bootstrap re-resolve regression-lock asserting in-memory mutation post-resolve.
+
+### Archive tables namespace rename `equity_*` → `xstock_*` (B79.0e)
+
+**Layer:** 8 (Persistence / Database)
+
+**Purpose:** B69 retagged the asset_class field VALUES from `equity_spot` → `xstock_spot` but the actual DB tables retained legacy `equity_*` names. B79.0e completes the namespace migration: 4 parent tables (`equity_spot_ohlc_1m` / `equity_spot_ticker_snap` / `equity_perp_ohlc_1m` / `equity_perp_ticker_snap` → `xstock_*`) + 52 monthly partition children (DO block sweep) + 4 parent indexes + 108 partition indexes (DO block sweep) + 4 module_constants `data_lifecycle.equity_*.hot_retention_days` keys (UPDATE). **172 DB objects renamed in single transaction** (sub-second metadata-only ALTER RENAME).
+
+**Code surface (15 files):** `shared/schema.ts` const exports renamed (`xstockSpotOhlc1m` etc; type aliases `EquitySpotOhlc1m` etc retained as transitional, queued for cosmetic modernization); `shared/asset-classes.ts` registry `archiveOhlcTable`/`archiveTickerTable` strings; `ohlc-batch-writer.ts` + `ticker-batch-writer.ts` import paths + tableForAssetClass map values; `xstock_spot/scanner.ts` + `data-freshness.ts` + `storage-client.ts` + `drift-dashboard-aggregator.ts` + `passive-archive-bootstrap.ts` + `b74-create-monthly-partitions.ts` + `b75-rehydrate.ts` + `b75-retention-sweep.ts` + `b79-0a-load-test.ts` + `b79-0a-qd-probe.ts` + `asset-classes.test.ts`.
+
+**Reserved namespace.** `equity_*` is now reserved for FUTURE real (non-tokenized) US equity feeds (e.g. direct ARCA/NYSE feed). xStocks (tokenized representations) own `xstock_*`. Don't conflate.
+
+**Rollback:** `2026-05-10-b79-0e-rename-equity-to-xstock-rollback.sql` — reverse-renames 172 objects via symmetric DO blocks + `UPDATE module_constants` reverse (Langston Step 4 F1 fix).
+
 ### `server/asset_classes/xstock_spot/market-hours.ts` (B79; B79.0c per-symbol)
 
 **Layer:** 5 (Regime Classification / Asset-Class Config)
