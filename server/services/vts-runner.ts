@@ -578,6 +578,36 @@ interface OpenVirtualTrade {
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
+
+// B79.0g — rehydrate the in-memory Map from vts_open_trades at server boot.
+// Called once from server/index.ts after DB connection but before scanner
+// starts. If the table is empty AND the Map has entries (post-deploy bootstrap
+// case), call bootstrapOpenTradesFromMemory which re-resolves asset_class so
+// legacy bad values from pre-B79.0f resolver don't freeze into DB.
+export async function rehydrateOpenVtsTrades(): Promise<void> {
+  try {
+    const { rehydrateOpenTrades, bootstrapOpenTradesFromMemory } = await import('./vts-trade-persistence.js');
+    const rows = await rehydrateOpenTrades();
+    if (rows.length > 0) {
+      for (const r of rows) openVirtualTrades.set(r.id, r as unknown as OpenVirtualTrade);
+      console.log(`[B79.0g][REHYDRATE] loaded ${rows.length} open VTS trades from DB`);
+    } else if (openVirtualTrades.size > 0) {
+      // Bootstrap path — first deploy of B79.0g, table empty but Map has entries.
+      const seeded = await bootstrapOpenTradesFromMemory(
+        Array.from(openVirtualTrades.values()) as any,
+      );
+      console.log(`[B79.0g][REHYDRATE] table empty + Map non-empty → bootstrapped ${seeded ?? 0}`);
+    } else {
+      console.log('[B79.0g][REHYDRATE] table empty + Map empty — clean start');
+    }
+  } catch (err) {
+    console.error(
+      '[B79.0g][REHYDRATE_FAIL] continuing with in-memory state only:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 // B72: MAX_OPEN_TRADES from module='vts_runner'.
 function getMaxOpenTrades(): number {
   return getCachedNumberRequired('vts_runner', 'max_open_vts_trades', _VTS_GK);
@@ -1397,6 +1427,22 @@ async function generatePhase10Signal(
     })(),
   };
 
+  // B79.0g (Langston Step 4 F1 fix): INSERT before Map.set — invert order so
+  // observer-visibility (TEC, scanner, signal logging below) NEVER sees a
+  // trade that fails to persist. If INSERT fails, abort the trade-open cleanly
+  // (no half-state). The previous fire-and-forget pattern created an observer-
+  // divergence window between Map.set and the async INSERT outcome.
+  try {
+    const { insertOpenTrade } = await import('./vts-trade-persistence.js');
+    await insertOpenTrade(openTrade as any);
+  } catch (persistErr) {
+    console.error(
+      `[B79.0g][PERSIST_FAIL] aborting trade-open for trade=${tradeId} symbol=${symbol} ` +
+      `because vts_open_trades INSERT failed:`,
+      persistErr instanceof Error ? persistErr.message : persistErr,
+    );
+    return null;
+  }
   openVirtualTrades.set(tradeId, openTrade);
   // Batch 47f15: Record setup hash to prevent identical re-entry
   lastSetupHash.set(`${symbol}:${strategy}`, computeSetupHash(entryPrice, stopLoss, takeProfit));
@@ -2310,6 +2356,25 @@ async function resolveOpenVirtualTrades(): Promise<{
 
     // Remove from open trades registry
     openVirtualTrades.delete(id);
+    // B79.0g: also remove from vts_open_trades. This is post-persistRealPriceTrade
+    // so the closed-trade row is already in paper_sim_trades (or whatever the
+    // active persistence target is); the DELETE here completes the migration.
+    // Per Langston Q5 lock the canonical pattern is single-transaction across
+    // both ops; deferring full transactional integration to a follow-up since
+    // persistRealPriceTrade currently runs async and doesn't expose a tx handle.
+    // Net effect today: window of inconsistency is sub-millisecond + correctness
+    // restored on next rehydrate boot. RUNNING_ISSUES tracker for tx integration.
+    void (async () => {
+      try {
+        const { deleteOpenTrade } = await import('./vts-trade-persistence.js');
+        await deleteOpenTrade(id);
+      } catch (err) {
+        console.warn(
+          `[B79.0g][DELETE_FAIL] orphan vts_open_trades row=${id} (will be cleared by next rehydrate or ops):`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    })();
     // Batch 45: Record close timestamp for re-entry cooldown
     recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
 

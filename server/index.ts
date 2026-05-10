@@ -652,6 +652,22 @@ app.use((req, res, next) => {
     process.exit(1);
   }
 
+  // ─── B79.0g: Rehydrate open VTS trades from vts_open_trades ───
+  // Restores the in-memory openVirtualTrades Map so trades survive PM2
+  // restarts. Must run AFTER loadTrailingStates (TEC trailing-engine state
+  // already restored) and BEFORE scanner.start (so cycle 1 sees correct
+  // open-trade state). Soft-fail: if persistence layer is down, log loud
+  // and continue with empty Map (degraded but not boot-blocking).
+  try {
+    const { rehydrateOpenVtsTrades } = await import('./services/vts-runner.js');
+    await rehydrateOpenVtsTrades();
+  } catch (rehydrateErr) {
+    console.error(
+      '[B79.0g][REHYDRATE_FAIL] continuing with empty in-memory state:',
+      rehydrateErr instanceof Error ? rehydrateErr.message : rehydrateErr,
+    );
+  }
+
   // ─── B79.0a: Live xstock_spot scanner (HARD-FAIL on boot per Langston rev 1 #4) ───
   // Subscribes to centralClock; observability scanner Day 1 (no signal-orchestrator
   // wiring yet — that's B79.x post-Layer-3). Runs BEFORE server.listen so the

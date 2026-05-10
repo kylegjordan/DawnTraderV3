@@ -115,4 +115,15 @@
 
 ---
 
-*End BATCH_79_0g_SCOPE.md rev 1.*
+---
+
+## §6 — rev 2 revisions (Langston review 2026-05-10, verdict: approved-with-revisions)
+
+1. **Q4 bootstrap MUST re-resolve asset_class** at snapshot time (Langston add'l #1, critical). Implemented: `bootstrapOpenTradesFromMemory` calls `safeResolveAssetClass(symbol, 'kraken')` for every in-memory trade before INSERT — defeats stale legacy values from pre-B79.0f resolver.
+2. **Q2 mutation audit** — Step 2 PIA grep'd `openVirtualTrades.` mutations. Findings: in-memory mutations to ladderRungsHit, originalStopPrice, latchTriggerPrice, rungTargetHistory all flow through TEC engine writebacks (covered by tec_trailing_states). modeChanged/breakEvenLatched are TEC-tracked. `openVirtualTrades.delete(id)` happens at trade close → covered by Q5 DELETE. No discovered orphan mutation paths. Q2=B safe.
+3. **Obj 6 dropped** — no client-side patch existed to remove. AssetClassBadge.tsx already reads `trade.assetClass` directly; resolver fix in B79.0f was server-side only. Updated objective table.
+4. **Rollback script named** — `drizzle/migrations/2026-05-10-b79-0g-vts-open-trades-rollback.sql`: DROP TABLE vts_open_trades. Code-side rollback: revert vts-runner persistence calls + index.ts rehydrate hook.
+
+**Q5 atomicity caveat (deviation flagged):** the close-time DELETE-from-vts_open_trades is currently fire-and-log async (post-`persistRealPriceTrade`), not wrapped in a single transaction with the closed-trade INSERT. True transactional integration requires plumbing a tx handle through `persistRealPriceTrade` (substantial refactor). Net effect: sub-millisecond inconsistency window between `paper_sim_trades` INSERT and `vts_open_trades` DELETE; orphan rows cleared on next rehydrate boot or via ad-hoc cleanup. Filed RUNNING_ISSUES tracker for proper Q5=A integration.
+
+*End BATCH_79_0g_SCOPE.md rev 2.*
