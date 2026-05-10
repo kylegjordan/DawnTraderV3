@@ -229,6 +229,54 @@ export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * B79.0f — Ticker COLLISIONS between xStocks (XSTOCK_SPOT_SYMBOLS) and
+ * Kraken's crypto-spot universe (`/0/public/AssetPairs` wsname BASE/USD).
+ *
+ * Provenance: enumerated 2026-05-10 via live Kraken `/0/public/AssetPairs`
+ * intersection with XSTOCK_SPOT_SYMBOLS bases. 9 USD-quote tickers exist
+ * BOTH as xStock equities (e.g. Sun Communities SUI on Kraken xStocks at
+ * `SUIxUSD` raw form) AND as Kraken-spot cryptos (e.g. Sui Network at
+ * `SUIUSD` raw form). Both canonicalize to `BASE/USD` and become
+ * indistinguishable post-canonicalization.
+ *
+ * Resolver semantics for collision tickers (Langston Q1 lock 2026-05-10):
+ * when the regular `kraken` exchange path receives a collision ticker
+ * WITHOUT the `x` suffix that disambiguates xStock display form, prefer
+ * crypto_spot. xStock data ingestion always uses `exchange='kraken-equities'`
+ * per B74 archiver — so an xStock symbol losing its `x` suffix in transit
+ * is by-construction crypto. WARN log fires on this path so future drift
+ * in the invariant is detectable.
+ *
+ * STANDING RULE: re-audit this set quarterly via `/0/public/AssetPairs`
+ * (calendar trigger in MULTI_ASSET_VTS_EXPANSION_PLAN.md §10c.X). Kraken
+ * adds tokens regularly; new collisions can emerge.
+ */
+export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
+  'BDX/USD',  // xStock: Becton Dickinson | Crypto: BDX
+  'CVX/USD',  // xStock: Chevron          | Crypto: Convex Finance
+  'DASH/USD', // xStock: DoorDash         | Crypto: Dash
+  'EDU/USD',  // xStock: New Oriental     | Crypto: Open Campus
+  'MET/USD',  // xStock: MetLife          | Crypto: MET
+  'OPEN/USD', // xStock: OpenLending      | Crypto: OPEN
+  'PEP/USD',  // xStock: PepsiCo          | Crypto: Pepe-related
+  'SUI/USD',  // xStock: Sun Communities  | Crypto: Sui Network
+  'T/USD',    // xStock: AT&T             | Crypto: T
+  // EUR-quote regression-locks: XSTOCK_SPOT_SYMBOLS is /USD-only today, but
+  // these 8 tickers ALSO exist as Kraken crypto /EUR pairs. If a future
+  // commit extends XSTOCK_SPOT_SYMBOLS to /EUR, the same collision arises.
+  // Pre-emptive entries here so the resolver gates correctly without
+  // requiring a coordinated double-edit.
+  'CVX/EUR',
+  'DASH/EUR',
+  'EDU/EUR',
+  'MET/EUR',
+  'OPEN/EUR',
+  'PEP/EUR',
+  'SUI/EUR',
+  'T/EUR',
+]);
+
+/**
  * B79.0c — xstock_spot symbols that trade 24/7 on Kraken Pro.
  *
  * Per Kraken Phase 1 announcement (2025-12-03) at
@@ -305,13 +353,37 @@ export function resolveAssetClass(symbol: string, exchange: string): AssetClass 
   }
 
   if (exchange === 'kraken') {
-    // Check for explicit xstock_spot display form (AAPLx/USD) — optional
-    // path if caller passes the Kraken Pro display format.
+    // Check for explicit xstock_spot display form (AAPLx/USD) — strongest
+    // signal: caller passed the Kraken Pro display format with x-suffix
+    // intact. This branch is ALWAYS xstock_spot regardless of collision set.
     if (XSTOCK_SPOT_DISPLAY.test(symbol)) return ASSET_CLASSES.XSTOCK_SPOT;
-    // B79: explicit xstock_spot allow-list lookup. The canonical pair-universe
-    // form for xStocks is `<TICKER>/<QUOTE>` (no x-suffix), which would
-    // otherwise match CRYPTO_SPOT_KRAKEN_RAW_2 below. Membership-set lookup
-    // is the conservative path — it cannot accidentally re-tag any crypto pair.
+
+    // B79.0f — collision gate. The 9 USD-quote (+ 8 EUR pre-emptive) tickers
+    // in XSTOCK_SPOT_KRAKEN_COLLISIONS exist BOTH as xStock equities AND as
+    // Kraken-spot cryptos with identical canonical form. When such a ticker
+    // arrives via the regular `kraken` exchange WITHOUT the disambiguating
+    // `x` suffix (which would have hit XSTOCK_SPOT_DISPLAY above), prefer
+    // crypto_spot. Reasoning: xStock ingestion uses `exchange='kraken-equities'`
+    // per B74 archiver invariant. A collision ticker on `kraken` without `x`
+    // suffix is by-construction crypto — the alternative would mean an
+    // xStock symbol lost its disambiguating marker in transit, which is
+    // itself a bug worth surfacing. Emit WARN log so any future drift in
+    // the B74 invariant is detectable, then return crypto_spot.
+    if (XSTOCK_SPOT_KRAKEN_COLLISIONS.has(symbol)) {
+      console.warn(
+        `[B79.0f][COLLISION_RESOLVE] symbol=${symbol} on exchange=kraken without x-suffix → resolving as crypto_spot. ` +
+        `If you expected xstock_spot, the caller should pass exchange='kraken-equities' or the display form (e.g. SUIx/USD). ` +
+        `Drift watch — see XSTOCK_SPOT_KRAKEN_COLLISIONS provenance comment.`,
+      );
+      return ASSET_CLASSES.CRYPTO_SPOT;
+    }
+
+    // B79: non-collision xstock_spot allow-list lookup. The canonical
+    // pair-universe form for xStocks is `<TICKER>/<QUOTE>` (no x-suffix),
+    // which would otherwise match CRYPTO_SPOT_KRAKEN_RAW_2 below. For
+    // tickers OUTSIDE the collision set, membership-set lookup is the
+    // conservative path — the ticker has no crypto counterpart on Kraken
+    // so no ambiguity exists.
     if (XSTOCK_SPOT_SYMBOLS.has(symbol)) return ASSET_CLASSES.XSTOCK_SPOT;
     // crypto_spot: canonical BASE/QUOTE (uppercase).
     if (CRYPTO_SPOT_CANONICAL.test(symbol)) return ASSET_CLASSES.CRYPTO_SPOT;

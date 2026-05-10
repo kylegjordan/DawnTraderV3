@@ -1,0 +1,527 @@
+diff --git a/scripts/b79-0d-orb-thresholds-seed.sql b/scripts/b79-0d-orb-thresholds-seed.sql
+new file mode 100644
+index 000000000..df774183d
+--- /dev/null
++++ b/scripts/b79-0d-orb-thresholds-seed.sql
+@@ -0,0 +1,61 @@
++-- B79.0d — Opening Range Breakout (ORB) module_constants seed.
++--
++-- Seeds 7 Layer-1 thresholds for ORB on xstock_spot scope and flips the
++-- strategy_gates row from false → true.
++--
++-- IDEMPOTENT (Langston scope-review concern #4): ON CONFLICT DO UPDATE so
++-- re-running on staging doesn't error.
++--
++-- Schema reference (verified on Supabase):
++--   module_constants(module_name, exchange, asset_class, strategy, regime,
++--                    constant_name, value::jsonb, updated_at, updated_by).
++--   No value_type column. Numbers stored as jsonb numbers, booleans as jsonb booleans.
++--
++-- Rollback (DB-only — no code revert needed; cached sync API picks up
++-- changes on next tick):
++--
++--   UPDATE module_constants
++--   SET value = 'false'::jsonb, updated_at = NOW(), updated_by = 'b79.0d-rollback'
++--   WHERE module_name = 'strategy_gates'
++--     AND asset_class = 'xstock_spot'
++--     AND strategy = 'orb'
++--     AND constant_name = 'enabled';
++
++BEGIN;
++
++-- ── Layer-1 thresholds (7 rows) ──────────────────────────────────────────
++INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by, updated_at)
++VALUES
++  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'open_range_minutes',       '30'::jsonb,   'b79.0d-seed', NOW()),
++  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'breakout_buffer_atr_mult', '0.15'::jsonb, 'b79.0d-seed', NOW()),
++  -- NOTE (Langston Step 4 F1): this is target-multiple-of-rangeHeight, NOT realized R:R.
++  -- Realized R:R drifts ~1.3:1 because actual risk = entry−rangeLow > rangeHeight
++  -- once breakout has cleared. Rename to target_range_multiple queued for B79.x.
++  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'risk_reward_ratio',        '2.0'::jsonb,  'b79.0d-seed', NOW()),
++  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'volume_multiple_min',      '1.5'::jsonb,  'b79.0d-seed', NOW()),
++  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'confidence_base',          '0.65'::jsonb, 'b79.0d-seed', NOW()),
++  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'range_atr_clamp_max',      '3.0'::jsonb,  'b79.0d-seed', NOW()),
++  ('strategy.orb', '*', 'xstock_spot', 'orb', '*', 'active_window_hours',      '2'::jsonb,    'b79.0d-seed', NOW())
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO UPDATE SET
++  value = EXCLUDED.value,
++  updated_by = EXCLUDED.updated_by,
++  updated_at = NOW();
++
++-- ── Flip strategy gate true ──────────────────────────────────────────────
++-- Existing row from B79: (strategy_gates, *, xstock_spot, orb, *, enabled, false).
++INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by, updated_at)
++VALUES
++  ('strategy_gates', '*', 'xstock_spot', 'orb', '*', 'enabled', 'true'::jsonb, 'b79.0d-seed', NOW())
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO UPDATE SET
++  value = EXCLUDED.value,
++  updated_by = EXCLUDED.updated_by,
++  updated_at = NOW();
++
++COMMIT;
++
++-- Verification query (run after COMMIT):
++SELECT module_name, asset_class, strategy, constant_name, value
++FROM module_constants
++WHERE (module_name = 'strategy.orb' AND asset_class = 'xstock_spot')
++   OR (module_name = 'strategy_gates' AND asset_class = 'xstock_spot' AND strategy = 'orb')
++ORDER BY module_name, constant_name;
+diff --git a/scripts/b79-0f-collision-audit.sql b/scripts/b79-0f-collision-audit.sql
+new file mode 100644
+index 000000000..8314949d9
+--- /dev/null
++++ b/scripts/b79-0f-collision-audit.sql
+@@ -0,0 +1,130 @@
++-- B79.0f — Asset-class collision audit (READ-ONLY by default).
++--
++-- Purpose: identify any historical rows where a collision-ticker symbol
++-- (BDX, CVX, DASH, EDU, MET, OPEN, PEP, SUI, T) was tagged asset_class='xstock_spot'
++-- when it should have been 'crypto_spot' (the resolver bug pre-B79.0f).
++--
++-- IDEMPOTENT: SELECT-only. UPDATE remediation statements at the bottom are
++-- COMMENTED OUT. After Kyle reviews the audit output, uncomment per-table
++-- remediation as appropriate. Backfill governance (Langston rev 2 #5):
++-- record per-table row counts touched in CHANGES_AND_FIXES.md for paper trail.
++--
++-- Run:
++--   psql "$DATABASE_URL" -f scripts/b79-0f-collision-audit.sql
++--
++-- Provenance: 2026-05-10 collision set from Kraken /0/public/AssetPairs query.
++
++\echo '=== B79.0f Collision Audit (read-only) ==='
++\echo ''
++
++-- Tables with asset_class column that could carry mis-tagged collision rows.
++-- Identified via:
++--   SELECT table_name FROM information_schema.columns
++--   WHERE column_name='asset_class' GROUP BY table_name;
++-- Audit query is read-only — no row writes.
++
++\echo '--- 1. signal_eval_archive (parent + monthly partitions) ---'
++SELECT
++  asset_class,
++  symbol,
++  COUNT(*) AS row_count,
++  MIN(captured_at) AS first_seen,
++  MAX(captured_at) AS last_seen
++FROM signal_eval_archive
++WHERE symbol IN (
++  'BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
++  'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR'
++)
++GROUP BY asset_class, symbol
++ORDER BY symbol, asset_class;
++
++\echo ''
++\echo '--- 2. trading_signals ---'
++SELECT
++  asset_class,
++  symbol,
++  COUNT(*) AS row_count
++FROM trading_signals
++WHERE symbol IN (
++  'BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
++  'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR'
++)
++GROUP BY asset_class, symbol
++ORDER BY symbol, asset_class;
++
++\echo ''
++\echo '--- 3. regime_factor_alternates ---'
++SELECT
++  asset_class,
++  COUNT(*) AS row_count,
++  MIN(evaluated_at) AS first_seen,
++  MAX(evaluated_at) AS last_seen
++FROM regime_factor_alternates
++WHERE asset_class = 'xstock_spot'
++  AND EXISTS (
++    SELECT 1 FROM unnest(ARRAY[
++      'BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD'
++    ]) sym
++  )
++GROUP BY asset_class;
++
++\echo ''
++\echo '--- 4. exit_strategy_alternates (B73 ablation) — keyed by trade_id, not symbol ---'
++-- Suspicious rows: xstock_spot tag with strategy=strong_bull_trend (xstock whitelist
++-- excludes strong_bull_trend per B79 — any such row is from a mis-tagged crypto trade).
++SELECT
++  asset_class,
++  strategy,
++  COUNT(*) AS row_count,
++  MIN(created_at) AS first_seen,
++  MAX(created_at) AS last_seen
++FROM exit_strategy_alternates
++WHERE asset_class = 'xstock_spot'
++  AND strategy = 'strong_bull_trend'
++GROUP BY asset_class, strategy;
++
++\echo ''
++\echo '--- 5. paper_sim_trades (paper_trades + trades have no asset_class column — pre-B69 schema) ---'
++SELECT 'paper_sim_trades' AS tbl, asset_class, symbol, COUNT(*) AS row_count
++FROM paper_sim_trades
++WHERE symbol IN (
++  'BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
++  'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR'
++)
++GROUP BY asset_class, symbol
++ORDER BY tbl, symbol;
++
++\echo ''
++\echo '=== Audit complete. Review counts above. ==='
++\echo 'If any row shows asset_class=xstock_spot for a collision symbol on the regular kraken path,'
++\echo 'uncomment + run the remediation block below (per-table). Record row counts in CHANGES_AND_FIXES.md.'
++\echo ''
++
++-- ─────────────────────────────────────────────────────────────────────────
++-- REMEDIATION (commented out by default — uncomment per-table after review)
++-- ─────────────────────────────────────────────────────────────────────────
++--
++-- BEGIN;
++--
++-- -- signal_eval_archive (live + partitions inherit)
++-- UPDATE signal_eval_archive SET asset_class = 'crypto_spot'
++-- WHERE asset_class = 'xstock_spot'
++--   AND symbol IN ('BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
++--                  'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR');
++--
++-- -- trading_signals
++-- UPDATE trading_signals SET asset_class = 'crypto_spot'
++-- WHERE asset_class = 'xstock_spot'
++--   AND symbol IN ('BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
++--                  'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR');
++--
++-- -- exit_strategy_alternates (B73)
++-- UPDATE exit_strategy_alternates SET asset_class = 'crypto_spot'
++-- WHERE asset_class = 'xstock_spot'
++--   AND symbol IN ('BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
++--                  'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR');
++--
++-- -- paper_sim_trades / paper_trades / trades
++-- -- (similar pattern; only run if audit shows non-zero counts)
++--
++-- COMMIT;
+diff --git a/scripts/b79-0f-collision-backfill.sql b/scripts/b79-0f-collision-backfill.sql
+new file mode 100644
+index 000000000..093cda110
+--- /dev/null
++++ b/scripts/b79-0f-collision-backfill.sql
+@@ -0,0 +1,37 @@
++-- B79.0f — Asset-class collision BACKFILL (one-shot, NOT idempotent because
++-- it operates on a snapshot of mis-tagged rows that should converge to zero
++-- after first run + resolver fix deploy).
++--
++-- Audit (b79-0f-collision-audit.sql) on staging 2026-05-10 found 4862 rows
++-- in signal_eval_archive incorrectly tagged asset_class='xstock_spot' for
++-- collision-set symbols (DASH/USD, MET/USD, OPEN/USD, SUI/USD). All
++-- timestamps post-2026-05-07 21:51 UTC, exactly when B79 deploy populated
++-- XSTOCK_SPOT_SYMBOLS and the resolver started preferring xstock_spot for
++-- collision tickers on regular kraken path.
++--
++-- Per-symbol counts pre-fix (signal_eval_archive only — other tables clean):
++--   DASH/USD : 337
++--   MET/USD  : 1598
++--   OPEN/USD : 44
++--   SUI/USD  : 2883
++--   TOTAL    : 4862
++--
++-- This script flips them back to crypto_spot. Other tables (trading_signals,
++-- regime_factor_alternates, exit_strategy_alternates, paper_sim_trades) had
++-- 0 mis-tagged rows so are not touched.
++
++BEGIN;
++
++UPDATE signal_eval_archive
++SET asset_class = 'crypto_spot'
++WHERE asset_class = 'xstock_spot'
++  AND symbol IN ('DASH/USD','MET/USD','OPEN/USD','SUI/USD');
++
++-- Verification: should return zero
++SELECT 'signal_eval_archive remaining mis-tagged' AS check, COUNT(*)
++FROM signal_eval_archive
++WHERE asset_class = 'xstock_spot'
++  AND symbol IN ('BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
++                 'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR');
++
++COMMIT;
+diff --git a/server/strategies/orb.ts b/server/strategies/orb.ts
+index 0c6a4ce8a..df47c741a 100644
+--- a/server/strategies/orb.ts
++++ b/server/strategies/orb.ts
+@@ -16,12 +16,22 @@
+  *   Q4: Confidence = clamp(0.65 + 0.20*min(range/atr, 3.0) + 0.10*(volMult-1), [0.55, 0.90]).
+  *   Q5: Regime mapping = IMPULSE_EXPANSION + STRUCTURAL_TRANSITION (vol-discovery natural fits).
+  *   Q6: Triple-defense asset-class guard: detect-internal + dispatch-block + SQE whitelist.
+- *   Q7: B73 ablation registered now (n=0 OK; cleaner audit trail than retrofit).
++ *   Q7: B73 ablation auto-included — the replay-service (`exit-strategy-
++ *       replay-service.ts`) is strategy-agnostic; ORB trades flow through
++ *       automatically once `persistRealPriceTrade` runs with strategy='orb'.
++ *       No registration code required (Langston B79.0d Step 4 F2 confirmation).
+  *
+  * Layer-1 thresholds in module_constants `strategy.orb` (xstock_spot scope):
+  *   open_range_minutes        = 30
+  *   breakout_buffer_atr_mult  = 0.15
+- *   risk_reward_ratio         = 2.0
++ *   risk_reward_ratio         = 2.0   (Langston B79.0d Step 4 F1: misnomer —
++ *                                      this is target-multiple-of-rangeHeight,
++ *                                      NOT realized R:R. Realized R:R drifts
++ *                                      ~1.3:1 because actual risk =
++ *                                      entry−rangeLow > rangeHeight once
++ *                                      breakout has cleared. Rename to
++ *                                      `target_range_multiple` queued via
++ *                                      RUNNING_ISSUES #90 for B79.x.)
+  *   volume_multiple_min       = 1.5
+  *   confidence_base           = 0.65
+  *   range_atr_clamp_max       = 3.0  (Q4 nit lock)
+@@ -46,7 +56,11 @@ const STRATEGY_KEY = 'orb';
+ const LOG_PREFIX = '[B79.0d][ORB]';
+ 
+ // Calendar-fixed UTC window constants (Q1+Q3 lock).
+-const RTH_OPEN_HOUR_UTC = 14;       // 14:30 UTC = 09:30 ET (DST handles itself in winter)
++// 14:30 UTC = NYSE open in winter (EST UTC-5); 1h after NYSE open in summer
++// (EDT UTC-4 → NYSE opens 13:30 UTC). Calendar-fixed UTC chosen per Q1
++// (avoids per-symbol first-tick state); seasonal NYSE drift accepted as
++// Layer-1 noise to be calibrated in B79.x. (Langston B79.0d Step 4 F3 fix.)
++const RTH_OPEN_HOUR_UTC = 14;
+ const RTH_OPEN_MINUTE_UTC = 30;
+ const ACTIVE_WINDOW_END_HOUR_UTC = 17; // 17:00 UTC end of active breakout window
+ 
+diff --git a/server/tests/unit/b79-0f-asset-class-collisions.test.ts b/server/tests/unit/b79-0f-asset-class-collisions.test.ts
+new file mode 100644
+index 000000000..95ec884df
+--- /dev/null
++++ b/server/tests/unit/b79-0f-asset-class-collisions.test.ts
+@@ -0,0 +1,130 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * B79.0f — Asset-class resolver collision regression-locks
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * Surfaced 2026-05-10 by Kyle: SUI/USD crypto trade was displaying as
++ * xStock Spot in the Machine Learning UI. Root cause: 9 USD-quote ticker
++ * collisions between Kraken's xStocks universe and Kraken's crypto-spot
++ * universe (e.g. Sun Communities `SUI` equity vs Sui Network `SUI` crypto).
++ *
++ * Resolver semantics (Langston Q1 lock):
++ *   - exchange='kraken-equities'                  → xstock_spot (always, no ambiguity)
++ *   - exchange='kraken' + 'BASEx/QUOTE'  display  → xstock_spot (display-form survives)
++ *   - exchange='kraken' + collision set (no x)    → crypto_spot (B79.0f gate; WARN logged)
++ *   - exchange='kraken' + non-collision xStock    → xstock_spot (membership-set fallback)
++ *   - exchange='kraken' + plain crypto canonical  → crypto_spot
++ *
++ * Provenance: 2026-05-10 live Kraken `/0/public/AssetPairs` query intersected
++ * with XSTOCK_SPOT_SYMBOLS bases.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import {
++  resolveAssetClass,
++  XSTOCK_SPOT_KRAKEN_COLLISIONS,
++  XSTOCK_SPOT_SYMBOLS,
++  ASSET_CLASSES,
++} from '../../../shared/asset-classes';
++
++const USD_COLLISIONS = ['BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD'];
++const EUR_COLLISIONS = ['CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR'];
++
++describe('B79.0f — XSTOCK_SPOT_KRAKEN_COLLISIONS membership', () => {
++  it('contains exactly 17 entries (9 USD + 8 EUR pre-emptive)', () => {
++    expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.size).toBe(17);
++  });
++
++  it('contains all 9 documented USD-quote collisions', () => {
++    for (const sym of USD_COLLISIONS) {
++      expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.has(sym)).toBe(true);
++    }
++  });
++
++  it('contains all 8 documented EUR-quote collisions (regression-lock for /EUR extension)', () => {
++    for (const sym of EUR_COLLISIONS) {
++      expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.has(sym)).toBe(true);
++    }
++  });
++
++  it('every USD-quote collision is currently in XSTOCK_SPOT_SYMBOLS (xStock catalog parity)', () => {
++    for (const sym of USD_COLLISIONS) {
++      expect(XSTOCK_SPOT_SYMBOLS.has(sym)).toBe(true);
++    }
++  });
++});
++
++describe('B79.0f — collision tickers on `kraken` resolve to crypto_spot (the bug fix)', () => {
++  let warnSpy: ReturnType<typeof vi.spyOn>;
++  beforeEach(() => {
++    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++  });
++
++  for (const sym of USD_COLLISIONS) {
++    it(`${sym} on exchange=kraken → crypto_spot (NOT xstock_spot)`, () => {
++      const result = resolveAssetClass(sym, 'kraken');
++      expect(result).toBe(ASSET_CLASSES.CRYPTO_SPOT);
++      expect(warnSpy).toHaveBeenCalledWith(
++        expect.stringContaining('[B79.0f][COLLISION_RESOLVE]'),
++      );
++    });
++  }
++
++  for (const sym of EUR_COLLISIONS) {
++    it(`${sym} on exchange=kraken → crypto_spot (regression-lock for /EUR)`, () => {
++      const result = resolveAssetClass(sym, 'kraken');
++      expect(result).toBe(ASSET_CLASSES.CRYPTO_SPOT);
++    });
++  }
++});
++
++describe('B79.0f — disambiguating x-suffix forms still resolve to xstock_spot', () => {
++  it('SUIx/USD on exchange=kraken → xstock_spot (display form preserved)', () => {
++    expect(resolveAssetClass('SUIx/USD', 'kraken')).toBe(ASSET_CLASSES.XSTOCK_SPOT);
++  });
++
++  it('PEPx/USD on exchange=kraken → xstock_spot', () => {
++    expect(resolveAssetClass('PEPx/USD', 'kraken')).toBe(ASSET_CLASSES.XSTOCK_SPOT);
++  });
++
++  it('SUI/USD on exchange=kraken-equities → xstock_spot (exchange-driven, no ambiguity)', () => {
++    expect(resolveAssetClass('SUI/USD', 'kraken-equities')).toBe(ASSET_CLASSES.XSTOCK_SPOT);
++  });
++});
++
++describe('B79.0f — non-collision xStock tickers preserved by membership fast-path', () => {
++  it('AAPL/USD on exchange=kraken → xstock_spot (no crypto counterpart on Kraken)', () => {
++    expect(resolveAssetClass('AAPL/USD', 'kraken')).toBe(ASSET_CLASSES.XSTOCK_SPOT);
++  });
++
++  it('TSLA/USD on exchange=kraken → xstock_spot', () => {
++    expect(resolveAssetClass('TSLA/USD', 'kraken')).toBe(ASSET_CLASSES.XSTOCK_SPOT);
++  });
++
++  it('NVDA/USD on exchange=kraken → xstock_spot', () => {
++    expect(resolveAssetClass('NVDA/USD', 'kraken')).toBe(ASSET_CLASSES.XSTOCK_SPOT);
++  });
++
++  it('GLD/USD on exchange=kraken → xstock_spot', () => {
++    expect(resolveAssetClass('GLD/USD', 'kraken')).toBe(ASSET_CLASSES.XSTOCK_SPOT);
++  });
++});
++
++describe('B79.0f — pure crypto pairs unaffected', () => {
++  it('BTC/USD on exchange=kraken → crypto_spot', () => {
++    expect(resolveAssetClass('BTC/USD', 'kraken')).toBe(ASSET_CLASSES.CRYPTO_SPOT);
++  });
++
++  it('ETH/USD on exchange=kraken → crypto_spot', () => {
++    expect(resolveAssetClass('ETH/USD', 'kraken')).toBe(ASSET_CLASSES.CRYPTO_SPOT);
++  });
++
++  it('SOLUSD raw form on exchange=kraken → crypto_spot', () => {
++    expect(resolveAssetClass('SOLUSD', 'kraken')).toBe(ASSET_CLASSES.CRYPTO_SPOT);
++  });
++
++  it('XXBTZUSD raw form on exchange=kraken → crypto_spot', () => {
++    expect(resolveAssetClass('XXBTZUSD', 'kraken')).toBe(ASSET_CLASSES.CRYPTO_SPOT);
++  });
++});
+diff --git a/shared/asset-classes.ts b/shared/asset-classes.ts
+index c6a91d4fb..35627e437 100644
+--- a/shared/asset-classes.ts
++++ b/shared/asset-classes.ts
+@@ -228,6 +228,54 @@ export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set([
+   'XOM/USD','XPEV/USD','XYL/USD','XYZ/USD','ZTS/USD',
+ ]);
+ 
++/**
++ * B79.0f — Ticker COLLISIONS between xStocks (XSTOCK_SPOT_SYMBOLS) and
++ * Kraken's crypto-spot universe (`/0/public/AssetPairs` wsname BASE/USD).
++ *
++ * Provenance: enumerated 2026-05-10 via live Kraken `/0/public/AssetPairs`
++ * intersection with XSTOCK_SPOT_SYMBOLS bases. 9 USD-quote tickers exist
++ * BOTH as xStock equities (e.g. Sun Communities SUI on Kraken xStocks at
++ * `SUIxUSD` raw form) AND as Kraken-spot cryptos (e.g. Sui Network at
++ * `SUIUSD` raw form). Both canonicalize to `BASE/USD` and become
++ * indistinguishable post-canonicalization.
++ *
++ * Resolver semantics for collision tickers (Langston Q1 lock 2026-05-10):
++ * when the regular `kraken` exchange path receives a collision ticker
++ * WITHOUT the `x` suffix that disambiguates xStock display form, prefer
++ * crypto_spot. xStock data ingestion always uses `exchange='kraken-equities'`
++ * per B74 archiver — so an xStock symbol losing its `x` suffix in transit
++ * is by-construction crypto. WARN log fires on this path so future drift
++ * in the invariant is detectable.
++ *
++ * STANDING RULE: re-audit this set quarterly via `/0/public/AssetPairs`
++ * (calendar trigger in MULTI_ASSET_VTS_EXPANSION_PLAN.md §10c.X). Kraken
++ * adds tokens regularly; new collisions can emerge.
++ */
++export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
++  'BDX/USD',  // xStock: Becton Dickinson | Crypto: BDX
++  'CVX/USD',  // xStock: Chevron          | Crypto: Convex Finance
++  'DASH/USD', // xStock: DoorDash         | Crypto: Dash
++  'EDU/USD',  // xStock: New Oriental     | Crypto: Open Campus
++  'MET/USD',  // xStock: MetLife          | Crypto: MET
++  'OPEN/USD', // xStock: OpenLending      | Crypto: OPEN
++  'PEP/USD',  // xStock: PepsiCo          | Crypto: Pepe-related
++  'SUI/USD',  // xStock: Sun Communities  | Crypto: Sui Network
++  'T/USD',    // xStock: AT&T             | Crypto: T
++  // EUR-quote regression-locks: XSTOCK_SPOT_SYMBOLS is /USD-only today, but
++  // these 8 tickers ALSO exist as Kraken crypto /EUR pairs. If a future
++  // commit extends XSTOCK_SPOT_SYMBOLS to /EUR, the same collision arises.
++  // Pre-emptive entries here so the resolver gates correctly without
++  // requiring a coordinated double-edit.
++  'CVX/EUR',
++  'DASH/EUR',
++  'EDU/EUR',
++  'MET/EUR',
++  'OPEN/EUR',
++  'PEP/EUR',
++  'SUI/EUR',
++  'T/EUR',
++]);
++
+ /**
+  * B79.0c — xstock_spot symbols that trade 24/7 on Kraken Pro.
+  *
+@@ -305,13 +353,37 @@ export function resolveAssetClass(symbol: string, exchange: string): AssetClass
+   }
+ 
+   if (exchange === 'kraken') {
+-    // Check for explicit xstock_spot display form (AAPLx/USD) — optional
+-    // path if caller passes the Kraken Pro display format.
++    // Check for explicit xstock_spot display form (AAPLx/USD) — strongest
++    // signal: caller passed the Kraken Pro display format with x-suffix
++    // intact. This branch is ALWAYS xstock_spot regardless of collision set.
+     if (XSTOCK_SPOT_DISPLAY.test(symbol)) return ASSET_CLASSES.XSTOCK_SPOT;
+-    // B79: explicit xstock_spot allow-list lookup. The canonical pair-universe
+-    // form for xStocks is `<TICKER>/<QUOTE>` (no x-suffix), which would
+-    // otherwise match CRYPTO_SPOT_KRAKEN_RAW_2 below. Membership-set lookup
+-    // is the conservative path — it cannot accidentally re-tag any crypto pair.
++
++    // B79.0f — collision gate. The 9 USD-quote (+ 8 EUR pre-emptive) tickers
++    // in XSTOCK_SPOT_KRAKEN_COLLISIONS exist BOTH as xStock equities AND as
++    // Kraken-spot cryptos with identical canonical form. When such a ticker
++    // arrives via the regular `kraken` exchange WITHOUT the disambiguating
++    // `x` suffix (which would have hit XSTOCK_SPOT_DISPLAY above), prefer
++    // crypto_spot. Reasoning: xStock ingestion uses `exchange='kraken-equities'`
++    // per B74 archiver invariant. A collision ticker on `kraken` without `x`
++    // suffix is by-construction crypto — the alternative would mean an
++    // xStock symbol lost its disambiguating marker in transit, which is
++    // itself a bug worth surfacing. Emit WARN log so any future drift in
++    // the B74 invariant is detectable, then return crypto_spot.
++    if (XSTOCK_SPOT_KRAKEN_COLLISIONS.has(symbol)) {
++      console.warn(
++        `[B79.0f][COLLISION_RESOLVE] symbol=${symbol} on exchange=kraken without x-suffix → resolving as crypto_spot. ` +
++        `If you expected xstock_spot, the caller should pass exchange='kraken-equities' or the display form (e.g. SUIx/USD). ` +
++        `Drift watch — see XSTOCK_SPOT_KRAKEN_COLLISIONS provenance comment.`,
++      );
++      return ASSET_CLASSES.CRYPTO_SPOT;
++    }
++
++    // B79: non-collision xstock_spot allow-list lookup. The canonical
++    // pair-universe form for xStocks is `<TICKER>/<QUOTE>` (no x-suffix),
++    // which would otherwise match CRYPTO_SPOT_KRAKEN_RAW_2 below. For
++    // tickers OUTSIDE the collision set, membership-set lookup is the
++    // conservative path — the ticker has no crypto counterpart on Kraken
++    // so no ambiguity exists.
+     if (XSTOCK_SPOT_SYMBOLS.has(symbol)) return ASSET_CLASSES.XSTOCK_SPOT;
+     // crypto_spot: canonical BASE/QUOTE (uppercase).
+     if (CRYPTO_SPOT_CANONICAL.test(symbol)) return ASSET_CLASSES.CRYPTO_SPOT;

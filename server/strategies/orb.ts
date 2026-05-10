@@ -16,12 +16,22 @@
  *   Q4: Confidence = clamp(0.65 + 0.20*min(range/atr, 3.0) + 0.10*(volMult-1), [0.55, 0.90]).
  *   Q5: Regime mapping = IMPULSE_EXPANSION + STRUCTURAL_TRANSITION (vol-discovery natural fits).
  *   Q6: Triple-defense asset-class guard: detect-internal + dispatch-block + SQE whitelist.
- *   Q7: B73 ablation registered now (n=0 OK; cleaner audit trail than retrofit).
+ *   Q7: B73 ablation auto-included — the replay-service (`exit-strategy-
+ *       replay-service.ts`) is strategy-agnostic; ORB trades flow through
+ *       automatically once `persistRealPriceTrade` runs with strategy='orb'.
+ *       No registration code required (Langston B79.0d Step 4 F2 confirmation).
  *
  * Layer-1 thresholds in module_constants `strategy.orb` (xstock_spot scope):
  *   open_range_minutes        = 30
  *   breakout_buffer_atr_mult  = 0.15
- *   risk_reward_ratio         = 2.0
+ *   risk_reward_ratio         = 2.0   (Langston B79.0d Step 4 F1: misnomer —
+ *                                      this is target-multiple-of-rangeHeight,
+ *                                      NOT realized R:R. Realized R:R drifts
+ *                                      ~1.3:1 because actual risk =
+ *                                      entry−rangeLow > rangeHeight once
+ *                                      breakout has cleared. Rename to
+ *                                      `target_range_multiple` queued via
+ *                                      RUNNING_ISSUES #90 for B79.x.)
  *   volume_multiple_min       = 1.5
  *   confidence_base           = 0.65
  *   range_atr_clamp_max       = 3.0  (Q4 nit lock)
@@ -46,7 +56,11 @@ const STRATEGY_KEY = 'orb';
 const LOG_PREFIX = '[B79.0d][ORB]';
 
 // Calendar-fixed UTC window constants (Q1+Q3 lock).
-const RTH_OPEN_HOUR_UTC = 14;       // 14:30 UTC = 09:30 ET (DST handles itself in winter)
+// 14:30 UTC = NYSE open in winter (EST UTC-5); 1h after NYSE open in summer
+// (EDT UTC-4 → NYSE opens 13:30 UTC). Calendar-fixed UTC chosen per Q1
+// (avoids per-symbol first-tick state); seasonal NYSE drift accepted as
+// Layer-1 noise to be calibrated in B79.x. (Langston B79.0d Step 4 F3 fix.)
+const RTH_OPEN_HOUR_UTC = 14;
 const RTH_OPEN_MINUTE_UTC = 30;
 const ACTIVE_WINDOW_END_HOUR_UTC = 17; // 17:00 UTC end of active breakout window
 
