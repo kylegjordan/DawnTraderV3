@@ -234,6 +234,19 @@ class XstockSpotScannerService {
         await new Promise((r) => setTimeout(r, HOSTILE_SIM_SLEEP_MS));
       }
 
+      // B79.0L: empty universe (during unified weekend close) — short-circuit
+      // before issuing the DB read. `IN ()` is a Postgres syntax error and
+      // there's no work to do anyway.
+      if (symbolList.length === 0) {
+        const cycleDurationMs = Date.now() - cycleStart;
+        this.diag.lastCycleDurationMs = cycleDurationMs;
+        this.diag.cyclesCompleted++;
+        this.diag.pairsScannedLastCycle = 0;
+        this.diag.pairsFreshLastCycle = 0;
+        this.diag.pairsStaleLastCycle = 0;
+        return;
+      }
+
       // Batched DB read — Langston rev 2 #1 commitment.
       const dbStart = Date.now();
       // Drizzle's sql template can't bind a JS array directly to PG ANY().
