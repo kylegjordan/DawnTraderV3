@@ -18,9 +18,9 @@
 
 ---
 
-## CURRENT STATE — 2026-05-10 (Phase 24 CLOSED + B79.0i.b SHIPPED — full Filter Diagnostics mirror)
+## CURRENT STATE — 2026-05-10 (Phase 24 CLOSED + B79.0i.b CLOSED — rich ablation tables + Filter Diagnostics mirror)
 
-**xstock_spot fully onboarded** + B79.0i.a (initial scanner+freshness panels) + B79.0i.b (EXPANDED per Kyle pushback to full Filter Diagnostics mirror + B73 + B67.0 ablation panels). PM2 #209 on `migration/aws-supabase` HEAD `cdbd2a04b`. G3 walkthrough verified all 5 sections render.
+**xstock_spot fully onboarded** + B79.0i.b (3-revision arc per Kyle pushbacks) shipped. xStocks tab now mirrors Filter Diagnostics in full + reuses the rich crypto ExitStrategyAblationSection + FactorCalibrationSection components via export+endpointBase prop. PM2 #210 on `migration/aws-supabase` HEAD `b9a1cdd4e`. G3 walkthrough verified rich tables render. "Shadow-mode" terminology removed per Kyle directive.
 
 **Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — post-Kyle-directive 2026-05-10, contains ONLY standing rules + procedural checklist. Trial-and-error history lives in per-batch completion reports, not the workflow doc.
 
@@ -65,7 +65,7 @@ Per Kyle pushback evening 2026-05-10, xStocks tab EXPANDED beyond the initial B7
 | B79.0e | `aca52acdc` | #206 | equity_*→xstock_* (172 DB objects) |
 | B79.0h | `963475be9` | n/a | Workflow + SIM/SYSTEM_MANUAL retrospective |
 | B79.0i.a | `c927924df` | #207 | xStocks tab (Phase 1: Panel A scanner-cycle + Panel E freshness + 2 new endpoints) |
-| B79.0i.b | `5dde28f52`+`cdbd2a04b` | #209 | xStocks tab EXPANDED to full Filter Diagnostics mirror + B73 + B67.0 ablation panels (Kyle pushback) |
+| B79.0i.b | `5dde28f52`+`cdbd2a04b`+`b9a1cdd4e` | #210 | xStocks tab: Filter Diagnostics mirror + rich ExitStrategyAblationSection + FactorCalibrationSection (reused via export+endpointBase prop). Aggregators parameterized with optional asset_class. "Shadow-mode" → "VTS Observation". |
 
 **Pending operator gates Sunday 2026-05-10/11:**
 - ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per checklist
