@@ -18,16 +18,25 @@
 
 ---
 
-## CURRENT STATE — 2026-05-09 night (B79.0c + B79.0d BOTH CLOSED on staging)
+## CURRENT STATE — 2026-05-10 (B79.0f+0g+0e ALL CLOSED; awaiting Sunday operator gates)
 
-**B79.0d CLOSED 2026-05-09 23:10 UTC.** ORB strategy real implementation for xstock_spot. Commits `16e0743c7` (impl) → `2e9006985` (display-name fix) → governance close pending. PM2 #203. CI Build+Docker green; Test 1086/59/5 (+10 new B79.0d cases passing, 59 baseline unchanged). DB seed applied: 7 thresholds + gate flipped TRUE. Triple-defense asset-class guard (detect+dispatch+SQE) + 24/7-name guard verified by tests. Langston Step 1 approved Q1-Q7 concur + 5 scope additions inline; Step 4 caught 3 findings (F1 R:R label drift → RUNNING_ISSUES #90; F2 B73-comment-vs-behavior → reconciled (replay is strategy-agnostic); F3 UTC↔ET DST comment corrected). Crypto no-touch fence: 22 emissions/factor/30min vs pre 3 (733% baseline; held). **First ORB signal expected Monday 2026-05-11 14:30 UTC** when 24/5 xstock_spot symbols start forming opening ranges.
+**B79.0e CLOSED 2026-05-10.** equity_*→xstock_* table rename. Commit `aca52acdc`. **172 DB objects renamed in single transaction** (4 parents + 52 partitions + 4 parent indexes + 108 partition indexes + 4 module_constants `data_lifecycle.equity_*.hot_retention_days` keys). 15 code files updated (Drizzle schema const + literals; archiver maps; scanner/freshness/storage-client/drift-aggregator/passive-archive-bootstrap/B74+B75 scripts/B79.0a scripts/test). Type aliases retained pointing at new consts (cosmetic modernization queued). Langston Step 4 F1: rollback symmetry — extended with reverse DO blocks + UPDATE.
 
-**B79.0c CLOSED 2026-05-09 22:38 UTC.** Per-symbol 24/7 xstock support. Commits `651540cd4` → `666812ca7` → `e37679ebc` (governance). PM2 #202. CI Build+Docker green; Test 1076/59/5 (baseline 59 unchanged; +18 new passing). Deploy verified: `/api/diagnostics/xstock-scanner` lastUniverseSize=10, lastArcaOpen=false. No-touch fence held. **Langston Step 4 caught real F1 regex bug** (greedy `[A-Z]+` + `i` flag + optional `x?` → silent fall-through); fix shipped. **WS-equities silent on weekends CONFIRMED** (RUNNING_ISSUES #89).
+**B79.0g CLOSED 2026-05-10.** Open VTS trade persistence per Langston Q4 lock from B79.0f review. Commits `6542dccb6` → `fb42335f7`. PM2 #205. New `vts_open_trades` table (hybrid 14 cols + jsonb context); new `vts-trade-persistence.ts` service (insert/delete/rehydrate/bootstrap); vts-runner trade-open AWAITS INSERT BEFORE Map.set per Langston F1 invert (no observer-divergence); trade-close fire-and-log DELETE (Q5 deviation tracked as B79.0g-tx in RUNNING_ISSUES #91 — full tx integration through persistRealPriceTrade affects B73+B70 hooks, deferred); rehydrate at boot (after loadTrailingStates, before scanner.start; soft-fail). Bootstrap-from-memory RE-RESOLVES asset_class — defeats stale legacy values from pre-B79.0f resolver (Langston Q4 add'l #1 critical lock).
 
-**Next sub-batches in queue:**
-- **B79.0e (low-priority)** — `equity_*` → `xstock_*` table rename. Cross-cutting schema rename. Sequence after operator gates clear.
-- **B79.x calibration sub-batch** — promote ORB Layer-1 placeholders + rename `risk_reward_ratio` → `target_range_multiple` (RUNNING_ISSUES #90).
-- **B79.x WS feed investigation** — Kraken Pro account / REST polling / support query for 24/7 names weekend silence (RUNNING_ISSUES #89).
+**B79.0f CLOSED 2026-05-10.** Asset-class collision disambiguation. Commit `e6fd7350f`. PM2 #204. Live bug: SUI/USD crypto displaying as xStock Spot. Root cause: 9 USD collision tickers (BDX, CVX, DASH, EDU, MET, OPEN, PEP, SUI, T) exist in BOTH Kraken xStocks + crypto. Resolver hardened with `XSTOCK_SPOT_KRAKEN_COLLISIONS` set + WARN log + provenance comment + quarterly re-audit standing rule. Backfilled 4862 mis-tagged rows in signal_eval_archive (DASH/USD 337 + MET/USD 1598 + OPEN/USD 44 + SUI/USD 2883). Other tables clean. Crypto no-touch fence held.
+
+**Pending operator gates (Sunday 2026-05-10 / 11):**
+- ~11:24 UTC: B79.TEC.b `break_even_enabled` wildcard DELETE
+- ~21:38 UTC: B79.0a SQE wildcards DELETE
+
+**Open follow-ups in RUNNING_ISSUES:** #89 Kraken WS-equities weekend silence, #90 ORB risk_reward_ratio rename, #91 B79.0g-tx (close-time tx integration through persistRealPriceTrade — affects B73+B70).
+
+**B79.0d CLOSED 2026-05-09 23:10 UTC.** ORB strategy real implementation. Commits `16e0743c7` → `2e9006985` → `13178e9b5`. PM2 #203. F1/F2/F3 doc fixes were LOST in commit cycle (Edit applied to working tree but never `git add`-ed); re-applied under B79.0f sha `e6fd7350f`. First ORB signal expected Monday 2026-05-11 14:30 UTC.
+
+**B79.0c CLOSED 2026-05-09 22:38 UTC.** Per-symbol 24/7 xstock support. Commits `651540cd4` → `666812ca7` → `e37679ebc`. Langston Step 4 caught regex bug; fix shipped. WS-equities silent weekends CONFIRMED (RUNNING_ISSUES #89).
+
+**B79.x calibration follow-ups in RUNNING_ISSUES:** #89 (Kraken WS-equities weekend silence — REST polling fallback or Kraken Pro investigation), #90 (rename ORB `risk_reward_ratio` → `target_range_multiple` per Langston B79.0d Step 4 F1).
 
 **B79.0e (queued, low-priority) — `equity_*` → `xstock_*` table rename.** Cross-cutting rename across schema, scripts, migrations, services. Sequence AFTER B79.0d.
 
