@@ -856,8 +856,8 @@ export async function computePassiveArchiveStatus(
   // Per-universe DB queries via raw SQL (3 OHLC + 3 ticker tables share
   // identical column shape; query each pair).
   const universeConfigs = [
-    { name: 'equity_spot' as const, ohlcTable: 'equity_spot_ohlc_1m', tickerTable: 'equity_spot_ticker_snap', stats: getEquitySpotStats() },
-    { name: 'equity_perp' as const, ohlcTable: 'equity_perp_ohlc_1m', tickerTable: 'equity_perp_ticker_snap', stats: getEquityPerpStats() },
+    { name: 'xstock_spot' as const, ohlcTable: 'xstock_spot_ohlc_1m', tickerTable: 'xstock_spot_ticker_snap', stats: getEquitySpotStats() },
+    { name: 'xstock_perp' as const, ohlcTable: 'xstock_perp_ohlc_1m', tickerTable: 'xstock_perp_ticker_snap', stats: getEquityPerpStats() },
     { name: 'crypto_spot' as const, ohlcTable: 'crypto_spot_ohlc_1m', tickerTable: 'crypto_spot_ticker_snap', stats: getCryptoSpotStats() },
   ];
 

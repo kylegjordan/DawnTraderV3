@@ -8,7 +8,7 @@
  * `module_constants` `(market_data, *, <assetClass>, *, *, data_freshness_window_ms)`.
  *
  * Per Langston Q2 lock (BATCH_79_0a_SCOPE.md §11): xstock_spot Day 1 value
- * empirically derived from `equity_spot_ticker_snap` p99 inter-tick gap on
+ * empirically derived from `xstock_spot_ticker_snap` p99 inter-tick gap on
  * a 6h sample (90,000 ms = max(p99_max + buffer, central_clock_interval)).
  *
  * Closed-market behavior: when the asset class is xstock_spot and the

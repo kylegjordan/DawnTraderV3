@@ -4593,9 +4593,9 @@ const ohlcColumns = {
   // (was 'equity_perp'). Per-archiver default set in migration.
   assetClass: text("asset_class").notNull(),
   // B69: exchange added for schema symmetry with live tables.
-  // crypto_spot_ohlc_1m + equity_spot_ohlc_1m default 'kraken' (and
+  // crypto_spot_ohlc_1m + xstock_spot_ohlc_1m default 'kraken' (and
   // 'kraken-equities' specifically for the equity-spot via ws-equities feed
-  // — per archiver insert). equity_perp_ohlc_1m defaults 'kraken-futures'.
+  // — per archiver insert). xstock_perp_ohlc_1m defaults 'kraken-futures'.
   exchange: text("exchange").notNull(),
   intervalBegin: timestamp("interval_begin", { withTimezone: true }).notNull(),
   open: numeric("open", { precision: 20, scale: 8 }).notNull(),
@@ -4609,12 +4609,16 @@ const ohlcColumns = {
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 } as const;
 
-export const equitySpotOhlc1m = pgTable("equity_spot_ohlc_1m", ohlcColumns, (table) => ({
-  symTimeIdx: index("equity_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+// B79.0e (2026-05-10): renamed from equity_*→xstock_* per B69 namespace
+// convention preserving equity_* for FUTURE real (non-tokenized) US equities.
+// Const exports kept identical names for transitional grep-hygiene; underlying
+// pgTable name + index name renamed to xstock_*.
+export const xstockSpotOhlc1m = pgTable("xstock_spot_ohlc_1m", ohlcColumns, (table) => ({
+  symTimeIdx: index("xstock_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
 }));
 
-export const equityPerpOhlc1m = pgTable("equity_perp_ohlc_1m", ohlcColumns, (table) => ({
-  symTimeIdx: index("equity_perp_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+export const xstockPerpOhlc1m = pgTable("xstock_perp_ohlc_1m", ohlcColumns, (table) => ({
+  symTimeIdx: index("xstock_perp_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
 }));
 
 export const cryptoSpotOhlc1m = pgTable("crypto_spot_ohlc_1m", ohlcColumns, (table) => ({
@@ -4634,7 +4638,7 @@ const tickerSnapColumns = {
   // B69 (2026-05-03): renamed from `universe` for single-source-of-truth
   // alignment with live tables. Same data, same partition routing semantics.
   assetClass: text("asset_class").notNull(),
-  // B69: exchange added for schema symmetry. equity_spot_ticker_snap
+  // B69: exchange added for schema symmetry. xstock_spot_ticker_snap
   // defaults 'kraken-equities' (separate WS endpoint), others 'kraken' or
   // 'kraken-futures' per archiver source.
   exchange: text("exchange").notNull(),
@@ -4657,28 +4661,31 @@ const tickerSnapColumns = {
   metadata: jsonb("metadata").notNull().default(sql`'{"schema_version": 1}'::jsonb`),
 } as const;
 
-export const equitySpotTickerSnap = pgTable("equity_spot_ticker_snap", tickerSnapColumns, (table) => ({
-  symTimeIdx: index("equity_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+export const xstockSpotTickerSnap = pgTable("xstock_spot_ticker_snap", tickerSnapColumns, (table) => ({
+  symTimeIdx: index("xstock_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
 }));
 
-export const equityPerpTickerSnap = pgTable("equity_perp_ticker_snap", tickerSnapColumns, (table) => ({
-  symTimeIdx: index("equity_perp_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+export const xstockPerpTickerSnap = pgTable("xstock_perp_ticker_snap", tickerSnapColumns, (table) => ({
+  symTimeIdx: index("xstock_perp_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
 }));
 
 export const cryptoSpotTickerSnap = pgTable("crypto_spot_ticker_snap", tickerSnapColumns, (table) => ({
   symTimeIdx: index("crypto_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
 }));
 
-// Type exports
-export type EquitySpotOhlc1m = typeof equitySpotOhlc1m.$inferSelect;
-export type InsertEquitySpotOhlc1m = typeof equitySpotOhlc1m.$inferInsert;
-export type EquityPerpOhlc1m = typeof equityPerpOhlc1m.$inferSelect;
-export type InsertEquityPerpOhlc1m = typeof equityPerpOhlc1m.$inferInsert;
+// Type exports — B79.0e renamed const refs from equity*→xstock*. Type names
+// kept (Equity*) to avoid touching every importer; the underlying inferred
+// shape is unchanged (table rename is metadata-only). Type-name modernization
+// queued as cosmetic follow-up.
+export type EquitySpotOhlc1m = typeof xstockSpotOhlc1m.$inferSelect;
+export type InsertEquitySpotOhlc1m = typeof xstockSpotOhlc1m.$inferInsert;
+export type EquityPerpOhlc1m = typeof xstockPerpOhlc1m.$inferSelect;
+export type InsertEquityPerpOhlc1m = typeof xstockPerpOhlc1m.$inferInsert;
 export type CryptoSpotOhlc1m = typeof cryptoSpotOhlc1m.$inferSelect;
 export type InsertCryptoSpotOhlc1m = typeof cryptoSpotOhlc1m.$inferInsert;
-export type EquitySpotTickerSnap = typeof equitySpotTickerSnap.$inferSelect;
-export type InsertEquitySpotTickerSnap = typeof equitySpotTickerSnap.$inferInsert;
-export type EquityPerpTickerSnap = typeof equityPerpTickerSnap.$inferSelect;
-export type InsertEquityPerpTickerSnap = typeof equityPerpTickerSnap.$inferInsert;
+export type EquitySpotTickerSnap = typeof xstockSpotTickerSnap.$inferSelect;
+export type InsertEquitySpotTickerSnap = typeof xstockSpotTickerSnap.$inferInsert;
+export type EquityPerpTickerSnap = typeof xstockPerpTickerSnap.$inferSelect;
+export type InsertEquityPerpTickerSnap = typeof xstockPerpTickerSnap.$inferInsert;
 export type CryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferSelect;
 export type InsertCryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferInsert;

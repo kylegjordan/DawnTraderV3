@@ -117,7 +117,7 @@ async function runXstockDryCycle(cycleNumber: number): Promise<DbRoundtripSample
       symbol::text AS symbol,
       last::text AS price,
       captured_at AS "capturedAt"
-    FROM equity_spot_ticker_snap
+    FROM xstock_spot_ticker_snap
     WHERE captured_at > NOW() - INTERVAL '5 minutes'
       AND symbol IN (${sql.raw(symbolListSql)})
     ORDER BY symbol, captured_at DESC

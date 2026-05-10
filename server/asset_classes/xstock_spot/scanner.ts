@@ -12,7 +12,7 @@
  * trading scanner. Per cycle:
  *   1. Market-open gate (`isXstockMarketOpenUTC`) — short-circuit if closed.
  *   2. Batched DB read of latest ticker prices for ALL xstock_spot symbols
- *      from `equity_spot_ticker_snap` (single round-trip, Langston rev 2 #1).
+ *      from `xstock_spot_ticker_snap` (single round-trip, Langston rev 2 #1).
  *   3. Per-pair freshness gate via `isPairDataFresh` (window=90s for Day 1,
  *      empirical p99 + buffer per Langston Q2).
  *   4. Update xstock TelemetryAggregator instance counters (cycle count,
@@ -230,7 +230,7 @@ class XstockSpotScannerService {
           symbol::text AS symbol,
           last::text AS price,
           captured_at AS "capturedAt"
-        FROM equity_spot_ticker_snap
+        FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes'
           AND symbol IN (${sql.raw(symbolListSql)})
         ORDER BY symbol, captured_at DESC
@@ -241,7 +241,7 @@ class XstockSpotScannerService {
       // silently iterating over a non-array.
       const rawRows = (result as any).rows ?? (result as unknown as TickerSnapRow[]);
       if (!Array.isArray(rawRows)) {
-        throw new Error(`[B79.0a] equity_spot_ticker_snap query returned non-array shape; got ${typeof rawRows}`);
+        throw new Error(`[B79.0a] xstock_spot_ticker_snap query returned non-array shape; got ${typeof rawRows}`);
       }
       const rows = rawRows;
 

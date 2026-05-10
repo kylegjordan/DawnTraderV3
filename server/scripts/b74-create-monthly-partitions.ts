@@ -26,11 +26,11 @@ import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
 
 const SIX_TABLES = [
-  'equity_spot_ohlc_1m',
-  'equity_perp_ohlc_1m',
+  'xstock_spot_ohlc_1m',
+  'xstock_perp_ohlc_1m',
   'crypto_spot_ohlc_1m',
-  'equity_spot_ticker_snap',
-  'equity_perp_ticker_snap',
+  'xstock_spot_ticker_snap',
+  'xstock_perp_ticker_snap',
   'crypto_spot_ticker_snap',
 ] as const;
 

@@ -9,7 +9,7 @@
  *
  * Usage:
  *   npx tsx server/scripts/b75-rehydrate.ts \
- *     --table equity_spot_ohlc_1m \
+ *     --table xstock_spot_ohlc_1m \
  *     --from 2025-12-01 \
  *     --to   2026-02-28 \
  *     --out  /tmp/rehydrated/ \

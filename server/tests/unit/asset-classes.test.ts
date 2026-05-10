@@ -69,10 +69,10 @@ describe('B69 asset class registry', () => {
     expect(isValidAssetClass('')).toBe(false);
   });
 
-  it('archive table mappings align with B74', () => {
+  it('archive table mappings align with B74 + B79.0e rename', () => {
     expect(ASSET_CLASS_REGISTRY.crypto_spot.archiveOhlcTable).toBe('crypto_spot_ohlc_1m');
-    expect(ASSET_CLASS_REGISTRY.xstock_spot.archiveOhlcTable).toBe('equity_spot_ohlc_1m');
-    expect(ASSET_CLASS_REGISTRY.xstock_perp.archiveOhlcTable).toBe('equity_perp_ohlc_1m');
+    expect(ASSET_CLASS_REGISTRY.xstock_spot.archiveOhlcTable).toBe('xstock_spot_ohlc_1m');
+    expect(ASSET_CLASS_REGISTRY.xstock_perp.archiveOhlcTable).toBe('xstock_perp_ohlc_1m');
   });
 });
 

@@ -14,8 +14,8 @@
 
 import { db } from '../../db.js';
 import {
-  equitySpotTickerSnap,
-  equityPerpTickerSnap,
+  xstockSpotTickerSnap,
+  xstockPerpTickerSnap,
   cryptoSpotTickerSnap,
   type InsertEquitySpotTickerSnap,
 } from '../../../shared/schema.js';
@@ -27,10 +27,10 @@ const MAX_CONCURRENT_INSERTS = 2;
 const DEFAULT_THROTTLE_MS = 1_000;
 
 // B69: renamed from tickerTableForUniverse. Drizzle table objects retain legacy
-// names (equitySpotTickerSnap etc.) but the routing key is now the asset class ID.
+// names (xstockSpotTickerSnap etc., post-B79.0e) and the routing key is the asset class ID.
 const tickerTableForAssetClass = {
-  xstock_spot: equitySpotTickerSnap,
-  xstock_perp: equityPerpTickerSnap,
+  xstock_spot: xstockSpotTickerSnap,
+  xstock_perp: xstockPerpTickerSnap,
   crypto_spot: cryptoSpotTickerSnap,
 } as const;
 

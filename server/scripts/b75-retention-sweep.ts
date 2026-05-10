@@ -40,11 +40,11 @@ interface B74TableSpec {
 }
 
 const B74_TABLES: B74TableSpec[] = [
-  { parent: 'equity_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'equity_spot_ticker_snap.hot_retention_days' },
-  { parent: 'equity_perp_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'equity_perp_ticker_snap.hot_retention_days' },
+  { parent: 'xstock_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_spot_ticker_snap.hot_retention_days' },
+  { parent: 'xstock_perp_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_perp_ticker_snap.hot_retention_days' },
   { parent: 'crypto_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'crypto_spot_ticker_snap.hot_retention_days' },
-  { parent: 'equity_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'equity_spot_ohlc_1m.hot_retention_days' },
-  { parent: 'equity_perp_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'equity_perp_ohlc_1m.hot_retention_days' },
+  { parent: 'xstock_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'xstock_spot_ohlc_1m.hot_retention_days' },
+  { parent: 'xstock_perp_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'xstock_perp_ohlc_1m.hot_retention_days' },
   { parent: 'crypto_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'crypto_spot_ohlc_1m.hot_retention_days' },
 ];
 

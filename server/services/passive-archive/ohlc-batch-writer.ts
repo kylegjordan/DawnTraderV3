@@ -19,8 +19,8 @@
 
 import { db } from '../../db.js';
 import {
-  equitySpotOhlc1m,
-  equityPerpOhlc1m,
+  xstockSpotOhlc1m,
+  xstockPerpOhlc1m,
   cryptoSpotOhlc1m,
   type InsertEquitySpotOhlc1m,
 } from '../../../shared/schema.js';
@@ -37,8 +37,8 @@ export type ArchiveAssetClass = 'xstock_spot' | 'xstock_perp' | 'crypto_spot';
 export type Universe = ArchiveAssetClass;
 
 const tableForAssetClass = {
-  xstock_spot: equitySpotOhlc1m,   // legacy table name retained
-  xstock_perp: equityPerpOhlc1m,   // legacy table name retained
+  xstock_spot: xstockSpotOhlc1m,
+  xstock_perp: xstockPerpOhlc1m,
   crypto_spot: cryptoSpotOhlc1m,
 } as const;
 

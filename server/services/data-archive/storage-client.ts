@@ -94,7 +94,7 @@ export class StorageClient {
    * payload for the caller to record in the manifest.
    *
    * @param bucket  e.g. 'dt-archive'
-   * @param path    e.g. 'warm/equity_spot_ticker_snap/2026-05.jsonl.gz'
+   * @param path    e.g. 'warm/xstock_spot_ticker_snap/2026-05.jsonl.gz'
    * @param data    full payload buffer (caller pre-buffers — we don't stream
    *                in v1 since Supabase REST upload accepts up to 50 MB per
    *                call; larger archives use uploadMultipart below)

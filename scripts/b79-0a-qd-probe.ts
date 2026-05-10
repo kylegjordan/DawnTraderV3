@@ -11,7 +11,7 @@
  * spread distribution we'll model friction against in B79.x.
  *
  * For each ticker:
- *   - Read latest xstock spot price from `equity_spot_ticker_snap` (kraken-equities)
+ *   - Read latest xstock spot price from `xstock_spot_ticker_snap` (kraken-equities)
  *   - Fetch underlying equity price via Yahoo Finance HTTP
  *   - Compute (xstock - underlying) / underlying → percentage delta
  *
@@ -98,7 +98,7 @@ async function runProbe(): Promise<void> {
     try {
       const result = await db.execute<TickerSnapRow>(sql`
         SELECT symbol::text AS symbol, last::text AS price, captured_at AS "capturedAt"
-        FROM equity_spot_ticker_snap
+        FROM xstock_spot_ticker_snap
         WHERE symbol = ${ticker}
         ORDER BY captured_at DESC
         LIMIT 1

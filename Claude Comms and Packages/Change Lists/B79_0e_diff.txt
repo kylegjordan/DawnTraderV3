@@ -1,0 +1,468 @@
+diff --git a/drizzle/migrations/2026-05-10-b79-0e-rename-equity-to-xstock-rollback.sql b/drizzle/migrations/2026-05-10-b79-0e-rename-equity-to-xstock-rollback.sql
+new file mode 100644
+index 000000000..1766a4351
+--- /dev/null
++++ b/drizzle/migrations/2026-05-10-b79-0e-rename-equity-to-xstock-rollback.sql
+@@ -0,0 +1,15 @@
++-- B79.0e rollback — reverse-rename xstock_*→equity_*.
++
++BEGIN;
++
++ALTER TABLE xstock_spot_ohlc_1m       RENAME TO equity_spot_ohlc_1m;
++ALTER TABLE xstock_spot_ticker_snap   RENAME TO equity_spot_ticker_snap;
++ALTER TABLE xstock_perp_ohlc_1m       RENAME TO equity_perp_ohlc_1m;
++ALTER TABLE xstock_perp_ticker_snap   RENAME TO equity_perp_ticker_snap;
++
++ALTER INDEX xstock_spot_ohlc_1m_sym_time     RENAME TO equity_spot_ohlc_1m_sym_time;
++ALTER INDEX xstock_spot_ticker_snap_sym_time RENAME TO equity_spot_ticker_snap_sym_time;
++ALTER INDEX xstock_perp_ohlc_1m_sym_time     RENAME TO equity_perp_ohlc_1m_sym_time;
++ALTER INDEX xstock_perp_ticker_snap_sym_time RENAME TO equity_perp_ticker_snap_sym_time;
++
++COMMIT;
+diff --git a/drizzle/migrations/2026-05-10-b79-0e-rename-equity-to-xstock.sql b/drizzle/migrations/2026-05-10-b79-0e-rename-equity-to-xstock.sql
+new file mode 100644
+index 000000000..9459d6230
+--- /dev/null
++++ b/drizzle/migrations/2026-05-10-b79-0e-rename-equity-to-xstock.sql
+@@ -0,0 +1,71 @@
++-- B79.0e — Rename equity_*→xstock_* archive tables + indexes + partitions.
++--
++-- B69 retagged asset_class field VALUES from equity_spot→xstock_spot but the
++-- DB TABLES kept legacy equity_* names. This violates B69's namespace
++-- convention which preserves equity_* for FUTURE real (non-tokenized) US
++-- equity feeds.
++--
++-- ALTER TABLE RENAME is metadata-only — no data copy on 1.2M+ rows.
++-- Sub-second AccessExclusiveLock; live archiver buffers absorb the gap.
++--
++-- Includes:
++--   - 4 parent table renames
++--   - All partition children (52 on staging at apply time)
++--   - All indexes on parents + partitions (~112 on staging at apply time)
++--   - module_constants retention key renames
++
++BEGIN;
++
++-- 1. Parent tables
++ALTER TABLE equity_spot_ohlc_1m       RENAME TO xstock_spot_ohlc_1m;
++ALTER TABLE equity_spot_ticker_snap   RENAME TO xstock_spot_ticker_snap;
++ALTER TABLE equity_perp_ohlc_1m       RENAME TO xstock_perp_ohlc_1m;
++ALTER TABLE equity_perp_ticker_snap   RENAME TO xstock_perp_ticker_snap;
++
++-- 2. Parent-level indexes (partition children inherit no indexes by name in PG —
++-- each partition has its own index whose name we sweep below).
++ALTER INDEX equity_spot_ohlc_1m_sym_time     RENAME TO xstock_spot_ohlc_1m_sym_time;
++ALTER INDEX equity_spot_ticker_snap_sym_time RENAME TO xstock_spot_ticker_snap_sym_time;
++ALTER INDEX equity_perp_ohlc_1m_sym_time     RENAME TO xstock_perp_ohlc_1m_sym_time;
++ALTER INDEX equity_perp_ticker_snap_sym_time RENAME TO xstock_perp_ticker_snap_sym_time;
++
++-- 3. Partition children (auto-discover and rename anything still named equity_*).
++DO $$
++DECLARE
++  r RECORD;
++  new_name TEXT;
++BEGIN
++  FOR r IN SELECT tablename FROM pg_tables WHERE tablename LIKE 'equity\_%' ESCAPE '\' LOOP
++    new_name := REPLACE(r.tablename, 'equity_', 'xstock_');
++    EXECUTE format('ALTER TABLE %I RENAME TO %I', r.tablename, new_name);
++  END LOOP;
++END
++$$;
++
++-- 4. All indexes (parents + partitions).
++DO $$
++DECLARE
++  r RECORD;
++  new_name TEXT;
++BEGIN
++  FOR r IN SELECT indexname FROM pg_indexes WHERE indexname LIKE 'equity\_%' ESCAPE '\' LOOP
++    new_name := REPLACE(r.indexname, 'equity_', 'xstock_');
++    EXECUTE format('ALTER INDEX %I RENAME TO %I', r.indexname, new_name);
++  END LOOP;
++END
++$$;
++
++-- 5. module_constants retention keys (data_lifecycle module).
++UPDATE module_constants
++SET constant_name = REPLACE(constant_name, 'equity_', 'xstock_'),
++    updated_at = NOW(),
++    updated_by = 'b79.0e-rename'
++WHERE module_name = 'data_lifecycle'
++  AND constant_name LIKE 'equity\_%' ESCAPE '\';
++
++COMMIT;
++
++-- Verification:
++-- SELECT COUNT(*) FROM pg_tables WHERE tablename LIKE 'equity_%';   -- expect 0
++-- SELECT COUNT(*) FROM pg_indexes WHERE indexname LIKE 'equity_%';  -- expect 0
++-- SELECT constant_name FROM module_constants WHERE module_name='data_lifecycle' AND constant_name LIKE 'equity%';  -- expect 0
+diff --git a/scripts/b79-0a-load-test.ts b/scripts/b79-0a-load-test.ts
+index b4e019270..be006c8e0 100644
+--- a/scripts/b79-0a-load-test.ts
++++ b/scripts/b79-0a-load-test.ts
+@@ -117,7 +117,7 @@ async function runXstockDryCycle(cycleNumber: number): Promise<DbRoundtripSample
+       symbol::text AS symbol,
+       last::text AS price,
+       captured_at AS "capturedAt"
+-    FROM equity_spot_ticker_snap
++    FROM xstock_spot_ticker_snap
+     WHERE captured_at > NOW() - INTERVAL '5 minutes'
+       AND symbol IN (${sql.raw(symbolListSql)})
+     ORDER BY symbol, captured_at DESC
+diff --git a/scripts/b79-0a-qd-probe.ts b/scripts/b79-0a-qd-probe.ts
+index a73303162..c92211a9a 100644
+--- a/scripts/b79-0a-qd-probe.ts
++++ b/scripts/b79-0a-qd-probe.ts
+@@ -11,7 +11,7 @@
+  * spread distribution we'll model friction against in B79.x.
+  *
+  * For each ticker:
+- *   - Read latest xstock spot price from `equity_spot_ticker_snap` (kraken-equities)
++ *   - Read latest xstock spot price from `xstock_spot_ticker_snap` (kraken-equities)
+  *   - Fetch underlying equity price via Yahoo Finance HTTP
+  *   - Compute (xstock - underlying) / underlying → percentage delta
+  *
+@@ -98,7 +98,7 @@ async function runProbe(): Promise<void> {
+     try {
+       const result = await db.execute<TickerSnapRow>(sql`
+         SELECT symbol::text AS symbol, last::text AS price, captured_at AS "capturedAt"
+-        FROM equity_spot_ticker_snap
++        FROM xstock_spot_ticker_snap
+         WHERE symbol = ${ticker}
+         ORDER BY captured_at DESC
+         LIMIT 1
+diff --git a/server/asset_classes/xstock_spot/scanner.ts b/server/asset_classes/xstock_spot/scanner.ts
+index 30583d524..0f776c4ce 100644
+--- a/server/asset_classes/xstock_spot/scanner.ts
++++ b/server/asset_classes/xstock_spot/scanner.ts
+@@ -12,7 +12,7 @@
+  * trading scanner. Per cycle:
+  *   1. Market-open gate (`isXstockMarketOpenUTC`) — short-circuit if closed.
+  *   2. Batched DB read of latest ticker prices for ALL xstock_spot symbols
+- *      from `equity_spot_ticker_snap` (single round-trip, Langston rev 2 #1).
++ *      from `xstock_spot_ticker_snap` (single round-trip, Langston rev 2 #1).
+  *   3. Per-pair freshness gate via `isPairDataFresh` (window=90s for Day 1,
+  *      empirical p99 + buffer per Langston Q2).
+  *   4. Update xstock TelemetryAggregator instance counters (cycle count,
+@@ -230,7 +230,7 @@ class XstockSpotScannerService {
+           symbol::text AS symbol,
+           last::text AS price,
+           captured_at AS "capturedAt"
+-        FROM equity_spot_ticker_snap
++        FROM xstock_spot_ticker_snap
+         WHERE captured_at > NOW() - INTERVAL '5 minutes'
+           AND symbol IN (${sql.raw(symbolListSql)})
+         ORDER BY symbol, captured_at DESC
+@@ -241,7 +241,7 @@ class XstockSpotScannerService {
+       // silently iterating over a non-array.
+       const rawRows = (result as any).rows ?? (result as unknown as TickerSnapRow[]);
+       if (!Array.isArray(rawRows)) {
+-        throw new Error(`[B79.0a] equity_spot_ticker_snap query returned non-array shape; got ${typeof rawRows}`);
++        throw new Error(`[B79.0a] xstock_spot_ticker_snap query returned non-array shape; got ${typeof rawRows}`);
+       }
+       const rows = rawRows;
+ 
+diff --git a/server/scripts/b74-create-monthly-partitions.ts b/server/scripts/b74-create-monthly-partitions.ts
+index 49de38277..7e0e616a5 100644
+--- a/server/scripts/b74-create-monthly-partitions.ts
++++ b/server/scripts/b74-create-monthly-partitions.ts
+@@ -26,11 +26,11 @@ import { db } from '../db.js';
+ import { sql } from 'drizzle-orm';
+ 
+ const SIX_TABLES = [
+-  'equity_spot_ohlc_1m',
+-  'equity_perp_ohlc_1m',
++  'xstock_spot_ohlc_1m',
++  'xstock_perp_ohlc_1m',
+   'crypto_spot_ohlc_1m',
+-  'equity_spot_ticker_snap',
+-  'equity_perp_ticker_snap',
++  'xstock_spot_ticker_snap',
++  'xstock_perp_ticker_snap',
+   'crypto_spot_ticker_snap',
+ ] as const;
+ 
+diff --git a/server/scripts/b75-rehydrate.ts b/server/scripts/b75-rehydrate.ts
+index a130663a4..964e2eadd 100644
+--- a/server/scripts/b75-rehydrate.ts
++++ b/server/scripts/b75-rehydrate.ts
+@@ -9,7 +9,7 @@
+  *
+  * Usage:
+  *   npx tsx server/scripts/b75-rehydrate.ts \
+- *     --table equity_spot_ohlc_1m \
++ *     --table xstock_spot_ohlc_1m \
+  *     --from 2025-12-01 \
+  *     --to   2026-02-28 \
+  *     --out  /tmp/rehydrated/ \
+diff --git a/server/scripts/b75-retention-sweep.ts b/server/scripts/b75-retention-sweep.ts
+index bc3fb5269..452e0cf54 100644
+--- a/server/scripts/b75-retention-sweep.ts
++++ b/server/scripts/b75-retention-sweep.ts
+@@ -40,11 +40,11 @@ interface B74TableSpec {
+ }
+ 
+ const B74_TABLES: B74TableSpec[] = [
+-  { parent: 'equity_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'equity_spot_ticker_snap.hot_retention_days' },
+-  { parent: 'equity_perp_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'equity_perp_ticker_snap.hot_retention_days' },
++  { parent: 'xstock_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_spot_ticker_snap.hot_retention_days' },
++  { parent: 'xstock_perp_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_perp_ticker_snap.hot_retention_days' },
+   { parent: 'crypto_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'crypto_spot_ticker_snap.hot_retention_days' },
+-  { parent: 'equity_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'equity_spot_ohlc_1m.hot_retention_days' },
+-  { parent: 'equity_perp_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'equity_perp_ohlc_1m.hot_retention_days' },
++  { parent: 'xstock_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'xstock_spot_ohlc_1m.hot_retention_days' },
++  { parent: 'xstock_perp_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'xstock_perp_ohlc_1m.hot_retention_days' },
+   { parent: 'crypto_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'crypto_spot_ohlc_1m.hot_retention_days' },
+ ];
+ 
+diff --git a/server/services/data-archive/storage-client.ts b/server/services/data-archive/storage-client.ts
+index f731f89fe..44bf528f6 100644
+--- a/server/services/data-archive/storage-client.ts
++++ b/server/services/data-archive/storage-client.ts
+@@ -94,7 +94,7 @@ export class StorageClient {
+    * payload for the caller to record in the manifest.
+    *
+    * @param bucket  e.g. 'dt-archive'
+-   * @param path    e.g. 'warm/equity_spot_ticker_snap/2026-05.jsonl.gz'
++   * @param path    e.g. 'warm/xstock_spot_ticker_snap/2026-05.jsonl.gz'
+    * @param data    full payload buffer (caller pre-buffers — we don't stream
+    *                in v1 since Supabase REST upload accepts up to 50 MB per
+    *                call; larger archives use uploadMultipart below)
+diff --git a/server/services/drift-dashboard-aggregator.ts b/server/services/drift-dashboard-aggregator.ts
+index e2cb66207..b9a244c25 100644
+--- a/server/services/drift-dashboard-aggregator.ts
++++ b/server/services/drift-dashboard-aggregator.ts
+@@ -856,8 +856,8 @@ export async function computePassiveArchiveStatus(
+   // Per-universe DB queries via raw SQL (3 OHLC + 3 ticker tables share
+   // identical column shape; query each pair).
+   const universeConfigs = [
+-    { name: 'equity_spot' as const, ohlcTable: 'equity_spot_ohlc_1m', tickerTable: 'equity_spot_ticker_snap', stats: getEquitySpotStats() },
+-    { name: 'equity_perp' as const, ohlcTable: 'equity_perp_ohlc_1m', tickerTable: 'equity_perp_ticker_snap', stats: getEquityPerpStats() },
++    { name: 'xstock_spot' as const, ohlcTable: 'xstock_spot_ohlc_1m', tickerTable: 'xstock_spot_ticker_snap', stats: getEquitySpotStats() },
++    { name: 'xstock_perp' as const, ohlcTable: 'xstock_perp_ohlc_1m', tickerTable: 'xstock_perp_ticker_snap', stats: getEquityPerpStats() },
+     { name: 'crypto_spot' as const, ohlcTable: 'crypto_spot_ohlc_1m', tickerTable: 'crypto_spot_ticker_snap', stats: getCryptoSpotStats() },
+   ];
+ 
+diff --git a/server/services/passive-archive/ohlc-batch-writer.ts b/server/services/passive-archive/ohlc-batch-writer.ts
+index ad6fd9108..98e7749f7 100644
+--- a/server/services/passive-archive/ohlc-batch-writer.ts
++++ b/server/services/passive-archive/ohlc-batch-writer.ts
+@@ -19,8 +19,8 @@
+ 
+ import { db } from '../../db.js';
+ import {
+-  equitySpotOhlc1m,
+-  equityPerpOhlc1m,
++  xstockSpotOhlc1m,
++  xstockPerpOhlc1m,
+   cryptoSpotOhlc1m,
+   type InsertEquitySpotOhlc1m,
+ } from '../../../shared/schema.js';
+@@ -37,8 +37,8 @@ export type ArchiveAssetClass = 'xstock_spot' | 'xstock_perp' | 'crypto_spot';
+ export type Universe = ArchiveAssetClass;
+ 
+ const tableForAssetClass = {
+-  xstock_spot: equitySpotOhlc1m,   // legacy table name retained
+-  xstock_perp: equityPerpOhlc1m,   // legacy table name retained
++  xstock_spot: xstockSpotOhlc1m,
++  xstock_perp: xstockPerpOhlc1m,
+   crypto_spot: cryptoSpotOhlc1m,
+ } as const;
+ 
+diff --git a/server/services/passive-archive/ticker-batch-writer.ts b/server/services/passive-archive/ticker-batch-writer.ts
+index 7ae5d7e79..91410e1db 100644
+--- a/server/services/passive-archive/ticker-batch-writer.ts
++++ b/server/services/passive-archive/ticker-batch-writer.ts
+@@ -14,8 +14,8 @@
+ 
+ import { db } from '../../db.js';
+ import {
+-  equitySpotTickerSnap,
+-  equityPerpTickerSnap,
++  xstockSpotTickerSnap,
++  xstockPerpTickerSnap,
+   cryptoSpotTickerSnap,
+   type InsertEquitySpotTickerSnap,
+ } from '../../../shared/schema.js';
+@@ -27,10 +27,10 @@ const MAX_CONCURRENT_INSERTS = 2;
+ const DEFAULT_THROTTLE_MS = 1_000;
+ 
+ // B69: renamed from tickerTableForUniverse. Drizzle table objects retain legacy
+-// names (equitySpotTickerSnap etc.) but the routing key is now the asset class ID.
++// names (xstockSpotTickerSnap etc., post-B79.0e) and the routing key is the asset class ID.
+ const tickerTableForAssetClass = {
+-  xstock_spot: equitySpotTickerSnap,
+-  xstock_perp: equityPerpTickerSnap,
++  xstock_spot: xstockSpotTickerSnap,
++  xstock_perp: xstockPerpTickerSnap,
+   crypto_spot: cryptoSpotTickerSnap,
+ } as const;
+ 
+diff --git a/server/startup/passive-archive-bootstrap.ts b/server/startup/passive-archive-bootstrap.ts
+index 29f5d23fa..f0af28732 100644
+--- a/server/startup/passive-archive-bootstrap.ts
++++ b/server/startup/passive-archive-bootstrap.ts
+@@ -31,11 +31,11 @@ import { db } from '../db.js';
+ import { sql } from 'drizzle-orm';
+ 
+ const SIX_TABLES = [
+-  'equity_spot_ohlc_1m',
+-  'equity_perp_ohlc_1m',
++  'xstock_spot_ohlc_1m',
++  'xstock_perp_ohlc_1m',
+   'crypto_spot_ohlc_1m',
+-  'equity_spot_ticker_snap',
+-  'equity_perp_ticker_snap',
++  'xstock_spot_ticker_snap',
++  'xstock_perp_ticker_snap',
+   'crypto_spot_ticker_snap',
+ ];
+ 
+diff --git a/server/tests/unit/asset-classes.test.ts b/server/tests/unit/asset-classes.test.ts
+index 8e12c9654..ac7aff083 100644
+--- a/server/tests/unit/asset-classes.test.ts
++++ b/server/tests/unit/asset-classes.test.ts
+@@ -69,10 +69,10 @@ describe('B69 asset class registry', () => {
+     expect(isValidAssetClass('')).toBe(false);
+   });
+ 
+-  it('archive table mappings align with B74', () => {
++  it('archive table mappings align with B74 + B79.0e rename', () => {
+     expect(ASSET_CLASS_REGISTRY.crypto_spot.archiveOhlcTable).toBe('crypto_spot_ohlc_1m');
+-    expect(ASSET_CLASS_REGISTRY.xstock_spot.archiveOhlcTable).toBe('equity_spot_ohlc_1m');
+-    expect(ASSET_CLASS_REGISTRY.xstock_perp.archiveOhlcTable).toBe('equity_perp_ohlc_1m');
++    expect(ASSET_CLASS_REGISTRY.xstock_spot.archiveOhlcTable).toBe('xstock_spot_ohlc_1m');
++    expect(ASSET_CLASS_REGISTRY.xstock_perp.archiveOhlcTable).toBe('xstock_perp_ohlc_1m');
+   });
+ });
+ 
+diff --git a/server/utils/data-freshness.ts b/server/utils/data-freshness.ts
+index f6ec7bcb4..b0adfa67a 100644
+--- a/server/utils/data-freshness.ts
++++ b/server/utils/data-freshness.ts
+@@ -8,7 +8,7 @@
+  * `module_constants` `(market_data, *, <assetClass>, *, *, data_freshness_window_ms)`.
+  *
+  * Per Langston Q2 lock (BATCH_79_0a_SCOPE.md §11): xstock_spot Day 1 value
+- * empirically derived from `equity_spot_ticker_snap` p99 inter-tick gap on
++ * empirically derived from `xstock_spot_ticker_snap` p99 inter-tick gap on
+  * a 6h sample (90,000 ms = max(p99_max + buffer, central_clock_interval)).
+  *
+  * Closed-market behavior: when the asset class is xstock_spot and the
+diff --git a/shared/asset-classes.ts b/shared/asset-classes.ts
+index 35627e437..0a2fa1334 100644
+--- a/shared/asset-classes.ts
++++ b/shared/asset-classes.ts
+@@ -89,8 +89,8 @@ export const ASSET_CLASS_REGISTRY: Record<AssetClass, AssetClassMeta> = {
+     displayName: 'xStock Spot',
+     defaultExchange: 'kraken-equities',
+     active: true,
+-    archiveOhlcTable: 'equity_spot_ohlc_1m',     // legacy table name retained from B74
+-    archiveTickerTable: 'equity_spot_ticker_snap',
++    archiveOhlcTable: 'xstock_spot_ohlc_1m',     // B79.0e renamed from equity_spot_*
++    archiveTickerTable: 'xstock_spot_ticker_snap',
+     badgeColor: 'bg-blue-100 text-blue-800',
+     description: 'Tokenized equity (Backed Finance xStock) on Kraken spot (ws-equities.kraken.com)',
+   },
+@@ -99,8 +99,8 @@ export const ASSET_CLASS_REGISTRY: Record<AssetClass, AssetClassMeta> = {
+     displayName: 'xStock Perp',
+     defaultExchange: 'kraken-futures',
+     active: true,
+-    archiveOhlcTable: 'equity_perp_ohlc_1m',     // legacy table name retained from B74
+-    archiveTickerTable: 'equity_perp_ticker_snap',
++    archiveOhlcTable: 'xstock_perp_ohlc_1m',     // B79.0e renamed from equity_perp_*
++    archiveTickerTable: 'xstock_perp_ticker_snap',
+     badgeColor: 'bg-indigo-100 text-indigo-800',
+     description: 'Tokenized equity perpetual swap (PF_*XUSD on Kraken Futures)',
+   },
+diff --git a/shared/schema.ts b/shared/schema.ts
+index 2c827ff6c..4079d22ab 100644
+--- a/shared/schema.ts
++++ b/shared/schema.ts
+@@ -4593,9 +4593,9 @@ const ohlcColumns = {
+   // (was 'equity_perp'). Per-archiver default set in migration.
+   assetClass: text("asset_class").notNull(),
+   // B69: exchange added for schema symmetry with live tables.
+-  // crypto_spot_ohlc_1m + equity_spot_ohlc_1m default 'kraken' (and
++  // crypto_spot_ohlc_1m + xstock_spot_ohlc_1m default 'kraken' (and
+   // 'kraken-equities' specifically for the equity-spot via ws-equities feed
+-  // — per archiver insert). equity_perp_ohlc_1m defaults 'kraken-futures'.
++  // — per archiver insert). xstock_perp_ohlc_1m defaults 'kraken-futures'.
+   exchange: text("exchange").notNull(),
+   intervalBegin: timestamp("interval_begin", { withTimezone: true }).notNull(),
+   open: numeric("open", { precision: 20, scale: 8 }).notNull(),
+@@ -4609,12 +4609,16 @@ const ohlcColumns = {
+   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+ } as const;
+ 
+-export const equitySpotOhlc1m = pgTable("equity_spot_ohlc_1m", ohlcColumns, (table) => ({
+-  symTimeIdx: index("equity_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
++// B79.0e (2026-05-10): renamed from equity_*→xstock_* per B69 namespace
++// convention preserving equity_* for FUTURE real (non-tokenized) US equities.
++// Const exports kept identical names for transitional grep-hygiene; underlying
++// pgTable name + index name renamed to xstock_*.
++export const xstockSpotOhlc1m = pgTable("xstock_spot_ohlc_1m", ohlcColumns, (table) => ({
++  symTimeIdx: index("xstock_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+ }));
+ 
+-export const equityPerpOhlc1m = pgTable("equity_perp_ohlc_1m", ohlcColumns, (table) => ({
+-  symTimeIdx: index("equity_perp_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
++export const xstockPerpOhlc1m = pgTable("xstock_perp_ohlc_1m", ohlcColumns, (table) => ({
++  symTimeIdx: index("xstock_perp_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+ }));
+ 
+ export const cryptoSpotOhlc1m = pgTable("crypto_spot_ohlc_1m", ohlcColumns, (table) => ({
+@@ -4634,7 +4638,7 @@ const tickerSnapColumns = {
+   // B69 (2026-05-03): renamed from `universe` for single-source-of-truth
+   // alignment with live tables. Same data, same partition routing semantics.
+   assetClass: text("asset_class").notNull(),
+-  // B69: exchange added for schema symmetry. equity_spot_ticker_snap
++  // B69: exchange added for schema symmetry. xstock_spot_ticker_snap
+   // defaults 'kraken-equities' (separate WS endpoint), others 'kraken' or
+   // 'kraken-futures' per archiver source.
+   exchange: text("exchange").notNull(),
+@@ -4657,28 +4661,31 @@ const tickerSnapColumns = {
+   metadata: jsonb("metadata").notNull().default(sql`'{"schema_version": 1}'::jsonb`),
+ } as const;
+ 
+-export const equitySpotTickerSnap = pgTable("equity_spot_ticker_snap", tickerSnapColumns, (table) => ({
+-  symTimeIdx: index("equity_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
++export const xstockSpotTickerSnap = pgTable("xstock_spot_ticker_snap", tickerSnapColumns, (table) => ({
++  symTimeIdx: index("xstock_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+ }));
+ 
+-export const equityPerpTickerSnap = pgTable("equity_perp_ticker_snap", tickerSnapColumns, (table) => ({
+-  symTimeIdx: index("equity_perp_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
++export const xstockPerpTickerSnap = pgTable("xstock_perp_ticker_snap", tickerSnapColumns, (table) => ({
++  symTimeIdx: index("xstock_perp_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+ }));
+ 
+ export const cryptoSpotTickerSnap = pgTable("crypto_spot_ticker_snap", tickerSnapColumns, (table) => ({
+   symTimeIdx: index("crypto_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+ }));
+ 
+-// Type exports
+-export type EquitySpotOhlc1m = typeof equitySpotOhlc1m.$inferSelect;
+-export type InsertEquitySpotOhlc1m = typeof equitySpotOhlc1m.$inferInsert;
+-export type EquityPerpOhlc1m = typeof equityPerpOhlc1m.$inferSelect;
+-export type InsertEquityPerpOhlc1m = typeof equityPerpOhlc1m.$inferInsert;
++// Type exports — B79.0e renamed const refs from equity*→xstock*. Type names
++// kept (Equity*) to avoid touching every importer; the underlying inferred
++// shape is unchanged (table rename is metadata-only). Type-name modernization
++// queued as cosmetic follow-up.
++export type EquitySpotOhlc1m = typeof xstockSpotOhlc1m.$inferSelect;
++export type InsertEquitySpotOhlc1m = typeof xstockSpotOhlc1m.$inferInsert;
++export type EquityPerpOhlc1m = typeof xstockPerpOhlc1m.$inferSelect;
++export type InsertEquityPerpOhlc1m = typeof xstockPerpOhlc1m.$inferInsert;
+ export type CryptoSpotOhlc1m = typeof cryptoSpotOhlc1m.$inferSelect;
+ export type InsertCryptoSpotOhlc1m = typeof cryptoSpotOhlc1m.$inferInsert;
+-export type EquitySpotTickerSnap = typeof equitySpotTickerSnap.$inferSelect;
+-export type InsertEquitySpotTickerSnap = typeof equitySpotTickerSnap.$inferInsert;
+-export type EquityPerpTickerSnap = typeof equityPerpTickerSnap.$inferSelect;
+-export type InsertEquityPerpTickerSnap = typeof equityPerpTickerSnap.$inferInsert;
++export type EquitySpotTickerSnap = typeof xstockSpotTickerSnap.$inferSelect;
++export type InsertEquitySpotTickerSnap = typeof xstockSpotTickerSnap.$inferInsert;
++export type EquityPerpTickerSnap = typeof xstockPerpTickerSnap.$inferSelect;
++export type InsertEquityPerpTickerSnap = typeof xstockPerpTickerSnap.$inferInsert;
+ export type CryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferSelect;
+ export type InsertCryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferInsert;

@@ -89,8 +89,8 @@ export const ASSET_CLASS_REGISTRY: Record<AssetClass, AssetClassMeta> = {
     displayName: 'xStock Spot',
     defaultExchange: 'kraken-equities',
     active: true,
-    archiveOhlcTable: 'equity_spot_ohlc_1m',     // legacy table name retained from B74
-    archiveTickerTable: 'equity_spot_ticker_snap',
+    archiveOhlcTable: 'xstock_spot_ohlc_1m',     // B79.0e renamed from equity_spot_*
+    archiveTickerTable: 'xstock_spot_ticker_snap',
     badgeColor: 'bg-blue-100 text-blue-800',
     description: 'Tokenized equity (Backed Finance xStock) on Kraken spot (ws-equities.kraken.com)',
   },
@@ -99,8 +99,8 @@ export const ASSET_CLASS_REGISTRY: Record<AssetClass, AssetClassMeta> = {
     displayName: 'xStock Perp',
     defaultExchange: 'kraken-futures',
     active: true,
-    archiveOhlcTable: 'equity_perp_ohlc_1m',     // legacy table name retained from B74
-    archiveTickerTable: 'equity_perp_ticker_snap',
+    archiveOhlcTable: 'xstock_perp_ohlc_1m',     // B79.0e renamed from equity_perp_*
+    archiveTickerTable: 'xstock_perp_ticker_snap',
     badgeColor: 'bg-indigo-100 text-indigo-800',
     description: 'Tokenized equity perpetual swap (PF_*XUSD on Kraken Futures)',
   },
