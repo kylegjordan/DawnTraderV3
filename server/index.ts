@@ -668,6 +668,23 @@ app.use((req, res, next) => {
     );
   }
 
+  // ─── B79.0g-tx: GC sweep of soft-deleted vts_open_trades rows ───
+  // DELETEs rows whose closed_at is older than
+  // module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days.
+  // Own try/catch so a sweep failure isn't conflated with a rehydrate
+  // failure in the logs (Langston pre-audit R2). Runs AFTER rehydrate
+  // (which already filters WHERE closed=false, so swept rows are
+  // irrelevant to the live Map anyway). Soft-fail: never halt boot.
+  try {
+    const { sweepClosedOpenTrades } = await import('./services/vts-trade-persistence.js');
+    await sweepClosedOpenTrades();
+  } catch (sweepErr) {
+    console.error(
+      '[B79.0g-tx][SWEEP_FAIL] boot-time vts_open_trades GC sweep failed; continuing boot:',
+      sweepErr instanceof Error ? sweepErr.message : sweepErr,
+    );
+  }
+
   // ─── B79.0a: Live xstock_spot scanner (HARD-FAIL on boot per Langston rev 1 #4) ───
   // Subscribes to centralClock; observability scanner Day 1 (no signal-orchestrator
   // wiring yet — that's B79.x post-Layer-3). Runs BEFORE server.listen so the

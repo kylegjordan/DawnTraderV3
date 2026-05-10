@@ -2372,27 +2372,34 @@ async function resolveOpenVirtualTrades(): Promise<{
       );
     }
 
-    // Remove from open trades registry
+    // Remove from open trades registry FIRST (synchronous, can't fail).
+    // The Map gate is the correctness invariant against re-running the
+    // non-idempotent close cascade (persistRealPriceTrade → closedTrades.push,
+    // session P&L, JSON ledger, B73 ablation replay, B70 archive enqueue,
+    // ML calibration). Must run before the soft-delete UPDATE so a thrown
+    // UPDATE cannot let the next exit cycle re-evaluate this trade and
+    // double-execute the cascade.
     openVirtualTrades.delete(id);
-    // B79.0g: also remove from vts_open_trades. This is post-persistRealPriceTrade
-    // so the closed-trade row is already in paper_sim_trades (or whatever the
-    // active persistence target is); the DELETE here completes the migration.
-    // Per Langston Q5 lock the canonical pattern is single-transaction across
-    // both ops; deferring full transactional integration to a follow-up since
-    // persistRealPriceTrade currently runs async and doesn't expose a tx handle.
-    // Net effect today: window of inconsistency is sub-millisecond + correctness
-    // restored on next rehydrate boot. RUNNING_ISSUES tracker for tx integration.
-    void (async () => {
-      try {
-        const { deleteOpenTrade } = await import('./vts-trade-persistence.js');
-        await deleteOpenTrade(id);
-      } catch (err) {
-        console.warn(
-          `[B79.0g][DELETE_FAIL] orphan vts_open_trades row=${id} (will be cleared by next rehydrate or ops):`,
-          err instanceof Error ? err.message : err,
-        );
-      }
-    })();
+    // B79.0g-tx: AWAITED soft-delete UPDATE (no re-throw). Replaces the
+    // B79.0g fire-and-log async DELETE. UPDATE is idempotent via
+    // `WHERE closed=false`. If this fails, the DB row stays closed=false
+    // and rehydrate-on-next-boot re-adds the trade to the Map; a
+    // subsequent close cycle retries the cascade idempotently. Soft-
+    // delete is NOT a transactional close-time invariant — only Option C
+    // would be; this is observability + bounded-history for vts_open_trades.
+    try {
+      const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
+      await markOpenTradeClosed(id);
+    } catch (err) {
+      console.error(
+        `[B79.0g-tx][MARK_CLOSED_FAIL] trade=${id} soft-delete UPDATE failed; ` +
+        `JSON ledger + session metrics OK; DB row stays closed=false until rehydrate-on-next-boot ` +
+        `re-adds to Map and a subsequent close cycle retries. Investigate if recurring:`,
+        err instanceof Error ? err.message : err,
+      );
+      // Intentional: do NOT re-throw. Re-throw would let the next exit
+      // cycle re-execute the non-idempotent close cascade.
+    }
     // Batch 45: Record close timestamp for re-entry cooldown
     recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
 

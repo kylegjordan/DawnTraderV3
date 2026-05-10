@@ -46,9 +46,10 @@ vi.mock('../../../shared/asset-classes.js', async () => {
 
 import {
   insertOpenTrade,
-  deleteOpenTrade,
+  markOpenTradeClosed,
   rehydrateOpenTrades,
   bootstrapOpenTradesFromMemory,
+  sweepClosedOpenTrades,
   type OpenVirtualTradeRecord,
 } from '../../services/vts-trade-persistence.js';
 
@@ -85,29 +86,97 @@ describe('B79.0g — vts-trade-persistence', () => {
     });
   });
 
-  describe('deleteOpenTrade', () => {
-    it('issues DELETE WHERE id = trade-id', async () => {
-      await deleteOpenTrade('t_abc');
+  describe('markOpenTradeClosed (B79.0g-tx)', () => {
+    it('issues UPDATE SET closed=true, closed_at=NOW() WHERE id AND closed=false', async () => {
+      await markOpenTradeClosed('t_abc');
       expect(mockExecute).toHaveBeenCalledTimes(1);
       const call = dbCalls[0];
-      expect(call.sql).toMatch(/DELETE FROM vts_open_trades WHERE id = /i);
+      expect(call.sql).toMatch(/UPDATE vts_open_trades/i);
+      expect(call.sql).toMatch(/SET closed = true/i);
+      expect(call.sql).toMatch(/closed_at = NOW\(\)/i);
+      expect(call.sql).toMatch(/WHERE id = /i);
+      expect(call.sql).toMatch(/AND closed = false/i);
+    });
+
+    it('is idempotent — second call with same id is a no-op at the SQL layer (WHERE closed=false filter)', async () => {
+      await markOpenTradeClosed('t_dup');
+      await markOpenTradeClosed('t_dup');
+      // Both calls issue the same statement; idempotency is enforced by the
+      // `AND closed = false` filter at the row level (zero-row UPDATE on retry).
+      expect(mockExecute).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('rehydrateOpenTrades', () => {
-    it('issues SELECT and returns empty list when table empty', async () => {
+  describe('rehydrateOpenTrades (B79.0g-tx: filters WHERE closed=false)', () => {
+    it('issues SELECT with WHERE closed = false and returns empty list when table empty', async () => {
       const rows = await rehydrateOpenTrades();
       expect(rows).toEqual([]);
       expect(mockExecute).toHaveBeenCalledTimes(1);
+      const call = dbCalls[0];
+      expect(call.sql).toMatch(/WHERE closed = false/i);
     });
   });
 
-  describe('bootstrapOpenTradesFromMemory', () => {
-    it('returns null when table is non-empty', async () => {
+  describe('sweepClosedOpenTrades (B79.0g-tx)', () => {
+    it('returns null + logs CONFIG_MISSING when module_constants row absent', async () => {
+      // First call: SELECT value FROM module_constants → empty rows.
+      mockExecute.mockImplementationOnce(async () => ({ rows: [] } as any));
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const result = await sweepClosedOpenTrades();
+      expect(result).toBeNull();
+      expect(errSpy).toHaveBeenCalled();
+      const firstCallArg = String(errSpy.mock.calls[0]?.[0] ?? '');
+      expect(firstCallArg).toMatch(/CONFIG_MISSING/);
+      errSpy.mockRestore();
+    });
+
+    it('issues DELETE WHERE closed=true AND closed_at < cutoff when config present', async () => {
+      // First call: SELECT value → return numeric 90.
+      mockExecute.mockImplementationOnce(async () => ({ rows: [{ value: 90 }] } as any));
+      // Second call: DELETE … RETURNING → COUNT row.
+      mockExecute.mockImplementationOnce(async () => ({ rows: [{ count: '0' }] } as any));
+      const result = await sweepClosedOpenTrades();
+      expect(result).toEqual({ swept: 0 });
+      expect(mockExecute).toHaveBeenCalledTimes(2);
+      const deleteCall = dbCalls[1];
+      expect(deleteCall.sql).toMatch(/DELETE FROM vts_open_trades/i);
+      expect(deleteCall.sql).toMatch(/WHERE closed = true/i);
+      expect(deleteCall.sql).toMatch(/AND closed_at <\s+NOW\(\)\s+-/i);
+    });
+
+    it('returns null + logs CONFIG_MISSING when retention value is invalid', async () => {
+      // Return a non-numeric / non-positive value.
+      mockExecute.mockImplementationOnce(async () => ({ rows: [{ value: 'banana' }] } as any));
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const result = await sweepClosedOpenTrades();
+      expect(result).toBeNull();
+      errSpy.mockRestore();
+    });
+  });
+
+  describe('bootstrapOpenTradesFromMemory (B79.0g-tx: open-only count)', () => {
+    it('returns null when OPEN-only count is non-zero (live trades present)', async () => {
       // Override mock: count = 5 (non-empty)
       mockExecute.mockImplementationOnce(async () => ({ rows: [{ count: '5' }] } as any));
       const result = await bootstrapOpenTradesFromMemory([makeTrade('BTC/USD', 'crypto_spot')]);
       expect(result).toBeNull();
+      // Regression-lock: COUNT query must filter WHERE closed=false.
+      const countCall = dbCalls[0];
+      expect(countCall.sql).toMatch(/SELECT COUNT.*FROM vts_open_trades WHERE closed = false/i);
+    });
+
+    it('PROCEEDS when only soft-deleted closed=true history rows exist (B79.0g-tx Q4 regression-lock)', async () => {
+      // Open-only count = 0 even though closed-history rows could exist in
+      // the table. Bootstrap path must treat the table as effectively empty
+      // and run the re-resolve seed (preserves B79.0g Q4 semantic across
+      // the new soft-delete world; Langston pre-audit Q4).
+      mockExecute.mockImplementationOnce(async () => ({ rows: [{ count: '0' }] } as any));
+      const result = await bootstrapOpenTradesFromMemory([makeTrade('BTC/USD', 'crypto_spot')]);
+      expect(result).toBe(1);
+      // Verify the re-resolve was invoked.
+      expect(resolverCalls.length).toBe(1);
+      const inserts = dbCalls.filter((c) => c.sql.includes('INSERT INTO vts_open_trades'));
+      expect(inserts.length).toBe(1);
     });
 
     it('re-resolves asset_class via safeResolveAssetClass — defeats stale legacy values', async () => {
