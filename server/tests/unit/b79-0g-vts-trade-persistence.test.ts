@@ -6,13 +6,20 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock db.execute → record args
+// Mock db.execute → record args. Captures into module-level `dbCalls` AND
+// supports per-test override of the return value via `dbReturnOverrides`
+// (queue-style; each entry is consumed in order). This avoids the problem
+// where `mockImplementationOnce` would bypass the dbCalls capture path.
 const dbCalls: Array<{ sql: string; params: any[] }> = [];
+const dbReturnOverrides: any[] = [];
 const mockExecute = vi.fn(async (q: any) => {
   // q is a drizzle SQL template — capture the queryChunks for inspection
   const sqlText = (q?.queryChunks ?? []).map((c: any) => c?.value ?? c).join(' ');
   const params = q?.params ?? [];
   dbCalls.push({ sql: sqlText, params });
+  if (dbReturnOverrides.length > 0) {
+    return dbReturnOverrides.shift();
+  }
   // For the rehydrate SELECT, return an empty array; for COUNT, return 0
   if (sqlText.toUpperCase().includes('SELECT COUNT')) {
     return { rows: [{ count: '0' }] } as any;
@@ -72,6 +79,7 @@ function makeTrade(symbol: string, assetClass: string): OpenVirtualTradeRecord {
 describe('B79.0g — vts-trade-persistence', () => {
   beforeEach(() => {
     dbCalls.length = 0;
+    dbReturnOverrides.length = 0;
     resolverCalls.length = 0;
     mockExecute.mockClear();
   });
@@ -119,8 +127,7 @@ describe('B79.0g — vts-trade-persistence', () => {
 
   describe('sweepClosedOpenTrades (B79.0g-tx)', () => {
     it('returns null + logs CONFIG_MISSING when module_constants row absent', async () => {
-      // First call: SELECT value FROM module_constants → empty rows.
-      mockExecute.mockImplementationOnce(async () => ({ rows: [] } as any));
+      dbReturnOverrides.push({ rows: [] }); // empty config lookup
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const result = await sweepClosedOpenTrades();
       expect(result).toBeNull();
@@ -131,13 +138,12 @@ describe('B79.0g — vts-trade-persistence', () => {
     });
 
     it('issues DELETE WHERE closed=true AND closed_at < cutoff when config present', async () => {
-      // First call: SELECT value → return numeric 90.
-      mockExecute.mockImplementationOnce(async () => ({ rows: [{ value: 90 }] } as any));
-      // Second call: DELETE … RETURNING → COUNT row.
-      mockExecute.mockImplementationOnce(async () => ({ rows: [{ count: '0' }] } as any));
+      // Queue overrides: first call returns config row (90); second returns swept count.
+      dbReturnOverrides.push({ rows: [{ value: 90 }] });
+      dbReturnOverrides.push({ rows: [{ count: '0' }] });
       const result = await sweepClosedOpenTrades();
       expect(result).toEqual({ swept: 0 });
-      expect(mockExecute).toHaveBeenCalledTimes(2);
+      expect(dbCalls.length).toBe(2);
       const deleteCall = dbCalls[1];
       expect(deleteCall.sql).toMatch(/DELETE FROM vts_open_trades/i);
       expect(deleteCall.sql).toMatch(/WHERE closed = true/i);
@@ -145,8 +151,7 @@ describe('B79.0g — vts-trade-persistence', () => {
     });
 
     it('returns null + logs CONFIG_MISSING when retention value is invalid', async () => {
-      // Return a non-numeric / non-positive value.
-      mockExecute.mockImplementationOnce(async () => ({ rows: [{ value: 'banana' }] } as any));
+      dbReturnOverrides.push({ rows: [{ value: 'banana' }] });
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const result = await sweepClosedOpenTrades();
       expect(result).toBeNull();
@@ -155,14 +160,12 @@ describe('B79.0g — vts-trade-persistence', () => {
   });
 
   describe('bootstrapOpenTradesFromMemory (B79.0g-tx: open-only count)', () => {
-    it('returns null when OPEN-only count is non-zero (live trades present)', async () => {
-      // Override mock: count = 5 (non-empty)
-      mockExecute.mockImplementationOnce(async () => ({ rows: [{ count: '5' }] } as any));
+    it('returns null when OPEN-only count is non-zero (live trades present) — COUNT query filters WHERE closed=false', async () => {
+      dbReturnOverrides.push({ rows: [{ count: '5' }] });
       const result = await bootstrapOpenTradesFromMemory([makeTrade('BTC/USD', 'crypto_spot')]);
       expect(result).toBeNull();
       // Regression-lock: COUNT query must filter WHERE closed=false.
-      const countCall = dbCalls[0];
-      expect(countCall.sql).toMatch(/SELECT COUNT.*FROM vts_open_trades WHERE closed = false/i);
+      expect(dbCalls[0].sql).toMatch(/SELECT COUNT.*FROM vts_open_trades WHERE closed = false/i);
     });
 
     it('PROCEEDS when only soft-deleted closed=true history rows exist (B79.0g-tx Q4 regression-lock)', async () => {
