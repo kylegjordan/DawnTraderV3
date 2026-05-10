@@ -1,28 +1,38 @@
 /**
- * Xstock-spot market hours utility (B79 + B79.0c per-symbol 24/7).
+ * Xstock-spot market hours utility.
  *
- * Kraken XStocks are tokenized 1:1 backed equities tracking ARCA-listed
- * underlyings. ARCA opens Sunday 22:00 UTC and closes Friday 22:00 UTC,
- * giving a ~24/5 schedule with a weekend gap.
+ * Schedule per Kyle directive 2026-05-10 (B79.0L correction):
+ *   - **All xStocks closed Friday 8PM ET → Sunday 8PM ET** (48-hour weekend
+ *     window — applies to ALL xStocks including the previously-marked
+ *     "24/7" Phase-1 names).
  *
- * B79.0c (2026-05-09) — per-symbol predicate: a subset of xStocks announced
- * by Kraken on 2025-12-03 trade 24/7 (Phase 1: AAPL, CRCL, GLD, GOOGL, HOOD,
- * MSTR, NVDA, QQQ, SPY, TSLA — see XSTOCK_SPOT_24_7_SYMBOLS). For those
- * names this predicate returns true regardless of weekday/hour. For all
- * other xStocks it applies the ARCA 24/5 schedule.
+ * Within the 120-hour open window (Sun 8PM ET → Fri 8PM ET):
+ *   - **Phase-1 extended-hours names** (`XSTOCK_SPOT_24_7_SYMBOLS` —
+ *     AAPL, CRCL, GLD, GOOGL, HOOD, MSTR, NVDA, QQQ, SPY, TSLA): trade
+ *     CONTINUOUSLY. NOT actually 24/7 despite the constant name; closed
+ *     during the weekend window above. Constant name retained for stability
+ *     across many call sites; future cosmetic rename is queued.
+ *   - **All other xStocks (ARCA-aligned):** follow ARCA schedule —
+ *     extended-hours close at 8PM ET daily, reopen at 4AM ET next weekday
+ *     (premarket). Approximated here as: closed Sat all day, closed Fri
+ *     after 8PM ET, closed Sun before 8PM ET, otherwise open.
  *
- * The VTS evaluation gate calls this on every xstock_spot signal — when
- * closed, the signal is skipped (early-return + counter increment) so VTS
- * does not write spurious shadow-mode rows for closed-market periods.
+ * DST handling: uses `Intl.DateTimeFormat` with `timeZone: 'America/New_York'`
+ * which automatically tracks the EST/EDT transition (March/November).
  *
  * NOT included: US equity holidays (Thanksgiving, etc.) and partially-
  * shortened sessions. Both produce false-open results for a handful of
  * days/year. A future enhancement can override via a module_constant
- * `xstockMarketHoursOverride` (Langston Q5 from B79); the shape would be
- * a list of (date, status) overrides consulted before this default.
+ * `xstockMarketHoursOverride`; the shape would be a list of (date, status)
+ * overrides consulted before this default.
  *
- * Imports: XSTOCK_SPOT_24_7_SYMBOLS from shared/asset-classes (single
- * dependency on a constant, no transitive cycles — shared/* is leaf).
+ * History:
+ *   B79: initial implementation (UTC math, ARCA-only)
+ *   B79.0c: added per-symbol predicate + XSTOCK_SPOT_24_7_SYMBOLS bypass
+ *   B79.0L (2026-05-10): corrected to Fri 8PM ET → Sun 8PM ET closed window
+ *     applied to ALL names including the Phase-1 set. Resolves #89
+ *     (silence-on-weekends was correctly intentional market closure, not
+ *     a Kraken feed bug — B79.0k investigation was based on a misframing).
  */
 
 import { XSTOCK_SPOT_24_7_SYMBOLS } from '../../../shared/asset-classes.js';
@@ -54,15 +64,56 @@ function normalizeXstockSymbol(symbol: string): string {
 }
 
 /**
+ * B79.0L: extract ET weekday + 24h-hour from a UTC `now` via
+ * `Intl.DateTimeFormat`. DST-aware (handles EST ↔ EDT automatically).
+ *
+ * Returns:
+ *   - weekday: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
+ *   - hour: 0-23 (24-hour clock in ET)
+ *   - minute: 0-59
+ */
+function getETParts(now: Date): { weekday: string; hour: number; minute: number } {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(now);
+  const weekday = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  const hourStr = parts.find((p) => p.type === 'hour')?.value ?? '0';
+  const minuteStr = parts.find((p) => p.type === 'minute')?.value ?? '0';
+  // `Intl.DateTimeFormat` with hour12=false sometimes emits "24" instead of
+  // "00" at midnight (Node version-dependent). Normalize.
+  let hour = parseInt(hourStr, 10);
+  if (hour === 24) hour = 0;
+  const minute = parseInt(minuteStr, 10);
+  return { weekday, hour, minute };
+}
+
+/**
+ * B79.0L: returns true iff `now` falls within the global xStock weekend
+ * close window (Friday 20:00 ET → Sunday 20:00 ET).
+ */
+function isInXstockWeekendClose(now: Date): boolean {
+  const { weekday, hour } = getETParts(now);
+  if (weekday === 'Fri' && hour >= 20) return true;
+  if (weekday === 'Sat') return true;
+  if (weekday === 'Sun' && hour < 20) return true;
+  return false;
+}
+
+/**
  * Returns true iff the xstock_spot market is open for `symbol` at `now` (UTC).
  *
- * Schedule (ARCA-aligned, UTC):
- *   - 24/7 names (XSTOCK_SPOT_24_7_SYMBOLS): always OPEN.
- *   - All other xstocks:
- *     - CLOSED all day Saturday (UTC day 6)
- *     - CLOSED Friday from 22:00 UTC onward
- *     - CLOSED Sunday before 22:00 UTC
- *     - OPEN otherwise
+ * Schedule (B79.0L):
+ *   - Global weekend close (ALL xStocks): Friday 20:00 ET → Sunday 20:00 ET
+ *   - Outside the weekend close:
+ *     - Extended-hours names (XSTOCK_SPOT_24_7_SYMBOLS): always OPEN
+ *     - All other xStocks (ARCA-aligned): closed Fri after 20:00 ET,
+ *       Sat all day, Sun before 20:00 ET (subsumed by the global close)
+ *       — open the rest of the work week
  *
  * @param symbol - xstock_spot symbol. REQUIRED (B79.0c rev 2 / Langston Q4):
  *                 fail-loud rather than silent ARCA-only fallback. Accepts
@@ -72,14 +123,25 @@ function normalizeXstockSymbol(symbol: string): string {
  *              Tests inject a controlled clock for boundary verification.
  */
 export function isXstockMarketOpenUTC(symbol: string, now: Date = new Date()): boolean {
+  // B79.0L: global weekend close applies to ALL xStocks first.
+  if (isInXstockWeekendClose(now)) return false;
+
   const normalized = normalizeXstockSymbol(symbol);
+  // Outside weekend close: extended-hours names are open continuously.
   if (XSTOCK_SPOT_24_7_SYMBOLS.has(normalized)) return true;
 
-  const day = now.getUTCDay();   // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+  // Non-extended-hours (ARCA-aligned) names: existing B79/B79.0c UTC math
+  // (Fri 22:00 UTC close) is MORE restrictive on Friday than the unified
+  // weekend window's Fri 20:00 ET (= 22:00 EDT / 23:00 EST UTC) — keep it.
+  // Sunday reopen previously used Sun 22:00 UTC (= 18:00 EDT = 6 PM EDT)
+  // which was wrong by ~2 hours per Kyle directive 2026-05-10. The unified
+  // weekend window already returned false above for any Sunday before
+  // 20:00 ET, so by the time control reaches this point on a Sunday, it's
+  // already after 20:00 ET = market is open per the unified rule.
+  // Saturday all-day-closed is also fully covered by the unified weekend
+  // window above (Sat ET = always inside the weekend window).
+  const day = now.getUTCDay();
   const hour = now.getUTCHours();
-
-  if (day === 6) return false;              // Saturday — fully closed
-  if (day === 5 && hour >= 22) return false; // Friday after 22:00 UTC
-  if (day === 0 && hour < 22) return false;  // Sunday before 22:00 UTC
+  if (day === 5 && hour >= 22) return false; // Friday 22:00 UTC onward (B79/B79.0c, more restrictive than unified Fri 20:00 ET)
   return true;
 }

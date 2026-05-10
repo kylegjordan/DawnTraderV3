@@ -151,11 +151,16 @@ export function detectORB(
   const assetClass = ctx?.assetClass ?? 'xstock_spot'; // dispatch passes; default for back-compat
   if (assetClass !== 'xstock_spot') return null;
 
-  // (b) 24/7 names have no opening bell (Langston scope review concern #1).
+  // (b) Extended-hours names have no daily opening bell (Langston scope review
+  // concern #1). Per B79.0L correction 2026-05-10: these names aren't actually
+  // 24/7 — they trade Sun 8PM ET → Fri 8PM ET continuously (120 hours/week).
+  // No opening bell within the open window means ORB doesn't apply to them.
+  // The constant name XSTOCK_SPOT_24_7_SYMBOLS is preserved from B79.0c for
+  // stability across many call sites; cosmetic rename queued.
   if (XSTOCK_SPOT_24_7_SYMBOLS.has(symbol)) {
     _no24_7LogCount++;
     if (_no24_7LogCount === 1 || _no24_7LogCount % 1000 === 0) {
-      console.log(`${LOG_PREFIX} ${symbol} skipped — 24/7 name has no opening bell (count=${_no24_7LogCount})`);
+      console.log(`${LOG_PREFIX} ${symbol} skipped — extended-hours name has no daily opening bell (count=${_no24_7LogCount})`);
     }
     return null;
   }

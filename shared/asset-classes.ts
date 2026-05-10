@@ -277,19 +277,31 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * B79.0c — xstock_spot symbols that trade 24/7 on Kraken Pro.
+ * B79.0c (named) / B79.0L (semantics corrected 2026-05-10) — xstock_spot
+ * Phase-1 EXTENDED-HOURS symbols.
+ *
+ * **NAMING NOTE: NOT actually 24/7.** Per Kyle directive 2026-05-10:
+ * xStocks (including these Phase-1 names) are closed Friday 8PM ET → Sunday
+ * 8PM ET (48-hour weekend window). The Phase-1 names trade CONTINUOUSLY
+ * during the 120-hour open window (Sun 8PM ET → Fri 8PM ET) — that's the
+ * extended-hours benefit vs other xStocks. They are NOT 24/7.
+ *
+ * The constant name `XSTOCK_SPOT_24_7_SYMBOLS` is preserved from B79.0c for
+ * stability across many call sites; cosmetic rename to
+ * `XSTOCK_SPOT_EXTENDED_HOURS_SYMBOLS` is queued for a future batch.
  *
  * Per Kraken Phase 1 announcement (2025-12-03) at
  * https://blog.kraken.com/news/xstocks-247-trading — ten xStock tokens trade
- * around the clock, not the ARCA-aligned 24/5 schedule the rest follow.
+ * extended hours, not the ARCA-aligned schedule the rest follow.
  * Canonical form (no "x" suffix; matches XSTOCK_SPOT_SYMBOLS shape).
  *
  * Reference data, NOT a behavioral knob — Phase-2 expansion is a Kraken
  * product event that requires a code change here AND in XSTOCK_SPOT_SYMBOLS,
  * so a DB-resolved row would only add coupling without shipping flexibility.
  *
- * Consumed by `isXstockMarketOpenUTC(symbol, now?)` to bypass the ARCA
- * weekend gate for these names. All 10 must already exist in
+ * Consumed by `isXstockMarketOpenUTC(symbol, now?)` which applies the global
+ * Fri-Sun weekend close to ALL xStocks first, then bypasses the daily ARCA
+ * gate for these names within the open window. All 10 must already exist in
  * XSTOCK_SPOT_SYMBOLS — assertion enforced by a unit test.
  */
 export const XSTOCK_SPOT_24_7_SYMBOLS: ReadonlySet<string> = new Set([

@@ -186,27 +186,46 @@ class XstockSpotScannerService {
     try {
       console.log(`[B79.0a][SCAN_CYCLE_START] tick=${tick.tickNumber}`);
 
-      // B79.0c: per-symbol ARCA-open gate. The 24/7 names (Kraken Phase 1
-      // — TSLA/AAPL/etc.) trade through the weekend; full universe scans
-      // when ARCA-open + restricted to the 24/7 set when ARCA-closed.
-      // Cycle is fully skipped only when EVERY name in the universe is
-      // closed (impossible while XSTOCK_SPOT_24_7_SYMBOLS is non-empty).
+      // B79.0c (per-symbol predicate) + B79.0L (unified weekend close):
+      // Three states the universe-filter handles:
+      //   1. Inside unified Fri 20:00 ET → Sun 20:00 ET weekend close: ALL
+      //      xStocks closed (including the extended-hours set). Cycle scans
+      //      empty universe — recorded as cycle-skipped for legacy counter.
+      //   2. Outside weekend close, ARCA open: full xstock universe scans.
+      //   3. Outside weekend close, ARCA closed (e.g., Mon-Thu overnight):
+      //      restrict to extended-hours set (XSTOCK_SPOT_24_7_SYMBOLS) which
+      //      remain open continuously during the work-week window.
       // Hostile-sim bypasses entirely so the no-shed posture test can run
       // regardless of when (e.g. weekend) Step 7+8 verify happens.
-      // Hostile-sim is gated behind NODE_ENV !== 'production' + explicit
-      // env flag — can't accidentally bypass in prod.
-      const arcaOpenSampleSym = 'NON_24_7_SAMPLE/USD'; // any non-24/7 sym → ARCA schedule
+      const arcaOpenSampleSym = 'NON_24_7_SAMPLE/USD'; // any non-extended sym → ARCA schedule (not extended-hours short-circuit)
       const arcaOpen = isXstockMarketOpenUTC(arcaOpenSampleSym);
-      // Build per-cycle universe: full when ARCA open, 24/7-only otherwise.
-      const symbolList = arcaOpen || this.diag.hostileSimActive
-        ? Array.from(XSTOCK_SPOT_SYMBOLS)
-        : Array.from(XSTOCK_SPOT_24_7_SYMBOLS);
+      // B79.0L: probe an extended-hours name to detect the unified weekend
+      // close. If AAPL/USD is also closed, we're inside the Fri-Sun close
+      // window — extended-hours set is also closed; scan empty universe.
+      const extendedHoursOpen = isXstockMarketOpenUTC('AAPL/USD');
+      const insideUnifiedWeekendClose = !arcaOpen && !extendedHoursOpen;
+
+      // Build per-cycle universe.
+      let symbolList: string[];
+      if (this.diag.hostileSimActive) {
+        symbolList = Array.from(XSTOCK_SPOT_SYMBOLS); // hostile-sim always full
+      } else if (insideUnifiedWeekendClose) {
+        symbolList = []; // B79.0L: ALL xStocks closed during Fri-Sun window
+      } else if (arcaOpen) {
+        symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
+      } else {
+        symbolList = Array.from(XSTOCK_SPOT_24_7_SYMBOLS); // ARCA closed but extended-hours open
+      }
       this.diag.lastUniverseSize = symbolList.length;
       this.diag.lastArcaOpen = arcaOpen;
       if (!arcaOpen && !this.diag.hostileSimActive) {
         this.diag.cyclesSkippedMarketClosed++; // legacy counter, retained for compat
         if (this.diag.cyclesSkippedMarketClosed % 30 === 1) {
-          console.log(`[B79.0c][SCAN_24_7_ONLY] tick=${tick.tickNumber} universe=${symbolList.length} (10 names; ARCA closed)`);
+          if (insideUnifiedWeekendClose) {
+            console.log(`[B79.0L][SCAN_WEEKEND_CLOSE] tick=${tick.tickNumber} universe=0 (Fri 8PM ET → Sun 8PM ET unified window)`);
+          } else {
+            console.log(`[B79.0c][SCAN_EXTENDED_ONLY] tick=${tick.tickNumber} universe=${symbolList.length} (10 names; ARCA closed but extended-hours names open)`);
+          }
         }
       }
 

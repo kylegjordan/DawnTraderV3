@@ -152,7 +152,7 @@ function ScannerCycleHeader({ data, isLoading }: { data: XstocksFilterDiagnostic
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-muted/30 rounded-md">
           <Stat label="Cycles Completed" value={s.cyclesCompleted.toLocaleString()} />
           <Stat label="Last Cycle At" value={lastCycleAt ? format(lastCycleAt, "HH:mm:ss") : "—"} />
-          <Stat label="Last Universe" value={s.lastUniverseSize.toString()} sub={s.lastArcaOpen ? "ARCA open" : "24/7 only"} />
+          <Stat label="Last Universe" value={s.lastUniverseSize.toString()} sub={s.lastArcaOpen ? "ARCA open" : "Extended-hours only"} />
           <Stat label="Last Cycle Duration" value={s.lastCycleDurationMs !== null ? `${s.lastCycleDurationMs} ms` : "—"} />
         </div>
         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -207,7 +207,7 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
         </div>
         <div className="text-xs text-muted-foreground mt-1">
           Fresh ≤ {data.thresholds.freshUpToSeconds}s · Stale ≤ {data.thresholds.staleUpToSeconds}s · Dead beyond.
-          Sorted stalest-first. <span className="font-semibold">24/7</span> = Kraken Phase-1 names trade through weekend.
+          Sorted stalest-first. <span className="font-semibold">Ext</span> = Kraken Phase-1 extended-hours names (Sun 8PM ET → Fri 8PM ET continuous; closed weekends with the rest).
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -226,7 +226,7 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
               {data.symbols.map((row) => (
                 <tr key={row.symbol} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="p-3 font-mono">{row.symbol}</td>
-                  <td className="p-3">{row.is24_7 ? <Badge variant="outline" className="text-xs">24/7</Badge> : <span className="text-xs text-muted-foreground">ARCA</span>}</td>
+                  <td className="p-3">{row.is24_7 ? <Badge variant="outline" className="text-xs" title="Phase-1 extended-hours name (Sun 8PM ET → Fri 8PM ET continuous; closed weekends)">Ext</Badge> : <span className="text-xs text-muted-foreground" title="ARCA-aligned schedule">ARCA</span>}</td>
                   <td className="p-3 text-right font-mono text-xs">{row.lastTickAt ? format(new Date(row.lastTickAt), "MM-dd HH:mm:ss") : "—"}</td>
                   <td className="p-3 text-right font-mono">{row.staleSeconds !== null ? row.staleSeconds.toLocaleString() : "—"}</td>
                   <td className="p-3 text-center">
