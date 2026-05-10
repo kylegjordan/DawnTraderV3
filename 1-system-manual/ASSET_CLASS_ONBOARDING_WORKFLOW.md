@@ -6,6 +6,58 @@
 
 **Phase 24 status (2026-05-10):** xstock_spot fully onboarded across 9 sub-batches. The doc was updated with **only the genuinely new standing rules** — Section L (ticker-collision check, the most important Phase 24 addition) + a tightened H.1.x. Trial-and-error history of how we got there lives in the per-batch completion reports, NOT here.
 
+---
+
+## Procedural checklist — execution order for onboarding a new asset class
+
+**This is the executable blueprint.** Follow it sequentially. Each numbered step references the detailed reference Section (A through L below) for HOW. The 11-step canonical batch workflow from CLAUDE.md §2 wraps this — every numbered onboarding step is itself a Step 1-11 batch.
+
+| # | Step | Reference | Output / artifact |
+|---|---|---|---|
+| 0 | **Trigger** — Kyle directive to onboard new asset class | — | Memo or directive recorded in `MEMORY.md` + `MULTI_ASSET_VTS_EXPANSION_PLAN.md` §12 update log |
+| 1 | **Ticker-collision check** — live exchange API intersection BEFORE architecture decisions | Section L | `<NEW_CLASS>_<EXISTING>_COLLISIONS` constant + provenance comment + regression-lock tests |
+| 2 | **Operational profile** — fill the Section A.0 table for the new asset class | Section A.0 | Filled table (trading hours, settlement, custody, exchange endpoints, symbol forms, universe, tick/lot). Decide: is this asset class monolithic OR per-symbol-heterogeneous (Phase 24 H.1.x rule 3)? |
+| 3 | **Discovery + inventory** — pair universe, ticker source, live-pricing path, per-pair characteristics, asset-specific (sector, fundamentals, IV) | Section A | A-checklist filled |
+| 4 | **Architecture decisions** — scanner shared vs dedicated; family-filter path; RTB pool; live-pricing adapter; telemetry isolation; pattern pool; quant family paths | Section B + Phase 24 H.1.x rule 4 | B-decisions table populated. If signal distributions differ from existing classes, build separate-instance triad via `getAssetClassInstances` factory. |
+| 5 | **Schema + module_constants** — verify or add `asset_class` column on every relevant table; insert seed rows for the new class; tag `tunable_status` correctly | Section C + Phase 24 H.1.x rule 2 | Drizzle migration SQL + module_constants seed SQL. Every behavioral knob has explicit per-class row (HARD-FAIL gate enforced at boot). |
+| 6 | **Code surface** — populate `server/asset_classes/<class>/{regime-thresholds,friction,pattern-pool-filters,market-hours,index}.ts`; extend `resolveAssetClass`; wire dispatch in `calculatePairRegime`, `cost-model`, `signal_quality_evaluator`, `MULTI_FAMILY_ELIGIBILITY`, telemetry boundaries, TEC stop-eval | Section D | All files added/modified. Section D.1 below has concrete extension templates from xstock_spot. |
+| 7 | **18-stage walkthrough** — for each pipeline stage answer: which variables/thresholds/gates apply, are they class-scoped or shared, where do values come from, Layer-1 baseline value, tagged `pending_layer_3` if no domain-knowledge answer | Section E | Row-per-stage table populated for the new class (mirrors Section H.1.E pattern) |
+| 8 | **Layer 1 / Layer 2 / Layer 3 protocol** — domain-knowledge baseline → cross-asset shadow-classify sanity → live shadow-mode VTS observation. Both ablation frameworks (B67.0 calibration + B73 exit-strategy) wired in parallel, each with asset-class-scoped emission | Section F + Section F.0 | Layer 1 values seeded; Section F.X observation period sized per evidence accumulation rate |
+| 9 | **Verification + forward-watch** — behavioral verify checklist; no-touch fence SQL on existing classes; 24h + 7d forward-watch metrics; strategy-gap monitoring (5 triggers) | Section G | Verify checklist + post-deploy SQL artifacts |
+| 10 | **Dedicated observation UI tab** — new asset class gets its own tab; both ablation panels side-by-side per Kyle directive | Section I.0 #6 | UI tab live with filter diagnostics + 2 ablation panels |
+| 11 | **Worked example** — populate Section H.N with the new class's worked example; populate Section H.N.x post-mortem at T+7d post-go-live with **only genuinely new standing rules** (per Phase 24 lesson) | Section H | Section H.N entry. Trial-and-error history lives in per-batch completion reports, NOT here. |
+
+**Decision Framework rules (Section I + Section I.0 universal rules)** apply throughout — re-check on every architectural choice.
+
+---
+
+### Section D.1 — Concrete code-extension templates (Phase 24 reference)
+
+Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.
+
+**Extending `resolveAssetClass` for a new class:**
+```ts
+// shared/asset-classes.ts
+// Branch order matters: exchange-first → display-form → collision-gate → membership → patterns
+if (exchange === '<new-exchange-tag>') return ASSET_CLASSES.<NEW_CLASS>;
+if (<NEW_CLASS>_DISPLAY.test(symbol)) return ASSET_CLASSES.<NEW_CLASS>;
+if (<NEW_CLASS>_<EXISTING>_COLLISIONS.has(symbol)) {
+  console.warn(`[<batch>][COLLISION_RESOLVE] ...`);
+  return ASSET_CLASSES.<EXISTING>;
+}
+if (<NEW_CLASS>_SYMBOLS.has(symbol)) return ASSET_CLASSES.<NEW_CLASS>;
+// Fall through to existing class patterns
+```
+
+**Registering a strategy for a new class** (when applicable — this is strategy-onboarding, not asset-class-onboarding):
+- See `server/strategies/orb.ts` (B79.0d) as the template. 6 surfaces touched: (1) detect logic in `server/strategies/<name>.ts`, (2) import + 'name' in `StrategySignal.strategy` enum + thin wrapper in `server/services/strategy-engine.ts`, (3) dispatch block in `server/services/signal-orchestrator.ts` (gated on `activeStrategies.has + assetClass match`), (4) `CANONICAL_REGIME_STRATEGY_MAP` regime entries, (5) `STRATEGY_DISPLAY_NAMES` map, (6) module_constants seed SQL with `strategy.<name>` thresholds + `strategy_gates.*.<class>.<name>.enabled`.
+
+**Ticker-collision discovery template** — see Section L "Step 1 — discover the collision set" pseudocode block.
+
+**Per-class config seed migration template** — see `drizzle/migrations/2026-05-03-b69-asset-class.sql` for the column-add-then-default-set pattern + B79's `module_constants` xstock_spot seeds via insert-with-asset-class-scope.
+
+**Persistence-at-trade-open** — already in place via `vts_open_trades` table + `vts-trade-persistence.ts` service (B79.0g). Future asset classes inherit automatically — `assetClass` column is class-agnostic; INSERT/DELETE/REHYDRATE paths work for any value. No new code needed per class for persistence.
+
 **Scope:** asset-class onboarding, not exchange onboarding. Exchange differences (API, symbol normalization, fee schedule) are mostly mechanical. Asset-class differences (regime classification, strategy applicability, friction model, market hours, telemetry partitioning) ripple deep into the system. Exchange-onboarding is a separate, simpler doc — flagged here as future work.
 
 ---
