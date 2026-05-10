@@ -18,9 +18,9 @@
 
 ---
 
-## CURRENT STATE — 2026-05-10 (Phase 24 CLOSED)
+## CURRENT STATE — 2026-05-10 (Phase 24 CLOSED + B79.0i.a SHIPPED)
 
-**xstock_spot fully onboarded** across 9 sub-batches: B79 + B79.TEC + B79.0a + B79.0b + B79.0c + B79.0d + B79.0f + B79.0g + B79.0e + B79.0h (governance retrospective). PM2 #206 on `migration/aws-supabase` HEAD `963475be9`.
+**xstock_spot fully onboarded** across 9 sub-batches + B79.0i.a (xStocks observation tab Phase 1) shipped 2026-05-10. PM2 #207 on `migration/aws-supabase` HEAD `c927924df`. All 5 verification gates PASS including Claude-in-Chrome G3 walkthrough.
 
 **Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — post-Kyle-directive 2026-05-10, contains ONLY standing rules + procedural checklist. Trial-and-error history lives in per-batch completion reports, not the workflow doc.
 
@@ -33,26 +33,13 @@
 
 ---
 
-## NEXT STEP — xStocks dedicated UI tab (Kyle directive 2026-05-10)
+## NEXT STEP — B79.0i.b (Tue/Wed 2026-05-12/13)
 
-**Goal:** new dedicated tab for xstock_spot mirroring crypto's existing `Machine Learning > Filter Diagnostics` tab. Built before B79.0d ORB strategy starts firing Monday 2026-05-11 14:30 UTC.
+Panels B (B73 Exit Ablation) + C (B67.0 Calibration Ablation with mandatory caveat banner) + D (Strategy Fire-Rate by Regime) on the existing xStocks tab. Parameterize 3 shared endpoints with OPTIONAL `?asset_class=`: `/api/analytics/exit-strategy-ablation`, `/api/analytics/factor-calibration`, `/api/analytics/ablation-comparison`. Crypto-regression invariant = structural + SQL-string equivalence when param omitted (per Langston scope-revision; NOT byte-diff on aggregate values). Required SQL-fixture-committed unit test covering all 3 aggregator paths including `drift-dashboard-aggregator.ts:1055` parameterization (no internal `'crypto_spot'` default — defaults live ONLY in route handlers, no silent fallbacks per Kyle directive). Also: Section M procedural recipe in `ASSET_CLASS_ONBOARDING_WORKFLOW.md` once .b closes (B80 implementer's blueprint for "stand up the dedicated observation tab"). exit_strategy_alternates.asset_class column verified present (default crypto_spot) — no migration needed.
 
-**Confirmed scope (subject to PIA):**
-- Filter diagnostics — 24h + 7d pipeline funnel (scanner → IMF → family → SQE → trade) for xstock_spot. **Look at staging filter-diagnostics tab AS THE TEMPLATE** — replicate everything that's there for xstock_spot, scoped via asset_class filter.
-- Scanner cycle metrics fold INTO the filter diagnostics panel (already exposed via `/api/diagnostics/xstock-scanner` — `lastUniverseSize`, `lastArcaOpen`, `cyclesCompleted`, freshness).
-- B73 exit-strategy ablation panel (12 variants per closed trade; asset_class-scoped).
-- Strategy fire-rate by regime (drives Section G strategy-gap monitoring trigger #1).
-- Per-pair top-N fresh-tick latency (given WS-silent-weekends issue).
+## B79.0i.a CLOSED 2026-05-10 (commit c927924df, PM2 #207)
 
-**Confirmed wired with caveats:**
-- B67.0 calibration ablation panel — wire for FRAMEWORK HEALTH visibility, but flag explicitly that decision-grade evidence (n≥150 per regime × factor-tertile bucket) likely takes 3-6 MONTHS given xstock_spot's ~50% signal volume vs crypto + TFS-regime concentration.
-
-**Dropped on Kyle's pushback:**
-- Mode distribution (NORMAL/DEFENSIVE/SURVIVAL) — the dynamic Adaptive Response System that detects regime + global DBS and adjusts modes is post-launch / Phase 19+. Don't surface mode distribution until that system exists.
-
-**Process:** Kyle directs me to NOT scope in detail this turn. Just note as next-step + confirm via scope+PIA in fresh context post-compaction.
-
-**Time pressure:** target before ARCA reopen Sunday 2026-05-10 22:00 UTC (or 8pm ET / 00:00 UTC Monday). Realistically a 1-2 day sub-batch with proper scope+Langston review+impl+verify; partial visibility before reopen acceptable.
+xStocks tab inside Machine Learning page (sibling to Filter Diagnostics + DBS Pair Tracking, positioned LAST). Panels A (Scanner Cycle Metrics) + E (Per-Pair Fresh-Tick Latency) shipped. 2 new sibling endpoints under `/api/xstocks/`. NO modifications to `/api/vts/*` or `/api/analytics/*` — crypto regression NONE by-construction. **Pre-audit Finding #1:** xstockSpotScanner does NOT track IMF/family/SQE/trade per-stage funnel counters yet (Day 1 = observability-only); Panel A is scanner-cycle metrics ONLY; full funnel deferred to a future B79.x batch. **Langston multi-step approval:** Step 1 (3 conditions applied) + Step 2 (4 conditions C1-C4 applied) + Step 4 APPROVE-ship (3 non-blocking nits). **5-gate verification all PASS** including G3 Claude-in-Chrome live UI walkthrough + N0/N1 rate-sanity check (delta=2 over 60s = exact 30s × 2 cadence) + G5 crypto Filter Diagnostics tab visually-identical post-deploy.
 
 ---
 
@@ -70,6 +57,7 @@
 | B79.0g | `fb42335f7` | #205 | vts_open_trades persistence + bootstrap-with-re-resolve |
 | B79.0e | `aca52acdc` | #206 | equity_*→xstock_* (172 DB objects) |
 | B79.0h | `963475be9` | n/a | Workflow + SIM/SYSTEM_MANUAL retrospective |
+| B79.0i.a | `c927924df` | #207 | xStocks tab (Phase 1: Panel A scanner-cycle + Panel E freshness + 2 new endpoints) |
 
 **Pending operator gates Sunday 2026-05-10/11:**
 - ~11:24 UTC — B79.TEC.b `break_even_enabled` wildcard DELETE per checklist

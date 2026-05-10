@@ -570,6 +570,7 @@ Adaptive Market Response concept document `1-system-manual/ADAPTIVE_MARKET_RESPO
 | B79.0g | 2026-05-10 | `6542dccb6`+`fb42335f7` | Persistence-at-trade-open (`vts_open_trades` table + service); INSERT-before-Map.set; bootstrap-with-re-resolve; rehydrate-on-boot |
 | B79.0e | 2026-05-10 | `aca52acdc` | `equity_*` → `xstock_*` namespace cleanup (172 DB objects in single transaction; rollback symmetry) |
 | **B79.0h** | 2026-05-10 | (this commit) | **Governance retrospective** — ASSET_CLASS_ONBOARDING_WORKFLOW H.1.x post-mortem + H.1.y decision rules + SIM/SYSTEM_MANUAL/PHASE_HISTORY updates |
+| **B79.0i.a** | 2026-05-10 | `c927924df` | **xStocks observation tab Phase 1** (tab + Panel A scanner-cycle + Panel E freshness + 2 new sibling endpoints under `/api/xstocks/`). Phase 24 standing rule #10 obligation. PM2 #207. All 5 verification gates PASS including G3 Claude-in-Chrome live UI walkthrough + N0/N1 rate-sanity check (delta=2 over 60s = exact 30s × 2 cadence). Crypto regression: NONE by-construction (no shared-endpoint mods). Panels B/C/D + 3 shared endpoint parameterization deferred to B79.0i.b Tue/Wed. |
 
 **Phase 24 success criteria — MET 2026-05-10:**
 - ✅ xstock_spot in production VTS shadow-mode (PM2 #206; archiver flushing to xstock_* renamed tables; no-touch fence on crypto_spot held)
