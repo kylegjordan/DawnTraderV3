@@ -36,7 +36,7 @@
 
 Phase 24 (B79 + B79.TEC + B79.0a-0g + B79.0h governance retrospective) closed 2026-05-10. xstock_spot fully onboarded across 9 sub-batches + governance retrospective. **Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` is now battle-tested through this stretch — Sections H.1.x (post-mortem) and H.1.y (updated decision rules) are the high-value content for B80 (crypto_perp / Phase 25) implementer.
 
-**10 architectural patterns established as cross-cutting standards** for future asset class onboarding:
+**12 architectural patterns established as cross-cutting standards** for future asset class onboarding (rules 1-10 from Phase 24 close 2026-05-10; rules 11-12 added 2026-05-10 from B79.0i.b — see SYSTEM_MANUAL appendix #6-#7):
 1. Per-asset-class behavioral config is the default (DB-resolved, asset_class-scoped, HARD-FAIL on missing rows)
 2. Telemetry partitioning via separate-instance triad
 3. Asset-class resolution is exchange-disambiguated, never canonical-form-disambiguated
@@ -45,8 +45,12 @@ Phase 24 (B79 + B79.TEC + B79.0a-0g + B79.0h governance retrospective) closed 20
 6. Per-symbol predicates when class is not monolithic
 7. Strategy real-implementation = 6 steps (detect → dispatch → orchestrator → regime-map → thresholds → gate)
 8. Namespace reservation (tokenized representations get own namespace)
-9. Two parallel ablation frameworks during shadow-mode (B67.0 + B73)
-10. Each new asset class gets dedicated observation UI tab
+9. Two parallel ablation frameworks during VTS observation (B67.0 + B73)
+10. Each new asset class gets dedicated observation UI tab — **CLOSED for xstock_spot 2026-05-10 (B79.0i.b)**; outstanding for B80 (crypto_perp) and beyond. Recipe lives at `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Section M.
+11. **Cross-asset-class UI component reuse via export+endpointBase prop** (B79.0i.b). Rich primary-asset components (`FilterDiagnosticsPanel`, `ExitStrategyAblationSection`, `FactorCalibrationSection`) exported with optional `endpointBase` prop whose default preserves byte-identical legacy behavior. Asset-class-specific tabs pass their own endpointBase pointing at sibling endpoints. No duplication, no behavioral drift, no risk to legacy crypto consumers.
+12. **Shared aggregator parameterization via optional asset_class** (B79.0i.b). Backend aggregator functions gain optional `assetClass` parameter with default value preserving the legacy crypto-only behavior. SQL WHERE clause appends `AND asset_class = $X` only when the param is provided (or when default is a literal, the SQL is parameterized rather than hardcoded). Crypto regression invariant: any caller that omits the param gets byte-identical pre-change behavior. Verified by post-deploy curl on `/api/analytics/factor-calibration` returning unchanged `factors: 10` shape.
+
+**Terminology standing rule (Kyle directive 2026-05-10 evening):** "VTS Observation" — never "shadow-mode" — when referring to VTS + passive learning telemetry surfaces in UI, code, governance docs, and Telegram comms.
 
 **Phase 24 follow-ups carrying into post-Phase-24:**
 - B79.0g-tx (RUNNING_ISSUES #91) — close-time atomic DELETE+INSERT through `persistRealPriceTrade` (substantial refactor; affects B73 + B70 hooks)

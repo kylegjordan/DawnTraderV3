@@ -2,6 +2,51 @@
 
 ---
 
+## INFRA-2026-05-10-B — B79.0i.b factor-calibration jsonb schema-extraction hotfix
+
+**Trigger:** B79.0i.b initial deploy of `/api/xstocks/factor-calibration` errored with `column "real_confidence" does not exist`. The custom xstocks endpoint query referenced flat `real_confidence` and `alt_confidence` columns assumed from naming convention.
+
+**Root cause:** I assumed the column shape from the variable name (`avgRealConfidence`, `avgAltConfidence`) without verifying schema. The actual `regime_factor_alternates` table stores the data as jsonb columns: `real_decision` (jsonb) and `alternate_decision` (jsonb), each with a `confidence` key inside the JSON object. Confidence values must be extracted via `(real_decision->>'confidence')::numeric`.
+
+**Fix:** Commit `cdbd2a04b` corrected the SQL extraction:
+```sql
+AVG(
+  COALESCE((real_decision->>'confidence')::numeric, 0)
+  - COALESCE((alternate_decision->>'confidence')::numeric, 0)
+)::text AS avg_shift
+```
+
+**Subsequent rev2 (`b9a1cdd4e`) sidesteps the issue entirely** by deleting the custom xstocks-side query and reusing the shared `computeFactorCalibration` aggregator (which already had the correct jsonb extraction at `drift-dashboard-aggregator.ts:1048`). The reusable-aggregator path is the right pattern.
+
+**Standing rule (added to `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Section M caveats):** Always run `psql \d <table>` on staging before writing aggregator SQL. Do not assume column shape from naming convention. Prefer reusing an existing shared aggregator over duplicating the SQL — duplicate SQL gets the schema wrong; the original is already correct.
+
+**Files:** `server/routes.ts` (hotfix `cdbd2a04b`); subsequently rewritten in `b9a1cdd4e`.
+
+---
+
+## INFRA-2026-05-10-A — Asset-class collision backfill (4862 rows, signal_eval_archive)
+
+**Trigger:** B79.0f resolver disambiguation surfaced historical mis-tagging for ticker-collision symbols (Sun Communities SUI equity vs Sui Network SUI crypto; analogous for BDX/CVX/DASH/EDU/MET/OPEN/PEP/T). Pre-B79 the resolver returned crypto_spot for these tickers; B79 ship 2026-05-07 21:51 UTC populated `XSTOCK_SPOT_SYMBOLS` and the `XSTOCK_SPOT_SYMBOLS.has(symbol)` fast-path started preferring xstock_spot for collision tickers on regular `kraken` exchange.
+
+**Audit (2026-05-10):**
+- signal_eval_archive: 4862 mis-tagged rows
+  - DASH/USD: 337 (first 2026-05-07 21:55 UTC, last 2026-05-10 00:17 UTC)
+  - MET/USD:  1598 (first 2026-05-07 21:53 UTC, last 2026-05-09 22:21 UTC)
+  - OPEN/USD: 44   (first 2026-05-08 15:02 UTC, last 2026-05-09 03:09 UTC)
+  - SUI/USD:  2883 (first 2026-05-07 21:51 UTC, last 2026-05-10 00:18 UTC)
+- trading_signals: 0
+- regime_factor_alternates: 0
+- exit_strategy_alternates: 0
+- paper_sim_trades: 0
+
+**Backfill applied 2026-05-10 (`scripts/b79-0f-collision-backfill.sql`):** single UPDATE flipped all 4862 rows xstock_spot → crypto_spot. Verification SELECT post-UPDATE returns 0 mis-tagged.
+
+**Standing rule:** quarterly re-audit of `XSTOCK_SPOT_KRAKEN_COLLISIONS` against Kraken `/0/public/AssetPairs` (calendar trigger in MULTI_ASSET_VTS_EXPANSION_PLAN.md §10c.X). Kraken adds tokens regularly; new collisions can emerge.
+
+**Paper-trail per Langston rev 2 #5:** per-table row counts above + commit reference (`e6fd7350f`).
+
+---
+
 ## INFRA-2026-05-09-E — Kraken WS-equities silent on weekends (incl. 24/7 names)
 
 **Trigger:** B79.0c WS probe pre-ship 2026-05-09 22:30 UTC. Subscribed to `wss://ws-equities.kraken.com` ticker+ohlc channels for all 10 Kraken Phase-1 24/7 names (TSLA, AAPL, SPY, QQQ, GLD, GOOGL, HOOD, MSTR, NVDA, CRCL — `BASExUSD` form). 60-second window returned 201 messages but ZERO ticker / ZERO OHLC. CLOSE 1006 (abnormal closure) at end of window. Pre-test DB freshness: `equity_spot_ticker_snap` last write 2026-05-09 11:12 UTC (10h+ stale); `equity_spot_ohlc_1m` last write 2026-05-09 00:15 UTC (22h+ stale). Concurrent flows healthy: `crypto_spot` 8/cycle, `xstock_perp` 38/cycle.

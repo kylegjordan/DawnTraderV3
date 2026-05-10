@@ -462,4 +462,162 @@ Out of scope for this doc. Exchange-onboarding (when adding Binance, Coinbase, B
 
 ---
 
+## Section M — Stand up the dedicated observation tab
+
+> **Added 2026-05-10 post-B79.0i.b.** The xstock_spot tab in `Machine Learning > xStocks` is the worked example. B80 (crypto_perp) implementer follows this recipe to stand up the equivalent for perp.
+
+### Why this section exists
+
+Phase 24 standing rule #10: **every new asset class gets a dedicated observation UI tab.** B79.0i landed three iterations under Kyle pushbacks before reaching the right design — this section captures the durable recipe so B80 doesn't repeat the iteration cost. The recipe rests on two architectural patterns established in B79.0i.b (now Phase 24 standing rules #6 + #7 in SYSTEM_MANUAL appendix):
+- **#6** Cross-asset-class UI component reuse via export+endpointBase prop
+- **#7** Shared aggregator parameterization via optional asset_class
+
+### Step 1 — Parameterize the shared backend aggregators
+
+For each shared aggregator function the new asset class needs (e.g., `computeExitStrategyAblation`, `computeFactorCalibration`, `computeAblationComparison`), add an optional `assetClass` parameter with a default value preserving the legacy behavior.
+
+```typescript
+// BEFORE
+export async function computeFoo(window: Window): Promise<FooResponse> {
+  // ... SQL with hardcoded "AND asset_class = 'crypto_spot'" ...
+}
+
+// AFTER
+export async function computeFoo(
+  window: Window,
+  assetClass: string = 'crypto_spot', // OR null if the legacy default was no filter
+): Promise<FooResponse> {
+  // ... SQL with parameterized "AND asset_class = ${assetClass}" (or conditional clause when default is null) ...
+}
+```
+
+**Crypto regression invariant:** verify post-deploy that the existing `/api/analytics/<endpoint>` returns byte-identical response when called without changes. Run a curl-diff on the response shape if the aggregator returns mixed-asset rows; check row count unchanged if filtered.
+
+### Step 2 — Export the rich UI sections
+
+The xStocks tab proved 3 components are worth reusing:
+- `FilterDiagnosticsPanel` from `machine-learning.tsx` (the full Filter Diagnostics tab content)
+- `ExitStrategyAblationSection` from `analytics.tsx` (B73 exit ablation tables)
+- `FactorCalibrationSection` from `analytics.tsx` (B67 calibration tables)
+
+Convert each from internal-only to `export function` with an optional `endpointBase` prop:
+
+```typescript
+// BEFORE
+function FactorCalibrationSection() {
+  const queryUrl = `/api/analytics/factor-calibration?window=${windowSel}`;
+  // ...
+}
+
+// AFTER
+export function FactorCalibrationSection({
+  endpointBase = '/api/analytics/factor-calibration',
+}: { endpointBase?: string } = {}) {
+  const queryUrl = `${endpointBase}?window=${windowSel}`;
+  // ... unchanged rendering ...
+}
+```
+
+For shapes that don't have built-in endpoints, also export the response-data type so the asset-class tab can typecheck its endpoint.
+
+### Step 3 — Build sibling endpoints under `/api/<asset_class>/`
+
+For each shared aggregator the asset-class tab needs, add a sibling route handler that calls the parameterized aggregator with the asset class fixed:
+
+```typescript
+apiRouter.get('/<asset_class>/exit-strategy-ablation', authenticateToken, async (req, res) => {
+  const { computeExitStrategyAblation } = await import('./services/exit-strategy-ablation-aggregator.js');
+  const win = (req.query.window as string) || 'rolling_7d';
+  const regimeFilter = (req.query.regime as string) || null;
+  const data = await computeExitStrategyAblation(win, regimeFilter, '<asset_class>');
+  res.json({ ok: true, data });
+});
+
+apiRouter.get('/<asset_class>/factor-calibration', authenticateToken, async (req, res) => {
+  const { computeFactorCalibration } = await import('./services/drift-dashboard-aggregator.js');
+  const win = (req.query.window as string) || 'rolling_7d';
+  const data = await computeFactorCalibration(win, '<asset_class>');
+  res.json({ ok: true, data });
+});
+```
+
+For the FilterDiagnosticsPanel feed, build a NEW endpoint `/api/<asset_class>/filter-diagnostics` that returns the full `FilterDiagnosticsData` shape populated from the asset-class-specific scanner + `signal_eval_archive` aggregations + ticker_snap counts. Honest signaling: where the scanner doesn't yet emit funnel-rejection counters, those fields stay zero (don't fake them).
+
+### Step 4 — Build the new tab component
+
+`client/src/components/machine-learning/<asset_class>-tab.tsx`:
+
+```typescript
+import { FilterDiagnosticsPanel, type FilterDiagnosticsData } from "@/pages/machine-learning";
+import { FactorCalibrationSection, ExitStrategyAblationSection } from "@/pages/analytics";
+
+export function <AssetClass>Tab() {
+  const { data: filterData, isLoading: filterLoading } = useQuery({
+    queryKey: ['/api/<asset_class>/filter-diagnostics', { asset_class: '<asset_class>' }], // cache-key isolation
+    queryFn: () => apiFetch('/api/<asset_class>/filter-diagnostics'),
+    refetchInterval: 15000,
+  });
+
+  // ... freshness query, scanner query, etc. ...
+
+  return (
+    <div className="space-y-4" data-testid="<asset_class>-tab">
+      <h2>...{asset_class}... — VTS Observation</h2> {/* NEVER "shadow-mode" — Kyle directive */}
+
+      <ScannerCycleHeader data={filterData} />
+      <FreshnessPanel data={freshnessData} />
+
+      {/* REUSED FilterDiagnosticsPanel scoped via endpoint */}
+      <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} />
+
+      {/* REUSED ablation sections via endpointBase */}
+      <ExitStrategyAblationSection endpointBase="/api/<asset_class>/exit-strategy-ablation" />
+      <FactorCalibrationSection endpointBase="/api/<asset_class>/factor-calibration" />
+    </div>
+  );
+}
+```
+
+### Step 5 — Wire the tab into Machine Learning Tabs group
+
+In `client/src/pages/machine-learning.tsx`, add the new TabsTrigger + TabsContent block. **Position LAST** in the tabs group:
+
+```typescript
+import { <AssetClass>Tab } from "@/components/machine-learning/<asset_class>-tab";
+
+<TabsTrigger value="<asset_class>" className="flex items-center gap-2" data-testid="tab-<asset_class>">
+  <SomeIcon className="w-4 h-4" />
+  <Asset Class Display Name>
+</TabsTrigger>
+
+<TabsContent value="<asset_class>">
+  <<AssetClass>Tab />
+</TabsContent>
+```
+
+### Step 6 — Verify via Claude-in-Chrome G3 walkthrough
+
+Mandatory per Kyle directive 2026-05-10:
+1. Navigate to staging Machine Learning page
+2. Click the new asset-class tab
+3. Screenshot all 5+ sections
+4. Browser DevTools Network tab — verify NO 4xx/5xx on asset-class-scoped XHR calls
+5. Console — verify NO app errors (browser-extension noise OK)
+6. Click back to existing Filter Diagnostics tab — verify visually identical to pre-deploy
+7. Curl `/api/analytics/<shared-endpoint>` — verify response shape unchanged from pre-deploy
+
+### Standing rules
+
+- **Terminology: "VTS Observation", NEVER "shadow-mode".** Per Kyle directive 2026-05-10 evening: "stop referring to VTS and passive learning as shadow mode. That is not terminology we are using."
+- **Honest signaling:** when an asset-class scanner is observability-only and not wired through orchestration yet, FilterDiagnosticsPanel funnel-rejection rows show zero. Do NOT fake counters. File the gap as a RUNNING_ISSUES entry pinning the future B<N>.x batch.
+- **Crypto regression invariant:** every shared-aggregator parameterization must preserve byte-identical default behavior. Verify with curl-diff post-deploy.
+- **Cache-key isolation:** every `useQuery` against a shared endpoint must include `{ asset_class: '<asset_class>' }` in its `queryKey` array.
+
+### Caveats from B79.0i
+
+- **Schema check before query writing.** B79.0i.b initially errored on `factor-calibration` trying to read flat `real_confidence`/`alt_confidence` columns that don't exist. Schema uses jsonb `real_decision`/`alternate_decision` columns with `->>'confidence'` extraction. Always run `psql \d <table>` on staging before writing aggregator SQL — don't assume column shape from naming convention. Rev2 sidesteps this by using the shared aggregator (already correct).
+- **Empty-state messages matter.** The reused crypto components have built-in empty-state messages explaining what populates them. They're honest, useful, accurate even pre-data-accumulation. Don't replace them with custom lighter ones.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
