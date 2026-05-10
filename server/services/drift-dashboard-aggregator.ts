@@ -1033,6 +1033,7 @@ function splitTertiles(
 
 export async function computeFactorCalibration(
   window: DashboardWindow,
+  assetClass: string = 'crypto_spot', // B79.0i.b: REQUIRED-with-default; xstock_spot path passes 'xstock_spot'. When omitted, behavior is byte-identical to pre-B79.0i.b (Langston scope contract).
 ): Promise<FactorCalibrationResponse> {
   const { db } = await import('../db.js');
   const { sql } = await import('drizzle-orm');
@@ -1052,7 +1053,7 @@ export async function computeFactorCalibration(
     FROM regime_factor_alternates
     WHERE evaluated_at >= ${windowStart}
       AND replay_completed_at IS NOT NULL
-      AND asset_class = 'crypto_spot'
+      AND asset_class = ${assetClass}
       -- B76 (2026-05-06): legacy frozen-factor filter REMOVED. Per Langston
       -- review revision: for b67_1 per-input rows and b67_2 phase rows
       -- (legacy b67_2_phase_dimension and current b67_2_phase_preference) we

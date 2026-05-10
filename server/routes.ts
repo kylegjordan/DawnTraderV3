@@ -7244,106 +7244,52 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // GET /api/xstocks/exit-strategy-ablation - B79.0i.a (REVISED): B73 exit
-  // ablation scoped to xstock_spot. Sibling endpoint (NOT modifying shared
-  // /api/analytics/exit-strategy-ablation — preserves no-touch fence on
-  // crypto). Reuses computeExitStrategyAblation aggregator with asset_class
-  // filter monkey-patched via direct DB query for the asset_class subset.
+  // GET /api/xstocks/exit-strategy-ablation - B79.0i.b: B73 exit ablation
+  // scoped to xstock_spot via the shared computeExitStrategyAblation
+  // aggregator with assetClass parameter. Returns the SAME ExitStrategyAblationResponse
+  // shape as /api/analytics/exit-strategy-ablation so the existing
+  // ExitStrategyAblationSection component can render identically.
   apiRouter.get('/xstocks/exit-strategy-ablation', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      const { computeExitStrategyAblation } = await import('./services/exit-strategy-ablation-aggregator.js');
       const win = (req.query.window as string) || 'rolling_7d';
       const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
       if (!allowed.includes(win)) {
         return res.status(400).json({ ok: false, error: `invalid window '${win}'` });
       }
-      const intervalMap: Record<string, string> = {
-        rolling_24h: '24 hours',
-        rolling_7d: '7 days',
-        rolling_30d: '30 days',
-        cohort_latest: '7 days',
-      };
-      const interval = intervalMap[win];
-      // Per-variant aggregate
-      const variantAgg = await db.execute(sql.raw(`
-        SELECT variant_id, variant_name,
-               COUNT(*)::text AS n,
-               AVG(virtual_pnl_pct)::text AS avg_pnl,
-               AVG(baseline_pnl_pct)::text AS avg_baseline,
-               COUNT(CASE WHEN virtual_pnl_pct > 0 THEN 1 END)::text AS wins,
-               COUNT(CASE WHEN virtual_pnl_pct <= 0 THEN 1 END)::text AS losses
-        FROM exit_strategy_alternates
-        WHERE asset_class = 'xstock_spot'
-          AND created_at > NOW() - INTERVAL '${interval}'
-        GROUP BY variant_id, variant_name
-        ORDER BY variant_id
-      `));
-      const variants = (((variantAgg as any).rows ?? []) as Array<any>).map((r) => ({
-        variantId: r.variant_id,
-        variantName: r.variant_name,
-        n: parseInt(r.n, 10) || 0,
-        avgPnL: parseFloat(r.avg_pnl) || 0,
-        avgBaseline: parseFloat(r.avg_baseline) || 0,
-        wins: parseInt(r.wins, 10) || 0,
-        losses: parseInt(r.losses, 10) || 0,
-        winRate: (parseInt(r.wins, 10) || 0) / Math.max(1, parseInt(r.n, 10) || 0),
-      }));
-      res.json({ ok: true, window: win, assetClass: 'xstock_spot', schema: 'xstocks-exit-ablation/v1.0', variants });
+      const regimeFilter = (req.query.regime as string) || null;
+      const data = await computeExitStrategyAblation(
+        win as 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest',
+        regimeFilter,
+        'xstock_spot',
+      );
+      res.json({ ok: true, data });
     } catch (error: any) {
-      console.error('[B79.0i.a][exit-strategy-ablation] failed:', error);
+      console.error('[B79.0i.b][xstocks/exit-strategy-ablation] failed:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });
 
-  // GET /api/xstocks/factor-calibration - B79.0i.a (REVISED): B67.0 factor
-  // calibration scoped to xstock_spot. Sibling endpoint preserves crypto
-  // no-touch fence.
+  // GET /api/xstocks/factor-calibration - B79.0i.b: B67.0 factor calibration
+  // scoped to xstock_spot via the shared computeFactorCalibration aggregator
+  // with assetClass parameter. Returns the SAME FactorCalibrationResponse
+  // shape as /api/analytics/factor-calibration so the existing
+  // FactorCalibrationSection component can render identically.
   apiRouter.get('/xstocks/factor-calibration', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      const { computeFactorCalibration } = await import('./services/drift-dashboard-aggregator.js');
       const win = (req.query.window as string) || 'rolling_7d';
       const allowed = ['rolling_24h', 'rolling_7d', 'rolling_30d', 'cohort_latest'];
       if (!allowed.includes(win)) {
         return res.status(400).json({ ok: false, error: `invalid window '${win}'` });
       }
-      const intervalMap: Record<string, string> = {
-        rolling_24h: '24 hours',
-        rolling_7d: '7 days',
-        rolling_30d: '30 days',
-        cohort_latest: '7 days',
-      };
-      const interval = intervalMap[win];
-      // Per-factor count + avg confidence shift extracted from jsonb decisions
-      const factorAgg = await db.execute(sql.raw(`
-        SELECT factor_name,
-               COUNT(*)::text AS n,
-               AVG(
-                 COALESCE((real_decision->>'confidence')::numeric, 0)
-                 - COALESCE((alternate_decision->>'confidence')::numeric, 0)
-               )::text AS avg_shift,
-               COUNT(CASE WHEN replay_completed_at IS NOT NULL THEN 1 END)::text AS replays_done
-        FROM regime_factor_alternates
-        WHERE asset_class = 'xstock_spot'
-          AND evaluated_at > NOW() - INTERVAL '${interval}'
-        GROUP BY factor_name
-        ORDER BY n DESC
-      `));
-      const factors = (((factorAgg as any).rows ?? []) as Array<any>).map((r) => ({
-        factor: r.factor_name,
-        n: parseInt(r.n, 10) || 0,
-        avgConfidenceShift: parseFloat(r.avg_shift) || 0,
-        replaysDone: parseInt(r.replays_done, 10) || 0,
-      }));
-      const totalN = factors.reduce((a, b) => a + b.n, 0);
-      res.json({
-        ok: true,
-        window: win,
-        assetClass: 'xstock_spot',
-        schema: 'xstocks-factor-calibration/v1.0',
-        decisionGradeThreshold: 150,
-        totalN,
-        factors,
-      });
+      const data = await computeFactorCalibration(
+        win as 'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest',
+        'xstock_spot',
+      );
+      res.json({ ok: true, data });
     } catch (error: any) {
-      console.error('[B79.0i.a][factor-calibration] failed:', error);
+      console.error('[B79.0i.b][xstocks/factor-calibration] failed:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });

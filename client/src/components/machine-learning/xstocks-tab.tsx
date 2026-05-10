@@ -1,27 +1,34 @@
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * B79.0i.a (REVISED 2026-05-10 per Kyle pushback)
+ * B79.0i.b (REVISED 2026-05-10 evening per Kyle pushback round 2)
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Mirrors the Filter Diagnostics tab in full for xstock_spot, plus adds B73
- * Exit Strategy Ablation + B67.0 Factor Calibration Ablation panels. Single
- * tab inside Machine Learning page. Reuses crypto's `FilterDiagnosticsPanel`
- * by importing it (data shape preserved); xstock-scoped data flows through
- * `/api/xstocks/filter-diagnostics`.
+ * Mirrors the Filter Diagnostics tab in full for xstock_spot, plus reuses
+ * the EXISTING ExitStrategyAblationSection + FactorCalibrationSection from
+ * analytics.tsx (the same components shown in the crypto Drift Dashboard) —
+ * so xstock_spot gets the SAME rich tables (per-variant exit-reason
+ * breakdowns, per-factor tertile buckets, predictive lift, decision-grade
+ * status) the crypto dashboard has.
  *
- * Panels (all on this one tab):
- *   1. Scanner Cycle Header Strip — xstock-specific (running, ARCA, cycles, etc.)
+ * Sections on this tab:
+ *   1. Scanner Cycle Header — xstock-specific (running, ARCA, cycles, etc.)
  *   2. Per-Pair Fresh-Tick Latency — xstock-specific (RUNNING_ISSUES #89 visibility)
- *   3. FilterDiagnosticsPanel (FULL) — Pipeline Summary + Last Scan + 24h Rolling
- *      + VTS Evaluation Detail by-strategy + Setup Nulls + Pre-Eval Skips
- *      + Post-Signal Rejections + Filter Metric Ranges. Mirrors crypto exactly,
- *      scoped to xstock_spot via /api/xstocks/filter-diagnostics endpoint.
- *   4. B73 Exit Strategy Ablation Panel
- *   5. B67.0 Factor Calibration Ablation Panel (with mandatory caveat banner)
+ *   3. FilterDiagnosticsPanel (FULL crypto component reused) — Pipeline
+ *      Summary + Last Scan + 24h Rolling + VTS Evaluation Detail by-strategy
+ *      + Setup Nulls + Pre-Eval Skips + Post-Signal Rejections + Filter
+ *      Metric Ranges, scoped to xstock_spot via /api/xstocks/filter-diagnostics.
+ *   4. ExitStrategyAblationSection (FULL crypto component reused) — B73 exit
+ *      ablation with per-variant table + exit-reason breakdown + diff vs
+ *      baseline + Sharpe-like score, scoped via /api/xstocks/exit-strategy-ablation.
+ *   5. FactorCalibrationSection (FULL crypto component reused) — B67 factor
+ *      calibration with confidence-shift distribution + tertile WR analysis +
+ *      predictive lift, scoped via /api/xstocks/factor-calibration.
  *
  * Crypto regression posture: all xstock data flows through NEW /api/xstocks/*
- * sibling endpoints. No modifications to /api/vts/* or /api/analytics/*.
- * No-touch fence on crypto_spot through 2026-05-15 preserved by-construction.
+ * sibling endpoints calling the SHARED aggregator functions with assetClass
+ * parameter (default = 'crypto_spot' / null preserves byte-identical
+ * pre-B79.0i.b behavior for crypto consumers). No-touch fence on crypto_spot
+ * through 2026-05-15 preserved.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
@@ -29,11 +36,13 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Activity, Wifi, WifiOff, AlertCircle, BarChart3, LineChart as LineChartIcon } from "lucide-react";
+// Alert kept for empty-state design; AlertCircle imported above
+
+import { Activity, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { format } from "date-fns";
 import { FilterDiagnosticsPanel, type FilterDiagnosticsData } from "@/pages/machine-learning";
+import { FactorCalibrationSection, ExitStrategyAblationSection } from "@/pages/analytics";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,34 +82,7 @@ interface XstocksFreshnessResponse {
   symbols: XstockFreshnessRow[];
 }
 
-interface ExitAblationVariant {
-  variantId: string;
-  variantName: string;
-  n: number;
-  avgPnL: number;
-  avgBaseline: number;
-  wins: number;
-  losses: number;
-  winRate: number;
-}
-interface ExitAblationResponse {
-  ok: boolean;
-  window: string;
-  variants: ExitAblationVariant[];
-}
-
-interface CalibrationFactor {
-  factor: string;
-  n: number;
-  avgConfidenceShift: number;
-}
-interface CalibrationResponse {
-  ok: boolean;
-  window: string;
-  decisionGradeThreshold: number;
-  totalN: number;
-  factors: CalibrationFactor[];
-}
+// (B73 + B67.0 ablation panels are imported from analytics.tsx — see XstocksTab below)
 
 // ---------------------------------------------------------------------------
 // Reusable atoms
@@ -123,21 +105,6 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <div className="text-2xl font-semibold mt-1">{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
     </div>
-  );
-}
-
-function CalibrationCaveatBanner({ n }: { n: number }) {
-  return (
-    <Alert className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-950 dark:border-amber-700" data-testid="xstocks-calibration-caveat-banner">
-      <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-      <AlertTitle className="text-amber-900 dark:text-amber-200">
-        Current n={n}. Decision-grade requires n≥150 per regime × factor-tertile bucket.
-      </AlertTitle>
-      <AlertDescription className="text-amber-800 dark:text-amber-300">
-        Given xstock_spot's ~50% lower signal volume vs crypto_spot and TFS-regime concentration,
-        expected timeline 3–6 months. Treat as system-health telemetry, not signal.
-      </AlertDescription>
-    </Alert>
   );
 }
 
@@ -278,117 +245,10 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
 }
 
 // ---------------------------------------------------------------------------
-// Panel: B73 Exit Strategy Ablation
-// ---------------------------------------------------------------------------
-
-function ExitAblationPanel({ data, isLoading }: { data: ExitAblationResponse | undefined; isLoading: boolean }) {
-  if (isLoading) {
-    return (<Card data-testid="xstocks-exit-ablation-panel"><CardHeader><CardTitle className="text-lg">B73 Exit Strategy Ablation</CardTitle></CardHeader><CardContent><div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div></CardContent></Card>);
-  }
-  if (!data?.ok) {
-    return (<Card data-testid="xstocks-exit-ablation-panel"><CardHeader><CardTitle className="text-lg">B73 Exit Strategy Ablation</CardTitle></CardHeader><CardContent><EmptyPanelState message="Failed to load exit ablation data." /></CardContent></Card>);
-  }
-  const totalN = data.variants.reduce((a, b) => a + b.n, 0);
-  if (totalN === 0) {
-    return (
-      <Card data-testid="xstocks-exit-ablation-panel">
-        <CardHeader><CardTitle className="text-lg flex items-center gap-2"><BarChart3 className="w-5 h-5" />B73 Exit Strategy Ablation</CardTitle></CardHeader>
-        <CardContent>
-          <EmptyPanelState message="No closed xstock_spot trades yet — populates after first ORB fire closes." secondary="Waiting on Monday 2026-05-11 14:30 UTC ARCA open + first breakout." />
-        </CardContent>
-      </Card>
-    );
-  }
-  return (
-    <Card data-testid="xstocks-exit-ablation-panel">
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2"><BarChart3 className="w-5 h-5" />B73 Exit Strategy Ablation</CardTitle>
-        <div className="text-xs text-muted-foreground mt-1">
-          12 exit variants per closed xstock_spot trade. Window: {data.window}. Total samples: {totalN}.
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="xstocks-exit-ablation-table">
-            <thead>
-              <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="text-left p-3">Variant</th>
-                <th className="text-right p-3">n</th>
-                <th className="text-right p-3">Avg P/L %</th>
-                <th className="text-right p-3">Avg Baseline %</th>
-                <th className="text-right p-3">Diff vs Baseline</th>
-                <th className="text-right p-3">Win Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.variants.map((v) => {
-                const diff = v.avgPnL - v.avgBaseline;
-                return (
-                  <tr key={v.variantId} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="p-3 font-medium">{v.variantName}</td>
-                    <td className="p-3 text-right font-mono">{v.n}</td>
-                    <td className={`p-3 text-right font-mono ${v.avgPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>{v.avgPnL.toFixed(2)}%</td>
-                    <td className={`p-3 text-right font-mono ${v.avgBaseline >= 0 ? 'text-green-600' : 'text-red-600'}`}>{v.avgBaseline.toFixed(2)}%</td>
-                    <td className={`p-3 text-right font-mono ${diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>{diff >= 0 ? '+' : ''}{diff.toFixed(2)}%</td>
-                    <td className="p-3 text-right font-mono">{(v.winRate * 100).toFixed(1)}%</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Panel: B67.0 Factor Calibration Ablation
-// ---------------------------------------------------------------------------
-
-function CalibrationAblationPanel({ data, isLoading }: { data: CalibrationResponse | undefined; isLoading: boolean }) {
-  if (isLoading) {
-    return (<Card data-testid="xstocks-calibration-panel"><CardHeader><CardTitle className="text-lg">B67.0 Factor Calibration Ablation</CardTitle></CardHeader><CardContent><div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div></CardContent></Card>);
-  }
-  const totalN = data?.totalN ?? 0;
-  return (
-    <Card data-testid="xstocks-calibration-panel">
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2"><LineChartIcon className="w-5 h-5" />B67.0 Factor Calibration Ablation</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <CalibrationCaveatBanner n={totalN} />
-        {!data?.ok ? <EmptyPanelState message="Failed to load calibration data." /> :
-         data.factors.length === 0 ? <EmptyPanelState message="No factor alternates captured for xstock_spot yet." secondary={`Window: ${data.window}. Populates as ORB + future strategy fires accumulate.`} /> :
-         (<div className="overflow-x-auto">
-           <table className="w-full text-sm" data-testid="xstocks-calibration-table">
-             <thead>
-               <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
-                 <th className="text-left p-3">Factor</th>
-                 <th className="text-right p-3">n</th>
-                 <th className="text-right p-3">Avg Confidence Shift</th>
-                 <th className="text-right p-3">Decision-Grade Progress</th>
-               </tr>
-             </thead>
-             <tbody>
-               {data.factors.map((f) => (
-                 <tr key={f.factor} className="border-b last:border-0 hover:bg-muted/30">
-                   <td className="p-3 font-medium">{f.factor}</td>
-                   <td className="p-3 text-right font-mono">{f.n}</td>
-                   <td className="p-3 text-right font-mono">{f.avgConfidenceShift >= 0 ? '+' : ''}{f.avgConfidenceShift.toFixed(4)}</td>
-                   <td className="p-3 text-right font-mono">{Math.min(100, (f.n / data.decisionGradeThreshold) * 100).toFixed(0)}%</td>
-                 </tr>
-               ))}
-             </tbody>
-           </table>
-         </div>)}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Top-level XstocksTab
+// Top-level XstocksTab — uses imported FactorCalibrationSection +
+// ExitStrategyAblationSection from analytics.tsx (B79.0i.b — Kyle directive
+// "exit and factor ablation tables" → reuse the rich existing components,
+// not the lighter custom ones)
 // ---------------------------------------------------------------------------
 
 export function XstocksTab() {
@@ -406,27 +266,13 @@ export function XstocksTab() {
     staleTime: 10000,
   });
 
-  const { data: exitData, isLoading: exitLoading } = useQuery<ExitAblationResponse>({
-    queryKey: ['/api/xstocks/exit-strategy-ablation', { asset_class: 'xstock_spot', window: 'rolling_7d' }],
-    queryFn: () => apiFetch('/api/xstocks/exit-strategy-ablation?window=rolling_7d'),
-    refetchInterval: 60000,
-    staleTime: 30000,
-  });
-
-  const { data: calibData, isLoading: calibLoading } = useQuery<CalibrationResponse>({
-    queryKey: ['/api/xstocks/factor-calibration', { asset_class: 'xstock_spot', window: 'rolling_7d' }],
-    queryFn: () => apiFetch('/api/xstocks/factor-calibration?window=rolling_7d'),
-    refetchInterval: 60000,
-    staleTime: 30000,
-  });
-
   return (
     <div className="space-y-4" data-testid="xstocks-tab">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">xStocks (xstock_spot) — Shadow-mode Observability</h2>
+          <h2 className="text-xl font-semibold">xStocks (xstock_spot) — VTS Observation</h2>
           <p className="text-sm text-muted-foreground">
-            Phase 24 closed 2026-05-10 · Live-trading enablement is Phase 19 territory · Monday 2026-05-11 14:30 UTC = ORB strategy goes hot
+            Phase 24 closed 2026-05-10 · VTS + passive learning telemetry · Monday 2026-05-11 14:30 UTC = ORB strategy goes hot
           </p>
         </div>
       </div>
@@ -454,11 +300,15 @@ export function XstocksTab() {
         </CardContent>
       </Card>
 
-      {/* 4. B73 Exit Strategy Ablation */}
-      <ExitAblationPanel data={exitData} isLoading={exitLoading} />
+      {/* 4. B73 Exit Strategy Ablation — REUSED rich crypto component, scoped via endpointBase */}
+      <div data-testid="xstocks-exit-ablation-section">
+        <ExitStrategyAblationSection endpointBase="/api/xstocks/exit-strategy-ablation" />
+      </div>
 
-      {/* 5. B67.0 Factor Calibration Ablation */}
-      <CalibrationAblationPanel data={calibData} isLoading={calibLoading} />
+      {/* 5. B67 Factor Calibration — REUSED rich crypto component, scoped via endpointBase */}
+      <div data-testid="xstocks-factor-calibration-section">
+        <FactorCalibrationSection endpointBase="/api/xstocks/factor-calibration" />
+      </div>
     </div>
   );
 }

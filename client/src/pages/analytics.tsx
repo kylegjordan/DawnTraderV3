@@ -1810,11 +1810,14 @@ interface FactorCalibrationData {
   totalReplayed: number;
 }
 
-function FactorCalibrationSection() {
+// B79.0i.b: exported + accepts optional endpointBase prop so xstocks-tab can
+// reuse this section by passing endpointBase='/api/xstocks/factor-calibration'.
+// Default is the existing crypto endpoint — unchanged behavior for crypto consumers.
+export function FactorCalibrationSection({ endpointBase = '/api/analytics/factor-calibration' }: { endpointBase?: string } = {}) {
   const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_7d');
   const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: FactorCalibrationData }>({
-    queryKey: ['/api/analytics/factor-calibration', windowSel],
-    queryFn: () => apiFetch(`/api/analytics/factor-calibration?window=${windowSel}`),
+    queryKey: [endpointBase, windowSel],
+    queryFn: () => apiFetch(`${endpointBase}?window=${windowSel}`),
     refetchInterval: 60_000,
   });
 
@@ -2103,13 +2106,14 @@ interface ExitStrategyAblationData {
   ready: boolean;
 }
 
-function ExitStrategyAblationSection() {
+// B79.0i.b: exported + accepts optional endpointBase prop for xstocks-tab reuse.
+export function ExitStrategyAblationSection({ endpointBase = '/api/analytics/exit-strategy-ablation' }: { endpointBase?: string } = {}) {
   const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_7d');
   const [regimeSel, setRegimeSel] = useState<string>('*');
 
-  const queryUrl = `/api/analytics/exit-strategy-ablation?window=${windowSel}${regimeSel !== '*' ? `&regime=${regimeSel}` : ''}`;
+  const queryUrl = `${endpointBase}?window=${windowSel}${regimeSel !== '*' ? `&regime=${regimeSel}` : ''}`;
   const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: ExitStrategyAblationData }>({
-    queryKey: ['/api/analytics/exit-strategy-ablation', windowSel, regimeSel],
+    queryKey: [endpointBase, windowSel, regimeSel],
     queryFn: () => apiFetch(queryUrl),
     refetchInterval: 60_000,
   });

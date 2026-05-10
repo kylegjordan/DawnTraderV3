@@ -11,7 +11,7 @@
 
 ## 1. What changed vs B79.0i.a
 
-B79.0i.a shipped Panel A (scanner-cycle metrics only) + Panel E (freshness) + 2 new endpoints, with Panels B/C/D deferred to "B79.0i.b Tue/Wed once shadow-mode evidence accumulates." Kyle pushed back: even with no live data accumulated yet, the diagnostic infrastructure should exist now. He directed me to:
+B79.0i.a shipped Panel A (scanner-cycle metrics only) + Panel E (freshness) + 2 new endpoints, with Panels B/C/D deferred to "B79.0i.b Tue/Wed once VTS-observation evidence accumulates." Kyle pushed back: even with no live data accumulated yet, the diagnostic infrastructure should exist now. He directed me to:
 1. Navigate to the staging Filter Diagnostics tab
 2. Note everything it analyzes
 3. Mirror all of it for xstock_spot
@@ -71,7 +71,7 @@ Login → Machine Learning → click xStocks tab → screenshot all 5 sections b
 | ss_79579w8zj | B73 empty-state + B67.0 panel with caveat banner |
 | ss_86002cpln | B67.0 caveat banner + empty-state below |
 
-All sections render without console errors or 4xx/5xx network responses. Empty states are honest signaling for shadow-mode pre-Monday-open state.
+All sections render without console errors or 4xx/5xx network responses. Empty states are honest signaling for VTS-observation pre-Monday-open state.
 
 ---
 

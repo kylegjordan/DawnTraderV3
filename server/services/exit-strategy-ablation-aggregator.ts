@@ -59,14 +59,18 @@ const WINDOW_INTERVALS: Record<AblationWindow, string> = {
 export async function computeExitStrategyAblation(
   window: AblationWindow,
   regimeFilter: string | null = null,
+  assetClass: string | null = null, // B79.0i.b: optional asset_class filter for xstock_spot tab. When null, behavior byte-identical to pre-B79.0i.b (no WHERE filter on asset_class — all rows including legacy unscoped).
 ): Promise<ExitStrategyAblationResponse> {
   const interval = WINDOW_INTERVALS[window];
   const windowEnd = new Date();
   const windowStart = new Date(windowEnd.getTime() - parseIntervalMs(interval));
 
-  // Build WHERE clause
+  // Build WHERE clauses
   const regimeClause = regimeFilter && regimeFilter !== '*'
     ? sql`AND regime = ${regimeFilter}`
+    : sql``;
+  const assetClassClause = assetClass
+    ? sql`AND asset_class = ${assetClass}`
     : sql``;
 
   // Per-variant aggregation
@@ -85,6 +89,7 @@ export async function computeExitStrategyAblation(
     WHERE created_at >= ${windowStart}
       AND virtual_pnl_pct IS NOT NULL
       ${regimeClause}
+      ${assetClassClause}
     GROUP BY variant_id, variant_name
     ORDER BY variant_id
   `);
@@ -95,6 +100,7 @@ export async function computeExitStrategyAblation(
     FROM exit_strategy_alternates
     WHERE created_at >= ${windowStart}
       ${regimeClause}
+      ${assetClassClause}
     GROUP BY variant_id, virtual_exit_reason
   `);
 
@@ -111,6 +117,7 @@ export async function computeExitStrategyAblation(
     FROM exit_strategy_alternates
     WHERE created_at >= ${windowStart}
       ${regimeClause}
+      ${assetClassClause}
   `);
   const totalTrades = (tradeCountRow.rows[0] as any)?.n ?? 0;
 
