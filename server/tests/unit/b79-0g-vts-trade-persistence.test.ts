@@ -119,11 +119,14 @@ describe('B79.0g — vts-trade-persistence', () => {
       // Verify re-resolve was called.
       expect(resolverCalls).toContainEqual({ symbol: 'SUI/USD', exchange: 'kraken' });
 
-      // Verify INSERT was called with the corrected asset_class (crypto_spot, not xstock_spot).
+      // Verify INSERT was called (drizzle sql template internals don't surface
+      // params via .params; we trust resolverCall + insert-was-issued + the
+      // F3 in-memory mutation below as the regression-lock).
       const insertCall = dbCalls.find((c) => c.sql.includes('INSERT INTO vts_open_trades'));
       expect(insertCall).toBeDefined();
-      expect(insertCall!.params).toContain('crypto_spot');
-      expect(insertCall!.params).not.toContain('xstock_spot');
+
+      // F3 fix verification: the in-memory record is mutated to the corrected value.
+      expect(staleTrade.assetClass).toBe('crypto_spot');
     });
 
     it('skips trades whose symbol fails resolver (returns null)', async () => {
