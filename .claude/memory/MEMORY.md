@@ -18,7 +18,44 @@
 
 ---
 
-## CURRENT STATE — 2026-05-11 (B79.0m.b PIPELINE WIRED + FLOWING on staging PM2 #221; signals null pending live setup OR synthetic injection)
+## CURRENT STATE — 2026-05-11 EOD (B79.0m.b partial; FRESH SESSION HANDOFF — read XSTOCKS_DIAGNOSTICS_TAB_FIXES.md FIRST)
+
+🚨 **READ FIRST IN NEW SESSION:** `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` — complete state of every xstock pipeline + UI issue, all evidence verified.
+
+🚨 **DO NOT TRUST PRIOR CC SESSION'S "FIXED" CLAIMS WITHOUT UI RE-VERIFICATION** per CLAUDE.md §9.3 — most claims were curl-verified not UI-verified.
+
+## What Kyle has been asking for, repeatedly, that is NOT yet done:
+
+**Architectural commitment (LOCKED — no more debate):**
+xstock VTS pipeline must mirror crypto's `fx5-scanner.ts` + `vts-runner.ts` EXACTLY. Same 6 paths (5 quant families + 1 pattern), same fan-out (pairs in multiple paths = multiple entries), same family-routed strategy iteration, same per-pair post-detect math, same exit cycle. Differences = DB rows (screener_filters + module_constants), NOT code.
+
+**What's NOT built (the big gaps):**
+- ❌ Parallel pattern path (A1 in tracker) — `vts_pattern`/`active_pattern` rows missing for xstock_spot, no pattern global filter + pattern IMF + pattern-strategy routing in eval-cycle. Pattern strategies currently fire inline within the quant loop instead of via parallel pattern pipeline.
+- ❌ Family fan-out (A2) — pairs that survive 3 family IMFs should produce 3 batch entries (one per family lane). Currently iterated once with family-eligibility gate.
+
+**Zero actual xstock VTS trades have opened.** `SELECT COUNT(*) FROM vts_open_trades WHERE asset_class='xstock_spot'` = 0.
+
+**What HAS been done (commit `c0a69fb7d` and earlier):**
+- Banner removed
+- SQE call removed from eval-cycle (crypto VTS doesn't call SQE)
+- `computeFinalScore` caller-side post-detect
+- Net EV gate via `computeNetExpectancyKernel`
+- Exit cycle xstock price routing (reads `xstock_spot_ticker_snap`)
+- Pre-open gates helper (`checkPreOpenGates`)
+- All 5 quant family filter rows seeded for xstock (vts_trend, vts_reversal, vts_breakout, vts_oscillator, vts_strong_trend × paper/live)
+- TEC migration applied (xstock BE=true, trail=0.8× crypto)
+
+Re-verify each of these against the source (don't trust the prior session's claims) before continuing.
+
+## Resolution discipline for new session
+
+1. Read XSTOCKS_DIAGNOSTICS_TAB_FIXES.md completely
+2. Read CLAUDE.md §9.3 (staging-verified means Claude-in-Chrome navigation, not curl)
+3. Work through Section A items in order (A1 = parallel pattern path first)
+4. NO "Q1-Q5 to Kyle" — architectural questions get answered from crypto code, not Kyle. He's said the same thing repeatedly.
+5. Implement → deploy → **UI-verify via Claude-in-Chrome** → mark done in tracker
+6. If stuck, escalate to Langston not Kyle
+7. UI fixes (Section B) are secondary; pipeline correctness (Section A) is the priority
 
 🚨 **B79.0m.b LAYER-1 STARTER PIPELINE IS WIRED AND FUNCTIONAL.** Latest PM2 #221 (HEAD `38d19b559`). Per SCAN_EVAL_DONE log at 11:37:34 UTC: entered=76, failed_global=0, passed_families=38, strats_evaled=76, strategy_nulls=76, signals=0, trades_opened=0. Strategies dispatching cleanly; null returns = "no setup matches current pre-market quote regime." Awaiting RTH open (13:30 UTC) for live signal OR future B79.0m.b2 synthetic-injection test.
 

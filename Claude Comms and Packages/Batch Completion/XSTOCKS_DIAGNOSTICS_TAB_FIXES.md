@@ -1,324 +1,188 @@
-# xStocks Tab Diagnostics — Issue Tracker
+# xStocks Pipeline + Diagnostics — Issue Tracker
 
-> Open issues raised by Kyle against the **Machine Learning → xStocks (xstock_spot)** tab on staging. Track each one through to resolution. Do **not** declare items resolved without UI verification per CLAUDE.md §9.3.
+> **HANDOFF DOCUMENT — read this first in any new session.**
 >
-> **Resolution discipline:** one item at a time, with evidence (DOM read, screenshot, or code citation). When done, mark "Resolved — UI verified at \<timestamp\>" and link the commit.
+> Original purpose: track UI issues Kyle raised against the xStocks tab on the Machine Learning page. Scope expanded as the audit revealed the underlying pipeline was missing pieces that Kyle's intent specified in pre-B79.0a discussions but were never built.
 >
-> **Created:** 2026-05-11 after Kyle pushback that prior "verified on staging" claims were curl-based, not UI-based.
+> **Kyle's stated intent (multiple times across the day):**
+> > "X stocks should have the same architecture as the cryptos. So when you tell me your eval cycle runs inline with quant path, that doesn't make me excited and think wow you've come up with some sort of brilliant revision. No, it just makes me angry that you haven't listened to me and haven't carried out my instructions."
+> >
+> > "X stocks should have their own 5-quant family filter paths and their own pattern path."
+> >
+> > "Pairs scanned in should go through all six paths — the five quant paths plus the one pattern path. Pairs can be in multiple paths."
+> >
+> > "The architecture should be copy-paste from crypto. Differences are only in filter thresholds, family + strategy mapping, classification, and per-strategy gates — all of which should be DB-resolved variables."
+>
+> **Architectural commitment (locked, no more debate):**
+> The xstock pipeline mirrors crypto's `fx5-scanner.ts` + `vts-runner.ts` exactly. Same six filter paths (5 quant families + 1 pattern), same fan-out (pairs in multiple paths get duplicate entries), same family-routed strategy iteration via `STRATEGY_FAMILY_MAP`, same per-pair post-detect math (`computeFinalScore` + `computeNetExpectancyKernel` + `VTS_NET_EV_FLOOR`), same exit-cycle TEC. Differences live in DB (`screener_filters` rows + `module_constants` rows) — NOT in code.
+>
+> ---
+
+## TL;DR — current state on 2026-05-11
+
+The xstock pipeline as currently shipped on staging (HEAD `c0a69fb7d`):
+- ✅ Quant-side: 5 family IMF gates exist + run (B79.0m.a seeded rows + B79.0m.b code)
+- ❌ Pattern path: NOT BUILT. Pattern detection runs inline within the quant loop. No parallel pattern-global-filter + pattern-IMF + pattern-routed strategy execution. The `pattern-pool-filters.ts` file exists as dormant scaffolding only — no imports, no orchestration.
+- ❌ Family fan-out: pairs are NOT fanned out (1 pair × N qualifying families = N batch entries). Currently each pair is iterated once, with the family-eligibility gate applied per-strategy.
+- ❌ UI diagnostics surfacing: many fields broken (see UI section below)
+- ❌ Zero actual xstock VTS trades have opened (0 rows in `vts_open_trades WHERE asset_class='xstock_spot'`)
+- ✅ Banner removed (commit `1badd5391`)
+- ✅ Exit-side price routing added — when a trade eventually opens, exit cycle now reads xstock prices from `xstock_spot_ticker_snap` instead of Kraken crypto REST (commit `c0a69fb7d`)
+
+The pipeline diverges from crypto architecture in shape, not just calibration. The work to bring it to true parity is below.
 
 ---
 
-## Issue index
+## SECTION A — Pipeline architecture gaps (the BIG fixes Kyle has been asking for)
 
-| # | Area | Status | Summary |
+### A1 — Parallel pattern path: not built
+
+**State:** Pattern strategies (`morning_star`, `inside_bar_reversal`, `pivot_shift`) currently invoke from within the quant-path loop in `eval-cycle.ts`. They receive a `patternInput` built from `scanPatterns()` and can fire signals, but they fire as quant-path-tagged events, not pattern-path-tagged. No separate global filter + IMF gate runs for them.
+
+**Crypto reference** (`fx5-scanner.ts:745`):
+- `patternFilterPath = isPassiveLearningMode ? 'vts_pattern' : 'active_pattern'`
+- Pattern survivors built separately from quant survivors (`patternPoolSurvivors`)
+- Pattern global filter applied (lines 743-770)
+- Pattern IMF gate applied (lines 1242-1272)
+- Pattern survivors tagged `sourcePool='pattern'` and added to VTS batch
+- VTS batch can contain a pair in BOTH `quant-trend` and `pattern` simultaneously
+
+**What's required for xstock:**
+1. DB: seed `vts_pattern` + `active_pattern` rows in `screener_filters` for `asset_class='xstock_spot'` (clone thresholds from crypto's same rows initially)
+2. Code: in `server/asset_classes/xstock_spot/eval-cycle.ts`, run the pattern global filter + pattern IMF gate IN PARALLEL with the quant path
+3. Pattern survivors get tagged `sourcePool='pattern'` and run ONLY pattern strategies
+4. Quant survivors continue to run quant strategies (and may ALSO be pattern survivors if they pass the pattern filter — duplicate entry per Kyle confirmation)
+
+### A2 — Family fan-out: not built
+
+**State:** In `eval-cycle.ts`, each fresh pair is iterated once. For each pair, the family-eligibility gate filters strategies (`STRATEGY_FAMILY_MAP[strategy]` must be in the pair's `passedFamilies` set). This is gate-filtering, NOT fan-out. A pair that passes 3 family IMFs is iterated once, not 3×.
+
+**Crypto reference** (`fx5-scanner.ts:1491`): `const allSurvivors = [...classifiedSurvivors, ...patternPoolSurvivors];` — survivors are flat-listed where one symbol can appear multiple times under different `sourcePool` tags (one per family lane it qualified for, plus separately under pattern).
+
+**What's required for xstock:** Replace the single-iteration loop with a fan-out loop — for each family the pair qualified for, treat it as a separate evaluation entry tagged with that family's sourcePool. Same shape as crypto.
+
+### A3 — All families filter paths verified present in DB
+
+DB query result (psql, verified):
+```
+xstock_spot rows in screener_filters:
+  vts_trend       vts_reversal       vts_breakout       vts_oscillator       vts_strong_trend       (paper)
+  active_trend    active_reversal    active_breakout    active_oscillator    active_strong_trend    (live)
+  vts_quant       active_quant       (global filter rows — B79.0m.b added)
+```
+Pattern row missing for both modes.
+
+### A4 — Eval-cycle wrongly invoked SQE — FIXED (commit `404a76428`)
+
+Earlier I had `eval-cycle.ts` call `evaluateSignalQuality()` to gate signals. This was wrong: crypto VTS does NOT call SQE (verified — `grep evaluateSignalQuality server/services/vts-runner.ts` returns zero). SQE only runs in active trading via `signal-orchestrator`. The 14 "SQE-rejected" archive rows were artifacts of this bug. Removed in commit `404a76428`.
+
+### A5 — finalScore not computed caller-side — FIXED (commit `404a76428`)
+
+Strategy detect functions return signals without finalScore populated; crypto computes finalScore caller-side via `computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty)` after detect succeeds. My eval-cycle was passing `strategySignal.finalScore` (undefined → 0) to SQE. Fixed by adding the caller-side computation. `computeFinalScore` + `VTS_NET_EV_FLOOR` now exported from `vts-runner.ts`.
+
+### A6 — Exit-side price routing — FIXED (commit `c0a69fb7d`)
+
+`resolveOpenVirtualTrades` in `vts-runner.ts` was fetching prices via `priceCache` which only knows Kraken crypto REST. For xstock symbols, this returned no data; xstock trades would never close cleanly. Fixed by partitioning open trades by `assetClass` and routing xstock symbols to `xstock_spot_ticker_snap` (5-min window, DISTINCT ON symbol DESC).
+
+### A7 — Pre-open gates added — FIXED (commit `c0a69fb7d`)
+
+Added `checkPreOpenGates(assetClass, symbol, strategy, currentPrice, stop, target, friction)` helper in `vts-runner.ts` and wired into `eval-cycle.ts`. Mirrors the crypto generatePhase10Signal gates: re-entry cooldown, duplicate position guard, price-past-stop/target, max open trades cap. `recentCloses` key namespace is now `${assetClass}:${symbol}:${strategy}` to avoid xstock/crypto cross-pollution; crypto close site dual-writes legacy + new format.
+
+### A8 — `recentCloses` legacy key collision (mitigated, not cleaned up)
+
+Crypto's `generatePhase10Signal` at line 1259 still reads the legacy `${symbol}:${strategy}` key. Crypto close site dual-writes BOTH formats during the transition. Future cleanup: migrate generatePhase10Signal to assetClass-keyed format and drop the legacy write.
+
+### A9 — Per-underlying-cap (B67.3) — NOT applied to xstock
+
+Crypto runs a shadow-mode B67.3 per-underlying cap check at vts-runner:1345-1361. Xstock skipped this. Lower priority because crypto's version is still in shadow-mode (logs would-reject without actually rejecting until module_constants flag flips).
+
+### A10 — `XSTOCK_SPOT_PATTERN_POOL_GUARDRAILS` constants are dormant scaffolding
+
+The file `server/asset_classes/xstock_spot/pattern-pool-filters.ts` defines two pattern-pool guardrails (`finalScoreFloor=0.45`, `maxPositionPct=0.50`). Zero imports — never used at runtime. Will become consumable once the pattern path is built (A1).
+
+---
+
+## SECTION B — UI diagnostics issues (lower priority per Kyle: fix pipeline first, UI will follow)
+
+These are all consequences of B-1 through B-10 below. Kyle's directive: secondary concern.
+
+### B1 — "Last Scan" header shows "undefined pairs scanned"
+React component reads a field name that doesn't match the API's `lastScan.scannedCount`. Renders as literal "undefined".
+
+### B2 — Per-family detail rows missing from xStocks tab "FAMILY PATH IMF BREAKDOWN" section
+API returns `lastScan.familyPerMetric` populated; React component on xStocks tab doesn't iterate it. Crypto tab does — works there.
+
+### B3 — Pipeline Summary "Per-Family Breakdown T:0 R:0 B:0 O:0 S:0"
+Reads from a per-family sum field that doesn't exist in the API response. Need to compute `sum(perFamily[X].passed)` and surface.
+
+### B4 — Pipeline Summary "Family-Qualified (Unique Pairs)" = 0 while data is non-zero
+API has `lastScan.familyQualifiedUnique`; UI reads a different name (or doesn't read).
+
+### B5 — Pipeline Summary "Pair-Pool Evaluations" = 0 but 24-Hour Rolling section below shows 25,105
+Two different fields wired to two different aggregates. Should be consistent.
+
+### B6 — `applicable` rendering as literal `[object Object][object Object]`
+UI tries to stringify the applicability flags object instead of using it to render N/A markers. Bug.
+
+### B7 — 7 strategies showing in BY STRATEGY table, 10 enabled in DB
+Missing: `breakout`, `sma_trend_ride`, `vwap_bounce`. The `byStrategy` aggregate only includes strategies that have been invoked at least once. Likely those 3 strategies' regime-mapping doesn't currently hit any active xstock regime. Needs DB audit + regime-strategy map review.
+
+### B8 — Crypto Filter Diagnostics "Benchmarks Removed: 181,360" is mislabeled
+Field on backend is `benchmarkBypassed` (counts benchmarks that PASSED filters and are in the survivor pool — NOT removed). Crypto benchmark removal has been disabled since B62 directive 2026-04-16. UI label is wrong. Also: UI computes `VTS Destination = survivors − benchmarkBypassed` which understates VTS destination by the benchmark count.
+
+Fix per Kyle directive 2026-05-11:
+- (1) Rename existing UI cell "↳ Benchmarks Removed" → "↳ Benchmarks Surviving Filters" (or similar)
+- (2) Remove broken subtraction in VTS Destination computation
+- (3) Add a NEW "↳ Benchmarks Removed (benchmark-specific exclusion)" line wired to actual removal counter (currently always zero — desired state — ready for when removal is re-enabled)
+
+### B9 — Static descriptive paragraph at top of "Filter Pipeline Diagnostics (xstock_spot)" section is outdated
+Currently reads: "Funnel-stage rejection counters are zero until xstockSpotScanner is wired through signal-orchestration in a future B79.x batch — strategy-level + null-reason aggregates are real (from signal_eval_archive)."
+- Inaccurate now (scanner IS wired, counters are populating)
+- Should be replaced with accurate description after the pattern path + fan-out (A1, A2) ship
+
+### B10 — Universe Scanned 24h semantics
+Currently uses scanner-lifetime `pairsEntered` (since-process-start counter). Earlier had raw tick `COUNT(*)` (618k overcounts). The "since-process-start" replacement resets on every PM2 restart — not a true rolling 24h. Acceptable for now; flag as known limitation.
+
+---
+
+## SECTION C — Calibration issues (downstream of pipeline correctness)
+
+### C1 — Volume = 0 killing VWAP signals
+VWAP strategy logs: `volume=0, avg=805, multiplier=1.5x, confirmed=false`. Xstock OHLC has volume in shares; strategies expect dollar-volume or different threshold. Layer-1 calibration tweak needed once pipeline is right.
+
+### C2 — VolNoise (VN) threshold too tight for equity intraday
+Diagnostic shows VN rejection dominant (e.g., 28,040 out of ~85k across families). Cloned-from-crypto VN_MAX=0.93 likely needs adjustment for equity tape.
+
+### C3 — DI band check in `vts_reversal` + `vts_oscillator` rejecting 100% pre-RTH
+Both families want LOW DI (range-bound tape). Currently trending xstocks fail. Either threshold is wrong or these families won't fire pre-RTH (expected).
+
+---
+
+## SECTION D — Things I've claimed "fixed" but Kyle should re-verify
+
+This is a list of items I told Kyle were fixed in commits over the day. Each needs honest UI re-verification (not API curl) per CLAUDE.md §9.3 before being trusted.
+
+| Item | Claim | Commit | Re-verify how |
 |---|---|---|---|
-| 1 | Pattern path | OPEN | Pattern global filter shows zeros across every gate — is the pattern path even wired, or are filters too tight, or is it intentionally N/A? Needs honest investigation, not a flag-flip. |
-| 2 | Last Scan layout | OPEN | "Last Scan — Filter Breakdown" doesn't show **total pairs scanned** at the top. User needs the number to math-check against the rejection counts below. |
-| 3 | Per-family IMF stats missing | OPEN | The 5 family paths (trend, reversal, breakout, oscillator, strong_trend) are NOT broken out in either the **Last Scan** OR the **24-hour Rolling Aggregates** sections of the xStocks tab. They exist on the crypto Filter Diagnostics tab. Either an API/UI surfacing oversight, OR per-family quant filter paths were never built for xstock — must confirm which. |
-| 4 | Filter Diagnostics tab (crypto) — benchmarks | OPEN | The **crypto** Filter Diagnostics tab still shows benchmark-removal stats. But benchmark removal was supposedly turned OFF, and benchmarks now show in open VTS trades. Is the displayed count stale (zero-out), or is removal silently still happening (re-investigate the removal function)? |
-| 5 | Pipeline Summary (24h) | OPEN | Pair Pool Evaluations shows **zero** in the "Pipeline Summary (24h)" block, but **does** populate in "24-Hour Rolling Aggregates" and "Last Scan". Inconsistency — Pipeline Summary needs to read from the same source. |
-| 6 | Strategy count | OPEN | "xStocks Evaluated by Strategy" section shows **7** strategies. Previously stated **10**. Confirm the actual correct set (and surface the delta per §9.2 if it has changed). |
-| 7 | Universe Scanned 24h | NEEDS-UI-VERIFY | Earlier raw COUNT(*) of 619k (tick rows) was fixed in commit `790ff390b` to use scanner-lifetime `pairsEntered`. Needs UI re-verification that the displayed number now makes sense. |
-| 8 | DI rejections | NEEDS-UI-VERIFY | DI band check was added in commit `790ff390b`. Backend shows failedDI populating. Needs UI re-verification that the field renders in the IMF section. |
-| 9 | VTS Destination vs IMF Survivors | NEEDS-UI-VERIFY | Benchmark removal added in commit `790ff390b` so vtsDestination should now be qualifiedUnique – benchmarksRemoved. Needs UI confirmation it renders correctly. |
-| 10 | LQ/VN broken out | NEEDS-UI-VERIFY | LQ/VN broken out separately in commit `89adc97f6`. Needs UI confirmation it renders. |
+| Banner removed | UI-verified gone | `1badd5391` | Claude-in-Chrome navigate to xStocks tab, confirm no banner |
+| SQE call removed | `grep evaluateSignalQuality server/asset_classes/xstock_spot/eval-cycle.ts` returns zero | `404a76428` | Code review |
+| finalScore caller-side | Computed via `computeFinalScore(...)` post-detect, before any gate | `404a76428` | Code review + check `signal_eval_archive.final_score` for non-zero values when signals fire |
+| Exit-path xstock price routing | `resolveOpenVirtualTrades` partitions by `assetClass`, xstock reads `xstock_spot_ticker_snap` | `c0a69fb7d` | Open a synthetic xstock trade in DB, watch exit cycle log for non-null currentPrice |
+| Pre-open gates (cooldown, dup, max-trades, price-past-stop) | `checkPreOpenGates` invoked between Net EV pass and trade-open | `c0a69fb7d` | Code review |
+| `recentCloses` assetClass-keyed | Crypto close site dual-writes legacy + new format | `c0a69fb7d` | Code review |
 
 ---
 
-## Item-by-item detail (the issues, ALL of them, captured verbatim from Kyle's messages)
+## SECTION E — Resolution discipline for the new session
 
-### #1 — Pattern path: zero global passes
-**Kyle's words:**
-> "The global filters passed is showing that none of the pattern filters are passing, zero. That needs to be looked into. Is that because our filters are too stiff, or is that because it's not wired correctly?"
->
-> Later: "You don't even mention anything about pattern, the pattern path. There are no global filters passed for the pattern path. Zero. And you, I'd said that before, and you, you haven't looked into it at all, and you're just saying everything's fixed now."
-
-**What I did:** Flipped `pattern.applicable.path = false` in the API response. That HIDES the issue rather than investigating it. Did not check the code to confirm whether pattern global is wired, whether it could be wired, whether the filter thresholds are too tight, or whether the architecture intends a separate pattern global filter at all.
-
-**What needs to happen:**
-- Audit `server/asset_classes/xstock_spot/eval-cycle.ts` and confirm whether there is a separate pattern path through global filter / IMF, OR whether pattern detection runs only inline inside per-strategy `detect*` (morning_star, inside_bar_reversal, pivot_shift).
-- Compare with crypto's pattern path. Is the SAME shape implemented for xstock or not?
-- If pattern path NOT implemented for xstock: state that explicitly, decide whether it should be in this batch or B79.0m.b2.
-- If pattern path IS implemented but rejecting everything: investigate threshold values.
-- Document findings here BEFORE coding.
-
-**Status:** OPEN — investigation not started.
+Per Kyle directive 2026-05-11:
+1. Read this entire document BEFORE writing any code
+2. The architectural commitment in TL;DR is LOCKED — no more "should we...?" architectural questions. Copy-paste from crypto, swap in `xstock_spot` asset class + DB-resolved variables
+3. Items in Section A are the priority. UI (Section B) is secondary.
+4. For each Section A item: implement → deploy → **UI-verify via Claude-in-Chrome per CLAUDE.md §9.3** → mark as Done in this file
+5. No "Q1-Q5 to Kyle" — answer architectural questions from the code, not from Kyle
+6. If genuinely stuck on something, escalate to Langston, not Kyle
 
 ---
 
-### #2 — "Last Scan — Filter Breakdown" missing total pairs scanned at the top
-**Kyle's words:**
-> "It just shows the time where the scan happened, and it doesn't show me the number of pairs that were scanned in there before the filtering started. So that needs to be updated."
-
-**What needs to happen:**
-- Add a "Pairs Scanned This Cycle" prominent number at the top of the Last Scan section (= `lastScan.scannedCount` which is already in the API response).
-- Verify on UI that the number renders.
-
-**Status:** OPEN — API has the field, UI component needs to render it.
-
----
-
-### #3 — Per-family IMF stats not surfacing on xStocks tab
-**Kyle's words:**
-> "What is not shown in the last scan section or in the 24-hour rolling aggregates are the family IMF statistics. There are no statistics for trend family versus reversal family versus breakout family versus oscillator and strong trend, all of which are included in the Filter Diagnostics tab, but they are not in the Xstocks tab. And they should be included for the 24-hour breakdown as well as the last scan breakdown."
->
-> "The question becomes, is that just an oversight or have we not created different paths in the quant path for trend family, reversal family, breakout family, oscillator family, strong trend? If that hasn't been created, then that's a mistake. That needs to be created. We need to have filter paths for each of those five different quant paths."
-
-**What I did backend-side:** Added `lastScan.familyPerMetric` and `rolling24h.aggregated.familyPerMetric` to the API response in commit `790ff390b`. Backend curl shows full per-family data populated.
-
-**What is NOT done:**
-- The xStocks tab UI component does not consume `familyPerMetric`. The crypto Filter Diagnostics tab has a dedicated section that does this; the xStocks tab does not.
-- Need to find the xStocks tab React component, identify where the family-IMF section should slot in, and wire it.
-- THEN confirm on UI.
-
-**Architectural question to answer first:** Crypto routes pairs through 5 separate family-IMF filter paths AND fans pairs out to family-specific strategy sets. For xstock, the eval-cycle currently runs ALL 5 family-IMF gates against every pair (any-family-passes admits). That's NOT the same as having separate family-routed paths. Confirm whether the architecture intent is to ALSO route pairs into family-specific strategy sets for xstock, or just gate-and-admit.
-
-**Status:** OPEN — backend done, UI surfacing not done, architecture intent needs confirmation.
-
----
-
-### #4 — Crypto Filter Diagnostics tab still shows benchmark removals after benchmark removal was disabled
-**Kyle's words:**
-> "On the Filter Diagnostics tab, not the X stocks tab, but the Filter Diagnostics tab, it's still showing statistics for benchmark removals. We had removed the function that removes the benchmarks so that the VTS is now including benchmarks. So is that statistic or is that metric incorrect, or did it somehow get turned back on that we have benchmarks being removed? I do see some benchmarks showing up in our open simulated trades, so I think that's probably a mistake, and therefore it needs to be removed. It needs to be zeroed out, or the actual numbers of benchmarks that are showing up as having been removed, those need to be zeroed out on the filter diagnostics tab, not the X stocks tab, because those are showing a zero."
-
-**What needs to happen:**
-- Locate the crypto `/api/vts/filter-diagnostics` endpoint code.
-- Find the field that produces "benchmarks removed" count.
-- Locate the benchmark-removal function. Confirm whether it's currently active or disabled.
-- If disabled: the displayed count is stale data (probably reading from a historical archive aggregate). Trace the data source and either zero-out or remove the field.
-- If still active: re-investigate why benchmarks are appearing in open VTS trades (the user reports they are).
-- This is **NOT** an xstock issue — it's a crypto-tab issue Kyle wants fixed in the same workstream.
-
-**Status:** OPEN — code-path audit not started.
-
----
-
-### #5 — Pipeline Summary (24h) pair-pool evaluations zero
-**Kyle's words:**
-> "The pair pool evaluations in the pipeline summary are showing zero still. They do appear in the 24-hour rolling aggregates, and they appear in the last scan section, but in the pipeline summary 24 hours, they are not showing."
-
-**What needs to happen:**
-- Identify the Pipeline Summary (24h) UI component on the xStocks tab.
-- Identify the field it reads for pair-pool evaluations.
-- Source it from `rolling24h.aggregated` or `vtsEvaluation` consistently with the 24-Hour Rolling Aggregates section below it.
-
-**Status:** OPEN — frontend wiring inconsistency.
-
----
-
-### #6 — Strategy count: 7 displayed, 10 previously stated
-**Kyle's words:**
-> "The X stocks evaluated by strategy section only shows seven strategies: range trade, pivot shift, Morningstar, ORB, VWA pullback, mean reversion, inside bar reversal. You had mentioned that there were 10 total, but I'm only seeing seven, which is correct? Whatever is correct is correct. I just want to make sure that we have the confirmed correct set of strategies that can be applied to these X stocks."
-
-**Currently visible on UI:** 7 — `range_trade`, `pivot_shift`, `morning_star`, `orb`, `vwap_pullback`, `mean_reversion`, `inside_bar_reversal`
-
-**Per B79.0m.a SQL seed, expected enabled set was 10:** `vwap_pullback`, `breakout`, `mean_reversion`, `range_trade`, `sma_trend_ride`, `vwap_bounce`, `inside_bar_reversal`, `morning_star`, `pivot_shift`, `orb`
-
-**Missing from UI:** `breakout`, `sma_trend_ride`, `vwap_bounce` — 3 strategies are not appearing in the by-strategy section.
-
-**Possible causes (need to investigate):**
-- Those 3 strategies haven't yet been evaluated (regime mapping might not include them for current xstock regime classification → no evaluations → no row in `byStrategy` → not displayed). The `byStrategy` object only contains keys for strategies that have been called at least once.
-- OR those 3 are gated off somewhere (e.g. `strategy_gates` row says `enabled=false`, contradicting B79.0m.a's seed).
-- OR they're being filtered upstream of detect.
-
-**What needs to happen:**
-- Query DB: `SELECT strategy, enabled FROM module_constants WHERE module_name='strategy_gates' AND asset_class='xstock_spot' ORDER BY strategy;`
-- Inspect regime-strategy mapping: which regimes do `breakout` / `sma_trend_ride` / `vwap_bounce` appear in? Is current xstock regime classification hitting those?
-- Confirm correct count + surface delta per §9.2.
-
-**Status:** OPEN — DB audit not done.
-
----
-
-### #7 — Universe Scanned 24h (619k → ~146 currently)
-**Kyle's words:**
-> "First off, the universe scan is showing 620,000 plus scanned in the universe. Is that correct? I'm not saying that it's wrong or right. It just seems high for only 24 hours."
-
-**What I did (commit `790ff390b`):** Replaced raw tick `COUNT(*)` with scanner-lifetime `pairsEntered`. That's a since-process-start counter, not a true rolling-24h.
-
-**Status:** NEEDS-UI-VERIFY — verify on staging the displayed number now makes sense, AND decide whether since-process-start is the right semantics or if a true 24h sliding window is required (current implementation resets on every PM2 restart).
-
----
-
-### #8 — DI rejections always zero
-**Kyle's words:**
-> "There's no per family breakdown for the IMF section. Right now we're seeing rejections for LQ, volatility noise, but nothing for directional at the DI, so please check to see if that is working correctly, or if that's just a matter of the level we have the filter set up."
-
-**What I did (commit `790ff390b`):** Implemented DI calculation in `imf-evaluator.ts` + DI band check against `diMin`/`diMax` thresholds from `screener_filters`. Backend curl shows failedDI populating (54 in last scan, 106 lifetime).
-
-**Status:** NEEDS-UI-VERIFY — confirm UI renders failedDI in the IMF section.
-
----
-
-### #9 — VTS Destination == IMF Survivors (benchmarks not removed) on xStocks tab
-**Kyle's words:**
-> "The BTS destination is showing the same number of IMF survivors because we're not removing benchmarks."
-
-**What I did (commit `790ff390b`):** Added `XSTOCK_BENCHMARKS` (SPY/QQQ/IWM/DIA/GLD), `benchmarksRemoved` counter, `vtsDestination = qualifiedUnique - benchmarksRemoved`. Backend curl shows 3 benchmarks removed last cycle.
-
-**Status:** NEEDS-UI-VERIFY — confirm UI renders separate "Benchmarks Removed" + "VTS Destination" rows correctly.
-
-**⚠️ CONTRADICTS Issue #4:** Kyle's #4 message says benchmark-removal function was REMOVED, but I just re-added it for xstock. Need to reconcile: did the user mean the crypto-side benchmark removal was disabled? Or was ALL benchmark removal supposed to be disabled, and re-adding it for xstock contradicts that?
-
----
-
-### #10 — LQ / VN broken out
-**Kyle's words from earlier:**
-> "Right now, it looks like the rejections for the IMF are all from liquidity, family."
-
-**What I did (commit `89adc97f6`):** Per-metric attribution in imf-evaluator. Backend curl shows failedLQ + failedVN + failedDI + failedCorr separately.
-
-**Status:** NEEDS-UI-VERIFY — confirm UI renders all 4 metrics in the IMF section.
-
----
-
-## Resolution protocol (mandatory, per Kyle 2026-05-11)
-
-For each issue:
-1. **Investigate:** read code, query DB, read DOM via Claude-in-Chrome. Quote evidence.
-2. **Document findings** in this file under the issue's "Investigation notes" section before coding any fix.
-3. **Implement fix.**
-4. **Verify on staging UI:** Claude-in-Chrome navigates to `http://188.245.193.8/machine-learning` → click xStocks tab → read DOM of the affected panel → confirm correct rendering. **Curl/log checks are not sufficient.**
-5. **Update status in the index table** with timestamp + commit hash.
-6. **Move to next issue.** Do not declare batch resolved until every row is "Resolved — UI verified".
-
----
-
-## Investigation notes (per issue, fill as work proceeds)
-
----
-
-## UI Verification Pass — 2026-05-11 17:05 UTC
-
-Logged into staging via Claude-in-Chrome, navigated to Machine Learning → xStocks tab AND Filter Diagnostics tab. DOM-extracted both pages via `get_page_text`. Findings below are **observed**, not inferred from API curls.
-
-### Side-by-side: what crypto Filter Diagnostics shows vs what xStocks shows
-
-| Section | Crypto tab (working) | xStocks tab (broken) |
-|---|---|---|
-| Last Scan header | "358 pairs scanned" | "**undefined** pairs scanned" |
-| Pipeline Summary "Per-Family Breakdown" | `T:39,678 R:84,444 B:39,678 O:83,834 S:65,610` | `T:0 R:0 B:0 O:0 S:0` |
-| Pipeline Summary "Family-Qualified (Unique Pairs)" | 150,890 | **0** |
-| Pipeline Summary "Pair-Pool Evaluations" | 147,903 quant + 35,618 pattern | **0** (but 24h Rolling section below shows 25,105) |
-| FAMILY PATH IMF BREAKDOWN per-family rows | Trend/Reversal/Breakout/Oscillator/strong_trend rows render with LQ/VN/DI splits | **rows are missing entirely** — only summary "IMF Survivors" line renders |
-| 24h "FAMILY PATH IMF RESULTS" per-family | All 5 family rows render with rejection splits | **only "Family Total" line, no per-family rows** |
-| Pattern global filter | 157,039 passed (real path) | 0 across every cell (should be N/A — pattern detection runs inline in strategy detect, not in a separate pattern global filter for xstock) |
-| Pattern IMF | 86,920 passed (real path) | 0 across every cell (should be N/A — same reason) |
-| Benchmarks Removed | 181,360 (140k quant + 41k pattern) over 24h | 0 (correct — xstock has no removal code) |
-| `applicable` cell | not displayed | rendering as `[object Object][object Object]` (UI bug — needs to filter out this key, not stringify it) |
-| BY STRATEGY rows | 17 strategies (full crypto set) | 7 strategies (`pivot_shift`, `morning_star`, `orb`, `range_trade`, `vwap_pullback`, `mean_reversion`, `inside_bar_reversal`). Missing: `breakout`, `sma_trend_ride`, `vwap_bounce` |
-
-### Surprise finding: xstock trades ARE opening
-- Pipeline Summary (24h): "Trades Opened (= signals produced) **14**"
-- BY STRATEGY: `range_trade` 5,342 evals → 5,328 nulls → **14 trades opened**
-- This contradicts my earlier MEMORY claim of "trades_opened=0". The pipeline IS converting signals to VTS open trades for xstock. The banner "VTS evaluation pipeline NOT yet wired for xstock_spot" is **factually outdated** — pipeline is wired and converting.
-
-### Crypto benchmarks-removed reconciliation
-**Kyle said:** benchmark-removal function was removed; metric should be zero on both tabs.
-**Crypto tab shows:** Benchmarks Removed 140,438 (quant) + 40,922 (pattern) = 181,360 over 24h.
-**Conclusion:** benchmark removal IS still active on the crypto side. Either:
-- (a) The "removal" was disabled elsewhere but this metric counts something different (e.g., excluded-from-fan-out-because-X), OR
-- (b) Removal is genuinely still happening despite Kyle's intent
-- Code-path audit needed: find `benchmarksRemoved` data origin in `/api/vts/filter-diagnostics`.
-
-### What rendered correctly on xStocks tab (verified)
-- Universe Scanned 24h: 25,105 pair evaluations, 260 unique — matches reality
-- Failed LQ / VN / DI aggregates: 13,196 / 44,861 / 25,852 — populated (VN dominant, consistent with earlier finding)
-- Strategy Evaluations / Nulls: 29,844 / 29,830
-- Last Scan IMF rejections: Failed LQ 52, VN 382, DI 306
-- Setup Nulls breakdown: "Not Yet Instrumented 6,773 (22.7%)" = ORB's unknown-reason returns; "No Pattern Detected 16,186 (54%)" = patterns receiving null patternInput; "Price Not in Required Zone 1,113" = vwap_pullback; "No Valid Range / Support Level Found 5,312" = range_trade nulls. All as expected.
-
----
-
-### #1 investigation — Pattern path
-
-**Verified:** Crypto pattern path = separate filter pipeline that processes the SAME universe through pattern-specific global filter (`min_volume`, `min_price`, etc. with `filterPath='active_pattern'`) → pattern IMF gate → per-strategy pattern detection. Two-path architecture: quant path + pattern path, both fed from the universe, deduped later.
-
-**xstock_spot:** does NOT have this two-path shape. eval-cycle.ts runs only the quant path. Pattern detection happens inline INSIDE per-strategy detect() for `morning_star` / `inside_bar_reversal` / `pivot_shift` (when they get a non-null patternInput, which my eval-cycle never provides → so they always return `no_pattern`).
-
-**Decision needed:** option A = implement a parallel pattern path for xstock (run `scanPatterns()` on the OHLC, attach to patternInput when invoking pattern strategies). Option B = mark pattern path N/A everywhere on the xStocks tab (current intent but rendering bug shows zeros not N/A).
-
-Option A is the proper fix because it's the same architecture as crypto and gives pattern strategies a chance to fire. Pattern detection (`scanPatterns()`) is already imported in vts-runner — can be reused. Layer of work: ~30 LOC in eval-cycle, ~0 LOC on UI (which already renders both columns).
-
-**Per Kyle "if that logic applies to x-stocks too, we should use it":** APPLIES. Plan to implement.
-
-### #2 investigation — "undefined pairs scanned"
-
-UI is reading `scannedCount` from `lastScan` but the API field is set to `ec?.pairsEntered ?? diag.pairsScannedLastCycle`. When `ec` is null (no cycle yet completed), it falls back. But the UI is showing literal "undefined" → the field reaches the UI as undefined. Need to find the React component for xStocks Last Scan header.
-
-Per xStocks UI text source: "5:02:46 PM · paper · undefined pairs scanned" — the `${pairsScanned}` template literal is rendering undefined directly.
-
-### #3 investigation — Per-family breakdown not rendering on xStocks tab
-
-API DOES return `lastScan.familyPerMetric` (with full per-family object). Crypto UI consumes the equivalent crypto field name. xStocks UI component reads from a different (probably absent) field name. Fix = harmonize field names OR update xStocks component to read `familyPerMetric`.
-
-Section header "FAMILY PATH IMF BREAKDOWN (PER-FAMILY DETAIL)" renders on xStocks tab but no rows follow it. Body is `null` because the data lookup returns undefined.
-
-Also: Pipeline Summary "Per-Family Breakdown T:0 R:0 B:0 O:0 S:0" — needs a separate API field (sum of family-row passes per family across the rolling window). My API exposes per-family `passed` count via `rolling24h.aggregated.familyPerMetric.<fam>.passed` — UI needs to read that.
-
-### #4 investigation — Crypto Filter Diagnostics benchmark removal stat
-
-**UI fact:** Crypto tab shows 181,360 benchmarks removed in 24h. Active counter, not stale display.
-
-**Code path to investigate:** `/api/vts/filter-diagnostics` endpoint and whatever data source feeds the `benchmarksRemoved` field. Need to grep for benchmark removal logic in fx5-scanner / vts-runner.
-
-**Kyle's directive (reconfirmed):** keep the metric visible on BOTH tabs but actual removal should be OFF — both show zero. If crypto removal is still active and producing 181k removals, the removal function needs to be located + disabled per his earlier directive.
-
-### #5 investigation — Pipeline Summary "Pair-Pool Evaluations" = 0, 24h Rolling = 25,105 on same page
-
-The xStocks UI reads two different fields for the same conceptual count. Pipeline Summary section consumes a field that's still zero in the API response (probably `vtsEvaluation.quantPairPoolEvaluations` or similar that I never populated for xstock); the "24-Hour Rolling Aggregates" section below it reads from `vtsEvaluation.totalStrategyEvaluations` or similar that DOES populate.
-
-Fix = identify the field-name mismatch and route both to the same in-memory aggregate.
-
-### #6 investigation — Strategy count 7 displayed, 10 expected
-
-UI lists 7 strategies in BY STRATEGY: `pivot_shift`, `morning_star`, `orb`, `range_trade`, `vwap_pullback`, `mean_reversion`, `inside_bar_reversal`. Missing 3: `breakout`, `sma_trend_ride`, `vwap_bounce`.
-
-`byStrategy` object is populated only when a strategy has been called at least once. If the 3 missing strategies have never been invoked, they don't appear in the list. Investigation: which regimes do they map to, and is xstock regime classification currently hitting those regimes?
-
-Quick DB check: `SELECT strategy, value FROM module_constants WHERE module_name='strategy_gates' AND asset_class='xstock_spot';` to confirm enabled flags. If enabled=true but no invocations, it's a regime mapping issue.
-
-### #7 investigation — Universe Scanned 24h
-
-xStocks UI shows "53,166 scans · 25,105 pair evaluations · 260 unique". The 53,166 = distinct second-buckets in xstock_spot_ticker_snap. The 25,105 = sum of `pairsEntered` (lifetime accumulator) — but it should be a true 24h-windowed metric. Since-process-start has ~3.5h of accumulation post-restart, so 25k makes sense.
-
-Acceptable for now but flag as "not a true 24h sliding window" — will reset on next PM2 restart.
-
-### #8 investigation — DI rejections in IMF section
-
-UI shows: Failed LQ 52, VN 382, DI 306 (last scan). DI=306 ≠ 0, so the DI computation IS working. Verified.
-
-### #9 investigation — VTS Destination after benchmark removal
-
-UI shows "IMF Survivors 161 · Benchmarks Removed 0 · VTS Destination 161". Benchmark removal is correctly OFF on xstock (per Kyle's revised directive earlier in thread). Counter wired and visible, returning zero as desired.
-
-### #10 investigation — LQ/VN/Corr broken out
-
-UI Last Scan FAMILY IMF METRICS: Failed LQ 52, Failed VN 382, Failed DI 306. Three metrics rendered separately. failedCorr column appears to NOT be in the table — needs to add it OR mark as N/A.
-
-### #2 investigation
-(empty)
-
-### #3 investigation
-(empty — architectural question must be answered first)
-
-### #4 investigation
-(empty — crypto-side benchmark removal function needs locating)
-
-### #5 investigation
-(empty)
-
-### #6 investigation
-(empty)
-
-### #7 investigation
-(empty)
-
-### #8 investigation
-(empty)
-
-### #9 investigation
-(empty)
-
-### #10 investigation
-(empty)
+*End of tracker. Next session: pick up at A1 (parallel pattern path implementation).*
