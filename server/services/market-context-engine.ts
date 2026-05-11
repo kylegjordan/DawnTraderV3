@@ -969,7 +969,8 @@ export class MarketContextEngine {
     // Path B admits at the seed `b68_5DbsSlopeMin=0.0` threshold (DBS slope
     // non-negative). When the gate is recalibrated to a positive threshold, a
     // missing slope here will correctly REJECT Path B.
-    const dbsSlope = propagatedDbs.slope ?? 0;
+    // B79.0m.b: null-safe — non-crypto may have undefined propagatedDbs (synthesized neutral above).
+    const dbsSlope = propagatedDbs?.slope ?? 0;
     const regimeResult = calculatePairRegime(
       ohlcData,
       directionalBias.score,

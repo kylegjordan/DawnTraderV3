@@ -779,7 +779,10 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
  * Maps strategy name to the correct StrategyEngine detect method.
  * Uses the EXACT same parameters as the signal orchestrator for parity.
  */
-function callStrategyDetect(
+// B79.0m.b: exported so xstock-side eval-cycle.ts can dispatch strategy detect
+// without duplicating the per-strategy switch. Crypto path inside this module
+// still calls it locally (unchanged behavior).
+export function callStrategyDetect(
   strategy: string,
   indicators: any,
   ohlcData: any[],
@@ -2506,8 +2509,169 @@ export function getOpenVirtualTradesStatus(): {
     count: openVirtualTrades.size,
     oldestOpenedAt: sortedByTime.length > 0 ? sortedByTime[0].openedAt : null,
     newestOpenedAt: sortedByTime.length > 0 ? sortedByTime[sortedByTime.length - 1].openedAt : null,
-    trades 
+    trades
   };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// B79.0m.b — registerOpenVtsTrade
+// ════════════════════════════════════════════════════════════════════════════
+// Shared trade-registration helper used by the xstock_spot eval-cycle (and
+// future non-crypto eval cycles). Encapsulates the INSERT-before-Map.set
+// invariant (Langston B79.0g Step 4 F1), the assetClass-keyed setup-hash
+// (Langston B79.0m.b rev2 R6), and the openVirtualTrades Map insertion so
+// callers don't reach into module-private state.
+//
+// Crypto's existing trade-open path inside `generatePhase10Signal` does NOT
+// route through this helper today — Langston-locked architecture for B79.0m.b
+// is "build new xstock pipeline + call existing shared post-filter functions;
+// vts-runner.ts UNTOUCHED on crypto's hot path." Retrofitting crypto's
+// trade-open to use this helper is a future cleanup (B79.0n+).
+//
+// Setup-hash key:  ${assetClass}:${symbol}:${strategy}
+//   The assetClass prefix isolates xstock vs crypto re-entry namespaces.
+//   Crypto's pre-existing entries use ${symbol}:${strategy} (no assetClass
+//   prefix) — those decay out via time-expiry pruning.
+// ════════════════════════════════════════════════════════════════════════════
+export interface RegisterOpenVtsTradeInput {
+  id?: string;
+  symbol: string;
+  assetClass: AssetClass;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  positionSize: number;
+  dollarValue: number;
+  quantity: number;
+  frictionCost: number;
+  regime: MarketRegimeType;
+  regimeScore: number;
+  signalType: CanonicalSignalType;
+  strategy: string;
+  patternType?: PatternType | null;
+  finalScore: number;
+  hybridScore: number;
+  predictiveConfidence: number;
+  regimeWeight: number;
+  decayPenalty: number;
+  pool: 'ideal' | 'rotational';
+  sourcePool?: string;
+  // Optional context fields — caller may pass MCE-derived snapshots.
+  atrAtOpen?: number;
+  pairDirectionalBias?: string;
+  pairDirectionalBiasScore?: number | null;
+  globalDirectionalBias?: string;
+  globalDirectionalBiasScore?: number | null;
+  macroModifierValue?: number;
+  regimeConfidenceRaw?: number;
+  regimeConfidenceModulated?: number;
+  phase?: 'EARLY' | 'PRIME' | 'LATE';
+  phaseAgeSeconds?: number;
+  strategyPhaseWeight?: number;
+}
+
+/**
+ * INSERT a new open VTS trade into both persistence + in-memory Map +
+ * setup-hash dedupe map. Returns the trade id on success, or null on
+ * INSERT failure (caller treats as fatal trade-open and aborts).
+ */
+export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Promise<string | null> {
+  const tradeId = input.id ?? `vts_${input.assetClass}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const openedAt = Date.now();
+
+  // B79.0g pre-flight: refuse duplicate id (Map.set idempotency check).
+  if (openVirtualTrades.has(tradeId)) {
+    console.warn(`[B79.0m.b][registerOpenVtsTrade] tradeId=${tradeId} already in openVirtualTrades — refusing duplicate insert`);
+    return null;
+  }
+
+  const openTrade: OpenVirtualTrade = {
+    id: tradeId,
+    symbol: input.symbol,
+    assetClass: input.assetClass,
+    entryPrice: input.entryPrice,
+    stopLoss: input.stopLoss,
+    takeProfit: input.takeProfit,
+    positionSize: input.positionSize,
+    dollarValue: input.dollarValue,
+    quantity: input.quantity,
+    frictionCost: input.frictionCost,
+    regime: input.regime,
+    regimeScore: input.regimeScore,
+    signalType: input.signalType,
+    strategy: input.strategy,
+    patternType: input.patternType ?? null,
+    finalScore: input.finalScore,
+    hybridScore: input.hybridScore,
+    predictiveConfidence: input.predictiveConfidence,
+    regimeWeight: input.regimeWeight,
+    decayPenalty: input.decayPenalty,
+    pool: input.pool,
+    openedAt,
+    executionContext: 'VTS',
+    sourcePool: input.sourcePool,
+    atrAtOpen: input.atrAtOpen,
+    diAtOpen: 50,
+    volNoiseAtOpen: 0.3,
+    originalStopPrice: input.stopLoss,
+    rungTargetHistory: [],
+    pairDirectionalBias: input.pairDirectionalBias,
+    pairDirectionalBiasScore: input.pairDirectionalBiasScore ?? null,
+    globalDirectionalBias: input.globalDirectionalBias,
+    globalDirectionalBiasScore: input.globalDirectionalBiasScore ?? null,
+    macroModifierValue: input.macroModifierValue,
+    regimeConfidenceRaw: input.regimeConfidenceRaw,
+    regimeConfidenceModulated: input.regimeConfidenceModulated,
+    phase: input.phase,
+    phaseAgeSeconds: input.phaseAgeSeconds,
+    strategyPhaseWeight: input.strategyPhaseWeight,
+  };
+
+  // INSERT before Map.set — Langston B79.0g Step 4 F1.
+  try {
+    const { insertOpenTrade } = await import('./vts-trade-persistence.js');
+    await insertOpenTrade(openTrade as any);
+  } catch (persistErr) {
+    console.error(
+      `[B79.0m.b][registerOpenVtsTrade] PERSIST_FAIL trade=${tradeId} symbol=${input.symbol} ` +
+      `asset_class=${input.assetClass} — aborting trade-open:`,
+      persistErr instanceof Error ? persistErr.message : persistErr,
+    );
+    return null;
+  }
+
+  openVirtualTrades.set(tradeId, openTrade);
+
+  // Setup-hash dedupe — assetClass-namespaced per Langston R6.
+  const setupKey = `${input.assetClass}:${input.symbol}:${input.strategy}`;
+  lastSetupHash.set(setupKey, computeSetupHash(input.entryPrice, input.stopLoss, input.takeProfit));
+
+  console.log(
+    `[B79.0m.b][Entry] ${input.symbol} (${input.assetClass}) opened @ ${input.entryPrice.toFixed(6)} ` +
+    `stop=${input.stopLoss.toFixed(6)} target=${input.takeProfit.toFixed(6)} ` +
+    `strategy=${input.strategy} regime=${input.regime}`,
+  );
+  return tradeId;
+}
+
+/**
+ * B79.0m.b — read-only check whether the (assetClass, symbol, strategy) tuple
+ * already has a setup-hash recorded with the same entry/stop/target. Used by
+ * non-crypto eval cycles to suppress identical re-entries (mirrors crypto's
+ * Batch 47f15 hash-suppression — same prevention, assetClass-keyed).
+ */
+export function isIdenticalXstockSetupSuppressed(
+  assetClass: AssetClass,
+  symbol: string,
+  strategy: string,
+  entryPrice: number,
+  stopLoss: number,
+  takeProfit: number,
+): boolean {
+  const key = `${assetClass}:${symbol}:${strategy}`;
+  const prev = lastSetupHash.get(key);
+  if (!prev) return false;
+  return prev === computeSetupHash(entryPrice, stopLoss, takeProfit);
 }
 
 async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {

@@ -282,16 +282,51 @@ class XstockSpotScannerService {
       const now = Date.now();
       let freshCount = 0;
       let staleCount = 0;
+      const freshSymbols: Array<{ symbol: string; price: number }> = [];
       for (const row of rows as TickerSnapRow[]) {
         const lastTickMs = new Date(row.capturedAt).getTime();
         const fresh = await isPairDataFresh(row.symbol, 'xstock_spot', lastTickMs, now);
-        if (fresh) freshCount++;
-        else staleCount++;
+        if (fresh) {
+          freshCount++;
+          freshSymbols.push({ symbol: row.symbol, price: parseFloat(row.price) });
+        } else {
+          staleCount++;
+        }
       }
 
-      // TODO B79.x: route fresh pairs into signal-orchestrator / strategy-engine.
-      // Day 1 = observability only; Layer-3 threshold calibration drives the
-      // downstream wiring decision.
+      // ════════════════════════════════════════════════════════════════════
+      // B79.0m.b — route fresh pairs into VTS evaluation pipeline.
+      // For each fresh xstock pair: fetch OHLC → global filter → IMF →
+      // MCE → strategy detect → SQE → archive → register-open-trade.
+      // Hostile-sim bypasses (no eval during artificial sleep).
+      // ════════════════════════════════════════════════════════════════════
+      if (!this.diag.hostileSimActive && freshSymbols.length > 0) {
+        const { evaluateXstockPairForVTS, fetchXstockOHLC, makeEmptyXstockCycleCounters } =
+          await import('./eval-cycle.js');
+        const cycleCounters = makeEmptyXstockCycleCounters();
+        for (const { symbol, price } of freshSymbols) {
+          if (!Number.isFinite(price) || price <= 0) continue;
+          const ohlc = await fetchXstockOHLC(symbol, 120);
+          if (ohlc.length < 60) continue; // global-filter min-history floor
+          // 24h dollar-volume proxy = sum of last 24h candle volumes × last price.
+          // Layer-1 starter: from the 120 most-recent 1m bars (≤ 2h) we don't
+          // have a true 24h window. Pass 0 so the global filter's min_volume
+          // gate Layer-1-passes per its own contract (caller=0 → skip-check).
+          const volume24hUSD = 0;
+          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters);
+        }
+        console.log(
+          `[B79.0m.b][SCAN_EVAL_DONE] tick=${tick.tickNumber} ` +
+          `entered=${cycleCounters.pairsEntered} ` +
+          `passed_global=${cycleCounters.pairsEntered - cycleCounters.pairsFailedGlobalFilter - cycleCounters.pairsFailedMarketHours} ` +
+          `passed_families=${cycleCounters.pairsPassedFamilies} ` +
+          `signals=${cycleCounters.signalsGenerated} ` +
+          `archived=${cycleCounters.signalsArchived} ` +
+          `sqe_rejects=${cycleCounters.signalsRejectedBySQE} ` +
+          `trades_opened=${cycleCounters.tradesOpened} ` +
+          `errors=${cycleCounters.errors}`,
+        );
+      }
 
       const cycleDurationMs = Date.now() - cycleStart;
       this.diag.lastCycleDurationMs = cycleDurationMs;
