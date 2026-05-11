@@ -60,6 +60,10 @@ const PREFETCH_MODULES = [
   'strategy.reverse_impulse',
   'strategy.support_bounce',
   'strategy.strong_bull_trend',
+  // B79.0m.a — strategy_gates moved from code constant XSTOCK_SPOT_ENABLED_STRATEGIES
+  // to DB rows. isStrategyEnabledForAssetClass (sync caller from SQE) reads via
+  // getCachedConstant; this module MUST be warm before SQE evaluation.
+  'strategy_gates',
   // Slice 4 — HIGH-risk:
   'sqe_config',           // SQE primary admission gates (precedence: screener_filters → sqe_config → static mirror)
   'expectancy_kernel',    // pWin floor/ceiling (caller-injected into pure-math kernel)

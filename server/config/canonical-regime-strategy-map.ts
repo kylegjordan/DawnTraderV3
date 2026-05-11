@@ -881,68 +881,68 @@ export const MULTI_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// B79 — per-asset-class strategy whitelist
+// B79 — per-asset-class strategy whitelist (B79.0m.a — DB-authoritative)
 // ════════════════════════════════════════════════════════════════════════════
 //
-// Per BATCH_79_SCOPE.md §2.5 + Langston Q2 conservative-ship answer: only
-// 6 well-understood, regime-based strategies are enabled for xstock_spot in
-// B79. The other 12 (pattern recognizers tuned for crypto microstructure,
-// liquidity-trap shorts already disabled, etc.) are scope-disabled per
-// asset class until shadow-mode evidence supports re-enabling.
+// History:
+//   B79         — introduced as code constant `XSTOCK_SPOT_ENABLED_STRATEGIES`
+//                 (6 quant strategies, Langston Q2 conservative ship)
+//   B79 rev 7   — expanded to 9 (6 quant + 3 file-based pattern) per Langston
+//                 rev 5 + PIA round-2 Q3 regime-compatibility appendix
+//   B79.0d      — added ORB (10 total)
+//   B79.0m.a    — MIGRATED FROM CODE TO DB. The `XSTOCK_SPOT_ENABLED_STRATEGIES`
+//                 const is DELETED per Langston Step 1 R1 (no dual SSOT).
+//                 Authoritative source: `module_constants.strategy_gates.
+//                 <assetClass>.<strategy>.enabled` (boolean).
 //
-// crypto_spot: ALL strategies enabled (back-compat — no change).
-// xstock_spot: only the 6 listed below.
-// other asset classes (crypto_perp, etc.): default open (no gate yet —
-//   gate added when each asset class lands per its own batch).
+// Default-open semantics preserved: an asset class with NO `strategy_gates`
+// rows is treated as "all strategies enabled" — back-compat for crypto_spot
+// (which has no rows) and future asset classes prior to their B79.x onboarding.
 //
-// Revisit in B82+ once xstock_spot has 1-2 weeks of shadow-mode data on
-// the disabled 12, with enough sample to evaluate per-strategy false-
-// positive rates on equity bars.
-// B79 rev 7 update: pattern path is ENABLED for xstock_spot with 3 specific
-// file-based pattern strategies (Langston rev 5 specific list, Q3 regime-
-// compatibility appendix approved in PIA round-2). These run in PARALLEL
-// with the 6 quant strategies per Stage 5 architecture (rev 5 correction).
+// xstock_spot: 10 rows seeded by B79.0m.a (8 enabled by default; orb gated
+// separately by its existing strategy_gates row).
 //
-// `orb` is included here so its detect path is permitted to run and surface
-// a candidate; ACTIVATION is gated separately by the DB row
-// `module_constants.strategy_gates.xstock_spot.orb.enabled` (default false,
-// flipped after the Q-D AAPLx-vs-AAPL probe outcome supports it).
-const XSTOCK_SPOT_ENABLED_STRATEGIES: ReadonlySet<string> = new Set([
-  // Quant whitelist (6) — well-understood regime-based strategies
-  'vwap_pullback',
-  'breakout',
-  'mean_reversion',
-  'range_trade',
-  'sma_trend_ride',
-  'vwap_bounce',
-  // File-based pattern path (3) — classical equity-TA patterns per
-  // Langston rev 5 + PIA round-2 Q3 regime-compatibility appendix:
-  //   inside_bar_reversal — TFS continuation + RBS breakout fits
-  //   morning_star        — HVU/IE reversal at session lows
-  //   pivot_shift         — TFS/IE on pivot break
-  'inside_bar_reversal',
-  'morning_star',
-  'pivot_shift',
-  // Equity-specific (1) — Q-D-gated; activation via DB flag
-  'orb',
-]);
+// Module `strategy_gates` is prefetched at boot via b72-warmup.ts so this
+// sync helper can read from the in-memory cache. Cold-cache reads throw;
+// the prefetch is a hard-fail boot dependency.
+
+import {
+  getCachedConstant,
+  type ResolutionKey,
+} from '../services/module-constants-service';
 
 /**
- * B79: returns true iff `strategy` is enabled for `assetClass`. The SQE
- * eligibility gate (server/core/filters/signal_quality_evaluator.ts) calls
- * this and rejects with reason 'asset_class_disabled' when false.
+ * B79.0m.a: DB-authoritative version. Returns true iff `strategy` is enabled
+ * for `assetClass` per `module_constants.strategy_gates.<assetClass>.<strategy>.enabled`.
  *
- * Default-open for unknown asset classes (back-compat) — adding a new
- * asset class without touching this helper does not silently disable any
- * strategy. Conservative gating only when an asset class is explicitly
- * registered with a whitelist.
+ * Resolution semantics (most-specific-wins is enforced by getCachedConstant
+ * via the scoreRowForKey scorer; rows are matched on
+ * exchange/assetClass/regime/strategy with wildcard fallback):
+ *   - If a matching row exists with `enabled=true` → returns true.
+ *   - If a matching row exists with `enabled=false` → returns false.
+ *   - If NO row matches the (assetClass, strategy) tuple (even via wildcard)
+ *     → returns true. Default-open back-compat for asset classes pre-onboarding
+ *     (crypto_spot has no rows; crypto_perp/xstock_perp pre-B80 etc. have none).
+ *
+ * For xstock_spot specifically, B79.0m.a seeds all 19 strategy rows explicitly
+ * (10 enabled, 9 disabled) so the allowlist is fully queryable from DB.
+ *
+ * Throws on cold cache — b72-warmup.ts must have prefetched `strategy_gates`.
  */
 export function isStrategyEnabledForAssetClass(
   strategy: string,
   assetClass: string,
 ): boolean {
-  if (assetClass === 'xstock_spot') {
-    return XSTOCK_SPOT_ENABLED_STRATEGIES.has(strategy);
+  const key: ResolutionKey = {
+    exchange: '*',
+    assetClass,
+    regime: '*',
+    strategy,
+  };
+  const value = getCachedConstant<boolean>('strategy_gates', 'enabled', key);
+  if (value === undefined) {
+    // No explicit row → default-open back-compat.
+    return true;
   }
-  return true; // crypto_spot + everything else: default open
+  return value === true;
 }

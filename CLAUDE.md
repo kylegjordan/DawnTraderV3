@@ -439,6 +439,28 @@ DawnTrader is massive and scaling. Cascade effects are easy to miss. Important d
 
 **Anti-pattern:** "I'll update the governance docs after the code is deployed." No. Deferred governance becomes forgotten governance. Update as part of the same batch, reviewed by Langston, before the batch is closed.
 
+### 9.1 SCAFFOLDING-VS-FUNCTIONAL declaration (Kyle directive 2026-05-11 — added B79.0m.a)
+
+**Rule.** Any sub-batch that ships scaffolding without making the user-facing capability functional MUST state this at the TOP of the completion report, in bold, separated from other content:
+
+> 🚨 THIS BATCH DOES NOT MAKE \<CAPABILITY\> FUNCTIONAL. \<CAPABILITY\> WILL REMAIN INERT UNTIL \<BATCH N+x\>.
+
+**Why.** Burying "deferred to next batch" in row 16 of an objectives table or in a paragraph at the end of a completion report has produced multiple cases where Kyle was told a capability was working when it wasn't (B79.0d told Kyle "ORB will flow through VTS shadow-mode Monday 14:30 UTC" — the wiring was never built; xstock_spot scaffolding was repeatedly described as "operational" while line 292 of `scanner.ts` still held a `TODO B79.x: route fresh pairs into signal-orchestrator`). The TOP-OF-REPORT declaration makes the gap impossible to miss.
+
+**Equally applies in real time:** if mid-conversation you tell Kyle that a capability is being set up but won't actually be active until a later batch, surface that as a bold-prefixed inline disclaimer, not a parenthetical.
+
+### 9.2 NUMERIC-DELTAS-MUST-BE-SURFACED (Kyle directive 2026-05-11 — added B79.0m.a)
+
+**Rule.** Any change to a previously-stated number (strategy count, threshold value, sub-batch count, LOC estimate, sequencing day, verification gate count) MUST be surfaced in the next user-facing communication as:
+
+> **PREVIOUSLY STATED: X. NOW: Y. REASON: \<one line\>.**
+
+Pre-audit and completion reports MUST include a "PREVIOUSLY-STATED-VS-NOW" section at the top listing every prior-number → new-number delta with the decision source cited.
+
+**Why.** Burying a new value in a table cell, test assertion, or seventh-paragraph parenthetical has produced multiple cases where Kyle was told a number that didn't survive scope iteration (e.g. "6 strategies for xstocks" → shipped as 10 after Langston rev 5 expanded the set; the expansion was technically defensible but never explicitly surfaced as a delta). The TOP-OF-REPORT delta section makes drift unmistakable.
+
+**Applies retroactively to in-flight communications:** if you realize a previously-stated number is now different, lead the next message with the PREVIOUSLY/NOW/REASON block before continuing.
+
 ---
 
 ## 10. Session Startup Checklist

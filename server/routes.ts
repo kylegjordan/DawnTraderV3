@@ -7134,14 +7134,27 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       // Construct FilterDiagnosticsData shape mirroring crypto endpoint.
-      // xstock_spot scanner doesn't track filter-rejection counters yet
-      // (Finding #1) so global/imf rejection fields are zero — HONEST signaling.
+      // B79.0m.a HONESTY FIX: passed_all_filters previously misset to
+      // universe24h (=COUNT DISTINCT symbol from xstock_spot_ticker_snap),
+      // which is an archive-feed metric NOT a filter-pass count. Now zero
+      // until B79.0m.b wires the VTS pipeline and real pass counts populate.
+      // The 3 N/A gates (stablecoin / quote_currency / market_cap) keep
+      // their zero counter but surface as applicable=false to the UI so the
+      // funnel display shows N/A instead of misleading 0% pass-rate.
       const emptyGlobal = {
         failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0,
         failed_min_price: 0, failed_max_price: 0, failed_stablecoin: 0,
         failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0,
         failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0,
-        passed_all_filters: universe24h,
+        passed_all_filters: 0,
+        // B79.0m.a: N/A applicability flags for the 3 non-applicable gates
+        // on xstock_spot. Frontend (FilterDiagnosticsPanel) reads these to
+        // render "N/A" instead of "0" cells. Other gates default applicable=true.
+        applicable: {
+          failed_stablecoin: false,
+          failed_quote_currency: false,
+          failed_market_cap: false,
+        } as Record<string, boolean>,
       };
       const emptyImf = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0 };
       const emptyPatternGlobal = {
