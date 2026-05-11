@@ -318,13 +318,19 @@ class XstockSpotScannerService {
         console.log(
           `[B79.0m.b][SCAN_EVAL_DONE] tick=${tick.tickNumber} ` +
           `entered=${cycleCounters.pairsEntered} ` +
-          `passed_global=${cycleCounters.pairsEntered - cycleCounters.pairsFailedGlobalFilter - cycleCounters.pairsFailedMarketHours} ` +
+          `failed_market_hours=${cycleCounters.pairsFailedMarketHours} ` +
+          `failed_global=${cycleCounters.pairsFailedGlobalFilter} ` +
+          `failed_all_families=${cycleCounters.pairsFailedAllFamilies} ` +
           `passed_families=${cycleCounters.pairsPassedFamilies} ` +
+          `strats_evaled=${cycleCounters.strategiesEvaluated} ` +
+          `strategy_nulls=${cycleCounters.strategyNulls} ` +
           `signals=${cycleCounters.signalsGenerated} ` +
           `archived=${cycleCounters.signalsArchived} ` +
           `sqe_rejects=${cycleCounters.signalsRejectedBySQE} ` +
           `trades_opened=${cycleCounters.tradesOpened} ` +
-          `errors=${cycleCounters.errors}`,
+          `errors=${cycleCounters.errors} ` +
+          `global_counters=${JSON.stringify(cycleCounters.globalFilterCounters)} ` +
+          `imf_counters=${JSON.stringify(cycleCounters.imfFilterCounters)}`,
         );
       }
 
