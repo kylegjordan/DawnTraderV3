@@ -32,10 +32,25 @@ describe('B79.0m.b2 — Lane eligibility', () => {
   it('inside_bar_reversal fires in pattern lane', () => {
     expect(isStrategyEligibleForLane('inside_bar_reversal', { kind: 'pattern', sourcePool: 'pattern' })).toBe(true);
   });
-  it('morning_star does NOT fire in any family lane', () => {
+  it('morning_star DOES fire in every family lane (Kyle directive 2026-05-11 — pattern strategies eligible in quant paths too)', () => {
+    // B79.0m.b2 followup: pattern strategies are eligible in family lanes,
+    // mirroring crypto where a pair in both quant + pattern pools produces
+    // duplicate VTS-batch entries and pattern strategies fire on the family-
+    // lane entries too. The scanPatterns()-derived patternInput is built per
+    // strategy; pattern strategies gate at detect-time on whether a matching
+    // pattern was detected.
     for (const fam of ['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'] as StrategyFamily[]) {
-      expect(isStrategyEligibleForLane('morning_star', { kind: 'family', family: fam, sourcePool: `xstock-${fam}` })).toBe(false);
+      expect(isStrategyEligibleForLane('morning_star', { kind: 'family', family: fam, sourcePool: `xstock-${fam}` })).toBe(true);
+      expect(isStrategyEligibleForLane('inside_bar_reversal', { kind: 'family', family: fam, sourcePool: `xstock-${fam}` })).toBe(true);
     }
+  });
+
+  it('quant strategies do NOT fire in pattern lane (asymmetric rule)', () => {
+    // Only `stratFamily === 'pattern'` strategies fire on the pattern lane.
+    // Quant + hybrid strategies are restricted to family lanes only.
+    expect(isStrategyEligibleForLane('breakout', { kind: 'pattern', sourcePool: 'pattern' })).toBe(false);
+    expect(isStrategyEligibleForLane('mean_reversion', { kind: 'pattern', sourcePool: 'pattern' })).toBe(false);
+    expect(isStrategyEligibleForLane('vwap_pullback', { kind: 'pattern', sourcePool: 'pattern' })).toBe(false);
   });
 
   // ── Quant strategies → primary family lane only ──
