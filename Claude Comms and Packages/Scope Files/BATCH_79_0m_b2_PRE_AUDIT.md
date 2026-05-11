@@ -9,9 +9,10 @@
 
 | Topic | Previously stated | Now | Reason |
 |---|---|---|---|
-| B79.0m.b "pipeline wired" status | "Pipeline is wired and 14 trades opened on staging" (claimed multiple turns) | **Pipeline is wired but ZERO actual xstock VTS trades have opened.** The 14 number was a misleading aggregate — all 14 SQE-rejected (finalScore=0). | Verified against `vts_open_trades WHERE asset_class='xstock_spot' = 0 rows` and `signal_eval_archive` showing `reject_stage='sqe'` with reason "FinalScore 0.0000 < 0.35". |
-| Asset-class architecture parity with crypto | "xstock has the family IMF gates (5 paths × thresholds)" — true | **xstock is missing the parallel pattern path AND the family-fanout routing.** Crypto has both; xstock has only the IMF-gate-check (any-family-passes admits). | Discovered when Kyle reminded me the pre-B79.0a design discussion included parallel pattern + 5 quant family paths, Langston agreed, was supposed to land in B79.0a, was missed. |
-| Crypto-side benchmark removal | "Active and producing 181k removals/24h" (my earlier turn claim based on UI label) | **Disabled per B62 directive 2026-04-16. The 181k counter on Filter Diagnostics tab is mislabeled — it's `excludedByRouting` (pairs skipped because DBS doesn't qualify them for a specific family lane). Not actual benchmark removal.** | Code audit: fx5-scanner line 1649-1651 comment confirms benchmark inclusion since B62; `benchmarksRemoved` field has no producer in crypto code; the UI label "Benchmarks Removed" is reading the `excludedByRouting` aggregate. |
+| B79.0m.b "pipeline wired" status | "Pipeline is wired and 14 trades opened on staging" (claimed multiple turns) | **Pipeline is wired but ZERO actual xstock VTS trades have opened.** All 14 signal_eval_archive rows are artifacts of my eval-cycle wrongly calling SQE — see below. | Verified against `vts_open_trades WHERE asset_class='xstock_spot' = 0 rows`. |
+| Whether VTS calls SQE | (implicit assumption) eval-cycle gates signals through SQE before opening VTS trade | **VTS DOES NOT CALL SQE. Hasn't in months. Confirmed via grep: `vts-runner.ts` has zero references to `evaluateSignalQuality` or `getSQEThresholds`.** My xstock eval-cycle was wrongly invoking SQE; that produced all 14 archive rows labeled `reject_stage='sqe'`. Remove the SQE call → signals flow through to trade-open. | Kyle correction 2026-05-11. Crypto VTS path runs strategy detect → Net-EV-floor check → `registerOpenVtsTrade`. SQE is exclusively in the active-trading signal-orchestrator path. |
+| Asset-class architecture parity with crypto | "xstock has the family IMF gates (5 paths × thresholds)" — true | **xstock is missing the parallel pattern path AND the family-fanout routing.** Crypto has both; xstock has only the IMF-gate-check (any-family-passes admits). | Pre-B79.0a Kyle+Langston design discussion explicitly included parallel pattern + 5 quant family paths. Missed in implementation. |
+| Crypto Filter Diagnostics "Benchmarks Removed" stat | "Mislabeled excludedByRouting counter" (my earlier turn claim) | **CORRECTED:** Field is `benchmarkBypassed` (fx5-scanner.ts:1377): `Object.values(familyPoolSurvivors).reduce((s, arr) => s + arr.filter(s => s.isBenchmark).length, 0)` — counts benchmark pairs that PASSED global + IMF filters and are in the survivor pool. UI label "Benchmarks Removed" is wrong; those benchmarks are NOT removed (B62 directive 2026-04-16 included them in VTS), they survived. The UI further compounds the error by computing `VTS Destination = survivors - benchmarkBypassed` — a subtraction that doesn't match reality. | Kyle hypothesis correct 2026-05-11. The counter conflates "benchmarks that passed filters" with "benchmarks removed by benchmark-specific functionality". Actual benchmark-removal counter (when re-enabled) needs a separate field. |
 
 ---
 
@@ -62,9 +63,10 @@ Bring xstock-side eval to crypto-parity. Required changes:
 - New: for each family the pair passes, fan-out a separate evaluation entry. Strategy iteration becomes per-family-tagged. Strategy's `STRATEGY_FAMILY_MAP` determines whether it runs for this family-routed entry (e.g., `range_trade` is in `reversal` family — only runs on entries tagged with reversal-pass).
 - This matches crypto's `taggedVtsSurvivors` from `collectAdaptiveBatch` where each entry is one pair × one family.
 
-#### (c) finalScore propagation fix
-- Audit each xstock-enabled strategy's `detect*` return shape. Per `vts-runner.ts` line 1057, the canonical pattern computes `computeFinalScore(symbol, regime, ...)` AFTER strategy detect returns a signal — finalScore is NOT a direct output of detect, it's computed at the caller side.
-- eval-cycle.ts must call the same `computeFinalScore` helper after detect returns a signal, before passing to SQE. Otherwise SQE always sees 0.
+#### (c) Remove the SQE call entirely from eval-cycle (corrected scope)
+- **Crypto VTS does not call SQE.** My xstock eval-cycle wrongly invoked `evaluateSignalQuality` — that's where the artificial 14 "rejections" came from.
+- Replace the SQE call with the crypto pattern: strategy detect → Net-EV-floor check (`VTS_NET_EV_FLOOR`) → `registerOpenVtsTrade`.
+- After the SQE removal, finalScore still matters because the open-trade record stores it and TEC + downstream ML reads it. Call `computeFinalScore(symbol, regime, indicators, ...)` caller-side AFTER detect returns a signal (mirrors crypto `generatePhase10Signal` line ~1057). This populates the trade record correctly even without SQE in the path.
 
 ### 2.2 — Seed missing screener_filters rows
 - `(mode='paper', asset_class='xstock_spot', filter_path='vts_pattern')` — pattern global config
@@ -83,11 +85,11 @@ Bring xstock-side eval to crypto-parity. Required changes:
 | `[object Object][object Object]` for `applicable` cell | UI tries to render the applicability flags object as a string label | Hide the row when `applicable` object is present (it should suppress render of the parent row entirely, not display) |
 | 7 strategies shown when 10 are enabled | `byStrategy` aggregate only includes strategies that have been called at least once. Strategies `breakout`, `sma_trend_ride`, `vwap_bounce` are enabled (DB strategy_gates row) but never invoked because their regime-mapping doesn't currently route into them | INVESTIGATE: query xstock regime classifier outputs over 24h; identify which regimes are hit; cross-reference `CANONICAL_REGIME_STRATEGY_MAP` to see if the 3 missing strategies appear in any of those regime sets. If not, document why; if yes, debug regime-routing pipeline |
 
-### 2.4 — UI fix on crypto Filter Diagnostics tab
+### 2.4 — UI fix on crypto Filter Diagnostics tab + xstocks tab (parallel fix)
 
 | UI bug | Root cause | Fix |
 |---|---|---|
-| "Benchmarks Removed: 181,360" rendering when crypto benchmark removal has been disabled since B62 (2026-04-16) | UI label is mapped to the `excludedByRouting` aggregate from family-IMF diagnostics, which counts DBS-routing exclusions not benchmark removals | Two-part fix per Kyle directive: (1) rename UI label from "Benchmarks Removed" to "DBS Routing Excluded" (accurate); (2) add a NEW "Benchmarks Removed" line that reads from an actual benchmark-removal counter (currently always zero since removal is off — that's the desired state). |
+| "Benchmarks Removed: 181,360" rendering when crypto benchmark removal has been disabled since B62 (2026-04-16). Same mislabel will land on xStocks tab once benchmark counter is wired there. | UI label maps to `benchmarkBypassed` field which counts benchmarks IN the survivor pool (i.e., not removed — survived filters). UI further computes `VTS Destination = survivors − benchmarkBypassed` which understates VTS destination by the benchmark count. | Two-part fix per Kyle directive 2026-05-11: (1) Rename the existing UI cell from "↳ Benchmarks Removed" to "↳ Benchmarks Surviving Filters" (or "Benchmarks in Pool") — accurate; remove the broken subtraction in VTS Destination computation. (2) Add a NEW "↳ Benchmarks Removed (benchmark-specific exclusion)" line that reads from an actual benchmark-removal counter (currently always zero on both crypto and xstock since the removal function is off — that's the desired state per Kyle, so the metric is visible-but-zero, ready to count if removal is ever re-enabled). |
 
 ### 2.5 — `getOHLCSourceForTrade` exit-path helper (Langston R1, deferred from B79.0m.b)
 
@@ -118,7 +120,7 @@ When the first xstock trade does eventually open, the TEC exit loop currently re
 
 **Q3.** **finalScore computation for xstock**: `computeFinalScore` in vts-runner takes regime + strategy + indicators. Confirmed asset-class-agnostic, OR does it have hidden crypto assumptions we need to surface?
 
-**Q4.** **Crypto Filter Diagnostics relabel scope**: just rename the column label, or also expose a new actual-benchmarks-removed counter that's wired but currently zero? Lean expose the counter wired-but-zero so it's ready when removal is re-enabled.
+**Q4.** **VTS Net-EV-floor for xstock**: crypto uses `VTS_NET_EV_FLOOR` (single global constant). Reasonable for xstock to share, OR per-asset-class? Lean share.
 
 **Q5.** **Banner state**: removed per Kyle directive 2026-05-11. Confirmed.
 
