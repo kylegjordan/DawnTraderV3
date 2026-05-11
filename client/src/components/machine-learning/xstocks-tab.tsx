@@ -297,11 +297,14 @@ export function XstocksTab() {
         <CardHeader>
           <CardTitle className="text-lg">Filter Pipeline Diagnostics (xstock_spot)</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Mirrors the crypto Filter Diagnostics tab, scoped to xstock_spot. Pipeline Summary, Last Scan Filter Breakdown,
-            24h Rolling Aggregates, VTS Evaluation Detail (by-strategy), Setup Nulls, Pre-Eval Skips, Post-Signal Rejections,
-            and Filter Metric Ranges. Funnel-stage rejection counters are zero until xstockSpotScanner is wired through
-            signal-orchestration in a future B79.x batch — strategy-level + null-reason aggregates are real (from
-            <code className="px-1">signal_eval_archive</code>).
+            Mirrors the crypto Filter Diagnostics tab, scoped to xstock_spot. Pipeline Summary, Last Scan Filter Breakdown
+            (with per-family Trend / Reversal / Breakout / Oscillator / Strong-Trend rows + the parallel Pattern Path), 24h
+            Rolling Aggregates, VTS Evaluation Detail (by-strategy), Setup Nulls, Pre-Eval Skips, Post-Signal Rejections,
+            and Filter Metric Ranges. <strong>xstock pipeline is at functional crypto parity as of B79.0m.b2 (2026-05-11)</strong>
+            — parallel pattern-global + pattern-IMF gate runs alongside the 5 family lanes; a pair passing N families plus
+            pattern produces N+1 evaluation entries (lane fan-out). When the xstock market is closed (weekends + US holidays
+            + outside extended hours) the scanner short-circuits at the market-hours gate and all counters read 0 — that is
+            expected behavior. Live data populates during US RTH (14:30 UTC onwards) and extended-hours windows.
           </p>
         </CardHeader>
         <CardContent>
