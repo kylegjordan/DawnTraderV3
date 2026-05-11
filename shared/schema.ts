@@ -462,6 +462,12 @@ export const screenerFilters = pgTable("screener_filters", {
   // Batch 19G: Filter path discriminator — 4 filter profiles per mode
   filterPath: varchar("filter_path", { length: 20 }).notNull().default('active_quant'),
 
+  // B79.0m.a: per-asset-class scoping — unique index is (mode, asset_class, filter_path).
+  // B79.0m.b: surfacing the column in the Drizzle schema so `screenerFilters.assetClass`
+  // resolves at the storage layer (was missing — getScreenerFilters with
+  // assetClass filter silently matched zero rows on every call).
+  assetClass: text("asset_class").notNull().default("crypto_spot"),
+
   // Batch 19G: IMF (Institutional Math Filters) columns — previously hardcoded in system-guards.ts
   lqMin: decimal("lq_min", { precision: 5, scale: 2 }).default("35.00"),
   vnMax: decimal("vn_max", { precision: 5, scale: 4 }).default("0.9300"),
