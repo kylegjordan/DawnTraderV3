@@ -18,81 +18,49 @@
 
 ---
 
-## CURRENT STATE — 2026-05-11 EOD (B79.0m.b partial; FRESH SESSION HANDOFF — read XSTOCKS_DIAGNOSTICS_TAB_FIXES.md FIRST)
+## CURRENT STATE — 2026-05-11 EOD (B79.0m.b2 SHIPPED PM2 #229; xstock pipeline at functional crypto parity, RTH-verification pending)
 
-🚨 **READ FIRST IN NEW SESSION:** `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` — complete state of every xstock pipeline + UI issue, all evidence verified.
+✅ **B79.0m.b2 deployed** — commits `4c60d259e` (main) + `909182690` (test fixup). PM2 #229. Pattern path + family fan-out + ORB LONG-only + B73 xstock branch + Drizzle drift fix all landed.
 
-🚨 **DO NOT TRUST PRIOR CC SESSION'S "FIXED" CLAIMS WITHOUT UI RE-VERIFICATION** per CLAUDE.md §9.3 — most claims were curl-verified not UI-verified.
+**G1-G2-G8-G10-G12 verified pre-RTH (weekend close):**
+- G1 effective GREEN (Build+Docker; TS+Test at pre-existing baseline RUNNING_ISSUES #39 + 66 `module_constants not warm`. All 28 of my new tests pass.)
+- G2 GREEN — 4 pattern rows seeded (`vts_pattern`/`active_pattern` × paper/live) with cloned crypto values.
+- G8 GREEN — crypto ORB admitted=0/24h (rollback trigger NOT tripped).
+- G10 PARTIAL — all 10 factor families emitting; 5/hr in 1h window is restart noise (re-check at +30min).
+- G12 GREEN — 26 pattern-strategy wildcard rows confirmed; fallback unit-test validates resolution.
 
-## What Kyle has been asking for, repeatedly, that is NOT yet done:
+**G3-G7 + G9 PENDING RTH 2026-05-12 13:30 UTC:** xstock scanner correctly short-circuiting on weekend market-closed. First live cycles will surface `patternFanOut`, `pairsPassedPattern`, signals, trades, B73 replay rows. xStocks tab banner stays up until trade flow observed.
 
-**Architectural commitment (LOCKED — no more debate):**
-xstock VTS pipeline must mirror crypto's `fx5-scanner.ts` + `vts-runner.ts` EXACTLY. Same 6 paths (5 quant families + 1 pattern), same fan-out (pairs in multiple paths = multiple entries), same family-routed strategy iteration, same per-pair post-detect math, same exit cycle. Differences = DB rows (screener_filters + module_constants), NOT code.
+**Pre-deploy crypto ORB baseline captured (§-1.7 rollback trigger ready):** admitted=0, total=77,919 invocations/24h all `strategy_internal`. Post-deploy at +1h: re-run + check for any new admit OR new reject_stage value.
 
-**What's NOT built (the big gaps):**
-- ❌ Parallel pattern path (A1 in tracker) — `vts_pattern`/`active_pattern` rows missing for xstock_spot, no pattern global filter + pattern IMF + pattern-strategy routing in eval-cycle. Pattern strategies currently fire inline within the quant loop instead of via parallel pattern pipeline.
-- ❌ Family fan-out (A2) — pairs that survive 3 family IMFs should produce 3 batch entries (one per family lane). Currently iterated once with family-eligibility gate.
+## What's new vs. B79.0m.b
 
-**Zero actual xstock VTS trades have opened.** `SELECT COUNT(*) FROM vts_open_trades WHERE asset_class='xstock_spot'` = 0.
+- ✅ Parallel pattern path (4 new screener_filters rows + `pattern-filter.ts` + parallel global+IMF gate in eval-cycle)
+- ✅ Family fan-out (`isStrategyEligibleForLane` in `lane-eligibility.ts`; pair × lane × strategy iteration mirrors `fx5-scanner.ts:1607-1643`)
+- ✅ ORB LONG-only fix + `STRATEGY_FAMILY_MAP['orb'] = 'breakout'`
+- ✅ B73 replay asset-class branch (xstock symbols read `xstock_spot_ohlc_1m`; EXPLAIN ANALYZE 1.035ms verified pre-deploy)
+- ✅ Drizzle schema-file drift fix
+- ✅ 7 Langston Step 4 nits applied inline (lane-eligibility extracted, ORB docblock, DI band tests, vi.fn assertion, archiveFailures counter)
 
-**What HAS been done (commit `c0a69fb7d` and earlier):**
-- Banner removed
-- SQE call removed from eval-cycle (crypto VTS doesn't call SQE)
-- `computeFinalScore` caller-side post-detect
-- Net EV gate via `computeNetExpectancyKernel`
-- Exit cycle xstock price routing (reads `xstock_spot_ticker_snap`)
-- Pre-open gates helper (`checkPreOpenGates`)
-- All 5 quant family filter rows seeded for xstock (vts_trend, vts_reversal, vts_breakout, vts_oscillator, vts_strong_trend × paper/live)
-- TEC migration applied (xstock BE=true, trail=0.8× crypto)
+## Resolution discipline next session
 
-Re-verify each of these against the source (don't trust the prior session's claims) before continuing.
+1. Read `Claude Comms and Packages/Batch Completion/BATCH_79_0m_b2_COMPLETION_REPORT.md` for full state
+2. Check Hetzner staging xstock-tab + PM2 logs post-RTH for G3-G7 + G9 trade-flow verification
+3. If any xstock trade closes during RTH window, verify B73 replay row appears in `exit_strategy_alternates WHERE asset_class='xstock_spot'`
+4. If G3-G7 GREEN, remove xStocks banner + write closure addendum to completion report
+5. If pattern path admits zero pairs → `patternRejectByMinHistory` tripwire will tell us instantly; Layer-1 60-bar floor is the prime suspect (see §-1.1 design + §-1.10 calibration debt)
+6. ORB +1h post-deploy check per §-1.7: if any new crypto ORB admitted appears OR new reject_stage value, revert single line `orb: 'breakout',` from `STRATEGY_FAMILY_MAP`
 
-## Resolution discipline for new session
+## NEXT STEP — Wait for RTH and verify G3-G7 + G9 trade flow
 
-1. Read XSTOCKS_DIAGNOSTICS_TAB_FIXES.md completely
-2. Read CLAUDE.md §9.3 (staging-verified means Claude-in-Chrome navigation, not curl)
-3. Work through Section A items in order (A1 = parallel pattern path first)
-4. NO "Q1-Q5 to Kyle" — architectural questions get answered from crypto code, not Kyle. He's said the same thing repeatedly.
-5. Implement → deploy → **UI-verify via Claude-in-Chrome** → mark done in tracker
-6. If stuck, escalate to Langston not Kyle
-7. UI fixes (Section B) are secondary; pipeline correctness (Section A) is the priority
+RTH opens Monday 2026-05-12 13:30 UTC = 9:30 AM ET. First xstock cycles after 13:30 should show:
+- `patternFanOut > 0` (pattern lane admitting at least some pairs)
+- `pairsPassedPattern > 0`
+- `signal_eval_archive` rows with `features->>'sourcePool' = 'pattern'` AND `reject_stage='admitted'`
+- `vts_open_trades` count for `asset_class='xstock_spot'` ≥ 1
+- B73 replay row in `exit_strategy_alternates WHERE asset_class='xstock_spot'` after first xstock trade closes
 
-🚨 **B79.0m.b LAYER-1 STARTER PIPELINE IS WIRED AND FUNCTIONAL.** Latest PM2 #221 (HEAD `38d19b559`). Per SCAN_EVAL_DONE log at 11:37:34 UTC: entered=76, failed_global=0, passed_families=38, strats_evaled=76, strategy_nulls=76, signals=0, trades_opened=0. Strategies dispatching cleanly; null returns = "no setup matches current pre-market quote regime." Awaiting RTH open (13:30 UTC) for live signal OR future B79.0m.b2 synthetic-injection test.
-
-**XSTOCK BANNER STILL UP** — Kyle's gate is "trades flowing end-to-end"; pipeline wired but G4 not yet observed.
-
-What landed in B79.0m.b PM2 #221 (commits `914a25e05` → `38d19b559`):
-- MCE null-safe DBS slope deref (non-crypto synthesized neutral)
-- vts-runner exports: callStrategyDetect + registerOpenVtsTrade(input) + isIdenticalXstockSetupSuppressed (assetClass-keyed setup-hash per Langston R6)
-- 3 NEW xstock_spot modules in server/asset_classes/xstock_spot/:
-  - eval-cycle.ts (orchestrator + fetchXstockOHLC helper reading xstock_spot_ohlc_1m.interval_begin)
-  - global-filter.ts (Layer-1 starter; min_price/min_volume/history; N/A applicability for 3 gates)
-  - imf-evaluator.ts (5 family paths via screener_filters lookups, any-family-passes admits)
-- xstockSpotScanner.runCycle wired (line 292 TODO consumed; routes fresh pairs through eval-cycle; SCAN_EVAL_DONE log with rich counters)
-- 3 staging-side fixes applied this session:
-  - TEC migration `2026-05-11-b79-0m-b-xstock-tec-enable.sql` (BE=true, trail=0.8× crypto)
-  - active_quant global filter rows for xstock_spot (B79.0m.a omission — added via `2026-05-11-b79-0m-b-xstock-active-quant-row.sql`)
-  - **Schema fix**: shared/schema.ts was MISSING `assetClass` column on `screenerFilters` Drizzle table definition (B79.0m.a added the DB column + unique index but forgot the schema surface). `eq(screenerFilters.assetClass, ...)` evaluated to `eq(undefined, ...)` and silently matched zero rows. Fixed in commit `38d19b559`.
-
-Crypto no-touch fence holds (10 factor families × 7-8/hr ±10% baseline).
-
-## DEFERRED to B79.0m.b2 (per CLAUDE.md §9.1 SCAFFOLDING-VS-FUNCTIONAL)
-
-Strict reading of the original Langston-approved scope: 12 steps. Landed 7 (pipeline wiring through to register-open-trade); deferred 5 polish/extensibility items:
-
-1. **getOHLCSourceForTrade exit-path helper** (Langston R1). Currently TEC reads crypto live-pricing-adapter cache for ALL trades; if/when first xstock trade opens, exit eval will lookup OHLC under wrong cache. Risk window: hours-to-days (trades hold). Must be in B79.0m.b2 BEFORE any xstock trade reaches a target/stop.
-2. **Skipped-signals asset_class field + filter** — Filter Diagnostics tab leak.
-3. **Per-strategy xstock SQL** (9 non-ORB volatility-sensitive thresholds) — Layer-1 starts on wildcard rows.
-4. **Regime classifier 4 remaining branches** (RBS/IE/HVU/ST) — TFS authored only.
-5. **Asset-class log tagging refactor** — partial coverage; full refactor deferred.
-6. **18-strategy null-DBS unit-test matrix** — neutral-DBS path is exercised in production now; explicit test matrix deferred.
-7. **Comprehensive G1-G9 verification** — G1-G3 GREEN; G4-G9 partial / awaiting RTH or synthetic.
-
-## NEXT STEP — Resume / verify B79.0m.b first live signal post-RTH OR ship B79.0m.b2
-
-If user wants to wait for RTH (13:30 UTC = 9:30 AM ET = ~2h away): poll for SCAN_EVAL_DONE showing signals>0 and trades_opened>0, then remove banner + close batch.
-
-Alternative path: B79.0m.b2 in next session — getOHLCSourceForTrade helper FIRST (blocks any xstock trade close), then deferred items 2-7.
+If `patternRejectByMinHistory` dominates the counter, the 60-bar floor is biting; pull a Layer-3 calibration into a sub-batch.
 
 ## Open Langston follow-ups logged
 

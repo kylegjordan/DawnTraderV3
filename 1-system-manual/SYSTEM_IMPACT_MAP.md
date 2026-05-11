@@ -1642,3 +1642,64 @@ Coverage for ARM constructor back-compat + data-freshness helper edge cases (clo
 - **Enable xstock_spot equity macro modifier** → currently 1.0 placeholder. B79.3 ships VIX/S&P/sector-rotation/yield-curve composition + module_constants seed. UPDATE `mce_config.macro_modifier` xstock_spot row to flip from neutral.
 - **Add new asset class** → walk `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` Section A through G. Add `server/asset_classes/<class>/` files + `getAssetClassInstances` switch case + `XSTOCK_SPOT_ENABLED_STRATEGIES`-equivalent set + schema migrations + module_constants seeds.
 - **Tune xstock_spot regime thresholds** → currently TS constants in `server/asset_classes/xstock_spot/regime-thresholds.ts` (Layer 1 baseline). Layer 3 calibration may promote to module_constants in B79.1.
+
+---
+
+## Recent additions (B79.0m.b2 — Phase 24 extended — 2026-05-11)
+
+### `server/asset_classes/xstock_spot/pattern-filter.ts` (NEW, B79.0m.b2)
+
+**Layer:** 3 (Filtering).
+**Purpose:** Parallel pattern-path filter for xstock_spot — mirrors crypto's pattern global+IMF gate from `fx5-scanner.ts:743-770 + 1242-1272`. Two-stage: (1) global filter (min_price/max_price/min_volume/60-bar history floor) then (2) pattern IMF gate (LQ/VN/DI band).
+**Upstream:** `screener_filters` row at `(mode, asset_class='xstock_spot', filter_path='vts_pattern'|'active_pattern')` — seeded by `2026-05-11-b79-0m-b2-xstock-pattern-rows.sql`; OHLC bars from `eval-cycle.fetchXstockOHLC`.
+**Downstream:** `eval-cycle.ts` only (single consumer).
+**Shared state:** none.
+**Execution:** synchronous per pair inside `evaluateXstockPairForVTS`.
+**Blast radius:** **LOW** — leaf module, DB row + arithmetic. Failure → returns `passed: false` with diagnostic reason.
+**Calibration debt (Layer 3):** the 60-bar floor matches `global-filter.ts:109` convention but is hardcoded; future migration target is `module_constants.pattern_pool_gates.min_bars_for_eval` per Langston Step 4 acknowledgement (PRE_AUDIT §-1.10).
+
+### `server/asset_classes/xstock_spot/lane-eligibility.ts` (NEW, B79.0m.b2)
+
+**Layer:** 4 (Adaptive / routing helper).
+**Purpose:** Per-lane strategy eligibility check extracted from `eval-cycle.ts` for unit-test isolation (Langston Step 4 nit #1). Exports `EvalLane` type + `isStrategyEligibleForLane(strategyKey, lane)`. Mirrors crypto `fx5-scanner.ts:1607-1643` lane semantics: `quant-${family}` lane → primary OR hybrid (HYBRID_FAMILY_ELIGIBILITY) OR multi-family (MULTI_FAMILY_ELIGIBILITY) match; `pattern` lane → `STRATEGY_FAMILY_MAP[s] === 'pattern'` only.
+**Upstream:** `STRATEGY_FAMILY_MAP`, `HYBRID_FAMILY_ELIGIBILITY`, `MULTI_FAMILY_ELIGIBILITY` from `canonical-regime-strategy-map.ts`.
+**Downstream:** `eval-cycle.ts` (production), `b79-0m-b2-lane-eligibility.test.ts` (unit test).
+**Blast radius:** **LOW** — pure-logic helper.
+
+### `server/asset_classes/xstock_spot/eval-cycle.ts` (MODIFIED, B79.0m.b2 — heavy refactor)
+
+**Layer:** 5 (Per-pair post-filter eval orchestrator).
+**Change:** Replaced single-iteration strategy loop with **lane × strategy fan-out**. After family-IMF + parallel pattern-filter, builds `lanes: EvalLane[]` (one entry per qualifying family + one pattern entry if pattern-passed). Strategy iteration is nested `for (lane of lanes) { for (strategy of regimeStrategies) { ... } }` with `isStrategyEligibleForLane` gate. A pair passing N families + pattern produces up to `(N+1) × |regimeStrategies|` evaluation entries, with most collapsed to `family_filter_mismatch` counter increments by the per-lane gate.
+**New counters added to `XstockEvalCycleCounters`:** `pairsPassedPattern`, `pairsFailedPattern`, `patternRejectByMinHistory` (Langston rev1 #7 tripwire for §-1.1 60-bar-floor implementation correctness), `patternFanOut`, `patternFilterCounters`, `patternPerMetric`, `archiveFailures` (Langston Step 4 #7).
+**Upstream additions:** `pattern-filter.ts`, `lane-eligibility.ts`.
+**Blast radius:** **HIGH** — every xstock signal flows through this file. Refactor changes data flow shape. Crypto path untouched (separate file `vts-runner.ts:runPhase10SimulationCycle`).
+
+### `server/services/exit-strategy-replay-service.ts` (MODIFIED, B79.0m.b2)
+
+**Change:** `ReplayContext` gains optional `assetClass?: string` (default `'crypto_spot'`). `fetchOhlcForReplay` gains `assetClass: string = 'crypto_spot'` parameter; branches on `xstock_spot` → Drizzle query against `xstock_spot_ohlc_1m` (EXPLAIN ANALYZE 1.035ms verified pre-deploy). Module-scoped `_b79XstockReplayErrors` counter + `[B73-REPLAY][XSTOCK] err=...` log surface async failures. Caller in `vts-service.persistRealPriceTrade:957` threads `tradeData.assetClass`; `vts-runner.ts:2336` threads `trade.assetClass`. Pre-existing log-line bug at line 339 (`ohlcBars.length` ReferenceError) NOT introduced this batch — filed RUNNING_ISSUES #99.
+**Blast radius:** **MEDIUM** — wrong-asset OHLC lookup pre-fix returned empty bars silently for xstock trades (B73 ablation rows would never populate). Crypto path unchanged (default param preserves byte-identical behavior).
+
+### `server/strategies/orb.ts` (MODIFIED, B79.0m.b2 — LONG-only fix)
+
+**Change:** Down-break branch (`!upBreak`) replaced with `setNullReason('sell_disabled_long_only'); return null;` mirroring `inside-bar-reversal.ts:131-134`. ORB now strictly LONG-only. New import `setNullReason from '../utils/null-reason-tracker.js'`. Docstring updated `Direction: BUY only`.
+**Blast radius:** **MEDIUM** — touches shared strategy file. Crypto impact verified zero (pre-deploy: crypto ORB admitted=0/24h, total=77,919 all strategy_internal — no down-break SELL trades ever leaked to admit on crypto). Real fix for xstock_spot where ORB is enabled and could have produced SHORT signals post-pattern-flow.
+
+### `server/config/canonical-regime-strategy-map.ts` (MODIFIED, B79.0m.b2 — STRATEGY_FAMILY_MAP entry)
+
+**Change:** Added `orb: 'breakout'` to `STRATEGY_FAMILY_MAP` (was previously absent → bypassed family-eligibility gate entirely). Comment cites Langston rev1 Q-L2 confirm. Rollback trigger §-1.7 documents two-condition revert (new crypto ORB admit + new reject_stage value) — neither expected.
+**Blast radius:** **MEDIUM** — affects vts-runner and signal-orchestrator family-gate behavior. Crypto regression risk: minimal (ORB never fires admitted on crypto today). Monitor `signal_eval_archive` post-deploy.
+
+### `drizzle/migrations/2026-05-11-b79-0m-b2-xstock-pattern-rows.sql` (NEW)
+
+4 INSERT rows: `(paper|live, xstock_spot, vts_pattern|active_pattern)` cloned from crypto baseline. `ON CONFLICT DO NOTHING` for re-run safety. Rollback file present.
+
+### `shared/schema.ts` `screenerFilters` (MODIFIED, B79.0m.b2 — drift fix)
+
+Unique-index TS declaration changed from `(mode, filterPath)` → `(mode, assetClass, filterPath)` matching production index name `screener_filters_mode_class_path_idx`. No DB migration runs because production already has correct state (applied by B79.0m.a hotfix that bypassed drizzle-kit). RUNNING_ISSUES #100 tracks the drizzle-kit journal synchronization follow-up.
+
+### "If I Change X, Check Y" — B79.0m.b2 additions
+
+- **Modify pattern-pool gates** → UPDATE `module_constants.pattern_pool_gates.<class>.*` row(s); `pattern-filter.ts` reads via `getCachedNumberRequired` so no code change needed.
+- **Add new pattern strategy** → ADD to `STRATEGY_FAMILY_MAP` with `'pattern'`, ADD `module_constants.strategy_gates.<class>.<strategy>.enabled` rows (default per-class), confirm `module_constants.strategy.<strategy>.*` wildcards or scoped rows exist, ADD detect function with LONG-only enforcement matching `inside-bar-reversal.ts:131-134` pattern.
+- **Add new asset class to B73 replay** → extend `fetchOhlcForReplay` switch in `exit-strategy-replay-service.ts` with a new branch; add observation counter; confirm OHLC source table has `(symbol, interval_begin DESC)` index on all partitions.
+- **Tune the 60-bar floor in pattern-filter** → for now hardcoded in `pattern-filter.ts`; Layer 3 migration target is `module_constants.pattern_pool_gates.min_bars_for_eval`. Same applies to `global-filter.ts:109`. Coordinate both files when promoting.
