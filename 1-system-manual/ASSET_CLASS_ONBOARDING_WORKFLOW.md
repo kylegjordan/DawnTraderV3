@@ -31,6 +31,125 @@
 
 ---
 
+## Onboarding Step Sequence Refinements — Phase 24 retrospective (Kyle directive 2026-05-11, captured before forgetting)
+
+Phase 24 (xstock_spot) is the canonical worked example, BUT the path it took had unnecessary detours that the next asset class (B80 crypto_perp, etc.) must avoid. This section captures the corrected sequence + the audit discipline that should have run on day 1.
+
+### Corrected order of operations
+
+Execute in this exact order. Skipping any one of these causes the same surfacing-failure pattern B79.0a → B79.0d → B79.0m.a produced (scaffolding without functionality, told user it worked when it didn't).
+
+#### Step 1 — Threshold/range/gate authorship (DB rows BEFORE wiring)
+
+For every behavioral knob, BEFORE any wiring code, decide and seed the DB row:
+- **Regime classifier ranges** (`module_constants.regime_classifier` + `regime_phase` + `volume_regime` + `regime_age` + `path_b_sustainability` + `multi_tf_agreement` + `pair_correlation` + `outcome_feedback`) — author asset-class-explicit rows for any threshold expressed in absolute volatility/momentum/return-magnitude units. KEEP wildcard for math primitives (`directional_integrity`, `dbs_calculation`) — these are scale-free. Document inline justification for each wildcard-keep.
+- **Strategy selection criteria** (`module_constants.strategy_gates.<assetClass>.<strategy>.enabled` rows) — explicit row for EVERY strategy, both enabled and disabled. No code constants. Default-open only for asset classes with zero rows; allowlist mode requires full coverage.
+- **Per-strategy thresholds** (`module_constants.strategy.<name>` rows) — author asset-class-explicit row for any threshold using ATR multipliers, absolute % moves, or distance-in-units. Wildcard-keep for scale-free pattern geometry. Document inline.
+- **SQE thresholds** (`module_constants.sqe_config.<assetClass>.*` rows) — `min_final_score`, `min_regime_weight`, `adx_min`, `di_min_quant`, `di_min_pattern`, `momentum_min`. Asset-class-explicit by default.
+- **Global filter row** (`screener_filters` with asset-class scope) — `min_volume`, `min_price`, `max_price`, `max_bid_ask_spread`, `min_market_cap`, `exclude_stablecoins`, etc. Per-mode (paper + live) rows.
+- **Family-IMF rows** (`screener_filters` with `filter_path IN ('vts_trend','vts_reversal','vts_breakout','vts_oscillator','vts_strong_trend','active_*')` + asset-class scope) — 5 family paths × 2 modes = 10 rows. LQ_MIN, VN_MAX, DI_MIN, DI_MAX per family.
+- **MCE config** (`module_constants.mce_config.<assetClass>.*`) — `macro_modifier` (placeholder 1.0 if no asset-class-specific feed yet; track future-batch in RUNNING_ISSUES).
+- **TEC / trailing config** (`module_constants.trailing_exit.<assetClass>.*`) — `break_even_enabled`, `target_lock_r`, `trail_distance_atr_multiplier`, moonbag knobs, BE-trigger threshold. Asset-class-explicit by default; do NOT inherit crypto's Variant K (BE off) blindly — equity exit behavior may want BE protection ON even when crypto has it OFF.
+- **Pattern pool gates** (`module_constants.pattern_pool_gates.<assetClass>.*`) — `final_score_floor`, `max_position_pct`.
+- **Data freshness window** (`module_constants.market_data.<assetClass>.data_freshness_window_ms`).
+
+**Critical:** the unique index on every `module_constants`-adjacent table must include `asset_class` as a key column. If the table has `(mode, filter_path)` unique without asset_class (like `screener_filters` pre-B79.0m.a), seed rows for the new asset class will silently fail on `ON CONFLICT DO NOTHING`. **Audit `pg_indexes WHERE tablename='<x>'` in Step 2 pre-audit and add a hotfix migration if needed.**
+
+#### Step 2 — Scanner + filter ownership decision
+
+Decide explicitly: does the new asset class get its own scanner + own filter path, or share with an existing class?
+
+**Phase 24 verdict for xstock_spot:** DEDICATED scanner + DEDICATED filter pipeline. Reasoning: telemetry isolation, market-hours-aware scanning, dollar-volume distributions materially different from crypto. Same answer expected for B80 crypto_perp (funding-window cycles, leverage-tier differences).
+
+If dedicated:
+- New `<asset_class>/scanner.ts` owns the cycle (subscription to centralClock, NOT a parallel setInterval — per B79 rev 5 §C)
+- New `<asset_class>/global-filter.ts` runs asset-class-specific global filter on fresh pairs
+- New `<asset_class>/imf-evaluator.ts` runs the 4 quant family-IMF paths + the pattern path
+- Each step emits its own diagnostic counters (no co-mingling with crypto's fx5-scanner counters)
+
+If shared (rare — only for asset classes with truly identical signal distributions):
+- Extend `fx5-scanner.ts` to accept assetClass param at every internal boundary
+- Add asset-class-aware family-row lookup (already in place via `getScreenerFilters({mode, filterPath, assetClass})` post-B79.0m.a)
+
+#### Step 3 — Post-filter survivor handoff (shared eval surface, NOT a carve-out)
+
+After filtering, surviving pairs flow into the SHARED post-filter eval functions. These already exist as DB-driven modular units (Phase 18 + B78 + B79.0m.a):
+
+| Function | What it does | Asset-class driven by |
+|---|---|---|
+| `computeMarketContext` (MCE) | Regime, indicators, DBS (where applicable) | Asset-class-aware module_constants lookups |
+| `callStrategyDetect` / strategy-engine `detect*` methods | Per-strategy detection logic | `module_constants.strategy.<name>` thresholds, DB-driven |
+| `evaluateSignalQuality` (SQE) | Eligibility gates, finalScore, regimeWeight | `module_constants.sqe_config.<assetClass>` + `strategy_gates.<assetClass>.<strategy>.enabled` |
+| `insertOpenTrade` + `signal_eval_archive` INSERT | Persist outcomes with `asset_class='<class>'` tag | Caller threads assetClass into row |
+| `resolveTECConfig(assetClass)` | TEC trailing/BE config per asset class | `module_constants.trailing_exit.<assetClass>` |
+
+The new asset class's scanner calls these functions IN A LOOP for each surviving pair, passing `assetClass='<class>'`. No extraction from `runPhase10SimulationCycle` required — that monolith stays crypto-only.
+
+#### Step 4 — Hidden crypto-assumptions audit on shared functions (MANDATORY before wiring)
+
+For each shared function in the post-filter chain, audit:
+
+**Q1.** Are there hardcoded crypto assumptions inside that need asset-class gating?
+- BTC OHLC reference (defensive_hedge, multi-TF correlation) — gate by `assetClass === 'crypto_spot'`
+- BTC dominance / mcap momentum / funding rate (B67.1 macro) — these read from `macro_modifier` DB row which is per-asset-class; xstock should resolve to its placeholder 1.0 (or actual equity macro feed when B79.3 ships)
+- Hardcoded symbol filters / quote-currency assumptions — grep for string literals `'/USD'`, `'BTC/'`, `'/USDT'`
+- Stablecoin gate — applies to crypto, N/A for xstock
+
+**Q2.** Are there things UNIQUE to crypto that should NOT run for the new asset class?
+- DBS computation (`directional-bias-store`) — runs for crypto on every cycle; xstock has no DBS today. The post-filter chain must accept `dbs=null` and treat as neutral multiplier=1.0. Grep every strategy detect function: does each handle `dbs === null`?
+- Pattern detector tuned-for-crypto-microstructure parameters — verify pattern shapes are scale-free (they are; the geometry doesn't care about absolute price level)
+- 24/7 trading assumptions — replaced with `is<AssetClass>MarketOpen` predicate gate (xstock has `isXstockMarketOpenUTC`; the eval cycle should NOT process pairs when market closed)
+
+**Q3.** Are there things UNIQUE to the new asset class that need NEW functionality?
+- Market-hours gate (xstock: ARCA RTH + Phase-1 extended-hours rules per B79.0L)
+- Sector classification (xstock: equity sector for portfolio-cluster prevention — B79.6 future, but stub in registry now)
+- Fundamentals / earnings / IV (xstock: deferred to a future batch, but flag if any current strategy assumes presence)
+- Asset-class-specific friction model (B69 + B79: `server/asset_classes/<class>/friction.ts`)
+- Macro-feed input source (B79.3 for xstock: VIX + SPY trend; B79.0m placeholder 1.0)
+- Funding-rate handling (B80 crypto_perp: funding windows + position-flip-on-funding-cost)
+
+**Q4.** Setup-hash, log-tag, metric-tag, and other shared global state:
+- Setup-hash key (`lastSetupHash` Map in vts-runner) — must include assetClass in the key composition to prevent cross-asset collisions
+- Every log line emitted from shared functions — must include `asset_class` field/tag so crypto and the new asset class telemetry don't conflate
+- Every metric — same
+- Counter accumulators (`vtsEvalCounters`) — must be partitioned by asset class OR explicitly not-applicable per asset class
+
+**Q5.** Exit path cleanliness:
+- Trailing-exit-controller (TEC) — `resolveTECConfig(assetClass)` already exists; verify config rows seeded for the new class
+- Exit-evaluation cycle — when an xstock trade exists in `vts_open_trades`, the exit loop must pull OHLC from the asset-class-correct table (`xstock_spot_ohlc_1m` not `crypto_spot_ohlc_1m`)
+- Close-time persist — `markOpenTradeClosed` is asset-class-agnostic (good); JSON ledger write is asset-class-agnostic (good)
+- B73 ablation replay + B70 archive — async, scoped via asset_class column, no per-class code needed
+
+#### Step 5 — Diagnostic UI separation (NO co-mingling)
+
+Each asset class gets its own observation tab in Machine Learning. Filter Diagnostics counters from one asset class MUST NEVER appear in another asset class's tab.
+
+- Endpoint isolation: `/api/<assetClass>/filter-diagnostics` returns ONLY that asset class's counters
+- Existing crypto Filter Diagnostics tab continues to read `/api/vts/filter-diagnostics` which is crypto-only by-construction (fx5-scanner only scans crypto)
+- Step 2 pre-audit must explicitly grep for cross-asset-class data leaks (e.g. an aggregator that doesn't filter by `asset_class` could leak xstock rows into crypto's Drift Dashboard if signal_eval_archive started accumulating xstock rows; this is exactly the B78 "drift-dashboard-aggregator gets `AND asset_class='crypto_spot'` filter" pattern — verify the same pattern applies to every diagnostic aggregator)
+
+#### Step 6 — TEC + trailing + BE settings (asset-class-explicit, do NOT inherit crypto)
+
+Each new asset class explicitly decides TEC behavior. Defaults that differ per asset class:
+- `break_even_enabled` — crypto Variant K = OFF; equity microstructure may want ON (test in shadow mode)
+- `trail_distance_atr_multiplier` — different per asset class typically
+- `target_lock_r` — different per asset class typically
+- Moonbag knobs — pure trade-mode policy, may transfer cross-class
+
+Seed asset-class-explicit `trailing_exit.<assetClass>.*` rows during Step 1; verify `resolveTECConfig(assetClass)` returns the right rows in Step 2 PIA.
+
+#### Step 7 — Active-trading path wire-in (signal orchestrator + paper execution)
+
+Separate batch (B79.0n pattern). Wires the post-filter survivors into `signal-orchestrator` for the active-trading dispatch path with asset-class-aware execution. Can be designed and shipped while active trading is OFF (verifiable up to the Phase 19 gate); full end-to-end testing waits for Phase 19.
+
+### The pre-audit discipline
+
+Step 4 above (hidden-assumptions audit) is the discipline B79 lacked. Every shared function in the post-filter chain needs grep-and-verify on Q1-Q5 BEFORE wiring code lands. Function-by-function. Document the answers in `BATCH_N_PRE_AUDIT.md` §"Shared function audit".
+
+This is the difference between "told the user it worked when it didn't" (B79.0a → B79.0d) and "verifiable, defensible, complete" (post-B79.0m.a).
+
+---
+
 ### Section D.1 — Concrete code-extension templates (Phase 24 reference)
 
 Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.
