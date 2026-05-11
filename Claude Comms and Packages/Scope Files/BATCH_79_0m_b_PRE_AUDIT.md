@@ -302,7 +302,27 @@ UPDATE existing `break_even_enabled` to `true` + INSERT rows for `target_lock_r`
 
 ---
 
-## 6. Open questions for Langston
+## 6.LANGSTON STEP 2 RESPONSE — APPLIED REVISIONS
+
+**APPROVED WITH REVISIONS** (Langston 2026-05-11). All 6 R-revisions applied:
+
+- **R1 (§1.7 exit-path OHLC):** Introduce `getOHLCSourceForTrade(trade)` helper that returns the correct cache binding by `trade.assetClass` (crypto → live-pricing-adapter; xstock → `xstock_spot_ohlc_1m`-backed cache). Exit loop calls per-trade. Unit test covers BOTH branches.
+- **R2 (§1.3 enablement matrix):** post-B79.0m.a, all 10 xstock_spot strategies are gated enabled=true (vwap_pullback, breakout, mean_reversion, range_trade, sma_trend_ride, vwap_bounce, inside_bar_reversal, morning_star, pivot_shift, orb). Verified DB seed. All 9 non-ORB get threshold authoring per §1.3.
+- **R3 (§4 G4 false-fail guard):** "At least one xstock VTS trade opens AND closes cleanly within 24h **OR synthetic trade injection confirms exit path executes end-to-end with `paper_sim_trades` row written with `asset_class='xstock_spot'`**." Prevents quiet-market false-fail.
+- **R4 (§4 G9 measurement):** "Cycle" = `xstockSpotScanner.runCycle` entry to last-pair-processed p95. "Crypto baseline" = phase-10 vts-runner cycle p95 over trailing 7 days pre-deploy. Window = first 48h on staging. Acceptance: xstock p95 ≤ 1.3× crypto baseline p95.
+- **R5 (§1.1 MCE signature):** Positional `assetClass` param with default acceptable for back-compat. RUNNING_ISSUES follow-up: refactor computeContext to options-object signature when crosses 8+ params; not in this batch.
+- **R6 (§2.4 batching):** Confirmed — process ALL fresh pairs per cycle (no batching, no new round-robin state). Matches existing xstockSpotScanner.runCycle behavior. If perf becomes an issue post-deploy (G9 fails), batching is a future-batch optimization. Crypto VTS already does this pattern (full eval per cycle).
+
+**Q1-Q6 answers locked:**
+
+- **Q1 DBS:** Synthesize neutral `{score:0, slope:0, category:'NEUTRAL'}` for non-crypto. Crypto's hard-fail on missing propagatedDbs PRESERVED when assetClass==='crypto_spot'. Per-asset-class DBS deferred to future Layer-3 batch (RUNNING_ISSUES candidate).
+- **Q2 Macro modifier:** Per-asset-class via `module_constants.mce_config.<assetClass>.macro_modifier` for non-crypto; crypto stays on `macroCachedContext.modifier.value`. RUNNING_ISSUES follow-up to unify (not in this batch).
+- **Q3 Per-strategy thresholds:** Volatility-sensitive only (~30-50 rows). Wildcard-keep for scale-free pattern geometry. Where halving rule is non-obvious (e.g. volume thresholds since crypto $-volume ≠ equity share-volume), add `notes` row justification.
+- **Q4 TEC starters:** Fresh equity-context. R-based knobs (BE trigger R, target lock R, moonbag R-thresholds) — same values as crypto pre-K (R is dimensionless). ATR-multiplier knobs (trail distance) — 0.8× crypto pre-K (equity still needs noise room, just less than crypto). All rows tagged `updated_by='b79.0m.b-layer1-starter-equity-baseline'`.
+- **Q5 Skipped-signals filter:** Single log directory + asset_class field + reader filter. Missing-field entries default to crypto_spot.
+- **Q6 Sequencing:** Confirmed sequential. B79.0n drafts after B79.0m.b passes G1-G9.
+
+## 7. Open questions for Langston
 
 **Q1.** DBS handling: synthesize neutral `{score:0, slope:0, category:'NEUTRAL'}` for non-crypto asset classes per §1.1(A), OR add a per-asset-class DBS computation surface in this batch? Lean **synthesize neutral** — DBS computation for xstock can be a future batch driven by Layer-3 evidence.
 

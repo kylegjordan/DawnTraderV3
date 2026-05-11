@@ -70,7 +70,7 @@ import {
   type MacroModifierConfig,
   type MacroModifierResult,
 } from '../core/metrics/macro-modifier.js';
-import { getConstant } from './module-constants-service.js';
+import { getConstant, getCachedConstant } from './module-constants-service.js';
 // B67.2: phase dimension (EARLY/PRIME/LATE on existing 5 regimes).
 // Per-pair age tracked by regimePhaseStore singleton; MCE ticks the store on
 // every cycle and computes the phase from age + boundary constants. Phase
@@ -859,7 +859,8 @@ export class MarketContextEngine {
     currentPrice: number,
     volume24h: number,
     smaPeriod?: number,
-    propagatedDbs?: { score: number; category: string; slope?: number } // B63: DBS propagated from FX5 scanner pre-filter
+    propagatedDbs?: { score: number; category: string; slope?: number }, // B63: DBS propagated from FX5 scanner pre-filter (REQUIRED for crypto_spot; synthesized neutral for non-crypto per B79.0m.b)
+    assetClass: string = 'crypto_spot', // B79.0m.b: asset-class param + conditional DBS + per-class macro modifier. Default crypto_spot preserves back-compat.
   ): MarketContext {
     const now = Date.now();
 
@@ -876,19 +877,43 @@ export class MarketContextEngine {
     const high24h = this.computeHigh24h(ohlcData);
     const low24h = this.computeLow24h(ohlcData);
 
-    // ── B63: DBS is a HARD PIPELINE CONTRACT. No fallback. No recompute. No default. ──
-    // FX5 scanner computes DBS pre-filter and propagates it through the pair object.
-    // MCE CONSUMES the propagated DBS — never computes it. If missing, fail loudly.
-    // Rationale: "Every time we put a fallback in, it ends up somehow becoming the default." — Kyle directive 2026-04-20
-    if (!propagatedDbs || !Number.isFinite(propagatedDbs.score)) {
-      throw new Error(`[B63][MCE] DBS not propagated for ${symbol} — hard-contract violation. Caller must supply propagatedDbs from pair object.`);
+    // ── B63: DBS HARD CONTRACT for crypto_spot. ──
+    // ── B79.0m.b: For non-crypto asset classes (xstock_spot etc.), DBS is
+    //    not computed today. Synthesize neutral {score:0, slope:0, category:'NEUTRAL'}
+    //    so the post-filter chain runs Path-A only (conservative; no DBS-based
+    //    routing). Future Layer-3 batch may add per-asset-class DBS computation.
+    //
+    //    Crypto's hard-fail PRESERVED — Kyle directive: "Every time we put a
+    //    fallback in, it ends up becoming the default." Per Langston Step 2 Q1
+    //    answer: contract does not loosen for crypto in this batch.
+    let directionalBias: { score: number; category: any; sentinelZero: boolean; components: any };
+    if (assetClass === 'crypto_spot') {
+      if (!propagatedDbs || !Number.isFinite(propagatedDbs.score)) {
+        throw new Error(`[B63][MCE] DBS not propagated for ${symbol} (asset_class=crypto_spot) — hard-contract violation. Caller must supply propagatedDbs from pair object.`);
+      }
+      directionalBias = {
+        score: propagatedDbs.score,
+        category: (propagatedDbs.category as any) || 'NEUTRAL',
+        sentinelZero: false,
+        components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 },
+      };
+    } else {
+      // Non-crypto: synthesize neutral DBS. Layer-1 starter; per-asset-class
+      // DBS computation deferred to future Layer-3 batch (RUNNING_ISSUES candidate).
+      directionalBias = propagatedDbs && Number.isFinite(propagatedDbs.score)
+        ? {
+            score: propagatedDbs.score,
+            category: (propagatedDbs.category as any) || 'NEUTRAL',
+            sentinelZero: false,
+            components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 },
+          }
+        : {
+            score: 0,
+            category: 'NEUTRAL' as any,
+            sentinelZero: true,
+            components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 },
+          };
     }
-    const directionalBias = {
-      score: propagatedDbs.score,
-      category: (propagatedDbs.category as any) || 'NEUTRAL',
-      sentinelZero: false,
-      components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 },
-    };
 
     // ── B67.1: read pre-resolved macro context from MCE state (sync) ──
     // Macro context is refreshed on a periodic timer started in MCE.start().
@@ -903,7 +928,30 @@ export class MarketContextEngine {
       );
     }
     const macroContext = this.macroCachedContext;
-    const macroModifierValue = macroContext.modifier.value;
+    // ── B79.0m.b: asset-class-aware macro modifier resolution ──
+    // crypto_spot: use the CoinGecko-fed macroCachedContext value (existing path)
+    // non-crypto: read `module_constants.mce_config.<assetClass>.macro_modifier`
+    //   (xstock_spot seeded as 1.0 placeholder; B79.3 will populate with equity
+    //   macro feed). Future asset classes follow same pattern.
+    // RUNNING_ISSUES follow-up (Langston Q2 answer): unify crypto's macro source
+    //   to module_constants for symmetric resolution; not in this batch.
+    let macroModifierValue: number;
+    if (assetClass === 'crypto_spot') {
+      macroModifierValue = macroContext.modifier.value;
+    } else {
+      try {
+        const v = getCachedConstant<number>('mce_config', 'macro_modifier', {
+          exchange: '*',
+          assetClass,
+          regime: '*',
+          strategy: '*',
+        });
+        macroModifierValue = typeof v === 'number' && Number.isFinite(v) ? v : 1.0;
+      } catch {
+        // Cold cache or missing row → safe neutral
+        macroModifierValue = 1.0;
+      }
+    }
 
     // ── B62 + B67.1 + B67.3.5: Regime calculation receives DBS + macro
     //    modifier + tunable regime config. RegimeConfig must be loaded before

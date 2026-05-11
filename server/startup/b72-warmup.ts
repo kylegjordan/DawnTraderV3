@@ -64,6 +64,10 @@ const PREFETCH_MODULES = [
   // to DB rows. isStrategyEnabledForAssetClass (sync caller from SQE) reads via
   // getCachedConstant; this module MUST be warm before SQE evaluation.
   'strategy_gates',
+  // B79.0m.b — mce_config read by MCE.computeContext for non-crypto assetClass
+  // (xstock_spot etc. use per-class macro_modifier row, default 1.0). Crypto
+  // keeps the macroCachedContext path; this is non-crypto only.
+  'mce_config',
   // Slice 4 — HIGH-risk:
   'sqe_config',           // SQE primary admission gates (precedence: screener_filters → sqe_config → static mirror)
   'expectancy_kernel',    // pWin floor/ceiling (caller-injected into pure-math kernel)
