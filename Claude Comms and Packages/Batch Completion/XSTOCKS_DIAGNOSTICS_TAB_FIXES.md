@@ -35,9 +35,11 @@ The pipeline diverges from crypto architecture in shape, not just calibration. T
 
 ## SECTION A — Pipeline architecture gaps (the BIG fixes Kyle has been asking for)
 
-### A1 — Parallel pattern path: not built
+### A1 — Parallel pattern path: not built (code + DB rows + thresholds all missing)
 
 **State:** Pattern strategies (`morning_star`, `inside_bar_reversal`, `pivot_shift`) currently invoke from within the quant-path loop in `eval-cycle.ts`. They receive a `patternInput` built from `scanPatterns()` and can fire signals, but they fire as quant-path-tagged events, not pattern-path-tagged. No separate global filter + IMF gate runs for them.
+
+**DB state (verified 2026-05-11):** No `vts_pattern` row, no `active_pattern` row in `screener_filters` for `asset_class='xstock_spot'`. Both code AND thresholds need to be added together since neither exists. Reference what crypto has: `SELECT * FROM screener_filters WHERE asset_class='crypto_spot' AND filter_path IN ('vts_pattern', 'active_pattern')` — clone those values for the xstock seeding.
 
 **Crypto reference** (`fx5-scanner.ts:745`):
 - `patternFilterPath = isPassiveLearningMode ? 'vts_pattern' : 'active_pattern'`
@@ -48,7 +50,7 @@ The pipeline diverges from crypto architecture in shape, not just calibration. T
 - VTS batch can contain a pair in BOTH `quant-trend` and `pattern` simultaneously
 
 **What's required for xstock:**
-1. DB: seed `vts_pattern` + `active_pattern` rows in `screener_filters` for `asset_class='xstock_spot'` (clone thresholds from crypto's same rows initially)
+1. DB: seed `vts_pattern` + `active_pattern` rows in `screener_filters` for `asset_class='xstock_spot'` — **thresholds also need to be assigned** (`lq_min`, `vn_max`, `di_min`, `di_max`, `min_volume`, `min_price`, plus pattern-specific knobs like `final_score_floor`). Clone from crypto's `vts_pattern`/`active_pattern` row values initially, tag `last_updated_by='b79.0m.b2-pattern-path-starter-cloned-from-crypto'`. Also seed the pattern-pool guardrails (`pattern_pool_gates.xstock_spot.*.final_score_floor`, `*.max_position_pct`) in `module_constants` if not already present — `pattern-pool-filters.ts` defines TS fallback constants (0.45 / 0.50) but the runtime authority is module_constants per the file's own docstring.
 2. Code: in `server/asset_classes/xstock_spot/eval-cycle.ts`, run the pattern global filter + pattern IMF gate IN PARALLEL with the quant path
 3. Pattern survivors get tagged `sourcePool='pattern'` and run ONLY pattern strategies
 4. Quant survivors continue to run quant strategies (and may ALSO be pattern survivors if they pass the pattern filter — duplicate entry per Kyle confirmation)
@@ -61,16 +63,21 @@ The pipeline diverges from crypto architecture in shape, not just calibration. T
 
 **What's required for xstock:** Replace the single-iteration loop with a fan-out loop — for each family the pair qualified for, treat it as a separate evaluation entry tagged with that family's sourcePool. Same shape as crypto.
 
-### A3 — All families filter paths verified present in DB
+### A3 — Five quant family paths: rows + thresholds present (cloned from crypto)
 
-DB query result (psql, verified):
+DB query result (psql, verified 2026-05-11):
 ```
 xstock_spot rows in screener_filters:
   vts_trend       vts_reversal       vts_breakout       vts_oscillator       vts_strong_trend       (paper)
   active_trend    active_reversal    active_breakout    active_oscillator    active_strong_trend    (live)
-  vts_quant       active_quant       (global filter rows — B79.0m.b added)
+  active_quant    (global filter row, paper + live; B79.0m.b added)
 ```
-Pattern row missing for both modes.
+Thresholds populated for all 10 family rows (paper paths VN_MAX=0.95 / 0.98 for strong_trend; live paths VN_MAX=0.85 / 0.95 for strong_trend; LQ_MIN=43 across non-strong-trend, 30/35 for strong_trend; DI bands per family). Tagged `last_updated_by='b79.0m.a-layer1-starter-cloned-from-crypto'`.
+
+**Pattern row missing for both modes — see A1.**
+
+**Calibration follow-up (not blocking pipeline correctness):**
+Family thresholds are crypto clones — VN dominance in current diagnostics (44k of 85k family-row failures) suggests xstock intraday tape has higher VN than crypto-tuned VN_MAX=0.95 tolerates. Layer-1 ships with the clones; xstock-specific recalibration drives off Layer-3 evidence post-architecture-completion. Track per-strategy thresholds in `module_constants` (e.g. RSI bands for `pivot_shift`, ATR multipliers for `morning_star`) similarly — most are still wildcard, see B79.0m.b2 deferred list.
 
 ### A4 — Eval-cycle wrongly invoked SQE — FIXED (commit `404a76428`)
 
