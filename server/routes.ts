@@ -7236,7 +7236,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const out: Record<string, { imf: any; survivors: number }> = {};
         for (const fam of Object.keys(perFamily)) {
           const f = perFamily[fam] ?? {};
-          out[fam] = {
+          // xstock counters use DB filter_path names (`vts_trend`, `active_trend`, etc.);
+          // crypto FilterDiagnosticsPanel iterates `['trend', 'reversal', 'breakout',
+          // 'oscillator', 'strong_trend']` (no prefix). Strip the `vts_`/`active_`
+          // prefix so the same component renders both asset classes consistently.
+          const key = fam.replace(/^vts_|^active_/, '');
+          out[key] = {
             imf: {
               failedLQ: f.failedLQ ?? 0,
               failedVN: f.failedVN ?? 0,
