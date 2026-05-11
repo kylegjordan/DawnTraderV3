@@ -99,13 +99,16 @@ export async function evaluateXstockGlobalFilter(
     return { passed: false, failureReason: 'min_volume', counters };
   }
 
-  // min_history — proxy via OHLC bar count: expect >= N days × ~390 min/day if 1m bars.
-  // Layer-1 simplification: require at least 60 bars (~1h of 1m candles) for any indicator math.
-  const minHistory = parseInt(config.minHistoryDays ?? '0', 10);
-  const minBarsRequired = minHistory > 0 ? Math.max(60, minHistory * 60) : 60;
-  if (ohlc.length < minBarsRequired) {
+  // min_history — proxy via OHLC bar count. The eval fetcher restricts to a
+  // ~6h sliding window (~360 1m bars max). config.minHistoryDays is a
+  // metadata field expressing "we've been collecting OHLC for N days" — that's
+  // a corpus-level invariant, not a per-pair-cycle bar count. Layer-1:
+  // require at least 60 bars (~1h of 1m candles) so indicator math is sound;
+  // ignore `minHistoryDays` for the in-cycle gate (use it elsewhere for
+  // corpus-age checks if needed).
+  if (ohlc.length < 60) {
     counters.failed_history = 1;
-    return { passed: false, failureReason: `history_${ohlc.length}_lt_${minBarsRequired}`, counters };
+    return { passed: false, failureReason: `history_${ohlc.length}_lt_60`, counters };
   }
 
   // max_bid_ask_spread — Layer-1 starter has no bid/ask in OHLC.
