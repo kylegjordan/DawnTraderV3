@@ -1,0 +1,207 @@
+diff --git a/server/index.ts b/server/index.ts
+index 93a413154..cfdb2ec51 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -668,6 +668,23 @@ app.use((req, res, next) => {
+     );
+   }
+ 
++  // ─── B79.0g-tx: GC sweep of soft-deleted vts_open_trades rows ───
++  // DELETEs rows whose closed_at is older than
++  // module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days.
++  // Own try/catch so a sweep failure isn't conflated with a rehydrate
++  // failure in the logs (Langston pre-audit R2). Runs AFTER rehydrate
++  // (which already filters WHERE closed=false, so swept rows are
++  // irrelevant to the live Map anyway). Soft-fail: never halt boot.
++  try {
++    const { sweepClosedOpenTrades } = await import('./services/vts-trade-persistence.js');
++    await sweepClosedOpenTrades();
++  } catch (sweepErr) {
++    console.error(
++      '[B79.0g-tx][SWEEP_FAIL] boot-time vts_open_trades GC sweep failed; continuing boot:',
++      sweepErr instanceof Error ? sweepErr.message : sweepErr,
++    );
++  }
++
+   // ─── B79.0a: Live xstock_spot scanner (HARD-FAIL on boot per Langston rev 1 #4) ───
+   // Subscribes to centralClock; observability scanner Day 1 (no signal-orchestrator
+   // wiring yet — that's B79.x post-Layer-3). Runs BEFORE server.listen so the
+diff --git a/server/services/vts-runner.ts b/server/services/vts-runner.ts
+index cdfbbce4d..1072bffdd 100644
+--- a/server/services/vts-runner.ts
++++ b/server/services/vts-runner.ts
+@@ -2372,27 +2372,34 @@ async function resolveOpenVirtualTrades(): Promise<{
+       );
+     }
+ 
+-    // Remove from open trades registry
++    // Remove from open trades registry FIRST (synchronous, can't fail).
++    // The Map gate is the correctness invariant against re-running the
++    // non-idempotent close cascade (persistRealPriceTrade → closedTrades.push,
++    // session P&L, JSON ledger, B73 ablation replay, B70 archive enqueue,
++    // ML calibration). Must run before the soft-delete UPDATE so a thrown
++    // UPDATE cannot let the next exit cycle re-evaluate this trade and
++    // double-execute the cascade.
+     openVirtualTrades.delete(id);
+-    // B79.0g: also remove from vts_open_trades. This is post-persistRealPriceTrade
+-    // so the closed-trade row is already in paper_sim_trades (or whatever the
+-    // active persistence target is); the DELETE here completes the migration.
+-    // Per Langston Q5 lock the canonical pattern is single-transaction across
+-    // both ops; deferring full transactional integration to a follow-up since
+-    // persistRealPriceTrade currently runs async and doesn't expose a tx handle.
+-    // Net effect today: window of inconsistency is sub-millisecond + correctness
+-    // restored on next rehydrate boot. RUNNING_ISSUES tracker for tx integration.
+-    void (async () => {
+-      try {
+-        const { deleteOpenTrade } = await import('./vts-trade-persistence.js');
+-        await deleteOpenTrade(id);
+-      } catch (err) {
+-        console.warn(
+-          `[B79.0g][DELETE_FAIL] orphan vts_open_trades row=${id} (will be cleared by next rehydrate or ops):`,
+-          err instanceof Error ? err.message : err,
+-        );
+-      }
+-    })();
++    // B79.0g-tx: AWAITED soft-delete UPDATE (no re-throw). Replaces the
++    // B79.0g fire-and-log async DELETE. UPDATE is idempotent via
++    // `WHERE closed=false`. If this fails, the DB row stays closed=false
++    // and rehydrate-on-next-boot re-adds the trade to the Map; a
++    // subsequent close cycle retries the cascade idempotently. Soft-
++    // delete is NOT a transactional close-time invariant — only Option C
++    // would be; this is observability + bounded-history for vts_open_trades.
++    try {
++      const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
++      await markOpenTradeClosed(id);
++    } catch (err) {
++      console.error(
++        `[B79.0g-tx][MARK_CLOSED_FAIL] trade=${id} soft-delete UPDATE failed; ` +
++        `JSON ledger + session metrics OK; DB row stays closed=false until rehydrate-on-next-boot ` +
++        `re-adds to Map and a subsequent close cycle retries. Investigate if recurring:`,
++        err instanceof Error ? err.message : err,
++      );
++      // Intentional: do NOT re-throw. Re-throw would let the next exit
++      // cycle re-execute the non-idempotent close cascade.
++    }
+     // Batch 45: Record close timestamp for re-entry cooldown
+     recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
+ 
+diff --git a/server/services/vts-trade-persistence.ts b/server/services/vts-trade-persistence.ts
+index dcc2c26d6..1ed5b3d48 100644
+--- a/server/services/vts-trade-persistence.ts
++++ b/server/services/vts-trade-persistence.ts
+@@ -109,15 +109,27 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
+ }
+ 
+ /**
+- * DELETE an open-trade row at close time. Called from inside the
+- * close-time transaction in vts-service.persistRealPriceTrade so the
+- * DELETE + the closed-trade INSERT atomically swap.
++ * B79.0g-tx — soft-delete: flip the row to closed=true with closed_at=NOW()
++ * instead of hard-DELETE. Called from vts-runner trade-close site AWAITED
++ * AFTER `openVirtualTrades.delete(id)` (which is the actual correctness
++ * gate against re-executing the non-idempotent close cascade). Idempotent
++ * via `WHERE closed=false`: a retry after partial-failure matches zero
++ * rows and returns cleanly.
+  *
+- * The actual transactional wrap is done in vts-service via a tx callback;
+- * this helper just exposes the DELETE statement.
++ * Replaces the B79.0g `deleteOpenTrade` hard-DELETE — soft-deleted rows
++ * carry the closed-history forward through the next boot's rehydrate
++ * (which filters `WHERE closed=false`) and are GC'd by
++ * `sweepClosedOpenTrades` at boot.
+  */
+-export async function deleteOpenTrade(tradeId: string): Promise<void> {
+-  await db.execute(sql`DELETE FROM vts_open_trades WHERE id = ${tradeId}`);
++export async function markOpenTradeClosed(tradeId: string): Promise<void> {
++  await db.execute(sql`
++    UPDATE vts_open_trades
++       SET closed = true,
++           closed_at = NOW(),
++           updated_at = NOW()
++     WHERE id = ${tradeId}
++       AND closed = false
++  `);
+ }
+ 
+ /**
+@@ -148,6 +160,7 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
+            position_size, dollar_value, quantity, regime, signal_type, strategy,
+            pool, opened_at, context
+     FROM vts_open_trades
++    WHERE closed = false
+   `);
+ 
+   const rows = (result as any).rows ?? (result as unknown as any[]);
+@@ -186,7 +199,11 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
+ export async function bootstrapOpenTradesFromMemory(
+   inMemoryTrades: Iterable<OpenVirtualTradeRecord>,
+ ): Promise<number | null> {
+-  const existing = await db.execute<{ count: string }>(sql`SELECT COUNT(*) AS count FROM vts_open_trades`);
++  // B79.0g-tx: bootstrap is gated on the OPEN-only count. Closed soft-
++  // deleted history rows do not block the re-resolve bootstrap path —
++  // they're just GC bookkeeping. Preserves the B79.0g Q4 re-resolve
++  // semantic across the new soft-delete world (Langston pre-audit Q4).
++  const existing = await db.execute<{ count: string }>(sql`SELECT COUNT(*) AS count FROM vts_open_trades WHERE closed = false`);
+   const existingRows = (existing as any).rows ?? (existing as unknown as any[]);
+   const existingCount = parseInt(String(existingRows[0]?.count ?? '0'), 10);
+   if (existingCount > 0) return null;
+@@ -222,3 +239,59 @@ export async function bootstrapOpenTradesFromMemory(
+   console.log(`[B79.0g][BOOTSTRAP] seeded ${bootstrapped} open trades from in-memory Map`);
+   return bootstrapped;
+ }
++
++/**
++ * B79.0g-tx — boot-time GC sweep. DELETEs soft-deleted rows whose
++ * `closed_at` is older than
++ * `module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days`.
++ *
++ * Bounded volume (typical: a few hundred to a few thousand rows per
++ * retention window); single statement; runs once at boot from
++ * `server/index.ts` after `rehydrateOpenVtsTrades()`. HARD-FAIL semantics
++ * on missing module_constants row: emit a greppable
++ * `[B79.0g-tx][CONFIG_MISSING]` line, skip the sweep, return null. Do
++ * NOT halt boot — sweep failure is observability, not a correctness
++ * invariant.
++ *
++ * Returns `{ swept: number }` on success, `null` if retention config
++ * was missing/invalid.
++ */
++export async function sweepClosedOpenTrades(): Promise<{ swept: number } | null> {
++  let retentionDays: number;
++  try {
++    const r = await db.execute<{ value: unknown }>(sql`
++      SELECT value FROM module_constants
++       WHERE module_name='data_lifecycle'
++         AND constant_name='vts_open_trades.closed_gc_retention_days'
++         AND asset_class='*' AND exchange='*' AND regime='*' AND strategy='*'
++       LIMIT 1
++    `);
++    const rows = (r as any).rows ?? (r as unknown as any[]);
++    const v = rows[0]?.value;
++    const n = typeof v === 'number' ? v : Number(v);
++    if (!Number.isFinite(n) || n <= 0) {
++      throw new Error(`invalid retention value: ${JSON.stringify(v)}`);
++    }
++    retentionDays = n;
++  } catch (err) {
++    console.error(
++      `[B79.0g-tx][CONFIG_MISSING] data_lifecycle.vts_open_trades.closed_gc_retention_days unreadable — sweep skipped:`,
++      err instanceof Error ? err.message : err,
++    );
++    return null;
++  }
++
++  const r = await db.execute<{ count: string }>(sql`
++    WITH d AS (
++      DELETE FROM vts_open_trades
++       WHERE closed = true
++         AND closed_at < NOW() - (${retentionDays}::int * INTERVAL '1 day')
++       RETURNING id
++    )
++    SELECT COUNT(*)::text AS count FROM d
++  `);
++  const rows = (r as any).rows ?? (r as unknown as any[]);
++  const swept = parseInt(String(rows[0]?.count ?? '0'), 10);
++  console.log(`[B79.0g-tx][GC_SWEEP] retention=${retentionDays}d swept=${swept} closed-rows from vts_open_trades`);
++  return { swept };
++}

@@ -2,6 +2,31 @@
 
 ---
 
+## INFRA-2026-05-11-A — B79.0g-tx atomic close-time soft-delete + pre-audit schema-paste rule
+
+**Trigger:** RUNNING_ISSUES #91 — B79.0g shipped close-time DELETE-from-vts_open_trades as fire-and-log async, not atomic with the closed-trade row creation. B79.0g-tx ships the soft-delete pattern (Option B) as the proper resolution after rejecting Option C (full tx through `persistRealPriceTrade`) as a regression-masquerading-as-a-fix.
+
+**Resolution:**
+- Schema: `closed BOOLEAN NOT NULL DEFAULT false` + `closed_at TIMESTAMPTZ` + partial index `WHERE closed=false` (CREATE INDEX CONCURRENTLY outside tx).
+- Service: `deleteOpenTrade` → `markOpenTradeClosed` awaited UPDATE (idempotent via `WHERE closed=false`); rehydrate + bootstrap COUNT filters `WHERE closed=false` (Q4 re-resolve semantic preserved); new `sweepClosedOpenTrades` boot-time CTE DELETE with HARD-FAIL [CONFIG_MISSING]+null on missing module_constants row.
+- Close-site (vts-runner.ts:2375-2402): Map.delete FIRST then awaited UPDATE in try/catch with NO re-throw. Map gate is the correctness invariant against re-executing the non-idempotent close cascade (Langston pre-audit R1, critical).
+- Boot path (server/index.ts:661-686): own try/catch with [SWEEP_FAIL] label (Langston pre-audit R2).
+- Seed: `module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days = 90` (wildcard scope; system knob, not per-asset behavioral).
+
+**Commits:** `79774aa51` (impl) + `e32e101ee` (test-mock hotfix) + `bd299b8f7` (seed-SQL column-list hotfix).
+
+**Test-mock snag (hotfix `e32e101ee`):** initial 2/13 b79-0g-tx tests failed with `TypeError: Cannot read properties of undefined (reading 'sql')` because `mockExecute.mockImplementationOnce` overrides bypassed the default mock's `dbCalls.push(...)` capture path. Replaced with a `dbReturnOverrides` queue the default mock consumes via `.shift()` — capture path always runs. No behavioral code change.
+
+**Seed-SQL snag (hotfix `bd299b8f7`):** pre-audit §1.5 paraphrased a phantom `tunable_status` column reference from `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Section C. Actual `module_constants` schema has 9 columns: `(module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_at, updated_by)` — no `tunable_status`. Caught at psql-INSERT time as a deploy-blocking error (not silent data corruption). 3-LOC hotfix corrected column list + ON CONFLICT key order to match the actual PK index.
+
+**Standing rule (Langston Step 8 verbatim):** "future pre-audit §1.5 schema sections must paste `\d <table>` output, not paraphrase from workflow docs." Tracked in new RUNNING_ISSUES #93 for the broader governance-doc schema-drift sweep (ASSET_CLASS_ONBOARDING_WORKFLOW Section C + SYSTEM_MANUAL appendix + CURRENT_SETTINGS_REGISTRY may have additional stale references).
+
+**Verification:** PM2 #215 boot logs clean — `[B79.0g][REHYDRATE] loaded 113 open VTS trades from DB` + `[B79.0g-tx][GC_SWEEP] retention=90d swept=0 closed-rows`; all 13 b79-0g-tx tests pass on CI; crypto no-touch fence held at 10 factor families × 8/hr. Langston Step 8 APPROVED with 2 non-blocking observations.
+
+**Lesson logged:** R1 was the high-value catch — my initial pre-audit pattern (UPDATE before Map.delete; re-throw on failure) would have shipped a latent double-execute bug on any transient Postgres blip during close-time UPDATE. Map.delete-first preserves the correctness invariant; soft-delete is observability + bounded-history, not close-cascade atomicity.
+
+---
+
 ## INFRA-2026-05-10-B — B79.0i.b factor-calibration jsonb schema-extraction hotfix
 
 **Trigger:** B79.0i.b initial deploy of `/api/xstocks/factor-calibration` errored with `column "real_confidence" does not exist`. The custom xstocks endpoint query referenced flat `real_confidence` and `alt_confidence` columns assumed from naming convention.

@@ -1573,19 +1573,23 @@ Coverage for ARM constructor back-compat + data-freshness helper edge cases (clo
 
 **Upstream:** written by `vts-trade-persistence.ts` from vts-runner trade-open path (await INSERT before Map.set). Bootstrap-from-memory writer re-resolves asset_class via `safeResolveAssetClass` before INSERT — defeats stale legacy values.
 **Downstream:** rehydrate-on-boot from `server/index.ts` after `loadTrailingStates` and BEFORE `xstockSpotScanner.start`. Rehydrated rows seed `openVirtualTrades` Map. TEC trailing states rejoin via existing `tec_trailing_states` rehydrate path.
-**Indexes:** symbol, asset_class, opened_at.
-**Atomicity caveat:** close-time DELETE is fire-and-log async (post `persistRealPriceTrade`) NOT wrapped in single transaction. Sub-millisecond inconsistency window; orphan rows cleared on next rehydrate boot. RUNNING_ISSUES #91 (B79.0g-tx) tracks the proper transactional integration through `persistRealPriceTrade`.
-**Blast radius:** MEDIUM — touches every trade-open path. INSERT failure aborts trade-open cleanly (no half-state). Rehydrate failure soft-fails (boot continues with empty Map).
+**Indexes:** symbol, asset_class, opened_at, **plus partial index `vts_open_trades_open_filter_idx ON (id) WHERE closed=false` (B79.0g-tx)** supporting the rehydrate + bootstrap-COUNT hot read path as closed-history accrues pre-GC.
+
+**B79.0g-tx soft-delete columns (added 2026-05-11):** `closed BOOLEAN NOT NULL DEFAULT false` + `closed_at TIMESTAMPTZ NULL`. Trade-close UPDATE flips `closed=true, closed_at=NOW()` via awaited single-row UPDATE in `markOpenTradeClosed` (replaced the B79.0g fire-and-log DELETE). UPDATE is idempotent via `WHERE closed=false`. Boot-time GC sweep DELETEs rows where `closed=true AND closed_at < NOW() - INTERVAL '<retention> days'`; retention sourced from `module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days` (default 90; HARD-FAIL semantics: missing row emits `[B79.0g-tx][CONFIG_MISSING]` log + skips sweep + does NOT halt boot).
+
+**Close-time ordering invariant (CRITICAL, Langston pre-audit R1):** at the vts-runner close site (lines 2375-2402) `openVirtualTrades.delete(id)` runs FIRST (synchronous, can't fail), THEN awaited `markOpenTradeClosed(id)` in try/catch with NO re-throw. The Map gate is the correctness invariant against re-executing the non-idempotent close cascade (`persistRealPriceTrade` → `closedTrades.push` + session P&L + JSON ledger + B70 archive enqueue + B73 ablation replay + ML calibration). Soft-delete is observability + bounded-history; only Option C would make the cascade atomic, and Option C was rejected at scope time because there's no shared Postgres-tx surface with `logTrade`'s JSON write. If `markOpenTradeClosed` throws, the DB row stays `closed=false` and rehydrate-on-next-boot re-adds the trade to the Map; a subsequent close cycle retries cleanly (idempotent UPDATE).
+
+**Blast radius:** MEDIUM — touches every trade-open path. INSERT failure aborts trade-open cleanly (no half-state). Rehydrate failure soft-fails (boot continues with empty Map). Sweep failure soft-fails with its own `[B79.0g-tx][SWEEP_FAIL]` label distinct from rehydrate.
 
 ### `server/services/vts-trade-persistence.ts` (NEW, B79.0g)
 
 **Layer:** 8 (Persistence / Database)
 
-**Purpose:** encapsulates the 4 ops on `vts_open_trades`: `insertOpenTrade` / `deleteOpenTrade` / `rehydrateOpenTrades` / `bootstrapOpenTradesFromMemory`. Bootstrap path is one-shot first-deploy migration that snapshots in-memory `openVirtualTrades` Map into the empty table WITH RE-RESOLVE of `asset_class` via `safeResolveAssetClass(symbol, 'kraken')` — critical to defeat stale legacy values from any pre-B79.0f resolver state on the in-memory record (Langston Q4 add'l #1 lock).
+**Purpose:** encapsulates the ops on `vts_open_trades`. After B79.0g-tx the surface is **5 functions**: `insertOpenTrade` / `markOpenTradeClosed` (replaced `deleteOpenTrade`) / `rehydrateOpenTrades` / `bootstrapOpenTradesFromMemory` / `sweepClosedOpenTrades`. Bootstrap path is one-shot first-deploy migration that snapshots in-memory `openVirtualTrades` Map into the empty table WITH RE-RESOLVE of `asset_class` via `safeResolveAssetClass(symbol, 'kraken')` — critical to defeat stale legacy values from any pre-B79.0f resolver state on the in-memory record (Langston Q4 add'l #1 lock). **Post-B79.0g-tx semantic:** bootstrap is gated on OPEN-only count (`WHERE closed=false`); closed-history soft-deleted rows do NOT block re-resolve bootstrap (Q4 preserved across soft-delete world).
 
-**Upstream:** vts-runner imports + calls all 4 ops.
-**Downstream:** writes to `vts_open_trades` table.
-**Test coverage:** `b79-0g-vts-trade-persistence.test.ts` 8 cases incl. bootstrap re-resolve regression-lock asserting in-memory mutation post-resolve.
+**Upstream:** vts-runner imports + calls insert + markOpenTradeClosed. `server/index.ts` boot path calls rehydrate + sweep in separate try/catch blocks.
+**Downstream:** writes (INSERT + UPDATE + DELETE) to `vts_open_trades` table; reads `module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days` for sweep.
+**Test coverage:** `b79-0g-vts-trade-persistence.test.ts` 13 cases incl. bootstrap re-resolve regression-lock, markOpenTradeClosed idempotency, sweepClosedOpenTrades (config present + missing + invalid), bootstrap-with-closed-history-rows regression-lock.
 
 ### Archive tables namespace rename `equity_*` → `xstock_*` (B79.0e)
 
