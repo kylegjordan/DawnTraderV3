@@ -98,37 +98,11 @@ Alternative path: B79.0m.b2 in next session — getOHLCSourceForTrade helper FIR
 
 **B79.0m.a SHIPPED + VERIFIED on staging PM2 #216** (HEAD `0a9d85588`). Threshold authoring + 19 strategy_gates + 10 family-IMF rows + 3 regime classifier rows + xStocks tab amber banner + CLAUDE.md §9.1/§9.2 rules.
 
-## Open Langston follow-ups logged (don't include in this batch)
+## Open Langston follow-ups + Phase 24 architectural rules
 
-- RUNNING_ISSUES candidate: per-asset-class DBS computation for xstock (Layer-3 driven)
-- RUNNING_ISSUES candidate: unify crypto macro source to module_constants (currently CoinGecko-fed cache; xstock reads DB)
-- RUNNING_ISSUES candidate: computeContext options-object refactor (Langston R5; too many positional params)
-- RUNNING_ISSUES candidate (already #85): extend B79.TEC HARD-FAIL to all behavioral TEC keys (in scope of B79.0m.b's TEC work)
+See `1-system-manual/SYSTEM_MANUAL.md` appendix for the 5 Phase 24 standing rules. See `RUNNING_ISSUES.md` for: per-asset-class DBS computation; macro source unification; computeContext options-object refactor; B79.TEC HARD-FAIL extension; Kraken WS-equities; governance-doc schema drift; B79.3 equity macro modifiers; B79.0n active-trading wire-in.
 
-**Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — post-Kyle-directive 2026-05-10, contains ONLY standing rules + procedural checklist. Trial-and-error history lives in per-batch completion reports, not the workflow doc.
-
-**5 architectural standing rules from Phase 24** (now in SYSTEM_MANUAL appendix):
-1. Per-asset-class behavioral config DB-resolved with HARD-FAIL boot
-2. Telemetry partitioning via separate-instance triad when distributions differ
-3. Asset-class resolution is exchange-disambiguated, never canonical-form-disambiguated
-4. Persistence-at-trade-open via `vts_open_trades` table (rehydrates on restart)
-5. Ticker-collision gate (`XSTOCK_SPOT_KRAKEN_COLLISIONS`) on shared-exchange path
-
----
-
-## Other open work (lower priority, after B79.0m.b)
-
-- **#89 Kraken WS-equities (Path A/C pending Kyle commercial directive)** — Path B dead empirically; not actionable without Kyle decision
-- **#93 governance-doc `tunable_status` schema-drift sweep** — own batch, no urgency
-- **B79.3 equity macro modifiers** — RUNNING_ISSUES #94, sequences after B79.0m.b + B79.0n
-- **B79.0n active-trading wire-in** — drafts after B79.0m.b closes
-- **Section M procedural recipe** in ASSET_CLASS_ONBOARDING_WORKFLOW.md for B80 (deferred)
-
----
-
-## PHASE 24 ARCHIVE — see BATCH_CATALOG.md for full history
-
-Most recent before B79.0m: B79.0g-tx (atomic close-time soft-delete) PM2 #215. B79.0L (xStock unified Fri 8PM ET → Sun 8PM ET close) PM2 #214. B79.0m.a (threshold authoring + DB-driven strategy_gates + diagnostic fixes + CLAUDE.md §9.1/§9.2) PM2 #216.
+Most recent before B79.0m: B79.0g-tx PM2 #215; B79.0L PM2 #214; B79.0m.a PM2 #216. Full history in `BATCH_CATALOG.md`.
 
 ---
 
@@ -152,25 +126,9 @@ If cadence drops post-deploy → halt and revert.
 
 ---
 
-## LANGSTON RUNTIME + COMMS (since 2026-05-06)
+## LANGSTON RUNTIME + COMMS — see CLAUDE.md §6 + §8
 
-Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-bridge-inbox.jsonl`.
-
-**Send protocol (CC → Langston):** 3 STEPS. (a) `cc-comms-bridge send` Telegram visibility post; (b) SSH-deliver via `sudo -u langston /usr/local/bin/langston-call /tmp/prompt.txt /tmp/reply.txt` — auto-retries; defaults to fresh UUID per attempt; **for code-review work explicitly use `--permission-mode bypassPermissions` via direct claude-cli invocation** because watchdog wrapper uses `acceptEdits` which hangs on Bash tool use; (c) MANDATORY post Langston verbatim stdout reply to Telegram via `@LangstonDTBot` sendMessage prefixed `**LANGSTON SPEAKING:**`. Pattern in CLAUDE.md §6.5 Step 3.
-
-**Hetzner GDrive FUSE recursive-grep is BROKEN.** Tell Langston explicitly "Read tool only, no Bash/Grep recursive ops." Stage diffs at `/tmp/` via scp.
-
-**Langston context status:** each watchdog call uses fresh UUID per task — no long-running session accumulation. He doesn't approach context limits. No compaction needed.
-
-**Langston MEMORY sync per batch — MANDATORY** (CLAUDE.md §2 Step 10.b). Mirror this MEMORY to `/home/langston/MEMORY.md` via SSH+scp. Same 200-line cap.
-
-**OAuth token:** `/etc/langston/oauth.env`, valid 1 year (issued 2026-05-06).
-
----
-
-## File-first comms protocol (CLAUDE.md §6.5.0, Kyle directive 2026-05-08)
-
-For prompts >3KB OR multi-question reviews: stage at `Claude Comms and Packages/Langston Design Asks/<batch>_<topic>_<rev>.md`. Watchdog prompt is short pointer (under 1KB). Never shorten content to dodge API hang on large prompts — file-on-disk is the proper solution.
+Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-bridge-inbox.jsonl`. Send protocol = 3 steps (Telegram visibility post + SSH-deliver via `langston-call` + verbatim relay back to Telegram). Hetzner GDrive recursive-grep BROKEN — Read-tool only, stage diffs via scp. OAuth at `/etc/langston/oauth.env`, valid 1 year. File-first comms for >3KB prompts: stage at `Claude Comms and Packages/Langston Design Asks/`.
 
 ---
 
