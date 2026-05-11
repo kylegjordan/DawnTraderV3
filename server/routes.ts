@@ -7182,19 +7182,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           passed_all_filters: gc.passed_all_filters ?? 0,
         };
       }
-      function buildImfFromCounters(ic: Record<string, number> | undefined) {
-        if (!ic) return emptyImf;
-        const passed = ic.any_passed ?? 0;
-        const total = ic.evaluated ?? 0;
-        return {
-          ...emptyImf,
-          failedLQ: total - (ic.vts_trend_passed ?? 0),
-          failedVN: 0,
-          failedDI: 0,
-          passed,
-          total,
-          benchmarkBypassed: 0,
-        };
+      function buildImfFromCounters(_ic: Record<string, number> | undefined, perMetric?: any) {
+        // Prefer per-metric attribution (B79.0m.b) over the lumped any_passed
+        // proxy used earlier. perMetric counts how many family-rows each
+        // pair failed; passed = how many family-rows admitted the pair.
+        if (perMetric && typeof perMetric.total === 'number') {
+          return {
+            ...emptyImf,
+            failedLQ: perMetric.failedLQ ?? 0,
+            failedVN: perMetric.failedVN ?? 0,
+            failedDI: perMetric.failedDI ?? 0,
+            // Correlation gets stuffed alongside DI for now until the UI
+            // adds a dedicated Correlation column.
+            failedCorr: perMetric.failedCorr ?? 0,
+            passed: perMetric.passed ?? 0,
+            total: perMetric.total ?? 0,
+            benchmarkBypassed: 0,
+          };
+        }
+        return emptyImf;
       }
 
       const lastScan = {
@@ -7203,7 +7209,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         scannedCount: ec?.pairsEntered ?? diag.pairsScannedLastCycle,
         quant: {
           global: buildGlobalFromCounters(ec?.globalFilterCounters),
-          imf: buildImfFromCounters(ec?.imfFilterCounters),
+          imf: buildImfFromCounters(ec?.imfFilterCounters, ec?.imfPerMetric),
           survivors: ec?.pairsPassedFamilies ?? 0,
         },
         pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
@@ -7229,7 +7235,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         aggregated: {
           quant: {
             global: buildGlobalFromCounters(lt?.globalFilterCounters),
-            imf: buildImfFromCounters(lt?.imfFilterCounters),
+            imf: buildImfFromCounters(lt?.imfFilterCounters, lt?.imfPerMetric),
             survivors: lt?.pairsPassedFamilies ?? 0,
           },
           pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
@@ -7273,19 +7279,31 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         tradesOpened: tradesOpenedEff,
         pairsSkippedNoPrice: 0,
         pairsSkippedInsufficientOHLC: 0,
-        nullReasons: {
-          conditionsNotMet: byReason['conditions_not_met'] || 0,
-          adxGuard: byReason['adx_guard'] || 0,
-          duplicatePosition: byReason['duplicate_position'] || 0,
-          uniqueDuplicateCombos: 0,
-          maxOpenTrades: byReason['max_open_trades'] || 0,
-          regimeNoStrategies: byReason['regime_no_strategies'] || 0,
-          familyFilterMismatch: byReason['family_filter_mismatch'] || 0,
-        },
+        // B79.0m.b: prefer live in-memory null-reason aggregate (xstock pipeline
+        // writes specific reasons via setNullReason) over the signal_eval_archive
+        // breakdown — which currently maps everything to 'conditions_not_met'.
+        nullReasons: (() => {
+          const live = lt?.nullReasonAggregate ?? {};
+          return {
+            conditionsNotMet: live['conditions_not_met'] ?? byReason['conditions_not_met'] ?? 0,
+            adxGuard: live['adx_guard'] ?? byReason['adx_guard'] ?? 0,
+            duplicatePosition: live['duplicate_position'] ?? byReason['duplicate_position'] ?? 0,
+            uniqueDuplicateCombos: 0,
+            maxOpenTrades: live['max_open_trades'] ?? byReason['max_open_trades'] ?? 0,
+            regimeNoStrategies: live['regime_no_strategies'] ?? byReason['regime_no_strategies'] ?? 0,
+            familyFilterMismatch: live['family_filter_mismatch'] ?? byReason['family_filter_mismatch'] ?? 0,
+            patternInputMissing: live['pattern_input_missing'] ?? 0,
+            unknown: live['unknown'] ?? 0,
+          };
+        })(),
         rejectedReasons: { netEvBelowFloor: byReason['net_ev_below_floor'] || totalRejected },
-        byStrategy,
-        nullReasonDetail: byReason,
-        quantNullReasonDetail: byReason,
+        // Prefer live in-memory byStrategy (with nulls/signals/rejected/trades fields)
+        // over the archive aggregate when present; UI uses both interchangeably.
+        byStrategy: lt?.byStrategy ?? byStrategy,
+        // Full per-strategy null-reason breakdown (what each strategy is failing on).
+        byStrategyNullReasons: lt?.byStrategyNullReasons ?? {},
+        nullReasonDetail: lt?.nullReasonAggregate ?? byReason,
+        quantNullReasonDetail: lt?.nullReasonAggregate ?? byReason,
         patternNullReasonDetail: {},
       };
 

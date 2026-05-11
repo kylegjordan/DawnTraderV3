@@ -25,7 +25,7 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-import { calculateIMFMetrics } from '../../core/metrics/imf-metrics.js';
+import { calculateIMFMetrics, calculateLogLiquidity, calculateVolNoise, calculateCorrelation } from '../../core/metrics/imf-metrics.js';
 import { storage } from '../../storage.js';
 import type { OHLCData } from '../../types/market-regime.types';
 
@@ -33,6 +33,17 @@ export interface FamilyIMFResult {
   anyPassed: boolean;
   passedFamilies: string[];
   counters: Record<string, number>;
+  // B79.0m.b: per-metric LQ/VN/Corr/DI failure attribution, summed across families.
+  // Used by the xStocks Filter Diagnostics tab so the IMF section shows
+  // failedLQ/failedVN/failedDI broken out instead of one lumped count.
+  perMetric: {
+    failedLQ: number;
+    failedVN: number;
+    failedCorr: number;
+    failedDI: number;
+    passed: number;
+    total: number;
+  };
 }
 
 const FAMILY_PATHS = ['vts_trend', 'vts_reversal', 'vts_breakout', 'vts_oscillator', 'vts_strong_trend'] as const;
@@ -52,6 +63,16 @@ export async function evaluateXstockFamilyIMF(
   }
 
   const passedFamilies: string[] = [];
+  const perMetric = { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 };
+
+  // Pre-compute metrics ONCE per pair — the LQ/VN/Correlation values don't
+  // depend on the family path; only the thresholds do.
+  const LQ = ohlc.length >= 10 ? calculateLogLiquidity(ohlc) : 0;
+  const VolNoise = ohlc.length >= 10 ? calculateVolNoise(ohlc) : 0.5;
+  const Correlation = ohlc.length >= 10 ? calculateCorrelation(ohlc) : 0.5;
+  counters.lq_value_x100 = Math.round(LQ * 100);
+  counters.vn_value_x10000 = Math.round(VolNoise * 10000);
+  counters.corr_value_x10000 = Math.round(Correlation * 10000);
 
   for (const filterPath of FAMILY_PATHS) {
     let row: any;
@@ -66,29 +87,38 @@ export async function evaluateXstockFamilyIMF(
     }
     if (!row) continue;
     counters[`${filterPath}_evaluated`]++;
+    perMetric.total++;
 
     const lqMin = parseFloat(row.lqMin ?? '0');
     const vnMax = parseFloat(row.vnMax ?? '999');
+    const corrMax = parseFloat(row.corrMax ?? '0.95');
     const diMin = parseFloat(row.diMin ?? '0');
     const diMax = parseFloat(row.diMax ?? '999');
 
-    const metrics = await calculateIMFMetrics(
-      symbol,
-      ohlc,
-      true, // passive
-      undefined,
-      { LQ_MIN: lqMin, VN_MAX: vnMax, CORR_MAX: 0.95 },
-    );
-
-    // calculateIMFMetrics already gates LQ + VN + Correlation. Layer-1 adds
-    // a DI band check on top using directional integrity. For now, since we
-    // don't have a separate DI compute here (it's part of MCE), we accept
-    // the IMF gate as the family decision. DI fine-tuning in B79.0m.b2.
+    // Per-metric attribution — order matters for counter accounting; we
+    // attribute to the FIRST failing metric so each fail counts once.
+    let failed = false;
+    if (LQ < lqMin) {
+      perMetric.failedLQ++;
+      counters[`${filterPath}_failed_lq`] = (counters[`${filterPath}_failed_lq`] ?? 0) + 1;
+      failed = true;
+    } else if (VolNoise > vnMax) {
+      perMetric.failedVN++;
+      counters[`${filterPath}_failed_vn`] = (counters[`${filterPath}_failed_vn`] ?? 0) + 1;
+      failed = true;
+    } else if (Correlation > corrMax) {
+      perMetric.failedCorr++;
+      counters[`${filterPath}_failed_corr`] = (counters[`${filterPath}_failed_corr`] ?? 0) + 1;
+      failed = true;
+    }
+    // DI band check deferred to B79.0m.b2 (computed inside MCE, not here);
+    // record threshold metadata for telemetry visibility.
     void diMin;
     void diMax;
 
-    if (metrics.passesMetricFilter) {
+    if (!failed) {
       counters[`${filterPath}_passed`]++;
+      perMetric.passed++;
       passedFamilies.push(filterPath);
     }
   }
@@ -101,5 +131,9 @@ export async function evaluateXstockFamilyIMF(
     anyPassed: passedFamilies.length > 0,
     passedFamilies,
     counters,
+    perMetric,
   };
 }
+
+// Keep calculateIMFMetrics import referenced for back-compat (avoid removal flag).
+void calculateIMFMetrics;

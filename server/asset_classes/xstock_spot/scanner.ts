@@ -339,6 +339,9 @@ class XstockSpotScannerService {
             strategyNulls: 0, signalsGenerated: 0, signalsArchived: 0,
             signalsRejectedBySQE: 0, tradesOpened: 0, errors: 0,
             globalFilterCounters: {}, imfFilterCounters: {},
+            imfPerMetric: { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 },
+            byStrategyNullReasons: {}, nullReasonAggregate: {},
+            byStrategy: {},
           };
         }
         const lt = this.diag.evalCountersLifetime;
@@ -353,6 +356,28 @@ class XstockSpotScannerService {
         }
         for (const k of Object.keys(cycleCounters.imfFilterCounters)) {
           lt.imfFilterCounters[k] = (lt.imfFilterCounters[k] ?? 0) + cycleCounters.imfFilterCounters[k];
+        }
+        // Per-metric IMF + per-strategy + null-reason accumulators.
+        for (const k of ['failedLQ', 'failedVN', 'failedCorr', 'failedDI', 'passed', 'total'] as const) {
+          lt.imfPerMetric[k] = (lt.imfPerMetric[k] ?? 0) + (cycleCounters.imfPerMetric[k] ?? 0);
+        }
+        for (const reason of Object.keys(cycleCounters.nullReasonAggregate)) {
+          lt.nullReasonAggregate[reason] = (lt.nullReasonAggregate[reason] ?? 0) + cycleCounters.nullReasonAggregate[reason];
+        }
+        for (const strat of Object.keys(cycleCounters.byStrategyNullReasons)) {
+          if (!lt.byStrategyNullReasons[strat]) lt.byStrategyNullReasons[strat] = {};
+          for (const r of Object.keys(cycleCounters.byStrategyNullReasons[strat])) {
+            lt.byStrategyNullReasons[strat][r] = (lt.byStrategyNullReasons[strat][r] ?? 0) + cycleCounters.byStrategyNullReasons[strat][r];
+          }
+        }
+        for (const strat of Object.keys(cycleCounters.byStrategy)) {
+          if (!lt.byStrategy[strat]) lt.byStrategy[strat] = { evaluated: 0, nulls: 0, signals: 0, rejected: 0, trades: 0 };
+          const cs = cycleCounters.byStrategy[strat];
+          lt.byStrategy[strat].evaluated += cs.evaluated;
+          lt.byStrategy[strat].nulls += cs.nulls;
+          lt.byStrategy[strat].signals += cs.signals;
+          lt.byStrategy[strat].rejected += cs.rejected;
+          lt.byStrategy[strat].trades += cs.trades;
         }
         console.log(
           `[B79.0m.b][SCAN_EVAL_DONE] tick=${tick.tickNumber} ` +

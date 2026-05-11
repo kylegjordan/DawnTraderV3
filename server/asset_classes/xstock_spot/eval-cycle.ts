@@ -37,6 +37,7 @@ import {
   isStrategyEnabledForAssetClass,
 } from '../../config/canonical-regime-strategy-map.js';
 import { callStrategyDetect, registerOpenVtsTrade, isIdenticalXstockSetupSuppressed } from '../../services/vts-runner.js';
+import { resetNullReason, getNullReason } from '../../utils/null-reason-tracker.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
 import { evaluateXstockGlobalFilter } from './global-filter.js';
 import { evaluateXstockFamilyIMF } from './imf-evaluator.js';
@@ -99,6 +100,16 @@ export interface XstockEvalCycleCounters {
   // pass-through from global-filter + imf-evaluator
   globalFilterCounters: Record<string, number>;
   imfFilterCounters: Record<string, number>;
+  // B79.0m.b: per-metric IMF attribution (summed across families) so the
+  // Filter Diagnostics UI can break the IMF rejection bucket out into
+  // failedLQ / failedVN / failedCorr individually instead of one lumped
+  // count. Mirrors the crypto Filter Diagnostics shape.
+  imfPerMetric: { failedLQ: number; failedVN: number; failedCorr: number; failedDI: number; passed: number; total: number };
+  // B79.0m.b: per-strategy + null-reason attribution. Reads from
+  // null-reason-tracker after each callStrategyDetect.
+  byStrategyNullReasons: Record<string, Record<string, number>>;
+  nullReasonAggregate: Record<string, number>;
+  byStrategy: Record<string, { evaluated: number; nulls: number; signals: number; rejected: number; trades: number }>;
 }
 
 export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
@@ -117,6 +128,10 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     errors: 0,
     globalFilterCounters: {},
     imfFilterCounters: {},
+    imfPerMetric: { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 },
+    byStrategyNullReasons: {},
+    nullReasonAggregate: {},
+    byStrategy: {},
   };
 }
 
@@ -170,6 +185,13 @@ export async function evaluateXstockPairForVTS(
     // ── 3. Family IMF (Layer-1 starter: any-family-passes admits to strategy eval) ──
     const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode);
     mergeCounters(counters.imfFilterCounters, imfResult.counters);
+    // Sum per-metric attribution into the cycle-level imfPerMetric.
+    counters.imfPerMetric.failedLQ += imfResult.perMetric.failedLQ;
+    counters.imfPerMetric.failedVN += imfResult.perMetric.failedVN;
+    counters.imfPerMetric.failedCorr += imfResult.perMetric.failedCorr;
+    counters.imfPerMetric.failedDI += imfResult.perMetric.failedDI;
+    counters.imfPerMetric.passed += imfResult.perMetric.passed;
+    counters.imfPerMetric.total += imfResult.perMetric.total;
     if (!imfResult.anyPassed) {
       counters.pairsFailedAllFamilies++;
       return;
@@ -190,8 +212,14 @@ export async function evaluateXstockPairForVTS(
         continue;
       }
       counters.strategiesEvaluated++;
+      if (!counters.byStrategy[strategyKey]) {
+        counters.byStrategy[strategyKey] = { evaluated: 0, nulls: 0, signals: 0, rejected: 0, trades: 0 };
+      }
+      counters.byStrategy[strategyKey].evaluated++;
 
-      // ── 5. callStrategyDetect (pattern strategies get null patternInput; pattern detection deferred for B79.0m.b2) ──
+      // ── 5. callStrategyDetect — wrap in resetNullReason() so we can read the
+      //    specific null-reason on null return (mirrors vts-runner Batch 31 pattern).
+      resetNullReason();
       let strategySignal: any = null;
       try {
         strategySignal = callStrategyDetect(
@@ -209,8 +237,19 @@ export async function evaluateXstockPairForVTS(
       }
       if (!strategySignal) {
         counters.strategyNulls++;
-        // Archive strategy nulls so the xStocks tab funnel shows the
-        // pre-signal layer of the pipeline (otherwise zeros pre-RTH).
+        counters.byStrategy[strategyKey].nulls++;
+        // Pattern strategies returning null with patternInput=null is expected
+        // until B79.0m.b2 wires pattern detection — surface that distinctly
+        // so it doesn't muddy the genuine quant null bucket.
+        const rawReason = getNullReason();
+        const reason = rawReason === 'unknown' && (stratDef.signalType === 'PATTERN' || stratDef.signalType === 'HYBRID')
+          ? 'pattern_input_missing'
+          : rawReason;
+        counters.nullReasonAggregate[reason] = (counters.nullReasonAggregate[reason] ?? 0) + 1;
+        if (!counters.byStrategyNullReasons[strategyKey]) counters.byStrategyNullReasons[strategyKey] = {};
+        counters.byStrategyNullReasons[strategyKey][reason] = (counters.byStrategyNullReasons[strategyKey][reason] ?? 0) + 1;
+        // Archive strategy nulls (with reason) so the xStocks tab funnel + null-
+        // reason histogram populate pre-RTH.
         try {
           const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
           archiveSignalEval({
@@ -224,15 +263,16 @@ export async function evaluateXstockPairForVTS(
             gateDecision: {
               gate: 'strategy_detect',
               accepted: false,
-              reason: 'no_setup_match',
+              reason,
             },
-            features: { sourcePool: 'xstock_spot' },
+            features: { sourcePool: 'xstock_spot', detailReason: reason },
           });
           counters.signalsArchived++;
         } catch { /* hot path */ }
         continue;
       }
       counters.signalsGenerated++;
+      counters.byStrategy[strategyKey].signals++;
 
       // ── 6. Setup-hash dedupe (assetClass-keyed) ──
       if (
