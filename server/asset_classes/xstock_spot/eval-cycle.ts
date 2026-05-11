@@ -53,11 +53,11 @@ import type { OHLCData } from '../../types/market-regime.types';
 export async function fetchXstockOHLC(symbol: string, limit = 120): Promise<OHLCData[]> {
   try {
     const result: any = await db.execute(sql`
-      SELECT timestamp_minute, open, high, low, close, volume
+      SELECT interval_begin, open, high, low, close, volume
         FROM xstock_spot_ohlc_1m
        WHERE symbol = ${symbol}
-         AND timestamp_minute > NOW() - INTERVAL '6 hours'
-       ORDER BY timestamp_minute DESC
+         AND interval_begin > NOW() - INTERVAL '6 hours'
+       ORDER BY interval_begin DESC
        LIMIT ${limit}
     `);
     const rows: any[] = (result as any).rows ?? result;
@@ -72,7 +72,7 @@ export async function fetchXstockOHLC(symbol: string, limit = 120): Promise<OHLC
         low: parseFloat(r.low),
         close: parseFloat(r.close),
         volume: parseFloat(r.volume),
-        timestamp: new Date(r.timestamp_minute).getTime(),
+        timestamp: new Date(r.interval_begin).getTime(),
       } as OHLCData));
     return bars;
   } catch (err) {
