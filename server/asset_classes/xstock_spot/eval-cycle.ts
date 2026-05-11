@@ -31,19 +31,39 @@
  */
 
 import { getMarketContextEngine } from '../../services/market-context-engine.js';
-import { evaluateSignalQuality } from '../../core/filters/signal_quality_evaluator.js';
 import {
   getStrategiesForRegime,
   isStrategyEnabledForAssetClass,
+  STRATEGY_FAMILY_MAP,
+  HYBRID_FAMILY_ELIGIBILITY,
+  MULTI_FAMILY_ELIGIBILITY,
+  normalizePatternToCanonical,
+  type StrategyFamily,
 } from '../../config/canonical-regime-strategy-map.js';
-import { callStrategyDetect, registerOpenVtsTrade, isIdenticalXstockSetupSuppressed } from '../../services/vts-runner.js';
+import {
+  callStrategyDetect,
+  registerOpenVtsTrade,
+  isIdenticalXstockSetupSuppressed,
+  computeFinalScore,
+  VTS_NET_EV_FLOOR,
+} from '../../services/vts-runner.js';
 import { resetNullReason, getNullReason } from '../../utils/null-reason-tracker.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
 import { evaluateXstockGlobalFilter } from './global-filter.js';
 import { evaluateXstockFamilyIMF } from './imf-evaluator.js';
+import { scanPatterns } from '../../services/pattern-recognizer.js';
+import { computeNetExpectancyKernel } from '../../core/calculations/net-expectancy-kernel.js';
+import { computeRealHybridScore, computeRealDecayPenalty } from '../../core/utils/vts-real-score.js';
+import { getPredictiveConfidence } from '../../core/utils/score-calculator.js';
+import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
+import { getCachedCostMetrics } from '../../core/math/cost-model.js';
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 import type { OHLCData } from '../../types/market-regime.types';
+import type { PatternType } from '../../types';
+
+const _XSTOCK_GK = { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' };
 
 /**
  * Fetch most-recent N 1-minute candles from xstock_spot_ohlc_1m for a symbol.
@@ -246,34 +266,108 @@ export async function evaluateXstockPairForVTS(
     counters.pairsPassedFamilies++;
     counters.familyQualifiedUnique++;
 
-    // VTS destination: drop benchmark ETFs (SPY/QQQ/IWM/DIA/GLD).
+    // B79.0m.b2: benchmark-specific removal is OFF (per Kyle directive — same
+    // posture as crypto since B62 2026-04-16). Counter stays wired but always
+    // zero so the metric is visible and ready when removal is re-enabled.
+    // Benchmark pairs continue through into strategy evaluation.
     if (isXstockBenchmark(symbol)) {
-      counters.benchmarksRemoved++;
-      return; // Benchmark removal — qualified but not admitted to strategy eval.
+      // No-op for now; benchmark removal is disabled. Reserved hook for
+      // when the benchmark-specific exclusion is re-enabled.
     }
     counters.vtsDestination++;
 
-    // ── 4. Iterate eligible strategies for this regime ──
+    // ── 4. Pattern detection (mirrors crypto vts-runner generatePhase10Signal:907-925) ──
+    const candles = ohlc.map(o => ({
+      timestamp: o.timestamp,
+      open: o.open,
+      high: o.high,
+      low: o.low,
+      close: o.close,
+      volume: o.volume,
+    }));
+    const detectedPatterns = scanPatterns(candles, symbol);
+    const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
+
+    // ── 5. Family-fanout iteration (mirrors crypto vts-runner runPhase10SimulationCycle
+    //    family-eligibility gate at lines 3050-3083). Each family the pair passes
+    //    becomes a separate routing lane; strategies are filtered by STRATEGY_FAMILY_MAP. ──
     const regimeStrategies = getStrategiesForRegime(regime);
     if (regimeStrategies.length === 0) {
-      console.log(`[B79.0m.b][EVAL] ${symbol} regime=${regime} — no strategies mapped`);
+      console.log(`[B79.0m.b2][EVAL] ${symbol} regime=${regime} — no strategies mapped`);
       return;
     }
 
+    const pairFams = new Set<StrategyFamily>(imfResult.passedFamilies.map(p => p.replace(/^vts_|^active_/, '') as StrategyFamily));
+
+    // Iterate each strategy in the regime. Family-eligibility gate filters per pair.
     for (const stratDef of regimeStrategies) {
       const strategyKey = stratDef.strategyKey;
-      // Per-asset-class enablement gate (B79.0m.a — DB-authoritative).
       if (!isStrategyEnabledForAssetClass(strategyKey, ASSET_CLASS)) {
         continue;
       }
+
+      // ── Family-eligibility gate (mirrors crypto vts-runner:3050-3083) ──
+      const stratFamily: StrategyFamily | undefined = STRATEGY_FAMILY_MAP[strategyKey];
+      if (stratFamily && stratFamily !== 'hybrid' && stratFamily !== 'pattern') {
+        const additionalFams = MULTI_FAMILY_ELIGIBILITY[strategyKey] ?? [];
+        const primaryFamilyMismatch = !pairFams.has(stratFamily);
+        const additionalFamilyMatch = additionalFams.some(f => pairFams.has(f));
+        if (primaryFamilyMismatch && !additionalFamilyMatch) {
+          counters.nullReasonAggregate['family_filter_mismatch'] = (counters.nullReasonAggregate['family_filter_mismatch'] ?? 0) + 1;
+          continue;
+        }
+      } else if (stratFamily === 'hybrid') {
+        const parentFams = HYBRID_FAMILY_ELIGIBILITY[strategyKey] ?? [];
+        if (!parentFams.some(f => pairFams.has(f))) {
+          counters.nullReasonAggregate['family_filter_mismatch'] = (counters.nullReasonAggregate['family_filter_mismatch'] ?? 0) + 1;
+          continue;
+        }
+      }
+      // Pattern strategies (stratFamily === 'pattern') gate on the pattern path —
+      // they require a matching detected pattern. We let the per-strategy detect
+      // function handle the no_pattern null return when the patternInput doesn't
+      // match the strategy's expected patternType.
+
       counters.strategiesEvaluated++;
       if (!counters.byStrategy[strategyKey]) {
         counters.byStrategy[strategyKey] = { evaluated: 0, nulls: 0, signals: 0, rejected: 0, trades: 0 };
       }
       counters.byStrategy[strategyKey].evaluated++;
 
-      // ── 5. callStrategyDetect — wrap in resetNullReason() so we can read the
-      //    specific null-reason on null return (mirrors vts-runner Batch 31 pattern).
+      // ── Build patternInput for this strategy (matches the strategy's expected pattern type) ──
+      const canonicalPatternType = (stratDef.patternType as any) ?? null;
+      const matchingPatterns = canonicalPatternType
+        ? detectedPatterns.filter(p => normalizePatternToCanonical(p.pattern as any) === canonicalPatternType)
+        : detectedPatterns;
+      const bestDetectedPattern = matchingPatterns.length > 0
+        ? matchingPatterns.reduce((best, p) => p.strength > best.strength ? p : best, matchingPatterns[0])
+        : null;
+      const canonicalPatternName = bestDetectedPattern
+        ? normalizePatternToCanonical(bestDetectedPattern.pattern as any)
+        : null;
+      const stratPatternInput = bestDetectedPattern ? {
+        pattern: canonicalPatternName ?? bestDetectedPattern.pattern,
+        direction: bestDetectedPattern.direction as 'BUY' | 'SELL',
+        strength: bestDetectedPattern.strength,
+        metadata: {
+          ...(bestDetectedPattern as any),
+          parentHigh: (bestDetectedPattern as any).metadata?.parentHigh ?? (candles.length >= 2 ? candles[candles.length - 2].high : 0),
+          parentLow: (bestDetectedPattern as any).metadata?.parentLow ?? (candles.length >= 2 ? candles[candles.length - 2].low : 0),
+          compressionRatio: (bestDetectedPattern as any).metadata?.compressionRatio ?? 0.5,
+          pinbarLow: (bestDetectedPattern as any).metadata?.pinbarLow ?? (candles.length > 0 ? candles[candles.length - 1].low : 0),
+          engulfingLow: (bestDetectedPattern as any).metadata?.engulfingLow ??
+            (candles.length >= 2 ? Math.min(candles[candles.length - 1].low, candles[candles.length - 2].low) : 0),
+          engulfRatio: (bestDetectedPattern as any).metadata?.engulfRatio ?? 1.0,
+          hasGap: (bestDetectedPattern as any).metadata?.hasGap ?? false,
+          recoveryRatio: (bestDetectedPattern as any).metadata?.recoveryRatio ?? 0,
+          aPointLow: (bestDetectedPattern as any).metadata?.aPointLow,
+          bPointHigh: (bestDetectedPattern as any).metadata?.bPointHigh,
+          cPointLow: (bestDetectedPattern as any).metadata?.cPointLow,
+          cPointHigh: (bestDetectedPattern as any).metadata?.cPointHigh,
+        },
+      } : null;
+
+      // ── Strategy detect with patternInput (real, not null) ──
       resetNullReason();
       let strategySignal: any = null;
       try {
@@ -281,30 +375,22 @@ export async function evaluateXstockPairForVTS(
           strategyKey,
           mceContext.indicators,
           ohlc as any,
-          null,
+          stratPatternInput as any,
           symbol,
           ASSET_CLASS,
         );
       } catch (detectErr) {
         counters.errors++;
-        console.warn(`[B79.0m.b][EVAL_DETECT_FAIL] ${symbol}/${strategyKey}: ${detectErr instanceof Error ? detectErr.message : detectErr}`);
+        console.warn(`[B79.0m.b2][EVAL_DETECT_FAIL] ${symbol}/${strategyKey}: ${detectErr instanceof Error ? detectErr.message : detectErr}`);
         continue;
       }
       if (!strategySignal) {
         counters.strategyNulls++;
         counters.byStrategy[strategyKey].nulls++;
-        // Pattern strategies returning null with patternInput=null is expected
-        // until B79.0m.b2 wires pattern detection — surface that distinctly
-        // so it doesn't muddy the genuine quant null bucket.
-        const rawReason = getNullReason();
-        const reason = rawReason === 'unknown' && (stratDef.signalType === 'PATTERN' || stratDef.signalType === 'HYBRID')
-          ? 'pattern_input_missing'
-          : rawReason;
+        const reason = getNullReason();
         counters.nullReasonAggregate[reason] = (counters.nullReasonAggregate[reason] ?? 0) + 1;
         if (!counters.byStrategyNullReasons[strategyKey]) counters.byStrategyNullReasons[strategyKey] = {};
         counters.byStrategyNullReasons[strategyKey][reason] = (counters.byStrategyNullReasons[strategyKey][reason] ?? 0) + 1;
-        // Archive strategy nulls (with reason) so the xStocks tab funnel + null-
-        // reason histogram populate pre-RTH.
         try {
           const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
           archiveSignalEval({
@@ -315,11 +401,7 @@ export async function evaluateXstockPairForVTS(
             strategy: strategyKey,
             regimeLabel: regime ?? undefined,
             rejectStage: 'strategy_internal',
-            gateDecision: {
-              gate: 'strategy_detect',
-              accepted: false,
-              reason,
-            },
+            gateDecision: { gate: 'strategy_detect', accepted: false, reason },
             features: { sourcePool: 'xstock_spot', detailReason: reason },
           });
           counters.signalsArchived++;
@@ -329,7 +411,7 @@ export async function evaluateXstockPairForVTS(
       counters.signalsGenerated++;
       counters.byStrategy[strategyKey].signals++;
 
-      // ── 6. Setup-hash dedupe (assetClass-keyed) ──
+      // ── Setup-hash dedupe (assetClass-keyed) ──
       if (
         isIdenticalXstockSetupSuppressed(
           ASSET_CLASS,
@@ -343,93 +425,119 @@ export async function evaluateXstockPairForVTS(
         continue;
       }
 
-      // ── 7. SQE evaluate ──
-      const signalId = `xstock_${symbol.replace(/[^A-Z0-9]/gi, '')}_${strategyKey}_${Date.now()}`;
-      let sqeResult;
+      // ── Compute the canonical post-detect scores (mirrors crypto vts-runner:1059-1132) ──
+      const entryPrice = strategySignal.entryPrice;
+      const takeProfit = strategySignal.targetPrice;
+      const stopLoss = strategySignal.stopPrice;
+      const spread = 0.001; // xstock spread placeholder — equity has bid/ask snap; full wiring is a follow-up
+      const hybridScore = computeRealHybridScore(strategyKey, mceContext.indicators, ohlc as any, regime);
+      const predictiveConfidence = getPredictiveConfidence(symbol, regime, strategyKey);
+      const regimeScoreRaw = calculateRegimeScore(regime, {
+        adx: (mceContext.raw as any)?.adx ?? 0,
+        volatility: (mceContext.raw as any)?.volatility ?? 0,
+      });
+      const regimeWeight = regimeScoreRaw / 100;
+      const decayPenalty = computeRealDecayPenalty();
+      const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
+
+      // ── Net EV gate via canonical kernel (mirrors crypto vts-runner:1141-1183) ──
+      const costMetrics = getCachedCostMetrics(symbol);
+      const totalFriction = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + spread;
+      const DI = Math.min(100, Math.max(0, predictiveConfidence * 100));
+      let kernelResult;
       try {
-        sqeResult = await evaluateSignalQuality({
-          signalId,
-          symbol,
-          strategy: strategyKey,
-          mode,
-          finalScore: (strategySignal as any).finalScore,
-          regimeWeight: mceContext.regime.confidence,
-          confidence: (strategySignal as any).confidence,
-          entryPrice: strategySignal.entryPrice,
-          targetPrice: strategySignal.targetPrice,
-          regime,
-          signalType: stratDef.signalType,
+        kernelResult = computeNetExpectancyKernel({
+          entryPrice,
+          stopPrice: stopLoss,
+          targetPrice: takeProfit,
+          totalFriction,
+          DI,
           sourcePool: 'xstock_spot',
-        }, { skipGovernanceGate: true });
-      } catch (sqeErr) {
+          minPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_floor', _XSTOCK_GK),
+          maxPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_ceiling', _XSTOCK_GK),
+          diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_to_pwin_scaling_factor', _XSTOCK_GK),
+        });
+      } catch (kernelErr) {
         counters.errors++;
-        console.warn(`[B79.0m.b][EVAL_SQE_FAIL] ${symbol}/${strategyKey}: ${sqeErr instanceof Error ? sqeErr.message : sqeErr}`);
+        console.warn(`[B79.0m.b2][EVAL_KERNEL_FAIL] ${symbol}/${strategyKey}: ${kernelErr instanceof Error ? kernelErr.message : kernelErr}`);
+        continue;
+      }
+      const archiveCommon = {
+        symbol,
+        exchange: 'kraken',
+        assetClass: ASSET_CLASS,
+        source: 'vts-runner' as const,
+        strategy: strategyKey,
+        regimeLabel: regime ?? undefined,
+        finalScore,
+      };
+      const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
+      if (kernelResult.netEV <= VTS_NET_EV_FLOOR) {
+        counters.signalsRejectedBySQE++;
+        counters.byStrategy[strategyKey].rejected++;
+        try {
+          archiveSignalEval({
+            ...archiveCommon,
+            rejectStage: 'sqe',
+            gateDecision: {
+              gate: 'net_ev_floor',
+              accepted: false,
+              reason: 'net_ev_below_floor',
+              netEv: kernelResult.netEV,
+              netEvFloor: VTS_NET_EV_FLOOR,
+            },
+            features: { sourcePool: 'xstock_spot' },
+          });
+          counters.signalsArchived++;
+        } catch { /* hot path */ }
         continue;
       }
 
-      // ── 8. Archive signal_eval (passed or rejected) ──
+      // ── Net EV passes — archive admitted + open VTS trade ──
       try {
-        const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
         archiveSignalEval({
-          symbol,
-          exchange: 'kraken',
-          assetClass: ASSET_CLASS,
-          // B79.0m.b: reusing 'vts-runner' source enum; xstock evaluator is the
-          // xstock-side VTS feeder. Adding a dedicated 'xstock-eval-cycle' source
-          // is a future SignalEvalSource union extension (B79.0m.b2 governance).
-          source: 'vts-runner',
-          strategy: strategyKey,
-          regimeLabel: regime ?? undefined,
-          rejectStage: sqeResult.passed ? 'admitted' : 'sqe',
-          finalScore: sqeResult.metrics.finalScore,
+          ...archiveCommon,
+          rejectStage: 'admitted',
           gateDecision: {
-            gate: 'sqe',
-            accepted: sqeResult.passed,
-            reason: sqeResult.reason ?? (sqeResult.failures?.[0] ?? 'passed'),
-            finalScoreMin: sqeResult.thresholds.finalScoreMin,
-            regimeWeightMin: sqeResult.thresholds.regimeWeightMin,
+            gate: 'net_ev_floor',
+            accepted: true,
+            netEv: kernelResult.netEV,
           },
           features: {
             sourcePool: 'xstock_spot',
-            macroModifier: mceContext.directionalBias?.score,
+            hybridScore,
+            predictiveConfidence,
+            regimeWeight,
           },
         });
         counters.signalsArchived++;
-      } catch (archiveErr) {
-        // Silent on hot path
-      }
+      } catch { /* hot path */ }
 
-      if (!sqeResult.passed) {
-        counters.signalsRejectedBySQE++;
-        continue;
-      }
-
-      // ── 9. Open VTS trade ──
-      // Layer-1 starter sizing: fixed $150 per trade (mirrors xstock starter).
+      // Layer-1 starter sizing: fixed $150 per trade.
       const dollarValue = 150;
-      const quantity = strategySignal.entryPrice > 0 ? dollarValue / strategySignal.entryPrice : 0;
+      const quantity = entryPrice > 0 ? dollarValue / entryPrice : 0;
       const tradeId = await registerOpenVtsTrade({
         symbol,
         assetClass: ASSET_CLASS,
-        entryPrice: strategySignal.entryPrice,
-        stopLoss: strategySignal.stopPrice,
-        takeProfit: strategySignal.targetPrice,
+        entryPrice,
+        stopLoss,
+        takeProfit,
         positionSize: dollarValue,
         dollarValue,
         quantity,
-        frictionCost: 0,
+        frictionCost: totalFriction,
         regime,
-        regimeScore: mceContext.regime.confidence,
+        regimeScore: regimeScoreRaw,
         signalType: stratDef.signalType,
         strategy: strategyKey,
         patternType: (stratDef.patternType as any) ?? null,
-        finalScore: sqeResult.metrics.finalScore,
-        hybridScore: 0,
-        predictiveConfidence: (strategySignal as any).confidence ?? 0.5,
-        regimeWeight: sqeResult.metrics.regimeWeight,
-        decayPenalty: 1.0,
+        finalScore,
+        hybridScore,
+        predictiveConfidence,
+        regimeWeight,
+        decayPenalty,
         pool: 'rotational',
-        sourcePool: 'xstock_spot',
+        sourcePool: stratFamily ? `xstock-${stratFamily}` : 'xstock_spot',
         atrAtOpen: mceContext.indicators.atr,
         pairDirectionalBias: mceContext.directionalBias?.category,
         pairDirectionalBiasScore: mceContext.directionalBias?.score ?? null,
@@ -441,7 +549,8 @@ export async function evaluateXstockPairForVTS(
       });
       if (tradeId) {
         counters.tradesOpened++;
-        console.log(`[B79.0m.b][EVAL] ${symbol} (xstock_spot) regime=${regime} strategy=${strategyKey} → trade ${tradeId} opened`);
+        counters.byStrategy[strategyKey].trades++;
+        console.log(`[B79.0m.b2][EVAL] ${symbol} (xstock_spot) regime=${regime} strategy=${strategyKey} family=${stratFamily ?? '-'} netEV=${kernelResult.netEV.toFixed(4)} → trade ${tradeId} opened`);
       }
     }
   } catch (err) {

@@ -398,7 +398,7 @@ interface VTSConfig {
 // These constants control VTS-ONLY behavior. Active trading is NOT affected.
 // Purpose: Increase VTS simulated trade volume for ML learning data.
 // ══════════════════════════════════════════════════════════════════════════════
-const VTS_NET_EV_FLOOR = -0.01;        // Batch 52 Fix 19: Tightened -2.0%→-1.0%. -2% was too permissive (zero rejections). -1% allows boundary-case learning while filtering truly negative-EV trades. Active trading unaffected (strict netEV>0).
+export const VTS_NET_EV_FLOOR = -0.01;        // Batch 52 Fix 19: Tightened -2.0%→-1.0%. -2% was too permissive (zero rejections). -1% allows boundary-case learning while filtering truly negative-EV trades. Active trading unaffected (strict netEV>0). B79.0m.b2: exported for xstock eval-cycle.
 // B72: VTS_MAX_CONCURRENT_PER_COMBO read from module='vts_runner'.
 // B19G HF1 stabilized at 1 (was 3). Tunable via SQL UPDATE without code redeploy.
 const _VTS_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
@@ -713,7 +713,9 @@ function computePositionSize(
   return Math.min(positionSize, maxPositionSize);
 }
 
-function computeFinalScore(
+// B79.0m.b2: exported so xstock eval-cycle can mirror the crypto post-detect
+// math without duplicating it.
+export function computeFinalScore(
   hybridScore: number,
   predictiveConfidence: number,
   regimeWeight: number,
