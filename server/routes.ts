@@ -7380,7 +7380,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           lastError: diag.lastError,
           hostileSimActive: diag.hostileSimActive,
           rolling24hApproxCycles: rolling24hCycles,
-          rolling24hApproxPairsScanned: rolling24hPairsScanned,
+          rolling24hApproxPairsScanned: rolling24hTickRows,
         },
       });
     } catch (error: any) {
