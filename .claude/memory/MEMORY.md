@@ -18,9 +18,76 @@
 
 ---
 
-## CURRENT STATE — 2026-05-11 (Phase 24 CLOSED + B79.0L CLOSED + B79.0g-tx CLOSED — atomic close-time soft-delete)
+## CURRENT STATE — 2026-05-11 (B79.0m.a SHIPPED + B79.0m.b IN-FLIGHT — pre-audit done, implementation 30% complete)
 
-**xstock_spot fully onboarded** + B79.0L (xStock market-hours unified Fri 8PM ET → Sun 8PM ET) + **B79.0g-tx (atomic close-time soft-delete for vts_open_trades, resolves #91)**. PM2 #215 on `migration/aws-supabase` HEAD `bd299b8f7`. Crypto no-touch fence holds.
+**B79.0m.a SHIPPED + VERIFIED on staging PM2 #216** (HEAD `0a9d85588`). Threshold authoring complete:
+- 19 xstock_spot strategy_gates rows (10 enabled + 9 disabled, code constant DELETED, DB authoritative)
+- 10 family-IMF screener_filters rows for xstock_spot
+- screener_filters unique index extended to (mode, asset_class, filter_path)
+- 3 regime classifier rows (TFS volatility/momentum scales halved + Path B sustainability)
+- xStocks tab amber banner 🚨 "VTS evaluation pipeline NOT yet wired"
+- CLAUDE.md §9.1 SCAFFOLDING-VS-FUNCTIONAL rule + §9.2 NUMERIC-DELTAS rule added
+
+**B79.0m.b IN-FLIGHT** (partial commit `3b84dc756`). Pre-audit + initial implementation done:
+- Pre-audit `BATCH_79_0m_b_PRE_AUDIT.md` Langston Step 2 APPROVED with R1-R6 applied
+- MCE.computeContext extended with `assetClass` param + conditional DBS synth + per-class macro modifier
+- b72-warmup adds mce_config to PREFETCH_MODULES
+- TEC enablement SQL ready (xstock BE=true, trail=0.8× crypto; not yet applied to staging)
+- Workflow doc updated with Phase 24 onboarding lessons retrospective
+
+**ASSET_CLASS_ONBOARDING_WORKFLOW.md** updated with 7-step corrected sequence (Kyle directive — captured before forgetting, NOT a governance batch).
+
+Crypto no-touch fence holds (10 factor families × 7-8/hr ±10% baseline).
+
+## REMAINING B79.0m.b WORK (resume after compact)
+
+Per pre-audit `BATCH_79_0m_b_PRE_AUDIT.md` (LANGSTON STEP 2 APPROVED). Architecture LOCKED. Just execute:
+
+**1. Apply TEC migration to staging** `2026-05-11-b79-0m-b-xstock-tec-enable.sql`
+
+**2. Build NEW xstock-side modules:**
+- `server/asset_classes/xstock_spot/global-filter.ts` (~80 LOC) — global filter on fresh pairs; resolve config via `getScreenerFilters({mode, assetClass:'xstock_spot'})`; emit counter deltas; N/A applicability for stablecoin/quote_currency/market_cap gates
+- `server/asset_classes/xstock_spot/imf-evaluator.ts` (~120 LOC) — 5 family paths + pattern path; reads family thresholds via `getScreenerFilters({mode, filterPath:'vts_<family>', assetClass:'xstock_spot'})`; uses existing `imf-metrics.ts` LQ/VN/DI helpers
+- `server/asset_classes/xstock_spot/eval-cycle.ts` (~150 LOC) — orchestrator: market-hours gate → global filter → IMF → MCE.computeContext('xstock_spot', ..., undefined-DBS) → for each strategy in regime's allowed-AND-enabled set: callStrategyDetect → SQE evaluate → archive to signal_eval_archive → if pass open VTS trade
+
+**3. Wire scanner.ts** — `xstockSpotScanner.runCycle` after freshness gate at line 290+, iterate fresh pairs (process ALL, no batching per Langston R6), call `evaluateXstockPairForVTS` per pair
+
+**4. Export `registerOpenVtsTrade` helper** from vts-runner.ts — inserts + Map.set + setup-hash record. xstock eval-cycle calls this. Setup-hash key fix in same helper: `${assetClass}:${symbol}:${strategy}` (Langston R6 from rev2)
+
+**5. Exit-path helper** `getOHLCSourceForTrade(trade)` per Langston Step 2 R1 — returns correct OHLC cache binding by trade.assetClass. Unit test BOTH branches.
+
+**6. Banner removal** from `client/src/components/machine-learning/xstocks-tab.tsx`
+
+**7. Skipped-signals asset_class field + filter** — fix the Filter Diagnostics leak. SkippedSignalEntry interface + caller writes + `getSkippedSignalsSummary(days, assetClass?)` filter. Crypto entries default crypto_spot.
+
+**8. SQL migrations** (per Langston Q3 + Q4 answers):
+- Per-strategy xstock thresholds for 9 non-ORB strategies — only volatility-sensitive (~30-50 rows), wildcard-keep scale-free pattern geometry with inline justification
+- Regime classifier xstock-explicit rows for remaining 4 regime branches (RBS/IE/HVU/ST volatility/momentum scales)
+- All tagged `updated_by='b79.0m.b-layer1-starter-equity-baseline'`
+
+**9. Asset-class log tagging refactor** — helper `withAssetClass(msg, assetClass)` or inline; thread through all shared eval functions
+
+**10. Tests:** 18-strategy null-DBS matrix asserting neutral 1.0 SQE outcome; exit-path xstock branch; TEC differentiation (`resolveTECConfig('crypto_spot').breakEvenEnabled===false` AND `resolveTECConfig('xstock_spot').breakEvenEnabled===true`); setup-hash assetClass-keyed
+
+**11. Deploy + Verify (G1-G9):**
+- G1 CI green
+- G2 DB seeds via psql
+- G3 PM2 boot logs include `[B79.0m.b][EVAL] symbol=... assetClass=xstock_spot ...` per pair
+- G4 signal_eval_archive accumulating xstock rows; xstock VTS trade opens AND closes within 24h **OR** synthetic-injection escape valve per Langston R3 (R3-relaxed if quiet tape)
+- G5 TEC differentiation: BE=true for xstock, BE=false for crypto; first xstock close logs `[BHF3] break_even_stop`
+- G6 Filter Diagnostics tab isolation: crypto tab shows ZERO xstock; xStocks tab shows ONLY xstock; getSkippedSignalsSummary filtered; **banner removed**
+- G7 crypto no-touch fence
+- G8 SQE distribution sanity for xstock rows
+- G9 xstock cycle p95 ≤ 1.3× crypto baseline (definition per Langston R4)
+
+**12. Completion report + governance** — BATCH_CATALOG, PHASE_HISTORY, RUNNING_ISSUES (#92 RESOLVED + #94 B79.0n tracker), SIM, CHANGES_AND_FIXES, MEMORY 3-way sync per CLAUDE.md §2 Step 10.b
+
+## Open Langston follow-ups logged (don't include in this batch)
+
+- RUNNING_ISSUES candidate: per-asset-class DBS computation for xstock (Layer-3 driven)
+- RUNNING_ISSUES candidate: unify crypto macro source to module_constants (currently CoinGecko-fed cache; xstock reads DB)
+- RUNNING_ISSUES candidate: computeContext options-object refactor (Langston R5; too many positional params)
+- RUNNING_ISSUES candidate (already #85): extend B79.TEC HARD-FAIL to all behavioral TEC keys (in scope of B79.0m.b's TEC work)
 
 **Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — post-Kyle-directive 2026-05-10, contains ONLY standing rules + procedural checklist. Trial-and-error history lives in per-batch completion reports, not the workflow doc.
 
@@ -33,55 +100,25 @@
 
 ---
 
-## NEXT STEP — B79.0k (#89) Kraken WS-equities Pro-tier path OR governance-doc schema-drift sweep (#93)
+## NEXT STEP — Resume B79.0m.b from `3b84dc756` per "REMAINING B79.0m.b WORK" above
 
-With #91 (B79.0g-tx) closed, the remaining open RUNNING_ISSUES are:
-1. **#89 Kraken WS-equities weekend silence (Path A/Path C pending Kyle directive).** Path B confirmed dead empirically; needs Kyle commercial decision on Kraken Pro upgrade OR approval to send Path C support query. Not actionable without Kyle directive.
-2. **#93 governance-doc schema-drift sweep (NEW, opened by B79.0g-tx Step 8).** ASSET_CLASS_ONBOARDING_WORKFLOW Section C + SYSTEM_MANUAL appendix paraphrase a phantom `tunable_status` column on module_constants. Sweep scope: audit governance docs for stale schema references; either drop or ship a migration. Own batch, no urgency.
-3. **#92 deferred to Phase 19** per Kyle clarification 2026-05-10: active trading isn't on until Phase 19, so xstockSpotScanner orchestration wiring isn't a near-term batch.
+Pre-audit Langston-APPROVED; architecture LOCKED. Just execute the 12 numbered steps. Start by re-reading the pre-audit file (`Claude Comms and Packages/Scope Files/BATCH_79_0m_b_PRE_AUDIT.md`) which has all decisions + Q1-Q6 answers from Langston Step 2. Then execute step 1 (apply TEC migration to staging) and proceed sequentially. Banner removal is at step 6; full G1-G9 verification at step 11.
 
-**Standing rule added 2026-05-11 (Langston Step 8):** future pre-audit §1.5 schema sections must paste `\d <table>` output, not paraphrase from workflow docs.
+After B79.0m.b: B79.0n (active-trading wire-in via signal-orchestrator). Then B79.3 (equity macro modifiers).
 
-## B79.0g-tx CLOSED 2026-05-11 (commits 79774aa51 + e32e101ee + bd299b8f7, PM2 #215)
+## Other open work (lower priority, after B79.0m.b)
 
-Atomic close-time soft-delete for vts_open_trades. Resolves RUNNING_ISSUES #91. Option B locked (Option C rejected as regression-masquerading-as-a-fix — no shared tx surface with logTrade JSON write).
-
-**Critical Langston pre-audit R1:** Map.delete FIRST (synchronous Map gate is the correctness invariant against re-executing the non-idempotent close cascade — `persistRealPriceTrade` → closedTrades + session P&L + JSON ledger + B70 archive + B73 ablation + ML calibration); THEN awaited `markOpenTradeClosed` in try/catch with NO re-throw. Re-throwing would let next exit cycle re-run the cascade → duplicate writes. Soft-delete is observability + bounded-history, not close-cascade atomicity. **R2:** boot sweep own try/catch with [SWEEP_FAIL] label.
-
-**Schema:** `closed BOOLEAN` + `closed_at TIMESTAMPTZ` + partial index `WHERE closed=false` (CREATE INDEX CONCURRENTLY, no tx wrap). **Seed:** `module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days=90` wildcard scope. **HARD-FAIL semantics:** missing module_constants row emits `[B79.0g-tx][CONFIG_MISSING]` log + skips sweep + does NOT halt boot. Sweep is boot-time only (single statement CTE DELETE; volume bounded by retention × close rate).
-
-**Snags:** test-mock `mockImplementationOnce` bypassed dbCalls capture → replaced with `dbReturnOverrides` queue (`e32e101ee`). Pre-audit §1.5 paraphrased phantom `tunable_status` column from workflow doc → caught at psql-INSERT, 3-LOC hotfix `bd299b8f7`. RUNNING_ISSUES #93 opened for broader sweep.
-
-**Verification:** boot logs `[B79.0g][REHYDRATE] loaded 113 open VTS trades from DB` + `[B79.0g-tx][GC_SWEEP] retention=90d swept=0`. All 13 b79-0g-tx tests green. Crypto no-touch fence held 10 factor families × 8/hr. Langston Step 8 APPROVED.
-
-## Section M procedural recipe in ASSET_CLASS_ONBOARDING_WORKFLOW.md (still queued for B80)
-
-Add Section M "Stand up the dedicated observation tab" with the procedural recipe B80 (crypto_perp) implementer follows: (1) export FilterDiagnosticsPanel from machine-learning.tsx if not done, (2) build new sibling endpoints under `/api/<asset_class>/` returning FilterDiagnosticsData v2.0 shape, (3) add 2 ablation sibling endpoints querying tables filtered by asset_class, (4) build new `<asset_class>-tab.tsx` with 5 sections, (5) wire tab into machine-learning.tsx Tabs group LAST. Defer until B80 actually starts.
+- **#89 Kraken WS-equities (Path A/C pending Kyle commercial directive)** — Path B dead empirically; not actionable without Kyle decision
+- **#93 governance-doc `tunable_status` schema-drift sweep** — own batch, no urgency
+- **B79.3 equity macro modifiers** — RUNNING_ISSUES #94, sequences after B79.0m.b + B79.0n
+- **B79.0n active-trading wire-in** — drafts after B79.0m.b closes
+- **Section M procedural recipe** in ASSET_CLASS_ONBOARDING_WORKFLOW.md for B80 (deferred)
 
 ---
 
-## PHASE 24 ARCHIVE (CLOSED 2026-05-10)
+## PHASE 24 ARCHIVE — see BATCH_CATALOG.md for full history
 
-| Sub-batch | Commit | PM2 | Summary |
-|---|---|---|---|
-| B79 | `260cc8cc5` | #184 | Dormant scaffold + workflow doc |
-| B79.TEC | `7eb4f5452` | #190 | Per-class TEC config + HARD-FAIL boot |
-| B79.0a | `a327964a5` | #197 | Live scanner + telemetry triad + freshness helper |
-| B79.0b | `54201bd32` | #198 | N3+N4 cleanup + SQE wildcard DELETE script |
-| B79.0c | `e37679ebc` | #202 | Per-symbol 24/7 predicate (Kraken Phase 1) |
-| B79.0d | `13178e9b5` | #203 | ORB real implementation (~210 lines) |
-| B79.0f | `3ba99237a` | #204 | Collision disambiguation + 4862-row backfill |
-| B79.0g | `fb42335f7` | #205 | vts_open_trades persistence + bootstrap-with-re-resolve |
-| B79.0e | `aca52acdc` | #206 | equity_*→xstock_* (172 DB objects) |
-| B79.0h | `963475be9` | n/a | Workflow + SIM/SYSTEM_MANUAL retrospective |
-| B79.0i.a | `c927924df` | #207 | xStocks tab (Phase 1: Panel A scanner-cycle + Panel E freshness + 2 new endpoints) |
-| B79.0i.b | `5dde28f52`+`cdbd2a04b`+`b9a1cdd4e` | #210 | xStocks tab: Filter Diagnostics mirror + rich ExitStrategyAblationSection + FactorCalibrationSection (reused via export+endpointBase prop). Aggregators parameterized with optional asset_class. "Shadow-mode" → "VTS Observation". |
-| B79.0j | `418088c7a`+`fa4cbabdc` | #212 | ORB rename `risk_reward_ratio` → `target_range_multiple` (resolves RUNNING_ISSUES #90) + bonus VTS dispatch bug fix (B79.0d had missed `vts-runner.ts:callStrategyDetect` dispatch site for ORB — silently 100%-nulling on VTS path). |
-| B79.0k | (governance only) | n/a | Investigation batch — Kraken WS-equities weekend silence. Decision matrix: Path B DEAD via probe (no public REST endpoint for xStocks), Path A needs Kyle directive (commercial), Path C needs Kyle approval (free). |
-| B79.0L | `fe47ba370`+`e92839f34` | #214 | xStock market-hours unified Fri 8PM ET → Sun 8PM ET close. Resolves #89 — REFRAMED. |
-| **B79.0g-tx** | `79774aa51`+`e32e101ee`+`bd299b8f7` | #215 | **Atomic close-time soft-delete for vts_open_trades. Resolves #91.** Option B locked (Option C rejected). Langston pre-audit R1: Map.delete FIRST then awaited markOpenTradeClosed (no re-throw). Schema: closed BOOLEAN + closed_at TIMESTAMPTZ + partial idx WHERE closed=false. Seed: data_lifecycle GC retention=90d. Boot-time sweep. Snags: test-mock hotfix + phantom `tunable_status` col hotfix. RUNNING_ISSUES #93 opened (governance-doc schema-drift sweep). |
-
-**Open RUNNING_ISSUES post-B79.0g-tx:** #89 Kraken WS-equities (pending Kyle), #93 governance-doc schema-drift sweep (NEW, no urgency), #92 deferred to Phase 19.
+Most recent before B79.0m: B79.0g-tx (atomic close-time soft-delete) PM2 #215. B79.0L (xStock unified Fri 8PM ET → Sun 8PM ET close) PM2 #214. B79.0m.a (threshold authoring + DB-driven strategy_gates + diagnostic fixes + CLAUDE.md §9.1/§9.2) PM2 #216.
 
 ---
 
