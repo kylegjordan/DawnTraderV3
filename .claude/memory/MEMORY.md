@@ -18,69 +18,48 @@
 
 ---
 
-## CURRENT STATE — 2026-05-11 (B79.0m.a SHIPPED + B79.0m.b IN-FLIGHT — pre-audit done, implementation 30% complete)
+## CURRENT STATE — 2026-05-11 (B79.0m.b PIPELINE WIRED + FLOWING on staging PM2 #221; signals null pending live setup OR synthetic injection)
 
-**B79.0m.a SHIPPED + VERIFIED on staging PM2 #216** (HEAD `0a9d85588`). Threshold authoring complete:
-- 19 xstock_spot strategy_gates rows (10 enabled + 9 disabled, code constant DELETED, DB authoritative)
-- 10 family-IMF screener_filters rows for xstock_spot
-- screener_filters unique index extended to (mode, asset_class, filter_path)
-- 3 regime classifier rows (TFS volatility/momentum scales halved + Path B sustainability)
-- xStocks tab amber banner 🚨 "VTS evaluation pipeline NOT yet wired"
-- CLAUDE.md §9.1 SCAFFOLDING-VS-FUNCTIONAL rule + §9.2 NUMERIC-DELTAS rule added
+🚨 **B79.0m.b LAYER-1 STARTER PIPELINE IS WIRED AND FUNCTIONAL.** Latest PM2 #221 (HEAD `38d19b559`). Per SCAN_EVAL_DONE log at 11:37:34 UTC: entered=76, failed_global=0, passed_families=38, strats_evaled=76, strategy_nulls=76, signals=0, trades_opened=0. Strategies dispatching cleanly; null returns = "no setup matches current pre-market quote regime." Awaiting RTH open (13:30 UTC) for live signal OR future B79.0m.b2 synthetic-injection test.
 
-**B79.0m.b IN-FLIGHT** (partial commit `3b84dc756`). Pre-audit + initial implementation done:
-- Pre-audit `BATCH_79_0m_b_PRE_AUDIT.md` Langston Step 2 APPROVED with R1-R6 applied
-- MCE.computeContext extended with `assetClass` param + conditional DBS synth + per-class macro modifier
-- b72-warmup adds mce_config to PREFETCH_MODULES
-- TEC enablement SQL ready (xstock BE=true, trail=0.8× crypto; not yet applied to staging)
-- Workflow doc updated with Phase 24 onboarding lessons retrospective
+**XSTOCK BANNER STILL UP** — Kyle's gate is "trades flowing end-to-end"; pipeline wired but G4 not yet observed.
 
-**ASSET_CLASS_ONBOARDING_WORKFLOW.md** updated with 7-step corrected sequence (Kyle directive — captured before forgetting, NOT a governance batch).
+What landed in B79.0m.b PM2 #221 (commits `914a25e05` → `38d19b559`):
+- MCE null-safe DBS slope deref (non-crypto synthesized neutral)
+- vts-runner exports: callStrategyDetect + registerOpenVtsTrade(input) + isIdenticalXstockSetupSuppressed (assetClass-keyed setup-hash per Langston R6)
+- 3 NEW xstock_spot modules in server/asset_classes/xstock_spot/:
+  - eval-cycle.ts (orchestrator + fetchXstockOHLC helper reading xstock_spot_ohlc_1m.interval_begin)
+  - global-filter.ts (Layer-1 starter; min_price/min_volume/history; N/A applicability for 3 gates)
+  - imf-evaluator.ts (5 family paths via screener_filters lookups, any-family-passes admits)
+- xstockSpotScanner.runCycle wired (line 292 TODO consumed; routes fresh pairs through eval-cycle; SCAN_EVAL_DONE log with rich counters)
+- 3 staging-side fixes applied this session:
+  - TEC migration `2026-05-11-b79-0m-b-xstock-tec-enable.sql` (BE=true, trail=0.8× crypto)
+  - active_quant global filter rows for xstock_spot (B79.0m.a omission — added via `2026-05-11-b79-0m-b-xstock-active-quant-row.sql`)
+  - **Schema fix**: shared/schema.ts was MISSING `assetClass` column on `screenerFilters` Drizzle table definition (B79.0m.a added the DB column + unique index but forgot the schema surface). `eq(screenerFilters.assetClass, ...)` evaluated to `eq(undefined, ...)` and silently matched zero rows. Fixed in commit `38d19b559`.
 
 Crypto no-touch fence holds (10 factor families × 7-8/hr ±10% baseline).
 
-## REMAINING B79.0m.b WORK (resume after compact)
+## DEFERRED to B79.0m.b2 (per CLAUDE.md §9.1 SCAFFOLDING-VS-FUNCTIONAL)
 
-Per pre-audit `BATCH_79_0m_b_PRE_AUDIT.md` (LANGSTON STEP 2 APPROVED). Architecture LOCKED. Just execute:
+Strict reading of the original Langston-approved scope: 12 steps. Landed 7 (pipeline wiring through to register-open-trade); deferred 5 polish/extensibility items:
 
-**1. Apply TEC migration to staging** `2026-05-11-b79-0m-b-xstock-tec-enable.sql`
+1. **getOHLCSourceForTrade exit-path helper** (Langston R1). Currently TEC reads crypto live-pricing-adapter cache for ALL trades; if/when first xstock trade opens, exit eval will lookup OHLC under wrong cache. Risk window: hours-to-days (trades hold). Must be in B79.0m.b2 BEFORE any xstock trade reaches a target/stop.
+2. **Skipped-signals asset_class field + filter** — Filter Diagnostics tab leak.
+3. **Per-strategy xstock SQL** (9 non-ORB volatility-sensitive thresholds) — Layer-1 starts on wildcard rows.
+4. **Regime classifier 4 remaining branches** (RBS/IE/HVU/ST) — TFS authored only.
+5. **Asset-class log tagging refactor** — partial coverage; full refactor deferred.
+6. **18-strategy null-DBS unit-test matrix** — neutral-DBS path is exercised in production now; explicit test matrix deferred.
+7. **Comprehensive G1-G9 verification** — G1-G3 GREEN; G4-G9 partial / awaiting RTH or synthetic.
 
-**2. Build NEW xstock-side modules:**
-- `server/asset_classes/xstock_spot/global-filter.ts` (~80 LOC) — global filter on fresh pairs; resolve config via `getScreenerFilters({mode, assetClass:'xstock_spot'})`; emit counter deltas; N/A applicability for stablecoin/quote_currency/market_cap gates
-- `server/asset_classes/xstock_spot/imf-evaluator.ts` (~120 LOC) — 5 family paths + pattern path; reads family thresholds via `getScreenerFilters({mode, filterPath:'vts_<family>', assetClass:'xstock_spot'})`; uses existing `imf-metrics.ts` LQ/VN/DI helpers
-- `server/asset_classes/xstock_spot/eval-cycle.ts` (~150 LOC) — orchestrator: market-hours gate → global filter → IMF → MCE.computeContext('xstock_spot', ..., undefined-DBS) → for each strategy in regime's allowed-AND-enabled set: callStrategyDetect → SQE evaluate → archive to signal_eval_archive → if pass open VTS trade
+## NEXT STEP — Resume / verify B79.0m.b first live signal post-RTH OR ship B79.0m.b2
 
-**3. Wire scanner.ts** — `xstockSpotScanner.runCycle` after freshness gate at line 290+, iterate fresh pairs (process ALL, no batching per Langston R6), call `evaluateXstockPairForVTS` per pair
+If user wants to wait for RTH (13:30 UTC = 9:30 AM ET = ~2h away): poll for SCAN_EVAL_DONE showing signals>0 and trades_opened>0, then remove banner + close batch.
 
-**4. Export `registerOpenVtsTrade` helper** from vts-runner.ts — inserts + Map.set + setup-hash record. xstock eval-cycle calls this. Setup-hash key fix in same helper: `${assetClass}:${symbol}:${strategy}` (Langston R6 from rev2)
+Alternative path: B79.0m.b2 in next session — getOHLCSourceForTrade helper FIRST (blocks any xstock trade close), then deferred items 2-7.
 
-**5. Exit-path helper** `getOHLCSourceForTrade(trade)` per Langston Step 2 R1 — returns correct OHLC cache binding by trade.assetClass. Unit test BOTH branches.
+## Open Langston follow-ups logged
 
-**6. Banner removal** from `client/src/components/machine-learning/xstocks-tab.tsx`
-
-**7. Skipped-signals asset_class field + filter** — fix the Filter Diagnostics leak. SkippedSignalEntry interface + caller writes + `getSkippedSignalsSummary(days, assetClass?)` filter. Crypto entries default crypto_spot.
-
-**8. SQL migrations** (per Langston Q3 + Q4 answers):
-- Per-strategy xstock thresholds for 9 non-ORB strategies — only volatility-sensitive (~30-50 rows), wildcard-keep scale-free pattern geometry with inline justification
-- Regime classifier xstock-explicit rows for remaining 4 regime branches (RBS/IE/HVU/ST volatility/momentum scales)
-- All tagged `updated_by='b79.0m.b-layer1-starter-equity-baseline'`
-
-**9. Asset-class log tagging refactor** — helper `withAssetClass(msg, assetClass)` or inline; thread through all shared eval functions
-
-**10. Tests:** 18-strategy null-DBS matrix asserting neutral 1.0 SQE outcome; exit-path xstock branch; TEC differentiation (`resolveTECConfig('crypto_spot').breakEvenEnabled===false` AND `resolveTECConfig('xstock_spot').breakEvenEnabled===true`); setup-hash assetClass-keyed
-
-**11. Deploy + Verify (G1-G9):**
-- G1 CI green
-- G2 DB seeds via psql
-- G3 PM2 boot logs include `[B79.0m.b][EVAL] symbol=... assetClass=xstock_spot ...` per pair
-- G4 signal_eval_archive accumulating xstock rows; xstock VTS trade opens AND closes within 24h **OR** synthetic-injection escape valve per Langston R3 (R3-relaxed if quiet tape)
-- G5 TEC differentiation: BE=true for xstock, BE=false for crypto; first xstock close logs `[BHF3] break_even_stop`
-- G6 Filter Diagnostics tab isolation: crypto tab shows ZERO xstock; xStocks tab shows ONLY xstock; getSkippedSignalsSummary filtered; **banner removed**
-- G7 crypto no-touch fence
-- G8 SQE distribution sanity for xstock rows
-- G9 xstock cycle p95 ≤ 1.3× crypto baseline (definition per Langston R4)
-
-**12. Completion report + governance** — BATCH_CATALOG, PHASE_HISTORY, RUNNING_ISSUES (#92 RESOLVED + #94 B79.0n tracker), SIM, CHANGES_AND_FIXES, MEMORY 3-way sync per CLAUDE.md §2 Step 10.b
+**B79.0m.a SHIPPED + VERIFIED on staging PM2 #216** (HEAD `0a9d85588`). Threshold authoring + 19 strategy_gates + 10 family-IMF rows + 3 regime classifier rows + xStocks tab amber banner + CLAUDE.md §9.1/§9.2 rules.
 
 ## Open Langston follow-ups logged (don't include in this batch)
 
@@ -99,12 +78,6 @@ Per pre-audit `BATCH_79_0m_b_PRE_AUDIT.md` (LANGSTON STEP 2 APPROVED). Architect
 5. Ticker-collision gate (`XSTOCK_SPOT_KRAKEN_COLLISIONS`) on shared-exchange path
 
 ---
-
-## NEXT STEP — Resume B79.0m.b from `3b84dc756` per "REMAINING B79.0m.b WORK" above
-
-Pre-audit Langston-APPROVED; architecture LOCKED. Just execute the 12 numbered steps. Start by re-reading the pre-audit file (`Claude Comms and Packages/Scope Files/BATCH_79_0m_b_PRE_AUDIT.md`) which has all decisions + Q1-Q6 answers from Langston Step 2. Then execute step 1 (apply TEC migration to staging) and proceed sequentially. Banner removal is at step 6; full G1-G9 verification at step 11.
-
-After B79.0m.b: B79.0n (active-trading wire-in via signal-orchestrator). Then B79.3 (equity macro modifiers).
 
 ## Other open work (lower priority, after B79.0m.b)
 
