@@ -2575,3 +2575,65 @@ Per Kyle directive + Langston cc-inbox #902. Pre-B70.3b every open trade showed 
 2. **Langston's "bulletproof > elegant" partitioning argument** (silent-corruption resistance via separate-instance pattern over CC's param-plumbing lean) is the kind of architectural pushback the workflow exists to surface. CC's initial design risked the future-call-site-forgets-the-arg failure mode; Langston's separate-instance shape eliminates the failure mode by construction.
 3. **Static-state hazard on singleton refactors** — TelemetryAggregator's module-scoped disk-persist path at line 1600-1602 is a foot-gun for the two-instance pattern. Day 1 sidestepped via in-memory-only xstock instance; full persistence parameterization deferred to B79.x with explicit tracking.
 4. **NO max_price cap** on xstock_spot mirrors crypto's no-cap convention (we don't cap BTC at $150K, so we don't cap AAPLx at $2000). Removing the cap was a Kyle round-2 directive; the migration sets NULL for xstock_spot row while crypto_spot rows preserve their numeric defaults.
+
+---
+
+## INFRA-2026-05-11: B79.0m.b2 — xstock_spot pipeline pulled to functional crypto parity (PM2 #229)
+
+**Commits:** `4c60d259e` (main, 26 files +2241/-478) + `909182690` (pattern-filter test fixup) + (endpoint patch this session). Phase 24 EXTENDED — closes the architectural gaps that B79.0m.b shipped with.
+
+**Trigger:** Kyle directive 2026-05-11 — *"xstock pipeline must mirror crypto's `fx5-scanner.ts` + `vts-runner.ts` shape EXACTLY; differences live in DB rows, not code."* B79.0m.b had wired a Layer-1-starter pipeline that ran cleanly for 24h but opened ZERO trades, because two architectural gaps remained:
+1. **Pattern path missing entirely.** Pattern strategies fired inline within the quant loop with no parallel global+IMF gate; zero `vts_pattern`/`active_pattern` rows for xstock_spot in `screener_filters`.
+2. **Family fan-out was single-iteration filter gate.** A pair passing 3 family IMFs was iterated once with eligibility filtering, vs. crypto's 3 separate evaluation entries via `taggedVtsSurvivors`.
+
+**5 objectives shipped (all approved across 3 Langston review rounds — rev1 + rev2 + Step 4 code review):**
+
+1. **Parallel pattern path** — 4 new `screener_filters` rows seeded (`vts_pattern` + `active_pattern` × paper/live; cloned from crypto baseline: LQ=43, VN=0.98, DI=3/5, min_price=0.05/0.25, min_volume=150k/250k). New file `server/asset_classes/xstock_spot/pattern-filter.ts` (~270 lines) — two-stage gate (global + IMF) matching crypto's `fx5-scanner.ts:743-770 + 1242-1272` shape. Per-cycle 60-bar floor matches `global-filter.ts:109` convention; Layer-3 migration target = `module_constants.pattern_pool_gates.min_bars_for_eval`. Pattern survivors tagged `sourcePool='pattern'` and ONLY pattern-family strategies (`STRATEGY_FAMILY_MAP[s] === 'pattern'`) fire on the pattern lane.
+
+2. **Family fan-out** — Replaced single-iteration loop in `eval-cycle.ts` with `for (lane of lanes) { for (strategy of regimeStrategies) { ... } }`. A pair passing N family IMFs + pattern produces `N+1` evaluation lanes. `isStrategyEligibleForLane(strategyKey, lane)` extracted to `server/asset_classes/xstock_spot/lane-eligibility.ts` for unit-test isolation (Langston Step 4 nit #1). Mirrors crypto `fx5-scanner.ts:1607-1643` exactly.
+
+3. **ORB LONG-only fix + STRATEGY_FAMILY_MAP entry** — `orb.ts:254-264` down-break (`!upBreak`) branch replaced with `setNullReason('sell_disabled_long_only'); return null;` (mirrors `inside-bar-reversal.ts:131-134`). Pre-deploy crypto baseline verified: admitted=0, total=77,919/24h all `strategy_internal` — no production SELL leak on crypto. Added `orb: 'breakout'` to `STRATEGY_FAMILY_MAP` (was previously absent → bypassed family-eligibility gate entirely; now routes through breakout IMF lane). §-1.7 rollback trigger documents two-condition revert.
+
+4. **B73 replay asset-class branch** — `exit-strategy-replay-service.ts:fetchOhlcForReplay` gains `assetClass: string = 'crypto_spot'` param; xstock symbols read partitioned `xstock_spot_ohlc_1m` directly (EXPLAIN ANALYZE 1.035 ms verified pre-deploy; all 13 partitions have child indexes on `(symbol, interval_begin DESC)`). `_b79XstockReplayErrors` counter + `[B73-REPLAY][XSTOCK]` log surface async failures. `ReplayContext.assetClass` threaded from `OpenVirtualTrade.assetClass` via `vts-runner.ts:2336` → `vts-service.persistRealPriceTrade:957`.
+
+5. **Drizzle schema-file drift fix** — `shared/schema.ts` `screenerFilters` unique-index TS declaration updated from `(mode, filterPath)` → `(mode, assetClass, filterPath)` with name `screener_filters_mode_class_path_idx` matching production. No DB migration runs (production already correct from B79.0m.a hotfix). RUNNING_ISSUES #100 tracks drizzle-kit journal-sync follow-up.
+
+**Endpoint patch (separate post-Step-11 commit):** `/api/xstocks/filter-diagnostics` had hardcoded `applicable.path: false` from B79.0m.b iteration 2 era. Without the patch, the xStocks UI tab would render pattern path as N/A even with the live parallel pipeline. Added `buildPatternGlobalFromCounters` + `buildPatternImfFromCounters` helpers; wired `lastScan.pattern` + `rolling24h.aggregated.pattern` to read the new B79.0m.b2 counters (`patternFilterCounters`, `patternPerMetric`, `pairsPassedPattern`). Lifetime accumulator in `scanner.ts` extended with the 5 new counters. SCAN_EVAL_DONE log line gains `passed_pattern`, `failed_pattern`, `pattern_reject_min_history`, `pattern_fanout`, `family_fanout_sum`, `archive_failures` fields.
+
+**Bug fixes:**
+- **BUG-2026-05-11-A — ORB SELL leak:** `orb.ts:260` unconditional `direction = 'SELL'` branch on down-break violated LONG-only invariant. **Production impact pre-fix:** zero (crypto admitted-ORB count = 0/24h pre-deploy). **Risk window if left unfixed:** as pattern path enabled more pair/regime combos hitting ORB on xstock_spot, SELL signals would have begun reaching admit stage. Pre-emptive fix.
+- **BUG-2026-05-11-B — B73 xstock replay silently empty:** `exit-strategy-replay-service.ts:fetchOhlcForReplay` defaulted to Kraken crypto REST for all symbols; xstock symbols returned empty bars. **Production impact pre-fix:** zero (no xstock trades had closed yet). Risk window: first xstock trade close would have produced no `exit_strategy_alternates` row.
+- **BUG-2026-05-11-C — Drizzle schema-file drift:** `shared/schema.ts` declared `(mode, filterPath)` index but production had `(mode, asset_class, filter_path)`. Production correct; TS file stale. **Surfaces as:** next `drizzle-kit generate` emits a surprise DROP-old-idx + CREATE-new-idx migration. Patched TS to match production. RUNNING_ISSUES #100 logs the journal-sync follow-up.
+- **BUG-2026-05-11-D — xStocks tab endpoint hardcoded pattern path N/A:** `/api/xstocks/filter-diagnostics` at `routes.ts:7241` hardcoded `applicable.path: false`. Patched to read live pattern counters; xStocks UI tab will now render the pattern path Pipeline Summary block with real data after first RTH cycle.
+
+**Pre-existing bug filed separately (NOT introduced this batch, NOT fixed):**
+- **RUNNING_ISSUES #99** — `exit-strategy-replay-service.ts:339` references `ohlcBars.length` but the in-scope variable is `replayBars` / `allBars`. ReferenceError thrown on every successful persist; wrapped in outer try/catch so it logs as "persist failed" — masks real B73 success signal. Surfaced during Langston Step 4 read. Standalone follow-up commit.
+
+**New counters in `XstockEvalCycleCounters`:**
+- `pairsPassedPattern` / `pairsFailedPattern` — pattern-filter pass/fail per cycle.
+- **`patternRejectByMinHistory`** — TRIPWIRE for §-1.1 60-bar-floor implementation correctness (spikes to ~all-pairs if Layer-1 floor is misconfigured).
+- `patternFanOut` — pairs admitted to pattern lane.
+- `patternFilterCounters` / `patternPerMetric` — pattern-side accumulator structures.
+- `archiveFailures` — `signal_eval_archive` insert exceptions surfaced (Langston Step 4 nit #7).
+
+**Verification gates G1-G12 pre-RTH:**
+- **G1 CI**: Build + Docker GREEN; TS Check + Test Suite at pre-existing legacy baseline (RUNNING_ISSUES #39 + 66 pre-existing `module_constants not warm` failures from boot-sequence tests). **All 28 of this batch's new tests pass.** No new failures introduced.
+- **G2 DB seeds**: ✅ 4 pattern rows confirmed via psql with correct cloned values.
+- **G3-G7 + G9**: PENDING RTH 2026-05-12 13:30 UTC. xstock scanner correctly short-circuits weekend market-closed; no cycle data to verify until xstock market open.
+- **G8 ORB LONG-only**: ✅ crypto ORB admitted=0/24h (rollback trigger NOT tripped).
+- **G10 crypto no-touch fence**: PARTIAL ✅ — all 10 factor families emitting (5/hr in 1h window — restart noise; +30min re-check scheduled).
+- **G11 schema drift**: ✅ closed.
+- **G12 pattern-strategy params**: ✅ 26 wildcard rows confirmed + unit test passes.
+
+**Files (7 new + 12 modified, +2241/-478):**
+- NEW: `server/asset_classes/xstock_spot/pattern-filter.ts`, `lane-eligibility.ts`; `drizzle/migrations/2026-05-11-b79-0m-b2-xstock-pattern-rows.sql` + rollback; 3 new unit test files; `Claude Comms and Packages/Scope Files/BATCH_79_0m_b2_SCOPE.md`; completion report.
+- MODIFIED: `eval-cycle.ts` (lane × strategy fan-out), `scanner.ts` (lifetime accumulator + log fields), `orb.ts` (LONG-only), `canonical-regime-strategy-map.ts` (orb family entry), `exit-strategy-replay-service.ts` (asset-class branch), `vts-runner.ts` + `vts-service.ts` (thread assetClass), `shared/schema.ts` (drift fix), `routes.ts` (xstock endpoint patch), `b79-0d-orb.test.ts` (LONG-only assertion).
+
+**Governance updated:** BATCH_CATALOG, PHASE_HISTORY (Phase 24 EXTENDED section), SYSTEM_IMPACT_MAP (7 new component entries + If-I-Change-X additions), SYSTEM_MANUAL (Phase 24 EXTENDED appendix), RUNNING_ISSUES (#99 + #100 new), MEMORY × 2 (in-cache truth + in-repo mirror) + Langston MEMORY synced via SSH+heredoc (83/200 lines).
+
+**Langston review trail:** 5 files in `Claude Comms and Packages/Langston Design Asks/B79_0m_b2_*`. 3 review rounds (rev1 8 pre-audit edits, rev2 2 refinements, Step 4 7 inline nits). Step 4 verdict: "push it."
+
+**Lessons:**
+1. **Architecture-as-code-shape vs. architecture-as-DB-rows.** B79.0m.b shipped a pipeline that ran but never opened trades because the code shape diverged from crypto. The fix wasn't more DB rows — it was rebuilding the iteration shape (lane × strategy fan-out + parallel pattern path) to match crypto's `fx5-scanner.ts:1607-1643` exactly. "Differences live in DB" only works when the code-shape is parity.
+2. **Endpoint-vs-pipeline drift on schema changes.** The `/api/xstocks/filter-diagnostics` endpoint had hardcoded `applicable.path: false` from a prior era when the pattern path didn't exist. Even after the parallel pipeline was built, the endpoint would have continued surfacing pattern path as N/A. Lesson: when a pipeline section comes online, audit all surfaces that previously reported it as N/A.
+3. **Pre-existing bugs surface during architectural touches.** RUNNING_ISSUES #99 (`ohlcBars.length` ReferenceError) had been masking B73 success logs since the file was written. Surfaced only because Step 4 review made Langston re-read the file. Lesson: file pre-existing bugs as separate follow-ups; don't piggyback the fix into the architectural batch.

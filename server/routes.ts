@@ -7143,10 +7143,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // B79.0m.b iteration 2: emptyGlobal default + applicability flags. The
       // 3 N/A gates (stablecoin / quote_currency / market_cap) surface as
       // applicable=false. DI also marked applicable=true (computed in IMF
-      // evaluator). Pattern path is N/A for xstock_spot at Layer-1 — the
-      // entire pattern pipeline runs inside per-strategy pattern detection
-      // (morning_star, inside_bar_reversal, pivot_shift); there's no
-      // separate "pattern global filter" pass like crypto. Marked N/A.
+      // evaluator).
+      //
+      // B79.0m.b2 (2026-05-11): Pattern path is now LIVE for xstock_spot —
+      // parallel pattern-global + pattern-IMF pipeline runs alongside the
+      // family chain in eval-cycle.ts. The hardcoded `applicable.path: false`
+      // posture below is REPLACED with real counter mapping built from
+      // `ec.patternFilterCounters` + `ec.patternPerMetric` + `ec.patternFanOut`.
       const emptyGlobal = {
         failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0,
         failed_min_price: 0, failed_max_price: 0, failed_stablecoin: 0,
@@ -7167,12 +7170,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         failed_stablecoin: 0, failed_min_price: 0, failed_max_price: 0,
         failed_min_volume: 0, failed_spread: 0, failed_history: 0,
         passed_all_filters: 0,
-        // Pattern global filter is N/A for xstock_spot Layer-1 — pattern
-        // detection runs inline inside per-strategy detect() calls; there is
-        // no separate pattern-pool pre-filter step. Frontend renders "N/A"
-        // for every cell when applicable.path === false.
+        // B79.0m.b2 (2026-05-11): pattern path is LIVE. applicable.path
+        // defaults true here; the buildPatternGlobalFromCounters helper below
+        // overrides per-cycle. The hardcoded N/A posture from B79.0m.b
+        // iteration 2 is gone.
         applicable: {
-          path: false,
+          path: true,
+          // The 3 always-N/A gates for xstock pattern path:
+          failed_stablecoin: false,   // no stablecoin equity tickers
+          failed_spread: false,       // bid/ask not in OHLC at Layer-1
         } as Record<string, boolean>,
       };
 
@@ -7226,6 +7232,38 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return out;
       }
 
+      // B79.0m.b2: build pattern-global response from the new
+      // patternFilterCounters keys emitted by `pattern-filter.ts`.
+      // Pattern-filter's failure reasons accumulate as failed_<reason>=1 on
+      // the rejecting cycle. evaluated/passed_global/passed_imf/passed_all
+      // track stage progress.
+      function buildPatternGlobalFromCounters(pfc: Record<string, number> | undefined) {
+        if (!pfc) return emptyPatternGlobal;
+        return {
+          ...emptyPatternGlobal,
+          failed_min_price: pfc.failed_min_price ?? 0,
+          failed_max_price: pfc.failed_max_price ?? 0,
+          failed_min_volume: pfc.failed_min_volume ?? 0,
+          failed_history: pfc.failed_min_history ?? 0,
+          passed_all_filters: pfc.passed_global ?? 0,
+        };
+      }
+
+      function buildPatternImfFromCounters(perMetric: any) {
+        if (!perMetric || typeof perMetric.total !== 'number') {
+          return { ...emptyImf, applicable: { path: true, failedDI: true } as Record<string, boolean> };
+        }
+        return {
+          ...emptyImf,
+          failedLQ: perMetric.failedLQ ?? 0,
+          failedVN: perMetric.failedVN ?? 0,
+          failedDI: perMetric.failedDI ?? 0,
+          passed: perMetric.passed ?? 0,
+          total: perMetric.total ?? 0,
+          applicable: { path: true, failedDI: true } as Record<string, boolean>,
+        };
+      }
+
       const lastScan = {
         timestamp: diag.lastTickAt ? new Date(diag.lastTickAt).toISOString() : new Date().toISOString(),
         mode: 'paper' as const,
@@ -7238,7 +7276,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           imf: buildImfFromCounters(ec?.imfFilterCounters, ec?.imfPerMetric),
           survivors: ec?.pairsPassedFamilies ?? 0,
         },
-        pattern: { global: emptyPatternGlobal, imf: { ...emptyImf, applicable: { path: false } as Record<string, boolean> }, survivors: 0 },
+        pattern: {
+          // B79.0m.b2: real pattern-path counters (parallel pipeline now live).
+          global: buildPatternGlobalFromCounters(ec?.patternFilterCounters),
+          imf: buildPatternImfFromCounters(ec?.patternPerMetric),
+          survivors: ec?.pairsPassedPattern ?? 0,
+        },
         // B79.0m.b iteration 2: full fan-out / qualified-unique / benchmark /
         // destination accounting so the Pipeline Summary table has real rows.
         familyFanOutSum: ec?.familyFanOutSum ?? 0,
@@ -7268,7 +7311,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             imf: buildImfFromCounters(lt?.imfFilterCounters, lt?.imfPerMetric),
             survivors: lt?.pairsPassedFamilies ?? 0,
           },
-          pattern: { global: emptyPatternGlobal, imf: { ...emptyImf, applicable: { path: false } as Record<string, boolean> }, survivors: 0 },
+          pattern: {
+            // B79.0m.b2: real lifetime pattern-path counters from process-restart
+            global: buildPatternGlobalFromCounters(lt?.patternFilterCounters),
+            imf: buildPatternImfFromCounters(lt?.patternPerMetric),
+            survivors: lt?.pairsPassedPattern ?? 0,
+          },
           familyPaths: buildFamilyPaths(lt?.imfPerFamily),
           familyPerMetric: lt?.imfPerFamily ?? {},
           familyFanOutSum: lt?.familyFanOutSum ?? 0,

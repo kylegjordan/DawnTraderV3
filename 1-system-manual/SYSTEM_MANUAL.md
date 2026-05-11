@@ -11090,3 +11090,103 @@ These are the architectural truths a new PM needs to understand HOW the multi-as
 - **Filter-as-first-class batch (B82/B83 TBD)** promotes filters to `module_name='filter:X'` rows in `module_constants`.
 
 *End of Modularization Phase Architecture appendix. Last updated 2026-05-10 with Phase 24 close (B79 + B79.TEC + B79.0a-0g).*
+
+## Phase 24 EXTENDED — xstock_spot pipeline pulled to functional crypto parity (B79.0L → B79.0m.b2, 2026-05-11)
+
+Phase 24 closed 2026-05-10 with the xstock pipeline observability-wired but architecturally divergent from crypto: pattern strategies fired inline within the quant loop (no parallel pattern global+IMF gate), and the family-eligibility gate was a single-iteration filter rather than the multi-lane fan-out crypto uses. Kyle's locked architectural commitment 2026-05-11 — "xstock pipeline mirrors crypto's `fx5-scanner.ts` + `vts-runner.ts` shape EXACTLY; differences live in DB rows, not code" — drove a 4-batch extension (B79.0L, B79.0m / B79.0m.a, B79.0m.b, B79.0m.b2) that closed those gaps.
+
+### Architectural shape after B79.0m.b2 (functional crypto parity)
+
+The xstock_spot per-pair eval pipeline (`server/asset_classes/xstock_spot/eval-cycle.ts`) now runs in this shape:
+
+```
+   market-hours → global-filter → MCE → family-IMF (5 lanes)  ||  pattern-filter
+                                            ↓                          ↓
+                            one lane per passed family   (if pattern passed) one pattern lane
+                                                  ↓
+                                    per-lane strategy iteration:
+                                      - pattern lane → STRATEGY_FAMILY_MAP[s] === 'pattern' ONLY
+                                      - family lane → primary OR hybrid (HYBRID_FAMILY_ELIGIBILITY)
+                                                       OR multi-family (MULTI_FAMILY_ELIGIBILITY) match
+                                                  ↓
+                       detect → setup-hash → finalScore → Net-EV → archive → registerOpenVtsTrade
+```
+
+A pair passing **N family IMFs** AND **the pattern filter** produces **N+1 distinct evaluation lanes**. Each lane runs its eligible strategies; each `signal_eval_archive` row carries the lane's `sourcePool` in `features` jsonb (e.g. `'xstock-trend'`, `'xstock-strong_trend'`, `'pattern'`). This mirrors crypto's `taggedVtsSurvivors` shape in `fx5-scanner.ts:1607-1643` exactly.
+
+### What lives in code vs. DB (parity invariant)
+
+The architectural commitment "differences live in DB, not code" is enforced by these key facts:
+
+- **Family IMF thresholds** — DB row at `screener_filters WHERE asset_class='xstock_spot' AND filter_path IN ('vts_trend', 'vts_reversal', 'vts_breakout', 'vts_oscillator', 'vts_strong_trend', 'active_*')` (10 rows × 5 paths × 2 modes — seeded B79.0m.a).
+- **Pattern IMF thresholds** — DB row at `screener_filters WHERE asset_class='xstock_spot' AND filter_path IN ('vts_pattern', 'active_pattern')` (4 rows × 2 paths × 2 modes — seeded B79.0m.b2; cloned from crypto baseline LQ=43, VN=0.98, DI=3/5).
+- **Global filter** — DB row at `screener_filters WHERE asset_class='xstock_spot' AND filter_path='active_quant'` (one row per mode — seeded B79.0m.b).
+- **Pattern-pool guardrails** — `module_constants.pattern_pool_gates.xstock_spot.{final_score_floor=0.45, max_position_pct=0.50}` (seeded B79_inherit_crypto 2026-05-07).
+- **Strategy enablement** — `module_constants.strategy_gates.xstock_spot.<strategy>.enabled` (19 rows, 10 enabled, 9 disabled — seeded B79.0m.a).
+- **TEC config (BE / trail / target_lock)** — `module_constants.trailing_exit.xstock_spot.*` (seeded B79.0m.b TEC migration).
+
+### Strategy lane membership (10 enabled strategies for xstock_spot, all LONG-only)
+
+| Strategy | STRATEGY_FAMILY_MAP | Eligible lanes |
+|---|---|---|
+| `breakout` | `'breakout'` | xstock-breakout |
+| `mean_reversion` | `'reversal'` | xstock-reversal |
+| `range_trade` | `'reversal'` | xstock-reversal |
+| `sma_trend_ride` | `'trend'` | xstock-trend |
+| `vwap_bounce` | `'breakout'` | xstock-breakout |
+| `vwap_pullback` | `'trend'` + multi-family `['strong_trend']` | xstock-trend, xstock-strong_trend |
+| `inside_bar_reversal` | `'pattern'` | pattern |
+| `morning_star` | `'pattern'` | pattern |
+| `pivot_shift` | `'hybrid'` + HYBRID_FAMILY_ELIGIBILITY `['trend','pattern']` | xstock-trend (the 'pattern' parent is enforced at detect-time via patternInput, not lane membership) |
+| `orb` | `'breakout'` (added B79.0m.b2) | xstock-breakout |
+
+The `isStrategyEligibleForLane(strategyKey, lane)` helper in `server/asset_classes/xstock_spot/lane-eligibility.ts` is the single source of truth for this routing.
+
+### LONG-only invariant (per-strategy enforcement)
+
+Every enabled xstock_spot strategy MUST return `null` (with `setNullReason('sell_disabled_long_only')`) when the detection geometry would produce a SELL signal. Verified per-strategy 2026-05-11:
+
+- `inside_bar_reversal`, `morning_star`, `pivot_shift` — gate at `direction === 'BUY'` check before signal construction.
+- `orb` — gates `!upBreak` branch returning null (fixed B79.0m.b2; mirrors `inside-bar-reversal.ts:131-134`).
+- `breakout`, `mean_reversion`, `range_trade`, `sma_trend_ride`, `vwap_bounce`, `vwap_pullback` — in-class `strategy-engine.ts` methods; LONG-only by construction (no SELL branch in source).
+
+`UNIVERSALLY_DISABLED_STRATEGIES` set in `vts-runner.ts:440` excludes `liquidity_trap` from iteration entirely (bearish-by-design strategy, awaiting bullish redesign per Batch 45 directive).
+
+### B73 exit-strategy ablation — asset-class OHLC source dispatch
+
+`exit-strategy-replay-service.ts:fetchOhlcForReplay` now branches on `assetClass`:
+- `crypto_spot` (default) → `ohlcCache.getOHLCData()` via Kraken REST (existing path).
+- `xstock_spot` → Drizzle query against partitioned `xstock_spot_ohlc_1m` table (EXPLAIN ANALYZE 1.035 ms verified pre-deploy, all 13 partitions have child indexes on `(symbol, interval_begin DESC)`).
+
+`ReplayContext.assetClass` threaded from `OpenVirtualTrade.assetClass` via `vts-runner.ts:2336` → `vts-service.persistRealPriceTrade:957` → `replayAndPersist`. Async fire-and-forget on close; `_b79XstockReplayErrors` counter + `[B73-REPLAY][XSTOCK]` log surface async failures observationally.
+
+### Per-cycle xstock counter surface (B79.0m.b2 additions)
+
+`XstockEvalCycleCounters` (defined in `eval-cycle.ts`) tracks per-cycle + lifetime accumulator:
+
+| Counter | What it counts |
+|---|---|
+| `pairsEntered` | Pairs entered the eval pipeline this cycle |
+| `pairsFailedMarketHours` | Failed `isXstockMarketOpenUTC` gate |
+| `pairsFailedGlobalFilter` | Failed quant-side global filter |
+| `pairsPassedFamilies` / `familyQualifiedUnique` | Pairs passing ≥1 family IMF (unique-pair count) |
+| `familyFanOutSum` | Sum of (pairs × families passed) — fan-out total |
+| **`pairsPassedPattern`** | Pairs passing pattern-filter (B79.0m.b2 NEW) |
+| **`pairsFailedPattern`** | Pairs failing pattern-filter (B79.0m.b2 NEW) |
+| **`patternRejectByMinHistory`** | Pairs failing pattern-filter on 60-bar floor — INSTANT TRIPWIRE for §-1.1 implementation correctness (B79.0m.b2 NEW) |
+| **`patternFanOut`** | Pairs admitted to pattern lane (B79.0m.b2 NEW) |
+| `strategiesEvaluated` / `strategyNulls` / `signalsGenerated` | Per-lane strategy iteration outcomes |
+| `tradesOpened` | Trades opened via `registerOpenVtsTrade` |
+| **`archiveFailures`** | `signal_eval_archive` insert exceptions (B79.0m.b2 NEW) |
+| `byStrategy` | Per-strategy {evaluated, nulls, signals, rejected, trades} |
+
+These surface in PM2 logs via `[B79.0m.b2][SCAN_EVAL_DONE]` line and in `/api/xstocks/filter-diagnostics` response (lastScan + 24h rolling sections).
+
+### Layer-3 calibration debt logged
+
+- Hardcoded 60-bar floor in `pattern-filter.ts` + `global-filter.ts:109` → migrate to `module_constants.pattern_pool_gates.min_bars_for_eval`.
+- Pattern strategy `module_constants.strategy.<name>.*` wildcard-only for xstock_spot (26 rows confirmed) → Layer-3 seeds xstock-scoped overrides for ATR-multiplier knobs.
+- `scanPatterns()` ATR multipliers (1.5×/2.5×) crypto-tuned → may need different for equity microstructure.
+- VN dominance in family-IMF rejection (31% of fails) → recalibrate `vn_max` for equity tape post-RTH evidence.
+
+*Updated 2026-05-11 with B79.0m.b2 close — xstock pipeline at functional crypto parity in code; live trade flow pending RTH 2026-05-12 13:30 UTC verification.*

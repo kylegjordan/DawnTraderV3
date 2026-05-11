@@ -338,6 +338,12 @@ class XstockSpotScannerService {
             pairsFailedAllFamilies: 0, pairsPassedFamilies: 0, strategiesEvaluated: 0,
             strategyNulls: 0, signalsGenerated: 0, signalsArchived: 0,
             signalsRejectedBySQE: 0, tradesOpened: 0, errors: 0,
+            // B79.0m.b2: pattern path lifetime counters.
+            pairsPassedPattern: 0, pairsFailedPattern: 0,
+            patternRejectByMinHistory: 0, patternFanOut: 0,
+            patternFilterCounters: {},
+            patternPerMetric: { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 },
+            archiveFailures: 0,
             globalFilterCounters: {}, imfFilterCounters: {},
             imfPerMetric: { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 },
             imfPerFamily: {},
@@ -351,8 +357,11 @@ class XstockSpotScannerService {
           'pairsFailedAllFamilies', 'pairsPassedFamilies', 'strategiesEvaluated',
           'strategyNulls', 'signalsGenerated', 'signalsArchived', 'signalsRejectedBySQE',
           'tradesOpened', 'errors', 'familyFanOutSum', 'familyQualifiedUnique',
-          'benchmarksRemoved', 'vtsDestination'] as const) {
-          lt[k] = (lt[k] ?? 0) + (cycleCounters[k] ?? 0);
+          'benchmarksRemoved', 'vtsDestination',
+          // B79.0m.b2 pattern + extra counters.
+          'pairsPassedPattern', 'pairsFailedPattern',
+          'patternRejectByMinHistory', 'patternFanOut', 'archiveFailures'] as const) {
+          lt[k] = (lt[k] ?? 0) + ((cycleCounters as any)[k] ?? 0);
         }
         for (const k of Object.keys(cycleCounters.globalFilterCounters)) {
           lt.globalFilterCounters[k] = (lt.globalFilterCounters[k] ?? 0) + cycleCounters.globalFilterCounters[k];
@@ -360,9 +369,19 @@ class XstockSpotScannerService {
         for (const k of Object.keys(cycleCounters.imfFilterCounters)) {
           lt.imfFilterCounters[k] = (lt.imfFilterCounters[k] ?? 0) + cycleCounters.imfFilterCounters[k];
         }
+        // B79.0m.b2: pattern-filter counter accumulator.
+        if (!lt.patternFilterCounters) lt.patternFilterCounters = {};
+        for (const k of Object.keys(cycleCounters.patternFilterCounters)) {
+          lt.patternFilterCounters[k] = (lt.patternFilterCounters[k] ?? 0) + cycleCounters.patternFilterCounters[k];
+        }
         // Per-metric IMF + per-strategy + null-reason accumulators.
         for (const k of ['failedLQ', 'failedVN', 'failedCorr', 'failedDI', 'passed', 'total'] as const) {
           lt.imfPerMetric[k] = (lt.imfPerMetric[k] ?? 0) + (cycleCounters.imfPerMetric[k] ?? 0);
+        }
+        // B79.0m.b2: pattern per-metric accumulator.
+        if (!lt.patternPerMetric) lt.patternPerMetric = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 };
+        for (const k of ['failedLQ', 'failedVN', 'failedDI', 'passed', 'total'] as const) {
+          lt.patternPerMetric[k] = (lt.patternPerMetric[k] ?? 0) + ((cycleCounters.patternPerMetric as any)[k] ?? 0);
         }
         // Per-family IMF breakdown.
         if (!lt.imfPerFamily) lt.imfPerFamily = {};
@@ -398,16 +417,23 @@ class XstockSpotScannerService {
           lt.byStrategy[strat].trades += cs.trades;
         }
         console.log(
-          `[B79.0m.b][SCAN_EVAL_DONE] tick=${tick.tickNumber} ` +
+          `[B79.0m.b2][SCAN_EVAL_DONE] tick=${tick.tickNumber} ` +
           `entered=${cycleCounters.pairsEntered} ` +
           `failed_market_hours=${cycleCounters.pairsFailedMarketHours} ` +
           `failed_global=${cycleCounters.pairsFailedGlobalFilter} ` +
           `failed_all_families=${cycleCounters.pairsFailedAllFamilies} ` +
           `passed_families=${cycleCounters.pairsPassedFamilies} ` +
+          // B79.0m.b2: pattern path counters.
+          `passed_pattern=${cycleCounters.pairsPassedPattern} ` +
+          `failed_pattern=${cycleCounters.pairsFailedPattern} ` +
+          `pattern_reject_min_history=${cycleCounters.patternRejectByMinHistory} ` +
+          `pattern_fanout=${cycleCounters.patternFanOut} ` +
+          `family_fanout_sum=${cycleCounters.familyFanOutSum} ` +
           `strats_evaled=${cycleCounters.strategiesEvaluated} ` +
           `strategy_nulls=${cycleCounters.strategyNulls} ` +
           `signals=${cycleCounters.signalsGenerated} ` +
           `archived=${cycleCounters.signalsArchived} ` +
+          `archive_failures=${cycleCounters.archiveFailures} ` +
           `sqe_rejects=${cycleCounters.signalsRejectedBySQE} ` +
           `trades_opened=${cycleCounters.tradesOpened} ` +
           `errors=${cycleCounters.errors}`,
