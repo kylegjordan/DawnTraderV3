@@ -7222,12 +7222,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return emptyImf;
       }
 
-      // Helper: build the "familyPaths" pass-count summary from per-family object.
-      function buildFamilyPaths(perFamily: any): Record<string, number> {
+      // Helper: build the "familyPaths" object shape the crypto Filter
+      // Diagnostics panel expects — `Record<string, {imf: {failedLQ, failedVN,
+      // failedDI, passed, total}, survivors: number}>`. Previously returned
+      // just pass counts which left every row showing 0s. Source data is the
+      // `imfPerFamily` cycle counter populated by `imf-evaluator.ts`.
+      // B79.0m.b2 followup (2026-05-11): aligned with crypto shape so the
+      // shared FilterDiagnosticsPanel (lines 2140-2168 of machine-learning.tsx)
+      // renders the 5 family rows (Trend / Reversal / Breakout / Oscillator /
+      // Strong Trend) with full LQ/VN/DI breakdown + survivors.
+      function buildFamilyPaths(perFamily: any): Record<string, { imf: { failedLQ: number; failedVN: number; failedDI: number; failedCorr: number; passed: number; total: number; benchmarkBypassed: number }; survivors: number }> {
         if (!perFamily) return {};
-        const out: Record<string, number> = {};
+        const out: Record<string, { imf: any; survivors: number }> = {};
         for (const fam of Object.keys(perFamily)) {
-          out[fam] = perFamily[fam].passed ?? 0;
+          const f = perFamily[fam] ?? {};
+          out[fam] = {
+            imf: {
+              failedLQ: f.failedLQ ?? 0,
+              failedVN: f.failedVN ?? 0,
+              failedDI: f.failedDI ?? 0,
+              failedCorr: f.failedCorr ?? 0,
+              passed: f.passed ?? 0,
+              total: f.evaluated ?? 0,
+              benchmarkBypassed: 0,
+            },
+            survivors: f.passed ?? 0,
+          };
         }
         return out;
       }
