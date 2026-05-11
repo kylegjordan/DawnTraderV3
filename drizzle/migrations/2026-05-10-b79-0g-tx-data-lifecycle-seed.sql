@@ -5,9 +5,9 @@
 BEGIN;
 
 INSERT INTO module_constants
-  (module_name, constant_name, value, asset_class, exchange, regime, strategy, tunable_status, updated_at)
+  (module_name, constant_name, value, asset_class, exchange, regime, strategy, updated_at, updated_by)
 VALUES
-  ('data_lifecycle', 'vts_open_trades.closed_gc_retention_days', '90'::jsonb, '*', '*', '*', '*', 'active', NOW())
-ON CONFLICT (module_name, constant_name, asset_class, exchange, regime, strategy) DO NOTHING;
+  ('data_lifecycle', 'vts_open_trades.closed_gc_retention_days', '90'::jsonb, '*', '*', '*', '*', NOW(), 'b79-0g-tx-migration')
+ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
 
 COMMIT;
