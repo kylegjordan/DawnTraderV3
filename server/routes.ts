@@ -7163,16 +7163,63 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         passed_all_filters: 0,
       };
 
+      // B79.0m.b: surface in-memory eval-pipeline counters from xstockSpotScanner.
+      // lastCycleEvalCounters = counters from the most recent SCAN_EVAL_DONE.
+      // evalCountersLifetime = since-process-start accumulator (substitute for true
+      // rolling-24h until B79.0m.b2 adds a sliding window).
+      const ec = (diag as any).lastCycleEvalCounters;
+      const lt = (diag as any).evalCountersLifetime;
+
+      function buildGlobalFromCounters(gc: Record<string, number> | undefined) {
+        if (!gc) return emptyGlobal;
+        return {
+          ...emptyGlobal,
+          failed_min_volume: gc.failed_min_volume ?? 0,
+          failed_min_price: gc.failed_min_price ?? 0,
+          failed_max_price: gc.failed_max_price ?? 0,
+          failed_history: gc.failed_history ?? 0,
+          failed_spread: gc.failed_max_bid_ask_spread ?? 0,
+          passed_all_filters: gc.passed_all_filters ?? 0,
+        };
+      }
+      function buildImfFromCounters(ic: Record<string, number> | undefined) {
+        if (!ic) return emptyImf;
+        const passed = ic.any_passed ?? 0;
+        const total = ic.evaluated ?? 0;
+        return {
+          ...emptyImf,
+          failedLQ: total - (ic.vts_trend_passed ?? 0),
+          failedVN: 0,
+          failedDI: 0,
+          passed,
+          total,
+          benchmarkBypassed: 0,
+        };
+      }
+
       const lastScan = {
         timestamp: diag.lastTickAt ? new Date(diag.lastTickAt).toISOString() : new Date().toISOString(),
         mode: 'paper' as const,
-        scannedCount: diag.pairsScannedLastCycle,
-        quant: { global: emptyGlobal, imf: emptyImf, survivors: diag.pairsFreshLastCycle },
+        scannedCount: ec?.pairsEntered ?? diag.pairsScannedLastCycle,
+        quant: {
+          global: buildGlobalFromCounters(ec?.globalFilterCounters),
+          imf: buildImfFromCounters(ec?.imfFilterCounters),
+          survivors: ec?.pairsPassedFamilies ?? 0,
+        },
         pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
-        familyQualifiedUnique: diag.pairsFreshLastCycle,
+        familyQualifiedUnique: ec?.pairsPassedFamilies ?? 0,
         destination: 'vts_batch' as const,
-        destinationCount: diag.pairsFreshLastCycle,
-        familyPaths: {},
+        destinationCount: ec?.tradesOpened ?? 0,
+        // Surface per-family pass counts so the UI's family-paths table populates.
+        familyPaths: ec?.imfFilterCounters ? {
+          vts_trend: ec.imfFilterCounters.vts_trend_passed ?? 0,
+          vts_reversal: ec.imfFilterCounters.vts_reversal_passed ?? 0,
+          vts_breakout: ec.imfFilterCounters.vts_breakout_passed ?? 0,
+          vts_oscillator: ec.imfFilterCounters.vts_oscillator_passed ?? 0,
+          vts_strong_trend: ec.imfFilterCounters.vts_strong_trend_passed ?? 0,
+        } : {},
+        // B79.0m.b extra counters exposed for the Filter Pipeline Diagnostics card
+        b79_eval: ec ?? null,
       };
 
       const rolling24h = {
@@ -7180,30 +7227,50 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         totalPairsScanned: rolling24hPairsScanned,
         uniquePairsScanned: universe24h,
         aggregated: {
-          quant: { global: emptyGlobal, imf: emptyImf, survivors: 0 },
+          quant: {
+            global: buildGlobalFromCounters(lt?.globalFilterCounters),
+            imf: buildImfFromCounters(lt?.imfFilterCounters),
+            survivors: lt?.pairsPassedFamilies ?? 0,
+          },
           pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
-          familyPaths: {},
+          familyPaths: lt?.imfFilterCounters ? {
+            vts_trend: lt.imfFilterCounters.vts_trend_passed ?? 0,
+            vts_reversal: lt.imfFilterCounters.vts_reversal_passed ?? 0,
+            vts_breakout: lt.imfFilterCounters.vts_breakout_passed ?? 0,
+            vts_oscillator: lt.imfFilterCounters.vts_oscillator_passed ?? 0,
+            vts_strong_trend: lt.imfFilterCounters.vts_strong_trend_passed ?? 0,
+          } : {},
         },
+        b79_eval_lifetime: lt ?? null,
       };
+
+      // B79.0m.b: prefer in-memory eval-cycle counters (live, lifetime) over the
+      // signal_eval_archive aggregate when the latter is sparse pre-RTH.
+      const totalEvaluatedEff = (lt?.strategiesEvaluated ?? 0) || totalEvaluated;
+      const totalNullsEff = (lt?.strategyNulls ?? 0) || totalNulls;
+      const totalSignalsEff = (lt?.signalsGenerated ?? 0) || totalSignals;
+      const totalRejectedEff = (lt?.signalsRejectedBySQE ?? 0) || totalRejected;
+      const tradesOpenedEff = lt?.tradesOpened ?? totalTrades;
 
       const vtsEvaluation = {
         timestamp: Date.now(),
-        quantPairsEvaluated: totalEvaluated,
+        quantPairsEvaluated: lt?.pairsEntered ?? totalEvaluated,
         patternPairsEvaluated: 0,
-        quantStrategyNulls: totalNulls,
+        quantStrategyNulls: totalNullsEff,
         patternNoDetection: 0,
         patternDetected: 0,
         quantPatternDetected: 0,
         quantPatternNoDetection: 0,
-        signalsGenerated: totalSignals,
-        quantStrategyEvaluations: totalEvaluated,
+        signalsGenerated: totalSignalsEff,
+        quantStrategyEvaluations: totalEvaluatedEff,
         patternStrategyEvaluations: 0,
-        quantSignalsGenerated: totalSignals,
+        quantSignalsGenerated: totalSignalsEff,
         patternSignalsGenerated: 0,
-        totalStrategyEvaluations: totalEvaluated,
-        signalsRejected: totalRejected,
-        quantSignalsRejected: totalRejected,
+        totalStrategyEvaluations: totalEvaluatedEff,
+        signalsRejected: totalRejectedEff,
+        quantSignalsRejected: totalRejectedEff,
         patternSignalsRejected: 0,
+        tradesOpened: tradesOpenedEff,
         pairsSkippedNoPrice: 0,
         pairsSkippedInsufficientOHLC: 0,
         nullReasons: {

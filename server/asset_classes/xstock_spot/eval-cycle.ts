@@ -209,6 +209,27 @@ export async function evaluateXstockPairForVTS(
       }
       if (!strategySignal) {
         counters.strategyNulls++;
+        // Archive strategy nulls so the xStocks tab funnel shows the
+        // pre-signal layer of the pipeline (otherwise zeros pre-RTH).
+        try {
+          const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
+          archiveSignalEval({
+            symbol,
+            exchange: 'kraken',
+            assetClass: ASSET_CLASS,
+            source: 'vts-runner',
+            strategy: strategyKey,
+            regimeLabel: regime ?? undefined,
+            rejectStage: 'strategy_internal',
+            gateDecision: {
+              gate: 'strategy_detect',
+              accepted: false,
+              reason: 'no_setup_match',
+            },
+            features: { sourcePool: 'xstock_spot' },
+          });
+          counters.signalsArchived++;
+        } catch { /* hot path */ }
         continue;
       }
       counters.signalsGenerated++;

@@ -71,6 +71,18 @@ interface ScannerDiagnostics {
   // B79.0c — universe-split telemetry for diagnostics endpoint.
   lastUniverseSize: number;
   lastArcaOpen: boolean;
+  // B79.0m.b — per-cycle eval-pipeline counters from xstock eval-cycle.
+  // Populated by runCycle after evaluateXstockPairForVTS loop completes;
+  // surfaced to /api/xstocks/filter-diagnostics so the xStocks tab funnel
+  // panels show real numbers (pre-B79.0m.b they showed all zeros because
+  // no in-memory counters were exposed and signal_eval_archive was empty).
+  lastCycleEvalCounters: any | null;
+  // Rolling-24h-style accumulator (process-lifetime): merged on each cycle
+  // so the "24-Hour Rolling Aggregates" panel has live numbers even before
+  // signal_eval_archive accumulates. NOT a true 24h sliding window — that
+  // would require periodic decay; this is a since-start accumulator. Future
+  // B79.0m.b2 may replace with a 24h windowed buffer.
+  evalCountersLifetime: any | null;
 }
 
 interface TickerSnapRow extends Record<string, unknown> {
@@ -98,6 +110,8 @@ class XstockSpotScannerService {
     lastUniverseSize: 0,
     lastArcaOpen: false,
     hostileSimActive: false,
+    lastCycleEvalCounters: null,
+    evalCountersLifetime: null,
   };
 
   /**
@@ -315,6 +329,31 @@ class XstockSpotScannerService {
           const volume24hUSD = 0;
           await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters);
         }
+        // Surface counters to the /api/xstocks/filter-diagnostics endpoint.
+        this.diag.lastCycleEvalCounters = cycleCounters;
+        // Lifetime accumulator (process-restart resets it).
+        if (!this.diag.evalCountersLifetime) {
+          this.diag.evalCountersLifetime = {
+            pairsEntered: 0, pairsFailedMarketHours: 0, pairsFailedGlobalFilter: 0,
+            pairsFailedAllFamilies: 0, pairsPassedFamilies: 0, strategiesEvaluated: 0,
+            strategyNulls: 0, signalsGenerated: 0, signalsArchived: 0,
+            signalsRejectedBySQE: 0, tradesOpened: 0, errors: 0,
+            globalFilterCounters: {}, imfFilterCounters: {},
+          };
+        }
+        const lt = this.diag.evalCountersLifetime;
+        for (const k of ['pairsEntered', 'pairsFailedMarketHours', 'pairsFailedGlobalFilter',
+          'pairsFailedAllFamilies', 'pairsPassedFamilies', 'strategiesEvaluated',
+          'strategyNulls', 'signalsGenerated', 'signalsArchived', 'signalsRejectedBySQE',
+          'tradesOpened', 'errors'] as const) {
+          lt[k] = (lt[k] ?? 0) + (cycleCounters[k] ?? 0);
+        }
+        for (const k of Object.keys(cycleCounters.globalFilterCounters)) {
+          lt.globalFilterCounters[k] = (lt.globalFilterCounters[k] ?? 0) + cycleCounters.globalFilterCounters[k];
+        }
+        for (const k of Object.keys(cycleCounters.imfFilterCounters)) {
+          lt.imfFilterCounters[k] = (lt.imfFilterCounters[k] ?? 0) + cycleCounters.imfFilterCounters[k];
+        }
         console.log(
           `[B79.0m.b][SCAN_EVAL_DONE] tick=${tick.tickNumber} ` +
           `entered=${cycleCounters.pairsEntered} ` +
@@ -328,9 +367,7 @@ class XstockSpotScannerService {
           `archived=${cycleCounters.signalsArchived} ` +
           `sqe_rejects=${cycleCounters.signalsRejectedBySQE} ` +
           `trades_opened=${cycleCounters.tradesOpened} ` +
-          `errors=${cycleCounters.errors} ` +
-          `global_counters=${JSON.stringify(cycleCounters.globalFilterCounters)} ` +
-          `imf_counters=${JSON.stringify(cycleCounters.imfFilterCounters)}`,
+          `errors=${cycleCounters.errors}`,
         );
       }
 
