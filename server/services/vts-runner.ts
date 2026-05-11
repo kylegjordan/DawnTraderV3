@@ -1998,19 +1998,80 @@ async function resolveOpenVirtualTrades(): Promise<{
     return { resolved, stopHits, targetHits, timeouts };
   }
   
-  // Get all symbols from open trades
-  const symbols = Array.from(new Set([...openVirtualTrades.values()].map(t => t.symbol)));
-  
-  // Subscribe all symbols to vtsSimulation bucket and fetch prices
+  // B79.0m.b2 — asset-class-aware price routing (Langston R1).
+  // Crypto trades fetch via priceCache (KrakenService crypto REST). Xstock
+  // trades fetch the most-recent tick from xstock_spot_ticker_snap (populated
+  // by the wss://ws-equities.kraken.com archiver, NOT exposed via priceCache).
+  // Without this dispatch, xstock trades would never receive a non-null
+  // currentPrice and never close cleanly.
+  const cryptoSymbols = new Set<string>();
+  const xstockSymbols = new Set<string>();
+  for (const t of openVirtualTrades.values()) {
+    if (t.assetClass === 'xstock_spot') xstockSymbols.add(t.symbol);
+    else cryptoSymbols.add(t.symbol);
+  }
+
+  // Crypto leg — existing priceCache path.
   const bucketType: CacheBucketType = 'vtsSimulation';
-  for (const symbol of symbols) {
+  const cryptoSymbolList = Array.from(cryptoSymbols);
+  for (const symbol of cryptoSymbolList) {
     priceCache.subscribe(symbol, bucketType);
   }
-  
-  // Wait for cache to refresh
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
-  const priceDataMap = await priceCache.getBatch(bucketType, symbols);
+  if (cryptoSymbolList.length > 0) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const cryptoPriceMap = cryptoSymbolList.length > 0
+    ? await priceCache.getBatch(bucketType, cryptoSymbolList)
+    : new Map<string, CachedPrice>();
+
+  // Xstock leg — read latest tick per symbol from xstock_spot_ticker_snap.
+  const xstockPriceMap = new Map<string, { symbol: string; price: number; bid: number; ask: number }>();
+  if (xstockSymbols.size > 0) {
+    try {
+      const xstockSymbolListSql = Array.from(xstockSymbols)
+        .map((s) => `'${s.replace(/'/g, "''")}'`)
+        .join(',');
+      const result: any = await db.execute(sql.raw(`
+        SELECT DISTINCT ON (symbol)
+          symbol::text AS symbol,
+          last::text AS price,
+          bid::text AS bid,
+          ask::text AS ask
+        FROM xstock_spot_ticker_snap
+        WHERE captured_at > NOW() - INTERVAL '5 minutes'
+          AND symbol IN (${xstockSymbolListSql})
+        ORDER BY symbol, captured_at DESC
+      `));
+      const rows = (result as any).rows ?? result;
+      if (Array.isArray(rows)) {
+        for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string }>) {
+          const price = parseFloat(r.price);
+          if (Number.isFinite(price) && price > 0) {
+            xstockPriceMap.set(r.symbol, {
+              symbol: r.symbol,
+              price,
+              bid: parseFloat(r.bid) || 0,
+              ask: parseFloat(r.ask) || 0,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[B79.0m.b2][EXIT_XSTOCK_PRICE_FETCH] failed for ${xstockSymbols.size} symbols:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Unified lookup helper: returns the current price for a trade, dispatching
+  // by trade.assetClass. Used inside the per-trade loop below.
+  const priceDataMap = {
+    get(symbol: string, assetClass?: string): { price: number; bid?: number; ask?: number } | undefined {
+      if (assetClass === 'xstock_spot') {
+        return xstockPriceMap.get(symbol);
+      }
+      const p = cryptoPriceMap.get(symbol);
+      return p ? { price: p.price, bid: p.bid, ask: p.ask } : undefined;
+    },
+  };
   
   // Check each open trade against current prices
   // B65.2 (2026-04-23): widened exit-reason domain now that the TEC state
@@ -2033,7 +2094,9 @@ async function resolveOpenVirtualTrades(): Promise<{
   // outer bound.
   for (const [tradeId, trade] of openVirtualTrades) {
     const holdDurationMs = now - trade.openedAt;
-    const priceData = priceDataMap.get(trade.symbol);
+    // B79.0m.b2: pass assetClass so xstock trades route to xstock_spot_ticker_snap
+    // instead of priceCache (which only has crypto prices via Kraken REST).
+    const priceData = priceDataMap.get(trade.symbol, trade.assetClass);
     const currentPrice = priceData && priceData.price > 0 ? priceData.price : null;
 
     // B79.TEC (2026-05-08): assetClass MUST come from the trade record,
@@ -2405,8 +2468,18 @@ async function resolveOpenVirtualTrades(): Promise<{
       // Intentional: do NOT re-throw. Re-throw would let the next exit
       // cycle re-execute the non-idempotent close cascade.
     }
-    // Batch 45: Record close timestamp for re-entry cooldown
-    recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
+    // Batch 45: Record close timestamp for re-entry cooldown.
+    // B79.0m.b2: assetClass-keyed namespace so xstock closes don't block crypto
+    // re-entries (or vice versa). The crypto-side generatePhase10Signal check
+    // at line 1258 still reads the legacy `${symbol}:${strategy}` key; write
+    // BOTH formats during the transition so neither path misses cooldowns.
+    // Future cleanup: migrate generatePhase10Signal to assetClass-keyed format
+    // and drop the legacy write.
+    const assetClass = trade.assetClass ?? 'crypto_spot';
+    recentCloses.set(`${assetClass}:${trade.symbol}:${trade.strategy}`, Date.now());
+    if (assetClass === 'crypto_spot') {
+      recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
+    }
 
     // B65.2: clear trailing engine state for this symbol. This also decrements
     // the concurrent-moonbag counter if the trade was in TRAILING_TAKE mode.
@@ -2516,6 +2589,55 @@ export function getOpenVirtualTradesStatus(): {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// B79.0m.b2 — pre-trade-open gate check for non-crypto eval cycles
+// ════════════════════════════════════════════════════════════════════════════
+// Mirrors the gates in generatePhase10Signal (re-entry cooldown, duplicate
+// position guard, max open trades cap) so xstock_spot eval-cycle gets the
+// same pre-open safety checks as crypto. Returns null if all gates pass, or
+// the rejection reason if any fails.
+//
+// Setup-hash dedupe + per-underlying-cap (B67.3) are kept inline in the
+// asset-class eval-cycle (setup-hash) or omitted at Layer-1 (per-underlying
+// is a crypto cohort observation).
+// ════════════════════════════════════════════════════════════════════════════
+export function checkPreOpenGates(
+  assetClass: AssetClass,
+  symbol: string,
+  strategy: string,
+  currentPrice: number,
+  stopLoss: number,
+  takeProfit: number,
+  frictionCost: number,
+): { allowed: true } | { allowed: false; reason: string } {
+  // Re-entry cooldown (recentCloses) — assetClass-keyed namespace so xstock
+  // closes don't block crypto re-entries or vice versa.
+  const cooldownKey = `${assetClass}:${symbol}:${strategy}`;
+  const lastClose = recentCloses.get(cooldownKey);
+  if (lastClose && Date.now() - lastClose < getReentryCooldownMs()) {
+    return { allowed: false, reason: 'reentry_cooldown' };
+  }
+  // Duplicate position guard — max concurrent per (symbol, strategy) combo.
+  const existingTradeCount = Array.from(openVirtualTrades.values()).filter((t) =>
+    t.symbol === symbol && t.strategy === strategy && t.assetClass === assetClass
+  ).length;
+  if (existingTradeCount >= getVtsMaxConcurrentPerCombo()) {
+    return { allowed: false, reason: 'duplicate_position' };
+  }
+  // Entry-price-past-stop / target validation (B53).
+  const minViableDistance = frictionCost * currentPrice * 2;
+  if (currentPrice <= stopLoss) {
+    return { allowed: false, reason: 'price_past_stop' };
+  }
+  if (currentPrice >= takeProfit - minViableDistance) {
+    return { allowed: false, reason: 'price_past_target' };
+  }
+  // Max open trades cap.
+  if (openVirtualTrades.size >= getMaxOpenTrades()) {
+    return { allowed: false, reason: 'max_open_trades' };
+  }
+  return { allowed: true };
+}
+
 // B79.0m.b — registerOpenVtsTrade
 // ════════════════════════════════════════════════════════════════════════════
 // Shared trade-registration helper used by the xstock_spot eval-cycle (and

@@ -45,6 +45,7 @@ import {
   registerOpenVtsTrade,
   isIdenticalXstockSetupSuppressed,
   computeFinalScore,
+  checkPreOpenGates,
   VTS_NET_EV_FLOOR,
 } from '../../services/vts-runner.js';
 import { resetNullReason, getNullReason } from '../../utils/null-reason-tracker.js';
@@ -485,6 +486,35 @@ export async function evaluateXstockPairForVTS(
               reason: 'net_ev_below_floor',
               netEv: kernelResult.netEV,
               netEvFloor: VTS_NET_EV_FLOOR,
+            },
+            features: { sourcePool: 'xstock_spot' },
+          });
+          counters.signalsArchived++;
+        } catch { /* hot path */ }
+        continue;
+      }
+
+      // ── Pre-open gates: cooldown, dup-position, price-past-stop, max-open-trades ──
+      const gateCheck = checkPreOpenGates(
+        ASSET_CLASS,
+        symbol,
+        strategyKey,
+        lastPrice,
+        stopLoss,
+        takeProfit,
+        totalFriction,
+      );
+      if (!gateCheck.allowed) {
+        counters.byStrategy[strategyKey].rejected++;
+        counters.nullReasonAggregate[gateCheck.reason] = (counters.nullReasonAggregate[gateCheck.reason] ?? 0) + 1;
+        try {
+          archiveSignalEval({
+            ...archiveCommon,
+            rejectStage: 'tcl',
+            gateDecision: {
+              gate: 'pre_open',
+              accepted: false,
+              reason: gateCheck.reason,
             },
             features: { sourcePool: 'xstock_spot' },
           });
