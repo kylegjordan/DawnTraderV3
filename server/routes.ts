@@ -7113,13 +7113,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.warn('[B79.0i.a][filter-diagnostics] null_reason/regime queries failed:', err);
       }
 
-      // 24h universe + cycle aggregates
-      let universe24h = 0, rolling24hCycles = 0, rolling24hPairsScanned = 0;
+      // 24h universe + cycle aggregates.
+      // B79.0m.b iteration 2: `universe24h` = COUNT(DISTINCT symbol) is the
+      // correct "unique symbols seen in 24h" metric. `rolling24hCycles` =
+      // distinct second-buckets that had at least one tick capture.
+      // `rolling24hPairsScanned` previously = COUNT(*) of raw tick rows which
+      // is a TICK count not a "pairs scanned" count — misleading by a factor
+      // of (ticks per cycle per pair). Replaced with cycles × avg-fresh-pairs
+      // estimate from the live scanner counters when available.
+      let universe24h = 0, rolling24hCycles = 0, rolling24hTickRows = 0;
       try {
         const cyclesAgg = await db.execute(sql`
           SELECT COUNT(DISTINCT symbol)::text AS uniq,
                  COUNT(DISTINCT date_trunc('second', captured_at))::text AS cycles,
-                 COUNT(*)::text AS pairs
+                 COUNT(*)::text AS ticks
           FROM xstock_spot_ticker_snap
           WHERE captured_at > NOW() - INTERVAL '24 hours'
         `);
@@ -7127,40 +7134,46 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (row) {
           universe24h = parseInt(row.uniq, 10) || 0;
           rolling24hCycles = parseInt(row.cycles, 10) || 0;
-          rolling24hPairsScanned = parseInt(row.pairs, 10) || 0;
+          rolling24hTickRows = parseInt(row.ticks, 10) || 0;
         }
       } catch (err) {
         console.warn('[B79.0i.a][filter-diagnostics] 24h aggregate query failed:', err);
       }
 
-      // Construct FilterDiagnosticsData shape mirroring crypto endpoint.
-      // B79.0m.a HONESTY FIX: passed_all_filters previously misset to
-      // universe24h (=COUNT DISTINCT symbol from xstock_spot_ticker_snap),
-      // which is an archive-feed metric NOT a filter-pass count. Now zero
-      // until B79.0m.b wires the VTS pipeline and real pass counts populate.
-      // The 3 N/A gates (stablecoin / quote_currency / market_cap) keep
-      // their zero counter but surface as applicable=false to the UI so the
-      // funnel display shows N/A instead of misleading 0% pass-rate.
+      // B79.0m.b iteration 2: emptyGlobal default + applicability flags. The
+      // 3 N/A gates (stablecoin / quote_currency / market_cap) surface as
+      // applicable=false. DI also marked applicable=true (computed in IMF
+      // evaluator). Pattern path is N/A for xstock_spot at Layer-1 — the
+      // entire pattern pipeline runs inside per-strategy pattern detection
+      // (morning_star, inside_bar_reversal, pivot_shift); there's no
+      // separate "pattern global filter" pass like crypto. Marked N/A.
       const emptyGlobal = {
         failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0,
         failed_min_price: 0, failed_max_price: 0, failed_stablecoin: 0,
         failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0,
         failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0,
         passed_all_filters: 0,
-        // B79.0m.a: N/A applicability flags for the 3 non-applicable gates
-        // on xstock_spot. Frontend (FilterDiagnosticsPanel) reads these to
-        // render "N/A" instead of "0" cells. Other gates default applicable=true.
         applicable: {
           failed_stablecoin: false,
           failed_quote_currency: false,
           failed_market_cap: false,
+          failed_correlation: false,    // computed in IMF, not global, for xstock
+          failed_guardrail_risk: false, // crypto-only concept (DBS guardrail)
+          failed_daily_range: false,    // not implemented for xstock global
         } as Record<string, boolean>,
       };
-      const emptyImf = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0 };
+      const emptyImf = { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0, applicable: { failedDI: true, failedCorr: true } as Record<string, boolean> };
       const emptyPatternGlobal = {
         failed_stablecoin: 0, failed_min_price: 0, failed_max_price: 0,
         failed_min_volume: 0, failed_spread: 0, failed_history: 0,
         passed_all_filters: 0,
+        // Pattern global filter is N/A for xstock_spot Layer-1 — pattern
+        // detection runs inline inside per-strategy detect() calls; there is
+        // no separate pattern-pool pre-filter step. Frontend renders "N/A"
+        // for every cell when applicable.path === false.
+        applicable: {
+          path: false,
+        } as Record<string, boolean>,
       };
 
       // B79.0m.b: surface in-memory eval-pipeline counters from xstockSpotScanner.
@@ -7203,34 +7216,51 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return emptyImf;
       }
 
+      // Helper: build the "familyPaths" pass-count summary from per-family object.
+      function buildFamilyPaths(perFamily: any): Record<string, number> {
+        if (!perFamily) return {};
+        const out: Record<string, number> = {};
+        for (const fam of Object.keys(perFamily)) {
+          out[fam] = perFamily[fam].passed ?? 0;
+        }
+        return out;
+      }
+
       const lastScan = {
         timestamp: diag.lastTickAt ? new Date(diag.lastTickAt).toISOString() : new Date().toISOString(),
         mode: 'paper' as const,
+        // Scanned count = pairs ENTERED the eval pipeline this cycle (the
+        // fresh-pair set after freshness gate). Reflects what the funnel
+        // started with — what the UI label "Scanned" should show.
         scannedCount: ec?.pairsEntered ?? diag.pairsScannedLastCycle,
         quant: {
           global: buildGlobalFromCounters(ec?.globalFilterCounters),
           imf: buildImfFromCounters(ec?.imfFilterCounters, ec?.imfPerMetric),
           survivors: ec?.pairsPassedFamilies ?? 0,
         },
-        pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
-        familyQualifiedUnique: ec?.pairsPassedFamilies ?? 0,
+        pattern: { global: emptyPatternGlobal, imf: { ...emptyImf, applicable: { path: false } as Record<string, boolean> }, survivors: 0 },
+        // B79.0m.b iteration 2: full fan-out / qualified-unique / benchmark /
+        // destination accounting so the Pipeline Summary table has real rows.
+        familyFanOutSum: ec?.familyFanOutSum ?? 0,
+        familyQualifiedUnique: ec?.familyQualifiedUnique ?? ec?.pairsPassedFamilies ?? 0,
+        benchmarksRemoved: ec?.benchmarksRemoved ?? 0,
         destination: 'vts_batch' as const,
-        destinationCount: ec?.tradesOpened ?? 0,
-        // Surface per-family pass counts so the UI's family-paths table populates.
-        familyPaths: ec?.imfFilterCounters ? {
-          vts_trend: ec.imfFilterCounters.vts_trend_passed ?? 0,
-          vts_reversal: ec.imfFilterCounters.vts_reversal_passed ?? 0,
-          vts_breakout: ec.imfFilterCounters.vts_breakout_passed ?? 0,
-          vts_oscillator: ec.imfFilterCounters.vts_oscillator_passed ?? 0,
-          vts_strong_trend: ec.imfFilterCounters.vts_strong_trend_passed ?? 0,
-        } : {},
+        destinationCount: ec?.vtsDestination ?? 0,
+        // Per-family pass counts so the UI's family-paths table populates.
+        familyPaths: buildFamilyPaths(ec?.imfPerFamily),
+        // Full per-family breakdown (which family is rejecting on which metric).
+        familyPerMetric: ec?.imfPerFamily ?? {},
         // B79.0m.b extra counters exposed for the Filter Pipeline Diagnostics card
         b79_eval: ec ?? null,
       };
 
       const rolling24h = {
         totalScans: rolling24hCycles,
-        totalPairsScanned: rolling24hPairsScanned,
+        // B79.0m.b iteration 2: prefer the live cycles-completed × pairs-
+        // entered-per-cycle estimate over the raw tick row COUNT(*) which
+        // overcounts by (ticks per pair per cycle). Falls back to tick rows
+        // if scanner lifetime isn't populated yet.
+        totalPairsScanned: lt?.pairsEntered ?? rolling24hTickRows,
         uniquePairsScanned: universe24h,
         aggregated: {
           quant: {
@@ -7238,20 +7268,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             imf: buildImfFromCounters(lt?.imfFilterCounters, lt?.imfPerMetric),
             survivors: lt?.pairsPassedFamilies ?? 0,
           },
-          pattern: { global: emptyPatternGlobal, imf: emptyImf, survivors: 0 },
-          familyPaths: lt?.imfFilterCounters ? {
-            vts_trend: lt.imfFilterCounters.vts_trend_passed ?? 0,
-            vts_reversal: lt.imfFilterCounters.vts_reversal_passed ?? 0,
-            vts_breakout: lt.imfFilterCounters.vts_breakout_passed ?? 0,
-            vts_oscillator: lt.imfFilterCounters.vts_oscillator_passed ?? 0,
-            vts_strong_trend: lt.imfFilterCounters.vts_strong_trend_passed ?? 0,
-          } : {},
+          pattern: { global: emptyPatternGlobal, imf: { ...emptyImf, applicable: { path: false } as Record<string, boolean> }, survivors: 0 },
+          familyPaths: buildFamilyPaths(lt?.imfPerFamily),
+          familyPerMetric: lt?.imfPerFamily ?? {},
+          familyFanOutSum: lt?.familyFanOutSum ?? 0,
+          familyQualifiedUnique: lt?.familyQualifiedUnique ?? lt?.pairsPassedFamilies ?? 0,
+          benchmarksRemoved: lt?.benchmarksRemoved ?? 0,
+          destinationCount: lt?.vtsDestination ?? 0,
         },
         b79_eval_lifetime: lt ?? null,
       };
 
-      // B79.0m.b: prefer in-memory eval-cycle counters (live, lifetime) over the
-      // signal_eval_archive aggregate when the latter is sparse pre-RTH.
+      // B79.0m.b: vtsEvaluation = 24h-lifetime view (the "VTS Evaluation Detail"
+      // panel is labeled "24-Hour Rolling"). lastCycleVtsEval = the just-
+      // finished cycle's view (mirrors lastScan but for the strategy-level
+      // funnel). The frontend reads them independently — no field reuse.
       const totalEvaluatedEff = (lt?.strategiesEvaluated ?? 0) || totalEvaluated;
       const totalNullsEff = (lt?.strategyNulls ?? 0) || totalNulls;
       const totalSignalsEff = (lt?.signalsGenerated ?? 0) || totalSignals;
@@ -7316,7 +7347,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         rolling24h,
         signalRejections: { total: totalRejected, byReason, byRegime },
         vtsEvaluation,
-        lastCycleVtsEval: vtsEvaluation,
+        // B79.0m.b iteration 2: lastCycleVtsEval is the just-finished cycle's
+        // strategy-level funnel (distinct from the 24h `vtsEvaluation` panel).
+        lastCycleVtsEval: ec ? {
+          timestamp: Date.now(),
+          quantPairsEvaluated: ec.pairsEntered,
+          patternPairsEvaluated: 0,
+          quantStrategyNulls: ec.strategyNulls,
+          signalsGenerated: ec.signalsGenerated,
+          quantStrategyEvaluations: ec.strategiesEvaluated,
+          patternStrategyEvaluations: 0,
+          totalStrategyEvaluations: ec.strategiesEvaluated,
+          signalsRejected: ec.signalsRejectedBySQE,
+          tradesOpened: ec.tradesOpened,
+          nullReasonDetail: ec.nullReasonAggregate ?? {},
+          byStrategy: ec.byStrategy ?? {},
+          byStrategyNullReasons: ec.byStrategyNullReasons ?? {},
+        } : vtsEvaluation,
         // xstock-specific scanner header strip
         xstockScanner: {
           isRunning: diag.isRunning,

@@ -44,9 +44,41 @@ export interface FamilyIMFResult {
     passed: number;
     total: number;
   };
+  // B79.0m.b iteration 2 — per-family-row breakdown so the Filter Diagnostics
+  // UI can show which family is rejecting which metric.
+  perFamily: Record<string, {
+    evaluated: number;
+    failedLQ: number;
+    failedVN: number;
+    failedCorr: number;
+    failedDI: number;
+    passed: number;
+  }>;
+  // Live metric values for telemetry / debug.
+  metrics: { LQ: number; VolNoise: number; Correlation: number; DI: number | null };
 }
 
 const FAMILY_PATHS = ['vts_trend', 'vts_reversal', 'vts_breakout', 'vts_oscillator', 'vts_strong_trend'] as const;
+
+/**
+ * Compute Directional Integrity score from OHLC bars.
+ * Simple proxy: sum of close-to-close returns over the window divided by
+ * sum of absolute close-to-close returns, scaled to 0–100. Higher = more
+ * directional. Mirrors the conceptual definition used in MCE without
+ * adding a dependency on regime config here. Returns null when bars < 20.
+ */
+function computeDirectionalIntegrity(ohlc: OHLCData[]): number | null {
+  if (ohlc.length < 20) return null;
+  let netDelta = 0;
+  let absDelta = 0;
+  for (let i = 1; i < ohlc.length; i++) {
+    const delta = ohlc[i].close - ohlc[i - 1].close;
+    netDelta += delta;
+    absDelta += Math.abs(delta);
+  }
+  if (absDelta === 0) return 50; // flat tape → neutral DI
+  return Math.min(100, Math.max(0, ((netDelta / absDelta) * 50) + 50));
+}
 
 export async function evaluateXstockFamilyIMF(
   symbol: string,
@@ -64,15 +96,18 @@ export async function evaluateXstockFamilyIMF(
 
   const passedFamilies: string[] = [];
   const perMetric = { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 };
+  const perFamily: Record<string, { evaluated: number; failedLQ: number; failedVN: number; failedCorr: number; failedDI: number; passed: number }> = {};
 
-  // Pre-compute metrics ONCE per pair — the LQ/VN/Correlation values don't
+  // Pre-compute metrics ONCE per pair — the LQ/VN/Correlation/DI values don't
   // depend on the family path; only the thresholds do.
   const LQ = ohlc.length >= 10 ? calculateLogLiquidity(ohlc) : 0;
   const VolNoise = ohlc.length >= 10 ? calculateVolNoise(ohlc) : 0.5;
   const Correlation = ohlc.length >= 10 ? calculateCorrelation(ohlc) : 0.5;
+  const DI = computeDirectionalIntegrity(ohlc);
   counters.lq_value_x100 = Math.round(LQ * 100);
   counters.vn_value_x10000 = Math.round(VolNoise * 10000);
   counters.corr_value_x10000 = Math.round(Correlation * 10000);
+  counters.di_value_x100 = DI === null ? -1 : Math.round(DI * 100);
 
   for (const filterPath of FAMILY_PATHS) {
     let row: any;
@@ -88,36 +123,45 @@ export async function evaluateXstockFamilyIMF(
     if (!row) continue;
     counters[`${filterPath}_evaluated`]++;
     perMetric.total++;
+    if (!perFamily[filterPath]) {
+      perFamily[filterPath] = { evaluated: 0, failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0 };
+    }
+    perFamily[filterPath].evaluated++;
 
     const lqMin = parseFloat(row.lqMin ?? '0');
     const vnMax = parseFloat(row.vnMax ?? '999');
     const corrMax = parseFloat(row.corrMax ?? '0.95');
     const diMin = parseFloat(row.diMin ?? '0');
-    const diMax = parseFloat(row.diMax ?? '999');
+    const diMax = parseFloat(row.diMax ?? '100');
 
     // Per-metric attribution — order matters for counter accounting; we
     // attribute to the FIRST failing metric so each fail counts once.
     let failed = false;
     if (LQ < lqMin) {
       perMetric.failedLQ++;
+      perFamily[filterPath].failedLQ++;
       counters[`${filterPath}_failed_lq`] = (counters[`${filterPath}_failed_lq`] ?? 0) + 1;
       failed = true;
     } else if (VolNoise > vnMax) {
       perMetric.failedVN++;
+      perFamily[filterPath].failedVN++;
       counters[`${filterPath}_failed_vn`] = (counters[`${filterPath}_failed_vn`] ?? 0) + 1;
       failed = true;
     } else if (Correlation > corrMax) {
       perMetric.failedCorr++;
+      perFamily[filterPath].failedCorr++;
       counters[`${filterPath}_failed_corr`] = (counters[`${filterPath}_failed_corr`] ?? 0) + 1;
       failed = true;
+    } else if (DI !== null && (DI < diMin || DI > diMax)) {
+      perMetric.failedDI++;
+      perFamily[filterPath].failedDI++;
+      counters[`${filterPath}_failed_di`] = (counters[`${filterPath}_failed_di`] ?? 0) + 1;
+      failed = true;
     }
-    // DI band check deferred to B79.0m.b2 (computed inside MCE, not here);
-    // record threshold metadata for telemetry visibility.
-    void diMin;
-    void diMax;
 
     if (!failed) {
       counters[`${filterPath}_passed`]++;
+      perFamily[filterPath].passed++;
       perMetric.passed++;
       passedFamilies.push(filterPath);
     }
@@ -132,6 +176,8 @@ export async function evaluateXstockFamilyIMF(
     passedFamilies,
     counters,
     perMetric,
+    perFamily,
+    metrics: { LQ, VolNoise, Correlation, DI },
   };
 }
 

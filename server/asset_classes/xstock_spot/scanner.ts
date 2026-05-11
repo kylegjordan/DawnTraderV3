@@ -340,6 +340,8 @@ class XstockSpotScannerService {
             signalsRejectedBySQE: 0, tradesOpened: 0, errors: 0,
             globalFilterCounters: {}, imfFilterCounters: {},
             imfPerMetric: { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 },
+            imfPerFamily: {},
+            familyFanOutSum: 0, familyQualifiedUnique: 0, benchmarksRemoved: 0, vtsDestination: 0,
             byStrategyNullReasons: {}, nullReasonAggregate: {},
             byStrategy: {},
           };
@@ -348,7 +350,8 @@ class XstockSpotScannerService {
         for (const k of ['pairsEntered', 'pairsFailedMarketHours', 'pairsFailedGlobalFilter',
           'pairsFailedAllFamilies', 'pairsPassedFamilies', 'strategiesEvaluated',
           'strategyNulls', 'signalsGenerated', 'signalsArchived', 'signalsRejectedBySQE',
-          'tradesOpened', 'errors'] as const) {
+          'tradesOpened', 'errors', 'familyFanOutSum', 'familyQualifiedUnique',
+          'benchmarksRemoved', 'vtsDestination'] as const) {
           lt[k] = (lt[k] ?? 0) + (cycleCounters[k] ?? 0);
         }
         for (const k of Object.keys(cycleCounters.globalFilterCounters)) {
@@ -360,6 +363,21 @@ class XstockSpotScannerService {
         // Per-metric IMF + per-strategy + null-reason accumulators.
         for (const k of ['failedLQ', 'failedVN', 'failedCorr', 'failedDI', 'passed', 'total'] as const) {
           lt.imfPerMetric[k] = (lt.imfPerMetric[k] ?? 0) + (cycleCounters.imfPerMetric[k] ?? 0);
+        }
+        // Per-family IMF breakdown.
+        if (!lt.imfPerFamily) lt.imfPerFamily = {};
+        for (const fam of Object.keys(cycleCounters.imfPerFamily)) {
+          if (!lt.imfPerFamily[fam]) {
+            lt.imfPerFamily[fam] = { evaluated: 0, failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0 };
+          }
+          const src = cycleCounters.imfPerFamily[fam];
+          const dst = lt.imfPerFamily[fam];
+          dst.evaluated += src.evaluated;
+          dst.failedLQ += src.failedLQ;
+          dst.failedVN += src.failedVN;
+          dst.failedCorr += src.failedCorr;
+          dst.failedDI += src.failedDI;
+          dst.passed += src.passed;
         }
         for (const reason of Object.keys(cycleCounters.nullReasonAggregate)) {
           lt.nullReasonAggregate[reason] = (lt.nullReasonAggregate[reason] ?? 0) + cycleCounters.nullReasonAggregate[reason];

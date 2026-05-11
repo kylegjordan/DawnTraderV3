@@ -84,6 +84,24 @@ export async function fetchXstockOHLC(symbol: string, limit = 120): Promise<OHLC
 
 const ASSET_CLASS = 'xstock_spot' as const;
 
+// B79.0m.b iteration 2: xstock benchmark tickers. These are broad-market
+// ETFs / index proxies that the family-IMF pipeline admits but VTS should
+// NOT trade in isolation (they're benchmarks against which other names are
+// measured). Mirrors crypto's BTC/ETH benchmark exclusion at the VTS-
+// destination step. SPY/QQQ/IWM/DIA = index ETFs; GLD = gold ETF (macro
+// benchmark, not a stock).
+const XSTOCK_BENCHMARKS: ReadonlySet<string> = new Set([
+  'SPY/USD',
+  'QQQ/USD',
+  'IWM/USD',
+  'DIA/USD',
+  'GLD/USD',
+]);
+
+function isXstockBenchmark(symbol: string): boolean {
+  return XSTOCK_BENCHMARKS.has(symbol);
+}
+
 export interface XstockEvalCycleCounters {
   pairsEntered: number;
   pairsFailedMarketHours: number;
@@ -105,6 +123,13 @@ export interface XstockEvalCycleCounters {
   // failedLQ / failedVN / failedCorr individually instead of one lumped
   // count. Mirrors the crypto Filter Diagnostics shape.
   imfPerMetric: { failedLQ: number; failedVN: number; failedCorr: number; failedDI: number; passed: number; total: number };
+  // B79.0m.b iteration 2 — per-family breakdown (which family is failing what).
+  imfPerFamily: Record<string, { evaluated: number; failedLQ: number; failedVN: number; failedCorr: number; failedDI: number; passed: number }>;
+  // B79.0m.b iteration 2 — fan-out + qualified-unique + VTS destination accounting.
+  familyFanOutSum: number;           // total family-row passes (sum across all family paths)
+  familyQualifiedUnique: number;     // unique pairs that passed >=1 family (same as pairsPassedFamilies but clearer name)
+  benchmarksRemoved: number;         // unique pairs filtered out at VTS destination because they're benchmark ETFs
+  vtsDestination: number;            // familyQualifiedUnique - benchmarksRemoved
   // B79.0m.b: per-strategy + null-reason attribution. Reads from
   // null-reason-tracker after each callStrategyDetect.
   byStrategyNullReasons: Record<string, Record<string, number>>;
@@ -129,6 +154,11 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     globalFilterCounters: {},
     imfFilterCounters: {},
     imfPerMetric: { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 },
+    imfPerFamily: {},
+    familyFanOutSum: 0,
+    familyQualifiedUnique: 0,
+    benchmarksRemoved: 0,
+    vtsDestination: 0,
     byStrategyNullReasons: {},
     nullReasonAggregate: {},
     byStrategy: {},
@@ -192,11 +222,36 @@ export async function evaluateXstockPairForVTS(
     counters.imfPerMetric.failedDI += imfResult.perMetric.failedDI;
     counters.imfPerMetric.passed += imfResult.perMetric.passed;
     counters.imfPerMetric.total += imfResult.perMetric.total;
+    // Merge per-family breakdown for the UI.
+    for (const fam of Object.keys(imfResult.perFamily)) {
+      const src = imfResult.perFamily[fam];
+      if (!counters.imfPerFamily[fam]) {
+        counters.imfPerFamily[fam] = { evaluated: 0, failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0 };
+      }
+      const dst = counters.imfPerFamily[fam];
+      dst.evaluated += src.evaluated;
+      dst.failedLQ += src.failedLQ;
+      dst.failedVN += src.failedVN;
+      dst.failedCorr += src.failedCorr;
+      dst.failedDI += src.failedDI;
+      dst.passed += src.passed;
+    }
+    // Fan-out sum: how many family-rows admitted this pair.
+    counters.familyFanOutSum += imfResult.passedFamilies.length;
+
     if (!imfResult.anyPassed) {
       counters.pairsFailedAllFamilies++;
       return;
     }
     counters.pairsPassedFamilies++;
+    counters.familyQualifiedUnique++;
+
+    // VTS destination: drop benchmark ETFs (SPY/QQQ/IWM/DIA/GLD).
+    if (isXstockBenchmark(symbol)) {
+      counters.benchmarksRemoved++;
+      return; // Benchmark removal — qualified but not admitted to strategy eval.
+    }
+    counters.vtsDestination++;
 
     // ── 4. Iterate eligible strategies for this regime ──
     const regimeStrategies = getStrategiesForRegime(regime);
