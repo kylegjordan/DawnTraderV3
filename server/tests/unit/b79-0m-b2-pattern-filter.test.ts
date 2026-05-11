@@ -11,8 +11,8 @@
  *       so XstockEvalCycleCounters.patternRejectByMinHistory tripwire fires
  *   (d) LQ below threshold → fail with `pattern_lq_*_lt_*`
  *   (e) VN above threshold → fail with `pattern_vn_*_gt_*`
- *   (f) DI below di_min band → fail with `pattern_di_*_outside_*` (Langston nit #3)
- *   (f2) DI flat-tape neutral (50) but di_min>50 → fail (band boundary)
+ *   (f) DI above di_max → fail with `pattern_di_*_outside_*` (upper boundary, Langston nit #3)
+ *   (f2) DI flat-tape neutral (50) but di_min>50 → fail (lower boundary)
  *   (g) All gates pass → passed=true
  *   (h) Mode → filter_path resolution: paper→vts_pattern, live→active_pattern
  *       (Langston nit #4 — vi.fn assertion on storage call args)
@@ -124,11 +124,11 @@ describe('B79.0m.b2 — Pattern Filter', () => {
     expect(result.perMetric.failedVN).toBe(1);
   });
 
-  it('(f) DI below di_min → pattern_di_*_outside_*  (Langston nit #3)', async () => {
-    // Tighten di_min to 95 so a typical directional series fails the band
-    // floor even with strong upward slope. computeDirectionalIntegrity proxy
-    // scales to 0-100; 95 forces a fail.
-    mockRow.current = { ...PATTERN_ROW, diMin: '95.0000' };
+  it('(f) DI above di_max → pattern_di_*_outside_*  (Langston nit #3)', async () => {
+    // Perfectly directional bars (slope=0.001 every step) produce DI=100
+    // (max). Tighten di_max to 30 so the upper-band gate trips. Covers the
+    // DI band's upper boundary; (f2) covers the lower boundary via flat tape.
+    mockRow.current = { ...PATTERN_ROW, diMax: '30.0000' };
     const result = await evaluateXstockPatternFilter('AAPL/USD', makeOhlc(100, 0.001), 200, 0, 'paper');
     expect(result.passed).toBe(false);
     expect(result.failureReason).toMatch(/^pattern_di_/);
