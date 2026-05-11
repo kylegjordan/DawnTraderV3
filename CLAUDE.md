@@ -461,6 +461,33 @@ Pre-audit and completion reports MUST include a "PREVIOUSLY-STATED-VS-NOW" secti
 
 **Applies retroactively to in-flight communications:** if you realize a previously-stated number is now different, lead the next message with the PREVIOUSLY/NOW/REASON block before continuing.
 
+### 9.3 STAGING-VERIFIED means UI-navigated, not curl-checked (Kyle directive 2026-05-11 — added B79.0m.b)
+
+**Rule.** The phrase "staging verified" / "verified on staging" / "verified live on staging" / any equivalent claim is **reserved for outcomes that have been visually inspected on the staging UI via Claude-in-Chrome**. It is NOT satisfied by:
+- A successful API response from `curl http://localhost:5000/api/...`
+- A psql query returning the expected row count
+- A PM2 log line matching an expected pattern
+- A successful `npm run build` + `pm2 restart`
+
+Those are **backend health checks**. They prove the server didn't crash and the route returned data. They do NOT prove the UI panel that consumes that data actually renders correctly, that the user sees real numbers, that no field is undefined-rendering-as-"--" in the table, or that the layout isn't broken.
+
+**What "staging verified" actually requires:**
+1. Invoke the `mcp__Claude_in_Chrome__navigate` tool to load the relevant staging URL.
+2. Use `mcp__Claude_in_Chrome__read_page` or `mcp__Claude_in_Chrome__get_page_text` to read the actual DOM of the panel in question.
+3. Cross-check the rendered values against what was expected.
+4. Optionally screenshot via `mcp__Claude_in_Chrome__gif_creator` for evidence.
+
+Kyle's browser opens a tab when Claude-in-Chrome navigates — he can SEE whether the verification actually happened. False claims of "staging verified" are immediately detectable on his end.
+
+**The flip side — when Kyle asks for UI verification, it is NOT optional.** If Kyle says "verify it on staging" / "check the UI" / "navigate to the staging site and confirm" — that is a hard requirement to use Claude-in-Chrome, not a suggestion. Skipping the UI step and substituting an API/log check is a rule violation.
+
+**No assumptions when Kyle reports issues.** Every issue the user raises must be:
+- Confirmed (reproduce it; locate the code path; quote the actual data)
+- Investigated (not dismissed with "marked N/A" or "probably the threshold")
+- Tracked in a dedicated batch-tracking document so nothing is glossed over
+
+Quick-fixing one item and declaring everything resolved is the failure mode. The discipline is: enumerate every item raised → tackle each one with evidence → only mark resolved when independently re-verified.
+
 ---
 
 ## 10. Session Startup Checklist
