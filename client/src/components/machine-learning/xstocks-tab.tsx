@@ -277,23 +277,14 @@ export function XstocksTab() {
         </div>
       </div>
 
-      {/* B79.0m.a — Scaffolding-vs-functional declaration per new CLAUDE.md §9 rule.
-          Banner removed by B79.0m.b once VTS evaluation pipeline ships for xstock. */}
-      <div
-        className="rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/30 p-4"
-        data-testid="xstocks-tab-vts-not-wired-banner"
-      >
-        <h3 className="text-base font-semibold text-amber-800 dark:text-amber-200">
-          🚨 VTS evaluation pipeline NOT yet wired for xstock_spot
-        </h3>
-        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-          B79.0m.a seeded thresholds + Filter Diagnostics labels + governance rules.
-          B79.0m.b carves the shared <code className="px-1">evaluatePairForVTS</code> entry
-          point and routes xstock pairs through it. Until then: signal_eval_archive +
-          vts_open_trades remain at 0 for xstock_spot; this tab shows the scanner cycle +
-          freshness telemetry only. Removed automatically once B79.0m.b ships.
-        </p>
-      </div>
+      {/* B79.0m.b — banner removed per Kyle directive 2026-05-11.
+          xstock VTS pipeline IS now wired through eval-cycle.ts. Diagnostic
+          panels below show real per-cycle + 24h-rolling numbers from the
+          xstock filter + IMF + strategy-eval flow. Note: parallel pattern
+          path + per-family fan-out routing are PENDING in the follow-up
+          batch — without them, pattern strategies receive null patternInput
+          and quant strategies are not family-routed. The diagnostic panels
+          will show this honestly until those land. */}
 
       {/* 1. Scanner Cycle Header (xstock-specific) */}
       <ScannerCycleHeader data={filterData} isLoading={filterLoading} />
