@@ -34,7 +34,7 @@ VALUES
   ('live',  'xstock_spot', 'active_breakout',     43.0000, 0.8500, 10.0000, 100.0000, 'b79.0m.a-layer1-starter-cloned-from-crypto'),
   ('live',  'xstock_spot', 'active_oscillator',   43.0000, 0.8500,  0.0000,  30.0000, 'b79.0m.a-layer1-starter-cloned-from-crypto'),
   ('live',  'xstock_spot', 'active_strong_trend', 35.0000, 0.9500,  0.0000, 100.0000, 'b79.0m.a-layer1-starter-cloned-from-crypto')
-ON CONFLICT (mode, filter_path) DO NOTHING;
+ON CONFLICT (mode, asset_class, filter_path) DO NOTHING;
 
 -- Also seed the mode=live row for the GLOBAL (no filter_path) xstock entry
 -- so schema-consistency invariant holds. Active trading off — row inert.
@@ -48,6 +48,6 @@ SELECT
   'b79.0m.a-layer1-starter-cloned-from-paper-mode'
 FROM screener_filters
 WHERE asset_class='xstock_spot' AND mode='paper' AND filter_path IS NULL
-ON CONFLICT (mode, filter_path) DO NOTHING;
+ON CONFLICT (mode, asset_class, filter_path) DO NOTHING;
 
 COMMIT;

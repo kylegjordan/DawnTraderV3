@@ -232,7 +232,7 @@ export interface IStorage {
 
   // Screener filters methods (global settings per mode)
   // Batch 19G: filterPath support for 4-path filter architecture
-  getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null>;
+  getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string; assetClass?: string }): Promise<ScreenerFilters | null>;
   upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters>;
 
   // Filter diagnostics methods
@@ -945,14 +945,18 @@ export class DatabaseStorage implements IStorage {
 
   // Screener filters methods (global settings per mode - Phase 27.F.15.A)
   // Batch 19G: filterPath support — defaults to 'active_quant' for backward compatibility
-  async getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null> {
+  // B79.0m.a: assetClass support — defaults to 'crypto_spot' for backward compat;
+  // unique index now (mode, asset_class, filter_path) so xstock can coexist.
+  async getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string; assetClass?: string }): Promise<ScreenerFilters | null> {
     const filterPath = params.filterPath || 'active_quant';
+    const assetClass = params.assetClass || 'crypto_spot';
     const [result] = await db
       .select()
       .from(screenerFilters)
       .where(and(
         eq(screenerFilters.mode, params.mode),
-        eq(screenerFilters.filterPath, filterPath)
+        eq(screenerFilters.filterPath, filterPath),
+        eq(screenerFilters.assetClass, assetClass)
       ));
     return result || null;
   }
