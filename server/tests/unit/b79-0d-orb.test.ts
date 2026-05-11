@@ -3,10 +3,11 @@
  * B79.0d — Opening Range Breakout (ORB) detect logic tests
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Coverage (Langston Q1-Q7 lock + scope concerns #1-#5):
+ * Coverage (Langston Q1-Q7 lock + scope concerns #1-#5; B79.0m.b2 update):
  *   (a) Range-formation phase returns null
  *   (b) Breakout-up generates BUY with correct stop/target/confidence
- *   (c) Breakout-down generates SELL
+ *   (c) Breakout-down returns null with `sell_disabled_long_only` (B79.0m.b2 LONG-only)
+ *   (c2) Breakout-up does NOT emit sell_disabled (LONG-only short-circuits before BUY)
  *   (d) No-breakout returns null
  *   (e) Gate-disabled returns null even on valid breakout
  *   (f) Crypto_spot symbol returns null (asset-class guard)
@@ -31,6 +32,13 @@ const thresholds = {
 vi.mock('../../services/module-constants-service.js', () => ({
   getCachedConstant: <T>(_module: string, _name: string) => gateValue.value as unknown as T,
   getCachedNumbersForModule: () => ({ ...thresholds }),
+}));
+
+// B79.0m.b2 (2026-05-11): mock null-reason-tracker so we can assert the
+// LONG-only return-null path emits `sell_disabled_long_only`.
+const nullReasonCalls: string[] = [];
+vi.mock('../../utils/null-reason-tracker.js', () => ({
+  setNullReason: (reason: string) => { nullReasonCalls.push(reason); },
 }));
 
 import { detectORB } from '../../strategies/orb.js';
@@ -78,6 +86,7 @@ const NOW_LATE_DAY = new Date(Date.UTC(2026, 4, 11, 18, 0, 0)); // 18:00 UTC —
 describe('B79.0d — ORB detect', () => {
   beforeEach(() => {
     gateValue.value = true;
+    nullReasonCalls.length = 0;
   });
 
   it('(a) range-formation phase returns null even with apparent breakout', () => {
@@ -102,16 +111,27 @@ describe('B79.0d — ORB detect', () => {
     expect(result!.confidence).toBeLessThanOrEqual(0.90);
   });
 
-  it('(c) breakout-DOWN generates SELL with stop above range', () => {
+  it('(c) breakout-DOWN returns null with sell_disabled_long_only — B79.0m.b2 LONG-only', () => {
+    // B79.0m.b2 (2026-05-11) — system is long-only; ORB down-break must NOT
+    // produce a SELL signal. Mirrors inside-bar-reversal.ts:131-134.
     const indicators = { ...baseIndicators, currentPrice: 98.50, volume: 2000 };
     const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
       assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
     });
+    expect(result).toBeNull();
+    expect(nullReasonCalls).toContain('sell_disabled_long_only');
+  });
+
+  it('(c2) breakout-UP does NOT set sell_disabled — confirms LONG-only path doesn\'t fire on valid BUY', () => {
+    // Sanity: the LONG-only guard short-circuits BEFORE the BUY branch. We
+    // verify the SELL-disabled reason is NOT emitted on a valid up-break.
+    const indicators = { ...baseIndicators, currentPrice: 100.50, volume: 2000 };
+    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
+      assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
+    });
     expect(result).not.toBeNull();
-    expect(result!.metadata.direction).toBe('SELL');
-    expect(result!.entryPrice).toBeCloseTo(98.50, 2);
-    expect(result!.stopPrice).toBeCloseTo(100, 2);                    // range high
-    expect(result!.targetPrice).toBeCloseTo(98.50 - 2 * 1, 2);
+    expect(result!.metadata.direction).toBe('BUY');
+    expect(nullReasonCalls).not.toContain('sell_disabled_long_only');
   });
 
   it('(d) inside-range price returns null', () => {

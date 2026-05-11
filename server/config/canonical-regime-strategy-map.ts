@@ -817,6 +817,12 @@ export const STRATEGY_FAMILY_MAP: Record<string, StrategyFamily> = {
   // BREAKOUT family — want directional expansion (medium-high DI, moderate VN)
   breakout: 'breakout',
   vwap_bounce: 'breakout',
+  // B79.0m.b2 (2026-05-11): ORB classified as breakout family by signalType
+  // 'QUANT' + range-breakout geometry (Langston rev1 Q-L2 confirm). Routes
+  // ORB through the breakout family IMF lane when it appears in a regime's
+  // strategy set. Pre-deploy crypto byStrategy ORB admit count = 0 (verified);
+  // rollback trigger documented in BATCH_79_0m_b2_PRE_AUDIT.md §-1.7.
+  orb: 'breakout',
 
   // PATTERN family — pattern detection drives strategy, tolerant of noise
   morning_star: 'pattern',

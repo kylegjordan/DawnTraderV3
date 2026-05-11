@@ -128,7 +128,7 @@ If cadence drops post-deploy → halt and revert.
 
 ## LANGSTON RUNTIME + COMMS — see CLAUDE.md §6 + §8
 
-Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-bridge-inbox.jsonl`. Send protocol = 3 steps (Telegram visibility post + SSH-deliver via `langston-call` + verbatim relay back to Telegram). Hetzner GDrive recursive-grep BROKEN — Read-tool only, stage diffs via scp. OAuth at `/etc/langston/oauth.env`, valid 1 year. File-first comms for >3KB prompts: stage at `Claude Comms and Packages/Langston Design Asks/`.
+Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-bridge-inbox.jsonl`. Send protocol = 3 steps (Telegram visibility + SSH-deliver via direct `claude -p` + verbatim relay back to Telegram). Empirical-confirmed details now in CLAUDE.md §6.5.0/6.5.1/§8.2: use `--permission-mode bypassPermissions` (NOT acceptEdits — hangs on Bash); scp-stage files to `/home/langston/inbox/<batch>/` (GDrive rclone cache lag hides new files from `/mnt/gdrive/...` for many minutes); fresh UUID every send.
 
 ---
 

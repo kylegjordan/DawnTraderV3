@@ -2333,6 +2333,11 @@ async function resolveOpenVirtualTrades(): Promise<{
         regimeConfidenceModulated: trade.regimeConfidenceModulated,
         // B73.1 (2026-04-30): real ATR for exit-strategy ablation replay.
         atrAtOpen: trade.atrAtOpen,
+        // B79.0m.b2 (2026-05-11): thread assetClass so B73 replay can branch
+        // OHLC source (xstock_spot → xstock_spot_ohlc_1m vs crypto_spot →
+        // Kraken REST via ohlcCache). Missing field silently degrades xstock
+        // replay to empty bars per Langston rev1 #5.
+        assetClass: trade.assetClass,
       });
       if (result.persisted) persisted++;
       if (result.mlTriggered) mlQueued++;

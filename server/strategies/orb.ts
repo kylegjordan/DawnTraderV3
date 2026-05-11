@@ -2,7 +2,9 @@
  * B79.0d — Opening Range Breakout (ORB) strategy — REAL IMPLEMENTATION.
  *
  * Type:      EQUITY-MICROSTRUCTURE
- * Direction: BUY and SELL
+ * Direction: BUY only (LONG-only system — B79.0m.b2 2026-05-11; down-break
+ *            returns null with `setNullReason('sell_disabled_long_only')`,
+ *            mirrors `inside-bar-reversal.ts:131-134` pattern)
  * Key:       orb
  * Asset:     xstock_spot only (24/5 names — explicitly NOT 24/7 names which have no "open bell")
  *
@@ -54,6 +56,7 @@ import {
   getCachedNumbersForModule,
 } from '../services/module-constants-service.js';
 import { XSTOCK_SPOT_24_7_SYMBOLS } from '../../shared/asset-classes.js';
+import { setNullReason } from '../utils/null-reason-tracker.js';
 
 const STRATEGY_KEY = 'orb';
 const LOG_PREFIX = '[B79.0d][ORB]';
@@ -246,22 +249,19 @@ export function detectORB(
   if (volumeMultiple < ORB_VOL_MULT_MIN) return null;
 
   // ── Geometry (entry/stop/target) ────────────────────────────────────────
-  let entryPrice: number;
-  let stopPrice: number;
-  let targetPrice: number;
-  let direction: 'BUY' | 'SELL';
-
-  if (upBreak) {
-    direction = 'BUY';
-    entryPrice = currentPrice;
-    stopPrice = rangeLow;                                 // opposite range extreme
-    targetPrice = entryPrice + ORB_TARGET_RANGE_MULT * rangeHeight; // target distance = mult × range height (NOT realized R:R)
-  } else {
-    direction = 'SELL';
-    entryPrice = currentPrice;
-    stopPrice = rangeHigh;
-    targetPrice = entryPrice - ORB_TARGET_RANGE_MULT * rangeHeight;
+  // B79.0m.b2: LONG-only enforcement. Down-break (SELL) returns null with
+  // setNullReason. Mirrors inside-bar-reversal.ts:131-134 pattern. The system
+  // is long-only (capital constraint, post-audit roadmap "Short trading
+  // DEFERRED INDEFINITELY"); any SELL leak would produce SHORT trades which
+  // the rest of the pipeline isn't designed for.
+  if (!upBreak) {
+    setNullReason('sell_disabled_long_only');
+    return null;
   }
+  const direction: 'BUY' = 'BUY';
+  const entryPrice = currentPrice;
+  const stopPrice = rangeLow;                                              // opposite range extreme
+  const targetPrice = entryPrice + ORB_TARGET_RANGE_MULT * rangeHeight;    // target distance = mult × rangeHeight
 
   // ── Confidence (Q4 with Langston nit: clamp range/atr term) ─────────────
   const rangeAtrNormRaw = rangeHeight / atr;

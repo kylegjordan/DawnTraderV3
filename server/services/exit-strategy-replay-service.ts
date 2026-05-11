@@ -17,6 +17,14 @@
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
 import { ohlcCache } from './ohlc-cache';
+
+// B79.0m.b2 (2026-05-11): xstock B73 replay error counter. Async fire-and-
+// forget means errors otherwise vanish silently. This counter increments on
+// any exception in the xstock_spot_ohlc_1m fetch path so a partition mishap
+// or schema drift is observable in PM2 logs. OBSERVATIONAL ONLY (no auto-
+// disable). Surface in completion report.
+let _b73XstockReplayErrors = 0;
+export function getB73XstockReplayErrorCount(): number { return _b73XstockReplayErrors; }
 import { getModuleConstants } from './module-constants-service';
 import {
   replayAllVariants,
@@ -30,6 +38,12 @@ export interface ReplayContext {
   tradeId: string;
   tradeSource: 'paper' | 'vts';
   symbol: string;
+  // B79.0m.b2 (2026-05-11): asset class drives OHLC source selection in
+  // fetchOhlcForReplay. Default 'crypto_spot' preserves byte-identical pre-
+  // batch behavior for any caller that omits the field (back-compat). xstock
+  // callers MUST set 'xstock_spot' or B73 replay silently degrades to
+  // Kraken-crypto-REST which returns no data for equity symbols.
+  assetClass?: string;
   side: 'BUY' | 'SELL';
   entryPrice: number;
   entryTime: number;       // epoch ms
@@ -117,14 +131,46 @@ async function fetchOhlcForReplay(
   exitTime: number,
   maxHoldMs: number,
   bufferMs: number, // retained for back-compat, unused (window now always extends to entryTime + maxHoldMs)
+  assetClass: string = 'crypto_spot', // B79.0m.b2 — default preserves byte-identical pre-batch behavior
 ): Promise<OHLCData[]> {
   void exitTime; void bufferMs; // explicit no-op; window is entry-anchored now
   const windowEnd = entryTime + maxHoldMs;
-  // Prefix the pre-entry ATR lookback so the caller can compute bar-derived ATR.
   const sinceSeconds = Math.floor(entryTime / 1000) - ATR_LOOKBACK_MIN * 60 - 60;
-  // Pagination enabled: 7d × 1440 = 10080 candles cap; ~14 batches × 720
-  // candles. Each batch is a separate Kraken REST call with 500ms delay.
-  // Async fire-and-forget so this doesn't block trade-close persistence.
+
+  // B79.0m.b2: xstock_spot uses the partitioned passive-archive table
+  // (xstock_spot_ohlc_1m, populated by B74 archiver from wss://ws-equities.
+  // kraken.com). Pre-audit EXPLAIN ANALYZE 2026-05-11 verified per-trade
+  // query at 1.035ms with full index coverage across all 13 partitions.
+  if (assetClass === 'xstock_spot') {
+    try {
+      const sinceTs = new Date(sinceSeconds * 1000);
+      const endTs = new Date(windowEnd);
+      const result: any = await db.execute(sql`
+        SELECT interval_begin, open, high, low, close, volume
+          FROM xstock_spot_ohlc_1m
+         WHERE symbol = ${symbol}
+           AND interval_begin >= ${sinceTs}
+           AND interval_begin <= ${endTs}
+         ORDER BY interval_begin ASC
+      `);
+      const rows: any[] = (result as any).rows ?? result;
+      if (!Array.isArray(rows)) return [];
+      return rows.map((r: any) => ({
+        timestamp: new Date(r.interval_begin).getTime(),
+        open: parseFloat(r.open),
+        high: parseFloat(r.high),
+        low: parseFloat(r.low),
+        close: parseFloat(r.close),
+        volume: parseFloat(r.volume),
+      } as OHLCData));
+    } catch (err) {
+      _b73XstockReplayErrors++;
+      console.warn(`[B73-REPLAY][XSTOCK] err=${err instanceof Error ? err.message : err} symbol=${symbol} tradeWindow=[${sinceSeconds}..${Math.floor(windowEnd / 1000)}] errCount=${_b73XstockReplayErrors}`);
+      return [];
+    }
+  }
+
+  // crypto_spot (default) — existing Kraken REST path via ohlcCache.
   const result = await ohlcCache.getOHLCData(symbol, 1, sinceSeconds, {
     paginationEnabled: true,
     maxBatches: 14,
@@ -245,6 +291,7 @@ export async function replayAndPersist(ctx: ReplayContext): Promise<void> {
     ctx.exitTime,
     config.maxHoldMs,
     3_600_000, // back-compat; ignored — window is entry-anchored now
+    ctx.assetClass ?? 'crypto_spot', // B79.0m.b2 — asset-class branch for OHLC source
   );
   if (allBars.length === 0) {
     console.warn(`[B73][exit-replay] no OHLC bars for ${ctx.symbol} ${ctx.tradeId}`);

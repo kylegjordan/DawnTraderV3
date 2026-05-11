@@ -761,6 +761,10 @@ export class VTSService extends EventEmitter {
     // F (no_BE_stop) behavior because BE triggers never fired. Per Langston
     // cc-inbox #864 Q2(a).
     atrAtOpen?: number;
+    // B79.0m.b2 (2026-05-11): asset class drives OHLC source in B73 replay.
+    // Default 'crypto_spot' preserves byte-identical pre-batch behavior for
+    // any caller that omits the field.
+    assetClass?: string;
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
     const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
@@ -953,6 +957,9 @@ export class VTSService extends EventEmitter {
           tradeId: trade.id,
           tradeSource: 'vts',
           symbol: tradeData.symbol,
+          // B79.0m.b2: thread assetClass so xstock B73 replay reads from
+          // xstock_spot_ohlc_1m instead of Kraken crypto REST.
+          assetClass: tradeData.assetClass,
           side,
           entryPrice: tradeData.entryPrice,
           entryTime: tradeData.entryTime,

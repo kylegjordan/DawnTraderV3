@@ -235,21 +235,27 @@ Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps so Kyl
 
 **The file-first pattern (mandatory for any design ask, scope draft, multi-question review request, or anything Langston needs to deeply consider):**
 
-1. **Write the full design ask as a markdown file** at `Claude Comms and Packages/Langston Design Asks/<batch-id>_<topic>_<rev>.md`. This is a dedicated folder for these asks. Use a descriptive filename like `B79_TEC_design_ask_rev1.md`.
+1. **Write the full design ask as a markdown file** at `Claude Comms and Packages/Langston Design Asks/<batch-id>_<topic>_<rev>.md`. This is a dedicated folder for these asks. Use a descriptive filename like `B79_TEC_design_ask_rev1.md`. Commit for paper trail.
 
-2. **Send Langston a SHORT (under 1KB) Telegram visibility post + claude-cli prompt** that just points him at the file:
+2. **Stage to Langston's inbox via scp** (REQUIRED — empirical 2026-05-11). The Hetzner GDrive FUSE mount (rclone) has multi-minute cache lag on newly-written files; pointing Langston at `/mnt/gdrive/...` paths for files written in the same session causes silent file-not-found and Langston spins indefinitely on Read tool retries. Pattern:
+   ```bash
+   ssh root@204.168.141.77 'mkdir -p /home/langston/inbox/<batch>/ && chown -R langston:langston /home/langston/inbox'
+   scp <local-file>... root@204.168.141.77:/home/langston/inbox/<batch>/
+   ssh root@204.168.141.77 'chown langston:langston /home/langston/inbox/<batch>/*'
    ```
-   "Read full design ask at /mnt/gdrive/Dawn Trader/DT_Clone_Repo/DawnTraderV3/Claude Comms and Packages/Langston Design Asks/<filename>.md
-    
-    Reply with your architectural call on the questions in §X. Use the watchdog reply file."
+   Reference Langston to the inbox path (`/home/langston/inbox/<batch>/<file>.md`), NOT the GDrive path.
+
+3. **Send Langston a SHORT (under 1KB) claude-cli prompt** that just points him at the staged inbox file:
    ```
-   Langston has the GDrive mount on Hetzner; he reads the file via Read tool from his side. No size limit on what he reads.
+   "Read full design ask at /home/langston/inbox/<batch>/<filename>.md
+    Reply with your architectural call on the questions in §X."
+   ```
 
-3. **Visibility step in Telegram** — same as before, post `@LangstonDTBot` mention with a SUMMARY of the ask + path. Kyle sees the summary; full content lives in the markdown file in the repo (committed) so it's reviewable + versioned.
+4. **Visibility step in Telegram** — post `@LangstonDTBot` mention with a SUMMARY of the ask + inbox path. Kyle sees the summary; full content lives in the committed markdown file in the repo.
 
-4. **Watchdog SSH+claude-cli call** carries only the short pointer prompt (under 1KB), not the full content. This eliminates the API-hang failure mode for large content.
+5. **Watchdog SSH+claude-cli call** carries only the short pointer prompt (under 1KB), not the full content. This eliminates the API-hang failure mode for large content.
 
-5. **Langston's reply still comes back via watchdog stdout → Telegram verbatim relay (per §6.5 Step 3)**. His reply size is typically under 5KB and outbound limits aren't the issue.
+6. **Langston's reply still comes back via watchdog stdout → Telegram verbatim relay (per §6.5 Step 3)**. His reply size is typically under 5KB and outbound limits aren't the issue.
 
 **Why we never shorten content:** When CC shortens a design ask to dodge the hang, details get cut. Cut details cause missed scope items, missed risks, missed architectural decisions, and result in breaks in the system. NO PATCHES doctrine (§5 #15) applies to comms infrastructure too — file-first is the proper solution; size-based content-cutting is a patch.
 
@@ -258,11 +264,14 @@ Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps so Kyl
 #### 6.5.1 Two-step pattern (visibility + delivery), same shape as the old OpenClaw flow:
 
 1. **Visibility step** (Kyle sees the request) — `cc-comms-bridge send --thread-id 21 --message "@LangstonDTBot ..."` (the @-mention is for Kyle's visual cue; it doesn't trigger anything on Langston's side).
-2. **Delivery step** (Langston actually reasons) — direct invocation via SSH. Langston's response comes back on stdout:
+2. **Delivery step** (Langston actually reasons) — direct invocation via SSH. Langston's response comes back on stdout. **Always use `--permission-mode bypassPermissions` and a fresh UUID** (see flag note below):
 
 ```bash
-ssh root@204.168.141.77 "sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=\$(cat /etc/langston/oauth.env | cut -d= -f2-) && export HOME=/home/langston && cd /home/langston && /usr/bin/claude -p --session-id <SESSION_UUID> --model claude-opus-4-7 --permission-mode acceptEdits \"<your message>\"'"
+FRESH_UUID=$(python3 -c "import uuid; print(uuid.uuid4())")  # or `uuidgen` on Linux
+ssh root@204.168.141.77 "sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=\$(cat /etc/langston/oauth.env | cut -d= -f2-) && export HOME=/home/langston && cd /home/langston && /usr/bin/claude -p --session-id ${FRESH_UUID} --model claude-opus-4-7 --permission-mode bypassPermissions \"<your message>\"'" > /tmp/langston_reply.txt 2>&1
 ```
+
+**Flag note (empirical 2026-05-11):** `--permission-mode acceptEdits` (the watchdog wrapper default) hangs silently on any Bash tool invocation in Langston's reasoning. For ANY review task where Langston might shell out (psql verification, diff inspection, file Read via shell), `bypassPermissions` is the only working flag. Default to `bypassPermissions` even for pure-file-read tasks to avoid the failure mode.
 
 3. **Post Langston's response to Telegram — MANDATORY (Kyle directive 2026-05-07)** via `@LangstonDTBot`'s `sendMessage` so Kyle sees his reply in topic 21. **This is non-negotiable** — Kyle pointed out that when CC delivers to Langston via SSH+claude-cli with a fresh UUID (the workaround when the canonical bridge UUID is locked), the response goes to CC's stdout but the Telegram bridge daemon never sees it. CC MUST relay it manually using the curl pattern below. Otherwise Kyle has zero visibility into what Langston actually said — only CC's summary, which can drift from what Langston wrote.
 
@@ -276,7 +285,7 @@ ssh root@204.168.141.77 "sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKE
 
    For long replies, chunk at 4000 chars. Prefix the relayed message with `**LANGSTON SPEAKING:**` so Kyle can distinguish Langston's verbatim text from CC's interpretation. **CC's own summary post (separately) is supplementary — it does NOT replace this verbatim relay.**
 
-**Langston's session UUID** lives in `/home/langston/.langston-bridge-state.json` (key `session_id`). Use the same UUID across all your SSH-deliveries so conversation context persists. Bridge will use the same UUID when it processes Telegram inbound. **When the canonical UUID is locked (bridge daemon polling), use a fresh one-off UUID — but step 3 above STILL applies to relay the response.**
+**Langston's session UUID:** the canonical UUID lives in `/home/langston/.langston-bridge-state.json` (key `session_id`) — but in practice it is **almost always locked by the bridge daemon's active poll**, so reusing it returns `Session ID already in use`. **Use a fresh `uuidgen` per SSH-delivery.** Context loss between turns is the trade-off; mitigate by including the relevant prior-turn pointer (commit hash, scope file path, reply file path) in the new prompt. Step 3 above (verbatim Telegram relay) STILL applies on every fresh-UUID delivery — that's how Kyle sees what Langston actually said.
 
 ### 6.6 Receiving — reading the unified inbox log
 
@@ -403,8 +412,11 @@ When something doesn't work as expected, check in this order:
 3. **getUpdates conflict (409)** — only one client at a time can long-poll a Telegram bot's getUpdates. If you see 409 errors in either bridge log, something else is polling the same token. Common cause: OpenClaw not fully shut down after migration. `systemctl --user status openclaw-gateway` and stop if running.
 4. **Bot privacy mode** — if Langston isn't seeing Kyle's non-mention posts, verify `curl https://api.telegram.org/bot<TOKEN>/getMe | jq .result.can_read_all_group_messages` returns `true`. Set via BotFather `/setprivacy → Disable`.
 5. **Bot-to-bot block (NOT a bug)** — `@LangstonDTBot`'s getUpdates will NEVER see `@CCDTCommsBot`'s messages, regardless of @-mentions. This is a Telegram platform rule. Use the SSH+`claude -p` direct delivery path for me→Langston, not Telegram.
-6. **Session UUID drift** — if Langston seems to lose context between turns, verify the SESSION_UUID in `/home/langston/.langston-bridge-state.json` matches what your SSH-delivery commands pass via `--session-id`. They MUST match for context to persist.
-7. **Markdown send errors (400)** — if Telegram rejects a message with "can't parse entities", the bridge auto-falls back to plain-text send (already handled). If the fallback also fails, check for invalid characters or excessive length (>4096 chars).
+6. **claude-cli alive but no reply (empirical 2026-05-11)** — if Langston's process shows growing ELAPSED time on `ps` but the reply file stays empty for >10min, two likely root causes:
+   - **`acceptEdits` permission-mode hang on Bash tool use** — kill the PID with `kill -9 <pid>`, re-invoke with `--permission-mode bypassPermissions` (see §6.5.1 flag note).
+   - **GDrive rclone cache lag on recently-written files** — if the prompt referenced a `/mnt/gdrive/...` path for a file written in the same session, Langston cannot see it. Verify with `ssh root@204.168.141.77 'sudo -u langston ls -la <gdrive-path>'`; if "No such file", scp-stage to `/home/langston/inbox/<batch>/` and re-prompt with the inbox path.
+7. **Session UUID conflict** — `Session ID already in use` from claude-cli means the canonical bridge UUID is locked. Use `uuidgen` for a fresh one-off; step 3 (verbatim relay) still applies.
+8. **Markdown send errors (400)** — if Telegram rejects a message with "can't parse entities", retry the same chunk WITHOUT `parse_mode=Markdown` (plain text fallback). The bridge daemon auto-falls back; manual relays via curl need to handle this themselves — the failed chunk's `description` field will name the offending character offset.
 
 ---
 

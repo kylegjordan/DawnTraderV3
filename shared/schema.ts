@@ -478,8 +478,15 @@ export const screenerFilters = pgTable("screener_filters", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  // Batch 19G: Composite unique index — one row per (mode, filterPath)
-  uniqueModePath: uniqueIndex("screener_filters_mode_path_idx").on(table.mode, table.filterPath),
+  // B79.0m.b2 (2026-05-11): Drizzle source-of-truth aligned with production.
+  // Production unique index is `(mode, asset_class, filter_path)` — added by
+  // B79.0m.a hotfix when xstock rows were seeded. The Drizzle declaration
+  // here was previously `(mode, filterPath)` only, creating schema-file
+  // drift; this update closes the drift. No DB migration runs because
+  // production already matches the declared final state.
+  uniqueModeClassPath: uniqueIndex("screener_filters_mode_class_path_idx").on(
+    table.mode, table.assetClass, table.filterPath,
+  ),
 }));
 
 // B65 (2026-04-23): Module Constants — central 5-dimensional tunable parameter
