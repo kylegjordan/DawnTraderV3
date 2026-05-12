@@ -2792,7 +2792,17 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                                 {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['family_filter_mismatch'] ?? 0, quantEvals)}</td>}
                                 {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['family_filter_mismatch'] ?? 0, patternEvals)}</td>}
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.familyFilterMismatch ?? 0)}</td>
-                                <td className="p-2 text-right">{pct(nr.familyFilterMismatch ?? 0)}%</td>
+                                {/* B-NEW-12 (RUNNING_ISSUES #101): family_filter_mismatch is a
+                                    pre-eval skip — fires BEFORE strategy.detect(), so it's not
+                                    counted in totalStratNulls. Use the correct denominator
+                                    emitted by the endpoint: familyMismatchDenominatorTotal =
+                                    strategiesEvaluated (eligibility-pass) + family_filter_mismatch
+                                    (eligibility-fail). Was showing 158%/177% before this fix. */}
+                                <td className="p-2 text-right">{(() => {
+                                  const denom = (ve as any).familyMismatchDenominatorTotal ?? 0;
+                                  const num = nr.familyFilterMismatch ?? 0;
+                                  return denom > 0 ? `${Math.round(num / denom * 100)}%` : '0%';
+                                })()}</td>
                               </tr>
                             </tbody>
                           </table>
