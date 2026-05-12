@@ -7301,7 +7301,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           familyPaths: buildFamilyPaths(lt?.imfPerFamily),
           familyPerMetric: lt?.imfPerFamily ?? {},
           familyFanOutSum: lt?.familyFanOutSum ?? 0,
+          totalFamilyFanOutSum: lt?.familyFanOutSum ?? 0,
           familyQualifiedUnique: lt?.familyQualifiedUnique ?? lt?.pairsPassedFamilies ?? 0,
+          // crypto-parity field name expected by shared FilterDiagnosticsPanel
+          totalFamilyQualifiedUnique: lt?.familyQualifiedUnique ?? lt?.pairsPassedFamilies ?? 0,
           benchmarksRemoved: lt?.benchmarksRemoved ?? 0,
           destinationCount: lt?.vtsDestination ?? 0,
         },
