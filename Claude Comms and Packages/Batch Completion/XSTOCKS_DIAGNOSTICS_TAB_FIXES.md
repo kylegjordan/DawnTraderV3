@@ -18,24 +18,25 @@
 >
 > ---
 
-## TL;DR — current state on 2026-05-11
+## TL;DR — current state on 2026-05-12 EOD (refreshed post-B79.0m.b2 + 6 follow-up commits)
 
-The xstock pipeline as currently shipped on staging (HEAD `c0a69fb7d`):
+The xstock pipeline as currently shipped on staging (HEAD `f31fc18d6`, PM2 #235):
 - ✅ Quant-side: 5 family IMF gates exist + run (B79.0m.a seeded rows + B79.0m.b code)
-- ❌ Pattern path: NOT BUILT. Pattern detection runs inline within the quant loop. No parallel pattern-global-filter + pattern-IMF + pattern-routed strategy execution. The `pattern-pool-filters.ts` file exists as dormant scaffolding only — no imports, no orchestration.
-- ❌ Family fan-out: pairs are NOT fanned out (1 pair × N qualifying families = N batch entries). Currently each pair is iterated once, with the family-eligibility gate applied per-strategy.
-- ❌ UI diagnostics surfacing: many fields broken (see UI section below)
-- ❌ Zero actual xstock VTS trades have opened (0 rows in `vts_open_trades WHERE asset_class='xstock_spot'`)
+- ✅ Pattern path: BUILT in B79.0m.b2 (commits `4c60d259e` + follow-ups). Parallel pattern-global-filter + pattern-IMF + pattern-routed strategy execution wired. Pair-fan-out via lane × strategy. `pattern-pool-filters.ts` consumable; threshold rows seeded in `screener_filters` for both modes.
+- ✅ Family fan-out: BUILT in B79.0m.b2 — lanes array per pair (passing families + pattern), nested iteration. Symbol-pool-union eligibility: pattern strategies now eligible in family lanes too (matches crypto, follow-up commit `dd0466c7e`).
+- ❌ UI diagnostics surfacing: still broken in many places. Kyle's 2026-05-12 EOD catalog (Section B below — refreshed).
+- ❌ Zero actual xstock VTS trades have opened (0 rows in `vts_open_trades WHERE asset_class='xstock_spot'`) — pending Tuesday 2026-05-13 RTH 13:30 UTC observation.
 - ✅ Banner removed (commit `1badd5391`)
-- ✅ Exit-side price routing added — when a trade eventually opens, exit cycle now reads xstock prices from `xstock_spot_ticker_snap` instead of Kraken crypto REST (commit `c0a69fb7d`)
+- ✅ Exit-side price routing (commit `c0a69fb7d`)
+- ✅ xStocks tab load time: 60s → 0.94s (commit `f31fc18d6` — endpoint switched to in-memory counters from `scanner.diag.evalCountersLifetime`)
 
-The pipeline diverges from crypto architecture in shape, not just calibration. The work to bring it to true parity is below.
+Architectural parity with crypto is COMPLETE. Remaining work = pure UI surfacing + counter-wiring + Layer-3 calibration. No more Section A architecture batches expected.
 
 ---
 
 ## SECTION A — Pipeline architecture gaps (the BIG fixes Kyle has been asking for)
 
-### A1 — Parallel pattern path: not built (code + DB rows + thresholds all missing)
+### A1 — Parallel pattern path: ✅ SHIPPED in B79.0m.b2 (2026-05-12)
 
 **State:** Pattern strategies (`morning_star`, `inside_bar_reversal`, `pivot_shift`) currently invoke from within the quant-path loop in `eval-cycle.ts`. They receive a `patternInput` built from `scanPatterns()` and can fire signals, but they fire as quant-path-tagged events, not pattern-path-tagged. No separate global filter + IMF gate runs for them.
 
@@ -55,7 +56,7 @@ The pipeline diverges from crypto architecture in shape, not just calibration. T
 3. Pattern survivors get tagged `sourcePool='pattern'` and run ONLY pattern strategies
 4. Quant survivors continue to run quant strategies (and may ALSO be pattern survivors if they pass the pattern filter — duplicate entry per Kyle confirmation)
 
-### A2 — Family fan-out: not built
+### A2 — Family fan-out: ✅ SHIPPED in B79.0m.b2 (2026-05-12)
 
 **State:** In `eval-cycle.ts`, each fresh pair is iterated once. For each pair, the family-eligibility gate filters strategies (`STRATEGY_FAMILY_MAP[strategy]` must be in the pair's `passedFamilies` set). This is gate-filtering, NOT fan-out. A pair that passes 3 family IMFs is iterated once, not 3×.
 
@@ -109,46 +110,130 @@ The file `server/asset_classes/xstock_spot/pattern-pool-filters.ts` defines two 
 
 ---
 
-## SECTION B — UI diagnostics issues (lower priority per Kyle: fix pipeline first, UI will follow)
+## SECTION B — UI diagnostics issues (fresh consolidated list, Kyle catalog 2026-05-12 EOD post-compact)
 
-These are all consequences of B-1 through B-10 below. Kyle's directive: secondary concern.
+> **Workflow per Kyle directive 2026-05-12:** lightweight, one-by-one. Diagnose → fix → Kyle verifies on staging → mark done → next item. NOT the full batch workflow. Each item gets a single short commit.
+>
+> **Stale B1–B10 entries from 2026-05-11 either resolved by B79.0m.b2 follow-up commits or deduplicated into the fresh list below.** Mapping recorded at the bottom of this section.
 
-### B1 — "Last Scan" header shows "undefined pairs scanned"
-React component reads a field name that doesn't match the API's `lastScan.scannedCount`. Renders as literal "undefined".
+### B-NEW-1 — Global Filters Passed shows 100% for both quant + pattern (Pipeline Summary)
 
-### B2 — Per-family detail rows missing from xStocks tab "FAMILY PATH IMF BREAKDOWN" section
-API returns `lastScan.familyPerMetric` populated; React component on xStocks tab doesn't iterate it. Crypto tab does — works there.
+**Symptom:** Both quant + pattern paths display 100% (or 99.x rounded up). Quant IMF passes > global filters passed (mathematically impossible — IMF runs AFTER global).
 
-### B3 — Pipeline Summary "Per-Family Breakdown T:0 R:0 B:0 O:0 S:0"
-Reads from a per-family sum field that doesn't exist in the API response. Need to compute `sum(perFamily[X].passed)` and surface.
+**Root-cause investigation (started 2026-05-12 EOD):** DB rows for `screener_filters WHERE asset_class='xstock_spot'` are partially seeded:
+- **Live mode missing:** `vts_breakout`, `vts_oscillator`, `vts_quant`, `vts_reversal`, `vts_strong_trend`, `vts_trend` (only `vts_pattern` exists)
+- **Paper mode missing:** `active_breakout`, `active_oscillator`, `active_reversal`, `active_strong_trend`, `active_trend` (also missing `vts_quant`)
+- **`active_quant` / `vts_quant` xstock rows have NULL** for `lq_min` / `vn_max` / `di_min` / `di_max` — so they don't IMF-filter at all
+- **3 stray rows with NULL `filter_path`** (`b79.0m.a-layer1-starter-cloned-from-paper-mode` + one with empty `last_updated_by`)
 
-### B4 — Pipeline Summary "Family-Qualified (Unique Pairs)" = 0 while data is non-zero
-API has `lastScan.familyQualifiedUnique`; UI reads a different name (or doesn't read).
+**Action:** seed the missing rows (clone from crypto) + clean up the NULL-path stray rows + investigate whether the % display is rounding or genuinely-passes-everything. Diagnose-and-fix this first — it determines whether other "100%" symptoms are real or display-only.
 
-### B5 — Pipeline Summary "Pair-Pool Evaluations" = 0 but 24-Hour Rolling section below shows 25,105
-Two different fields wired to two different aggregates. Should be consistent.
+**Status:** OPEN — IN PROGRESS
 
-### B6 — `applicable` rendering as literal `[object Object][object Object]`
-UI tries to stringify the applicability flags object instead of using it to render N/A markers. Bug.
+### B-NEW-2 — "Universe scanned" total absent from Pipeline Summary
 
-### B7 — 7 strategies showing in BY STRATEGY table, 10 enabled in DB
-Missing: `breakout`, `sma_trend_ride`, `vwap_bounce`. The `byStrategy` aggregate only includes strategies that have been invoked at least once. Likely those 3 strategies' regime-mapping doesn't currently hit any active xstock regime. Needs DB audit + regime-strategy map review.
+Want a top-line row showing total pairs the scanner has examined in the window. Currently the universe figure is unbacked.
 
-### B8 — Crypto Filter Diagnostics "Benchmarks Removed: 181,360" is mislabeled
-Field on backend is `benchmarkBypassed` (counts benchmarks that PASSED filters and are in the survivor pool — NOT removed). Crypto benchmark removal has been disabled since B62 directive 2026-04-16. UI label is wrong. Also: UI computes `VTS Destination = survivors − benchmarkBypassed` which understates VTS destination by the benchmark count.
+**Status:** OPEN
 
-Fix per Kyle directive 2026-05-11:
-- (1) Rename existing UI cell "↳ Benchmarks Removed" → "↳ Benchmarks Surviving Filters" (or similar)
-- (2) Remove broken subtraction in VTS Destination computation
-- (3) Add a NEW "↳ Benchmarks Removed (benchmark-specific exclusion)" line wired to actual removal counter (currently always zero — desired state — ready for when removal is re-enabled)
+### B-NEW-3 — Family-qualified unique pairs shows 0 (quant) / "—" (pattern)
 
-### B9 — Static descriptive paragraph at top of "Filter Pipeline Diagnostics (xstock_spot)" section is outdated
-Currently reads: "Funnel-stage rejection counters are zero until xstockSpotScanner is wired through signal-orchestration in a future B79.x batch — strategy-level + null-reason aggregates are real (from signal_eval_archive)."
-- Inaccurate now (scanner IS wired, counters are populating)
-- Should be replaced with accurate description after the pattern path + fan-out (A1, A2) ship
+Counter either not wired in endpoint or panel reads wrong field. Likely a counter that exists for crypto but never added to xstock's `evalCountersLifetime`.
 
-### B10 — Universe Scanned 24h semantics
-Currently uses scanner-lifetime `pairsEntered` (since-process-start counter). Earlier had raw tick `COUNT(*)` (618k overcounts). The "since-process-start" replacement resets on every PM2 restart — not a true rolling 24h. Acceptable for now; flag as known limitation.
+**Status:** OPEN — was B4 in old list
+
+### B-NEW-4 — Pair-pool evaluations 0 in 24h Pipeline Summary
+
+Either not incrementing in `eval-cycle.ts` for xstock_spot, or aggregated to a different field than the endpoint reads. Same class as B-NEW-3.
+
+**Status:** OPEN — was B5 in old list
+
+### B-NEW-5 — Last Scan Filter Breakdown header: "Paper · undefined pairs scanned"
+
+Want total pairs scanned in the top row next to last-scan timestamp. `undefined` indicates the field the panel reads doesn't exist on endpoint response.
+
+**Status:** OPEN — was B1 in old list
+
+### B-NEW-6 — Family IMF Passed hardcoded at 29% in Pipeline Summary 24h
+
+Both quant + pattern paths show 29%. Quant's IMF passes > global filters passed (impossible). The 29% value appears literal — locate either the hardcode in `routes.ts` xstocks endpoint or in `FilterDiagnosticsPanel`/`xstocks-tab.tsx`.
+
+**Status:** OPEN
+
+### B-NEW-7 — "applicable [object Object][object Object]…" garbage row in 24h Rolling Aggregates
+
+Object-stringification artifact after the "passed all" global-filter row. Likely something rendered as `${value}` where value is the `{imf, survivors}` shape from `buildFamilyPaths`. Remove the row.
+
+**Status:** OPEN — was B6 in old list
+
+### B-NEW-8 — Family path IMF totals broken in 24h Rolling Aggregates
+
+Family fan-out total = 37k+; IMF survivors + VTS destination both = 18,492 = strong_trend_pass alone. Survivors row aggregates only one family (strong_trend) instead of summing all 5. Per-family field-name mismatch — aggregation loop only finds `strong_trend.survivors` and other 4 read undefined.
+
+**Status:** OPEN
+
+### B-NEW-9 — VTS Evaluation Detail math impossible
+
+`total_strategy_evaluations − true_strategy_nulls − rejected_signals` > 0 (so some signals should generate), but `signals_generated = 0` AND `rejected = 0`. Counter-bucketing bug: signals being categorized into `true_nulls` even though they passed `strategy.detect()`, OR denominator overcounting fan-out. Map every increment site against field names the endpoint reads.
+
+**Status:** OPEN
+
+### B-NEW-10 — By Strategy panel shows only 6 of 10 strategies for xstock_spot
+
+Missing 4 strategies — either their `detect()` returns null early before any counter call, or they're skipped by `isStrategyEligibleForLane`. Audit which 4 are missing on the panel against the canonical strategy list.
+
+**Status:** OPEN — was B7 in old list (Kyle now sees 6, was 7 yesterday)
+
+### B-NEW-11 — Setup Nulls % sum > 100% in 24h Rolling Aggregates
+
+"Not yet instrumented" 14% + "No pattern detected" 93.3% = 107.3% (more buckets exist too). Percentages calculated against wrong denominator — likely each bucket divides by `non_eligible_strategies` (partial) rather than `total_strategy_nulls` (full pool).
+
+**Status:** OPEN
+
+### B-NEW-12 — Family Filter Mismatch denominator still off (frontend math)
+
+Endpoint emits correct `vtsEvaluation.familyMismatchDenominatorTotal` since `f31fc18d6`, but frontend `client/src/pages/machine-learning.tsx` still divides `nullReasons.familyFilterMismatch` by `strategiesEvaluated` (eligibility-pass only).
+
+**Status:** OPEN — was RUNNING_ISSUES #101 (Tier 3 cleanup) — reraised by Kyle EOD
+
+### B-NEW-13 — No xstocks in open or closed simulated trades
+
+Downstream consequence of B-NEW-9 (math impossible). If B-NEW-9 fixed → signals actually generate → trades flow. Verify-only after B-NEW-9 ships.
+
+**Status:** OPEN — depends on B-NEW-9
+
+### Sequencing plan (one-by-one per Kyle directive 2026-05-12 EOD)
+
+| Step | Item | Why this order |
+|---|---|---|
+| 1 | B-NEW-1 (Global Filters 100%) | First — determines whether downstream symptoms are real or display-only. DB-row reseeding is the diagnose-then-fix path. |
+| 2 | B-NEW-5 (undefined pairs scanned header) | Quick win; field-name fix. |
+| 3 | B-NEW-2 (universe scanned total absent) | Same field-name class as B-NEW-5. |
+| 4 | B-NEW-3 (family-qualified 0/—) | Counter-wiring class. |
+| 5 | B-NEW-4 (pair-pool evals 0) | Same class as B-NEW-3. |
+| 6 | B-NEW-6 (Family IMF 29% hardcoded) | Endpoint or panel hardcode. |
+| 7 | B-NEW-7 ([object Object] row) | Quick render-bug fix. |
+| 8 | B-NEW-8 (family path totals only strong_trend) | Endpoint aggregation bug. |
+| 9 | B-NEW-9 (math impossible — signals=0) | Bigger investigation; counter audit. |
+| 10 | B-NEW-10 (only 6 of 10 strategies) | Cleanest after B-NEW-9 maps counter sites. |
+| 11 | B-NEW-11 (Setup Nulls > 100%) | Denominator fix. |
+| 12 | B-NEW-12 (Family Filter Mismatch frontend) | Quick frontend swap. |
+| 13 | B-NEW-13 (no xstock trades) | Verify-only after B-NEW-9 ships. |
+
+### Mapping from old B1–B10 to new list / status
+
+| Old | Disposition |
+|---|---|
+| B1 (undefined pairs scanned) | → B-NEW-5 |
+| B2 (per-family detail rows missing — old "FAMILY PATH IMF BREAKDOWN") | Resolved by `8fd97b16e`/`ac38ac194`/`a7f494cc0` (familyPaths shape + prefix strip). Re-verify on staging. |
+| B3 (Per-Family Breakdown T:0 R:0…) | Resolved or absorbed into B-NEW-3 / B-NEW-4 / B-NEW-8 — re-verify panel reads. |
+| B4 (Family-Qualified Unique Pairs = 0) | → B-NEW-3 |
+| B5 (Pair-Pool Evaluations = 0) | → B-NEW-4 |
+| B6 ([object Object][object Object]) | → B-NEW-7 |
+| B7 (only N of 10 strategies) | → B-NEW-10 |
+| B8 (Crypto "Benchmarks Removed" mislabel) | Out of scope for xStocks tab session — separate ticket, leave for later. |
+| B9 (static descriptive paragraph outdated) | Resolved by `1dd6b9e45` (description text updated). Re-verify on staging. |
+| B10 (Universe Scanned 24h semantics — since-process-start) | Acceptable per prior agreement; B-NEW-2 separately wants the total displayed. |
 
 ---
 

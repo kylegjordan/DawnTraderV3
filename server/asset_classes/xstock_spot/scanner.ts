@@ -88,6 +88,7 @@ interface ScannerDiagnostics {
 interface TickerSnapRow extends Record<string, unknown> {
   symbol: string;
   price: string;        // numeric stored as string in pg
+  volume24h: string;    // 24h rolling SHARE volume from Kraken ticker; multiply by price for USD
   capturedAt: Date;
 }
 
@@ -275,6 +276,7 @@ class XstockSpotScannerService {
         SELECT DISTINCT ON (symbol)
           symbol::text AS symbol,
           last::text AS price,
+          COALESCE(volume_24h, 0)::text AS "volume24h",
           captured_at AS "capturedAt"
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes'
@@ -296,13 +298,17 @@ class XstockSpotScannerService {
       const now = Date.now();
       let freshCount = 0;
       let staleCount = 0;
-      const freshSymbols: Array<{ symbol: string; price: number }> = [];
+      const freshSymbols: Array<{ symbol: string; price: number; volume24hShares: number }> = [];
       for (const row of rows as TickerSnapRow[]) {
         const lastTickMs = new Date(row.capturedAt).getTime();
         const fresh = await isPairDataFresh(row.symbol, 'xstock_spot', lastTickMs, now);
         if (fresh) {
           freshCount++;
-          freshSymbols.push({ symbol: row.symbol, price: parseFloat(row.price) });
+          freshSymbols.push({
+            symbol: row.symbol,
+            price: parseFloat(row.price),
+            volume24hShares: parseFloat(row.volume24h ?? '0'),
+          });
         } else {
           staleCount++;
         }
@@ -318,15 +324,21 @@ class XstockSpotScannerService {
         const { evaluateXstockPairForVTS, fetchXstockOHLC, makeEmptyXstockCycleCounters } =
           await import('./eval-cycle.js');
         const cycleCounters = makeEmptyXstockCycleCounters();
-        for (const { symbol, price } of freshSymbols) {
+        for (const { symbol, price, volume24hShares } of freshSymbols) {
           if (!Number.isFinite(price) || price <= 0) continue;
           const ohlc = await fetchXstockOHLC(symbol, 120);
           if (ohlc.length < 60) continue; // global-filter min-history floor
-          // 24h dollar-volume proxy = sum of last 24h candle volumes × last price.
-          // Layer-1 starter: from the 120 most-recent 1m bars (≤ 2h) we don't
-          // have a true 24h window. Pass 0 so the global filter's min_volume
-          // gate Layer-1-passes per its own contract (caller=0 → skip-check).
-          const volume24hUSD = 0;
+          // 24h dollar-volume = Kraken-reported rolling 24h share volume × last price.
+          // Source: xstock_spot_ticker_snap.volume_24h (already a 24h rolling
+          // window from the exchange ticker, NOT current-bar). Multiplied by
+          // last price to land in USD so global/pattern min_volume thresholds
+          // can compare apples-to-apples (DB thresholds are USD per Langston
+          // B-NEW-1 review 2026-05-12). When the snap has no volume_24h yet
+          // (cold-start, brand-new symbol) we pass 0 and the gate Layer-1-passes
+          // per the global-filter contract (caller=0 → skip-check).
+          const volume24hUSD = Number.isFinite(volume24hShares) && volume24hShares > 0
+            ? volume24hShares * price
+            : 0;
           await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters);
         }
         // Surface counters to the /api/xstocks/filter-diagnostics endpoint.

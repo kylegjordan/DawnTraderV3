@@ -261,6 +261,12 @@
 | 103 | **xStocks Last Scan Filter Breakdown UI investigation.** Kyle observed that global-filter line-by-line failure attribution (min_volume / max_spread / daily_range / min_price / max_price / etc.) shows 0 for both quant and pattern paths even when other filters show nonzero values. Likely NOT a bug — xstock global filter is permissive so failure counters are legitimately 0 — but verify whether the UI actually renders zero-value rows or omits them. If omitted, force-render with 0 so the user can see the filter is reporting. | OPEN — Tier 3 investigation | Surfaced 2026-05-12. Investigation pending next session. |
 | 104 | **Layer-3 calibration sub-batch: tighten pattern path `di_min`.** Pattern row `di_min=3` admits ~all pairs to pattern lane (verified 435 pairs in 24h vs `scanPatterns()` returning null on 288 of them). Generous filter ≠ generous signal flow. Equity 1m DI distribution post-RTH evidence will inform proper threshold. Also evaluate per-strategy `module_constants.strategy.<name>.*` rows for xstock_spot (currently 26 wildcard) and VN dominance in family-IMF rejection. | OPEN — Layer-3 calibration sub-batch | Surfaced 2026-05-12 from live xstock cycles. PRE_AUDIT §-1.10 already flagged the broader calibration debt. |
 
+### xStocks Filter Pipeline Diagnostics — TRACKER FILE NOTE
+
+> Canonical xStocks UI/pipeline tracker lives in `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`. Items raised by Kyle 2026-05-12 EOD (catalog of 13 issues post-B79.0m.b2 follow-ups) are tracked there, deduped against the existing B1–B10 entries in that file. RUNNING_ISSUES #101–#104 cross-reference into the canonical tracker.
+
+---
+
 ### Standing-rule proposal (Kyle directive 2026-05-11)
 
 **Proposed addition to CLAUDE.md §9:** every deferral mentioned in scope/pre-audit/completion-report MUST get a RUNNING_ISSUES entry the same session it's decided. Verbal "we'll do that later" without a tracker number is rejected — the project is too large for prose-paragraph paper trails to survive. Re-evaluate "DEFERRED to BXX.x" entries that point at non-existent batch IDs — either give them real batch numbers + sequencing or relabel as "DEFERRED — no scope, no trigger" so they don't masquerade as scheduled.
