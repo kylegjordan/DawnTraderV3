@@ -7438,6 +7438,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           timestamp: Date.now(),
           quantPairsEvaluated: (ec as any).quantPairsEvaluated ?? ec.pairsEntered,
           patternPairsEvaluated: (ec as any).patternPairsEvaluated ?? 0,
+          // B-NEW-8 per-cycle parity (2026-05-12): Last Scan section's
+          // "Pair-Pool Evaluations" row reads quant/patternPairPoolEvaluations
+          // first, falling back to quant/patternPairsEvaluated. Without these
+          // explicit emissions the panel showed unique-pair count (67) instead
+          // of the fan-out (208) for the quant column. Same source as the 24h
+          // aggregate above: familyFanOutSum + patternFanOut.
+          quantPairPoolEvaluations: (ec as any).familyFanOutSum ?? 0,
+          patternPairPoolEvaluations: (ec as any).patternFanOut ?? 0,
           quantStrategyNulls: (ec as any).quantStrategyNulls ?? ec.strategyNulls,
           patternStrategyNulls: (ec as any).patternStrategyNulls ?? 0,
           signalsGenerated: ec.signalsGenerated,
