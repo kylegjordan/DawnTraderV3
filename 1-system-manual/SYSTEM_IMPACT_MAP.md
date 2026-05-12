@@ -727,6 +727,16 @@
 
 ---
 
+## Recent Additions (xStocks UI sprint, 2026-05-13)
+
+| Component | Location | Impact |
+|-----------|----------|--------|
+| **Crypto-parity scanner defenses for xstock_spot** | `server/asset_classes/xstock_spot/scanner.ts` + `eval-cycle.ts` + `global-filter.ts` + `pattern-filter.ts` + `imf-evaluator.ts` | Three defenses missed in B79.0a → B79.0m.b2 ship: (1) cycle-scoped `XstockFilterConfigBundle` via `loadXstockFilterConfigs()` — pre-loads 7 screener_filters rows once per cycle, filter functions accept optional pre-loaded config (back-compat for unit tests). 1638 lookups/cycle → 7. (2) 25s `SCAN_TIMEOUT_MS` + `Promise.race` in `clockTickHandler` — force-resets isScanning on timeout, prevents wedge. (3) 75-pair round-robin rotation (70 rotated + 3 pinned benchmarks SPY/QQQ/GLD) with `rotationCursor` advancing per cycle. Cycle time 280s → 10-17s. Blast radius: LOW (xstock-only). **Pattern established: every dedicated scanner MUST implement these from day one** (Workflow Step 2b standing rules). |
+| **Per-lane null-reason aggregates** | `server/asset_classes/xstock_spot/eval-cycle.ts` + `scanner.ts` | New `quantNullReasonAggregate` + `patternNullReasonAggregate` fields on `XstockEvalCycleCounters`. Incremented separately at family_filter_mismatch site (line 437) and strategy-null site (line 510). Lifetime accumulator in scanner sums both. Endpoint emits as `quant/patternNullReasonDetail`. Panel renders correct per-lane shares; previously the combined map was emitted in the quant slot causing > 100% sums. Blast radius: LOW (telemetry only). |
+| **DB-backed 24h Trades Opened (xstock endpoint)** | `server/routes.ts` xstocks endpoint | Per-request DB query against `vts_open_trades` split by `signal_type` ('QUANT' vs 'PATTERN'). Replaces in-memory counter that reset on PM2 restart. Query indexed on `(asset_class, opened_at)`, <50ms expected. Per-cycle `lastCycleVtsEval` keeps in-memory counter (correct scope). Blast radius: LOW (single endpoint). |
+| **xStocks tab UI: enriched byStrategy + section totals + per-pool null splits + scope-clarity relabel** | `client/src/pages/machine-learning.tsx` | Multiple changes: (a) pre-populate `byStrategy` with all 10 DB-enabled xstock strategies (zero-rows for dormant); (b) Setup Nulls "Section Total" row with drift indicator; (c) iteration filters `Object.entries(global).filter(([k,v]) => typeof v === 'number')` to skip the `applicable` object key (was rendering `[object Object]`); (d) Trades Opened reads `quant/patternTradesOpened` (post-gate) instead of `quant/patternSignalsGenerated` (post-detect); (e) labels honest about counter scope (in-memory since-process-start vs DB-backed 24h); (f) Pre-Eval Skips total includes all 6 pre-detect rejection sources + Last Scan list adds missing rows. Blast radius: LOW (UI only). |
+| **Workflow doc Step 6b (Calibration cycle MANDATORY)** | `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` | Three sub-cycles required before declaring asset class production-ready: (1) regime classifier calibration, (2) filter threshold reality check, (3) strategy gate testing. Each has observation window + tuning surface + exit criteria. Distilled from crypto + xstock onboarding experience. Step 7b in procedural checklist; Section "Step 6b" body in detail. |
+
 ## Recent Additions (B52-B53)
 
 | Component | Location | Impact |

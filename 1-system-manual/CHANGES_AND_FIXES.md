@@ -2,6 +2,40 @@
 
 ---
 
+## UI-2026-05-13-A — xStocks Filter Diagnostics tab UI sprint (Phase 24 follow-on, 17 fixes 2026-05-12 → 2026-05-13)
+
+**Trigger:** Kyle catalog of UI issues against the xStocks Filter Diagnostics tab post-B79.0m.b2. One-by-one diagnose-and-fix workflow (NOT a full batch — per Kyle directive 2026-05-12). Canonical tracker: `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`.
+
+**Architectural-parity defenses landed (missed in original B79.0a → B79.0m.b2 ship):**
+- Cycle-scoped `screener_filters` config cache (1638 redundant lookups per cycle → 7). Commit `e3e8492bf`.
+- 25s `SCAN_TIMEOUT_MS` + `Promise.race` (matches crypto fx5-scanner.ts:572-624). Commit `73ff21052`.
+- 75-pair round-robin rotation with 3 pinned benchmarks (SPY/QQQ/GLD). ~1m 45s full universe sweep. Commit `dd5810c32`.
+- Constant-name typo fix (`di_to_pwin_scaling_factor` → `di_pwin_factor`) — kernel-fail log spam saturating event loop. Commit `f86295cb9`.
+
+**Pipeline architecture:**
+- Parallel quant + pattern global filters (B-NEW-1 follow-up, commit `73ab29eb5`).
+- Quant global threshold tightening + 24h dollar-volume wired from `xstock_spot_ticker_snap` (was hardcoded volume=0 silently skipping the gate). Commits `37dc1cee7` + migration `2026-05-12-b-new-1-xstock-global-tighten.sql`.
+- ↩ max_bid_ask_spread REVERTED (`7892af79a`) — adding bid/ask columns to ticker_snap SELECT caused 130× query slowdown. Needs separate batched query design (B-NEW-14 deferred).
+
+**UI / data-surfacing fixes — backend → panel field-name + math corrections (full list in tracker):**
+B-NEW-3 (`38878c59a`), B-NEW-4 (`92f4d8ef9` + `257bc5752`), B-NEW-5 (`305129326`), B-NEW-6 (incidentally fixed), B-NEW-7 (`494db9b65`), B-NEW-8 (`7d7b61ff1` + `257bc5752`), B-NEW-9 + B-NEW-13 (`54f9286bf` + `e3811aba4` + `5569e9cc7` + `1d06a6832` + `1027485c6` — culminates in DB-backed 24h trade counts via `vts_open_trades.signal_type` split; 13 QUANT + 1 PATTERN live), B-NEW-10 (`b87635ec8` — all 10 enabled strategies show, dormant zero-rows), B-NEW-11 (`a6da4aaec` — Section Total row + drift indicator), B-NEW-12 (`9c9d14b47`), B-NEW-12.b (`cf260480b` — real fix for Quant column %>100%, eval-cycle maintains per-lane null aggregates), B-NEW-17 (`84183086c` + `717a4ada8` — Pre-Eval Skips total + Last Scan rows + 24h per-pool split). Max Price → "—" (`1835fb03b`). Pinned benchmarks SPY/QQQ/GLD only (`2deb4259a`).
+
+**Standing rule added to ASSET_CLASS_ONBOARDING_WORKFLOW.md (commit `0bfc50242`):**
+New **Step 6b — Calibration cycle (MANDATORY)** with 3 sub-cycles (regime classifier / filter thresholds / strategy gate testing). Each has observation window + tuning surface + exit criteria. Initial Layer-1 seed values are domain-knowledge starters, not production-tuned — empirical calibration is required before the asset class moves to Phase 19 active-trading consideration.
+
+**Verified live (PM2 #262, HEAD `717a4ada8`):**
+- 14 xstock trades opened in last 24h DB-backed (13 QUANT + 1 PATTERN).
+- Cycle time ~10-17s under 25s timeout (33% margin).
+- Math coherent within each scope: pool column %s sum ≤ 100%; Setup Nulls Section Total ≈ 99.9% of totalStratNulls.
+- 10 strategies visible (5 active + 5 dormant regime-gated).
+- No crypto-side regression: `regime_factor_alternates` cadence holds, no-touch fence respected.
+
+**Deferred (tracked):**
+- B-NEW-14: bid/ask spread filter — separate-batched-query redesign needed.
+- B-NEW-15/16/18: Layer-3 calibration items (DI band, trend+breakout threshold differentiation, regime+family classifier redistribution).
+
+---
+
 ## INFRA-2026-05-11-A — B79.0g-tx atomic close-time soft-delete + pre-audit schema-paste rule
 
 **Trigger:** RUNNING_ISSUES #91 — B79.0g shipped close-time DELETE-from-vts_open_trades as fire-and-log async, not atomic with the closed-trade row creation. B79.0g-tx ships the soft-delete pattern (Option B) as the proper resolution after rejecting Option C (full tx through `persistRealPriceTrade`) as a regression-masquerading-as-a-fix.
