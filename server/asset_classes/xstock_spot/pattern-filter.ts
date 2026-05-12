@@ -106,6 +106,7 @@ export async function evaluateXstockPatternFilter(
   lastPrice: number,
   volume24hUSD: number,
   mode: 'paper' | 'live',
+  preloadedConfig?: any,
 ): Promise<PatternFilterResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -123,24 +124,27 @@ export async function evaluateXstockPatternFilter(
   };
   const perMetric = { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 };
 
-  // Resolve config: vts_pattern in passive mode, active_pattern in live mode.
+  // Pre-loaded config preferred (loaded once per cycle by scanner.runCycle).
+  // Falls back to per-pair DB lookup for back-compat (e.g. unit tests).
   const filterPath = mode === 'paper' ? 'vts_pattern' : 'active_pattern';
-  let config: any;
-  try {
-    config = await storage.getScreenerFilters({
-      mode,
-      assetClass: 'xstock_spot',
-      filterPath,
-    });
-  } catch (err) {
-    counters.failed_config_missing = 1;
-    return {
-      passed: false,
-      failureReason: `pattern_config_lookup_failed_${err instanceof Error ? err.message : 'unknown'}`,
-      counters,
-      perMetric,
-      metrics: { LQ: 0, VolNoise: 0, DI: null },
-    };
+  let config: any = preloadedConfig;
+  if (!config) {
+    try {
+      config = await storage.getScreenerFilters({
+        mode,
+        assetClass: 'xstock_spot',
+        filterPath,
+      });
+    } catch (err) {
+      counters.failed_config_missing = 1;
+      return {
+        passed: false,
+        failureReason: `pattern_config_lookup_failed_${err instanceof Error ? err.message : 'unknown'}`,
+        counters,
+        perMetric,
+        metrics: { LQ: 0, VolNoise: 0, DI: null },
+      };
+    }
   }
   if (!config) {
     counters.failed_config_missing = 1;

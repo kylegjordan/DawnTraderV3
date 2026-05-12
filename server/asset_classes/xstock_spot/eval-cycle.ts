@@ -108,6 +108,37 @@ export async function fetchXstockOHLC(symbol: string, limit = 120): Promise<OHLC
 
 const ASSET_CLASS = 'xstock_spot' as const;
 
+/**
+ * Per-cycle pre-loaded screener_filters config bundle. Loaded ONCE at the top
+ * of scanner.runCycle (mirroring crypto fx5-scanner.ts:737-815 which loads
+ * `vts_quant` + `vts_pattern` + 5 family rows once per cycle and passes them
+ * through). Pre-bundle, each filter function did its own per-pair DB lookup
+ * — for a 234-fresh-pair cycle that's 7 lookups × 234 pairs = 1638 redundant
+ * round-trips to Supabase, saturating the connection pool and dragging
+ * cycle time from ~22s to 280s+.
+ */
+export interface XstockFilterConfigBundle {
+  globalQuant: any | null;             // screener_filters row for 'active_quant'
+  pattern: any | null;                 // screener_filters row for 'vts_pattern' or 'active_pattern'
+  families: Map<string, any>;          // 5 entries: 'vts_trend' .. 'vts_strong_trend'
+}
+
+import { storage } from '../../storage.js';
+
+const FAMILY_PATHS_FOR_BUNDLE = ['vts_trend', 'vts_reversal', 'vts_breakout', 'vts_oscillator', 'vts_strong_trend'] as const;
+
+export async function loadXstockFilterConfigs(mode: 'paper' | 'live'): Promise<XstockFilterConfigBundle> {
+  const globalQuant = await storage.getScreenerFilters({ mode, assetClass: 'xstock_spot', filterPath: 'active_quant' }).catch(() => null);
+  const patternPath = mode === 'paper' ? 'vts_pattern' : 'active_pattern';
+  const pattern = await storage.getScreenerFilters({ mode, assetClass: 'xstock_spot', filterPath: patternPath }).catch(() => null);
+  const families = new Map<string, any>();
+  for (const fp of FAMILY_PATHS_FOR_BUNDLE) {
+    const row = await storage.getScreenerFilters({ mode, assetClass: 'xstock_spot', filterPath: fp }).catch(() => null);
+    if (row) families.set(fp, row);
+  }
+  return { globalQuant, pattern, families };
+}
+
 const XSTOCK_BENCHMARKS: ReadonlySet<string> = new Set([
   'SPY/USD',
   'QQQ/USD',
@@ -249,6 +280,7 @@ export async function evaluateXstockPairForVTS(
   volume24h: number,
   mode: 'paper' | 'live',
   counters: XstockEvalCycleCounters,
+  configs?: XstockFilterConfigBundle,
 ): Promise<void> {
   counters.pairsEntered++;
 
@@ -266,10 +298,10 @@ export async function evaluateXstockPairForVTS(
     // min_price=$2). Pair is rejected only when BOTH global filters fail.
     // Per Kyle directive 2026-05-12 EOD post-compact: do not let quant
     // global short-circuit the pattern path.
-    const globalResult = await evaluateXstockGlobalFilter(symbol, ohlc, lastPrice, volume24h, mode);
+    const globalResult = await evaluateXstockGlobalFilter(symbol, ohlc, lastPrice, volume24h, mode, configs?.globalQuant);
     mergeCounters(counters.globalFilterCounters, globalResult.counters);
 
-    const patternResult = await evaluateXstockPatternFilter(symbol, ohlc, lastPrice, volume24h, mode);
+    const patternResult = await evaluateXstockPatternFilter(symbol, ohlc, lastPrice, volume24h, mode, configs?.pattern);
     mergeCounters(counters.patternFilterCounters, patternResult.counters);
     counters.patternPerMetric.failedLQ += patternResult.perMetric.failedLQ;
     counters.patternPerMetric.failedVN += patternResult.perMetric.failedVN;
@@ -307,7 +339,7 @@ export async function evaluateXstockPairForVTS(
     // ── 3a. Family IMF (5 quant lanes) — only if quant global passed ──
     let passedFamilies: string[] = [];
     if (globalResult.passed) {
-      const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode);
+      const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode, configs?.families);
       mergeCounters(counters.imfFilterCounters, imfResult.counters);
       counters.imfPerMetric.failedLQ += imfResult.perMetric.failedLQ;
       counters.imfPerMetric.failedVN += imfResult.perMetric.failedVN;

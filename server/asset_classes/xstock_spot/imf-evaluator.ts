@@ -84,6 +84,7 @@ export async function evaluateXstockFamilyIMF(
   symbol: string,
   ohlc: OHLCData[],
   mode: 'paper' | 'live',
+  preloadedFamilies?: Map<string, any>,
 ): Promise<FamilyIMFResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -110,15 +111,18 @@ export async function evaluateXstockFamilyIMF(
   counters.di_value_x100 = DI === null ? -1 : Math.round(DI * 100);
 
   for (const filterPath of FAMILY_PATHS) {
-    let row: any;
-    try {
-      row = await storage.getScreenerFilters({
-        mode,
-        assetClass: 'xstock_spot',
-        filterPath,
-      });
-    } catch {
-      continue;
+    let row: any = preloadedFamilies?.get(filterPath);
+    if (!row) {
+      // Fallback DB lookup if not pre-loaded (e.g. unit tests).
+      try {
+        row = await storage.getScreenerFilters({
+          mode,
+          assetClass: 'xstock_spot',
+          filterPath,
+        });
+      } catch {
+        continue;
+      }
     }
     if (!row) continue;
     counters[`${filterPath}_evaluated`]++;

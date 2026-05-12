@@ -42,6 +42,7 @@ export async function evaluateXstockGlobalFilter(
   lastPrice: number,
   volume24hUSD: number,
   mode: 'paper' | 'live',
+  preloadedConfig?: any,
 ): Promise<GlobalFilterResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -61,16 +62,20 @@ export async function evaluateXstockGlobalFilter(
   counters.na_quote_currency = 1;
   counters.na_market_cap = 1;
 
-  let config: any;
-  try {
-    config = await storage.getScreenerFilters({
-      mode,
-      assetClass: 'xstock_spot',
-      filterPath: 'active_quant',
-    });
-  } catch (err) {
-    counters.failed_config_missing = 1;
-    return { passed: false, failureReason: 'config_lookup_failed', counters };
+  // Pre-loaded config preferred (loaded once per cycle by scanner.runCycle).
+  // Falls back to per-pair DB lookup for back-compat (e.g. unit tests).
+  let config: any = preloadedConfig;
+  if (!config) {
+    try {
+      config = await storage.getScreenerFilters({
+        mode,
+        assetClass: 'xstock_spot',
+        filterPath: 'active_quant',
+      });
+    } catch (err) {
+      counters.failed_config_missing = 1;
+      return { passed: false, failureReason: 'config_lookup_failed', counters };
+    }
   }
   if (!config) {
     counters.failed_config_missing = 1;

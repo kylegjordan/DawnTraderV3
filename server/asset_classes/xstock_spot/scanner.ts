@@ -321,9 +321,15 @@ class XstockSpotScannerService {
       // Hostile-sim bypasses (no eval during artificial sleep).
       // ════════════════════════════════════════════════════════════════════
       if (!this.diag.hostileSimActive && freshSymbols.length > 0) {
-        const { evaluateXstockPairForVTS, fetchXstockOHLC, makeEmptyXstockCycleCounters } =
+        const { evaluateXstockPairForVTS, fetchXstockOHLC, makeEmptyXstockCycleCounters, loadXstockFilterConfigs } =
           await import('./eval-cycle.js');
         const cycleCounters = makeEmptyXstockCycleCounters();
+        // Pre-load 7 screener_filters rows ONCE per cycle (mirrors crypto
+        // fx5-scanner.ts:737-815). Pre-bundle, each filter function did its
+        // own per-pair DB lookup — for a 234-fresh-pair cycle that was 1638
+        // redundant Supabase round-trips, saturating the connection pool and
+        // dragging cycle time from ~22s to 280s.
+        const cycleConfigs = await loadXstockFilterConfigs('paper');
         for (const { symbol, price, volume24hShares } of freshSymbols) {
           if (!Number.isFinite(price) || price <= 0) continue;
           const ohlc = await fetchXstockOHLC(symbol, 120);
@@ -339,7 +345,7 @@ class XstockSpotScannerService {
           const volume24hUSD = Number.isFinite(volume24hShares) && volume24hShares > 0
             ? volume24hShares * price
             : 0;
-          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters);
+          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters, cycleConfigs);
         }
         // Surface counters to the /api/xstocks/filter-diagnostics endpoint.
         this.diag.lastCycleEvalCounters = cycleCounters;
