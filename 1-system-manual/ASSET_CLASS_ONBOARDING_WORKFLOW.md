@@ -22,6 +22,7 @@
 | 5 | **Schema + module_constants** — verify or add `asset_class` column on every relevant table; insert seed rows for the new class; tag `tunable_status` correctly | Section C + Phase 24 H.1.x rule 2 | Drizzle migration SQL + module_constants seed SQL. Every behavioral knob has explicit per-class row (HARD-FAIL gate enforced at boot). |
 | 6 | **Code surface** — populate `server/asset_classes/<class>/{regime-thresholds,friction,pattern-pool-filters,market-hours,index}.ts`; extend `resolveAssetClass`; wire dispatch in `calculatePairRegime`, `cost-model`, `signal_quality_evaluator`, `MULTI_FAMILY_ELIGIBILITY`, telemetry boundaries, TEC stop-eval | Section D | All files added/modified. Section D.1 below has concrete extension templates from xstock_spot. |
 | 7 | **18-stage walkthrough** — for each pipeline stage answer: which variables/thresholds/gates apply, are they class-scoped or shared, where do values come from, Layer-1 baseline value, tagged `pending_layer_3` if no domain-knowledge answer | Section E | Row-per-stage table populated for the new class (mirrors Section H.1.E pattern) |
+| 7b | **Calibration cycle** — 3 mandatory sub-cycles: regime classifier (Sub-cycle 1), filter thresholds (Sub-cycle 2), strategy gate testing (Sub-cycle 3). Each has an observation window + tuning step + exit criteria. **Initial Layer-1 seed values are domain-knowledge starters, not production-tuned — empirical calibration is required.** Tracked in the asset class's diagnostics tracker. | Section "Step 6b — Calibration cycle" below | Pass/fail per sub-cycle + threshold-change migration log |
 | 8 | **Layer 1 / Layer 2 / Layer 3 protocol** — domain-knowledge baseline → cross-asset shadow-classify sanity → live shadow-mode VTS observation. Both ablation frameworks (B67.0 calibration + B73 exit-strategy) wired in parallel, each with asset-class-scoped emission | Section F + Section F.0 | Layer 1 values seeded; Section F.X observation period sized per evidence accumulation rate |
 | 9 | **Verification + forward-watch** — behavioral verify checklist; no-touch fence SQL on existing classes; 24h + 7d forward-watch metrics; strategy-gap monitoring (5 triggers) | Section G | Verify checklist + post-deploy SQL artifacts |
 | 10 | **Dedicated observation UI tab** — new asset class gets its own tab; both ablation panels side-by-side per Kyle directive | Section I.0 #6 | UI tab live with filter diagnostics + 2 ablation panels |
@@ -168,6 +169,39 @@ Each new asset class explicitly decides TEC behavior. Defaults that differ per a
 - Moonbag knobs — pure trade-mode policy, may transfer cross-class
 
 Seed asset-class-explicit `trailing_exit.<assetClass>.*` rows during Step 1; verify `resolveTECConfig(assetClass)` returns the right rows in Step 2 PIA.
+
+#### Step 6b — Calibration cycle (MANDATORY post-deploy, before declaring asset class production-ready)
+
+> Distilled from crypto + xstock onboarding experience (Kyle directive 2026-05-13). Initial Layer-1 seed values are domain-knowledge starters, not production-tuned. Empirical calibration is required before the asset class is treated as functional. Skipping this step is the root cause of "we shipped the asset class but no trades flow / wrong trades flow" — exactly what xstock surfaced.
+
+Three calibration sub-cycles MUST run, each with its own observation window + tuning step:
+
+**Sub-cycle 1 — Regime classifier calibration**
+- Observation: monitor the asset class's regime distribution across its universe over 24-72h of live data.
+- Expected anti-pattern: pairs heavily concentrated in 1-2 regimes (e.g. crypto initially over-classified to RANGE_BOUND_STABLE; xstock will likely over-classify to TREND_FRIENDLY_STABLE / STRUCTURAL_TRANSITION during RTH).
+- Tuning surface: `module_constants.regime_classifier.<assetClass>.*` thresholds (momentum / volatility / ADX / trend-strength bands). These were authored in Step 1 — Sub-cycle 1 verifies they produce reasonable distributions.
+- Reference: crypto saw a big shift from range_bound concentration to predominantly strong_trend after Layer-3 retune. Expect similar redistributions for any new asset class.
+- Exit criterion: regime distribution roughly matches the expected market behavior for the asset class (no regime > 70% of population unless deliberate).
+
+**Sub-cycle 2 — Filter threshold reality check**
+- Observation: examine the xStocks-style Filter Diagnostics panel for the new asset class over 24h.
+- Verify every applicable filter is binding meaningfully (rejecting at least some pairs) OR is set to permissive-by-design (e.g. `max_price` for fractional-ownership assets).
+- Expected anti-pattern: most filters at 0% rejection (too permissive, like xstock's $1 min_price for $200 TSLAx pairs) OR one filter rejecting >70% (too tight, like xstock's DI gate on reversal/oscillator families).
+- Tuning surface: `screener_filters.<assetClass>.<filter_path>` rows (min_price, min_volume, max_bid_ask_spread, LQ/VN/DI bands per family).
+- Exit criterion: each filter row's failure % is defensible — either zero (intentionally permissive) or measurable rejections that the operator can explain.
+
+**Sub-cycle 3 — Strategy gate testing**
+- Observation: over a multi-day window, monitor the By Strategy panel for the new asset class.
+- Verify every DB-enabled strategy fires at least once. Dormant strategies are acceptable ONLY if their gating reason is documented (regime never hit during observation window, market-hours gate excludes them, etc.).
+- Expected anti-pattern: IMPULSE_EXPANSION-mapped strategies stay at 0 even when IE regime hits other strategies (xstock surface — ORB fires under IE, but sma_trend_ride / breakout / vwap_bounce stay dormant, suggests a separate IE-routing audit).
+- Tuning surface: `strategy_gates.<assetClass>.<strategy>.enabled` rows + per-strategy thresholds in `module_constants.strategy.<name>.*` + family eligibility map.
+- Exit criterion: each enabled strategy has either (a) fired ≥ 1 signal in the observation window, OR (b) a documented gating explanation (regime never hit, market-hours, family eligibility).
+
+**Calibration tracker discipline:** each sub-cycle produces a deltas log in the asset class's diagnostics tracker (e.g. `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` for xstock). Every threshold change must be a DB UPDATE migration with `last_updated_by='<batch>-calibration-N'` so the audit trail survives across operator handoffs.
+
+**Pre-flight check — before declaring the asset class production-ready:**
+- All 3 sub-cycles run + passed exit criteria → asset class can move to Phase 19 active-trading consideration
+- Any sub-cycle still failing → asset class stays in passive-learning VTS mode; document the open calibration items in the asset class's diagnostics tracker
 
 #### Step 7 — Active-trading path wire-in (signal orchestrator + paper execution)
 
