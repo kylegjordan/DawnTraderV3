@@ -2009,15 +2009,26 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                       <tr className="bg-muted/50 border-y">
                         <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — pairs processed after cooldown/skip filters)</span></td>
                       </tr>
-                      {/* Batch 52 Fix 17: Pre-evaluation skips + Pair-Pool row in 24h summary */}
+                      {/* Batch 52 Fix 17: Pre-evaluation skips + Pair-Pool row in 24h summary
+                          B-NEW-17 (2026-05-13): include ALL pre-eval-skip reasons in the total,
+                          not just pairsSkippedNoPrice + pairsSkippedInsufficientOHLC. Family
+                          filter mismatch, duplicate position, max open trades, regime-no-
+                          strategies all fire BEFORE strategy.detect() — they belong here. */}
                       {(() => {
-                        const totalSkips24h = ((ve as any).pairsSkippedNoPrice ?? 0) + ((ve as any).pairsSkippedInsufficientOHLC ?? 0);
+                        const nr2 = (ve.nullReasons ?? {}) as any;
+                        const noPriceSkip = (ve as any).pairsSkippedNoPrice ?? 0;
+                        const ohlcSkip = (ve as any).pairsSkippedInsufficientOHLC ?? 0;
+                        const familyMismatch = nr2.familyFilterMismatch ?? 0;
+                        const dupPos = nr2.duplicatePosition ?? 0;
+                        const maxOpen = nr2.maxOpenTrades ?? 0;
+                        const regimeNoStrat = nr2.regimeNoStrategies ?? 0;
+                        const totalSkips24h = noPriceSkip + ohlcSkip + familyMismatch + dupPos + maxOpen + regimeNoStrat;
                         return (
                           <tr className="border-b hover:bg-muted/30">
                             <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
                             <td className="p-2 text-right text-xs text-orange-500" colSpan={2}></td>
                             <td className="p-2 text-right text-xs text-orange-500">{totalSkips24h > 0 ? `−${fmt(totalSkips24h)}` : '0'}</td>
-                            <td className="p-2 text-xs text-muted-foreground">noPrice={fmt((ve as any).pairsSkippedNoPrice ?? 0)}, insufficientOHLC={fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)} (24h cumulative)</td>
+                            <td className="p-2 text-xs text-muted-foreground">noPrice={fmt(noPriceSkip)}, insufficientOHLC={fmt(ohlcSkip)}, familyMismatch={fmt(familyMismatch)}, duplicate={fmt(dupPos)}, maxOpen={fmt(maxOpen)}, regimeNoStrats={fmt(regimeNoStrat)} (24h cumulative)</td>
                           </tr>
                         );
                       })()}
@@ -2418,12 +2429,28 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         <tr className="bg-muted/50 border-y">
                           <td colSpan={4} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation (24h rolling — VTS-side counters)</td>
                         </tr>
-                        <tr className="border-b hover:bg-muted/30">
-                          <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
-                          <td className="p-2 text-right text-xs text-orange-500">{fmt((ve as any).pairsSkippedNoPrice ?? 0)}</td>
-                          <td className="p-2 text-right text-xs text-orange-500">{fmt((ve as any).pairsSkippedInsufficientOHLC ?? 0)}</td>
-                          <td className="p-2 text-right text-xs text-orange-500">{fmt(((ve as any).pairsSkippedNoPrice ?? 0) + ((ve as any).pairsSkippedInsufficientOHLC ?? 0))}</td>
-                        </tr>
+                        {/* B-NEW-17 (2026-05-13): Pre-Eval Skips total here also includes
+                            all pre-eval-skip null-reason buckets (family_filter_mismatch,
+                            duplicate_position, max_open_trades, regime_no_strategies). */}
+                        {(() => {
+                          const nr3 = (ve.nullReasons ?? {}) as any;
+                          const quantQty = (ve as any).pairsSkippedNoPrice ?? 0;
+                          const ohlcQty = (ve as any).pairsSkippedInsufficientOHLC ?? 0;
+                          const preEvalTotal =
+                            quantQty + ohlcQty +
+                            (nr3.familyFilterMismatch ?? 0) +
+                            (nr3.duplicatePosition ?? 0) +
+                            (nr3.maxOpenTrades ?? 0) +
+                            (nr3.regimeNoStrategies ?? 0);
+                          return (
+                            <tr className="border-b hover:bg-muted/30">
+                              <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips <span className="text-[10px]">(sum of all pre-detect rejections)</span></td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(quantQty)}</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(ohlcQty)}</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(preEvalTotal)}</td>
+                            </tr>
+                          );
+                        })()}
                         <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
                           <td className="p-2 font-medium">Pair-Pool Evaluations</td>
                           <td className="p-2 text-right text-blue-600">{fmt(ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated)}</td>
