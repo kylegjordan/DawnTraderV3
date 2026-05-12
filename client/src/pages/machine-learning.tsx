@@ -2016,19 +2016,36 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                           strategies all fire BEFORE strategy.detect() — they belong here. */}
                       {(() => {
                         const nr2 = (ve.nullReasons ?? {}) as any;
+                        const qDetail = ((ve as any).quantNullReasonDetail ?? {}) as Record<string, number>;
+                        const pDetail = ((ve as any).patternNullReasonDetail ?? {}) as Record<string, number>;
                         const noPriceSkip = (ve as any).pairsSkippedNoPrice ?? 0;
                         const ohlcSkip = (ve as any).pairsSkippedInsufficientOHLC ?? 0;
                         const familyMismatch = nr2.familyFilterMismatch ?? 0;
                         const dupPos = nr2.duplicatePosition ?? 0;
                         const maxOpen = nr2.maxOpenTrades ?? 0;
                         const regimeNoStrat = nr2.regimeNoStrategies ?? 0;
+                        // B-NEW-17.b: per-lane breakdown where available (family_filter_mismatch
+                        // is per-lane since B-NEW-12.b; other reasons are pair-level or post-
+                        // detect — attributed to the combined total only).
+                        const qFamily = qDetail['family_filter_mismatch'] ?? 0;
+                        const pFamily = pDetail['family_filter_mismatch'] ?? 0;
+                        const qDup = qDetail['duplicate_position'] ?? 0;
+                        const pDup = pDetail['duplicate_position'] ?? 0;
+                        const qMaxOpen = qDetail['max_open_trades'] ?? 0;
+                        const pMaxOpen = pDetail['max_open_trades'] ?? 0;
+                        const qNoRegime = qDetail['regime_no_strategies'] ?? 0;
+                        const pNoRegime = pDetail['regime_no_strategies'] ?? 0;
+                        const quantSkips = qFamily + qDup + qMaxOpen + qNoRegime;
+                        const patternSkips = pFamily + pDup + pMaxOpen + pNoRegime;
+                        // pair-level skips (noPrice + OHLC) fire before any lane → can't split
                         const totalSkips24h = noPriceSkip + ohlcSkip + familyMismatch + dupPos + maxOpen + regimeNoStrat;
                         return (
                           <tr className="border-b hover:bg-muted/30">
                             <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
-                            <td className="p-2 text-right text-xs text-orange-500" colSpan={2}></td>
+                            <td className="p-2 text-right text-xs text-orange-500">{quantSkips > 0 ? `−${fmt(quantSkips)}` : '0'}</td>
+                            <td className="p-2 text-right text-xs text-orange-500">{patternSkips > 0 ? `−${fmt(patternSkips)}` : '0'}</td>
                             <td className="p-2 text-right text-xs text-orange-500">{totalSkips24h > 0 ? `−${fmt(totalSkips24h)}` : '0'}</td>
-                            <td className="p-2 text-xs text-muted-foreground">noPrice={fmt(noPriceSkip)}, insufficientOHLC={fmt(ohlcSkip)}, familyMismatch={fmt(familyMismatch)}, duplicate={fmt(dupPos)}, maxOpen={fmt(maxOpen)}, regimeNoStrats={fmt(regimeNoStrat)} (24h cumulative)</td>
+                            <td className="p-2 text-xs text-muted-foreground">noPrice={fmt(noPriceSkip)}, insufficientOHLC={fmt(ohlcSkip)}, familyMismatch={fmt(familyMismatch)}, duplicate={fmt(dupPos)}, maxOpen={fmt(maxOpen)}, regimeNoStrats={fmt(regimeNoStrat)}. Quant/Pattern columns show per-lane share of family_filter_mismatch + duplicate + maxOpen + regimeNoStrats; pair-level skips (noPrice/OHLC) fire pre-lane and are only in Total.</td>
                           </tr>
                         );
                       })()}
@@ -2211,9 +2228,11 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     const trades = signals - rejected;
                     const skippedNoPrice = lc.pairsSkippedNoPrice || 0;
                     const skippedOHLC = lc.pairsSkippedInsufficientOHLC || 0;
-                    const skippedMaxTrades = lc.nullReasons?.maxOpenTrades || 0;
-                    const skippedNoRegime = lc.nullReasons?.regimeNoStrategies || 0;
-                    const totalPreEvalSkips = skippedNoPrice + skippedOHLC + skippedMaxTrades;
+                    const skippedMaxTrades = (lc.nullReasons as any)?.maxOpenTrades || (lc.nullReasonDetail as any)?.['max_open_trades'] || 0;
+                    const skippedNoRegime = (lc.nullReasons as any)?.regimeNoStrategies || (lc.nullReasonDetail as any)?.['regime_no_strategies'] || 0;
+                    const skippedDuplicate = (lc.nullReasons as any)?.duplicatePosition || (lc.nullReasonDetail as any)?.['duplicate_position'] || 0;
+                    const skippedFamilyMismatch = (lc.nullReasons as any)?.familyFilterMismatch || (lc.nullReasonDetail as any)?.['family_filter_mismatch'] || 0;
+                    const totalPreEvalSkips = skippedNoPrice + skippedOHLC + skippedMaxTrades + skippedNoRegime + skippedDuplicate + skippedFamilyMismatch;
                     return (
                       <>
                         <tr className="border-b bg-blue-500/5"><td colSpan={4} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
@@ -2237,6 +2256,25 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                           <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Max Open Trades</td>
                           <td colSpan={2}></td>
                           <td className="p-2 text-right text-xs text-orange-400">{skippedMaxTrades > 0 ? `−${fmt(skippedMaxTrades)}` : '0'}</td>
+                        </tr>
+                        {/* B-NEW-17.b (2026-05-13): missing pre-eval-skip rows in Last Scan list.
+                            Family Filter Mismatch, Duplicate Position, and Regime Has No
+                            Strategies all fire before strategy.detect() — belong in this section
+                            to match the 24h Rolling Aggregates structure. */}
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Family Filter Mismatch</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{skippedFamilyMismatch > 0 ? `−${fmt(skippedFamilyMismatch)}` : '0'}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Duplicate Position</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{skippedDuplicate > 0 ? `−${fmt(skippedDuplicate)}` : '0'}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Regime Has No Strategies</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{skippedNoRegime > 0 ? `−${fmt(skippedNoRegime)}` : '0'}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-4">Pair-Pool Evaluations</td>
