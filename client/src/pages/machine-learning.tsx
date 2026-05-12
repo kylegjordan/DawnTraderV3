@@ -2728,6 +2728,28 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                                 <td className="p-2 text-right text-orange-500">{fmt(nr.adxGuard ?? 0)}</td>
                                 <td className="p-2 text-right">{pct(nr.adxGuard ?? 0)}%</td>
                               </tr>
+                              {/* B-NEW-11 (2026-05-13): Section Total row — makes drift visible.
+                                  Sums all displayed counts in this section + compares against
+                                  totalStratNulls. >100% indicates a reason is being double-counted
+                                  or a pre-eval skip leaked into the section; <100% indicates
+                                  uncategorized nulls. */}
+                              {(() => {
+                                const sectionTotal =
+                                  (nr.conditionsNotMet ?? 0) +
+                                  (nr.adxGuard ?? 0) +
+                                  groupDefs.flatMap(g => g.keys).reduce((s, k) => s + (detail?.[k] ?? 0), 0);
+                                const sectionPct = totalStratNulls > 0 ? Math.round(sectionTotal / totalStratNulls * 100) : 0;
+                                const driftWarn = sectionPct > 100 || (totalStratNulls > 0 && sectionPct < 95);
+                                return (
+                                  <tr className={`border-t-2 ${driftWarn ? 'border-amber-500 bg-amber-50/40 dark:bg-amber-950/20' : 'border-blue-500/30 bg-blue-50/20 dark:bg-blue-950/10'} font-semibold`}>
+                                    <td className="p-2">Section Total <span className="text-[10px] text-muted-foreground">(sum of all rows above)</span></td>
+                                    {hasPoolDetail && <td className="p-2 text-right">—</td>}
+                                    {hasPoolDetail && <td className="p-2 text-right">—</td>}
+                                    <td className="p-2 text-right">{fmt(sectionTotal)}</td>
+                                    <td className={`p-2 text-right ${driftWarn ? 'text-amber-600 dark:text-amber-400' : ''}`}>{sectionPct}%{driftWarn && <span className="ml-1 text-[10px]">⚠</span>}</td>
+                                  </tr>
+                                );
+                              })()}
                             </tbody>
                           </table>
 
