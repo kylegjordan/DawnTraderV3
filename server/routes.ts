@@ -7482,8 +7482,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Full per-strategy null-reason breakdown (what each strategy is failing on).
         byStrategyNullReasons: lt?.byStrategyNullReasons ?? {},
         nullReasonDetail: lt?.nullReasonAggregate ?? byReason,
-        quantNullReasonDetail: lt?.nullReasonAggregate ?? byReason,
-        patternNullReasonDetail: {},
+        // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
+        // separately maintained in eval-cycle.ts. Was emitting the combined
+        // aggregate in the quant slot + {} in pattern, which made the panel
+        // double-count (quant column showed total instead of quant share)
+        // so per-pool %s could exceed 100% (Kyle's 92.3% + 16.4% screenshot).
+        quantNullReasonDetail: (lt as any)?.quantNullReasonAggregate ?? lt?.nullReasonAggregate ?? byReason,
+        patternNullReasonDetail: (lt as any)?.patternNullReasonAggregate ?? {},
         // B79.0m.b2-followup (Kyle 2026-05-12 issue #6): denominator for
         // family-mismatch % was strategiesEvaluated only (eligibility-pass),
         // giving 158% on 24h data. Real denominator is total iterations:

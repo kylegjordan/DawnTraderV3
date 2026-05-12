@@ -434,6 +434,7 @@ class XstockSpotScannerService {
             imfPerFamily: {},
             familyFanOutSum: 0, familyQualifiedUnique: 0, benchmarksRemoved: 0, vtsDestination: 0,
             byStrategyNullReasons: {}, nullReasonAggregate: {},
+            quantNullReasonAggregate: {}, patternNullReasonAggregate: {},
             byStrategy: {},
           };
         }
@@ -493,6 +494,15 @@ class XstockSpotScannerService {
         }
         for (const reason of Object.keys(cycleCounters.nullReasonAggregate)) {
           lt.nullReasonAggregate[reason] = (lt.nullReasonAggregate[reason] ?? 0) + cycleCounters.nullReasonAggregate[reason];
+        }
+        // B-NEW-12.b per-lane null reason accumulators
+        if (!(lt as any).quantNullReasonAggregate) (lt as any).quantNullReasonAggregate = {};
+        if (!(lt as any).patternNullReasonAggregate) (lt as any).patternNullReasonAggregate = {};
+        for (const reason of Object.keys(cycleCounters.quantNullReasonAggregate)) {
+          (lt as any).quantNullReasonAggregate[reason] = ((lt as any).quantNullReasonAggregate[reason] ?? 0) + cycleCounters.quantNullReasonAggregate[reason];
+        }
+        for (const reason of Object.keys(cycleCounters.patternNullReasonAggregate)) {
+          (lt as any).patternNullReasonAggregate[reason] = ((lt as any).patternNullReasonAggregate[reason] ?? 0) + cycleCounters.patternNullReasonAggregate[reason];
         }
         for (const strat of Object.keys(cycleCounters.byStrategyNullReasons)) {
           if (!lt.byStrategyNullReasons[strat]) lt.byStrategyNullReasons[strat] = {};

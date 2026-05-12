@@ -213,6 +213,12 @@ export interface XstockEvalCycleCounters {
   vtsDestination: number;
   byStrategyNullReasons: Record<string, Record<string, number>>;
   nullReasonAggregate: Record<string, number>;
+  // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates so the panel's
+  // Quant + Pattern columns can show their share of each reason against
+  // their own evaluation total. Previously the panel rendered the combined
+  // aggregate in the Quant column → sums could exceed 100% of quant evals.
+  quantNullReasonAggregate: Record<string, number>;
+  patternNullReasonAggregate: Record<string, number>;
   byStrategy: Record<string, { evaluated: number; nulls: number; signals: number; rejected: number; trades: number }>;
 }
 
@@ -260,6 +266,8 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     vtsDestination: 0,
     byStrategyNullReasons: {},
     nullReasonAggregate: {},
+    quantNullReasonAggregate: {},
+    patternNullReasonAggregate: {},
     byStrategy: {},
   };
 }
@@ -436,6 +444,14 @@ export async function evaluateXstockPairForVTS(
         if (!isStrategyEligibleForLane(strategyKey, lane)) {
           counters.nullReasonAggregate['family_filter_mismatch'] =
             (counters.nullReasonAggregate['family_filter_mismatch'] ?? 0) + 1;
+          // B-NEW-12.b per-lane split
+          if (lane.kind === 'pattern') {
+            counters.patternNullReasonAggregate['family_filter_mismatch'] =
+              (counters.patternNullReasonAggregate['family_filter_mismatch'] ?? 0) + 1;
+          } else {
+            counters.quantNullReasonAggregate['family_filter_mismatch'] =
+              (counters.quantNullReasonAggregate['family_filter_mismatch'] ?? 0) + 1;
+          }
           continue;
         }
 
@@ -508,6 +524,12 @@ export async function evaluateXstockPairForVTS(
           counters.byStrategy[strategyKey].nulls++;
           const reason = getNullReason();
           counters.nullReasonAggregate[reason] = (counters.nullReasonAggregate[reason] ?? 0) + 1;
+          // B-NEW-12.b per-lane split
+          if (lane.kind === 'pattern') {
+            counters.patternNullReasonAggregate[reason] = (counters.patternNullReasonAggregate[reason] ?? 0) + 1;
+          } else {
+            counters.quantNullReasonAggregate[reason] = (counters.quantNullReasonAggregate[reason] ?? 0) + 1;
+          }
           if (!counters.byStrategyNullReasons[strategyKey]) counters.byStrategyNullReasons[strategyKey] = {};
           counters.byStrategyNullReasons[strategyKey][reason] = (counters.byStrategyNullReasons[strategyKey][reason] ?? 0) + 1;
           try {
