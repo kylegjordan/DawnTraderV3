@@ -89,8 +89,6 @@ interface TickerSnapRow extends Record<string, unknown> {
   symbol: string;
   price: string;        // numeric stored as string in pg
   volume24h: string;    // 24h rolling SHARE volume from Kraken ticker; multiply by price for USD
-  bid: string;          // best bid for spread computation
-  ask: string;          // best ask for spread computation
   capturedAt: Date;
 }
 
@@ -279,8 +277,6 @@ class XstockSpotScannerService {
           symbol::text AS symbol,
           last::text AS price,
           COALESCE(volume_24h, 0)::text AS "volume24h",
-          COALESCE(bid, 0)::text AS bid,
-          COALESCE(ask, 0)::text AS ask,
           captured_at AS "capturedAt"
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes'
@@ -302,25 +298,16 @@ class XstockSpotScannerService {
       const now = Date.now();
       let freshCount = 0;
       let staleCount = 0;
-      const freshSymbols: Array<{ symbol: string; price: number; volume24hShares: number; bidAskSpreadPct: number }> = [];
+      const freshSymbols: Array<{ symbol: string; price: number; volume24hShares: number }> = [];
       for (const row of rows as TickerSnapRow[]) {
         const lastTickMs = new Date(row.capturedAt).getTime();
         const fresh = await isPairDataFresh(row.symbol, 'xstock_spot', lastTickMs, now);
         if (fresh) {
           freshCount++;
-          // Bid/ask spread as % of midpoint. NaN/0 → -1 sentinel so the
-          // filter Layer-1-passes per the (caller=-1 → skip-check) contract
-          // when bid/ask aren't available; non-negative means a real measurement.
-          const bid = parseFloat(row.bid ?? '0');
-          const ask = parseFloat(row.ask ?? '0');
-          const spreadPct = (bid > 0 && ask > 0 && ask >= bid)
-            ? ((ask - bid) / ((ask + bid) / 2)) * 100
-            : -1;
           freshSymbols.push({
             symbol: row.symbol,
             price: parseFloat(row.price),
             volume24hShares: parseFloat(row.volume24h ?? '0'),
-            bidAskSpreadPct: spreadPct,
           });
         } else {
           staleCount++;
@@ -337,7 +324,7 @@ class XstockSpotScannerService {
         const { evaluateXstockPairForVTS, fetchXstockOHLC, makeEmptyXstockCycleCounters } =
           await import('./eval-cycle.js');
         const cycleCounters = makeEmptyXstockCycleCounters();
-        for (const { symbol, price, volume24hShares, bidAskSpreadPct } of freshSymbols) {
+        for (const { symbol, price, volume24hShares } of freshSymbols) {
           if (!Number.isFinite(price) || price <= 0) continue;
           const ohlc = await fetchXstockOHLC(symbol, 120);
           if (ohlc.length < 60) continue; // global-filter min-history floor
@@ -352,7 +339,7 @@ class XstockSpotScannerService {
           const volume24hUSD = Number.isFinite(volume24hShares) && volume24hShares > 0
             ? volume24hShares * price
             : 0;
-          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, bidAskSpreadPct, 'paper', cycleCounters);
+          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters);
         }
         // Surface counters to the /api/xstocks/filter-diagnostics endpoint.
         this.diag.lastCycleEvalCounters = cycleCounters;

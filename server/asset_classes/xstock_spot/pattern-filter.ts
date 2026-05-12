@@ -105,7 +105,6 @@ export async function evaluateXstockPatternFilter(
   ohlc: OHLCData[],
   lastPrice: number,
   volume24hUSD: number,
-  bidAskSpreadPct: number,
   mode: 'paper' | 'live',
 ): Promise<PatternFilterResult> {
   const counters: Record<string, number> = {
@@ -117,7 +116,6 @@ export async function evaluateXstockPatternFilter(
     failed_min_price: 0,
     failed_max_price: 0,
     failed_min_volume: 0,
-    failed_max_bid_ask_spread: 0,
     failed_min_history: 0,
     failed_lq: 0,
     failed_vn: 0,
@@ -190,21 +188,6 @@ export async function evaluateXstockPatternFilter(
     return {
       passed: false,
       failureReason: 'pattern_min_volume',
-      counters,
-      perMetric,
-      metrics: { LQ: 0, VolNoise: 0, DI: null },
-    };
-  }
-
-  // max_bid_ask_spread — same contract as global-filter.ts (caller=-1 →
-  // Layer-1 skip-check). Pattern path uses the same 3% global threshold
-  // per Langston review B-NEW (2026-05-12 cc-inbox).
-  const maxSpread = parseFloat(config.maxBidAskSpread ?? '0');
-  if (maxSpread > 0 && bidAskSpreadPct >= 0 && bidAskSpreadPct > maxSpread) {
-    counters.failed_max_bid_ask_spread = 1;
-    return {
-      passed: false,
-      failureReason: 'pattern_max_bid_ask_spread',
       counters,
       perMetric,
       metrics: { LQ: 0, VolNoise: 0, DI: null },
