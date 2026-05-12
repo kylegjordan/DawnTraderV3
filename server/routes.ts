@@ -7345,6 +7345,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         timestamp: Date.now(),
         quantPairsEvaluated: quantPairsEval || (lt?.pairsEntered ?? totalEvaluated),
         patternPairsEvaluated: patternPairsEval,
+        // B-NEW-4 (2026-05-12): Pair-Pool Evaluations row in the shared
+        // FilterDiagnosticsPanel reads quant/patternPairPoolEvaluations
+        // (pair × passed-family fan-out count, NOT unique pair count). For
+        // xstock the equivalents are familyFanOutSum (sum across all pairs of
+        // how many families each pair qualified for) and patternFanOut.
+        // Without this mapping the panel rendered 0 even when the underlying
+        // counters were healthy.
+        quantPairPoolEvaluations: lt?.familyFanOutSum ?? 0,
+        patternPairPoolEvaluations: lt?.patternFanOut ?? 0,
         quantStrategyNulls: quantStrategyNullsLt || totalNullsEff,
         patternStrategyNulls: patternStrategyNullsLt,
         patternNoDetection: 0,
