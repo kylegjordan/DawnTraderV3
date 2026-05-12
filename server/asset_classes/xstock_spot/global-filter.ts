@@ -41,6 +41,7 @@ export async function evaluateXstockGlobalFilter(
   ohlc: OHLCData[],
   lastPrice: number,
   volume24hUSD: number,
+  bidAskSpreadPct: number,
   mode: 'paper' | 'live',
 ): Promise<GlobalFilterResult> {
   const counters: Record<string, number> = {
@@ -111,8 +112,17 @@ export async function evaluateXstockGlobalFilter(
     return { passed: false, failureReason: `history_${ohlc.length}_lt_60`, counters };
   }
 
-  // max_bid_ask_spread — Layer-1 starter has no bid/ask in OHLC.
-  // Defer to B79.0m.b2 (feed extension); record as N/A pass for now.
+  // max_bid_ask_spread — bid/ask sourced from xstock_spot_ticker_snap by the
+  // scanner; caller passes spread % of midpoint. -1 sentinel = no measurement
+  // (Layer-1 skip-check per the same contract as min_volume when caller=0).
+  // Threshold per Langston B-NEW (2026-05-12 cc-inbox): 3% = ~6% round-trip
+  // friction = past the EV ceiling for any strategy. "Obvious junk" criterion
+  // satisfied. Stricter caps belong inside strategy logic, not here.
+  const maxSpread = parseFloat(config.maxBidAskSpread ?? '0');
+  if (maxSpread > 0 && bidAskSpreadPct >= 0 && bidAskSpreadPct > maxSpread) {
+    counters.failed_max_bid_ask_spread = 1;
+    return { passed: false, failureReason: 'max_bid_ask_spread', counters };
+  }
 
   counters.passed_all_filters = 1;
   return { passed: true, counters };

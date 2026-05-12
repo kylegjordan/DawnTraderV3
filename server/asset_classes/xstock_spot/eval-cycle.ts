@@ -247,6 +247,7 @@ export async function evaluateXstockPairForVTS(
   ohlc: OHLCData[],
   lastPrice: number,
   volume24h: number,
+  bidAskSpreadPct: number,
   mode: 'paper' | 'live',
   counters: XstockEvalCycleCounters,
 ): Promise<void> {
@@ -266,10 +267,10 @@ export async function evaluateXstockPairForVTS(
     // min_price=$2). Pair is rejected only when BOTH global filters fail.
     // Per Kyle directive 2026-05-12 EOD post-compact: do not let quant
     // global short-circuit the pattern path.
-    const globalResult = await evaluateXstockGlobalFilter(symbol, ohlc, lastPrice, volume24h, mode);
+    const globalResult = await evaluateXstockGlobalFilter(symbol, ohlc, lastPrice, volume24h, bidAskSpreadPct, mode);
     mergeCounters(counters.globalFilterCounters, globalResult.counters);
 
-    const patternResult = await evaluateXstockPatternFilter(symbol, ohlc, lastPrice, volume24h, mode);
+    const patternResult = await evaluateXstockPatternFilter(symbol, ohlc, lastPrice, volume24h, bidAskSpreadPct, mode);
     mergeCounters(counters.patternFilterCounters, patternResult.counters);
     counters.patternPerMetric.failedLQ += patternResult.perMetric.failedLQ;
     counters.patternPerMetric.failedVN += patternResult.perMetric.failedVN;
