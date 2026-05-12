@@ -7389,6 +7389,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const quantRejectedLt = lt?.quantSignalsRejected ?? 0;
       const patternRejectedLt = lt?.patternSignalsRejected ?? 0;
 
+      // B-NEW-10 (Kyle directive 2026-05-13): pre-populate `byStrategy` with
+      // zero-rows for every xstock-enabled strategy that hasn't iterated yet
+      // in this PM2 lifetime. Without this, regime-gated strategies (e.g.
+      // mean_reversion, sma_trend_ride, vwap_bounce, breakout, inside_bar_
+      // reversal) never appear in the By Strategy panel because their counter
+      // is created lazily on first iteration. DB has 10 xstock-enabled
+      // strategies; panel was showing only the ones that fired this run.
+      const enrichedByStrategy: Record<string, any> = { ...(lt?.byStrategy ?? byStrategy) };
+      try {
+        const { STRATEGY_DISPLAY_NAMES, isStrategyEnabledForAssetClass } =
+          await import('./config/canonical-regime-strategy-map.js');
+        for (const strategy of Object.keys(STRATEGY_DISPLAY_NAMES)) {
+          let enabled = false;
+          try {
+            enabled = isStrategyEnabledForAssetClass(strategy, 'xstock_spot');
+          } catch {
+            // Cold-cache or unknown strategy — default to NOT including.
+          }
+          if (enabled && !enrichedByStrategy[strategy]) {
+            enrichedByStrategy[strategy] = { evaluated: 0, nulls: 0, signals: 0, rejected: 0, trades: 0 };
+          }
+        }
+      } catch (err) {
+        console.warn(`[xstocks-filter-diagnostics] byStrategy enrichment skipped:`, err instanceof Error ? err.message : err);
+      }
+
       const vtsEvaluation = {
         timestamp: Date.now(),
         quantPairsEvaluated: quantPairsEval || (lt?.pairsEntered ?? totalEvaluated),
@@ -7450,7 +7476,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         rejectedReasons: { netEvBelowFloor: byReason['net_ev_below_floor'] || totalRejected },
         // Prefer live in-memory byStrategy (with nulls/signals/rejected/trades fields)
         // over the archive aggregate when present; UI uses both interchangeably.
-        byStrategy: lt?.byStrategy ?? byStrategy,
+        // B-NEW-10: enriched with zero-rows for xstock-enabled strategies that
+        // haven't iterated yet (regime-gated dormancy etc.).
+        byStrategy: enrichedByStrategy,
         // Full per-strategy null-reason breakdown (what each strategy is failing on).
         byStrategyNullReasons: lt?.byStrategyNullReasons ?? {},
         nullReasonDetail: lt?.nullReasonAggregate ?? byReason,
