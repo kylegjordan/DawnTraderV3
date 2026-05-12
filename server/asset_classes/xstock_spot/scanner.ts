@@ -160,7 +160,27 @@ class XstockSpotScannerService {
       }
       // Run every 30 ticks (30 seconds).
       if (tick.tickNumber > 0 && tick.tickNumber % SCAN_INTERVAL_SECONDS === 0) {
-        await this.runCycle(tick);
+        // Hard-timeout protection — mirrors crypto fx5-scanner.ts:572 + 604-624.
+        // Without this, a single slow runCycle (e.g. DB pool saturation) wedges
+        // the scanner forever: isScanning stays true, every subsequent 30s tick
+        // SKIPs, no recovery. 25s is intentionally below the 30s interval so
+        // a timed-out cycle releases isScanning before the next scheduled tick.
+        const SCAN_TIMEOUT_MS = 25000;
+        const cycleStartTs = Date.now();
+        const timeoutPromise = new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Scan timeout')), SCAN_TIMEOUT_MS),
+        );
+        await Promise.race([this.runCycle(tick), timeoutPromise]).catch((err) => {
+          console.error(
+            `[B79.0a][SCAN_TIMEOUT] tick=${tick.tickNumber} duration_ms=${Date.now() - cycleStartTs}: ${err?.message ?? err}`,
+          );
+          // runCycle's own finally will eventually reset these as well, but
+          // force-reset here so the next scheduled tick is not blocked while
+          // the background promise drains. Concurrent next-cycle is acceptable
+          // — counters merge cleanly via in-memory accumulator.
+          this.isScanning = false;
+          this.diag.isScanning = false;
+        });
       }
     };
 
