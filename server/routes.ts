@@ -7341,6 +7341,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const totalRejectedEff = (lt?.signalsRejectedBySQE ?? 0) || totalRejected;
       const tradesOpenedEff = lt?.tradesOpened ?? totalTrades;
 
+      // B-NEW-9 path A (Kyle directive 2026-05-13): DB-backed 24h trades-
+      // opened counts. In-memory counters reset on PM2 restart, so 24h-
+      // labeled rows on the panel had been showing "since-process-start"
+      // values (e.g. 1-7 displayed vs 12+ actual in DB). Query the soft-
+      // delete-flag vts_open_trades table (B79.0g-tx kept trade rows in
+      // table even after close) for true 24h rolling count, split by pool.
+      let trades24hQuant = 0;
+      let trades24hPattern = 0;
+      try {
+        const dbStart = Date.now();
+        const tradeCountResult: any = await db.execute(sql`
+          SELECT
+            COUNT(*) FILTER (WHERE pool = 'pattern')::int AS pattern_count,
+            COUNT(*) FILTER (WHERE pool != 'pattern')::int AS quant_count
+          FROM vts_open_trades
+          WHERE asset_class = 'xstock_spot'
+            AND opened_at > NOW() - INTERVAL '24 hours'
+        `);
+        const tradeCountRow: any = (tradeCountResult as any).rows?.[0] ?? (tradeCountResult as any)[0];
+        if (tradeCountRow) {
+          trades24hQuant = Number(tradeCountRow.quant_count ?? 0);
+          trades24hPattern = Number(tradeCountRow.pattern_count ?? 0);
+        }
+        if (Date.now() - dbStart > 1000) {
+          console.warn(`[xstocks-filter-diagnostics] 24h trade count query took ${Date.now() - dbStart}ms`);
+        }
+      } catch (err) {
+        console.warn(`[xstocks-filter-diagnostics] 24h trade count query failed:`, err instanceof Error ? err.message : err);
+      }
+
       // B79.0m.b2-followup (Kyle 2026-05-12): real per-lane split — was
       // hardcoded 0 for all pattern-path eval metrics, making the panel
       // appear "dead after VTS destination" for the pattern path.
@@ -7379,11 +7409,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         patternStrategyEvaluations: patternStrategyEvalsLt,
         quantSignalsGenerated: quantSignalsLt || totalSignalsEff,
         patternSignalsGenerated: patternSignalsLt,
-        // B-NEW-9 (2026-05-12): per-lane TRADES OPENED counters. signals
-        // Generated above is post-detect (pre-Net-EV-gate); these are the
-        // actual trades-opened count, used by the panel "Trades Opened" row.
-        quantTradesOpened: (lt as any)?.quantTradesOpened ?? 0,
-        patternTradesOpened: (lt as any)?.patternTradesOpened ?? 0,
+        // B-NEW-9 path A (Kyle directive 2026-05-13): DB-backed 24h trades-
+        // opened, replacing in-memory counters that reset on PM2 restart.
+        // The 24h panel rows now reflect actual DB-persisted trade rows
+        // opened in the last 24h, split by pool (pattern vs quant family).
+        quantTradesOpened: trades24hQuant,
+        patternTradesOpened: trades24hPattern,
         totalStrategyEvaluations: (quantStrategyEvalsLt + patternStrategyEvalsLt) || totalEvaluatedEff,
         signalsRejected: (quantRejectedLt + patternRejectedLt) || totalRejectedEff,
         quantSignalsRejected: quantRejectedLt || totalRejectedEff,
