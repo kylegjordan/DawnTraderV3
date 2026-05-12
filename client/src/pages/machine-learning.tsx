@@ -2083,7 +2083,12 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(lastScan.quant.global).map(([key, value]) => (
+                  {Object.entries(lastScan.quant.global)
+                    // B-NEW-7 (2026-05-12): `applicable` is an object holding
+                    // N/A flags for the panel — not a numeric counter. Skip
+                    // here so it doesn't render as "[object Object]".
+                    .filter(([key, value]) => typeof value === 'number')
+                    .map(([key, value]) => (
                     <tr key={key} className="border-b hover:bg-muted/30">
                       <td className="p-2">{formatFilterName(key)}</td>
                       <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, lastScan.totalPairsScanned)}`}>
@@ -2292,7 +2297,11 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(rolling24h.aggregated.quant.global).map(([key, value]) => {
+                  {Object.entries(rolling24h.aggregated.quant.global)
+                    // B-NEW-7 (2026-05-12): same `applicable`-object-as-string
+                    // fix as the Last Scan table above. Skip non-numeric keys.
+                    .filter(([key, value]) => typeof value === 'number')
+                    .map(([key, value]) => {
                     const patternVal = rolling24h.aggregated.pattern.global && key in (rolling24h.aggregated.pattern.global as Record<string, number>)
                       ? (rolling24h.aggregated.pattern.global as Record<string, number>)[key]
                       : null;
