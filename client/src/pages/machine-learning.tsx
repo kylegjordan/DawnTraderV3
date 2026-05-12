@@ -2043,11 +2043,11 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         <td className="p-2 text-xs text-muted-foreground">VTS counter (in-memory, 24h rolling)</td>
                       </tr>
                       <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
-                        <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(= signals produced)</span></td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantSignalsGenerated ?? 0)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternSignalsGenerated ?? 0)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt(((ve as any).quantSignalsGenerated ?? 0) + ((ve as any).patternSignalsGenerated ?? 0))}</td>
-                        <td className="p-2 text-xs text-muted-foreground">After all gates passed. Post-signal rejections counted separately.</td>
+                        <td className="p-2">Trades Opened</td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">After all gates passed (Net EV + pre-open + dedupe). Post-signal rejections counted separately.</td>
                       </tr>
                     </>
                   )}

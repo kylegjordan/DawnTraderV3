@@ -7379,6 +7379,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         patternStrategyEvaluations: patternStrategyEvalsLt,
         quantSignalsGenerated: quantSignalsLt || totalSignalsEff,
         patternSignalsGenerated: patternSignalsLt,
+        // B-NEW-9 (2026-05-12): per-lane TRADES OPENED counters. signals
+        // Generated above is post-detect (pre-Net-EV-gate); these are the
+        // actual trades-opened count, used by the panel "Trades Opened" row.
+        quantTradesOpened: (lt as any)?.quantTradesOpened ?? 0,
+        patternTradesOpened: (lt as any)?.patternTradesOpened ?? 0,
         totalStrategyEvaluations: (quantStrategyEvalsLt + patternStrategyEvalsLt) || totalEvaluatedEff,
         signalsRejected: (quantRejectedLt + patternRejectedLt) || totalRejectedEff,
         quantSignalsRejected: quantRejectedLt || totalRejectedEff,
@@ -7453,6 +7458,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           patternStrategyEvaluations: (ec as any).patternStrategiesEvaluated ?? 0,
           quantSignalsGenerated: (ec as any).quantSignalsGenerated ?? ec.signalsGenerated,
           patternSignalsGenerated: (ec as any).patternSignalsGenerated ?? 0,
+          // B-NEW-9 per-cycle: post-gate trade counts.
+          quantTradesOpened: (ec as any).quantTradesOpened ?? 0,
+          patternTradesOpened: (ec as any).patternTradesOpened ?? 0,
           quantSignalsRejected: (ec as any).quantSignalsRejected ?? ec.signalsRejectedBySQE,
           patternSignalsRejected: (ec as any).patternSignalsRejected ?? 0,
           totalStrategyEvaluations: ec.strategiesEvaluated,

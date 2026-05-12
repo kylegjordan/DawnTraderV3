@@ -426,6 +426,7 @@ class XstockSpotScannerService {
             quantStrategyNulls: 0, patternStrategyNulls: 0,
             quantSignalsGenerated: 0, patternSignalsGenerated: 0,
             quantSignalsRejected: 0, patternSignalsRejected: 0,
+            quantTradesOpened: 0, patternTradesOpened: 0,
             setupHashDeduped: 0,
             archiveFailures: 0,
             globalFilterCounters: {}, imfFilterCounters: {},
@@ -451,6 +452,7 @@ class XstockSpotScannerService {
           'quantStrategyNulls', 'patternStrategyNulls',
           'quantSignalsGenerated', 'patternSignalsGenerated',
           'quantSignalsRejected', 'patternSignalsRejected',
+          'quantTradesOpened', 'patternTradesOpened',
           'setupHashDeduped'] as const) {
           lt[k] = (lt[k] ?? 0) + ((cycleCounters as any)[k] ?? 0);
         }

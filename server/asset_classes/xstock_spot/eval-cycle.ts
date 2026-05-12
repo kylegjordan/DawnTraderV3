@@ -182,6 +182,11 @@ export interface XstockEvalCycleCounters {
   patternStrategyNulls: number;
   quantSignalsGenerated: number;
   patternSignalsGenerated: number;
+  // B-NEW-9 per-lane trade counts (2026-05-12). Distinct from
+  // *SignalsGenerated which is post-detect (pre-gate). These two are the
+  // actual "trade was opened" counters, per lane.
+  quantTradesOpened: number;
+  patternTradesOpened: number;
   quantSignalsRejected: number;       // post-detect rejection (Net EV gate or pre-open)
   patternSignalsRejected: number;
   // B79.0m.b2-followup: setup-hash dedupe was a silent `continue;` —
@@ -237,6 +242,8 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     patternStrategyNulls: 0,
     quantSignalsGenerated: 0,
     patternSignalsGenerated: 0,
+    quantTradesOpened: 0,
+    patternTradesOpened: 0,
     quantSignalsRejected: 0,
     patternSignalsRejected: 0,
     setupHashDeduped: 0,
@@ -701,6 +708,12 @@ export async function evaluateXstockPairForVTS(
         });
         if (tradeId) {
           counters.tradesOpened++;
+          // B-NEW-9 per-lane trade counts (2026-05-12): panel "Trades Opened"
+          // row was reading quant/patternSignalsGenerated (post-detect, pre-
+          // gate). After all gates pass and a trade is actually opened, also
+          // bump the per-lane counter so the panel reflects actual trades.
+          if (lane.kind === 'pattern') (counters as any).patternTradesOpened = ((counters as any).patternTradesOpened ?? 0) + 1;
+          else (counters as any).quantTradesOpened = ((counters as any).quantTradesOpened ?? 0) + 1;
           counters.byStrategy[strategyKey].trades++;
           console.log(`[B79.0m.b2][EVAL] ${symbol} (xstock_spot) regime=${regime} strategy=${strategyKey} lane=${lane.sourcePool} netEV=${kernelResult.netEV.toFixed(4)} → trade ${tradeId} opened`);
         }
