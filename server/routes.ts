@@ -7113,6 +7113,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           failed_correlation: false,    // computed in IMF, not global, for xstock
           failed_guardrail_risk: false, // crypto-only concept (DBS guardrail)
           failed_daily_range: false,    // not implemented for xstock global
+          // xstocks support fractional ownership → no maximum-price cap. DB
+          // value max_price=0 means "no limit"; panel renders "—" via this
+          // applicable flag (Kyle directive 2026-05-12).
+          failed_max_price: false,
         } as Record<string, boolean>,
       };
       const emptyImf = { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0, benchmarkBypassed: 0, applicable: { failedDI: true, failedCorr: true } as Record<string, boolean> };
@@ -7126,9 +7130,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // iteration 2 is gone.
         applicable: {
           path: true,
-          // The 3 always-N/A gates for xstock pattern path:
+          // The always-N/A gates for xstock pattern path:
           failed_stablecoin: false,   // no stablecoin equity tickers
           failed_spread: false,       // bid/ask not in OHLC at Layer-1
+          // xstocks support fractional ownership → no maximum-price cap.
+          failed_max_price: false,
         } as Record<string, boolean>,
       };
 
