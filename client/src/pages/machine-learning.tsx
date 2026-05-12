@@ -2029,25 +2029,25 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         <td className="p-2 text-xs text-muted-foreground">VTS Destination minus skips (pair+family combos entering evaluation, 24h)</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2 font-medium">Strategy Evaluations</td>
+                        <td className="p-2 font-medium">Strategy Evaluations <span className="text-[10px] text-muted-foreground">(since process start)</span></td>
                         <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt(((ve as any).quantStrategyEvaluations ?? 0) + ((ve as any).patternStrategyEvaluations ?? 0))}</td>
-                        <td className="p-2 text-xs text-muted-foreground">Per-strategy per-pair detect() calls (24h)</td>
+                        <td className="p-2 text-xs text-muted-foreground">Per-strategy per-pair detect() calls. In-memory counter, resets on PM2 restart.</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls</td>
+                        <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls <span className="text-[10px]">(since process start)</span></td>
                         <td className="p-2 text-right text-xs text-red-400">{fmt((ve as any).quantStrategyNulls ?? 0)}</td>
                         <td className="p-2 text-right text-xs text-red-400">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
                         <td className="p-2 text-right text-xs text-red-400">{fmt(((ve as any).quantStrategyNulls ?? 0) + ((ve as any).patternStrategyNulls ?? 0))}</td>
-                        <td className="p-2 text-xs text-muted-foreground">VTS counter (in-memory, 24h rolling)</td>
+                        <td className="p-2 text-xs text-muted-foreground">In-memory counter, resets on PM2 restart.</td>
                       </tr>
                       <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
-                        <td className="p-2">Trades Opened</td>
+                        <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(DB-backed, 24h rolling)</span></td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
                         <td className="p-2 text-right text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
-                        <td className="p-2 text-xs text-muted-foreground">After all gates passed (Net EV + pre-open + dedupe). Post-signal rejections counted separately.</td>
+                        <td className="p-2 text-xs text-muted-foreground">After all gates passed (Net EV + pre-open + dedupe). Sourced from vts_open_trades DB row count — scope differs from in-memory Strategy counters above.</td>
                       </tr>
                     </>
                   )}
@@ -2535,25 +2535,25 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         </td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Total Strategy Evaluations <span className="text-xs text-muted-foreground">(cumulative, 24h rolling)</span></td>
+                        <td className="p-2">Total Strategy Evaluations <span className="text-xs text-muted-foreground">(since process start — in-memory, resets on PM2 restart)</span></td>
                         <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">True Strategy Nulls <span className="text-xs text-muted-foreground">(no setup found — excludes post-signal rejections)</span></td>
+                        <td className="p-2">True Strategy Nulls <span className="text-xs text-muted-foreground">(since process start — no setup found, excludes post-signal rejections)</span></td>
                         <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
                         <td className="p-2 text-right text-orange-500">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
                         <td className="p-2 text-right font-semibold text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2">Signals Rejected (Net EV Below Floor) <span className="text-xs text-muted-foreground">(cumulative, 24h — strategy fired but signal failed EV check)</span></td>
+                        <td className="p-2">Signals Rejected (Net EV Below Floor) <span className="text-xs text-muted-foreground">(since process start — strategy fired but signal failed EV check)</span></td>
                         <td className="p-2 text-right text-red-500">{fmt((ve as any).quantSignalsRejected ?? 0)}</td>
                         <td className="p-2 text-right text-red-500">{fmt((ve as any).patternSignalsRejected ?? 0)}</td>
                         <td className="p-2 text-right font-semibold text-red-500">{fmt((ve as any).signalsRejected ?? 0)}</td>
                       </tr>
                       <tr className="bg-muted/30 font-semibold">
-                        <td className="p-2">Trades Opened <span className="text-xs text-muted-foreground">(cumulative since process start — virtual trades opened, post-gate)</span></td>
+                        <td className="p-2">Trades Opened <span className="text-xs text-muted-foreground">(DB-backed, 24h rolling — scope differs from in-memory rows above)</span></td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
                         <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
                         <td className="p-2 text-right font-semibold text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
