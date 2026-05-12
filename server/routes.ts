@@ -7245,6 +7245,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Scanned count = pairs ENTERED the eval pipeline this cycle (the
         // fresh-pair set after freshness gate). Reflects what the funnel
         // started with — what the UI label "Scanned" should show.
+        //
+        // Field is named `totalPairsScanned` for crypto-parity (the shared
+        // FilterDiagnosticsPanel reads `lastScan.totalPairsScanned`); also
+        // emit `scannedCount` for any older consumers still wired to that
+        // name. Both point at the same value.
+        totalPairsScanned: ec?.pairsEntered ?? diag.pairsScannedLastCycle,
         scannedCount: ec?.pairsEntered ?? diag.pairsScannedLastCycle,
         quant: {
           global: buildGlobalFromCounters(ec?.globalFilterCounters),
