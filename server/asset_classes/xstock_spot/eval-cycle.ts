@@ -259,51 +259,16 @@ export async function evaluateXstockPairForVTS(
       return;
     }
 
-    // ── 1. Global filter (quant-side global) ──
+    // ── 1. PARALLEL global filters (mirrors crypto fx5-scanner.ts:743-1188) ──
+    // Quant global filter and pattern global filter run INDEPENDENTLY on
+    // every scanned pair. A pair that fails quant global can still pass
+    // pattern global (e.g. PLUG $3.95 < quant min_price=$5 but > pattern
+    // min_price=$2). Pair is rejected only when BOTH global filters fail.
+    // Per Kyle directive 2026-05-12 EOD post-compact: do not let quant
+    // global short-circuit the pattern path.
     const globalResult = await evaluateXstockGlobalFilter(symbol, ohlc, lastPrice, volume24h, mode);
     mergeCounters(counters.globalFilterCounters, globalResult.counters);
-    if (!globalResult.passed) {
-      counters.pairsFailedGlobalFilter++;
-      return;
-    }
 
-    // ── 2. MCE context (assetClass-aware; synthesized neutral DBS for xstock) ──
-    const mce = getMarketContextEngine();
-    let mceContext;
-    try {
-      mceContext = mce.computeContext(symbol, ohlc, lastPrice, volume24h, undefined, undefined, ASSET_CLASS);
-    } catch (mceErr) {
-      counters.errors++;
-      console.warn(`[B79.0m.b2][EVAL_MCE_FAIL] ${symbol}: ${mceErr instanceof Error ? mceErr.message : mceErr}`);
-      return;
-    }
-    const regime = mceContext.regime.regime;
-
-    // ── 3a. Family IMF (5 quant lanes) ──
-    const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode);
-    mergeCounters(counters.imfFilterCounters, imfResult.counters);
-    counters.imfPerMetric.failedLQ += imfResult.perMetric.failedLQ;
-    counters.imfPerMetric.failedVN += imfResult.perMetric.failedVN;
-    counters.imfPerMetric.failedCorr += imfResult.perMetric.failedCorr;
-    counters.imfPerMetric.failedDI += imfResult.perMetric.failedDI;
-    counters.imfPerMetric.passed += imfResult.perMetric.passed;
-    counters.imfPerMetric.total += imfResult.perMetric.total;
-    for (const fam of Object.keys(imfResult.perFamily)) {
-      const src = imfResult.perFamily[fam];
-      if (!counters.imfPerFamily[fam]) {
-        counters.imfPerFamily[fam] = { evaluated: 0, failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0 };
-      }
-      const dst = counters.imfPerFamily[fam];
-      dst.evaluated += src.evaluated;
-      dst.failedLQ += src.failedLQ;
-      dst.failedVN += src.failedVN;
-      dst.failedCorr += src.failedCorr;
-      dst.failedDI += src.failedDI;
-      dst.passed += src.passed;
-    }
-    counters.familyFanOutSum += imfResult.passedFamilies.length;
-
-    // ── 3b. Pattern filter (parallel pattern path — B79.0m.b2) ──
     const patternResult = await evaluateXstockPatternFilter(symbol, ohlc, lastPrice, volume24h, mode);
     mergeCounters(counters.patternFilterCounters, patternResult.counters);
     counters.patternPerMetric.failedLQ += patternResult.perMetric.failedLQ;
@@ -321,9 +286,59 @@ export async function evaluateXstockPairForVTS(
       counters.pairsFailedPattern++;
     }
 
+    if (!globalResult.passed && !patternResult.passed) {
+      counters.pairsFailedGlobalFilter++;
+      return;
+    }
+
+    // ── 2. MCE context (assetClass-aware; synthesized neutral DBS for xstock) ──
+    // Needed by both lanes for regime-routing of strategies downstream.
+    const mce = getMarketContextEngine();
+    let mceContext;
+    try {
+      mceContext = mce.computeContext(symbol, ohlc, lastPrice, volume24h, undefined, undefined, ASSET_CLASS);
+    } catch (mceErr) {
+      counters.errors++;
+      console.warn(`[B79.0m.b2][EVAL_MCE_FAIL] ${symbol}: ${mceErr instanceof Error ? mceErr.message : mceErr}`);
+      return;
+    }
+    const regime = mceContext.regime.regime;
+
+    // ── 3a. Family IMF (5 quant lanes) — only if quant global passed ──
+    let passedFamilies: string[] = [];
+    if (globalResult.passed) {
+      const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode);
+      mergeCounters(counters.imfFilterCounters, imfResult.counters);
+      counters.imfPerMetric.failedLQ += imfResult.perMetric.failedLQ;
+      counters.imfPerMetric.failedVN += imfResult.perMetric.failedVN;
+      counters.imfPerMetric.failedCorr += imfResult.perMetric.failedCorr;
+      counters.imfPerMetric.failedDI += imfResult.perMetric.failedDI;
+      counters.imfPerMetric.passed += imfResult.perMetric.passed;
+      counters.imfPerMetric.total += imfResult.perMetric.total;
+      for (const fam of Object.keys(imfResult.perFamily)) {
+        const src = imfResult.perFamily[fam];
+        if (!counters.imfPerFamily[fam]) {
+          counters.imfPerFamily[fam] = { evaluated: 0, failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0 };
+        }
+        const dst = counters.imfPerFamily[fam];
+        dst.evaluated += src.evaluated;
+        dst.failedLQ += src.failedLQ;
+        dst.failedVN += src.failedVN;
+        dst.failedCorr += src.failedCorr;
+        dst.failedDI += src.failedDI;
+        dst.passed += src.passed;
+      }
+      counters.familyFanOutSum += imfResult.passedFamilies.length;
+      passedFamilies = imfResult.passedFamilies;
+      if (imfResult.anyPassed) {
+        counters.pairsPassedFamilies++;
+        counters.familyQualifiedUnique++;
+      }
+    }
+
     // ── 3c. Lane composition (fan-out) ──
     const lanes: EvalLane[] = [];
-    for (const fp of imfResult.passedFamilies) {
+    for (const fp of passedFamilies) {
       const familyKey = fp.replace(/^vts_|^active_/, '') as StrategyFamily;
       lanes.push({ kind: 'family', family: familyKey, sourcePool: `xstock-${familyKey}` });
     }
@@ -334,10 +349,6 @@ export async function evaluateXstockPairForVTS(
     if (lanes.length === 0) {
       counters.pairsFailedAllFamilies++;
       return;
-    }
-    if (imfResult.anyPassed) {
-      counters.pairsPassedFamilies++;
-      counters.familyQualifiedUnique++;
     }
 
     // Benchmark removal currently OFF (mirrors crypto B62 posture).
