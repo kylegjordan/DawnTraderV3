@@ -71,6 +71,37 @@ If shared (rare — only for asset classes with truly identical signal distribut
 - Extend `fx5-scanner.ts` to accept assetClass param at every internal boundary
 - Add asset-class-aware family-row lookup (already in place via `getScreenerFilters({mode, filterPath, assetClass})` post-B79.0m.a)
 
+#### Step 2b — Crypto-parity scanner defenses (MANDATORY for every dedicated scanner)
+
+> Distilled from xstock_spot trial-and-error 2026-05-12. Every new dedicated scanner must implement these from day one. Missing any of them produces the exact "scanner wedges, UI shows zeros forever, every cycle times out" failure mode the xstock pipeline hit.
+
+1. **Cycle-scoped config cache** — Load every `screener_filters` row (1 global + 1 pattern + 5 family = 7 rows for a standard quant+pattern setup) ONCE at the top of `runCycle`. Pass through to filter functions as a config bundle. **Do NOT call `storage.getScreenerFilters` inside the per-pair eval loop** — it's the N+1 query that saturates the connection pool. Reference: `fx5-scanner.ts:737-815` for the crypto pattern; `server/asset_classes/xstock_spot/eval-cycle.ts:loadXstockFilterConfigs` for the xstock implementation.
+
+2. **`SCAN_TIMEOUT_MS` + `Promise.race`** — Wrap `runCycle(tick)` in `Promise.race([cyclePromise, timeoutPromise])` where the timeout is **strictly less than the scan interval** (e.g. 25s timeout for 30s interval). On timeout, force-reset `isScanning = false` in the `.catch` so the next scheduled tick can start fresh. Reference: `fx5-scanner.ts:572 + 604-624` (crypto); `scanner.ts` xstock implementation. **Without this, one slow cycle wedges the scanner forever** — every subsequent 30s tick SKIPs because isScanning stays true, no recovery path.
+
+3. **Pair-batch rotation when universe > budget** — If the asset class universe size × per-pair eval cost exceeds the `SCAN_TIMEOUT_MS` budget, implement round-robin rotation. Each cycle scans a fixed batch (e.g. 75 pairs); a `rotationCursor` advances through the universe over multiple cycles for a full sweep. **Always pin index benchmarks every cycle** (5 names max) so portfolio-level signals never wait for rotation. Reference: xstock scanner.ts `CYCLE_BATCH_SIZE = 75`, `PINNED_BENCHMARKS`, `rotationCursor`. Trade-off: each non-pinned pair evaluated every N cycles instead of every cycle — accept in VTS observation phase; revisit when active trading turns on.
+
+4. **Pinned-benchmark sanity check** — Whatever symbols you pin must actually exist in the asset class universe. xstock initially pinned 5 (SPY/QQQ/IWM/DIA/GLD) but IWM and DIA aren't tokenized — silently filtered out by `symbolList.includes()`. **In Step 2 pre-audit, verify each pinned symbol against the asset class's `<class>-universe.json`**.
+
+5. **Constant-name canonicalization** — Before writing ANY `getCachedNumberRequired('<module>', '<constant_name>', ...)` call site, grep the existing codebase + DB for the canonical constant_name. xstock spent hours debugging massive log spam from `directional_integrity.di_to_pwin_scaling_factor` (a typo) when every other site used `di_pwin_factor`. **Pre-audit must grep `getCachedNumberRequired` across the new asset class's code path** and cross-check against `SELECT DISTINCT constant_name FROM module_constants WHERE module_name = '...'`.
+
+6. **Bid/ask spread filter source pattern** — When adding spread filtering, DO NOT add `bid`/`ask` columns to the main ticker_snap SELECT used for the freshness gate. xstock tried that and the query plan blew up 130× (141ms → 18.5s) because the new columns required heap reads on a heavily-written partitioned table. The right pattern: a **separate small batched query** for bid/ask keyed by symbol, executed AFTER the freshness gate so it runs on the survivor set only. **Currently unimplemented; tracker `B-NEW-14`.**
+
+7. **OHLC fetch — pre-warm batched at cycle start, or per-symbol cache with TTL** — Two valid patterns:
+   - **Pre-warm batched** (xstock pattern, recommended when source is own DB): single `SELECT ... WHERE symbol = ANY([survivors])` query at top of cycle, populate a Map, eval reads from Map. Single DB roundtrip per cycle.
+   - **Per-symbol TTL cache** (crypto pattern, required when source is rate-limited external API): `OHLCCache` class with Map + TTL, miss-path fetches upstream. TTL calibrated to candle interval (5min for 60min candles; 25s for 1min candles — must be < candle close interval to avoid stale-bar serving).
+   - **NEVER do per-pair sequential reads inside the eval loop without one of these layers**. That's the xstock pre-2026-05-12 anti-pattern.
+
+8. **NO silent fallbacks** — Pre-warm batched queries, config bundle loads, etc. MUST hard-fail loud (log + alert) on error. **Do NOT fall back to per-symbol queries on batch failure** — that re-introduces the N+1 pattern the batched query was designed to kill. Add a test that breaks if a fallback path appears. Reference: NO PATCHES doctrine (CLAUDE.md §5 #15).
+
+9. **Symbol normalization consistency** — Verify the symbol key format is byte-identical across: archiver writes → ticker_snap rows → OHLC table rows → cache keys → eval loop comparisons → strategy detect calls. Mismatches here are silent killers (cache always misses; eval skips symbols nobody notices). Pre-audit step: log a single symbol's hex bytes at each boundary and confirm equality.
+
+10. **Connection pool sizing for worst case** — The Supabase / Postgres pool must handle the cycle's worst-case concurrent query count. With pre-warm + per-pair OHLC + config bundle reads + concurrent ticker writers, peak demand can spike. Pre-audit step: count the queries per cycle, multiply by concurrent asset-class scanners running, verify pool size > peak. xstock saw `ticker-batch-writer: pool slot timeout (5s)` for hours under N+1 + heavy ticker writes.
+
+11. **Central clock subscription, NOT setInterval** — Always subscribe to the shared `centralClock` and gate execution on `tick.tickNumber % SCAN_INTERVAL_SECONDS === 0`. Same boundary as every other scanner (crypto + xstock both fire at tick 30, 60, 90, ...). Do NOT spin up an independent `setInterval` — they drift and create non-deterministic load patterns.
+
+12. **`isScanning` early-return** — Set `this.isScanning = true` BEFORE `runCycle()` starts, reset in a `finally` block. Every tick handler should `if (this.isScanning) return;` to prevent re-entry. The `SCAN_TIMEOUT_MS` (defense #2) provides the escape valve when something takes longer than expected.
+
 #### Step 3 — Post-filter survivor handoff (shared eval surface, NOT a carve-out)
 
 After filtering, surviving pairs flow into the SHARED post-filter eval functions. These already exist as DB-driven modular units (Phase 18 + B78 + B79.0m.a):

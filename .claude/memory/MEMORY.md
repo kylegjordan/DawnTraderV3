@@ -18,6 +18,28 @@
 
 ---
 
+## TEMPORARY MAINTENANCE RULES (xStocks UI sprint — remove when all B-NEW items FIXED + verified)
+
+Kyle directive 2026-05-12 EOD. These rules apply WHILE the xStocks Filter Diagnostics tab still has open items. Remove from MEMORY.md once `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` Open Items list is empty AND each item is Kyle-verified on staging.
+
+**Rule 1 — `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` (canonical xstock UI tracker):**
+- All-time changelog format. Keep every entry forever (FIXED + REVERTED + OPEN).
+- Every UI fix to xstock tab → add a row to CHANGELOG with date, commit hash, exact change, status.
+- Every new issue Kyle raises → append a `B-NEW-N` entry to OPEN ITEMS table (incrementing N).
+- One-by-one workflow: fix → push → Kyle verifies on staging → mark FIXED → next.
+- File path: `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`.
+
+**Rule 2 — `ASSET_CLASS_ONBOARDING_WORKFLOW.md` (distilled standing rules only):**
+- Update with **standing rules that every future asset class needs**, NOT trial-and-error history.
+- Criterion: "Tomorrow we add a new asset class. What gets us 98% there on first pass?"
+- Trial-and-error history lives in per-batch completion reports and the xstocks tracker, NOT the workflow doc.
+- Standing rules examples: scanner architecture defenses (config cache, scan timeout, rotation), constant-name canonicalization, NO silent fallbacks, symbol normalization audit, etc.
+- File path: `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md`. Step 2b added today.
+
+**Rule 3 — Update both files in the same session you ship a fix.** Otherwise the changelog drifts from reality and the workflow doc loses the learning.
+
+---
+
 ## CURRENT STATE — 2026-05-12 EOD (B79.0m.b2 + 6 follow-up patches SHIPPED PM2 #235; xstock pipeline at crypto parity AND diagnostically clean; awaiting RTH signal flow)
 
 ✅ **B79.0m.b2 main + 6 follow-ups deployed.** PM2 #235 (HEAD `f31fc18d6`).

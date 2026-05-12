@@ -105,8 +105,13 @@ class XstockSpotScannerService {
   // instead of every cycle. Accepted for VTS observation phase. Benchmarks
   // pinned every cycle because index-level signals matter at all times.
   private static readonly CYCLE_BATCH_SIZE = 75;
+  // Pinned to xstock universe membership only. SPY (S&P 500) + QQQ (Nasdaq
+  // 100) + GLD (Gold) cover broad-US + commodity index signals. IWM (Russell
+  // 2000) and DIA (Dow Jones) ETFs are not tokenized by Backed Finance so
+  // they don't exist as xstocks; previously hardcoded but silently filtered
+  // out by `symbolList.includes` — moot rows.
   private static readonly PINNED_BENCHMARKS: readonly string[] = [
-    'SPY/USD', 'QQQ/USD', 'IWM/USD', 'DIA/USD', 'GLD/USD',
+    'SPY/USD', 'QQQ/USD', 'GLD/USD',
   ];
   private rotationCursor = 0;
 
