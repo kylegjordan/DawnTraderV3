@@ -7261,7 +7261,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         quant: {
           global: buildGlobalFromCounters(ec?.globalFilterCounters),
           imf: buildImfFromCounters(ec?.imfFilterCounters, ec?.imfPerMetric),
-          survivors: ec?.pairsPassedFamilies ?? 0,
+          // B-NEW-8: panel labels this "IMF Survivors (incl. benchmarks)" —
+          // semantically a FAN-OUT count (each pair × each passed family is
+          // its own survivor entry, matching crypto fx5-scanner.ts:1491
+          // allSurvivors). Was reading `pairsPassedFamilies` (unique pair
+          // count) → showed strong_trend's pass count alone instead of the
+          // family-sum. Family-Qualified Unique Pairs row reads the unique
+          // count separately.
+          survivors: ec?.familyFanOutSum ?? 0,
         },
         pattern: {
           // B79.0m.b2: real pattern-path counters (parallel pipeline now live).
@@ -7275,7 +7282,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         familyQualifiedUnique: ec?.familyQualifiedUnique ?? ec?.pairsPassedFamilies ?? 0,
         benchmarksRemoved: ec?.benchmarksRemoved ?? 0,
         destination: 'vts_batch' as const,
-        destinationCount: ec?.vtsDestination ?? 0,
+        // B-NEW-8: panel labels "VTS Destination (post-benchmark)" — fan-out
+        // count of pair × lane entries entering VTS (each family lane + the
+        // pattern lane is its own VTS entry, matching crypto's allSurvivors).
+        // Was reading `vtsDestination` (unique pair count). Now familyFanOut
+        // + patternFanOut. Benchmark subtraction left untouched — currently 0.
+        destinationCount: (ec?.familyFanOutSum ?? 0) + (ec?.patternFanOut ?? 0),
         // Per-family pass counts so the UI's family-paths table populates.
         familyPaths: buildFamilyPaths(ec?.imfPerFamily),
         // Full per-family breakdown (which family is rejecting on which metric).
@@ -7296,7 +7308,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           quant: {
             global: buildGlobalFromCounters(lt?.globalFilterCounters),
             imf: buildImfFromCounters(lt?.imfFilterCounters, lt?.imfPerMetric),
-            survivors: lt?.pairsPassedFamilies ?? 0,
+            // B-NEW-8 (24h aggregate): same fan-out vs unique fix as per-cycle above.
+          survivors: lt?.familyFanOutSum ?? 0,
           },
           pattern: {
             // B79.0m.b2: real lifetime pattern-path counters from process-restart
@@ -7312,7 +7325,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           // crypto-parity field name expected by shared FilterDiagnosticsPanel
           totalFamilyQualifiedUnique: lt?.familyQualifiedUnique ?? lt?.pairsPassedFamilies ?? 0,
           benchmarksRemoved: lt?.benchmarksRemoved ?? 0,
-          destinationCount: lt?.vtsDestination ?? 0,
+          // B-NEW-8 (24h aggregate): same fan-out fix as per-cycle above.
+          destinationCount: (lt?.familyFanOutSum ?? 0) + (lt?.patternFanOut ?? 0),
         },
         b79_eval_lifetime: lt ?? null,
       };
