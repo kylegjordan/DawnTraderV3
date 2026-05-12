@@ -97,6 +97,19 @@ class XstockSpotScannerService {
   private isScanning = false;
   private clockTickHandler: ((tick: ClockTick) => Promise<void>) | null = null;
 
+  // ── Per-cycle rotation (Kyle directive 2026-05-12) ──
+  // Each cycle scans 70 rotated symbols + 5 pinned benchmarks = 75 total.
+  // Sequential OHLC fetch at ~150ms/pair × 75 = ~11s — clean margin under the
+  // 25s SCAN_TIMEOUT_MS. Full universe (~260 xstocks) covered every 3.5 cycles
+  // = ~1m 45s sweep. Trade-off: each pair evaluated ~every two 1-min candles
+  // instead of every cycle. Accepted for VTS observation phase. Benchmarks
+  // pinned every cycle because index-level signals matter at all times.
+  private static readonly CYCLE_BATCH_SIZE = 75;
+  private static readonly PINNED_BENCHMARKS: readonly string[] = [
+    'SPY/USD', 'QQQ/USD', 'IWM/USD', 'DIA/USD', 'GLD/USD',
+  ];
+  private rotationCursor = 0;
+
   private diag: ScannerDiagnostics = {
     isRunning: false,
     isScanning: false,
@@ -253,6 +266,27 @@ class XstockSpotScannerService {
       }
       this.diag.lastUniverseSize = symbolList.length;
       this.diag.lastArcaOpen = arcaOpen;
+
+      // ── Per-cycle rotation (Kyle directive 2026-05-12) ──
+      // Pre-rotation length captured above as lastUniverseSize so the
+      // diagnostic still reports the full universe.
+      // Rotation only applies when we have more than CYCLE_BATCH_SIZE candidates.
+      // Hostile-sim bypasses rotation so the load test sees the full universe.
+      if (!this.diag.hostileSimActive && symbolList.length > XstockSpotScannerService.CYCLE_BATCH_SIZE) {
+        const pinned = XstockSpotScannerService.PINNED_BENCHMARKS.filter((s) => symbolList.includes(s));
+        const rotatable = symbolList.filter((s) => !pinned.includes(s));
+        const rotatedSize = XstockSpotScannerService.CYCLE_BATCH_SIZE - pinned.length;
+        const rotatedSlice: string[] = [];
+        for (let i = 0; i < rotatedSize && i < rotatable.length; i++) {
+          rotatedSlice.push(rotatable[(this.rotationCursor + i) % rotatable.length]);
+        }
+        this.rotationCursor = (this.rotationCursor + rotatedSize) % rotatable.length;
+        symbolList = [...pinned, ...rotatedSlice];
+        console.log(
+          `[B79.0a][ROTATION] tick=${tick.tickNumber} batch=${symbolList.length} ` +
+          `(pinned=${pinned.length} rotated=${rotatedSlice.length}) cursor=${this.rotationCursor}/${rotatable.length}`,
+        );
+      }
       if (!arcaOpen && !this.diag.hostileSimActive) {
         this.diag.cyclesSkippedMarketClosed++; // legacy counter, retained for compat
         if (this.diag.cyclesSkippedMarketClosed % 30 === 1) {
