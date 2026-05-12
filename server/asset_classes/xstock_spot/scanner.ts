@@ -343,6 +343,13 @@ class XstockSpotScannerService {
             patternRejectByMinHistory: 0, patternFanOut: 0,
             patternFilterCounters: {},
             patternPerMetric: { failedLQ: 0, failedVN: 0, failedDI: 0, passed: 0, total: 0 },
+            // B79.0m.b2-followup (2026-05-12): per-lane VTS Evaluation Detail split.
+            quantPairsEvaluated: 0, patternPairsEvaluated: 0,
+            quantStrategiesEvaluated: 0, patternStrategiesEvaluated: 0,
+            quantStrategyNulls: 0, patternStrategyNulls: 0,
+            quantSignalsGenerated: 0, patternSignalsGenerated: 0,
+            quantSignalsRejected: 0, patternSignalsRejected: 0,
+            setupHashDeduped: 0,
             archiveFailures: 0,
             globalFilterCounters: {}, imfFilterCounters: {},
             imfPerMetric: { failedLQ: 0, failedVN: 0, failedCorr: 0, failedDI: 0, passed: 0, total: 0 },
@@ -360,7 +367,14 @@ class XstockSpotScannerService {
           'benchmarksRemoved', 'vtsDestination',
           // B79.0m.b2 pattern + extra counters.
           'pairsPassedPattern', 'pairsFailedPattern',
-          'patternRejectByMinHistory', 'patternFanOut', 'archiveFailures'] as const) {
+          'patternRejectByMinHistory', 'patternFanOut', 'archiveFailures',
+          // B79.0m.b2-followup (2026-05-12): per-lane split.
+          'quantPairsEvaluated', 'patternPairsEvaluated',
+          'quantStrategiesEvaluated', 'patternStrategiesEvaluated',
+          'quantStrategyNulls', 'patternStrategyNulls',
+          'quantSignalsGenerated', 'patternSignalsGenerated',
+          'quantSignalsRejected', 'patternSignalsRejected',
+          'setupHashDeduped'] as const) {
           lt[k] = (lt[k] ?? 0) + ((cycleCounters as any)[k] ?? 0);
         }
         for (const k of Object.keys(cycleCounters.globalFilterCounters)) {

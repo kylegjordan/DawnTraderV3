@@ -7046,99 +7046,49 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { xstockSpotScanner } = await import('./asset_classes/xstock_spot/scanner.js');
       const diag = xstockSpotScanner.getDiagnostics();
 
-      // Aggregate signal_eval_archive over 24h scoped to xstock_spot.
-      let archiveRows: Array<{ strategy: string; regime: string; evaluated: string; nulls: string; signals: string; rejected: string; trades: string }> = [];
-      try {
-        const archiveAgg = await db.execute(sql`
-          SELECT
-            strategy::text AS strategy,
-            regime::text AS regime,
-            COUNT(*)::text AS evaluated,
-            SUM(CASE WHEN null_reason IS NOT NULL AND null_reason != '' THEN 1 ELSE 0 END)::text AS nulls,
-            SUM(CASE WHEN signal_generated IS TRUE THEN 1 ELSE 0 END)::text AS signals,
-            SUM(CASE WHEN signal_generated IS TRUE AND trade_opened IS NOT TRUE THEN 1 ELSE 0 END)::text AS rejected,
-            SUM(CASE WHEN trade_opened IS TRUE THEN 1 ELSE 0 END)::text AS trades
-          FROM signal_eval_archive
-          WHERE asset_class = 'xstock_spot'
-            AND captured_at > NOW() - INTERVAL '24 hours'
-          GROUP BY strategy, regime
-        `);
-        archiveRows = ((archiveAgg as any).rows ?? []) as any;
-      } catch (err) {
-        console.warn('[B79.0i.a][filter-diagnostics] signal_eval_archive query failed:', err);
-      }
-
+      // B79.0m.b2-followup (Kyle 2026-05-12 issue #1): the prior signal_eval_
+      // archive aggregations referenced nonexistent columns (`regime`,
+      // `null_reason`, `signal_generated`, `trade_opened`) — they silently
+      // failed via try/catch leaving every panel section empty. Plus the
+      // 322K-row group-by aggregation contributed to the 60-second statement-
+      // timeout that made the xStocks tab take ~1 minute to load.
+      //
+      // Source of truth for these aggregates is now the in-memory `lt`
+      // lifetime accumulator on `xstockSpotScanner.diag.evalCountersLifetime`,
+      // populated by every cycle of `eval-cycle.ts`. That accumulator already
+      // has byStrategy, byStrategyNullReasons, and nullReasonAggregate in the
+      // correct shape with zero DB cost. Skipping the broken DB queries.
       const byStrategy: Record<string, { evaluated: number; trueNulls: number; signals: number; rejected: number; trades: number }> = {};
       let totalEvaluated = 0, totalNulls = 0, totalSignals = 0, totalRejected = 0, totalTrades = 0;
-      for (const r of archiveRows) {
-        const ev = parseInt(r.evaluated, 10) || 0;
-        const nu = parseInt(r.nulls, 10) || 0;
-        const sg = parseInt(r.signals, 10) || 0;
-        const rj = parseInt(r.rejected, 10) || 0;
-        const td = parseInt(r.trades, 10) || 0;
-        if (!byStrategy[r.strategy]) byStrategy[r.strategy] = { evaluated: 0, trueNulls: 0, signals: 0, rejected: 0, trades: 0 };
-        byStrategy[r.strategy].evaluated += ev;
-        byStrategy[r.strategy].trueNulls += nu;
-        byStrategy[r.strategy].signals += sg;
-        byStrategy[r.strategy].rejected += rj;
-        byStrategy[r.strategy].trades += td;
-        totalEvaluated += ev; totalNulls += nu; totalSignals += sg; totalRejected += rj; totalTrades += td;
-      }
-
-      // Null-reason aggregate
       const byReason: Record<string, number> = {};
       const byRegime: Record<string, number> = {};
-      try {
-        const nullReasonAgg = await db.execute(sql`
-          SELECT null_reason::text AS null_reason, COUNT(*)::text AS cnt
-          FROM signal_eval_archive
-          WHERE asset_class = 'xstock_spot' AND captured_at > NOW() - INTERVAL '24 hours'
-            AND null_reason IS NOT NULL AND null_reason != ''
-          GROUP BY null_reason
-        `);
-        for (const r of ((nullReasonAgg as any).rows ?? []) as Array<{ null_reason: string; cnt: string }>) {
-          byReason[r.null_reason] = parseInt(r.cnt, 10) || 0;
-        }
-        const regimeAgg = await db.execute(sql`
-          SELECT regime::text AS regime, COUNT(*)::text AS cnt
-          FROM signal_eval_archive
-          WHERE asset_class = 'xstock_spot' AND captured_at > NOW() - INTERVAL '24 hours'
-            AND null_reason IS NOT NULL AND null_reason != ''
-          GROUP BY regime
-        `);
-        for (const r of ((regimeAgg as any).rows ?? []) as Array<{ regime: string; cnt: string }>) {
-          byRegime[r.regime] = parseInt(r.cnt, 10) || 0;
-        }
-      } catch (err) {
-        console.warn('[B79.0i.a][filter-diagnostics] null_reason/regime queries failed:', err);
-      }
+      // Note: lt-aggregate consumption happens below; this block remains as
+      // declaration scaffolding for the existing reference shape.
 
-      // 24h universe + cycle aggregates.
-      // B79.0m.b iteration 2: `universe24h` = COUNT(DISTINCT symbol) is the
-      // correct "unique symbols seen in 24h" metric. `rolling24hCycles` =
-      // distinct second-buckets that had at least one tick capture.
-      // `rolling24hPairsScanned` previously = COUNT(*) of raw tick rows which
-      // is a TICK count not a "pairs scanned" count — misleading by a factor
-      // of (ticks per cycle per pair). Replaced with cycles × avg-fresh-pairs
-      // estimate from the live scanner counters when available.
-      let universe24h = 0, rolling24hCycles = 0, rolling24hTickRows = 0;
+      // B79.0m.b2-followup (Kyle 2026-05-12 issue #1): the prior 24h universe
+      // aggregate did `COUNT(DISTINCT symbol)` + `COUNT(DISTINCT date_trunc
+      // ('second', captured_at))` + `COUNT(*)` over xstock_spot_ticker_snap.
+      // With millions of tick rows in 24h, this single query hit the 60-
+      // second statement timeout — and it ran on every tab refresh + every
+      // 15-second polling refetch from the UI. Result: tab took ~60s to load.
+      //
+      // Replaced with cheap in-memory equivalents from scanner.diag:
+      //   - universe24h = static `XSTOCK_SPOT_SYMBOLS` size (knowable
+      //     constant; doesn't materially change over a 24h window)
+      //   - rolling24hCycles = scanner's cycles-completed counter
+      //     (process-restart resets, but matches the in-memory lifetime
+      //     accumulator's lifecycle anyway)
+      //   - rolling24hTickRows is dropped from the response (was previously
+      //     misleading — overcounted by ticks-per-cycle-per-pair factor)
+      let universe24h = 0, rolling24hCycles = 0;
+      const rolling24hTickRows = 0; // dropped — never accurate at the tick level
       try {
-        const cyclesAgg = await db.execute(sql`
-          SELECT COUNT(DISTINCT symbol)::text AS uniq,
-                 COUNT(DISTINCT date_trunc('second', captured_at))::text AS cycles,
-                 COUNT(*)::text AS ticks
-          FROM xstock_spot_ticker_snap
-          WHERE captured_at > NOW() - INTERVAL '24 hours'
-        `);
-        const row = ((cyclesAgg as any).rows ?? [])[0];
-        if (row) {
-          universe24h = parseInt(row.uniq, 10) || 0;
-          rolling24hCycles = parseInt(row.cycles, 10) || 0;
-          rolling24hTickRows = parseInt(row.ticks, 10) || 0;
-        }
-      } catch (err) {
-        console.warn('[B79.0i.a][filter-diagnostics] 24h aggregate query failed:', err);
+        const { XSTOCK_SPOT_SYMBOLS } = await import('../shared/asset-classes.js');
+        universe24h = XSTOCK_SPOT_SYMBOLS.size;
+      } catch {
+        universe24h = 0;
       }
+      rolling24hCycles = (diag as any).cyclesCompleted ?? 0;
 
       // B79.0m.b iteration 2: emptyGlobal default + applicability flags. The
       // 3 N/A gates (stablecoin / quote_currency / market_cap) surface as
@@ -7362,27 +7312,45 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const totalRejectedEff = (lt?.signalsRejectedBySQE ?? 0) || totalRejected;
       const tradesOpenedEff = lt?.tradesOpened ?? totalTrades;
 
+      // B79.0m.b2-followup (Kyle 2026-05-12): real per-lane split — was
+      // hardcoded 0 for all pattern-path eval metrics, making the panel
+      // appear "dead after VTS destination" for the pattern path.
+      const quantPairsEval = lt?.quantPairsEvaluated ?? 0;
+      const patternPairsEval = lt?.patternPairsEvaluated ?? 0;
+      const quantStrategyEvalsLt = lt?.quantStrategiesEvaluated ?? 0;
+      const patternStrategyEvalsLt = lt?.patternStrategiesEvaluated ?? 0;
+      const quantStrategyNullsLt = lt?.quantStrategyNulls ?? 0;
+      const patternStrategyNullsLt = lt?.patternStrategyNulls ?? 0;
+      const quantSignalsLt = lt?.quantSignalsGenerated ?? 0;
+      const patternSignalsLt = lt?.patternSignalsGenerated ?? 0;
+      const quantRejectedLt = lt?.quantSignalsRejected ?? 0;
+      const patternRejectedLt = lt?.patternSignalsRejected ?? 0;
+
       const vtsEvaluation = {
         timestamp: Date.now(),
-        quantPairsEvaluated: lt?.pairsEntered ?? totalEvaluated,
-        patternPairsEvaluated: 0,
-        quantStrategyNulls: totalNullsEff,
+        quantPairsEvaluated: quantPairsEval || (lt?.pairsEntered ?? totalEvaluated),
+        patternPairsEvaluated: patternPairsEval,
+        quantStrategyNulls: quantStrategyNullsLt || totalNullsEff,
+        patternStrategyNulls: patternStrategyNullsLt,
         patternNoDetection: 0,
         patternDetected: 0,
         quantPatternDetected: 0,
         quantPatternNoDetection: 0,
-        signalsGenerated: totalSignalsEff,
-        quantStrategyEvaluations: totalEvaluatedEff,
-        patternStrategyEvaluations: 0,
-        quantSignalsGenerated: totalSignalsEff,
-        patternSignalsGenerated: 0,
-        totalStrategyEvaluations: totalEvaluatedEff,
-        signalsRejected: totalRejectedEff,
-        quantSignalsRejected: totalRejectedEff,
-        patternSignalsRejected: 0,
+        signalsGenerated: (quantSignalsLt + patternSignalsLt) || totalSignalsEff,
+        quantStrategyEvaluations: quantStrategyEvalsLt || totalEvaluatedEff,
+        patternStrategyEvaluations: patternStrategyEvalsLt,
+        quantSignalsGenerated: quantSignalsLt || totalSignalsEff,
+        patternSignalsGenerated: patternSignalsLt,
+        totalStrategyEvaluations: (quantStrategyEvalsLt + patternStrategyEvalsLt) || totalEvaluatedEff,
+        signalsRejected: (quantRejectedLt + patternRejectedLt) || totalRejectedEff,
+        quantSignalsRejected: quantRejectedLt || totalRejectedEff,
+        patternSignalsRejected: patternRejectedLt,
         tradesOpened: tradesOpenedEff,
         pairsSkippedNoPrice: 0,
         pairsSkippedInsufficientOHLC: 0,
+        // B79.0m.b2-followup: surface setup-hash dedupe so the panel can show
+        // why `signalsGenerated > 0` but `tradesOpened = 0` (silent dedupe).
+        setupHashDeduped: lt?.setupHashDeduped ?? 0,
         // B79.0m.b: prefer live in-memory null-reason aggregate (xstock pipeline
         // writes specific reasons via setNullReason) over the signal_eval_archive
         // breakdown — which currently maps everything to 'conditions_not_met'.
@@ -7397,6 +7365,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             regimeNoStrategies: live['regime_no_strategies'] ?? byReason['regime_no_strategies'] ?? 0,
             familyFilterMismatch: live['family_filter_mismatch'] ?? byReason['family_filter_mismatch'] ?? 0,
             patternInputMissing: live['pattern_input_missing'] ?? 0,
+            setupHashDedupe: live['setup_hash_dedupe'] ?? 0,
             unknown: live['unknown'] ?? 0,
           };
         })(),
@@ -7409,6 +7378,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         nullReasonDetail: lt?.nullReasonAggregate ?? byReason,
         quantNullReasonDetail: lt?.nullReasonAggregate ?? byReason,
         patternNullReasonDetail: {},
+        // B79.0m.b2-followup (Kyle 2026-05-12 issue #6): denominator for
+        // family-mismatch % was strategiesEvaluated only (eligibility-pass),
+        // giving 158% on 24h data. Real denominator is total iterations:
+        // (eligibility-pass + eligibility-fail).
+        familyMismatchDenominatorTotal: (quantStrategyEvalsLt + patternStrategyEvalsLt) + (lt?.nullReasonAggregate?.['family_filter_mismatch'] ?? 0),
       };
 
       res.json({
@@ -7424,18 +7398,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // strategy-level funnel (distinct from the 24h `vtsEvaluation` panel).
         lastCycleVtsEval: ec ? {
           timestamp: Date.now(),
-          quantPairsEvaluated: ec.pairsEntered,
-          patternPairsEvaluated: 0,
-          quantStrategyNulls: ec.strategyNulls,
+          quantPairsEvaluated: (ec as any).quantPairsEvaluated ?? ec.pairsEntered,
+          patternPairsEvaluated: (ec as any).patternPairsEvaluated ?? 0,
+          quantStrategyNulls: (ec as any).quantStrategyNulls ?? ec.strategyNulls,
+          patternStrategyNulls: (ec as any).patternStrategyNulls ?? 0,
           signalsGenerated: ec.signalsGenerated,
-          quantStrategyEvaluations: ec.strategiesEvaluated,
-          patternStrategyEvaluations: 0,
+          quantStrategyEvaluations: (ec as any).quantStrategiesEvaluated ?? ec.strategiesEvaluated,
+          patternStrategyEvaluations: (ec as any).patternStrategiesEvaluated ?? 0,
+          quantSignalsGenerated: (ec as any).quantSignalsGenerated ?? ec.signalsGenerated,
+          patternSignalsGenerated: (ec as any).patternSignalsGenerated ?? 0,
+          quantSignalsRejected: (ec as any).quantSignalsRejected ?? ec.signalsRejectedBySQE,
+          patternSignalsRejected: (ec as any).patternSignalsRejected ?? 0,
           totalStrategyEvaluations: ec.strategiesEvaluated,
           signalsRejected: ec.signalsRejectedBySQE,
           tradesOpened: ec.tradesOpened,
+          setupHashDeduped: (ec as any).setupHashDeduped ?? 0,
           nullReasonDetail: ec.nullReasonAggregate ?? {},
           byStrategy: ec.byStrategy ?? {},
           byStrategyNullReasons: ec.byStrategyNullReasons ?? {},
+          familyMismatchDenominatorTotal:
+            ((ec as any).quantStrategiesEvaluated ?? ec.strategiesEvaluated) +
+            ((ec as any).patternStrategiesEvaluated ?? 0) +
+            (ec.nullReasonAggregate?.['family_filter_mismatch'] ?? 0),
         } : vtsEvaluation,
         // xstock-specific scanner header strip
         xstockScanner: {

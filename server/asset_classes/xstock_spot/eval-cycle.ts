@@ -138,6 +138,26 @@ export interface XstockEvalCycleCounters {
   signalsRejectedBySQE: number;
   tradesOpened: number;
   errors: number;
+  // B79.0m.b2-followup (2026-05-12): per-lane (quant vs pattern) split for the
+  // VTS Evaluation Detail panel. The endpoint was hardcoding patternPairs
+  // Evaluated/StrategyEvaluations/SignalsGenerated to 0, leaving the panel
+  // showing "pattern path goes dead after VTS destination." These counters
+  // populate from the lane-iteration loop so the panel shows real numbers.
+  quantPairsEvaluated: number;        // unique pairs that hit ≥1 family lane
+  patternPairsEvaluated: number;      // unique pairs that hit the pattern lane
+  quantStrategiesEvaluated: number;   // strategy-detect calls inside family lanes
+  patternStrategiesEvaluated: number; // strategy-detect calls inside the pattern lane
+  quantStrategyNulls: number;
+  patternStrategyNulls: number;
+  quantSignalsGenerated: number;
+  patternSignalsGenerated: number;
+  quantSignalsRejected: number;       // post-detect rejection (Net EV gate or pre-open)
+  patternSignalsRejected: number;
+  // B79.0m.b2-followup: setup-hash dedupe was a silent `continue;` —
+  // strategy fires a signal but it dedupes against a prior identical setup
+  // and the signal vanishes with no counter. Result: signalsGenerated > 0
+  // while tradesOpened = 0 with no visible reason in the diagnostics panel.
+  setupHashDeduped: number;
   // B79.0m.b2 Langston Step 4 nit #7 (2026-05-11): counter for silent archive
   // failures in the 4 archiveSignalEval try/catch blocks (strategy_internal,
   // sqe, tcl, admitted). Currently swallowed `catch { /* hot path */ }` per
@@ -178,6 +198,17 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     signalsRejectedBySQE: 0,
     tradesOpened: 0,
     errors: 0,
+    quantPairsEvaluated: 0,
+    patternPairsEvaluated: 0,
+    quantStrategiesEvaluated: 0,
+    patternStrategiesEvaluated: 0,
+    quantStrategyNulls: 0,
+    patternStrategyNulls: 0,
+    quantSignalsGenerated: 0,
+    patternSignalsGenerated: 0,
+    quantSignalsRejected: 0,
+    patternSignalsRejected: 0,
+    setupHashDeduped: 0,
     archiveFailures: 0,
     globalFilterCounters: {},
     imfFilterCounters: {},
@@ -334,6 +365,14 @@ export async function evaluateXstockPairForVTS(
     }
 
     // ── 6. Lane × strategy fan-out (mirrors crypto fx5-scanner.ts:1607-1643) ──
+    // B79.0m.b2-followup (Kyle 2026-05-12): per-lane pair-pool eval counts.
+    // Counts unique pair-into-lane events so the "Pair-Pool Evaluations"
+    // panel row shows quant + pattern split instead of hardcoded 0.
+    const sawQuantLane = lanes.some((l) => l.kind === 'family');
+    const sawPatternLane = lanes.some((l) => l.kind === 'pattern');
+    if (sawQuantLane) counters.quantPairsEvaluated++;
+    if (sawPatternLane) counters.patternPairsEvaluated++;
+
     for (const lane of lanes) {
       for (const stratDef of regimeStrategies) {
         const strategyKey = stratDef.strategyKey;
@@ -351,6 +390,12 @@ export async function evaluateXstockPairForVTS(
         }
 
         counters.strategiesEvaluated++;
+        // Per-lane split for VTS Evaluation Detail panel (Kyle 2026-05-12).
+        if (lane.kind === 'pattern') {
+          counters.patternStrategiesEvaluated++;
+        } else {
+          counters.quantStrategiesEvaluated++;
+        }
         if (!counters.byStrategy[strategyKey]) {
           counters.byStrategy[strategyKey] = { evaluated: 0, nulls: 0, signals: 0, rejected: 0, trades: 0 };
         }
@@ -408,6 +453,8 @@ export async function evaluateXstockPairForVTS(
         }
         if (!strategySignal) {
           counters.strategyNulls++;
+          if (lane.kind === 'pattern') counters.patternStrategyNulls++;
+          else counters.quantStrategyNulls++;
           counters.byStrategy[strategyKey].nulls++;
           const reason = getNullReason();
           counters.nullReasonAggregate[reason] = (counters.nullReasonAggregate[reason] ?? 0) + 1;
@@ -431,9 +478,14 @@ export async function evaluateXstockPairForVTS(
           continue;
         }
         counters.signalsGenerated++;
+        if (lane.kind === 'pattern') counters.patternSignalsGenerated++;
+        else counters.quantSignalsGenerated++;
         counters.byStrategy[strategyKey].signals++;
 
-        // Setup-hash dedupe (assetClass-keyed).
+        // Setup-hash dedupe (assetClass-keyed). Kyle 2026-05-12: was a silent
+        // continue — `signalsGenerated > 0` but `tradesOpened = 0` with no
+        // visible reason in diagnostics. Tracking via setupHashDeduped + null-
+        // reason aggregate so the panel surfaces the cause.
         if (
           isIdenticalXstockSetupSuppressed(
             ASSET_CLASS,
@@ -444,6 +496,9 @@ export async function evaluateXstockPairForVTS(
             strategySignal.targetPrice,
           )
         ) {
+          counters.setupHashDeduped++;
+          counters.nullReasonAggregate['setup_hash_dedupe'] =
+            (counters.nullReasonAggregate['setup_hash_dedupe'] ?? 0) + 1;
           continue;
         }
 
@@ -496,6 +551,8 @@ export async function evaluateXstockPairForVTS(
         const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
         if (kernelResult.netEV <= VTS_NET_EV_FLOOR) {
           counters.signalsRejectedBySQE++;
+          if (lane.kind === 'pattern') counters.patternSignalsRejected++;
+          else counters.quantSignalsRejected++;
           counters.byStrategy[strategyKey].rejected++;
           try {
             archiveSignalEval({
@@ -526,6 +583,8 @@ export async function evaluateXstockPairForVTS(
           totalFriction,
         );
         if (!gateCheck.allowed) {
+          if (lane.kind === 'pattern') counters.patternSignalsRejected++;
+          else counters.quantSignalsRejected++;
           counters.byStrategy[strategyKey].rejected++;
           counters.nullReasonAggregate[gateCheck.reason] = (counters.nullReasonAggregate[gateCheck.reason] ?? 0) + 1;
           try {

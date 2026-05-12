@@ -289,10 +289,12 @@ export function XstocksTab() {
       {/* 1. Scanner Cycle Header (xstock-specific) */}
       <ScannerCycleHeader data={filterData} isLoading={filterLoading} />
 
-      {/* 2. Per-Pair Freshness (xstock-specific) */}
-      <FreshnessPanel data={freshnessData} isLoading={freshnessLoading} />
+      {/* Per-Pair Fresh-Tick Latency panel REMOVED per Kyle directive 2026-05-12.
+          The freshnessData query is still issued for the scanner-cycle header
+          tooltip; if removing the query is desired in a future cleanup, drop
+          the useQuery call + freshnessData/freshnessLoading variables too. */}
 
-      {/* 3. Filter Diagnostics — REUSED from crypto, scoped to xstock_spot */}
+      {/* 2. Filter Diagnostics — REUSED from crypto, scoped to xstock_spot */}
       <Card data-testid="xstocks-filter-diagnostics-section">
         <CardHeader>
           <CardTitle className="text-lg">Filter Pipeline Diagnostics (xstock_spot)</CardTitle>
