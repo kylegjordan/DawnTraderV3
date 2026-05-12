@@ -2443,10 +2443,10 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                           <td className="p-2 text-right text-xs text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
                         </tr>
                         <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
-                          <td className="p-2">Signals Generated <span className="text-[10px] text-muted-foreground">(= trades opened)</span></td>
-                          <td className="p-2 text-right text-green-600">{fmt((ve as any).quantSignalsGenerated ?? 0)}</td>
-                          <td className="p-2 text-right text-green-600">{fmt((ve as any).patternSignalsGenerated ?? 0)}</td>
-                          <td className="p-2 text-right font-semibold text-green-600">{fmt(ve.signalsGenerated)}</td>
+                          <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(post-gate)</span></td>
+                          <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
+                          <td className="p-2 text-right font-semibold text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
                         </tr>
                       </>
                     );
@@ -2553,10 +2553,10 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         <td className="p-2 text-right font-semibold text-red-500">{fmt((ve as any).signalsRejected ?? 0)}</td>
                       </tr>
                       <tr className="bg-muted/30 font-semibold">
-                        <td className="p-2">Signals Generated <span className="text-xs text-muted-foreground">(cumulative, 24h — = virtual trades opened)</span></td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantSignalsGenerated ?? 0)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternSignalsGenerated ?? 0)}</td>
-                        <td className="p-2 text-right font-semibold text-green-600">{fmt(ve.signalsGenerated)}</td>
+                        <td className="p-2">Trades Opened <span className="text-xs text-muted-foreground">(cumulative since process start — virtual trades opened, post-gate)</span></td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
                       </tr>
                     </tbody>
                   </table>
