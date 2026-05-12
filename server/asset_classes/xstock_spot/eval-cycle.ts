@@ -543,7 +543,7 @@ export async function evaluateXstockPairForVTS(
             sourcePool: lane.sourcePool,
             minPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_floor', _XSTOCK_GK),
             maxPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_ceiling', _XSTOCK_GK),
-            diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_to_pwin_scaling_factor', _XSTOCK_GK),
+            diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _XSTOCK_GK),
           });
         } catch (kernelErr) {
           counters.errors++;
