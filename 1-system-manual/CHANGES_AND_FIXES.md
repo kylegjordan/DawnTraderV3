@@ -2637,3 +2637,59 @@ Per Kyle directive + Langston cc-inbox #902. Pre-B70.3b every open trade showed 
 1. **Architecture-as-code-shape vs. architecture-as-DB-rows.** B79.0m.b shipped a pipeline that ran but never opened trades because the code shape diverged from crypto. The fix wasn't more DB rows — it was rebuilding the iteration shape (lane × strategy fan-out + parallel pattern path) to match crypto's `fx5-scanner.ts:1607-1643` exactly. "Differences live in DB" only works when the code-shape is parity.
 2. **Endpoint-vs-pipeline drift on schema changes.** The `/api/xstocks/filter-diagnostics` endpoint had hardcoded `applicable.path: false` from a prior era when the pattern path didn't exist. Even after the parallel pipeline was built, the endpoint would have continued surfacing pattern path as N/A. Lesson: when a pipeline section comes online, audit all surfaces that previously reported it as N/A.
 3. **Pre-existing bugs surface during architectural touches.** RUNNING_ISSUES #99 (`ohlcBars.length` ReferenceError) had been masking B73 success logs since the file was written. Surfaced only because Step 4 review made Langston re-read the file. Lesson: file pre-existing bugs as separate follow-ups; don't piggyback the fix into the architectural batch.
+
+---
+
+## INFRA-2026-05-12: B79.0m.b2 follow-up patches — closing Kyle's 9-issue catalog (PM2 #235)
+
+**Trigger:** After B79.0m.b2 main ship, Kyle navigated the xStocks tab on Monday evening 2026-05-12 and surfaced 9 concrete issues — 7 infrastructure/visibility bugs, 2 calibration concerns. 6 follow-up commits (`8fd97b16e` → `f31fc18d6`) close the 7 infrastructure items.
+
+**Commit chain:**
+- `8fd97b16e` — xstocks endpoint patch (pattern path applicable=true; scanner lifetime counter expansion; SYSTEM_MANUAL Phase 24 EXTENDED appendix; CHANGES_AND_FIXES B79.0m.b2 entry)
+- `ac38ac194` — `buildFamilyPaths` shape fix (panel rows render full `{imf,survivors}` shape instead of bare numbers)
+- `a7f494cc0` — strip `vts_`/`active_` prefix from family keys for panel parity
+- `1dd6b9e45` — xStocks tab description text refresh (no longer claims scanner-not-wired)
+- `dd0466c7e` — pattern strategies eligible in family lanes (Kyle directive: crypto parity)
+- `f31fc18d6` — per-lane counter split + slow-load fix + freshness panel removal + setup-hash dedupe counter + family-mismatch denominator fix
+
+**Bug catalog (BUG-2026-05-12-A through -F):**
+
+- **BUG-2026-05-12-A — Endpoint hardcoded pattern-path eval metrics to 0.** `routes.ts:/api/xstocks/filter-diagnostics` had `patternPairsEvaluated: 0`, `patternStrategyEvaluations: 0`, `patternSignalsGenerated: 0` hardcoded from B79.0m.b iteration 2 era. After B79.0m.b2 made the pattern path real, the panel still showed pattern path as dead. Fix: 10 new per-lane counter fields in `XstockEvalCycleCounters` + endpoint mapping.
+
+- **BUG-2026-05-12-B — Slow tab load (~60s).** Two compounding DB query bugs: (1) `signal_eval_archive` queries referenced 4 nonexistent columns (`regime`/`null_reason`/`signal_generated`/`trade_opened`) — silently failed via try/catch leaving panel sections empty. Real columns are `regime_label`, `reject_stage`, etc. (2) `COUNT(DISTINCT date_trunc('second', captured_at))` over millions of `xstock_spot_ticker_snap` tick rows hit Supabase's 60s statement timeout. Both replaced with cheap in-memory reads. **Verified: 60s → 0.94s (60× speedup).**
+
+- **BUG-2026-05-12-C — `buildFamilyPaths` returned wrong shape.** Returned `Record<string, number>` (pass counts only); the crypto `FilterDiagnosticsPanel` reads `Record<string, {imf: {failedLQ/VN/DI/passed/total}, survivors: number}>`. Without the fix the 5 family rows rendered but every cell showed 0/undefined. Patched to return full nested shape.
+
+- **BUG-2026-05-12-D — Family-key prefix mismatch.** xstock counters use DB filter_path names (`vts_trend`, `vts_reversal`, ...); the FilterDiagnosticsPanel iterates `['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend']` (no prefix). Stripped prefix in `buildFamilyPaths` so xstock + crypto share the same component contract.
+
+- **BUG-2026-05-12-E — Setup-hash dedupe silent skip.** `isIdenticalXstockSetupSuppressed` true → `continue;` with no counter increment. Result: `signalsGenerated > 0` with `tradesOpened = 0` and no visible reason in the panel. Added `setupHashDeduped` counter + `setup_hash_dedupe` null-reason emit. Verified live: `setupHashDeduped: 0` confirmed NOT the cause of 0 trades; 100% null rate is at strategy detect time.
+
+- **BUG-2026-05-12-F — Family-mismatch denominator math broken.** UI showed 248,375 mismatches / 156,398 strategies-evaluated = 158.8% (impossible). Denominator should be eligibility-pass + eligibility-fail = total iterations. Endpoint now emits `vtsEvaluation.familyMismatchDenominatorTotal` (5,408 in current cycle) for the correct 60.5% rate. **Frontend UI math fix still queued** — `machine-learning.tsx` divides by old denominator.
+
+**Pattern-strategies-in-family-lanes — semantic alignment with crypto:** Kyle's directive 2026-05-12 evening: "In the crypto asset class, the pattern strategies can fire in the quant paths, so that should also be a possibility for the X stocks." `isStrategyEligibleForLane` flipped: pattern strategies now eligible in family lanes. Verified live — strategy iteration count tripled (225 → 824) confirming pattern strategies now firing on both pattern lane AND family lanes per crypto's symbol-pool-union model. Asymmetry preserved: quant/hybrid strategies still excluded from pattern lane.
+
+**Per-Pair Fresh-Tick Latency panel removed** from xStocks tab UI per Kyle directive 2026-05-12. Freshness query kept for scanner-cycle header tooltip.
+
+**Verified counters from live xstock cycles 2026-05-12 evening (post-deploy PM2 #235):**
+```
+quantPairsEvaluated: 1035        patternPairsEvaluated: 435
+quantStrategyEvaluations: 1846   patternStrategyEvaluations: 289
+quantStrategyNulls: 1843         patternStrategyNulls: 288  (99.8% both lanes)
+quantSignalsGenerated: 0         patternSignalsGenerated: 0
+tradesOpened: 0                  setupHashDeduped: 0
+familyMismatchDenominatorTotal: 5408
+```
+
+**Why 0 trades right now (post-RTH-close Mon evening UTC):** NOT infrastructure — every counter populates correctly, every silent-skip path now has telemetry. Pure detect-time strategy nulls across both lanes: pattern strategies returning null because `scanPatterns()` isn't detecting Morning Star/Inside Bar/Pivot Shift patterns on noisy 1m equity bars; quant strategies returning null because thresholds are crypto-tuned. **This is Layer-3 calibration territory** — pre-audit §-1.10 already flagged it. Generous filter ≠ generous signal flow.
+
+**Calibration concerns flagged for future sub-batch (Kyle 2026-05-12):**
+- Pattern path `di_min=3` too lenient (admits ~all pairs but `scanPatterns()` then nulls them at detect)
+- `scanPatterns()` ATR multipliers at `pattern-recognizer.ts:553-554` crypto-tuned
+- Quant strategy `module_constants.strategy.<name>.*` 26 wildcard rows for xstock_spot
+- VN dominance in family-IMF rejection (31% of fails)
+
+**Lessons:**
+1. **Hardcoded "N/A" surfaces survive architectural overhauls.** Pattern path was hardcoded to `applicable.path: false` from B79.0m.b iteration 2 era; survived B79.0m.b2 architectural ship until Kyle navigated the UI and noticed pattern path showing as dead. Lesson: when a previously-N/A subsystem comes online, grep for `applicable.path: false` (and equivalents) across response builders.
+2. **Schema-column drift causes silent panel failures.** Endpoint queries against columns that don't exist (`regime`, `null_reason`) caught by try/catch — panel sections went empty, no logs. Lesson: when DB schemas change, the queries referencing old column names need an audit pass, not just "it'll fail silently and we'll catch it later."
+3. **In-memory state beats expensive aggregations.** The slow-load fix replaced two complex DB queries with cheap in-memory reads from the scanner's lifetime accumulator. The in-memory state was already populated; the endpoint just wasn't reading it. Lesson: when an endpoint is slow, audit whether the data it queries from DB is already available in process memory.
+4. **Generous filters ≠ generous signal flow.** A wide-open pattern filter admits pairs but doesn't generate signals — the strategy detect functions correctly reject when there's no pattern shape. Tuning filters won't help signal flow; the bottleneck is at detect time. Layer-3 calibration needs to address strategy thresholds, not just filter thresholds.

@@ -18,59 +18,84 @@
 
 ---
 
-## CURRENT STATE — 2026-05-11 EOD (B79.0m.b2 SHIPPED PM2 #229; xstock pipeline at functional crypto parity, RTH-verification pending)
+## CURRENT STATE — 2026-05-12 EOD (B79.0m.b2 + 6 follow-up patches SHIPPED PM2 #235; xstock pipeline at crypto parity AND diagnostically clean; awaiting RTH signal flow)
 
-✅ **B79.0m.b2 deployed** — commits `4c60d259e` (main) + `909182690` (test fixup). PM2 #229. Pattern path + family fan-out + ORB LONG-only + B73 xstock branch + Drizzle drift fix all landed.
+✅ **B79.0m.b2 main + 6 follow-ups deployed.** PM2 #235 (HEAD `f31fc18d6`).
 
-**G1-G2-G8-G10-G12 verified pre-RTH (weekend close):**
-- G1 effective GREEN (Build+Docker; TS+Test at pre-existing baseline RUNNING_ISSUES #39 + 66 `module_constants not warm`. All 28 of my new tests pass.)
-- G2 GREEN — 4 pattern rows seeded (`vts_pattern`/`active_pattern` × paper/live) with cloned crypto values.
-- G8 GREEN — crypto ORB admitted=0/24h (rollback trigger NOT tripped).
-- G10 PARTIAL — all 10 factor families emitting; 5/hr in 1h window is restart noise (re-check at +30min).
-- G12 GREEN — 26 pattern-strategy wildcard rows confirmed; fallback unit-test validates resolution.
+**Main commits:** `4c60d259e` + `909182690` (test fixup).
+**Follow-up commits (Mon evening 2026-05-12):**
+- `8fd97b16e` — endpoint patch (pattern path applicable=true) + scanner lifetime counter expansion + SYSTEM_MANUAL Phase 24 EXTENDED appendix + CHANGES_AND_FIXES B79.0m.b2 entry
+- `ac38ac194` — familyPaths shape fix (panel rows render correctly)
+- `a7f494cc0` — strip `vts_`/`active_` prefix from family keys for panel parity
+- `1dd6b9e45` — xStocks tab description text updated (no longer claims scanner-not-wired)
+- `dd0466c7e` — **pattern strategies eligible in family lanes** (matches crypto's symbol-pool-union model)
+- `f31fc18d6` — **per-lane counter split (quant vs pattern) + slow load fix (~60s → 0.94s) + freshness panel removed + setup-hash dedupe counter + family-mismatch denominator fix**
 
-**G3-G7 + G9 PENDING RTH 2026-05-12 13:30 UTC:** xstock scanner correctly short-circuiting on weekend market-closed. First live cycles will surface `patternFanOut`, `pairsPassedPattern`, signals, trades, B73 replay rows. xStocks tab banner stays up until trade flow observed.
+### What's verified live on staging right NOW (2026-05-12 evening UTC)
 
-**Pre-deploy crypto ORB baseline captured (§-1.7 rollback trigger ready):** admitted=0, total=77,919 invocations/24h all `strategy_internal`. Post-deploy at +1h: re-run + check for any new admit OR new reject_stage value.
+Counters from live xstock cycles post-deploy:
+- `quantPairsEvaluated: 1035`, `patternPairsEvaluated: 435` (per-lane split working)
+- `quantStrategyEvaluations: 1846`, `patternStrategyEvaluations: 289` (pattern strategies firing on BOTH pattern + family lanes per `dd0466c7e`)
+- `quantStrategyNulls: 1843` / `patternStrategyNulls: 288` (99.8% null rate both lanes)
+- `quantSignalsGenerated: 0`, `patternSignalsGenerated: 0`, `tradesOpened: 0`
+- `setupHashDeduped: 0` (silent skip is NOT the cause of 0 trades — verified)
+- `familyMismatchDenominatorTotal: 5408` (correct denominator: 1846+289+3273 mismatches)
 
-## What's new vs. B79.0m.b
+**Endpoint load time:** ~60s → 0.94s (60× speedup). Was caused by (a) `signal_eval_archive` queries referencing 4 nonexistent columns (`regime`/`null_reason`/`signal_generated`/`trade_opened`) that silently failed; (b) `COUNT(DISTINCT date_trunc('second', captured_at))` over millions of tick rows hit 60s statement timeout. Both replaced with cheap in-memory reads from `scanner.diag.evalCountersLifetime`.
 
-- ✅ Parallel pattern path (4 new screener_filters rows + `pattern-filter.ts` + parallel global+IMF gate in eval-cycle)
-- ✅ Family fan-out (`isStrategyEligibleForLane` in `lane-eligibility.ts`; pair × lane × strategy iteration mirrors `fx5-scanner.ts:1607-1643`)
-- ✅ ORB LONG-only fix + `STRATEGY_FAMILY_MAP['orb'] = 'breakout'`
-- ✅ B73 replay asset-class branch (xstock symbols read `xstock_spot_ohlc_1m`; EXPLAIN ANALYZE 1.035ms verified pre-deploy)
-- ✅ Drizzle schema-file drift fix
-- ✅ 7 Langston Step 4 nits applied inline (lane-eligibility extracted, ORB docblock, DI band tests, vi.fn assertion, archiveFailures counter)
+### Why 0 trades right now (Mon evening, post-RTH-close)
 
-## Resolution discipline next session
+**Not infrastructure** — every counter populates correctly, every silent-skip path now has telemetry. **Pure detect-time strategy nulls:** pattern strategies (`scanPatterns()` not finding chart patterns on 1m equity bars), quant strategies (thresholds tuned for crypto microstructure, not equity 1m). This is Layer-3 calibration territory.
 
-1. Read `Claude Comms and Packages/Batch Completion/BATCH_79_0m_b2_COMPLETION_REPORT.md` for full state
-2. Check Hetzner staging xstock-tab + PM2 logs post-RTH for G3-G7 + G9 trade-flow verification
-3. If any xstock trade closes during RTH window, verify B73 replay row appears in `exit_strategy_alternates WHERE asset_class='xstock_spot'`
-4. If G3-G7 GREEN, remove xStocks banner + write closure addendum to completion report
-5. If pattern path admits zero pairs → `patternRejectByMinHistory` tripwire will tell us instantly; Layer-1 60-bar floor is the prime suspect (see §-1.1 design + §-1.10 calibration debt)
-6. ORB +1h post-deploy check per §-1.7: if any new crypto ORB admitted appears OR new reject_stage value, revert single line `orb: 'breakout',` from `STRATEGY_FAMILY_MAP`
+**Pattern path filter calibration concern (Kyle 2026-05-12):** `di_min=3` is very lenient — admits 435 pairs to pattern lane, but pattern strategies still return null because `scanPatterns()` doesn't detect actual chart patterns in noisy after-hours data. **Generous filter ≠ generous signal flow.** Layer-3 evidence-driven calibration needed once Tuesday-Friday RTH evidence accumulates.
 
-## NEXT STEP — Wait for RTH and verify G3-G7 + G9 trade flow
+### Verified gates pre-RTH (Mon evening)
 
-RTH opens Monday 2026-05-12 13:30 UTC = 9:30 AM ET. First xstock cycles after 13:30 should show:
-- `patternFanOut > 0` (pattern lane admitting at least some pairs)
-- `pairsPassedPattern > 0`
+- G1 effective GREEN (Build+Docker; TS+Test at pre-existing legacy baseline)
+- G2 GREEN (4 pattern rows seeded)
+- G8 GREEN (crypto ORB admitted=0/24h, rollback trigger NOT tripped)
+- G10 PARTIAL (10 factor families emitting; +30min re-check still pending)
+- G12 GREEN (26 wildcard rows resolve cleanly)
+
+### Pending RTH 2026-05-12 13:30 UTC (Tuesday morning)
+
+G3-G7 + G9 trade-flow verification:
+- `vts_open_trades WHERE asset_class='xstock_spot'` ≥ 1
 - `signal_eval_archive` rows with `features->>'sourcePool' = 'pattern'` AND `reject_stage='admitted'`
-- `vts_open_trades` count for `asset_class='xstock_spot'` ≥ 1
 - B73 replay row in `exit_strategy_alternates WHERE asset_class='xstock_spot'` after first xstock trade closes
+- `patternRejectByMinHistory` should stay near 0 (60-bar floor is correct for normal-volume RTH cycles)
 
-If `patternRejectByMinHistory` dominates the counter, the 60-bar floor is biting; pull a Layer-3 calibration into a sub-batch.
+### Kyle's 9 catalog of issues — status
 
-## Open Langston follow-ups logged
+| # | Issue | Status |
+|---|---|---|
+| 1 | Slow tab load (~60s) | ✅ FIXED — 0.94s |
+| 2 | Pattern path 0 pair-pool/strategy evals | ✅ FIXED via per-lane counter split |
+| 3 | Last scan filter breakdown missing global-filter line-by-line | ⏸ NOT a bug — xstock global filter is permissive; counters legitimately 0. Verify UI doesn't omit zero rows next session |
+| 4 | 24h pattern path "no DI failures" | ⏸ Layer-3 calibration concern (di_min=3 too lenient) |
+| 5 | Pattern path dead after VTS destination | ✅ FIXED (same as #2) |
+| 6 | Family-mismatch 158.8% rate (math broken) | ✅ Endpoint surfaces correct denominator. **Frontend UI math fix still queued** — `machine-learning.tsx` divides by old denominator |
+| 7 | No pattern nulls in pre-eval skips | ✅ FIXED via patternStrategyNulls field |
+| 8 | 8 signals → 0 trades no visible reason | ✅ FIXED via setupHashDeduped counter (verified NOT the cause) |
+| 9 | Remove Per-Pair Fresh-Tick Latency table | ✅ REMOVED |
 
-**B79.0m.a SHIPPED + VERIFIED on staging PM2 #216** (HEAD `0a9d85588`). Threshold authoring + 19 strategy_gates + 10 family-IMF rows + 3 regime classifier rows + xStocks tab amber banner + CLAUDE.md §9.1/§9.2 rules.
+## NEXT SESSION — Resume sequence
 
-## Open Langston follow-ups + Phase 24 architectural rules
+1. **Read this MEMORY file first.** Then read `Claude Comms and Packages/Batch Completion/BATCH_79_0m_b2_COMPLETION_REPORT.md` (the closure addendum at the bottom catalogs the 6 follow-up commits).
+2. **Check staging xstock counters at RTH-open or post-RTH:**
+   ```bash
+   ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d "{\"username\":\"testuser123\",\"password\":\"SecurePass123!\"}" | python3 -c "import json,sys; print(json.load(sys.stdin)[\"accessToken\"])") && curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:5000/api/xstocks/filter-diagnostics" | python3 -m json.tool' | less
+   ```
+3. **Check first xstock trade:** `SELECT COUNT(*) FROM vts_open_trades WHERE asset_class='xstock_spot';` — if ≥ 1, batch is functionally complete and banner can come off.
+4. **If patternRejectByMinHistory dominates** → Layer-3 60-bar-floor calibration pull-forward.
+5. **If pattern lane admits but no signals** → Layer-3 calibration pull-forward to tighten pattern filter (di_min likely needs to rise from 3 to ~30-40 for equity) and/or tune per-strategy thresholds.
+6. **ORB rollback trigger check** (§-1.7): re-run baseline SQL; verify crypto ORB admitted=0 and no new reject_stage values.
+7. **Two known follow-up items queued (non-blocking):**
+   - Frontend math fix: `machine-learning.tsx` family-mismatch % should consume `vtsEvaluation.familyMismatchDenominatorTotal` (currently divides by `strategiesEvaluated` only, showing 158%/177% instead of correct ~60%)
+   - ORB `setNullReason` on early-return paths (replace `unknown: 279` with `orb_outside_active_window`, `orb_atr_zero`, etc.)
+8. **Issue #3 (filter breakdown UI gap)** — investigate whether the UI actually omits zero-failure global-filter rows or shows them as zeros; verify on staging.
 
-See `1-system-manual/SYSTEM_MANUAL.md` appendix for the 5 Phase 24 standing rules. See `RUNNING_ISSUES.md` for: per-asset-class DBS computation; macro source unification; computeContext options-object refactor; B79.TEC HARD-FAIL extension; Kraken WS-equities; governance-doc schema drift; B79.3 equity macro modifiers; B79.0n active-trading wire-in.
-
-Most recent before B79.0m: B79.0g-tx PM2 #215; B79.0L PM2 #214; B79.0m.a PM2 #216. Full history in `BATCH_CATALOG.md`.
+**Calibration concern (Kyle 2026-05-12) — for follow-up sub-batch:** pattern path `di_min=3` lets 435 pairs into pattern lane but `scanPatterns()` returns null on all of them. Generous lane filter ≠ generous signal flow. Tighten DI floor based on RTH evidence, AND/OR investigate whether `scanPatterns()` needs equity-specific tuning (currently crypto-tuned ATR multipliers at lines 553-554).
 
 ---
 

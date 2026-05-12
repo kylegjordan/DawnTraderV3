@@ -1703,3 +1703,54 @@ Unique-index TS declaration changed from `(mode, filterPath)` → `(mode, assetC
 - **Add new pattern strategy** → ADD to `STRATEGY_FAMILY_MAP` with `'pattern'`, ADD `module_constants.strategy_gates.<class>.<strategy>.enabled` rows (default per-class), confirm `module_constants.strategy.<strategy>.*` wildcards or scoped rows exist, ADD detect function with LONG-only enforcement matching `inside-bar-reversal.ts:131-134` pattern.
 - **Add new asset class to B73 replay** → extend `fetchOhlcForReplay` switch in `exit-strategy-replay-service.ts` with a new branch; add observation counter; confirm OHLC source table has `(symbol, interval_begin DESC)` index on all partitions.
 - **Tune the 60-bar floor in pattern-filter** → for now hardcoded in `pattern-filter.ts`; Layer 3 migration target is `module_constants.pattern_pool_gates.min_bars_for_eval`. Same applies to `global-filter.ts:109`. Coordinate both files when promoting.
+
+## B79.0m.b2 follow-up patches (2026-05-12)
+
+After initial B79.0m.b2 ship, 6 follow-up commits closed Kyle's catalog of 9 diagnostic-visibility issues. The architectural shape from B79.0m.b2 is unchanged; these patches surface real numbers in the panel that were previously hardcoded to 0 or hidden by slow/broken DB queries.
+
+### `server/asset_classes/xstock_spot/eval-cycle.ts` (MODIFIED, B79.0m.b2 follow-up)
+
+**Change:** `XstockEvalCycleCounters` gains 10 new fields for per-lane (quant vs pattern) split + setup-hash-dedupe counter:
+- `quantPairsEvaluated` / `patternPairsEvaluated`
+- `quantStrategiesEvaluated` / `patternStrategiesEvaluated`
+- `quantStrategyNulls` / `patternStrategyNulls`
+- `quantSignalsGenerated` / `patternSignalsGenerated`
+- `quantSignalsRejected` / `patternSignalsRejected`
+- `setupHashDeduped` — fires when setup-hash dedupe path silently skips (was a `continue;` with no counter pre-fix)
+- Also: `nullReasonAggregate['setup_hash_dedupe']++` so the null-reason aggregate surfaces this path
+
+**Why:** Endpoint was hardcoding all pattern-path eval metrics to 0, making the panel show pattern path "dead after VTS destination." Per-lane increments in the strategy iteration loop branch on `lane.kind`.
+
+### `server/asset_classes/xstock_spot/lane-eligibility.ts` (MODIFIED, B79.0m.b2 follow-up)
+
+**Change:** `isStrategyEligibleForLane` now allows `stratFamily === 'pattern'` strategies in family lanes (was previously `return false`). Mirrors crypto's symbol-pool-union eligibility model where a pair in both quant + pattern pools produces duplicate VTS-batch entries and pattern strategies fire on family-lane entries too.
+
+**Asymmetry preserved:** Quant + hybrid strategies still do NOT fire on the pattern lane.
+
+**Blast radius:** **LOW** — single boolean flip in a pure-logic helper. Verified live: strategy iteration count tripled from 225 to 824 in the first cycle post-deploy.
+
+### `server/asset_classes/xstock_spot/scanner.ts` (MODIFIED, B79.0m.b2 follow-up)
+
+**Change:** Lifetime accumulator extended with all 10 new per-lane counters + `setupHashDeduped`. SCAN_EVAL_DONE log line gains `passed_pattern`, `failed_pattern`, `pattern_reject_min_history`, `pattern_fanout`, `family_fanout_sum`, `archive_failures` fields (was missing pattern path + fan-out telemetry).
+
+### `server/routes.ts` `/api/xstocks/filter-diagnostics` (HEAVY REFACTOR, B79.0m.b2 follow-up)
+
+**Three critical changes:**
+1. **Dropped broken `signal_eval_archive` aggregation queries** — referenced 4 nonexistent columns (`regime`/`null_reason`/`signal_generated`/`trade_opened`); silently failed via try/catch leaving panel sections empty. Replaced with in-memory reads from `scanner.diag.evalCountersLifetime`.
+2. **Dropped slow universe COUNT query** — `COUNT(DISTINCT date_trunc('second', captured_at))` over millions of `xstock_spot_ticker_snap` tick rows hit 60s statement timeout, causing the ~60s tab load Kyle reported. Replaced with `XSTOCK_SPOT_SYMBOLS.size` static lookup + `diag.cyclesCompleted` from scanner.
+3. **Endpoint now surfaces real per-lane counters** — `vtsEvaluation.quantPairsEvaluated`, `patternPairsEvaluated`, `quantStrategyEvaluations`, `patternStrategyEvaluations`, `quantStrategyNulls`, `patternStrategyNulls`, `quantSignalsGenerated`, `patternSignalsGenerated`, `quantSignalsRejected`, `patternSignalsRejected`, `setupHashDeduped`. Same fields added to `lastCycleVtsEval` for last-cycle view.
+
+**Plus:** `familyMismatchDenominatorTotal` field added — endpoint emits the correct denominator (`eligibility-pass + eligibility-fail`) for the family-mismatch % rendering. Pattern-path response now uses `applicable.path: true` with `buildPatternGlobalFromCounters` + `buildPatternImfFromCounters` helpers consuming the new counters. `buildFamilyPaths` returns full `{imf: {failedLQ/VN/DI/Corr/passed/total/benchmarkBypassed}, survivors}` shape per family + strips `vts_`/`active_` prefix from keys (panel iterates `['trend','reversal','breakout','oscillator','strong_trend']`).
+
+**Blast radius:** **HIGH** — endpoint is the sole data source for the xStocks tab Filter Diagnostics panel. **Load time verified 60s → 0.94s (60× speedup).**
+
+### `client/src/components/machine-learning/xstocks-tab.tsx` (MODIFIED, B79.0m.b2 follow-up)
+
+**Change:** Per-Pair Fresh-Tick Latency panel (`<FreshnessPanel>`) removed from the render tree per Kyle directive 2026-05-12. The `useQuery` against `/api/xstocks/freshness` is left in place because the scanner-cycle header tooltip still consumes it. Description text above the Filter Pipeline Diagnostics panel updated to reflect post-B79.0m.b2 functional-crypto-parity state.
+
+### "If I Change X, Check Y" — B79.0m.b2 follow-up additions
+
+- **Add new per-lane counter** → ADD field to `XstockEvalCycleCounters` interface + initialize in `makeEmptyXstockCycleCounters` + increment in eval-cycle.ts at the appropriate site + ADD to scanner.ts lifetime accumulator's keys list + surface in routes.ts `/api/xstocks/filter-diagnostics`.
+- **Modify a strategy's lane eligibility** → edit `lane-eligibility.ts`. Pattern lane reserved for `stratFamily === 'pattern'` only; family lanes admit pattern + family + hybrid (per HYBRID_FAMILY_ELIGIBILITY) + multi-family (per MULTI_FAMILY_ELIGIBILITY).
+- **Add UI consumer of a per-lane counter** → the endpoint surfaces them under `vtsEvaluation.<field>` and `lastCycleVtsEval.<field>`. Pattern-lane fields available: `patternPairsEvaluated`, `patternStrategyEvaluations`, `patternStrategyNulls`, `patternSignalsGenerated`, `patternSignalsRejected`. Quant-lane equivalents with `quant` prefix.
+- **Compute family-mismatch %** → divide `nullReasons.familyFilterMismatch` by `vtsEvaluation.familyMismatchDenominatorTotal` (NOT by `strategiesEvaluated`).
