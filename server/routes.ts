@@ -7346,15 +7346,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // labeled rows on the panel had been showing "since-process-start"
       // values (e.g. 1-7 displayed vs 12+ actual in DB). Query the soft-
       // delete-flag vts_open_trades table (B79.0g-tx kept trade rows in
-      // table even after close) for true 24h rolling count, split by pool.
+      // table even after close) for true 24h rolling count, split by
+      // signal_type. NOTE: `pool` column stores a regime/stage label like
+      // 'rotational' — NOT the lane source. The correct quant-vs-pattern
+      // split is `signal_type` ('QUANT' vs 'PATTERN'), which reflects the
+      // strategy family that produced the signal (Kyle catalog 2026-05-13).
       let trades24hQuant = 0;
       let trades24hPattern = 0;
       try {
         const dbStart = Date.now();
         const tradeCountResult: any = await db.execute(sql`
           SELECT
-            COUNT(*) FILTER (WHERE pool = 'pattern')::int AS pattern_count,
-            COUNT(*) FILTER (WHERE pool != 'pattern')::int AS quant_count
+            COUNT(*) FILTER (WHERE signal_type = 'PATTERN')::int AS pattern_count,
+            COUNT(*) FILTER (WHERE signal_type = 'QUANT')::int AS quant_count
           FROM vts_open_trades
           WHERE asset_class = 'xstock_spot'
             AND opened_at > NOW() - INTERVAL '24 hours'
