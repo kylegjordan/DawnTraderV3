@@ -34,11 +34,21 @@ Remove these rules once all B-NEW items in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` Op
 
 ---
 
-## CURRENT STATE — 2026-05-13 11:11 UTC (post-B-NEW-19 ship, PM2 #263, HEAD `3451bb9c8`)
+## CURRENT STATE — 2026-05-13 13:50 UTC (post-BATCH_80 close, PM2 #269, HEAD `08b07dfb4`)
 
-**xStocks UI diagnostic sprint** advanced with B-NEW-19 (Possible Strategy Iterations row + subtractive flow + per-lane Pre-Eval Skips split). Conceptual confusion resolved: Pre-Eval Skips live at deeper granularity (pair-lane-strategy iteration) than VTS Destination / Pair-Pool Evaluations (pair-lane), so they CAN legitimately exceed the parent row. Panel now shows the fan-out explicitly via `Possible Strategy Iterations = Pre-Eval Skips + Strategy Evaluations` row, with subtractive visual flow. Per-lane Quant/Pattern split now wired in all three sections (was total-only in Last Scan; semantically wrong in 24h Rolling Aggregates). All leading `−` signs removed. Applies to BOTH crypto + xstock tabs (FilterDiagnosticsPanel is shared).
+**BATCH_80 SHIPPED (RUNNING_ISSUES #105 RESOLVED).** TEC `trailingStates` Map re-keyed from symbol → tradeId. Concurrent trades on same symbol (FET/USD-style multi-strategy cases) now each get their own engine state. Option C+ rehydrate seed preserves in-flight `tradeMode`+`ladderRung`+`originalStopPrice` across restarts with engine-side defensive coercion for null-rung TRAILING_TAKE seeds. Runtime invariant `[B80][TEC_KEYING_INVARIANT_VIOLATION]` fires every exit-cycle on both VTS + paper+ live. 10 unit tests passing in CI. UI category line added in Open/Closed Simulated Trades per Kyle directive.
 
-Real numbers will populate after US market opens (13:30 UTC). Pre-RTH xstock cycles produce zero pair-lane entries because pairs don't pass quant global filter.
+**Commits:** Phase 1 `8ace0b859` (engine + tests) → Phase 1.b `d5fe43084` (coercion fix per Langston review) → Phase 1.c `1c47b3e37` (test-site coverage fix) → Phase 2 `08b07dfb4` (UI category line). All pushed and deployed via PM2 #268 → #269.
+
+**Staging verified live:** monitor caught clean per-trade TEC init for all open trades with proper tradeIds, zero invariant violations, zero `[TEC_UPDATE_MISSING_TRADE_ID]`, persistence layer correctly preserving per-trade state across restarts, XRP/GBP visibly multi-trade-per-symbol case resolved (2 independent trades with separate stops).
+
+**Moonbag concurrency behavior delta:** pre-B80 collapsed 3 same-symbol moonbag transitions into 1 counter increment; post-B80 counts each per-trade (3 increments). Cap is now finally enforcing its declared semantics. Watch for entries that previously sneaked through getting rejected.
+
+**Open carryover items:**
+- Pre-existing CI red: ~60 test failures across b73/cost_telemetry/dynamic_sizing/b72/b70 + client-side TS errors. Not from BATCH_80. CLAUDE.md §7 "ALL 4 GREEN since B56" invariant violated. **BATCH_81 candidate** — dedicated CI-recovery batch needed.
+- B-NEW-23 Phase 16/19 hardening (observability gap that allowed B79.0m.b2 missing-import bug to run silently 2 days).
+
+**Earlier today (xStocks UI sprint, B-NEW-17 through B-NEW-27):** Pre-Eval Skips math clarification (Possible Strategy Iterations subtractive flow), xstock exit-cycle `db is not defined` fix, xstock UI Stale badge fix, closed-trade assetClass persistence, 15-trade JSON backfill, BE-protect doc sync.
 
 ### What's shipped (highlights — full log in XSTOCKS_DIAGNOSTICS_TAB_FIXES.md)
 
