@@ -188,6 +188,7 @@ describe('B79.TEC — per-asset-class TEC config cache', () => {
       updatePosition({
         // @ts-expect-error — intentionally bypassing type to test runtime guard
         assetClass: undefined,
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,

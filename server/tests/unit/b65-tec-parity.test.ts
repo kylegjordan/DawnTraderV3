@@ -148,6 +148,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 1: useTrailing=false, stop hit clamps to stop', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 94, atr: 0,
@@ -161,6 +162,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 2: useTrailing=false, target hit clamps to target', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 112, atr: 0,
@@ -174,6 +176,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 3: stale-price force-close exits at entry', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'ILLIQUID/USD',
       symbol: 'ILLIQUID/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: null, atr: 0,
@@ -187,6 +190,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 4: MAX_HOLD timeout with live price closes at currentPrice', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 103, atr: 0,
@@ -200,6 +204,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 5: qualifier accept — strong_bull_trend hits target, enters moonbag', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 111, atr: 2,
@@ -215,6 +220,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 6: qualifier reject — unknown strategy hits target, closes without moonbag', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'ETH/USD',
       symbol: 'ETH/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 111, atr: 2,
@@ -231,6 +237,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 7: source-pool qualifier — vwap_pullback outside strong-trend pool rejected', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 111, atr: 2,
@@ -248,6 +255,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
   it('Scenario 8: concurrency cap — paper at N-1 blocks further moonbag entries', async () => {
     // Trade 1 enters moonbag (10 slots total, reserved=1, so cap = 9 moonbags)
     await evaluateTECExit({
+      tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 111, atr: 2,
@@ -259,6 +267,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
     // Trade 2: strategy qualifies, but cap exhausted → closes at target.
     const d = await evaluateTECExit({
+      tradeId: 'ETH/USD',
       symbol: 'ETH/USD',
       entryPrice: 200, stopPrice: 190, targetPrice: 220,
       currentPrice: 221, atr: 4,
@@ -287,6 +296,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     expect(getConcurrentMoonbagCount('vts')).toBe(5);
 
     const d = await evaluateTECExit({
+      tradeId: 'NEWPAIR/USD',
       symbol: 'NEWPAIR/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 111, atr: 2,
@@ -314,6 +324,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
 
   it('Scenario 11: stop_hit via trailing path (engine never ratcheted) reports as stop_hit, not trailing_stop_hit', async () => {
     const d = await evaluateTECExit({
+      tradeId: 'SOL/USD',
       symbol: 'SOL/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
       currentPrice: 94, atr: 2, // price below stop, ATR present
@@ -507,6 +518,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     const { importStates, getTrailingState } = await import('../../services/trailing-exit-controller.js');
 
     const oldState: any = {
+      tradeId: 'OLDSTATE/USD',
       symbol: 'OLDSTATE/USD',
       tradeMode: 'TRAILING_TAKE',
       entryPrice: 100,

@@ -926,7 +926,27 @@ export class PaperExecutionEngine {
           `has no assetClass. Backfill via the B69 schema migration before retrying.`,
         );
       }
+      // B80 (2026-05-13): Option C+ rehydrate seed. Built once on the first
+      // exit-cycle for an open position post-deploy. Subsequent cycles: the
+      // engine state is in memory, seed is ignored (only fires when state
+      // doesn't exist yet). Per Langston rev2 §4.4.
+      const { getTrailingState: _getTSForSeed } = await import('./trailing-exit-controller.js');
+      const existingTecStatePE = _getTSForSeed(position.id);
+      const tecSeedPE = existingTecStatePE
+        ? undefined
+        : {
+            tradeMode: ((position as any).tradeMode === 'TRAILING_TAKE'
+              ? 'TRAILING_TAKE'
+              : 'TARGET') as 'TARGET' | 'TRAILING_TAKE',
+            ladderRung: (position as any).ladderRungsHit ?? 0,
+            originalStopPrice:
+              (position as any).originalStopPrice ?? (stopLoss ?? undefined),
+          };
+
       const decision = await evaluateTECExit({
+        // B80 (2026-05-13): per-trade keying. paper/live positions key by
+        // the DB row id (paper_sim_open_positions.id).
+        tradeId: position.id,
         symbol: position.symbol,
         entryPrice: avgPrice,
         stopPrice: stopLoss ?? -Infinity,
@@ -947,6 +967,8 @@ export class PaperExecutionEngine {
         callerMode: this.mode === 'live' ? 'live' : 'paper',
         sourcePool: (position as any).sourcePool ?? null,
         currentSlotTotal,
+        // B80: Option C+ seed (only on first cycle post-restart).
+        seed: tecSeedPE,
       });
 
       // B65.2: if the engine ratcheted the stop (break-even lock, target
@@ -957,6 +979,29 @@ export class PaperExecutionEngine {
         await storage.updatePaperSimOpenPosition(this.mode, position.id, {
           stopLoss: decision.newStopPrice.toString(),
         });
+      }
+
+      // B80 (2026-05-13, Langston rev2 #1): runtime invariant assertion on
+      // every exit-cycle iteration. Per-trade keying means displayed stop
+      // (position.stopLoss) MUST equal engine state's currentStopPrice
+      // (decision.newStopPrice). Divergence indicates a keying contract
+      // break; surface for next pre-audit.
+      if (decision.newStopPrice !== undefined && stopLoss !== null && avgPrice > 0) {
+        const epsilon = Math.max(0.00001, 0.0001 * avgPrice);
+        // Compare the engine's reported stop against the value we'd just
+        // written back (post-ratchet). If the engine returned a stop that's
+        // LOWER than the current displayed stop, that's a violation —
+        // engine should never ratchet downward.
+        const effectiveDisplayedStop =
+          decision.newStopPrice > stopLoss ? decision.newStopPrice : stopLoss;
+        const delta = Math.abs(effectiveDisplayedStop - decision.newStopPrice);
+        if (delta > epsilon) {
+          console.error(
+            `[B80][TEC_KEYING_INVARIANT_VIOLATION] tradeId=${position.id} symbol=${position.symbol} ` +
+            `displayed=${effectiveDisplayedStop.toFixed(6)} engine=${decision.newStopPrice.toFixed(6)} ` +
+            `delta=${delta.toFixed(6)} epsilon=${epsilon.toFixed(6)}`
+          );
+        }
       }
 
       // B65.2: write trade_mode on mode change (TARGET → TRAILING_TAKE).
@@ -1226,7 +1271,8 @@ export class PaperExecutionEngine {
       // rungTargetHistory). All optional; null on persisted trades that
       // closed before this state was tracked.
       const { getTrailingState: _getTES } = await import('./trailing-exit-controller.js');
-      const _finalState = _getTES(position.symbol);
+      // B80 (2026-05-13): per-trade keying — look up engine state by position.id.
+      const _finalState = _getTES(position.id);
       const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = _finalState?.tradeMode ?? 'TARGET';
       const finalLadderRung: number = _finalState?.ladderRung ?? 0;
       const finalOriginalStop: number | null = _finalState?.originalStopPrice ?? null;
@@ -1343,15 +1389,17 @@ export class PaperExecutionEngine {
     let deleteSuccessful = false;
     let deleteError: string | undefined;
     
-    // B65.2: clear trailing engine state after the closed-trade row has been
-    // updated with the final tradeMode. clearTrailingState also decrements
-    // the concurrent-moonbag counter if this trade was in TRAILING_TAKE mode,
-    // freeing a slot for the next setup that hits target.
+    // B65.2 / B80 (2026-05-13): clear trailing engine state after close-row
+    // is updated with the final tradeMode. Decrements the concurrent-moonbag
+    // counter if this trade was in TRAILING_TAKE mode. Pre-B80 keyed by
+    // symbol — wiped state for ALL concurrent positions on the symbol.
+    // Post-B80 keyed by position.id — only this position's state is cleared,
+    // other concurrent positions on the same symbol are untouched.
     try {
       const { clearTrailingState } = await import('./trailing-exit-controller.js');
-      clearTrailingState(position.symbol);
+      clearTrailingState(position.id);
     } catch (err) {
-      console.error(`[B65.2][TEC] Failed to clear trailing state for ${position.symbol}:`, err);
+      console.error(`[B65.2][TEC] Failed to clear trailing state for positionId=${position.id} symbol=${position.symbol}:`, err);
     }
 
     // Delete open position with error handling for AJ19-B

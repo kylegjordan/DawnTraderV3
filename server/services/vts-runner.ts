@@ -2117,7 +2117,28 @@ async function resolveOpenVirtualTrades(): Promise<{
       );
       continue;
     }
+    // B80 (2026-05-13): Option C+ rehydrate seed. Built once on the first
+    // exit-cycle for an open trade post-deploy (when TEC engine has no state
+    // for this tradeId yet). Passes through trade-record fields so the
+    // freshly-initialized per-trade TEC state preserves in-flight tradeMode,
+    // ladderRung, originalStopPrice. Subsequent cycles: engine state is in
+    // memory, seed is ignored by initializeTrailingState (only fires when
+    // state doesn't exist yet). Per Langston rev2 §4.4.
+    const { getTrailingState } = await import('./trailing-exit-controller.js');
+    const existingTecState = getTrailingState(tradeId);
+    const tecSeed = existingTecState
+      ? undefined
+      : {
+          tradeMode: (trade as any).tradeMode === 'TRAILING_TAKE'
+            ? ('TRAILING_TAKE' as const)
+            : ('TARGET' as const),
+          ladderRung: trade.ladderRungsHit ?? 0,
+          originalStopPrice: trade.originalStopPrice ?? trade.stopLoss,
+        };
+
     const decision = await evaluateTECExit({
+      // B80: per-trade keying. tradeId from the for-of iteration variable.
+      tradeId,
       symbol: trade.symbol,
       entryPrice: trade.entryPrice,
       stopPrice: trade.stopLoss,
@@ -2138,6 +2159,8 @@ async function resolveOpenVirtualTrades(): Promise<{
       callerMode: 'vts',
       sourcePool: trade.sourcePool ?? null,
       currentSlotTotal: Number.POSITIVE_INFINITY, // VTS: no concurrency cap
+      // B80: Option C+ seed (only on first cycle post-restart).
+      seed: tecSeed,
     });
 
     // B65.2: if the engine ratcheted the stop (break-even lock or trailing),
@@ -2146,6 +2169,23 @@ async function resolveOpenVirtualTrades(): Promise<{
     // reader (e.g. diagnostic endpoint) shows the live stop.
     if (decision.newStopPrice !== undefined && decision.newStopPrice > trade.stopLoss) {
       trade.stopLoss = decision.newStopPrice;
+    }
+
+    // B80 (2026-05-13, Langston rev2 #1): runtime invariant assertion on
+    // every exit-cycle iteration. After per-trade keying, displayed
+    // `trade.stopLoss` MUST always equal the engine's `state.currentStopPrice`
+    // (within tick-relative epsilon). Divergence indicates the per-trade
+    // keying contract has broken somewhere; surface for the next pre-audit.
+    if (decision.newStopPrice !== undefined) {
+      const epsilon = Math.max(0.00001, 0.0001 * trade.entryPrice);
+      const delta = Math.abs(trade.stopLoss - decision.newStopPrice);
+      if (delta > epsilon) {
+        console.error(
+          `[B80][TEC_KEYING_INVARIANT_VIOLATION] tradeId=${tradeId} symbol=${trade.symbol} ` +
+          `displayed=${trade.stopLoss.toFixed(6)} engine=${decision.newStopPrice.toFixed(6)} ` +
+          `delta=${delta.toFixed(6)} epsilon=${epsilon.toFixed(6)}`
+        );
+      }
     }
 
     // B65.4: write back the live ladder rung count so the closed-trade
@@ -2278,7 +2318,8 @@ async function resolveOpenVirtualTrades(): Promise<{
     // the B70 exit-decision hook below can reference finalTradeMode without
     // a scope error. The trailing snapshot read is cheap (in-memory map).
     const { getTrailingState } = await import('./trailing-exit-controller.js');
-    const trailingSnapshot = getTrailingState(trade.symbol);
+    // B80 (2026-05-13): per-trade keying — look up engine state by tradeId.
+    const trailingSnapshot = getTrailingState(tradeId);
     const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = trailingSnapshot?.tradeMode ?? 'TARGET';
 
     // Directive 11.6C: Persist to legacy VTS storage and ML pipeline
@@ -2493,13 +2534,15 @@ async function resolveOpenVirtualTrades(): Promise<{
       recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
     }
 
-    // B65.2: clear trailing engine state for this symbol. This also decrements
-    // the concurrent-moonbag counter if the trade was in TRAILING_TAKE mode.
+    // B65.2 / B80 (2026-05-13): clear trailing engine state for THIS TRADE.
+    // Pre-B80 keyed by symbol — wiped state for ALL concurrent trades on the
+    // symbol. Post-B80 keyed by tradeId — only this trade's state is cleared,
+    // other concurrent trades on the same symbol are untouched.
     try {
       const { clearTrailingState } = await import('./trailing-exit-controller.js');
-      clearTrailingState(trade.symbol);
+      clearTrailingState(tradeId);
     } catch (err) {
-      console.error(`[B65.2][TEC] Failed to clear trailing state for ${trade.symbol}:`, err);
+      console.error(`[B65.2][TEC] Failed to clear trailing state for tradeId=${tradeId} symbol=${trade.symbol}:`, err);
     }
 
     // Directive 11.6 Task 6: Verification logging
@@ -4055,7 +4098,7 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
     }
   }
 
-  for (const [_, trade] of openVirtualTrades) {
+  for (const [tradeId, trade] of openVirtualTrades) {
     let currentPrice: number | null = null;
     if (trade.assetClass === 'xstock_spot') {
       const p = xstockPriceMapUi.get(trade.symbol);
@@ -4152,7 +4195,8 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       // engineStopPrice is the engine's ratcheted stop (may be higher
       // than the original trade.stopLoss once the engine has moved it).
       ...(() => {
-        const ts = getTECState(trade.symbol);
+        // B80 (2026-05-13): per-trade keying — look up engine state by tradeId.
+        const ts = getTECState(tradeId);
         return {
           tradeMode: (ts?.tradeMode ?? 'TARGET') as 'TARGET' | 'TRAILING_TAKE',
           breakEvenLatched: ts?.breakEvenLatched ?? false,

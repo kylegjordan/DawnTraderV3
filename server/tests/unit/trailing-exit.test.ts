@@ -163,7 +163,7 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     });
 
     it('should initialize trailing state correctly', () => {
-      const state = initializeTrailingState('TEST/USD', 100, 110, 95, 50, 0.3, 2);
+      const state = initializeTrailingState('TEST/USD', 'TEST/USD', 100, 110, 95, 50, 0.3, 2);
       expect(state.symbol).toBe('TEST/USD');
       expect(state.tradeMode).toBe('TARGET');
       expect(state.entryPrice).toBe(100);
@@ -174,8 +174,9 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     });
 
     it('should update high water mark on price increase', () => {
-      initializeTrailingState('TEST/USD', 100, 110, 95, 50, 0.3, 2);
+      initializeTrailingState('TEST/USD', 'TEST/USD', 100, 110, 95, 50, 0.3, 2);
       const result = updatePosition({
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,
@@ -190,8 +191,9 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     });
 
     it('should latch break-even at 1×ATR gain', () => {
-      initializeTrailingState('TEST/USD', 100, 110, 95, 50, 0.3, 2);
+      initializeTrailingState('TEST/USD', 'TEST/USD', 100, 110, 95, 50, 0.3, 2);
       const result = updatePosition({
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,
@@ -207,8 +209,9 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     });
 
     it('should latch target and transition to TRAILING_TAKE mode', () => {
-      initializeTrailingState('TEST/USD', 100, 110, 95, 50, 0.3, 2);
+      initializeTrailingState('TEST/USD', 'TEST/USD', 100, 110, 95, 50, 0.3, 2);
       updatePosition({
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,
@@ -220,6 +223,7 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
         assetClass: 'crypto_spot',
       });
       const result = updatePosition({
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,
@@ -242,8 +246,9 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     });
 
     it('should not regress stop price once latched', () => {
-      initializeTrailingState('TEST/USD', 100, 110, 95, 50, 0.3, 2);
+      initializeTrailingState('TEST/USD', 'TEST/USD', 100, 110, 95, 50, 0.3, 2);
       updatePosition({
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,
@@ -258,6 +263,7 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
       const stop1 = state1?.currentStopPrice || 0;
       
       updatePosition({
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,
@@ -284,8 +290,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     });
 
     it('should export all states correctly', () => {
-      initializeTrailingState('TEST/USD', 100, 110, 95, 50, 0.3, 2);
-      initializeTrailingState('BTC/USD', 45000, 48000, 43000, 60, 0.2, 1000);
+      initializeTrailingState('TEST/USD', 'TEST/USD', 100, 110, 95, 50, 0.3, 2);
+      initializeTrailingState('BTC/USD', 'BTC/USD', 45000, 48000, 43000, 60, 0.2, 1000);
       
       const states = exportAllStates();
       expect(states.length).toBe(2);
@@ -296,6 +302,8 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     it('should import states correctly', () => {
       const states: TrailingState[] = [
         {
+          // B80 (2026-05-13): per-trade keying. tradeId added.
+          tradeId: 'IMPORT/USD',
           symbol: 'IMPORT/USD',
           tradeMode: 'TRAILING_TAKE',
           entryPrice: 50,
@@ -307,10 +315,14 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
           lastUpdated: Date.now(),
           DI: 70,
           VolNoise: 0.2,
-          ATR: 1
+          ATR: 1,
+          // B65.4: ladder fields required by interface.
+          ladderRung: 1,
+          currentRungTarget: 60,
+          currentRungFloor: 55,
         }
       ];
-      
+
       importStates(states);
       const imported = getTrailingState('IMPORT/USD');
       expect(imported).toBeDefined();
@@ -320,8 +332,9 @@ describe('Directive 9.2 — Dynamic Trade Management', () => {
     });
 
     it('should provide correct diagnostics', () => {
-      initializeTrailingState('TEST/USD', 100, 110, 95, 50, 0.3, 2);
+      initializeTrailingState('TEST/USD', 'TEST/USD', 100, 110, 95, 50, 0.3, 2);
       updatePosition({
+        tradeId: 'TEST/USD',
         symbol: 'TEST/USD',
         entryPrice: 100,
         targetPrice: 110,

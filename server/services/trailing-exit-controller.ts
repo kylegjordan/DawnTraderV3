@@ -438,6 +438,16 @@ async function syncTradeModeToStorage(symbol: string, tradeMode: TradeMode): Pro
 }
 
 export interface TrailingState {
+  /**
+   * B80 (2026-05-13): per-trade keying. TEC state is now keyed by trade.id
+   * (VTS: `vts_<assetClass>_<ts>_<rand>`; paper/live: DB UUID). symbol is
+   * retained as a display/log field but no longer the Map key. Resolves the
+   * multi-trade-per-symbol bug where concurrent trades on FET/USD (e.g.
+   * range_trade + support_bounce + morning_star) all shared one TEC state
+   * and inherited the FIRST trade's stop as their trigger price. See
+   * RUNNING_ISSUES #105 + BATCH_80_SCOPE rev2.
+   */
+  tradeId: string;
   symbol: string;
   tradeMode: TradeMode;
   entryPrice: number;
@@ -490,7 +500,39 @@ export interface TrailingState {
   rungTargetHistory?: number[];
 }
 
+/**
+ * B80 (2026-05-13): Option C+ rehydrate seed. Callers (vts-runner / paper-
+ * execution-engine) build this from the in-memory trade record on the first
+ * exit-cycle for an open trade post-deploy, so the freshly-initialized per-
+ * trade TEC state preserves the in-flight `tradeMode`, `ladderRung`, and
+ * `originalStopPrice`. Default = current behavior (no seed): bounds the
+ * regression surface for callers that don't pass it.
+ *
+ * `currentRungTarget` is intentionally NOT in the seed — it is fully
+ * deterministic from `entryPrice + (ladderRung + 1) * (targetPrice -
+ * entryPrice)` (see updatePosition's `rungStepPrice` derivation). Same for
+ * `currentRungFloor`, recomputed on the next exit-cycle from the prev rung
+ * target.
+ */
+export interface TrailingStateSeed {
+  tradeMode?: TradeMode;
+  ladderRung?: number;
+  originalStopPrice?: number;
+  /**
+   * Optional — can be re-derived at next cycle from `stopLoss >= netBreakeven`.
+   * Pass through if you want immediate consistency; otherwise leave undefined
+   * and the BE-latch will re-evaluate on the first cycle.
+   */
+  breakEvenLatched?: boolean;
+}
+
 export interface PositionUpdate {
+  /**
+   * B80 (2026-05-13): per-trade keying. TEC state Map is keyed by tradeId.
+   * VTS callers pass the OpenVirtualTrade.id; paper/live callers pass the
+   * paper_sim_open_positions.id (DB UUID). Required.
+   */
+  tradeId: string;
   symbol: string;
   entryPrice: number;
   targetPrice: number;
@@ -499,6 +541,13 @@ export interface PositionUpdate {
   VolNoise: number;
   ATR: number;
   currentStopPrice: number;
+  /**
+   * B80 (2026-05-13): optional Option C+ rehydrate seed. Callers pass this
+   * on the FIRST exit-cycle after PM2 restart so initializeTrailingState
+   * reconstructs the in-flight TEC state from trade-record fields. Subsequent
+   * cycles pass nothing — the engine state is in memory.
+   */
+  seed?: TrailingStateSeed;
   // B65.2: extra inputs for moonbag gating + concurrency tracking.
   strategy?: string;
   sourcePool?: string | null;
@@ -533,6 +582,8 @@ export interface PositionUpdate {
 }
 
 export interface TrailingUpdateResult {
+  /** B80 (2026-05-13): tradeId echoed back for caller-side invariant assertion. */
+  tradeId: string;
   symbol: string;
   previousMode: TradeMode;
   newMode: TradeMode;
@@ -572,59 +623,84 @@ const trailingStates = new Map<string, TrailingState>();
 let _b79TecFreezeCount = 0;
 
 /**
- * Directive 9.2.A: Initialize trailing state for a new position
+ * Directive 9.2.A: Initialize trailing state for a new position.
+ * B80 (2026-05-13): keyed by tradeId. Optional `seed` parameter activates
+ * Option C+ rehydrate path — caller passes the trade record's in-flight
+ * `tradeMode`, `ladderRung`, `originalStopPrice` so a post-deploy restart
+ * preserves moonbag trade protection instead of silently downgrading them
+ * to TARGET mode. `currentRungTarget` and `currentRungFloor` are deterministic
+ * from entry + target + ladderRung and are computed below — NOT seeded.
  */
 export function initializeTrailingState(
+  tradeId: string,
   symbol: string,
   entryPrice: number,
   targetPrice: number,
   initialStopPrice: number,
   DI: number = 50,
   VolNoise: number = 0.3,
-  ATR: number = 0
+  ATR: number = 0,
+  seed?: TrailingStateSeed,
 ): TrailingState {
+  // B80: seed-aware ladder reconstruction. Rung step = R = targetPrice - entryPrice.
+  // At ladderRung=N (≥1), currentRungTarget = targetPrice + N×R. Deterministic.
+  const rungStepPrice = targetPrice - entryPrice;
+  const seededRung = seed?.ladderRung ?? 0;
+  const seededMode: TradeMode =
+    seed?.tradeMode ?? (seededRung >= 1 ? 'TRAILING_TAKE' : 'TARGET');
+  const seededTargetLatched = seededRung >= 1;
+  const seededRungTarget =
+    seededRung >= 1 ? targetPrice + seededRung * rungStepPrice : targetPrice;
+
   const state: TrailingState = {
+    tradeId,
     symbol,
-    tradeMode: 'TARGET',
+    tradeMode: seededMode,
     entryPrice,
     targetPrice,
     currentStopPrice: initialStopPrice,
     highWaterMark: entryPrice,
-    breakEvenLatched: false,
-    targetLatched: false,
+    breakEvenLatched: seed?.breakEvenLatched ?? false,
+    targetLatched: seededTargetLatched,
     lastUpdated: Date.now(),
     DI,
     VolNoise,
     ATR,
-    // B65.4: ladder starts at rung 0 (no targets hit). currentRungTarget
-    // tracks the active target; advances on each rung event. Initially
-    // equals the original target (rung 0 is "aiming at original target").
-    // currentRungFloor is 0 until first rung lands.
-    ladderRung: 0,
-    currentRungTarget: targetPrice,
-    currentRungFloor: 0,
-    // B65.4.2 (2026-04-28): observability fields for ladder mechanics.
-    // Captured at init so reports can show what the original stop was even
-    // after the engine ratchets currentStopPrice up. latchTriggerPrice and
-    // rungTargetHistory remain unset until the first target latch fires.
-    originalStopPrice: initialStopPrice,
+    // B65.4 / B80: ladder rung reconstructed from seed if present.
+    ladderRung: seededRung,
+    currentRungTarget: seededRungTarget,
+    currentRungFloor: 0, // will ratchet on next cycle if applicable
+    // B65.4.2: originalStopPrice preserved from seed when rehydrating; else
+    // captured at init time. Per Langston rev2 #2 callout, on emergency
+    // git-revert the pre-fix code lacks Option C+ rehydrate — in-flight
+    // moonbag trades will degrade to TARGET on revert. Documented in
+    // BATCH_80 rollback playbook.
+    originalStopPrice: seed?.originalStopPrice ?? initialStopPrice,
     rungTargetHistory: [],
+    // B80: track moonbag counter increment if seeded as TRAILING_TAKE so
+    // concurrency cap remains accurate across restarts.
   };
-  
-  trailingStates.set(symbol, state);
-  console.log(`[9.2][EXIT] ${symbol} initialized: entry=${entryPrice.toFixed(4)}, target=${targetPrice.toFixed(4)}, stop=${initialStopPrice.toFixed(4)}, mode=TARGET`);
-  
+
+  trailingStates.set(tradeId, state);
+  const seedNote = seed ? ` (seeded: rung=${seededRung} mode=${seededMode})` : '';
+  console.log(
+    `[9.2][EXIT] ${symbol} tradeId=${tradeId} initialized: ` +
+    `entry=${entryPrice.toFixed(4)}, target=${targetPrice.toFixed(4)}, ` +
+    `stop=${initialStopPrice.toFixed(4)}, mode=${seededMode}${seedNote}`
+  );
+
   // Directive 9.2.D: Schedule persistence save after state creation
   schedulePersistence();
-  
+
   return state;
 }
 
 /**
- * Directive 9.2.A: Get current trailing state for a position
+ * Directive 9.2.A: Get current trailing state for a position.
+ * B80: keyed by tradeId.
  */
-export function getTrailingState(symbol: string): TrailingState | undefined {
-  return trailingStates.get(symbol);
+export function getTrailingState(tradeId: string): TrailingState | undefined {
+  return trailingStates.get(tradeId);
 }
 
 /**
@@ -651,8 +727,18 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   if (!update.assetClass) {
     const msg =
       `[TEC_UPDATE_MISSING_ASSET_CLASS] updatePosition called for symbol=${update.symbol} ` +
-      `without assetClass. Every TEC-evaluated position must carry an explicit AssetClass. ` +
-      `See BATCH_79_TEC_SCOPE.md §1 #3.`;
+      `tradeId=${update.tradeId} without assetClass. Every TEC-evaluated position must carry ` +
+      `an explicit AssetClass. See BATCH_79_TEC_SCOPE.md §1 #3.`;
+    console.error(msg);
+    throw new Error(msg);
+  }
+  // B80 (2026-05-13): runtime assertion that tradeId was passed. PositionUpdate.tradeId
+  // is non-optional in TS, but defensive guard catches any caller that bypasses types.
+  if (!update.tradeId) {
+    const msg =
+      `[TEC_UPDATE_MISSING_TRADE_ID] updatePosition called for symbol=${update.symbol} ` +
+      `without tradeId. BATCH_80 requires per-trade keying — every TEC-evaluated position ` +
+      `must carry an explicit tradeId. See BATCH_80_SCOPE.md.`;
     console.error(msg);
     throw new Error(msg);
   }
@@ -660,15 +746,22 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   if (assetClass === 'xstock_spot') {
     // B79.0c: per-symbol — 24/7 names (Kraken Phase 1) get normal stop-eval
     // through the weekend; only ARCA-aligned 24/5 names freeze.
+    // B80: freeze GATE keys by symbol (market-hours is a symbol property); freeze
+    // STATE lookup keys by tradeId (Langston rev1 §4.3 callout — keep the texture
+    // between symbol-level and trade-level explicit).
     if (!isXstockMarketOpenUTC(update.symbol)) {
       _b79TecFreezeCount++;
       if (_b79TecFreezeCount % 100 === 1) {
-        console.log(`[B79][TEC_FREEZE] ${update.symbol} (xstock_spot, market closed) — skipping stop-eval (count=${_b79TecFreezeCount})`);
+        console.log(
+          `[B79][TEC_FREEZE] ${update.symbol} tradeId=${update.tradeId} ` +
+          `(xstock_spot, market closed) — skipping stop-eval (count=${_b79TecFreezeCount})`
+        );
       }
       // Return current state unchanged — no stop movement, no mode change.
-      const existing = trailingStates.get(update.symbol);
+      const existing = trailingStates.get(update.tradeId);
       const mode = existing?.tradeMode ?? 'PROTECT_GAINS' as TradeMode;
       return {
+        tradeId: update.tradeId,
         symbol: update.symbol,
         previousMode: mode,
         newMode: mode,
@@ -684,18 +777,32 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   }
   // ─────────────────────────────────────────────────────────────────────
 
-  let state = trailingStates.get(update.symbol);
+  let state = trailingStates.get(update.tradeId);
 
   if (!state) {
+    // B80: Option C+ rehydrate — pass seed if caller provided one. Caller
+    // builds seed from trade-record fields on the first exit-cycle for an
+    // open trade post-deploy.
     state = initializeTrailingState(
+      update.tradeId,
       update.symbol,
       update.entryPrice,
       update.targetPrice,
       update.currentStopPrice,
       update.DI,
       update.VolNoise,
-      update.ATR
+      update.ATR,
+      update.seed,
     );
+    // B80: if seed indicated TRAILING_TAKE on rehydrate, increment the
+    // concurrency counter to preserve cap-enforcement accuracy across restarts.
+    if (state.tradeMode === 'TRAILING_TAKE' && update.callerMode) {
+      concurrentMoonbagByMode[update.callerMode] += 1;
+      console.log(
+        `[B80][MOONBAG_REHYDRATE] ${update.symbol} tradeId=${update.tradeId} ` +
+        `rehydrated as TRAILING_TAKE (rung=${state.ladderRung}); counter ${update.callerMode}=${concurrentMoonbagByMode[update.callerMode]}`
+      );
+    }
   }
   
   const previousMode = state.tradeMode;
@@ -709,7 +816,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   
   if (update.currentPrice > state.highWaterMark) {
     state.highWaterMark = update.currentPrice;
-    console.log(`[9.2][EXIT] ${update.symbol} new HWM=${state.highWaterMark.toFixed(4)}`);
+    console.log(`[9.2][EXIT] ${update.symbol} tradeId=${update.tradeId} new HWM=${state.highWaterMark.toFixed(4)}`);
   }
   
   // B79.TEC: per-asset-class config snapshot (sync map lookup; cache pre-warmed
@@ -740,7 +847,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
       state.breakEvenLatched = true;
       // Directive 11.3A: Use net breakeven (accounts for costs) instead of gross entry
       newStopPrice = Math.max(newStopPrice, netBreakeven);
-      console.log(`[9.2][LOCK] ${update.symbol} BREAK-EVEN latched @ ${netBreakeven.toFixed(4)} (net, ${cfg.breakEvenTriggerR}×ATR gain, assetClass=${assetClass})`);
+      console.log(`[9.2][LOCK] ${update.symbol} tradeId=${update.tradeId} BREAK-EVEN latched @ ${netBreakeven.toFixed(4)} (net, ${cfg.breakEvenTriggerR}×ATR gain, assetClass=${assetClass})`);
     }
   }
   
@@ -805,7 +912,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
         modeChanged = true;
         concurrentMoonbagByMode[state.callerMode] += 1;
         newStopPrice = Math.max(newStopPrice, state.currentRungFloor);
-        console.log(`[9.2][LADDER] ${update.symbol} rung=1 (entry-target hit) — new_target=${state.currentRungTarget.toFixed(4)} new_floor=${state.currentRungFloor.toFixed(4)} mode=${state.callerMode} concurrent=${concurrentMoonbagByMode[state.callerMode]}`);
+        console.log(`[9.2][LADDER] ${update.symbol} tradeId=${update.tradeId} rung=1 (entry-target hit) — new_target=${state.currentRungTarget.toFixed(4)} new_floor=${state.currentRungFloor.toFixed(4)} mode=${state.callerMode} concurrent=${concurrentMoonbagByMode[state.callerMode]}`);
       } else {
         // Qualifier rejected or cap hit → close at target, no ladder.
         // Stop still ratchets to the net-target floor for protection on the close fill.
@@ -813,7 +920,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
         closeNow = true;
         closeReason = 'target_hit_no_trailing';
         const reason = !moonbagQualified ? 'strategy-not-qualified' : 'concurrency-cap-reached';
-        console.log(`[9.2][MODE] ${update.symbol} → TARGET close (moonbag denied: ${reason})`);
+        console.log(`[9.2][MODE] ${update.symbol} tradeId=${update.tradeId} → TARGET close (moonbag denied: ${reason})`);
       }
     }
   }
@@ -833,7 +940,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
       if (!state.rungTargetHistory) state.rungTargetHistory = [];
       state.rungTargetHistory.push(justHitTarget);
       newStopPrice = Math.max(newStopPrice, state.currentRungFloor);
-      console.log(`[9.2][LADDER] ${update.symbol} rung=${state.ladderRung} (target ${justHitTarget.toFixed(4)} hit) — new_target=${state.currentRungTarget.toFixed(4)} new_floor=${state.currentRungFloor.toFixed(4)}`);
+      console.log(`[9.2][LADDER] ${update.symbol} tradeId=${update.tradeId} rung=${state.ladderRung} (target ${justHitTarget.toFixed(4)} hit) — new_target=${state.currentRungTarget.toFixed(4)} new_floor=${state.currentRungFloor.toFixed(4)}`);
     }
   }
 
@@ -843,7 +950,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
     if (durationMs > cfg.moonbagMaxDurationMs) {
       closeNow = true;
       closeReason = 'moonbag_timeout';
-      console.log(`[9.2][TIMEOUT] ${update.symbol} moonbag duration ${Math.round(durationMs / 60000)}m exceeded cap ${Math.round(cfg.moonbagMaxDurationMs / 60000)}m — forcing close (rung=${state.ladderRung})`);
+      console.log(`[9.2][TIMEOUT] ${update.symbol} tradeId=${update.tradeId} moonbag duration ${Math.round(durationMs / 60000)}m exceeded cap ${Math.round(cfg.moonbagMaxDurationMs / 60000)}m — forcing close (rung=${state.ladderRung})`);
     }
   }
 
@@ -862,7 +969,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
     newStopPrice = Math.max(floorStop, dynamicStop);
 
     const Kprime = calculateDynamicStopDistance(state.DI, state.VolNoise);
-    console.log(`[9.2][EXIT] ${update.symbol} trailing rung=${state.ladderRung}: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (rungFloor=${floorStop.toFixed(4)}, nextTarget=${state.currentRungTarget.toFixed(4)})`);
+    console.log(`[9.2][EXIT] ${update.symbol} tradeId=${update.tradeId} trailing rung=${state.ladderRung}: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (rungFloor=${floorStop.toFixed(4)}, nextTarget=${state.currentRungTarget.toFixed(4)})`);
   } else if (state.breakEvenLatched && !state.targetLatched && state.ATR > 0) {
     const dynamicStop = calculateTrailingStopPrice(
       state.highWaterMark,
@@ -875,13 +982,13 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
     newStopPrice = Math.max(floorStop, dynamicStop);
     
     const Kprime = calculateDynamicStopDistance(state.DI, state.VolNoise);
-    console.log(`[9.2][EXIT] ${update.symbol} BE trailing: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (netFloor=${floorStop.toFixed(4)})`);
+    console.log(`[9.2][EXIT] ${update.symbol} tradeId=${update.tradeId} BE trailing: K'=${Kprime.toFixed(2)}, HWM=${state.highWaterMark.toFixed(4)}, stop=${newStopPrice.toFixed(4)} (netFloor=${floorStop.toFixed(4)})`);
   }
   
   state.currentStopPrice = newStopPrice;
   state.lastUpdated = Date.now();
-  trailingStates.set(update.symbol, state);
-  
+  trailingStates.set(update.tradeId, state);
+
   const stopMoved = Math.abs(newStopPrice - previousStop) > 0.00001;
   
   // Directive 9.2.D: Schedule persistence save after state mutation
@@ -897,6 +1004,7 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   }
   
   return {
+    tradeId: update.tradeId,
     symbol: update.symbol,
     previousMode,
     newMode: state.tradeMode,
@@ -1096,29 +1204,36 @@ export async function primeTECConfig(): Promise<void> {
 }
 
 /**
- * Directive 9.2.A: Check if position should be closed (stop hit)
+ * Directive 9.2.A: Check if position should be closed (stop hit).
+ * B80: keyed by tradeId.
  */
-export function shouldClosePosition(symbol: string, currentPrice: number): boolean {
-  const state = trailingStates.get(symbol);
+export function shouldClosePosition(tradeId: string, currentPrice: number): boolean {
+  const state = trailingStates.get(tradeId);
   if (!state) return false;
-  
+
   return currentPrice <= state.currentStopPrice;
 }
 
 /**
- * Directive 9.2.A: Clear trailing state when position is closed
+ * Directive 9.2.A: Clear trailing state when position is closed.
+ * B80: keyed by tradeId. Only clears THIS trade's state — other concurrent
+ * trades on the same symbol are untouched (the load-bearing fix vs the
+ * pre-B80 symbol-keyed behavior).
  */
-export function clearTrailingState(symbol: string): void {
-  if (trailingStates.has(symbol)) {
-    const state = trailingStates.get(symbol);
+export function clearTrailingState(tradeId: string): void {
+  if (trailingStates.has(tradeId)) {
+    const state = trailingStates.get(tradeId);
     // B65.2: decrement the concurrent-moonbag counter if this trade was in
     // trailing mode when cleared. Keeps the cap check accurate across opens
     // and closes happening in any order within a cycle.
     if (state && state.tradeMode === 'TRAILING_TAKE' && state.callerMode) {
       concurrentMoonbagByMode[state.callerMode] = Math.max(0, concurrentMoonbagByMode[state.callerMode] - 1);
     }
-    console.log(`[9.2][EXIT] ${symbol} cleared: mode=${state?.tradeMode}, finalStop=${state?.currentStopPrice.toFixed(4)}`);
-    trailingStates.delete(symbol);
+    console.log(
+      `[9.2][EXIT] ${state?.symbol ?? 'UNKNOWN'} tradeId=${tradeId} cleared: ` +
+      `mode=${state?.tradeMode}, finalStop=${state?.currentStopPrice.toFixed(4)}`
+    );
+    trailingStates.delete(tradeId);
     // Directive 9.2.D: Schedule persistence save after state removal
     schedulePersistence();
   }
@@ -1132,7 +1247,20 @@ export function exportAllStates(): TrailingState[] {
 }
 
 /**
- * Directive 9.2.D: Import trailing states from persistence
+ * Directive 9.2.D: Import trailing states from persistence.
+ *
+ * B80 (2026-05-13): Option C+ drop pattern. The Map key changed from symbol
+ * to tradeId. Any legacy state record persisted before B80 lacks a `tradeId`
+ * field. Such records are DISCARDED on import — vts-runner / paper-engine
+ * will rebuild fresh per-trade TEC state on the next exit-cycle using the
+ * Option C+ seed path (initializeTrailingState with seed = trade record's
+ * tradeMode/ladderRung/originalStopPrice). This avoids the rev1 Option C
+ * silent-downgrade of in-flight moonbag trades to TARGET mode.
+ *
+ * Per Langston rev2 #2 callout: on emergency `git revert`, the pre-fix
+ * build won't have the seed path. In-flight TRAILING_TAKE trades degrade
+ * to TARGET at rollback. Acceptable emergency procedure; called out in
+ * the rollback playbook.
  */
 export function importStates(states: TrailingState[]): void {
   trailingStates.clear();
@@ -1142,7 +1270,14 @@ export function importStates(states: TrailingState[]): void {
   concurrentMoonbagByMode.paper = 0;
   concurrentMoonbagByMode.live = 0;
   let migratedCount = 0;
+  let droppedLegacyCount = 0;
   for (const stateRaw of states) {
+    // B80: legacy pre-B80 state lacks tradeId — drop it. Per-trade state
+    // will be rebuilt fresh via seed on next exit-cycle.
+    if (!stateRaw.tradeId) {
+      droppedLegacyCount++;
+      continue;
+    }
     // B65.4: backward-compat migration. Persistence files written before the
     // ladder fields existed will not have ladderRung / currentRungTarget /
     // currentRungFloor. Best-effort migration:
@@ -1182,26 +1317,41 @@ export function importStates(states: TrailingState[]): void {
       migratedCount++;
     }
 
-    trailingStates.set(state.symbol, state);
+    trailingStates.set(state.tradeId, state);
     if (state.tradeMode === 'TRAILING_TAKE' && state.callerMode) {
       concurrentMoonbagByMode[state.callerMode] += 1;
     }
-    console.log(`[9.2][EXIT] ${state.symbol} restored: mode=${state.tradeMode}, stop=${state.currentStopPrice.toFixed(4)}, rung=${state.ladderRung}${migrated ? ' (B65.4 migrated)' : ''}`);
+    console.log(
+      `[9.2][EXIT] ${state.symbol} tradeId=${state.tradeId} restored: ` +
+      `mode=${state.tradeMode}, stop=${state.currentStopPrice.toFixed(4)}, ` +
+      `rung=${state.ladderRung}${migrated ? ' (B65.4 migrated)' : ''}`
+    );
   }
   if (migratedCount > 0) {
     console.log(`[9.2][B65.4] Migrated ${migratedCount} pre-ladder persisted states with default ladder fields`);
   }
-  console.log(`[9.2][EXIT] Restored ${states.length} trailing states (moonbag concurrency: vts=${concurrentMoonbagByMode.vts}, paper=${concurrentMoonbagByMode.paper}, live=${concurrentMoonbagByMode.live})`);
+  if (droppedLegacyCount > 0) {
+    console.log(
+      `[B80][TEC_KEYING] Dropped ${droppedLegacyCount} legacy pre-B80 persisted states ` +
+      `(missing tradeId field). Per-trade state will be rebuilt via Option C+ seed on ` +
+      `next exit-cycle using trade-record fields.`
+    );
+  }
+  console.log(`[9.2][EXIT] Restored ${trailingStates.size} trailing states (moonbag concurrency: vts=${concurrentMoonbagByMode.vts}, paper=${concurrentMoonbagByMode.paper}, live=${concurrentMoonbagByMode.live})`);
 }
 
 /**
- * Directive 9.2.F: Get diagnostic summary
+ * Directive 9.2.F: Get diagnostic summary.
+ * B80: rows now include `tradeId`. Same symbol can appear N times when
+ * multiple concurrent trades share a symbol — that is the load-bearing
+ * intent of per-trade keying. Consumers that dedupe by symbol must be
+ * updated to dedupe by tradeId.
  */
 export function getDiagnostics(): {
   activeCount: number;
   targetModeCount: number;
   trailingTakeModeCount: number;
-  states: Array<{ symbol: string; mode: TradeMode; stop: number; latches: string }>;
+  states: Array<{ tradeId: string; symbol: string; mode: TradeMode; stop: number; latches: string }>;
 } {
   const states = Array.from(trailingStates.values());
   return {
@@ -1209,6 +1359,7 @@ export function getDiagnostics(): {
     targetModeCount: states.filter(s => s.tradeMode === 'TARGET').length,
     trailingTakeModeCount: states.filter(s => s.tradeMode === 'TRAILING_TAKE').length,
     states: states.map(s => ({
+      tradeId: s.tradeId,
       symbol: s.symbol,
       mode: s.tradeMode,
       stop: s.currentStopPrice,

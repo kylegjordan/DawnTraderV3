@@ -69,6 +69,7 @@ import {
   canEnterMoonbag,
   getConcurrentMoonbagCount,
   type TrailingUpdateResult,
+  type TrailingStateSeed,
   type CallerMode,
 } from './trailing-exit-controller.js';
 import type { AssetClass } from '../../shared/asset-classes.js';
@@ -90,6 +91,12 @@ export interface TECExitContext {
 }
 
 export interface TECExitInput {
+  /**
+   * B80 (2026-05-13): per-trade keying. VTS callers pass OpenVirtualTrade.id;
+   * paper/live callers pass paper_sim_open_positions.id (DB UUID). Required.
+   * See BATCH_80_SCOPE.md + RUNNING_ISSUES #105.
+   */
+  tradeId: string;
   symbol: string;
   entryPrice: number;
   stopPrice: number;
@@ -119,6 +126,15 @@ export interface TECExitInput {
   sourcePool?: string | null;
   /** Current total slot count in the caller's pool — used for the concurrency cap. Ignored for VTS. */
   currentSlotTotal?: number;
+  /**
+   * B80 (2026-05-13): Option C+ rehydrate seed. Pass on the FIRST exit-cycle
+   * for an open trade after PM2 restart. Caller builds from trade record:
+   * `{ tradeMode: trade.tradeMode, ladderRung: trade.ladderRungsHit,
+   *    originalStopPrice: trade.originalStopPrice }`. Engine uses this to
+   * reconstruct in-flight TEC state instead of silently downgrading moonbag
+   * trades to TARGET mode. Subsequent cycles pass nothing.
+   */
+  seed?: TrailingStateSeed;
 }
 
 export type TECExitReason =
@@ -282,6 +298,8 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
     );
 
     const update: TrailingUpdateResult = tecUpdatePosition({
+      // B80 (2026-05-13): per-trade keying. tradeId is required.
+      tradeId: input.tradeId,
       symbol: input.symbol,
       entryPrice: input.entryPrice,
       targetPrice: input.targetPrice,
@@ -301,6 +319,8 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       callerMode,
       moonbagQualified,
       moonbagAllowed,
+      // B80: Option C+ rehydrate seed (only on first cycle after restart).
+      seed: input.seed,
     });
 
     // Engine-authored terminal decisions (B65.2):
@@ -334,7 +354,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       };
     }
 
-    if (tecShouldClose(input.symbol, currentPrice)) {
+    if (tecShouldClose(input.tradeId, currentPrice)) {
       // B65.2-HF3: three distinct close semantics when the engine reports
       // "close now":
       //   1. targetLatched = trade entered TRAILING_TAKE (moonbag), now
