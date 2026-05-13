@@ -34,9 +34,11 @@ Remove these rules once all B-NEW items in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` Op
 
 ---
 
-## CURRENT STATE — 2026-05-13 03:15 UTC (post-xStocks UI sprint, PM2 #262, HEAD `717a4ada8`)
+## CURRENT STATE — 2026-05-13 11:11 UTC (post-B-NEW-19 ship, PM2 #263, HEAD `3451bb9c8`)
 
-**xStocks UI diagnostic sprint COMPLETE** for the actionable items. 17 fixes shipped across 2026-05-12 and 2026-05-13. Pipeline + UI now match crypto architecture at the panel level. Math is internally coherent per pool.
+**xStocks UI diagnostic sprint** advanced with B-NEW-19 (Possible Strategy Iterations row + subtractive flow + per-lane Pre-Eval Skips split). Conceptual confusion resolved: Pre-Eval Skips live at deeper granularity (pair-lane-strategy iteration) than VTS Destination / Pair-Pool Evaluations (pair-lane), so they CAN legitimately exceed the parent row. Panel now shows the fan-out explicitly via `Possible Strategy Iterations = Pre-Eval Skips + Strategy Evaluations` row, with subtractive visual flow. Per-lane Quant/Pattern split now wired in all three sections (was total-only in Last Scan; semantically wrong in 24h Rolling Aggregates). All leading `−` signs removed. Applies to BOTH crypto + xstock tabs (FilterDiagnosticsPanel is shared).
+
+Real numbers will populate after US market opens (13:30 UTC). Pre-RTH xstock cycles produce zero pair-lane entries because pairs don't pass quant global filter.
 
 ### What's shipped (highlights — full log in XSTOCKS_DIAGNOSTICS_TAB_FIXES.md)
 
