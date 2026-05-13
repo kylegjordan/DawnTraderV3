@@ -846,6 +846,17 @@ export class VTSService extends EventEmitter {
       regime: tradeData.regime,
       pool: tradeData.pool,
       sourcePool: tradeData.sourcePool, // Batch 45: Propagate family-qualified sourcePool
+      // B-NEW-26 (Kyle directive 2026-05-13): assetClass was received in
+      // persistRealPriceTrade signature (line 767) since B79.0m.b2 but never
+      // written into the persisted trade record. Result: every closed trade
+      // — including all xstock_spot closures — gets the default 'crypto_spot'
+      // fallback on readback via export-csv.ts:230, mislabeling xstock trades
+      // as "Crypto Spot" in the Closed Simulated Trades UI / CSV export.
+      // Surfaced 2026-05-13 from Kyle's closed-trades export showing 14
+      // xstock closures (LMND BE_PROTECT, BABA BE_PROTECT, BIDU BE_PROTECT,
+      // VIA×3 stop_hit, JNJ stop_hit, BE/HUT/FCEL/MRVL/INTC target_hit,
+      // AEP stop_hit) all tagged crypto_spot. Fix: thread assetClass through.
+      assetClass: tradeData.assetClass,
       // HF9: Context dimensions from trade OPEN snapshot
       globalRegime: tradeData.globalRegime,
       pairFriction: tradeData.pairFriction,
