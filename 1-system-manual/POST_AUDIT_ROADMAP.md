@@ -55,6 +55,7 @@ Phase 24 (B79 + B79.TEC + B79.0a-0g + B79.0h governance retrospective) closed 20
 **Phase 24 follow-ups carrying into post-Phase-24:**
 - B79.0g-tx (RUNNING_ISSUES #91) — close-time atomic DELETE+INSERT through `persistRealPriceTrade` (substantial refactor; affects B73 + B70 hooks)
 - B79.x calibration sub-batches — Layer-1 → Layer-3 promotion of xstock_spot thresholds (post-shadow-mode-evidence)
+- **B79.x — archived xstock data backfill calibration batch** (added 2026-05-13 per Kyle directive). Use the 2+ weeks of archived xstock OHLC + ticker_snap + signal_eval_archive data (via the B74 archiver pipeline — `xstock_spot_ohlc_1m`, `xstock_spot_ticker_snap`) to perform backfill testing for calibration of: (a) **filter thresholds** (LQ/VN/DI/Corr across all 5 family IMFs — currently cloned from crypto baseline, never tuned for equity microstructure per B-NEW-15/16 evidence); (b) **regime classifications** (the same redistribution toward STRONG_TREND we saw post-crypto-calibration — likely applies to xstocks but needs evidence); (c) **strategy selection criteria** (per-strategy module_constants rows — currently 26 wildcards inherited from crypto); (d) **strategy gates** (`strategy_gates` enabled/disabled rows). Backfill replay framework reuses the B73 ablation infrastructure pattern but applied to filter + regime + strategy parameters (not just exit-strategy variants). Scope to be defined in its own scope file; this entry is a placeholder for the planned batch.
 - B79.5 — live-pricing adapter for `wss://ws-equities.kraken.com` (Phase 19 prerequisite)
 - B79.6 — sector-aware portfolio cluster prevention (Stage 12.5)
 - B79.x — Kraken WS-equities weekend silence investigation (RUNNING_ISSUES #89; Kraken Pro feed-tier OR REST polling fallback)
@@ -724,7 +725,25 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 
 **Pass criteria:** post-deletion, `grep -rn "trailingStopPercent"` over `server/` should return only the engine's own internal `highWaterMark` (which is part of the active ATR TEC state, not legacy). Any remaining ABCD/SMA references mean those strategies were kept; document the kept references explicitly so future audits don't re-flag them.
 
-**Phase 16 expected outcome**: All legacy infrastructure permanently removed. Schema cleaned. ~71 legacy tables dropped. LSP errors resolved. Residual paper percentage-trailing code purged from active codebase.
+### 16.7 Test Suite Recovery (added 2026-05-13)
+
+**Surfaced 2026-05-13 during BATCH_80 CI verification.** CI Test Suite has been red since at least 2026-05-12 23:23 with ~60 failed tests across 5 unrelated test files. Pre-existing — NOT caused by BATCH_80. CLAUDE.md §7 invariant "ALL 4 GREEN since B56" is currently violated.
+
+**Failing test files (snapshot 2026-05-13 14:00 UTC, CI run `25802780663`):**
+- `server/tests/unit/b73-exit-strategy-replay.test.ts` — BE-stop variant scenarios (Variants F, J, Scenarios 12-15). Likely test-data drift from B73.1 ATR real-input change.
+- `server/tests/integration/cost_telemetry.test.ts` — DSE Cost Pressure (Directive 11.3C). Likely module_constants schema or seed drift.
+- `server/tests/integration/dynamic_sizing.test.ts` — Directive 11.3 DSE (Core Sizing, Volatility/Cost Penalties, Telemetry, Diagnostics, Adaptive Weight Integration). Likely module_constants or storage interface drift.
+- `server/tests/integration/b72-dbs-routing-guards-consistency.test.ts` — DBS routing guards mutual consistency.
+- `server/tests/unit/b70-run-mode-controller.test.ts` — Run mode controller.
+
+**Approach:**
+- Triage each failing test: (a) legitimate regression to fix, (b) outdated test that needs updating, (c) test exercising intentionally-changed behavior that needs rewriting.
+- Restore CI to clean green baseline so future batches can rely on the regression-gate signal.
+- Likely sequenced AFTER xstock UI diagnostic-tab fixes close + AFTER BATCH_80 governance closes.
+
+**Out of scope:** if any failing test reveals a live-system bug, file as a separate dedicated batch — don't bundle into Test Suite Recovery.
+
+**Phase 16 expected outcome**: All legacy infrastructure permanently removed. Schema cleaned. ~71 legacy tables dropped. LSP errors resolved. Residual paper percentage-trailing code purged from active codebase. **CI Test Suite restored to green per §16.7.**
 
 ---
 

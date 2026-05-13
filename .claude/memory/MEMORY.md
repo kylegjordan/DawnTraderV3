@@ -6,81 +6,66 @@
 
 ## SESSION-START PROTOCOL (every new session / post-compact)
 
-1. Read `DawnTraderV3/CLAUDE.md` (especially §6 + §8 — comms; §2 Step 10.b — Langston MEMORY sync mandatory; §6.5 Step 3 — Telegram verbatim relay mandatory).
+1. Read `DawnTraderV3/CLAUDE.md` (especially §6 + §8 — comms; §2 Step 10.b — Langston MEMORY sync; §6.5 Step 3 — verbatim Telegram relay).
 2. Read this file.
-3. Read `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — canonical blueprint. Step 6b (Calibration cycle) added 2026-05-13.
-4. Read `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` — canonical xstock UI tracker (all-time changelog).
-5. Read `1-system-manual/POST_AUDIT_ROADMAP.md` for current phase.
-6. Kyle messages me here in Claude Desktop. For Kyle↔Langston traffic visibility, tail `/var/log/cc-bridge-inbox.jsonl` on Hetzner.
-7. Acknowledge readiness in one line.
+3. Read `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` — canonical xstock UI tracker.
+4. Read `1-system-manual/POST_AUDIT_ROADMAP.md` for current phase context.
+5. Kyle messages me here in Claude Desktop. For Kyle↔Langston visibility, tail `/var/log/cc-bridge-inbox.jsonl` on Hetzner.
+6. Acknowledge readiness in one line.
 
-**Do NOT:** confabulate; skip SIM in pre-audit; touch crypto_spot (no-touch fence through 2026-05-15); dump every lesson into workflow doc (standing rules only).
+**Do NOT:** confabulate; skip SIM in pre-audit; touch crypto_spot (no-touch fence through 2026-05-15); dump trial-and-error history into workflow doc (standing rules only).
 
 ---
 
-## TEMPORARY MAINTENANCE RULES (xStocks UI sprint — remove when ALL B-NEW items closed)
+## TEMPORARY MAINTENANCE RULES (xStocks UI sprint — remove when ALL open B-NEW items closed)
 
-**Rule 1 — `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` discipline:**
-- All-time changelog format. Every fix → row in CHANGELOG with date/commit/change. Every new issue Kyle raises → append `B-NEW-N` to OPEN ITEMS.
-- One-by-one workflow: fix → push → Kyle verifies on staging → mark FIXED → next.
+**Rule 1 — `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` discipline:** all-time changelog. Every fix → row. Every Kyle-raised issue → new B-NEW-N. One-by-one workflow.
 
-**Rule 2 — `ASSET_CLASS_ONBOARDING_WORKFLOW.md` discipline:**
-- Update with STANDING RULES only ("tomorrow we add a new asset class — what gets us 98% there on first pass?"), NOT trial-and-error history.
-- Trial-and-error history lives in batch completion reports + xstocks tracker.
+**Rule 2 — `ASSET_CLASS_ONBOARDING_WORKFLOW.md` discipline:** STANDING RULES only. Trial-and-error history lives in batch completion reports + xstocks tracker.
 
 **Rule 3 — Update both files in the same session you ship a fix.**
 
-Remove these rules once all B-NEW items in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` Open Items list are closed AND Layer-3 calibration is moved to its own batch.
+Remove these when all B-NEW items in tracker Open Items closed AND Layer-3 calibration moved to its own batch.
 
 ---
 
-## CURRENT STATE — 2026-05-13 13:50 UTC (post-BATCH_80 close, PM2 #269, HEAD `08b07dfb4`)
+## CURRENT STATE — 2026-05-13 14:15 UTC (BATCH_80 CLOSED + Phase 2.b asset-name UI, PM2 #270, HEAD `70d2afb2d`)
 
-**BATCH_80 SHIPPED (RUNNING_ISSUES #105 RESOLVED).** TEC `trailingStates` Map re-keyed from symbol → tradeId. Concurrent trades on same symbol (FET/USD-style multi-strategy cases) now each get their own engine state. Option C+ rehydrate seed preserves in-flight `tradeMode`+`ladderRung`+`originalStopPrice` across restarts with engine-side defensive coercion for null-rung TRAILING_TAKE seeds. Runtime invariant `[B80][TEC_KEYING_INVARIANT_VIOLATION]` fires every exit-cycle on both VTS + paper+ live. 10 unit tests passing in CI. UI category line added in Open/Closed Simulated Trades per Kyle directive.
+**BATCH_80 SHIPPED + verified live.** TEC `trailingStates` Map re-keyed from symbol → tradeId. RUNNING_ISSUES #105 RESOLVED. Concurrent trades on same symbol (FET/USD 4-trade case, SUI/EUR 7-trade case, XRP/GBP 3-trade case) now each have their own engine state. Option C+ rehydrate seed preserves in-flight `tradeMode`+`ladderRung`+`originalStopPrice` across restarts. Engine-side defensive coercion for null-rung TRAILING_TAKE seeds (Langston Phase 1 review revision). Runtime invariant `[B80][TEC_KEYING_INVARIANT_VIOLATION]` fires every exit-cycle on both VTS + paper + live. 10 unit tests + 5 b65-parity scenarios passing in CI.
 
-**Commits:** Phase 1 `8ace0b859` (engine + tests) → Phase 1.b `d5fe43084` (coercion fix per Langston review) → Phase 1.c `1c47b3e37` (test-site coverage fix) → Phase 2 `08b07dfb4` (UI category line). All pushed and deployed via PM2 #268 → #269.
+**Phase 2 UI revision (Phase 2.b — Kyle clarification 2026-05-13):** Open + Closed Simulated Trades now show specific asset NAME (Apple, Bitcoin, Solana, Alibaba) instead of category (crypto/xstock). Lookup from new `shared/asset-names.ts` (~180 entries: CRYPTO_NAMES + XSTOCK_NAMES). Maintain by adding entries when new pairs enter trading.
 
-**Staging verified live:** monitor caught clean per-trade TEC init for all open trades with proper tradeIds, zero invariant violations, zero `[TEC_UPDATE_MISSING_TRADE_ID]`, persistence layer correctly preserving per-trade state across restarts, XRP/GBP visibly multi-trade-per-symbol case resolved (2 independent trades with separate stops).
+**Commits:** `8ace0b859` (Phase 1 engine + tests) → `d5fe43084` (Phase 1.b coercion fix) → `1c47b3e37` (Phase 1.c test-site coverage) → `08b07dfb4` (Phase 2 UI category — superseded) → `a3f757a3b` (governance close) → `70d2afb2d` (Phase 2.b asset-name UI). All pushed; PM2 #268→#269→#270 deployed.
 
-**Moonbag concurrency behavior delta:** pre-B80 collapsed 3 same-symbol moonbag transitions into 1 counter increment; post-B80 counts each per-trade (3 increments). Cap is now finally enforcing its declared semantics. Watch for entries that previously sneaked through getting rejected.
+**30-min monitor window CLEAN:** zero `[B80][TEC_KEYING_INVARIANT_VIOLATION]`, zero `[TEC_UPDATE_MISSING_TRADE_ID]`, persistence preserved per-trade state across 3 PM2 restarts, FET/USD multi-trade case verified (4 trades each with own stop), new opens (PDD/BABA/CRWD/CRCL/NIO/HUT/SPGI/GEV) all using new tradeId format.
 
-**Open carryover items:**
-- Pre-existing CI red: ~60 test failures across b73/cost_telemetry/dynamic_sizing/b72/b70 + client-side TS errors. Not from BATCH_80. CLAUDE.md §7 "ALL 4 GREEN since B56" invariant violated. **BATCH_81 candidate** — dedicated CI-recovery batch needed.
-- B-NEW-23 Phase 16/19 hardening (observability gap that allowed B79.0m.b2 missing-import bug to run silently 2 days).
+**Moonbag concurrency behavior delta:** pre-B80 collapsed 3 same-symbol moonbag transitions into 1 counter increment; post-B80 counts each per-trade. Cap now enforces declared semantics. Watch for entries previously sneaking through getting rejected — that's the cap working, not a regression. Documented in SIM line 884 + completion report.
 
-**Earlier today (xStocks UI sprint, B-NEW-17 through B-NEW-27):** Pre-Eval Skips math clarification (Possible Strategy Iterations subtractive flow), xstock exit-cycle `db is not defined` fix, xstock UI Stale badge fix, closed-trade assetClass persistence, 15-trade JSON backfill, BE-protect doc sync.
+**Earlier today (xStocks UI sprint, B-NEW-17 through B-NEW-27):** Possible Strategy Iterations subtractive flow + per-lane Pre-Eval Skips split; xstock exit-cycle `db is not defined` fix (B-NEW-20 — the 21-stuck-trades bug); xstock UI Stale badge fix (B-NEW-25); closed-trade assetClass persistence (B-NEW-26); 15-trade JSON backfill (B-NEW-27); BE-protect doc sync (xstock_spot deliberately ENABLED per Kyle).
 
-### What's shipped (highlights — full log in XSTOCKS_DIAGNOSTICS_TAB_FIXES.md)
+---
 
-- **Crypto-parity scanner defenses** (config-cache 1-per-cycle screener_filters load; 25s SCAN_TIMEOUT_MS + Promise.race; 75-pair round-robin rotation with 3 pinned benchmarks). Cycle time 280s→ ~10-17s.
-- **Parallel quant + pattern global filters** (B-NEW-1) — pattern lane admits pairs quant rejects ($2-5 band).
-- **DB-backed 24h Trades Opened** (B-NEW-9 path A) — `vts_open_trades` per `signal_type` split (QUANT vs PATTERN). 14 trades in 24h (13 quant + 1 pattern morning_star).
-- **Per-lane null-reason aggregates** (B-NEW-12.b) — `quantNullReasonAggregate` + `patternNullReasonAggregate` separate. Quant column %s no longer over-count (was 108.7%, now coherent ≤100%).
-- **All 10 xstock-enabled strategies in By Strategy panel** (B-NEW-10) — dormant ones show zero-rows.
-- **Setup Nulls Section Total + drift indicator** (B-NEW-11) — amber ⚠ on >100% or <95%.
-- **Family Filter Mismatch math** (B-NEW-12) — `familyMismatchDenominatorTotal` instead of strategiesEvaluated. Was 158%/177%, now realistic.
-- **Pre-Eval Skips total includes all pre-detect rejections** (B-NEW-17 + 17.b) — Last Scan list has Family Filter Mismatch / Duplicate Position / Regime Has No Strategies rows; 24h Summary populates Quant + Pattern columns.
-- **Max Price → "—"** (fractional ownership; DB value 0 + applicable flag false).
-- **Workflow doc Step 6b** — Calibration cycle is now a MANDATORY onboarding step with 3 sub-cycles (regime classifier, filter thresholds, strategy gate testing) before any asset class moves to Phase 19 active-trading.
+## NEXT SESSION PLAN (post-compaction)
 
-### Live state (PM2 #262 deployed 2026-05-13 ~01:13 UTC)
+**Priority 1 — Continue xStocks diagnostic tab fixes** from `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` Open Items list:
+- **B-NEW-14:** `max_bid_ask_spread` filter wiring. Was reverted (adding bid/ask to ticker_snap SELECT caused 130× query slowdown 141ms→18.5s). **Redesign needed:** separate batched bid/ask query AFTER freshness gate (survivor set only). DB threshold already 3.0% per Langston, code path doesn't read it yet.
+- **L3-NEW-1:** Investigate `no_pattern_detected` and `family_filter_mismatch` rejection rates — legitimate or over-blocking?
 
-- 14 trades opened in last 24h DB-backed (13 QUANT + 1 PATTERN)
-- Pattern strategies firing (vwap_pullback, range_trade, morning_star, pivot_shift, orb)
-- 5 strategies still dormant (breakout, inside_bar_reversal, mean_reversion, sma_trend_ride, vwap_bounce) — regime-gated, waiting for IMPULSE_EXPANSION + HIGH_VOLATILITY_UNSTABLE regimes to hit + family-IMF passes
-- All UI math now consistent within each scope (% sums ≤ 100% per pool)
+**Priority 2 — Layer-3 calibration items** (B-NEW-15, 16, 18): batch deferred until xstock UI items closed. Will fold into new Phase 24 backfill calibration batch (added to roadmap 2026-05-13).
 
-### Open / next session
+**New Phase 24 batch added to roadmap (2026-05-13 — Kyle directive):** archived xstock data backfill calibration. Use 2+ weeks of `xstock_spot_ohlc_1m` + `xstock_spot_ticker_snap` + `signal_eval_archive` to perform backfill testing for: (a) filter thresholds (LQ/VN/DI/Corr per family — currently cloned from crypto, never tuned for equity microstructure); (b) regime classifications (likely STRONG_TREND redistribution like crypto saw post-calibration); (c) strategy selection criteria (per-strategy module_constants — currently 26 wildcards); (d) strategy gates. Scope to be defined when batch starts.
 
-**B-NEW-14 (deferred, needs redesign):** max_bid_ask_spread filter wiring. Was reverted earlier — adding bid/ask columns to ticker_snap SELECT made the query 130× slower (141ms → 18.5s) due to heap reads on the partitioned table. Redesign: **separate batched bid/ask query** after the freshness gate (survivor set only). DB threshold still set to 3.0% (Langston-approved); code path doesn't read it yet.
+**Phase 16 §16.7 added to roadmap (2026-05-13):** Test Suite Recovery. CI red since at least 2026-05-12 23:23 with ~60 pre-existing test failures across b73/cost_telemetry/dynamic_sizing/b72/b70. Triage each: regression / outdated / behavior-change-needing-rewrite. Sequenced AFTER xstock UI close + AFTER any active batch. Approach: do not bundle into BATCH_81 (already reserved for filter-as-first-class) — keep within Phase 16.
 
-**Layer-3 calibration items (B-NEW-15, 16, 18):**
-- DI_MAX too tight for reversal/oscillator families (65-66% rejection on xstock RTH)
-- vts_trend + vts_breakout DB rows have IDENTICAL thresholds (cloned from crypto, not differentiated)
-- Regime classifier calibration needed (expect redistribution toward STRONG_TREND like crypto saw)
-- IE-regime strategies (sma_trend_ride / breakout / vwap_bounce) dormant despite ORB firing under IE — separate IE-routing audit needed
+**B-NEW-23 carryover** (Phase 16/19 hardening): observability gap that allowed B79.0m.b2 missing-import bug to run silently 2 days. Investigate why `TypeScript Check` CI didn't catch missing identifier. Tighten try/catch around `db.execute` to distinguish ReferenceError from operational errors. Add consecutive-failure alert.
 
-These are Layer-3 calibration work, **not UI bugs**. Move to a dedicated calibration batch after Phase 24 closure.
+---
+
+## ANSWERS TO RECURRING QUESTIONS
+
+**Q: When was open-trade persistence added?** A: **B79.0g (2026-05-10)** shipped `vts_open_trades` DB table + `vts-trade-persistence.ts` service (insertOpenTrade/deleteOpenTrade/rehydrateOpenTrades/bootstrapOpenTradesFromMemory). **B79.0g-tx (2026-05-11)** made it atomic with closed-flag soft-delete + boot-time GC sweep + 90-day retention. Open trades now persist across PM2 restarts via DB rehydrate. Separate from TEC engine state which persists via `/tmp/trailing-states.json` per B65.2 Directive 9.2.D.
+
+**Q: Where do pre-existing CI test failures fit?** A: **Phase 16 §16.7 Test Suite Recovery** (added 2026-05-13). Sequenced after xstock UI work closes. NOT a new BATCH_81 (that's reserved for filter-as-first-class promotion per Multi-Asset VTS Expansion stretch).
 
 ---
 
@@ -91,23 +76,26 @@ SELECT factor_name, COUNT(*) FROM regime_factor_alternates
 WHERE asset_class='crypto_spot' AND evaluated_at > NOW() - INTERVAL '1 hour'
 GROUP BY factor_name;
 ```
-Halt + revert if cadence drops materially.
+Halt + revert if cadence drops materially. Fence expires 2026-05-15.
 
 ---
 
 ## OPERATIONAL FACTS
 
-- xstocks: 260-pair universe + 24h DB-backed trade counts via `vts_open_trades` (B79.0g-tx soft-delete model).
+- xstocks: 260-pair universe + 24h DB-backed trade counts via `vts_open_trades` (B79.0g-tx soft-delete model with 90d retention).
 - 75-pair round-robin scan rotation (~1m 45s full universe sweep). 3 pinned benchmarks: SPY/QQQ/GLD.
 - xstock + perp feeds archived via B74 (renamed to xstock_*_ohlc_1m / xstock_*_ticker_snap in B79.0e).
-- Strategy registration: 10 enabled for xstock_spot (DB `strategy_gates`), 9 disabled (defensive_hedge / volatility_edge etc. — regime-gated).
-- Active trading OFF (Phase 19 territory). VTS passive learning ON. Trading toggle reads paper-mode `screener_filters` rows.
+- Strategy registration: 10 enabled for xstock_spot (DB `strategy_gates`), 9 disabled.
+- xstock_spot BE-protect = **TRUE** in DB per Kyle directive (intentional, not a bug).
+- Active trading OFF (Phase 19 territory). VTS passive learning ON.
+- TEC state persists across PM2 restarts via `/tmp/trailing-states.json` (B65.2). Open trades persist via DB (B79.0g + 0g-tx).
+- **TEC is now per-trade keyed (BATCH_80)** — `trailingStates: Map<tradeId, TrailingState>`.
 
 ---
 
 ## LANGSTON RUNTIME + COMMS — see CLAUDE.md §6 + §8
 
-Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-bridge-inbox.jsonl`. Send protocol = 3 steps (Telegram visibility + SSH-deliver via direct `claude -p` + verbatim relay back to Telegram). Use `--permission-mode bypassPermissions`; scp-stage files to `/home/langston/inbox/<batch>/`; fresh UUID every send.
+Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox `/var/log/cc-bridge-inbox.jsonl`. Send protocol = 3 steps (Telegram visibility + SSH-deliver via `claude -p` + verbatim relay back to Telegram). Use `--permission-mode bypassPermissions`; scp-stage files to `/home/langston/inbox/<batch>/`; fresh UUID per send.
 
 ---
 
@@ -120,7 +108,9 @@ Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-
 - **No fallbacks for DB-governed settings.**
 - **Kyle messages me in Claude Desktop.** Telegram = Kyle↔Langston + CC outbound visibility only.
 - **Iterate with Langston to consensus** — escalate only on deadlock / scope expansion / new directive / risk boundary.
-- **Calibration is a mandatory onboarding step** (workflow Step 6b 2026-05-13). Initial Layer-1 values are domain-knowledge starters, not production-tuned.
+- **Calibration is a mandatory onboarding step** (workflow Step 6b 2026-05-13).
+- **"Staging verified" means UI-navigated, not curl-checked** (CLAUDE.md §9.3).
+- **Numeric deltas / scaffolding-vs-functional declarations** must be top-of-report explicit (CLAUDE.md §9.1, §9.2).
 
 ---
 
@@ -128,7 +118,7 @@ Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox log `/var/log/cc-
 
 1. `DawnTraderV3/CLAUDE.md`
 2. This file
-3. `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` (canonical blueprint, Step 6b added 2026-05-13)
-4. `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` (all-time changelog)
-5. `1-system-manual/POST_AUDIT_ROADMAP.md` (current phase)
-6. `1-system-manual/SYSTEM_IMPACT_MAP.md` for any component touched in next batch
+3. `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` (xstock UI tracker, all-time changelog)
+4. `1-system-manual/POST_AUDIT_ROADMAP.md` (Phase 24 follow-ups + Phase 16 §16.7 + new backfill calibration batch)
+5. `1-system-manual/SYSTEM_IMPACT_MAP.md` for any component touched in next batch
+6. `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` (canonical blueprint, Step 6b calibration cycle)
