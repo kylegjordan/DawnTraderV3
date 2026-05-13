@@ -5,15 +5,10 @@
  * Imports display metadata from the shared registry so display names + colors
  * are consistent server-side and client-side from one source of truth.
  *
- * BATCH_80 (2026-05-13): exported `getAssetClassCategory()` derives the
- * underlying-asset category from a full asset class ID. Used in the
- * Open/Closed Simulated Trades tables to render a third line BETWEEN the
- * symbol and the full asset-class badge per Kyle directive 2026-05-13.
- *   crypto_spot / crypto_perp                 → 'crypto'
- *   xstock_spot / xstock_perp                 → 'xstock'
- *   equity_spot / equity_futures              → 'equity'
- *   commodity_futures                          → 'commodity'
- *   fx_spot                                    → 'fx'
+ * BATCH_80 (2026-05-13): an earlier draft included `getAssetClassCategory()`
+ * to derive the underlying category. Kyle clarified he wants the specific
+ * asset NAME instead (Apple, Bitcoin, Solana) — see `shared/asset-names.ts`
+ * `getAssetName()`. This file now stays focused on the badge component.
  */
 
 import { Badge } from "@/components/ui/badge";
@@ -22,17 +17,6 @@ import { ASSET_CLASS_REGISTRY, type AssetClass } from "@shared/asset-classes";
 interface AssetClassBadgeProps {
   assetClass: string | null | undefined;
   className?: string;
-}
-
-/**
- * BATCH_80: derive the underlying-asset category from a full asset class ID.
- * Robust to future additions (commodity_*, fx_*, ...) because it just splits
- * on the first underscore and returns the leading segment.
- */
-export function getAssetClassCategory(assetClass: string | null | undefined): string | null {
-  if (!assetClass) return null;
-  const parts = assetClass.split('_');
-  return parts[0] || null;
 }
 
 export function AssetClassBadge({ assetClass, className }: AssetClassBadgeProps) {
