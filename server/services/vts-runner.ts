@@ -98,6 +98,13 @@ import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } fro
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 import { computeGlobalStability } from '../core/governance/regime-stability.js';
 import { computeRankingScore, normalizeNetReturn } from '../config/ranking-weights.js';
+// B-NEW-20 (2026-05-13): db + sql for xstock exit-side price-fetch from
+// xstock_spot_ticker_snap. Without these imports, the B79.0m.b2 xstock leg
+// of resolveOpenVirtualTrades threw `ReferenceError: db is not defined`
+// every minute — silently caught by the try/catch — leaving every xstock
+// open trade with currentPrice=null and never able to evaluate target/stop.
+import { db } from '../db.js';
+import { sql } from 'drizzle-orm';
 import '../core/governance/governance-persistence.js'; // Batch 46: Auto-persist/rehydrate governance state
 import { logSkippedSignal as logGovernanceSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 // B67.0 — Factor ablation framework: emit hook for replay-ablation telemetry
