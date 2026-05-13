@@ -7536,6 +7536,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           tradesOpened: ec.tradesOpened,
           setupHashDeduped: (ec as any).setupHashDeduped ?? 0,
           nullReasonDetail: ec.nullReasonAggregate ?? {},
+          // B-NEW-19 (Kyle directive 2026-05-13): per-lane null-reason aggregates
+          // emitted at per-cycle granularity so the Last Scan section can render
+          // the Quant/Pattern split for Pre-Eval Skips and compute Possible
+          // Strategy Iterations per lane. 24h block (lt) already emits these
+          // (lines ~7490). xstock eval-cycle maintains both maps separately.
+          quantNullReasonDetail: (ec as any).quantNullReasonAggregate ?? ec.nullReasonAggregate ?? {},
+          patternNullReasonDetail: (ec as any).patternNullReasonAggregate ?? {},
           byStrategy: ec.byStrategy ?? {},
           byStrategyNullReasons: ec.byStrategyNullReasons ?? {},
           familyMismatchDenominatorTotal:

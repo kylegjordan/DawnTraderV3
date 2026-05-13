@@ -2009,11 +2009,25 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                       <tr className="bg-muted/50 border-y">
                         <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — pairs processed after cooldown/skip filters)</span></td>
                       </tr>
-                      {/* Batch 52 Fix 17: Pre-evaluation skips + Pair-Pool row in 24h summary
-                          B-NEW-17 (2026-05-13): include ALL pre-eval-skip reasons in the total,
-                          not just pairsSkippedNoPrice + pairsSkippedInsufficientOHLC. Family
-                          filter mismatch, duplicate position, max open trades, regime-no-
-                          strategies all fire BEFORE strategy.detect() — they belong here. */}
+                      {/* B-NEW-19 (Kyle directive 2026-05-13): re-ordered pipeline math so it
+                          flows subtractively. Order is now:
+                            Pair-Pool Evaluations (= VTS Destination = IMF Survivors, lane fan-out)
+                              ↓ × strategies-in-regime-pool (asset-class-enabled)
+                            Possible Strategy Iterations  (= Pre-Eval Skips + Strategy Evaluations)
+                              − Pre-Eval Skips            (family-mismatch / duplicate / max-open /
+                                                          regime-no-strats — strategy iterations
+                                                          that didn't run detect())
+                              = Strategy Evaluations
+                                  − Strategy Nulls
+                                  = Signals Generated
+                          Pre-Eval Skips render WITHOUT leading minus signs per Kyle 2026-05-13. */}
+                      <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                        <td className="p-2 font-medium">Pair-Pool Evaluations</td>
+                        <td className="p-2 text-right">{fmt((ve as any).quantPairPoolEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right">{fmt((ve as any).patternPairPoolEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold">{fmt(((ve as any).quantPairPoolEvaluations ?? 0) + ((ve as any).patternPairPoolEvaluations ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">Same as VTS Destination — lane fan-out count (a pair passing N families produces N entries here). 24h cumulative.</td>
+                      </tr>
                       {(() => {
                         const nr2 = (ve.nullReasons ?? {}) as any;
                         const qDetail = ((ve as any).quantNullReasonDetail ?? {}) as Record<string, number>;
@@ -2024,9 +2038,6 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         const dupPos = nr2.duplicatePosition ?? 0;
                         const maxOpen = nr2.maxOpenTrades ?? 0;
                         const regimeNoStrat = nr2.regimeNoStrategies ?? 0;
-                        // B-NEW-17.b: per-lane breakdown where available (family_filter_mismatch
-                        // is per-lane since B-NEW-12.b; other reasons are pair-level or post-
-                        // detect — attributed to the combined total only).
                         const qFamily = qDetail['family_filter_mismatch'] ?? 0;
                         const pFamily = pDetail['family_filter_mismatch'] ?? 0;
                         const qDup = qDetail['duplicate_position'] ?? 0;
@@ -2037,31 +2048,38 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         const pNoRegime = pDetail['regime_no_strategies'] ?? 0;
                         const quantSkips = qFamily + qDup + qMaxOpen + qNoRegime;
                         const patternSkips = pFamily + pDup + pMaxOpen + pNoRegime;
-                        // pair-level skips (noPrice + OHLC) fire before any lane → can't split
                         const totalSkips24h = noPriceSkip + ohlcSkip + familyMismatch + dupPos + maxOpen + regimeNoStrat;
+                        // B-NEW-19: Possible Strategy Iterations = Pre-Eval Skips + Strategy Evaluations
+                        const qEvals = (ve as any).quantStrategyEvaluations ?? 0;
+                        const pEvals = (ve as any).patternStrategyEvaluations ?? 0;
+                        const qPossible = quantSkips + qEvals;
+                        const pPossible = patternSkips + pEvals;
+                        const totalPossible = totalSkips24h + qEvals + pEvals;
                         return (
-                          <tr className="border-b hover:bg-muted/30">
-                            <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
-                            <td className="p-2 text-right text-xs text-orange-500">{quantSkips > 0 ? `−${fmt(quantSkips)}` : '0'}</td>
-                            <td className="p-2 text-right text-xs text-orange-500">{patternSkips > 0 ? `−${fmt(patternSkips)}` : '0'}</td>
-                            <td className="p-2 text-right text-xs text-orange-500">{totalSkips24h > 0 ? `−${fmt(totalSkips24h)}` : '0'}</td>
-                            <td className="p-2 text-xs text-muted-foreground">noPrice={fmt(noPriceSkip)}, insufficientOHLC={fmt(ohlcSkip)}, familyMismatch={fmt(familyMismatch)}, duplicate={fmt(dupPos)}, maxOpen={fmt(maxOpen)}, regimeNoStrats={fmt(regimeNoStrat)}. Quant/Pattern columns show per-lane share of family_filter_mismatch + duplicate + maxOpen + regimeNoStrats; pair-level skips (noPrice/OHLC) fire pre-lane and are only in Total.</td>
-                          </tr>
+                          <>
+                            <tr className="border-b hover:bg-muted/30 bg-indigo-500/5">
+                              <td className="p-2 font-medium">Possible Strategy Iterations</td>
+                              <td className="p-2 text-right text-indigo-600">{fmt(qPossible)}</td>
+                              <td className="p-2 text-right text-indigo-600">{fmt(pPossible)}</td>
+                              <td className="p-2 text-right text-indigo-600 font-semibold">{fmt(totalPossible)}</td>
+                              <td className="p-2 text-xs text-muted-foreground">Each pair-lane entry iterates through every asset-class-enabled strategy in its regime's pool. = Pre-Eval Skips + Strategy Evaluations.</td>
+                            </tr>
+                            <tr className="border-b hover:bg-muted/30">
+                              <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Pre-Evaluation Skips</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(quantSkips)}</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(patternSkips)}</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(totalSkips24h)}</td>
+                              <td className="p-2 text-xs text-muted-foreground">Strategy iterations that didn't run detect(). noPrice={fmt(noPriceSkip)}, OHLC={fmt(ohlcSkip)}, familyMismatch={fmt(familyMismatch)}, duplicate={fmt(dupPos)}, maxOpen={fmt(maxOpen)}, regimeNoStrats={fmt(regimeNoStrat)}. Lane cols = per-lane split of family_mismatch+duplicate+maxOpen+regimeNoStrats; pair-level (noPrice/OHLC) fire pre-lane and are in Total only.</td>
+                            </tr>
+                          </>
                         );
                       })()}
-                      <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
-                        <td className="p-2 font-medium">Pair-Pool Evaluations</td>
-                        <td className="p-2 text-right">{fmt((ve as any).quantPairPoolEvaluations ?? 0)}</td>
-                        <td className="p-2 text-right">{fmt((ve as any).patternPairPoolEvaluations ?? 0)}</td>
-                        <td className="p-2 text-right font-semibold">{fmt(((ve as any).quantPairPoolEvaluations ?? 0) + ((ve as any).patternPairPoolEvaluations ?? 0))}</td>
-                        <td className="p-2 text-xs text-muted-foreground">VTS Destination minus skips (pair+family combos entering evaluation, 24h)</td>
-                      </tr>
                       <tr className="border-b hover:bg-muted/30">
-                        <td className="p-2 font-medium">Strategy Evaluations <span className="text-[10px] text-muted-foreground">(since process start)</span></td>
+                        <td className="p-2 font-medium">= Strategy Evaluations <span className="text-[10px] text-muted-foreground">(since process start)</span></td>
                         <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
                         <td className="p-2 text-right">{fmt(((ve as any).quantStrategyEvaluations ?? 0) + ((ve as any).patternStrategyEvaluations ?? 0))}</td>
-                        <td className="p-2 text-xs text-muted-foreground">Per-strategy per-pair detect() calls. In-memory counter, resets on PM2 restart.</td>
+                        <td className="p-2 text-xs text-muted-foreground">Per-strategy per-pair detect() calls. Possible Strategy Iterations minus Pre-Eval Skips. In-memory counter, resets on PM2 restart.</td>
                       </tr>
                       <tr className="border-b hover:bg-muted/30">
                         <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls <span className="text-[10px]">(since process start)</span></td>
@@ -2218,7 +2236,12 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     <td className="p-2 text-right text-green-700">{fmt(lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold text-base">{fmt((lastScan.quant.survivors - lastScan.quant.imf.benchmarkBypassed) + (lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
                   </tr>
-                  {/* Batch 51 HF2: Restored VTS Signal Funnel in Last Scan with last-cycle data (Kyle directive) */}
+                  {/* Batch 51 HF2: Restored VTS Signal Funnel in Last Scan with last-cycle data (Kyle directive)
+                      B-NEW-19 (Kyle 2026-05-13): Restructured to match Pipeline Summary 24h order —
+                      Pair-Pool Evals first, then Possible Strategy Iterations, then per-lane Pre-Eval
+                      Skip breakdown, then Strategy Evaluations. Per-lane Quant/Pattern split wired
+                      using lc.quantNullReasonDetail / patternNullReasonDetail emitted by routes.ts
+                      (xstock) and vts-runner snapshot (crypto). No leading minus signs. */}
                   {data?.lastCycleVtsEval && (() => {
                     const lc = data.lastCycleVtsEval;
                     const totalEvals = lc.totalStrategyEvaluations || 0;
@@ -2226,6 +2249,8 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     const signals = lc.signalsGenerated || 0;
                     const rejected = lc.signalsRejected || 0;
                     const trades = signals - rejected;
+                    const qDetail = ((lc as any).quantNullReasonDetail ?? {}) as Record<string, number>;
+                    const pDetail = ((lc as any).patternNullReasonDetail ?? {}) as Record<string, number>;
                     const skippedNoPrice = lc.pairsSkippedNoPrice || 0;
                     const skippedOHLC = lc.pairsSkippedInsufficientOHLC || 0;
                     const skippedMaxTrades = (lc.nullReasons as any)?.maxOpenTrades || (lc.nullReasonDetail as any)?.['max_open_trades'] || 0;
@@ -2233,59 +2258,84 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     const skippedDuplicate = (lc.nullReasons as any)?.duplicatePosition || (lc.nullReasonDetail as any)?.['duplicate_position'] || 0;
                     const skippedFamilyMismatch = (lc.nullReasons as any)?.familyFilterMismatch || (lc.nullReasonDetail as any)?.['family_filter_mismatch'] || 0;
                     const totalPreEvalSkips = skippedNoPrice + skippedOHLC + skippedMaxTrades + skippedNoRegime + skippedDuplicate + skippedFamilyMismatch;
+                    // Per-lane split (lane-level reasons only; pair-level noPrice/OHLC go to Total).
+                    const qFamily = qDetail['family_filter_mismatch'] ?? 0;
+                    const pFamily = pDetail['family_filter_mismatch'] ?? 0;
+                    const qDup = qDetail['duplicate_position'] ?? 0;
+                    const pDup = pDetail['duplicate_position'] ?? 0;
+                    const qMaxOpen = qDetail['max_open_trades'] ?? 0;
+                    const pMaxOpen = pDetail['max_open_trades'] ?? 0;
+                    const qNoRegime = qDetail['regime_no_strategies'] ?? 0;
+                    const pNoRegime = pDetail['regime_no_strategies'] ?? 0;
+                    const quantSkips = qFamily + qDup + qMaxOpen + qNoRegime;
+                    const patternSkips = pFamily + pDup + pMaxOpen + pNoRegime;
+                    // Possible Strategy Iterations = Pre-Eval Skips + Strategy Evaluations
+                    const qPairPool = (lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0;
+                    const pPairPool = (lc.patternPairPoolEvaluations ?? lc.patternPairsEvaluated) || 0;
+                    const qEvals = lc.quantStrategyEvaluations || 0;
+                    const pEvals = lc.patternStrategyEvaluations || 0;
+                    const qPossible = quantSkips + qEvals;
+                    const pPossible = patternSkips + pEvals;
+                    const totalPossible = totalPreEvalSkips + totalEvals;
                     return (
                       <>
                         <tr className="border-b bg-blue-500/5"><td colSpan={4} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
-                        {/* Batch 52 Fix 17: Pre-evaluation skip rows — always shown (Kyle directive) */}
+                        <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                          <td className="p-2 pl-4 font-medium">Pair-Pool Evaluations</td>
+                          <td className="p-2 text-right">{fmt(qPairPool)}</td>
+                          <td className="p-2 text-right">{fmt(pPairPool)}</td>
+                          <td className="p-2 text-right font-semibold">{fmt(qPairPool + pPairPool)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 bg-indigo-500/5">
+                          <td className="p-2 pl-4 font-medium">Possible Strategy Iterations</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(qPossible)}</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(pPossible)}</td>
+                          <td className="p-2 text-right text-indigo-600 font-semibold">{fmt(totalPossible)}</td>
+                        </tr>
                         <tr className="border-b hover:bg-muted/30">
-                          <td className="p-2 pl-4 text-xs text-muted-foreground">Pre-Evaluation Skips</td>
-                          <td colSpan={2} className="p-2 text-right text-xs text-muted-foreground">pairs sent to VTS but not evaluated</td>
-                          <td className="p-2 text-right text-xs text-orange-500">{totalPreEvalSkips > 0 ? `−${fmt(totalPreEvalSkips)}` : '0'}</td>
+                          <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Pre-Evaluation Skips</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(quantSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(patternSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(totalPreEvalSkips)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-8 text-xs text-muted-foreground">↳ No Price Data</td>
                           <td colSpan={2}></td>
-                          <td className="p-2 text-right text-xs text-orange-400">{skippedNoPrice > 0 ? `−${fmt(skippedNoPrice)}` : '0'}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedNoPrice)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Insufficient OHLC</td>
                           <td colSpan={2}></td>
-                          <td className="p-2 text-right text-xs text-orange-400">{skippedOHLC > 0 ? `−${fmt(skippedOHLC)}` : '0'}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedOHLC)}</td>
                         </tr>
-                        <tr className="border-b hover:bg-muted/30">
-                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Max Open Trades</td>
-                          <td colSpan={2}></td>
-                          <td className="p-2 text-right text-xs text-orange-400">{skippedMaxTrades > 0 ? `−${fmt(skippedMaxTrades)}` : '0'}</td>
-                        </tr>
-                        {/* B-NEW-17.b (2026-05-13): missing pre-eval-skip rows in Last Scan list.
-                            Family Filter Mismatch, Duplicate Position, and Regime Has No
-                            Strategies all fire before strategy.detect() — belong in this section
-                            to match the 24h Rolling Aggregates structure. */}
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Family Filter Mismatch</td>
-                          <td colSpan={2}></td>
-                          <td className="p-2 text-right text-xs text-orange-400">{skippedFamilyMismatch > 0 ? `−${fmt(skippedFamilyMismatch)}` : '0'}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qFamily)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pFamily)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedFamilyMismatch)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Duplicate Position</td>
-                          <td colSpan={2}></td>
-                          <td className="p-2 text-right text-xs text-orange-400">{skippedDuplicate > 0 ? `−${fmt(skippedDuplicate)}` : '0'}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qDup)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pDup)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedDuplicate)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Max Open Trades</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qMaxOpen)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pMaxOpen)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedMaxTrades)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
                           <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Regime Has No Strategies</td>
-                          <td colSpan={2}></td>
-                          <td className="p-2 text-right text-xs text-orange-400">{skippedNoRegime > 0 ? `−${fmt(skippedNoRegime)}` : '0'}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qNoRegime)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pNoRegime)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedNoRegime)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
-                          <td className="p-2 pl-4">Pair-Pool Evaluations</td>
-                          <td className="p-2 text-right">{fmt((lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0)}</td>
-                          <td className="p-2 text-right">{fmt((lc.patternPairPoolEvaluations ?? lc.patternPairsEvaluated) || 0)}</td>
-                          <td className="p-2 text-right">{fmt(((lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0) + ((lc.patternPairPoolEvaluations ?? lc.patternPairsEvaluated) || 0))}</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/30">
-                          <td className="p-2 pl-4">Strategy Evaluations</td>
-                          <td className="p-2 text-right">{fmt(lc.quantStrategyEvaluations || 0)}</td>
-                          <td className="p-2 text-right">{fmt(lc.patternStrategyEvaluations || 0)}</td>
+                          <td className="p-2 pl-4">= Strategy Evaluations</td>
+                          <td className="p-2 text-right">{fmt(qEvals)}</td>
+                          <td className="p-2 text-right">{fmt(pEvals)}</td>
                           <td className="p-2 text-right">{fmt(totalEvals)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
@@ -2459,46 +2509,70 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold">{fmt((rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed) + (rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
                   </tr>
-                  {/* Batch 52 Fix 18: Merged VTS Evaluation Breakdown into this table (was separate card) */}
+                  {/* Batch 52 Fix 18: Merged VTS Evaluation Breakdown into this table (was separate card)
+                      B-NEW-19 (Kyle 2026-05-13): Restructured to subtractive flow.
+                        Pair-Pool Evaluations → Possible Strategy Iterations → Pre-Eval Skips →
+                        Strategy Evaluations → Strategy Nulls → Trades Opened.
+                      Per-lane split for Pre-Eval Skips now reads ve.quantNullReasonDetail /
+                      ve.patternNullReasonDetail (previously rendered noPrice in quant col and
+                      OHLC in pattern col — semantically wrong). No leading minus signs. */}
                   {data?.vtsEvaluation && (() => {
                     const ve = data.vtsEvaluation!;
+                    const nr3 = (ve.nullReasons ?? {}) as any;
+                    const qDetail = ((ve as any).quantNullReasonDetail ?? {}) as Record<string, number>;
+                    const pDetail = ((ve as any).patternNullReasonDetail ?? {}) as Record<string, number>;
+                    const noPrice = (ve as any).pairsSkippedNoPrice ?? 0;
+                    const ohlc = (ve as any).pairsSkippedInsufficientOHLC ?? 0;
+                    const qFamily = qDetail['family_filter_mismatch'] ?? 0;
+                    const pFamily = pDetail['family_filter_mismatch'] ?? 0;
+                    const qDup = qDetail['duplicate_position'] ?? 0;
+                    const pDup = pDetail['duplicate_position'] ?? 0;
+                    const qMaxOpen = qDetail['max_open_trades'] ?? 0;
+                    const pMaxOpen = pDetail['max_open_trades'] ?? 0;
+                    const qNoRegime = qDetail['regime_no_strategies'] ?? 0;
+                    const pNoRegime = pDetail['regime_no_strategies'] ?? 0;
+                    const quantSkips = qFamily + qDup + qMaxOpen + qNoRegime;
+                    const patternSkips = pFamily + pDup + pMaxOpen + pNoRegime;
+                    const preEvalTotal =
+                      noPrice + ohlc +
+                      (nr3.familyFilterMismatch ?? 0) +
+                      (nr3.duplicatePosition ?? 0) +
+                      (nr3.maxOpenTrades ?? 0) +
+                      (nr3.regimeNoStrategies ?? 0);
+                    const qPairPool = ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated;
+                    const pPairPool = ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated;
+                    const qEvals = (ve as any).quantStrategyEvaluations ?? 0;
+                    const pEvals = (ve as any).patternStrategyEvaluations ?? 0;
+                    const qPossible = quantSkips + qEvals;
+                    const pPossible = patternSkips + pEvals;
+                    const totalPossible = preEvalTotal + ve.totalStrategyEvaluations;
                     return (
                       <>
                         <tr className="bg-muted/50 border-y">
                           <td colSpan={4} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation (24h rolling — VTS-side counters)</td>
                         </tr>
-                        {/* B-NEW-17 (2026-05-13): Pre-Eval Skips total here also includes
-                            all pre-eval-skip null-reason buckets (family_filter_mismatch,
-                            duplicate_position, max_open_trades, regime_no_strategies). */}
-                        {(() => {
-                          const nr3 = (ve.nullReasons ?? {}) as any;
-                          const quantQty = (ve as any).pairsSkippedNoPrice ?? 0;
-                          const ohlcQty = (ve as any).pairsSkippedInsufficientOHLC ?? 0;
-                          const preEvalTotal =
-                            quantQty + ohlcQty +
-                            (nr3.familyFilterMismatch ?? 0) +
-                            (nr3.duplicatePosition ?? 0) +
-                            (nr3.maxOpenTrades ?? 0) +
-                            (nr3.regimeNoStrategies ?? 0);
-                          return (
-                            <tr className="border-b hover:bg-muted/30">
-                              <td className="p-2 text-xs text-muted-foreground">Pre-Evaluation Skips <span className="text-[10px]">(sum of all pre-detect rejections)</span></td>
-                              <td className="p-2 text-right text-xs text-orange-500">{fmt(quantQty)}</td>
-                              <td className="p-2 text-right text-xs text-orange-500">{fmt(ohlcQty)}</td>
-                              <td className="p-2 text-right text-xs text-orange-500">{fmt(preEvalTotal)}</td>
-                            </tr>
-                          );
-                        })()}
                         <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
                           <td className="p-2 font-medium">Pair-Pool Evaluations</td>
-                          <td className="p-2 text-right text-blue-600">{fmt(ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated)}</td>
-                          <td className="p-2 text-right text-blue-600">{fmt(ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated)}</td>
-                          <td className="p-2 text-right font-semibold text-blue-600">{fmt((ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated) + (ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated))}</td>
+                          <td className="p-2 text-right text-blue-600">{fmt(qPairPool)}</td>
+                          <td className="p-2 text-right text-blue-600">{fmt(pPairPool)}</td>
+                          <td className="p-2 text-right font-semibold text-blue-600">{fmt(qPairPool + pPairPool)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 bg-indigo-500/5">
+                          <td className="p-2 font-medium">Possible Strategy Iterations</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(qPossible)}</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(pPossible)}</td>
+                          <td className="p-2 text-right font-semibold text-indigo-600">{fmt(totalPossible)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
-                          <td className="p-2">Strategy Evaluations</td>
-                          <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
-                          <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
+                          <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Pre-Evaluation Skips <span className="text-[10px]">(sum of all pre-detect rejections)</span></td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(quantSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(patternSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(preEvalTotal)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2">= Strategy Evaluations</td>
+                          <td className="p-2 text-right">{fmt(qEvals)}</td>
+                          <td className="p-2 text-right">{fmt(pEvals)}</td>
                           <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
                         </tr>
                         <tr className="border-b hover:bg-muted/30">
