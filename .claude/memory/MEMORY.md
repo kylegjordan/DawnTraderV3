@@ -59,6 +59,8 @@ Remove these when all B-NEW items in tracker Open Items closed AND Layer-3 calib
 
 **B-NEW-23 carryover** (Phase 16/19 hardening): observability gap that allowed B79.0m.b2 missing-import bug to run silently 2 days. Investigate why `TypeScript Check` CI didn't catch missing identifier. Tighten try/catch around `db.execute` to distinguish ReferenceError from operational errors. Add consecutive-failure alert.
 
+**BATCH_80 24h moonbag-counter forward-watch** (Langston Step 8 non-blocking ask 2026-05-13 14:50 UTC). Window expires 2026-05-14 14:50 UTC. Monitor `concurrentMoonbagByMode.{vts,paper,live}` counter via PM2 logs `[9.2][LADDER] ... concurrent=N` lines. Pre-B80 collapsed 3 same-symbol moonbag transitions into 1 counter increment; post-B80 counts each per-trade (3 increments). If the cap starts rejecting moonbag entries that previously sneaked through, that is the cap finally enforcing its declared semantics — NOT a regression. Flag for the dashboard but don't reverse course. Capture observation summary in next session.
+
 ---
 
 ## ANSWERS TO RECURRING QUESTIONS
