@@ -94,6 +94,19 @@ interface TrailingExitConfig {
 // safe-state invoked only when DB row is genuinely unavailable AND
 // `[TEC_CACHE_MISS_FATAL]` did not throw (i.e. fields per-key fall-back
 // inside primeTECConfig DB read for known asset class).
+//
+// Live DB state per asset class (verified 2026-05-13 via direct module_constants
+// query; Kyle confirmed intended state):
+//   crypto_spot  → break_even_enabled = false (variant K winner, B73 ablation)
+//   crypto_perp  → break_even_enabled = false
+//   xstock_spot  → break_even_enabled = TRUE (Kyle 2026-05-13: BE-protect +
+//                   trailing exits are deliberately ENABLED for xstocks.
+//                   Earlier code comments / MEMORY.md descriptions that said
+//                   "Day 1 default false, flips after B79.4 ablation" were
+//                   aspirational and never matched live DB row. Doc sync'd
+//                   2026-05-13 to live state.)
+//   xstock_perp  → break_even_enabled = false
+//   *  (wildcard) → break_even_enabled = false
 const TEC_DEFAULTS: TrailingExitConfig = {
   breakEvenEnabled: false, // B79.TEC: fail-closed (was true pre-B79.TEC)
   breakEvenTriggerR: 1.0,
