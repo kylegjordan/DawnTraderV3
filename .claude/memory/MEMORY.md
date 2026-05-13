@@ -48,6 +48,7 @@ Remove these when all B-NEW items in tracker Open Items closed AND Layer-3 calib
 ## NEXT SESSION PLAN (post-compaction)
 
 **Priority 1 — Continue xStocks diagnostic tab fixes** from `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` Open Items list:
+- **B-NEW-28 (PRIORITY NEXT — Kyle directive 2026-05-13 19:20 UTC):** xStocks tab — Scanner Cycle Metrics + Exit Strategy Ablation (B73) + Factor Calibration (B67) panels stuck on "Loading..." (or significant load delay). Filter Pipeline Diagnostics loads slowly but works. **First diagnostic:** curl `/api/xstocks/exit-strategy-ablation?window=rolling_7d` + `/api/xstocks/factor-calibration?window=rolling_7d` — check response time + body. Likely Supabase statement-timeout pattern (same root cause family as B-NEW-21 freshness) if aggregator does wide-symbol JOIN, or `{ok:false}` returned + panel doesn't render error state.
 - **B-NEW-14:** `max_bid_ask_spread` filter wiring. Was reverted (adding bid/ask to ticker_snap SELECT caused 130× query slowdown 141ms→18.5s). **Redesign needed:** separate batched bid/ask query AFTER freshness gate (survivor set only). DB threshold already 3.0% per Langston, code path doesn't read it yet.
 - **L3-NEW-1:** Investigate `no_pattern_detected` and `family_filter_mismatch` rejection rates — legitimate or over-blocking?
 
