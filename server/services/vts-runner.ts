@@ -2693,7 +2693,16 @@ export interface RegisterOpenVtsTradeInput {
   pool: 'ideal' | 'rotational';
   sourcePool?: string;
   // Optional context fields — caller may pass MCE-derived snapshots.
+  // B-NEW-22 (2026-05-13): if caller omits any of globalRegime / pairFriction /
+  // globalFriction / pairDirectionalBias / globalDirectionalBias / pair-
+  // DirectionalBiasScore / globalDirectionalBiasScore, registerOpenVtsTrade
+  // default-resolves them via the canonical helpers (matches the inline crypto
+  // open path in this file at lines ~1414-1426). Prevents xstock-style empty
+  // columns in the open-trades CSV/UI when callers don't know to pass them.
   atrAtOpen?: number;
+  globalRegime?: MarketRegimeType;
+  pairFriction?: number;
+  globalFriction?: number;
   pairDirectionalBias?: string;
   pairDirectionalBiasScore?: number | null;
   globalDirectionalBias?: string;
@@ -2720,6 +2729,38 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     console.warn(`[B79.0m.b][registerOpenVtsTrade] tradeId=${tradeId} already in openVirtualTrades — refusing duplicate insert`);
     return null;
   }
+
+  // B-NEW-22 (2026-05-13): default-resolve the 5 context fields that callers
+  // may not pass (xstock eval-cycle was passing only pairDirectionalBias[Score]).
+  // Mirrors the inline crypto open-path resolution at this file's lines
+  // ~1414-1426. Without these, the open-trades CSV/UI showed empty
+  // globalRegime/pairFriction/globalFriction/globalDirectionalBias/
+  // globalDirectionalBiasScore columns for every xstock trade.
+  const resolvedGlobalRegime: MarketRegimeType = input.globalRegime ?? (() => {
+    try {
+      const ta = getTelemetryAggregator();
+      return ta.getDominantRegime?.()?.regime ?? input.regime;
+    } catch {
+      return input.regime;
+    }
+  })();
+  const resolvedPairFriction = input.pairFriction ?? (() => {
+    try {
+      const cm = getCachedCostMetrics(input.symbol);
+      return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
+    } catch {
+      return undefined;
+    }
+  })();
+  const resolvedGlobalFriction = input.globalFriction ?? (() => {
+    try { return getGlobalFriction(); } catch { return undefined; }
+  })();
+  const resolvedGlobalDirectionalBias = input.globalDirectionalBias ?? (() => {
+    try { return getLastGlobalDBSCategory(); } catch { return undefined; }
+  })();
+  const resolvedGlobalDirectionalBiasScore = input.globalDirectionalBiasScore ?? (() => {
+    try { return getLastGlobalDBSScore() ?? null; } catch { return null; }
+  })();
 
   const openTrade: OpenVirtualTrade = {
     id: tradeId,
@@ -2751,10 +2792,14 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     volNoiseAtOpen: 0.3,
     originalStopPrice: input.stopLoss,
     rungTargetHistory: [],
+    // B-NEW-22 resolved context fields (default to inline-resolution if caller omitted).
+    globalRegime: resolvedGlobalRegime,
+    pairFriction: resolvedPairFriction,
+    globalFriction: resolvedGlobalFriction,
     pairDirectionalBias: input.pairDirectionalBias,
     pairDirectionalBiasScore: input.pairDirectionalBiasScore ?? null,
-    globalDirectionalBias: input.globalDirectionalBias,
-    globalDirectionalBiasScore: input.globalDirectionalBiasScore ?? null,
+    globalDirectionalBias: resolvedGlobalDirectionalBias,
+    globalDirectionalBiasScore: resolvedGlobalDirectionalBiasScore,
     macroModifierValue: input.macroModifierValue,
     regimeConfidenceRaw: input.regimeConfidenceRaw,
     regimeConfidenceModulated: input.regimeConfidenceModulated,
