@@ -69,6 +69,25 @@ Remove these when all B-NEW items in tracker Open Items closed AND Layer-3 calib
 
 ---
 
+## RECURRING ANALYSIS RECIPE ("run the calibration review")
+
+Restored from B79.0a / B79.TEC era MEMORY (was present in commit `8152acd61` 2026-05-08, dropped during xStocks expansion trim). Endpoints unchanged — still callable.
+
+1. `GET /api/analytics/factor-calibration?window=rolling_7d` — 10-row factor table. Post-B78 scoped `asset_class='crypto_spot'`.
+2. `GET /api/analytics/exit-strategy-ablation?window=rolling_7d` — 12-variant table sorted by Sharpe.
+3. Verify recent fixes: b68_5 lift drift; trailing-after-target DISABLED; liquidity_trap exclusion; floor 0.20; B72 sync-read API healthy; B76 marker present.
+4. Plain-language interpretation + recommendations for B67.5 wiring (~2026-05-15).
+
+xStock parallels (when needed, post-Phase-24 backfill-calibration batch):
+- `GET /api/xstocks/factor-calibration?window=rolling_7d` (scoped xstock_spot)
+- `GET /api/xstocks/exit-strategy-ablation?window=rolling_7d`
+
+## Calibration windows (LOCKED through 2026-05-15)
+
+B67.4 / B68.1 / B68.2 / B68.3 / B68.4 — gates: tertile-monotonic WR, ≥7pp gap, p<0.05, n≥150/bucket. **Pre-B76 lifts captured 2026-05-08:** b67_4 +2.95pp, b68_1 +5.71pp, b68_2 +4.13pp, b68_3 +4.13pp, b68_4 +2.94pp, b68_5 −1.78pp. If any flip post-B76/B78 → revert. Re-run the recipe weekly to track.
+
+---
+
 ## NO-TOUCH FENCE on crypto_spot through 2026-05-15
 
 ```sql
