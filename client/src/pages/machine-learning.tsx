@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AssetClassBadge } from "@/components/ui/asset-class-badge";
+import { AssetClassBadge, getAssetClassCategory } from "@/components/ui/asset-class-badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown, Filter, LineChart } from "lucide-react";
@@ -586,10 +586,20 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
             ) : (
               sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.entryTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
-                  {/* B69.1 (2026-05-04): symbol + asset class badge stacked vertically. */}
+                  {/* B69.1 (2026-05-04): symbol + asset class badge stacked vertically.
+                      BATCH_80 (2026-05-13): added underlying-category line BETWEEN symbol
+                      and full asset-class badge per Kyle directive. Mapping:
+                        crypto_spot/crypto_perp → "crypto"
+                        xstock_spot/xstock_perp → "xstock"
+                        (helper derived from assetClass.split('_')[0]) */}
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium">{trade.symbol}</span>
+                      {getAssetClassCategory(trade.assetClass) && (
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          {getAssetClassCategory(trade.assetClass)}
+                        </span>
+                      )}
                       <AssetClassBadge assetClass={trade.assetClass} />
                     </div>
                   </td>
@@ -898,10 +908,20 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
             ) : (
               sortedTrades.map((trade, idx) => (
                 <tr key={`${trade.symbol}-${trade.exitTime}-${idx}`} className="border-b border-border/50 hover:bg-muted/30">
-                  {/* B69.1 (2026-05-04): symbol + asset class badge stacked vertically. */}
+                  {/* B69.1 (2026-05-04): symbol + asset class badge stacked vertically.
+                      BATCH_80 (2026-05-13): added underlying-category line BETWEEN symbol
+                      and full asset-class badge per Kyle directive. Mapping:
+                        crypto_spot/crypto_perp → "crypto"
+                        xstock_spot/xstock_perp → "xstock"
+                        (helper derived from assetClass.split('_')[0]) */}
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium">{trade.symbol}</span>
+                      {getAssetClassCategory(trade.assetClass) && (
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          {getAssetClassCategory(trade.assetClass)}
+                        </span>
+                      )}
                       <AssetClassBadge assetClass={trade.assetClass} />
                     </div>
                   </td>
