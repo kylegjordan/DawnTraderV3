@@ -2176,6 +2176,12 @@ async function resolveOpenVirtualTrades(): Promise<{
     // `trade.stopLoss` MUST always equal the engine's `state.currentStopPrice`
     // (within tick-relative epsilon). Divergence indicates the per-trade
     // keying contract has broken somewhere; surface for the next pre-audit.
+    //
+    // Asymmetry note (Langston Phase 1 review): vts-runner checks
+    // post-ratchet `|stopLoss - engine|`; paper-engine checks
+    // `|max(engine, stopLoss) - engine|`. Both collapse to engine-≤-displayed
+    // asymmetry post-ratchet — engine should never report a stop LOWER than
+    // the displayed value since the write-back above is monotonic-up.
     if (decision.newStopPrice !== undefined) {
       const epsilon = Math.max(0.00001, 0.0001 * trade.entryPrice);
       const delta = Math.abs(trade.stopLoss - decision.newStopPrice);

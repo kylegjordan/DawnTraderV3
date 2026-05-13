@@ -354,6 +354,94 @@ describe('BATCH_80 — TEC per-trade keying', () => {
     expect(s3?.ladderRung).toBe(0);
   });
 
+  // ─── Test 8b: seed coercion for TRAILING_TAKE with null/0 ladderRung ─────
+  // Per Langston Phase 1 code review: if caller seeds tradeMode='TRAILING_TAKE'
+  // but ladderRung is null/undefined/0 (timing-window case at deploy), engine
+  // MUST coerce rung=1 + targetLatched=true to preserve mode-rung invariant.
+  // Without coercion, the resulting state would have mode=TRAILING_TAKE but
+  // targetLatched=false, silently losing ladder trailing logic.
+  it('Test 8b: TRAILING_TAKE seed with null/0 ladderRung coerces to rung=1 + targetLatched=true', () => {
+    // Case 1: ladderRung explicitly 0, tradeMode TRAILING_TAKE.
+    updatePosition({
+      tradeId: 'vts_crypto_spot_R8b1',
+      symbol: 'UNI/USD',
+      entryPrice: 5.00,
+      targetPrice: 5.50,
+      currentPrice: 5.40,
+      currentStopPrice: 4.75,
+      DI: 50,
+      VolNoise: 0.3,
+      ATR: 0.25,
+      assetClass: 'crypto_spot',
+      callerMode: 'vts',
+      seed: { tradeMode: 'TRAILING_TAKE', ladderRung: 0, originalStopPrice: 4.75 },
+    });
+    const s1 = getTrailingState('vts_crypto_spot_R8b1');
+    expect(s1?.tradeMode).toBe('TRAILING_TAKE');
+    expect(s1?.ladderRung).toBeGreaterThanOrEqual(1);
+    expect(s1?.targetLatched).toBe(true);
+
+    // Case 2: ladderRung undefined, tradeMode TRAILING_TAKE.
+    updatePosition({
+      tradeId: 'vts_crypto_spot_R8b2',
+      symbol: 'UNI/USD',
+      entryPrice: 5.00,
+      targetPrice: 5.50,
+      currentPrice: 5.40,
+      currentStopPrice: 4.75,
+      DI: 50,
+      VolNoise: 0.3,
+      ATR: 0.25,
+      assetClass: 'crypto_spot',
+      callerMode: 'vts',
+      seed: { tradeMode: 'TRAILING_TAKE', originalStopPrice: 4.75 }, // ladderRung omitted
+    });
+    const s2 = getTrailingState('vts_crypto_spot_R8b2');
+    expect(s2?.tradeMode).toBe('TRAILING_TAKE');
+    expect(s2?.ladderRung).toBeGreaterThanOrEqual(1);
+    expect(s2?.targetLatched).toBe(true);
+
+    // Case 3 (no regression): explicit ladderRung > 1 preserved.
+    updatePosition({
+      tradeId: 'vts_crypto_spot_R8b3',
+      symbol: 'UNI/USD',
+      entryPrice: 5.00,
+      targetPrice: 5.50,
+      currentPrice: 5.60,
+      currentStopPrice: 5.25,
+      DI: 50,
+      VolNoise: 0.3,
+      ATR: 0.25,
+      assetClass: 'crypto_spot',
+      callerMode: 'vts',
+      seed: { tradeMode: 'TRAILING_TAKE', ladderRung: 3, originalStopPrice: 4.75 },
+    });
+    const s3 = getTrailingState('vts_crypto_spot_R8b3');
+    expect(s3?.tradeMode).toBe('TRAILING_TAKE');
+    expect(s3?.ladderRung).toBeGreaterThanOrEqual(3);
+    expect(s3?.targetLatched).toBe(true);
+
+    // Case 4 (no regression): TARGET mode preserves rung=0, targetLatched=false.
+    updatePosition({
+      tradeId: 'vts_crypto_spot_R8b4',
+      symbol: 'UNI/USD',
+      entryPrice: 5.00,
+      targetPrice: 5.50,
+      currentPrice: 5.10,
+      currentStopPrice: 4.75,
+      DI: 50,
+      VolNoise: 0.3,
+      ATR: 0.25,
+      assetClass: 'crypto_spot',
+      callerMode: 'vts',
+      seed: { tradeMode: 'TARGET', ladderRung: 0, originalStopPrice: 4.75 },
+    });
+    const s4 = getTrailingState('vts_crypto_spot_R8b4');
+    expect(s4?.tradeMode).toBe('TARGET');
+    expect(s4?.ladderRung).toBe(0);
+    expect(s4?.targetLatched).toBe(false);
+  });
+
   // ─── Test 9: 4th trade on a 3-already-open symbol doesn't poison existing ───
   it('Test 9: opening a 4th trade on a 3-already-open symbol leaves existing states unchanged', () => {
     initializeTrailingState('vts_crypto_spot_X1', 'AVAX/USD', 30, 33, 28.5, 50, 0.3, 1);

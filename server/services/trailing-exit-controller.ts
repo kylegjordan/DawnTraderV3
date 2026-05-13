@@ -645,10 +645,20 @@ export function initializeTrailingState(
   // B80: seed-aware ladder reconstruction. Rung step = R = targetPrice - entryPrice.
   // At ladderRung=N (≥1), currentRungTarget = targetPrice + N×R. Deterministic.
   const rungStepPrice = targetPrice - entryPrice;
-  const seededRung = seed?.ladderRung ?? 0;
+  const rawSeededRung = seed?.ladderRung ?? 0;
   const seededMode: TradeMode =
-    seed?.tradeMode ?? (seededRung >= 1 ? 'TRAILING_TAKE' : 'TARGET');
-  const seededTargetLatched = seededRung >= 1;
+    seed?.tradeMode ?? (rawSeededRung >= 1 ? 'TRAILING_TAKE' : 'TARGET');
+  // B80 (Langston Phase 1 review revision): defensive mode-rung consistency
+  // enforcement. A TRAILING_TAKE state MUST have rung >= 1 and targetLatched=true
+  // by engine invariant. If caller seeded TRAILING_TAKE but ladderRung is null
+  // or 0 (narrow timing-window case at deploy: mode writeback landed but rung
+  // writeback didn't; or pre-B65.4 legacy row), coerce to rung=1 (just-latched
+  // semantics) rather than constructing a half-broken state that would silently
+  // lose ladder trailing logic on the next exit-cycle. Keeps consistency rules
+  // in one place — protects against caller errors AND future callers who don't
+  // read scope §4.4 carefully. See BATCH_80 Phase 1 review reply.
+  const seededRung = seededMode === 'TRAILING_TAKE' ? Math.max(1, rawSeededRung) : rawSeededRung;
+  const seededTargetLatched = seededMode === 'TRAILING_TAKE';
   const seededRungTarget =
     seededRung >= 1 ? targetPrice + seededRung * rungStepPrice : targetPrice;
 
