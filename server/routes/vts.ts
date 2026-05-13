@@ -1092,7 +1092,7 @@ router.post('/enable-learning', requireAuth, async (req: AuthenticatedRequest, r
  */
 router.get('/ml/open', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const trades = getOpenVirtualTradesForML();
+    const trades = await getOpenVirtualTradesForML();
     console.log(`[11.6E][API] GET /ml/open - ${trades.length} open trades`);
     
     res.json({
@@ -1134,7 +1134,7 @@ router.get('/ml/closed', requireAuth, async (req: AuthenticatedRequest, res: Res
  */
 router.get('/ml/open/export', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const trades = getOpenVirtualTradesForML();
+    const trades = await getOpenVirtualTradesForML();
     const csv = generateCsvContent(trades);
     const filename = `vts_open_trades_${new Date().toISOString().slice(0, 10)}.csv`;
     

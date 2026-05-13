@@ -3941,7 +3941,7 @@ export async function saveM5CSessionTrades(sessionId?: string): Promise<string> 
  * Directive 11.6E: Get all open virtual trades with full data for ML dashboard
  * Directive 11.6H: Added dollarValue and quantity fields
  */
-export function getOpenVirtualTradesForML(): Array<{
+export async function getOpenVirtualTradesForML(): Promise<Array<{
   symbol: string;
   // B69.1 (2026-05-04): asset class surfaced on Open Simulated Trades UI.
   // VTS today handles crypto_spot exclusively; hardcoded here to match the
@@ -4005,7 +4005,7 @@ export function getOpenVirtualTradesForML(): Array<{
   originalStopPrice: number | null;
   latchTriggerPrice: number | null;
   rungTargetHistory: number[] | null;
-}> {
+}>> {
   const now = Date.now();
   const trades: Array<any> = [];
 
@@ -4013,10 +4013,58 @@ export function getOpenVirtualTradesForML(): Array<{
   // sees the current mode + latch flags + ratcheted stop for every trade.
   // Imported at module-load (see top of file): getTECState.
 
+  // B-NEW-25 (Kyle directive 2026-05-13): asset-class-aware price routing for
+  // the UI serializer. Pre-B-NEW-25, every trade read from priceCache (which
+  // only has crypto prices via Kraken REST/WS). xstock trades got
+  // priceCache.get() === undefined → priceIsFresh = false → currentPrice = null
+  // → UI rendered "Stale" badge with placeholder values. Mirrors the same
+  // dispatch pattern the exit-cycle uses (resolveOpenVirtualTrades B79.0m.b2
+  // xstock leg). Batch-fetch all xstock open-trade prices once per call from
+  // xstock_spot_ticker_snap; reuse the priceCache path for crypto trades.
+  const xstockSymbolsForUi = new Set<string>();
+  for (const trade of openVirtualTrades.values()) {
+    if (trade.assetClass === 'xstock_spot') xstockSymbolsForUi.add(trade.symbol);
+  }
+  const xstockPriceMapUi = new Map<string, number>();
+  if (xstockSymbolsForUi.size > 0) {
+    try {
+      const xstockListSql = Array.from(xstockSymbolsForUi)
+        .map((s) => `'${s.replace(/'/g, "''")}'`)
+        .join(',');
+      const result: any = await db.execute(sql.raw(`
+        SELECT DISTINCT ON (symbol)
+          symbol::text AS symbol,
+          last::text AS price,
+          captured_at
+        FROM xstock_spot_ticker_snap
+        WHERE captured_at > NOW() - INTERVAL '5 minutes'
+          AND symbol IN (${xstockListSql})
+        ORDER BY symbol, captured_at DESC
+      `));
+      const rows = (result as any).rows ?? result;
+      if (Array.isArray(rows)) {
+        for (const r of rows as Array<{ symbol: string; price: string }>) {
+          const p = parseFloat(r.price);
+          if (Number.isFinite(p) && p > 0) {
+            xstockPriceMapUi.set(r.symbol, p);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[B-NEW-25][UI_XSTOCK_PRICE_FETCH] failed for ${xstockSymbolsForUi.size} symbols:`, err instanceof Error ? err.message : err);
+    }
+  }
+
   for (const [_, trade] of openVirtualTrades) {
-    const cachedPrice = priceCache.get(trade.symbol);
-    const priceIsFresh = cachedPrice && (Date.now() - cachedPrice.lastUpdatedAt < 120000);
-    const currentPrice = priceIsFresh ? cachedPrice.price : null;
+    let currentPrice: number | null = null;
+    if (trade.assetClass === 'xstock_spot') {
+      const p = xstockPriceMapUi.get(trade.symbol);
+      currentPrice = p !== undefined ? p : null;
+    } else {
+      const cachedPrice = priceCache.get(trade.symbol);
+      const priceIsFresh = cachedPrice && (Date.now() - cachedPrice.lastUpdatedAt < 120000);
+      currentPrice = priceIsFresh ? cachedPrice.price : null;
+    }
     
     const priceForCalc = currentPrice ?? trade.entryPrice;
     
