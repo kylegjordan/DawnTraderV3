@@ -1,5 +1,5 @@
 /**
- * BATCH_80 (2026-05-13) — Symbol → asset-name lookup
+ * BATCH_80 (2026-05-13) / B-NEW-30 (2026-05-13) — Symbol → asset-name lookup
  *
  * Maps the base symbol (the part before the quote currency) to the full
  * asset name for UI display in the Open/Closed Simulated Trades tables
@@ -10,16 +10,20 @@
  *   AAPL/USD  → "Apple"        → renders under "AAPL/USD" / above "xStock Spot"
  *   SOL/USD   → "Solana"
  *
- * Structure:
- *   - `CRYPTO_NAMES`  — base symbol → name for cryptocurrencies
- *   - `XSTOCK_NAMES`  — base symbol → name for Backed Finance tokenized equities
- *
- * Fallback: `getAssetName()` returns null if the symbol isn't in the map
- * (UI renders nothing in that line — safer than guessing). Maintain by
- * adding entries here when new pairs enter the universe.
+ * B-NEW-30 architecture (2026-05-13):
+ *   - **xstock**: names now live in `shared/asset-classes.ts::XSTOCK_SPOT_REGISTRY`
+ *     alongside the universe definition. Adding a new xStock = edit one entry in
+ *     ONE file; `name` is type-required (compile error if forgotten). The
+ *     standalone `XSTOCK_NAMES` map that lived here has been REMOVED — its
+ *     contents are now in the registry.
+ *   - **crypto**: names still live in `CRYPTO_NAMES` below because the crypto
+ *     universe is dynamic (Kraken adds tokens regularly without dev review).
+ *     Unmapped symbols fall back to the base ticker (e.g. FOO/USD → "FOO")
+ *     and emit a one-time console.warn so the gap is observable.
  *
  * Lives in `shared/` so server + client both import from one place.
  */
+import { getXstockName } from './asset-classes.js';
 
 /** Crypto top symbols seen across the universe (active trades + benchmarks). */
 export const CRYPTO_NAMES: Record<string, string> = {
@@ -179,342 +183,36 @@ export const CRYPTO_NAMES: Record<string, string> = {
   GUSD: 'Gemini Dollar',
 };
 
-/**
- * Backed Finance xStock tokenized equities universe.
- * These are Solana-resident tokens that track Nasdaq / NYSE equities.
- * The base symbol is the underlying ticker (AAPL, TSLA, NVDA, ...).
- *
- * **B-NEW-29 (2026-05-13):** comprehensive coverage of every entry in
- * `XSTOCK_SPOT_SYMBOLS` (`shared/asset-classes.ts`). Previously only ~80
- * mega-caps were mapped, so live open trades for symbols like NVT, GLXY,
- * and ELV rendered blank under the symbol line. Maintain by adding new
- * entries here when Kraken adds new xStocks to the universe.
- */
-export const XSTOCK_NAMES: Record<string, string> = {
-  // ─── Mega-cap tech ─────────────────────────────────────────────────────
-  AAPL: 'Apple',
-  MSFT: 'Microsoft',
-  GOOG: 'Alphabet',
-  GOOGL: 'Alphabet',
-  AMZN: 'Amazon',
-  META: 'Meta Platforms',
-  NVDA: 'Nvidia',
-  TSLA: 'Tesla',
-  NFLX: 'Netflix',
-  ADBE: 'Adobe',
-  ORCL: 'Oracle',
-  CRM: 'Salesforce',
-  AVGO: 'Broadcom',
-  AMD: 'AMD',
-  INTC: 'Intel',
-  CSCO: 'Cisco Systems',
-  IBM: 'IBM',
-  TXN: 'Texas Instruments',
-  AMAT: 'Applied Materials',
-  MU: 'Micron Technology',
-  MRVL: 'Marvell Technology',
-  NXPI: 'NXP Semiconductors',
-  ANET: 'Arista Networks',
-  PANW: 'Palo Alto Networks',
-  CRWD: 'CrowdStrike',
-  SNOW: 'Snowflake',
-  PLTR: 'Palantir',
-  ASML: 'ASML Holding',
-  QCOM: 'Qualcomm',
-  LRCX: 'Lam Research',
-  TER: 'Teradyne',
-  SAP: 'SAP',
-  NOW: 'ServiceNow',
-  NET: 'Cloudflare',
-  MDB: 'MongoDB',
-  NTNX: 'Nutanix',
-  PATH: 'UiPath',
-  SHOP: 'Shopify',
-  GLOB: 'Globant',
-  // ─── ETFs ──────────────────────────────────────────────────────────────
-  SPY: 'S&P 500 ETF',
-  QQQ: 'Nasdaq 100 ETF',
-  GLD: 'Gold ETF',
-  SLV: 'Silver ETF',
-  IWM: 'Russell 2000 ETF',
-  DIA: 'Dow Jones ETF',
-  EEM: 'Emerging Markets ETF',
-  EFA: 'EAFE ETF',
-  TLT: '20+ Year Treasury ETF',
-  VTI: 'Total Stock Market ETF',
-  ARKK: 'ARK Innovation ETF',
-  ARKG: 'ARK Genomic Revolution ETF',
-  XBI: 'SPDR S&P Biotech ETF',
-  IEMG: 'Core MSCI Emerging Markets ETF',
-  TOTL: 'DoubleLine Total Return ETF',
-  EWA: 'Australia ETF',
-  EWC: 'Canada ETF',
-  EWG: 'Germany ETF',
-  EWI: 'Italy ETF',
-  EWL: 'Switzerland ETF',
-  EWN: 'Netherlands ETF',
-  EWP: 'Spain ETF',
-  EWQ: 'France ETF',
-  EWS: 'Singapore ETF',
-  EWU: 'United Kingdom ETF',
-  EWZ: 'Brazil ETF',
-  // ─── Crypto-exposure equities ──────────────────────────────────────────
-  COIN: 'Coinbase',
-  HOOD: 'Robinhood',
-  MSTR: 'MicroStrategy',
-  RIOT: 'Riot Platforms',
-  MARA: 'Marathon Digital',
-  HUT: 'Hut 8 Mining',
-  CIFR: 'Cipher Mining',
-  CLSK: 'CleanSpark',
-  BITF: 'Bitfarms',
-  CORZ: 'Core Scientific',
-  BTBT: 'Bit Digital',
-  HIVE: 'HIVE Digital Technologies',
-  GLXY: 'Galaxy Digital',
-  DFDV: 'DeFi Development Corp',
-  // ─── Finance / banks / payments ────────────────────────────────────────
-  JPM: 'JPMorgan Chase',
-  BAC: 'Bank of America',
-  WFC: 'Wells Fargo',
-  C: 'Citigroup',
-  GS: 'Goldman Sachs',
-  MS: 'Morgan Stanley',
-  V: 'Visa',
-  MA: 'Mastercard',
-  AXP: 'American Express',
-  PYPL: 'PayPal',
-  SQ: 'Block',
-  CB: 'Chubb',
-  AIG: 'AIG',
-  AFL: 'Aflac',
-  ALL: 'Allstate',
-  HIG: 'Hartford Financial',
-  LNC: 'Lincoln National',
-  MET: 'MetLife',
-  PRU: 'Prudential Financial',
-  TRV: 'Travelers',
-  PGR: 'Progressive',
-  AON: 'Aon',
-  VOYA: 'Voya Financial',
-  ICE: 'Intercontinental Exchange',
-  CBOE: 'Cboe Global Markets',
-  CME: 'CME Group',
-  NDAQ: 'Nasdaq Inc.',
-  MCO: "Moody's",
-  MSCI: 'MSCI Inc.',
-  SOFI: 'SoFi Technologies',
-  RKT: 'Rocket Companies',
-  UWMC: 'UWM Holdings',
-  // ─── Consumer / retail / staples ───────────────────────────────────────
-  WMT: 'Walmart',
-  COST: 'Costco',
-  TGT: 'Target',
-  HD: 'Home Depot',
-  LOW: "Lowe's",
-  MCD: "McDonald's",
-  SBUX: 'Starbucks',
-  KO: 'Coca-Cola',
-  PEP: 'PepsiCo',
-  NKE: 'Nike',
-  PG: 'Procter & Gamble',
-  CL: 'Colgate-Palmolive',
-  MO: 'Altria Group',
-  PM: 'Philip Morris International',
-  BTI: 'British American Tobacco',
-  BUD: 'Anheuser-Busch InBev',
-  DEO: 'Diageo',
-  STZ: 'Constellation Brands',
-  TAP: 'Molson Coors',
-  MDLZ: 'Mondelez International',
-  UL: 'Unilever',
-  BBBY: 'Bed Bath & Beyond',
-  AMC: 'AMC Entertainment',
-  GME: 'GameStop',
-  // ─── Healthcare / pharma / biotech ─────────────────────────────────────
-  JNJ: 'Johnson & Johnson',
-  PFE: 'Pfizer',
-  MRK: 'Merck',
-  ABBV: 'AbbVie',
-  LLY: 'Eli Lilly',
-  UNH: 'UnitedHealth Group',
-  CVS: 'CVS Health',
-  HUM: 'Humana',
-  MRNA: 'Moderna',
-  BNTX: 'BioNTech',
-  REGN: 'Regeneron',
-  ELV: 'Elevance Health',
-  CI: 'Cigna',
-  CNC: 'Centene',
-  MOH: 'Molina Healthcare',
-  HCA: 'HCA Healthcare',
-  UHS: 'Universal Health Services',
-  THC: 'Tenet Healthcare',
-  MCK: 'McKesson',
-  AMGN: 'Amgen',
-  GILD: 'Gilead Sciences',
-  BIIB: 'Biogen',
-  ALNY: 'Alnylam Pharmaceuticals',
-  ARCT: 'Arcturus Therapeutics',
-  BHC: 'Bausch Health',
-  BMY: 'Bristol Myers Squibb',
-  BAX: 'Baxter International',
-  DHR: 'Danaher',
-  HOLX: 'Hologic',
-  MDT: 'Medtronic',
-  NBIX: 'Neurocrine Biosciences',
-  NVAX: 'Novavax',
-  NVO: 'Novo Nordisk',
-  RGEN: 'Repligen',
-  RMD: 'ResMed',
-  SAGE: 'Sage Therapeutics',
-  SUPN: 'Supernus Pharmaceuticals',
-  TEVA: 'Teva Pharmaceuticals',
-  TMO: 'Thermo Fisher Scientific',
-  VRTX: 'Vertex Pharmaceuticals',
-  VTRS: 'Viatris',
-  WBA: 'Walgreens Boots Alliance',
-  ZTS: 'Zoetis',
-  // ─── Energy / utilities ────────────────────────────────────────────────
-  XOM: 'ExxonMobil',
-  CVX: 'Chevron',
-  COP: 'ConocoPhillips',
-  OXY: 'Occidental Petroleum',
-  EQT: 'EQT Corporation',
-  MPC: 'Marathon Petroleum',
-  PSX: 'Phillips 66',
-  VLO: 'Valero Energy',
-  SLB: 'Schlumberger',
-  SHEL: 'Shell',
-  NEE: 'NextEra Energy',
-  DUK: 'Duke Energy',
-  AEP: 'American Electric Power',
-  D: 'Dominion Energy',
-  DTE: 'DTE Energy',
-  ED: 'Consolidated Edison',
-  EIX: 'Edison International',
-  EXC: 'Exelon',
-  PCG: 'PG&E',
-  SO: 'Southern Company',
-  SRE: 'Sempra Energy',
-  XEL: 'Xcel Energy',
-  FCEL: 'FuelCell Energy',
-  PLUG: 'Plug Power',
-  BE: 'Bloom Energy',
-  BLDP: 'Ballard Power',
-  // ─── Chinese ADRs ──────────────────────────────────────────────────────
-  BABA: 'Alibaba',
-  BIDU: 'Baidu',
-  JD: 'JD.com',
-  PDD: 'PDD Holdings',
-  NIO: 'NIO',
-  XPEV: 'XPeng',
-  LI: 'Li Auto',
-  TME: 'Tencent Music',
-  BILI: 'Bilibili',
-  NTES: 'NetEase',
-  TAL: 'TAL Education',
-  EDU: 'New Oriental Education',
-  GOTU: 'Gaotu Techedu',
-  // ─── Industrials / aerospace / autos ───────────────────────────────────
-  BA: 'Boeing',
-  CAT: 'Caterpillar',
-  DE: 'Deere & Company',
-  GE: 'GE Aerospace',
-  GEV: 'GE Vernova',
-  HON: 'Honeywell',
-  LMT: 'Lockheed Martin',
-  RTX: 'RTX Corporation',
-  MMM: '3M',
-  EMR: 'Emerson Electric',
-  ROK: 'Rockwell Automation',
-  ROP: 'Roper Technologies',
-  PH: 'Parker-Hannifin',
-  PWR: 'Quanta Services',
-  PNR: 'Pentair',
-  TT: 'Trane Technologies',
-  URI: 'United Rentals',
-  FAST: 'Fastenal',
-  GWW: 'W.W. Grainger',
-  LECO: 'Lincoln Electric',
-  NVT: 'nVent Electric',
-  XYL: 'Xylem',
-  F: 'Ford',
-  GM: 'General Motors',
-  LCID: 'Lucid Group',
-  RIVN: 'Rivian',
-  AUR: 'Aurora Innovation',
-  LIDR: 'AEye Inc.',
-  UBER: 'Uber',
-  LYFT: 'Lyft',
-  DASH: 'DoorDash',
-  ABNB: 'Airbnb',
-  BMBL: 'Bumble',
-  MTCH: 'Match Group',
-  RBLX: 'Roblox',
-  UPS: 'UPS',
-  // ─── Communications / media ────────────────────────────────────────────
-  DIS: 'Disney',
-  CMCSA: 'Comcast',
-  T: 'AT&T',
-  VZ: 'Verizon',
-  TMUS: 'T-Mobile',
-  PARA: 'Paramount Global',
-  FOX: 'Fox Corporation (B)',
-  FOXA: 'Fox Corporation (A)',
-  NWS: 'News Corporation (B)',
-  NWSA: 'News Corporation (A)',
-  WBD: 'Warner Bros. Discovery',
-  // ─── REITs ─────────────────────────────────────────────────────────────
-  AMT: 'American Tower',
-  AVB: 'AvalonBay Communities',
-  CCI: 'Crown Castle',
-  DLR: 'Digital Realty',
-  EQIX: 'Equinix',
-  EQR: 'Equity Residential',
-  ESS: 'Essex Property Trust',
-  MAA: 'Mid-America Apartment',
-  O: 'Realty Income',
-  PLD: 'Prologis',
-  PSA: 'Public Storage',
-  SPG: 'Simon Property Group',
-  VICI: 'VICI Properties',
-  // ─── Active xstock universe (Backed Finance issued) ────────────────────
-  CRCL: 'Circle',
-  SPGI: 'S&P Global',
-  ROOT: 'Root Inc.',
-  XYZ: 'Block (XYZ)',
-  LMND: 'Lemonade',
-  SNDK: 'SanDisk',
-  VIA: 'Via Renewables',
-  // NOTE: ICNT removed from XSTOCK section — duplicated with crypto entry
-  // (Impossible Cloud Network). xstock universe uses 'ICE' for Intercontinental
-  // Exchange (already mapped above).
-  // ─── Speculative / SPAC / small cap / clean energy ────────────────────
-  FREYR: 'FREYR Battery',
-  BLNK: 'Blink Charging',
-  EVGO: 'EVgo',
-  CHPT: 'ChargePoint',
-  OPEN: 'Opendoor Technologies',
-  BCC: 'Boise Cascade',
-  TONX: 'TONX Inc.',
-  // ─── Collision tickers (also exist as crypto on Kraken) ───────────────
-  // These bases ALSO appear in crypto universe — the registry split by
-  // assetClass at lookup time (getAssetName checks assetClass.startsWith)
-  // means same key can have different names per registry. Keep both entries.
-  SUI: 'Sun Communities', // xstock — crypto SUI is Sui Network (CRYPTO_NAMES)
-  BDX: 'Becton Dickinson',
-};
 
 /**
  * Look up the human-readable asset name for a trading pair.
- * Splits on '/' to extract the base symbol, then consults the appropriate
- * registry based on assetClass. Returns null if the symbol isn't mapped —
- * UI should render nothing in that case rather than show a partial label.
+ * Splits on '/' to extract the base symbol (crypto path) or uses the full
+ * pair (xstock path), then consults the appropriate source:
+ *   - crypto: `CRYPTO_NAMES` map above
+ *   - xstock: `XSTOCK_SPOT_REGISTRY` in asset-classes.ts (via getXstockName)
+ *
+ * B-NEW-30: fail-loud fallback for unmapped symbols. Returns the base ticker
+ * (e.g. "FOO" for FOO/USD) and emits a one-time console.warn so the gap is
+ * observable. Never returns null for live trading pairs — only returns null
+ * if pair/assetClass is itself null/undefined.
  *
  * @param pair    e.g. "BTC/USD", "AAPL/USD", "SOL/EUR"
  * @param assetClass  e.g. "crypto_spot", "xstock_spot"
  */
+const _warnedSymbols = new Set<string>();
+function _warnUnmappedOnce(pair: string, assetClass: string): void {
+  const key = assetClass + ':' + pair;
+  if (_warnedSymbols.has(key)) return;
+  _warnedSymbols.add(key);
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[B-NEW-30][asset-names] unmapped symbol falling back to base ticker. ' +
+    'pair=' + pair + ' assetClass=' + assetClass + '. ' +
+    'Add an entry to shared/asset-classes.ts::XSTOCK_SPOT_REGISTRY (xstock) ' +
+    'or shared/asset-names.ts::CRYPTO_NAMES (crypto).'
+  );
+}
+
 export function getAssetName(
   pair: string | null | undefined,
   assetClass: string | null | undefined,
@@ -522,14 +220,22 @@ export function getAssetName(
   if (!pair || !assetClass) return null;
   const baseSymbol = pair.split('/')[0]?.toUpperCase();
   if (!baseSymbol) return null;
+
   if (assetClass.startsWith('crypto')) {
-    return CRYPTO_NAMES[baseSymbol] ?? null;
+    const name = CRYPTO_NAMES[baseSymbol];
+    if (name) return name;
+    _warnUnmappedOnce(pair, assetClass);
+    return baseSymbol; // fail-loud fallback: show ticker, not blank
   }
-  if (assetClass.startsWith('xstock')) {
-    return XSTOCK_NAMES[baseSymbol] ?? null;
+
+  if (assetClass.startsWith('xstock') || assetClass.startsWith('equity')) {
+    // B-NEW-30: read from SSOT registry in asset-classes.ts. getXstockName
+    // takes the FULL pair (e.g. 'AAPL/USD'), not just the base symbol.
+    const name = getXstockName(pair);
+    if (name) return name;
+    _warnUnmappedOnce(pair, assetClass);
+    return baseSymbol;
   }
-  if (assetClass.startsWith('equity')) {
-    return XSTOCK_NAMES[baseSymbol] ?? null; // reuse equity names
-  }
+
   return null;
 }

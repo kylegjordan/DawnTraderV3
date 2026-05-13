@@ -182,51 +182,314 @@ const XSTOCK_PERP_RAW = /^PF_[A-Z]{2,6}X(USD|EUR|GBP)$/;
 const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
 
 /**
- * B79: explicit allow-list of xstock_spot canonical symbols.
+ * B-NEW-30 (2026-05-13): xstock_spot universe — SSOT registry pattern.
+ *
+ * Single source of truth for the xstock_spot universe. Each entry carries:
+ *   - `name`     — human-readable display name (REQUIRED — TypeScript enforces)
+ *   - `is24_7`   — optional flag for Phase-1 extended-hours names (10 total)
+ *
+ * Previously the universe (`XSTOCK_SPOT_SYMBOLS`) and the display names
+ * (`XSTOCK_NAMES` in `shared/asset-names.ts`) were two parallel structures
+ * that could drift. B-NEW-29 (2026-05-13) patched the gap by data-filling
+ * XSTOCK_NAMES; B-NEW-30 fixed the structural issue by consolidating to
+ * this registry. `XSTOCK_SPOT_SYMBOLS` + `XSTOCK_SPOT_24_7_SYMBOLS` are now
+ * DERIVED from this map — adding a new xStock requires editing exactly one
+ * entry here, and the type system makes `name` non-optional so forgetting
+ * the display name becomes a compile error (not a runtime blank cell).
  *
  * The WS feed and the canonical pair-universe form (used by the scanner) is
  * `<TICKER>/<QUOTE>` without an x-suffix — indistinguishable by regex from
- * crypto_spot canonical (`BASE/QUOTE`). When the scanner's pair universe is
- * merged from `server/config/xstocks-universe.json`, the resolveAssetClass
- * call will see an `exchange='kraken'` symbol that we MUST classify as
- * xstock_spot, not crypto_spot.
- *
- * This Set is loaded eagerly at module import time. It mirrors the JSON
- * file. Adding a symbol = edit the JSON + this list together (or refactor
- * to import the JSON directly; kept inline for shared/ → no dynamic import).
- *
- * Membership check is O(1). Resolution dispatches to XSTOCK_SPOT before
- * the crypto_spot regex paths in `resolveAssetClass` for `exchange='kraken'`.
+ * crypto_spot canonical (`BASE/QUOTE`). Membership check via the derived
+ * `XSTOCK_SPOT_SYMBOLS` Set is O(1). Resolution dispatches to XSTOCK_SPOT
+ * before the crypto_spot regex paths in `resolveAssetClass` for
+ * `exchange='kraken'`.
  */
-export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set([
-  'AAPL/USD','ABBV/USD','ABNB/USD','ADBE/USD','AEP/USD','AFL/USD','AIG/USD','ALL/USD','ALNY/USD','AMAT/USD',
-  'AMC/USD','AMD/USD','AMGN/USD','AMT/USD','AMZN/USD','AON/USD','ARCT/USD','ARKG/USD','ARKK/USD','ASML/USD',
-  'AUR/USD','AVB/USD','AXP/USD','BABA/USD','BAC/USD','BAX/USD','BBBY/USD','BCC/USD','BDX/USD','BE/USD',
-  'BHC/USD','BIDU/USD','BIIB/USD','BILI/USD','BITF/USD','BLDP/USD','BLNK/USD','BMBL/USD','BMY/USD','BNTX/USD',
-  'BTBT/USD','BTI/USD','BUD/USD','CB/USD','CBOE/USD','CCI/USD','CHPT/USD','CI/USD','CIFR/USD','CL/USD',
-  'CLSK/USD','CMCSA/USD','CME/USD','CNC/USD','COIN/USD','COP/USD','COST/USD','CRCL/USD','CRWD/USD','CSCO/USD',
-  'CVS/USD','CVX/USD','D/USD','DASH/USD','DE/USD','DEO/USD','DFDV/USD','DHR/USD','DIS/USD','DLR/USD',
-  'DTE/USD','DUK/USD','ED/USD','EDU/USD','EIX/USD','ELV/USD','EMR/USD','EQIX/USD','EQR/USD','EQT/USD',
-  'ESS/USD','EVGO/USD','EWA/USD','EWC/USD','EWG/USD','EWI/USD','EWL/USD','EWN/USD','EWP/USD','EWQ/USD',
-  'EWS/USD','EWU/USD','EWZ/USD','EXC/USD','F/USD','FAST/USD','FCEL/USD','FOX/USD','FOXA/USD','GEV/USD',
-  'GILD/USD','GLD/USD','GLOB/USD','GLXY/USD','GM/USD','GME/USD','GOOGL/USD','GOTU/USD','GS/USD','GWW/USD',
-  'HCA/USD','HD/USD','HIG/USD','HIVE/USD','HOLX/USD','HOOD/USD','HUM/USD','HUT/USD','IBM/USD','ICE/USD',
-  'IEMG/USD','INTC/USD','JD/USD','JNJ/USD','JPM/USD','KO/USD','LCID/USD','LECO/USD','LI/USD','LIDR/USD',
-  'LLY/USD','LMND/USD','LMT/USD','LNC/USD','LOW/USD','LRCX/USD','LYFT/USD','MAA/USD','MCD/USD','MCK/USD',
-  'MCO/USD','MDB/USD','MDLZ/USD','MDT/USD','MET/USD','META/USD','MMM/USD','MO/USD','MOH/USD','MPC/USD',
-  'MRK/USD','MRNA/USD','MRVL/USD','MS/USD','MSCI/USD','MSFT/USD','MSTR/USD','MTCH/USD','NBIX/USD','NDAQ/USD',
-  'NEE/USD','NET/USD','NFLX/USD','NIO/USD','NKE/USD','NOW/USD','NTES/USD','NTNX/USD','NVAX/USD','NVDA/USD',
-  'NVO/USD','NVT/USD','NWS/USD','NWSA/USD','O/USD','OPEN/USD','ORCL/USD','OXY/USD','PANW/USD','PARA/USD',
-  'PATH/USD','PCG/USD','PDD/USD','PEP/USD','PFE/USD','PG/USD','PGR/USD','PH/USD','PLD/USD','PLTR/USD',
-  'PLUG/USD','PM/USD','PNR/USD','PRU/USD','PSA/USD','PSX/USD','PWR/USD','PYPL/USD','QCOM/USD','QQQ/USD',
-  'RBLX/USD','REGN/USD','RGEN/USD','RIVN/USD','RKT/USD','RMD/USD','ROK/USD','ROOT/USD','ROP/USD','RTX/USD',
-  'SAGE/USD','SAP/USD','SHEL/USD','SHOP/USD','SLB/USD','SNDK/USD','SNOW/USD','SO/USD','SOFI/USD','SPG/USD',
-  'SPGI/USD','SPY/USD','SRE/USD','STZ/USD','SUI/USD','SUPN/USD','T/USD','TAL/USD','TAP/USD','TER/USD',
-  'TEVA/USD','TGT/USD','THC/USD','TME/USD','TMO/USD','TMUS/USD','TONX/USD','TOTL/USD','TRV/USD','TSLA/USD',
-  'TT/USD','TXN/USD','UBER/USD','UHS/USD','UL/USD','UPS/USD','URI/USD','UWMC/USD','VIA/USD','VICI/USD',
-  'VLO/USD','VOYA/USD','VRTX/USD','VTRS/USD','VZ/USD','WBA/USD','WBD/USD','WFC/USD','XBI/USD','XEL/USD',
-  'XOM/USD','XPEV/USD','XYL/USD','XYZ/USD','ZTS/USD',
+export interface XstockSpotEntry {
+  /** Human-readable display name (e.g., 'Apple', 'nVent Electric'). REQUIRED. */
+  name: string;
+  /** True for Phase-1 extended-hours names (Sun 8PM ET → Fri 8PM ET continuous). */
+  is24_7?: boolean;
+}
+
+export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Map<string, XstockSpotEntry>([
+  ['AAPL/USD', { name: 'Apple', is24_7: true }],
+  ['ABBV/USD', { name: 'AbbVie' }],
+  ['ABNB/USD', { name: 'Airbnb' }],
+  ['ADBE/USD', { name: 'Adobe' }],
+  ['AEP/USD', { name: 'American Electric Power' }],
+  ['AFL/USD', { name: 'Aflac' }],
+  ['AIG/USD', { name: 'AIG' }],
+  ['ALL/USD', { name: 'Allstate' }],
+  ['ALNY/USD', { name: 'Alnylam Pharmaceuticals' }],
+  ['AMAT/USD', { name: 'Applied Materials' }],
+  ['AMC/USD', { name: 'AMC Entertainment' }],
+  ['AMD/USD', { name: 'AMD' }],
+  ['AMGN/USD', { name: 'Amgen' }],
+  ['AMT/USD', { name: 'American Tower' }],
+  ['AMZN/USD', { name: 'Amazon' }],
+  ['AON/USD', { name: 'Aon' }],
+  ['ARCT/USD', { name: 'Arcturus Therapeutics' }],
+  ['ARKG/USD', { name: 'ARK Genomic Revolution ETF' }],
+  ['ARKK/USD', { name: 'ARK Innovation ETF' }],
+  ['ASML/USD', { name: 'ASML Holding' }],
+  ['AUR/USD', { name: 'Aurora Innovation' }],
+  ['AVB/USD', { name: 'AvalonBay Communities' }],
+  ['AXP/USD', { name: 'American Express' }],
+  ['BABA/USD', { name: 'Alibaba' }],
+  ['BAC/USD', { name: 'Bank of America' }],
+  ['BAX/USD', { name: 'Baxter International' }],
+  ['BBBY/USD', { name: 'Bed Bath & Beyond' }],
+  ['BCC/USD', { name: 'Boise Cascade' }],
+  ['BDX/USD', { name: 'Becton Dickinson' }],
+  ['BE/USD', { name: 'Bloom Energy' }],
+  ['BHC/USD', { name: 'Bausch Health' }],
+  ['BIDU/USD', { name: 'Baidu' }],
+  ['BIIB/USD', { name: 'Biogen' }],
+  ['BILI/USD', { name: 'Bilibili' }],
+  ['BITF/USD', { name: 'Bitfarms' }],
+  ['BLDP/USD', { name: 'Ballard Power' }],
+  ['BLNK/USD', { name: 'Blink Charging' }],
+  ['BMBL/USD', { name: 'Bumble' }],
+  ['BMY/USD', { name: 'Bristol Myers Squibb' }],
+  ['BNTX/USD', { name: 'BioNTech' }],
+  ['BTBT/USD', { name: 'Bit Digital' }],
+  ['BTI/USD', { name: 'British American Tobacco' }],
+  ['BUD/USD', { name: 'Anheuser-Busch InBev' }],
+  ['CB/USD', { name: 'Chubb' }],
+  ['CBOE/USD', { name: 'Cboe Global Markets' }],
+  ['CCI/USD', { name: 'Crown Castle' }],
+  ['CHPT/USD', { name: 'ChargePoint' }],
+  ['CI/USD', { name: 'Cigna' }],
+  ['CIFR/USD', { name: 'Cipher Mining' }],
+  ['CL/USD', { name: 'Colgate-Palmolive' }],
+  ['CLSK/USD', { name: 'CleanSpark' }],
+  ['CMCSA/USD', { name: 'Comcast' }],
+  ['CME/USD', { name: 'CME Group' }],
+  ['CNC/USD', { name: 'Centene' }],
+  ['COIN/USD', { name: 'Coinbase' }],
+  ['COP/USD', { name: 'ConocoPhillips' }],
+  ['COST/USD', { name: 'Costco' }],
+  ['CRCL/USD', { name: 'Circle', is24_7: true }],
+  ['CRWD/USD', { name: 'CrowdStrike' }],
+  ['CSCO/USD', { name: 'Cisco Systems' }],
+  ['CVS/USD', { name: 'CVS Health' }],
+  ['CVX/USD', { name: 'Chevron' }],
+  ['D/USD', { name: 'Dominion Energy' }],
+  ['DASH/USD', { name: 'DoorDash' }],
+  ['DE/USD', { name: 'Deere & Company' }],
+  ['DEO/USD', { name: 'Diageo' }],
+  ['DFDV/USD', { name: 'DeFi Development Corp' }],
+  ['DHR/USD', { name: 'Danaher' }],
+  ['DIS/USD', { name: 'Disney' }],
+  ['DLR/USD', { name: 'Digital Realty' }],
+  ['DTE/USD', { name: 'DTE Energy' }],
+  ['DUK/USD', { name: 'Duke Energy' }],
+  ['ED/USD', { name: 'Consolidated Edison' }],
+  ['EDU/USD', { name: 'New Oriental Education' }],
+  ['EIX/USD', { name: 'Edison International' }],
+  ['ELV/USD', { name: 'Elevance Health' }],
+  ['EMR/USD', { name: 'Emerson Electric' }],
+  ['EQIX/USD', { name: 'Equinix' }],
+  ['EQR/USD', { name: 'Equity Residential' }],
+  ['EQT/USD', { name: 'EQT Corporation' }],
+  ['ESS/USD', { name: 'Essex Property Trust' }],
+  ['EVGO/USD', { name: 'EVgo' }],
+  ['EWA/USD', { name: 'Australia ETF' }],
+  ['EWC/USD', { name: 'Canada ETF' }],
+  ['EWG/USD', { name: 'Germany ETF' }],
+  ['EWI/USD', { name: 'Italy ETF' }],
+  ['EWL/USD', { name: 'Switzerland ETF' }],
+  ['EWN/USD', { name: 'Netherlands ETF' }],
+  ['EWP/USD', { name: 'Spain ETF' }],
+  ['EWQ/USD', { name: 'France ETF' }],
+  ['EWS/USD', { name: 'Singapore ETF' }],
+  ['EWU/USD', { name: 'United Kingdom ETF' }],
+  ['EWZ/USD', { name: 'Brazil ETF' }],
+  ['EXC/USD', { name: 'Exelon' }],
+  ['F/USD', { name: 'Ford' }],
+  ['FAST/USD', { name: 'Fastenal' }],
+  ['FCEL/USD', { name: 'FuelCell Energy' }],
+  ['FOX/USD', { name: 'Fox Corporation (B)' }],
+  ['FOXA/USD', { name: 'Fox Corporation (A)' }],
+  ['GEV/USD', { name: 'GE Vernova' }],
+  ['GILD/USD', { name: 'Gilead Sciences' }],
+  ['GLD/USD', { name: 'Gold ETF', is24_7: true }],
+  ['GLOB/USD', { name: 'Globant' }],
+  ['GLXY/USD', { name: 'Galaxy Digital' }],
+  ['GM/USD', { name: 'General Motors' }],
+  ['GME/USD', { name: 'GameStop' }],
+  ['GOOGL/USD', { name: 'Alphabet', is24_7: true }],
+  ['GOTU/USD', { name: 'Gaotu Techedu' }],
+  ['GS/USD', { name: 'Goldman Sachs' }],
+  ['GWW/USD', { name: 'W.W. Grainger' }],
+  ['HCA/USD', { name: 'HCA Healthcare' }],
+  ['HD/USD', { name: 'Home Depot' }],
+  ['HIG/USD', { name: 'Hartford Financial' }],
+  ['HIVE/USD', { name: 'HIVE Digital Technologies' }],
+  ['HOLX/USD', { name: 'Hologic' }],
+  ['HOOD/USD', { name: 'Robinhood', is24_7: true }],
+  ['HUM/USD', { name: 'Humana' }],
+  ['HUT/USD', { name: 'Hut 8 Mining' }],
+  ['IBM/USD', { name: 'IBM' }],
+  ['ICE/USD', { name: 'Intercontinental Exchange' }],
+  ['IEMG/USD', { name: 'Core MSCI Emerging Markets ETF' }],
+  ['INTC/USD', { name: 'Intel' }],
+  ['JD/USD', { name: 'JD.com' }],
+  ['JNJ/USD', { name: 'Johnson & Johnson' }],
+  ['JPM/USD', { name: 'JPMorgan Chase' }],
+  ['KO/USD', { name: 'Coca-Cola' }],
+  ['LCID/USD', { name: 'Lucid Group' }],
+  ['LECO/USD', { name: 'Lincoln Electric' }],
+  ['LI/USD', { name: 'Li Auto' }],
+  ['LIDR/USD', { name: 'AEye Inc.' }],
+  ['LLY/USD', { name: 'Eli Lilly' }],
+  ['LMND/USD', { name: 'Lemonade' }],
+  ['LMT/USD', { name: 'Lockheed Martin' }],
+  ['LNC/USD', { name: 'Lincoln National' }],
+  ['LOW/USD', { name: "Lowe's" }],
+  ['LRCX/USD', { name: 'Lam Research' }],
+  ['LYFT/USD', { name: 'Lyft' }],
+  ['MAA/USD', { name: 'Mid-America Apartment' }],
+  ['MCD/USD', { name: "McDonald's" }],
+  ['MCK/USD', { name: 'McKesson' }],
+  ['MCO/USD', { name: "Moody's" }],
+  ['MDB/USD', { name: 'MongoDB' }],
+  ['MDLZ/USD', { name: 'Mondelez International' }],
+  ['MDT/USD', { name: 'Medtronic' }],
+  ['MET/USD', { name: 'MetLife' }],
+  ['META/USD', { name: 'Meta Platforms' }],
+  ['MMM/USD', { name: '3M' }],
+  ['MO/USD', { name: 'Altria Group' }],
+  ['MOH/USD', { name: 'Molina Healthcare' }],
+  ['MPC/USD', { name: 'Marathon Petroleum' }],
+  ['MRK/USD', { name: 'Merck' }],
+  ['MRNA/USD', { name: 'Moderna' }],
+  ['MRVL/USD', { name: 'Marvell Technology' }],
+  ['MS/USD', { name: 'Morgan Stanley' }],
+  ['MSCI/USD', { name: 'MSCI Inc.' }],
+  ['MSFT/USD', { name: 'Microsoft' }],
+  ['MSTR/USD', { name: 'MicroStrategy', is24_7: true }],
+  ['MTCH/USD', { name: 'Match Group' }],
+  ['NBIX/USD', { name: 'Neurocrine Biosciences' }],
+  ['NDAQ/USD', { name: 'Nasdaq Inc.' }],
+  ['NEE/USD', { name: 'NextEra Energy' }],
+  ['NET/USD', { name: 'Cloudflare' }],
+  ['NFLX/USD', { name: 'Netflix' }],
+  ['NIO/USD', { name: 'NIO' }],
+  ['NKE/USD', { name: 'Nike' }],
+  ['NOW/USD', { name: 'ServiceNow' }],
+  ['NTES/USD', { name: 'NetEase' }],
+  ['NTNX/USD', { name: 'Nutanix' }],
+  ['NVAX/USD', { name: 'Novavax' }],
+  ['NVDA/USD', { name: 'Nvidia', is24_7: true }],
+  ['NVO/USD', { name: 'Novo Nordisk' }],
+  ['NVT/USD', { name: 'nVent Electric' }],
+  ['NWS/USD', { name: 'News Corporation (B)' }],
+  ['NWSA/USD', { name: 'News Corporation (A)' }],
+  ['O/USD', { name: 'Realty Income' }],
+  ['OPEN/USD', { name: 'Opendoor Technologies' }],
+  ['ORCL/USD', { name: 'Oracle' }],
+  ['OXY/USD', { name: 'Occidental Petroleum' }],
+  ['PANW/USD', { name: 'Palo Alto Networks' }],
+  ['PARA/USD', { name: 'Paramount Global' }],
+  ['PATH/USD', { name: 'UiPath' }],
+  ['PCG/USD', { name: 'PG&E' }],
+  ['PDD/USD', { name: 'PDD Holdings' }],
+  ['PEP/USD', { name: 'PepsiCo' }],
+  ['PFE/USD', { name: 'Pfizer' }],
+  ['PG/USD', { name: 'Procter & Gamble' }],
+  ['PGR/USD', { name: 'Progressive' }],
+  ['PH/USD', { name: 'Parker-Hannifin' }],
+  ['PLD/USD', { name: 'Prologis' }],
+  ['PLTR/USD', { name: 'Palantir' }],
+  ['PLUG/USD', { name: 'Plug Power' }],
+  ['PM/USD', { name: 'Philip Morris International' }],
+  ['PNR/USD', { name: 'Pentair' }],
+  ['PRU/USD', { name: 'Prudential Financial' }],
+  ['PSA/USD', { name: 'Public Storage' }],
+  ['PSX/USD', { name: 'Phillips 66' }],
+  ['PWR/USD', { name: 'Quanta Services' }],
+  ['PYPL/USD', { name: 'PayPal' }],
+  ['QCOM/USD', { name: 'Qualcomm' }],
+  ['QQQ/USD', { name: 'Nasdaq 100 ETF', is24_7: true }],
+  ['RBLX/USD', { name: 'Roblox' }],
+  ['REGN/USD', { name: 'Regeneron' }],
+  ['RGEN/USD', { name: 'Repligen' }],
+  ['RIVN/USD', { name: 'Rivian' }],
+  ['RKT/USD', { name: 'Rocket Companies' }],
+  ['RMD/USD', { name: 'ResMed' }],
+  ['ROK/USD', { name: 'Rockwell Automation' }],
+  ['ROOT/USD', { name: 'Root Inc.' }],
+  ['ROP/USD', { name: 'Roper Technologies' }],
+  ['RTX/USD', { name: 'RTX Corporation' }],
+  ['SAGE/USD', { name: 'Sage Therapeutics' }],
+  ['SAP/USD', { name: 'SAP' }],
+  ['SHEL/USD', { name: 'Shell' }],
+  ['SHOP/USD', { name: 'Shopify' }],
+  ['SLB/USD', { name: 'Schlumberger' }],
+  ['SNDK/USD', { name: 'SanDisk' }],
+  ['SNOW/USD', { name: 'Snowflake' }],
+  ['SO/USD', { name: 'Southern Company' }],
+  ['SOFI/USD', { name: 'SoFi Technologies' }],
+  ['SPG/USD', { name: 'Simon Property Group' }],
+  ['SPGI/USD', { name: 'S&P Global' }],
+  ['SPY/USD', { name: 'S&P 500 ETF', is24_7: true }],
+  ['SRE/USD', { name: 'Sempra Energy' }],
+  ['STZ/USD', { name: 'Constellation Brands' }],
+  ['SUI/USD', { name: 'Sun Communities' }],
+  ['SUPN/USD', { name: 'Supernus Pharmaceuticals' }],
+  ['T/USD', { name: 'AT&T' }],
+  ['TAL/USD', { name: 'TAL Education' }],
+  ['TAP/USD', { name: 'Molson Coors' }],
+  ['TER/USD', { name: 'Teradyne' }],
+  ['TEVA/USD', { name: 'Teva Pharmaceuticals' }],
+  ['TGT/USD', { name: 'Target' }],
+  ['THC/USD', { name: 'Tenet Healthcare' }],
+  ['TME/USD', { name: 'Tencent Music' }],
+  ['TMO/USD', { name: 'Thermo Fisher Scientific' }],
+  ['TMUS/USD', { name: 'T-Mobile' }],
+  ['TONX/USD', { name: 'TONX Inc.' }],
+  ['TOTL/USD', { name: 'DoubleLine Total Return ETF' }],
+  ['TRV/USD', { name: 'Travelers' }],
+  ['TSLA/USD', { name: 'Tesla', is24_7: true }],
+  ['TT/USD', { name: 'Trane Technologies' }],
+  ['TXN/USD', { name: 'Texas Instruments' }],
+  ['UBER/USD', { name: 'Uber' }],
+  ['UHS/USD', { name: 'Universal Health Services' }],
+  ['UL/USD', { name: 'Unilever' }],
+  ['UPS/USD', { name: 'UPS' }],
+  ['URI/USD', { name: 'United Rentals' }],
+  ['UWMC/USD', { name: 'UWM Holdings' }],
+  ['VIA/USD', { name: 'Via Renewables' }],
+  ['VICI/USD', { name: 'VICI Properties' }],
+  ['VLO/USD', { name: 'Valero Energy' }],
+  ['VOYA/USD', { name: 'Voya Financial' }],
+  ['VRTX/USD', { name: 'Vertex Pharmaceuticals' }],
+  ['VTRS/USD', { name: 'Viatris' }],
+  ['VZ/USD', { name: 'Verizon' }],
+  ['WBA/USD', { name: 'Walgreens Boots Alliance' }],
+  ['WBD/USD', { name: 'Warner Bros. Discovery' }],
+  ['WFC/USD', { name: 'Wells Fargo' }],
+  ['XBI/USD', { name: 'SPDR S&P Biotech ETF' }],
+  ['XEL/USD', { name: 'Xcel Energy' }],
+  ['XOM/USD', { name: 'ExxonMobil' }],
+  ['XPEV/USD', { name: 'XPeng' }],
+  ['XYL/USD', { name: 'Xylem' }],
+  ['XYZ/USD', { name: 'Block (XYZ)' }],
+  ['ZTS/USD', { name: 'Zoetis' }],
 ]);
+
+/**
+ * Back-compat: derived universe set. DO NOT add entries here — edit
+ * `XSTOCK_SPOT_REGISTRY` above. Existing `.has()` callers + iteration
+ * sites work unchanged.
+ */
+export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set(XSTOCK_SPOT_REGISTRY.keys());
+
+/** Look up the human-readable display name for an xstock pair. Returns null if unknown. */
+export function getXstockName(pair: string): string | null {
+  return XSTOCK_SPOT_REGISTRY.get(pair)?.name ?? null;
+}
 
 /**
  * B79.0f — Ticker COLLISIONS between xStocks (XSTOCK_SPOT_SYMBOLS) and
@@ -277,8 +540,9 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * B79.0c (named) / B79.0L (semantics corrected 2026-05-10) — xstock_spot
- * Phase-1 EXTENDED-HOURS symbols.
+ * B79.0c (named) / B79.0L (semantics corrected 2026-05-10) / B-NEW-30
+ * (2026-05-13: derived from XSTOCK_SPOT_REGISTRY) — xstock_spot Phase-1
+ * EXTENDED-HOURS symbols.
  *
  * **NAMING NOTE: NOT actually 24/7.** Per Kyle directive 2026-05-10:
  * xStocks (including these Phase-1 names) are closed Friday 8PM ET → Sunday
@@ -293,29 +557,22 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
  * Per Kraken Phase 1 announcement (2025-12-03) at
  * https://blog.kraken.com/news/xstocks-247-trading — ten xStock tokens trade
  * extended hours, not the ARCA-aligned schedule the rest follow.
- * Canonical form (no "x" suffix; matches XSTOCK_SPOT_SYMBOLS shape).
  *
- * Reference data, NOT a behavioral knob — Phase-2 expansion is a Kraken
- * product event that requires a code change here AND in XSTOCK_SPOT_SYMBOLS,
- * so a DB-resolved row would only add coupling without shipping flexibility.
+ * B-NEW-30: DERIVED from `XSTOCK_SPOT_REGISTRY` via the `is24_7` flag.
+ * To add or remove a Phase-1 name, edit the corresponding entry in the
+ * registry. This set is recomputed at module-load time.
  *
  * Consumed by `isXstockMarketOpenUTC(symbol, now?)` which applies the global
  * Fri-Sun weekend close to ALL xStocks first, then bypasses the daily ARCA
  * gate for these names within the open window. All 10 must already exist in
- * XSTOCK_SPOT_SYMBOLS — assertion enforced by a unit test.
+ * XSTOCK_SPOT_SYMBOLS — invariant now enforced by construction (subset of
+ * registry keys).
  */
-export const XSTOCK_SPOT_24_7_SYMBOLS: ReadonlySet<string> = new Set([
-  'AAPL/USD',
-  'CRCL/USD',
-  'GLD/USD',
-  'GOOGL/USD',
-  'HOOD/USD',
-  'MSTR/USD',
-  'NVDA/USD',
-  'QQQ/USD',
-  'SPY/USD',
-  'TSLA/USD',
-]);
+export const XSTOCK_SPOT_24_7_SYMBOLS: ReadonlySet<string> = new Set(
+  Array.from(XSTOCK_SPOT_REGISTRY.entries())
+    .filter(([, meta]) => meta.is24_7 === true)
+    .map(([pair]) => pair),
+);
 
 /** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. */
 const CRYPTO_SPOT_CANONICAL = /^[A-Z0-9]{2,10}\/[A-Z0-9]{3,4}$/;
