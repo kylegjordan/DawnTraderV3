@@ -529,6 +529,49 @@ CC proposed building a unified Boot Readiness Coordinator as its own batch BEFOR
 
 **Why deferring is acceptable:** the patchwork has been running for many batches. We are not at the point where we have hard data showing it's the cause of recurring failures. B79.TEC's hard-fail handles its own correctness regardless of the broader boot architecture. If Phase 19 surfaces compounding issues, the coordinator becomes urgent; if not, it ships as planned cleanup work.
 
+### §10c.6 Oscillator family-filter removal (Kyle directive 2026-05-14)
+
+**Decision:** the `oscillator` filter-family is an architectural orphan and gets removed as a Phase 24 follow-up batch (sub-batch identifier TBD when sequenced — likely B79.0p or similar, after the xStocks UI sprint closes).
+
+**Background:** Audit 2026-05-14 confirmed `FILTER_FAMILIES` (server/config/canonical-regime-strategy-map.ts:847) includes `'oscillator'`, DB has `vts_oscillator` + `active_oscillator` rows with active thresholds for both `crypto_spot` and `xstock_spot`, and pairs ARE evaluated against the gate — but `STRATEGY_FAMILY_MAP` (line 806) has **zero strategies tagged `oscillator`**. Pairs that pass `vts_oscillator` and no other family lane dead-end at strategy iteration. The orphan has existed since pre-Phase-24; it became visible during xstock filter-diagnostics audits.
+
+**Langston's call (2026-05-14, recorded via 3-step protocol):** Option 2 — remove the family entirely. Rejected Option 1 (add a real oscillator strategy — would be 1-2 batch effort with detect signature + parameter discovery + SIM coverage + backtest + ML hooks; no proven net-EV gap demands a 19th strategy now; placeholders violate NO-PATCHES). Rejected Option 3 for this batch (retag a "reversal"-tagged strategy to `oscillator` — Langston pushed back that `range_trade` is range-detection not oscillator-archetype; the actual oscillator candidate is `mean_reversion`, but retagging changes IMF lane routing and needs SIM coverage; park as separate future question).
+
+**Surface area for the removal batch:**
+1. `server/config/canonical-regime-strategy-map.ts:804` — drop `'oscillator'` from `StrategyFamily` union (TS compiler will surface any orphan literal references)
+2. `server/config/canonical-regime-strategy-map.ts:847` — drop from `FILTER_FAMILIES` (5 → 4 lanes: trend / reversal / breakout / strong_trend)
+3. DB migration — `DELETE FROM screener_filters WHERE filter_path IN ('vts_oscillator', 'active_oscillator')` for both `crypto_spot` AND `xstock_spot`
+4. Read-audit `vts-runner.ts`, `xstock_spot/eval-cycle.ts`, `lane-eligibility.ts` for any literal `'oscillator'` / `'vts_oscillator'` / `'active_oscillator'` references — drop or update
+5. `1-system-manual/SYSTEM_MANUAL.md:11121` — drop `'vts_oscillator'` from the filter-path enumeration
+6. Governance trail: BATCH_CATALOG, PHASE_HISTORY, CHANGES_AND_FIXES note (anomaly: oscillator orphan since [git blame to identify origin batch], resolved [batch-id]); add one-line note that `mean_reversion → oscillator` retag is deferred / open question so we don't lose the thread
+
+**Pre-deploy verification gate:** SIM `byStrategy` query confirming zero signals have ever fired with `sourcePool='quant-oscillator'` or equivalent. If nonzero, Langston's Option 2 read is wrong and re-audit triggers per the "audit-conclusion-that-contradicts-telemetry triggers re-audit" standing rule.
+
+**Sequencing:** runs after the xStocks UI sprint (B-NEW-N items in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`) closes. Small batch — one type literal, one const, ~4 DB rows, file audits, one System Manual edit. Should fold into a near-term Phase 24 follow-up batch rather than spawn a dedicated batch given the limited surface area.
+
+**Open follow-up (separate batch, not this one):** decide whether `mean_reversion` (canonical-regime-strategy-map line 193: `'RSI < 30 or > 70 • Price deviation > 1σ'`) should be retagged from `'reversal'` to a different family. The behavior-change (different IMF lane routing → different LQ/VN/DI admit/reject distribution) requires SIM coverage before deploy. Parked as open question for Langston review.
+
+### §10c.7 xstock data-volume actuals vs B75 projection (logged 2026-05-14)
+
+B75 (2026-05-06) sized the tiered-storage architecture around projected B74 data volumes. Phase 24 actuals after 8 days of xstock_spot operation are higher than the B75 forecast assumed:
+
+**Observed (24 GB DB total, 2026-05-14):**
+- `xstock_spot_ticker_snap_2026_05`: **12 GB / month** (146 rows/sec sustained — Kraken WS-equities ticker feed)
+- `xstock_spot_ohlc_1m_2026_05`: 3 GB / month
+- `xstock_perp_ticker_snap_2026_05`: 2.6 GB / month
+- Other tables (crypto OHLC + signal_eval_archive + pair_scan + etc): ~6 GB / month combined
+
+**Projection delta:** B75 (`§10c.1 NO PATCHES doctrine` era) implicitly assumed hot-tier steady-state of ~10–15 GB. Current trajectory points to **~30–45 GB hot-tier steady-state** once the first 30-day sweep cycle activates (early June 2026 for May partitions).
+
+**Cost implication on Supabase Pro:** $25 base + 8 GB included + $0.125/GB/mo overage. At 40 GB current = $29/mo. At eventual ~45 GB steady-state = ~$29.60/mo. **Within $3–4/mo of the original B75 projection**, well below the 200 GB plan cap (which would be $49/mo). Auto-expansion 27 → 40 GB is normal Supabase Pro mechanics, NOT a sign of plan-cap risk.
+
+**Action items (added to Phase 24 follow-ups):**
+1. **Early-June check-in** — confirm the first 30-day b75-retention-sweep cycle activates as designed on 2026-05 partitions. `data_archive_manifest` currently shows 4 rows in `active` state (sweeps confirmed working on April data); we need to see May partitions transition through `pending → uploaded → verified → active`. If the cycle doesn't fire on schedule, that's a real bug to chase.
+2. **Document the xstock ticker-volume actual** in `1-system-manual/SYSTEM_MANUAL.md` storage section so future asset-class additions can budget against the empirical 146 rows/sec / 12 GB-month figure rather than re-estimate from scratch.
+3. **Per-asset-class data-volume capture rule (new standing rule):** any new asset class added in Phase 24+ ships with a data-volume actuals row appended to this section §10c.7 at the end of its first 30 days. This way future tier-storage retunes have empirical inputs, not estimates.
+
+**Not a blocker.** Storage is on track within tolerance. The retention-sweep architecture from B75 is correct; we just need the first sweep cycle to actually run on the new asset-class partitions to confirm the pipeline closes.
+
 ### §10c.5 Documentation discipline (rule, not just a reminder)
 
 Kyle directive: discussions get forgotten when implementation happens 3-4 phases later. To prevent yes-yes-yes-then-not-done failure mode:
@@ -577,6 +620,7 @@ Items requiring decision before / during the relevant batch.
 | 2026-05-10 | CC | **B79.0e SHIPPED.** `equity_*` → `xstock_*` namespace cleanup. 172 DB objects renamed in single transaction (4 parents + 52 partition children + 4 parent indexes + 108 partition indexes + 4 module_constants `data_lifecycle.equity_*.hot_retention_days` keys). 15 code files updated (Drizzle schema const + literals; archiver maps; scanner/freshness/storage-client/drift-aggregator/scripts/test). Type aliases retained pointing at new consts (cosmetic modernization queued). Langston Step 4 F1 catch: rollback symmetry — extended rollback SQL with reverse DO blocks + module_constants UPDATE. PM2 #206. |
 | 2026-05-10 | CC | **B79.0h — governance retrospective.** Phase 24 close. ASSET_CLASS_ONBOARDING_WORKFLOW.md updated with Sections H.1.x post-mortem (lessons by sub-batch + comms-infra protocols) and H.1.y updated decision rules (10 new if-then triggers from B79.0a-0g). SYSTEM_IMPACT_MAP.md updated with collision-set + vts_open_trades + table renames entries. SYSTEM_MANUAL.md appended with Phase 24 retrospective + 10 cross-cutting architectural patterns. PHASE_HISTORY.md sub-batch table populated. POST_AUDIT_ROADMAP.md Phase 24 closure recorded. **Phase 24 success criteria MET 2026-05-10:** xstock_spot in production VTS shadow-mode + onboarding workflow battle-tested through 9 sub-batches + ready for Phase 25 (B80 crypto_perp). |
 | 2026-05-10 evening | CC | **B79.0i.a + B79.0i.b SHIPPED — Phase 24 standing rule #10 obligation closed for xstock_spot.** Three-revision arc under two Kyle pushbacks. **Final form:** xStocks tab inside Machine Learning page contains 5 sections all reusing existing crypto components: Scanner Cycle Header (xstock-specific) + Per-Pair Fresh-Tick Latency (xstock-specific) + FilterDiagnosticsPanel (REUSED from machine-learning.tsx via export — full Pipeline Summary + Last Scan + 24h Rolling + VTS Eval Detail by-strategy + Setup Nulls + Pre-Eval Skips + Post-Signal Rejections + Filter Metric Ranges) + ExitStrategyAblationSection (REUSED from analytics.tsx via export+endpointBase prop) + FactorCalibrationSection (REUSED from analytics.tsx via export+endpointBase prop). 3 NEW sibling endpoints under `/api/xstocks/`. Aggregators `computeExitStrategyAblation` + `computeFactorCalibration` parameterized with optional `assetClass` — defaults preserve byte-identical pre-change behavior; verified post-deploy curl on `/api/analytics/factor-calibration` returns unchanged `factors: 10`. **Two new architectural patterns established (now Phase 24 standing rules #6 + #7 in SYSTEM_MANUAL appendix):** (a) cross-asset-class UI component reuse via export+endpointBase prop with default preserving legacy; (b) shared aggregator parameterization via optional asset_class with default preserving legacy. Pattern documented as canonical recipe in `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Section M for B80 implementer. **Terminology:** "shadow-mode" terminology dropped per Kyle directive 2026-05-10 evening; replaced with "VTS Observation". **Outstanding follow-up:** RUNNING_ISSUES #92 — wire xstockSpotScanner through signal-orchestration so FilterDiagnosticsPanel funnel-rejection counters populate (currently zero — observability-only scanner; future B79.x batch). PM2 #210. |
+| 2026-05-14 | CC | **Mid-stretch update — xStocks UI sprint still in flight (B-NEW-N items in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`); B79.0m.b2 partial-ship intervening commits 2026-05-11 → 2026-05-13 not separately logged here per Kyle's "trial-and-error history belongs in completion reports + tracker, not the plan doc" directive (2026-05-10).** Two new entries: **§10c.6** Oscillator family-filter removal — Langston-approved Option 2 (remove entirely) per 3-step protocol exchange 2026-05-14. Sub-batch sequenced for after xStocks UI sprint closes. Open follow-up: `mean_reversion → oscillator` retag is parked as separate future question. **§10c.7** xstock data-volume actuals — observed 12 GB/month for `xstock_spot_ticker_snap` (146 rows/sec WS feed), higher than B75 implicit forecast. Cost-tracking: ~$29/mo on Supabase Pro at current 40 GB allocation, vs B75 projection ~$26/mo. Within tolerance, not a plan-change trigger. Two action items: early-June check-in that first 30-day b75-retention-sweep cycle activates on May partitions; new standing rule that every new asset class ships with a 30-day data-volume actuals row appended to §10c.7 so future tier-storage retunes have empirical inputs. |
 | _(append rows here at every batch close, plus any mid-batch finding that changes the plan)_ | | |
 
 ---
