@@ -17,23 +17,18 @@
 
 ---
 
-## TEMPORARY MAINTENANCE RULES (xStocks UI sprint — remove when ALL open B-NEW items closed)
+## CURRENT STATE — 2026-05-14 (BATCH_82 CLOSED + xStocks UI sprint data/UI fixes all shipped, PM2 #282)
 
-**Rule 1 — `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` discipline:** all-time changelog. Every fix → row. Every Kyle-raised issue → new B-NEW-N. One-by-one workflow.
-**Rule 2 — `ASSET_CLASS_ONBOARDING_WORKFLOW.md` discipline:** STANDING RULES only. Trial-and-error history lives in batch completion reports + xstocks tracker.
-**Rule 3 — Update both files in the same session you ship a fix.**
+**xStocks diagnostic tab data/UI sprint — FULLY CLOSED 2026-05-14.** All three data/UI items shipped + verified end-to-end on staging:
 
-Remove these when all B-NEW items in tracker Open Items closed AND Layer-3 calibration moved to its own batch.
-
----
-
-## CURRENT STATE — 2026-05-14 (BATCH_82 CLOSED + B-NEW-31 + B-NEW-14 shipped, PM2 #280)
-
-**B-NEW-14 SHIPPED 2026-05-14** (commits `3e17ff31e` + `b5b057161`, PM2 #280). Re-implemented `max_bid_ask_spread` as a peer global filter on xstock_spot. Mirrors crypto's `fx5-scanner.ts:1037-1053` + `market-scanner.ts:775` pattern — crypto gets bid/ask inline from live Kraken ticker payload; xstock reads them from the archived snap row (same upstream Kraken payload, different transport). The previous May 12 revert was triggered by a "130× slowdown" claim that turned out to be a measurement artifact — live speed test 2026-05-14 confirmed adding bid/ask to the snap SELECT is functionally free (40-43ms with or without on 25-75 symbol IN-clauses; `(symbol, captured_at)` index covers the read and output projection doesn't change the plan). **Implementation:** scanner.ts SELECT + per-row spread compute with sentinel -1 for null/zero/inverted bid-ask; threaded through `evaluateXstockPairForVTS` as optional positional param (back-compat with existing pattern-filter tests); read by BOTH `evaluateXstockGlobalFilter` + `evaluateXstockPatternFilter` against their own pool's `max_bid_ask_spread` threshold (both = 3.00 in DB). routes.ts pattern-side `failed_spread` surfaced symmetric with quant; leftover B79.0m.b2 `applicable.failed_spread: false` N/A-override removed. **Verification end-to-end:** threshold tightened to 0.05% temporarily → 16/21 quant + 7/12 pattern rejections; reverted to 3% → 1 rejection per cycle (EWS/USD-class illiquid ETFs). UI verified via Claude-in-Chrome: Max Spread row renders real numbers on both Quant + Pattern columns (Last Scan = 0/0/0 when no illiquid in rotation; 24h rolling = 1/1/2 accumulated). **Bonus same commit:** TabsList in machine-learning.tsx gains `flex-wrap h-auto` — tab strip now wraps onto multiple rows on narrow viewports.
+- **B-NEW-31 (commit `3e7a7ccbd`, PM2 #276):** Header row + first column frozen on Open + Closed Simulated Trades tables. Sticky positioning with z-index layering (z-30 top-left corner, z-20 thead, z-10 body first-col). Active-trading tables explicitly out of scope per Kyle — Phase 19.
+- **B-NEW-14 (commits `3e17ff31e` + `b5b057161`, PM2 #280):** max_bid_ask_spread peer global filter on xstock_spot. Mirrors crypto's pattern semantically — crypto reads bid/ask from live Kraken ticker payload, xstock reads them from archived snap row (same upstream Kraken payload). Previous "130× slowdown" revert was a measurement artifact; live speed test confirmed adding bid/ask to the SELECT is 40-43ms either way. Tab strip wrap bonus shipped same commit.
+- **B-NEW-TZ (commit `82325e27b`, PM2 #281):** User timezone setting actually persists + renders. Surfaced by Kyle mid-sprint; bundled with the diagnostic-tab work. PUT /api/settings was 410-dead (deprecation over-corrected); GET never returned timezone (built from buildSettingsFromGuardrails which omitted it). Fix: GET also fetches users.timezone; PUT accepts allow-listed { timezone } with Intl validation and writes users.timezone via storage.updateUser. Kyle's account set to Europe/Warsaw; top-bar verified showing "Local Time: GMT+2".
+- **B-NEW-21 (commit `19de3bb4f`, PM2 #282):** `/api/xstocks/freshness` rewritten — `unnest + LATERAL JOIN` per symbol driving the (symbol, captured_at) index. 13.8s → 88ms (157× speedup). Note: the visible per-pair Fresh-Tick Latency UI panel was removed from xstocks-tab.tsx on 2026-05-12 as a workaround for the timeout; endpoint now safe to consume but re-enabling the visible panel is a separate UI decision pending Kyle's call.
 
 **Plain-language summaries to Kyle (Kyle directive 2026-05-14)** — added to project CLAUDE.md §1 + §11 + Langston's `/home/langston/CLAUDE.md` §2. All Kyle-facing summaries are plain English now: no function names, file paths, code snippets, SQL, table/column names, or framework jargon. Reference exemplar: B-NEW-14 / B-NEW-21 explanations 2026-05-14. CC↔Langston exchanges stay technical at whatever depth best gets the outcome — bidirectional, no constraint either way.
 
-**B-NEW-31 SHIPPED 2026-05-14** (commit `3e7a7ccbd`, PM2 #276). Header row + first column frozen on both Open + Closed Simulated Trades tables (`sticky top-0 z-20` on thead + `sticky left-0 z-30` on top-left corner + `sticky left-0 z-10` on body first-col cells; outer container `overflow-auto max-h-[calc(100vh-13rem)]`). Active-trading tables explicitly out of scope per Kyle — Phase 19.
+**Open xStocks tab items remaining = LAYER-3 CALIBRATION ONLY** (deferred to Phase 24 backfill calibration batch per Kyle directive): B-NEW-15 (DI rejection on reversal/oscillator), B-NEW-16 (Trend + Breakout IMF threshold differentiation), B-NEW-18 (regime + family classification calibration), L3-NEW-1 (no_pattern_detected + family_filter_mismatch investigation). Data/UI sprint complete — calibration work begins after Phase 24 archived data backfill.
 
 ## EARLIER — BATCH_82 (still in 24h forward-watch window, PM2 #275, deploy_timestamp 2026-05-14T11:28:24Z)
 
