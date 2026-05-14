@@ -1,10 +1,21 @@
 # BATCH_82 — xstock_spot ablation + calibration data path repair
 
-**Status:** DRAFT (rev 1) — pending Langston design review
-**Author:** Claude Code, 2026-05-13
+**Status:** DRAFT (rev 2) — Langston design review concur 2026-05-14 (Q1/Q2/Q3/Q4 + concerns 1-4; concern 5 push-back resolved — INSTRUCTIONS.md is legacy per project CLAUDE.md §4)
+**Author:** Claude Code, 2026-05-13 (rev 1) → 2026-05-14 (rev 2)
 **Predecessor:** B-NEW-28 in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` (graduated to a numbered batch per Kyle directive 2026-05-13)
-**Blast radius:** 4 services + 2 DB tables + 2 UI components
+**Blast radius:** 4 services + 2 DB tables + 2 UI components + ReplayContext type tightening
 **Workflow path:** full 11-step (Kyle directive 2026-05-13 — "please go through the full workflow")
+
+## REV HISTORY
+
+- **rev 1 (2026-05-13):** initial scope draft. Sent to Langston.
+- **rev 2 (2026-05-14):** Langston design review applied:
+  - Obj 1 — `emitAblationRecord(assetClass)` REQUIRED parameter, NO default (Q1 concur).
+  - Obj 2 — `ReplayContext.assetClass: AssetClass` non-nullable. Drop `??` fallback at BOTH `exit-strategy-replay-service.ts:264` AND `:294` (the line-294 OHLC-fetch fallback shipped in B79.0m.b2 was the same anti-pattern). Update all `replayAndPersist` callers.
+  - Obj 4 — empty-state copy split per-section (calibration triggers from factor-replay, not trade-close) + render `ASSET_CLASS_REGISTRY.displayName` ("xStock Spot") not raw enum (`xstock_spot`).
+  - §6 risk analysis rewritten to match REQUIRED+no-default decision (was contradictory in rev 1).
+  - INSTRUCTIONS.md / batch-zip packaging dropped from completion checklist — legacy pre-Clone-Repo workflow per project CLAUDE.md §4.
+  - Pre-audit obligations (concerns 1-4 + Q3 partition/Drizzle gotchas) added to §5 Step-2 row.
 
 ---
 
@@ -31,10 +42,10 @@ This is the **5th instance** of the crypto-first / asset-class-lost pattern (aft
 
 | # | Objective | Verification gate |
 |---|---|---|
-| 1 | Thread `assetClass` parameter through `emitAblationRecord()` signature. Remove hardcode at `factor-ablation-emitter.ts:236`. Update 2 caller sites (`signal-orchestrator.ts:959`, `vts-runner.ts:1794`) to pass the correct asset class. | `INSERT` rows on `regime_factor_alternates` for xstock pairs show `asset_class='xstock_spot'` post-deploy (DB query) |
-| 2 | Replace hardcoded `'crypto_spot'` SQL literal at `exit-strategy-replay-service.ts:264` with `ctx.assetClass ?? 'crypto_spot'`. Threading already exists on `ReplayContext` (line 294 uses it for OHLC source); replay-INSERT was the orphan. | `INSERT` rows on `exit_strategy_alternates` for closed xstock trades show `asset_class='xstock_spot'` post-deploy |
-| 3 | Add 2 composite DB indexes via Drizzle migration: <br/>(a) `CREATE INDEX CONCURRENTLY idx_exit_strategy_alternates_asset_created ON exit_strategy_alternates (asset_class, created_at DESC)` <br/>(b) `CREATE INDEX CONCURRENTLY idx_regime_factor_alternates_asset_evaluated ON regime_factor_alternates (asset_class, evaluated_at DESC) WHERE replay_completed_at IS NOT NULL` | EXPLAIN on the xstock variant queries shows `Index Cond: (asset_class = 'xstock_spot' ...)` instead of `Filter:`. Endpoint response time < 5s for xstock both endpoints. Crypto endpoint times unchanged (regression-tested). |
-| 4 | UI empty-state branch in `ExitStrategyAblationSection` + `FactorCalibrationSection` (`client/src/pages/analytics.tsx`): when `totalTrades===0 && variants.length===0` (ablation) or `factors.length===0 && totalReplayed===0` (calibration), render an explicit empty-state panel with text "No <asset_class> data yet — accumulating. Panel will populate as closed trades are written." | Visual: load `/machine-learning` with a fresh xstock_spot universe (no closed xstock trades) → both panels show the empty-state text, NOT "Loading..." |
+| 1 | **REQUIRED, no default.** Thread `assetClass: AssetClass` as a REQUIRED parameter on `emitAblationRecord()` signature — NO default value (silent-fallback pattern is what caused B-NEW-20/22/25/26/28; type-system enforcement is the structural fix). Remove hardcode at `factor-ablation-emitter.ts:236`. Update ALL caller sites (`signal-orchestrator.ts:959`, `vts-runner.ts:1794`, plus any test/script callers surfaced by pre-audit grep) to pass the correct asset class. | `INSERT` rows on `regime_factor_alternates` for xstock pairs show `asset_class='xstock_spot'` post-deploy (DB query). Compiler enforces caller passes `assetClass` — no `??` fallback path. |
+| 2 | **Non-nullable threading, drop fallback at BOTH sites.** Tighten `ReplayContext.assetClass: AssetClass` to non-nullable (currently optional with `?? 'crypto_spot'` fallback). Drop the `??` fallback at BOTH `exit-strategy-replay-service.ts:264` (replay INSERT) AND `:294` (OHLC-fetch — same anti-pattern shipped in B79.0m.b2). Update all `replayAndPersist` callers (enumerated in pre-audit) to pass `assetClass` explicitly. | `INSERT` rows on `exit_strategy_alternates` for closed xstock trades show `asset_class='xstock_spot'` post-deploy. No `??` fallback anywhere in replay-service. |
+| 3 | Add 2 composite DB indexes for partitioned tables. **Pre-audit MUST enumerate partitions for both tables and document the per-partition `CREATE INDEX CONCURRENTLY` + parent-table non-concurrent `CREATE INDEX` adoption pattern** (PG doesn't support `CONCURRENTLY` on partitioned parents). Drizzle migration MUST disable transaction wrapping (`CONCURRENTLY` cannot run inside BEGIN/COMMIT). Index definitions: <br/>(a) `(asset_class, created_at DESC)` on `exit_strategy_alternates` <br/>(b) `(asset_class, evaluated_at DESC) WHERE replay_completed_at IS NOT NULL` on `regime_factor_alternates` | EXPLAIN on the xstock variant queries shows `Index Cond: (asset_class = 'xstock_spot' ...)` instead of `Filter:`. Endpoint response time < 5s for xstock both endpoints. Crypto endpoint times unchanged (regression-tested). |
+| 4 | UI empty-state branch in `ExitStrategyAblationSection` + `FactorCalibrationSection` (`client/src/pages/analytics.tsx`). Different copy per panel (different data-source triggers): <br/>**Ablation** (when `totalTrades===0 && variants.length===0`): `"No {displayName} data yet — accumulating. Panel populates as closed trades complete the ablation replay window."` <br/>**Calibration** (when `factors.length===0 && totalReplayed===0`): `"No {displayName} data yet — accumulating. Panel populates as the factor replay pipeline evaluates new signals."` <br/>`{displayName}` is `ASSET_CLASS_REGISTRY[assetClass].displayName` (e.g., "xStock Spot"), NOT the raw enum (`xstock_spot`). | Visual: load `/machine-learning` with a fresh xstock_spot universe (no closed xstock trades + no recent factor evaluations) → both panels show their respective empty-state copy with human-readable asset class label, NOT "Loading..." |
 | 5 | **NO BACKFILL** — historical mis-tagged rows (2026-05-11 → BATCH_82 deploy) remain in the `crypto_spot` bucket. Per Kyle directive 2026-05-13, fresh-start posture: panels begin populating from deploy time forward. Calibration windows are LOCKED through 2026-05-15 per MEMORY no-touch fence; no decisions are being made off this data yet. | Note documented in completion report + governance docs. No DB UPDATE statements. |
 | 6 | Governance: update SIM (file-level dependency map) for both writer changes + both new indexes. Update System Manual for asset-class threading invariant. Update RUNNING_ISSUES, BATCH_CATALOG, PHASE_HISTORY, MEMORY (both copies + Langston Hetzner). Update CHANGES_AND_FIXES with the fix entries. | Completion report lists every governance file changed |
 | 7 | All 4 CI checks GREEN (TypeScript, Test Suite, Build, Docker Build). Phase 16 §16.7 pre-existing failures NOT addressed here; will not be made worse. | CI status on the BATCH_82 merge commit |
@@ -75,7 +86,7 @@ This is the **5th instance** of the crypto-first / asset-class-lost pattern (aft
 | Step | Action | Owner | Duration estimate |
 |---|---|---|---|
 | 1 | This scope doc — Langston design review (file-first per §6.5.0) | CC → Langston | ~30 min Langston |
-| 2 | Pre-audit `BATCH_82_PRE_AUDIT.md` — SIM consultation, blast-radius doc per CLAUDE.md §9 | CC → Langston | ~1h |
+| 2 | Pre-audit `BATCH_82_PRE_AUDIT.md` — SIM consultation, blast-radius doc per CLAUDE.md §9. MUST cover: (a) exhaustive `grep -rn 'emitAblationRecord\b'` + `grep -rn 'replayAndPersist\b'` including server/, scripts/, tests/ — every caller listed; (b) partition enumeration on `exit_strategy_alternates` + `regime_factor_alternates` with the per-partition `CREATE INDEX CONCURRENTLY` + parent-table non-concurrent adoption plan; (c) Drizzle migration must disable txn-wrap (CONCURRENTLY cannot run in BEGIN/COMMIT); (d) negative + regression verification gates (NO new crypto_spot rows for xstock pairs post-deploy; crypto_spot rows still tag correctly); (e) T+1h / T+6h / T+24h spot-check schedule; (f) downstream-consumer audit: enumerate ML training pipeline + weekly digest jobs + training-data export scripts that read these two tables, check for implicit `WHERE asset_class='crypto_spot'` filters that might break or silently exclude new xstock rows. | CC → Langston | ~1.5h |
 | 3 | Implementation in 3 sub-phases: <br/>3.a writer-side asset_class threading (Obj 1 + 2) <br/>3.b DB index migration (Obj 3) <br/>3.c UI empty-state (Obj 4) | CC | ~2h |
 | 4 | Code review diff (Langston reads `git diff` BEFORE push) | Langston | ~30 min |
 | 5 | GitHub push + CI (all 4 green) | CC | 5-10 min |
@@ -88,10 +99,11 @@ This is the **5th instance** of the crypto-first / asset-class-lost pattern (aft
 
 ## 6. RISK ANALYSIS
 
-- **Writer-side change (Obj 1):** Medium risk. `emitAblationRecord` is on the hot path of every VTS evaluation. Signature change must be backward-compatible (caller-omitted assetClass should not blow up). Mitigation: make the parameter optional with `'crypto_spot'` default → existing callers continue to work + new xstock callers pass `'xstock_spot'`. Then update vts-runner + signal-orchestrator in same commit so default is never relied upon.
-- **DB index creation (Obj 3):** Low risk if `CREATE INDEX CONCURRENTLY` (non-blocking). Both target tables are non-trivial (23k / 39k rows) but small enough that index build completes in seconds. Mitigation: deploy during low-traffic window; have rollback SQL ready (`DROP INDEX CONCURRENTLY ...`).
-- **Replay-service change (Obj 2):** Low risk. ctx.assetClass already exists; just feeding it through to the INSERT.
-- **UI empty-state (Obj 4):** Low risk. Pure render-path branch; no data flow change.
+- **Writer-side change (Obj 1):** Medium risk. `emitAblationRecord` is on the hot path of every VTS evaluation. **Mitigation is type-system enforcement, not silent-fallback.** Per Langston rev 1 review concur 2026-05-14 + per §5 #15 NO PATCHES + §11 no-silent-fallbacks: the new `assetClass: AssetClass` parameter is REQUIRED (no default). All known callers (signal-orchestrator.ts:959, vts-runner.ts:1794, plus any surfaced by pre-audit grep) MUST be updated in the same commit. Compile fails if any caller missed → the type system is the gate that prevents incident #6. This is the structural fix; the rev-1-draft "optional with crypto_spot default" mitigation was the silent-fallback anti-pattern itself and is rejected.
+- **Replay-service change (Obj 2):** Medium risk (NOT low — upgraded post-review). Same logic as Obj 1: drop `??` fallback. `ReplayContext.assetClass` becomes non-nullable. All `replayAndPersist` callers (enumerated in pre-audit) update in same commit. Compile fails if missed → no silent re-introduction of the crypto_spot tag.
+- **DB index creation (Obj 3):** Low risk on the SQL side IF the partition pattern is correct. Real risk is operational: <br/>(a) Drizzle wraps migrations in BEGIN/COMMIT by default — `CREATE INDEX CONCURRENTLY` fails inside a txn block. Migration MUST be marked txn-disabled (Drizzle's `// breakpoint` directive or raw SQL outside the migration runner). <br/>(b) PostgreSQL does NOT support `CREATE INDEX CONCURRENTLY` on a partitioned PARENT — must per-partition CONCURRENTLY then non-concurrent on parent (which adopts the existing child indexes). Pre-audit enumerates partitions for both tables and locks the exact DDL sequence. Rollback SQL ready (`DROP INDEX CONCURRENTLY ...` per partition + non-concurrent drop on parent).
+- **UI empty-state (Obj 4):** Low risk. Pure render-path branch; no data flow change. Per-section copy split (calibration triggers from factor-replay, not trade-close) + human-readable displayName label.
+- **Downstream-consumer risk (added per Langston concern 4):** Unknown until pre-audit completes. If a ML training pipeline / weekly digest / training-data export script has an implicit `WHERE asset_class='crypto_spot'` filter, the writer fix correctly tags new xstock rows BUT a reader silently filters them out OR breaks on the new tag. Pre-audit enumerates consumers + maps each one's tag-handling.
 
 ## 7. ROLLBACK PLAN
 
@@ -110,3 +122,4 @@ This is the **5th instance** of the crypto-first / asset-class-lost pattern (aft
 ## CHANGELOG
 
 - **rev 1 (2026-05-13):** initial draft. Pending Langston design review.
+- **rev 2 (2026-05-14):** Langston design review concur (Q1/Q2/Q3/Q4 + concerns 1-4). Concern 5 (INSTRUCTIONS.md / batch zip) push-back resolved — confirmed legacy per project CLAUDE.md §4, retired. Revisions applied to Obj 1, 2, 4 + §5 (pre-audit expansion) + §6 (risk analysis rewritten — REQUIRED+no-default is the structural fix, not the silent-fallback mitigation written in rev 1).
