@@ -5,6 +5,8 @@
 > **Origin:** picks up where `MULTI_ASSET_VTS_EXPANSION_PLAN.md` leaves off. That doc covered the structural multi-asset wiring (B78 modularization → B79 xStock observation-mode → B80 crypto-perp → B81 ranking parity). This doc covers the calibration work that was deferred during Phase 24 ship and is now sequenced as its own multi-batch chain.
 > **Forward reference from MULTI_ASSET_VTS_EXPANSION_PLAN.md:** see §4 sequencing table — Phase 24 calibration follow-on items moved into this plan.
 > **Process trail:** two CC sessions converged on plan structure; Langston design review (v1 → round 1 → v2 → round 2 ACK) completed in single session 2026-05-15. Paper trail under `Claude Comms and Packages/Cross-Session Briefs/` (5 docs) and `Claude Comms and Packages/Langston Design Asks/` (4 docs).
+>
+> **Phase 0 sequencing dependency (Kyle directive 2026-05-15):** Phase 0 does NOT start immediately. It starts AFTER **crypto factor calibration finalization + B67.5 ship.** May 15 was the planned hard fence on crypto's calibration cohort per `MULTI_ASSET_VTS_EXPANSION_PLAN.md`; acting on accumulated lever-ablation evidence before opening xStock work avoids the framework being applied to xStocks while crypto's factor set is unfinalized. The consumer-gate pattern B67.5 builds also becomes inherited infrastructure for xStock Phase E. Realistic insert: 3-5 days at the front of the calibration plan window (full timeline 38-50 days nominal / 58-70 days conservative as a result).
 
 ---
 

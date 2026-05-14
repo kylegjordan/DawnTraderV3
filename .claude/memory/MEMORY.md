@@ -17,7 +17,11 @@
 
 ---
 
-## CURRENT STATE — 2026-05-15 (xStock Calibration Plan LOCKED, PM2 #282)
+## CURRENT STATE — 2026-05-15 (xStock Calibration Plan LOCKED + sequencing update, PM2 #282)
+
+**SEQUENCING ORDER (Kyle directive 2026-05-15):**
+1. **Crypto factor calibration finalization + B67.5 ship FIRST** (3-5 days). May 15 was the hard fence on crypto's calibration cohort per MULTI_ASSET_VTS_EXPANSION_PLAN.md; act on accumulated lever-ablation evidence before opening new asset-class work.
+2. **xStock Calibration Plan Phase 0 corp-actions audit SECOND**, after B67.5 ships clean.
 
 **xStock Calibration Plan v2 LOCKED 2026-05-15.** Canonical living plan now lives at `1-system-manual/XSTOCK_CALIBRATION_PLAN.md`. Picks up where `MULTI_ASSET_VTS_EXPANSION_PLAN.md` leaves off (items 3 / 4 / 6 from that doc's §4 sequencing table). Process: two CC sessions converged on plan structure; Langston two-round design review (round 1 substantive + 9-question answers + 8 corner-case scrutiny + timeline pushback → v2 + round 2 ACK with 3 inline clarifications: F-NOW migration scope, crypto-friction-review batch added, DBS backfill 7-day hard floor).
 
@@ -40,19 +44,20 @@
 
 ## NEXT SESSION PLAN (post-compaction — immediate next step)
 
-**Priority 1 — Begin Phase 0 corporate-actions audit.** First code-touching batch of the calibration plan. Three sub-tasks:
-- 0.1 corporate actions verification (5-step procedure in plan §1 Phase 0)
-- 0.2 dividend ex-dates verification (4-step procedure)
-- 0.3 halts/circuit breakers verification (4-step procedure)
-Gate: if any surface real bugs requiring code change, Phase 0 becomes hotfix batch BEFORE Phase A. If clean → proceed to A.1 DBS design call (which runs in parallel — start drafting the A.1 scope while Phase 0 verifications run).
+**SEQUENCING UPDATE 2026-05-15 (Kyle directive):** Crypto factor calibration finalization + B67.5 ship BEFORE xStock Calibration Plan Phase 0. Reasoning: May 15 was the planned hard fence on crypto's calibration cohort per MULTI_ASSET_VTS_EXPANSION_PLAN.md. Walking past the fence without acting on the two-plus weeks of accumulated lever-ablation evidence would be incoherent. Plus: the consumer-gate pattern B67.5 builds (downstream gate that reads the calibrated confidence number) becomes inherited infrastructure for xStock Phase E; doing xStocks first means building xStock factor calibration against an unused number.
 
-**Priority 2 — A.1 DBS design call.** Parallel to Phase 0 once Phase 0 launches. Scope doc + Langston design review. Strong opening recommendation: sector-classification with SPY fallback + index-self handling + ADR caveat + per-sector floor 3-5 / global 30.
+**Priority 1 — Crypto factor calibration finalization + B67.5 batch.**
+1. **Pull the analysis.** Run `computeFactorCalibration` on rolling_30d window; verify decision-grade gates per factor (n ≥ 150/bucket, spread ≥ 7pp, p < 0.05). Get per-lever verdict: positive lift / negative lift / decorative / still-accumulating.
+2. **Decide factor set.** For each of the 8 levers (b67_1 macro modifier, b67_2 phase preference, b67_4 outcome feedback, b68_1 multi-tf agreement, b68_2 volume regime, b68_3 pair correlation, b68_4 freshness, b68_5 DBS sustainability): keep / retune / drop / wait-for-more-data. Iterate to consensus with Langston via file-first protocol.
+3. **Design B67.5 gate.** Currently floor of 0.45 means confidence never goes low enough to gate a trade. B67.5 = the consumer gate that actually rejects based on calibrated confidence. Design call needs Langston review. Probably needs Kyle decision on the rejection threshold.
+4. **Implement + ship B67.5.** Scope doc → pre-audit → Step 3 code → Langston review → ship → UI verify → completion report.
+5. **Governance.** Update relevant docs; close the calibration cohort fence; update MEMORY before xStock Phase 0 starts.
 
-**Priority 3 — Out of scope this session, sequenced later:**
-- Phase 16 §16.7 Test Suite Recovery (~60 pre-existing CI failures, RED baseline since 2026-05-12)
-- §10d Observability backfill batch (exit-cycle health dashboard + multi-API rate-limit dashboards) — moved to Phase 16 per Kyle directive 2026-05-14
-- Oscillator family removal — moved to Phase 16 per Kyle directive 2026-05-14
-- Crypto-perp into VTS (B80) — moved to post-launch per Kyle directive 2026-05-14
+Realistic time: 3-5 days, possibly longer if data is inconclusive (insufficient samples in some buckets → "keep accumulating N more days" rather than "finalize today"). If inconclusive, may need to start xStock Phase 0 in parallel anyway and finalize crypto on a slightly later date.
+
+**Priority 2 — xStock Calibration Plan Phase 0 corporate-actions audit.** Sequenced AFTER crypto B67.5 ships. First code-touching batch of `1-system-manual/XSTOCK_CALIBRATION_PLAN.md`. Three sub-tasks (0.1 splits / 0.2 dividends / 0.3 halts) per the plan §1 Phase 0 procedures. Gate: if any surface real bugs, Phase 0 becomes hotfix batch before Phase A. A.1 DBS design call runs in parallel.
+
+**Priority 3 — Out of scope this session:** Phase 16 §16.7 test suite recovery; §10d observability backfill; oscillator family removal; B80 crypto-perp (all sequenced after the xStock calibration plan completes).
 
 ---
 
