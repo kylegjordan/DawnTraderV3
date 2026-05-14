@@ -66,6 +66,10 @@ export interface PatternFilterResult {
   metrics: { LQ: number; VolNoise: number; DI: number | null };
 }
 
+// B-NEW-14 (2026-05-14): expose the pattern-side counter set so eval-cycle's
+// merge has the same shape as the quant-side counters. Pattern path adds
+// `failed_max_bid_ask_spread` here for the panel's Pattern column.
+
 /**
  * Compute Directional Integrity score from OHLC bars. Same proxy as
  * imf-evaluator.ts (lifted to keep this module self-contained — could be
@@ -107,6 +111,9 @@ export async function evaluateXstockPatternFilter(
   volume24hUSD: number,
   mode: 'paper' | 'live',
   preloadedConfig?: any,
+  // B-NEW-14 (2026-05-14): bid/ask spread % from latest snap row.
+  // Sentinel -1 = "skip check" (back-compat with tests + cold-start).
+  bidAskSpreadPct: number = -1,
 ): Promise<PatternFilterResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -118,6 +125,7 @@ export async function evaluateXstockPatternFilter(
     failed_max_price: 0,
     failed_min_volume: 0,
     failed_min_history: 0,
+    failed_max_bid_ask_spread: 0,
     failed_lq: 0,
     failed_vn: 0,
     failed_di: 0,
@@ -205,6 +213,22 @@ export async function evaluateXstockPatternFilter(
     return {
       passed: false,
       failureReason: `pattern_history_${ohlc.length}_lt_60`,
+      counters,
+      perMetric,
+      metrics: { LQ: 0, VolNoise: 0, DI: null },
+    };
+  }
+
+  // max_bid_ask_spread (B-NEW-14, 2026-05-14): peer global filter on the
+  // pattern side. Pattern threshold reads from the pattern config row
+  // (vts_pattern / active_pattern) — DB convention is identical to the
+  // quant-side `active_quant` row. Sentinel -1 = "skip check".
+  const patternMaxBidAskSpread = parseFloat(config.maxBidAskSpread ?? '0');
+  if (patternMaxBidAskSpread > 0 && bidAskSpreadPct >= 0 && bidAskSpreadPct > patternMaxBidAskSpread) {
+    counters.failed_max_bid_ask_spread = 1;
+    return {
+      passed: false,
+      failureReason: `pattern_max_bid_ask_spread_${bidAskSpreadPct.toFixed(3)}_gt_${patternMaxBidAskSpread.toFixed(3)}`,
       counters,
       perMetric,
       metrics: { LQ: 0, VolNoise: 0, DI: null },

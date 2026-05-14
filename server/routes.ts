@@ -7226,6 +7226,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           failed_max_price: pfc.failed_max_price ?? 0,
           failed_min_volume: pfc.failed_min_volume ?? 0,
           failed_history: pfc.failed_min_history ?? 0,
+          // B-NEW-14 (2026-05-14): surface pattern-side spread rejections to
+          // the panel's Pattern column. Symmetric with the quant lane's
+          // failed_max_bid_ask_spread → failed_spread mapping above.
+          failed_spread: pfc.failed_max_bid_ask_spread ?? 0,
           passed_all_filters: pfc.passed_global ?? 0,
         };
       }

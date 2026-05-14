@@ -89,6 +89,17 @@ interface TickerSnapRow extends Record<string, unknown> {
   symbol: string;
   price: string;        // numeric stored as string in pg
   volume24h: string;    // 24h rolling SHARE volume from Kraken ticker; multiply by price for USD
+  // B-NEW-14 (2026-05-14): bid/ask added back to the scan read so the
+  // max_bid_ask_spread global filter has the data it needs. Mirrors
+  // crypto's fx5-scanner.ts:1037-1053 pattern — same architecture, the
+  // xstock feed lands in the snap table instead of arriving inline from
+  // a live Kraken ticker call, but the data shape is identical (Kraken
+  // populates the same fields on both the futures REST endpoint AND the
+  // xstock ticker REST endpoint that the archiver scrapes every minute).
+  // Sentinel handling: null/zero bid or ask → caller maps to -1
+  // bidAskSpreadPct ("skip check") per the global-filter contract.
+  bid: string | null;
+  ask: string | null;
   capturedAt: Date;
 }
 
@@ -331,11 +342,20 @@ class XstockSpotScannerService {
       // old anyway, so wider scans waste time + risk statement timeout on
       // the 13-partition table. 5min window covers any reasonable freshness
       // ceiling future B79.x calibration might pick.
+      // B-NEW-14 (2026-05-14): bid + ask added to the SELECT. Speed test
+      // 2026-05-14 against live staging DB: identical 40-43ms timing with
+      // or without the two extra columns on 25-75 symbol IN-clauses. The
+      // earlier "130× slowdown" report (May 12 revert) was a measurement
+      // artifact, not a real cost — the existing `(symbol, captured_at)`
+      // index covers the read and adding output columns doesn't change
+      // the query plan.
       const result = await db.execute<TickerSnapRow>(sql`
         SELECT DISTINCT ON (symbol)
           symbol::text AS symbol,
           last::text AS price,
           COALESCE(volume_24h, 0)::text AS "volume24h",
+          bid::text AS bid,
+          ask::text AS ask,
           captured_at AS "capturedAt"
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes'
@@ -357,16 +377,33 @@ class XstockSpotScannerService {
       const now = Date.now();
       let freshCount = 0;
       let staleCount = 0;
-      const freshSymbols: Array<{ symbol: string; price: number; volume24hShares: number }> = [];
+      // B-NEW-14 (2026-05-14): freshSymbols carries bidAskSpreadPct per pair
+      // so the eval-cycle's max_bid_ask_spread check has the data it needs.
+      // Spread is computed once here (cheap arithmetic on already-fetched
+      // numbers) rather than re-derived inside the filter.
+      const freshSymbols: Array<{ symbol: string; price: number; volume24hShares: number; bidAskSpreadPct: number }> = [];
       for (const row of rows as TickerSnapRow[]) {
         const lastTickMs = new Date(row.capturedAt).getTime();
         const fresh = await isPairDataFresh(row.symbol, 'xstock_spot', lastTickMs, now);
         if (fresh) {
           freshCount++;
+          // B-NEW-14: spread % from latest snap row. Use the sentinel -1
+          // when bid or ask is null/zero/inverted so the global filter
+          // skips the check rather than rejecting on bad data. Non-negative
+          // values are real measurements the filter compares against the
+          // DB threshold.
+          const bidRaw = row.bid ?? null;
+          const askRaw = row.ask ?? null;
+          const bid = bidRaw !== null ? parseFloat(bidRaw) : NaN;
+          const ask = askRaw !== null ? parseFloat(askRaw) : NaN;
+          const bidAskSpreadPct = (Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0 && ask >= bid)
+            ? ((ask - bid) / ((ask + bid) / 2)) * 100
+            : -1;
           freshSymbols.push({
             symbol: row.symbol,
             price: parseFloat(row.price),
             volume24hShares: parseFloat(row.volume24h ?? '0'),
+            bidAskSpreadPct,
           });
         } else {
           staleCount++;
@@ -389,7 +426,7 @@ class XstockSpotScannerService {
         // redundant Supabase round-trips, saturating the connection pool and
         // dragging cycle time from ~22s to 280s.
         const cycleConfigs = await loadXstockFilterConfigs('paper');
-        for (const { symbol, price, volume24hShares } of freshSymbols) {
+        for (const { symbol, price, volume24hShares, bidAskSpreadPct } of freshSymbols) {
           if (!Number.isFinite(price) || price <= 0) continue;
           const ohlc = await fetchXstockOHLC(symbol, 120);
           if (ohlc.length < 60) continue; // global-filter min-history floor
@@ -404,7 +441,10 @@ class XstockSpotScannerService {
           const volume24hUSD = Number.isFinite(volume24hShares) && volume24hShares > 0
             ? volume24hShares * price
             : 0;
-          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters, cycleConfigs);
+          // B-NEW-14 (2026-05-14): bidAskSpreadPct threaded through to both
+          // quant + pattern global filters for the max_bid_ask_spread check.
+          // -1 sentinel = data unavailable, skip check.
+          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters, cycleConfigs, bidAskSpreadPct);
         }
         // Surface counters to the /api/xstocks/filter-diagnostics endpoint.
         this.diag.lastCycleEvalCounters = cycleCounters;

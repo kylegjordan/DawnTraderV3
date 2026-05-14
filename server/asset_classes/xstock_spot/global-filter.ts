@@ -18,7 +18,17 @@
  *   - max_price             (sanity ceiling)
  *   - min_volume / volume_24h_min  (24h dollar-volume proxy)
  *   - min_history_days      (OHLC history depth)
- *   - max_bid_ask_spread    (bid/ask proxy from snap if available; Layer-1 skip if not present)
+ *   - max_bid_ask_spread    (B-NEW-14, 2026-05-14): bid/ask spread % from
+ *                            the latest ticker snap. Caller measures
+ *                            `((ask - bid) / mid) * 100` from the snap row
+ *                            and passes it as `bidAskSpreadPct`. Sentinel
+ *                            `-1` = "data unavailable, skip check" (back-compat
+ *                            with tests + cold-start). Mirrors crypto's
+ *                            fx5-scanner.ts:1037-1053 + market-scanner.ts:775
+ *                            pattern — same architecture, different feed
+ *                            source (crypto = live Kraken ticker payload;
+ *                            xstock = archived snap row from the same
+ *                            payload).
  *
  * Counters returned per cycle; merged into XstockEvalCycleCounters for the
  * Filter Diagnostics panel.
@@ -43,6 +53,11 @@ export async function evaluateXstockGlobalFilter(
   volume24hUSD: number,
   mode: 'paper' | 'live',
   preloadedConfig?: any,
+  // B-NEW-14 (2026-05-14): bid/ask spread % measured at scan time from the
+  // latest ticker snap row. Sentinel -1 = "data unavailable; skip check"
+  // (back-compat with tests + cold-start when snap has not yet captured
+  // bid/ask for a brand-new symbol).
+  bidAskSpreadPct: number = -1,
 ): Promise<GlobalFilterResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -116,8 +131,20 @@ export async function evaluateXstockGlobalFilter(
     return { passed: false, failureReason: `history_${ohlc.length}_lt_60`, counters };
   }
 
-  // max_bid_ask_spread — Layer-1 starter has no bid/ask in OHLC.
-  // Defer to B79.0m.b2 (feed extension); record as N/A pass for now.
+  // max_bid_ask_spread (B-NEW-14, 2026-05-14): peer global filter — mirrors
+  // crypto's fx5-scanner.ts:1037-1053 + market-scanner.ts:775 pattern.
+  // Caller measures spread% from the snap row; sentinel -1 = "data unavailable
+  // for this pair this cycle, skip check" (cold-start or null bid/ask).
+  // Threshold = 0 disables the gate entirely (DB convention).
+  const maxBidAskSpread = parseFloat(config.maxBidAskSpread ?? '0');
+  if (maxBidAskSpread > 0 && bidAskSpreadPct >= 0 && bidAskSpreadPct > maxBidAskSpread) {
+    counters.failed_max_bid_ask_spread = 1;
+    return {
+      passed: false,
+      failureReason: `max_bid_ask_spread_${bidAskSpreadPct.toFixed(3)}_gt_${maxBidAskSpread.toFixed(3)}`,
+      counters,
+    };
+  }
 
   counters.passed_all_filters = 1;
   return { passed: true, counters };

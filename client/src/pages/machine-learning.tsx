@@ -3477,7 +3477,13 @@ export default function MachineLearningPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex items-center justify-between">
-          <TabsList>
+          {/* B-NEW-14-UI (2026-05-14, Kyle directive): tab strip wraps onto
+              multiple lines when the viewport is narrower than the natural
+              tab-row width. Default shadcn TabsList uses a fixed `h-10` +
+              `inline-flex` (no wrap), which left the last few tabs running
+              off-screen on half-width windows. `flex-wrap h-auto` allows
+              wrapping; the strip still renders as a single row at full width. */}
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="open" className="flex items-center gap-2">
               <Target className="w-4 h-4" />
               Open Trades
