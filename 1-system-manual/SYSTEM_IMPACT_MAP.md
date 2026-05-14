@@ -1765,3 +1765,56 @@ After initial B79.0m.b2 ship, 6 follow-up commits closed Kyle's catalog of 9 dia
 - **Modify a strategy's lane eligibility** → edit `lane-eligibility.ts`. Pattern lane reserved for `stratFamily === 'pattern'` only; family lanes admit pattern + family + hybrid (per HYBRID_FAMILY_ELIGIBILITY) + multi-family (per MULTI_FAMILY_ELIGIBILITY).
 - **Add UI consumer of a per-lane counter** → the endpoint surfaces them under `vtsEvaluation.<field>` and `lastCycleVtsEval.<field>`. Pattern-lane fields available: `patternPairsEvaluated`, `patternStrategyEvaluations`, `patternStrategyNulls`, `patternSignalsGenerated`, `patternSignalsRejected`. Quant-lane equivalents with `quant` prefix.
 - **Compute family-mismatch %** → divide `nullReasons.familyFilterMismatch` by `vtsEvaluation.familyMismatchDenominatorTotal` (NOT by `strategiesEvaluated`).
+
+---
+
+## Rename invariants (added 2026-05-14 — B83 post-mortem governance)
+
+**Why this section exists.** BATCH_80 Phase 1 (commit `8ace0b859`, 2026-05-13) renamed `getTrailingState(symbol)` → `getTrailingState(tradeId)` in `server/services/vts-runner.ts`. The first for-loop body was updated correctly (variable name `tradeId` matches the destructure). The second for-loop body — `for (const { id, trade, exitPrice, exitReason } of tradesToClose)` — had its three `getTrailingState`/`clearTrailingState`/error-log references renamed to `tradeId` too, but the destructured variable was named `id`, not `tradeId`. Result: `ReferenceError: tradeId is not defined` every cycle that had ≥1 trade to close. ~24 hours of silent pipeline stall. Fixed in commit `b4cde6b85` (B83 hotfix, 2026-05-14) with three single-character changes.
+
+TypeScript didn't catch it because `tradeId` is a valid identifier at module-level scope elsewhere in the file (the first for-loop's `for (const [tradeId, trade] of openVirtualTrades)` binding). The compiler resolved the references against module scope rather than block scope.
+
+**Standing rule (per Kyle directive 2026-05-14).** Any refactor that renames an identifier referenced across multiple call sites MUST:
+
+1. **Inventory step (mandatory).** Before the rename diff is committed, run a repo-wide grep for the OLD identifier:
+   ```
+   git grep -nE '\bOLD_NAME\b' -- '*.ts' '*.tsx' '*.js'
+   ```
+   Capture the full list. Create a file at `Claude Comms and Packages/Change Lists/rename-inventory-<batch-id>.md` listing every match with: file, line number, current code, decision (RENAMED / KEPT-AS-OLD-WITH-REASON / REMOVED).
+
+2. **Diff alignment.** No call site may be left undecided. For each row:
+   - RENAMED: the diff must change OLD → NEW at that line.
+   - KEPT-AS-OLD-WITH-REASON: stay as OLD, but the reason (e.g., "back-compat shim", "string literal in error message", "test fixture name") must be written next to the row.
+   - REMOVED: the call site is deleted in the same diff.
+
+3. **Post-rename verification.** After applying the rename diff:
+   ```
+   git grep -nE '\bOLD_NAME\b' -- '*.ts' '*.tsx' '*.js'
+   ```
+   The output must match ONLY the rows marked KEPT-AS-OLD-WITH-REASON. Any other match is a missed rename.
+
+4. **Langston code-review gate.** Code-review pass must verify the inventory file vs the actual diff. Discrepancy blocks merge.
+
+5. **CI verification (future B83-followup batch).** Wire a CI step that runs the grep + compares against the inventory file. Currently manual; tracked in `MULTI_ASSET_VTS_EXPANSION_PLAN.md` §10d.5.
+
+### Known cross-module identifiers (starter inventory)
+
+When renaming any of these, expect call sites across the listed modules. Run a fresh grep before each rename — list below is a starting reference, not exhaustive.
+
+| Identifier | Module of origin | Known consumers (sample — verify via grep) |
+|---|---|---|
+| `getTrailingState`, `clearTrailingState`, `initializeTrailingState` | `server/services/trailing-exit-controller.ts` | `vts-runner.ts` (2 for-loops), `paper-execution-engine.ts`, `tec-evaluator.ts` |
+| `evaluateTECExit`, `TECExitInput`, `TECExitDecision` | `server/services/tec-evaluator.ts` | `vts-runner.ts`, `paper-execution-engine.ts` |
+| `emitAblationRecord`, `FactorAlternate`, `RegimeDecision` | `server/services/factor-ablation-emitter.ts` | `signal-orchestrator.ts`, `vts-runner.ts`, all `server/core/metrics/*.ts` files |
+| `resolveAssetClass`, `safeResolveAssetClass`, `ASSET_CLASSES`, `AssetClass` | `shared/asset-classes.ts` | both server/ and client/ trees — extensive consumer list |
+| `XSTOCK_SPOT_REGISTRY`, `XSTOCK_SPOT_SYMBOLS`, `getXstockName` | `shared/asset-classes.ts` (post-B-NEW-30) | scanner, routes, freshness endpoint, UI tabs |
+| `OpenVirtualTrade`, `openVirtualTrades` Map | `server/services/vts-runner.ts` | many internal helpers in same file + persistence layer |
+| `priceCache`, `subscribe`, `getBatch`, `getCachedPrice`, `snapshot` | `server/services/price-cache.ts` | vts-runner exit cycle, FX5 scanner, routes diagnostics |
+
+**Note on for-loop iteration variables (B83 specific lesson).** Block-scoped iteration variables (`for (const x of arr)` or `for (const { y } of arr)`) DO NOT participate in module-scope identifier visibility. If the rename touches identifiers inside a for-loop body, **the variable used inside the loop body must match the loop's destructure pattern explicitly.** Don't rely on TypeScript scope inference — TS will silently resolve to an outer-scope binding with the same name, masking the bug until runtime.
+
+### "If I Change X, Check Y" — rename-inventory additions
+
+- **Rename a function exported from `services/`** → run the grep + inventory protocol above BEFORE committing the rename diff.
+- **Rename a for-loop iteration variable** → audit the entire loop body for references to the OLD name. Block-scope is unforgiving.
+- **Rename a destructured field** (`const { a } of arr` → `const { b } of arr`) → audit the loop body the same way; references to the OLD field name will compile (matching outer-scope identifiers) but throw at runtime.

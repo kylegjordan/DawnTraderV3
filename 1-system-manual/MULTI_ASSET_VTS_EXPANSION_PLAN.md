@@ -582,6 +582,105 @@ Kyle directive: discussions get forgotten when implementation happens 3-4 phases
 
 ---
 
+## §10d. Observability backfill batch (added 2026-05-14 — Kyle directive after B83 pipeline-stall incident)
+
+**Context.** BATCH_80 Phase 1 (commit `8ace0b859`, 2026-05-13) introduced a `ReferenceError: tradeId is not defined` in the second for-loop of `resolveOpenVirtualTrades` (server/services/vts-runner.ts:2349, :2570, :2572). The refactor renamed `getTrailingState(symbol)` → `getTrailingState(tradeId)` correctly in the first loop, but the second loop destructures the iteration variable as `id` — so the three rename sites in that loop body referenced an out-of-scope identifier. Every cycle where ≥1 trade should have closed, the function threw and aborted mid-loop. **~24 hours of silent pipeline stall, 85-trade backlog**, only spotted by Kyle visually inspecting `/machine-learning`. Fixed in commit `b4cde6b85` (B83 hotfix, 2026-05-14) — three single-character changes. **Detection took runtime instrumentation; static analysis couldn't find it because TS resolved `tradeId` against module-level scope rather than block scope.**
+
+This batch addresses the **systemic observability gap** that allowed the regression to ship + run undetected. It's NOT another asset-class expansion item — it's infrastructure that every subsequent batch will rely on. Sequenced after the xStocks UI sprint (B-NEW-N items in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`) closes, before resuming the §4 expansion sequence.
+
+### §10d.1 Exit-cycle health dashboard
+
+A new tab (or dedicated page within System Monitoring) surfaces real-time + rolling-window health of `resolveOpenVirtualTrades`:
+
+| Metric | Source | Alert threshold |
+|---|---|---|
+| Cycles completed in last hour | `[B83-CYCLE]` log lines (already shipped) | < 50/hr → WARN |
+| Trades closed in last hour | sum `resolved` from `[B83-CYCLE]` | drop > 50% vs 7d avg → CRIT |
+| Trades opened in last hour | new VTS open inserts | drop > 50% vs 7d avg → WARN |
+| Currently-open trade count | `vts_open_trades WHERE closed=false` | > N (TBD per asset class) → WARN |
+| Oldest open trade age | `MAX(NOW() - opened_at)` | > 48h → WARN, > 7d → CRIT |
+| Stale-bail count per cycle | `currentPrice === null` count in evaluator | > 10% of evaluated → WARN |
+| ReferenceError / unhandled rejection count | parse PM2 error.log | > 0 → CRIT (was the missing alert for B83) |
+| Avg evaluator duration | timer around evaluateTECExit | > 100ms → WARN |
+| Per-asset-class breakdown | group by `trade.assetClass` | (informational) |
+
+**Implementation note:** the `[B83-CYCLE]` log line (shipped in B83-DIAG commit `aad057c3c`) is the foundational data emission for this dashboard. It already fires unconditionally per cycle — the dashboard scrapes that log + supplements with DB queries.
+
+### §10d.2 Multi-API rate-limit dashboard
+
+Per Kyle directive 2026-05-14: **NOT Kraken-only — every external API we call must have rate-limit headroom tracking.** A new dashboard with one row per external service:
+
+| Service | What we call | Documented rate limit | Track + alert |
+|---|---|---|---|
+| **Kraken Public REST** (`api.kraken.com/0/public/*`) | Ticker, OHLC, AssetPairs, Depth | 1 req/sec (tier 0); higher tiers if authenticated | weight consumed / sec, weight remaining, throttle events |
+| **Kraken Private REST** (`api.kraken.com/0/private/*`) | Balance, AddOrder, OpenOrders (future Phase 19) | 15 req / 5 sec base, decays | tier counter, decay rate, near-limit warnings |
+| **Kraken WebSocket** (`ws.kraken.com`, `ws-equities.kraken.com`) | Ticker subscriptions, book, ohlc | subscription cap (TBD documented), msgs/sec budget | active subscription count, reconnect frequency, ping-pong miss rate |
+| **Kraken Futures REST** (`futures.kraken.com/api/charts/v1/*` + `derivatives/api/v3/*`) | Tickers, candles | 500 req/min documented | req/min, throttle responses |
+| **CoinGecko** (`api.coingecko.com/api/v3/*`) | Macro modifier (btc_dom, mcap_mom, funding) | 30 req/min (free tier) | req/min, 429 rate, daily quota consumed |
+| **Supabase Postgres** (`db.vqqyisaudwenrdhnmjwt.supabase.co:5432`) | All Drizzle queries + raw SQL | Pro tier: ~60 concurrent connections + statement_timeout 60s | active connections, slow-query count > 5s, statement-timeout errors (the B-NEW-21 freshness pattern) |
+| **Supabase REST (PostgREST)** | (currently unused — would be if we migrate API layer) | tier-dependent | placeholder for future |
+| **Anthropic API** (`api.anthropic.com/v1/messages`) | Langston relay + future ML calls | tier-dependent (Max plan for OAuth path; API for direct) | tokens/min, requests/min, near-limit warnings |
+| **Telegram Bot API** (`api.telegram.org`) | CC ↔ Langston comms bridge | 30 msgs/sec per bot; 20 msgs/min per group | msg rate, 429 rate, queue depth |
+| **GitHub API** (`api.github.com`) | gh CLI for PR + CI status checks | 5000 req/hr authenticated | req/hr remaining, near-limit warnings |
+| **Finnhub** (mentioned in `[StockService]` warning) | Currently disabled (no FINNHUB_API_KEY) | when enabled: 60 req/min free | placeholder |
+
+**Each row tracks:** current rate, peak last 60s, peak last 60min, near-limit alert threshold, hard-limit alert threshold, last 24h 429-rate. **Required behavior on near-limit:** WARN log + dashboard red. **Required on hard-limit hit:** CRIT log + auto-throttle + page-emit.
+
+### §10d.3 System Monitoring page reorganization
+
+Per Kyle directive 2026-05-14: many existing tabs in System Monitoring are stale or duplicate. As part of this batch:
+- Audit every existing tab in System Monitoring
+- Categorize: KEEP (still relevant), MOVE (relocate into the new health dashboard), DELETE (defunct).
+- Specific candidates to evaluate:
+  - WebSocket health diagnostics → MOVE into rate-limit dashboard
+  - Per-pair freshness latency → MOVE into exit-cycle health
+  - Existing CentralClock drift display → KEEP as a separate timing tab OR MOVE
+- The new Exit-Cycle Health Dashboard and Multi-API Rate-Limit Dashboard become the two primary tabs.
+
+### §10d.4 Code-side observability hardening
+
+Three structural changes that prevent recurrence of the B83 silent-fail pattern:
+
+1. **Promote unhandled promise rejections to alert-grade.** Currently the `ReferenceError: tradeId is not defined` was logged at error.log level but produced no alert. Wire a global `process.on('unhandledRejection')` handler that:
+   - Emits to a dedicated `[CRIT][UNHANDLED]` log channel
+   - Increments a counter visible on the health dashboard
+   - Pages on any non-zero count
+
+2. **Replace gated success-logs with unconditional summary logs.** The pre-B83 pattern `if (resolved > 0) { console.log('Resolution: ...') }` meant silence = failure OR healthy-idle, indistinguishable. The fix: unconditional per-cycle summary (now `[B83-CYCLE]` line shipped). Audit other gated logs in the codebase and remove similar `if (success)` gates.
+
+3. **Pre-trade-close invariant assertion.** Add a runtime check inside the inner exit-cycle loop: if `decision.shouldExit === true` and the close persistence path doesn't complete, emit a `[CRIT][CLOSE_FAILED]` line with the tradeId + symbol. This would have caught B83 immediately because every single trade with shouldExit=true would have been emitting CRIT.
+
+### §10d.5 Rename-inventory governance (CLAUDE.md / SIM addition)
+
+Per Kyle directive 2026-05-14: **any refactor that renames an identifier (variable, function, type, exported symbol) referenced across the codebase must inventory every existing call site BEFORE the rename, and the change list must explicitly account for each one.** The B83 bug was caused by missing 3 of N call sites during BATCH_80 Phase 1.
+
+**Required protocol (to be added to CLAUDE.md §3 governance + SIM "rename invariants" section):**
+
+1. **Pre-rename inventory step.** Before any commit that renames an identifier `OLD` → `NEW`, the diff author runs `grep -nE '\bOLD\b' --include='*.ts' --include='*.tsx'` across the full repo and records the full list in a `change-list/rename-inventory-<batch>.md` file (one per rename).
+2. **Diff-author commitment.** For each call site in the inventory, the author marks: KEPT-AS-OLD (intentionally referencing legacy), RENAMED (changed to NEW), or REMOVED (call site deleted). No call site can be left without an explicit decision.
+3. **Langston review gate.** Code review pass must verify the inventory file matches `git grep` output post-rename: no remaining bare `OLD` references except those marked KEPT-AS-OLD with documented reason.
+4. **CI check (future).** A CI step that runs the grep + diffs against the inventory file would catch missed renames automatically. Out of scope for this immediate fix but tracked here.
+
+**SIM addition:** add a new SIM section "Rename invariants" that lists identifiers known to be referenced cross-module (e.g. `getTrailingState`, `clearTrailingState`, `evaluateTECExit`, etc.) so future refactors have a starting inventory to check against. Each entry: identifier name, modules that import it, modules that reference it via dynamic-import.
+
+### §10d.6 Batch sequencing
+
+This batch sits **between the xStocks UI sprint close and the §4 expansion sequence resumption**:
+
+```
+xStocks UI sprint (B-NEW-N items) → CLOSED
+  ↓
+BATCH_82 (xstock ablation/calibration data integrity — currently scoped) → SHIP
+  ↓
+THIS BATCH (§10d observability backfill) → SHIP
+  ↓
+Resume §4 expansion sequence (B81 RTB-parity, B80 crypto_perp wire-in, etc.)
+```
+
+**Rationale for this sequencing:** BATCH_82 ships first because (a) its scope is already drafted + Langston-reviewed-ready, (b) it's a data-integrity fix for xstock that's actively producing wrong tags every minute, and (c) the observability work would otherwise delay BATCH_82 by several days. The observability backfill then ships before the next asset-class wave (B80 perp wire-in) so that batch lands into instrumented production.
+
+---
+
 ## §11. Open questions log
 
 Items requiring decision before / during the relevant batch.
@@ -620,6 +719,7 @@ Items requiring decision before / during the relevant batch.
 | 2026-05-10 | CC | **B79.0e SHIPPED.** `equity_*` → `xstock_*` namespace cleanup. 172 DB objects renamed in single transaction (4 parents + 52 partition children + 4 parent indexes + 108 partition indexes + 4 module_constants `data_lifecycle.equity_*.hot_retention_days` keys). 15 code files updated (Drizzle schema const + literals; archiver maps; scanner/freshness/storage-client/drift-aggregator/scripts/test). Type aliases retained pointing at new consts (cosmetic modernization queued). Langston Step 4 F1 catch: rollback symmetry — extended rollback SQL with reverse DO blocks + module_constants UPDATE. PM2 #206. |
 | 2026-05-10 | CC | **B79.0h — governance retrospective.** Phase 24 close. ASSET_CLASS_ONBOARDING_WORKFLOW.md updated with Sections H.1.x post-mortem (lessons by sub-batch + comms-infra protocols) and H.1.y updated decision rules (10 new if-then triggers from B79.0a-0g). SYSTEM_IMPACT_MAP.md updated with collision-set + vts_open_trades + table renames entries. SYSTEM_MANUAL.md appended with Phase 24 retrospective + 10 cross-cutting architectural patterns. PHASE_HISTORY.md sub-batch table populated. POST_AUDIT_ROADMAP.md Phase 24 closure recorded. **Phase 24 success criteria MET 2026-05-10:** xstock_spot in production VTS shadow-mode + onboarding workflow battle-tested through 9 sub-batches + ready for Phase 25 (B80 crypto_perp). |
 | 2026-05-10 evening | CC | **B79.0i.a + B79.0i.b SHIPPED — Phase 24 standing rule #10 obligation closed for xstock_spot.** Three-revision arc under two Kyle pushbacks. **Final form:** xStocks tab inside Machine Learning page contains 5 sections all reusing existing crypto components: Scanner Cycle Header (xstock-specific) + Per-Pair Fresh-Tick Latency (xstock-specific) + FilterDiagnosticsPanel (REUSED from machine-learning.tsx via export — full Pipeline Summary + Last Scan + 24h Rolling + VTS Eval Detail by-strategy + Setup Nulls + Pre-Eval Skips + Post-Signal Rejections + Filter Metric Ranges) + ExitStrategyAblationSection (REUSED from analytics.tsx via export+endpointBase prop) + FactorCalibrationSection (REUSED from analytics.tsx via export+endpointBase prop). 3 NEW sibling endpoints under `/api/xstocks/`. Aggregators `computeExitStrategyAblation` + `computeFactorCalibration` parameterized with optional `assetClass` — defaults preserve byte-identical pre-change behavior; verified post-deploy curl on `/api/analytics/factor-calibration` returns unchanged `factors: 10`. **Two new architectural patterns established (now Phase 24 standing rules #6 + #7 in SYSTEM_MANUAL appendix):** (a) cross-asset-class UI component reuse via export+endpointBase prop with default preserving legacy; (b) shared aggregator parameterization via optional asset_class with default preserving legacy. Pattern documented as canonical recipe in `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Section M for B80 implementer. **Terminology:** "shadow-mode" terminology dropped per Kyle directive 2026-05-10 evening; replaced with "VTS Observation". **Outstanding follow-up:** RUNNING_ISSUES #92 — wire xstockSpotScanner through signal-orchestration so FilterDiagnosticsPanel funnel-rejection counters populate (currently zero — observability-only scanner; future B79.x batch). PM2 #210. |
+| 2026-05-14 | CC | **B83 incident + §10d observability backfill batch added.** ~24hr silent pipeline stall caused by BATCH_80 Phase 1 missed-rename (`getTrailingState(tradeId)` in for-loop body where destructure was `id`). 85 trades closed cleanly via natural exit rules once fixed; 44 remaining are legitimately in-flight. Root cause + fix detailed in §10d preface; observability backfill scope (§10d.1–§10d.6) added per Kyle directive: exit-cycle health dashboard, multi-API rate-limit dashboards (Kraken Public/Private/WS/Futures + CoinGecko + Supabase + Anthropic + Telegram + GitHub + Finnhub), System Monitoring page reorganization, code-side hardening (unhandled-rejection alerting, replace gated-success logs, pre-close invariant), rename-inventory governance protocol. Sequenced between BATCH_82 ship + §4 expansion resume. |
 | 2026-05-14 | CC | **Mid-stretch update — xStocks UI sprint still in flight (B-NEW-N items in `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`); B79.0m.b2 partial-ship intervening commits 2026-05-11 → 2026-05-13 not separately logged here per Kyle's "trial-and-error history belongs in completion reports + tracker, not the plan doc" directive (2026-05-10).** Two new entries: **§10c.6** Oscillator family-filter removal — Langston-approved Option 2 (remove entirely) per 3-step protocol exchange 2026-05-14. Sub-batch sequenced for after xStocks UI sprint closes. Open follow-up: `mean_reversion → oscillator` retag is parked as separate future question. **§10c.7** xstock data-volume actuals — observed 12 GB/month for `xstock_spot_ticker_snap` (146 rows/sec WS feed), higher than B75 implicit forecast. Cost-tracking: ~$29/mo on Supabase Pro at current 40 GB allocation, vs B75 projection ~$26/mo. Within tolerance, not a plan-change trigger. Two action items: early-June check-in that first 30-day b75-retention-sweep cycle activates on May partitions; new standing rule that every new asset class ships with a 30-day data-volume actuals row appended to §10c.7 so future tier-storage retunes have empirical inputs. |
 | _(append rows here at every batch close, plus any mid-batch finding that changes the plan)_ | | |
 
