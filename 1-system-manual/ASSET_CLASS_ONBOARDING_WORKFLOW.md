@@ -290,6 +290,28 @@ For asset-class onboarding specifically: when you rename a for-loop variable in 
 
 ---
 
+### Step 4.7 — Scan-cycle read-side data-completeness audit (B-NEW-14 lesson, 2026-05-14)
+
+Distilled from B-NEW-14 (xstock_spot `max_bid_ask_spread` gate sitting inert for ~3 days while the threshold was alive in the DB).
+
+**The pattern, plainly:** the snapshot table that the scan reads from is populated by an upstream background job that captures EVERY field the exchange returns — bid, ask, last, volume, high, low, etc. The scan's read query, however, typically only asks for the subset of columns the FIRST iteration of the scanner needed. If a threshold gets added to the DB later (or was always intended but stubbed) and its source column wasn't in the original SELECT, the gate silently no-ops while the threshold misleads anyone reading the DB into thinking the gate is live.
+
+**Mandatory check at onboarding (rev-N pre-audit):** before declaring the global / pattern filter complete, run the following inventory:
+
+1. List every column in the snap table (or live ticker payload for non-archive asset classes).
+2. List every filter threshold defined in `screener_filters` for the new asset class (every `min_*` / `max_*` / `excludes_*` column with a non-null, non-zero value).
+3. For each threshold, identify which column from #1 the filter would need to read to evaluate it.
+4. Verify the scan-cycle read query (or the live ticker call) actually SELECTs every such column.
+5. If any column is missing, ADD it to the SELECT BEFORE shipping the filter. Cost: usually zero (DB query plan unchanged for additional output projections on indexed reads — empirically tested 2026-05-14 on `xstock_spot_ticker_snap` snap: 40-43ms whether bid/ask is included or not on 25-75 symbol IN-clauses).
+
+**The standing rule:** "every threshold that lives in the database must have its corresponding data column read by the scan-cycle SELECT (or by whatever the equivalent data fetch is for that asset class). A threshold in DB without a matching column read is a silent no-op gate — strictly forbidden."
+
+**Why this is non-negotiable:** the failure mode is silent. The diagnostic panel keeps reporting "zero rejections" on a row whose threshold was set with intent. Nobody knows the gate isn't working unless they go re-read the source. B-NEW-14 sat in this state for ~3 days; the same trap will fire on the next asset class if this step is skipped.
+
+**Mirror semantically across feed sources.** For asset classes that read from a live exchange ticker call (e.g. crypto via Kraken REST/WS), the same rule applies — the ticker call response shape must include every column whose threshold lives in DB, or the scanner must augment with a separate call. The pattern is feed-source-agnostic: same data shape, different transport.
+
+---
+
 ### Section D.1 — Concrete code-extension templates (Phase 24 reference)
 
 Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.
