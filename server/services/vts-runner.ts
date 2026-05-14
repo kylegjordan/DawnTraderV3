@@ -2346,7 +2346,12 @@ async function resolveOpenVirtualTrades(): Promise<{
     // a scope error. The trailing snapshot read is cheap (in-memory map).
     const { getTrailingState } = await import('./trailing-exit-controller.js');
     // B80 (2026-05-13): per-trade keying — look up engine state by tradeId.
-    const trailingSnapshot = getTrailingState(tradeId);
+    // B83 (2026-05-14): destructured variable in this for-loop is `id`, not
+    // `tradeId`. Pre-B83 bug threw `ReferenceError: tradeId is not defined`
+    // every cycle where ≥1 trade should have closed → entire function aborted
+    // mid-way → no trades closed → silent pipeline stall since BATCH_80
+    // deploy 2026-05-13.
+    const trailingSnapshot = getTrailingState(id);
     const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = trailingSnapshot?.tradeMode ?? 'TARGET';
 
     // Directive 11.6C: Persist to legacy VTS storage and ML pipeline
@@ -2567,9 +2572,11 @@ async function resolveOpenVirtualTrades(): Promise<{
     // other concurrent trades on the same symbol are untouched.
     try {
       const { clearTrailingState } = await import('./trailing-exit-controller.js');
-      clearTrailingState(tradeId);
+      // B83 (2026-05-14): use destructured `id` (was `tradeId` — same BATCH_80
+      // rename bug as line 2349 above; would never execute due to abort there).
+      clearTrailingState(id);
     } catch (err) {
-      console.error(`[B65.2][TEC] Failed to clear trailing state for tradeId=${tradeId} symbol=${trade.symbol}:`, err);
+      console.error(`[B65.2][TEC] Failed to clear trailing state for tradeId=${id} symbol=${trade.symbol}:`, err);
     }
 
     // Directive 11.6 Task 6: Verification logging
