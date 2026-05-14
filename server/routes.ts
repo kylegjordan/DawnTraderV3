@@ -7128,11 +7128,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // defaults true here; the buildPatternGlobalFromCounters helper below
         // overrides per-cycle. The hardcoded N/A posture from B79.0m.b
         // iteration 2 is gone.
+        // B-NEW-14 (2026-05-14): failed_spread N/A override REMOVED — the
+        // bid/ask feed now flows through the snap-table scan read, so the
+        // pattern-lane max_bid_ask_spread gate is live and the row should
+        // render real numbers, not "N/A".
         applicable: {
           path: true,
           // The always-N/A gates for xstock pattern path:
           failed_stablecoin: false,   // no stablecoin equity tickers
-          failed_spread: false,       // bid/ask not in OHLC at Layer-1
           // xstocks support fractional ownership → no maximum-price cap.
           failed_max_price: false,
         } as Record<string, boolean>,
