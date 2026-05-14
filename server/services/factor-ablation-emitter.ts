@@ -43,6 +43,10 @@
 import { db } from '../db.js';
 import { regimeFactorAlternates, type InsertRegimeFactorAlternate } from '../../shared/schema.js';
 import { getConstant } from './module-constants-service.js';
+// BATCH_82 (2026-05-14): AssetClass enum import for the required `assetClass`
+// parameter threaded through emitAblationRecord(). Caller MUST resolve and pass
+// — no default, no silent fallback (CLAUDE.md §11 + §5 #15 NO PATCHES).
+import type { AssetClass } from '../../shared/asset-classes.js';
 
 /**
  * B76 (2026-05-06) — Calibration framework version marker.
@@ -147,12 +151,20 @@ export type AblationSource =
  * @param pairSymbol   — pair identifier for filtering / grouping
  * @param realDecision — what the classifier actually decided (committed to RTB / VTS / paper / etc.); confidence MUST be chain-final per above
  * @param alternates   — zero or more factor-level alternates; emit is a no-op when empty
+ * @param assetClass   — REQUIRED (BATCH_82, 2026-05-14). NO default. Caller MUST resolve from
+ *                       its own context (e.g. `resolveAssetClass(symbol, 'kraken')` for vts-runner +
+ *                       signal-orchestrator; trade-record field for replay paths). The pre-B82
+ *                       hardcoded `'crypto_spot'` at the row builder caused 5+ months of silent
+ *                       asset-class-loss incidents (B-NEW-20/22/25/26/28). Type-system enforcement
+ *                       is the structural fix — compile fails if caller forgets, no silent fallback.
+ * @param strategy     — optional strategy key (last param so existing call sites stay readable)
  */
 export function emitAblationRecord(
   source: AblationSource,
   pairSymbol: string,
   realDecision: RegimeDecision,
   alternates: FactorAlternate[],
+  assetClass: AssetClass,
   strategy: string | null = null,
 ): void {
   if (!alternates || alternates.length === 0) {
@@ -167,7 +179,7 @@ export function emitAblationRecord(
 
   // Fire-and-forget. We catch + log inside the async block so the synchronous
   // caller never sees the rejection.
-  void persistRecord(source, pairSymbol, realDecision, alternates, strategy).catch((err) => {
+  void persistRecord(source, pairSymbol, realDecision, alternates, assetClass, strategy).catch((err) => {
     console.error(
       `[B67.0][ablation-emitter] Failed to persist ablation record for ${sourceLabel} pair=${pairSymbol}:`,
       err instanceof Error ? err.message : err,
@@ -180,6 +192,7 @@ async function persistRecord(
   pairSymbol: string,
   realDecision: RegimeDecision,
   alternates: FactorAlternate[],
+  assetClass: AssetClass,
   strategy: string | null,
 ): Promise<void> {
   // Gate on module_constants flag. If disabled, skip silently. Default `true`
@@ -228,12 +241,15 @@ async function persistRecord(
     // B67.0.1 (2026-04-30): persist strategy for (pair_symbol, evaluated_at,
     // strategy) natural-key join in replay-ablation. Per Langston cc-inbox #864.
     strategy,
-    // B69: explicit asset class + exchange (not DB-default-reliant).
-    // v1: all ablation is crypto_spot on kraken. When multi-asset-class trading
-    // goes live, the caller (signal-orchestrator / vts-runner) will pass these
-    // as parameters to emitAblationRecord.
+    // BATCH_82 (2026-05-14): explicit asset_class threaded from caller. Pre-B82
+    // this was hardcoded `'crypto_spot'` — every xstock VTS-emitted ablation row
+    // since 2026-05-11 was silently mis-tagged crypto_spot, contaminating the
+    // factor-calibration panels for both asset classes. 5th instance of the
+    // crypto-first / asset-class-lost pattern (B-NEW-20/22/25/26/28). Structural
+    // fix: type-system-enforced caller-resolves (REQUIRED param, NO default).
+    // Per Langston B82 design review concur Q1 2026-05-14.
     exchange: 'kraken',
-    assetClass: 'crypto_spot',
+    assetClass,
     factorName: alt.factorName,
     factorState: alt.factorState,
     realDecision: realDecisionStamped as unknown as Record<string, unknown>,
@@ -265,5 +281,7 @@ async function persistRecord(
  *     });
  *   }
  *
- *   emitAblationRecord(signalId, pair, realDecision, alternates);
+ *   // BATCH_82 (2026-05-14): assetClass is REQUIRED, NO default.
+ *   const assetClass = resolveAssetClass(rawSignal.symbol, 'kraken');
+ *   emitAblationRecord(signalId, pair, realDecision, alternates, assetClass);
  */

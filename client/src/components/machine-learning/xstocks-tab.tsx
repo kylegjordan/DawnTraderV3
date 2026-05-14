@@ -316,12 +316,12 @@ export function XstocksTab() {
 
       {/* 4. B73 Exit Strategy Ablation — REUSED rich crypto component, scoped via endpointBase */}
       <div data-testid="xstocks-exit-ablation-section">
-        <ExitStrategyAblationSection endpointBase="/api/xstocks/exit-strategy-ablation" />
+        <ExitStrategyAblationSection endpointBase="/api/xstocks/exit-strategy-ablation" assetClass="xstock_spot" />
       </div>
 
       {/* 5. B67 Factor Calibration — REUSED rich crypto component, scoped via endpointBase */}
       <div data-testid="xstocks-factor-calibration-section">
-        <FactorCalibrationSection endpointBase="/api/xstocks/factor-calibration" />
+        <FactorCalibrationSection endpointBase="/api/xstocks/factor-calibration" assetClass="xstock_spot" />
       </div>
     </div>
   );

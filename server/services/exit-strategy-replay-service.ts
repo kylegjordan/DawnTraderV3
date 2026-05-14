@@ -33,17 +33,24 @@ import {
   type VirtualExit,
 } from './exit-strategy-replay';
 import type { OHLCData } from '../types/market-regime.types';
+// BATCH_82 (2026-05-14): AssetClass enum for non-nullable ReplayContext.assetClass.
+// Pre-B82 was `assetClass?: string` with `?? 'crypto_spot'` silent fallbacks at
+// the SQL INSERT (:264) and OHLC fetch (:294) — same anti-pattern as the 5 prior
+// crypto-first incidents. Structural fix per Langston B82 design review concur.
+import type { AssetClass } from '../../shared/asset-classes.js';
 
 export interface ReplayContext {
   tradeId: string;
   tradeSource: 'paper' | 'vts';
   symbol: string;
-  // B79.0m.b2 (2026-05-11): asset class drives OHLC source selection in
-  // fetchOhlcForReplay. Default 'crypto_spot' preserves byte-identical pre-
-  // batch behavior for any caller that omits the field (back-compat). xstock
-  // callers MUST set 'xstock_spot' or B73 replay silently degrades to
-  // Kraken-crypto-REST which returns no data for equity symbols.
-  assetClass?: string;
+  // BATCH_82 (2026-05-14): non-nullable, typed AssetClass — REQUIRED.
+  // Pre-B82 was `assetClass?: string` with `?? 'crypto_spot'` fallbacks at the
+  // SQL INSERT (:264) and OHLC fetch (:294). Both fallbacks dropped — caller
+  // MUST resolve and pass. The sole caller (vts-service.ts:967) already
+  // threads `tradeData.assetClass` per B79.0m.b2 — no caller change required.
+  // Compile fails if any new caller forgets. Per Langston B82 design review
+  // concur 2026-05-14 + CLAUDE.md §11 (no silent fallbacks).
+  assetClass: AssetClass;
   side: 'BUY' | 'SELL';
   entryPrice: number;
   entryTime: number;       // epoch ms
@@ -131,7 +138,7 @@ async function fetchOhlcForReplay(
   exitTime: number,
   maxHoldMs: number,
   bufferMs: number, // retained for back-compat, unused (window now always extends to entryTime + maxHoldMs)
-  assetClass: string = 'crypto_spot', // B79.0m.b2 — default preserves byte-identical pre-batch behavior
+  assetClass: AssetClass, // BATCH_82 (2026-05-14): REQUIRED, no default. Caller resolves from ReplayContext.assetClass.
 ): Promise<OHLCData[]> {
   void exitTime; void bufferMs; // explicit no-op; window is entry-anchored now
   const windowEnd = entryTime + maxHoldMs;
@@ -261,7 +268,7 @@ async function persistExits(
          ${r.virtual_exit_price}, ${r.virtual_exit_reason}, ${r.virtual_exit_time},
          ${r.virtual_pnl_pct}, ${r.virtual_duration_min}, ${r.baseline_pnl_pct},
          ${r.regime}, ${r.strategy}, ${JSON.stringify(r.metadata)}::jsonb,
-         'kraken', 'crypto_spot')
+         'kraken', ${ctx.assetClass})
       ON CONFLICT (trade_id, variant_id) DO NOTHING
     `);
   }
@@ -291,7 +298,7 @@ export async function replayAndPersist(ctx: ReplayContext): Promise<void> {
     ctx.exitTime,
     config.maxHoldMs,
     3_600_000, // back-compat; ignored — window is entry-anchored now
-    ctx.assetClass ?? 'crypto_spot', // B79.0m.b2 — asset-class branch for OHLC source
+    ctx.assetClass, // BATCH_82 (2026-05-14): `??` fallback dropped — assetClass is non-nullable on ReplayContext
   );
   if (allBars.length === 0) {
     console.warn(`[B73][exit-replay] no OHLC bars for ${ctx.symbol} ${ctx.tradeId}`);

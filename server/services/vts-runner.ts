@@ -1791,6 +1791,11 @@ async function generatePhase10Signal(
     _regimeLabelForEmit,
   );
 
+  // BATCH_82 (2026-05-14): resolve assetClass via resolveAssetClass (already
+  // statically imported at top of file; same pattern used at line 1828 below
+  // in the open-trade INSERT). REQUIRED parameter — no default, no silent
+  // fallback. Compile fails if missed.
+  const _assetClassForAblation = resolveAssetClass(symbol, 'kraken');
   emitAblationRecord(
     { kind: 'vts_trade', vtsTradeId: signal.id },
     symbol,
@@ -1808,6 +1813,7 @@ async function generatePhase10Signal(
       },
     },
     _b67_1_alternates,
+    _assetClassForAblation, // BATCH_82
     strategy, // B67.0.1 (2026-04-30): natural-key join in replay-ablation per Langston #864
   );
 

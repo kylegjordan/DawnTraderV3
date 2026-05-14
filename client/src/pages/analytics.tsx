@@ -13,6 +13,11 @@ import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
 import BenchmarkList from "@/components/analytics/benchmark-list";
+// BATCH_82 (2026-05-14): explicit asset_class prop + human-readable displayName for empty-state copy.
+// Pre-B82: panels stuck on "Loading..." because the endpoint returned 38-133s + empty due to
+// writer-side asset-class drop. Post-B82: endpoint < 5s + populated. When still empty (legitimately
+// no data yet for an asset class), show clear "No <DisplayName> data yet — accumulating" message.
+import { ASSET_CLASS_REGISTRY, type AssetClass } from "@shared/asset-classes";
 import GovernanceSection from "@/components/analytics/governance-section";
 import { apiFetch } from "@/lib/api";
 
@@ -1813,7 +1818,17 @@ interface FactorCalibrationData {
 // B79.0i.b: exported + accepts optional endpointBase prop so xstocks-tab can
 // reuse this section by passing endpointBase='/api/xstocks/factor-calibration'.
 // Default is the existing crypto endpoint — unchanged behavior for crypto consumers.
-export function FactorCalibrationSection({ endpointBase = '/api/analytics/factor-calibration' }: { endpointBase?: string } = {}) {
+// BATCH_82 (2026-05-14): assetClass is REQUIRED for empty-state human-readable
+// copy. Pre-B82 the empty-state read "No replayed factor rows in this window
+// yet" — generic. Post-B82: "No <DisplayName> data yet — accumulating. Panel
+// populates as the factor replay pipeline evaluates new signals."
+// Caller passes assetClass explicitly (NOT URL-string-parsed — per Langston
+// B82 design review concur Q3 rev). All callers updated in same commit.
+export function FactorCalibrationSection({
+  endpointBase = '/api/analytics/factor-calibration',
+  assetClass,
+}: { endpointBase?: string; assetClass: AssetClass }) {
+  const displayName = ASSET_CLASS_REGISTRY[assetClass].displayName;
   const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_7d');
   const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: FactorCalibrationData }>({
     queryKey: [endpointBase, windowSel],
@@ -1862,11 +1877,11 @@ export function FactorCalibrationSection({ endpointBase = '/api/analytics/factor
       <CardContent>
         {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
         {error && <div className="text-sm text-red-500">Error: {String((error as Error).message)}</div>}
-        {d && d.factors.length === 0 && (
-          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md">
-            <div className="font-medium mb-2">No replayed factor rows in this window yet.</div>
+        {d && (!d.factors || d.factors.length === 0) && d.totalReplayed === 0 && (
+          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md" data-testid="factor-calibration-empty-state">
+            <div className="font-medium mb-2">No {displayName} data yet — accumulating.</div>
             <div className="text-xs">
-              Calibration analysis requires closed VTS trades that have been joined to ablation alternates by replay-ablation. As trades close and the nightly cron runs (or ad-hoc invocation), this panel will populate per-factor calibration statistics.
+              Panel populates as the factor replay pipeline evaluates new signals. Calibration analysis requires closed VTS trades that have been joined to ablation alternates by replay-ablation. As trades close and the nightly cron runs (or ad-hoc invocation), this panel will populate per-factor calibration statistics.
             </div>
           </div>
         )}
@@ -2107,7 +2122,14 @@ interface ExitStrategyAblationData {
 }
 
 // B79.0i.b: exported + accepts optional endpointBase prop for xstocks-tab reuse.
-export function ExitStrategyAblationSection({ endpointBase = '/api/analytics/exit-strategy-ablation' }: { endpointBase?: string } = {}) {
+// BATCH_82 (2026-05-14): assetClass REQUIRED for empty-state human-readable copy.
+// Empty-state copy: "No <DisplayName> data yet — accumulating. Panel populates
+// as closed trades complete the ablation replay window."
+export function ExitStrategyAblationSection({
+  endpointBase = '/api/analytics/exit-strategy-ablation',
+  assetClass,
+}: { endpointBase?: string; assetClass: AssetClass }) {
+  const displayName = ASSET_CLASS_REGISTRY[assetClass].displayName;
   const [windowSel, setWindowSel] = useState<'rolling_24h' | 'rolling_7d' | 'rolling_30d' | 'cohort_latest'>('rolling_7d');
   const [regimeSel, setRegimeSel] = useState<string>('*');
 
@@ -2163,11 +2185,11 @@ export function ExitStrategyAblationSection({ endpointBase = '/api/analytics/exi
       <CardContent>
         {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
         {error && <div className="text-sm text-red-500">Error: {String((error as Error).message)}</div>}
-        {d && d.totalRows === 0 && (
-          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md">
-            <div className="font-medium mb-2">No exit-strategy ablation rows in this window yet.</div>
+        {d && d.totalTrades === 0 && (!d.variants || d.variants.length === 0) && (
+          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md" data-testid="exit-ablation-empty-state">
+            <div className="font-medium mb-2">No {displayName} data yet — accumulating.</div>
             <div className="text-xs">
-              The framework is wired and listening. Each VTS trade close populates 12 variant rows automatically. If this stays empty, check that VTS is closing trades and that <code className="text-[11px]">originalStopPrice</code> is populated on new closures.
+              Panel populates as closed trades complete the ablation replay window. The framework is wired and listening — each VTS trade close populates 12 variant rows automatically. If this stays empty, check that {displayName} VTS is closing trades and that <code className="text-[11px]">originalStopPrice</code> is populated on new closures.
             </div>
           </div>
         )}
@@ -3246,9 +3268,11 @@ export default function AnalyticsPage() {
           <TabsContent value="drift" className="mt-6">
             <div className="space-y-6">
               <DriftDashboardSection />
-              <FactorCalibrationSection />
+              {/* BATCH_82 (2026-05-14): assetClass='crypto_spot' explicit. Drift tab is the
+                  crypto-side rendering surface; xstock-side renders in xstocks-tab.tsx. */}
+              <FactorCalibrationSection assetClass="crypto_spot" />
               <AblationComparisonSection />
-              <ExitStrategyAblationSection />
+              <ExitStrategyAblationSection assetClass="crypto_spot" />
               <PassiveArchiveSection />
               <DataArchiveSection />
             </div>

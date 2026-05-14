@@ -956,6 +956,10 @@ export class SignalOrchestrator {
       regimeLabelForEmit,
     );
 
+    // BATCH_82 (2026-05-14): resolve assetClass via resolveAssetClass (already
+    // statically imported at top of file; same pattern used at line 990 below).
+    // REQUIRED parameter — no default, no silent fallback. Compile fails if missed.
+    const assetClassForAblation = resolveAssetClass(rawSignal.symbol, 'kraken');
     emitAblationRecord(
       { kind: 'active_signal', signalId },
       rawSignal.symbol,
@@ -974,6 +978,7 @@ export class SignalOrchestrator {
         },
       },
       ablationAlternates,
+      assetClassForAblation, // BATCH_82
       strategyId, // B67.0.1 (2026-04-30): natural-key join in replay-ablation per Langston #864
     );
 
