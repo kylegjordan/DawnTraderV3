@@ -97,7 +97,7 @@ Every refinement Langston flagged in round-1 review, folded in:
 - Build `xstock-directional-bias-store.ts` analogous to crypto's.
 - Wire into `xstockSpotScanner.runCycle` ahead of eval-cycle dispatch.
 - Eval-cycle passes real DBS to MCE (replaces `undefined` at `server/asset_classes/xstock_spot/eval-cycle.ts:353`).
-- **Pre-commit check: verify actual xStock archive start date.** If <14 days available, document explicitly — calibration history is thinner than crypto's was.
+- **Pre-commit check: verify actual xStock archive start date.** Hard floor (Langston v2 ACK clarification (c)): **<7 days available → A.2 WAITS for archive maturation** (calibration on ~3 days of history is plumbing-validation, not signal — same principle as the workflow invariant). 7-14 days → proceed but document the thinness explicitly so downstream readers don't conflate with crypto's longer-history calibration. 14+ days → no caveat needed.
 - Backfill 2-3 weeks of historical DBS from archived OHLC.
 - MCE `propagatedDbs` branch lifts when value provided.
 
@@ -196,7 +196,9 @@ Add: VIX-derived, DXY-derived, beta-to-SPY rolling, market-breadth, earnings-pro
   - Set at INSERT time in `vts-trade-persistence.ts::insertOpenTrade()`, not at close time — open trades spanning Phase A-E ship retain their open-time tag.
   - On trade close, `calibration_state` propagates from `vts_open_trades` → `exit_strategy_alternates` row via the exit-strategy-replay-service writer.
   - Aggregator query at `exit-strategy-ablation-aggregator.ts::computeExitStrategyAblation` adds `AND calibration_state IS DISTINCT FROM 'pre_calibration_xstock_2026_05'` to its WHERE clause when scoped to xStocks.
-  - Post-Phase-E trades: default value flips to `'production'` via a one-line migration when Phase E ships, so the gate auto-engages.
+  - **Post-Phase-E production-flip migration (Langston v2 ACK clarification (a)) — TWO changes, not one:**
+    1. Change the application-code constant in `vts-trade-persistence.ts::insertOpenTrade()` from `'pre_calibration_xstock_2026_05'` to `'production'` so newly-opened post-Phase-E xStock trades tag correctly.
+    2. Issue `UPDATE vts_open_trades SET calibration_state = 'production' WHERE calibration_state = 'pre_calibration_xstock_2026_05'` for any in-flight open trades at migration time, otherwise they carry the pre_calibration tag through close and get excluded from the very dataset they should populate.
 - Backfill check for pre-launch historical xStock outcomes (likely empty; one-line script).
 
 **F-LATER (~20-30 days from start):**
@@ -227,6 +229,7 @@ Items 1-3 are in scope for this xStock calibration plan. Items 4-8 are post-laun
 - Phase 0 (corporate-actions audit): 1 day pre-flight, parallel to A.1
 - Phase A: 3-5 days
 - Phase B: 8-12 days (seven sub-batches; B.4→B.5 sequenced consecutive)
+- **Crypto-friction-review batch (Langston v2 ACK clarification (b)):** 3-5 days, runs in parallel with Phase B (does NOT extend critical path). Audits the existing crypto-side `cost-model.ts` friction parameters that were never explicitly re-validated; required as B81 prerequisite item 2 so both crypto and xStock are on equal calibration footing before cross-asset ranking parity ships. Slot into the Phase B window without sequencing it as a sub-batch of Phase B (it's a separate batch with its own scope doc).
 - Phase C: 3-5 days (parallel to B)
 - Phase D: 3-4 days (parallel to B/C)
 - Phase E.1-E.2: 3-4 days (sequential after A+C+D)
