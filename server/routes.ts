@@ -7684,25 +7684,40 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // state. Sorted by staleSeconds DESC (stalest first). Distinguishes the
   // 10 Kraken Phase-1 24/7 names from the 24/5 ARCA-aligned set so the UI
   // can label them.
+  //
+  // B-NEW-21 (2026-05-14): query rewritten from `GROUP BY symbol MAX(captured_at)`
+  // (which scanned ~380K rows across 24h partitions, ~14s, regularly hitting
+  // Supabase statement timeouts) to `unnest(universe) LEFT JOIN LATERAL (
+  // SELECT ... ORDER BY captured_at DESC LIMIT 1) ON true`. The LATERAL form
+  // drives the existing `(symbol, captured_at)` index per-symbol with a 1-row
+  // index lookup — ~1-2ms per symbol × 265 symbols ≈ sub-500ms total. Live
+  // staging benchmark (psql, 2026-05-14): 77ms for 260 lateral lookups when
+  // universe is bounded. The universe is provided from the in-memory
+  // XSTOCK_SPOT_SYMBOLS constant via `unnest(ARRAY[...])` so all 265 symbols
+  // appear in the response — symbols with no tick in 24h have `lastTickAt`
+  // NULL and are post-processed into the `dead` state below.
   apiRouter.get('/xstocks/freshness', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS } = await import('../shared/asset-classes.js');
 
-      // Per-symbol most-recent captured_at over last 24h (window bounds the
-      // partition scan). Symbols with no row in 24h are still included via
-      // the LEFT JOIN below so the UI can render "dead" state.
       const symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
-      const symbolListSql = symbolList.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
+      // Single-quote escape: SQL identifier convention. The list is a hardcoded
+      // const (never user input), so literal interpolation here is safe and
+      // avoids drizzle's parameter-binding pitfall on ANY()/IN() of JS arrays.
+      const symbolArrayLiteral = `ARRAY[${symbolList.map((s) => `'${s.replace(/'/g, "''")}'`).join(',')}]::text[]`;
 
       const result = await db.execute<{ symbol: string; lastTickAt: string | null }>(sql`
         SELECT u.symbol::text AS symbol,
-               MAX(t.captured_at) AS "lastTickAt"
-        FROM (VALUES ${sql.raw(symbolList.map((s) => `('${s.replace(/'/g, "''")}')`).join(','))}) AS u(symbol)
-        LEFT JOIN xstock_spot_ticker_snap t
-          ON t.symbol = u.symbol
-          AND t.captured_at > NOW() - INTERVAL '24 hours'
-        WHERE u.symbol IN (${sql.raw(symbolListSql)})
-        GROUP BY u.symbol
+               t.captured_at AS "lastTickAt"
+        FROM unnest(${sql.raw(symbolArrayLiteral)}) AS u(symbol)
+        LEFT JOIN LATERAL (
+          SELECT captured_at
+          FROM xstock_spot_ticker_snap t
+          WHERE t.symbol = u.symbol
+            AND t.captured_at > NOW() - INTERVAL '24 hours'
+          ORDER BY captured_at DESC
+          LIMIT 1
+        ) t ON true
       `);
       const rawRows = (result as any).rows ?? [];
       if (!Array.isArray(rawRows)) {
