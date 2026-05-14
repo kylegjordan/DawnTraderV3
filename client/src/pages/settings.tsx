@@ -70,12 +70,14 @@ export default function Settings() {
   const [showHelp, setShowHelp] = useState(false);
 
   // General Settings State
+  // B-NEW-TZ (2026-05-14): timezone fallback corrected from 'Asia/Dubai' to 'UTC'
+  // so a missing saved value is obvious instead of silently rendering Dubai.
   const [generalFormData, setGeneralFormData] = useState({
     emailNotifications: (settings as any)?.emailNotifications ?? true,
     pushNotifications: (settings as any)?.pushNotifications ?? true,
     telegramNotifications: (settings as any)?.telegramNotifications ?? false,
     showSystemAlerts: (settings as any)?.showSystemAlerts !== false, // Default true
-    timezone: settings?.timezone || 'Asia/Dubai',
+    timezone: settings?.timezone || 'UTC',
   });
 
   useEffect(() => {
@@ -85,7 +87,7 @@ export default function Settings() {
         pushNotifications: (settings as any).pushNotifications ?? true,
         telegramNotifications: (settings as any).telegramNotifications ?? false,
         showSystemAlerts: (settings as any).showSystemAlerts !== false,
-        timezone: settings.timezone || 'Asia/Dubai',
+        timezone: settings.timezone || 'UTC',
       });
     }
   }, [settings]);

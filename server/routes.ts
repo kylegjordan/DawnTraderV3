@@ -1179,22 +1179,33 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 41F-L.E2E-PURGE: Settings now sourced from mode-level guardrails_v2 + portfolio_state
-  // This endpoint provides backward compatibility using buildSettingsFromModeLevel adapter
+  // This endpoint provides backward compatibility using buildSettingsFromModeLevel adapter.
+  // B-NEW-TZ (2026-05-14): GET also returns the user-level timezone (users.timezone)
+  // so the top-bar clock + Settings page dropdown can render the saved value. The
+  // PUT companion below writes timezone back to the same column.
   apiRouter.get('/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      
+
       // [9.6.3] Source settings from mode-level guardrails_v2 + portfolio_state
       const { buildSettingsFromGuardrails } = await import('./services/guardrail-settings.js');
       const settings = await buildSettingsFromGuardrails(mode, userId);
-      
+
+      // B-NEW-TZ (2026-05-14): fetch user-level UI preferences (timezone).
+      // Previously this field was absent from the response, so the client's
+      // `settings?.timezone || 'Asia/Dubai'` fallback always rendered Dubai —
+      // making it look like a save bug when no save path even existed yet.
+      const user = await storage.getUser(userId);
+      const userTimezone = user?.timezone || 'UTC';
+
       // Check if environment secrets are configured
       const hasKrakenApiKey = !!process.env.KRAKEN_API_KEY;
       const hasKrakenApiSecret = !!process.env.KRAKEN_API_SECRET;
-      
+
       res.json({
         ...settings,
+        timezone: userTimezone,
         hasKrakenApiKey,
         hasKrakenApiSecret,
         krakenApiKeySet: hasKrakenApiKey,
@@ -1206,19 +1217,54 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 41F-L.E2E-PURGE: DEPRECATED - User-level settings updates disabled
-  // Risk parameters now controlled via Guardrails tab (/api/guardrails-v2)
-  // Portfolio balance controlled via mode-level portfolio_state
+  // Phase 41F-L.E2E-PURGE: Risk / portfolio settings remain DEPRECATED at this endpoint.
+  // Risk parameters → /api/guardrails-v2. Portfolio balance → /api/portfolio-state.
+  // B-NEW-TZ (2026-05-14): User-level UI preferences (timezone) ARE accepted here —
+  // they have no other natural home and are not a "trading-mode" setting. Only the
+  // explicitly-listed UI-preference fields are honored; any other field in the body
+  // is silently dropped so the legacy risk-param fields can't sneak back in.
   apiRouter.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    res.status(410).json({ 
-      error: 'This endpoint is deprecated',
-      message: 'Settings now managed at mode-level. Use the Guardrails tab to adjust risk parameters (risk %, max positions, kill switch, cooldown). Portfolio balance managed via /api/portfolio-state.',
-      migration: 'User-level settings eliminated in Phase 41F-L.E2E-PURGE',
-      alternatives: {
-        guardrails: 'PUT /api/guardrails-v2?mode=paper or mode=live',
-        portfolioBalance: 'PUT /api/portfolio-state?mode=paper or mode=live'
+    try {
+      const userId = req.user!.id;
+      const body = (req.body ?? {}) as Record<string, unknown>;
+
+      // Allow-list: ONLY these fields are accepted on this endpoint.
+      const updates: { timezone?: string } = {};
+
+      if (typeof body.timezone === 'string') {
+        const requested = body.timezone.trim();
+        // Validate against the runtime's known IANA zones. Available on Node 18+.
+        // Falls back to a permissive accept if Intl.supportedValuesOf isn't
+        // available (very old runtime), since the client's dropdown is a fixed
+        // allow-list anyway and the column is a sane-sized varchar(50).
+        const supported: string[] = typeof (Intl as any).supportedValuesOf === 'function'
+          ? (Intl as any).supportedValuesOf('timeZone')
+          : [];
+        if (supported.length > 0 && !supported.includes(requested)) {
+          return res.status(400).json({
+            error: 'Invalid timezone',
+            message: `'${requested}' is not a recognized IANA timezone name (e.g. 'Europe/Warsaw', 'America/New_York', 'UTC').`,
+          });
+        }
+        updates.timezone = requested;
       }
-    });
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({
+          error: 'No supported fields in update body',
+          message: 'This endpoint accepts: timezone. Risk parameters live at /api/guardrails-v2; portfolio balance at /api/portfolio-state.',
+        });
+      }
+
+      const updated = await storage.updateUser(userId, updates as any);
+      res.json({
+        success: true,
+        timezone: updated?.timezone ?? updates.timezone,
+      });
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      res.status(500).json({ error: 'Failed to update settings' });
+    }
   });
 
 

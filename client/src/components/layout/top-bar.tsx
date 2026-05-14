@@ -117,7 +117,12 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   // Update dual time display (UTC + Local)
   useEffect(() => {
     const updateTime = () => {
-      const timezone = settings?.timezone || 'Asia/Dubai';
+      // B-NEW-TZ (2026-05-14): fallback corrected from 'Asia/Dubai' to 'UTC'.
+      // The hardcoded Dubai fallback was masking a missing save path — when
+      // the saved value came through as undefined it looked like the user's
+      // pick had been reverted to Dubai when it had never been saved at all.
+      // UTC is a neutral baseline that makes a missing save obvious.
+      const timezone = settings?.timezone || 'UTC';
       const timeFormat = (settings?.timeFormat || '12hr') as '12hr' | '24hr';
       
       // Update UTC time and date (formatted together)
