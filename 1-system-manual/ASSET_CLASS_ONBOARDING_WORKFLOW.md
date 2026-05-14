@@ -56,6 +56,18 @@ For every behavioral knob, BEFORE any wiring code, decide and seed the DB row:
 
 **Critical:** the unique index on every `module_constants`-adjacent table must include `asset_class` as a key column. If the table has `(mode, filter_path)` unique without asset_class (like `screener_filters` pre-B79.0m.a), seed rows for the new asset class will silently fail on `ON CONFLICT DO NOTHING`. **Audit `pg_indexes WHERE tablename='<x>'` in Step 2 pre-audit and add a hotfix migration if needed.**
 
+#### Composite asset-class indexes on aggregator-read tables (BATCH_82 standing rule)
+
+In addition to unique-index seeding above: every aggregator-read table with an `asset_class` column AND time-based filtering (e.g. `regime_factor_alternates`, `exit_strategy_alternates`, `signal_eval_archive`) MUST have a composite `(asset_class, <time-column> DESC)` index. Without it, the aggregator's `WHERE asset_class = $X AND <time> >= ...` query does a full-window scan with a post-bitmap-scan `Filter` on asset_class — 32+ seconds on 24k-row tables. With the index, sub-millisecond.
+
+**Naming convention:** `idx_<table>_asset_<timecolumn>`. Example: `idx_exit_strategy_alternates_asset_created`, `idx_regime_factor_alternates_asset_evaluated`.
+
+**Partial-index discipline:** if the aggregator's query includes `AND <some_predicate> IS NOT NULL` (e.g. `replay_completed_at IS NOT NULL`), the index should be partial with the same predicate. Smaller index, faster query — but the partial predicate must intersect with actual query WHERE; verify via `EXPLAIN ANALYZE` at deploy time that `Index Cond` (not `Filter`) carries the asset_class predicate.
+
+**Drizzle txn-mode gotcha:** `CREATE INDEX CONCURRENTLY` CANNOT run inside a transaction block. Drizzle's default migration runner wraps each file in BEGIN/COMMIT, breaking `CONCURRENTLY`. Recommended path: raw SQL script at `server/migrations/manual/B<NN>_<description>.sql` applied via `psql` outside the Drizzle runner. Idempotent with `IF NOT EXISTS` guard. Rollback SQL co-located at `server/migrations/manual/B<NN>_<description>_rollback.sql`. Reference: `server/migrations/manual/B82_asset_class_indexes.sql`.
+
+**Pre-launch check:** for each aggregator-read table, run the aggregator's representative query under `EXPLAIN ANALYZE` BEFORE the new asset class starts emitting. If `Filter:` (not `Index Cond:`) appears on the asset_class predicate, build the index in the same batch that wires the new class. The 38-133s endpoint timings in B-NEW-28 came from skipping this check.
+
 #### Step 2 — Scanner + filter ownership decision
 
 Decide explicitly: does the new asset class get its own scanner + own filter path, or share with an existing class?
@@ -212,6 +224,69 @@ Separate batch (B79.0n pattern). Wires the post-filter survivors into `signal-or
 Step 4 above (hidden-assumptions audit) is the discipline B79 lacked. Every shared function in the post-filter chain needs grep-and-verify on Q1-Q5 BEFORE wiring code lands. Function-by-function. Document the answers in `BATCH_N_PRE_AUDIT.md` §"Shared function audit".
 
 This is the difference between "told the user it worked when it didn't" (B79.0a → B79.0d) and "verifiable, defensible, complete" (post-B79.0m.a).
+
+---
+
+### Step 4.5 — Writer-side asset-class threading audit (BATCH_82 standing rule, 2026-05-14)
+
+Distilled from the 5-incident crypto-first / asset-class-lost run (B-NEW-20/22/25/26/28) culminating in BATCH_82. **Every persistence site that writes the `asset_class` column must accept the value as a typed parameter from the caller. NO hardcoded literals. NO `?? 'crypto_spot'` fallbacks. The structural fix is type-system enforcement, not silent fallback.**
+
+#### What to check at pre-audit (every asset-class onboarding, no exceptions)
+
+Run the following grep across `server/services/` AND `server/scripts/` AND `server/tests/`:
+
+```bash
+grep -rn "asset_class" server/services/ server/scripts/ server/tests/ shared/
+```
+
+For every site that returns matches, verify:
+
+1. **Schema (`shared/schema.ts`)** — column exists with NOT NULL constraint.
+2. **Writer site (INSERT or UPDATE on the column)** — does the value come from a typed parameter, or is it a hardcoded literal / `??` fallback? If the latter, this is a future incident waiting to fire. Refactor to type-system-enforced caller-resolves: parameter is REQUIRED (no default), TypeScript compile fails if any caller forgets.
+3. **Reader site (SELECT where the column is in WHERE / GROUP BY / aggregation)** — does the function accept `assetClass` parameter, or is it implicitly crypto-only? If implicit, every panel + aggregate breaks silently when the new asset class arrives — they'll either return crypto-only data with the wrong label OR throw on the new class.
+4. **Downstream consumer (ML pipeline, weekly digest, training-export script, etc.)** — does any consumer have an implicit `WHERE asset_class = 'crypto_spot'` filter that would silently exclude the new asset class? If so, the writer fix correctly tags new rows but the reader silently skips them.
+
+Document the inventory in `BATCH_N_PRE_AUDIT.md` §"Writer/reader asset-class enumeration". For BATCH_82 the inventory was 2 writers (factor-ablation-emitter, exit-strategy-replay-service) + 2 readers (drift-dashboard-aggregator, exit-strategy-ablation-aggregator) + 1 indirect consumer (replay-ablation.ts script — already asset-class-agnostic). No ML pipeline / digest / export reads either table — clean downstream.
+
+#### Standing recipe — type-enforced caller-resolves
+
+```ts
+// BAD — silent fallback to crypto_spot
+function emitWriter(..., assetClass: string = 'crypto_spot') { ... }
+function emitWriter(...) { ...
+  const row = { asset_class: ctx.assetClass ?? 'crypto_spot' };  // ← silent fallback
+}
+
+// GOOD — type-system-enforced caller-resolves
+function emitWriter(..., assetClass: AssetClass) { ... }  // REQUIRED, no default
+function emitWriter(ctx: { assetClass: AssetClass }) { ... }  // non-nullable on the type
+```
+
+For READER-side aggregators, the pattern is different — they may legitimately want to default to a baseline asset class for backward-compat. Use an optional parameter with a sentinel that means "all classes" rather than a hardcoded primary-class default:
+
+```ts
+// GOOD — explicit "all" semantic
+function computeAggregate(window: Window, assetClass: AssetClass | null = null) {
+  // When assetClass is null, no WHERE filter on asset_class — returns all classes
+  // When assetClass is provided, adds AND asset_class = $X
+}
+```
+
+#### Why this matters
+
+Every silent fallback to `'crypto_spot'` is a future incident. The xStocks expansion produced 5 of them in 4 days because writer sites were crypto-first by default. Each incident took live observation + Kyle screenshot + diagnostic session to surface. **Pre-launch enumeration via this audit collapses the 5 reactive incidents into one proactive grep.**
+
+---
+
+### Step 4.6 — Block-scope identifier renaming (BATCH_82 + B83 lesson, 2026-05-14)
+
+Distilled from the B83 hotfix (24hr silent pipeline stall, 85-trade backlog). **NOT asset-class-specific** — applies to every refactor — but worth flagging here because asset-class onboarding refactors are exactly when this anti-pattern fires.
+
+**The bug:** TypeScript does NOT enforce block-scope-only identifier visibility for for-loop iteration variables. If you rename a for-loop variable AND there's an outer-scope identifier with the same OLD name, TypeScript silently resolves references to the OLD name against the outer scope. At runtime, JS throws `ReferenceError` — but only when the for-loop body actually executes.
+
+**The recipe:** when renaming an identifier referenced inside a for-loop body, the variable used inside MUST match the loop's destructure pattern explicitly. Don't rely on TypeScript scope inference. Add the rename to the inventory file at `Claude Comms and Packages/Change Lists/rename-inventory-<batch>.md` (5-step protocol in SIM "Rename invariants" section): pre-rename grep → per-row decision → post-rename verification grep.
+
+For asset-class onboarding specifically: when you rename a for-loop variable in `vts-runner.ts` / `signal-orchestrator.ts` / any shared-engine file, audit the entire loop body for references to the OLD name before committing. Block-scope is unforgiving.
 
 ---
 
@@ -677,30 +752,36 @@ export async function computeFoo(
 
 **Crypto regression invariant:** verify post-deploy that the existing `/api/analytics/<endpoint>` returns byte-identical response when called without changes. Run a curl-diff on the response shape if the aggregator returns mixed-asset rows; check row count unchanged if filtered.
 
-### Step 2 — Export the rich UI sections
+### Step 2 — Export the rich UI sections (refined BATCH_82 — explicit assetClass prop)
 
 The xStocks tab proved 3 components are worth reusing:
 - `FilterDiagnosticsPanel` from `machine-learning.tsx` (the full Filter Diagnostics tab content)
 - `ExitStrategyAblationSection` from `analytics.tsx` (B73 exit ablation tables)
 - `FactorCalibrationSection` from `analytics.tsx` (B67 calibration tables)
 
-Convert each from internal-only to `export function` with an optional `endpointBase` prop:
+Convert each from internal-only to `export function` with **both an `endpointBase` prop AND an explicit `assetClass: AssetClass` REQUIRED prop** (BATCH_82 refinement, per Langston design review Q3 2026-05-14):
 
 ```typescript
-// BEFORE
-function FactorCalibrationSection() {
-  const queryUrl = `/api/analytics/factor-calibration?window=${windowSel}`;
-  // ...
-}
-
-// AFTER
+// BEFORE (pre-B82 — endpointBase only, asset class implicit in URL)
 export function FactorCalibrationSection({
   endpointBase = '/api/analytics/factor-calibration',
 }: { endpointBase?: string } = {}) {
-  const queryUrl = `${endpointBase}?window=${windowSel}`;
-  // ... unchanged rendering ...
+  // ... no way to get the human-readable asset-class label without URL-string-parsing ...
+}
+
+// AFTER (post-B82 — explicit assetClass prop, type-safe)
+import { ASSET_CLASS_REGISTRY, type AssetClass } from "@shared/asset-classes";
+
+export function FactorCalibrationSection({
+  endpointBase = '/api/analytics/factor-calibration',
+  assetClass,
+}: { endpointBase?: string; assetClass: AssetClass }) {
+  const displayName = ASSET_CLASS_REGISTRY[assetClass].displayName; // "xStock Spot", "Crypto Spot"
+  // ... rendering can now reference displayName for empty-state copy, badges, etc. ...
 }
 ```
+
+**Why explicit prop, not URL-string-parsing:** the parent component already knows which asset class it's rendering (that's how it chose the endpointBase). Encoding that knowledge twice — once in the URL, once derived back from the URL — is brittle. URL conventions will rot as new asset classes come online; explicit type-safe prop scales linearly for N asset classes.
 
 For shapes that don't have built-in endpoints, also export the response-data type so the asset-class tab can typecheck its endpoint.
 
@@ -754,13 +835,15 @@ export function <AssetClass>Tab() {
       {/* REUSED FilterDiagnosticsPanel scoped via endpoint */}
       <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} />
 
-      {/* REUSED ablation sections via endpointBase */}
-      <ExitStrategyAblationSection endpointBase="/api/<asset_class>/exit-strategy-ablation" />
-      <FactorCalibrationSection endpointBase="/api/<asset_class>/factor-calibration" />
+      {/* REUSED ablation sections via endpointBase + explicit assetClass prop (BATCH_82) */}
+      <ExitStrategyAblationSection endpointBase="/api/<asset_class>/exit-strategy-ablation" assetClass="<asset_class>" />
+      <FactorCalibrationSection endpointBase="/api/<asset_class>/factor-calibration" assetClass="<asset_class>" />
     </div>
   );
 }
 ```
+
+**BATCH_82 note:** crypto-side callers in `analytics.tsx` Drift tab also pass `assetClass="crypto_spot"` explicitly. The prop is REQUIRED on both section components — TypeScript blocks the build if any caller omits it (closes the silent-URL-derive anti-pattern).
 
 ### Step 5 — Wire the tab into Machine Learning Tabs group
 

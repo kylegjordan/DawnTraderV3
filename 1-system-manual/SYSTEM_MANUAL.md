@@ -11076,7 +11076,7 @@ These are the architectural truths a new PM needs to understand HOW the multi-as
 
 5. **Ticker-collision gate.** `XSTOCK_SPOT_KRAKEN_COLLISIONS` (17 entries: 9 USD + 8 EUR pre-emptive) is the membership-set the resolver gates against on the regular `kraken` exchange path. Collision tickers (e.g. SUI = both Sun Communities equity and Sui Network crypto) without disambiguating x-suffix route to crypto_spot + emit `[B79.0f][COLLISION_RESOLVE]` WARN log. Provenance comment cites Kraken `/0/public/AssetPairs` source + last-verified date; standing quarterly re-audit rule (Kraken adds tokens regularly).
 
-6. **Cross-asset-class UI component reuse via export+endpointBase prop (B79.0i.b).** When an asset-class-specific tab needs the same rich tables a primary asset-class tab already renders, the primary's component is exported with an optional `endpointBase` prop whose default is the primary's existing endpoint. The asset-class-specific tab passes its own `endpointBase` pointing at a sibling endpoint that returns the same response shape. **No code-duplication, no behavioral drift, no risk to legacy consumers** — when `endpointBase` is omitted, behavior is byte-identical to pre-change. Examples landed in B79.0i.b: `FilterDiagnosticsPanel` (machine-learning.tsx), `FactorCalibrationSection` + `ExitStrategyAblationSection` (analytics.tsx). The xStocks tab consumes all three via `endpointBase="/api/xstocks/..."`. Apply this pattern in B80 (crypto_perp) when building the perp tab.
+6. **Cross-asset-class UI component reuse via export+endpointBase prop + explicit `assetClass` prop (B79.0i.b → refined in BATCH_82).** When an asset-class-specific tab needs the same rich tables a primary asset-class tab already renders, the primary's component is exported with an `endpointBase` prop. **BATCH_82 refinement (per Langston design review Q3, 2026-05-14):** alongside `endpointBase`, the component also accepts an explicit `assetClass: AssetClass` REQUIRED prop. The parent component (which already knows which asset class it's rendering, since that's how it chose the endpointBase) passes both. Inside the section component, render-time lookups (e.g. empty-state copy with human-readable label) read `ASSET_CLASS_REGISTRY[assetClass].displayName` directly. **NO URL-string-parsing of the endpointBase to derive the asset class** — that's the brittle anti-pattern (couples render logic to URL convention; rots when futures/forex come online). The explicit-prop pattern scales linearly for N asset classes. Examples post-B82: `FactorCalibrationSection({ endpointBase, assetClass })` + `ExitStrategyAblationSection({ endpointBase, assetClass })` (analytics.tsx). Both crypto callers in `analytics.tsx` Drift tab pass `assetClass="crypto_spot"`; xstock callers in `xstocks-tab.tsx` pass `assetClass="xstock_spot"`. Apply this pattern in B80 (crypto_perp) when building the perp tab.
 
 7. **Shared aggregator parameterization via optional asset_class (B79.0i.b).** When a backend aggregator function needs to serve multiple asset classes, the function signature gains an optional `assetClass` parameter with a default value preserving the legacy behavior. The SQL WHERE clause appends `AND asset_class = $X` ONLY when the parameter is provided (or, when default is a literal like `'crypto_spot'`, the SQL is parameterized rather than hardcoded). **Crypto regression invariant:** any caller that omits the param gets byte-identical pre-change behavior. Verified in B79.0i.b for `computeExitStrategyAblation(window, regimeFilter, assetClass=null)` and `computeFactorCalibration(window, assetClass='crypto_spot')` — post-deploy curl on `/api/analytics/factor-calibration` returns identical row count to pre-deploy. Apply in B80 to any new shared aggregator functions.
 
@@ -11154,11 +11154,24 @@ Every enabled xstock_spot strategy MUST return `null` (with `setNullReason('sell
 
 ### B73 exit-strategy ablation — asset-class OHLC source dispatch
 
-`exit-strategy-replay-service.ts:fetchOhlcForReplay` now branches on `assetClass`:
-- `crypto_spot` (default) → `ohlcCache.getOHLCData()` via Kraken REST (existing path).
+`exit-strategy-replay-service.ts:fetchOhlcForReplay` branches on `assetClass`:
+- `crypto_spot` → `ohlcCache.getOHLCData()` via Kraken REST (existing path).
 - `xstock_spot` → Drizzle query against partitioned `xstock_spot_ohlc_1m` table (EXPLAIN ANALYZE 1.035 ms verified pre-deploy, all 13 partitions have child indexes on `(symbol, interval_begin DESC)`).
 
-`ReplayContext.assetClass` threaded from `OpenVirtualTrade.assetClass` via `vts-runner.ts:2336` → `vts-service.persistRealPriceTrade:957` → `replayAndPersist`. Async fire-and-forget on close; `_b79XstockReplayErrors` counter + `[B73-REPLAY][XSTOCK]` log surface async failures observationally.
+**BATCH_82 (2026-05-14) — type-system-enforced caller-resolves.** `ReplayContext.assetClass: AssetClass` is non-nullable (was `?: string` with `?? 'crypto_spot'` fallback at both consumer sites). The `??` fallbacks at `exit-strategy-replay-service.ts:264` (SQL VALUES bind for the ablation row INSERT) and `:294` (OHLC fetch arg) are dropped — both consume `ctx.assetClass` directly. The sole caller (`vts-service.persistRealPriceTrade:967`) threads `tradeData.assetClass` explicitly. **Compile fails if any future caller forgets** — closes the silent-crypto-default anti-pattern that drove B-NEW-20/22/25/26/28. Async fire-and-forget on close; `_b79XstockReplayErrors` counter + `[B73-REPLAY][XSTOCK]` log surface async failures observationally.
+
+### Factor ablation emit — type-enforced asset-class threading (BATCH_82)
+
+`emitAblationRecord(source, pairSymbol, realDecision, alternates, assetClass, strategy?)` carries `assetClass: AssetClass` as a REQUIRED parameter (no default). Pre-B82 the row builder hardcoded `assetClass: 'crypto_spot'` at `factor-ablation-emitter.ts:236`. Every xstock VTS-emitted ablation row 2026-05-11 → 2026-05-14 was silently mis-tagged crypto_spot until B82 shipped. Both production callers (`signal-orchestrator.ts:959` and `vts-runner.ts:1794`) pre-compute `resolveAssetClass(symbol, 'kraken')` and pass it explicitly. The structural fix is the type-system gate, not a runtime check — TypeScript blocks merge of any future caller that omits the parameter.
+
+### Cross-cutting invariant — writer-side asset-class threading (BATCH_82 standing rule)
+
+Every persistence site that writes an `asset_class` column MUST receive the value through a typed parameter from the caller. NO hardcoded literals (`'crypto_spot'`), NO `??` fallbacks. This applies to:
+- `factor-ablation-emitter.ts` (regime_factor_alternates)
+- `exit-strategy-replay-service.ts` (exit_strategy_alternates)
+- Future writers when new asset-class-scoped tables are added
+
+When adding a new asset class, the pre-launch grep `grep -rn "asset_class" server/services/` enumerates every site that touches the column. Each site is verified to accept a typed parameter — no exceptions.
 
 ### Per-cycle xstock counter surface (B79.0m.b2 additions)
 
