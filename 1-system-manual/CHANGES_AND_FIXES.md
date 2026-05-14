@@ -2,6 +2,61 @@
 
 ---
 
+## INFRA-2026-05-14-A — BATCH_82 xstock_spot ablation + calibration data path repair (5th crypto-first incident closure)
+
+**Date:** 2026-05-14 | **Commits:** `dbdde1bfe` (Step 3 impl) + governance commit (Step 10) | **PM2:** #275 | **Deploy timestamp:** 2026-05-14T11:28:24Z
+
+**What broke:** Pre-B82, two writer sites hardcoded `assetClass='crypto_spot'` regardless of caller intent — `factor-ablation-emitter.ts:236` (row builder) + `exit-strategy-replay-service.ts:264` (SQL VALUES literal). Every xstock VTS-emitted ablation/replay row since 2026-05-11 was silently mis-tagged crypto_spot. `/api/xstocks/exit-strategy-ablation?window=rolling_7d` returned `totalTrades:0, variants:[]` after 133.6 seconds; `/api/xstocks/factor-calibration` same shape at 38.1s. UI panels stuck on perpetual "Loading...".
+
+**5th instance of crypto-first / asset-class-lost pattern** (after B-NEW-20/22/25/26).
+
+**Structural fix (type-system-enforced caller-resolves, NOT silent fallback):**
+1. `emitAblationRecord(..., assetClass: AssetClass)` REQUIRED parameter (NO default — compile fails if caller forgets). Both callers updated.
+2. `ReplayContext.assetClass: AssetClass` non-nullable. Drop `?? 'crypto_spot'` fallback at line 264 (SQL bind) + line 294 (OHLC fetch).
+3. Composite indexes via manual SQL: `(asset_class, created_at)` on `exit_strategy_alternates` + partial `(asset_class, evaluated_at) WHERE replay_completed_at IS NOT NULL` on `regime_factor_alternates`. Drizzle txn-wrap incompatible with `CONCURRENTLY` — script at `server/migrations/manual/B82_asset_class_indexes.sql`.
+4. UI empty-state per-section copy with `ASSET_CLASS_REGISTRY.displayName` ("xStock Spot" not raw enum). Explicit `assetClass: AssetClass` prop (per Langston Q3 — explicit-prop scales for N asset classes).
+
+**Endpoint speedups (curl-verified post-deploy):** xstock-ablation **954×** (133.6s → 0.14s), xstock-calibration **501×** (38.1s → 0.076s), crypto-ablation regression test **63×** (36.7s → 0.577s).
+
+**Live UI verification 2026-05-14 11:40 UTC** via Claude-in-Chrome — both panels render "No xStock Spot data yet — accumulating" empty-state with displayName.
+
+**Activation thresholds:** Exit Strategy Ablation = 1 closed xstock trade (12 variant rows). Factor Calibration = 1 trade + 1 nightly replay-ablation cron run.
+
+**No-backfill Option β** (Kyle directive). 4-day contamination window rolls off rolling_30d by 2026-06-15.
+
+**Same-batch governance ship:** `/home/langston/.claude/CLAUDE.md` stale 2026-05-06 loader rewritten (referenced retired CCPI + DT_Staged_Changes + batch zip + INSTRUCTIONS.md). 3 new SIM "If I Change X, Check Y" entries. `MULTI_ASSET_VTS_EXPANSION_PLAN.md` §10d observability backfill batch filed (commit `32ed09cd9`).
+
+**Langston trail:** scope rev1 REVISE → rev2 APPROVE; pre-audit rev1 REVISE → rev2 APPROVE; Step 4 code review APPROVE-PUSH; Step 8 APPROVE-CLOSE.
+
+See `BATCH_82_COMPLETION_REPORT.md` for full detail.
+
+---
+
+## INFRA-2026-05-14-B — B83 hotfix: ReferenceError tradeId in resolveOpenVirtualTrades (24hr silent pipeline stall)
+
+**Date:** 2026-05-14 | **Commit:** `b4cde6b85` | **PM2:** #274
+
+**What broke:** BATCH_80 Phase 1 (commit `8ace0b859`, 2026-05-13) renamed `getTrailingState(symbol)` → `getTrailingState(tradeId)` correctly in the FIRST for-loop of `resolveOpenVirtualTrades`. The SECOND for-loop destructures `for (const { id, trade, exitPrice, exitReason } of tradesToClose)` — iteration variable is `id`, NOT `tradeId`. Three references inside that loop body at lines `:2349` / `:2570` / `:2572` referenced an out-of-scope name. **TypeScript didn't catch it** because `tradeId` is a valid identifier elsewhere in the same module — compiler resolved against module scope. At runtime, JS threw `ReferenceError: tradeId is not defined` every cycle where `tradesToClose.length >= 1` → entire function aborted at the first iteration of the second loop → **ZERO trades closed for ~24 hours**.
+
+**Detection:** Required **runtime instrumentation** because static analysis couldn't surface it. Added `[B83-DIAG]` per-trade decision logging + `[B83-CYCLE]` unconditional per-cycle summary log (replaces the gated `if (resolved > 0)` anti-pattern — success had a log line, failure had silence). The B83-CYCLE log line ships as PERMANENT health-beat.
+
+**Fix:** Three single-character changes `tradeId` → `id` at lines 2349/2570/2572 of `vts-runner.ts`.
+
+**Verification:** 85 trades closed cleanly via natural exit rules on first post-fix cycle (10:02:56 UTC). Pre-fix backlog flushed (84 closes in one cycle: AKT/EUR -10.07%, ARKM/USD -5.47%, EUL/USD -4.67%, ZBT/USD -7.16%, ICNT/USD -4.33%, SXT/USD -9.22%, plus trailing-stop winners; +1 EWZ/USD on second cycle).
+
+**Why this hit production undetected for 24 hours:**
+1. BATCH_80 code review missed the second for-loop variable mismatch.
+2. TypeScript module-scope vs block-scope resolution — compiler doesn't flag block-scope shadowing when same-name outer-scope identifier exists.
+3. Silent error swallowing — unhandled rejection logged at error.log level but no alert paged.
+4. Gated success-only logs hid the failure. **B83-CYCLE permanent unconditional log fixes this anti-pattern.**
+
+**Governance added in same stretch:**
+1. **SIM "Rename invariants" section** (NEW): 5-step protocol mandatory for any cross-module identifier rename. Starter inventory of 7 identifier families.
+2. **Block-scope for-loop lesson** added to SIM "If I Change X, Check Y" — block-scoped iteration variables DO NOT participate in module-scope identifier visibility.
+3. **`MULTI_ASSET_VTS_EXPANSION_PLAN.md` §10d observability backfill batch** filed: exit-cycle health dashboard + multi-API rate-limit dashboards (Kraken Public/Private/WS/Futures + CoinGecko + Supabase + Anthropic + Telegram + GitHub + Finnhub) + System Monitoring page reorganization + code-side hardening.
+
+---
+
 ## UI-2026-05-13-A — xStocks Filter Diagnostics tab UI sprint (Phase 24 follow-on, 17 fixes 2026-05-12 → 2026-05-13)
 
 **Trigger:** Kyle catalog of UI issues against the xStocks Filter Diagnostics tab post-B79.0m.b2. One-by-one diagnose-and-fix workflow (NOT a full batch — per Kyle directive 2026-05-12). Canonical tracker: `Claude Comms and Packages/Batch Completion/XSTOCKS_DIAGNOSTICS_TAB_FIXES.md`.
