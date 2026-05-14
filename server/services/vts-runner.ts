@@ -2163,6 +2163,27 @@ async function resolveOpenVirtualTrades(): Promise<{
       seed: tecSeed,
     });
 
+    // [B83-DIAG] (2026-05-14) Per-trade decision diagnostic for stuck crypto
+    // trades. Surface every key input + the evaluator's verdict so we can
+    // identify why stop_hit isn't firing when currentPrice < stopLoss. Scoped
+    // to crypto trades older than 30 minutes to avoid flooding logs with
+    // healthy young-trade noise. REMOVE after root cause identified.
+    if (trade.assetClass === 'crypto_spot' && holdDurationMs > 30 * 60 * 1000) {
+      const currentPriceStr = currentPrice === null ? 'NULL' : String(currentPrice);
+      const atrStr = trade.atrAtOpen === undefined ? 'UNDEF' : String(trade.atrAtOpen);
+      const wouldFireSimpleStop =
+        currentPrice !== null && currentPrice <= trade.stopLoss ? 'YES' : 'NO';
+      console.log(
+        `[B83-DIAG] ${trade.symbol} tradeId=${tradeId} ` +
+        `cur=${currentPriceStr} stop=${trade.stopLoss} atr=${atrStr} ` +
+        `useTrailing=true shouldExit=${decision.shouldExit} ` +
+        `reason=${decision.exitReason ?? 'null'} ` +
+        `engineStop=${decision.newStopPrice ?? 'undef'} ` +
+        `wouldFireSimpleStop=${wouldFireSimpleStop} ` +
+        `holdMin=${Math.round(holdDurationMs / 60000)}`
+      );
+    }
+
     // B65.2: if the engine ratcheted the stop (break-even lock or trailing),
     // propagate the new stop back onto the in-memory trade record so the
     // next cycle's evaluation sees the updated level and so any downstream
@@ -2569,6 +2590,11 @@ async function resolveOpenVirtualTrades(): Promise<{
     if (exitReason === 'break_even_stop') { stopHits++; /* for cycle stats only */ }
   }
   
+  // [B83-CYCLE] (2026-05-14) Per-cycle summary ALWAYS fires so silent zero-close
+  // cycles are observable. Removes the `if (resolved > 0)` gate that hid the
+  // pipeline-stall from PM2 logs. REMOVE the unconditional log after observability
+  // dashboard ships; the resolved>0 block below stays as the success-path detail.
+  console.log(`[B83-CYCLE] ${openVirtualTrades.size} evaluated, ${resolved} closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), pending=${tradesToClose.length}`);
   if (resolved > 0) {
     console.log(`[11.6][Resolution] Cycle complete: ${resolved} trades closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), ${openVirtualTrades.size} still open`);
     // Directive 11.6D: Sanity check - all trades resolved via real-price
