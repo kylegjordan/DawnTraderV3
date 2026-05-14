@@ -138,6 +138,7 @@ Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox `/var/log/cc-brid
 - **"Staging verified" means UI-navigated, not curl-checked** (CLAUDE.md §9.3).
 - **Numeric deltas / scaffolding-vs-functional declarations** must be top-of-report explicit (CLAUDE.md §9.1, §9.2).
 - **Rename inventory protocol** (post-B83, 2026-05-14): grep-inventory all OLD-name call sites before commit; per-row decision (RENAMED / KEPT-AS-OLD-WITH-REASON / REMOVED). Block-scope for-loop iteration variables are unforgiving — TS won't catch the bug.
+- **Plain-language summaries to Kyle, every time** (Kyle directive 2026-05-14, CLAUDE.md §1 + §11). No function names, file paths, code snippets, SQL, or jargon in messages to Kyle. Reference bar: B-NEW-14 / B-NEW-21 explanations from 2026-05-14. CC↔Langston exchanges stay technical at whatever depth best gets the outcome. Same rule mirrored to Langston's CLAUDE.md §2 (Langston→Kyle plain, Langston→CC technical).
 
 ---
 

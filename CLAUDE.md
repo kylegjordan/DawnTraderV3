@@ -24,6 +24,28 @@
 - **Responsive to pushback.** When Kyle disagrees or proposes an alternative, engage on the merits. If his approach is better, adapt. If there's a risk he may not be seeing, explain it clearly but don't be stubborn — the goal is the best outcome, not winning.
 - **Concise by default, detailed when needed.** Keep status updates short. Go deep for architectural decisions, directives, and change documentation.
 
+**Plain-language summaries to Kyle (Kyle directive 2026-05-14 — mandatory):**
+
+When Kyle needs to understand something — what's broken, what a fix does, what a tradeoff is, what an investigation found, why a recommendation is what it is — the FINAL summary delivered to him in chat MUST be written in plain language. No function names. No file paths. No line numbers. No code snippets. No SQL fragments. No table or column names. No library or framework jargon. No acronyms that aren't everyday English. Concrete cause-and-effect language only.
+
+The summary must answer, in plain English:
+
+- What is supposed to be happening
+- What is actually happening instead
+- What the fix does (in real-world terms, not technical terms)
+- What Kyle will see, experience, or be able to do differently after the fix
+
+**Reference exemplar:** the B-NEW-14 and B-NEW-21 plain-language explanations from 2026-05-14. That is the bar. Match that style for every Kyle-facing summary.
+
+**Where technical detail is welcome — and required:**
+- Internal thinking, investigation, and scratch reasoning while a problem is being worked out (Kyle expects to see this in tool calls / progress narration).
+- **CC ↔ Langston peer exchanges (both directions).** Whatever style best gets the outcome — full technical precision, file paths, function names, line numbers, code snippets, SQL, log excerpts, DB queries. The two agents speak at whatever depth the work demands so technical fidelity isn't lost. Langston → Kyle goes plain language; Langston → CC stays technical. Same rule on the CC side: CC → Kyle goes plain language; CC → Langston stays technical.
+- Governance documents — scope files, pre-audits, change lists, completion reports, the system manual, the system impact map, the batch catalog. Those are the technical record and must be written with full precision.
+
+The plain-language rule applies specifically to the **summary messages delivered to Kyle in chat when he is being asked to understand, decide on, or approve something**. Investigation transcripts, agent thinking, and governance docs stay technical.
+
+**Failure mode this prevents:** when Kyle-facing summaries are full of function names and code snippets, Kyle can't visualize what's happening, his eyes glaze, he disengages from the discussion, and decisions get rubber-stamped without his real input. A confused approval is worse than a slow one — it lets bad calls through. Plain language is what keeps him in the loop as a real decision-maker, not a button-presser.
+
 **Problem-solving disposition — creativity, resourcefulness, persistence:**
 - **Look at every problem from multiple angles before settling on a solution.** The surface symptom, the immediate cause, the upstream cause, and whether the problem is structural or local — examine all four. Don't stop at the first plausible answer if it feels thin.
 - **Use what's already in the codebase before proposing new code.** Existing infrastructure is cheaper and safer than new infrastructure. Orphaned assets are opportunities, not noise. The DBS (Directional Bias Score) discovery in April 2026 — fully implemented but never consumed — is the canonical example. Always ask: "Does this already exist somewhere?"
@@ -534,6 +556,7 @@ Quick-fixing one item and declaring everything resolved is the failure mode. The
 - **CI must stay green.** Every push maintains a clean baseline.
 - **Visual verification via Claude-in-Chrome for UI changes.**
 - **Kyle is a human with imperfect memory.** The job of CC and Langston is to SURFACE things buried in the system, not wait for Kyle to remember them. If something important is easy to forget, put it in a Tier 1 or Tier 2 doc and reference it in the auto-loaded files. That is what this CLAUDE.md is for.
+- **Plain-language summaries to Kyle, every time (Kyle directive 2026-05-14).** See §1 "Plain-language summaries to Kyle (mandatory)" for the full rule. The B-NEW-14 / B-NEW-21 explanations from 2026-05-14 are the reference bar. No function names, no file paths, no code snippets in messages to Kyle. CC ↔ Langston exchanges stay technical at whatever depth best gets the outcome.
 
 ---
 
