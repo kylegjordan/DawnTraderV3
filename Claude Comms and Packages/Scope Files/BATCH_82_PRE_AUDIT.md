@@ -1,9 +1,12 @@
 # BATCH_82 — Pre-audit
 
-**Status:** READY for Langston review
+**Status:** rev 2 — addresses Langston rev-1-review (Q3 → explicit prop + concerns 1-4 closed in §9.a / §9.b / §6 / §7)
 **Date:** 2026-05-14
 **Predecessor:** `BATCH_82_SCOPE.md` rev 2 (Langston APPROVED 2026-05-14)
 **Workflow step:** §2 of 11
+**Rev history:**
+- rev 1 (2026-05-14 11:08 UTC): initial pre-audit draft. Langston returned REVISE.
+- rev 2 (2026-05-14 11:25 UTC): Q3 changed to explicit `assetClass` prop (URL-parse rejected). §6.4b regime_factor_alternates partial-index EXPLAIN added. §9.a deferred field-availability checks closed (verified all 3 caller sites). §9.b DBURL extraction mechanism concretized + staging-reachability verified. §6 deploy_timestamp capture protocol added. §7 SIM update paths + section names cited explicitly.
 
 This pre-audit consumes the obligations from `BATCH_82_SCOPE.md` rev 2 §5 row "Step 2", plus Langston's two non-blocking notes from his rev-2 APPROVE message:
 - Note 1: verify line numbers cited (`:236`, `:264`, `:294`, `:959`, `:1794`) against current `HEAD`.
@@ -178,7 +181,7 @@ WHERE evaluated_at > '<deploy_timestamp>' - INTERVAL '15 minutes'
 GROUP BY asset_class;
 -- EXPECTED: crypto_spot rows only. Zero xstock_spot mis-tags.
 
--- 6.4 INDEX VERIFICATION: EXPLAIN should now use the new index
+-- 6.4 INDEX VERIFICATION (exit_strategy_alternates): EXPLAIN should now use the new index
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT variant_id, COUNT(*)
 FROM exit_strategy_alternates
@@ -189,6 +192,26 @@ GROUP BY variant_id;
 -- EXPECTED: Index Scan or Bitmap Heap Scan with Index Cond on (asset_class, created_at).
 --           NOT a Filter post-scan.
 
+-- 6.4b INDEX VERIFICATION (regime_factor_alternates) — partial-index predicate validation
+-- (per Langston rev-1-review Q2 — partial index `WHERE replay_completed_at IS NOT NULL`
+-- must intersect with actual query WHERE; otherwise the partial index silently no-ops)
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT factor_name, COUNT(*)
+FROM regime_factor_alternates
+WHERE evaluated_at >= NOW() - INTERVAL '7 days'
+  AND replay_completed_at IS NOT NULL
+  AND asset_class = 'xstock_spot'
+  AND real_decision->>'confidence' IS NOT NULL
+  AND alternate_decision->>'confidence' IS NOT NULL
+GROUP BY factor_name;
+-- EXPECTED: Index Scan on idx_regime_factor_alternates_asset_evaluated
+--           with Index Cond: (asset_class = 'xstock_spot' AND evaluated_at >= ...)
+--           NOT a Filter post-scan.
+-- FAIL CRITERIA: if EXPLAIN shows a sequential scan or filter without using the new
+--           index, the partial-index predicate (`WHERE replay_completed_at IS NOT NULL`)
+--           is mismatched with the query — must rebuild index without the partial
+--           predicate OR rewrite the query to surface the predicate first.
+
 -- 6.5 ENDPOINT TIMING: re-run the two endpoints
 -- /api/xstocks/exit-strategy-ablation?window=rolling_7d → expect < 5s
 -- /api/xstocks/factor-calibration?window=rolling_7d → expect < 5s
@@ -196,15 +219,23 @@ GROUP BY variant_id;
 -- /api/analytics/factor-calibration?window=rolling_7d (crypto baseline) → expect no regression
 ```
 
+### deploy_timestamp capture protocol (per Langston rev-1-review concern 3)
+
+At Step 6 (staging deploy), immediately AFTER `pm2 restart dawntrader` succeeds, capture the exact UTC timestamp via:
+```bash
+ssh root@188.245.193.8 'date -u +"%Y-%m-%dT%H:%M:%SZ"'
+```
+Record this as `<deploy_timestamp>` in the completion-report appendix table. All verification queries (§6.1-6.5) substitute this exact value. This gives reproducible post-hoc replay across the T+1h / T+6h / T+24h forward-watch and makes the verification SQL deterministic for any future audit.
+
 ### T+1h / T+6h / T+24h forward-watch schedule
 
 After Step 11 closure, schedule re-runs of queries 6.1-6.5 at these intervals:
 
-| Time | Owner | Action |
-|---|---|---|
-| T+1h post-deploy | CC | Re-run 6.1-6.5; record results in completion report appendix. |
-| T+6h post-deploy | CC | Re-run 6.1-6.3 (row tag verification). Append to completion report. |
-| T+24h post-deploy | CC | Re-run all queries. Confirm endpoint timings holding < 5s p99. Append. |
+| Time | Owner | Action | Recorded in |
+|---|---|---|---|
+| T+1h post-deploy | CC | Re-run 6.1-6.5; record results in completion report appendix. | `BATCH_82_COMPLETION_REPORT.md` §X-Verification |
+| T+6h post-deploy | CC | Re-run 6.1-6.3 (row tag verification). | Same appendix |
+| T+24h post-deploy | CC | Re-run all queries. Confirm endpoint timings holding < 5s p99. | Same appendix |
 
 Any failure at any checkpoint triggers immediate rollback (revert commit + redeploy + drop indexes).
 
@@ -229,12 +260,19 @@ Independent verification per CLAUDE.md §2 Step 8. Langston re-runs queries 6.1-
 | `vts-runner.ts` | Service (caller) | scanner, eval-cycle | factor-ablation-emitter, replayAndPersist (via vts-service) | openVirtualTrades Map | **Low** — single line at `:1794` adds `assetClass` argument |
 | `vts-service.ts` | Service | vts-runner | exit-strategy-replay-service | None | **Low** — single line at `:967` adds `assetClass` to ReplayContext |
 
-### SIM entry updates required (Step 10)
+### SIM entry updates required (Step 10) — concrete paths + section names (per Langston rev-1-review concern 4)
 
-Following entries need new lines in SIM "If I Change X, Check Y":
-- **"Modify `emitAblationRecord` signature"** → list both callers (signal-orchestrator.ts:959, vts-runner.ts:1794) + assert no test/script callers
-- **"Modify `ReplayContext` type"** → list sole caller (vts-service.ts:967) + cross-reference exit-strategy-replay-service line 264 + line 294
-- **"Add `asset_class` index to ablation/calibration table"** → cross-reference the index naming convention `idx_<table>_asset_<timecolumn>` for future indexes
+All three entries land in `1-system-manual/SYSTEM_IMPACT_MAP.md` in the existing **"Rename invariants"** section (added 2026-05-14 in commit `32ed09cd9` for B83 governance) — specifically in the **"If I Change X, Check Y — rename-inventory additions"** sub-section near the end of that section. Adding the three new entries inline preserves the section's role as the canonical cross-module-identifier-change checklist.
+
+Entries to add (verbatim wording for Step 10 commit):
+
+1. **"Modify `emitAblationRecord` signature"** → 2 production callers (signal-orchestrator.ts:959, vts-runner.ts:1794). Zero test/script callers verified via `grep -rn 'emitAblationRecord\s*(' server/ scripts/ shared/ tests/`. Pre-rename inventory documents the closed-set caller list.
+
+2. **"Modify `ReplayContext` type or `replayAndPersist` signature"** → 1 production caller (vts-service.ts:967). Zero test callers. Cross-reference `exit-strategy-replay-service.ts:264` (SQL VALUES bind) + `:294` (OHLC fetch arg) — both inside the same module are consumers of the same `ctx.assetClass` field.
+
+3. **"Add asset_class index to a per-asset-class ablation/calibration table"** → naming convention: `idx_<table>_asset_<timecolumn>` (e.g., `idx_exit_strategy_alternates_asset_created`, `idx_regime_factor_alternates_asset_evaluated`). Index DDL via raw SQL script at `server/migrations/manual/B<NN>_*.sql` (NOT Drizzle migration runner) — CONCURRENTLY cannot run inside Drizzle's BEGIN/COMMIT wrapper. Partial-index predicate must intersect with actual query WHERE (verified via EXPLAIN ANALYZE at deploy time).
+
+These entries are added in the SAME Step-10 commit that updates BATCH_CATALOG / PHASE_HISTORY / RUNNING_ISSUES / CHANGES_AND_FIXES / MEMORY.
 
 ---
 
@@ -253,24 +291,39 @@ Both Obj 1 + Obj 2 risk levels (Medium) unchanged from rev 2 — type-system enf
 
 ### §9.a — Writer-side asset_class threading (Obj 1 + 2)
 
+**Caller-site field-availability verification (closes Langston rev-1-review concern 1, no deferred trust):**
+
+| Call site | Variable holding asset class | Derivation method | Verified at line |
+|---|---|---|---|
+| `signal-orchestrator.ts:959` | `rawSignal: StrategySignal` (function param at line 384) | `resolveAssetClass(rawSignal.symbol, 'kraken')` — same pattern already used at line 990 (a few lines below the emit). Import already present. | Verified via `grep -n "resolveAssetClass" server/services/signal-orchestrator.ts` |
+| `vts-runner.ts:1794` | `symbol: string` (function param, already in scope at line 1796) | `resolveAssetClass(symbol, 'kraken')` — same pattern already used at line 1828 (the open-trade INSERT a few lines below). Import already present. | Verified via `grep -n "resolveAssetClass" server/services/vts-runner.ts` |
+| `vts-service.ts:967` | `tradeData.assetClass` (parameter on `persistRealPriceTrade`, ALREADY THREADED via B79.0m.b2 at line 973) | **No change needed — already passes** `assetClass: tradeData.assetClass`. | Read at lines 967-984. |
+
+The pattern `resolveAssetClass(symbol, 'kraken')` is the canonical exchange-context derivation. It throws on unknown symbol patterns (no silent fallback). Both signal-orchestrator and vts-runner are committed to `kraken` exchange (spot-only) in current scope; xstock-spot uses `kraken-equities` only at the archiver layer, never at the VTS/signal-orchestrator layer. When perp wiring lands (B80), the exchange parameter becomes context-dependent — out of B82 scope.
+
 **Files modified:**
 1. `server/services/factor-ablation-emitter.ts`
-   - Add `import { AssetClass } from '../../shared/asset-classes.js'` (verify if already imported)
-   - Change `emitAblationRecord(source, pairSymbol, realDecision, alternates, strategy?)` → add `assetClass: AssetClass` as REQUIRED parameter (per Langston Q1)
+   - Confirm `import { AssetClass } from '../../shared/asset-classes.js'` (already present in current source via `type AssetClass` export)
+   - Change `emitAblationRecord(source, pairSymbol, realDecision, alternates, strategy?)` → add `assetClass: AssetClass` as REQUIRED parameter (per Langston Q1 — NO default)
    - Remove hardcoded `'crypto_spot'` at line 236; replace with `assetClass`
    - Update JSDoc example at line 268 to show the new signature
 2. `server/services/signal-orchestrator.ts:959`
-   - Add `assetClass` argument at the call site. Source: the rawSignal/MCE context already carries asset class — confirm in pre-implementation read.
+   - Pre-compute `const assetClass = resolveAssetClass(rawSignal.symbol, 'kraken');` at top of the emit block (before line 959)
+   - Pass `assetClass` as the new emitAblationRecord parameter
 3. `server/services/vts-runner.ts:1794`
-   - Add `assetClass: signal.assetClass` (or equivalent — confirm field name on the local `signal` variable).
+   - Pre-compute `const assetClass = resolveAssetClass(symbol, 'kraken');` at top of the emit block (before line 1794) — OR hoist the existing line-1828 expression up
+   - Pass `assetClass` as the new emitAblationRecord parameter
 4. `server/services/exit-strategy-replay-service.ts`
    - Change `ReplayContext.assetClass?: AssetClass` → `assetClass: AssetClass` (drop `?`)
-   - Drop `?? 'crypto_spot'` at line 264 SQL literal: use `${ctx.assetClass}` in the bind
-   - Drop `?? 'crypto_spot'` at line 294 OHLC fetch fallback: use `ctx.assetClass`
+   - Drop `?? 'crypto_spot'` at line 264 SQL literal: bind `${ctx.assetClass}` directly
+   - Drop `?? 'crypto_spot'` at line 294 OHLC fetch fallback: pass `ctx.assetClass` directly
 5. `server/services/vts-service.ts:967`
-   - Update `replayAndPersist({ ... })` call site to pass `assetClass: trade.assetClass` (confirm field on the `trade` variable).
+   - **No code change — already passes `assetClass: tradeData.assetClass` per B79.0m.b2.** Confirm `persistRealPriceTrade.tradeData.assetClass` is non-null at call site (it is — populated at trade-open via resolveAssetClass per vts-runner:1828).
 
-**Verification at end of §9.a:** TypeScript compile clean. Spot-check via grep that no `?? 'crypto_spot'` remains in `exit-strategy-replay-service.ts`.
+**Verification at end of §9.a:**
+1. `npx tsc --noEmit` passes clean.
+2. `grep -rn "?? 'crypto_spot'" server/services/` returns zero matches.
+3. `grep -rn "assetClass: 'crypto_spot'" server/services/factor-ablation-emitter.ts` returns zero matches.
 
 ### §9.b — DB index migration (Obj 3)
 
@@ -297,26 +350,50 @@ Both Obj 1 + Obj 2 risk levels (Medium) unchanged from rev 2 — type-system enf
 **Deployment sequence:**
 - Commit both SQL files in Step 3.
 - After Step 5 (CI green) + Step 6 (npm build + pm2 restart), run forward DDL via:
+  ```bash
+  scp server/migrations/manual/B82_asset_class_indexes.sql root@188.245.193.8:/tmp/
+  ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && DBURL=\$(grep -E ^DATABASE_URL= .env | head -1 | cut -d= -f2-) && psql \"\$DBURL\" -f /tmp/B82_asset_class_indexes.sql'"
   ```
-  ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && DBURL=\$(...) && psql \"\$DBURL\" -f server/migrations/manual/B82_asset_class_indexes.sql'"
-  ```
+- **DBURL extraction mechanism (concretized per Langston rev-1-review concern 2):** the staging-app `.env` file at `/home/deploy/dawntrader/.env` contains `DATABASE_URL=postgresql://...`. The grep+cut command above extracts it. **Connection reachability verified:** this exact extraction pattern was used multiple times in B83 diagnostic queries (e.g., `_b82_partition.sql` partition enumeration) — all queries returned successfully. No DNS/firewall/connection issues from the Hetzner deploy box to Supabase.
 - If rollback needed: equivalent psql call against the rollback file.
 
 ### §9.c — UI empty-state (Obj 4)
 
-**File modified:** `client/src/pages/analytics.tsx`
+**Files modified:**
+1. `client/src/pages/analytics.tsx` — add explicit `assetClass: AssetClass` prop to both `ExitStrategyAblationSection` + `FactorCalibrationSection` component signatures. Render empty-state branch using the prop.
+2. `client/src/pages/analytics.tsx` (crypto callers) — parent component passes `assetClass="crypto_spot"` explicitly (these sections were already rendering crypto-by-default; now type-safe).
+3. `client/src/components/machine-learning/xstocks-tab.tsx` — parent passes `assetClass="xstock_spot"` explicitly alongside the existing `endpointBase` prop.
 
-For each of `ExitStrategyAblationSection` + `FactorCalibrationSection`:
-1. Read `endpointBase` prop (already exists per B79.0i.b)
-2. Derive `assetClass` from the endpoint path (`/api/xstocks/*` → `xstock_spot`; `/api/analytics/*` → `crypto_spot`)
-3. Look up `displayName = ASSET_CLASS_REGISTRY[assetClass].displayName`
-4. Render the appropriate empty-state copy when:
-   - Ablation: `data.totalTrades === 0 && (!data.variants || data.variants.length === 0)`
-   - Calibration: `(!data.factors || data.factors.length === 0) && data.totalReplayed === 0`
+**Implementation pattern (per Langston rev-1-review Q3 — explicit prop, NOT URL-string parsing):**
+```tsx
+// In analytics.tsx — section component signatures
+export function ExitStrategyAblationSection({
+  endpointBase,
+  assetClass,  // NEW — explicit prop, type-safe
+}: {
+  endpointBase?: string;
+  assetClass: AssetClass;  // REQUIRED
+}) {
+  // ... existing data-fetch logic ...
+  const displayName = ASSET_CLASS_REGISTRY[assetClass].displayName;
 
-**Copy:**
-- Ablation: `"No {displayName} data yet — accumulating. Panel populates as closed trades complete the ablation replay window."`
-- Calibration: `"No {displayName} data yet — accumulating. Panel populates as the factor replay pipeline evaluates new signals."`
+  if (data.totalTrades === 0 && (!data.variants || data.variants.length === 0)) {
+    return <EmptyState>
+      No {displayName} data yet — accumulating. Panel populates as closed trades complete the ablation replay window.
+    </EmptyState>;
+  }
+  // ... existing rendering ...
+}
+
+// Same pattern for FactorCalibrationSection with empty-copy:
+// "No {displayName} data yet — accumulating. Panel populates as the factor replay pipeline evaluates new signals."
+```
+
+**Rationale for explicit prop over URL parsing (Langston rev-1-review Q3):** parent components ALREADY know which asset class they're rendering — that's the basis on which they chose the `endpointBase`. Encoding that knowledge twice (once in the URL, once derived back from the URL) is brittle. When B80 / B81 / future asset classes wire their own UI tabs, the explicit prop scales linearly; URL parsing requires touching the section component's URL-detection logic each time. Per CLAUDE.md §11 "per-asset-class configuration is the default" — explicit type-safe parameterization.
+
+**Render-condition predicates:**
+- Ablation: `data.totalTrades === 0 && (!data.variants || data.variants.length === 0)` (handles both null/empty array cases)
+- Calibration: `(!data.factors || data.factors.length === 0) && data.totalReplayed === 0`
 
 ---
 
@@ -330,12 +407,20 @@ When implementation completes, the Langston code-review packet will contain:
 
 ---
 
-## §11. Open questions for Langston review of this pre-audit
+## §11. Open questions — RESOLVED in rev 2
 
-1. **Partition finding** — agree this invalidates Q3 gotcha #2 (and simplifies Obj 3 risk to Low)?
-2. **Manual-SQL-script path** for index DDL (vs Drizzle migration) — agree this is the right path?
-3. **Empty-state asset-class derivation** from endpoint prop — sensible, or should the parent component pass assetClass explicitly?
+All three rev-1 open questions plus four rev-1-review concerns resolved:
 
-If approve, I proceed to Step 3 (implementation). If revisions needed, rev 2 of pre-audit.
+| # | Topic | Rev-1 position | Langston call | Rev-2 resolution |
+|---|---|---|---|---|
+| Q1 | Partition finding invalidates Q3 gotcha #2 | APPROVE (CC) | APPROVE | §3 partition table updated to show 0 partitions; §6 risk simplified |
+| Q2 | Manual SQL script path for index DDL | APPROVE (CC) | APPROVE + ask | §9.b psql command concretized with DBURL extraction + connection verification; §6.4b regime_factor_alternates partial-index EXPLAIN added |
+| Q3 | Empty-state asset-class derivation | URL parse (CC) | REVISE → explicit prop | §9.c rewritten with `assetClass: AssetClass` prop pattern + parent passes explicit |
+| C1 | §9.a deferred field-availability checks | "confirm in pre-implementation read" | Verify NOW | §9.a Caller-site verification table added — all 3 sites resolved (resolveAssetClass at 2 sites + already-threaded at 1) |
+| C2 | DBURL concrete mechanism | placeholder | Concretize + verify reachability | §9.b explicit grep+cut command + Hetzner→Supabase reachability confirmed via prior B83 diagnostic usage |
+| C3 | deploy_timestamp capture | implicit | Make explicit | §6 deploy_timestamp capture protocol added; ssh+date command specified |
+| C4 | SIM update paths + section names | "SIM update entries" | Cite explicitly | §7 SIM updates section now specifies exact file (`SYSTEM_IMPACT_MAP.md`), exact section ("Rename invariants" / "If I Change X, Check Y — rename-inventory additions"), and verbatim wording for the 3 entries |
+
+**Ready for Langston rev-2 APPROVE.** If approved, I proceed to Step 3 (implementation). If further revs needed, rev 3.
 
 — CC
