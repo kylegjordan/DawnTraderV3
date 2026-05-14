@@ -117,20 +117,28 @@ Wall-clock realistic: **35-45 days** to complete xstock calibration end to end. 
 
 The 21-28 day estimate sets up unrealistic expectations going into Langston review. I'd flag this transparently — present the realistic range and let Langston scrutinize the optimism.
 
-### 2.4 Exit-strategy ablation extension — already done (per the 2026-05-15 update at top of this brief)
+### 2.4 Exit-strategy ablation extension — plumbing works, but data is not yet calibration-grade *(Kyle correction, 2026-05-15)*
 
-Your master plan implies the exit-strategy ablation framework needs the schema lift (regime, strategy) → (regime, strategy, asset_class) and the wiring as part of this calibration scope. Per Kyle's update tonight, the table is now populating with real xstock data. So either:
+Your master plan implies the exit-strategy ablation framework needs the schema lift (regime, strategy) → (regime, strategy, asset_class) and the wiring as part of this calibration scope. Per Kyle's update earlier today, the table is now populating with real xstock data — 14 trades on rolling-7d, ACCUMULATING badge, variant rows with real Mean P&L %, Sharpe, win rate.
 
-- The schema lift already shipped (worth verifying in code — check `exit_strategy_alternates` table schema and the aggregator query at `server/services/exit-strategy-ablation-aggregator.ts`).
-- Or the table was populating via a different mechanism that doesn't require the schema lift.
+**HOWEVER (Kyle correction, 2026-05-15 ~00:20 UTC):** the trades feeding the table right now opened on top of:
+- DBS-blind regime classifier (synthesized DBS=0 → regime labels potentially wrong for xstocks)
+- Crypto-cloned filter thresholds (wrong survivor set)
+- Crypto-cloned strategy gates (trigger conditions tuned for crypto volatility, not equity)
+- A strategy selection that may not transfer (9 carryovers + 1 ORB designed in haste)
 
-Either way, the Phase F I had scoped in my revised plan ("extension to xstocks") is largely done. The scope contracts to:
+So the exit ablation panel is technically working, but the data flowing through it represents **exit behavior of mistimed / miscalibrated trades** — not exit behavior on the trade distribution we'll see once upstream is properly calibrated. Calibrating xstock exit strategy from this data would lock in exits optimized for noise.
 
-- F.1 — Verify the schema lift is in place + ablation aggregator filters by asset_class.
-- F.2 — Confirm 7-day window contains usable data (currently 14 trades visible; needs more for decision-grade, but the pipe is producing).
-- F.3 — Backfill exit-strategy alternates from any historical pre-launch xstock trades if they exist (probably none — xstock trades only started flowing post-B79.0a).
+**The deeper principle this surfaces:** downstream calibration is only meaningful once upstream is calibrated. Exit-strategy calibration sits BELOW regime calibration + filter calibration + strategy-gate calibration in the dependency chain. The exit ablation table populating doesn't mean we have exit calibration data — it means we have the plumbing, but the plumbing is producing noise-distribution outputs until Phases A-D are done.
 
-That's a verification batch, not a build batch. ~half day.
+**Phase F scope as revised:**
+
+- F.1 — Verify the schema lift is in place + ablation aggregator filters by asset_class (purely plumbing audit).
+- F.2 — **HOLD** on treating the current 14-trade window as calibration evidence. Document it as "plumbing-validation data only; NOT calibration-grade until upstream calibration (Phases A-D) lands."
+- F.3 — After Phases A-D ship and xstock trades resume opening on properly-calibrated regime + filter + gate state, restart the exit-ablation accumulation window from that point forward. Probably want to truncate or asset-class-tag the pre-calibration trades so the aggregator excludes them (or at minimum surface the contamination so downstream readers don't draw wrong conclusions).
+- F.4 — Once post-calibration trades accumulate to decision-grade n (n ≥ 150/variant), run the exit-strategy ablation analysis. Tune trailing parameters, BE-stop policy, moonbag policy per the same framework as crypto's B73.
+
+So Phase F is a half-day verification batch NOW, then becomes a real calibration batch ~20-30 days from now once enough properly-calibrated trade outcomes have accumulated post-Phase-E.
 
 ### 2.5 Friction model calibration — missing entirely from your plan, belongs in Phase B
 
@@ -302,19 +310,19 @@ So Phase B.4 unblocks B81 (cross-asset ranking) downstream. Worth noting as a fo
 - Keep factors that clear the bar; drop the rest.
 - Output: completion report + B67.5 candidate list for xstocks.
 
-### Phase F — Exit-strategy ablation verification *(contracted scope per 2026-05-15 update)*
+### Phase F — Exit-strategy ablation: plumbing now, calibration later
 
-**F.1 — Verify schema + aggregator filtering**
-- Confirm `exit_strategy_alternates` schema includes `asset_class`.
-- Confirm aggregator queries filter by `asset_class='xstock_spot'`.
+*(Two-stage scope per Kyle correction 2026-05-15: plumbing verification is half-day NOW; real calibration is a separate batch ~20-30 days from now once post-upstream-calibration trades accumulate.)*
 
-**F.2 — Validate live panel data**
-- Current state: 14 trades on rolling-7d window, ACCUMULATING.
-- Need to reach n ≥ 150/variant for decision-grade. Calendar-time gated.
+**F-NOW (~half day, can run anytime — parallel to Phase A or later):**
+- F.1 — Verify `exit_strategy_alternates` schema includes `asset_class` + aggregator queries filter by it.
+- F.2 — Document pre-calibration trades as NOT calibration-grade. Decide whether to truncate them or asset-class-tag for exclusion from post-calibration analysis.
+- F.3 — Backfill check: if any pre-launch historical xstock trade outcomes exist with reusable regime/strategy state, exclude them too (same contamination concern).
 
-**F.3 — Backfill if historical xstock trade outcomes exist**
-- Likely no useful pre-launch xstock trade outcomes (VTS only started flowing post-B79.0a).
-- One-line script to check + skip if empty.
+**F-LATER (a real calibration batch, runs AFTER Phases A-D ship and trades accumulate to decision-grade n):**
+- F.4 — Once post-calibration xstock trades reach n ≥ 150/variant in the rolling window, run exit-strategy ablation analysis with the same framework as crypto's B73.
+- F.5 — Tune trailing parameters, BE-stop policy, moonbag policy for equity volatility profiles using the calibration-grade results.
+- F.6 — Update `module_constants` for the xstock TEC config (overlaps with Phase B.6 — coordinate scope so TEC tuning is unified across both batches).
 
 ### Phase G — Cross-asset ranking parity *(post-launch, NOT in scope here)*
 
@@ -330,9 +338,12 @@ Referenced as downstream-of-Phase-B.4 (friction calibration). Out of scope for t
 - Phase D: 2-3 days (parallel after A)
 - Phase E.1-E.2: 3-4 days (sequential after A+C+D done)
 - Phase E.3: 14 days observation (serialized)
-- Phase F: 0.5-1 day (verification)
+- Phase F-NOW: 0.5 day (plumbing verification, parallel-anywhere)
+- Phase F-LATER: a separate batch ~20-30 days from start, runs AFTER A-D ship and post-calibration trades accumulate. Adds another 2-3 days of engineering at that point.
 
-**Total wall-clock realistic: 35-45 days.** Aggressive: 28. Conservative: 50.
+**Total wall-clock realistic to factor-calibration decisions: 35-45 days.** Aggressive: 28. Conservative: 50.
+
+**Exit-strategy ablation calibration completion: 55-75 days from start** (needs the upstream done + enough trade outcomes to reach decision-grade n).
 
 Frame this honestly for Langston rather than the optimistic 21-28 estimate.
 
