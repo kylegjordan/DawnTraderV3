@@ -430,27 +430,29 @@ function isBenchmarkSymbol(symbol: string): boolean {
 type OpenSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'grossProfitValue' | 'netProfitValue' | 'finalScore' | 'expectedEdge' | 'regimeWeight' | 'entryTime' | 'durationOpenMinutes';
 type SortDirection = 'asc' | 'desc';
 
-function SortableHeader({ 
-  label, 
-  field, 
-  currentSort, 
-  direction, 
-  onSort, 
-  align = 'left' 
-}: { 
-  label: string; 
-  field: string; 
-  currentSort: string | null; 
-  direction: SortDirection; 
+function SortableHeader({
+  label,
+  field,
+  currentSort,
+  direction,
+  onSort,
+  align = 'left',
+  extraClass = ''
+}: {
+  label: string;
+  field: string;
+  currentSort: string | null;
+  direction: SortDirection;
   onSort: (field: string) => void;
   align?: 'left' | 'right' | 'center';
+  extraClass?: string;
 }) {
   const isActive = currentSort === field;
   const alignClass = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
-  
+
   return (
-    <th 
-      className={`px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none`}
+    <th
+      className={`px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none ${extraClass}`}
       onClick={() => onSort(field)}
     >
       <div className={`flex items-center gap-1 ${alignClass}`}>
@@ -537,17 +539,22 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
       >
         <div style={{ width: '2300px', height: '1px' }} />
       </div>
-      <div 
+      <div
         ref={scrollRef}
-        className="overflow-x-auto scrollbar-thin"
+        className="overflow-auto scrollbar-thin max-h-[calc(100vh-13rem)]"
         onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
+        {/* B-NEW-31 (2026-05-14): outer container now scrolls both axes with bounded
+            max-height so the sticky thead + sticky first-column work correctly. Header
+            stays pinned on vertical scroll; Symbol column stays pinned on horizontal
+            scroll. Top-left corner uses z-30 so it sits above both axes. */}
         <table className="w-full min-w-[2400px] text-sm">
-          <thead className="sticky top-0 bg-card z-10">
+          <thead className="sticky top-0 bg-card z-20">
             <tr className="border-b border-border">
-              {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell. */}
-              <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell.
+                  B-NEW-31 (2026-05-14): first-column header sticky-left + z-30 (top-left corner). */}
+              <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} extraClass="sticky left-0 z-30 bg-card text-left" />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -594,8 +601,11 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                         BTC → Bitcoin, ETH → Ethereum, SOL → Solana,
                         AAPL → Apple, BABA → Alibaba, NIO → NIO, MRNA → Moderna, ...
                       Renders nothing if symbol isn't in the map (maintain by adding
-                      entries in shared/asset-names.ts as new pairs enter universe). */}
-                  <td className="px-3 py-2">
+                      entries in shared/asset-names.ts as new pairs enter universe).
+                      B-NEW-31 (2026-05-14): sticky-left + bg-card so column stays
+                      visible during horizontal scroll. z-10 keeps it above body cells
+                      but below the sticky thead (z-20) and top-left corner (z-30). */}
+                  <td className="px-3 py-2 sticky left-0 z-10 bg-card">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium">{trade.symbol}</span>
                       {getAssetName(trade.symbol, trade.assetClass) && (
@@ -862,17 +872,21 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
       >
         <div style={{ width: '2300px', height: '1px' }} />
       </div>
-      <div 
+      <div
         ref={scrollRef}
-        className="overflow-x-auto scrollbar-thin"
+        className="overflow-auto scrollbar-thin max-h-[calc(100vh-13rem)]"
         onScroll={handleMainScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
+        {/* B-NEW-31 (2026-05-14): outer container scrolls both axes with bounded
+            max-height so the sticky thead + sticky first-column work correctly.
+            Mirrors the OpenTradesTable freeze logic. */}
         <table className="w-full min-w-[2400px] text-sm">
-          <thead className="sticky top-0 bg-card z-10">
+          <thead className="sticky top-0 bg-card z-20">
             <tr className="border-b border-border">
-              {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell. */}
-              <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell.
+                  B-NEW-31 (2026-05-14): first-column header sticky-left + z-30 (top-left corner). */}
+              <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} extraClass="sticky left-0 z-30 bg-card text-left" />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -918,8 +932,11 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                         BTC → Bitcoin, ETH → Ethereum, SOL → Solana,
                         AAPL → Apple, BABA → Alibaba, NIO → NIO, MRNA → Moderna, ...
                       Renders nothing if symbol isn't in the map (maintain by adding
-                      entries in shared/asset-names.ts as new pairs enter universe). */}
-                  <td className="px-3 py-2">
+                      entries in shared/asset-names.ts as new pairs enter universe).
+                      B-NEW-31 (2026-05-14): sticky-left + bg-card so column stays
+                      visible during horizontal scroll. z-10 keeps it above body cells
+                      but below the sticky thead (z-20) and top-left corner (z-30). */}
+                  <td className="px-3 py-2 sticky left-0 z-10 bg-card">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium">{trade.symbol}</span>
                       {getAssetName(trade.symbol, trade.assetClass) && (
