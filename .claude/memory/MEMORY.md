@@ -17,63 +17,65 @@
 
 ---
 
-## CURRENT STATE — 2026-05-15/16 (B-NEW-33+34+36+37 CLOSED; B-NEW-39 spawning for multi-mechanism inversion fix; B67.5 BLOCKED through B-NEW-39 → B-NEW-38)
+## CURRENT STATE — 2026-05-16 (B-NEW-39 PHASE 1 APPLIED; awaiting verification @ 1h emission window)
 
-**B-NEW-37 — Confidence-inversion forensics — CLOSED at Step 9 (commits `2331a21bb` + `ba893d9e1`).** 7-phase forensic CLI ran on staging 2026-05-15 22:20 UTC. **NO single-lever sign flip exists** — all 6 multiplicative levers have factor ratios 0.99-1.01 (near-neutral). Diagnosis is MULTI-MECHANISM with two interacting defects per Langston FINDING-2026-05-15-A:
-- **Defect 1: `module_constants.regime_classifier.b67_5_post_composition_floor = 0.20`** (set by B70.3b 2026-05-05 as visibility-window override; original 0.45; code default 0.4). 15.4% of trades pinned, pinned WR 34.5% vs free 23.6% — floor accidentally concentrating winners.
-- **Defect 2: b68_5 Path-B sustainability gate uniformly over-aggressive** (Δconf -0.40 on both winners and losers, MW-U p=0.094 — scenario B per Langston Q4). The -0.40 haircut compresses everything toward floor; floor catches winners; high pre-conf trades land at 0.20 while low pre-conf drift free → inversion at top decile.
+**🚨 ACTIVE BATCH: B-NEW-39 multi-mechanism inversion fix. Phase 1 SQL APPLIED 2026-05-15T23:07:54Z UTC.** Floor `module_constants.regime_classifier.b67_5_post_composition_floor` reverted 0.20 → 0.45 on wildcard row (1 row updated, verified via RETURNING). Cache TTL=60s, new emissions using floor=0.45 from ~23:09 UTC. Per Langston B-NEW-39 Step 1+2 APPROVE.
 
-**Langston Step 8 verdict: CLOSE B-NEW-37 + SPAWN B-NEW-39** with three-phase sequential scope:
-1. Phase 1: revert floor 0.20→0.45 via SQL UPDATE (one-line module_constants change; LARGEST contributor cheapest to test)
-2. Phase 2: recalibrate b68_5 gate downward-push cap from -0.40 → -0.10/-0.15 (magnitude problem not sign problem)
-3. Phase 3 (conditional): raw classifier forensics if Phases 1+2 don't restore monotonic-up. Potential splitoff to B-NEW-40 if structural to regime classifier.
+**IMMEDIATE NEXT ACTION:** Wait ~1-2 hours from 23:08 UTC for natural ablation-row accumulation, then re-run forensic with `--since` filter:
+```bash
+ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && npm run b-new-37:inversion-forensics -- --since=2026-05-15T23:08:00Z 2>&1'"
+```
+First check row count: ensure ≥50 matched rows per factor for any forensic signal. Decile-grade analysis (n≥150 per decile) ideally needs 1500+ per factor = several hours of emissions.
 
-**Verification harness:** re-run B-NEW-37 forensic CLI after each phase. Expect Δconf magnitudes to drop + decile shape to approach monotonic-up.
+**Phase 1 completion gate (Langston Concern C — TIGHTENED):**
+- Decile shape on b67_4_outcome_feedback subset = **`monotonic-up`** ONLY (`flat` triggers Phase 3, not closure)
+- Phase 4 metric: % at 0.200 floor ≈ 0% (new floor is 0.45)
+- Top-decile WR ≥ bottom-decile WR
 
-**B-NEW-38 stays blocked through B-NEW-39** — re-running stratified B-NEW-33 on known-broken baseline wastes the cohort. **B67.5 unblocks after B-NEW-38.**
+**Decision branches after verification:**
+- **Phase 1 fully resolves to monotonic-up:** SKIP Phase 2, close B-NEW-39, Step 8 review, governance close
+- **Phase 1 narrows but residual non-monotonic:** apply Phase 2 next — `scripts/b-new-39-phase2-b68-5-recalibrate.sql` updating ONLY the wildcard row of `path_b_sustainability.b68_5_path_b_momentum_min` from 0.001 → **0.0005** (Langston Q2 intermediate, NOT 0.0). Wildcard row scope: `(exchange=*, asset_class=*, strategy=*, regime=TREND_FRIENDLY_STABLE, value=0.001)`. **DO NOT TOUCH** the xstock_spot-scoped row at 0.0005 (Langston Q3).
+- **Phase 1 makes things worse:** apply rollback `scripts/b-new-39-phase1-floor-rollback.sql` (committed). Surface to Kyle/Langston.
+- **Shape goes flat:** Phase 3 raw-classifier forensics fires (possibly splitoff to B-NEW-40 per Langston).
 
-**Bonus fix shipped in B-NEW-37:** `scripts/b-new-36-cohort-diagnostic.ts` classifyShape() gained segment-based monotonic-down/up fallback (strict pairwise inversion counting was mis-labeling b76 shape as "undefined" when last-3 deciles average is materially below first-3).
+**B-NEW-37 closed `5520d1892`:** Multi-mechanism diagnosis (FINDING-2026-05-15-A). No single-line sign flip. b68_5 gate uniform-too-aggressive (-0.40 Δconf, MW-U p=0.094 → scenario B). 0.20 floor concentrating winners (15.4% pinned, pinned WR 34.5% vs free 23.6%).
+
+**B-NEW-36 closed:** Cohort diagnostic + chi-square confirmed Hypothesis B selection bias on 6 dimensions.
+
+**B-NEW-33 closed:** all 10 factors INCONCLUSIVE at Langston-locked 7pp gate. Kyle Option 1 LOCKED 2026-05-15 evening.
+
+**B-NEW-38 BLOCKED through B-NEW-39. B67.5 BLOCKED through B-NEW-38.** Total delay ~3-5 days from B-NEW-33 closure.
+
+### Recent commits
+
+- `5520d1892` — B-NEW-37 closure + governance
+- `04ec4f940` — B-NEW-39 scope + pre-audit
+- `3a0034c6c` — B-NEW-39 Phase 1 SQL + rollback + forensic --since flag + scope addendum
+
+### Key file paths
+- Forensic CLI: `scripts/b-new-37-inversion-forensics.ts` (supports `--since=<ISO>`)
+- Phase 1 SQL: `scripts/b-new-39-phase1-floor-revert.sql` (applied)
+- Phase 1 rollback: `scripts/b-new-39-phase1-floor-rollback.sql` (committed, not applied)
+- Pre-fix forensic report: `Claude Comms and Packages/Batch Completion/B-NEW-37_FORENSICS.md`
+- Scope: `Claude Comms and Packages/Scope Files/B-NEW-39_SCOPE.md` (§8b has all Langston Q+Concern resolutions)
 
 ---
 
-## PRIOR STATE — 2026-05-15 (B-NEW-33 + B-NEW-34 + B-NEW-36 CLOSED, b76 confidence INVERSION discovered)
+## PRIOR BATCHES (compressed — full detail in completion reports + governance)
 
-**🚨 B-NEW-36 — Cohort diagnostic — CLOSED with CRITICAL FINDING.** Commits `bb508ce29` + `390e23ced` (chunked-load hotfix). New `scripts/b-new-36-cohort-diagnostic.ts` (~500 LOC) ran on staging 2026-05-15 21:45 UTC. **The b76 confidence chain is INVERSELY correlated with realized WR.** Decile 2 (conf 0.200-0.210, n=893) wins 40.5%; decile 9 (conf 0.422-0.493, n=893) wins 6.7%. Monotonic-down across deciles 2-9. Survives single-strategy stratification (strong_bull_trend alone n=5514 monotonic-down) AND single-phase (LATE n=2184 monotonic-down). Per Langston Step 8: "Almost certainly a system bug, not noise." Top-decile confidence wins 1 in 10; bottom-decile wins 4 in 10 — confidence signal points wrong direction. Chi-square confirms Hypothesis B (selection bias) on 6 of 8 dimensions (strategy, sourcePool, regime, framework, symbol, hour-of-day, day-of-week) all p≈0. Phase-chi-square at p=0 is instrumentation artifact (phase_at_entry only exists on matched rows). **Langston Step 8 verdict: sequence B-NEW-37 (inversion forensics) → B-NEW-38 (stratified B-NEW-33 re-run) → B67.5.** Sequential not parallel — if b76 chain is buggy, every downstream analysis using it is contaminated. Root cause priors: (1) label-flip in b76 training, (2) feature-polarity error, (3) train-vs-serve mismatch, (4) rank-vs-calibration drift. (1) and (2) primary. **~3-5 calendar days additional delay before B67.5 unblocks; worth it to avoid shipping consumer wiring on inverted signal.** Bonus B-NEW-37 todo: fix `classifyShape()` in diagnostic script (missing monotonic-down branch). Crypto regression: NONE by-construction (read-only CLI).
+**B-NEW-37 CLOSED 2026-05-15/16** (`5520d1892`). 7-phase forensic identified TWO interacting defects (FINDING-2026-05-15-A): (1) `b67_5_post_composition_floor=0.20` set by B70.3b 2026-05-05 as visibility-window override; 15.4% trades pinned, pinned WR 34.5% vs free 23.6%; (2) b68_5 Path-B gate uniformly over-aggressive (Δconf -0.40, MW-U p=0.094, scenario B). NO single-lever sign flip exists (all 6 multiplicative levers near-neutral, ratios 0.99-1.01). Langston Step 8: CLOSE+SPAWN B-NEW-39. Bonus fix: classifyShape() segment-based monotonic-down fallback added to B-NEW-36 CLI.
 
-**B-NEW-37 spawned** via mcp__ccd_session__spawn_task: trace b76 chain composition; inspect each modulator's sign convention; compare b76-predicted-prob vs realized WR at training-vs-serving; confirm post-b76-cutover; pinpoint the specific modulator/feature causing inversion. Then ship the fix.
+**B-NEW-36 CLOSED 2026-05-15** (`bb508ce29` + `390e23ced`). Cohort diagnostic surfaced the inversion. b76 deciles: low 17% → high 11%. Chi-square confirmed Hypothesis B selection bias on 6 dimensions (p≈0). Langston Step 8: sequence B-NEW-37 → B-NEW-38 → B67.5.
 
-**B-NEW-33 — Crypto factor calibration backtest tool + nightly cron unblock — CLOSED.** Commit `892da2f27` + parity check `58e2011dd`. Live drain on staging: 33,049 pending rows processed; 13,830 matched; 19,219 marked `unreplayable_real_rejected`. Post-drain pending=0. **All 10 crypto factors verdict INCONCLUSIVE.** Critical Langston Step 8 finding: tertile WRs non-monotonic across all 10 factors (low 17% → mid 26% → high 21%) — single upstream artifact contaminating every calibration. **Kyle Option 1 LOCKED 2026-05-15 evening: HOLD Langston's 7pp + p<0.05 gate.** Parity check vs May 5/6 screenshot confirmed methodology sound (confidence-shift values identical e.g. b68_5: 0.4457→0.4456); divergence is at verdict-labeling LAYER not calculation (screenshot used ~+3pp floor as "DECISION-GRADE WIN", my CLI uses Langston's 7pp gate). Operational discipline of not shipping potential noise into consumer chain takes precedence. **B67.5 BLOCKED on B-NEW-36** diagnostic spike (tertile non-monotonicity + 58% unmatched-rate decomposition). b68_5_path_b_sustainability flagged for ~0.37 calibration multiplier in B67.5 (NOT DROP) — only factor doing real work (mean |Δconf|=0.43), but only after B-NEW-36 resolves upstream artifact.
+**B-NEW-33 CLOSED 2026-05-15** (`892da2f27`). Factor calibration backtest tool + cron unblock. 33,049 rows drained; 13,830 matched; all 10 factors INCONCLUSIVE at 7pp gate. Kyle Option 1 LOCKED. Parity check vs May 5/6 screenshot confirmed methodology sound — divergence at verdict-labeling layer (gate threshold) not calculation. b68_5 flagged for ~0.37 multiplier; superseded by B-NEW-37 scenario B → recalibrate.
 
-**B-NEW-36 spawned** via mcp__ccd_session__spawn_task. Two scopes: (a) tertile non-monotonicity diagnostic — is it base distribution or matched-cohort selection bias? (b) unmatched-rate audit grouping 19,219 unreplayable rows by (symbol, hour-of-day, dow, signal direction, strategy).
+**B-NEW-34 CLOSED 2026-05-15** (4 commits ending `1ee3ceb27`, PM2 #287). xstock scanner 60-min bar parity. LAST CYCLE DURATION 675ms vs 25s+ pre-fix; PAIRS SCANNED 64 of 75 vs 26 pre-deploy. **B74 duplicate-row bug discovered (18-56× dup per minute)** — B-NEW-35 spawned for source-side dedup. 240m warm-fetch suspended until B-NEW-35.
 
-**B-NEW-34 — xstock 60-min bar parity + 4-hour pre-warm staged + B74 dup-row workaround — CLOSED.**
+**B-NEW-32 CLOSED 2026-05-15** (`de28e4de0`, PM2 #283). CoinGecko Pro-tier migration.
 
-Four commits on `migration/aws-supabase`:
-- `756b64e49` — main implementation (10 files: aggregator + cache + scanner + eval-cycle + both filters + freshness + tests + migration SQL + xstocks-tab banner)
-- `a7545d595` — hotfix 1: drizzle `WHERE symbol = ANY(${arr})` → `IN (${literal-list})` (drizzle array-binding pitfall)
-- `88e34bd67` — hotfix 2: cache depth `MAX_BARS_60M=200 / MAX_BARS_240M=60` → `60 / 30` (cut source-row workload ~4×)
-- `1ee3ceb27` — hotfix 3: DISTINCT ON aggregator (B74 source has 18-56× duplicate rows per (symbol,interval_begin)) + 240m warm-fetch SUSPENDED (commented out)
+**xStocks diagnostic UI sprint CLOSED 2026-05-14:** B-NEW-31 + B-NEW-14 + B-NEW-TZ + B-NEW-21.
 
-**Staging VERIFIED live via Claude-in-Chrome (CLAUDE.md §9.3):** xStocks tab Scanner Cycle Metrics shows LAST CYCLE DURATION=675ms (vs 25s+ pre-fix), PAIRS SCANNED=64 of 75 (vs 26 pre-deploy), 10 consecutive healthy cycles, no SCAN_TIMEOUT after PM2 #287 restart.
-
-**Two structural insights from B-NEW-34 verification:**
-1. **B74 archive write bug:** `xstock_spot_ohlc_1m` has 18-56× duplicate rows per `(symbol, interval_begin)`. The B74 WS archive emits a fresh row for every intra-minute tick rather than upserting one closed bar per minute. Empirical (AAPL/USD over 2h): 4876 rows for 103 distinct minutes; one minute had 227 distinct OHLCV tuples with $1.78 close spread. Latest `captured_at` per (symbol, interval_begin) = the correct closed bar.
-2. **`last_analyze=NULL` on the partition.** The May partition (13.5M rows, 3.4GB) had never been analyzed. Manually ran ANALYZE during hotfix 3 diagnosis. Watch item for autovacuum settings on partitioned tables.
-
-**B-NEW-35 spawned** (via mcp__ccd_session__spawn_task) for B74 source-side fix: UNIQUE constraint on (symbol, interval_begin) + cleanup migration + writer rewrite to INSERT ON CONFLICT DO UPDATE. Once B-NEW-35 lands: (i) DISTINCT ON CTE in ohlc-aggregator.ts becomes redundant and is removed; (ii) 240-min warm-fetch in scanner.ts is re-enabled.
-
-**Governance shipped (8 docs + completion report):**
-- `BATCH_CATALOG.md` — B-NEW-34 entry inserted before BATCH_82
-- `PHASE_HISTORY.md` — Phase 24 EXTENDED 2 sub-batch row
-- `SYSTEM_MANUAL.md` — NEW Phase 24 EXTENDED 2 section: "Bar interval — design rationale" + "B74 duplicate-row workaround" + "Cache architecture" + "Filter-floor SSOT promotion" + "Freshness gate REMOVED" subsections
-- `SYSTEM_IMPACT_MAP.md` — 8 new component entries under "Recent Additions (B-NEW-34)"
-- `CHANGES_AND_FIXES.md` — INFRA-2026-05-15-A architectural fact entry
-- `XSTOCK_CALIBRATION_PLAN.md` — rev 2 entry: bar-interval ripples into Phase B sub-batches, cohort start resets to 2026-05-15, Phase D ORB suspended, pre-flight C debt absorbed
-- `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` line 294 — doc drift cleanup ("5-minute intervals" → "60-minute intervals")
-- `client/src/components/machine-learning/xstocks-tab.tsx` — banner updated for B-NEW-34 architecture
-- `B-NEW-34_COMPLETION_REPORT.md` — written; top-of-report scaffolding-vs-functional + previously-stated-vs-now blocks per CLAUDE.md §9.1/§9.2
-
-**Pre-flight C calibration debt** (~12 indicator/threshold concerns from 60-min bar shift; 300-period Z-window meaning shifts from 5h to 12.5 days) absorbed into Phase B of XSTOCK_CALIBRATION_PLAN.md rev 2.
+**B-NEW-35 spawned:** B74 archive UPSERT fix (UNIQUE constraint + cleanup migration + writer rewrite to INSERT ON CONFLICT DO UPDATE). When it lands: remove DISTINCT ON CTE in ohlc-aggregator.ts + re-enable 240m warm-fetch.
 
 ---
 
