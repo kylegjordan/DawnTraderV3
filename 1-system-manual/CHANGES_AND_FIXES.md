@@ -2,6 +2,46 @@
 
 ---
 
+## INFRA-2026-05-15-B — B-NEW-33 crypto factor-calibration backtest + nightly-cron unblock
+
+**Date:** 2026-05-15 | **Commit:** `892da2f27` | **PM2:** no restart required (out-of-band CLI; cron change applies on next nightly run)
+
+**What broke:** `b67:replay-ablation` nightly cron stuck since 2026-05-11. Each run loaded 5000 of 33,049 pending rows, matched 0 against the JSONL source-of-truth, left unmatched rows pending (line 311 explicitly: "Don't mark as completed — leave for next pass when the trade closes"). Result: each night the same ~5000 stale-unmatchable rows re-fetched while the matchable ones beneath the ceiling never got processed. By 2026-05-15 the live `/api/analytics/factor-calibration` panel was showing decision-grade rows only for the ~7,593 replays that landed pre-stall (peak May 3-5).
+
+**Two root causes:**
+1. **Source coverage gap.** Cron's JSONL source filed closed trades by CLOSE-DATE filename, not OPEN-DATE. Trades opening one day and closing 1-3 days later existed in their close-day file, which the OPEN-day natural-key search wouldn't load if it walked from open-date. (Coverage worked accidentally pre-May-11 because most trades closed same-day; B79.0g-tx's soft-delete shift in the closure cascade made the cross-day pattern more visible.) Empirical confirmation: SUI/USD reverse_impulse opened 2026-05-12, closed 2026-05-14 — exists only in `2026-05-14.json` not `2026-05-12.json`.
+2. **No-progress dead-lock.** Cron loaded 5000 pending rows per pass via `LIMIT 5000` with no ORDER BY. Unmatched rows stayed pending. Same rows re-fetched nightly. Matchable rows beneath the ceiling were unreachable.
+
+**Structural fix per Langston APPROVE 2026-05-15 + 4 implementation conditions:**
+
+1. **Extract shared replay logic into `server/services/factor-replay-core.ts`.** Both the nightly cron (`server/scripts/replay-ablation.ts`) and the new one-shot CLI (`scripts/b-new-33-factor-backtest.ts`) consume it. No drift between the two paths.
+
+2. **Dual canonical source.** Primary: `vts_open_trades WHERE closed=true AND opened_at >= 2026-05-11` (post-B79.0g-tx canonical truth). Fallback: JSONL files for trades opened before the cutoff. The matcher tries DB first, falls back to JSONL. Closest-by-time tiebreak within ±5min tolerance window (per Langston Q5).
+
+3. **Unmatched rows are MARKED `unreplayable_real_rejected` with near-miss diagnostics.** No more pending-row pileup. Cron's nightly delta-only workload becomes bounded by the day's new emissions (~500 rows).
+
+4. **One-shot CLI tool `npm run b-new-33:factor-backtest`.** Unbounded drain mode (no 5000 limit), then computes per-lever verdicts: tertile-WR split on `real_decision.confidence` + chi-square 2×2 (df=1) p-value (per Langston Q3 — simplified from Fisher's exact since n≥150 is the gate) + decision-grade gate (n≥150/bucket AND |spread|≥7pp AND p<0.05 per Langston Q2). Markdown output to stdout + `Claude Comms and Packages/Batch Completion/B-NEW-33_VERDICTS.md`.
+
+5. **Negative-control test (Langston condition 3).** `--dry-run-synthetic` flag generates 1000 noise rows; verdict math correctly produces INCONCLUSIVE for all factors. Catches verdict-math regressions where a degenerate lever accidentally gets a false KEEP.
+
+**Live drain on staging (2026-05-15 15:42 UTC):**
+- 33,049 pending rows processed in single pass
+- 13,830 matched (41.8%)
+- 19,219 marked `unreplayable_real_rejected` (signal emitted but no closed trade — rejected at gates downstream of signal generation)
+- Post-drain DB state: pending=0, all 40,642 crypto_spot rows have `replay_completed_at` set
+
+**Per-lever verdicts (16-day cohort, 2026-04-30 → 2026-05-15):** all 10 crypto factors return INCONCLUSIVE. 8 of 10 fail on spread<7pp gate (tertile WR spread 1.0pp - 4.2pp range; none reach the 7pp decision-grade floor). 2 of 10 marked dormant (mean abs confidence shift < 0.01). Notable: tertile WRs are non-monotonic across all 10 (low ~17% → mid ~26% → high ~21%) suggesting confidence clustering or non-linear factor effects. b68_5_path_b_sustainability shows predictive_lift = -6.1pp (lever may actually be harming the signal) — flagged for B67.5 design consideration.
+
+**Cron health post-restructure:** nightly run from 2026-05-16 onwards processes ~500 fresh emissions per day (the system's typical daily ablation-row output). The `LIMIT 5000` retained gives 10× safety margin. Expected log pattern: `Pending rows: vts_trade=~500 ... matched=~150 unmatched=~350 ... Done. pending_vts=0`.
+
+**Watch items for ops:** monitor `/var/log/dawntrader/replay-ablation.log` next 3 nights. If pending_vts stays > 0 after the run, that signals a fresh accumulation problem.
+
+**Crypto regression:** NONE by construction (out-of-band CLI; reads existing tables; writes only to `regime_factor_alternates.replay_outcome` + `replay_completed_at` columns; cron refactor preserves outcome row shape consumed by `computeFactorCalibration`).
+
+**Hands-off to B67.5:** the verdict file informs B67.5 consumer-gate design. Three paths under Langston Step 8 review: (a) hold and recohort to a full 30-day window, (b) relax thresholds, (c) pivot to combination/interaction analysis. Awaiting Langston recommendation.
+
+---
+
 ## INFRA-2026-05-15-A — B-NEW-34 xstock scanner 60-min bar parity + B74 dup-row workaround
 
 **Date:** 2026-05-15 | **Commits:** `756b64e49` (initial impl) → `a7545d595` (hotfix 1: drizzle IN-literal) → `88e34bd67` (hotfix 2: cache depth) → `1ee3ceb27` (hotfix 3: DISTINCT ON aggregator + 240m warm-fetch suspended) | **PM2:** #283→#284→#285→#286→#287 | **Migration script:** `scripts/b-new-34-xstock-60min-parity.sql`

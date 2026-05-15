@@ -17,7 +17,11 @@
 
 ---
 
-## CURRENT STATE — 2026-05-15 (B-NEW-34 CLOSED, governance shipped, PM2 #287)
+## CURRENT STATE — 2026-05-15 (B-NEW-33 + B-NEW-34 CLOSED, B67.5 BLOCKED on B-NEW-36)
+
+**B-NEW-33 — Crypto factor calibration backtest tool + nightly cron unblock — CLOSED.** Commit `892da2f27`. Live drain on staging: 33,049 pending rows processed; 13,830 matched; 19,219 marked `unreplayable_real_rejected`. Post-drain pending=0. **All 10 crypto factors verdict INCONCLUSIVE.** Critical Langston Step 8 finding: tertile WRs non-monotonic across all 10 factors (low 17% → mid 26% → high 21%) — single upstream artifact contaminating every calibration. **B67.5 BLOCKED on B-NEW-36** diagnostic spike (tertile non-monotonicity + 58% unmatched-rate decomposition). b68_5_path_b_sustainability flagged for ~0.37 calibration multiplier in B67.5 (NOT DROP) — only factor doing real work (mean |Δconf|=0.43), but only after B-NEW-36 resolves upstream artifact.
+
+**B-NEW-36 spawned** via mcp__ccd_session__spawn_task. Two scopes: (a) tertile non-monotonicity diagnostic — is it base distribution or matched-cohort selection bias? (b) unmatched-rate audit grouping 19,219 unreplayable rows by (symbol, hour-of-day, dow, signal direction, strategy).
 
 **B-NEW-34 — xstock 60-min bar parity + 4-hour pre-warm staged + B74 dup-row workaround — CLOSED.**
 
@@ -52,26 +56,29 @@ Four commits on `migration/aws-supabase`:
 
 ## NEXT SESSION PLAN (immediate next step after Kyle ack)
 
-**Priority 1 — Resume crypto factor calibration backtesting (B-NEW-33).**
+**Priority 1 — B-NEW-36 diagnostic spike** (unblocks B67.5).
 
-This was the original "next step" before the xstock investigation triggered B-NEW-34 + B-NEW-35. Design already drafted in earlier conversation:
+Two findings from B-NEW-33 verdicts require investigation BEFORE B67.5 consumer-gate design proceeds:
 
-- **B-NEW-33: One-shot backtest tool over `regime_factor_alternates` 30-day cohort, bypassing the stuck replay cron.**
-- Build the tool to compute per-lever WR by tertile, lift vs without-factor scenario, decision-grade gates (n≥150/bucket, spread≥7pp, p<0.05).
-- Run across 8 levers: b67_1 macro modifier, b67_2 phase preference, b67_4 outcome feedback, b68_1 multi-TF agreement, b68_2 volume regime, b68_3 pair correlation, b68_4 regime-age, b68_5 Path B sustainability.
-- Produce per-lever verdicts.
+1. **Tertile non-monotonicity across all 10 crypto factors.** Low ~17% → mid ~26% → high ~21% — mid-confidence wins more than high-confidence universally. Single upstream artifact, not 10 independent signals. Two hypotheses: (A) base confidence distribution has non-monotonic relationship with outcome (high-confidence routed to thinner-liquidity contexts), (B) 13,830 matched cohort is selection-biased.
 
-**Priority 2 — Design B67.5 consumer-gate from verdicts.**
+2. **58% of pending rows unmatched.** Need audit grouping 19,219 `unreplayable_real_rejected` rows by (symbol, hour-of-day, day-of-week, strategy) to check for skew. If uniform → crypto reality, move on. If lopsided → matched cohort is biased and every B-NEW-33 verdict is suspect.
 
-From the per-lever evidence, design how each LIVE consumer (7 sites) reads the chain-final confidence post-modulation. Currently confidence is decorative (no consumer reads the modulated value). B67.5 wires the consumers and removes the legacy `RegimeWeight` class. Spec preview in `BATCH_67_PROGRESS_REPORT.md` close-out section.
+Build CLI tool `scripts/b-new-36-cohort-diagnostic.ts` (mirror B-NEW-33 pattern). Output Markdown report at `Claude Comms and Packages/Batch Completion/B-NEW-36_DIAGNOSTIC.md`. Full prompt captured in spawned-task chip (2026-05-15).
 
-**Priority 3 — xStock Calibration Plan Phase 0** (sequenced AFTER B-NEW-33 + B67.5 close).
+**Priority 2 — Re-run B-NEW-33 post-B-NEW-36.** If tertile shape resolves to monotonic post-diagnostic, several factors that look INCONCLUSIVE today might cross the 7pp gate cleanly.
+
+**Priority 3 — Design B67.5 consumer-gate** from the re-run verdicts. b68_5 likely candidate for ~0.37 calibration multiplier (not DROP).
+
+**Priority 4 — xStock Calibration Plan Phase 0** sequenced AFTER B67.5 ships.
 - Phase 0.1 splits, 0.2 dividends, 0.3 halts (corporate actions pre-flight).
 - Per Kyle directive 2026-05-15: Phase 0 does NOT start until crypto factor calibration finalization + B67.5 ship are complete.
 
 ---
 
 ## RECENT SHIPS (compressed)
+
+**B-NEW-33 (2026-05-15, commit `892da2f27`, no PM2 restart):** Crypto factor calibration backtest tool + nightly cron unblock. New `factor-replay-core.ts` shared between cron and CLI; dual-source matcher; unmatched rows marked unreplayable. CLI drained 33,049 pending in one pass. **All 10 factors verdict INCONCLUSIVE.** Tertile non-monotonicity finding (Langston Step 8 catch) blocks B67.5 on B-NEW-36 spike.
 
 **B-NEW-34 (2026-05-15, commits `756b64e49`→`a7545d595`→`88e34bd67`→`1ee3ceb27`, PM2 #287):** xstock scanner switched to 60-min bar parity with crypto. Local SQL rollup from `xstock_spot_ohlc_1m`. Filter floor 60→24 via module_constants SSOT. ORB disabled. Freshness gate removed. 240m warm-fetch SUSPENDED until B-NEW-35. Discovered B74 source 18-56× duplicate-row bug.
 
