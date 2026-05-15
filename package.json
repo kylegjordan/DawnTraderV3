@@ -11,7 +11,8 @@
     "db:push": "drizzle-kit push",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:b69-retag": "psql $DATABASE_URL -f drizzle/migrations/2026-05-03-b69-asset-class-retag.sql",
-    "b67:replay-ablation": "tsx server/scripts/replay-ablation.ts"
+    "b67:replay-ablation": "tsx server/scripts/replay-ablation.ts",
+    "b-new-33:factor-backtest": "tsx scripts/b-new-33-factor-backtest.ts"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",

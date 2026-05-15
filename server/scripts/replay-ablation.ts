@@ -264,20 +264,29 @@ export async function runReplayAblation(): Promise<ReplayStats> {
     }
 
     // ── Step 3: replay VTS-trade rows ──
-    // VTS outcomes live in JSON files at logs/virtual_trades/YYYY-MM-DD.json.
-    // Build a date-windowed in-memory index of closed trades by id, then
-    // for each pending row look up the trade and classify the outcome.
+    // B-NEW-33 (2026-05-15) refactor: uses `factor-replay-core.ts` for the
+    // matching logic (shared with the one-shot CLI `b-new-33:factor-backtest`).
+    // Dual canonical source: `vts_open_trades WHERE closed=true` (post-
+    // B79.0g-tx canonical) PRIMARY, JSONL files FALLBACK for pre-cutoff
+    // trades. Unmatched rows are MARKED `unreplayable_real_rejected` so
+    // subsequent runs skip them (the structural fix for the pre-B-NEW-33
+    // pending-row pileup that produced matched=0/5000 nightly).
     if (stats.pendingVtsTradeRows > 0) {
       try {
-        const vtsIndex = await buildVtsTradeIndex(14);
-        const indexedTradeCount = Array.from(vtsIndex.values())
-          .reduce((sum, list) => sum + list.length, 0);
+        const { loadClosedVtsTradesFromDb, findMatchingTrade, findNearestForDiagnostic, computeReplayOutcomeFromTrade, buildUnmatchedReplayOutcome } = await import('../services/factor-replay-core.js');
+        const { buildVtsTradeIndex } = await import('../services/factor-replay-core.js');
+
+        const dbIndex = await loadClosedVtsTradesFromDb();
+        const dbCount = Array.from(dbIndex.values()).reduce((s, l) => s + l.length, 0);
+        const jsonlIndex = await buildVtsTradeIndex(14);
+        const jsonlCount = Array.from(jsonlIndex.values()).reduce((s, l) => s + l.length, 0);
         console.log(
-          `[B67.0][replay-ablation] VTS index loaded: ${indexedTradeCount} closed trades from last 14d, ${vtsIndex.size} (symbol|strategy) buckets`,
+          `[B67.0][replay-ablation] Indexes loaded: db=${dbCount} jsonl=${jsonlCount} (post-B-NEW-33 dual-source)`,
         );
 
-        // Load pending VTS rows in batches. Bound to 5000 per pass so a
-        // backlog doesn't blow memory; subsequent passes pick up the rest.
+        // Load pending VTS rows. Cron stays bounded at 5000 per pass to keep
+        // run-time predictable on the nightly schedule; the CLI tool handles
+        // the unbounded drain on demand.
         const pendingVtsRows = await db
           .select()
           .from(regimeFactorAlternates)
@@ -292,67 +301,54 @@ export async function runReplayAblation(): Promise<ReplayStats> {
         let matched = 0;
         let unmatched = 0;
         for (const row of pendingVtsRows) {
-          // B67.0.1 (2026-04-30): natural-key join via (symbol, strategy,
-          // evaluated_at±60s) instead of the broken vts_trade_id match.
-          // Falls back to the legacy id-based match for any pre-fix rows
-          // that have null strategy (none today, but safe for transition).
-          let trade: any = null;
-          if (row.strategy) {
-            trade = findVtsTradeByNaturalKey(
-              vtsIndex,
+          const evaluatedAtMs = row.evaluatedAt instanceof Date
+            ? row.evaluatedAt.getTime()
+            : Number(row.evaluatedAt);
+          const entry = findMatchingTrade(
+            dbIndex,
+            jsonlIndex,
+            row.pairSymbol,
+            row.strategy,
+            evaluatedAtMs,
+          );
+          if (!entry) {
+            // No match in either source. Mark as unreplayable so we don't
+            // re-fetch this row on tomorrow's run. Old behavior left the row
+            // pending forever and the pipeline got stuck on stale rows.
+            const nearest = findNearestForDiagnostic(
+              dbIndex,
+              jsonlIndex,
               row.pairSymbol,
               row.strategy,
-              row.evaluatedAt instanceof Date
-                ? row.evaluatedAt.getTime()
-                : Number(row.evaluatedAt),
+              evaluatedAtMs,
             );
-          }
-          if (!trade) {
-            // Trade not yet closed (still open) OR file missing OR no match.
-            // Don't mark as completed — leave for next pass when the trade closes.
+            const outcome = buildUnmatchedReplayOutcome({
+              reason: nearest
+                ? `no trade within ±5min; nearest in ${nearest.source} was ${nearest.delta}ms away`
+                : 'no closed trade for (symbol, strategy) — likely rejected pre-trade-open',
+              sourcesTried: ['db', 'jsonl'],
+              nearMissMs: nearest?.delta,
+            });
+            await db
+              .update(regimeFactorAlternates)
+              .set({ replayOutcome: outcome as any, replayCompletedAt: new Date() })
+              .where(eq(regimeFactorAlternates.id, row.id));
             unmatched++;
+            stats.rowsReplayed++;
             continue;
           }
 
-          // Trade is closed. Compute outcome from netProfit. With B67's
-          // confidence-only modulation, real and alternate decisions both
-          // admit the same trade pre-B67.5 (no consumer gates on confidence
-          // value yet), so the four-quadrant taxonomy collapses to just
-          // 'admitted_won/lost/breakeven' for now. When B67.5 wires Kelly
-          // sizing the counterfactual P&L scales by the size delta — that
-          // logic ships with B67.5.
-          const netPnl = Number(trade.netProfit ?? 0);
-          const outcome = classifyTradeOutcome(netPnl);
-          const exitReason = trade.exitReason ?? trade.resultType ?? 'unknown';
-
+          // Matched. Build the replay-outcome payload via shared core.
+          const outcome = computeReplayOutcomeFromTrade(entry.trade, row.vtsTradeId, entry.source);
           await db
             .update(regimeFactorAlternates)
-            .set({
-              replayOutcome: {
-                outcome,
-                pnl_usd: netPnl,
-                exit_reason: exitReason,
-                vts_trade_id: row.vtsTradeId,
-                vts_jsonl_trade_id: trade?.id ?? null,
-                vts_jsonl_signal_id: trade?.signal?.id ?? null,
-                trade_mode: trade.tradeMode,
-                ladder_rungs_hit: trade.ladderRungsHit,
-                regime_at_entry: trade.regime,
-                strategy_at_entry: trade.strategy,
-                phase_at_entry: trade.phase ?? null,
-                phase_age_seconds_at_entry: trade.phaseAgeSeconds ?? null,
-                regime_confidence_modulated_at_entry: trade.regimeConfidenceModulated ?? null,
-                macro_modifier_at_entry: trade.macroModifierValue ?? null,
-                notes: 'pre_b67_5_both_admit',
-              } as any,
-              replayCompletedAt: new Date(),
-            })
+            .set({ replayOutcome: outcome as any, replayCompletedAt: new Date() })
             .where(eq(regimeFactorAlternates.id, row.id));
           matched++;
           stats.rowsReplayed++;
         }
         console.log(
-          `[B67.0][replay-ablation] VTS replay: matched=${matched} unmatched=${unmatched} (unmatched = trade still open or file missing)`,
+          `[B67.0][replay-ablation] VTS replay: matched=${matched} unmatched=${unmatched} (unmatched are marked unreplayable_real_rejected; cron will skip on subsequent runs)`,
         );
       } catch (err) {
         console.error('[B67.0][replay-ablation] VTS replay error:', err instanceof Error ? err.message : err);
