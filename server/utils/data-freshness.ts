@@ -26,8 +26,7 @@
  */
 
 import { getModuleConstants } from '../services/module-constants-service.js';
-import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
-import { ASSET_CLASSES, type AssetClass } from '../../shared/asset-classes.js';
+import { type AssetClass } from '../../shared/asset-classes.js';
 
 // In-process cache of resolved window per asset class. TTL 60s mirrors
 // the module_constants service cache. Avoids hitting the resolver on
@@ -91,12 +90,13 @@ export async function isPairDataFresh(
   lastTickTimestampMs: number,
   now: number = Date.now(),
 ): Promise<boolean> {
-  // Belt-and-suspenders for closed market (Langston Q2 lock from B79).
-  // B79.0c: per-symbol — 24/7 names (Kraken Phase 1) keep normal staleness
-  // semantics (don't auto-mark fresh just because it's the weekend).
-  if (assetClass === ASSET_CLASSES.XSTOCK_SPOT && !isXstockMarketOpenUTC(symbol)) {
-    return true;
-  }
+  // B-NEW-34 (2026-05-15): The xstock_spot-specific closed-market short-circuit
+  // (previously here) was removed alongside the xstock scanner's switch to
+  // OHLC-history-based gating (no more ticker-freshness gate). Module_constants
+  // row `market_data.xstock_spot.data_freshness_window_ms` was DELETED in the
+  // same migration. For xstock_spot callers, `_resolveWindowMs` now returns
+  // Infinity (no row → _NO_WINDOW sentinel → always-fresh), matching crypto.
+  // Function retained for back-compat with any non-scanner callers and tests.
 
   const windowMs = await _resolveWindowMs(assetClass);
   if (!Number.isFinite(windowMs)) return true; // no window configured = always-fresh

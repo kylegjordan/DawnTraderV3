@@ -40,7 +40,6 @@
 import { centralClock, type ClockTick } from '../../services/central-clock.js';
 import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
-import { isPairDataFresh } from '../../utils/data-freshness.js';
 import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS } from '../../../shared/asset-classes.js';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
@@ -332,24 +331,45 @@ class XstockSpotScannerService {
         return;
       }
 
-      // Batched DB read — Langston rev 2 #1 commitment.
+      // ════════════════════════════════════════════════════════════════════
+      // B-NEW-34 (2026-05-15): 60-min bar parity with crypto.
+      // Replaces the prior ticker-snap + 90s freshness gate with local-DB
+      // aggregation of 60-min bars (via xstockOhlcCache + ohlc-aggregator).
+      // Bid/ask enrichment kept as a best-effort side query — drives the
+      // max_bid_ask_spread filter when fresh quote data is available, sentinel
+      // -1 otherwise. No freshness GATE — OHLC bar history is the source of
+      // truth, gated only by min_ohlc_history_bars (module_constants, default
+      // 24 bars = ~1 trading day of context).
+      //
+      // Architecture: Kraken has no public xstock REST endpoint at any tier
+      // (BATCH_79_0k verdict, re-verified 2026-05-15). The only data source
+      // is the WebSocket-fed xstock_spot_ohlc_1m archive, which we roll up
+      // to 60-min + 240-min via aggregator. 240-min cache is warmed fire-
+      // and-forget per cycle so future multi-TF agreement (Phase B of
+      // XSTOCK_CALIBRATION_PLAN) has its data ready.
+      // ════════════════════════════════════════════════════════════════════
       const dbStart = Date.now();
-      // Drizzle's sql template can't bind a JS array directly to PG ANY().
-      // XSTOCK_SPOT_SYMBOLS is a hardcoded const Set (not user input) so
-      // literal-list injection is safe and avoids the parameter-binding pitfall.
+      const { xstockOhlcCache } = await import('../../services/xstock-ohlc-cache.js');
+
+      // Single SQL round-trip for 60-min bars across the rotation batch.
+      // Per Langston R2#4: WHERE symbol = ANY($1), postgres groups in-process.
+      const ohlcBatch = await xstockOhlcCache.getOHLCDataBatch(symbolList, 60);
+
+      // Fire-and-forget 240-min cache warm. Per Kyle directive: pre-fetch so
+      // multi-TF agreement wiring (later batch) finds the data ready.
+      // ~ same cost as the 60-min fetch (single SQL); no await — caller cycle
+      // doesn't block on it. Errors logged but don't fail the cycle.
+      void xstockOhlcCache.getOHLCDataBatch(symbolList, 240).catch((err) => {
+        console.warn(`[B-NEW-34][AGGREGATOR_240M] warm-fetch error: ${err instanceof Error ? err.message : err}`);
+      });
+
+      // Bid/ask enrichment — best-effort. Drives the max_bid_ask_spread
+      // filter (B-NEW-14). NOT a gate — symbols without recent ticker data
+      // still get evaluated; they just pass the sentinel -1 ("skip check"
+      // per the global-filter contract). Wider 30-minute window than the
+      // prior 5-minute gate because we're enriching, not gating.
       const symbolListSql = symbolList.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
-      // Constrain to last 5 minutes — freshness gate rejects anything > 90s
-      // old anyway, so wider scans waste time + risk statement timeout on
-      // the 13-partition table. 5min window covers any reasonable freshness
-      // ceiling future B79.x calibration might pick.
-      // B-NEW-14 (2026-05-14): bid + ask added to the SELECT. Speed test
-      // 2026-05-14 against live staging DB: identical 40-43ms timing with
-      // or without the two extra columns on 25-75 symbol IN-clauses. The
-      // earlier "130× slowdown" report (May 12 revert) was a measurement
-      // artifact, not a real cost — the existing `(symbol, captured_at)`
-      // index covers the read and adding output columns doesn't change
-      // the query plan.
-      const result = await db.execute<TickerSnapRow>(sql`
+      const tickerResult = await db.execute<TickerSnapRow>(sql`
         SELECT DISTINCT ON (symbol)
           symbol::text AS symbol,
           last::text AS price,
@@ -358,66 +378,48 @@ class XstockSpotScannerService {
           ask::text AS ask,
           captured_at AS "capturedAt"
         FROM xstock_spot_ticker_snap
-        WHERE captured_at > NOW() - INTERVAL '5 minutes'
+        WHERE captured_at > NOW() - INTERVAL '30 minutes'
           AND symbol IN (${sql.raw(symbolListSql)})
         ORDER BY symbol, captured_at DESC
       `);
       const dbDurationMs = Date.now() - dbStart;
-      // Langston Step 4 Finding #7 nit: defensive cast hardened with runtime
-      // Array guard so a drizzle shape regression fails loudly instead of
-      // silently iterating over a non-array.
-      const rawRows = (result as any).rows ?? (result as unknown as TickerSnapRow[]);
-      if (!Array.isArray(rawRows)) {
-        throw new Error(`[B79.0a] xstock_spot_ticker_snap query returned non-array shape; got ${typeof rawRows}`);
+      const tickerRawRows = (tickerResult as any).rows ?? (tickerResult as unknown as TickerSnapRow[]);
+      const tickerRows: TickerSnapRow[] = Array.isArray(tickerRawRows) ? tickerRawRows : [];
+      const tickerEnrichmentBySymbol = new Map<string, { bidAskSpreadPct: number; volume24hShares: number }>();
+      for (const row of tickerRows) {
+        const bidRaw = row.bid ?? null;
+        const askRaw = row.ask ?? null;
+        const bid = bidRaw !== null ? parseFloat(bidRaw) : NaN;
+        const ask = askRaw !== null ? parseFloat(askRaw) : NaN;
+        const bidAskSpreadPct = (Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0 && ask >= bid)
+          ? ((ask - bid) / ((ask + bid) / 2)) * 100
+          : -1;
+        tickerEnrichmentBySymbol.set(row.symbol, {
+          bidAskSpreadPct,
+          volume24hShares: parseFloat(row.volume24h ?? '0'),
+        });
       }
-      const rows = rawRows;
 
-      // Per-pair freshness gate + telemetry.
+      // Telemetry — pairs with sufficient OHLC history are "ready for eval"
+      // (replaces the freshCount/staleCount semantics).
       const xstockInstances = getXstockSpotInstances();
-      const now = Date.now();
-      let freshCount = 0;
-      let staleCount = 0;
-      // B-NEW-14 (2026-05-14): freshSymbols carries bidAskSpreadPct per pair
-      // so the eval-cycle's max_bid_ask_spread check has the data it needs.
-      // Spread is computed once here (cheap arithmetic on already-fetched
-      // numbers) rather than re-derived inside the filter.
-      const freshSymbols: Array<{ symbol: string; price: number; volume24hShares: number; bidAskSpreadPct: number }> = [];
-      for (const row of rows as TickerSnapRow[]) {
-        const lastTickMs = new Date(row.capturedAt).getTime();
-        const fresh = await isPairDataFresh(row.symbol, 'xstock_spot', lastTickMs, now);
-        if (fresh) {
-          freshCount++;
-          // B-NEW-14: spread % from latest snap row. Use the sentinel -1
-          // when bid or ask is null/zero/inverted so the global filter
-          // skips the check rather than rejecting on bad data. Non-negative
-          // values are real measurements the filter compares against the
-          // DB threshold.
-          const bidRaw = row.bid ?? null;
-          const askRaw = row.ask ?? null;
-          const bid = bidRaw !== null ? parseFloat(bidRaw) : NaN;
-          const ask = askRaw !== null ? parseFloat(askRaw) : NaN;
-          const bidAskSpreadPct = (Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0 && ask >= bid)
-            ? ((ask - bid) / ((ask + bid) / 2)) * 100
-            : -1;
-          freshSymbols.push({
-            symbol: row.symbol,
-            price: parseFloat(row.price),
-            volume24hShares: parseFloat(row.volume24h ?? '0'),
-            bidAskSpreadPct,
-          });
-        } else {
-          staleCount++;
-        }
-      }
+      let readyForEval = 0;
+      let insufficientHistory = 0;
+      const cacheStats = xstockOhlcCache.getStats();
+      console.log(
+        `[B-NEW-34][AGGREGATOR] 60m batch — universe=${symbolList.length} ` +
+        `cache_hit_rate=${cacheStats.hitRatePct}% size=${cacheStats.size} db_ms=${dbDurationMs}`,
+      );
 
       // ════════════════════════════════════════════════════════════════════
-      // B79.0m.b — route fresh pairs into VTS evaluation pipeline.
-      // For each fresh xstock pair: fetch OHLC → global filter → IMF →
-      // MCE → strategy detect → SQE → archive → register-open-trade.
+      // B-NEW-34 (2026-05-15): route rotation batch into VTS evaluation pipeline.
+      // For each rotated xstock pair WITH SUFFICIENT OHLC HISTORY: global
+      // filter → IMF → MCE → strategy detect → SQE → archive → register-open-
+      // trade. No tick-freshness gate — bar history is the source of truth.
       // Hostile-sim bypasses (no eval during artificial sleep).
       // ════════════════════════════════════════════════════════════════════
-      if (!this.diag.hostileSimActive && freshSymbols.length > 0) {
-        const { evaluateXstockPairForVTS, fetchXstockOHLC, makeEmptyXstockCycleCounters, loadXstockFilterConfigs } =
+      if (!this.diag.hostileSimActive && symbolList.length > 0) {
+        const { evaluateXstockPairForVTS, makeEmptyXstockCycleCounters, loadXstockFilterConfigs } =
           await import('./eval-cycle.js');
         const cycleCounters = makeEmptyXstockCycleCounters();
         // Pre-load 7 screener_filters rows ONCE per cycle (mirrors crypto
@@ -426,24 +428,52 @@ class XstockSpotScannerService {
         // redundant Supabase round-trips, saturating the connection pool and
         // dragging cycle time from ~22s to 280s.
         const cycleConfigs = await loadXstockFilterConfigs('paper');
-        for (const { symbol, price, volume24hShares, bidAskSpreadPct } of freshSymbols) {
+
+        // B-NEW-34: configurable min-OHLC-history floor (module_constants).
+        // Default 24 if row missing — matches the Langston R3 floor recommendation
+        // (4-bar BB/SMA(20) headroom + Monday-morning resilience vs the prior
+        // hardcoded 60). Strict source-of-truth is the DB row but we fall back
+        // to 24 to keep the system functional during the migration window.
+        let minOhlcHistoryBars = 24;
+        try {
+          const { getConstant } = await import('../../services/module-constants-service.js');
+          const dbValue = await getConstant<number>('xstock_spot', 'min_ohlc_history_bars', {
+            exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*',
+          });
+          if (typeof dbValue === 'number' && dbValue > 0) minOhlcHistoryBars = dbValue;
+          else console.warn(`[B-NEW-34] module_constants xstock_spot.min_ohlc_history_bars missing/invalid; using fallback ${minOhlcHistoryBars}`);
+        } catch (err) {
+          console.warn(`[B-NEW-34] module_constants read failed; using fallback ${minOhlcHistoryBars}: ${err instanceof Error ? err.message : err}`);
+        }
+
+        for (const symbol of symbolList) {
+          const ohlc = ohlcBatch.get(symbol) ?? [];
+          if (ohlc.length < minOhlcHistoryBars) {
+            insufficientHistory++;
+            continue;
+          }
+          readyForEval++;
+
+          // Price source: most recent bar's close. Consistent across all
+          // evaluated pairs — same source the strategies use internally.
+          // Avoids ticker-vs-bar drift; matches crypto's pattern of pulling
+          // price from the OHLC array.
+          const latestBar = ohlc[ohlc.length - 1];
+          const price = latestBar.close;
           if (!Number.isFinite(price) || price <= 0) continue;
-          const ohlc = await fetchXstockOHLC(symbol, 120);
-          if (ohlc.length < 60) continue; // global-filter min-history floor
-          // 24h dollar-volume = Kraken-reported rolling 24h share volume × last price.
-          // Source: xstock_spot_ticker_snap.volume_24h (already a 24h rolling
-          // window from the exchange ticker, NOT current-bar). Multiplied by
-          // last price to land in USD so global/pattern min_volume thresholds
-          // can compare apples-to-apples (DB thresholds are USD per Langston
-          // B-NEW-1 review 2026-05-12). When the snap has no volume_24h yet
-          // (cold-start, brand-new symbol) we pass 0 and the gate Layer-1-passes
-          // per the global-filter contract (caller=0 → skip-check).
+
+          // Bid/ask + 24h-volume enrichment from ticker_snap side-query.
+          // Missing → use sentinels (-1 spread = skip-check; 0 volume = skip-check).
+          const enrich = tickerEnrichmentBySymbol.get(symbol);
+          const bidAskSpreadPct = enrich?.bidAskSpreadPct ?? -1;
+          const volume24hShares = enrich?.volume24hShares ?? 0;
+
+          // 24h dollar-volume — Kraken's rolling 24h share volume × last price.
+          // Falls back to 0 when ticker enrichment missed (then global-filter
+          // Layer-1-passes the min_volume gate per the skip-check contract).
           const volume24hUSD = Number.isFinite(volume24hShares) && volume24hShares > 0
             ? volume24hShares * price
             : 0;
-          // B-NEW-14 (2026-05-14): bidAskSpreadPct threaded through to both
-          // quant + pattern global filters for the max_bid_ask_spread check.
-          // -1 sentinel = data unavailable, skip check.
           await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters, cycleConfigs, bidAskSpreadPct);
         }
         // Surface counters to the /api/xstocks/filter-diagnostics endpoint.
@@ -586,14 +616,18 @@ class XstockSpotScannerService {
       const cycleDurationMs = Date.now() - cycleStart;
       this.diag.lastCycleDurationMs = cycleDurationMs;
       this.diag.cyclesCompleted++;
-      this.diag.pairsScannedLastCycle = (rows as TickerSnapRow[]).length;
-      this.diag.pairsFreshLastCycle = freshCount;
-      this.diag.pairsStaleLastCycle = staleCount;
+      // B-NEW-34: pairs* counters now reflect OHLC-history-floor semantics.
+      // readyForEval = pairs that passed min_ohlc_history_bars and entered the
+      // eval pipeline. insufficientHistory = rotation members skipped because
+      // not enough bars yet. Empty universe / hostile-sim leave both at 0.
+      this.diag.pairsFreshLastCycle = readyForEval;
+      this.diag.pairsStaleLastCycle = insufficientHistory;
+      this.diag.pairsScannedLastCycle = readyForEval;
 
       console.log(
         `[B79.0a][SCAN_CYCLE_DONE] tick=${tick.tickNumber} duration_ms=${cycleDurationMs} ` +
-        `db_roundtrip_ms=${dbDurationMs} pairs_scanned=${(rows as TickerSnapRow[]).length} ` +
-        `fresh=${freshCount} stale=${staleCount}`,
+        `db_roundtrip_ms=${dbDurationMs} attempted=${symbolList.length} ` +
+        `pairs_scanned=${this.diag.pairsScannedLastCycle} insufficient_history=${this.diag.pairsStaleLastCycle}`,
       );
 
       // Backpressure observation — telemetry signal only, NEVER triggers shedding.

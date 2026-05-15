@@ -70,41 +70,15 @@ import type { OHLCData } from '../../types/market-regime.types';
 
 const _XSTOCK_GK = { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' };
 
-/**
- * Fetch most-recent N 1-minute candles from xstock_spot_ohlc_1m for a symbol.
- * Layer-1 starter: reads the partitioned passive-archive table directly.
- * Future B79.0m.b2: introduce an `XstockOHLCCache` (5-min TTL) mirroring the
- * crypto ohlcCache, so per-cycle reads don't hit DB.
- */
-export async function fetchXstockOHLC(symbol: string, limit = 120): Promise<OHLCData[]> {
-  try {
-    const result: any = await db.execute(sql`
-      SELECT interval_begin, open, high, low, close, volume
-        FROM xstock_spot_ohlc_1m
-       WHERE symbol = ${symbol}
-         AND interval_begin > NOW() - INTERVAL '6 hours'
-       ORDER BY interval_begin DESC
-       LIMIT ${limit}
-    `);
-    const rows: any[] = (result as any).rows ?? result;
-    if (!Array.isArray(rows) || rows.length === 0) return [];
-    const bars: OHLCData[] = rows
-      .slice()
-      .reverse()
-      .map((r) => ({
-        open: parseFloat(r.open),
-        high: parseFloat(r.high),
-        low: parseFloat(r.low),
-        close: parseFloat(r.close),
-        volume: parseFloat(r.volume),
-        timestamp: new Date(r.interval_begin).getTime(),
-      } as OHLCData));
-    return bars;
-  } catch (err) {
-    console.warn(`[B79.0m.b2][fetchXstockOHLC] ${symbol}: ${err instanceof Error ? err.message : err}`);
-    return [];
-  }
-}
+// B-NEW-34 (2026-05-15): `fetchXstockOHLC` REMOVED. Replaced by the
+// `xstockOhlcCache` (server/services/xstock-ohlc-cache.ts) which aggregates
+// 60-min + 240-min bars from `xstock_spot_ohlc_1m` via SQL rollup and caches
+// with 5-min TTL. Scanner now fetches the batch up-front per cycle and
+// passes pre-rolled bars into evaluateXstockPairForVTS — no per-pair 1-min
+// query in the hot loop.
+//
+// xstock_spot_ohlc_1m remains the long-term canonical 1-min store (B74
+// archive). Backtesting + ML training paths still query it directly.
 
 const ASSET_CLASS = 'xstock_spot' as const;
 

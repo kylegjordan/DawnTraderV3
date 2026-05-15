@@ -37,6 +37,7 @@
 
 import { storage } from '../../storage.js';
 import type { OHLCData } from '../../types/market-regime.types';
+import { getConstant } from '../../services/module-constants-service.js';
 
 export interface GlobalFilterResult {
   passed: boolean;
@@ -119,16 +120,31 @@ export async function evaluateXstockGlobalFilter(
     return { passed: false, failureReason: 'min_volume', counters };
   }
 
-  // min_history — proxy via OHLC bar count. The eval fetcher restricts to a
-  // ~6h sliding window (~360 1m bars max). config.minHistoryDays is a
-  // metadata field expressing "we've been collecting OHLC for N days" — that's
-  // a corpus-level invariant, not a per-pair-cycle bar count. Layer-1:
-  // require at least 60 bars (~1h of 1m candles) so indicator math is sound;
-  // ignore `minHistoryDays` for the in-cycle gate (use it elsewhere for
-  // corpus-age checks if needed).
-  if (ohlc.length < 60) {
+  // min_history — proxy via OHLC bar count.
+  //
+  // B-NEW-34 (2026-05-15): floor now reads from module_constants
+  // `xstock_spot.min_ohlc_history_bars` (default 24 = ~1 trading day of
+  // 60-min bars). Prior to B-NEW-34 the scanner fetched 1-min bars and used
+  // a hardcoded 60-bar floor (= ~1 hour of 1-min); the comment block describing
+  // 1m bars was thus correct for that era. With B-NEW-34 the scanner pulls
+  // 60-min rolled-up bars via xstockOhlcCache, so the floor's "bar count"
+  // unit shifted from minutes to hours. 24 chosen to: (a) leave 4 bars of
+  // headroom over BB/SMA(20)-period indicators, (b) survive Monday morning
+  // when the prior Friday's bars plus Monday pre-market should give ~18-20
+  // hours of context, (c) keep first-signal-fire window to ~1 day post-deploy.
+  // module_constants migration: see SQL in same batch.
+  // Fallback to 24 if the row is missing keeps the system functional during
+  // the migration race window between code-deploy and SQL-apply.
+  // B-NEW-34 R4 cleanup: static top-of-file import (Node module cache makes
+  // dynamic import effectively a no-op after first call, but static keeps the
+  // hot path free of microtasks and removes one indirection for readers).
+  const minBarsRaw = await getConstant<number>('xstock_spot', 'min_ohlc_history_bars', {
+    exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*',
+  });
+  const minBars = typeof minBarsRaw === 'number' && minBarsRaw > 0 ? minBarsRaw : 24;
+  if (ohlc.length < minBars) {
     counters.failed_history = 1;
-    return { passed: false, failureReason: `history_${ohlc.length}_lt_60`, counters };
+    return { passed: false, failureReason: `history_${ohlc.length}_lt_${minBars}`, counters };
   }
 
   // max_bid_ask_spread (B-NEW-14, 2026-05-14): peer global filter — mirrors

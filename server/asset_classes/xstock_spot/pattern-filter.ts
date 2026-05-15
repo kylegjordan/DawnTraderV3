@@ -47,6 +47,7 @@
 import { calculateLogLiquidity, calculateVolNoise } from '../../core/metrics/imf-metrics.js';
 import { storage } from '../../storage.js';
 import type { OHLCData } from '../../types/market-regime.types';
+import { getConstant } from '../../services/module-constants-service.js';
 
 export interface PatternFilterResult {
   passed: boolean;
@@ -206,13 +207,24 @@ export async function evaluateXstockPatternFilter(
     };
   }
 
-  // 60-bar floor — matches global-filter.ts:109. Layer-3 target: migrate to
-  // module_constants.pattern_pool_gates.min_bars_for_eval (see PRE_AUDIT §-1.10).
-  if (ohlc.length < 60) {
+  // B-NEW-34 (2026-05-15): floor now reads from module_constants
+  // `xstock_spot.min_ohlc_history_bars` (same key as global-filter.ts —
+  // single source of truth for both lanes). Migrated from hardcoded 60.
+  // Layer-3 target documented in pre-B-NEW-34 PRE_AUDIT §-1.10 was
+  // `pattern_pool_gates.min_bars_for_eval`; B-NEW-34 unifies on the
+  // xstock_spot.min_ohlc_history_bars key so both filters drive off one row.
+  // Fallback to 24 keeps the system functional during the migration race.
+  // B-NEW-34 R4 cleanup: static top-of-file import (same key as global-filter,
+  // single source of truth for the floor across both lanes).
+  const minBarsRaw = await getConstant<number>('xstock_spot', 'min_ohlc_history_bars', {
+    exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*',
+  });
+  const minBars = typeof minBarsRaw === 'number' && minBarsRaw > 0 ? minBarsRaw : 24;
+  if (ohlc.length < minBars) {
     counters.failed_min_history = 1;
     return {
       passed: false,
-      failureReason: `pattern_history_${ohlc.length}_lt_60`,
+      failureReason: `pattern_history_${ohlc.length}_lt_${minBars}`,
       counters,
       perMetric,
       metrics: { LQ: 0, VolNoise: 0, DI: null },

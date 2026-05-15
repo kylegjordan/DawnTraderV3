@@ -4,11 +4,17 @@
  * ════════════════════════════════════════════════════════════════════════════
  *
  * Verifies isPairDataFresh:
- *   - Closed-market xstock_spot returns true (Langston Q2 lock)
  *   - Per-class window resolved from module_constants
  *   - Stale (now - lastTick > window) returns false
  *   - lastTick=0 returns false
  *   - No-window-configured returns true (Infinity sentinel)
+ *
+ * B-NEW-34 (2026-05-15) removed the closed-market xstock_spot short-circuit
+ * branch from the helper alongside the xstock scanner's switch to OHLC-history
+ * gating. The corresponding "closed-market returns true" test case is therefore
+ * removed; the isXstockMarketOpenUTC mock and dependency are no longer needed.
+ * Generic per-class window resolution semantics (the tests that remain) are
+ * unchanged and continue to provide regression coverage for the helper itself.
  * ════════════════════════════════════════════════════════════════════════════
  */
 
@@ -19,14 +25,6 @@ vi.mock('../../db.js', () => ({
   db: {
     select: () => ({ from: () => ({ where: async () => mockRows.current }) }),
   },
-}));
-
-// Mock isXstockMarketOpenUTC so we can flip it. B79.0c: signature now
-// requires symbol param; mock accepts and ignores it (per-symbol logic
-// covered by b79-0c-market-hours-per-symbol.test.ts).
-const marketOpenMock = { value: true };
-vi.mock('../../asset_classes/xstock_spot/market-hours.js', () => ({
-  isXstockMarketOpenUTC: (_symbol: string, _now?: Date) => marketOpenMock.value,
 }));
 
 import { isPairDataFresh, _testClearFreshnessCache } from '../../utils/data-freshness.js';
@@ -45,17 +43,6 @@ describe('B79.0a — isPairDataFresh', () => {
   beforeEach(() => {
     clearModuleConstantsCache();
     _testClearFreshnessCache();
-    marketOpenMock.value = true;
-  });
-
-  it('xstock_spot during market-closed returns true (Langston Q2 belt-and-suspenders)', async () => {
-    marketOpenMock.value = false;
-    mockRows.current = [
-      { ...baseRow, assetClass: 'xstock_spot', constantName: 'data_freshness_window_ms', value: 90000 },
-    ];
-    // Even with a stale-as-hell timestamp, closed-market wins
-    const fresh = await isPairDataFresh('AAPL/USD', 'xstock_spot', 0, Date.now());
-    expect(fresh).toBe(true);
   });
 
   it('xstock_spot during market-open + within window returns true', async () => {
