@@ -67,6 +67,45 @@ interface Row {
   calibration_version: string | null;
 }
 
+async function loadRows(applyB76Filter: boolean, cohort: 'pre-drain' | 'post-drain' | 'all'): Promise<Row[]> {
+  const cohortClause = cohort === 'pre-drain'
+    ? sql`AND replay_completed_at < ${PRE_DRAIN_CUTOFF}::timestamptz`
+    : cohort === 'post-drain'
+      ? sql`AND replay_completed_at >= ${PRE_DRAIN_CUTOFF}::timestamptz`
+      : sql``;
+  const b76Clause = applyB76Filter
+    ? sql`AND (
+        factor_name NOT IN ('b67_1_btc_dominance', 'b67_1_funding_rates', 'b67_1_mcap_momentum',
+                            'b67_1_macro_modifier', 'b67_2_phase_preference', 'b67_2_phase_dimension')
+        OR real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final'
+      )`
+    : sql``;
+  const result: any = await db.execute(sql`
+    SELECT
+      factor_name,
+      (real_decision->>'confidence')::float AS real_conf,
+      (alternate_decision->>'confidence')::float AS alt_conf,
+      COALESCE(replay_outcome->>'outcome', '') AS outcome,
+      real_decision->'metadata'->>'calibrationFrameworkVersion' AS calibration_version
+    FROM regime_factor_alternates
+    WHERE asset_class = ${ASSET_CLASS}
+      AND replay_completed_at IS NOT NULL
+      AND real_decision->>'confidence' IS NOT NULL
+      AND alternate_decision->>'confidence' IS NOT NULL
+      ${cohortClause}
+      ${b76Clause}
+    ORDER BY factor_name
+  `);
+  const rows = (result as any).rows ?? result;
+  return rows.map((r: any) => ({
+    factor_name: r.factor_name,
+    real_conf: Number(r.real_conf),
+    alt_conf: Number(r.alt_conf),
+    outcome: r.outcome,
+    calibration_version: r.calibration_version,
+  }));
+}
+
 async function loadPreDrainRows(applyB76Filter: boolean): Promise<Row[]> {
   // Pre-drain rows = replay_completed_at strictly before 2026-05-15 (the date
   // my drain ran). Earliest pre-drain replay was 2026-04-30.
@@ -275,7 +314,36 @@ async function main() {
   lines.push(`**Pre-drain cohort:** rows with replay_completed_at < ${PRE_DRAIN_CUTOFF} (cron-replayed, pre-B-NEW-33-drain)`);
   lines.push(`**Total rows:** raw=${rowsRaw.length} / B76-filtered=${rowsB76.length}`);
   lines.push('');
-  lines.push('## Per-factor comparison (B76 frozen-factor filter APPLIED — matches existing aggregator behavior)');
+  lines.push('## TOP TABLE — Confidence-shift distribution (the panel Kyle was watching pre-stall)');
+  lines.push('');
+  lines.push('Reproduces the existing aggregator\'s top table (`drift-dashboard-aggregator.ts:1106-1126`): avgConfidenceShift, avgAbsConfidenceShift, maxAbsConfidenceShift, shiftIsZeroFraction. These metrics describe HOW MUCH each lever moves the confidence number — independent of trade outcomes. **B76 frozen-factor filter applied** (matching the aggregator).');
+  lines.push('');
+  lines.push('| Factor | n | avg shift | avg abs shift | max abs shift | % at zero | shape |');
+  lines.push('|---|---:|---:|---:|---:|---:|---|');
+  for (const factor of allFactors) {
+    const rows = groupedB76.get(factor) ?? [];
+    if (rows.length === 0) {
+      lines.push(`| ${factor} | 0 | — | — | — | — | (no rows after B76 filter) |`);
+      continue;
+    }
+    const n = rows.length;
+    const shifts = rows.map(r => r.real_conf - r.alt_conf);
+    const absShifts = shifts.map(s => Math.abs(s));
+    const avgShift = shifts.reduce((s, x) => s + x, 0) / n;
+    const avgAbsShift = absShifts.reduce((s, x) => s + x, 0) / n;
+    const maxAbsShift = Math.max(...absShifts);
+    const pctAtZero = (absShifts.filter(s => s < 1e-9).length / n) * 100;
+    const shape = avgAbsShift < 0.005
+      ? 'dormant'
+      : avgAbsShift < 0.02
+        ? 'small movement'
+        : avgAbsShift < 0.05
+          ? 'meaningful movement'
+          : 'large movement';
+    lines.push(`| ${factor} | ${n} | ${avgShift.toFixed(4)} | ${avgAbsShift.toFixed(4)} | ${maxAbsShift.toFixed(4)} | ${pctAtZero.toFixed(1)}% | ${shape} |`);
+  }
+  lines.push('');
+  lines.push('## BOTTOM TABLE — Tertile WR + predictive lift (B76 frozen-factor filter APPLIED)');
   lines.push('');
   lines.push('| Factor | n | Agg low/mid/high WR | Real spread | Alt spread | Lift | min n/bkt | Decision-grade? |');
   lines.push('|---|---:|---|---:|---:|---:|---:|---|');
@@ -305,6 +373,34 @@ async function main() {
     const pStr = r.pValue === null ? 'N/A' : r.pValue.toFixed(4);
     lines.push(`| ${factor} | ${r.n} | ${tertWR} | ${r.realSpreadPP.toFixed(1)}pp | ${r.altSpreadPP.toFixed(1)}pp | ${r.predictiveLiftPP.toFixed(1)}pp | ${pStr} | ${r.meanAbsConfShift.toFixed(4)} | **${r.verdict}** |`);
   }
+  lines.push('');
+  lines.push('## Pre-drain vs post-drain confidence-shift comparison');
+  lines.push('');
+  lines.push('Same top-table metrics computed on (a) pre-drain rows only (cron-replayed, what Kyle saw before the stall) vs (b) post-drain rows only (the 13,830 newly-matched + 19,219 unreplayable rows from B-NEW-33). Looks at whether the data character changed during the stall window.');
+  lines.push('');
+  const preDrainRowsB76 = await loadRows(true, 'pre-drain');
+  const postDrainRowsB76 = await loadRows(true, 'post-drain');
+  const groupedPre = (() => { const m = new Map<string, Row[]>(); for (const r of preDrainRowsB76) { if (!m.has(r.factor_name)) m.set(r.factor_name, []); m.get(r.factor_name)!.push(r); } return m; })();
+  const groupedPost = (() => { const m = new Map<string, Row[]>(); for (const r of postDrainRowsB76) { if (!m.has(r.factor_name)) m.set(r.factor_name, []); m.get(r.factor_name)!.push(r); } return m; })();
+  const allFactorsBoth = Array.from(new Set([...groupedPre.keys(), ...groupedPost.keys()])).sort();
+  lines.push('| Factor | Pre n | Post n | Pre avg abs shift | Post avg abs shift | Pre max abs | Post max abs | Δ avg abs shift |');
+  lines.push('|---|---:|---:|---:|---:|---:|---:|---:|');
+  function shiftMetrics(rows: Row[]): { n: number; avgAbsShift: number; maxAbsShift: number } {
+    if (rows.length === 0) return { n: 0, avgAbsShift: 0, maxAbsShift: 0 };
+    const abs = rows.map(r => Math.abs(r.real_conf - r.alt_conf));
+    return { n: rows.length, avgAbsShift: abs.reduce((s, x) => s + x, 0) / rows.length, maxAbsShift: Math.max(...abs) };
+  }
+  for (const factor of allFactorsBoth) {
+    const pre = shiftMetrics(groupedPre.get(factor) ?? []);
+    const post = shiftMetrics(groupedPost.get(factor) ?? []);
+    const delta = post.avgAbsShift - pre.avgAbsShift;
+    lines.push(`| ${factor} | ${pre.n} | ${post.n} | ${pre.avgAbsShift.toFixed(4)} | ${post.avgAbsShift.toFixed(4)} | ${pre.maxAbsShift.toFixed(4)} | ${post.maxAbsShift.toFixed(4)} | ${delta >= 0 ? '+' : ''}${delta.toFixed(4)} |`);
+  }
+  lines.push('');
+  lines.push('**Interpretation guide:**');
+  lines.push('- If Δ avg abs shift is near zero across the board → confidence-shift character is stable; the all-INCONCLUSIVE verdict is about TERTILE WR, not lever activity.');
+  lines.push('- If Δ is large for some factors → factor producers may have changed behavior during the stall window. Worth investigating before re-running B-NEW-33.');
+  lines.push('- If "post avg abs shift" is much smaller than "pre" for the levers Kyle remembered as active → the recent two weeks have a structurally different confidence signal.');
   lines.push('');
   lines.push('## Methodology delta analysis');
   lines.push('');
