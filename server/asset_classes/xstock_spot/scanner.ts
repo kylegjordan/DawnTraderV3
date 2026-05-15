@@ -355,13 +355,31 @@ class XstockSpotScannerService {
       // Per Langston R2#4: WHERE symbol = ANY($1), postgres groups in-process.
       const ohlcBatch = await xstockOhlcCache.getOHLCDataBatch(symbolList, 60);
 
-      // Fire-and-forget 240-min cache warm. Per Kyle directive: pre-fetch so
-      // multi-TF agreement wiring (later batch) finds the data ready.
-      // ~ same cost as the 60-min fetch (single SQL); no await — caller cycle
-      // doesn't block on it. Errors logged but don't fail the cycle.
-      void xstockOhlcCache.getOHLCDataBatch(symbolList, 240).catch((err) => {
-        console.warn(`[B-NEW-34][AGGREGATOR_240M] warm-fetch error: ${err instanceof Error ? err.message : err}`);
-      });
+      // 240-min warm-fetch SUSPENDED in B-NEW-34 hotfix 3 (2026-05-15).
+      //
+      // Root cause: the underlying `xstock_spot_ohlc_1m` table has 18-56×
+      // duplicate rows per (symbol, interval_begin) from the B74 WS archive
+      // write pattern (tracked as B-NEW-35 source-side dedup). At 30-bar depth
+      // the 240-min lookback window is 120 hours; multiplied by ~21× dup
+      // factor and 75 symbols = ~9M source rows per warm-fetch. Postgres
+      // statement_timeout (2 min) was canceling every warm call, AND the
+      // concurrent disk-IO load against the same partition was starving the
+      // synchronous 60-min query causing SCAN_TIMEOUT (25s scanner ceiling).
+      //
+      // 240-min data is NOT YET CONSUMED by any canonical scanner path. It
+      // was added as forward-pre-warm for future multi-TF agreement wiring
+      // (B68.1 pattern on xstocks, currently scoped to Phase D of the
+      // XSTOCK_CALIBRATION_PLAN). Disabling it has zero functional impact on
+      // the current 60-min pipeline.
+      //
+      // Re-enable path: once B-NEW-35 lands (B74 source dedup) the 240-min
+      // batch query will run ~21× faster and concurrent execution will no
+      // longer starve the 60-min critical path. At that point this fire-and-
+      // forget block is restored. Multi-TF consumer wiring stays as a
+      // separate later batch independent of this warm-fetch decision.
+      // void xstockOhlcCache.getOHLCDataBatch(symbolList, 240).catch((err) => {
+      //   console.warn(`[B-NEW-34][AGGREGATOR_240M] warm-fetch error: ${err instanceof Error ? err.message : err}`);
+      // });
 
       // Bid/ask enrichment — best-effort. Drives the max_bid_ask_spread
       // filter (B-NEW-14). NOT a gate — symbols without recent ticker data

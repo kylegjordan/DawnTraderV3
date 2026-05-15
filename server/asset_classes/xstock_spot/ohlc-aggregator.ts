@@ -139,17 +139,47 @@ export async function aggregateXstockOHLC(
   // R2#1: ordered aggregation via (array_agg(... ORDER BY interval_begin))[1]
   // for open and [1 DESC] for close. R2#2: partial-bar emission — no end-of-
   // bucket gating, so the currently-forming bucket is included.
+  // B-NEW-34 hotfix 3 (2026-05-15 — discovered post-staging-verify): the
+  // `xstock_spot_ohlc_1m` table is being written by B74 with 18-56× duplicate
+  // rows per (symbol, interval_begin) — the WS archive emits a fresh row for
+  // every intra-minute tick rather than upserting one closed bar per minute.
+  // Empirical (2026-05-15, AAPL/USD over 60h lookback): 60K rows for 2900
+  // distinct minutes = ~21× duplication; recent hours up to 56× (current bar
+  // being tick-updated). Source-quality bug tracked as B-NEW-35 (B74 archive
+  // dedup); for the aggregator we MUST de-dup at query time or the rollup
+  // produces incorrect MAX/MIN/SUM (counting the same minute's high/low/volume
+  // dozens of times).
+  //
+  // The DISTINCT ON pick: latest `captured_at` per (symbol, interval_begin)
+  // wins, ties broken by `id` DESC. Latest tick == bar-close-aligned snapshot
+  // == correct closed-bar OHLCV for that minute. The OLDER intra-minute rows
+  // are partial bars from earlier in the minute (open held constant, high/
+  // low/close/volume evolving as more ticks arrived); only the LAST row holds
+  // the full minute's OHLCV. This is the structurally-correct interpretation
+  // of the table's current write pattern; B-NEW-35 will normalize the write
+  // side so DISTINCT ON is no longer needed.
+  //
+  // Note: even with DISTINCT ON the scan cost remains O(rows-in-window).
+  // Combined with the 240-min warm-fetch disable in scanner.ts (also B-NEW-34
+  // hotfix 3), this brings cold-cache cycle time from 25s+ (SCAN_TIMEOUT) into
+  // the single-digit-seconds range.
   const symbolListSql = symbols.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
   const result: any = await db.execute(sql`
-    WITH bucketed AS (
+    WITH deduped AS (
+      SELECT DISTINCT ON (symbol, interval_begin)
+        symbol, interval_begin, open, high, low, close, volume
+      FROM xstock_spot_ohlc_1m
+      WHERE symbol IN (${sql.raw(symbolListSql)})
+        AND interval_begin > NOW() - (${lookbackHours}::int * INTERVAL '1 hour')
+      ORDER BY symbol, interval_begin, captured_at DESC, id DESC
+    ),
+    bucketed AS (
       SELECT
         symbol,
         (${sql.raw(bucketExpr)}) AS bucket_ts,
         interval_begin,
         open, high, low, close, volume
-      FROM xstock_spot_ohlc_1m
-      WHERE symbol IN (${sql.raw(symbolListSql)})
-        AND interval_begin > NOW() - (${lookbackHours}::int * INTERVAL '1 hour')
+      FROM deduped
     ),
     aggregated AS (
       SELECT
