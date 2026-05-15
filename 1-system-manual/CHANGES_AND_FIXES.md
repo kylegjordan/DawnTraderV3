@@ -2,6 +2,37 @@
 
 ---
 
+## FINDING-2026-05-15-A — B-NEW-37 forensic surfaces TWO interacting defects in the modulation chain
+
+**Date:** 2026-05-15/16 | **Commits:** `2331a21bb` + `ba893d9e1` | **PM2:** no restart (out-of-band CLI)
+
+**Per Langston Step 8 framing:** "CHANGES_AND_FIXES gets a `FINDING-2026-05-15-A` entry tagging the b68_5 uniform-haircut and 0.20 floor concentration as separate but interacting defects."
+
+**Defect 1 — `module_constants.regime_classifier.b67_5_post_composition_floor = 0.20` (set by B70.3b 2026-05-05 as visibility-window override; code default is 0.4; original pre-B70.3b value was 0.45).**
+
+- Empirical impact (B-NEW-37 Phase 4): 15.4% of b76 trades pinned at exactly 0.200. Pinned-trades WR = 34.5%; free-floating WR = 23.6%. **11pp gap — the floor is actively concentrating winners while free-floating trades drift inverted at the top deciles.**
+- B70.3b's change log labelled this as "Pure visibility — no consumer reads `regimeConfidenceModulated` until B67.5" and "until B67.5 lands and re-tunes based on real distribution data" (SIM §B70.3b line 1246).
+- The 0.20 setting is anomalously low compared to peer floors in `module_constants` (pwin_floor=0.4, winrate_floor_low=0.4, pattern_pool_gates.final_score_floor=0.45, mode-based confidence floors 0.60-0.80).
+- **Fix candidate (B-NEW-39 Phase 1):** revert via SQL UPDATE to 0.45 (original) or 0.40 (code default). One-line config change. Verification via re-running B-NEW-37 forensic CLI — expect pinned-WR-vs-free-WR gap to narrow + decile-1 to no longer be a pure floor-pinned cluster.
+
+**Defect 2 — b68_5 Path-B sustainability gate is uniformly over-aggressive (~0.40 confidence haircut on every signal).**
+
+- Empirical impact (B-NEW-37 Phase 3): Δconf (real - alt) = -0.406 for winners (n=222) and -0.391 for losers (n=241). MW-U p=0.094 (not statistically significant — gate doesn't preferentially suppress winners).
+- Per Langston Q4 verdict matrix → **Scenario B: uniform-too-aggressive — recalibrate, don't DROP.** The gate has directional value (mostly correct sign even if compressed) but the magnitude erases the predictive signal that exists in the alt (gate-off) distribution. The -0.40 haircut compresses everything toward floor, then the 0.20 floor catches the compressed signal and accidentally concentrates winners.
+- **Fix candidate (B-NEW-39 Phase 2):** cap the gate's downward push at ~0.10-0.15. Recalibration target per Langston: "still in the neighborhood of the ~0.37 multiplier intuition from B-NEW-33 Step 8."
+
+**Interaction between Defect 1 and Defect 2:** the b68_5 gate compresses chain output by 0.40, pushing many trades below the 0.20 floor. The floor catches them and pins them at 0.20. Trades that the gate WOULD have driven to (e.g.) 0.05-0.15 land at 0.20. Trades that DIDN'T need much gate suppression land in the 0.30-0.50 free-floating band. The high pre-confidence winners get gate-compressed below 0.20 and floor-pinned; the low pre-confidence losers stay free-floating. **Net effect: inversion at the top decile, winners concentrated at the floor.**
+
+**Per-modulator factor analysis (Phase 2):** all 6 multiplicative levers near-neutral. b67_2_phase_preference (ratio 1.006, inert), b67_4_outcome_feedback (1.005, correct sign p=0.007), b68_1_multi_tf_agreement (1.007, correct sign p=0.020), b68_2_volume_regime (1.000, inert), b68_3_pair_correlation (0.999, inert), b68_4_regime_age (0.991, inert). **NO single-lever sign flip exists.** The diagnosis is not "a modulator is broken" — it's "two interacting structural defects (floor + b68_5 magnitude) create the inversion".
+
+**Bonus fix shipped:** `scripts/b-new-36-cohort-diagnostic.ts` `classifyShape()` gained segment-based monotonic-down/up fallback (Langston Step 8 of B-NEW-36 todo).
+
+**Hand-off:** **CLOSE B-NEW-37 at Step 9. SPAWN B-NEW-39** with three-phase sequential scope (floor revert → b68_5 recalibrate → conditional raw-classifier forensics with potential B-NEW-40 splitoff). **B-NEW-38 (stratified B-NEW-33 re-run) stays blocked through B-NEW-39.** B67.5 consumer-gate design unblocks after B-NEW-39.
+
+**Crypto regression: NONE** by construction (out-of-band CLI; read-only; no PM2 restart; no aggregator changes).
+
+---
+
 ## INFRA-2026-05-15-C — B-NEW-36 cohort diagnostic surfaces b76 confidence-inversion (CRITICAL system bug suspicion)
 
 **Date:** 2026-05-15 | **Commits:** `bb508ce29` (initial impl) + `390e23ced` (chunked-load hotfix) | **PM2:** no restart (out-of-band CLI)

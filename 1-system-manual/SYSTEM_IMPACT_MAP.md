@@ -1247,6 +1247,8 @@ Multi-week observation accumulates in parallel with B67.4 cheap-tier + calibrati
 - Updates SIM §5.1 `calculatePairRegime` terminal clamp behavior (floor at 0.20 instead of 0.45 until B67.5 lands and re-tunes based on real distribution data).
 - Pure visibility — no consumer reads `regimeConfidenceModulated` until B67.5.
 
+**B-NEW-37 update (2026-05-15/16) — modulation chain currently INVERSION-PRONE at top decile.** Per B-NEW-36 + B-NEW-37 forensic findings, the 0.20 floor (this entry) interacts with b68_5 Path-B sustainability gate's uniform -0.40 confidence haircut to produce a measurable inversion: trades with the highest `real_decision.confidence` (post-modulation) have the LOWEST realized win rate (decile 10 WR = 11%, decile 1 floor-pinned WR = 48%). 15.4% of trades are pinned at 0.200. **B67.5 consumer-gate design BLOCKED until B-NEW-39 reverts the floor + recalibrates b68_5 magnitude.** SIM consumers of `regimeConfidenceModulated` must read this entry before designing any gate that depends on the modulated chain output.
+
 ### B70 known limitations / deferred to B70.1
 
 - ~~Reject-stage signal_eval capture (`pre_filter`/`sqe`/`rtb`/`tcl`/`strategy_internal`)~~ — admitted-only in v1. Each reject site needs a small `archiveSignalEval({rejectStage: '<stage>', ...})` call. RUNNING_ISSUES #56.
