@@ -40,6 +40,8 @@
 
 **Hands-off to B67.5:** the verdict file informs B67.5 consumer-gate design. Three paths under Langston Step 8 review: (a) hold and recohort to a full 30-day window, (b) relax thresholds, (c) pivot to combination/interaction analysis. Awaiting Langston recommendation.
 
+**Parity check addendum (Kyle directive 2026-05-15 evening).** After the all-INCONCLUSIVE verdict, Kyle questioned whether methodology had drifted from the canonical aggregator that had previously shown 5-6 active levers in the UI panel. Built `scripts/b-new-33-parity-check.ts` to run both calculations on the same pre-drain row set. **Result: confidence-shift values (top table of the UI panel) match the May 5/6 screenshot exactly to within rounding** (e.g. b68_5: 0.4457 → 0.4456; b68_4: 0.0149 → 0.0149). Predictive-lift values are in the same direction and similar magnitude; small numerical differences explained by cohort-size delta (screenshot had ~700 rows/factor; pre-drain analysis includes through May 10 ≈ 800-850/factor). **Methodology is sound — no calculation drift.** The divergence is at the verdict-labeling LAYER: the screenshot used approximately a +3pp lift floor as "DECISION-GRADE WIN"; my CLI applies Langston's locked 7pp + p<0.05 gate. **Kyle decision: HOLD the 7pp gate (Option 1).** B-NEW-36 diagnostic spike (tertile non-monotonicity + 58% unmatched-rate audit) runs FIRST. B67.5 wires nothing this cycle. Parity report committed at `Claude Comms and Packages/Batch Completion/B-NEW-33_PARITY_CHECK.md`.
+
 ---
 
 ## INFRA-2026-05-15-A — B-NEW-34 xstock scanner 60-min bar parity + B74 dup-row workaround

@@ -149,9 +149,25 @@ Neither changes the row shape consumed downstream by `computeFactorCalibration` 
 
 ---
 
+## Parity check — methodology validation (Kyle directive 2026-05-15 evening)
+
+After the initial all-INCONCLUSIVE verdict, Kyle flagged that the existing Factor Calibration UI panel had been showing meaningful results for 5-6 levers before the cron stalled. Concern: had the calculation methodology drifted from the canonical aggregator?
+
+**Action:** built `scripts/b-new-33-parity-check.ts` to run BOTH calculations (existing `computeFactorCalibration` aggregator + B-NEW-33 CLI) against the SAME pre-drain row set (7,593 rows replayed by the cron pre-stall). Output filed at `Claude Comms and Packages/Batch Completion/B-NEW-33_PARITY_CHECK.md`.
+
+**Findings:**
+
+1. **Confidence-shift values (top table of the UI panel): IDENTICAL.** Side-by-side with a May 5/6 screenshot Kyle provided showed exact-match agreement on `avg |shift|` per factor (e.g. b68_5 = 0.4457 in the screenshot vs 0.4456 in my parity check; b68_4 = 0.0149 in both). The 5-6 "actively moving" levers Kyle remembers are still active in the data with the same magnitudes.
+
+2. **Predictive-lift values: same direction and similar magnitude with small numerical differences explained by cohort-size delta** (screenshot was from a ~700-row-per-factor cohort; my pre-drain analysis included rows through May 10 ≈ 800-850 per factor). Where lifts differ: b68_5 went from -1.8pp (screenshot) to -4.1pp (mine) — the harmful-lever finding STRENGTHENED with more data. b68_1 went from +5.7pp to +8.5pp — positive lift held up.
+
+3. **Verdict-labeling logic differs at the gate threshold, NOT at the calculation.** The May 5/6 screenshot uses approximately a +3pp lift floor as "DECISION-GRADE WIN". My CLI applies Langston's locked 7pp gate + p<0.05. Per Langston B-NEW-33 scope-review approval 2026-05-15 morning: "n≥150 / |spread|≥7pp / p<0.05 approved. Lower n risks false positives; lower spread is operationally noisy. Binomial 95% CI half-width ≈ 8pp around WR=0.5 at n=150 supports the 7pp floor."
+
+**Kyle decision 2026-05-15 evening: HOLD the 7pp gate (Option 1).** All 10 factors stay INCONCLUSIVE per the strict gate. B-NEW-36 diagnostic spike runs FIRST. B67.5 wires nothing this cycle. The relaxed-gate path (which would have graduated 5 factors to KEEP) was REJECTED — the operational discipline of not shipping potential noise into the consumer chain takes precedence over the "ship something" pressure.
+
 ## Sign-off
 
-CC: Implementation done, staging-verified, drain successful, verdict report generated and committed. Plain-language summary delivered to Kyle. B-NEW-36 diagnostic spike spawned per Langston Step 8 recommendation.
+CC: Implementation done, staging-verified, drain successful, verdict report generated and committed. Parity check confirms methodology is sound (confidence-shift values match the May 5/6 cohort exactly). Plain-language summary delivered to Kyle. B-NEW-36 diagnostic spike spawned per Langston Step 8 recommendation.
 
 Langston: Steps 1-2 + 4 APPROVE with 4 conditions (all reflected). **Step 8 verdict: HOLD thresholds + spike B-NEW-36 first + re-run B-NEW-33 post-spike.** Verbatim relayed to Telegram thread 21.
 
