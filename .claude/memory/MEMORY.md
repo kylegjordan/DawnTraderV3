@@ -17,7 +17,11 @@
 
 ---
 
-## CURRENT STATE — 2026-05-15 (B-NEW-33 + B-NEW-34 CLOSED, B67.5 BLOCKED on B-NEW-36)
+## CURRENT STATE — 2026-05-15 (B-NEW-33 + B-NEW-34 + B-NEW-36 CLOSED, b76 confidence INVERSION discovered, B67.5 BLOCKED on B-NEW-37 → B-NEW-38)
+
+**🚨 B-NEW-36 — Cohort diagnostic — CLOSED with CRITICAL FINDING.** Commits `bb508ce29` + `390e23ced` (chunked-load hotfix). New `scripts/b-new-36-cohort-diagnostic.ts` (~500 LOC) ran on staging 2026-05-15 21:45 UTC. **The b76 confidence chain is INVERSELY correlated with realized WR.** Decile 2 (conf 0.200-0.210, n=893) wins 40.5%; decile 9 (conf 0.422-0.493, n=893) wins 6.7%. Monotonic-down across deciles 2-9. Survives single-strategy stratification (strong_bull_trend alone n=5514 monotonic-down) AND single-phase (LATE n=2184 monotonic-down). Per Langston Step 8: "Almost certainly a system bug, not noise." Top-decile confidence wins 1 in 10; bottom-decile wins 4 in 10 — confidence signal points wrong direction. Chi-square confirms Hypothesis B (selection bias) on 6 of 8 dimensions (strategy, sourcePool, regime, framework, symbol, hour-of-day, day-of-week) all p≈0. Phase-chi-square at p=0 is instrumentation artifact (phase_at_entry only exists on matched rows). **Langston Step 8 verdict: sequence B-NEW-37 (inversion forensics) → B-NEW-38 (stratified B-NEW-33 re-run) → B67.5.** Sequential not parallel — if b76 chain is buggy, every downstream analysis using it is contaminated. Root cause priors: (1) label-flip in b76 training, (2) feature-polarity error, (3) train-vs-serve mismatch, (4) rank-vs-calibration drift. (1) and (2) primary. **~3-5 calendar days additional delay before B67.5 unblocks; worth it to avoid shipping consumer wiring on inverted signal.** Bonus B-NEW-37 todo: fix `classifyShape()` in diagnostic script (missing monotonic-down branch). Crypto regression: NONE by-construction (read-only CLI).
+
+**B-NEW-37 spawned** via mcp__ccd_session__spawn_task: trace b76 chain composition; inspect each modulator's sign convention; compare b76-predicted-prob vs realized WR at training-vs-serving; confirm post-b76-cutover; pinpoint the specific modulator/feature causing inversion. Then ship the fix.
 
 **B-NEW-33 — Crypto factor calibration backtest tool + nightly cron unblock — CLOSED.** Commit `892da2f27` + parity check `58e2011dd`. Live drain on staging: 33,049 pending rows processed; 13,830 matched; 19,219 marked `unreplayable_real_rejected`. Post-drain pending=0. **All 10 crypto factors verdict INCONCLUSIVE.** Critical Langston Step 8 finding: tertile WRs non-monotonic across all 10 factors (low 17% → mid 26% → high 21%) — single upstream artifact contaminating every calibration. **Kyle Option 1 LOCKED 2026-05-15 evening: HOLD Langston's 7pp + p<0.05 gate.** Parity check vs May 5/6 screenshot confirmed methodology sound (confidence-shift values identical e.g. b68_5: 0.4457→0.4456); divergence is at verdict-labeling LAYER not calculation (screenshot used ~+3pp floor as "DECISION-GRADE WIN", my CLI uses Langston's 7pp gate). Operational discipline of not shipping potential noise into consumer chain takes precedence. **B67.5 BLOCKED on B-NEW-36** diagnostic spike (tertile non-monotonicity + 58% unmatched-rate decomposition). b68_5_path_b_sustainability flagged for ~0.37 calibration multiplier in B67.5 (NOT DROP) — only factor doing real work (mean |Δconf|=0.43), but only after B-NEW-36 resolves upstream artifact.
 
@@ -56,7 +60,15 @@ Four commits on `migration/aws-supabase`:
 
 ## NEXT SESSION PLAN (immediate next step after Kyle ack)
 
-**Priority 1 — B-NEW-36 diagnostic spike** (unblocks B67.5).
+**Priority 1 — B-NEW-37 confidence-inversion forensics** (BLOCKS B-NEW-38 and B67.5).
+
+The b76 confidence chain is inversely correlated with realized WR (decile 9 conf 0.42-0.49 wins 6.7% vs decile 2 conf 0.20-0.21 wins 40.5%). Per Langston Step 8 — almost certainly a system bug. Root cause priors in order: (1) label-flip in b76 training/calibration, (2) feature-polarity error in one or more of 8 modulator inputs, (3) train-vs-serve distribution mismatch, (4) rank-vs-calibration drift. (1) and (2) primary — both inspectable via training-script read + holdout SQL.
+
+Investigation: trace b76 chain-final calibration code path; inspect each of 8 modulators' sign convention; compare b76-predicted-prob vs realized WR at training-vs-serving; confirm post-b76-cutover (legacy showed u-shape mid-dip — different from monotonic-down); pinpoint specific modulator/feature (re-run B-NEW-33 verdict with each lever DISABLED to find the resolver); propose fix. Bonus todo: fix `classifyShape()` in `scripts/b-new-36-cohort-diagnostic.ts` (missing monotonic-down branch).
+
+**Priority 2 — B-NEW-38 stratified B-NEW-33 re-run** AFTER B-NEW-37 lands fix. Re-run on corrected baseline; primary cell b76 + TFS + quant-strong_trend + post-stall (n~4000-4400). If b76 confidence direction is fixed, several factors that look INCONCLUSIVE today might cross the 7pp gate cleanly.
+
+**Priority 1-LEGACY-COMMENT — B-NEW-36 diagnostic spike** (was the unblocker; now CLOSED — surfaced the inversion).
 
 Two findings from B-NEW-33 verdicts require investigation BEFORE B67.5 consumer-gate design proceeds:
 
@@ -66,11 +78,11 @@ Two findings from B-NEW-33 verdicts require investigation BEFORE B67.5 consumer-
 
 Build CLI tool `scripts/b-new-36-cohort-diagnostic.ts` (mirror B-NEW-33 pattern). Output Markdown report at `Claude Comms and Packages/Batch Completion/B-NEW-36_DIAGNOSTIC.md`. Full prompt captured in spawned-task chip (2026-05-15).
 
-**Priority 2 — Re-run B-NEW-33 post-B-NEW-36.** If tertile shape resolves to monotonic post-diagnostic, several factors that look INCONCLUSIVE today might cross the 7pp gate cleanly.
-
-**Priority 3 — Design B67.5 consumer-gate** from the re-run verdicts. b68_5 likely candidate for ~0.37 calibration multiplier (not DROP).
+**Priority 3 — Design B67.5 consumer-gate** from B-NEW-38 corrected verdicts. b68_5 likely candidate for ~0.37 calibration multiplier (not DROP) IF inversion was a polarity bug.
 
 **Priority 4 — xStock Calibration Plan Phase 0** sequenced AFTER B67.5 ships.
+
+**Total delay estimate before B67.5 unblocks:** ~3-5 calendar days (B-NEW-37 ~1-2 days + B-NEW-38 ~1-2 days). Worth it to avoid shipping consumer gate on inverted signal.
 - Phase 0.1 splits, 0.2 dividends, 0.3 halts (corporate actions pre-flight).
 - Per Kyle directive 2026-05-15: Phase 0 does NOT start until crypto factor calibration finalization + B67.5 ship are complete.
 

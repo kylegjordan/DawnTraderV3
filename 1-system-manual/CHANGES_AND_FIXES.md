@@ -2,6 +2,52 @@
 
 ---
 
+## INFRA-2026-05-15-C — B-NEW-36 cohort diagnostic surfaces b76 confidence-inversion (CRITICAL system bug suspicion)
+
+**Date:** 2026-05-15 | **Commits:** `bb508ce29` (initial impl) + `390e23ced` (chunked-load hotfix) | **PM2:** no restart (out-of-band CLI)
+
+**What this batch found:** the b76 confidence framework is **inversely correlated with realized win rate**. Splitting the 8,926 b76 matched rows into deciles by `real_decision.confidence`:
+
+| Decile | Confidence range | n | WR |
+|---|---|---:|---:|
+| 1 (floor-pinned) | 0.200 | 892 | 35.3% |
+| 2 | 0.200-0.210 | 893 | 40.5% |
+| 5 | 0.259-0.295 | 893 | 32.3% |
+| 9 | 0.422-0.493 | 893 | **6.7%** |
+| 10 | 0.493-0.839 | 893 | **11.2%** |
+
+WR drops monotonically across deciles 2-9. Higher modulated confidence corresponds to LOWER realized WR. The system rates trades as "high confidence" and those trades subsequently win less often than trades it rates as "low confidence". This survives single-strategy stratification (strong_bull_trend n=5514 alone is monotonic-down) AND single-phase stratification (LATE n=2184 is monotonic-down). Not noise.
+
+**Why this matters operationally:** B67.5 was meant to wire the modulated confidence chain into 7 live consumer sites. If we ship B67.5 against an inverted signal, the consumer gates would REDUCE realized WR — actively harm the bot. Pre-B67.5 the chain is decorative (no consumer reads modulated confidence yet) so the inversion has no live impact today.
+
+**Other findings (chi-square at p≈0 on all 6 valid dimensions):**
+- Hour-of-day: 21:00 UTC = 79.5% unmatched rate; 22:00 UTC = 61.4%; morning hours (03-07 UTC) = 23-28%. The signal-orchestration layer is dropping evening UTC signals at much higher rates than morning signals.
+- Day-of-week: Thu 70.1% unmatched, Fri 68.8%, Tue 54.4%, Mon 24.9%, Sun 20.9%. The weekday pattern is highly imbalanced.
+- Strategy: vwap_pullback 65.1% unmatched, strong_bull_trend 44.9%, support_bounce 23.1%.
+- sourcePool, regimeLabel, symbol: all highly significant skew.
+- (`phase_at_entry` chi-square at p=0 is **instrumentation artifact** — that field only exists on `replay_outcome` of matched rows, so all unmatched are null by construction. Excluded from selection-bias evidence per Langston Step 8.)
+
+**Decision rule outcome:** Phase 5 of the diagnostic pre-committed three possible recommendations (A: framework split resolves → b76-only re-run; B: sourcePool split resolves → per-pool verdicts; C: persists → sub-cohort). **Outcome C — non-monotonicity persists across framework + sourcePool + regime + strategy stratification.** Default recommendation was sub-cohort B-NEW-33 re-run on b76 + TFS + quant-strong_trend + post-stall. **Overridden by Langston Step 8 verdict:** the more useful next step is forensics on the inversion itself, not a re-run on a buggy chain.
+
+**Langston Step 8 verdict APPROVED for closure with sequencing change:**
+- **B-NEW-37 (inversion forensics) FIRST.** Trace b76 chain-composition; check each modulator's sign convention; compare train-vs-serve confidence-WR; verify the inversion is post-b76-cutover. Identify which specific modulator or feature is the bug source.
+- **B-NEW-38 (stratified B-NEW-33 re-run) AFTER B-NEW-37 lands.** Re-run on corrected or known-good baseline.
+- **B67.5 BLOCKED through both batches** (~3-5 calendar days delay; worth it to avoid shipping consumer gate on inverted signal).
+
+Root cause priors per Langston (in order): (1) label-flip in b76 training/calibration, (2) feature-polarity error in one or more modulator inputs, (3) train-vs-serve distribution mismatch, (4) rank-vs-calibration drift. (1) and (2) are primary — both inspectable via training-script read + a single SQL of training labels vs realized outcomes on a holdout.
+
+**Parity check (Phase 6 of diagnostic):** diagnostic's tertile-collapsed WRs for `b67_4_outcome_feedback` match B-NEW-33 verdict report exactly (17.3% / 25.7% / 20.4%, n=2192). Methodology validated.
+
+**Bonus fix for B-NEW-37:** the `classifyShape()` function in `scripts/b-new-36-cohort-diagnostic.ts` lacks a `monotonic-down` detection branch — b76's clear monotonic-down shape was mis-labeled "undefined". One-line fix.
+
+**B-NEW-37 spawned** via `mcp__ccd_session__spawn_task` with full scope including root cause priors, sequencing notes, and reference docs.
+
+**Crypto regression:** NONE by-construction (read-only CLI; no DB writes; no PM2 restart; no aggregator changes).
+
+**Files touched:** `scripts/b-new-36-cohort-diagnostic.ts` (NEW, ~500 LOC), `package.json` (script entry).
+
+---
+
 ## INFRA-2026-05-15-B — B-NEW-33 crypto factor-calibration backtest + nightly-cron unblock
 
 **Date:** 2026-05-15 | **Commit:** `892da2f27` | **PM2:** no restart required (out-of-band CLI; cron change applies on next nightly run)
