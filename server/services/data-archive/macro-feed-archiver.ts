@@ -31,6 +31,11 @@ export function ensureMacroArchiverRegistered(): void {
 
 export interface MacroArchiveInput {
   capturedAt: Date | number;
+  // B-NEW-32 (2026-05-15): caller-supplied source tag. Lets the feed identify
+  // its own tier (e.g. 'coingecko-global' for Demo, 'coingecko-pro-global' for
+  // Pro). Optional with backward-compat default for callers that pre-date the
+  // tier-configurable migration.
+  source?: string;
   btcDominance?: number;
   mcapMomentum?: number;
   fundingRate?: number;
@@ -55,7 +60,7 @@ export function archiveMacroSnapshot(input: MacroArchiveInput): void {
 
   enqueueArchiveRow(TABLE, {
     captured_at: capturedAt,
-    source: 'coingecko-global',
+    source: input.source ?? 'coingecko-global',
     btc_dominance_pct: input.btcDominance ?? null,
     mcap_momentum: input.mcapMomentum ?? null,
     funding_rate: input.fundingRate ?? null,

@@ -231,22 +231,63 @@ let pollIntervalSec = 60;
 
 // ─── Upstream HTTP fetchers ─────────────────────────────────────────────────
 
-const COINGECKO_GLOBAL = 'https://api.coingecko.com/api/v3/global';
 const BINANCE_PREMIUM_INDEX = 'https://fapi.binance.com/fapi/v1/premiumIndex';
 const FETCH_TIMEOUT_MS = 8_000;
 
-// B69.3 (2026-05-04): CoinGecko Demo API key support per Kyle directive.
-// Without a key, the unauthenticated endpoint shares an IP-pooled rate limit
-// with the rest of the internet and was returning HTTP 429 ~50% of the time
-// (verified via PM2 logs 2026-05-04 16:00-19:59). With a Demo key the request
-// gets the per-key 30 calls/min quota — well above our 60s poll interval.
-// Key lives ONLY in the staging .env file; not committed.
+// B-NEW-32 (2026-05-15): CoinGecko tier configurable. Kyle upgraded the
+// staging account to a paid plan on/around 2026-05-12; the Pro tier uses a
+// DIFFERENT base URL (pro-api.coingecko.com vs api.coingecko.com) AND a
+// DIFFERENT auth header name (x-cg-pro-api-key vs x-cg-demo-api-key) compared
+// to the Demo tier wired in B69.3. Mismatched key/endpoint pairs return
+// HTTP 400 with error_code 10010. Tier env var is REQUIRED — no default,
+// per CLAUDE.md §11 no-silent-fallback discipline. A future tier migration
+// is an env-var change only; no code change required.
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY ?? '';
-if (COINGECKO_API_KEY) {
-  console.log('[B67.1][feed] CoinGecko Demo API key present — authenticated requests enabled');
-} else {
-  console.warn('[B67.1][feed] COINGECKO_API_KEY env var not set — falling back to unauthenticated requests (subject to shared rate limits)');
+const COINGECKO_API_TIER_RAW = process.env.COINGECKO_API_TIER;
+if (!COINGECKO_API_TIER_RAW) {
+  throw new Error(
+    `[B67.1] COINGECKO_API_TIER env var is required. Must be 'demo' or 'pro'. ` +
+    `No default — per CLAUDE.md §11 no-silent-fallback discipline. ` +
+    `Set in .env: COINGECKO_API_TIER=demo (free) or COINGECKO_API_TIER=pro (paid).`,
+  );
 }
+const COINGECKO_API_TIER = COINGECKO_API_TIER_RAW.toLowerCase();
+if (COINGECKO_API_TIER !== 'demo' && COINGECKO_API_TIER !== 'pro') {
+  throw new Error(
+    `[B67.1] invalid COINGECKO_API_TIER='${COINGECKO_API_TIER_RAW}'. ` +
+    `Must be 'demo' or 'pro'.`,
+  );
+}
+const COINGECKO_BASE_URL = COINGECKO_API_TIER === 'pro'
+  ? 'https://pro-api.coingecko.com/api/v3'
+  : 'https://api.coingecko.com/api/v3';
+const COINGECKO_API_KEY_HEADER = COINGECKO_API_TIER === 'pro'
+  ? 'x-cg-pro-api-key'
+  : 'x-cg-demo-api-key';
+const COINGECKO_ARCHIVE_SOURCE = COINGECKO_API_TIER === 'pro'
+  ? 'coingecko-pro-global'
+  : 'coingecko-global';
+const COINGECKO_GLOBAL = `${COINGECKO_BASE_URL}/global`;
+
+if (COINGECKO_API_KEY) {
+  console.log(
+    `[B67.1][feed] CoinGecko ${COINGECKO_API_TIER.toUpperCase()} API key present — ` +
+    `endpoint=${COINGECKO_BASE_URL} header=${COINGECKO_API_KEY_HEADER}`,
+  );
+} else {
+  console.warn(
+    `[B67.1][feed] COINGECKO_API_KEY env var not set — falling back to ` +
+    `unauthenticated ${COINGECKO_API_TIER.toUpperCase()} requests (subject to shared rate limits)`,
+  );
+}
+
+// B-NEW-32 (2026-05-15): ALERT-WORTHY consecutive-fallback counter. Surfaces
+// persistent feed outages in PM2 logs without manual log-tailing. Crosses
+// threshold = ~30 minutes of continuous fallback at 60s poll cadence; logs a
+// single high-visibility warning on threshold-cross. Resets on first clean
+// snapshot AND emits a recovery line if it had crossed.
+let consecutiveFallbackCycles = 0;
+const ALERT_WORTHY_FALLBACK_THRESHOLD = 30;
 
 async function fetchWithTimeout(url: string, headers?: Record<string, string>): Promise<Response> {
   const ctl = new AbortController();
@@ -278,7 +319,7 @@ async function fetchCoinGeckoGlobal(): Promise<{
   totalMarketCapUsd?: number;
 }> {
   const headers: Record<string, string> = COINGECKO_API_KEY
-    ? { 'x-cg-demo-api-key': COINGECKO_API_KEY }
+    ? { [COINGECKO_API_KEY_HEADER]: COINGECKO_API_KEY }
     : {};
 
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -407,6 +448,30 @@ async function pollCycle(): Promise<void> {
     state.lastSuccessAt = startedAt;
   }
 
+  // B-NEW-32 (2026-05-15): ALERT-WORTHY consecutive-fallback tracking.
+  // Increments while feed is partial; logs once at threshold-cross; emits
+  // recovery line and resets when first clean snapshot lands after threshold
+  // was crossed.
+  if (partial) {
+    consecutiveFallbackCycles++;
+    if (consecutiveFallbackCycles === ALERT_WORTHY_FALLBACK_THRESHOLD) {
+      console.warn(
+        `[ALERT-WORTHY] CoinGecko ${COINGECKO_API_TIER.toUpperCase()} feed has been in ` +
+        `fallback for ${ALERT_WORTHY_FALLBACK_THRESHOLD} consecutive poll cycles ` +
+        `(~${ALERT_WORTHY_FALLBACK_THRESHOLD} minutes at ${pollIntervalSec}s cadence). ` +
+        `Check feed credentials, endpoint config, and vendor status.`,
+      );
+    }
+  } else {
+    if (consecutiveFallbackCycles >= ALERT_WORTHY_FALLBACK_THRESHOLD) {
+      console.log(
+        `[ALERT-WORTHY] CoinGecko ${COINGECKO_API_TIER.toUpperCase()} feed RECOVERED after ` +
+        `${consecutiveFallbackCycles} consecutive fallback cycles. Clean snapshot received.`,
+      );
+    }
+    consecutiveFallbackCycles = 0;
+  }
+
   // B67.1 follow-up: persist after every poll so the rolling baseline survives
   // PM2 restarts. ~720 sample writes per window × 3 windows = ~2KB JSON;
   // synchronous fs write is well under the 60s poll cadence.
@@ -418,6 +483,7 @@ async function pollCycle(): Promise<void> {
     const { archiveMacroSnapshot } = await import('./data-archive/macro-feed-archiver.js');
     archiveMacroSnapshot({
       capturedAt: startedAt,
+      source: COINGECKO_ARCHIVE_SOURCE, // B-NEW-32: tier-aware tag (coingecko-pro-global or coingecko-global)
       btcDominance: cg.btcDominance,
       mcapMomentum: mcapMomentum,
       fundingRate: bn.fundingRate,

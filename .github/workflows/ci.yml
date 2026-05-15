@@ -60,6 +60,12 @@ jobs:
         run: npx vitest run --reporter=verbose
         env:
           NODE_ENV: test
+          # B-NEW-32 (2026-05-15): external-macro-feed.ts requires this env var
+          # at module-import time per the no-silent-fallback discipline. Tests
+          # that import transitively (e.g. b68-4-regime-age via market-context-
+          # engine) would otherwise crash. Demo is the safe test default — the
+          # feed isn't actually polled during tests.
+          COINGECKO_API_TIER: demo
 
   build:
     name: Build
