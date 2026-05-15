@@ -68,6 +68,16 @@ import { sql } from 'drizzle-orm';
 const ASSET_CLASS = 'crypto_spot';
 const FLOOR_EPSILON = 0.001; // for floor-pinning detection (post_conf within ε of floor candidates)
 
+// B-NEW-39 verification support (Langston Concern B): --since=<ISO timestamp>
+// filters the forensic to rows emitted after a given UTC timestamp. Used to
+// re-run on post-fix emissions only after applying a Phase 1/Phase 2 SQL UPDATE.
+const argv = process.argv.slice(2);
+const sinceIdx = argv.indexOf('--since');
+const SINCE_FILTER: string | null = sinceIdx >= 0 ? argv[sinceIdx + 1] ?? null : null;
+if (SINCE_FILTER) {
+  console.log(`[B-NEW-37] --since filter active: only rows with evaluated_at >= ${SINCE_FILTER}`);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Data model
 // ────────────────────────────────────────────────────────────────────────────
@@ -96,6 +106,9 @@ interface DecileBucket {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function loadMatched(factorName: string): Promise<AblationRow[]> {
+  const sinceClause = SINCE_FILTER
+    ? sql`AND evaluated_at >= ${SINCE_FILTER}::timestamptz`
+    : sql``;
   const result: any = await db.execute(sql`
     SELECT
       factor_name,
@@ -113,6 +126,7 @@ async function loadMatched(factorName: string): Promise<AblationRow[]> {
       AND replay_outcome->>'outcome' IN ('admitted_won', 'admitted_lost', 'admitted_breakeven')
       AND real_decision->>'confidence' IS NOT NULL
       AND real_decision->'metadata'->>'predictiveConfidenceRaw' IS NOT NULL
+      ${sinceClause}
   `);
   const raw = (result as any).rows ?? result;
   return raw.map((r: any) => ({

@@ -197,6 +197,39 @@ Each phase's SQL migration is wrapped in a transaction with a rollback script. I
 
 ---
 
+## 8b. Langston Step 1+2 review — APPROVE with revisions applied (2026-05-15/16)
+
+**Verdict:** APPROVE for Phase 1 implementation. Phase 2 needs revision per Q2 + Q3 below before SQL is written. Verbatim relayed to Telegram thread 21.
+
+### Q1-Q5 resolutions
+
+- **Q1 — 0.45 target for Phase 1: APPROVED.** B70.3b commit log explicitly names 0.45 as revert target; peer-floor-consistent; reverting to as-shipped value (not code-default 0.40 which is cold-start fallback).
+- **Q2 — Phase 2 target REVISED:** intermediate step. Take only the wildcard `b68_5_path_b_momentum_min` row from 0.001 → **0.0005** first, NOT directly to 0.0. Re-verify. Only step to 0.0 if 0.0005 doesn't move the needle.
+- **Q3 — Two-row scoping RESOLVED:**
+  - Wildcard row (catches crypto_spot + crypto_perp): regime=TFS, value=0.001 ← Phase 2 target
+  - xstock_spot-scoped row: regime=TFS, value=0.0005 ← **DO NOT TOUCH** (Langston: xstock has its own dynamics; treat separately)
+- **Q4 — Sequential pacing APPROVED.** Apply Phase 1 → verify → Phase 2 if shape still non-monotonic-up. No human gate required between phases per Kyle's "iterate to conclusion" directive. Re-engage Langston at Step 8 with post-fix forensic.
+- **Q5 — Rollback HUMAN-GATED:** rollback SQL committed alongside forward migration but execution is manual. Avoid auto-rollback oscillation risk.
+
+### Langston Concerns A-D resolutions
+
+- **Concern A (cache TTL):** RESOLVED. `module-constants-service.ts:51` defines `CACHE_TTL_MS = 60_000` (60s). Post-UPDATE propagation is bounded at ~60s. Verification will wait ~2 hours for natural emission accumulation.
+- **Concern B (forensic must read post-fix rows):** RESOLVED. Added `--since=<ISO timestamp>` flag to B-NEW-37 forensic CLI (`scripts/b-new-37-inversion-forensics.ts`). Phase 1/Phase 2 verification will use `npm run b-new-37:inversion-forensics -- --since=<UPDATE_TS>` to filter to post-fix rows only.
+- **Concern C (completion gate `monotonic-up` only):** APPLIED. Tighten §5.3 — **`flat` shape triggers Phase 3 (NOT closure)**. Only `monotonic-up` closes the batch.
+- **Concern D (intermediate-step value for Phase 2):** APPLIED per Q2 above. 0.0005 first, 0.0 only if 0.0005 doesn't move the needle.
+
+### §5.3 completion gate (updated)
+
+After each phase, run B-NEW-37 forensic with `--since=<phase_UPDATE_TS>`. Stable closure criteria:
+- Decile shape on b67_4_outcome_feedback subset = **`monotonic-up`** (strict — NOT `flat`)
+- Phase 4 metric: % at 0.200 floor ≈ 0% (post-Phase-1) or no longer concentrating outliers post-Phase-2
+- Phase 3 metric: Δconf magnitude ≤ 0.25 (post-Phase-2 if it fires)
+- B-NEW-36 cohort diagnostic re-run shows top-decile WR ≥ bottom-decile WR
+
+If `flat`, Phase 3 (raw classifier forensics) fires.
+
+---
+
 ## 9. Risk + concerns
 
 - **Risk: floor revert from 0.20 to 0.45 reclassifies many trades from "free-floating" to "above-floor"** — distribution shifts substantially. Expected per the design, but worth measuring before/after.
