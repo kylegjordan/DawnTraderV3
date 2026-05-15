@@ -64,9 +64,19 @@ export type XstockAggregationInterval = 60 | 240;
 /**
  * Per-Langston R2#5 — cache depth caps. Aggregator returns up to this many
  * bars per symbol per interval. Caller can re-roll on cache expiry cheaply.
+ *
+ * B-NEW-34 hotfix (2026-05-15 post-staging-verify): initial 200/60 depths
+ * produced ~15s 60-min cycle times and statement-timeout errors on the 240-min
+ * warm-fetch. Source-row math: 200 bars × 60-min × 60 1-min/bar = 720K rows
+ * for the 60-min query alone; 60 bars × 240-min × 60 = 864K rows for the
+ * 240-min. Concurrent execution saturated the connection pool.
+ *
+ * Reduced to 60/30 — still well above the 24-bar floor (`min_ohlc_history_bars`)
+ * and B68.1's 30-bar `min_higher_tf_samples` threshold. Source-row counts drop
+ * to 270K (60-min) + 540K (240-min) ≈ 4× faster on the rollup queries.
  */
-const MAX_BARS_60M = 200; // ~8 trading days of hourly history
-const MAX_BARS_240M = 60; // ~10 trading days of 4h history
+const MAX_BARS_60M = 60;  // ~2.5 trading days of hourly history (24-bar floor + 2.5× headroom)
+const MAX_BARS_240M = 30; // ~5 trading days of 4h history (matches B68.1 min_higher_tf_samples)
 
 /**
  * Aggregate xstock_spot_ohlc_1m rows into higher-timeframe OHLC bars.
