@@ -516,6 +516,10 @@ function phase7Proposal(
 
 async function main() {
   console.log('[B-NEW-37] Confidence-inversion forensics starting');
+  // Lift statement_timeout to 5 minutes for this session — JSONB extracts on
+  // single-factor SELECT (~2K rows × 6 JSONB ops) can exceed the 60s default
+  // on the Supabase pooler.
+  await db.execute(sql`SET statement_timeout = '300s'`);
   const lines: string[] = [];
   lines.push('# B-NEW-37 — Confidence-Inversion Forensic Findings');
   lines.push('');
