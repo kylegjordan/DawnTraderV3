@@ -201,11 +201,30 @@ function classifyShape(deciles: DecileBucket[]): CohortStats['shape'] {
   const troughIdx = wrs.indexOf(Math.min(...wrs));
   const range = Math.max(...wrs) - Math.min(...wrs);
   if (range < 4) return 'flat'; // <4pp range = noise
-  // Monotonic checks (allow 1 inversion in noise)
+  // Monotonic checks — strict (allow ≤2 inversions in noise)
   const inversions = wrs.slice(1).filter((v, i) => v < wrs[i]).length;
   const reverseInversions = wrs.slice(1).filter((v, i) => v > wrs[i]).length;
   if (inversions <= 2) return 'monotonic-up';
   if (reverseInversions <= 2) return 'monotonic-down';
+  // B-NEW-37 bonus fix (Langston Step 8 of B-NEW-36): segment-based
+  // monotonic-down fallback. The strict inversion check above misses
+  // shapes like 35→41→33→35→32→20→20→20→7→11 — that's clearly "down
+  // overall" but has pairwise rises in the first half. Catch via:
+  // last 3 deciles all below first 3 deciles AND average decreasing.
+  if (deciles.length >= 6) {
+    const first3 = wrs.slice(0, 3);
+    const last3 = wrs.slice(-3);
+    const first3Max = Math.max(...first3);
+    const last3Max = Math.max(...last3);
+    const first3Avg = first3.reduce((a, b) => a + b, 0) / 3;
+    const last3Avg = last3.reduce((a, b) => a + b, 0) / 3;
+    if (last3Max < first3Max - 4 && last3Avg < first3Avg - 4) {
+      return 'monotonic-down';
+    }
+    if (last3Max > first3Max + 4 && last3Avg > first3Avg + 4) {
+      return 'monotonic-up';
+    }
+  }
   // Peak in middle → inverted-U (mid wins more)
   if (peakIdx >= 3 && peakIdx <= 6) return 'inverted-u (mid-peak)';
   // Trough in middle → U (mid loses more)

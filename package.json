@@ -14,7 +14,8 @@
     "b67:replay-ablation": "tsx server/scripts/replay-ablation.ts",
     "b-new-33:factor-backtest": "tsx scripts/b-new-33-factor-backtest.ts",
     "b-new-33:parity-check": "tsx scripts/b-new-33-parity-check.ts",
-    "b-new-36:cohort-diagnostic": "tsx scripts/b-new-36-cohort-diagnostic.ts"
+    "b-new-36:cohort-diagnostic": "tsx scripts/b-new-36-cohort-diagnostic.ts",
+    "b-new-37:inversion-forensics": "tsx scripts/b-new-37-inversion-forensics.ts"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",
