@@ -253,13 +253,31 @@ Updates as phases ship. Append rows; do NOT rewrite history.
 | Date | Phase / Sub-batch | Status | Commit / notes |
 |---|---|---|---|
 | 2026-05-15 | Plan LOCKED | done | Langston round-2 ACK; v2 final committed `9cc9ac7d5`. Promoted to system-manual `1bd...` (this commit). |
+| 2026-05-15 | **B-NEW-34 — bar-interval switch to 60-min + freshness-gate removal + filter floor 60→24 + ORB disabled** | done | Commits `756b64e49` → `a7545d595` → `88e34bd67` → `1ee3ceb27`. PM2 #287. Staging verified live: 64 pairs/cycle (vs 26 pre-deploy), 675ms cycle duration, no SCAN_TIMEOUT. Pre-flight C calibration debt (~12 indicator/threshold concerns) absorbed into Phase B. B-NEW-35 spawned for B74 source dedup. 240-min warm-fetch suspended until B-NEW-35 lands. |
 | _(append rows here as each phase ships)_ | | | |
 
-**Open follow-ups not yet sequenced into a phase:**
-- None currently. All scope is captured in Phase 0 through Phase F (G is post-launch reference).
+**Plan rev 2 entry (2026-05-15) — bar-interval change ripples + cohort reset:**
+
+- **Bar interval changed 1-minute → 60-minute** for canonical xStock scanner path (B-NEW-34). All indicator/threshold periods that were expressed in number-of-bars now mean different real-time windows: a "300-period Z-score" was 5 hours of intraday tape on 1-min bars; now 12.5 days of swing data on 60-min bars. Phase B threshold-calibration targets updated accordingly:
+  - **Phase B.1 LQ threshold review** — re-evaluate against 60-min-bar liquidity profile (volume-per-bar magnitudes differ ~60× from 1-min bars; absolute LQ thresholds may need rescaling even if the percentile mapping concept is preserved).
+  - **Phase B.2 VN threshold review** — VN ratio uses ATR ÷ price; on 60-min bars ATR is larger (multi-tick range), so VN distributions shift. Pre-flight C concern about "VN dominance in family-IMF rejection (31% of fails)" needs re-measurement against post-B-NEW-34 evidence.
+  - **Phase B.3 DI window** — DI computation uses N closes of geometric vs straight-line distance. On 60-min bars, N=48 closes = 2 calendar days of trading; same N on 1-min bars was 48 minutes. Decide whether N is preserved (semantic: "directional integrity over last N price points") or rescaled to match prior crypto-derived calibration (semantic: "directional integrity over the last 48 minutes").
+  - **Phase B.4 friction calibration** — bid/ask spread sampling switches from 1-min to 60-min bar timestamps. Slippage-per-bar magnitudes change (1 hour of price movement is larger absolute drift than 1 minute). Friction model is exchange-keyed not bar-interval-keyed, so the friction parameters themselves don't move — but the EVIDENCE WINDOW (`max_bid_ask_spread` filter, slippage telemetry buckets) shifts to 60-min bars.
+  - **Phase B.5 max-spread threshold** — same window-shift as B.4. Threshold value (currently 100 bps with 90s ticker-snap freshness) is being re-evaluated against bar-derived bid/ask quotes that have different freshness semantics.
+  - **Phase B.6 ATR-multiplier calibration** — strategy ATR-distance multipliers (1.5× / 2.5× for `scanPatterns()`) are bar-interval-sensitive. The 1.5×/2.5× crypto-derived values assume some baseline noise level; 60-min ATR is larger absolute than 1-min ATR, so multipliers may need rescaling.
+
+- **Cohort starts reset to B-NEW-34 deploy date (2026-05-15).** Any calibration sample collected pre-2026-05-15 from the xstock pipeline is mixed-bar-interval data (predominantly 1-min, but some 60-min for backtests). Calibration windows for xstock_spot start fresh from 2026-05-15 PM2 #287 deploy. **Specifically resets:** Phase B threshold samples, Phase C macro-modifier observations, Phase D strategy-fire-rate evidence, Phase E pre-calibration-tagged trades.
+
+- **Threshold starter values now use crypto-calibrated 60-min values.** The "Day-1 placeholder" values in `screener_filters WHERE asset_class='xstock_spot'` were set in B79.0m.b2 (2026-05-11) from CRYPTO 60-min baselines (LQ=43, VN=0.98, DI=3/5). That choice is now correct by construction — both crypto and xstock are 60-min-bar systems. The "Day-1 placeholder pending Layer-3" framing in §4 is preserved (xstocks still need evidence-driven calibration), but the starter values are no longer asset-mismatched.
+
+- **Phase D ORB redesign SUSPENDED.** ORB (Opening Range Breakout) is fundamentally an intraday strategy using the first 15-30 minutes of session price action to define a breakout range. On 60-min bars, the entire first hour IS the first bar — there is no "opening range" to define inside it. ORB has been disabled in `module_constants.strategy_gates.xstock_spot.orb.enabled=false` (B-NEW-34). Phase D's ORB-specific work is suspended until/unless multi-TF support is added (which would let ORB read sub-hourly bars for the opening-range definition + 60-min bars for the rest of the pipeline). All other Phase D items proceed.
+
+- **Pre-flight C calibration debt absorbed into Phase B.** Langston Round 3 §3 surfaced ~12 indicator/threshold concerns from the bar-interval change. They're not blockers for B-NEW-34 ship (the 24-bar filter floor and 60-min cache depth are functioning); they ARE blockers for Phase B threshold confidence. Specific items tracked in this entry's bullets above.
+
+- **240-min (4-hour) bar infrastructure shipped but DISABLED.** B-NEW-34 shipped aggregator + cache support for 240-min bars (matching Kraken's interval=240 boundaries at 00/04/08/12/16/20 UTC). Fire-and-forget warm-fetch in scanner currently commented out — pending B-NEW-35 source-side dedup. When 240-min becomes consumable: hookup point is `XstockMultiTFAgreement` (Phase D of this plan), mirroring B68.1 multi-TF agreement on the crypto side.
 
 **Deltas from plan vs. ship reality** _(track as we go; honest about overruns + adjustments)_:
-- _(empty — plan just locked)_
+- **2026-05-15 — Bar-interval change.** Original plan (rev 1, locked 2026-05-15 morning) assumed the xStock scanner kept the existing 1-minute-bar architecture. Same-day Kyle directive flipped to 60-minute parity with crypto + 4-hour pre-warm (B-NEW-34). Calibration plan adjusted: thresholds re-anchor to 60-min evidence, cohort start resets to 2026-05-15 deploy, Phase D ORB work suspended pending multi-TF support, ~12 pre-flight C calibration debt items absorbed into Phase B sub-batches.
 
 ---
 

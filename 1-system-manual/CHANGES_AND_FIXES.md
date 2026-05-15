@@ -2,6 +2,45 @@
 
 ---
 
+## INFRA-2026-05-15-A — B-NEW-34 xstock scanner 60-min bar parity + B74 dup-row workaround
+
+**Date:** 2026-05-15 | **Commits:** `756b64e49` (initial impl) → `a7545d595` (hotfix 1: drizzle IN-literal) → `88e34bd67` (hotfix 2: cache depth) → `1ee3ceb27` (hotfix 3: DISTINCT ON aggregator + 240m warm-fetch suspended) | **PM2:** #283→#284→#285→#286→#287 | **Migration script:** `scripts/b-new-34-xstock-60min-parity.sql`
+
+**What broke (the pre-existing condition that triggered the batch):**
+Pre-B-NEW-34 the xstock scanner was producing 26 pairs scanned per cycle in steady state (target ≥70). Investigation across the 7-day window post-rotation commit `dd5810c32` (2026-05-12) showed the actual proximate cause was the 75-pair rotation interacting with a 90-second ticker_snap freshness gate, NOT the freshness batch (B79.0a, 2026-05-08) as initially suspected. On 60-min-class swing-trading decisions, requiring fresh ticker data inside a 90-second window is a hidden gate that filters even liquid names during minor data lulls. The architecture decision Kyle locked 2026-05-15 was to drop the freshness gate entirely and switch to 60-minute bar parity with crypto, mirroring the documented swing-trading premise of the system.
+
+**What this batch did:**
+Switched xstock scanner to canonical 60-minute bar interval via local SQL aggregation from the B74 archive table `xstock_spot_ohlc_1m`. Source path: Kraken has NO equities REST API at any subscription tier (B79.0k verdict re-verified 2026-05-15 via live probe of `pair=TSLAxUSD&interval=60` returning `EGeneral:Invalid arguments`). Two new files: `server/asset_classes/xstock_spot/ohlc-aggregator.ts` (single-SQL rollup with epoch-floor UTC alignment) + `server/services/xstock-ohlc-cache.ts` (asset-class-scoped 5-min TTL, separate instance from crypto ohlcCache). Filter floor 60 → 24 bars via new module_constants row `xstock_spot.min_ohlc_history_bars=24` (single SSOT for global-filter + pattern-filter). `data_freshness_window_ms` row DELETED. ORB disabled (intraday-bar strategy, incompatible with 60-min architecture, revisit Phase D of XSTOCK_CALIBRATION_PLAN.md).
+
+**Two postgres-TZ bugs caught by Langston Step 4 R4 review (both load-bearing):**
+1. `date_trunc('hour', timestamptz)` is silently session-TZ-dependent — would produce wrong bucket boundaries on any non-UTC postgres session. Fixed to `to_timestamp(floor(extract(epoch from t)/3600)*3600)`.
+2. `to_timestamp(floor(epoch/N)*N) AT TIME ZONE 'UTC'` downcasts timestamptz to TZ-naive `timestamp` — the pg driver then renders without `+00` suffix and `new Date()` would interpret it as host-local TZ. Would break on any non-UTC Node host (Hetzner is UTC today but laptop dev / CI runners / future regions wouldn't be). Fixed by dropping the AT TIME ZONE clause; epoch-floor returns plain timestamptz, UTC-anchored.
+
+**Three structural hotfixes (NO PATCHES doctrine — every fix is the long-term right answer):**
+1. **Hotfix 1 (`a7545d595`):** drizzle `WHERE symbol = ANY(${array})` throws "op ANY/ALL requires array on right side" because the `sql` template doesn't auto-bind JS arrays to postgres array params. Fix: build literal IN-list with single-quote escaping (symbols sourced from hardcoded `XSTOCK_SPOT_SYMBOLS` const Set; no user input). Mirrors the existing scanner.ts:337-339 workaround.
+2. **Hotfix 2 (`88e34bd67`):** initial cache depth 200 bars / 60-min + 60 bars / 240-min produced workload too large for postgres `statement_timeout=2min`. Reduced to 60/30 bars (still well above 24-bar filter floor + B68.1's 30-bar `min_higher_tf_samples` threshold). ~4× faster on rollup queries.
+3. **Hotfix 3 (`1ee3ceb27`):** post-hotfix-2 SCAN_TIMEOUTs persisted. Diagnostic queries surfaced **B74 archive is writing 18-56× duplicate rows per (symbol, interval_begin)** — every intra-minute tick produces a fresh row rather than upserting one closed bar. Empirical (AAPL/USD over 2h): 4876 rows for 103 distinct minutes; one specific minute with 227 distinct OHLCV tuples, $1.78 close spread. Aggregator rewritten with `DISTINCT ON (symbol, interval_begin) ORDER BY captured_at DESC, id DESC` CTE picking the latest-tick (closed-bar) snapshot per minute. 240-min warm-fetch SUSPENDED (commented in scanner.ts) — not yet consumed by any canonical path; will be re-enabled once B-NEW-35 source-side dedup lands.
+
+**ANALYZE discovery (also during hotfix 3 diagnosis):**
+`xstock_spot_ohlc_1m_2026_05` partition had `last_analyze=NULL` despite 13.5M live rows in 3.4GB on disk. The planner was using default statistics and likely choosing sequential scans against indexed-but-not-analyzed pages. Manual `ANALYZE VERBOSE xstock_spot_ohlc_1m_2026_05` completed during diagnosis; planner switched to bitmap-index-scan post-ANALYZE. **Filed as a separate watch item:** verify the autovacuum/auto-analyze settings for partitioned tables are firing correctly. If not, partition-creation procedure may need explicit `ANALYZE` step.
+
+**B-NEW-35 spawned** for the structural fix at the B74 archive write side: add UNIQUE constraint on `(symbol, interval_begin)` per partition + cleanup migration to DELETE 18-56× duplicates + writer rewrite to `INSERT ... ON CONFLICT DO UPDATE`. Once B-NEW-35 lands: (i) DISTINCT ON CTE in `ohlc-aggregator.ts` becomes redundant and is removed; (ii) 240-min warm-fetch in `scanner.ts:runCycle` is re-enabled.
+
+**Staging verified live via Claude-in-Chrome (CLAUDE.md §9.3):**
+xStocks tab Scanner Cycle Metrics post-PM2 #287 shows LAST CYCLE DURATION=675ms (down from 25s+ timeouts), PAIRS SCANNED (LAST CYCLE)=64 of 75 attempted (up from 26 pre-deploy), 10 consecutive healthy cycles, no SCAN_TIMEOUT after restart. Insufficient_history=11-17 per cycle (thinly-traded or newly-added names with <24 hourly bars — expected).
+
+**Pre-flight C calibration debt (~12 indicator/threshold concerns) deferred to Phase B of XSTOCK_CALIBRATION_PLAN.md rev 2:**
+Bar-interval change from 1-minute to 60-minute changes the meaning of any rolling-window threshold expressed in periods. 300-period Z-score window was 5 hours on 1-min bars; now 12.5 days on 60-min bars (samples regime-stable vs intraday-momentum). VN dominance, family-IMF thresholds, LQ thresholds, DI windows, ATR-distance multipliers ALL re-evaluated against 60-min bar evidence post-RTH 2026-05-19+.
+
+**`pairsScannedLastCycle` semantic shift:**
+Was "pairs with fresh ticker tick within 90s freshness window"; now "pairs with ≥24 hourly bars available in OHLC archive". Caller-side UI labels (xStocks tab) unchanged; numeric meaning is the canonical one going forward.
+
+**Crypto regression:** NONE by-construction (separate `xstockOhlcCache` instance, asset-class-scoped aggregator, crypto `ohlcCache` + Kraken REST path untouched).
+
+**Files touched:** 10 in initial impl (aggregator + cache + scanner + eval-cycle + global-filter + pattern-filter + data-freshness + tests + migration SQL + xstocks-tab banner) + 2 in hotfix 1 + 2 in hotfix 2 + 2 in hotfix 3.
+
+---
+
 ## INFRA-2026-05-14-A — BATCH_82 xstock_spot ablation + calibration data path repair (5th crypto-first incident closure)
 
 **Date:** 2026-05-14 | **Commits:** `dbdde1bfe` (Step 3 impl) + governance commit (Step 10) | **PM2:** #275 | **Deploy timestamp:** 2026-05-14T11:28:24Z

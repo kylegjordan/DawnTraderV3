@@ -6,97 +6,111 @@
 
 ## SESSION-START PROTOCOL (every new session / post-compact)
 
-1. Read `DawnTraderV3/CLAUDE.md` (especially §1 plain-language rule; §6 + §8 Langston comms; §6.5 Step 3 verbatim Telegram relay).
+1. Read `DawnTraderV3/CLAUDE.md` (esp. §1 plain-language; §6+§8 Langston comms; §6.5 Step 3 verbatim Telegram relay).
 2. Read this file.
-3. Read `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` — **THE ACTIVE WORK PLAN.** Locked 2026-05-15; first code-touching batch is Phase 0 corporate-actions audit.
-4. Read `1-system-manual/POST_AUDIT_ROADMAP.md` for the broader context.
-5. Kyle messages me here in Claude Desktop. For Kyle↔Langston visibility, tail `/var/log/cc-bridge-inbox.jsonl` on Hetzner.
+3. Read `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` — locked plan (rev 2); held until crypto B-NEW-33 backtest + B67.5 close.
+4. Read `1-system-manual/POST_AUDIT_ROADMAP.md` for broader context.
+5. Kyle messages me here in Claude Desktop. Kyle↔Langston visibility via `/var/log/cc-bridge-inbox.jsonl` on Hetzner.
 6. Acknowledge readiness in one line.
 
-**Do NOT:** confabulate; skip SIM in pre-audit; dump trial-and-error history into workflow doc (standing rules only); use technical jargon in Kyle-facing summaries (plain language only).
+**Do NOT:** confabulate; skip SIM in pre-audit; use technical jargon in Kyle-facing summaries (plain language only).
 
 ---
 
-## CURRENT STATE — 2026-05-15 (xStock Calibration Plan LOCKED + sequencing update, PM2 #282)
+## CURRENT STATE — 2026-05-15 (B-NEW-34 CLOSED, governance shipped, PM2 #287)
 
-**SEQUENCING ORDER (Kyle directive 2026-05-15):**
-1. **Crypto factor calibration finalization + B67.5 ship FIRST** (3-5 days). May 15 was the hard fence on crypto's calibration cohort per MULTI_ASSET_VTS_EXPANSION_PLAN.md; act on accumulated lever-ablation evidence before opening new asset-class work.
-2. **xStock Calibration Plan Phase 0 corp-actions audit SECOND**, after B67.5 ships clean.
+**B-NEW-34 — xstock 60-min bar parity + 4-hour pre-warm staged + B74 dup-row workaround — CLOSED.**
 
-**xStock Calibration Plan v2 LOCKED 2026-05-15.** Canonical living plan now lives at `1-system-manual/XSTOCK_CALIBRATION_PLAN.md`. Picks up where `MULTI_ASSET_VTS_EXPANSION_PLAN.md` leaves off (items 3 / 4 / 6 from that doc's §4 sequencing table). Process: two CC sessions converged on plan structure; Langston two-round design review (round 1 substantive + 9-question answers + 8 corner-case scrutiny + timeline pushback → v2 + round 2 ACK with 3 inline clarifications: F-NOW migration scope, crypto-friction-review batch added, DBS backfill 7-day hard floor).
+Four commits on `migration/aws-supabase`:
+- `756b64e49` — main implementation (10 files: aggregator + cache + scanner + eval-cycle + both filters + freshness + tests + migration SQL + xstocks-tab banner)
+- `a7545d595` — hotfix 1: drizzle `WHERE symbol = ANY(${arr})` → `IN (${literal-list})` (drizzle array-binding pitfall)
+- `88e34bd67` — hotfix 2: cache depth `MAX_BARS_60M=200 / MAX_BARS_240M=60` → `60 / 30` (cut source-row workload ~4×)
+- `1ee3ceb27` — hotfix 3: DISTINCT ON aggregator (B74 source has 18-56× duplicate rows per (symbol,interval_begin)) + 240m warm-fetch SUSPENDED (commented out)
 
-**Plan structure (locked):**
-- Phase 0 (NEW pre-flight, parallel to A.1): corporate-actions + dividend ex-dates + halts verification. Production-risk gate — TEC is live on xStock VTS trades and a 2:1 split would cascade-trigger trailing stops.
-- Phase A: DBS foundation for xStocks. Sector-classification with SPY fallback. Eleven SPDR sector ETFs (XLK, XLE, XLV, XLF, XLI, XLP, XLY, XLU, XLB, XLRE, XLC). NO pre-emptive component-weight retune (load-bearing invariant). Sector mapping co-located on `XSTOCK_SPOT_REGISTRY` extended to `{ name, is24_7?, sector }`. Hard floor: <7 days archive depth → A.2 waits.
-- Phase B: 7 sub-batches for threshold calibration. B.1 regime + time_of_day_class via NYSE clock + index-rebalance flag; B.2 IMF families; B.3 strategy gates (watchlist: pivot_shift / mean_reversion / range_trade); **B.4↔B.5 coupled-retune unit (friction + max-spread together; NO batch inserts between)**; B.6 TEC priors from archive replay; B.7 position sizing + sector concentration gate (2-3 positions/sector or 35-40% heat).
-- Phase C: equity macro modifier. **Narrow start: VIX only.** Add DXY after first observation window. FRED + Yahoo; Polygon deferred.
-- Phase D: strategy set scope. Keep 9 crypto carryovers + audit; ORB redesign (5/15/30/60min sweep); gap-fill YES; PEAD/sector-rotation/index-rebalance DEFER. **Earnings option (b): block opens 24h before / 4h after.**
-- Phase E: factor identification + emitter implementation (wires xStock pipeline into `emitAblationRecord` — BATCH_82 fixed crypto call sites but xStock pipeline still bypasses it) + 14-day observation calibration (SERIALIZED).
-- Phase F: two-stage. **F-NOW (~half day): plumbing verify + `calibration_state TEXT` column on `vts_open_trades` set at INSERT.** F-LATER (~20-30 days from start): real exit-ablation calibration once post-A-D trades accumulate.
-- Phase G: cross-asset ranking parity (B81). Post-launch reference only. NOT in scope.
-- Parallel batch: crypto-friction-review (3-5 days, runs in Phase B window; B81 prerequisite item 2).
+**Staging VERIFIED live via Claude-in-Chrome (CLAUDE.md §9.3):** xStocks tab Scanner Cycle Metrics shows LAST CYCLE DURATION=675ms (vs 25s+ pre-fix), PAIRS SCANNED=64 of 75 (vs 26 pre-deploy), 10 consecutive healthy cycles, no SCAN_TIMEOUT after PM2 #287 restart.
 
-**Timeline:** 35-45 days nominal, 55-65 conservative. Stack-up risks: DBS design call iteration, Phase 0 surfacing edge cases, strategy redesigns, gap-fill build, earnings-handling impl.
+**Two structural insights from B-NEW-34 verification:**
+1. **B74 archive write bug:** `xstock_spot_ohlc_1m` has 18-56× duplicate rows per `(symbol, interval_begin)`. The B74 WS archive emits a fresh row for every intra-minute tick rather than upserting one closed bar per minute. Empirical (AAPL/USD over 2h): 4876 rows for 103 distinct minutes; one minute had 227 distinct OHLCV tuples with $1.78 close spread. Latest `captured_at` per (symbol, interval_begin) = the correct closed bar.
+2. **`last_analyze=NULL` on the partition.** The May partition (13.5M rows, 3.4GB) had never been analyzed. Manually ran ANALYZE during hotfix 3 diagnosis. Watch item for autovacuum settings on partitioned tables.
 
-**Architectural principle locked into the plan (becomes workflow doc standing rule at plan close):** "Calibration dependency invariant — every new asset class calibrates upstream-to-downstream; Layer-1 starter values are deployment-validation only, not calibration-grade. Evidence collected on miscalibrated upstream cannot be used as calibration input for downstream stages."
+**B-NEW-35 spawned** (via mcp__ccd_session__spawn_task) for B74 source-side fix: UNIQUE constraint on (symbol, interval_begin) + cleanup migration + writer rewrite to INSERT ON CONFLICT DO UPDATE. Once B-NEW-35 lands: (i) DISTINCT ON CTE in ohlc-aggregator.ts becomes redundant and is removed; (ii) 240-min warm-fetch in scanner.ts is re-enabled.
 
----
+**Governance shipped (8 docs + completion report):**
+- `BATCH_CATALOG.md` — B-NEW-34 entry inserted before BATCH_82
+- `PHASE_HISTORY.md` — Phase 24 EXTENDED 2 sub-batch row
+- `SYSTEM_MANUAL.md` — NEW Phase 24 EXTENDED 2 section: "Bar interval — design rationale" + "B74 duplicate-row workaround" + "Cache architecture" + "Filter-floor SSOT promotion" + "Freshness gate REMOVED" subsections
+- `SYSTEM_IMPACT_MAP.md` — 8 new component entries under "Recent Additions (B-NEW-34)"
+- `CHANGES_AND_FIXES.md` — INFRA-2026-05-15-A architectural fact entry
+- `XSTOCK_CALIBRATION_PLAN.md` — rev 2 entry: bar-interval ripples into Phase B sub-batches, cohort start resets to 2026-05-15, Phase D ORB suspended, pre-flight C debt absorbed
+- `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` line 294 — doc drift cleanup ("5-minute intervals" → "60-minute intervals")
+- `client/src/components/machine-learning/xstocks-tab.tsx` — banner updated for B-NEW-34 architecture
+- `B-NEW-34_COMPLETION_REPORT.md` — written; top-of-report scaffolding-vs-functional + previously-stated-vs-now blocks per CLAUDE.md §9.1/§9.2
 
-## NEXT SESSION PLAN (post-compaction — immediate next step)
-
-**SEQUENCING UPDATE 2026-05-15 (Kyle directive):** Crypto factor calibration finalization + B67.5 ship BEFORE xStock Calibration Plan Phase 0. Reasoning: May 15 was the planned hard fence on crypto's calibration cohort per MULTI_ASSET_VTS_EXPANSION_PLAN.md. Walking past the fence without acting on the two-plus weeks of accumulated lever-ablation evidence would be incoherent. Plus: the consumer-gate pattern B67.5 builds (downstream gate that reads the calibrated confidence number) becomes inherited infrastructure for xStock Phase E; doing xStocks first means building xStock factor calibration against an unused number.
-
-**Priority 1 — Crypto factor calibration finalization + B67.5 batch.**
-1. **Pull the analysis.** Run `computeFactorCalibration` on rolling_30d window; verify decision-grade gates per factor (n ≥ 150/bucket, spread ≥ 7pp, p < 0.05). Get per-lever verdict: positive lift / negative lift / decorative / still-accumulating.
-2. **Decide factor set.** For each of the 8 levers (b67_1 macro modifier, b67_2 phase preference, b67_4 outcome feedback, b68_1 multi-tf agreement, b68_2 volume regime, b68_3 pair correlation, b68_4 freshness, b68_5 DBS sustainability): keep / retune / drop / wait-for-more-data. Iterate to consensus with Langston via file-first protocol.
-3. **Design B67.5 gate.** Currently floor of 0.45 means confidence never goes low enough to gate a trade. B67.5 = the consumer gate that actually rejects based on calibrated confidence. Design call needs Langston review. Probably needs Kyle decision on the rejection threshold.
-4. **Implement + ship B67.5.** Scope doc → pre-audit → Step 3 code → Langston review → ship → UI verify → completion report.
-5. **Governance.** Update relevant docs; close the calibration cohort fence; update MEMORY before xStock Phase 0 starts.
-
-Realistic time: 3-5 days, possibly longer if data is inconclusive (insufficient samples in some buckets → "keep accumulating N more days" rather than "finalize today"). If inconclusive, may need to start xStock Phase 0 in parallel anyway and finalize crypto on a slightly later date.
-
-**Priority 2 — xStock Calibration Plan Phase 0 corporate-actions audit.** Sequenced AFTER crypto B67.5 ships. First code-touching batch of `1-system-manual/XSTOCK_CALIBRATION_PLAN.md`. Three sub-tasks (0.1 splits / 0.2 dividends / 0.3 halts) per the plan §1 Phase 0 procedures. Gate: if any surface real bugs, Phase 0 becomes hotfix batch before Phase A. A.1 DBS design call runs in parallel.
-
-**Priority 3 — Out of scope this session:** Phase 16 §16.7 test suite recovery; §10d observability backfill; oscillator family removal; B80 crypto-perp (all sequenced after the xStock calibration plan completes).
+**Pre-flight C calibration debt** (~12 indicator/threshold concerns from 60-min bar shift; 300-period Z-window meaning shifts from 5h to 12.5 days) absorbed into Phase B of XSTOCK_CALIBRATION_PLAN.md rev 2.
 
 ---
 
-## RECENT SHIPS (compressed summary — full detail in batch completion reports / commits)
+## NEXT SESSION PLAN (immediate next step after Kyle ack)
 
-**xStocks diagnostic data/UI sprint CLOSED 2026-05-14:**
-- B-NEW-31 (`3e7a7ccbd`, PM2 #276) — Header/first-col freeze on Open + Closed Simulated Trades tables
-- B-NEW-14 (`3e17ff31e` + `b5b057161`, PM2 #280) — max_bid_ask_spread peer global filter on xstock + tab strip wrap
-- B-NEW-TZ (`82325e27b`, PM2 #281) — User timezone setting persists; Kyle's account set to Europe/Warsaw
-- B-NEW-21 (`19de3bb4f`, PM2 #282) — `/api/xstocks/freshness` rewritten unnest+LATERAL; 13.8s → 88ms (157× speedup)
+**Priority 1 — Resume crypto factor calibration backtesting (B-NEW-33).**
 
-**BATCH_82 (2026-05-14, PM2 #275):** xstock_spot ablation + calibration data path repair. Type-system-enforced caller-resolves on `emitAblationRecord(assetClass)`. Composite (asset_class, time) indexes on both ablation tables. Endpoint speedups: xstock-ablation 954×, xstock-calibration 501×, crypto-ablation 63× regression. KNOWN GAP from BATCH_82: it fixed asset-class threading on crypto call sites only — xStock signal-emission path still bypasses `emitAblationRecord` entirely. Phase E.2 of the calibration plan addresses this.
+This was the original "next step" before the xstock investigation triggered B-NEW-34 + B-NEW-35. Design already drafted in earlier conversation:
 
-**B83 hotfix (2026-05-14, commit `b4cde6b85`, PM2 #274):** `ReferenceError: tradeId is not defined` in `vts-runner.ts` second for-loop. 24hr silent pipeline stall; 85-trade backlog flushed on first post-fix cycle. `[B83-CYCLE]` permanent unconditional health-beat log replaces gated `if (resolved > 0)` anti-pattern.
+- **B-NEW-33: One-shot backtest tool over `regime_factor_alternates` 30-day cohort, bypassing the stuck replay cron.**
+- Build the tool to compute per-lever WR by tertile, lift vs without-factor scenario, decision-grade gates (n≥150/bucket, spread≥7pp, p<0.05).
+- Run across 8 levers: b67_1 macro modifier, b67_2 phase preference, b67_4 outcome feedback, b68_1 multi-TF agreement, b68_2 volume regime, b68_3 pair correlation, b68_4 regime-age, b68_5 Path B sustainability.
+- Produce per-lever verdicts.
 
-**Plain-language rule (2026-05-14):** All Kyle-facing summaries plain English; no function names, file paths, code snippets, SQL, jargon. Reference exemplar: B-NEW-14 / B-NEW-21 explanations. CC↔Langston exchanges stay technical bidirectionally.
+**Priority 2 — Design B67.5 consumer-gate from verdicts.**
+
+From the per-lever evidence, design how each LIVE consumer (7 sites) reads the chain-final confidence post-modulation. Currently confidence is decorative (no consumer reads the modulated value). B67.5 wires the consumers and removes the legacy `RegimeWeight` class. Spec preview in `BATCH_67_PROGRESS_REPORT.md` close-out section.
+
+**Priority 3 — xStock Calibration Plan Phase 0** (sequenced AFTER B-NEW-33 + B67.5 close).
+- Phase 0.1 splits, 0.2 dividends, 0.3 halts (corporate actions pre-flight).
+- Per Kyle directive 2026-05-15: Phase 0 does NOT start until crypto factor calibration finalization + B67.5 ship are complete.
+
+---
+
+## RECENT SHIPS (compressed)
+
+**B-NEW-34 (2026-05-15, commits `756b64e49`→`a7545d595`→`88e34bd67`→`1ee3ceb27`, PM2 #287):** xstock scanner switched to 60-min bar parity with crypto. Local SQL rollup from `xstock_spot_ohlc_1m`. Filter floor 60→24 via module_constants SSOT. ORB disabled. Freshness gate removed. 240m warm-fetch SUSPENDED until B-NEW-35. Discovered B74 source 18-56× duplicate-row bug.
+
+**B-NEW-32 (2026-05-15, commit `de28e4de0`, PM2 #283):** CoinGecko Pro-tier migration. Tier-configurable env var (COINGECKO_API_TIER=demo|pro). Feed restored after 3-day outage.
+
+**xStocks diagnostic data/UI sprint CLOSED 2026-05-14:** B-NEW-31 freeze headers; B-NEW-14 max_bid_ask_spread; B-NEW-TZ timezone; B-NEW-21 freshness query 157× speedup.
+
+**xStock Calibration Plan v2 LOCKED 2026-05-15.** Living plan at `1-system-manual/XSTOCK_CALIBRATION_PLAN.md`. Now rev 2 with B-NEW-34 bar-interval ripples. Picks up post-B-NEW-33/B67.5.
+
+**BATCH_82 (2026-05-14, PM2 #275):** xstock_spot ablation/calibration data path repair. xStock signal-emission path still bypasses `emitAblationRecord` — Phase E.2 of calibration plan addresses.
+
+**B83 hotfix (2026-05-14, commit `b4cde6b85`, PM2 #274):** vts-runner second for-loop ReferenceError. 24h stall; 85-trade backlog flushed.
 
 ---
 
 ## OPERATIONAL FACTS
 
-- xstocks: 260-pair universe + 24h DB-backed trade counts via `vts_open_trades` (B79.0g-tx soft-delete with 90d retention).
+- xstocks: 265-pair universe + 24h DB-backed trade counts via `vts_open_trades` (B79.0g-tx soft-delete with 90d retention).
 - 75-pair round-robin scan rotation. 3 pinned benchmarks: SPY/QQQ/GLD.
-- xstock + perp feeds archived via B74 (renamed `xstock_*_ohlc_1m` / `xstock_*_ticker_snap` in B79.0e).
-- Strategy registration: 10 enabled for xstock_spot (9 crypto carryovers + 1 ORB equity-native). xstock_spot BE-protect = **TRUE** in DB per Kyle directive (intentional).
+- xstock + perp feeds archived via B74 (`xstock_*_ohlc_1m` / `xstock_*_ticker_snap`).
+- **xstock scanner: 60-min bars** (B-NEW-34) via xstockOhlcCache → ohlc-aggregator SQL rollup from xstock_spot_ohlc_1m. 240-min aggregator built but warm-fetch SUSPENDED (commented in scanner.ts) until B-NEW-35.
+- Strategy registration: 9 enabled for xstock_spot post-B-NEW-34 (ORB disabled; defensive_hedge already DB-disabled).
+- xstock_spot BE-protect = TRUE in DB per Kyle directive (intentional).
 - Active trading OFF (Phase 19 territory). VTS passive learning ON.
 - TEC state persists across PM2 restarts via `/tmp/trailing-states.json`. Per-trade keyed (BATCH_80).
 - `[B83-CYCLE]` log fires unconditionally per VTS exit cycle.
-- DBS for xstock currently SYNTHESIZED NEUTRAL (DBS=0) — Phase A of calibration plan fixes this.
-- `emitAblationRecord` wiring MISSING for xStock pipeline — Phase E.2 fixes this.
-- xStock archive depth: started post-B79.0a (2026-05-08); pre-commit check at Phase A.2 with 7-day hard floor.
+- DBS for xstock currently SYNTHESIZED NEUTRAL (DBS=0) — Phase A of calibration plan fixes.
+- `emitAblationRecord` wiring MISSING for xStock pipeline — Phase E.2 fixes.
+- `module_constants.xstock_spot.min_ohlc_history_bars = 24` (single SSOT for both global-filter + pattern-filter). `data_freshness_window_ms` row DELETED.
+- Kraken: Pro account = trading tier (xStocks unlocked). NO Kraken equities REST endpoint at any tier (B79.0k verdict + 2026-05-15 re-verification).
+- **B74 source quality bug:** `xstock_spot_ohlc_1m` writes 18-56× duplicate rows per (symbol, interval_begin). Aggregator DISTINCT ON workaround in place (B-NEW-34 hotfix 3). B-NEW-35 will fix source-side. Watch item: autovacuum/auto-analyze on partitioned tables (last_analyze was NULL on May partition).
 
 ---
 
 ## LANGSTON RUNTIME + COMMS — see CLAUDE.md §6 + §8
 
-Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox `/var/log/cc-bridge-inbox.jsonl`. Send protocol = 3 steps (Telegram visibility + SSH-deliver via `claude -p --permission-mode bypassPermissions` with FRESH UUID per send + verbatim relay back to Telegram with `**LANGSTON SPEAKING:**` prefix). File-first for prompts >3KB; scp-stage to `/home/langston/inbox/<batch>/`.
+Two systemd bridges on Hetzner `204.168.141.77`. Unified inbox `/var/log/cc-bridge-inbox.jsonl`. 3-step protocol: Telegram visibility + SSH-deliver via `claude -p --permission-mode bypassPermissions` with FRESH UUID per send + verbatim Telegram relay with `**LANGSTON SPEAKING:**` prefix. File-first for prompts >3KB; scp to `/home/langston/inbox/<batch>/`.
 
-Recently demonstrated working pattern (2026-05-15 calibration plan): v1 design ask staged to `/home/langston/inbox/xstock-calibration-plan/` → short pointer prompt via claude-cli → response captured to local task-output file → archived to `Langston Design Asks/<batch>_REPLY.md` → verbatim relay to Telegram in chunks (markdown parse can fail; fall back to plain text per §8.2 diagnostic runbook).
+B-NEW-34 ran R1+R2+R3+Step 4 + R4 fixes across 5 inbox files. Step 4 R4 caught 2 load-bearing TZ bugs in the aggregator SQL (date_trunc session-TZ-dependence + AT TIME ZONE 'UTC' timestamptz downcast). Both fixed pre-push.
 
 ---
 
@@ -109,11 +123,10 @@ Recently demonstrated working pattern (2026-05-15 calibration plan): v1 design a
 - **No fallbacks for DB-governed settings.**
 - **Kyle messages me in Claude Desktop.** Telegram = Kyle↔Langston + CC outbound visibility only.
 - **Iterate with Langston to consensus** — escalate only on deadlock / scope expansion / new directive / risk boundary. Independently evaluate his feedback; never rubber-stamp.
-- **Calibration is a mandatory onboarding step** (workflow Step 6b 2026-05-13).
 - **"Staging verified" means UI-navigated, not curl-checked** (CLAUDE.md §9.3).
-- **Numeric deltas / scaffolding-vs-functional declarations** must be top-of-report explicit (CLAUDE.md §9.1, §9.2).
-- **Rename inventory protocol** (post-B83): grep-inventory OLD-name call sites pre-commit; per-row decision. Block-scope for-loop variables are unforgiving — TS won't catch.
-- **Plain-language summaries to Kyle, every time** (CLAUDE.md §1 + §11). Reference bar: B-NEW-14 / B-NEW-21 / xStock plan summary. CC↔Langston exchanges stay technical bidirectionally.
+- **Numeric deltas / scaffolding-vs-functional declarations** must be top-of-report explicit (CLAUDE.md §9.1, §9.2). B-NEW-34 completion report observes this.
+- **Plain-language summaries to Kyle, every time** (CLAUDE.md §1 + §11). Reference exemplar: B-NEW-14 / B-NEW-21 / xStock plan summary / B-NEW-34 hotfix-3 summary.
+- **Verify with the data, not assumption.** B-NEW-34 hotfix 3 discovered the B74 dup-row bug only because I tested actual SQL execution times instead of assuming. Always grep + DB-query + git-log + EXPLAIN before stating a regression.
 
 ---
 
@@ -121,7 +134,7 @@ Recently demonstrated working pattern (2026-05-15 calibration plan): v1 design a
 
 1. `DawnTraderV3/CLAUDE.md`
 2. This file
-3. `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` — **THE ACTIVE PLAN**
+3. `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` (rev 2)
 4. `1-system-manual/POST_AUDIT_ROADMAP.md`
 5. `1-system-manual/SYSTEM_IMPACT_MAP.md` for any component touched in next batch
-6. `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` (canonical blueprint; receives the calibration-dependency invariant + 9 other distilled items at plan close)
+6. `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` (calibration-dependency invariant + canonical blueprint)

@@ -289,12 +289,14 @@ interface CachedPrice {
 
 ## 4.2 OHLC Cache
 
-**File:** `server/core/cache/ohlc-cache.ts`
+**File:** `server/core/cache/ohlc-cache.ts` (crypto) + `server/services/xstock-ohlc-cache.ts` (xstock, asset-class-scoped — B-NEW-34, 2026-05-15)
 
-- 721 candles per symbol (5-minute intervals = ~2.5 days)
+- 721 candles per symbol on the crypto path (60-minute intervals; 1-hour candles = ~30 days of swing-tradable history)
+- xstock path: 60 candles per symbol at 60-min, optional 30 candles at 240-min — B-NEW-34 (locally aggregated from `xstock_spot_ohlc_1m` archive because Kraken has no equities REST API)
+- Both cache instances: TTL-based refresh (5 minutes)
 - Lazy-loaded on first request
-- TTL-based refresh (5 minutes)
 - Used for IMF calculations and regime detection
+- **Note (2026-05-15):** previous wording "5-minute intervals = ~2.5 days" was doc drift; the canonical bar interval has always been 60 minutes (1-hour swing-trading cadence). B-NEW-34 promoted the same 60-minute bar contract to xstock_spot and corrected this doc.
 
 ## 4.3 Data Source Hierarchy
 

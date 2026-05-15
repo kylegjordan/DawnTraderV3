@@ -11197,9 +11197,64 @@ These surface in PM2 logs via `[B79.0m.b2][SCAN_EVAL_DONE]` line and in `/api/xs
 
 ### Layer-3 calibration debt logged
 
-- Hardcoded 60-bar floor in `pattern-filter.ts` + `global-filter.ts:109` → migrate to `module_constants.pattern_pool_gates.min_bars_for_eval`.
+- Hardcoded 60-bar floor in `pattern-filter.ts` + `global-filter.ts:109` → migrate to `module_constants.pattern_pool_gates.min_bars_for_eval`. **CLOSED 2026-05-15 (B-NEW-34):** both consumers now read `module_constants.xstock_spot.min_ohlc_history_bars=24` (single SSOT row, asset-class-scoped). Floor lowered from 60 to 24 bars to align with 60-min bar architecture — 60 hourly bars would have required 2.5 trading days of history, blocking thinly-traded names. 24 bars = 24 hours of history; chosen over CC-proposed 20 for indicator headroom and Monday-morning resilience.
 - Pattern strategy `module_constants.strategy.<name>.*` wildcard-only for xstock_spot (26 rows confirmed) → Layer-3 seeds xstock-scoped overrides for ATR-multiplier knobs.
 - `scanPatterns()` ATR multipliers (1.5×/2.5×) crypto-tuned → may need different for equity microstructure.
 - VN dominance in family-IMF rejection (31% of fails) → recalibrate `vn_max` for equity tape post-RTH evidence.
+- **B-NEW-34 calibration debt (~12 indicator/threshold concerns) — Phase B of `XSTOCK_CALIBRATION_PLAN.md` rev 2.** Bar-interval change from 1-minute to 60-minute changes the meaning of any rolling-window threshold expressed in periods. Specifically: 300-period Z-score window was 5 hours on 1-min bars; now 12.5 days on 60-min bars (samples regime-stable vs intraday-momentum). VN dominance percentage may shift dramatically. Family-IMF thresholds, LQ thresholds, DI windows, ATR-distance multipliers ALL re-evaluated against 60-min bar evidence post-RTH 2026-05-19+ in calibration plan Phase B.
 
-*Updated 2026-05-11 with B79.0m.b2 close — xstock pipeline at functional crypto parity in code; live trade flow pending RTH 2026-05-12 13:30 UTC verification.*
+*Updated 2026-05-11 with B79.0m.b2 close — xstock pipeline at functional crypto parity in code; live trade flow pending RTH 2026-05-12 13:30 UTC verification. Updated 2026-05-15 with B-NEW-34 close — xstock scanner switched to 60-minute bars (see "Bar interval — design rationale" subsection below).*
+
+---
+
+## Phase 24 EXTENDED 2 — xstock scanner bar-interval switch to 60-minute parity (B-NEW-34, 2026-05-15)
+
+### Bar interval — design rationale
+
+**Canonical xstock_spot scanner bar interval is 60 minutes** (matching crypto's `interval=60` Kraken-REST native). Locked 2026-05-15 per Kyle directive after diagnostic investigation surfaced that the pre-B-NEW-34 1-minute-bar architecture was producing 26-of-75 pairs scanned per cycle in steady state (vs target ≥70), with the 90-second ticker_snap freshness gate behaving as a hidden gate even on liquid names.
+
+**Why 60-minute, not 1-minute or 5-minute:**
+
+DawnTrader is a swing-trading system, not a high-frequency-trading or intraday-momentum system. The strategy taxonomy is built around regime-stable price geometry (trend, reversal, breakout, oscillator) and pattern-formation evidence over hours-to-days timeframes. The decision-relevant timeframe is the 60-minute bar — long enough that intraday tick noise is integrated out, short enough that a full trading day still produces 6-8 decision points. This matches the crypto pipeline's `interval=60` Kraken-REST pull and the legacy intent documented at `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` (corrected from incorrect "5-minute intervals" wording in B-NEW-34 governance pass).
+
+**Why local SQL aggregation, not Kraken REST:**
+
+Kraken has NO equities REST API at any subscription tier. Verified empirically across the B79.0k investigation (2026-05-10) AND a fresh probe 2026-05-15 (`pair=TSLAxUSD&interval=60` returns `EGeneral:Invalid arguments`). xStocks exist exclusively on the `wss://ws-equities.kraken.com` WebSocket infrastructure with no public REST cousin. The B74 archive captures the WS-fed 1-minute bars to local Supabase (`xstock_spot_ohlc_1m`), and the B-NEW-34 aggregator rolls those into 60-minute bars on demand.
+
+**Why partial-bar emission (not end-of-bucket gating):**
+
+The currently-forming 60-minute bar is included in the returned series, matching crypto's Kraken-REST behavior where `interval=60&since=...` returns the still-forming bar as the last entry. Strategy detectors are written to handle partial-bar semantics (the strategy-engine treats the most recent bar as "current state, may evolve"). End-of-bucket gating would discard 0-60 minutes of price action and contradict the crypto path's contract.
+
+**Why UTC alignment (not session-local):**
+
+Both 60-minute (boundaries at HH:00 UTC) and 240-minute (boundaries at 00/04/08/12/16/20 UTC) bars use epoch-floor alignment (`to_timestamp(floor(extract(epoch from t) / N) * N)` where N=3600 for 60-min, 14400 for 240-min). This matches Kraken's native `interval=60` and `interval=240` candle boundaries and is invariant to postgres session timezone, Node host timezone, and deployment region. Two earlier candidates (`date_trunc('hour', timestamptz)` and `to_timestamp(...) AT TIME ZONE 'UTC'`) were both caught and rejected during Langston Step 4 R4 review — the former is silently session-TZ-dependent, the latter downcasts timestamptz to TZ-naive timestamp before pg-driver render and breaks on any non-UTC host.
+
+**Why 240-minute pre-warm is currently disabled:**
+
+The 240-minute (4-hour) aggregation infrastructure ships in B-NEW-34 (in `ohlc-aggregator.ts` and `xstock-ohlc-cache.ts`) but the fire-and-forget warm-fetch in `scanner.ts:runCycle` is commented out. Two reasons: (a) no canonical scanner path consumes 240-min bars yet — the data is staged for future multi-TF agreement wiring (Phase D of `XSTOCK_CALIBRATION_PLAN.md`); (b) the warm-fetch is currently blocked by the B74 source-side duplicate-row bug (see next subsection) and statement_timeout cancellation on 9M-row scan queries. Once B-NEW-35 lands (B74 source dedup), the 240-min warm-fetch is re-enabled.
+
+### B74 archive duplicate-row workaround (DISTINCT ON dedup at query time)
+
+**The bug.** The `xstock_spot_ohlc_1m` table is being written by the B74 WebSocket archive with **18-56× duplicate rows per `(symbol, interval_begin)`**. Every intra-minute tick produces a fresh row rather than upserting one closed bar per minute. Empirical (AAPL/USD over 2-hour lookback, 2026-05-15): 4876 rows for 103 distinct minutes; one specific minute (13:31:00 UTC) had 227 rows with 227 distinct OHLCV tuples, $1.78 close spread. Distribution holds across all time windows: last 1h = 56×, last 4h = 18×, last 24h = 20×, older = 21×. Older rows hold partial-bar state (open held constant, high/low/close/volume evolving as more ticks arrived); only the latest row per `(symbol, interval_begin)` (highest `captured_at`) holds the full minute's OHLCV.
+
+The PK `(interval_begin, symbol, id)` includes the `id` bigserial, which allows many rows per `(symbol, interval_begin)` — no UNIQUE constraint exists. The May 2026 partition holds 13.5M rows in 3.4GB on disk.
+
+**The aggregator workaround (B-NEW-34 hotfix 3).** `ohlc-aggregator.ts` applies `DISTINCT ON (symbol, interval_begin) ORDER BY symbol, interval_begin, captured_at DESC, id DESC` as a CTE before the bucketing CTE. This picks the latest-tick (closed-bar) snapshot per minute, then rolls up 60 of those into one 60-minute bar via the standard `array_agg(... ORDER BY)` pattern. Without the dedup, the rollup's MAX/MIN/SUM would over-count the same minute's high/low/volume dozens of times.
+
+**The structural fix (B-NEW-35, scheduled).** B-NEW-35 will rewrite the B74 archive writer to do `INSERT ... ON CONFLICT (symbol, interval_begin) DO UPDATE SET ...` keeping the latest values. Requires (a) adding a UNIQUE constraint on `(symbol, interval_begin)` per partition, which (b) requires a backfill migration to DELETE the duplicate rows first. After B-NEW-35 lands, the DISTINCT ON CTE in `ohlc-aggregator.ts` becomes redundant and is removed, AND the 240-min warm-fetch in `scanner.ts:runCycle` is re-enabled.
+
+### Cache architecture — asset-class-scoped, not shared
+
+`server/services/xstock-ohlc-cache.ts` is a SEPARATE instance from crypto's `ohlcCache` — distinct singleton, distinct internal Map, distinct TTL counters. The 5 collision tickers (CVX, DASH, MET, OPEN, SUI exist in both crypto and xstock universes per `XSTOCK_SPOT_KRAKEN_COLLISIONS`) are unambiguous at this layer because no shared lookup table is consulted. Per Langston R2 §1.2 design ask: "asset-class-scoped by construction; no x-suffix needed at this layer."
+
+Cache depth caps (after hotfix 2 reduction): 60 bars for 60-min (~2.5 trading days of hourly history), 30 bars for 240-min (~5 trading days of 4-hour history — currently unused while warm-fetch suspended). Initial 200/60 was reduced 4× after staging-verify showed source-row workload was too large for postgres `statement_timeout=2min`.
+
+### Filter-floor SSOT promotion
+
+`module_constants.xstock_spot.min_ohlc_history_bars=24` is the single source of truth read by BOTH `global-filter.ts` and `pattern-filter.ts`. Previously these were hardcoded `ohlc.length < 60` constants; the B-NEW-34 migration consolidates them onto one DB-governed key. 24 bars chosen for indicator headroom (most strategy detectors need 14-20 bars for ATR/regime/DI computation) plus Monday-morning resilience (a stock with light weekend data still has 24h of US-session history available).
+
+### Freshness gate REMOVED for xstocks
+
+`server/utils/data-freshness.ts` had an xstock_spot branch reading `module_constants.market_data.xstock_spot.data_freshness_window_ms` (90s default) and a closed-market short-circuit. **Both removed in B-NEW-34.** The `data_freshness_window_ms` row was DELETED from module_constants. The xstock scanner now treats OHLC bar history as the source of truth — if you have ≥24 bars, you're evaluatable; if you don't, you're not. No ticker_snap-based freshness gate. ticker_snap is still queried for bid/ask enrichment to feed the `max_bid_ask_spread` filter (B-NEW-14) but the absence of fresh ticker data does NOT block evaluation; the spread check sentinel-skips via -1.
+
+*Added 2026-05-15 with B-NEW-34 close.*

@@ -272,7 +272,7 @@ export function XstocksTab() {
         <div>
           <h2 className="text-xl font-semibold">xStocks (xstock_spot) — VTS Observation</h2>
           <p className="text-sm text-muted-foreground">
-            Phase 24 closed 2026-05-10 · VTS + passive learning telemetry · Monday 2026-05-11 14:30 UTC = ORB strategy goes hot
+            Phase 24 closed 2026-05-10 · VTS + passive learning telemetry · 60-minute bar parity with crypto (B-NEW-34, 2026-05-15) · 4-hour pre-warm staged pending B-NEW-35 source dedup · ORB disabled (intraday-bar strategy)
           </p>
         </div>
       </div>
