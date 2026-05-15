@@ -120,10 +120,16 @@ export async function aggregateXstockOHLC(
     bucketExpr = "to_timestamp(floor(extract(epoch from interval_begin) / 14400) * 14400)";
   }
 
-  // R2#4: single SQL with ANY($1). R2#1: ordered aggregation via
-  // (array_agg(... ORDER BY interval_begin))[1] for open and [LAST] for close.
-  // R2#2: partial-bar emission — no "interval_begin <= bucket+interval - 1min"
-  // gating, so the currently-forming bucket is included.
+  // R2#4: single SQL with IN-literal-list (per the workaround documented in
+  // scanner.ts:337-339 — drizzle sql template doesn't auto-bind JS arrays to
+  // postgres array params, so `ANY($1)` throws "op ANY/ALL (array) requires
+  // array on right side". Mitigation: string-literal-inject the symbol list.
+  // Safe because the symbol list is sourced from XSTOCK_SPOT_SYMBOLS (hardcoded
+  // const Set), not user input. Each entry is `'` escaped via `replace(/'/g, "''")`.
+  // R2#1: ordered aggregation via (array_agg(... ORDER BY interval_begin))[1]
+  // for open and [1 DESC] for close. R2#2: partial-bar emission — no end-of-
+  // bucket gating, so the currently-forming bucket is included.
+  const symbolListSql = symbols.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
   const result: any = await db.execute(sql`
     WITH bucketed AS (
       SELECT
@@ -132,7 +138,7 @@ export async function aggregateXstockOHLC(
         interval_begin,
         open, high, low, close, volume
       FROM xstock_spot_ohlc_1m
-      WHERE symbol = ANY(${symbols})
+      WHERE symbol IN (${sql.raw(symbolListSql)})
         AND interval_begin > NOW() - (${lookbackHours}::int * INTERVAL '1 hour')
     ),
     aggregated AS (
