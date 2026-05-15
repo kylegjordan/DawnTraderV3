@@ -100,44 +100,62 @@ interface CohortStats {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function loadAllRows(): Promise<Row[]> {
-  console.log('[B-NEW-36] Loading all replayed crypto_spot rows...');
-  const result: any = await db.execute(sql`
-    SELECT
-      factor_name,
-      (real_decision->>'confidence')::float AS real_conf,
-      (alternate_decision->>'confidence')::float AS alt_conf,
-      COALESCE(replay_outcome->>'outcome', '') AS outcome,
-      real_decision->'metadata'->>'sourcePool' AS source_pool,
-      real_decision->>'regimeLabel' AS regime_label,
-      replay_outcome->>'phase_at_entry' AS phase,
-      replay_outcome->>'strategy_at_entry' AS strategy_o,
-      strategy AS strategy_col,
-      pair_symbol AS symbol,
-      (real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final') AS is_b76,
-      (replay_completed_at >= ${PRE_DRAIN_CUTOFF}::timestamptz) AS is_post_stall,
-      EXTRACT(HOUR FROM evaluated_at) AS hour_of_day,
-      EXTRACT(DOW FROM evaluated_at) AS day_of_week
-    FROM regime_factor_alternates
-    WHERE asset_class = ${ASSET_CLASS}
-      AND replay_outcome IS NOT NULL
-      AND real_decision->>'confidence' IS NOT NULL
+  console.log('[B-NEW-36] Loading all replayed crypto_spot rows (chunked by factor)...');
+  // The full-table query with ~14 JSONB extracts × 40K rows hits postgres
+  // statement_timeout (60s default on the Supabase pooler). Chunk by factor_name
+  // so each query is ~4K rows = sub-second per chunk.
+  const factorListResult: any = await db.execute(sql`
+    SELECT DISTINCT factor_name FROM regime_factor_alternates
+    WHERE asset_class = ${ASSET_CLASS} ORDER BY factor_name
   `);
-  const raw = (result as any).rows ?? result;
-  return raw.map((r: any) => ({
-    factor_name: r.factor_name,
-    real_conf: Number(r.real_conf),
-    alt_conf: Number(r.alt_conf ?? 0),
-    outcome: r.outcome,
-    source_pool: r.source_pool,
-    regime_label: r.regime_label,
-    phase: r.phase,
-    strategy: r.strategy_o ?? r.strategy_col,
-    symbol: r.symbol,
-    framework_version: r.is_b76 ? 'b76' : 'legacy',
-    cohort: r.is_post_stall ? 'post-stall' : 'pre-stall',
-    hour_of_day: Number(r.hour_of_day),
-    day_of_week: Number(r.day_of_week),
-  }));
+  const factors = ((factorListResult as any).rows ?? factorListResult).map((r: any) => r.factor_name);
+  console.log(`[B-NEW-36]   Factors to scan: ${factors.length}`);
+
+  const allRows: Row[] = [];
+  for (const factorName of factors) {
+    const result: any = await db.execute(sql`
+      SELECT
+        factor_name,
+        (real_decision->>'confidence')::float AS real_conf,
+        (alternate_decision->>'confidence')::float AS alt_conf,
+        COALESCE(replay_outcome->>'outcome', '') AS outcome,
+        real_decision->'metadata'->>'sourcePool' AS source_pool,
+        real_decision->>'regimeLabel' AS regime_label,
+        replay_outcome->>'phase_at_entry' AS phase,
+        replay_outcome->>'strategy_at_entry' AS strategy_o,
+        strategy AS strategy_col,
+        pair_symbol AS symbol,
+        (real_decision->'metadata'->>'calibrationFrameworkVersion' = 'b76_chain_final') AS is_b76,
+        (replay_completed_at >= ${PRE_DRAIN_CUTOFF}::timestamptz) AS is_post_stall,
+        EXTRACT(HOUR FROM evaluated_at) AS hour_of_day,
+        EXTRACT(DOW FROM evaluated_at) AS day_of_week
+      FROM regime_factor_alternates
+      WHERE asset_class = ${ASSET_CLASS}
+        AND factor_name = ${factorName}
+        AND replay_outcome IS NOT NULL
+        AND real_decision->>'confidence' IS NOT NULL
+    `);
+    const raw = (result as any).rows ?? result;
+    for (const r of raw) {
+      allRows.push({
+        factor_name: r.factor_name,
+        real_conf: Number(r.real_conf),
+        alt_conf: Number(r.alt_conf ?? 0),
+        outcome: r.outcome,
+        source_pool: r.source_pool,
+        regime_label: r.regime_label,
+        phase: r.phase,
+        strategy: r.strategy_o ?? r.strategy_col,
+        symbol: r.symbol,
+        framework_version: r.is_b76 ? 'b76' : 'legacy',
+        cohort: r.is_post_stall ? 'post-stall' : 'pre-stall',
+        hour_of_day: Number(r.hour_of_day),
+        day_of_week: Number(r.day_of_week),
+      });
+    }
+    console.log(`[B-NEW-36]   ${factorName}: +${raw.length} rows`);
+  }
+  return allRows;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
