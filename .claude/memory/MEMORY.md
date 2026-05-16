@@ -17,15 +17,33 @@
 
 ---
 
-## CURRENT STATE — 2026-05-16 (B-NEW-39 PHASE 1 APPLIED; awaiting verification @ 1h emission window)
+## CURRENT STATE — 2026-05-16 04:25 UTC (B-NEW-39 PHASE 1 APPLIED + MECHANICALLY VERIFIED; forensic shape verification DEFERRED ~3-7 days)
 
-**🚨 ACTIVE BATCH: B-NEW-39 multi-mechanism inversion fix. Phase 1 SQL APPLIED 2026-05-15T23:07:54Z UTC.** Floor `module_constants.regime_classifier.b67_5_post_composition_floor` reverted 0.20 → 0.45 on wildcard row (1 row updated, verified via RETURNING). Cache TTL=60s, new emissions using floor=0.45 from ~23:09 UTC. Per Langston B-NEW-39 Step 1+2 APPROVE.
+**🚨 ACTIVE BATCH: B-NEW-39 multi-mechanism inversion fix.** Phase 1 SQL APPLIED 2026-05-15T23:07:54Z UTC. Floor `module_constants.regime_classifier.b67_5_post_composition_floor` reverted 0.20 → 0.45 on wildcard row. Cache TTL=60s. Phase 1 MECHANICAL verification COMPLETE; forensic SHAPE verification DEFERRED due to crypto market regime (0 wins, 0 losses in 24h pre-halt AND post-restart — all breakeven). Phase 2 ON HOLD.
 
-**IMMEDIATE NEXT ACTION:** Wait ~1-2 hours from 23:08 UTC for natural ablation-row accumulation, then re-run forensic with `--since` filter:
-```bash
-ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && npm run b-new-37:inversion-forensics -- --since=2026-05-15T23:08:00Z 2>&1'"
-```
-First check row count: ensure ≥50 matched rows per factor for any forensic signal. Decile-grade analysis (n≥150 per decile) ideally needs 1500+ per factor = several hours of emissions.
+**OPERATIONAL EVENTS (2026-05-15/16):**
+- **23:36 UTC PM2 restart #288** resolved pipeline stuck state (emissions halted 17:13 UTC, TEC_STALE_FAIL_CLOSED 17:43 UTC). xstock SCAN_TIMEOUT + B73 ohlcBars undefined errors PERSIST → separate batch candidate (chip spawned).
+- **04:18 UTC git pull on staging** — fast-forwarded ba893d9e1→9e7040ea8 to deploy --since flag for forensic CLI (commit 3a0034c6c was pushed but never deployed). No server code changes in pulled commits; no rebuild needed.
+- **04:20 UTC forensic CLI re-run** with --since=2026-05-15T23:36:00Z (filter now active). Phase 4 confirmed 0% pinned at 0.20 (n=3 post-restart sample). Pre-fix baseline was 15.4% pinned at 0.20 with pinned WR 34.3% vs free WR 23.4%. Mechanic confirmed.
+
+**PHASE 1 MECHANICAL VERIFICATION: COMPLETE**
+- Post-restart emissions: 0% pinned at old floor (0.20), 50% pinned at new floor (0.45)
+- CHZ/EUR confidence = exactly 0.45 (clamped at new floor); ZEC/USD = 0.5643 (above floor, unchanged)
+- Floor change in production, mechanically effective
+
+**PHASE 1 FORENSIC SHAPE VERIFICATION: DEFERRED ~3-7 DAYS**
+- Forensic CLI Phase 4 (floor-clamp): confirms 0.20 elimination ✅
+- Forensic CLI Phases 1-3, 5-7: all `inconclusive` due to n=3 with all admitted_breakeven (0 wins, 0 losses)
+- Crypto market in RANGE_BOUND_STABLE producing only breakeven outcomes — TP/SL not being hit before time-exit
+- 7-day baseline: 1050 wins, 1584 losses ✓ — system normally produces win/loss, current regime is unusually breakeven-dominant
+- Realistic verdict timeline: ≥50 win/loss per factor in ~3-7 days; decile-grade ≥150 per decile in ~10-30 days
+
+**DELIVERABLES (this overnight session):**
+- `Claude Comms and Packages/Batch Completion/B-NEW-39_PHASE1_STATUS.md` — partial status report (technical detail)
+- `Claude Comms and Packages/Batch Completion/B-NEW-39_PHASE1_PARTIAL_FORENSIC.md` — post-restart forensic CLI output (n=3 evidence)
+- `Claude Comms and Packages/Batch Completion/B-NEW-39_KYLE_MORNING_SUMMARY.md` — plain-language summary for Kyle morning
+
+**IMMEDIATE NEXT ACTION:** Schedule wakeup ~24h to recheck win/loss accumulation. Phase 1 SQL stays in production. Phase 2 stays HOLD. No rollback warranted.
 
 **Phase 1 completion gate (Langston Concern C — TIGHTENED):**
 - Decile shape on b67_4_outcome_feedback subset = **`monotonic-up`** ONLY (`flat` triggers Phase 3, not closure)
