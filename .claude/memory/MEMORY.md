@@ -14,41 +14,46 @@
 
 **Do NOT:** confabulate; skip SIM in pre-audit; use jargon in Kyle-facing summaries; assume — verify.
 
-**For Langston dispatches:** embed diff snippets inline + explicit "DO NOT cd to gdrive" (per §6.5.0.a). Check status at 5-10 min, kill+re-dispatch by 12 min max (per §6.5.0.b). Never let polling loops run unbounded.
+**For Langston dispatches:** embed diff snippets inline + explicit "DO NOT cd to gdrive" (per §6.5.0.a). Check status at 5-10 min, kill+re-dispatch by 12 min max (per §6.5.0.b). Never let polling loops run unbounded. File-first protocol per §6.5.0 for any prompt >3KB.
 
 ---
 
 ## 🟢 JUST CLOSED (2026-05-17)
 
-- **B-NEW-42b** — price-discontinuity detector + TEC integration. Commit `d8e0f5885` → governance closeout `c5f805401`. PM2 #293. Closes all 3 B-NEW-42-confirmed exit-side gaps (forward-split stop, reverse-split phantom-promote, halt-resume-gap unfillable fill). 4 kinds: halt_resume_gap / corp_action / ex_dividend / cold_start fail-safe. Single hoisted detector consultation per logical tick in `tec-evaluator.ts`. Curated 60-entry ex-dividend calendar (15 names × Q3+Q4 2026 dates). State machine IDLE / DISCONTINUITY_ACTIVE / CLEARING with stateless 5min HARD_CEILING + lazy 24h eviction gated on IDLE. Langston Step 1+2+4(round 1+2 after BLOCKER fixes)+8 ACK'd. 76/76 tests green; crypto regression ZERO. **All three trading modes (VTS, paper, live) protected on EXIT side.** Completion report: `Claude Comms and Packages/Batch Completion/B_NEW_42B_COMPLETION_REPORT.md`.
+- **B-PHASE-A2** — xStock DBS foundation. Commits `e84657110` → `9cdafa7df` → `2a9341b87` → `ba2689141` → `d567399bc` → `e7f9902f2` → `a418a7731` (6 sub-tasks A→F + pg ESM fix). PM2 #294. Closes the synthesized-neutral DBS gap for xStocks: every pair with ≥48 archive bars + ATR>0 + registry sector now gets a real DBS computed pre-cycle + threaded through MCE end-to-end. **Mirror invariant honored** (component weights/lookback/EMA byte-identical to crypto; no pre-emptive equity-tune). Two-instance store (`directionalBiasStore` crypto unchanged + new `xstockDirectionalBiasStore` mode='xstock' with GICS partition + dual floor); 265-entry sector mapping (11 GICS + 3 special buckets, 26 ADR-flagged, 11 cryptoAdjacent-flagged); 8 xstock_spot module_constants rows; new `xstock_dbs_backfill` table populated 31,481 rows / 260/265 symbols / all 14 sector tags. Langston Step 1+2+4(BLOCKER fix)+8 ACK'd. CI baseline held +2 passing tests. Companion ref doc `xstock_sector_mappings_reference.md`. Completion: `B_PHASE_A2_COMPLETION_REPORT.md`.
+
+- **B-NEW-42b** — price-discontinuity detector + TEC integration. Earlier 2026-05-17. PM2 #293. All 3 confirmed B-NEW-42 exit-side gaps closed structurally.
 
 - **B-NEW-42** — Phase 0 audit (DIRTY verdict). Spawned B-NEW-42b.
 
 - **B-NEW-40 + B-NEW-41** — closed earlier 2026-05-17.
 
-## 🟡 OPEN GAP (accepted via Option A — Kyle directive 2026-05-17 evening)
+## 🟡 OPEN GAP (accepted via Option A — Kyle directive 2026-05-17)
 
-- **Entry-side discontinuity gating NOT BUILT.** The detector covers EXIT decisions only (stop-check + target-lock-promote in TEC). The SCANNER does NOT consult the detector when deciding whether to open new positions. **Consequence:** during a halt-resume gap or split-effected price, the scanner could still open a fresh position at the discontinuity-effected level. **Accepted per Option A** because (a) xStock live trading isn't imminent, (b) VTS + paper bad entries become learning signal not money loss, (c) intra-RTH halts were rare-to-zero in 7-day archive. **Phase 19 live-trading prep MUST add the entry-side counterpart** (mirror-image scanner consult before allowing fresh position on a flagged tick).
+- **Entry-side discontinuity gating NOT BUILT.** Detector covers EXIT decisions only. Scanner does NOT consult detector before opening positions. Phase 19 live-trading prep adds entry-side counterpart.
 
-## 🟢 NEXT UP — Phase A (xStock DBS Foundation)
+## ⏳ NEXT — Phase A.3 (DBS verification gate)
 
-**Plan reference:** `Claude Comms and Packages/Langston Design Asks/XSTOCK_CALIBRATION_PLAN_v2_LANGSTON_REVIEW.md` §A (locked 2026-05-15; Langston ACK'd; Kyle authorized to proceed via "go into 42b" → 42b shipped → Phase A unblocked).
+**Plan reference:** `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` Phase A.3.
 
-### Phase A.1 — DBS design call (FIRST ACTION when Kyle says "go")
+**What:** compare xStock DBS distributions vs crypto distributions at component level (slope / return / EMA / final score). Confirm values are moving (not stuck at zero or floor/ceiling). **Volume-weighted-median skew analysis** (Langston design rev2 C7): inspect whether top-5 xStock names exceed 60% volume weight — if severe, post-A.3 calibration considers equal-weighted alternatives.
 
-**What:** sector-classification + SPY fallback architecture for xStock directional-bias scoring. Eleven SPDR sector ETFs (XLK/XLE/XLV/XLF/XLI/XLP/XLY/XLU/XLB/XLRE/XLC). Index-self handling (SPY/QQQ/IWM xStocks can't benchmark against themselves → force sector-blind regime mode). ADR caveat (beta-to-SPY may understate non-US macro coupling; flag for Phase E). DBS component weights stay byte-identical to crypto (NO pre-emptive equity-tune). Per-sector floor 3-5 pairs, global floor ~30. Sector mapping co-located on `XSTOCK_SPOT_REGISTRY` (extend shape to `{name, is24_7?, sector}`).
+**Live ARCA-open telemetry verification gate (FIRST ACTION when ARCA opens):**
+- Scheduled alert `7b33b931-aeb5-4a25-adc8-60fa0ba2e1e3` fires **2026-05-18T13:35Z** (Mon 13:30 UTC ARCA opens; 5min margin).
+- Steps per the alert body: (1) `ssh root@188.245.193.8 'pm2 logs dawntrader --lines 200 --nostream | grep -E "B-PHASE-A2.CYCLE_DBS_TIMING"'` should show per-cycle log every 30s with dbs_compute_ms <50ms and pairs_with_dbs in 50-200 range. (2) `grep -E "B-PHASE-A2.FIRST_FLOOR_CLEAR"` should show one log per session when both floors first clear. (3) `psql -c "SELECT count(*) FROM xstock_dbs_backfill"` should be >30000. (4) Navigate via Claude-in-Chrome to staging xStocks tab; verify `/api/xstocks/filter-diagnostics` shows non-zero pair counts.
+- Expected per pre-audit §3.7: cold-start at ARCA open may take 5-10 min before first publish-success as ATR + 48-bar lookback accumulate; stale-prior served during warmup is intentional.
 
-**Sector ETF data availability check (procedure):** query `XSTOCK_SPOT_SYMBOLS` for presence of XLK, XLE, XLV, XLF, XLI, XLP, XLY, XLU, XLB, XLRE, XLC AS xStocks. If >3 missing → offline-feed integration becomes A.1 sub-batch with its own Langston design call before A.2 starts.
+**Phase A.3 deliverable (after live telemetry verified):** DBS distribution comparison report; block Phase B if anomalies surface.
 
-**A.1 dispatch shape:** I draft the design ask + post to `Claude Comms and Packages/Langston Design Asks/B_PHASE_A1_DBS_design_ask_rev1.md` → file-first protocol to Langston → standard scope-review round-trip.
+## ⏳ NEXT — Phase B (after A.3 ACK)
 
-### Phase A.2 — DBS implementation + backfill (after A.1 design ACK'd)
+**Plan reference:** `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` Phase B.
 
-Build `xstock-directional-bias-store.ts` analogous to crypto's. Wire into `xstockSpotScanner.runCycle` ahead of eval-cycle dispatch. Eval-cycle passes real DBS to MCE (replaces `undefined` at `server/asset_classes/xstock_spot/eval-cycle.ts:353`). **Pre-commit check (Langston v2 ACK clarification c):** verify actual xStock archive start date. **<7 days available → A.2 WAITS for archive maturation** (calibration on ~3 days of history is plumbing-validation, not signal). 7-14 days → proceed but document thinness explicitly. 14+ days → no caveat needed. Backfill 2-3 weeks of historical DBS from archived OHLC. MCE `propagatedDbs` branch lifts when value provided.
+7 sub-batches: B.1 regime classifier threshold calibration (tune 14 `_XSTOCK` constants per equity microstructure); B.2 IMF family threshold calibration (per-family rows in screener_filters); B.3 per-strategy gate calibration (replace 26 wildcards in module_constants with xStock-specific values; strategy-watchlist for redesign-not-retune: pivot_shift / mean_reversion / range_trade); B.4 friction model calibration; B.5 max_bid_ask_spread validation (sequenced immediately after B.4 in coupled-retune unit); B.6 TEC threshold calibration (archive-replay priors); B.7 position-sizing review + sector concentration gate.
 
-### Phase A.3 — DBS verification gate
+## ⏳ QUEUED — B-PHASE-E-PRE-1 (Phase E prerequisite)
 
-Compare DBS distributions across xStocks against crypto's known distributions. Confirm values are moving (not stuck at zero or floor/ceiling). Blocks Phase B if anomalies surface.
+11 of 11 SPDR sector ETFs MISSING from xStock registry (verified by B-PHASE-A1 §3.3). Phase E sector-correlation factor work (`b68_3_pair_correlation` repurposed) requires SPDR ETF prices per symbol. **Path-1 (FRED daily-close + Yahoo intraday offline feed) locked as recommended** per Langston Step 4 R2. Estimated 5-7 days. Triggers at Phase E kickoff design ask. Not blocking A.3 / B / C / D — DBS itself uses pair-OHLC only.
 
 ---
 
@@ -66,18 +71,21 @@ Compare DBS distributions across xStocks against crypto's known distributions. C
 
 ## OPERATIONAL FACTS
 
-- PM2 #293 on staging since 2026-05-17 20:10:00Z (B-NEW-42b). Pipeline healthy.
-- B-NEW-42b detector loaded; ex-dividend calendar loaded; cold-start emissions confirmed.
-- 24 module_constants rows for `price_discontinuity_detector` (idempotent migration applied).
-- Scheduled alert `b83b1e4b` fires 2026-05-31T12:46:47Z (B-NEW-40 14-day soak verify).
+- PM2 #294 on staging since 2026-05-17 22:16:00Z (B-PHASE-A2). Pipeline healthy; HTTP 200.
+- B-PHASE-A2 wiring loaded; xstockDirectionalBiasStore singleton ready; ARCA-closed weekend short-circuit until Mon 01:00 UTC (24/7 universe partial) → Mon 13:30 UTC (full ARCA + 265 pairs).
+- 8 xstock_spot DBS module_constants rows applied; crypto wildcard rows untouched.
+- `xstock_dbs_backfill` table populated 31,481 rows / 260 symbols / 14 sectors. DBS distribution healthy (38% up / 42% down / 20% neutral, range -1.00 to +0.99, avg -0.006, 0 sentinels).
+- Scheduled alerts queue: `b83b1e4b` (B-NEW-40 14-day soak verify, fires 2026-05-31T12:46:47Z) + `7b33b931` (B-PHASE-A2 live telemetry verify, fires 2026-05-18T13:35Z).
 - Langston SSH alias `staging` → `deploy@188.245.193.8`. IP-restricted to `204.168.141.77`.
 - DATABASE_URL: direct Postgres port 5432 (Supabase Frankfurt).
-- **CI red baseline ACCEPTED as pre-existing technical debt** (RUNNING_ISSUES #113). TS Check non-blocking since 2026-03-30; Test Suite 13 failures from Directive 11.3/11.7F era; pre-dates 2026-05-08. B-NEW-42b held the baseline (+1 passing, 0 new failures).
+- **CI red baseline ACCEPTED as pre-existing technical debt** (RUNNING_ISSUES #113). TS Check non-blocking since 2026-03-30; Test Suite 13 failures from Directive 11.3/11.7F era. B-PHASE-A2 held the baseline: +2 passing test files (13 failed | 77 passed vs B-NEW-42b baseline 13/75).
 
 ---
 
 ## RECENT RUNNING_ISSUES SUMMARY
 
+- **#115 OPEN Tier 3** — crypto `dbs_calculation` module_constants asymmetry (only `min_sample_count` exists as wildcard; other 7 knobs code-defaulted). Filed during B-PHASE-A2 Step 8 (Langston).
+- **#114 OPEN low-severity** — crypto DBS floor counts sentinel-zero entries; xStock applies stricter rule from day one. Filed during B-PHASE-A2 Step 10 from B-PHASE-A1 design call.
 - **#113 OPEN accepted-baseline** — pre-existing CI red (10+ days); Phase 19 paper-trading prep reckons with it.
 - **#112 DEFERRED Phase D (INTERIM POSTURE DEPLOYED via B-NEW-42b)** — xStock dividend-credit question; curated calendar live.
 - **#111 DEFERRED Phase 19** — TFS sustainability gate value-scope.
@@ -90,6 +98,7 @@ Compare DBS distributions across xStocks against crypto's known distributions. C
 
 1. `DawnTraderV3/CLAUDE.md` — esp. §6.5.0.a (embed-diff-inline) + §6.5.0.b (hung-instance checking)
 2. This file
-3. `Claude Comms and Packages/Langston Design Asks/XSTOCK_CALIBRATION_PLAN_v2_LANGSTON_REVIEW.md` — Phase A architecture spec (lines 87-108 = A.1, lines 96-103 = A.2, lines 104-108 = A.3)
-4. `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` — living plan doc (mirror of v2 + future progress)
-5. Latest active scope/pre-audit if mid-batch
+3. `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` — Phase A.2 SHIPPED; Phase A.3 NEXT
+4. `Claude Comms and Packages/Langston Design Asks/B_PHASE_A1_DBS_design_ask_rev2.md` — design LOCKED
+5. `Claude Comms and Packages/Batch Completion/B_PHASE_A2_COMPLETION_REPORT.md` — once written in Step 11
+6. Latest active scope/pre-audit if mid-batch

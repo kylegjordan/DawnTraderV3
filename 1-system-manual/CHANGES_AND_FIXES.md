@@ -2,6 +2,63 @@
 
 ---
 
+## ENHANCE-2026-05-17-A — xStock DBS foundation wired (B-PHASE-A2)
+
+**Severity:** Foundation work (RESOLVED via Phase A.2 ship).
+**Surfaced by:** v2 xStock Calibration Plan §A (Langston-locked 2026-05-15).
+**Implemented by:** B-PHASE-A2 (commits `e84657110` → `a418a7731` on `migration/aws-supabase`, deployed 2026-05-17T22:16Z to staging PM2 #294).
+**Verified by:** Langston Step 4 CLEAN ACK on `e7f9902f2` + Step 8 CLEAN ACK on `a418a7731`.
+
+**The pre-existing gap:** xStock eval-cycle at `eval-cycle.ts:327` passed `undefined` as `propagatedDbs` to `mce.computeContext()`. MCE's non-crypto branch synthesized a neutral DBS (`score=0`, category=NEUTRAL, sentinelZero=true) for every xStock pair. Net effect: the regime classifier ran with no directional signal on xStocks; Path-B sustainability gate was dead-code on xStocks (TFS admitted only via Path-A momentum + DX); confidence modifiers defaulted to 1.0 for every xStock trade.
+
+**Structural fix:**
+
+1. **NEW `xstockDirectionalBiasStore` singleton** — second instance of the same `DirectionalBiasStore` class, constructed with `{mode: 'xstock', assetClassForKnobs: 'xstock_spot'}`. mode='xstock' branch applies sector partition (GICS-only counting) + dual floors (global ≥30 AND sector-coverage ≥7).
+2. **Pre-cycle DBS compute in `xstock_spot/scanner.ts`** — for each symbol with sufficient OHLC + ATR + registry sector: compute pair DBS via shared `computeDirectionalBias()`, feed the new store, stash in `dbsBySymbol` Map for thread-down.
+3. **`evaluateXstockPairForVTS` signature extended** with `propagatedDbs?` param. Scanner call-site at `scanner.ts:495` passes `dbsBySymbol.get(symbol)`. MCE non-crypto branch reads it end-to-end (verified in pre-audit §3 trace at lines 905, 973, 976, 997, 1048; no hidden `assetClass === 'crypto_spot'` guards).
+4. **`XSTOCK_SPOT_REGISTRY` shape extended** with REQUIRED `sector: XstockSector` field + optional `adr` / `cryptoAdjacent` flags. All 265 entries mapped to GICS sectors (11 standard + 3 special buckets INDEX_PROXY / BROAD_ETF / INTL_ETF). TypeScript compile-fails any future entry missing sector.
+5. **`module_constants` migration** — 8 xstock_spot DBS knobs (min_sample_count=30, sector_coverage_floor=7, plus 6 byte-identical-to-crypto weights/periods). Idempotent ON CONFLICT DO UPDATE. Crypto wildcard rows untouched.
+6. **NEW `xstock_dbs_backfill` table** with component-aware schema (slope_component, return_component, ema_component, final_score, sentinel_zero, atr, volume_24h_usd). Backfill script populated 31,481 rows across 260 of 265 symbols, all 14 sector tags exercised. DBS score distribution healthy (38% up / 42% down / 20% neutral, range -1.00 to +0.99, avg -0.006, 0 sentinels).
+
+**Mirror invariant honored:** DBS component weights (0.40 slope / 0.35 return / 0.25 ema) + lookback (48 bars) + EMA periods (12/26) + category thresholds + confidence-modifier ranges all byte-identical to crypto. No pre-emptive equity-tune (calibration-dependency invariant per v2 plan §A.2). Retune happens post-A.3 evidence-gated.
+
+**Test coverage:** +2 passing test files vs B-NEW-42b CI baseline (13/77 vs 13/75). New tests: `b-phase-a2-xstock-dbs-store.test.ts` (11 cases — two-instance independence, dual-floor mechanics, sentinel exclusion, INDEX_PROXY aggregation exclusion) + `b-phase-a2-xstock-eval-cycle-dbs.test.ts` (24 cases — registry completeness + 15 D17 high-profile-name asserts + special bucket + flag set spot-check).
+
+**Step 7 first-pass verification:**
+- Backfill 31,481 / 260 / 14 confirmed via psql
+- DBS score distribution healthy (0 sentinels)
+- module_constants 8 rows applied; crypto wildcard untouched
+- PM2 #294 boot clean; no `getSectorCoverageFloor` / `xstockDirectionalBiasStore` / `SECTOR_MISSING` errors
+- Live ARCA-open telemetry verification scheduled (alert `7b33b931` fires 2026-05-18T13:35Z when ARCA opens Monday)
+
+**Step 8 Langston independent second-pass:** all 5 verification items reproduced exactly — db state row counts, wildcard isolation, components-sum invariant (31,481 / 31,481 exact match, 21 clamped per design rev2 §3, 0 unexplained diffs), application liveness, endpoint reachability.
+
+**Two Step-10 governance findings logged in RUNNING_ISSUES:**
+- **#114** — Crypto DBS floor counts sentinel-zero entries (asymmetric vs xstock's stricter rule from day one).
+- **#115** — Crypto's other 7 `dbs_calculation` knobs are code-defaulted rather than DB-governed (only `min_sample_count` exists as wildcard row). Pre-existing asymmetry, surfaced by Langston Step 8.
+
+**Phase E pre-requisite queued:** all 11 SPDR sector ETFs (XLK/XLE/XLV/XLF/XLI/XLP/XLY/XLU/XLB/XLRE/XLC) MISSING from xStock registry. **B-PHASE-E-PRE-1 placeholder batch** queued for offline FRED+Yahoo feed integration before Phase E sector-correlation factor work can run. Estimated 5-7 days.
+
+**Lessons (carries forward to PHASE_HISTORY):**
+- **Constructor-option discriminator beats partition-key.** Initial design rev1 framed the two-store pattern as instances sharing class shape. Langston Step 1 R4 review surfaced that `publishSnapshot()` behavior diverges between modes (sector partition + dual floors for xstock), requiring an explicit `mode` discriminator in the constructor. Final shape: `new DirectionalBiasStore({mode, assetClassForKnobs})`. Cleaner future-proofing for asset class 3 (registry-of-stores remains a 15-min refactor).
+- **Pre-audit code-level rigor catches design assumptions before implementation.** Step 2 deepening (per Kyle directive) caught the `getSectorCoverageFloor` silent-fallback pattern AND the volume column omission AND the slope semantics question — all surfaced at pre-audit code-trace stage, not at Step 4 review. Sub-task A would have shipped the silent fallback otherwise.
+- **No silent fallbacks for DB-governed settings (CLAUDE.md §8 #10).** Sub-task A's first draft used try/catch with hardcoded 7 fallback for `sector_coverage_floor`. Langston Step 4 flagged as BLOCKER. Strict `getCachedNumberRequired` matches `getGlobalDbsMinSampleCount` shape; missing row = loud crash, not silent degradation.
+
+**Cross-references:**
+- Design rev2: `Claude Comms and Packages/Langston Design Asks/B_PHASE_A1_DBS_design_ask_rev2.md`
+- Sector reference doc: `Claude Comms and Packages/Langston Design Asks/xstock_sector_mappings_reference.md`
+- Scope rev2: `Claude Comms and Packages/Scope Files/B_PHASE_A2_DBS_SCOPE.md`
+- Pre-audit rev2: `Claude Comms and Packages/Scope Files/B_PHASE_A2_DBS_PRE_AUDIT.md`
+- Completion report: `Claude Comms and Packages/Batch Completion/B_PHASE_A2_COMPLETION_REPORT.md`
+- Store code: `server/core/metrics/directional-bias-store.ts`
+- Scanner pre-cycle DBS: `server/asset_classes/xstock_spot/scanner.ts:467+`
+- Eval-cycle threading: `server/asset_classes/xstock_spot/eval-cycle.ts:265,327`
+- Migration: `drizzle/migrations/2026-05-17-b-phase-a2-dbs-xstock-constants.sql`
+- Backfill table: `drizzle/migrations/2026-05-17-b-phase-a2-dbs-backfill-table.sql`
+- Backfill script: `scripts/b-phase-a2-backfill.ts`
+
+---
+
 ## BUG-2026-05-17-B — TEC structural gaps closed by B-NEW-42b price-discontinuity sentinel
 
 **Severity:** Operational risk (RESOLVED via structural fix).

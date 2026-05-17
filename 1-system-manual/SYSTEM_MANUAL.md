@@ -11355,3 +11355,155 @@ The detector cache is **in-process only**. A PM2 restart discards the cache enti
 Detector returns `{active: false}` immediately for non-xStock symbols (first check is `XSTOCK_SPOT_SYMBOLS.has(symbol)`). Crypto stop-check + target-lock behavior unchanged. Verified: b65-tec-parity + b80-tec-per-trade-keying + b79-tec-per-class-cache + trailing-exit tests all green (55+).
 
 *Added 2026-05-17 with B-NEW-42b close.*
+
+---
+
+# DBS extension to xStocks (B-PHASE-A2, 2026-05-17)
+
+> **Section title note (Langston Step 2 #2):** intentionally uses the batch ID (B-PHASE-A2) rather than the legacy "Phase 14" prefix from the original DBS chapter, since the workflow uses STEPS-not-Phases per the 2026-04-23 rename in B65.2 and the project is currently in Phase 24+.
+
+## Why this section exists
+
+The original DBS chapter (Phase 14 / B62 / B63 Item 16) was implicitly crypto-only — it described per-pair DBS compute, global aggregation, and the directional-bias-store singleton, all operating on the crypto universe. Pre-B-PHASE-A2, xStocks reached MCE with `propagatedDbs === undefined`; MCE's non-crypto branch synthesized a neutral DBS for every xStock pair; the regime classifier ran with zero directional signal on xStocks; Path-B sustainability gate was dead-code on xStocks; confidence modifiers defaulted to 1.0.
+
+B-PHASE-A2 extends DBS to xStocks by adding a second instance of the same `DirectionalBiasStore` class, wiring the xStock scanner to compute real per-pair DBS pre-cycle, and threading the result through MCE end-to-end. The core math (formula, weights, lookback, thresholds, confidence-modifier ranges) is byte-identical to crypto — no pre-emptive equity-tune.
+
+## Architecture
+
+### Two-instance pattern (constructor-option discriminator)
+
+```ts
+// server/core/metrics/directional-bias-store.ts
+export interface DirectionalBiasStoreOptions {
+  mode: 'crypto' | 'xstock';
+  assetClassForKnobs: 'crypto_spot' | 'xstock_spot';
+}
+
+export const directionalBiasStore = new DirectionalBiasStore({
+  mode: 'crypto',
+  assetClassForKnobs: 'crypto_spot',
+});
+
+export const xstockDirectionalBiasStore = new DirectionalBiasStore({
+  mode: 'xstock',
+  assetClassForKnobs: 'xstock_spot',
+});
+```
+
+**Why constructor-option, not subclassing:** the two instances share class shape but their `publishSnapshot()` behavior diverges (xstock applies sector partition + dual floor). The constructor option keeps the divergence visible at the class level (one if/else in publishSnapshot) without classical-inheritance overhead. Future-proofing for asset class 3 is a 15-min refactor to a registry-of-stores when that asset class arrives.
+
+### Per-pair compute (shared with crypto, byte-identical)
+
+`computeDirectionalBias(ohlc, atr)` in `server/core/metrics/directional-bias.ts` is universe-agnostic and reused as-is. Component weights, lookback (48 bars), EMA periods (12/26), and category thresholds (UP_STRONG 0.60 / UP_MODERATE 0.30 / UP_WEAK 0.10 / DOWN_WEAK -0.10 / DOWN_MODERATE -0.30 / DOWN_STRONG -0.60) are byte-identical to crypto.
+
+### Sector taxonomy on XSTOCK_SPOT_REGISTRY
+
+Every entry in `XSTOCK_SPOT_REGISTRY` carries a REQUIRED `sector: XstockSector` field with one of 14 values:
+
+| Bucket | Values | Behavior |
+|---|---|---|
+| GICS sectors | XLK, XLE, XLV, XLF, XLI, XLP, XLY, XLU, XLB, XLRE, XLC | Counted toward both floors; included in weighted-median aggregation |
+| INDEX_PROXY | SPY, QQQ | Stored for own-use (their eval-cycle reads back their own score); EXCLUDED from floor count + aggregation (would degenerate to "SPY's own DBS") |
+| BROAD_ETF | ARKK, ARKG, XBI, GLD, TOTL, IEMG | Same as INDEX_PROXY — stored for own-use, excluded from aggregation. Phase E factor work falls back to SPY for sector-correlation factor |
+| INTL_ETF | EWA, EWC, EWG, EWI, EWL, EWN, EWP, EWQ, EWS, EWU, EWZ | Same — country/region ETFs; SPY fallback for Phase E |
+
+Optional flags: `adr?: boolean` (26 entries — Phase E factor work consumes), `cryptoAdjacent?: boolean` (11 entries — MSTR / COIN / CRCL / GLXY / DFDV + 6 miners).
+
+TypeScript hard-fails any future entry missing `sector`. Sector mapping rationale + GICS reclassification gotchas (GOOGL→XLC post-2018, AMZN→XLY despite AWS, MSTR→XLK with cryptoAdjacent, COIN→XLF) documented in `Claude Comms and Packages/Langston Design Asks/xstock_sector_mappings_reference.md`.
+
+## Floor mechanics (mode='xstock' only)
+
+Crypto store (mode='crypto') uses a single floor: `freshCount ≥ min_sample_count(20)` against `this.store.size` (the pre-B-PHASE-A2 behavior; counts sentinel entries — see RUNNING_ISSUES #114 for the asymmetry).
+
+xStock store (mode='xstock') uses TWO floors that BOTH must clear:
+
+1. **Global floor**: `freshCount ≥ min_sample_count` where freshCount counts ONLY entries with:
+   - `sector ∈ (XLK, XLE, XLV, XLF, XLI, XLP, XLY, XLU, XLB, XLRE, XLC)` — INDEX_PROXY/BROAD_ETF/INTL_ETF excluded
+   - `sentinelZero === false` — degraded compute results don't count
+2. **Sector coverage floor**: `≥ sector_coverage_floor` distinct GICS sectors with ≥1 non-sentinel entry each
+
+Layer-1 starter values (seeded in `module_constants` by B-PHASE-A2 migration):
+
+| Knob | xstock_spot value | Crypto wildcard value | Rationale |
+|---|---|---|---|
+| `min_sample_count` | 30 | 20 (unchanged) | 30 of 265 = ~11% coverage; loosely proportional to crypto's 20/140 = ~14% with slightly stronger per-entry information richness offsetting the lower ratio |
+| `sector_coverage_floor` | 7 | N/A (crypto has no sector concept) | 7 of 11 GICS sectors = 64% diversity requirement. NEW knob xStock-only. |
+| 6 weight/period knobs | byte-identical to crypto | (same values) | No pre-emptive equity-tune; explicit rows isolate xstock from future crypto retunes |
+
+**Both floors are DB-governed via strict `getCachedNumberRequired`** (no silent fallback per CLAUDE.md §8 #10 + §11; Langston Step 4 BLOCKER fix in commit `e7f9902f2`). Missing seeded row = loud crash, not silent default.
+
+## Extended-hours expected degradation
+
+During ARCA-closed windows (Friday 8PM ET → Sunday 8PM ET unified weekend close), only the 10-pair 24/7 universe accumulates fresh writes. Empirical sector distribution: XLK=3 (AAPL/MSTR/NVDA), XLF=2 (CRCL/HOOD), XLC=1 (GOOGL), XLY=1 (TSLA), plus INDEX_PROXY=2 (SPY/QQQ) and BROAD_ETF=1 (GLD) — total 10, GICS-sectored 7, GICS sectors covered 4 of 11.
+
+**Both floors fail by construction during ARCA-closed:**
+- Global ≥30: max possible is 7 (GICS-sectored 24/7 names)
+- Sector coverage ≥7: covered 4 of 11
+
+`publishSnapshot()` serves stale-prior or null per the 5-row spec. **This is intentional.** Extended-hours signal quality is intrinsically lower (thin books, fewer ECN participants); serving a degraded global xStock DBS is more conservative than serving stale-prior. A.3 verification MUST NOT flag "global xStock DBS unavailable during weekend" as a defect.
+
+## RTH-open + cold-start framing (corrected post-rev1)
+
+Both crypto AND xStock DBS compute on 60-min bars (`xstockOhlcCache.getOHLCDataBatch(symbols, 60)`; crypto's `ohlcCache.getOHLCData(symbol, interval=60)`). DBS requires `lookbackPeriod = 48` bars → 48 × 60min = 48 trading hours of archive history.
+
+Implication: pairs with ≥48 hours of archived 60-min bars produce non-sentinel DBS from the first minute of any session. **Cold-start is NOT a session-start ramp**; it's a structural condition applying only to:
+- New symbols added to the universe with <48 archived bars
+- PM2 restart while xStock archive itself is <48-72 trading hours deep (no longer applicable post-A.2; archive depth is ~17 days = ~400 hours as of A.2 ship)
+
+For LIVE operation: weekends do not reset the archive. Monday RTH open does NOT trigger cold-start for any pair with prior-week history.
+
+## Telemetry
+
+- `[B-PHASE-A2][CYCLE_DBS_TIMING] tick=N dbs_compute_ms=M pairs_with_dbs=K universe=U` — per-cycle (30s) timing log. Empirical analytical estimate from pre-audit §11: 0.16% of 25s budget (~39ms at 250 pairs). Step 7 verification reads actual.
+- `[B-PHASE-A2][FIRST_FLOOR_CLEAR] tick=N pairs=K global_dbs=X.XXX category=Y` — one-shot per session on first publish-success after both floors clear. Resets on PM2 restart.
+- `[B-PHASE-A2][SECTOR_MISSING] symbol=...` — defense-in-depth warn if scanner ever encounters a symbol not in registry. Should never fire post-A.2 (TypeScript-required); presence indicates registry sync drift.
+- `[GlobalDBS-xstock][coldStart|degradedCoverage|noSnapshot|invalidCompute]` — 5-row behavior spec logs with `-xstock` suffix differentiating from crypto's `[GlobalDBS]`.
+
+## Volume-weighted-median informational note (Phase A.3 follow-up)
+
+The xStock weighted-median uses USD-denominated 24h volume (shares × price). Megacap dominance is structurally large: AAPL/MSFT/NVDA together can be 30-40% of S&P daily $ volume. A.3 verification will explicitly inspect distribution skew: if top-5 names exceed 60% volume weight in the median, document for post-A.3 calibration consideration (equal-weighted or sector-equal-weighted alternatives). Not an A.2 concern.
+
+## Backfill table
+
+`xstock_dbs_backfill` table captures per-bar DBS components for A.3 verification + Phase B calibration replay:
+
+```sql
+CREATE TABLE xstock_dbs_backfill (
+  symbol TEXT NOT NULL,
+  sector TEXT NOT NULL,
+  ts TIMESTAMPTZ NOT NULL,
+  final_score DOUBLE PRECISION NOT NULL,
+  slope_component DOUBLE PRECISION NOT NULL,
+  return_component DOUBLE PRECISION NOT NULL,
+  ema_component DOUBLE PRECISION NOT NULL,
+  sentinel_zero BOOLEAN NOT NULL,
+  atr DOUBLE PRECISION,
+  volume_24h_usd DOUBLE PRECISION,    -- B-PHASE-A2 (F) addition per Langston Step 4 ask
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (symbol, ts)
+);
+```
+
+Backfill script `scripts/b-phase-a2-backfill.ts` aggregates 1-min bars to 60-min via SQL `date_trunc('hour', interval_begin)`, computes per-window DBS, inserts ON CONFLICT DO NOTHING. Idempotent re-runs. Component capture (slope/return/ema) per Langston C8 — enables A.3 to diagnose which component drives any xStock-vs-crypto distribution divergence.
+
+## Crypto-path back-compat (verified by code-level pre-audit + Step 8)
+
+All 5 crypto-side consumers of `directionalBiasStore` (market-indicators isStale badge, drift-dashboard-aggregator history+transitions+latest reads, MCE updatePair write + publishSnapshot read) operate against the same singleton with the same call signatures. mode='crypto' branch in `publishSnapshot()` is identical to pre-B-PHASE-A2 behavior. Test mocks reference singleton symbols by name (b63-item16 test); constructor-arg refactor preserves the export surface. Zero crypto regression.
+
+## Crypto vs xStock symmetry asymmetries (filed in RUNNING_ISSUES for future hardening)
+
+Two pre-existing asymmetries surfaced during B-PHASE-A2 audits, both filed as low-severity future-hardening items:
+
+- **#114 (B-PHASE-A1 design call):** crypto floor counts sentinel-zero entries (uses `this.store.size`); xStock counts only non-sentinel GICS-sectored entries. xStock applies stricter rule from day one; crypto deferred to dedicated recalibration batch.
+- **#115 (Langston Step 8 finding):** crypto's `dbs_calculation` module_constants has only one wildcard row (`min_sample_count=20`); the other 7 DBS knobs are code-defaulted in the crypto path, NOT DB-governed. xStock_spot path is fully DB-governed (8 rows). Pre-existing state, not A.2 drift. Worth deciding intentionally rather than discovering by accident.
+
+## B-PHASE-A2 invariants (do not violate without governance update)
+
+1. **No pre-emptive equity-tune.** Component weights, lookback, EMA periods, category thresholds, confidence modifier ranges all byte-identical to crypto. Retune is POST-A.3 evidence-gated per v2 plan §A.2 (calibration-dependency invariant applies to its own foundation).
+2. **GICS-only + non-sentinel counting for xstock floor.** INDEX_PROXY / BROAD_ETF / INTL_ETF / undefined-sector / sentinelZero=true entries do not count toward global floor or sector-coverage floor, AND do not participate in weighted-median aggregation.
+3. **Constructor-option discriminator is the single source of truth.** All mode-specific behavior (sector partition, dual floor, log tag) branches on `this.opts.mode === 'xstock'`. Never add mode-specific behavior via runtime detection or `instanceof` checks.
+4. **Sector field REQUIRED on every registry entry.** TypeScript compile-fails any future entry missing sector. Companion `xstock_sector_mappings_reference.md` documents rationale for high-judgment cases.
+5. **Strict `getCachedNumberRequired` for both floor knobs.** No silent fallback per CLAUDE.md §8 #10 + §11. Missing seeded row = loud crash, not silent default.
+6. **Graceful degrade preserved.** Pairs with insufficient OHLC / ATR=0 / sector missing fall through to `propagatedDbs=undefined`; MCE's non-crypto branch synthesizes neutral as before A.2. No new failure modes introduced.
+
+*Added 2026-05-17 with B-PHASE-A2 close.*

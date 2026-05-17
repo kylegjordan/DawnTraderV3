@@ -1983,3 +1983,83 @@ NEW component shipped with B-NEW-42b commit `d8e0f5885`. Closes the 3 structural
 - ADJUSTMENT_FRAMEWORK Appendix A — 8 catalogued knobs
 - CHANGES_AND_FIXES `BUG-2026-05-17-B` — fix entry
 - POST_AUDIT_ROADMAP Phase 24 follow-ups (B79.x failure-mode taxonomy) — partial-address note + entry-side gap acceptance
+
+---
+
+## xStock Directional Bias Store + scanner DBS compute — Added B-PHASE-A2 (2026-05-17)
+
+### Why this entry exists
+
+B-PHASE-A2 ships the xStock-specific Directional Bias Score (DBS) foundation per the locked v2 Calibration Plan §A. Adds a second singleton instance of `DirectionalBiasStore` with `mode='xstock'` semantics (sector partition + dual floor), wires the xStock scanner to compute real per-pair DBS pre-cycle and thread it through MCE, replacing the prior synthesized-neutral fallback that left the regime classifier with no directional signal on xStocks.
+
+### Component
+
+- **Class**: `DirectionalBiasStore` in `server/core/metrics/directional-bias-store.ts` (extended; ~150 lines added for B-PHASE-A2)
+- **Crypto singleton** (unchanged surface): `export const directionalBiasStore` — constructed with `{mode: 'crypto', assetClassForKnobs: 'crypto_spot'}`
+- **xStock singleton** (NEW): `export const xstockDirectionalBiasStore` — constructed with `{mode: 'xstock', assetClassForKnobs: 'xstock_spot'}`
+- **Convenience accessors**: `getLatestGlobalDbsSnapshot()` (crypto, unchanged) + `getLatestXstockGlobalDbsSnapshot()` (NEW)
+- **Scanner pre-cycle compute**: `server/asset_classes/xstock_spot/scanner.ts` — pre-cycle block before eval loop (mirrors `fx5-scanner.ts:1098-1118`)
+- **Eval-cycle threading**: `server/asset_classes/xstock_spot/eval-cycle.ts:265` — `evaluateXstockPairForVTS` signature gains `propagatedDbs?` param; threads to MCE at line 327
+- **Backfill table**: `xstock_dbs_backfill` (component-aware schema; created by `2026-05-17-b-phase-a2-dbs-backfill-table.sql`)
+- **Backfill script**: `scripts/b-phase-a2-backfill.ts` (npm script `b-phase-a2:backfill`)
+
+### Upstream dependencies
+
+- **`XSTOCK_SPOT_REGISTRY`** in `shared/asset-classes.ts` — every entry MUST have a `sector: XstockSector` field (TypeScript-required after B-PHASE-A2). 14 valid values: 11 GICS sectors (XLK / XLE / XLV / XLF / XLI / XLP / XLY / XLU / XLB / XLRE / XLC) + 3 special buckets (INDEX_PROXY / BROAD_ETF / INTL_ETF). Optional `adr?` + `cryptoAdjacent?` flags (Phase E factor work consumes).
+- **`module_constants.dbs_calculation.*`** with `asset_class='xstock_spot'` — 8 explicit rows seeded by `2026-05-17-b-phase-a2-dbs-xstock-constants.sql`: `min_sample_count`=30, `sector_coverage_floor`=7 (NEW knob, xStock-only), plus 6 byte-identical-to-crypto component weights/periods (slope_weight, return_weight, ema_weight, lookback_period, ema_fast_period, ema_slow_period). Crypto wildcard rows untouched.
+- **`xstockOhlcCache.getOHLCDataBatch(symbols, 60)`** in `server/services/xstock-ohlc-cache.ts` — supplies 60-minute aggregated OHLC bars (default interval=60) to the scanner pre-cycle compute. Already operational pre-B-PHASE-A2.
+- **`computeDirectionalBias(ohlc, atr)`** in `server/core/metrics/directional-bias.ts` — shared math primitive; byte-identical between crypto and xStock (no fork).
+- **`computeGlobalDirectionalBias(...)`** — shared aggregator; volume-weighted median; filtered by sentinel-flags; reused as-is.
+
+### Downstream consumers
+
+- **MCE `computeContext` non-crypto branch** (`server/services/market-context-engine.ts:889-916`) — reads `propagatedDbs` directly, builds `directionalBias` from real values when supplied (replaces synthesized-neutral fallback). Then `dbsSlope` (line 973) + regime classifier (line 974) + phase store (line 997) + `MarketContext` attachment (line 1048) all consume the real value end-to-end.
+- **`calculatePairRegime`** in `server/core/metrics/market-regime.ts:209-289` — gates RBS (`|DBS| < 0.10`), admits TFS Path-B (`|DBS| >= 0.30`), admits IE (`|DBS| >= 0.50 + vol`). XSTOCK-suffixed threshold dispatch already exists from B79.0m.b (`market-regime.ts:227-249`). Once real DBS flows, these thresholds are exercised for real (today they're exercised against synthesized 0).
+- **Phase store `regimePhaseStore.tick()`** in `server/core/metrics/regime-phase.ts` — cold-pair age inference reads `dbsScore` for backfill. Phase backfill accuracy improves for xStocks post-A.2.
+- **B68.5 Path-B sustainability gate** — previously dead-code on xStocks (synth=0 never satisfied `|DBS| >= 0.30`); becomes ACTIVE for xStocks post-A.2.
+- **`computeBiasConfidenceModifier`** — universe-agnostic; downstream consumers (RTB, SQE, ranking-weights, drift-dashboard) pick up real categories automatically.
+- **A.3 verification queries (future)** + **Phase B calibration replay (future)** — both read `xstock_dbs_backfill` for component-level distribution analysis.
+
+### Blast radius
+
+- **Crypto path**: ZERO. `directionalBiasStore` singleton keeps 4-arg `updatePair` signature and identical `publishSnapshot()` behavior (mode='crypto' branch is the pre-B-PHASE-A2 behavior). All 5 crypto-side consumer sites (market-indicators, drift-dashboard-aggregator x3, MCE x2 + 1 publish) read the same singleton with the same call signature. Pre-audit code-level audit verified zero crypto regression.
+- **xStock entry side**: NOT GATED. Scanner pre-cycle DBS compute precedes the eval loop. Pairs with insufficient OHLC / ATR=0 / sector missing get `dbsBySymbol.get(symbol) === undefined`, which threads as `undefined` to MCE → synthesized neutral (preserves pre-A.2 behavior for thin pairs). Graceful degrade.
+- **xStock exit side**: not affected by A.2 directly (TEC discontinuity detector from B-NEW-42b handles exit-side gating). A.2 affects entry decisions via regime classifier consuming real DBS.
+
+### Key invariants
+
+- **Mirror invariant**: DBS component weights (0.40 slope / 0.35 return / 0.25 ema), lookback (48 bars), EMA periods (12/26), category thresholds (UP_STRONG 0.60 etc), confidence modifier ranges all byte-identical to crypto. **No pre-emptive equity-tune.** Retune is post-A.3 evidence-gated per v2 plan §A.2.
+- **Dual floor for xstock publish**: BOTH must clear — global ≥ `min_sample_count` (30) AND ≥ `sector_coverage_floor` (7) distinct GICS sectors with ≥1 non-sentinel entry each. Either failing → 5-row behavior spec applies (stale-prior or null).
+- **GICS-only + non-sentinel counting**: only entries with `sector ∈ (XLK..XLC)` and `sentinelZero === false` count toward xstock floor. INDEX_PROXY / BROAD_ETF / INTL_ETF stored for own-use (their own eval-cycle reads back their own score) but excluded from floor count AND from weighted-median aggregation. Sentinel entries (ATR=0 / insufficient OHLC) don't count toward floor (stricter than crypto's mode='crypto' branch — see RUNNING_ISSUES #114).
+- **Constructor-option discriminator**: `mode: 'crypto' | 'xstock'` is the single source of truth for behavioral branching in `publishSnapshot()`. Subclassing rejected per Langston Step 1 R4. Adding asset class 3 would add a third `mode` literal + branch (or refactor to registry-of-stores, ~15min).
+- **Sector field REQUIRED on every registry entry**: TypeScript compile-fail on any future entry missing sector. Companion `xstock_sector_mappings_reference.md` documents rationale for high-judgment cases (GOOGL→XLC post-2018, AMZN→XLY despite AWS, MSTR→XLK + cryptoAdjacent, etc.).
+
+### Modification risks ("things that break if X changes")
+
+- **Change `DirectionalBiasStore` constructor signature** → both `directionalBiasStore` and `xstockDirectionalBiasStore` singleton-export sites must update. Existing test mocks reference singleton symbols by name (e.g. `b63-item16-dbs-store.test.ts`); rename the symbols at your peril.
+- **Change `publishSnapshot()` mode-branch behavior** → cascades to: market-indicators isStale semantics, drift-dashboard-aggregator freshness filters, A.3 verification logic, Phase B calibration replay assumptions. Update System Manual §"Phase 14 — DBS extension to xStocks" + this SIM entry.
+- **Add a new sector tag to `XstockSector` union** → must update GICS_SECTORS set in store (if it should count toward floor), the 265-entry registry (TypeScript compile-time enforced for new entries; existing entries unaffected), and the companion reference doc.
+- **Change DBS component weights or lookback** → POST-A.3 only, evidence-gated. Touches `module_constants` for both `asset_class='*'` (crypto wildcard) AND `asset_class='xstock_spot'` rows. Cascades to all backfill data interpretations (consider regenerating xstock_dbs_backfill).
+- **Remove `getCachedNumberRequired` calls in store** → silent-fallback regression (Langston Step 4 BLOCKER fix). CLAUDE.md §8 #10 violation. Restore loud-fail semantics.
+- **Drop `sector?` field from `PairStoreEntry`** → mode='xstock' partition filter breaks; aggregation runs over INDEX_PROXY/BROAD_ETF/INTL_ETF entries; weighted-median degenerates.
+- **Backfill table schema change** → `xstock_dbs_backfill` PK `(symbol, ts)` + sector/ts indexes assumed by A.3 verification queries + Phase B calibration replay. Migrate carefully; backfill script is idempotent ON CONFLICT DO NOTHING.
+
+### Telemetry
+
+- `[B-PHASE-A2][CYCLE_DBS_TIMING] tick=N dbs_compute_ms=M pairs_with_dbs=K universe=U` — per-cycle (every 30s during ARCA-open / 24/7-only-open windows).
+- `[B-PHASE-A2][FIRST_FLOOR_CLEAR] tick=N pairs=K global_dbs=X.XXX category=Y` — one-shot per session (resets to false on PM2 restart).
+- `[B-PHASE-A2][SECTOR_MISSING] symbol=...` — defense-in-depth warn for symbols not in registry (should never fire post-A.2; TypeScript-required).
+- `[GlobalDBS-xstock][coldStart|degradedCoverage|noSnapshot|invalidCompute]` — 5-row behavior spec logs with `-xstock` suffix differentiating from crypto's `[GlobalDBS]`.
+
+### Cross-references
+
+- Design rev2 (LOCKED): `Claude Comms and Packages/Langston Design Asks/B_PHASE_A1_DBS_design_ask_rev2.md`
+- Sector taxonomy reference doc (Langston spot-check ACK'd): `Claude Comms and Packages/Langston Design Asks/xstock_sector_mappings_reference.md`
+- Scope rev2: `Claude Comms and Packages/Scope Files/B_PHASE_A2_DBS_SCOPE.md`
+- Pre-audit rev2 (code-level deepened): `Claude Comms and Packages/Scope Files/B_PHASE_A2_DBS_PRE_AUDIT.md`
+- Step 4 code review dispatch: `Claude Comms and Packages/Langston Design Asks/B_PHASE_A2_step4_code_review.md`
+- Step 8 verification dispatch: `Claude Comms and Packages/Langston Design Asks/B_PHASE_A2_step8_verification.md`
+- Completion report: `Claude Comms and Packages/Batch Completion/B_PHASE_A2_COMPLETION_REPORT.md`
+- CHANGES_AND_FIXES `ENHANCE-2026-05-17-A` — fix entry
+- RUNNING_ISSUES #114 (crypto sentinel-counting asymmetry, low-severity future hardening) + #115 (Langston Step 8 discovery — crypto wildcard rows sparseness, Tier 3 cleanup)
+- B-PHASE-E-PRE-1 placeholder (SPDR offline-feed integration; queued from §3.3 11/11-missing escalation) in MULTI_ASSET_VTS_EXPANSION_PLAN + XSTOCK_CALIBRATION_PLAN Phase E sections

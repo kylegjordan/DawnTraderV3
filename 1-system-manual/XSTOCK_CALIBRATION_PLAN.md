@@ -49,26 +49,29 @@ This invariant becomes a canonical standing rule in `ASSET_CLASS_ONBOARDING_WORK
 
 ### Phase A — Foundation: DBS for xStocks *(critical path, sequential)*
 
-**A.1 — DBS design call (parallel to Phase 0).**
-- Sector-classification with SPY fallback. Eleven SPDR sector ETFs (XLK, XLE, XLV, XLF, XLI, XLP, XLY, XLU, XLB, XLRE, XLC).
-- Index-self handling — xStocks that ARE indices (SPY/QQQ/IWM xStocks) skip per-pair DBS; force sector-blind regime mode.
-- ADR caveat — sector mapping works for routing; beta-to-SPY may understate non-US coupling; flag for Phase E.
-- **DBS component weights stay byte-identical to crypto's formula** — observe 2-3 weeks, retune only on evidence. NO pre-emptive equity-tune (load-bearing invariant — calibration-dependency principle applies to its own foundation).
-- Per-sector floor 3-5 pairs, global floor ~30 (vs crypto's 20).
-- Sector mapping co-located on `XSTOCK_SPOT_REGISTRY` — extend shape to `{ name, is24_7?, sector }`.
-- **Sector ETF data availability check (procedure):** query `XSTOCK_SPOT_SYMBOLS` for presence of XLK, XLE, XLV, XLF, XLI, XLP, XLY, XLU, XLB, XLRE, XLC AS xStocks. For each missing: determine if Kraken offers it under a different naming convention, or if we need to add offline feed (FRED daily-close + Yahoo intraday). If >3 are missing, the offline-feed integration becomes a Phase A.1 sub-batch with its own Langston design call before A.2 starts. Cost: ~half-day per missing ETF for feed integration.
+**A.1 — DBS design call.** ✅ **SHIPPED 2026-05-17.**
+- Design rev2 LOCKED via `Claude Comms and Packages/Langston Design Asks/B_PHASE_A1_DBS_design_ask_rev2.md` after Langston conditional ACK on rev1 + R1-R4 absorption.
+- 14-bucket sector taxonomy locked: 11 GICS sectors + INDEX_PROXY (excluded from aggregation) + BROAD_ETF + INTL_ETF.
+- Sector mapping reference doc Langston-ACK'd via `xstock_sector_mappings_reference.md`.
+- Constructor-option discriminator pattern selected (mode='crypto' | 'xstock') over partition-key or subclassing.
+- Two-floor mechanic locked: global ≥30 GICS-non-sentinel + sector-coverage ≥7 distinct GICS sectors.
+- **Sector ETF availability check executed**: 11 of 11 SPDR sector ETFs MISSING from xStock registry → **B-PHASE-E-PRE-1 placeholder queued** (see Phase E section). Path-1 (FRED+Yahoo offline feed) locked as recommended; not blocking A.2 since per-pair DBS doesn't consume sector ETF prices.
 
-**A.2 — DBS implementation + backfill.**
-- Build `xstock-directional-bias-store.ts` analogous to crypto's.
-- Wire into `xstockSpotScanner.runCycle` ahead of eval-cycle dispatch.
-- Eval-cycle passes real DBS to MCE (replaces `undefined` at `server/asset_classes/xstock_spot/eval-cycle.ts:353`).
-- **Pre-commit check: verify actual xStock archive start date.** Hard floor: **<7 days available → A.2 WAITS for archive maturation** (calibration on ~3 days of history is plumbing-validation, not signal). 7-14 days → proceed but document the thinness explicitly so downstream readers don't conflate with crypto's longer-history calibration. 14+ days → no caveat needed.
-- Backfill 2-3 weeks of historical DBS from archived OHLC.
-- MCE `propagatedDbs` branch lifts when value provided.
+**A.2 — DBS implementation + backfill.** ✅ **SHIPPED 2026-05-17 (B-PHASE-A2 batch).**
+- Built two-instance `directional-bias-store.ts` extension with `xstockDirectionalBiasStore` singleton.
+- Wired into `xstockSpotScanner.runCycle` pre-cycle compute block (mirrors `fx5-scanner.ts:1098-1118`).
+- Eval-cycle threads real `propagatedDbs` to MCE at `eval-cycle.ts:327`; MCE non-crypto branch reads end-to-end (verified by pre-audit §3 trace at lines 905, 973, 976, 997, 1048).
+- Archive maturity gate cleared: 17 days available at A.2 ship (clears both 7-day and 14-day no-caveat thresholds).
+- Backfill complete: 31,481 rows / 260 of 265 symbols / all 14 sector tags exercised. DBS distribution healthy (38% up / 42% down / 20% neutral, range -1.00 to +0.99, avg -0.006, 0 sentinels).
+- Commits `e84657110` → `a418a7731`. Deploy PM2 #294 on staging since 2026-05-17T22:16Z.
+- Langston Step 4 CLEAN ACK on `e7f9902f2` + Step 8 CLEAN ACK on `a418a7731`.
+- **Mirror invariant honored:** DBS component weights byte-identical to crypto; retune POST-A.3 evidence-gated.
 
-**A.3 — DBS verification gate.**
-- Compare DBS distributions across xStocks against crypto's known distributions.
+**A.3 — DBS verification gate.** ⏳ NEXT.
+- Compare DBS distributions across xStocks against crypto's known distributions (component-level: slope / return / EMA / final score).
 - Confirm values are moving (not stuck at zero or floor/ceiling).
+- Volume-weighted-median skew analysis: inspect whether top-5 xStock names exceed 60% volume weight (per design rev2 §3.6 Langston C7) — if severe, post-A.3 calibration considers equal-weighted or sector-equal-weighted alternatives.
+- Live ARCA-open telemetry verification via scheduled alert `7b33b931` (fires Mon 2026-05-18T13:35Z): verify `[B-PHASE-A2][CYCLE_DBS_TIMING]` per-cycle log and `[B-PHASE-A2][FIRST_FLOOR_CLEAR]` one-shot.
 - Block Phase B if anomalies surface.
 
 ### Phase B — Threshold calibration *(parallel-capable after A done; B.4→B.5 sequenced consecutive)*
@@ -136,13 +139,19 @@ This invariant becomes a canonical standing rule in `ASSET_CLASS_ONBOARDING_WORK
 
 ### Phase E — Factor identification + calibration *(LAST — after A-D done, requires accumulated VTS trades)*
 
+**Phase E pre-requisite: B-PHASE-E-PRE-1 (queued from B-PHASE-A2 §3.3 11/11-missing escalation).**
+- 11 of 11 SPDR sector ETFs (XLK / XLE / XLV / XLF / XLI / XLP / XLY / XLU / XLB / XLRE / XLC) MISSING from xStock registry — verified empirically on 2026-05-17 during Phase A.1 design.
+- Sector-correlation factor work (`b68_3_pair_correlation` repurposed below) requires sector ETF prices to compute "correlation with own-sector ETF" per symbol. Cannot proceed without an offline feed.
+- **Path-1 (FRED daily-close + Yahoo intraday) locked as recommended** per Langston Step 4 R2 review. Paths 2 (basket-synthesize from xStock baskets) + 3 (defer factor entirely) REJECTED — circularity / silent factor drop respectively.
+- Estimated 5-7 days for the offline-feed adapter + scheduled fetch + archive table + integration. Triggers at Phase E kickoff design ask; Kyle override window at Phase E kickoff if final path needs to change. See `MULTI_ASSET_VTS_EXPANSION_PLAN.md` Phase E placeholder for cross-reference.
+
 **E.1 — xStock factor candidate identification.**
 
 Drop: `b67_1_btc_dominance`, `b67_1_funding_rates`, `b67_1_mcap_momentum`.
 
 Keep: `b67_2_phase_preference`, `b67_4_outcome_feedback`, `b68_1_multi_tf_agreement`, `b68_2_volume_regime`, `b68_4_freshness`, `b68_5_dbs_sustainability` (once Phase A done).
 
-Repurpose: `b68_3_pair_correlation` — sector ETF per symbol via same DRY mapping.
+Repurpose: `b68_3_pair_correlation` — sector ETF per symbol via same DRY mapping. **GATED on B-PHASE-E-PRE-1 ship** (sector ETF prices must be available before this factor can compute).
 
 Add: VIX-derived, DXY-derived, beta-to-SPY rolling, market-breadth, earnings-proximity (if D adopts earnings handling). 4-8 candidates; expect 2-4 to clear decision-grade.
 
