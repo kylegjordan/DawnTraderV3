@@ -275,6 +275,12 @@ export async function evaluateXstockPairForVTS(
   // (quant + pattern) so max_bid_ask_spread runs as a peer global filter
   // on each lane. Sentinel -1 = "data unavailable; skip check".
   bidAskSpreadPct: number = -1,
+  // B-PHASE-A2 (2026-05-17): real DBS values pre-computed by the scanner from
+  // archived 60-min OHLC bars. When provided, MCE's non-crypto branch reads
+  // these directly (replacing the synthesized-neutral fallback). When undefined
+  // (insufficient OHLC / ATR=0 / sector missing), MCE synthesizes neutral as
+  // before — preserves current behavior for thin pairs.
+  propagatedDbs?: { score: number; category: string; slope: number },
 ): Promise<void> {
   counters.pairsEntered++;
 
@@ -319,12 +325,17 @@ export async function evaluateXstockPairForVTS(
       return;
     }
 
-    // ── 2. MCE context (assetClass-aware; synthesized neutral DBS for xstock) ──
-    // Needed by both lanes for regime-routing of strategies downstream.
+    // ── 2. MCE context (assetClass-aware) ──
+    // B-PHASE-A2 (2026-05-17): when propagatedDbs is supplied, MCE non-crypto
+    // branch reads real DBS values; regime classifier consumes real dbsScore +
+    // dbsSlope (XSTOCK threshold dispatch at market-regime.ts:227-249 already
+    // wired via B79.0m.b). When propagatedDbs is undefined (scanner didn't have
+    // enough OHLC / ATR=0 / sector missing), MCE falls back to synthesized
+    // neutral as before — preserves the prior behavior for thin pairs.
     const mce = getMarketContextEngine();
     let mceContext;
     try {
-      mceContext = mce.computeContext(symbol, ohlc, lastPrice, volume24h, undefined, undefined, ASSET_CLASS);
+      mceContext = mce.computeContext(symbol, ohlc, lastPrice, volume24h, undefined, propagatedDbs, ASSET_CLASS);
     } catch (mceErr) {
       counters.errors++;
       console.warn(`[B79.0m.b2][EVAL_MCE_FAIL] ${symbol}: ${mceErr instanceof Error ? mceErr.message : mceErr}`);

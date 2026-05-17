@@ -40,9 +40,32 @@
 import { centralClock, type ClockTick } from '../../services/central-clock.js';
 import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
-import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS } from '../../../shared/asset-classes.js';
+import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS, XSTOCK_SPOT_REGISTRY } from '../../../shared/asset-classes.js';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
+// B-PHASE-A2 (2026-05-17): pre-cycle DBS compute imports.
+import { computeDirectionalBias } from '../../core/metrics/directional-bias.js';
+import { xstockDirectionalBiasStore } from '../../core/metrics/directional-bias-store.js';
+import type { OHLCData } from '../../types/market-regime.types.js';
+
+/**
+ * B-PHASE-A2 (2026-05-17): ATR helper for DBS pre-compute (mirrors fx5-scanner.ts:66-78).
+ * Computes 14-period ATR over a 60-min OHLC bar sequence. Used to normalize the
+ * DBS slope + EMA components for cross-pair comparability.
+ */
+function computeATRFromOHLC(ohlcData: OHLCData[], period: number = 14): number {
+  if (ohlcData.length < period + 1) return 0;
+  const recent = ohlcData.slice(-(period + 1));
+  let trSum = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const high = recent[i].high;
+    const low = recent[i].low;
+    const prevClose = recent[i - 1].close;
+    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+    trSum += tr;
+  }
+  return trSum / period;
+}
 
 // 30 seconds — same as FX5 scanner. Aligned with central-clock budget.
 const SCAN_INTERVAL_SECONDS = 30;
@@ -82,6 +105,10 @@ interface ScannerDiagnostics {
   // would require periodic decay; this is a since-start accumulator. Future
   // B79.0m.b2 may replace with a 24h windowed buffer.
   evalCountersLifetime: any | null;
+  // B-PHASE-A2 (2026-05-17): one-shot flag — first publish-success of each ARCA
+  // session emits the FIRST_FLOOR_CLEAR telemetry. Resets to false on PM2 restart
+  // (cold start) so post-restart first publish is captured.
+  firstFloorClearLogged: boolean;
 }
 
 interface TickerSnapRow extends Record<string, unknown> {
@@ -141,6 +168,7 @@ class XstockSpotScannerService {
     hostileSimActive: false,
     lastCycleEvalCounters: null,
     evalCountersLifetime: null,
+    firstFloorClearLogged: false,
   };
 
   /**
@@ -464,6 +492,76 @@ class XstockSpotScannerService {
           console.warn(`[B-NEW-34] module_constants read failed; using fallback ${minOhlcHistoryBars}: ${err instanceof Error ? err.message : err}`);
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // B-PHASE-A2 (2026-05-17): pre-cycle DBS compute.
+        // ════════════════════════════════════════════════════════════════════
+        // Before the eval loop dispatches, compute per-pair DBS + slope for
+        // every symbol with sufficient OHLC + ATR. Feed xstockDirectionalBiasStore
+        // for end-of-cycle global aggregation. Stash per-pair result in
+        // `dbsBySymbol` so the eval loop threads it through evaluateXstockPairForVTS
+        // → mce.computeContext → calculatePairRegime (replacing the prior
+        // synthesized-neutral fallback at MCE non-crypto branch).
+        //
+        // Graceful degrade: pairs with insufficient OHLC (< minOhlcHistoryBars)
+        // OR ATR <= 0 do NOT enter dbsBySymbol; eval-cycle calls with
+        // propagatedDbs=undefined; MCE's non-crypto branch synthesizes neutral
+        // as before (preserves today's behavior for thin pairs).
+        //
+        // Mirror of fx5-scanner.ts:1098-1118 pattern. Empirical timing per
+        // B_PHASE_A2_DBS_PRE_AUDIT.md §11: 0.16% of cycle budget @ 250 pairs.
+        // ════════════════════════════════════════════════════════════════════
+        const dbsCycleStart = Date.now();
+        const dbsBySymbol = new Map<string, { score: number; category: string; slope: number }>();
+        for (const symbol of symbolList) {
+          const ohlc = ohlcBatch.get(symbol) ?? [];
+          if (ohlc.length < minOhlcHistoryBars) continue;
+          const atr = computeATRFromOHLC(ohlc, 14);
+          if (atr <= 0) continue;
+
+          const registryEntry = XSTOCK_SPOT_REGISTRY.get(symbol);
+          const sector = registryEntry?.sector;
+          if (!sector) {
+            // Defense-in-depth: registry guarantees sector is required, but log
+            // if scanner ever encounters a symbol missing from registry.
+            console.warn(`[B-PHASE-A2][SECTOR_MISSING] ${symbol} not in XSTOCK_SPOT_REGISTRY; skipping DBS write`);
+            continue;
+          }
+
+          const dbsResult = computeDirectionalBias(ohlc, atr);
+          let slope = 0;
+          const priorOHLC = ohlc.slice(0, -3);
+          if (priorOHLC.length >= 20) {
+            const priorAtr = computeATRFromOHLC(priorOHLC, 14);
+            if (priorAtr > 0) {
+              const priorDbs = computeDirectionalBias(priorOHLC, priorAtr);
+              slope = dbsResult.score - priorDbs.score;
+            }
+          }
+
+          // Volume for the store: best-effort 24h USD (shares × latest bar close).
+          // Falls back to 0 when ticker enrichment missed; computeGlobalDirectionalBias
+          // gracefully handles zero volumes via its sentinel path.
+          const enrich = tickerEnrichmentBySymbol.get(symbol);
+          const volume24hShares = enrich?.volume24hShares ?? 0;
+          const latestPrice = ohlc[ohlc.length - 1].close;
+          const volume24hUSD = Number.isFinite(volume24hShares) && volume24hShares > 0 && Number.isFinite(latestPrice) && latestPrice > 0
+            ? volume24hShares * latestPrice
+            : 0;
+
+          xstockDirectionalBiasStore.updatePair(
+            symbol, dbsResult.score, dbsResult.sentinelZero, volume24hUSD, sector,
+          );
+          dbsBySymbol.set(symbol, { score: dbsResult.score, category: dbsResult.category, slope });
+        }
+        const dbsComputeDurationMs = Date.now() - dbsCycleStart;
+        console.log(
+          `[B-PHASE-A2][CYCLE_DBS_TIMING] tick=${tick.tickNumber} dbs_compute_ms=${dbsComputeDurationMs} ` +
+          `pairs_with_dbs=${dbsBySymbol.size} universe=${symbolList.length}`,
+        );
+
+        // ════════════════════════════════════════════════════════════════════
+        // Eval loop — same as before, plus thread propagatedDbs.
+        // ════════════════════════════════════════════════════════════════════
         for (const symbol of symbolList) {
           const ohlc = ohlcBatch.get(symbol) ?? [];
           if (ohlc.length < minOhlcHistoryBars) {
@@ -492,7 +590,31 @@ class XstockSpotScannerService {
           const volume24hUSD = Number.isFinite(volume24hShares) && volume24hShares > 0
             ? volume24hShares * price
             : 0;
-          await evaluateXstockPairForVTS(symbol, ohlc, price, volume24hUSD, 'paper', cycleCounters, cycleConfigs, bidAskSpreadPct);
+          // B-PHASE-A2: thread propagatedDbs from pre-cycle compute. When undefined
+          // (insufficient OHLC / ATR=0 / sector missing), MCE non-crypto branch
+          // synthesizes neutral as before (graceful degrade).
+          const propagatedDbs = dbsBySymbol.get(symbol);
+          await evaluateXstockPairForVTS(
+            symbol, ohlc, price, volume24hUSD, 'paper',
+            cycleCounters, cycleConfigs, bidAskSpreadPct, propagatedDbs,
+          );
+        }
+
+        // B-PHASE-A2: end-of-cycle global xStock DBS snapshot publish.
+        // mode='xstock' applies GICS-only counting + sector partition + dual floors
+        // per directional-bias-store.ts publishSnapshot().
+        const xstockGlobalSnapshot = xstockDirectionalBiasStore.publishSnapshot();
+        if (xstockGlobalSnapshot && !xstockGlobalSnapshot.isStale) {
+          // Telemetry on first publish-success per session for §C4 (Step 7 verification).
+          if (!this.diag.firstFloorClearLogged) {
+            console.log(
+              `[B-PHASE-A2][FIRST_FLOOR_CLEAR] tick=${tick.tickNumber} ` +
+              `pairs=${xstockGlobalSnapshot.coverage} ` +
+              `global_dbs=${xstockGlobalSnapshot.value.score.toFixed(3)} ` +
+              `category=${xstockGlobalSnapshot.value.category}`,
+            );
+            this.diag.firstFloorClearLogged = true;
+          }
         }
         // Surface counters to the /api/xstocks/filter-diagnostics endpoint.
         this.diag.lastCycleEvalCounters = cycleCounters;
