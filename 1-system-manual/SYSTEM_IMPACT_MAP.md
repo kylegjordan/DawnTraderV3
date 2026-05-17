@@ -1925,3 +1925,61 @@ These two Python bridges run on the Hetzner Helsinki agent box (`204.168.141.77`
 - **Change `from="..."` IP on Langston's pubkey** → update both Helsinki box (via `curl ifconfig.me` check first) AND staging `/home/deploy/.ssh/authorized_keys` line in same atomic operation. Otherwise Langston SSH breaks.
 - **Add new Telegram topic Kyle wants Langston/CC to monitor** → add explicit allowlist entry in both `should_handle*` / `is_allowed_voice` functions. Defaults-to-off design — no implicit topic expansion.
 - **Modify `/var/log/cc-bridge-inbox.jsonl` schema** → both bridges write to this file; bump `schema_version` on all new entry shapes simultaneously and add migration logic if old entries need reformatting. CC and Langston both read it (tail) so both must understand the new shape.
+
+---
+
+## Price-Discontinuity Detector — Added B-NEW-42b (2026-05-17)
+
+NEW component shipped with B-NEW-42b commit `d8e0f5885`. Closes the 3 structural TEC gaps surfaced by B-NEW-42's Phase 0 audit.
+
+### Component definition
+
+- **File**: `server/services/price-discontinuity-detector.ts` (483 lines)
+- **What**: Sentinel module that watches every xStock price tick and flags structural discontinuities (splits, halts with resume gaps, known ex-dividends, cold-start post-restart) so TEC can defer its naive `currentPrice <= stop` and target-lock checks during those events.
+- **Public API**: `isDiscontinuityActive(symbol, currentPrice, currentTs?)` → `{ active, kind?, details? }`. Four kinds: `halt_resume_gap` / `corp_action` / `ex_dividend` / `cold_start`.
+- **State**: Detector-owned per-symbol `Map<string, SymbolEntry>` cache (state machine IDLE / DISCONTINUITY_ACTIVE / CLEARING). In-process only; PM2 restart discards cache; first call per symbol post-restart triggers `cold_start` fail-safe-skip.
+
+### Upstream dependencies
+
+- `shared/asset-classes.ts` — `XSTOCK_SPOT_SYMBOLS` Set determines whether the detector runs (xStock symbols only). Crypto symbols return inactive immediately.
+- `1-system-manual/audits/b-new-42/dividend-calendar-seed.json` — curated 60-entry ex-dividend calendar (15 div-paying symbols × Q3+Q4 2026 dates). Lazy-loaded on first ex-dividend check.
+- `module_constants.price_discontinuity_detector.*` — 8 per-asset-class behavioral knobs seeded by `drizzle/migrations/2026-05-17-b-new-42b-...sql` (idempotent ON CONFLICT). **Currently READ ONLY hardcoded values matching the seeds**; DB-resolution deferred to Phase E calibration batch with B79.0a `_NO_WINDOW = Infinity` wildcard fallback pattern.
+
+### Downstream consumers (load-bearing)
+
+- **`server/services/tec-evaluator.ts`** — HOISTS the single detector consultation per logical tick (Langston Step 4 BLOCKER 2 fix). Threads the result down to both:
+  - `tecUpdatePosition` via the new `discontinuity?: { active, kind? }` field on `PositionUpdate` → target-lock latch skip
+  - `tecShouldClose` as the new 4th positional param → stop-check skip
+- **`server/services/trailing-exit-controller.ts`** — `shouldClosePosition` + `updatePosition` target-lock gate consume the pre-resolved discontinuity. When `discontinuity` is omitted by a direct caller (e.g. b65/b80/b79 tests), no gate runs and pre-B-NEW-42b behavior is preserved.
+
+### Blast radius
+
+- **Crypto path**: ZERO by construction. First check in `isDiscontinuityActive` is `XSTOCK_SPOT_SYMBOLS.has(symbol)` → returns `{active: false}` immediately for non-xStock symbols. Crypto stop-check + target-lock behavior unchanged.
+- **xStock entry path (scanner)**: NOT GATED. The detector is exit-side only. New positions can still be opened during a halt-resume gap or split-effected price. Entry-side gating accepted as out-of-scope per Kyle directive 2026-05-17 (Option A); Phase 19 live-trading prep adds the entry-side counterpart.
+- **xStock exit path (open positions across VTS / paper / live)**: ALL THREE MODES PROTECTED. They all flow through `evaluateTECExit` which consults the detector. No code-path divergence between modes.
+
+### Key invariants
+
+- **Single-consultation-per-logical-tick**: `tec-evaluator.ts` is the ONE site that consults `isDiscontinuityActive` in production. Any future caller integrating the detector must ALSO consult once per logical tick and thread the result, NOT call independently. Pre-fix double-consultation collapsed the 2-tick deferral into 1-tick.
+- **Cold-start fail-safe-skip**: first call per symbol when cache is empty returns `{active: true, kind: 'cold_start'}` (Langston pre-audit rev1 #1 non-negotiable). Protects against unfillable-fill during process-restart-during-halt blind window. Cost: one tick of stop-check delay per symbol per cold-start episode.
+- **Lazy 24h eviction gated on IDLE state**: entries in DISCONTINUITY_ACTIVE / CLEARING must reach state-machine resolution; only IDLE entries evict by age.
+- **Stateless HARD_CEILING**: no setTimeout. 5-minute auto-clear is `(now - state.activatedAt) > HARD_CEILING_MS` — evaluated only when a tick arrives.
+
+### Modification risks ("things that break if X changes")
+
+- **Move detector consultation OUT of tec-evaluator** → reintroduce the Step 4 BLOCKER 2 bug (double-consultation per logical tick collapsing 2-tick deferral).
+- **Disable cold-start fail-safe-skip** → unfillable-fill exposure during process-restart-during-halt blind window returns. NEVER disable without an equivalent guard.
+- **Change `XSTOCK_SPOT_SYMBOLS` Set without updating detector imports** → crypto path stops being no-op'd; detector starts running on crypto symbols where the curated dividend calendar is empty and the structural assumptions don't apply.
+- **Change curated dividend calendar JSON schema** → detector's `loadDividendCalendar()` parses `entries[]`. Bump `_metadata.schema_version` on shape changes; detector currently tolerates missing `_metadata` (skips it).
+- **Remove the `discontinuity` parameter from `PositionUpdate` or `shouldClosePosition`** → direct callers in tests would still work, but `tec-evaluator` threading breaks. Production xStock exits would lose detector protection. ALL three trading modes (VTS / paper / live) regress simultaneously.
+- **Migrate detector to DB-resolved constants** → Phase E calibration concern. Must use `getModuleConstants('price_discontinuity_detector', ...)` with B79.0a-style `_NO_WINDOW = Infinity` wildcard fallback so missing rows degrade to "detector inactive" not "detector crash."
+
+### Cross-references
+
+- Scope: `Claude Comms and Packages/Scope Files/B_NEW_42B_SCOPE.md`
+- Pre-audit (with the design refinement rationale): `Claude Comms and Packages/Scope Files/B_NEW_42B_PRE_AUDIT.md`
+- Completion report: `Claude Comms and Packages/Batch Completion/B_NEW_42B_COMPLETION_REPORT.md`
+- B-NEW-42 audit findings (the empirical evidence): `1-system-manual/audits/b-new-42/audit-report.md`
+- ADJUSTMENT_FRAMEWORK Appendix A — 8 catalogued knobs
+- CHANGES_AND_FIXES `BUG-2026-05-17-B` — fix entry
+- POST_AUDIT_ROADMAP Phase 24 follow-ups (B79.x failure-mode taxonomy) — partial-address note + entry-side gap acceptance

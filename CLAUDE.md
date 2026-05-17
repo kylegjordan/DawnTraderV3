@@ -283,6 +283,41 @@ Every CC message must start with `**CLAUDE CODE SPEAKING:**` in bold caps so Kyl
 
 **Folder naming convention:** `Claude Comms and Packages/Langston Design Asks/<batch-id>_<topic>_<rev>.md`. Reply files (Langston's verbatim) optionally archived next to the ask for paper trail: `..._reply.md`. Both committed to git.
 
+#### 6.5.0.a — EMBED DIFF SNIPPETS INLINE for code reviews (Kyle directive 2026-05-17, B-NEW-42b lesson)
+
+**Rule:** for code-review dispatches (Step 4), DO NOT rely on Langston navigating to files in the repo to inspect the diff. EMBED the load-bearing code snippets directly in the design-ask file along with their before/after blocks.
+
+**Reason (B-NEW-42b empirical):** two consecutive Step 4 round-2 dispatches hung 30+ minutes each because Langston's claude-cli auto-exploration ran `cd /mnt/gdrive/...` + `git status` on the 10GB+ repo via the GDrive FUSE mount. FUSE cache stalls on the first git command and the whole subprocess pins indefinitely. The third dispatch had the diff snippets embedded inline + explicitly told Langston "DO NOT cd to /mnt/gdrive" — Langston ACK'd in under 1 minute.
+
+**Pattern for code-review dispatches:**
+
+1. Author the inbox file with sections labelled NEW / MODIFIED / DELETED files.
+2. For each substantive change, include the actual BEFORE/AFTER code block (5-20 lines per snippet usually sufficient).
+3. Include explicit "INFRASTRUCTURE NOTE: DO NOT cd to /mnt/gdrive or run git status/log on the gdrive-mounted repo. The staging server at `ssh staging` has the same code at the same commit; use that for any repo-side inspection."
+4. List the inbox file paths Langston can Read directly (those are local-FS, fast).
+5. Reference `ssh staging 'cd /home/deploy/dawntrader && git ...'` as the supported repo-inspection path if Langston needs to look at something beyond the embedded snippets.
+
+**Why this matters:** Langston's tool surface includes Bash with auto-exploration heuristics. Without the embedded snippets + explicit no-gdrive instruction, his first instinct is to "look at the repo" — which hits the FUSE mount and hangs. Embedding the diff content makes "look at the repo" unnecessary; the explicit no-gdrive instruction overrides the auto-exploration.
+
+#### 6.5.0.b — HUNG-INSTANCE CHECKING (Kyle directive 2026-05-17, B-NEW-42b lesson)
+
+**Rule:** CC sessions MUST actively check on background Langston SSH+claude-cli dispatches at 5-10 minute intervals. **DO NOT WAIT 30 MINUTES before intervening** on a hung instance.
+
+**Reason (B-NEW-42b empirical):** typical Langston claude-cli turnaround is 1-8 minutes for substantive reviews. If a dispatch has been running for >10 minutes with a 0-byte reply file, the inner process is almost certainly hung (gdrive FUSE, session UUID lock, network hiccup, etc.). Waiting longer wastes Kyle's time and the day's work cycle. Kyle's frustration on 2026-05-17 ("If Langston isn't responding, please intervene") was triggered after the 30+ minute mark on a hung dispatch — that's too long.
+
+**Procedure when a Langston dispatch is suspected hung:**
+
+1. **At 5-10 minutes elapsed**, check `ssh root@204.168.141.77 'pgrep -u langston -f "claude -p" >/dev/null && echo RUNNING ($(ps -p $(pgrep -u langston -f claude | head -1) -o etime= | tr -d " ")) || echo DONE'` and the local reply-file size.
+2. **If still running past 12 minutes** AND reply file 0 bytes:
+   - Inspect subprocess state: `ssh root@204.168.141.77 'ps -u langston -o pid,etime,cmd | head -20'` — look for stuck `bash -c ... cd /mnt/gdrive ... git ...` patterns.
+   - **Kill hung processes:** `ssh root@204.168.141.77 'pgrep -u langston -f "claude -p\|git\|bash -c" | xargs -r sudo kill -9'`.
+   - **Re-dispatch with embedded-diff + no-gdrive instructions** per §6.5.0.a.
+3. **If 2-3 re-dispatch attempts all hang**, ESCALATE to Kyle. This signals an infrastructure regression (FUSE behavior changed, claude-cli broken, network partition) that needs his decision on either fix-the-infra OR proceed-without-Langston-Step-4-ACK.
+
+**ScheduleWakeup integration:** when running Langston dispatches in background, schedule a wakeup at **5 minutes** for the first check, not 4+ minutes worth of fire-and-forget waits. The 30-second polling-loop pattern (`until ! pgrep ...; do sleep 30; done`) is acceptable IF the loop also has a maximum-iteration cutoff (e.g. `if [ "$ITERATIONS" -gt 24 ]; then KILL_AND_BREAK; fi` = 12 minutes total). NEVER let the polling loop run indefinitely.
+
+**The 30-minute previous behavior was a workflow violation** — past CC sessions waited too long because the polling loop had no upper bound. Fix it at the loop level (max iterations) AND at the check-in level (5-10 min ScheduleWakeup), not just one of the two.
+
 #### 6.5.1 Two-step pattern (visibility + delivery), same shape as the old OpenClaw flow:
 
 1. **Visibility step** (Kyle sees the request) — `cc-comms-bridge send --thread-id 21 --message "@LangstonDTBot ..."` (the @-mention is for Kyle's visual cue; it doesn't trigger anything on Langston's side).
