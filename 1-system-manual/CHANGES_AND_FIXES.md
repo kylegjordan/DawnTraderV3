@@ -2,6 +2,51 @@
 
 ---
 
+## INFRA-2026-05-17-B — B-NEW-41: voice transcription (whisper.cpp) + Langston staging SSH access
+
+**Severity:** LOW — pure agent-infrastructure work. Zero touch on trading system, DB, strategies, signals.
+
+**Trigger:** Kyle directive 2026-05-17 (quick-win batch combining two independent deliverables: voice notes for both bots + resolving B-NEW-40 RUNNING_ISSUES #108 Langston-no-staging-SSH gap).
+
+**Changes:**
+
+1. **Whisper.cpp self-host on Hetzner Helsinki (`204.168.141.77`):**
+   - Source pinned to `https://github.com/ggml-org/whisper.cpp` tag `v1.8.4` commit SHA `9386f239401074690479731c1e41683fbbeac557`.
+   - Build path: `/opt/whisper.cpp/build/bin/whisper-cli` (CMake build, renamed from upstream `main` → `whisper-cli` in v1.8.x).
+   - Model: `ggml-small.en.bin` (487MB, sha256 `c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d`) at `/opt/whisper.cpp/models/`. English-only, ~0.75x real-time on CPX22 4 vCPU with `-t 3`.
+   - Smoke test: JFK clip (11s audio) transcribed in 8.3s wallclock with verbatim accuracy.
+   - Permissions: root:root, 0755 binary, 0644 model — readable+executable by `langston` group.
+
+2. **`cc-comms-bridge` voice handler:** detects `update.message.voice` + `update.message.audio`, downloads via `getFile` (20MB Telegram cap), transcribes via whisper-cli subprocess, writes `kind: "voice_inbound"` JSONL entry to `/var/log/cc-bridge-inbox.jsonl` (with `schema_version: 1`, `transcription_duration_ms`, `audio_duration_s`, `audio_archive_path`, `file_id`). 100-char ACK preview posted back to chat. Worker-thread pattern (`queue.Queue` + single daemon=True consumer) keeps main poll loop unblocked. Allowlist: DM-with-bot OR topic 21 of Dawn Trader HQ group (`-1003575211453`). Failure-path: `kind: "voice_inbound_failed"` entry + user-facing fallback notice.
+
+3. **`langston-bridge.py` unified task queue (Step 2 Rev 1 critical correctness fix):** ALL inbound (text + voice) now routes through a single `task_q` consumed by one worker thread. Guarantees single-claude-at-a-time invariant — two concurrent `claude --session-id <same UUID>` subprocesses cannot run simultaneously (would otherwise corrupt session state). Main poll loop is now a pure enqueuer.
+
+4. **Voice archive infrastructure:**
+   - Root: `/var/log/cc-bridge-voice-archive/<YYYY-MM-DD>/<msg_id>.ogg`.
+   - Logrotate: 30-day daily retention (`/etc/logrotate.d/cc-bridge-voice-archive`).
+   - Cron prune: `cc-voice-archive-prune.timer` runs daily 04:00 UTC, removes oldest files when total dir size exceeds 5GB ceiling. Defense against unexpected volume spikes.
+
+5. **Langston SSH access to staging (resolves B-NEW-40 #108):**
+   - ed25519 keypair generated on Helsinki: `/home/langston/.ssh/id_ed25519`. Fingerprint `SHA256:gvtY9j7vBwXruVXaGNLhot/lWac/zVt3omObdSTHIQs langston@helsinki`.
+   - Pubkey installed on staging at `/home/deploy/.ssh/authorized_keys` with `from="204.168.141.77"` IP restriction (Helsinki static IPv4).
+   - Hostkey pre-pinned via `ssh-keyscan` from CC side, written to `/home/langston/.ssh/known_hosts` (defense against first-connection MITM).
+   - SSH config alias `staging` added at `/home/langston/.ssh/config` for ergonomic future use.
+   - Verified working: `tail /var/log/dawntrader/out.log`, `pm2 list`, `curl localhost:5000/api/health` all succeed from Helsinki via deploy user.
+
+6. **CLAUDE.md §10.5 dual-update:** both project-root `CLAUDE.md` AND Langston-side `/home/langston/CLAUDE.md` updated to distinguish per-turn alerts check paths: CC uses `ssh root@188.245.193.8`, Langston uses `ssh deploy@188.245.193.8` (via new keypair).
+
+**Defense-in-depth posture (Q5 reconsidered post-Langston-pushback):** `deploy` user chosen over original `root` proposal. Helsinki compromise → deploy-level read access on staging only (logs, pm2 read, localhost curl). Strictly less than CC's root path. Explicit escalation chain documented in SIM: Helsinki → Langston key → deploy@staging → `.env` → `DATABASE_URL` → DB read/write. Recommended follow-up: ForceCommand wrapper to restrict pubkey to specific commands (RUNNING_ISSUES #110).
+
+**Verification:**
+- V1 ✅ Whisper smoke (jfk.wav transcribed correctly, 8.3s wallclock)
+- V6 ✅ Langston SSH to staging (`ssh staging '...'` succeeds, all read ops work)
+- V8 ✅ Both bridges restart clean (tasks=2 confirms main + worker threads spawned per boot log)
+- V2-V5, V7, V9 ⏳ Kyle-in-the-loop / Step 8 / post-archive-files
+
+**Langston review trail (all APPROVED):** Step 1 (4 rev rounds applying 8 revisions + Q5 reconsideration), Step 2 (2 rev rounds with critical Rev 1 unified-queue fix), Step 4 (clean approval after verifying single-claude-at-a-time invariant via trace + first live SSH §10.5 check).
+
+---
+
 ## INFRA-2026-05-17-A — B-NEW-40: pg pool keepalive + TEC refresh timeout (silent-TCP-death root-cause fix)
 
 **Severity:** HIGH — recurring production stall, requires PM2 restart to clear, blocks all VTS exit cycles and ablation emissions when triggered.

@@ -550,15 +550,17 @@ Every Claude Code session — both CC (this) and Langston — must perform this 
 
 **Procedure:**
 
-1. Read `/var/log/dawntrader/system-alerts.jsonl` (on Hetzner; CC accesses via SSH, Langston accesses directly).
+1. Read `/var/log/dawntrader/system-alerts.jsonl` from staging (`188.245.193.8`, Frankfurt) via SSH:
+   - **CC sessions** (this): `ssh root@188.245.193.8 'tail -50 /var/log/dawntrader/system-alerts.jsonl'` — root user.
+   - **Langston sessions:** `ssh deploy@188.245.193.8 'tail -50 /var/log/dawntrader/system-alerts.jsonl'` (or `ssh staging '...'` via the `~/.ssh/config` alias) — deploy user, installed by B-NEW-41 (2026-05-17). IP-restricted to Langston's Helsinki IPv4.
 2. For each entry where `state === 'active'` AND `acknowledged_at === null` AND `triggers_at <= NOW()`:
    - Surface the entry to the user **as part of your response in plain language** (not raw JSON, not file paths)
    - Cite the `id`, `title`, `severity`, `body`, and `metadata` if present
    - State whether the entry needs action this turn or is FYI
 3. If you ACT on an alert during the turn (run the verification script it points to, dispatch a follow-up, etc.):
-   - Run `scripts/system-alerts.ts ack <id> --by <session-name>` so it stops surfacing
+   - Run `ssh <user>@188.245.193.8 'cd /home/deploy/dawntrader && npm run system-alerts -- ack <id> --by <session-name>'` so it stops surfacing
    - Use session names: `cc-session-<YYYY-MM-DD>` or `langston` or `kyle-direct`
-4. If you CAN'T reach the file (Hetzner unreachable, file missing, SSH down):
+4. If you CAN'T reach staging (SSH timeout, file missing, Hetzner unreachable):
    - State that explicitly to the user — don't silently skip
    - Continue with the user's request anyway
 

@@ -16,9 +16,25 @@
 
 ---
 
-## CURRENT STATE — 2026-05-17 (B-NEW-40 CLOSED pending Kyle ack)
+## CURRENT STATE — 2026-05-17 (B-NEW-41 awaiting Kyle voice tests V2-V5)
 
-**🟢 B-NEW-40 SHIPPED.** All 9 objectives YES. Deploy 2026-05-17T12:46:47Z, PM2 #290. 14-day soak armed (alert id b83b1e4b, triggers 2026-05-31T12:46:47Z). Completion report at `Claude Comms and Packages/Batch Completion/B_NEW_40_COMPLETION_REPORT.md`. Awaiting Kyle ack to close.
+**🟢 B-NEW-40 CLOSED (Kyle ack 2026-05-17).** 14-day soak armed (alert id b83b1e4b, triggers 2026-05-31T12:46:47Z).
+
+**🟢 B-NEW-41 Steps 1-6 COMPLETE.** Voice transcription + Langston SSH access deployed to Hetzner Helsinki. Awaiting Kyle voice-test for Step 7 first-pass + Langston Step 8 second-pass.
+
+### B-NEW-41 — what's live
+- **Whisper.cpp v1.8.4** at `/opt/whisper.cpp/build/bin/whisper-cli` on Helsinki. Model ggml-small.en.bin (487MB). Smoke ✅ (jfk.wav 8.3s wallclock @ -t 3).
+- **cc-comms-bridge** voice handling deployed, restarted, voice worker thread spawned.
+- **langston-bridge.py** unified task_q (text+voice through single worker) deployed, restarted.
+- **Langston SSH to staging** working as `deploy` user with `from="204.168.141.77"` IP restriction. Langston confirmed working in his Step 4 review (first live §10.5 SSH check passed).
+- **Voice archive infra** — 30d logrotate + 5GB cron prune (cc-voice-archive-prune.timer active).
+- **CLAUDE.md §10.5 dual-update** — both project-root + Langston-side now distinguish CC (root) vs Langston (deploy) SSH paths.
+- **Langston review trail:** Step 1 APPROVED rev4 (after 4 rev rounds + Q5 reconsideration to deploy user); Step 2 APPROVED rev2 (after critical Rev 1 unified-queue fix); Step 4 APPROVED clean (verified single-claude-at-a-time invariant by tracing every path).
+
+### Pending B-NEW-41
+- **Step 7 (Kyle-in-the-loop):** Kyle records test voice notes (V2-V5) to verify end-to-end. Once Kyle confirms reception, V7 (Langston SSH-side) already passes per Step 4 live test.
+- **Step 8:** Langston second-pass via SSH (now works directly without CC-paste-evidence).
+- **Step 11:** Completion report after V2-V5 pass.
 
 ### What B-NEW-40 shipped
 - **Pool hardening** (`server/db.ts`): keepAlive=true, 10s initial delay, 30s query_timeout, 30s idleTimeoutMillis, max=10, application_name=dawntrader_main. Boot log `[DB_POOL_INIT]` confirmed.
