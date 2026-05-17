@@ -24,12 +24,20 @@
 
 ### B-NEW-41 — what's live
 - **Whisper.cpp v1.8.4** at `/opt/whisper.cpp/build/bin/whisper-cli` on Helsinki. Model ggml-small.en.bin (487MB). Smoke ✅ (jfk.wav 8.3s wallclock @ -t 3).
-- **cc-comms-bridge** voice handling deployed, restarted, voice worker thread spawned.
-- **langston-bridge.py** unified task_q (text+voice through single worker) deployed, restarted.
+- **cc-comms-bridge** voice handling deployed. ffmpeg Ogg→WAV preprocessor (hotfix-1). Voice worker thread spawned.
+- **langston-bridge.py** unified task_q (text+voice through single worker). Per-bridge archive subdir under `/var/log/cc-bridge-voice-archive/langston/` (hotfix-2). Session-UUID auto-rotate on lock collision + bridge-error silent-in-group (hotfix-3).
 - **Langston SSH to staging** working as `deploy` user with `from="204.168.141.77"` IP restriction. Langston confirmed working in his Step 4 review (first live §10.5 SSH check passed).
 - **Voice archive infra** — 30d logrotate + 5GB cron prune (cc-voice-archive-prune.timer active).
 - **CLAUDE.md §10.5 dual-update** — both project-root + Langston-side now distinguish CC (root) vs Langston (deploy) SSH paths.
+- **CLAUDE.md §6.8 + §5.2 (Langston) — voice comms protocol** documented for both sides.
 - **Langston review trail:** Step 1 APPROVED rev4 (after 4 rev rounds + Q5 reconsideration to deploy user); Step 2 APPROVED rev2 (after critical Rev 1 unified-queue fix); Step 4 APPROVED clean (verified single-claude-at-a-time invariant by tracing every path).
+- **Step 7 voice tests (Kyle in-the-loop, 2026-05-17):** V2 ✅ DM with @CCDTCommsBot transcribed cleanly. V3 ✅ topic 21 transcribed cleanly across 4 voice notes (Langston also responded in-thread cleanly post-hotfix-3). V4 (DM with @LangstonDTBot) not explicitly tested but same code path as V3-Langston-side which works. Three hotfixes applied during Step 7: ffmpeg conversion, archive subdir+silent-in-group, session-rotate+bridge-error-silent.
+
+### Voice comms quick reference for new sessions
+- Kyle voice → @CCDTCommsBot DM → inbox `voice_inbound` (CC reads via tail)
+- Kyle voice → topic 21 → CC posts ACK + inbox entry; Langston transcribes silently and only posts if non-[SILENT] claude reply
+- Kyle voice → @LangstonDTBot DM → Langston transcribes + ACK preview + claude reply in DM
+- All transcriptions written to same `/var/log/cc-bridge-inbox.jsonl` with `kind` discriminator. Full schema: schema_version, text, transcription_source, transcription_duration_ms, audio_duration_s, audio_archive_path, file_id, file_size.
 
 ### Pending B-NEW-41
 - **Step 7 (Kyle-in-the-loop):** Kyle records test voice notes (V2-V5) to verify end-to-end. Once Kyle confirms reception, V7 (Langston SSH-side) already passes per Step 4 live test.

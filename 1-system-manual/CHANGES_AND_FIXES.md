@@ -45,6 +45,27 @@
 
 **Langston review trail (all APPROVED):** Step 1 (4 rev rounds applying 8 revisions + Q5 reconsideration), Step 2 (2 rev rounds with critical Rev 1 unified-queue fix), Step 4 (clean approval after verifying single-claude-at-a-time invariant via trace + first live SSH §10.5 check).
 
+### Step 7 first-pass hotfixes (2026-05-17, Kyle voice testing)
+
+Three sub-batch hotfixes applied during Step 7 when Kyle's actual voice notes surfaced gaps not caught in pre-audit. **All three hotfixes deployed live to Hetzner Helsinki via direct `scp` + `systemctl restart` (no GitHub roundtrip; in-repo CI is pre-existing red and Helsinki box is operational infrastructure outside the deploy pipeline).**
+
+**Hotfix-1 — ffmpeg Ogg→WAV preprocessor.** Pre-audit §3.2 assumed `whisper-cli` handled Telegram's Opus-in-Ogg natively; v1.8.4's standalone CLI only reads WAV (verified by direct test on Kyle's archived msg 3918 — "failed to read audio data as wav (Unknown error)"). Fix: `apt-get install -y ffmpeg`; both bridges now run `ffmpeg -loglevel error -y -i <audio> -ar 16000 -ac 1 -c:a pcm_s16le <wav>` before invoking whisper-cli on the converted WAV. Adds 30s `FFMPEG_TIMEOUT_S` budget; intermediate WAV cleaned up regardless of outcome. Verified via re-transcription of msg 3918 returning correct text "Are you receiving this message? Please transcribe it if you get it." in 7.7s wallclock. **Lesson:** smoke-test format-handling claims with real production audio samples, not just bundled samples (jfk.wav happens to be WAV which masked the limitation).
+
+**Hotfix-2 — per-bridge archive subdir + silent-in-group UX.** Two bugs surfaced when Kyle posted his second voice note in topic 21: (a) cc-bridge runs as `root` per systemd; langston-bridge runs as `langston`; both tried to write the same archive path → `PermissionError: [Errno 13] Permission denied: '/var/log/cc-bridge-voice-archive/2026-05-17/3920.oga'`. (b) Both bots posted user-facing notices in topic 21 (one ACK, one failure), confusing UX. **Fixes:** (a) langston-bridge's `VOICE_ARCHIVE_ROOT` switched to `/var/log/cc-bridge-voice-archive/langston/` subdir (langston:langston owned). cc-bridge keeps original path. No collision possible. (b) langston-bridge's voice handler now distinguishes DM vs group via `chat.type == 'private'`: in DM keeps full UX (preview ACK + fallback notice on failure); in topic 21 is silent on success ACK and silent on failure notice — CC handles user-facing message there; Langston speaks only via the actual claude-cli reply (and only if non-[SILENT]). Removed the "Now invoking Langston..." over-promise suffix from CC's ACK per Langston Step 4 obs #1.
+
+**Hotfix-3 — session UUID auto-rotate + bridge-error silent-in-group.** claude-cli intermittently rejects langston-bridge's canonical session UUID with `Error: Session ID f8dd5e4c-... is already in use` even when no other claude process is running (timing-sensitive internal lock; transient — same UUID worked fine on direct retest a minute later). **Fix:** `invoke_claude` detects "already in use" in stderr, generates a fresh `uuid.uuid4()`, persists to `/home/langston/.langston-bridge-state.json` via existing `save_state`, retries once. Lossy on prior conversation history but Langston's CLAUDE.md+MEMORY auto-load on every session start, so persona/state recover. **Also fixed:** bridge-error wrapped responses (`_Langston bridge error: claude returned exit code N_`) suppressed from group chat posts when chat is not DM. Still mirrored to inbox JSONL for debugging. DMs still surface errors visibly. Verified live: post-hotfix Langston cleanly responded to Kyle in topic 21 (msg 3928 "This is a test message. Please transcribe it." echo + msg 3933 "Acknowledged — third system message received. Standing by...").
+
+**Verification (Step 7 V2-V4):**
+- V2 ✅ DM with @CCDTCommsBot: msg 63 "Are you able to transcribe these messages?" transcribed cleanly to inbox.
+- V3 ✅ topic 21: 4 voice notes (msgs 3920, 3923, 3926, 3929, 3931) all transcribed cleanly. Langston responded in-thread cleanly post-hotfix-3.
+- V4 (DM with @LangstonDTBot): not explicitly retested but same code path as V3-Langston-side which works.
+
+**Files changed by hotfixes (on Hetzner Helsinki, not in repo):**
+- `/usr/local/bin/cc-comms-bridge` — ffmpeg step + ACK suffix removed
+- `/usr/local/bin/langston-bridge.py` — ffmpeg step + archive subdir + DM-vs-group conditional + session-UUID rotate + bridge-error-silent-in-group
+- `/var/log/cc-bridge-voice-archive/langston/` — new langston:langston subdir
+- `/usr/bin/ffmpeg` — installed via apt
+
 ---
 
 ## INFRA-2026-05-17-A — B-NEW-40: pg pool keepalive + TEC refresh timeout (silent-TCP-death root-cause fix)

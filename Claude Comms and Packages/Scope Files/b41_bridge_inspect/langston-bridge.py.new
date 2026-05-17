@@ -62,7 +62,9 @@ WHISPER_CLI = "/opt/whisper.cpp/build/bin/whisper-cli"
 WHISPER_MODEL = "/opt/whisper.cpp/models/ggml-small.en.bin"
 WHISPER_THREADS = "3"
 WHISPER_TIMEOUT_S = 120
-VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive"
+FFMPEG_BIN = "/usr/bin/ffmpeg"  # B-NEW-41 hotfix: whisper-cli v1.8.4 only reads WAV; convert Ogg first
+FFMPEG_TIMEOUT_S = 30
+VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive/langston"  # B-NEW-41 hotfix: per-bridge subdir prevents cross-user file ownership collisions
 TG_FILE_SIZE_CAP = 20 * 1024 * 1024
 ACK_PREVIEW_CHARS = 100
 HEARTBEAT_INTERVAL_S = 60
@@ -263,16 +265,40 @@ def detect_voice_or_audio(msg):
 
 
 def transcribe_audio(audio_path):
-    """B-NEW-41: run whisper-cli on the audio file.
+    """B-NEW-41 hotfix: convert Ogg/Opus → 16kHz mono WAV via ffmpeg, then whisper-cli.
 
     Returns (text: str|None, error: str|None, duration_ms: int).
+
+    Whisper.cpp v1.8.4's whisper-cli only reads WAV; Telegram voice notes
+    are Opus-in-Ogg, so ffmpeg conversion is required as a prep step.
     """
     t0 = time.time()
+    wav_path = f"/tmp/whisper-in-{os.getpid()}-{int(t0*1000)}.wav"
     out_prefix = f"/tmp/whisper-out-{os.getpid()}-{int(t0*1000)}"
+
+    # Step 1: ffmpeg → 16kHz mono WAV
+    ffmpeg_args = [
+        FFMPEG_BIN, "-loglevel", "error", "-y",
+        "-i", audio_path,
+        "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+        wav_path,
+    ]
+    try:
+        ff = subprocess.run(ffmpeg_args, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT_S)
+        if ff.returncode != 0:
+            return None, f"ffmpeg exit={ff.returncode} stderr_tail={ff.stderr[-500:]}", int((time.time() - t0) * 1000)
+        if not Path(wav_path).exists():
+            return None, f"ffmpeg produced no WAV output (stderr: {ff.stderr[-500:]})", int((time.time() - t0) * 1000)
+    except subprocess.TimeoutExpired:
+        return None, f"ffmpeg timeout after {FFMPEG_TIMEOUT_S}s", int((time.time() - t0) * 1000)
+    except Exception as e:
+        return None, f"ffmpeg invoke error: {type(e).__name__}: {e}", int((time.time() - t0) * 1000)
+
+    # Step 2: whisper-cli on the WAV
     args = [
         WHISPER_CLI,
         "-m", WHISPER_MODEL,
-        "-f", audio_path,
+        "-f", wav_path,
         "-t", WHISPER_THREADS,
         "-otxt",
         "-of", out_prefix,
@@ -283,6 +309,10 @@ def transcribe_audio(audio_path):
             args, capture_output=True, text=True, timeout=WHISPER_TIMEOUT_S
         )
         elapsed_ms = int((time.time() - t0) * 1000)
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
         if result.returncode != 0:
             return None, f"whisper exit={result.returncode} stderr_tail={result.stderr[-500:]}", elapsed_ms
         txt_path = out_prefix + ".txt"
@@ -297,12 +327,30 @@ def transcribe_audio(audio_path):
             return None, "whisper produced empty transcription", elapsed_ms
         return text, None, elapsed_ms
     except subprocess.TimeoutExpired:
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
         return None, f"whisper timeout after {WHISPER_TIMEOUT_S}s", int((time.time() - t0) * 1000)
     except Exception as e:
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
         return None, f"whisper invoke error: {type(e).__name__}: {e}", int((time.time() - t0) * 1000)
 
 
-def invoke_claude(prompt, session_id):
+def invoke_claude(prompt, session_id, state=None, _retry_count=0):
+    """Invoke claude-cli with session_id. On "Session ID already in use" error,
+    automatically rotate to a fresh UUID, persist to state, and retry once.
+
+    B-NEW-41 hotfix (Kyle 2026-05-17): claude-cli intermittently refuses the
+    bridge's canonical UUID with "Session ID already in use" even when no other
+    claude process is running (timing-sensitive lock from CLI internals). Auto-
+    rotating the UUID + persisting to state recovers gracefully — at the cost
+    of losing prior conversation context, which Langston's CLAUDE.md+MEMORY
+    auto-load on session start mitigates.
+    """
     env = os.environ.copy()
     env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
     env["HOME"] = WORK_DIR
@@ -314,7 +362,7 @@ def invoke_claude(prompt, session_id):
         "--session-id", session_id, "--model", "claude-opus-4-7",
         "--permission-mode", "acceptEdits",
     ]
-    log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}...)")
+    log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}..., retry={_retry_count})")
     t0 = time.time()
     try:
         result = subprocess.run(
@@ -323,7 +371,15 @@ def invoke_claude(prompt, session_id):
         )
         elapsed = time.time() - t0
         if result.returncode != 0:
+            stderr_lc = (result.stderr or "").lower()
             log(f"claude exit {result.returncode} after {elapsed:.1f}s: stderr={result.stderr[:300]}")
+            # Auto-rotate on session lock collision (once per invocation)
+            if "already in use" in stderr_lc and state is not None and _retry_count == 0:
+                new_uuid = str(uuid.uuid4())
+                log(f"session UUID locked, rotating {session_id[:8]}... -> {new_uuid[:8]}...")
+                state["session_id"] = new_uuid
+                save_state(state)
+                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1)
             return f"_Langston bridge error: claude returned exit code {result.returncode}_\n\n```\n{result.stderr[:1500]}\n```"
         log(f"claude returned {len(result.stdout)} chars in {elapsed:.1f}s")
         return result.stdout.strip()
@@ -379,28 +435,43 @@ def process_task(task, state):
     msg = task["msg"]
 
     if kind == "voice":
-        # Voice path: download + transcribe, THEN invoke claude
+        # B-NEW-41 hotfix (Kyle 2026-05-17): distinguish DM vs group.
+        #   - DM with @LangstonDTBot: full UX (preview ACK + fallback notice on failure).
+        #   - Group topic 21: silent on voice (cc-comms-bridge handles user-facing ACK
+        #     since both bots monitor that thread). Just invoke claude; post only if
+        #     non-[SILENT]. This prevents the "two bots respond / one with error" UX
+        #     Kyle reported when cc-comms-bridge succeeded and langston-bridge failed
+        #     in a race for the same archive file.
+        chat_type = (msg.get("chat") or {}).get("type")
+        is_dm = (chat_type == "private")
+
         prompt, error = process_voice(task)
         if prompt is None:
-            # Transcription failed — fallback notice + mirror event
-            fallback_text = (
-                f"⚠️ Voice transcription failed (reason: {error[:200]}). "
-                f"Please retry as text or paste the message again. (msg {msg_id})"
-            )
-            send_message(chat_id, fallback_text, thread_id=thread_id, reply_to=msg_id)
+            # Transcription failed
+            if is_dm:
+                fallback_text = (
+                    f"⚠️ Voice transcription failed (reason: {error[:200]}). "
+                    f"Please retry as text or paste the message again. (msg {msg_id})"
+                )
+                send_message(chat_id, fallback_text, thread_id=thread_id, reply_to=msg_id)
+            # else: group topic 21 — silent failure; cc-comms-bridge will surface ACK.
             mirror_event(
                 "langston_inbound_voice_failed",
                 chat_id=chat_id, thread_id=thread_id, message_id=msg_id,
                 file_id=task.get("file_id"), failure_reason=error[:500],
+                silent_in_group=not is_dm,
             )
             return
-        # Voice transcribed successfully. Post ACK with preview.
-        preview = prompt[:ACK_PREVIEW_CHARS] + ("..." if len(prompt) > ACK_PREVIEW_CHARS else "")
-        ack_text = (
-            f"✅ Voice transcribed: \"{preview}\" — Logged (msg {msg_id}). "
-            f"Now invoking Langston..."
-        )
-        send_message(chat_id, ack_text, thread_id=thread_id, reply_to=msg_id)
+        # Voice transcribed successfully.
+        if is_dm:
+            # DM: post preview ACK so Kyle sees transcription before Langston's claude reply.
+            # No "Now invoking Langston..." suffix per Langston Step 4 obs #1 — that suffix
+            # over-promises if Langston returns [SILENT] (no response to post).
+            preview = prompt[:ACK_PREVIEW_CHARS] + ("..." if len(prompt) > ACK_PREVIEW_CHARS else "")
+            ack_text = f"✅ Voice transcribed: \"{preview}\""
+            send_message(chat_id, ack_text, thread_id=thread_id, reply_to=msg_id)
+        # else: group topic 21 — silent on success. cc-comms-bridge posts user-facing ACK.
+        # Langston only speaks via the claude-cli reply path below.
         mirror_event(
             "langston_inbound_voice",
             chat_id=chat_id, thread_id=thread_id, message_id=msg_id,
@@ -412,6 +483,7 @@ def process_task(task, state):
             audio_duration_s=(msg.get(task.get("voice_kind")) or {}).get("duration"),
             audio_archive_path=task.get("audio_archive_path"),
             file_id=task.get("file_id"),
+            silent_in_group=not is_dm,
         )
     else:
         # Text path
@@ -430,9 +502,17 @@ def process_task(task, state):
     except Exception:
         pass
 
-    response = invoke_claude(prompt, state["session_id"])
+    response = invoke_claude(prompt, state["session_id"], state=state)
     resp_stripped = (response or "").strip()
     is_silent = (not resp_stripped) or resp_stripped.upper().startswith("[SILENT]") or resp_stripped.upper() == "SILENT"
+    # B-NEW-41 hotfix: bridge-error wrapped responses are also treated as silent
+    # in group chats (still mirrored for debugging). In DMs they post normally so
+    # the user sees what went wrong.
+    is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
+    chat_type = (msg.get("chat") or {}).get("type")
+    is_dm = (chat_type == "private")
+    if is_bridge_error and not is_dm:
+        is_silent = True
     if is_silent:
         mirror_event(
             "langston_silent",

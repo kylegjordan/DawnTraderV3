@@ -46,6 +46,8 @@ WHISPER_CLI = "/opt/whisper.cpp/build/bin/whisper-cli"
 WHISPER_MODEL = "/opt/whisper.cpp/models/ggml-small.en.bin"
 WHISPER_THREADS = "3"
 WHISPER_TIMEOUT_S = 120
+FFMPEG_BIN = "/usr/bin/ffmpeg"  # B-NEW-41 hotfix: whisper-cli CLI v1.8.4 only reads WAV; convert Ogg/Opus first
+FFMPEG_TIMEOUT_S = 30
 VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive"
 VOICE_DOWNLOAD_TMP = "/tmp"
 TG_FILE_SIZE_CAP = 20 * 1024 * 1024  # 20MB Telegram bot API cap
@@ -154,17 +156,44 @@ def is_allowed_voice(msg):
 
 
 def transcribe_audio(audio_path):
-    """Run whisper-cli on the audio file. Returns (text: str|None, error: str|None, duration_ms: int).
+    """B-NEW-41 hotfix: convert Ogg/Opus → 16kHz mono WAV via ffmpeg, then run whisper-cli.
+
+    Returns (text: str|None, error: str|None, duration_ms: int).
 
     On success: text is non-empty stripped transcription, error is None.
     On failure: text is None, error is descriptive message.
+
+    Why ffmpeg: whisper.cpp's standalone whisper-cli binary in v1.8.4 only
+    accepts uncompressed WAV. Telegram voice notes arrive as Opus-in-Ogg
+    (.oga extension). The ffmpeg step converts to 16kHz mono 16-bit PCM
+    which is the format whisper-cli expects natively.
     """
     t0 = time.time()
+    wav_path = f"/tmp/whisper-in-{os.getpid()}-{int(t0*1000)}.wav"
     out_prefix = f"/tmp/whisper-out-{os.getpid()}-{int(t0*1000)}"
+    # Step 1: ffmpeg convert to 16kHz mono WAV
+    ffmpeg_args = [
+        FFMPEG_BIN, "-loglevel", "error", "-y",
+        "-i", audio_path,
+        "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+        wav_path,
+    ]
+    try:
+        ff = subprocess.run(ffmpeg_args, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT_S)
+        if ff.returncode != 0:
+            return None, f"ffmpeg exit={ff.returncode} stderr_tail={ff.stderr[-500:]}", int((time.time() - t0) * 1000)
+        if not Path(wav_path).exists():
+            return None, f"ffmpeg produced no WAV output (stderr: {ff.stderr[-500:]})", int((time.time() - t0) * 1000)
+    except subprocess.TimeoutExpired:
+        return None, f"ffmpeg timeout after {FFMPEG_TIMEOUT_S}s", int((time.time() - t0) * 1000)
+    except Exception as e:
+        return None, f"ffmpeg invoke error: {type(e).__name__}: {e}", int((time.time() - t0) * 1000)
+
+    # Step 2: whisper-cli on the WAV
     args = [
         WHISPER_CLI,
         "-m", WHISPER_MODEL,
-        "-f", audio_path,
+        "-f", wav_path,
         "-t", WHISPER_THREADS,
         "-otxt",
         "-of", out_prefix,
@@ -175,6 +204,11 @@ def transcribe_audio(audio_path):
             args, capture_output=True, text=True, timeout=WHISPER_TIMEOUT_S
         )
         elapsed_ms = int((time.time() - t0) * 1000)
+        # Clean up intermediate WAV regardless of outcome
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
         if result.returncode != 0:
             return None, f"whisper exit={result.returncode} stderr_tail={result.stderr[-500:]}", elapsed_ms
         txt_path = out_prefix + ".txt"
@@ -189,8 +223,17 @@ def transcribe_audio(audio_path):
             return None, "whisper produced empty transcription", elapsed_ms
         return text, None, elapsed_ms
     except subprocess.TimeoutExpired:
+        # Clean up wav even on whisper timeout
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
         return None, f"whisper timeout after {WHISPER_TIMEOUT_S}s", int((time.time() - t0) * 1000)
     except Exception as e:
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
         return None, f"whisper invoke error: {type(e).__name__}: {e}", int((time.time() - t0) * 1000)
 
 
@@ -292,7 +335,7 @@ def handle_voice_task(task):
 
     # Post ACK to originating chat with 100-char preview
     preview = text[:ACK_PREVIEW_CHARS] + ("..." if len(text) > ACK_PREVIEW_CHARS else "")
-    ack_text = f"✅ Voice transcribed: \"{preview}\" — Logged (msg {message_id}). CC will see at next session start."
+    ack_text = f"✅ Voice transcribed: \"{preview}\" — Logged (msg {message_id})."
     post_to_chat(chat_id, thread_id, message_id, ack_text, fallback_to_topic_21=True,
                  fallback_chat_id=chat_id, chat_type=(msg.get("chat") or {}).get("type"))
 

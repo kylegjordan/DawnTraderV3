@@ -366,6 +366,22 @@ You and Langston are peers on technical review. You do NOT need Kyle's permissio
 
 **Image relay:** When Kyle sends images in Telegram, CCDT saves them to `Claude Comms and Packages/CCDT Relay/images/<filename>`. Read them with the Read tool at that path.
 
+### 6.8 Voice note transcription (B-NEW-41, 2026-05-17)
+
+Kyle can leave voice notes in three places; both bridges on Hetzner Helsinki detect voice/audio Telegram messages and transcribe locally via `whisper.cpp v1.8.4` + `ggml-small.en` model. No external API dependency. Pipeline: Telegram `getFile` (20MB cap) → `ffmpeg -ar 16000 -ac 1 -c:a pcm_s16le` to WAV → `whisper-cli -t 3` → text. Audio archived 30 days under `/var/log/cc-bridge-voice-archive/{cc,langston}/<YYYY-MM-DD>/<msg_id>.ogg`.
+
+**Where you see the transcription:**
+- **DM with `@CCDTCommsBot`**: transcription appears in `/var/log/cc-bridge-inbox.jsonl` as `kind: "voice_inbound"`. Bot posts ACK preview ("✅ Voice transcribed: \"<first 100 chars>...\" — Logged (msg N).") back to chat. CC sees the inbox entry via SSH-tail.
+- **DM with `@LangstonDTBot`**: same transcription, additionally fed to claude-cli as Langston's prompt. Langston replies normally in the DM.
+- **Topic 21 (Dawn Trader HQ)**: BOTH bots receive the voice message. CC posts the ACK ("✅ Voice transcribed: ..."). Langston transcribes silently (no preview ACK, no fallback notice) and only posts back if his claude-cli reply is non-[SILENT]. Single-bot-visible-response pattern by design.
+
+**Failure modes:**
+- Transcription failure (ffmpeg fail, whisper fail, oversize, zero-byte): inbox entry with `kind: "voice_inbound_failed"` + `failure_reason` + `stderr_tail`. In DMs the bot also posts a "⚠️ Voice transcription failed (reason: …)" notice; in topic 21 it's silent (CC handles user-facing message).
+- claude-cli "Session ID already in use" on Langston's canonical UUID: bridge auto-rotates to a fresh UUID, persists to `/home/langston/.langston-bridge-state.json`, retries once. Lossy on prior conversation context but Langston's CLAUDE.md+MEMORY auto-load on every session start, so persona/state recover.
+- Bridge wrapper errors (claude-cli returned exit-nonzero, timeout, invoke error): logged to inbox; suppressed from group chat posts; visible in DMs.
+
+**Reading transcriptions:** the same SSH-tail pattern (`tail /var/log/cc-bridge-inbox.jsonl`) you already use for text inbound. Each voice entry has full schema fields (schema_version, text, transcription_source, transcription_duration_ms, audio_duration_s, audio_archive_path, file_id) for full audit and re-transcription if needed.
+
 ---
 
 ## 7. Infrastructure Reference
@@ -414,6 +430,8 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
   - `/var/log/cc-bridge-inbox.jsonl` — unified inbox (read this)
   - `/var/log/langston-bridge.log` — Langston bridge daemon log (debug)
   - `/var/log/cc-comms-bridge.log` — cc-comms-bridge daemon log (debug)
+- **Voice transcription (B-NEW-41, 2026-05-17):** whisper.cpp v1.8.4 at `/opt/whisper.cpp/build/bin/whisper-cli`, model `ggml-small.en.bin` at `/opt/whisper.cpp/models/`. ffmpeg as Ogg→WAV preprocessor. Audio archive at `/var/log/cc-bridge-voice-archive/{cc,langston}/<YYYY-MM-DD>/<msg_id>.ogg` with 30-day logrotate + 5GB cron prune (`cc-voice-archive-prune.timer`). See §6.8 for the comms protocol; bridges auto-detect voice/audio Telegram message types and route through the same task queue as text inbound.
+- **Langston-side staging SSH (B-NEW-41, 2026-05-17):** keypair at `/home/langston/.ssh/id_ed25519`; staging access as `deploy@188.245.193.8` with `from="204.168.141.77"` IP restriction; alias `ssh staging` available via `/home/langston/.ssh/config`. Use this for Step 8 second-pass verification + Langston-side §10.5 alerts check.
 
 ### 8.1 OpenClaw — DECOMMISSIONED 2026-05-06
 
