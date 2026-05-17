@@ -22,6 +22,8 @@
 
 **🟢 B-NEW-41 CLOSED pending Kyle ack** (2026-05-17). All 9 objectives YES with 3 Step-7 hotfixes applied during verification. Steps 1-2-4-8 all APPROVED by Langston. Voice transcription live for both bots (V2 ✅ + V3 ✅ verified by Kyle voice tests). Langston SSH to staging working (verified at Step 4 + re-confirmed at Step 8). Completion report at `Claude Comms and Packages/Batch Completion/B_NEW_41_COMPLETION_REPORT.md`.
 
+**🟡 TFS sustainability gate — TABLED until Phase 19** (Kyle directive 2026-05-17, three-way Kyle/CC/Langston converged). Step 1 baseline confirmed B-NEW-37 forensic at scale: gate is uniform confidence dampener, blocks path B 0.9% of trades, Δconf identical (winners 0.4477 vs losers 0.4423). Current implementation feeds confidence pipeline only — regime/strategy/sizing don't consume sustainability output. Original design intent (B67.5/B68.5 era) was broader (stage-aware regime nuance), implementation contracted to confidence-only without explicit deferral tag. Phase 19 decision tree: (a) full stage-aware redesign, (b) narrow TEC exit-mode routing hook, (c) deprecate gate. All three forks share prerequisite of classifier validation. Methodology pivot captured: success criterion is forward-trend-continuation accuracy, NOT trade outcome (Kyle directive). Governance: RUNNING_ISSUES #111 + POST_AUDIT_ROADMAP §19.0.3 + CHANGES_AND_FIXES `DESIGN-2026-05-17-A`. Three design-ask docs in `Claude Comms and Packages/Langston Design Asks/`: research design rev2, Step 1 baseline, value-proposition decision.
+
 ### B-NEW-41 — what's live
 - **Whisper.cpp v1.8.4** at `/opt/whisper.cpp/build/bin/whisper-cli` on Helsinki. Model ggml-small.en.bin (487MB). Smoke ✅ (jfk.wav 8.3s wallclock @ -t 3).
 - **cc-comms-bridge** voice handling deployed. ffmpeg Ogg→WAV preprocessor (hotfix-1). Voice worker thread spawned.
@@ -72,12 +74,12 @@
 
 ### Strategic reset (Kyle 2026-05-16 17:30 UTC)
 **SHELVE until Phase 19:** confidence calibration based on VTS win/loss outcomes. VTS = family fan-out + no SQE; active trading = one signal per family + SQE applied. VTS wins/losses ≠ active-trading wins/losses.
-**Shelved:** B-NEW-38 stratified re-run, B67.5 consumer-gate-from-VTS in current form.
-**Still active:** xStock filter/regime/drift calibration (NOT confidence), TFS sustainability second-gate redesign (3 decisions queued — drop/replace/parallel), voice-note transcription wiring.
+**Shelved:** B-NEW-38 stratified re-run, B67.5 consumer-gate-from-VTS in current form, **TFS sustainability gate value-scope decision (added 2026-05-17 — see TFS block in CURRENT STATE).**
+**Still active:** xStock filter/regime/drift calibration (NOT confidence). Voice-note transcription completed via B-NEW-41 ✅.
 
 ### B-NEW-39 state
 - Phase 1 SQL applied 2026-05-15 23:07 UTC: floor `b67_5_post_composition_floor` 0.20 → 0.45 wildcard. Mechanical verified. Forensic shape deferred to Phase 19.
-- Phase 2 ON HOLD pending sustainability gate redesign.
+- Phase 2 ON HOLD — folded into Phase 19 alongside TFS sustainability gate value-scope decision.
 
 ---
 

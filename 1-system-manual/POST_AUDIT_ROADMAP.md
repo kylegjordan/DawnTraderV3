@@ -1030,6 +1030,24 @@ This makes the ~5% coverage gap explicit and trackable — if specific missing p
 
 **Goal**: Run the complete system end-to-end in Paper Mode with all components active (MCE, real VTS, Directional Bias, Short Trading, Predictive Execution, ML). Find and fix everything before live capital.
 
+### 19.0.3 — TFS sustainability gate value-scope decision (NEW 2026-05-17, Kyle directive)
+
+**Context.** The B67.5/B68.5 path-B sustainability gate currently feeds the confidence pipeline only — regime classifier, strategy selection, and Dynamic Sizing Engine do NOT consume sustainability output. Original design intent (B67.5/B68.5 era) was broader ("preventing late-trend entries" + "adding nuance to regime handling"); implementation contracted to confidence-only without explicit deferral tag. Step 1 baseline analysis 2026-05-17 (3,992 ablation rows in 16-day window) CONFIRMED B-NEW-37 forensic at scale: gate is uniform confidence dampener, blocks path B in only 0.9% of trades, Δconf identical between winners (0.4477) and losers (0.4423). Three-way Kyle/CC/Langston converged decision: table value-scope decision until Phase 19. RUNNING_ISSUES #111 tracks the deferral.
+
+**Decision tree to resolve at Phase 19 opening:**
+
+1. **Full stage-aware redesign** — extend regime model to include {EARLY, MATURE, LATE} stages; re-do canonical regime-strategy map as (regime × stage) → strategy set; modify DSE to factor stage into sizing. Multi-batch effort. Highest payoff if sustainability classifier validates AND stage-awareness measurably improves outcomes.
+
+2. **Narrow trailing-exit-controller (TEC) routing hook** — read sustainability score at trade-entry time, route to TARGET (tight, lock-in) vs TRAILING_TAKE (wide trail, let-it-run) exit mode based on score. No changes to regime classifier, strategy selection, or sizing. Single batch (~1.x of follow-up). Smaller payoff but much smaller scope. Real near-term value path.
+
+3. **Deprecate the gate** — remove the confidence-modification hook entirely, accept that DBS ≥ 0.30 regime classification + downstream Phase 19 filters carry the load. Smallest scope. Justified by data if classifier validation fails.
+
+**Shared prerequisite for all three branches:** classifier accuracy validation. Methodology framework is locked at `Claude Comms and Packages/Langston Design Asks/TFS_SUSTAINABILITY_GATE_RESEARCH_DESIGN_2026-05-17_rev2.md`. Pivot at Kyle directive 2026-05-17: success criterion must be **forward-trend-continuation accuracy**, NOT trade-outcome win/loss (trade outcomes are downstream of entry/exit/sizing/friction; confidence inversion noise in VTS contaminates outcome-based measurement).
+
+**Data continues accumulating during the deferral:** VTS persists sustainability score on every trade as feature for future ML training. The deferral doesn't lose history.
+
+**Decision-record paper trail:** Step 1 baseline `..._STEP1_BASELINE_2026-05-17.md`; value-proposition decision `..._VALUE_PROPOSITION_2026-05-17.md`; methodology rev2 `..._RESEARCH_DESIGN_2026-05-17_rev2.md`. Implementation history captured in CHANGES_AND_FIXES `DESIGN-2026-05-17-A`.
+
 ### 19.0.5 — Full data-capture coverage for paper-active path (HARD requirement, Kyle directive 2026-05-05)
 
 **Status:** B70 main + B70.1 shipped capture for the VTS path (which was the only active path at B70 time). When paper-active turns on in Phase 19, the system MUST capture EVERYTHING flowing through the paper path with the same fidelity. This is a precondition for Phase 19.1 paper trading run; without it, the paper run produces less data than the VTS run that preceded it, which defeats the whole point.

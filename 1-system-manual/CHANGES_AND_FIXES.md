@@ -2,6 +2,35 @@
 
 ---
 
+## DESIGN-2026-05-17-A — TFS sustainability gate: design-intent-vs-shipped scope contraction (DECISION RECORD, not a bug)
+
+**Severity:** Process-governance. Not a defect, not a fix — a design-decision-history record captured per Kyle directive 2026-05-17 so the implicit deferral is auditable when Phase 19 opens.
+
+**Discovery:** During the three-way Kyle/CC/Langston session 2026-05-17 on whether to redesign the TFS sustainability gate ("path B sustainability" in B67.5/B68.5), Kyle asked the structural question: what is the gate FOR? His recollection of the original framing was broader than the shipped implementation — he remembered it being about regime classification, strategy selection, or position sizing nuance, NOT confidence modification. Langston confirmed Kyle's recollection: original design rationale in the B67.5/B68.5 scoping discussions explicitly mentioned "preventing late-trend entries" and "adding nuance to regime handling." At implementation time, the actual code hook landed only in the confidence pipeline (signal-orchestrator path B → confidence dampening → post-composition floor interaction). The broader stage-aware redesign was deferred — but the deferral was implicit, never explicitly tagged as deferred work.
+
+**Why it matters:** Step 1 baseline analysis 2026-05-17 on 3,992 b68_5 ablation rows from the 16-day window 2026-05-01 → 2026-05-16 CONFIRMED B-NEW-37 forensic at scale: the gate is a uniform confidence dampener (Δconf 0.4477 for winners vs 0.4423 for losers — functionally identical), blocks path B in only 0.9% of trades, win rate uniform across gate-action categories. Concluding "drop the gate" from this alone would be correct under the SHIPPED-implementation framing, but premature under the ORIGINAL-design-intent framing. The structural question "what is the gate for" had to be answered before the methodology question "is the gate's input the right signal" could be resolved.
+
+**Resolution (2026-05-17 Kyle directive — three-way converged):**
+
+- Table value-scope decision until Phase 19, where stage-aware regime/strategy/sizing redesign would naturally be designed alongside any sustainability classifier work.
+- Add Phase 19 roadmap line item (POST_AUDIT_ROADMAP §19.0.3) with three-fork decision tree: full redesign / narrow TEC routing hook / deprecate gate. Each fork shares the same prerequisite (classifier validation).
+- Add RUNNING_ISSUES #111 as discoverable open-decision tracker.
+- Document the design-intent-vs-shipped gap in this entry so the implicit deferral is auditable.
+- VTS continues persisting sustainability score on every trade — data capture for future ML training continues during deferral.
+
+**Methodology pivot also captured (Kyle directive 2026-05-17):** Original Step 1 methodology measured trade-outcome win/loss as success criterion. Kyle's challenge: that's a downstream proxy contaminated by entry/exit/sizing/friction + the VTS confidence inversion noise. The correct success criterion for the classifier is **forward-trend-continuation accuracy** (does the gate's "sustainable" verdict correlate with actual price-action continuation N minutes later, independent of trade outcome). This pivot applies to any classifier-validation work in Phase 19.
+
+**Lesson captured:** when implementation contracts a feature's scope vs. design intent, the contraction must be explicitly tagged as deferred work (RUNNING_ISSUES entry + roadmap line item) at the implementation batch — not left implicit. The 2026-05-17 surfacing of this gap required a multi-session research effort that could have been avoided if B67.5/B68.5 had explicitly tagged the broader stage-aware redesign as Phase-19-deferred at ship time.
+
+**Files referenced:**
+- `Claude Comms and Packages/Langston Design Asks/TFS_SUSTAINABILITY_GATE_RESEARCH_DESIGN_2026-05-17_rev2.md` (methodology lock — APPROVED rev2)
+- `Claude Comms and Packages/Langston Design Asks/TFS_SUSTAINABILITY_STEP1_BASELINE_2026-05-17.md` (Step 1 baseline confirming B-NEW-37 at scale)
+- `Claude Comms and Packages/Langston Design Asks/TFS_SUSTAINABILITY_VALUE_PROPOSITION_2026-05-17.md` (value-scope decision)
+- `1-system-manual/RUNNING_ISSUES.md` #111 (open-decision tracker)
+- `1-system-manual/POST_AUDIT_ROADMAP.md` §19.0.3 (Phase 19 decision tree)
+
+---
+
 ## INFRA-2026-05-17-B — B-NEW-41: voice transcription (whisper.cpp) + Langston staging SSH access
 
 **Severity:** LOW — pure agent-infrastructure work. Zero touch on trading system, DB, strategies, signals.
