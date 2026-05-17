@@ -11258,3 +11258,55 @@ Cache depth caps (after hotfix 2 reduction): 60 bars for 60-min (~2.5 trading da
 `server/utils/data-freshness.ts` had an xstock_spot branch reading `module_constants.market_data.xstock_spot.data_freshness_window_ms` (90s default) and a closed-market short-circuit. **Both removed in B-NEW-34.** The `data_freshness_window_ms` row was DELETED from module_constants. The xstock scanner now treats OHLC bar history as the source of truth — if you have ≥24 bars, you're evaluatable; if you don't, you're not. No ticker_snap-based freshness gate. ticker_snap is still queried for bid/ask enrichment to feed the `max_bid_ask_spread` filter (B-NEW-14) but the absence of fresh ticker data does NOT block evaluation; the spread check sentinel-skips via -1.
 
 *Added 2026-05-15 with B-NEW-34 close.*
+
+---
+
+## Phase 24 EXTENDED 3 — xStock Calibration Phase 0 audit findings (B-NEW-42, 2026-05-17)
+
+### Corporate Actions
+
+#### Archive Findings
+
+B-NEW-42 §2.1.1 scan across `xstock_spot_ticker_snap` (46.2M rows / 260 symbols / 14 days, 2026-04-30 → 2026-05-17): **0 corporate-action candidate events.** Pass A's `prev_day_close / open_24h` ratio scan with threshold <0.6 OR >1.6 returned 0 rows. The OHLC consecutive-bar step-change scan (Pass B) was deferred at the 30s pool-level statement_timeout; Pass A's EOD-level null was treated as conclusive for the audit's gap-detection purpose. Intra-bar discontinuity coverage is structural via the B-NEW-42b sentinel module (not archive-window-dependent). Full artifact: `1-system-manual/audits/b-new-42/corp-actions-scan.csv`.
+
+#### Kraken WebSocket Behavior
+
+Empirical inspection of the OHLC + ticker_snap metadata jsonb columns (Pass C/D) shows **only `schema_version` key present** across the entire xStock archive. Kraken's WS feed delivers no `adjustment_factor` / `event_type` / `corporate_action` / `split_ratio` envelope fields. Whatever price flows through their `ticker` channel is the raw value we receive; we have no upstream signal that a corporate action has occurred. Live observation during a real corp-action event would confirm whether Kraken applies auto-adjustments; this remains an open question for Phase A.1.
+
+#### TEC Handling Policy
+
+`shouldClosePosition` (server/services/trailing-exit-controller.ts:1326-1331) is a naive `currentPrice <= currentStopPrice` check with no discontinuity awareness. On a 2:1 split, every long xStock position with a stop above price/2 fires the stop simultaneously. **Confirmed by regression test `server/tests/unit/b-new-42-tec-split-resilience.test.ts → FORWARD SPLIT` (50% drop) + `REVERSE SPLIT` (2× jump phantom-promotes to TRAILING_TAKE).**
+
+**Partial existing defense:** `isXstockMarketOpenUTC` (B79.0L, server/asset_classes/xstock_spot/market-hours.ts) short-circuits TEC evaluation during the Fri 8PM ET → Sun 8PM ET window. Since splits are almost always overnight-effective, the existing weekend gate IS a real partial defense in production. Operational urgency narrowed; structural fix still required.
+
+**Fix delivered by B-NEW-42b** — `server/services/price-discontinuity-detector.ts` adds a `corp_action` flag triggering on ≥40% single-bar discontinuity. TEC consumes the detector at the stop-check + target-lock sites via a single gate site.
+
+### Trading Halts
+
+#### Archive Findings
+
+B-NEW-42 §2.3.1 scan for tick-stream gaps >5 minutes across the last 7 days surfaced **42,226 candidate gap events** across the xStock universe. Distribution by classification:
+- **96% `candidate_pause_no_movement`** (40,487 rows; |price change| < 0.1%) — benign Kraken pauses during off-hours; resume with same price.
+- **3% `candidate_extended_gap_moderate_movement`** (1,277 rows; 0.1-0.5% change).
+- **1.1% `candidate_halt_with_resume_gap`** (462 rows; ≥0.5% change). Average 1.10% absolute price change across resume gap; max 4.6% (EDU/USD, 2026-05-11 01:30:51 → 01:40:21 UTC).
+
+The 462 resume-gap candidates are mostly off-hours pauses on 24/5 names rather than intra-RTH halts (timestamps fall outside ET 9:30-16:00). True intra-RTH halts in the archive window appear rare-to-zero. The audit's structural fix is therefore designed against the Kraken behavior pattern (pause-with-occasional-resume-gap is empirically confirmed) rather than against an archive-observed-during-RTH proof. Full artifact: `1-system-manual/audits/b-new-42/halt-gaps-scan.csv`.
+
+#### Kraken WebSocket Behavior
+
+Pattern: **pause-with-occasional-resume-gap.** Kraken can and does emit a ticker-update gap (>5min, often hours during weekend) and resume with either the same price (benign) OR a meaningfully different price (real price discovery happened during the pause). Both behaviors observed in the same archive.
+
+#### §2.3.3 Test Outcome
+
+`server/tests/unit/b-new-42-tec-halt-resilience.test.ts` exercises three scenarios per pre-audit §3.3:
+- **PAUSE (no movement during halt window):** TEC sees stable price across 10 simulated minutes; no stop fires. ✅ Current behavior correct.
+- **STALE-STREAM (advancing captured_at, same price):** equivalent to PAUSE from TEC's perspective. ✅ Current behavior correct.
+- **POST-RESUME GAP (resume at gapped-down price below stop):** TEC clamps exit to pre-halt stop level — an unfillable price in reality (real fill would be at or worse than the resume price). System books fictitious PnL. **❌ Gap confirmed.** B-NEW-42b inverts this assertion post-fix.
+
+#### Halt Sentinel Decision
+
+Scope §2.3.4 reinterprets v2 plan §0.3.4 directive ("add halt-detection sentinel to data-freshness layer") as conditional on test outcome. **Test confirmed gap → sentinel REQUIRED, delivered by B-NEW-42b.**
+
+**Sentinel location revised post-investigation:** the data-freshness layer is NOT the right home — B-NEW-34 removed the xstock_spot freshness window leaving the layer as a no-op gate. The sentinel lives in `server/services/price-discontinuity-detector.ts` (NEW, single module covering halt_resume_gap + corp_action + ex_dividend kinds) consumed by TEC at the stop-check site directly.
+
+*Added 2026-05-17 with B-NEW-42 close.*

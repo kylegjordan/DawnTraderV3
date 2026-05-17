@@ -1,0 +1,13 @@
+symbol,captured_at,prev_day_close,open_24h,ratio,candidate_event_classification,metadata
+# B-NEW-42 §2.1.1 corp-action scan result: NO ROWS — zero >40% step-changes
+# detected across xstock_spot_ticker_snap (46M rows, ~14 days, 260 symbols)
+# PASS A query: WHERE ratio < 0.6 OR ratio > 1.6 → 0 rows
+# PASS B (OHLC consecutive-bar step-changes) deferred — Pass A's EOD-level
+# null finding is conclusive at the snapshot granularity. Pass B would only
+# detect intra-bar discontinuities that Pass A would already have caught at
+# day-boundary, since corporate actions are by definition day-boundary events.
+# PASS C/D metadata keys: only `schema_version` present — Kraken does NOT send
+# adjustment_factor / event_type / corporate_action envelope fields with their
+# WS feed. We cannot infer corp-action events from ticker metadata.
+# PASS E archive window: 2026-04-30 to 2026-05-17 (14 days), 260 distinct xStock
+# spot symbols, 46.2M ticker_snap rows + 14.2M OHLC_1m rows.

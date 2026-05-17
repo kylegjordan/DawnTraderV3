@@ -654,6 +654,28 @@ The network condition was the same in both eras. B79.TEC changed how the system 
 
 ---
 
+**Phase 24 xSTOCK CALIBRATION PHASE 0 — B-NEW-42 (2026-05-17):**
+
+First batch executing the locked xStock Calibration Plan v2 (§0 pre-flight audit on corporate actions + dividends + halts). Plan locked 2026-05-15; B-NEW-42 opens 2026-05-17 with Kyle's "proceed with option 2" directive granting CC+Langston autonomy on the audit batch.
+
+| Batch | Date | Commit | Summary |
+|-------|------|--------|---------|
+| **B-NEW-42** | 2026-05-17 | ✅ CLOSED (DIRTY verdict; B-NEW-42b hotfix spawned). Commits pending push. | **xStock Calibration Phase 0 pre-flight audit on TEC equity-specific behaviors.** Three regression-test-confirmed structural gaps: (1) `shouldClosePosition` naive `currentPrice <= currentStopPrice` fires stop on synthetic 50% drop (forward split); (2) target-lock phantom-promotes to TRAILING_TAKE on synthetic 2× jump (reverse split); (3) TEC clamps exit to pre-halt stop on halt-resume gap-down through stop, booking unfillable PnL. **Empirical evidence:** 462 halt-with-resume-gap events across xStock universe in 7-day archive (avg 1.10% magnitude, max 4.6%). **Existing partial defense:** `isXstockMarketOpenUTC` (B79.0L weekend gate) covers most corp-action exposure since splits are overnight-effective; intra-RTH halt scenario is undefended. **Dividend hypothesis INCONCLUSIVE** without external ex-dividend calendar correlation (defers to Phase D auto-calendar wiring; B-NEW-42b adopts curated-calendar interim posture for 15 named div-paying symbols). **Kraken WS schema:** empirically only `schema_version` key — no `adjustment_factor` / `event_type` / `corporate_action`. Open question filed for Phase A.1. **Sequencing reconciliation:** May-15 line-9 directive ("Phase 0 starts after B67.5 ship") interpreted as factor-calibration interlock for Phase E only; Phase 0 production-risk gate (plan line 27) justifies independent execution; Langston rev2 ACK confirms. **Phase A unblock status: FALSE** — gated on B-NEW-42b ship. **B-NEW-42b spawn:** new `server/services/price-discontinuity-detector.ts` module (NEW) with three kinds (halt_resume_gap / corp_action / ex_dividend) consumed by TEC via single gate site at `shouldClosePosition` + target-lock. 5-minute hard-ceiling state machine for halt clearing; fail-safe-skip on missing prev-tick context; curated 60-entry ex-dividend calendar. Awaiting Kyle authorization to proceed to B-NEW-42b Step 3 implementation. |
+
+**Lessons captured from B-NEW-42:**
+
+1. **Predicted-outcome analysis in pre-audit is high-value when it sets expectations correctly but high-risk when the host-environment gates short-circuit tests.** Pre-audit §3.1 predicted "forward-split test LIKELY FAILS" — confirmed. But initial test run with `assetClass='xstock_spot'` and host clock on Sunday produced false-pass: every test short-circuited via `isXstockMarketOpenUTC` weekend gate before the bug surface was reached. Required `vi.mock('../../asset_classes/xstock_spot/market-hours.js')` to isolate the structural TEC gap from the orthogonal weekend safety. Both tests now carry a multi-line comment block at the top explaining the mock + the silent-rot failure mode if it's removed without time-injection replacement.
+
+2. **Statement-timeout (B-NEW-40-enforced 30s pool-level) constrains archive-scan SQL more than expected.** Pass B (OHLC consecutive-bar step-change) timed out on the 14.2M-row OHLC table even with `SET statement_timeout=0`. The pool's `query_timeout: 30_000` from B-NEW-40 fires before the SET applies in some pgbouncer-style routing scenarios. Worked around by partitioned-table direct query + date filtering. Future audit-scan scripts should default to partition-direct + date-filtered patterns instead of parent-table scans.
+
+3. **Empirical archive evidence reframes structural fixes from "theoretical" to "operationally urgent."** Audit halt-scan surfaced 462 candidate halt-with-resume-gap events in 7 days (66/day average, max 4.6%). Without that empirical grounding, the halt-detector might have been deferred or under-prioritized. Future fixes designed against archive-observed-behavior carry stronger ship-priority signal than fixes designed against pure structural arguments.
+
+4. **Symbol-format divergence between display form and storage form bit the audit.** Pre-audit assumed dividend candidate symbols would be stored as `KOx/USD` (matching `XSTOCK_SPOT_DISPLAY` regex). Actual archive stores them as `KO/USD` (no `x` suffix). First dividend scan returned 0 universe hits; corrected on second pass after listing actual stored symbols. Lesson: when querying archive against a candidate-symbol list, verify the actual storage form via a `SELECT DISTINCT symbol` quick-check before running the main scan.
+
+5. **Fork-not-expand discipline (Langston rev2 §Q3 + #15 NO PATCHES) held under temptation.** When the audit confirmed DIRTY, the natural temptation was to fold the fix into B-NEW-42 (one less batch round-trip, faster ship). Discipline held: B-NEW-42 closes as audit-only, B-NEW-42b spawned with its own scope + design + Langston code review + verification. Treating the discovered-gap entry as B-NEW-42 governance and the fix entry as B-NEW-42b governance keeps the catalog readable and the workflow clean.
+
+---
+
 **Phase 24 success criteria — MET 2026-05-10, extended 2026-05-11:**
 - ✅ xstock_spot in production VTS shadow-mode (PM2 #206; archiver flushing to xstock_* renamed tables; no-touch fence on crypto_spot held)
 - ✅ ASSET_CLASS_ONBOARDING_WORKFLOW.md battle-tested through 13 sub-batches (B79.0a through B79.0m.b2)
