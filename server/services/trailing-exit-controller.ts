@@ -26,6 +26,11 @@ import {
 } from '../utils/analysis-utils.js';
 import { getCachedCostMetrics, computeNetBreakeven, computeNetTargetFloor } from '../core/math/cost-model.js';
 import { getModuleConstants, hasExplicitAssetClassRow } from './module-constants-service.js';
+// B-NEW-42b (2026-05-17): price-discontinuity sentinel. Consumed at stop-check
+// + target-lock gate sites to short-circuit naive logic during halt-resume
+// gaps, corp-action discontinuities, and known ex-dividend windows. Detector
+// owns its own per-symbol state cache (lazy 24h eviction); TEC just calls.
+import { isDiscontinuityActive } from './price-discontinuity-detector.js';
 // B79: market-hours is a leaf module (no imports) — safe static import.
 // Used by the TEC stop-freeze guard at top of updatePosition() for xstock_spot.
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
@@ -654,6 +659,27 @@ export interface PositionUpdate {
    * cycles pass nothing — the engine state is in memory.
    */
   seed?: TrailingStateSeed;
+  /**
+   * B-NEW-42b (2026-05-17): optional tick timestamp for the price-discontinuity
+   * detector. Production callers omit (defaults to Date.now() — the price-tick
+   * arrival time). Test callers pass explicit values to simulate halt timing
+   * and discontinuity windows without fake timers.
+   */
+  currentTs?: number;
+  /**
+   * B-NEW-42b (2026-05-17) per Langston Step 4 BLOCKER 2: discontinuity result
+   * pre-resolved by the caller (typically `tec-evaluator.ts` consults the
+   * detector ONCE per logical tick and threads the result down). When provided,
+   * `updatePosition` uses this for the target-lock skip decision INSTEAD of
+   * calling the detector itself. Eliminates the double-consultation bug where
+   * two state-machine advances per logical tick collapsed the intended 2-tick
+   * deferral into 1.
+   *
+   * Direct callers (b65/b80/b79 crypto-path tests) omit this param → no
+   * detector gate runs, pre-B-NEW-42b behavior preserved (crypto-path
+   * back-compat).
+   */
+  discontinuity?: { active: boolean; kind?: string };
   // B65.2: extra inputs for moonbag gating + concurrency tracking.
   strategy?: string;
   sourcePool?: string | null;
@@ -1005,7 +1031,30 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   const rungStepPrice = state.targetPrice - state.entryPrice;
 
   // First, handle the initial target-latch event (rung 0 → rung 1).
-  if (!state.targetLatched) {
+  //
+  // B-NEW-42b (2026-05-17): discontinuity gate. If the detector flags this
+  // tick as a price discontinuity (reverse-split jump, corp-action, halt
+  // resume, cold-start), short-circuit the target-lock check. Prevents
+  // phantom-promotion to TRAILING_TAKE on what is structurally a non-event
+  // (e.g. a 2× single-bar jump crossing target on a 1:2 reverse split).
+  // Crypto symbols + idle xStock symbols pass through unchanged (detector
+  // returns `{active: false}`).
+  // B-NEW-42b (Step 4 fix BLOCKER 2): consume pre-resolved discontinuity from
+  // the caller (tec-evaluator hoists the single detector call). Fall back to
+  // direct consultation only if discontinuity wasn't provided AND target isn't
+  // latched yet (matches pre-Step-4-review behavior for direct callers).
+  const targetLockDiscontinuity = state.targetLatched
+    ? { active: false }
+    : (update.discontinuity ?? isDiscontinuityActive(update.symbol, update.currentPrice, update.currentTs ?? Date.now()));
+  if (targetLockDiscontinuity.active) {
+    console.log(
+      `[B-NEW-42b][TEC_DISCONTINUITY_SKIP_TARGETLOCK] ${update.symbol} ` +
+      `tradeId=${update.tradeId} kind=${targetLockDiscontinuity.kind} — ` +
+      `deferring target-lock check (currentPrice=${update.currentPrice.toFixed(4)}, ` +
+      `targetPrice=${state.targetPrice.toFixed(4)}).`,
+    );
+  }
+  if (!state.targetLatched && !targetLockDiscontinuity.active) {
     if (isTargetLockTriggered(update.currentPrice, state.targetPrice)) {
       state.targetLatched = true;
 
@@ -1322,10 +1371,51 @@ export async function primeTECConfig(): Promise<void> {
 /**
  * Directive 9.2.A: Check if position should be closed (stop hit).
  * B80: keyed by tradeId.
+ *
+ * B-NEW-42b (2026-05-17): wrapped with price-discontinuity sentinel. When the
+ * sentinel returns `active`, the naive `currentPrice <= stop` check is
+ * short-circuited. This covers:
+ *   - halt-resume gap (visibility-return at a re-priced level looks like a
+ *     stop hit but is unfillable in reality);
+ *   - corp-action discontinuity (50% drop on a split looks like a stop hit
+ *     but is a unit-count change, not a value change);
+ *   - known ex-dividend window (1-2h pre-market-open on ex-date);
+ *   - cold-start fail-safe (first call per symbol post-restart — see
+ *     price-discontinuity-detector.ts §3a-b).
+ *
+ * Crypto symbols pass through unchanged — detector returns `{active: false}`
+ * immediately for non-xStock symbols.
  */
-export function shouldClosePosition(tradeId: string, currentPrice: number): boolean {
+export function shouldClosePosition(
+  tradeId: string,
+  currentPrice: number,
+  // B-NEW-42b: optional tick timestamp for the detector. Defaults to Date.now()
+  // (production callers don't need to pass it). Test callers pass explicit
+  // timestamps to simulate halt/discontinuity timing.
+  currentTs: number = Date.now(),
+  // B-NEW-42b (Step 4 fix BLOCKER 2): pre-resolved discontinuity from caller.
+  // tec-evaluator consults the detector ONCE per logical tick and threads the
+  // same result to both `updatePosition` (target-lock skip) and
+  // `shouldClosePosition` (stop-check skip). Eliminates the double-consultation
+  // bug that collapsed the 2-tick deferral into 1-tick. Direct callers omit
+  // → no gate (pre-B-NEW-42b behavior preserved for crypto-path tests).
+  discontinuity?: { active: boolean; kind?: string },
+): boolean {
   const state = trailingStates.get(tradeId);
   if (!state) return false;
+
+  // B-NEW-42b: discontinuity gate. Skip stop check if detector flags the tick.
+  // Use pre-resolved result if caller provided; else only consult inline if
+  // a non-tec-evaluator caller (e.g. ad-hoc test) is using us directly.
+  const resolvedDiscontinuity = discontinuity ?? { active: false };
+  if (resolvedDiscontinuity.active) {
+    console.log(
+      `[B-NEW-42b][TEC_DISCONTINUITY_SKIP_STOP] ${state.symbol} ` +
+      `tradeId=${tradeId} kind=${resolvedDiscontinuity.kind} — deferring stop check ` +
+      `(currentPrice=${currentPrice.toFixed(4)}, stopPrice=${state.currentStopPrice.toFixed(4)}).`,
+    );
+    return false;
+  }
 
   return currentPrice <= state.currentStopPrice;
 }

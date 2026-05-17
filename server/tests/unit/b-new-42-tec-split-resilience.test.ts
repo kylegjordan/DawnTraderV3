@@ -3,29 +3,25 @@
  * B-NEW-42 §2.1.4 — TEC split-resilience regression test
  * ═════════════════════════════════════════════════════════════════════════════
  *
- * **PURPOSE: Documents existing gap, not desired-behavior verification.**
+ * **PURPOSE: Verifies the B-NEW-42b fix (post-assertion-inversion).**
  *
- * The trailing-exit controller's stop-trigger is the naive comparison
- * `currentPrice <= currentStopPrice` (server/services/trailing-exit-controller.ts:1330).
- * On a 2:1 stock split, the quote halves overnight. Every long xStock position
- * with a trailing stop above price/2 (which is essentially every protected
- * position — break-even or better) sees `currentPrice <= currentStopPrice`
- * become true and fires the stop on what is structurally a non-event (the
- * underlying value didn't change, only the unit count).
+ * **History:** Pre-B-NEW-42b this test documented the structural gap in the
+ * trailing-exit controller's stop-trigger — `currentPrice <= currentStopPrice`
+ * (server/services/trailing-exit-controller.ts:1330) — by asserting that a
+ * synthetic 50% drop (2:1 split) DID fire the stop and a 2× jump (1:2 reverse
+ * split) DID phantom-promote to TRAILING_TAKE.
  *
- * Kraken's WebSocket schema (verified B-NEW-42 §2.1.3) sends no `adjustment_factor`
- * / `event_type` / `corporate_action` envelope fields with their ticker stream.
- * There is no upstream signal we currently consume that would short-circuit
- * the stop check on a corporate action. TEC sees split-effected prices as
- * real prices.
+ * **B-NEW-42b inverted the assertions** — the new
+ * `server/services/price-discontinuity-detector.ts` sentinel module short-
+ * circuits both the stop-check and target-lock gates when it detects a
+ * single-bar price change ≥40% (corp_action kind). TEC's stop-check now
+ * returns `false` and target-lock fires `false` during the discontinuity
+ * window — the fix's verification surface.
  *
- * **This test asserts CURRENT (buggy) behavior** so it passes today and
- * documents the gap concretely. The post-fix (B-NEW-42b) inverts each
- * assertion — desired behavior is `shouldExit=false` on the synthetic split,
- * because B-NEW-42b adds a corporate-action sentinel (likely
- * `server/services/corporate-action-detector.ts`) that short-circuits the
- * stop check on a >40% single-bar price discontinuity OR on a Kraken-supplied
- * adjustment event if such a feed surface lands.
+ * Kraken's WebSocket schema (verified B-NEW-42 §2.1.3) sends no
+ * `adjustment_factor` / `event_type` / `corporate_action` envelope fields with
+ * their ticker stream. There is no upstream signal we consume; the detector
+ * infers structural events from single-bar discontinuity magnitude alone.
  *
  * Two variants per Langston rev2 §2.1.4:
  *
@@ -126,6 +122,8 @@ import {
   _testClearEngineConfigCache,
 } from '../../services/trailing-exit-controller.js';
 import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
+// B-NEW-42b: clear per-symbol detector state between tests so each starts cold.
+import { _testClearAllState as _testClearDetectorState } from '../../services/price-discontinuity-detector.js';
 
 // Seed all module_constants rows required by primeTECConfig
 function seedAllConstants() {
@@ -176,7 +174,7 @@ const xstockContext = {
   regime: 'TREND_FRIENDLY_STABLE',
 };
 
-describe('B-NEW-42 §2.1.4 — TEC split-resilience (DOCUMENTS GAP)', () => {
+describe('B-NEW-42 §2.1.4 — TEC split-resilience (VERIFIES B-NEW-42b FIX)', () => {
   beforeEach(async () => {
     clearModuleConstantsCache();
     seedAllConstants();
@@ -185,13 +183,17 @@ describe('B-NEW-42 §2.1.4 — TEC split-resilience (DOCUMENTS GAP)', () => {
     clearTrailingState('AAPL/USD');
     clearTrailingState('TSLA/USD');
     clearTrailingState('NVDA/USD');
+    // B-NEW-42b: clear per-symbol discontinuity-detector cache so each test
+    // starts cold. Forward-split + reverse-split tests use real xStock
+    // symbols (AAPL/USD + TSLA/USD) so the detector intercepts.
+    _testClearDetectorState();
   });
 
   // ──────────────────────────────────────────────────────────────────────────
   // Forward split (2:1) — 50% single-bar drop
   // ──────────────────────────────────────────────────────────────────────────
 
-  it('FORWARD SPLIT: 50% single-bar drop FIRES stop (current bug, B-NEW-42b inverts)', async () => {
+  it('FORWARD SPLIT (post-fix): 50% single-bar drop does NOT fire stop — discontinuity sentinel short-circuits', async () => {
     // Pre-split state: LONG AAPL at $200, stop $190, target $230, currentPrice
     // is steady at $205. With useTrailing=true, the engine doesn't move the
     // stop on its own without break-even latching or target-lock; with
@@ -232,22 +234,20 @@ describe('B-NEW-42 §2.1.4 — TEC split-resilience (DOCUMENTS GAP)', () => {
       currentSlotTotal: 10,
     });
 
-    // CURRENT BEHAVIOR (the gap): stop fires.
-    expect(postSplit.shouldExit).toBe(true);
-    expect(postSplit.exitReason).toBe('stop_hit');
-    // exitPrice clamped to the stop price.
-    expect(postSplit.exitPrice).toBe(190);
-
-    // POST-B-NEW-42b assertion (commented out, will be active once fix lands):
-    //   expect(postSplit.shouldExit).toBe(false);
-    //   expect(postSplit.exitReason).toBeUndefined();
+    // POST-FIX BEHAVIOR (B-NEW-42b): discontinuity sentinel short-circuits the
+    // target-lock check on the 50% drop (|Δ%|=50 >= 40% corp_action threshold).
+    // The stop check in `shouldClosePosition` is also short-circuited if the
+    // path reaches it. shouldExit=false → trade stays open until next confirming
+    // tick clears the discontinuity OR the 24h TTL auto-clears the corp_action
+    // state.
+    expect(postSplit.shouldExit).toBe(false);
   });
 
   // ──────────────────────────────────────────────────────────────────────────
   // Reverse split (1:2) — 2× single-bar jump on LONG, target in path
   // ──────────────────────────────────────────────────────────────────────────
 
-  it('REVERSE SPLIT: 2× jump on LONG (entry $50, target $80, jump to $100) phantom-promotes to TRAILING_TAKE (current bug, B-NEW-42b inverts)', async () => {
+  it('REVERSE SPLIT (post-fix): 2× jump on LONG (entry $50, target $80, jump to $100) does NOT phantom-promote — discontinuity sentinel short-circuits target-lock', async () => {
     // Per pre-audit §3.2: parameters chosen to stress phantom-promotion.
     // Entry $50, target $80, single-bar jump $50 → $100. Jump traverses
     // target ($80), so isTargetLockTriggered() returns true, target-lock
@@ -266,8 +266,8 @@ describe('B-NEW-42 §2.1.4 — TEC split-resilience (DOCUMENTS GAP)', () => {
 
     // Step 1: pre-jump — establish baseline at $52 (small profit, no latches).
     const preJump = await evaluateTECExit({
-      tradeId: 'STRUGGLE/USD',
-      symbol: 'STRUGGLE/USD',
+      tradeId: 'TSLA/USD',
+      symbol: 'TSLA/USD',
       entryPrice: 50, stopPrice: 45, targetPrice: 80,
       currentPrice: 52, atr: 1,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
@@ -280,8 +280,8 @@ describe('B-NEW-42 §2.1.4 — TEC split-resilience (DOCUMENTS GAP)', () => {
     // Step 2: 1:2 reverse-split jump — currentPrice doubles to $100, past
     // target ($80). target-lock fires.
     const postJump = await evaluateTECExit({
-      tradeId: 'STRUGGLE/USD',
-      symbol: 'STRUGGLE/USD',
+      tradeId: 'TSLA/USD',
+      symbol: 'TSLA/USD',
       entryPrice: 50, stopPrice: 45, targetPrice: 80,
       currentPrice: 100, atr: 1,
       holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
@@ -289,15 +289,12 @@ describe('B-NEW-42 §2.1.4 — TEC split-resilience (DOCUMENTS GAP)', () => {
       currentSlotTotal: 10,
     });
 
-    // CURRENT BEHAVIOR (the gap): target-lock latches, mode flips, position
-    // continues as moonbag.
-    expect(postJump.modeChanged).toBe(true);
+    // POST-FIX BEHAVIOR (B-NEW-42b): discontinuity sentinel flags the 100%
+    // single-bar jump (|Δ%|=100 >= 40% corp_action threshold). Target-lock
+    // check is short-circuited → modeChanged=false, no phantom-promotion to
+    // TRAILING_TAKE. shouldExit also false (no stop fires; no target latches).
+    expect(postJump.modeChanged).toBeFalsy();
     expect(postJump.shouldExit).toBe(false);
-
-    // POST-B-NEW-42b assertion (commented out, will be active once fix lands):
-    //   expect(postJump.modeChanged).toBeFalsy();
-    //   expect(postJump.shouldExit).toBe(false);  // also false — engine waits
-    //                                              // for adjustment processing
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -307,8 +304,8 @@ describe('B-NEW-42 §2.1.4 — TEC split-resilience (DOCUMENTS GAP)', () => {
 
   it('SANITY: normal 5% intraday move neither fires stop nor latches target', async () => {
     const normal = await evaluateTECExit({
-      tradeId: 'NORMAL/USD',
-      symbol: 'NORMAL/USD',
+      tradeId: 'NVDA/USD',
+      symbol: 'NVDA/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 120,
       currentPrice: 105, atr: 2,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,

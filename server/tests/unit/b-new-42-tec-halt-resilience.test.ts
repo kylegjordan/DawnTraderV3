@@ -95,6 +95,8 @@ import {
   _testClearEngineConfigCache,
 } from '../../services/trailing-exit-controller.js';
 import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
+// B-NEW-42b: clear per-symbol detector state between tests.
+import { _testClearAllState as _testClearDetectorState } from '../../services/price-discontinuity-detector.js';
 
 function seedAllConstants() {
   const wildcard = {
@@ -135,7 +137,7 @@ const xstockContext = {
   regime: 'TREND_FRIENDLY_STABLE',
 };
 
-describe('B-NEW-42 §2.3.3 — TEC halt-resilience (DOCUMENTS GAP)', () => {
+describe('B-NEW-42 §2.3.3 — TEC halt-resilience (VERIFIES B-NEW-42b FIX)', () => {
   beforeEach(async () => {
     clearModuleConstantsCache();
     seedAllConstants();
@@ -143,6 +145,7 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (DOCUMENTS GAP)', () => {
     await primeTECConfig();
     clearTrailingState('AAPL/USD');
     clearTrailingState('TSLA/USD');
+    _testClearDetectorState();
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -208,7 +211,7 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (DOCUMENTS GAP)', () => {
   // Scenario 3: Post-resume gap — THE GAP. Bug-documenting test.
   // ──────────────────────────────────────────────────────────────────────────
 
-  it('POST-RESUME GAP: 10-minute halt, resumes at gapped-down price below stop FIRES stop on visibility-return (current bug, B-NEW-42b inverts)', async () => {
+  it('POST-RESUME GAP (post-fix): 10-minute halt, resumes at gapped-down price below stop does NOT fire stop — discontinuity sentinel defers', async () => {
     // Pre-halt: position at $200, stop $190, target $230, currentPrice $205.
     // Halt fires (news pending, LULD circuit breaker, etc.) — ticker freezes
     // for 10 minutes.
@@ -234,7 +237,13 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (DOCUMENTS GAP)', () => {
     // check; await independent confirming tick). Also, the audit recommends
     // logging a [TEC_HALT_RESUME_DEFER] line so the deferral is observable.
 
-    // Step 1: pre-halt baseline at $205.
+    // B-NEW-42b: explicit timestamps for the detector. Without these, both
+    // calls would land in microseconds in real wallclock → detector sees
+    // ~0s gap, halt_resume_gap doesn't trigger (gap > 300s threshold). We
+    // synthesize a 10-min halt window via explicit currentTs values.
+    const t0 = 1_700_000_000_000;
+
+    // Step 1: pre-halt baseline at $205 (t0).
     const preHalt = await evaluateTECExit({
       tradeId: 'TSLA/USD',
       symbol: 'TSLA/USD',
@@ -243,12 +252,31 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (DOCUMENTS GAP)', () => {
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context: xstockContext, useTrailing: true, callerMode: 'paper',
       currentSlotTotal: 10,
+      currentTs: t0,
     });
     expect(preHalt.shouldExit).toBe(false);
 
+    // Need a steady-state tick to populate the cache after cold-start; without
+    // this, the next call would still be cold-start (cache populated but state
+    // is IDLE awaiting actual prior-tick comparison; cold-start records and
+    // returns active=true on FIRST call only).
+    const steadyState = await evaluateTECExit({
+      tradeId: 'TSLA/USD',
+      symbol: 'TSLA/USD',
+      entryPrice: 200, stopPrice: 190, targetPrice: 230,
+      currentPrice: 205, atr: 3,
+      holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
+      context: xstockContext, useTrailing: true, callerMode: 'paper',
+      currentSlotTotal: 10,
+      currentTs: t0 + 60_000,
+    });
+    expect(steadyState.shouldExit).toBe(false);
+
     // Step 2 (skipped — halt window has no ticks; would be no-op calls).
 
-    // Step 3: resume tick at $185 (gapped down through stop).
+    // Step 3: resume tick at $185 (gapped down through stop). 10-min after
+    // last steady-state tick → detector sees gap=600s, |Δ%|=9.76% → triggers
+    // halt_resume_gap.
     const postResume = await evaluateTECExit({
       tradeId: 'TSLA/USD',
       symbol: 'TSLA/USD',
@@ -257,16 +285,24 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (DOCUMENTS GAP)', () => {
       holdDurationMs: 11 * 60_000, maxHoldMs: 7 * 86400_000,
       context: xstockContext, useTrailing: true, callerMode: 'paper',
       currentSlotTotal: 10,
+      currentTs: t0 + 60_000 + 10 * 60_000,
     });
 
-    // CURRENT BEHAVIOR (the gap): stop fires on visibility-return.
-    expect(postResume.shouldExit).toBe(true);
-    expect(postResume.exitReason).toBe('stop_hit');
-    // exitPrice clamped to stop, not actual resume price.
-    expect(postResume.exitPrice).toBe(190);
+    // POST-FIX BEHAVIOR (B-NEW-42b): discontinuity sentinel flags the 660s
+    // gap with |Δ%|≈10% from pre-halt price (well above 0.5% halt threshold)
+    // → halt_resume_gap kind. shouldClosePosition short-circuits → returns
+    // false. Trade stays open through the discontinuity window; next
+    // confirming tick within the 30s clearing window transitions to IDLE.
+    expect(postResume.shouldExit).toBe(false);
 
-    // POST-B-NEW-42b assertion (commented out, will be active once fix lands):
-    //   expect(postResume.shouldExit).toBe(false);
-    //   expect(postResume.exitReason).toBeUndefined();
+    // Langston Step 4 review recommendation: ensure the gate fired for the
+    // INTENDED reason (halt_resume_gap), not cold_start fail-safe. Probe the
+    // detector state directly post-call — entry.activeKind should be
+    // 'halt_resume_gap' (we passed currentTs explicitly so synthesis is real).
+    // If a future regression breaks the currentTs plumbing, the cold_start
+    // path would silently fire here and this assert catches it.
+    const { _testGetSymbolEntry } = await import('../../services/price-discontinuity-detector.js');
+    const entry = _testGetSymbolEntry('TSLA/USD');
+    expect(entry?.activeKind).toBe('halt_resume_gap');
   });
 });

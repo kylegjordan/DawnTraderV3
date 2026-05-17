@@ -1,0 +1,26 @@
+{
+  "_metadata": {
+    "purpose": "B-NEW-42b ex-dividend curated calendar (interim posture). 1-2h pre-market-open block (7:30-9:30 ET on ex-date) for 15 known dividend-paying xStock symbols. Replaces Phase D auto-calendar feed (Yahoo Finance) at handover. See SYSTEM_MANUAL.md → Trading Halts → Ex-Dividend Curated Calendar.",
+    "source": "Estimated ex-dividend dates Q3 + Q4 2026 based on each company's historical declaration cadence. NOT a guarantee — symbols' actual schedules can shift; this is interim defense before Yahoo Finance auto-feed lands in Phase D.",
+    "refresh_cadence": "Manually refresh quarterly; each refresh batch hand-schedules next refresh alert via the system-alerts queue (see RUNNING_ISSUES #112).",
+    "handover_to_phase_d": "When Phase D ships, replace this file with a JSON adapter that reads from Yahoo Finance API. Consumer (price-discontinuity-detector.ts) unchanged — the entries[] schema is the contract.",
+    "schema_version": 1
+  },
+  "entries": [
+    { "symbol": "KO/USD",  "ex_dates": ["2026-06-12", "2026-09-11", "2026-12-04"] },
+    { "symbol": "JNJ/USD", "ex_dates": ["2026-05-26", "2026-08-25", "2026-11-24"] },
+    { "symbol": "PG/USD",  "ex_dates": ["2026-07-17", "2026-10-22", "2027-01-21"] },
+    { "symbol": "XOM/USD", "ex_dates": ["2026-05-15", "2026-08-14", "2026-11-13"] },
+    { "symbol": "CVX/USD", "ex_dates": ["2026-05-19", "2026-08-18", "2026-11-17"] },
+    { "symbol": "JPM/USD", "ex_dates": ["2026-07-06", "2026-10-06", "2027-01-05"] },
+    { "symbol": "BAC/USD", "ex_dates": ["2026-06-05", "2026-09-04", "2026-12-04"] },
+    { "symbol": "T/USD",   "ex_dates": ["2026-07-10", "2026-10-09", "2027-01-08"] },
+    { "symbol": "VZ/USD",  "ex_dates": ["2026-07-10", "2026-10-09", "2027-01-08"] },
+    { "symbol": "MCD/USD", "ex_dates": ["2026-06-01", "2026-09-01", "2026-12-01"] },
+    { "symbol": "HD/USD",  "ex_dates": ["2026-06-04", "2026-09-03", "2026-12-03"] },
+    { "symbol": "WMT/USD", "ex_dates": ["2026-05-15", "2026-08-14", "2026-11-13"] },
+    { "symbol": "MMM/USD", "ex_dates": ["2026-05-22", "2026-08-21", "2026-11-20"] },
+    { "symbol": "IBM/USD", "ex_dates": ["2026-05-08", "2026-08-07", "2026-11-06"] },
+    { "symbol": "MO/USD",  "ex_dates": ["2026-06-15", "2026-09-14", "2026-12-22"] }
+  ]
+}

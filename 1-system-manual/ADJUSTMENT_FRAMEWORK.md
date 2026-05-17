@@ -504,3 +504,34 @@ This document, together with AUTHORITY_BASELINE.md and authority-baseline-v1.jso
 **Phase 11 closes only after Batch 58b** — the code implementation sub-batch that creates the parameter registry, authority baseline loader, audit logging, and `/api/filters-v2` validation integration. Phase 11 closure requires all items on the Phase 11 Closure Checklist in BATCH_58_SCOPE.md to be verified with evidence.
 
 Once Phase 11 is closed, it unlocks **Phase 15: Rules-Based Predictive Execution** — the "Smart Thermostat" where the system can make bounded, deterministic filter adjustments within this framework, without ML.
+
+---
+
+## Appendix A — B-NEW-42b price-discontinuity detector knobs (2026-05-17)
+
+Per Langston pre-audit rev1 #4: cataloguing the new per-asset-class behavioral knobs landed by B-NEW-42b. These knobs control the `server/services/price-discontinuity-detector.ts` sentinel — the module TEC consults to short-circuit stop-check + target-lock during halt-resume gaps, corp-action discontinuities, and known ex-dividend windows.
+
+**Module name:** `price_discontinuity_detector`
+**DB rows seeded by:** `drizzle/migrations/2026-05-17-b-new-42b-price-discontinuity-detector-constants.sql` (idempotent via `ON CONFLICT DO NOTHING`)
+**Code reference:** detector currently uses hardcoded defaults matching the seeded values; DB-resolution is deferred to a future Phase E calibration batch using the standard `getModuleConstants` API with B79.0a-style wildcard-default sentinel fallback.
+
+| Constant | Wildcard default | xstock_spot value | crypto_spot value | Purpose | Tunability tier |
+|---|---|---|---|---|---|
+| `halt_gap_seconds_threshold` | 300 | 300 | 300 | Minimum tick-stream gap (seconds) that triggers halt_resume_gap kind. <300s = normal market drift. | Tier 1 (Phase E calibration) |
+| `halt_pct_threshold` | 0.5 | 0.5 | 0.5 | Minimum \|Δ%\| at resume tick to confirm a real price-discovery discontinuity. | Tier 1 (Phase E calibration) |
+| `halt_clearing_window_seconds` | 30 | 30 | 30 | Preferred confirming-tick window. Tick within this window AND \|Δ%\| < halt_pct_threshold from resume price → transition to CLEARING. | Tier 2 (operator polish) |
+| `halt_hard_ceiling_seconds` | 300 | 300 | 300 | Hard auto-clear ceiling. If active state persists past this with no confirming tick (WS drop scenario), force-transition to IDLE. | Tier 2 (operator polish) |
+| `corp_action_pct_threshold` | 40 | 40 | 40 | \|Δ%\| ≥ this in a single bar = corp_action kind (split / reverse split / large special dividend). | Tier 1 (Phase E calibration) |
+| `corp_action_ttl_seconds` | 86400 | 86400 | 86400 | Persistence duration for active corp_action state. 24h aligns with typical overnight-effective corp actions. | Tier 2 (operator polish) |
+| `ex_div_pre_open_window_hours` | 2 | 2 | 0 | Hours before US market open during which a known ex-dividend date triggers ex_dividend kind. crypto_spot=0 (no equity ex-div). | Tier 1 (per-class) |
+| `symbol_cache_stale_seconds` | 86400 | 86400 | 86400 | Lazy-eviction threshold. Detector cache entry idle for longer than this (and in IDLE state) is dropped → next call is cold-start. | Tier 3 (memory hygiene) |
+
+**Tier 1** knobs are calibrated empirically against archived discontinuity events in Phase E. Until then, the hardcoded values are Layer-1 starters derived from B-NEW-42 audit empirics (462 candidate halt-resume-gap events in 7-day archive, max 4.6% magnitude on EDU/USD).
+
+**Tier 2** knobs are operator-tunable polish — adjust if production behavior shows pathological patterns (e.g. WS drops more frequent than 5min causing too many hard-ceiling auto-clears).
+
+**Tier 3** memory-hygiene knob; should not need adjustment short of an unusual xStock universe expansion.
+
+**Adjustment audit trail:** any future tune must go through the standard `module_constants` UPDATE pattern with `updated_by` set to a recognizable batch ID; the audit trail is the row-version history in module_constants.
+
+— Added 2026-05-17 with B-NEW-42b close.

@@ -72,6 +72,11 @@ import {
   type TrailingStateSeed,
   type CallerMode,
 } from './trailing-exit-controller.js';
+// B-NEW-42b (2026-05-17) per Langston Step 4 BLOCKER 2 fix: detector consultation
+// hoisted from TEC to here so we have ONE state-machine advance per logical tick.
+// Result is threaded down to both `tecUpdatePosition` (target-lock decision) and
+// `tecShouldClose` (stop-check decision) as a pre-resolved parameter.
+import { isDiscontinuityActive } from './price-discontinuity-detector.js';
 import type { AssetClass } from '../../shared/asset-classes.js';
 
 export interface TECExitContext {
@@ -135,6 +140,12 @@ export interface TECExitInput {
    * trades to TARGET mode. Subsequent cycles pass nothing.
    */
   seed?: TrailingStateSeed;
+  /**
+   * B-NEW-42b (2026-05-17): optional tick timestamp for the price-discontinuity
+   * detector. Production callers omit (defaults to Date.now() — the price-tick
+   * arrival time). Test callers pass explicit values to simulate halt timing.
+   */
+  currentTs?: number;
 }
 
 export type TECExitReason =
@@ -281,6 +292,16 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
   if (input.useTrailing && input.atr > 0) {
     const callerMode: CallerMode = input.callerMode ?? 'paper';
 
+    // B-NEW-42b (Step 4 fix BLOCKER 2): consult the price-discontinuity detector
+    // ONCE per logical tick. The result threads to both `tecUpdatePosition`
+    // (target-lock skip decision) and `tecShouldClose` (stop-check skip
+    // decision). Pre-fix: each function consulted independently → two state-
+    // machine advances per logical tick → the intended 2-tick deferral
+    // (DISCONTINUITY_ACTIVE → confirming tick → CLEARING → IDLE) collapsed to
+    // 1-tick, exactly the unfillable-fill failure this batch closes.
+    const tickTs = input.currentTs ?? Date.now();
+    const discontinuity = isDiscontinuityActive(input.symbol, currentPrice, tickTs);
+
     // B79.TEC: moonbag gates are now SYNC (cache pre-warmed by primeTECConfig).
     // Both calls take an explicit `assetClass` from the context.
     const moonbagQualified = isMoonbagQualifier(
@@ -321,6 +342,13 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       moonbagAllowed,
       // B80: Option C+ rehydrate seed (only on first cycle after restart).
       seed: input.seed,
+      // B-NEW-42b (2026-05-17): tick timestamp passed through so any inline
+      // detector consult inside updatePosition (only possible if discontinuity
+      // param is omitted, which it isn't here) uses the same tick time.
+      currentTs: tickTs,
+      // B-NEW-42b (Step 4 fix BLOCKER 2): pre-resolved discontinuity from the
+      // single hoisted consult above. Target-lock skip honors this.
+      discontinuity,
     });
 
     // Engine-authored terminal decisions (B65.2):
@@ -354,7 +382,9 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       };
     }
 
-    if (tecShouldClose(input.tradeId, currentPrice)) {
+    // B-NEW-42b (Step 4 fix BLOCKER 2): pass the SAME discontinuity result we
+    // resolved at the top of this trailing branch. No second detector call.
+    if (tecShouldClose(input.tradeId, currentPrice, tickTs, discontinuity)) {
       // B65.2-HF3: three distinct close semantics when the engine reports
       // "close now":
       //   1. targetLatched = trade entered TRAILING_TAKE (moonbag), now
