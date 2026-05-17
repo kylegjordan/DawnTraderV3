@@ -2,6 +2,41 @@
 
 ---
 
+## BUG-2026-05-17-B — TEC structural gaps closed by B-NEW-42b price-discontinuity sentinel
+
+**Severity:** Operational risk (RESOLVED via structural fix).
+**Surfaced by:** B-NEW-42 Phase 0 audit (2026-05-17 morning).
+**Fixed by:** B-NEW-42b (commit `d8e0f5885`, deployed 2026-05-17T20:10:00Z to staging PM2 #293).
+**Verified by:** Langston Step 8 PASS (2026-05-17).
+
+**The three gaps:**
+
+1. **Forward split (50% drop) fires stop on synthetic non-event.** `shouldClosePosition` naive `currentPrice <= currentStopPrice` check. Every protected long xStock position with a stop above price/2 would fire simultaneously on a 2:1 split. Partial existing defense: B79.0L weekend market-hours gate covers most splits (overnight-effective); intra-week effective-date case was undefended.
+
+2. **Reverse split (2× jump) phantom-promotes to TRAILING_TAKE.** Target-lock latch fires when current price crosses target; 1:2 reverse-split jump from $50 → $100 with target $80 in path satisfies the condition. Trade incorrectly enters moonbag mode based on a unit-count change, not a value change. Same partial defense as #1 (weekend gate).
+
+3. **Halt resume gap fires stop at unfillable price.** Intra-RTH halt resolves with a price gapped down through stop. `shouldClosePosition` clamps exit to pre-halt stop level — a price that was never tradeable. System books fictitious PnL. **No existing defense; this was the load-bearing exposure.** 462 candidate halt-resume-gap events observed in 7-day archive (avg 1.10% magnitude, max 4.6% on EDU/USD 2026-05-11).
+
+**Structural fix:** new `server/services/price-discontinuity-detector.ts` sentinel consumed by TEC at `shouldClosePosition` + `updatePosition` target-lock gate via a single hoisted consultation per logical tick in `tec-evaluator.ts`. Four kinds: `halt_resume_gap`, `corp_action`, `ex_dividend` (curated calendar), `cold_start` (fail-safe-skip first call per symbol). State machine IDLE / DISCONTINUITY_ACTIVE / CLEARING with stateless 5min HARD_CEILING timestamp comparison + lazy 24h eviction gated on IDLE state.
+
+**Test coverage:** 76/76 passing — detector unit (13), B-NEW-42 assertion-inverted (6, with `entry.activeKind` assertion to catch future cold_start drift), crypto regression (55+, all green).
+
+**Lessons:**
+- **Double-consultation per logical tick is a non-obvious state-machine bug.** Pre-Step-4-review code consulted detector independently in `updatePosition` (target-lock) and `shouldClosePosition` (stop-check); both within microseconds; second consult advanced IDLE → DISCONTINUITY_ACTIVE → CLEARING on the same tick. Fix: hoist to one call per logical tick in `tec-evaluator.ts`.
+- **Cold-start fail-safe-skip is non-negotiable for sentinel-based stop-check gating.** Defaults `{active: true, kind: 'cold_start'}` on first call per symbol; protects against unfillable-fill during process-restart-during-halt blind window. Cost: one tick of stop-check delay (operationally trivial).
+- **Detector-owned cache cleaner than caller-side prev-tick propagation.** Initial scope rev2 specified caller-propagation; pre-audit §3 refined to detector-owned cache. Outcome structurally equivalent; caller-side surface unchanged; silent-disable failure mode (caller forgets to plumb prevPrice) structurally eliminated.
+
+**Cross-references:**
+- Scope: `Claude Comms and Packages/Scope Files/B_NEW_42B_SCOPE.md`
+- Pre-audit: `Claude Comms and Packages/Scope Files/B_NEW_42B_PRE_AUDIT.md`
+- Completion report: `Claude Comms and Packages/Batch Completion/B_NEW_42B_COMPLETION_REPORT.md`
+- Detector code: `server/services/price-discontinuity-detector.ts`
+- Curated dividend calendar: `1-system-manual/audits/b-new-42/dividend-calendar-seed.json`
+- ADJUSTMENT_FRAMEWORK Appendix A (8 new knobs)
+- B-NEW-42 audit findings: `1-system-manual/audits/b-new-42/audit-report.md`
+
+---
+
 ## DESIGN-2026-05-17-A — TFS sustainability gate: design-intent-vs-shipped scope contraction (DECISION RECORD, not a bug)
 
 **Severity:** Process-governance. Not a defect, not a fix — a design-decision-history record captured per Kyle directive 2026-05-17 so the implicit deferral is auditable when Phase 19 opens.

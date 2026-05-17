@@ -11310,3 +11310,48 @@ Scope §2.3.4 reinterprets v2 plan §0.3.4 directive ("add halt-detection sentin
 **Sentinel location revised post-investigation:** the data-freshness layer is NOT the right home — B-NEW-34 removed the xstock_spot freshness window leaving the layer as a no-op gate. The sentinel lives in `server/services/price-discontinuity-detector.ts` (NEW, single module covering halt_resume_gap + corp_action + ex_dividend kinds) consumed by TEC at the stop-check site directly.
 
 *Added 2026-05-17 with B-NEW-42 close.*
+
+---
+
+## Phase 24 EXTENDED 4 — xStock Calibration Phase 0 STRUCTURAL FIX shipped (B-NEW-42b, 2026-05-17)
+
+B-NEW-42 audit verdict was DIRTY; B-NEW-42b closes all three confirmed gaps structurally.
+
+### Price-discontinuity sentinel architecture
+
+NEW module `server/services/price-discontinuity-detector.ts` (483 lines) consumed by TEC at two gate sites:
+- `shouldClosePosition` — stop-check skip
+- `updatePosition` target-lock latch — phantom-promote skip
+
+**Single-call-per-logical-tick architecture (Langston Step 4 BLOCKER 2 fix):** `tec-evaluator.ts` hoists the detector consultation. The result threads down to both gate sites via the `discontinuity` parameter. Pre-fix double-consultation per tick advanced the state machine twice, collapsing the intended 2-tick deferral (DISCONTINUITY_ACTIVE → confirming tick CLEARING → IDLE) into 1-tick.
+
+### Four detector kinds
+
+| Kind | Trigger | Resolution |
+|---|---|---|
+| `halt_resume_gap` | `gapSeconds > 300 AND |Δ%| >= 0.5%` | Confirming tick within 30s window AND \|Δ%\| < 0.5% from resume price → CLEARING → next call IDLE. Hard ceiling 5min (stateless timestamp check, no setTimeout) auto-clears even without confirming tick. |
+| `corp_action` | `|Δ%| >= 40%` single-bar | 24h TTL (`corp_action_ttl_seconds`). Supersedes halt_resume_gap when both could trigger. |
+| `ex_dividend` | 7:30-9:30 ET on a known ex-date for the symbol | Outside window OR off-date → INACTIVE. Curated calendar via `1-system-manual/audits/b-new-42/dividend-calendar-seed.json` (15 names × Q3+Q4 2026); Phase D auto-feed replaces this without changing the consumer. |
+| `cold_start` | First call per symbol when cache is empty (process-restart-during-halt fail-safe per Langston pre-audit rev1 #1) | Auto-resolves on second call (state populated from first). |
+
+### Cold-start fail-safe-skip
+
+First call per symbol returns `{active: true, kind: 'cold_start'}`. Reasoning: process restart at t=0 + halt landing at t=-5s + first post-restart tick at t=+10s could pass a gap-down resume price to `shouldClosePosition` before the detector has any prior-tick context to evaluate the gap. Fail-safe-skip prevents the unfillable-fill failure mode during the blind window. Cost: one tick of stop-check delay per symbol per cold-start episode (operationally trivial; symbols see hundreds of ticks per session). Logs `[B-NEW-42b][DETECTOR_COLD_START_SKIP] <symbol>` per occurrence.
+
+### Lazy eviction (gated on IDLE)
+
+Cache entries idle for >24h are dropped → next call is cold-start. **Critical:** only IDLE entries evict by age; DISCONTINUITY_ACTIVE and CLEARING entries must reach their state-machine resolution (TTL / hard-ceiling / clearing tick) regardless of wallclock staleness — they represent live operational state.
+
+### Restart semantics (Langston pre-audit rev1 #1 documentation requirement)
+
+The detector cache is **in-process only**. A PM2 restart discards the cache entirely. The first tick per symbol post-restart triggers the cold_start fail-safe-skip, protecting against the unfillable-fill failure mode during the blind window (where a halt could have landed between snapshot moments). After one tick per symbol, the cache repopulates and the detector resumes normal operation.
+
+### Adjustment knobs
+
+8 per-asset-class behavioral knobs catalogued in `ADJUSTMENT_FRAMEWORK.md` Appendix A. Seeded by `drizzle/migrations/2026-05-17-b-new-42b-price-discontinuity-detector-constants.sql` (idempotent ON CONFLICT). Detector currently uses hardcoded values matching the seeds; DB-resolution deferred to Phase E calibration batch using the standard `getModuleConstants` API with B79.0a-style wildcard-default sentinel fallback.
+
+### Crypto-path back-compat
+
+Detector returns `{active: false}` immediately for non-xStock symbols (first check is `XSTOCK_SPOT_SYMBOLS.has(symbol)`). Crypto stop-check + target-lock behavior unchanged. Verified: b65-tec-parity + b80-tec-per-trade-keying + b79-tec-per-class-cache + trailing-exit tests all green (55+).
+
+*Added 2026-05-17 with B-NEW-42b close.*
