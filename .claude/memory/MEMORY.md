@@ -20,7 +20,7 @@
 
 **🟢 B-NEW-40 CLOSED (Kyle ack 2026-05-17).** 14-day soak armed (alert id b83b1e4b, triggers 2026-05-31T12:46:47Z).
 
-**🟢 B-NEW-41 Steps 1-6 COMPLETE.** Voice transcription + Langston SSH access deployed to Hetzner Helsinki. Awaiting Kyle voice-test for Step 7 first-pass + Langston Step 8 second-pass.
+**🟢 B-NEW-41 CLOSED pending Kyle ack** (2026-05-17). All 9 objectives YES with 3 Step-7 hotfixes applied during verification. Steps 1-2-4-8 all APPROVED by Langston. Voice transcription live for both bots (V2 ✅ + V3 ✅ verified by Kyle voice tests). Langston SSH to staging working (verified at Step 4 + re-confirmed at Step 8). Completion report at `Claude Comms and Packages/Batch Completion/B_NEW_41_COMPLETION_REPORT.md`.
 
 ### B-NEW-41 — what's live
 - **Whisper.cpp v1.8.4** at `/opt/whisper.cpp/build/bin/whisper-cli` on Helsinki. Model ggml-small.en.bin (487MB). Smoke ✅ (jfk.wav 8.3s wallclock @ -t 3).
