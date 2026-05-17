@@ -544,6 +544,32 @@ Quick-fixing one item and declaring everything resolved is the failure mode. The
 
 ---
 
+## 10.5 System Alerts per-turn check (Kyle directive 2026-05-17 — MANDATORY)
+
+Every Claude Code session — both CC (this) and Langston — must perform this check **before responding to any user message**, on every turn, regardless of session age.
+
+**Procedure:**
+
+1. Read `/var/log/dawntrader/system-alerts.jsonl` (on Hetzner; CC accesses via SSH, Langston accesses directly).
+2. For each entry where `state === 'active'` AND `acknowledged_at === null` AND `triggers_at <= NOW()`:
+   - Surface the entry to the user **as part of your response in plain language** (not raw JSON, not file paths)
+   - Cite the `id`, `title`, `severity`, `body`, and `metadata` if present
+   - State whether the entry needs action this turn or is FYI
+3. If you ACT on an alert during the turn (run the verification script it points to, dispatch a follow-up, etc.):
+   - Run `scripts/system-alerts.ts ack <id> --by <session-name>` so it stops surfacing
+   - Use session names: `cc-session-<YYYY-MM-DD>` or `langston` or `kyle-direct`
+4. If you CAN'T reach the file (Hetzner unreachable, file missing, SSH down):
+   - State that explicitly to the user — don't silently skip
+   - Continue with the user's request anyway
+
+**Why this is mandatory:** Kyle directive 2026-05-17. Sessions can be days or weeks apart; whoever is at the keyboard at the moment a scheduled check is due is the one who picks it up. Telegram messages don't get reliably read because there's so much technical CC↔Langston chatter. The per-turn check ensures alerts get seen by either Claude or Kyle (via Claude's plain-language surfacing) regardless of which channel Kyle is using to interact.
+
+**What goes in the queue:** scheduled verifications (e.g., the 14-day soak verification for B-NEW-40), one-off reminders, recurring health checks (future batch), and breakage triggers (future batch). The dispatcher cron on staging promotes scheduled events to active when their `triggers_at` arrives. See `Claude Comms and Packages/Scope Files/B_NEW_40_SCOPE.md` §2.8 for the full architecture.
+
+**Failure to perform this check on every turn is a process violation.** It's not a session-start-only check — it's per-turn because alerts can fire between turns of a long session.
+
+---
+
 ## 11. Kyle Preferences
 
 - **Outcomes-based verification, always.** A batch is done when the objectives are green in the UI, not when the code compiles.

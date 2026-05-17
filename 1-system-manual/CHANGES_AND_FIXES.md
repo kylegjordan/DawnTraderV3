@@ -2,6 +2,46 @@
 
 ---
 
+## INFRA-2026-05-17-A — B-NEW-40: pg pool keepalive + TEC refresh timeout (silent-TCP-death root-cause fix)
+
+**Severity:** HIGH — recurring production stall, requires PM2 restart to clear, blocks all VTS exit cycles and ablation emissions when triggered.
+
+**Symptom:** `[TEC_STALE_FAIL_CLOSED]` cascade on staging, two incidents 18h apart (2026-05-15 17:13 UTC and 2026-05-16 11:14 UTC). Each event cascade: `evaluateTECExit` → `isMoonbagQualifier` → `resolveTECConfig` throws → `resolveOpenVirtualTrades` throws → `runPhase10SimulationCycle` throws → VTS exit loop dies → no new VTS trades created → no new ablation emissions → trades-open inflow stops. Cleared only by PM2 restart; recurs on a 12–18h cadence.
+
+**Root cause (verified by CC + Langston converged review, 2026-05-17):** two stacked contributors.
+
+1. **Network layer — silent TCP path death.** Long-idle pg-pool connections between Hetzner Falkenstein and Supabase Frankfurt lose state at intermediate hops without TCP RST. With pg-pool's default `keepAlive: false`, the OS never probes the socket. The pool reuses the dead-but-ESTABLISHED connection for a query; the query write succeeds (lands in the local kernel buffer) but the response never returns. No socket error, no statement timeout. Pre-May 8 heartbeat-cycle slowdowns of 14.9s and 96.9s observed in April logs confirm the network condition existed before B79.TEC; it was absorbed silently by the old await-based TEC architecture.
+
+2. **Code amplifier introduced by B79.TEC (2026-05-08, commit `01fa39912`).** The per-asset-class fire-and-forget refresh pattern with `tecConfigRefreshInFlight` coalescer Map + 5-min staleness ceiling converts a single hung promise into a permanent fail-closed state. When the underlying `refreshTECConfigForClass` await neither resolves nor rejects, the chained `.catch` and `.finally` never fire — the Map entry stays populated forever, blocking every future refresh attempt. After 5 minutes of staleness, every `resolveTECConfig` call throws `TEC_STALE_FAIL_CLOSED` until PM2 restart. Smoking gun: 0 `[TEC_REFRESH_FAIL]` log events across 4832 `[TEC_STALE_FAIL_CLOSED]` events (strict regex grep). Architectural fingerprint: exact-duplicate-duration clustering (4 events at precisely 96,983ms, 4 events at precisely 8,943ms) is the signature of "one hung promise traps the Map; every subsequent read re-evaluates the same staleness check against the same fixed timestamp" — distinct from a recurring network blip which would produce a distribution of durations.
+
+**Fix (B-NEW-40, 2026-05-17):** five mitigation layers in one batch.
+
+1. **Pool config hardening** (`server/db.ts`): `keepAlive: true` + `keepAliveInitialDelayMillis: 10_000` (OS TCP probes detect dead sockets within ~12 min instead of 2+ hours; in-flight queries on detected-dead clients reject cleanly with no silent retry, aligns with CLAUDE.md §5 #15 "no silent fallbacks"), `query_timeout: 30_000` (pg-client-side abort on any query >30s), `idleTimeoutMillis: 30_000` (lower connection churn; resilience comes from keepAlive layer), explicit `max: 10` (matches default, surfaces ceiling for operators), `application_name: 'dawntrader_main'` (tags connection class for DB-side diagnosability). Boot emits `[DB_POOL_INIT]` log line.
+
+2. **Refresh-promise timeout fence** (`server/services/trailing-exit-controller.ts:~235`): `Promise.race([refreshTECConfigForClass(assetClass), timeoutAfter45s])`. On timeout-path rejection, existing `.catch` increments `tecRefreshFailCount` and logs `[TEC_REFRESH_TIMEOUT]` (distinct tag from `[TEC_REFRESH_FAIL]` for path attribution); `.finally` clears the in-flight Map. 45s budget = pool `query_timeout` (30s) + 15s slack for event-loop scheduling + GC. Plain `setTimeout` per Central Clock audit (per-call one-shot, not a recurring schedule).
+
+3. **TEC diagnostic endpoint** (`server/routes.ts` + `getTECDiagnostics()` in `trailing-exit-controller.ts`): NEW `/api/diagnostics/tec-config` route (auth-gated, read-only). Surfaces per-class state + Central Clock health. Operational visibility at incident time without needing a DB query.
+
+4. **Hostile-scenario test** (`server/tests/unit/b-new-40-tec-refresh-hang.test.ts` — NEW): simulates hung refresh via mock returning `new Promise(() => {})`; asserts (a) inFlight Map releases within 45s+ε, (b) `tecRefreshFailCount` increments by 1, (c) `[TEC_REFRESH_TIMEOUT]` logs exactly once, (d) cached config returned until 5-min ceiling, (e) past ceiling throws `TEC_STALE_FAIL_CLOSED`.
+
+5. **`tec-pg-capture` systemd unit on staging** (`/usr/local/bin/tec-pg-capture`): adds `ss -tnpi state established '( dport = 5432 )'` capture per 60s tick after `TEC_STALE_FAIL_CLOSED` log-tail trigger. Output to `/var/log/dawntrader/tec_diag/ss_<ts>.txt`. Direct evidence of TCP socket state at incident time.
+
+**Central Clock alignment audit (Kyle directive 2026-05-17):** zero new recurring schedules introduced, zero competing timers. Pool config is kernel/library layer; refresh timeout is per-call one-shot; diagnostic endpoint is request-driven; bash capture is event-driven by log tail. No Central Clock subscription required.
+
+**SIM governance gap closed:** new "Recent Additions (B-NEW-40)" section in `SYSTEM_IMPACT_MAP.md` documents both B-NEW-40's changes AND the B79.TEC config-cache subsystem (cache maps, `primeTECConfig`, `hasExplicitAssetClassRow` invariant, 45s `Promise.race` fence, `CONFIG_MAX_STALENESS_MS` ceiling, canonical log signatures, bidirectional link to `server/db.ts` SIM entry).
+
+**Langston Step 1 + Step 2 sign-off:** APPROVED 2026-05-17 with 5 corrections applied (idleTimeoutMillis framing rewrite, keepAlive failure-mode line, hostile-test expanded to 5 assertions, `application_name` in SIM, plain-language paragraph in scope).
+
+**Verification:** 14-day staging soak. Zero `TEC_STALE_FAIL_CLOSED` events = cause closed. If one fires, the `ss` capture identifies whether the dead-socket signature is still present (would indicate keepalive isn't reaching the actual failure mode and we need a network-layer follow-up).
+
+**References:**
+- `Claude Comms and Packages/Scope Files/B_NEW_40_SCOPE.md` (Step 1 scope, Langston-approved)
+- `Claude Comms and Packages/Scope Files/B_NEW_40_PRE_AUDIT.md` (Step 2 pre-audit with §2.6 Central Clock audit + §1.1 architectural-fingerprint evidence)
+- `1-system-manual/SYSTEM_IMPACT_MAP.md` "Recent Additions (B-NEW-40 — pg pool keepalive + TEC refresh timeout, 2026-05-17)"
+- `Claude Comms and Packages/Langston Design Asks/TEC_STALE_INVESTIGATION_2026-05-16_rev1.md` + `..._2026-05-17_rev2.md` (Langston reviews)
+
+---
+
 ## FINDING-2026-05-15-A — B-NEW-37 forensic surfaces TWO interacting defects in the modulation chain
 
 **Date:** 2026-05-15/16 | **Commits:** `2331a21bb` + `ba893d9e1` | **PM2:** no restart (out-of-band CLI)

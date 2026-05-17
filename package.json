@@ -15,7 +15,9 @@
     "b-new-33:factor-backtest": "tsx scripts/b-new-33-factor-backtest.ts",
     "b-new-33:parity-check": "tsx scripts/b-new-33-parity-check.ts",
     "b-new-36:cohort-diagnostic": "tsx scripts/b-new-36-cohort-diagnostic.ts",
-    "b-new-37:inversion-forensics": "tsx scripts/b-new-37-inversion-forensics.ts"
+    "b-new-37:inversion-forensics": "tsx scripts/b-new-37-inversion-forensics.ts",
+    "system-alerts": "tsx scripts/system-alerts.ts",
+    "b-new-40:soak-verify": "tsx scripts/b-new-40-soak-verify.ts"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",

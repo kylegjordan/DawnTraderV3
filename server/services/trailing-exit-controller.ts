@@ -231,18 +231,60 @@ export function resolveTECConfig(assetClass: AssetClass): TrailingExitConfig {
 
   // Background refresh on stale entry — non-blocking, fire-and-forget,
   // coalesced via inFlight Map (Langston Q1).
+  //
+  // B-NEW-40 (2026-05-17): wrap the refresh in Promise.race against a 45s
+  // timeout so the inFlight Map ALWAYS releases — even when the underlying pg
+  // promise neither resolves nor rejects (the silent-TCP-death failure mode).
+  // Without this, a single hung refresh traps the Map entry for the rest of
+  // process lifetime, blocking every future refresh attempt and producing the
+  // permanent TEC_STALE_FAIL_CLOSED cascade observed 2026-05-15 and -16.
+  //
+  // 45s budget: pool query_timeout (30s, server/db.ts) rejects the underlying
+  // query first; the 15s buffer covers event-loop scheduling, deserialization,
+  // and GC. Tighter (30-35s) risks false timeouts on legitimate slow refreshes
+  // during transient network blips. Looser (60s+) extends worst-case stale-
+  // fail-closed window unnecessarily.
+  //
+  // Central Clock alignment: per-call one-shot deadline; NOT recurring. Plain
+  // setTimeout is correct — subscribing to Central Clock for a 45s one-shot
+  // would add subscriber churn for zero scheduling benefit. (See pre-audit
+  // §2.6 Central Clock audit + Langston Step 1 Q7.)
   if (now >= expiresAt && !tecConfigRefreshInFlight.has(assetClass)) {
-    const promise = refreshTECConfigForClass(assetClass)
+    const REFRESH_TIMEOUT_MS = 45_000;
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(
+          new Error(
+            `[TEC_REFRESH_TIMEOUT] assetClass=${assetClass} refresh exceeded ` +
+            `${REFRESH_TIMEOUT_MS}ms budget without resolving or rejecting. ` +
+            `Underlying pg promise is hung — releasing inFlight Map so next ` +
+            `caller can attempt a fresh refresh.`,
+          ),
+        );
+      }, REFRESH_TIMEOUT_MS);
+    });
+
+    const promise = Promise.race([
+      refreshTECConfigForClass(assetClass),
+      timeoutPromise,
+    ])
       .catch((err) => {
         const failCount = (tecRefreshFailCount.get(assetClass) ?? 0) + 1;
         tecRefreshFailCount.set(assetClass, failCount);
+        const isTimeout =
+          err instanceof Error && err.message.startsWith('[TEC_REFRESH_TIMEOUT]');
+        const logTag = isTimeout ? '[TEC_REFRESH_TIMEOUT]' : '[TEC_REFRESH_FAIL]';
         console.error(
-          `[TEC_REFRESH_FAIL] assetClass=${assetClass} background refresh failed ` +
+          `${logTag} assetClass=${assetClass} background refresh failed ` +
           `(consecutive_fail_count=${failCount}):`,
           err,
         );
       })
       .finally(() => {
+        if (timeoutHandle !== null) {
+          clearTimeout(timeoutHandle);
+        }
         tecConfigRefreshInFlight.delete(assetClass);
       });
     tecConfigRefreshInFlight.set(assetClass, promise);
@@ -379,6 +421,70 @@ export function canEnterMoonbag(
  */
 export function getResolvedTECConfig(assetClass: AssetClass): TrailingExitConfig {
   return resolveTECConfig(assetClass);
+}
+
+/**
+ * B79.TEC diagnostic accessor (added 2026-05-16 for TEC stale-fail-closed
+ * root-cause investigation per Kyle directive).
+ *
+ * Returns a read-only snapshot of the internal per-class TEC state maps
+ * so an HTTP endpoint can observe whether a refresh is in-flight, the
+ * cache's expiry/staleness, and the consecutive-fail count without
+ * mutating the maps. Purpose-built to confirm/refute the "refresh promise
+ * hangs and locks inFlight Map" hypothesis at incident time.
+ */
+export interface TECDiagnosticEntry {
+  assetClass: AssetClass;
+  cached: boolean;
+  refreshInFlight: boolean;
+  expiresAtMs: number | null;
+  msSinceExpiry: number | null;
+  lastSuccessAtMs: number | null;
+  msSinceLastSuccess: number | null;
+  consecutiveFailCount: number;
+  staleByCeiling: boolean;
+}
+
+export interface TECDiagnosticSnapshot {
+  nowMs: number;
+  configTtlMs: number;
+  maxStalenessMs: number;
+  classes: TECDiagnosticEntry[];
+}
+
+export function getTECDiagnostics(): TECDiagnosticSnapshot {
+  const now = Date.now();
+  const classes: TECDiagnosticEntry[] = [];
+  // Collect union of all keys across the four state maps so we report a
+  // row even for an asset class that's e.g. inFlight but missing from cache.
+  const allKeys = new Set<AssetClass>();
+  for (const k of tecConfigCache.keys()) allKeys.add(k);
+  for (const k of tecConfigExpiresAt.keys()) allKeys.add(k);
+  for (const k of tecConfigLastSuccessAt.keys()) allKeys.add(k);
+  for (const k of tecConfigRefreshInFlight.keys()) allKeys.add(k);
+  for (const k of tecRefreshFailCount.keys()) allKeys.add(k);
+  for (const assetClass of allKeys) {
+    const expiresAt = tecConfigExpiresAt.get(assetClass) ?? null;
+    const lastSuccess = tecConfigLastSuccessAt.get(assetClass) ?? null;
+    classes.push({
+      assetClass,
+      cached: tecConfigCache.has(assetClass),
+      refreshInFlight: tecConfigRefreshInFlight.has(assetClass),
+      expiresAtMs: expiresAt,
+      msSinceExpiry: expiresAt !== null ? now - expiresAt : null,
+      lastSuccessAtMs: lastSuccess,
+      msSinceLastSuccess: lastSuccess !== null ? now - lastSuccess : null,
+      consecutiveFailCount: tecRefreshFailCount.get(assetClass) ?? 0,
+      staleByCeiling:
+        lastSuccess !== null && now - lastSuccess > CONFIG_MAX_STALENESS_MS,
+    });
+  }
+  return {
+    nowMs: now,
+    configTtlMs: CONFIG_TTL_MS,
+    maxStalenessMs: CONFIG_MAX_STALENESS_MS,
+    classes,
+  };
 }
 
 /**

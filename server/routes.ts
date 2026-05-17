@@ -6303,8 +6303,159 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== B-NEW-40: System Alerts queue (humans + AI consumers) ====================
+  //
+  // Read-only listing + acknowledgement of system alerts. Both humans (via the
+  // "System Alerts" dashboard tab) and AI sessions (via the per-turn CLAUDE.md
+  // §10.5 check) consume from the same JSONL-backed queue. Auth-gated identical
+  // to the TEC diagnostic endpoint; same `authenticateToken` middleware.
+  //
+  // GET  /api/system-alerts
+  //      Returns entries in (state: active | scheduled), sorted triggers_at ASC.
+  //      Query params: ?state=<s>, ?category=<c>
+  //
+  // POST /api/system-alerts/:id/acknowledge
+  //      Body: { "by": "kyle" | "cc-session-..." | "langston" | "system" }
+  //      Moves an entry to state=acknowledged.
+  //
+  // See `server/services/system-alerts.ts` for the storage library.
+
+  apiRouter.get('/system-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { listAlerts, listSurfaceable } = await import('./services/system-alerts.js');
+      // Narrow query strings to the union types accepted by listAlerts; reject
+      // unknown values (silently → undefined → no filter) rather than casting.
+      const STATES = new Set(['scheduled', 'active', 'acknowledged', 'resolved'] as const);
+      const CATEGORIES = new Set([
+        'soak_verification', 'health_check', 'breakage', 'one_off', 'recurring',
+      ] as const);
+      const stateRaw = typeof req.query.state === 'string' ? req.query.state : undefined;
+      const categoryRaw = typeof req.query.category === 'string' ? req.query.category : undefined;
+      const state = stateRaw && (STATES as Set<string>).has(stateRaw)
+        ? (stateRaw as 'scheduled' | 'active' | 'acknowledged' | 'resolved')
+        : undefined;
+      const category = categoryRaw && (CATEGORIES as Set<string>).has(categoryRaw)
+        ? (categoryRaw as 'soak_verification' | 'health_check' | 'breakage' | 'one_off' | 'recurring')
+        : undefined;
+
+      // Default response includes BOTH surfaceable-now AND scheduled-future entries
+      // so the UI can show both lists. Explicit ?state filter narrows it.
+      const entries = state || category
+        ? listAlerts({ state, category })
+        : listAlerts({}).filter(
+            (a) => a.state === 'active' || a.state === 'scheduled',
+          );
+      // Sort by triggers_at ascending
+      entries.sort((a, b) => a.triggers_at.localeCompare(b.triggers_at));
+
+      const surfaceable = listSurfaceable();
+      res.json({
+        ok: true,
+        capturedAt: new Date().toISOString(),
+        counts: {
+          active: entries.filter((a) => a.state === 'active').length,
+          scheduled: entries.filter((a) => a.state === 'scheduled').length,
+          surfaceableNow: surfaceable.length,
+        },
+        entries,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to read system alerts',
+        message: error?.message ?? String(error),
+      });
+    }
+  });
+
+  apiRouter.post('/system-alerts/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ackAlert } = await import('./services/system-alerts.js');
+      const id = req.params.id;
+      const by = (req.body && typeof req.body.by === 'string' && req.body.by.trim()) || undefined;
+      if (!by) {
+        res.status(400).json({
+          ok: false,
+          error: 'Missing required field: by',
+          message: 'POST body must include { "by": "<actor-identifier>" } for audit trail',
+        });
+        return;
+      }
+      const updated = await ackAlert(id, by);
+      if (!updated) {
+        res.status(404).json({ ok: false, error: 'Alert not found', id });
+        return;
+      }
+      res.json({ ok: true, alert: updated });
+    } catch (error: any) {
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to acknowledge alert',
+        message: error?.message ?? String(error),
+      });
+    }
+  });
+
+  // ==================== B79.TEC: Per-asset-class TEC diagnostic snapshot ====================
+  //
+  // Read-only snapshot of TEC's internal per-class state maps (cache, expiry,
+  // last-success, refresh-in-flight, consecutive-fail-count). Added 2026-05-16
+  // to investigate the TEC_STALE_FAIL_CLOSED recurrence pattern — specifically
+  // to confirm/refute whether the in-flight Map holds a stuck Promise when the
+  // staleness ceiling is breached.
+  //
+  // GET /api/diagnostics/tec-config
+  apiRouter.get('/diagnostics/tec-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getTECDiagnostics } = await import('./services/trailing-exit-controller.js');
+      // B-NEW-40 (2026-05-17): surface Central Clock health alongside TEC state
+      // so incident-time operators can verify the clock is running and reporting
+      // normal drift in the same payload as TEC staleness checks. Uses the
+      // existing ClockHealth interface — no type duplication.
+      const { centralClock } = await import('./services/central-clock.js');
+      const snapshot = getTECDiagnostics();
+      const clockHealth = centralClock.getHealth();
+      res.json({
+        ok: true,
+        capturedAt: new Date(snapshot.nowMs).toISOString(),
+        configTtlMs: snapshot.configTtlMs,
+        maxStalenessMs: snapshot.maxStalenessMs,
+        classes: snapshot.classes.map((c) => ({
+          assetClass: c.assetClass,
+          cached: c.cached,
+          refreshInFlight: c.refreshInFlight,
+          expiresAt: c.expiresAtMs !== null ? new Date(c.expiresAtMs).toISOString() : null,
+          msSinceExpiry: c.msSinceExpiry,
+          lastSuccessAt: c.lastSuccessAtMs !== null ? new Date(c.lastSuccessAtMs).toISOString() : null,
+          msSinceLastSuccess: c.msSinceLastSuccess,
+          secondsSinceLastSuccess:
+            c.msSinceLastSuccess !== null ? Math.round(c.msSinceLastSuccess / 1000) : null,
+          consecutiveFailCount: c.consecutiveFailCount,
+          staleByCeiling: c.staleByCeiling,
+        })),
+        centralClock: {
+          isRunning: clockHealth.isRunning,
+          tickNumber: clockHealth.tickNumber,
+          lastTickTime:
+            clockHealth.lastTickTime > 0
+              ? new Date(clockHealth.lastTickTime).toISOString()
+              : null,
+          averageDriftMs: Math.round(clockHealth.averageDrift * 10) / 10,
+          maxDriftMs: Math.round(clockHealth.maxDrift),
+          subscriberCount: clockHealth.subscribers.length,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to read TEC diagnostics',
+        message: error?.message ?? String(error),
+      });
+    }
+  });
+
   // ==================== REB 2.11: Active Pool Stability Validation Endpoint ====================
-  
+
   // GET /api/diagnostics/reb-2-11 - Get REB 2.11 diagnostic buffers
   apiRouter.get('/diagnostics/reb-2-11', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

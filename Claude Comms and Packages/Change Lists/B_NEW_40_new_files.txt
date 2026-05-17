@@ -1,0 +1,1209 @@
+#!/usr/bin/env tsx
+/**
+ * ═════════════════════════════════════════════════════════════════════════════
+ * B-NEW-40 — System Alerts CLI
+ * ═════════════════════════════════════════════════════════════════════════════
+ *
+ * Commands:
+ *   add        Insert a scheduled alert
+ *   fire-due   Dispatcher: promote scheduled entries whose triggers_at <= NOW()
+ *              to active; push critical-severity entries to Telegram
+ *   list       Print alerts (optionally filtered by state and/or category)
+ *   ack        Acknowledge an alert by id
+ *   resolve    Mark an alert resolved (terminal state, kept for history)
+ *
+ * Examples:
+ *   npm run system-alerts -- add --triggers-at 2026-05-31T00:00:00Z \
+ *     --category soak_verification --severity warning \
+ *     --title "B-NEW-40 14-day soak verification due" \
+ *     --body "Run scripts/b-new-40-soak-verify.ts"
+ *
+ *   npm run system-alerts -- fire-due
+ *   npm run system-alerts -- list --state active
+ *   npm run system-alerts -- ack abc-123-uuid --by kyle
+ *   npm run system-alerts -- resolve abc-123-uuid --by cc-session-2026-05-31
+ *
+ * Telegram push: requires CCDT_BOT_TOKEN_FILE env var pointing to
+ * /etc/langston/ccdt-bot.env (or wherever the bot token lives).
+ * Critical-severity alerts ping Kyle's DM at chat_id 8734856533.
+ *
+ * Reference: BATCH_B_NEW_40_SCOPE.md §2.8
+ * ═════════════════════════════════════════════════════════════════════════════
+ */
+
+import 'dotenv/config';
+import {
+  addAlert,
+  fireDue,
+  listAlerts,
+  ackAlert,
+  resolveAlert,
+  ALERTS_FILE,
+  type SystemAlert,
+  type AlertCategory,
+  type AlertSeverity,
+  type AlertState,
+} from '../server/services/system-alerts.js';
+import * as fs from 'node:fs';
+
+// ─── Argument parsing ──────────────────────────────────────────────────────
+
+function getFlag(args: string[], name: string): string | undefined {
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined;
+}
+
+function requireFlag(args: string[], name: string): string {
+  const v = getFlag(args, name);
+  if (v === undefined) {
+    console.error(`Missing required flag: --${name}`);
+    process.exit(1);
+  }
+  return v;
+}
+
+// ─── Telegram push (for fire-due) ──────────────────────────────────────────
+
+const KYLE_DM_CHAT_ID = 8734856533; // Kyle's private DM chat with @CCDTCommsBot
+
+async function pushToTelegram(alert: SystemAlert): Promise<void> {
+  const tokenFile = process.env.CCDT_BOT_TOKEN_FILE || '/etc/langston/ccdt-bot.env';
+  if (!fs.existsSync(tokenFile)) {
+    console.warn(`[fire-due] Telegram bot-token file ${tokenFile} not found — skipping push`);
+    return;
+  }
+  const tokenLine = fs.readFileSync(tokenFile, 'utf-8').split('\n').find((l) => l.includes('TOKEN='));
+  if (!tokenLine) {
+    console.warn(`[fire-due] no TOKEN= line in ${tokenFile} — skipping push`);
+    return;
+  }
+  const token = tokenLine.split('=').slice(1).join('=').trim();
+  const text =
+    `🚨 *SYSTEM ALERT — ${alert.severity.toUpperCase()}*\n\n` +
+    `*${alert.title}*\n\n` +
+    `${alert.body}\n\n` +
+    `_Category: ${alert.category}_\n` +
+    `_Alert ID: \`${alert.id}\`_\n` +
+    (Object.keys(alert.metadata).length > 0
+      ? `_Metadata: \`${JSON.stringify(alert.metadata).slice(0, 300)}\`_`
+      : '');
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: KYLE_DM_CHAT_ID,
+        text,
+        parse_mode: 'Markdown',
+      }),
+    });
+    const data = (await res.json()) as { ok?: boolean; description?: string };
+    if (!data.ok) {
+      console.warn(`[fire-due] Telegram push for alert ${alert.id} returned not-ok:`, data.description);
+    }
+  } catch (err) {
+    console.warn(`[fire-due] Telegram push for alert ${alert.id} threw:`, err);
+  }
+}
+
+// ─── Subcommand implementations ────────────────────────────────────────────
+
+async function cmdAdd(args: string[]): Promise<void> {
+  const triggers_at = requireFlag(args, 'triggers-at');
+  const category = requireFlag(args, 'category') as AlertCategory;
+  const severity = requireFlag(args, 'severity') as AlertSeverity;
+  const title = requireFlag(args, 'title');
+  const body = requireFlag(args, 'body');
+  const metadataStr = getFlag(args, 'metadata');
+  let metadata: Record<string, unknown> = {};
+  if (metadataStr) {
+    try {
+      metadata = JSON.parse(metadataStr);
+    } catch (err) {
+      console.error('Invalid JSON in --metadata:', err);
+      process.exit(1);
+    }
+  }
+  const entry = addAlert({ triggers_at, category, severity, title, body, metadata });
+  console.log(JSON.stringify(entry, null, 2));
+}
+
+async function cmdFireDue(): Promise<void> {
+  const promoted = fireDue();
+  if (promoted.length === 0) {
+    console.log('[fire-due] no scheduled alerts due');
+    return;
+  }
+  console.log(`[fire-due] promoted ${promoted.length} alert(s) to active`);
+  for (const alert of promoted) {
+    console.log(`  - ${alert.id} [${alert.severity}] ${alert.title}`);
+    // Telegram push for critical severity. Warning + info don't push by default
+    // (deferred severity-routing batch will refine; see scope deferred-items).
+    if (alert.severity === 'critical') {
+      await pushToTelegram(alert);
+    }
+  }
+}
+
+async function cmdList(args: string[]): Promise<void> {
+  const state = getFlag(args, 'state') as AlertState | undefined;
+  const category = getFlag(args, 'category') as AlertCategory | undefined;
+  const entries = listAlerts({ state, category });
+  if (entries.length === 0) {
+    console.log('(no alerts)');
+    return;
+  }
+  for (const e of entries) {
+    const ackStr = e.acknowledged_at
+      ? ` (acked by ${e.acknowledged_by} at ${e.acknowledged_at})`
+      : '';
+    console.log(`${e.state.padEnd(13)} [${e.severity.padEnd(8)}] ${e.category.padEnd(18)} triggers_at=${e.triggers_at} id=${e.id}  ${e.title}${ackStr}`);
+  }
+}
+
+async function cmdAck(args: string[]): Promise<void> {
+  const id = args[1];
+  if (!id || id.startsWith('--')) {
+    console.error('Usage: ack <id> --by <user>');
+    process.exit(1);
+  }
+  const by = requireFlag(args, 'by');
+  const updated = ackAlert(id, by);
+  if (!updated) {
+    console.error(`Alert ${id} not found`);
+    process.exit(1);
+  }
+  console.log(JSON.stringify(updated, null, 2));
+}
+
+async function cmdResolve(args: string[]): Promise<void> {
+  const id = args[1];
+  if (!id || id.startsWith('--')) {
+    console.error('Usage: resolve <id> --by <user>');
+    process.exit(1);
+  }
+  const by = requireFlag(args, 'by');
+  const updated = resolveAlert(id, by);
+  if (!updated) {
+    console.error(`Alert ${id} not found`);
+    process.exit(1);
+  }
+  console.log(JSON.stringify(updated, null, 2));
+}
+
+// ─── Main ──────────────────────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const cmd = args[0];
+  if (!cmd) {
+    console.error('Usage: system-alerts <add|fire-due|list|ack|resolve> [...flags]');
+    console.error(`Storage: ${ALERTS_FILE}`);
+    process.exit(1);
+  }
+  switch (cmd) {
+    case 'add':
+      await cmdAdd(args);
+      break;
+    case 'fire-due':
+      await cmdFireDue();
+      break;
+    case 'list':
+      await cmdList(args);
+      break;
+    case 'ack':
+      await cmdAck(args);
+      break;
+    case 'resolve':
+      await cmdResolve(args);
+      break;
+    default:
+      console.error(`Unknown command: ${cmd}`);
+      process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  console.error('Fatal:', err);
+  process.exit(1);
+});
+#!/usr/bin/env tsx
+/**
+ * ═════════════════════════════════════════════════════════════════════════════
+ * B-NEW-40 — Soak Verification Script
+ * ═════════════════════════════════════════════════════════════════════════════
+ *
+ * Runs at the end of the 14-day staging soak window (or any time on-demand)
+ * to verify that the pg pool keepalive + TEC refresh timeout fix actually
+ * closed the recurring TEC_STALE_FAIL_CLOSED failure mode.
+ *
+ * Pass/fail criterion (Langston Step 1 refinement): presence-not-count.
+ *   ANY TEC_STALE_FAIL_CLOSED event between deploy timestamp and now = FAIL.
+ *   TEC_REFRESH_TIMEOUT events are INFO (that's the new fence working).
+ *   Count comparisons are informational only.
+ *
+ * Usage:
+ *   npm run b-new-40:soak-verify -- --deploy-ts 2026-05-17T12:00:00Z
+ *   npm run b-new-40:soak-verify -- --deploy-ts <ts> --ack-alert-id <uuid>
+ *   npm run b-new-40:soak-verify -- --deploy-ts <ts> --log-paths /custom/error.log,/custom/out.log
+ *
+ * When run via SSH on staging:
+ *   ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && \
+ *     npm run b-new-40:soak-verify -- --deploy-ts 2026-05-17T12:00:00Z'"
+ *
+ * Reference: BATCH_B_NEW_40_SCOPE.md §2.9
+ * ═════════════════════════════════════════════════════════════════════════════
+ */
+
+import 'dotenv/config';
+import * as fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+
+const DEFAULT_LOG_PATHS = [
+  '/var/log/dawntrader/error.log',
+  '/var/log/dawntrader/out.log',
+];
+
+const FAIL_SIGNATURES = ['TEC_STALE_FAIL_CLOSED'];
+const INFO_SIGNATURES = ['TEC_REFRESH_TIMEOUT', 'TEC_REFRESH_FAIL'];
+const POOL_SIGNATURES = [
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'getaddrinfo',
+  'read ETIMEDOUT',
+  'write ETIMEDOUT',
+  'connection terminated',
+];
+
+function getFlag(args: string[], name: string): string | undefined {
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined;
+}
+
+interface EventRecord {
+  timestamp: string;
+  signature: string;
+  line: string;
+}
+
+function findInLog(path: string, deployTs: Date, signatures: string[]): EventRecord[] {
+  if (!fs.existsSync(path)) {
+    return [];
+  }
+  // Use grep + awk on the timestamp prefix. The log lines start with
+  // "YYYY-MM-DD HH:MM:SS +ZZZZ:" so a string compare against deployTs ISO works.
+  const deployTsCompare = deployTs.toISOString().slice(0, 19).replace('T', ' ');
+  const sigPattern = signatures.map((s) => `\\[${s}\\]`).join('|');
+  const result = spawnSync(
+    'sh',
+    ['-c', `awk '$1" "$2 >= "${deployTsCompare}"' "${path}" | grep -E '${sigPattern}' || true`],
+    { encoding: 'utf-8' },
+  );
+  if (result.status !== 0 && result.status !== 1) {
+    console.error(`[soak-verify] grep failed on ${path}: status=${result.status}`);
+    return [];
+  }
+  const lines = (result.stdout || '').split('\n').filter((l) => l.trim().length > 0);
+  const records: EventRecord[] = [];
+  for (const line of lines) {
+    const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+    const sigMatch = signatures.find((s) => line.includes(`[${s}]`));
+    if (tsMatch && sigMatch) {
+      records.push({ timestamp: tsMatch[1], signature: sigMatch, line });
+    }
+  }
+  return records;
+}
+
+function eventsByDay(records: EventRecord[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const r of records) {
+    const day = r.timestamp.slice(0, 10);
+    counts[day] = (counts[day] ?? 0) + 1;
+  }
+  return counts;
+}
+
+async function ackAlert(id: string, by: string): Promise<void> {
+  const { ackAlert: doAck } = await import('../server/services/system-alerts.js');
+  const result = doAck(id, by);
+  if (result) {
+    console.log(`[soak-verify] acknowledged alert ${id} as ${by}`);
+  } else {
+    console.warn(`[soak-verify] alert ${id} not found — skipping ack`);
+  }
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const deployTsStr = getFlag(args, 'deploy-ts');
+  if (!deployTsStr) {
+    console.error('Missing required flag: --deploy-ts <ISO timestamp>');
+    console.error('Example: --deploy-ts 2026-05-17T12:00:00Z');
+    process.exit(1);
+  }
+  const deployTs = new Date(deployTsStr);
+  if (isNaN(deployTs.getTime())) {
+    console.error(`Invalid --deploy-ts: ${deployTsStr}`);
+    process.exit(1);
+  }
+
+  const logPathsFlag = getFlag(args, 'log-paths');
+  const logPaths = logPathsFlag ? logPathsFlag.split(',') : DEFAULT_LOG_PATHS;
+
+  const ackAlertId = getFlag(args, 'ack-alert-id');
+  const ackBy = getFlag(args, 'ack-by') ?? `b-new-40-soak-verify-${process.pid}`;
+
+  const now = new Date();
+  const elapsedMs = now.getTime() - deployTs.getTime();
+  const elapsedDays = (elapsedMs / 86_400_000).toFixed(1);
+
+  console.log('═══════════════════════════════════════════════════════════════════════════');
+  console.log('B-NEW-40 — Soak Verification');
+  console.log('═══════════════════════════════════════════════════════════════════════════');
+  console.log(`Deploy timestamp:  ${deployTs.toISOString()}`);
+  console.log(`Run timestamp:     ${now.toISOString()}`);
+  console.log(`Elapsed:           ${elapsedDays} days`);
+  console.log(`Log paths scanned: ${logPaths.join(', ')}`);
+  console.log('');
+
+  let totalFailEvents: EventRecord[] = [];
+  let totalInfoEvents: EventRecord[] = [];
+  let totalPoolEvents: EventRecord[] = [];
+
+  for (const path of logPaths) {
+    if (!fs.existsSync(path)) {
+      console.log(`  ⚠ Log path not found, skipping: ${path}`);
+      continue;
+    }
+    totalFailEvents.push(...findInLog(path, deployTs, FAIL_SIGNATURES));
+    totalInfoEvents.push(...findInLog(path, deployTs, INFO_SIGNATURES));
+    totalPoolEvents.push(...findInLog(path, deployTs, POOL_SIGNATURES));
+  }
+
+  // Deduplicate by timestamp + signature (some lines appear in both out and error)
+  const dedup = (rs: EventRecord[]): EventRecord[] => {
+    const seen = new Set<string>();
+    return rs.filter((r) => {
+      const key = `${r.timestamp}::${r.signature}::${r.line.slice(0, 100)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  totalFailEvents = dedup(totalFailEvents);
+  totalInfoEvents = dedup(totalInfoEvents);
+  totalPoolEvents = dedup(totalPoolEvents);
+
+  console.log('── Counts ────────────────────────────────────────────────────────────────');
+  console.log(`FAIL signatures   (any = FAIL):   ${totalFailEvents.length.toString().padStart(6)}  [${FAIL_SIGNATURES.join(', ')}]`);
+  console.log(`INFO signatures   (fence working): ${totalInfoEvents.length.toString().padStart(6)}  [${INFO_SIGNATURES.join(', ')}]`);
+  console.log(`Pool/socket errors:                ${totalPoolEvents.length.toString().padStart(6)}  [${POOL_SIGNATURES.join(', ')}]`);
+  console.log('');
+
+  if (totalFailEvents.length > 0) {
+    console.log('── Per-day TEC_STALE_FAIL_CLOSED events ─────────────────────────────────');
+    const byDay = eventsByDay(totalFailEvents);
+    for (const day of Object.keys(byDay).sort()) {
+      console.log(`  ${day}: ${byDay[day]} events`);
+    }
+    console.log('');
+    console.log('── First 5 FAIL events ──────────────────────────────────────────────────');
+    for (const r of totalFailEvents.slice(0, 5)) {
+      console.log(`  ${r.timestamp} ${r.line.slice(0, 200)}`);
+    }
+    console.log('');
+  }
+
+  if (totalInfoEvents.length > 0) {
+    console.log('── Per-day INFO events (timeout fence + pool-detected refresh fails) ───');
+    const byDay = eventsByDay(totalInfoEvents);
+    for (const day of Object.keys(byDay).sort()) {
+      console.log(`  ${day}: ${byDay[day]} events`);
+    }
+    console.log('');
+  }
+
+  console.log('═══════════════════════════════════════════════════════════════════════════');
+  if (totalFailEvents.length === 0) {
+    console.log('VERDICT: PASS — zero TEC_STALE_FAIL_CLOSED events post-deploy');
+    if (totalInfoEvents.length > 0) {
+      console.log(`         (${totalInfoEvents.length} INFO events = timeout fence + pool detected refresh issues cleanly; this is the fix working as designed)`);
+    }
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    if (ackAlertId) {
+      await ackAlert(ackAlertId, ackBy);
+    }
+    process.exit(0);
+  } else {
+    console.log('VERDICT: FAIL — TEC_STALE_FAIL_CLOSED still firing post-deploy');
+    console.log(`         ${totalFailEvents.length} event(s) detected. Investigate:`);
+    console.log('         1. Check /var/log/dawntrader/tec_diag/ for pg_stat_activity + ss snapshots from the incident');
+    console.log('         2. Run /api/diagnostics/tec-config to see live state of inFlight Map + last-success timestamps');
+    console.log('         3. If ss capture shows dead-but-ESTABLISHED sockets, keepalive is not reaching the failure mode — consider tightening keepAliveInitialDelayMillis');
+    console.log('         4. If ss shows clean sockets but TEC still stale, there is a NEW failure mode B-NEW-40 did not cover — escalate to Langston');
+    console.log('         DO NOT auto-ack the soak alert. Manual review required.');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  console.error('Fatal:', err);
+  process.exit(2);
+});
+/**
+ * ═════════════════════════════════════════════════════════════════════════════
+ * B-NEW-40 — System Alerts Library
+ * ═════════════════════════════════════════════════════════════════════════════
+ *
+ * Persistent queue of "events that someone needs to look at" — both human
+ * operators (UI tab) and AI agents (per-turn check in CC + Langston sessions).
+ *
+ * Three writers touch this file concurrently:
+ *   - The CLI (`scripts/system-alerts.ts`) — operator/AI-invoked
+ *   - The dispatcher cron (15-min systemd timer on staging) — promotes
+ *     scheduled events to active when their `triggers_at` arrives
+ *   - The HTTP API (`/api/system-alerts/:id/acknowledge`) — UI ack button
+ *
+ * Concurrency model: O_EXCL-based file lock (`/var/log/dawntrader/system-
+ * alerts.jsonl.lock`). Same primitive that `proper-lockfile` uses under the
+ * hood; no new npm dep needed (per Kyle "no new npm deps" directive from B75).
+ *
+ * Parse resilience: malformed JSONL lines are skipped with a console.warn,
+ * not abort-on-error. Operator can fix in place; reader keeps going.
+ *
+ * First-deploy bootstrap: the first `add` call creates the file if it doesn't
+ * exist (Langston Step 1 review concern — the per-turn check fail-soft path
+ * handles file-missing gracefully but bootstrapping cleanly is preferred).
+ *
+ * Schema-versioning: all entries currently `schema_version: 1`. Future schema
+ * changes bump this and old readers must skip-or-migrate based on version.
+ *
+ * Reference: BATCH_B_NEW_40_SCOPE.md §2.8, BATCH_B_NEW_40_PRE_AUDIT.md §2.7
+ * ═════════════════════════════════════════════════════════════════════════════
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
+
+export const ALERTS_FILE = '/var/log/dawntrader/system-alerts.jsonl';
+const LOCK_FILE = `${ALERTS_FILE}.lock`;
+const LOCK_RETRY_MAX = 50;       // 50 × 100ms = 5s max wait
+const LOCK_RETRY_DELAY_MS = 100;
+const LOCK_STALE_AFTER_MS = 30_000; // 30s — if lock is older than this, assume crashed holder and force-acquire
+
+export type AlertState = 'scheduled' | 'active' | 'acknowledged' | 'resolved';
+export type AlertCategory =
+  | 'soak_verification'
+  | 'health_check'
+  | 'breakage'
+  | 'one_off'
+  | 'recurring';
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+
+export interface SystemAlert {
+  schema_version: 1;
+  id: string;                                      // uuid
+  created_at: string;                              // ISO-8601
+  triggers_at: string;                             // ISO-8601 — when this should fire
+  fired_at: string | null;                         // ISO-8601 — when dispatcher promoted scheduled → active
+  acknowledged_at: string | null;                  // ISO-8601
+  acknowledged_by: string | null;                  // 'kyle' | 'cc-session-...' | 'langston' | 'system' | etc.
+  state: AlertState;
+  category: AlertCategory;
+  severity: AlertSeverity;
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+  /** Schema-reserved for future recurring health checks. Not used yet. */
+  recurrence_interval_seconds: number | null;
+}
+
+// ─── File-lock primitives (O_EXCL based, no npm deps) ──────────────────────
+
+function acquireLock(): void {
+  for (let attempt = 0; attempt < LOCK_RETRY_MAX; attempt++) {
+    try {
+      // O_EXCL + O_CREAT: atomic "create only if doesn't exist". If another
+      // process holds the lock, fails with EEXIST.
+      const fd = fs.openSync(LOCK_FILE, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o644);
+      fs.writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+      fs.closeSync(fd);
+      return;
+    } catch (err: any) {
+      if (err.code === 'EEXIST') {
+        // Check if the lock is stale (holder crashed before releasing)
+        try {
+          const stats = fs.statSync(LOCK_FILE);
+          if (Date.now() - stats.mtimeMs > LOCK_STALE_AFTER_MS) {
+            // Stale lock — force-remove and retry
+            console.warn(`[system-alerts] stale lock detected (age ${Date.now() - stats.mtimeMs}ms), force-acquiring`);
+            try { fs.unlinkSync(LOCK_FILE); } catch { /* race: another writer cleaned up first */ }
+            continue;
+          }
+        } catch { /* file vanished between EEXIST and statSync — race; retry */ }
+        // Active lock; wait and retry
+        const start = Date.now();
+        while (Date.now() - start < LOCK_RETRY_DELAY_MS) {
+          // Busy-wait synchronously. The library is CLI/short-task oriented;
+          // contention windows are short.
+        }
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`[system-alerts] failed to acquire lock after ${LOCK_RETRY_MAX} retries (~${LOCK_RETRY_MAX * LOCK_RETRY_DELAY_MS}ms)`);
+}
+
+function releaseLock(): void {
+  try {
+    fs.unlinkSync(LOCK_FILE);
+  } catch (err: any) {
+    if (err.code !== 'ENOENT') {
+      console.error('[system-alerts] failed to release lock:', err);
+    }
+  }
+}
+
+function withLock<T>(fn: () => T): T {
+  acquireLock();
+  try {
+    return fn();
+  } finally {
+    releaseLock();
+  }
+}
+
+// ─── Read / parse with skip-on-error resilience ────────────────────────────
+
+function ensureFileExists(): void {
+  if (!fs.existsSync(ALERTS_FILE)) {
+    fs.mkdirSync(path.dirname(ALERTS_FILE), { recursive: true });
+    fs.writeFileSync(ALERTS_FILE, '', { flag: 'a' }); // create empty if absent
+  }
+}
+
+/**
+ * Read all alerts from the file. Malformed lines are SKIPPED with a warning,
+ * not aborted. If the file doesn't exist returns []. Used by readers (CLI list,
+ * API GET, per-turn AI check).
+ */
+export function readAllAlerts(): SystemAlert[] {
+  if (!fs.existsSync(ALERTS_FILE)) return [];
+  const raw = fs.readFileSync(ALERTS_FILE, 'utf-8');
+  const lines = raw.split('\n').filter((l) => l.trim().length > 0);
+  const result: SystemAlert[] = [];
+  let skipped = 0;
+  for (const [idx, line] of lines.entries()) {
+    try {
+      const entry = JSON.parse(line) as SystemAlert;
+      // Minimal shape validation — skip if required fields missing
+      if (!entry.id || !entry.state || !entry.triggers_at) {
+        skipped++;
+        continue;
+      }
+      result.push(entry);
+    } catch (_err) {
+      skipped++;
+      // Don't spam if many lines bad; one warning is enough
+      if (skipped === 1) {
+        console.warn(`[system-alerts] skipping malformed JSONL line ${idx + 1} (and potentially more)`);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Atomic whole-file rewrite via tmpfile-rename. Always called inside withLock().
+ */
+function writeAllAlertsAtomic(alerts: SystemAlert[]): void {
+  const tmp = `${ALERTS_FILE}.tmp.${process.pid}.${Date.now()}`;
+  const content = alerts.map((a) => JSON.stringify(a)).join('\n') + (alerts.length > 0 ? '\n' : '');
+  fs.writeFileSync(tmp, content, { mode: 0o644 });
+  fs.renameSync(tmp, ALERTS_FILE);
+}
+
+// ─── Public mutating API (all under lock) ──────────────────────────────────
+
+export interface AddAlertOptions {
+  triggers_at: string | Date;
+  category: AlertCategory;
+  severity: AlertSeverity;
+  title: string;
+  body: string;
+  metadata?: Record<string, unknown>;
+  recurrence_interval_seconds?: number | null;
+}
+
+/**
+ * Insert a new alert. If `triggers_at` is in the past, the dispatcher will
+ * promote it to active on its next run. State starts as `scheduled`.
+ */
+export function addAlert(opts: AddAlertOptions): SystemAlert {
+  ensureFileExists();
+  const triggersAtISO = typeof opts.triggers_at === 'string' ? opts.triggers_at : opts.triggers_at.toISOString();
+  const entry: SystemAlert = {
+    schema_version: 1,
+    id: crypto.randomUUID(),
+    created_at: new Date().toISOString(),
+    triggers_at: triggersAtISO,
+    fired_at: null,
+    acknowledged_at: null,
+    acknowledged_by: null,
+    state: 'scheduled',
+    category: opts.category,
+    severity: opts.severity,
+    title: opts.title,
+    body: opts.body,
+    metadata: opts.metadata ?? {},
+    recurrence_interval_seconds: opts.recurrence_interval_seconds ?? null,
+  };
+  withLock(() => {
+    const all = readAllAlerts();
+    all.push(entry);
+    writeAllAlertsAtomic(all);
+  });
+  return entry;
+}
+
+/**
+ * Dispatcher invocation: promote `scheduled` entries whose `triggers_at <= NOW()`
+ * to `active`. Returns the entries that were promoted (so callers can fire
+ * Telegram notifications etc.).
+ *
+ * Idempotency: state mutation persists even if subsequent post-promotion steps
+ * (e.g. Telegram push) fail — caller handles push errors separately.
+ */
+export function fireDue(nowMs: number = Date.now()): SystemAlert[] {
+  ensureFileExists();
+  let promoted: SystemAlert[] = [];
+  withLock(() => {
+    const all = readAllAlerts();
+    const nowISO = new Date(nowMs).toISOString();
+    let mutated = false;
+    for (const entry of all) {
+      if (entry.state === 'scheduled' && entry.triggers_at <= nowISO) {
+        entry.state = 'active';
+        entry.fired_at = nowISO;
+        promoted.push({ ...entry }); // clone for return so caller mutations don't affect file state
+        mutated = true;
+      }
+    }
+    if (mutated) {
+      writeAllAlertsAtomic(all);
+    }
+  });
+  return promoted;
+}
+
+/**
+ * Mark an alert as acknowledged. `by` is required for audit trail.
+ * Returns the updated alert, or null if not found.
+ */
+export function ackAlert(id: string, by: string): SystemAlert | null {
+  ensureFileExists();
+  let result: SystemAlert | null = null;
+  withLock(() => {
+    const all = readAllAlerts();
+    const found = all.find((a) => a.id === id);
+    if (!found) return;
+    if (found.state === 'active') {
+      found.state = 'acknowledged';
+      found.acknowledged_at = new Date().toISOString();
+      found.acknowledged_by = by;
+      result = { ...found };
+      writeAllAlertsAtomic(all);
+    } else {
+      // Idempotent — if already acknowledged or resolved, return current state
+      result = { ...found };
+    }
+  });
+  return result;
+}
+
+/**
+ * Mark an alert as resolved (terminal state — kept for history but won't
+ * surface). Use when the underlying condition is fully closed.
+ */
+export function resolveAlert(id: string, by: string): SystemAlert | null {
+  ensureFileExists();
+  let result: SystemAlert | null = null;
+  withLock(() => {
+    const all = readAllAlerts();
+    const found = all.find((a) => a.id === id);
+    if (!found) return;
+    found.state = 'resolved';
+    if (!found.acknowledged_at) {
+      found.acknowledged_at = new Date().toISOString();
+      found.acknowledged_by = by;
+    }
+    result = { ...found };
+    writeAllAlertsAtomic(all);
+  });
+  return result;
+}
+
+// ─── Read accessors (no lock — concurrent reads are safe) ─────────────────
+
+export interface ListAlertsOptions {
+  state?: AlertState;
+  category?: AlertCategory;
+}
+
+export function listAlerts(opts: ListAlertsOptions = {}): SystemAlert[] {
+  let all = readAllAlerts();
+  if (opts.state) all = all.filter((a) => a.state === opts.state);
+  if (opts.category) all = all.filter((a) => a.category === opts.category);
+  return all;
+}
+
+/**
+ * Convenience: alerts that an AI per-turn check or the UI tab should surface.
+ * These are unack'd active alerts whose `triggers_at` has already arrived.
+ */
+export function listSurfaceable(): SystemAlert[] {
+  const nowISO = new Date().toISOString();
+  return readAllAlerts().filter(
+    (a) =>
+      (a.state === 'active' || (a.state === 'scheduled' && a.triggers_at <= nowISO)) &&
+      a.acknowledged_at === null,
+  );
+}
+/**
+ * ═════════════════════════════════════════════════════════════════════════════
+ * B-NEW-40 — TEC refresh-hang hostile-scenario test
+ * ═════════════════════════════════════════════════════════════════════════════
+ *
+ * Verifies that when the underlying pg refresh promise hangs (neither resolves
+ * nor rejects — the silent-TCP-death failure mode that produced 4832
+ * TEC_STALE_FAIL_CLOSED events between 2026-05-08 and 2026-05-16), the new
+ * Promise.race-against-45s-timeout escape hatch:
+ *
+ *   (a) releases `tecConfigRefreshInFlight` Map entry within 45s + ε
+ *   (b) increments `tecRefreshFailCount` for the affected asset class
+ *   (c) emits `[TEC_REFRESH_TIMEOUT]` log line exactly once for that incident
+ *   (d) keeps returning cached config from `resolveTECConfig` until 5min ceiling
+ *   (e) at 5min ceiling, `resolveTECConfig` throws TEC_STALE_FAIL_CLOSED
+ *
+ * The expanded assertion set (vs the prior B65/B80 tests) is intentional —
+ * silent regressions where the catch path is bypassed are the exact failure
+ * mode B-NEW-40 closes; the test must verify the catch path is provably
+ * traversed (b + c), not just that the Map eventually frees (a alone).
+ *
+ * Implementation note: uses vitest fake timers to advance simulated time
+ * deterministically. The hung promise stays pending across the entire test
+ * (never created with reject/resolve handlers exposed externally), so the
+ * timeout race is the ONLY thing that can free the Map entry.
+ * ═════════════════════════════════════════════════════════════════════════════
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// --- DB mock: getModuleConstants returns a never-resolving promise so the
+//     real refreshTECConfigForClass call (which awaits getModuleConstants) hangs.
+//     This simulates the silent-TCP-death scenario where pg-pool returns a
+//     dead-but-ESTABLISHED socket and the query write succeeds but the
+//     response never comes back. ---
+const moduleConstantsHangControl = { hang: false };
+vi.mock('../../services/module-constants-service.js', async () => {
+  return {
+    getModuleConstants: vi.fn(async (..._args: unknown[]) => {
+      if (moduleConstantsHangControl.hang) {
+        // Hang forever — never resolves, never rejects. The failure mode.
+        return new Promise(() => {});
+      }
+      // Normal mode: return the rowset trailing_exit would resolve to.
+      return {
+        break_even_enabled: false,
+        break_even_trigger_r: 1.0,
+        target_lock_r: 1.5,
+        trail_distance_atr_multiplier: 1.0,
+        persistence_debounce_ms: 5000,
+        moonbag_qualifying_strategies: ['strong_bull_trend'],
+        moonbag_qualifying_source_pools: {},
+        moonbag_max_duration_ms: 14_400_000,
+        moonbag_cap_mode: 'reserved_slots',
+        moonbag_reserved_slots: 1,
+        rung_floor_slippage_buffer_multiplier: 1.0,
+      };
+    }),
+    hasExplicitAssetClassRow: vi.fn(async () => true),
+  };
+});
+
+// Storage stub — module imports it but the path under test doesn't exercise it.
+vi.mock('../../storage.js', () => ({
+  storage: {
+    getPaperSimOpenPositions: async () => [],
+    updatePaperSimOpenPosition: async () => undefined,
+  },
+}));
+
+// Cost model stub.
+vi.mock('../../core/math/cost-model.js', () => ({
+  getCachedCostMetrics: () => ({ fee: 0, slippage: 0, spread: 0, takerFee: 0, totalCost: 0 }),
+  computeNetBreakeven: (entry: number) => entry,
+  computeNetTargetFloor: (target: number) => target,
+  computeTotalRoundTripCost: () => 0,
+}));
+
+// Import the SUT. vi.mock() calls above are hoisted by vitest so this static
+// import resolves against the mocked module-constants-service. Matches the
+// pattern in b65-tec-parity.test.ts (no top-level await).
+import {
+  primeTECConfig,
+  resolveTECConfig,
+  _testClearEngineConfigCache,
+  getTECDiagnostics,
+} from '../../services/trailing-exit-controller.js';
+
+describe('B-NEW-40 — TEC refresh-hang hostile scenario', () => {
+  const ASSET_CLASS = 'crypto_spot' as const;
+  const REFRESH_TIMEOUT_MS = 45_000;
+  const CONFIG_TTL_MS = 60_000;
+  const MAX_STALENESS_MS = 5 * CONFIG_TTL_MS; // 300_000
+
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    moduleConstantsHangControl.hang = false;
+    _testClearEngineConfigCache();
+    // Prime cache with a fresh successful refresh.
+    await primeTECConfig();
+    // Verify priming worked — cached snapshot for crypto_spot should exist.
+    const diag0 = getTECDiagnostics();
+    const cs0 = diag0.classes.find((c) => c.assetClass === ASSET_CLASS);
+    expect(cs0?.cached).toBe(true);
+    expect(cs0?.refreshInFlight).toBe(false);
+    expect(cs0?.consecutiveFailCount).toBe(0);
+    // From here on, switch the mock to hang mode so the NEXT background
+    // refresh (triggered by TTL expiry) will simulate a stuck query.
+    moduleConstantsHangControl.hang = true;
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('(a) inFlight Map releases within 45s + ε after a hung refresh; (b) tecRefreshFailCount increments; (c) TEC_REFRESH_TIMEOUT logs exactly once', async () => {
+    // Advance past TTL so next resolve call triggers the background refresh.
+    vi.advanceTimersByTime(CONFIG_TTL_MS + 100);
+
+    // Trigger the background refresh. resolveTECConfig returns the cached
+    // snapshot synchronously and schedules the refresh in the background.
+    const cached1 = resolveTECConfig(ASSET_CLASS);
+    expect(cached1).toBeDefined();
+
+    // Refresh should be in flight now.
+    const diagDuring = getTECDiagnostics();
+    const csDuring = diagDuring.classes.find((c) => c.assetClass === ASSET_CLASS);
+    expect(csDuring?.refreshInFlight).toBe(true);
+
+    // Advance time past the 45s refresh-timeout fence. The hung promise will
+    // never settle on its own; only the Promise.race timeout can free the Map.
+    await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS + 250);
+
+    // (a) inFlight Map entry released
+    const diagAfter = getTECDiagnostics();
+    const csAfter = diagAfter.classes.find((c) => c.assetClass === ASSET_CLASS);
+    expect(csAfter?.refreshInFlight).toBe(false);
+
+    // (b) fail counter incremented exactly once
+    expect(csAfter?.consecutiveFailCount).toBe(1);
+
+    // (c) TEC_REFRESH_TIMEOUT log fired exactly once
+    const timeoutLogCalls = consoleErrorSpy.mock.calls.filter((call) =>
+      typeof call[0] === 'string' && call[0].startsWith('[TEC_REFRESH_TIMEOUT]'),
+    );
+    expect(timeoutLogCalls.length).toBe(1);
+    // Sanity: did NOT log [TEC_REFRESH_FAIL] (timeout path is distinct).
+    const failLogCalls = consoleErrorSpy.mock.calls.filter((call) =>
+      typeof call[0] === 'string' && call[0].startsWith('[TEC_REFRESH_FAIL]'),
+    );
+    expect(failLogCalls.length).toBe(0);
+  });
+
+  it('(d) resolveTECConfig keeps returning cached snapshot until 5min ceiling; (e) throws TEC_STALE_FAIL_CLOSED past ceiling', async () => {
+    // Snapshot cached value before any refresh.
+    const cachedRef = resolveTECConfig(ASSET_CLASS);
+    expect(cachedRef.breakEvenEnabled).toBe(false);
+
+    // Advance past TTL, trigger first hung refresh.
+    vi.advanceTimersByTime(CONFIG_TTL_MS + 100);
+    resolveTECConfig(ASSET_CLASS); // triggers background refresh, returns cache
+
+    // Advance to 45s + ε so the timeout fence frees the Map.
+    await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS + 250);
+
+    // (d) Between 45s and 5min, resolveTECConfig keeps returning the cache.
+    // Walk forward minute by minute and confirm.
+    for (let elapsedMin = 1; elapsedMin <= 4; elapsedMin++) {
+      const cfg = resolveTECConfig(ASSET_CLASS);
+      expect(cfg.breakEvenEnabled).toBe(false);
+      // Each call triggers another background refresh (TTL still expired).
+      // Each of those refreshes will also hang and time out at 45s.
+      await vi.advanceTimersByTimeAsync(60_000); // advance 1 min, draining any 45s timeouts en route
+    }
+
+    // (e) Past 5min ceiling, resolveTECConfig throws TEC_STALE_FAIL_CLOSED.
+    // We're now at roughly 4 min + first refresh trigger + 45s. Advance enough
+    // to cross the 5min staleness ceiling from the LAST successful refresh
+    // (which happened in beforeEach via primeTECConfig).
+    await vi.advanceTimersByTimeAsync(MAX_STALENESS_MS + 1000);
+
+    expect(() => resolveTECConfig(ASSET_CLASS)).toThrow(/TEC_STALE_FAIL_CLOSED/);
+  });
+});
+/**
+ * B-NEW-40 — System Alerts dashboard tab
+ *
+ * Lists alerts in `state: active | scheduled` from the server-side
+ * `/var/log/dawntrader/system-alerts.jsonl` queue. 30-second polling refresh.
+ * Ack button moves an entry to `acknowledged` state.
+ *
+ * Minimum viable per BATCH_B_NEW_40_SCOPE.md §2.8.e. UI polish (filtering,
+ * sorting, search, detail view, history) explicitly deferred to a future batch
+ * — see scope §3 out-of-scope list.
+ */
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { authFetch } from '@/lib/auth';
+
+interface SystemAlert {
+  id: string;
+  created_at: string;
+  triggers_at: string;
+  fired_at: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  state: 'scheduled' | 'active' | 'acknowledged' | 'resolved';
+  category: string;
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
+}
+
+interface SystemAlertsResponse {
+  ok: boolean;
+  capturedAt: string;
+  counts: { active: number; scheduled: number; surfaceableNow: number };
+  entries: SystemAlert[];
+}
+
+function severityColor(severity: SystemAlert['severity']): string {
+  switch (severity) {
+    case 'critical':
+      return 'bg-red-100 text-red-800 border-red-300';
+    case 'warning':
+      return 'bg-amber-100 text-amber-800 border-amber-300';
+    case 'info':
+    default:
+      return 'bg-blue-100 text-blue-800 border-blue-300';
+  }
+}
+
+function stateColor(state: SystemAlert['state']): string {
+  switch (state) {
+    case 'active':
+      return 'bg-orange-100 text-orange-800';
+    case 'scheduled':
+      return 'bg-gray-100 text-gray-700';
+    case 'acknowledged':
+      return 'bg-green-100 text-green-700';
+    case 'resolved':
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+}
+
+function fmtTs(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+export default function SystemAlertsPage() {
+  const queryClient = useQueryClient();
+  const [actorOverride, setActorOverride] = useState<string>('kyle');
+
+  const { data, isLoading, error, refetch } = useQuery<SystemAlertsResponse>({
+    queryKey: ['/api/system-alerts'],
+    queryFn: async () => {
+      const res = await authFetch('/api/system-alerts');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    refetchInterval: 30_000, // 30s polling per scope
+  });
+
+  const ackMutation = useMutation({
+    mutationFn: async ({ id, by }: { id: string; by: string }) => {
+      const res = await authFetch(`/api/system-alerts/${id}/acknowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ by }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message ?? `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/system-alerts'] });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold mb-2">System Alerts</h1>
+        <p className="text-gray-500">Loading…</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold mb-2">System Alerts</h1>
+        <div className="text-red-600">Failed to load alerts: {(error as Error).message}</div>
+        <button
+          onClick={() => refetch()}
+          className="mt-2 px-3 py-1 border rounded text-sm hover:bg-gray-50"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const entries = data?.entries ?? [];
+  const counts = data?.counts ?? { active: 0, scheduled: 0, surfaceableNow: 0 };
+
+  return (
+    <div className="p-6 max-w-screen-2xl mx-auto">
+      <div className="flex items-baseline justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-semibold">System Alerts</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Captured at {fmtTs(data?.capturedAt ?? null)} · auto-refreshes every 30s
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="px-2 py-1 rounded bg-orange-100 text-orange-800 font-medium">
+            {counts.active} active
+          </span>
+          <span className="px-2 py-1 rounded bg-gray-100 text-gray-700 font-medium">
+            {counts.scheduled} scheduled
+          </span>
+          {counts.surfaceableNow > 0 && (
+            <span className="px-2 py-1 rounded bg-red-100 text-red-800 font-medium">
+              {counts.surfaceableNow} surfaceable now
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-3 flex items-center gap-2 text-sm">
+        <label className="text-gray-600">Ack as:</label>
+        <input
+          value={actorOverride}
+          onChange={(e) => setActorOverride(e.target.value)}
+          className="px-2 py-1 border rounded text-sm w-40"
+          placeholder="kyle"
+        />
+        <span className="text-gray-400 text-xs">(written to acknowledged_by audit field)</span>
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="border rounded p-8 text-center text-gray-500 bg-white">
+          No active or scheduled alerts. The queue is empty.
+        </div>
+      ) : (
+        <div className="border rounded bg-white overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr className="text-left">
+                <th className="px-3 py-2 font-medium text-gray-700">State</th>
+                <th className="px-3 py-2 font-medium text-gray-700">Severity</th>
+                <th className="px-3 py-2 font-medium text-gray-700">Category</th>
+                <th className="px-3 py-2 font-medium text-gray-700">Triggers At</th>
+                <th className="px-3 py-2 font-medium text-gray-700">Title</th>
+                <th className="px-3 py-2 font-medium text-gray-700">Body</th>
+                <th className="px-3 py-2 font-medium text-gray-700">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((alert) => (
+                <tr key={alert.id} className="border-t hover:bg-gray-50 align-top">
+                  <td className="px-3 py-2">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${stateColor(alert.state)}`}>
+                      {alert.state}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${severityColor(alert.severity)}`}>
+                      {alert.severity}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-gray-700">{alert.category}</td>
+                  <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{fmtTs(alert.triggers_at)}</td>
+                  <td className="px-3 py-2 font-medium text-gray-900">{alert.title}</td>
+                  <td className="px-3 py-2 text-gray-600 max-w-md whitespace-pre-wrap">{alert.body}</td>
+                  <td className="px-3 py-2">
+                    {alert.state === 'active' && (
+                      <button
+                        onClick={() => ackMutation.mutate({ id: alert.id, by: actorOverride })}
+                        disabled={ackMutation.isPending}
+                        className="px-3 py-1 border rounded text-xs hover:bg-green-50 hover:border-green-300 disabled:opacity-50"
+                      >
+                        {ackMutation.isPending ? 'Acking…' : 'Ack'}
+                      </button>
+                    )}
+                    {alert.state === 'scheduled' && (
+                      <span className="text-xs text-gray-400">waiting</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <details className="mt-6 text-sm text-gray-500">
+        <summary className="cursor-pointer hover:text-gray-700">About this tab</summary>
+        <div className="mt-2 space-y-2 pl-2">
+          <p>
+            This is the canonical queue of system events that need human or AI review. AI sessions
+            (CC + Langston) read the same data on every conversation turn per CLAUDE.md §10.5. The
+            server-side dispatcher promotes scheduled alerts to active when their trigger time
+            arrives. Critical-severity alerts also fire a Telegram notification.
+          </p>
+          <p>
+            Acknowledging an alert moves it out of the surfaceable set. Use the "Ack as" field
+            above to record who's acknowledging. Resolved alerts are kept in history but not
+            shown here.
+          </p>
+          <p>
+            Sources: <code>/var/log/dawntrader/system-alerts.jsonl</code> · CLI:{' '}
+            <code>npm run system-alerts</code> · Scope:{' '}
+            <code>BATCH_B_NEW_40_SCOPE.md §2.8</code>
+          </p>
+        </div>
+      </details>
+    </div>
+  );
+}

@@ -30,6 +30,7 @@ const SystemConfigPage = lazy(() => import("@/pages/system-config"));
 const FilterInsightsPage = lazy(() => import("@/pages/filter-insights"));
 const AnalyticsPage = lazy(() => import("@/pages/analytics"));
 const MachineLearningPage = lazy(() => import("@/pages/machine-learning"));
+const SystemAlertsPage = lazy(() => import("@/pages/system-alerts"));
 
 class DiagnosticErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -229,6 +230,7 @@ function Router() {
               <Route path="/analytics" component={AnalyticsPage} />
               <Route path="/machine-learning" component={MachineLearningPage} />
               <Route path="/insights" component={FilterInsightsPage} />
+              <Route path="/system-alerts" component={SystemAlertsPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/system/config" component={SystemConfigPage} />
               <Route path="/:rest*">

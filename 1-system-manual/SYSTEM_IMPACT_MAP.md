@@ -721,9 +721,73 @@
 | **Docker** | `Dockerfile` (multi-stage: Node 20 + Python 3 for ML). `.dockerignore`. `docker-compose.yml`. | Available for containerized deployments but PM2 is primary on staging. |
 | **Langston Server** | 204.168.141.77 (Hetzner, Helsinki). OpenClaw gateway, Telegram bot, cc-inbox, Google Drive mount. | Separate from staging. NOT moved during migration. |
 | **Replit (FROZEN)** | replit.com/@kylegjordan/The-Dawn-Trader. Branch: dawntrader-v4. Last commit: 892d7f24. | No updates. FX5 scanner runs temporarily. Backup only. |
-| **server/db.ts** | `pg` package (node-postgres), `drizzle-orm/node-postgres`, `DATABASE_URL` env var pointing to Supabase. | Changed from `@neondatabase/serverless` in Batch 40. All Drizzle ORM queries unchanged. |
+| **server/db.ts** | `pg` package (node-postgres), `drizzle-orm/node-postgres`, `DATABASE_URL` env var pointing to Supabase (direct port 5432, not pgbouncer 6543). Pool config since **B-NEW-40 (2026-05-17)**: `keepAlive: true`, `keepAliveInitialDelayMillis: 10_000`, `query_timeout: 30_000`, `idleTimeoutMillis: 30_000`, `max: 10`, `application_name: 'dawntrader_main'`. 23 consumers import this pool — see "Recent Additions (B-NEW-40 — pg pool keepalive + TEC refresh timeout)" section below for the upstream/downstream impact map. Pre-B-NEW-40 pool config was bare `new Pool({ connectionString })` with all defaults; that produced the silent-dead-socket failure mode that B79.TEC's fire-and-forget refresh architecture converted into the recurring `TEC_STALE_FAIL_CLOSED` cascade. | Changed from `@neondatabase/serverless` in Batch 40. Pool-config hardening added in B-NEW-40 (2026-05-17). Boot emits `[DB_POOL_INIT]` log confirming config landed. **Bidirectional link: see TEC config-cache subsystem SIM section below.** |
 | **vite.config.ts** | React plugin only. Replit plugins removed in Batch 40. | No longer depends on `REPL_ID` or `@replit/vite-plugin-*`. |
 | **screener_filters DB table** | Now 24 rows: 4 base paths + 4 family paths x 2 modes (paper/live). Columns include `filter_path`, `lq_min`, `vn_max`, `corr_max`, `di_min`, `di_max`. | Expanded from 8 rows (Batch 19G) to 24 rows (Batch 40 — family-specific profiles added). |
+
+---
+
+## Recent Additions (B-NEW-40 — pg pool keepalive + TEC refresh timeout, 2026-05-17)
+
+Closes the silent-TCP-death failure mode + B79.TEC's `tecConfigRefreshInFlight` amplifier that produced two `TEC_STALE_FAIL_CLOSED` cascades in 18 hours (2026-05-15 17:13 UTC, 2026-05-16 11:14 UTC). Pre-B-NEW-40 pre-audit + Langston Step 2 review converged on the diagnosis. Pre-May 8 corroboration grep showed the underlying network slowdowns existed throughout April (14.9s and 96s heartbeat cycle outliers) but were absorbed silently by the old await-based TEC architecture.
+
+### Components changed by B-NEW-40
+
+| Component | Location | Impact |
+|-----------|----------|--------|
+| **pg pool config hardening** | `server/db.ts` | Adds `keepAlive: true` + `keepAliveInitialDelayMillis: 10_000` (OS-level TCP probes detect dead sockets within ~12 min instead of 2+ hours), `query_timeout: 30_000` (pg-client-side abort on any query >30s), `idleTimeoutMillis: 30_000` (extends idle window from default 10s; resilience comes from keepAlive layer, this is churn tuning), explicit `max: 10` (matches default, surfaces ceiling for operators), `application_name: 'dawntrader_main'` (tags connection class in `pg_stat_activity` and Supabase dashboard). Boot emits `[DB_POOL_INIT] application_name=... keepAlive=true ...` log line. Affects ALL 23 importing modules symmetrically. Blast radius: MEDIUM-LOW. |
+| **TEC refresh-promise timeout fence** | `server/services/trailing-exit-controller.ts:~235` | Wraps the `refreshTECConfigForClass(assetClass)` call in `Promise.race([refresh, timeoutAfter45s])`. When the underlying pg promise hangs indefinitely (silent-TCP-death failure mode), the 45s timeout rejects, the existing `.catch` increments `tecRefreshFailCount`, logs `[TEC_REFRESH_TIMEOUT]` (distinct tag from `[TEC_REFRESH_FAIL]` so operators can tell which path fired), and `.finally` clears the `tecConfigRefreshInFlight` Map entry. Plain `setTimeout` + `clearTimeout` — NOT Central-Clock-subscribed (per Central Clock audit: per-call one-shot deadline, not a recurring schedule). 45s budget = pool `query_timeout` (30s) + 15s slack for event-loop scheduling + GC + deserialization. Blast radius: LOW. |
+| **TEC diagnostic endpoint** | `server/routes.ts` + `server/services/trailing-exit-controller.ts` (`getTECDiagnostics()`) | NEW `/api/diagnostics/tec-config` route (auth-gated). Returns per-asset-class snapshot of `tecConfigCache`, `tecConfigExpiresAt`, `tecConfigLastSuccessAt`, `tecConfigRefreshInFlight`, `tecRefreshFailCount`, `staleByCeiling`, plus Central Clock health (`isRunning`, `tickNumber`, `lastTickTime`, `averageDriftMs`, `maxDriftMs`, `subscriberCount`). Operational visibility into refresh-stuck-state at incident time without needing a DB query. Read-only, zero mutation. Blast radius: LOW. |
+| **`tec-pg-capture` systemd unit (staging only)** | `/usr/local/bin/tec-pg-capture` on 188.245.193.8 | Bash service tailing `/var/log/dawntrader/error.log` for `TEC_STALE_FAIL_CLOSED`. On match, captures 10 snapshots at 60s intervals: `pg_stat_activity` (DB-side query state) + **`ss -tnpi state established '( dport = 5432 )'` (B-NEW-40 addition — TCP socket state including retransmit counts, unacked bytes, send/recv queue depth)**. Output to `/var/log/dawntrader/tec_diag/pg_stat_<ts>.txt` and `ss_<ts>.txt`. Staging-only, not part of application code. Blast radius: ZERO. |
+| **Hostile-scenario test** | `server/tests/unit/b-new-40-tec-refresh-hang.test.ts` (NEW) | Simulates hung refresh via mock that returns `new Promise(() => {})`. Asserts: (a) inFlight Map releases within 45s + ε, (b) `tecRefreshFailCount` increments by 1, (c) `[TEC_REFRESH_TIMEOUT]` logs exactly once, (d) `resolveTECConfig` keeps returning cached snapshot until 5min ceiling, (e) past 5min ceiling throws `TEC_STALE_FAIL_CLOSED`. Prevents regressions where the catch path is bypassed. Uses vitest fake timers. Blast radius: ZERO (test only). |
+
+### B79.TEC config-cache subsystem (SIM gap closure)
+
+The B79.TEC batch (2026-05-08, commit `01fa39912`) introduced a per-asset-class TEC config-cache subsystem that was never documented in SIM. B-NEW-40 closes this governance gap.
+
+**Subsystem architecture:**
+
+- **Per-class cache maps** (state in `server/services/trailing-exit-controller.ts`): `tecConfigCache: Map<AssetClass, TrailingExitConfig>` (immutable wholesale snapshot), `tecConfigExpiresAt: Map<AssetClass, number>` (TTL expiry timestamp), `tecConfigLastSuccessAt: Map<AssetClass, number>` (for staleness-ceiling check), `tecConfigRefreshInFlight: Map<AssetClass, Promise<void>>` (refresh coalescer), `tecRefreshFailCount: Map<AssetClass, number>` (consecutive-fail counter exposed via diagnostic endpoint).
+- **Boot bootstrap**: `primeTECConfig()` called from `server/index.ts` boot sequence iterates `getActiveAssetClasses()` (`crypto_spot`, `crypto_perp`, `xstock_spot`, `xstock_perp`); retry-with-backoff 2s/4s/8s for transient errors; HARD-FAIL on any class via `process.exit(1)`.
+- **HARD-FAIL invariant**: `hasExplicitAssetClassRow('trailing_exit', assetClass, 'break_even_enabled')` MUST return true for each active class. Without an explicit per-class row, `getModuleConstants` would silently fall back to the `(*,*,*,*)` wildcard — the failure mode B79.TEC was designed to prevent.
+- **Refresh coalescer + B-NEW-40 timeout fence**: when `now >= expiresAt`, `resolveTECConfig` schedules a background `refreshTECConfigForClass(assetClass)` call IF and ONLY IF `tecConfigRefreshInFlight` doesn't already have an entry for that class. B-NEW-40 wraps the refresh in `Promise.race([refresh, timeoutAfter45s])` so the Map always releases (closes the regression where a hung underlying pg promise pinned the Map for the rest of process lifetime).
+- **`CONFIG_MAX_STALENESS_MS = 5min` ceiling + `TEC_STALE_FAIL_CLOSED` semantics**: if `now - lastSuccess > 5×TTL` (300s), `resolveTECConfig` throws instead of returning a stale snapshot. Fail-closed because TEC's `break_even_enabled` is a kill-switch key; trusting a 5-minute-stale value risks operator-flipped kill-switch decisions being ignored.
+
+**Canonical log signatures emitted by this subsystem** (for operator grep at incident time):
+- `[TEC_RESOLVE_AGGR] minute=YYYY-MM-DDThh:mm <class>=resolves:N` — per-minute resolve-counter summary
+- `[TEC_REFRESH_FAIL] assetClass=<class> background refresh failed (consecutive_fail_count=N): <err>` — pg-rejected refresh
+- `[TEC_REFRESH_TIMEOUT] assetClass=<class> refresh exceeded 45000ms budget... (consecutive_fail_count=N)` — B-NEW-40-introduced: 45s timeout fence fired on a hung promise
+- `[TEC_STALE_FAIL_CLOSED] assetClass=<class> cache age=Nms exceeds ceiling 300000ms` — staleness ceiling breached, fail-closed throw
+- `[TEC_CACHE_MISS_FATAL] resolveTECConfig called for assetClass=<class> but cache has no entry` — programmer error / primeTECConfig was not awaited
+- `[DB_POOL_INIT] application_name=dawntrader_main keepAlive=true ...` (B-NEW-40-introduced, `server/db.ts`) — pool config landed at boot
+
+**Upstream dependency**: `server/db.ts` pg pool (see entry above). Pool-level resilience (keepAlive, query_timeout) IS the primary defense against the silent-TCP-death failure mode. The TEC refresh-timeout fence is the per-class belt-and-suspenders backstop for any other hang source not covered by the pool layer. **Bidirectional link: see `server/db.ts` SIM entry above.**
+
+**Downstream consumers** (via `resolveTECConfig` and `getResolvedTECConfig`):
+- `server/services/tec-evaluator.ts` (centralizer for VTS + paper exit loops)
+- `server/services/vts-runner.ts` (VTS exit loop; multiple call sites per cycle)
+- `server/services/paper-execution-engine.ts` (paper `checkExitConditions`)
+- `server/services/trailing-exit-controller.ts` itself (internal: `isMoonbagQualifier`, `canEnterMoonbag`, `updatePosition`)
+- `server/routes.ts` `/api/diagnostics/tec-config` endpoint (B-NEW-40-introduced)
+
+**Central Clock interaction**: NONE. The TEC config-cache subsystem operates on `Date.now()` timestamps and on-demand refresh triggered by `resolveTECConfig` callers (not on a recurring schedule). B-NEW-40's 45s timeout fence is a per-call one-shot deadline (plain `setTimeout`), not a recurring tick. The pre-existing `[TEC_RESOLVE_AGGR]` 60-second log emitter uses raw `setInterval` independent of Central Clock — this is a minor cosmetic drift, filed as a future cleanup item, NOT in B-NEW-40 scope. (See B_NEW_40_PRE_AUDIT.md §2.6 for the full Central Clock alignment audit.)
+
+### Pre-incident evidence reference
+
+- First `[TEC_STALE_FAIL_CLOSED]` in `/var/log/dawntrader/error.log`: 2026-05-08 15:03:57 UTC (same-day as B79.TEC deploy at 11:14 UTC)
+- Count of `[TEC_STALE_FAIL_CLOSED]` events through 2026-05-17: 4832
+- Count of `[TEC_REFRESH_FAIL]` events through 2026-05-17: 0 (smoking gun for the catch handler never executing → underlying promise neither resolves nor rejects → silent-TCP-death pattern)
+- Pre-May 8 heartbeat cycle slowdowns: 1-3 per day baseline, with outliers at 14,879ms (2026-04-15) and 4 events at exactly 96,983ms (architectural-fingerprint duplication signature)
+- Post-May 8 slowdown clusters on TEC-stuck days: 866 (2026-05-12), 584 (2026-05-13), 1712 (2026-05-15)
+
+### Files touched (when editing any of these, check the others)
+
+- `server/db.ts` — pool config + boot log
+- `server/services/trailing-exit-controller.ts` — config cache maps + `primeTECConfig` + `refreshTECConfigForClass` + `resolveTECConfig` + 45s timeout fence + `getTECDiagnostics`
+- `server/routes.ts` — `/api/diagnostics/tec-config` route (auth-gated)
+- `server/services/tec-evaluator.ts` — passes through `resolveTECConfig` results (no direct edits in B-NEW-40 but relevant if you touch TEC behavior)
+- `server/tests/unit/b-new-40-tec-refresh-hang.test.ts` — hostile-scenario regression coverage
+- `/usr/local/bin/tec-pg-capture` on staging — pg_stat_activity + ss capture systemd service
 
 ---
 

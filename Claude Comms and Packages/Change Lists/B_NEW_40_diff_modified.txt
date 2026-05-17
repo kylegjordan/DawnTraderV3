@@ -1,0 +1,435 @@
+diff --git a/client/src/App.tsx b/client/src/App.tsx
+index e1c103323..9a60eea7a 100644
+--- a/client/src/App.tsx
++++ b/client/src/App.tsx
+@@ -30,6 +30,7 @@ const SystemConfigPage = lazy(() => import("@/pages/system-config"));
+ const FilterInsightsPage = lazy(() => import("@/pages/filter-insights"));
+ const AnalyticsPage = lazy(() => import("@/pages/analytics"));
+ const MachineLearningPage = lazy(() => import("@/pages/machine-learning"));
++const SystemAlertsPage = lazy(() => import("@/pages/system-alerts"));
+ 
+ class DiagnosticErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
+   constructor(props: { children: ReactNode }) {
+@@ -229,6 +230,7 @@ function Router() {
+               <Route path="/analytics" component={AnalyticsPage} />
+               <Route path="/machine-learning" component={MachineLearningPage} />
+               <Route path="/insights" component={FilterInsightsPage} />
++              <Route path="/system-alerts" component={SystemAlertsPage} />
+               <Route path="/settings" component={Settings} />
+               <Route path="/system/config" component={SystemConfigPage} />
+               <Route path="/:rest*">
+diff --git a/client/src/components/layout/sidebar.tsx b/client/src/components/layout/sidebar.tsx
+index 1679a59ce..d777cbbe8 100644
+--- a/client/src/components/layout/sidebar.tsx
++++ b/client/src/components/layout/sidebar.tsx
+@@ -13,7 +13,8 @@ import {
+   Activity,
+   Newspaper,
+   Sparkles,
+-  Brain
++  Brain,
++  Bell
+ } from "lucide-react";
+ import { useTrading } from "@/hooks/use-trading";
+ import { Button } from "@/components/ui/button";
+@@ -37,6 +38,7 @@ const navigation = [
+   { name: "Reports", href: "/reports", icon: FileText },
+   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
+   { name: "System Monitoring", href: "/systems", icon: Activity },
++  { name: "System Alerts", href: "/system-alerts", icon: Bell },
+   { name: "Settings", href: "/settings", icon: Settings },
+ ];
+ 
+diff --git a/package.json b/package.json
+index 849ec7cf2..3a7147aec 100644
+--- a/package.json
++++ b/package.json
+@@ -15,7 +15,9 @@
+     "b-new-33:factor-backtest": "tsx scripts/b-new-33-factor-backtest.ts",
+     "b-new-33:parity-check": "tsx scripts/b-new-33-parity-check.ts",
+     "b-new-36:cohort-diagnostic": "tsx scripts/b-new-36-cohort-diagnostic.ts",
+-    "b-new-37:inversion-forensics": "tsx scripts/b-new-37-inversion-forensics.ts"
++    "b-new-37:inversion-forensics": "tsx scripts/b-new-37-inversion-forensics.ts",
++    "system-alerts": "tsx scripts/system-alerts.ts",
++    "b-new-40:soak-verify": "tsx scripts/b-new-40-soak-verify.ts"
+   },
+   "dependencies": {
+     "@google-cloud/speech": "^7.2.0",
+diff --git a/server/db.ts b/server/db.ts
+index a5f9c4e98..62e72266f 100644
+--- a/server/db.ts
++++ b/server/db.ts
+@@ -10,5 +10,81 @@ if (!process.env.DATABASE_URL) {
+   );
+ }
+ 
+-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
++// ─── B-NEW-40 (2026-05-17): pg pool hardening ──────────────────────────────
++// Closes the root cause of recurring TEC_STALE_FAIL_CLOSED incidents (2026-05-15
++// 17:13 UTC and 2026-05-16 11:14 UTC) plus the broader silent-TCP-death failure
++// mode that existed pre-B79.TEC but was absorbed quietly by the old await-based
++// resolveTECConfig pattern. See B_NEW_40_SCOPE.md and B_NEW_40_PRE_AUDIT.md.
++//
++// Layer-by-layer rationale:
++//
++// - `keepAlive: true` + `keepAliveInitialDelayMillis: 10_000`
++//     Enables SO_KEEPALIVE on every pool socket. After 10s of socket idle, the
++//     OS starts sending TCP keepalive probes. If the underlying network path
++//     has gone silently dead (NAT timeout, intermediate router drop without
++//     RST), probes go unanswered and pg-pool surfaces the dead socket as an
++//     error event — in-flight queries reject with a connection error, the
++//     pool removes the client, no silent retry. This is the upstream cause-
++//     layer fix.
++//
++// - `query_timeout: 30_000`
++//     pg-client-side abort on any individual query running >30s. Catches any
++//     other hang source we haven't identified, including the case where the
++//     query was sent before keepalive detected the dead socket. 30s ceiling
++//     is well above any legitimate single-query duration in the codebase
++//     (audited per B_NEW_40_PRE_AUDIT.md §2.3 — partition-exporter chunks at
++//     1000 rows, drift-dashboard uses its own 4s SET LOCAL statement_timeout,
++//     replay-ablation chunks at 5000, archive writers are pre-chunked, B74
++//     partition CREATE TABLEs are sub-second).
++//
++// - `idleTimeoutMillis: 30_000`
++//     Extends idle window from pg-pool default 10s to 30s. Purely
++//     connection-churn tuning — lower churn (each new connection costs TCP +
++//     TLS + auth round-trip) at the cost of more time for an idle socket to
++//     have its NAT/firewall state dropped. Resilience against dead-socket-
++//     reuse is provided by `keepAlive` (above), NOT by this setting. Audited
++//     per Langston Step 2 Q4: longer idle window is fine because keepalive
++//     carries the resilience load.
++//
++// - `max: 10`
++//     Matches pg-pool default. Made explicit for operator visibility — when
++//     `pg_stat_activity` shows queue waits, future operators can see the
++//     ceiling without consulting pg-pool internals. If staging soak shows
++//     pool saturation under hot load (23 importing modules + signal pipeline
++//     + archive writers + xstock scanner concurrent), raise to 15 or 20;
++//     do NOT lower idleTimeoutMillis (keepalive already covers dead-socket
++//     concerns).
++//
++// - `application_name: 'dawntrader_main'`
++//     Tags this connection class in `pg_stat_activity` and Supabase's project
++//     dashboard. Future operators investigating slow queries / connection
++//     leaks / pool exhaustion can filter by this name to isolate the trading
++//     app from any admin/migration tooling sharing the database.
++//
++// Central Clock alignment: pool config is kernel/library layer. No new
++// recurring schedules introduced. No Central Clock interaction. (See
++// B_NEW_40_PRE_AUDIT.md §2.6 for the per-component audit.)
++
++const POOL_CONFIG = {
++  connectionString: process.env.DATABASE_URL,
++  keepAlive: true,
++  keepAliveInitialDelayMillis: 10_000,
++  query_timeout: 30_000,
++  idleTimeoutMillis: 30_000,
++  max: 10,
++  application_name: 'dawntrader_main',
++} as const;
++
++export const pool = new Pool(POOL_CONFIG);
+ export const db = drizzle({ client: pool, schema });
++
++// Boot-time confirmation log so config landing is visible in PM2 logs without
++// requiring a DB query. Per Langston Step 1 Q6 #1.
++console.log(
++  `[DB_POOL_INIT] application_name=${POOL_CONFIG.application_name} ` +
++    `keepAlive=${POOL_CONFIG.keepAlive} ` +
++    `keepAliveInitialDelayMillis=${POOL_CONFIG.keepAliveInitialDelayMillis} ` +
++    `query_timeout=${POOL_CONFIG.query_timeout} ` +
++    `idleTimeoutMillis=${POOL_CONFIG.idleTimeoutMillis} ` +
++    `max=${POOL_CONFIG.max}`
++);
+diff --git a/server/routes.ts b/server/routes.ts
+index be8721e5b..f4a6cccec 100644
+--- a/server/routes.ts
++++ b/server/routes.ts
+@@ -6303,8 +6303,147 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
+     }
+   });
+ 
++  // ==================== B-NEW-40: System Alerts queue (humans + AI consumers) ====================
++  //
++  // Read-only listing + acknowledgement of system alerts. Both humans (via the
++  // "System Alerts" dashboard tab) and AI sessions (via the per-turn CLAUDE.md
++  // §10.5 check) consume from the same JSONL-backed queue. Auth-gated identical
++  // to the TEC diagnostic endpoint; same `authenticateToken` middleware.
++  //
++  // GET  /api/system-alerts
++  //      Returns entries in (state: active | scheduled), sorted triggers_at ASC.
++  //      Query params: ?state=<s>, ?category=<c>
++  //
++  // POST /api/system-alerts/:id/acknowledge
++  //      Body: { "by": "kyle" | "cc-session-..." | "langston" | "system" }
++  //      Moves an entry to state=acknowledged.
++  //
++  // See `server/services/system-alerts.ts` for the storage library.
++
++  apiRouter.get('/system-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
++    try {
++      const { listAlerts, listSurfaceable } = await import('./services/system-alerts.js');
++      const state = (req.query.state as string | undefined) || undefined;
++      const category = (req.query.category as string | undefined) || undefined;
++
++      // Default response includes BOTH surfaceable-now AND scheduled-future entries
++      // so the UI can show both lists. Explicit ?state filter narrows it.
++      const entries = state || category
++        ? listAlerts({ state: state as any, category: category as any })
++        : listAlerts({}).filter(
++            (a) => a.state === 'active' || a.state === 'scheduled',
++          );
++      // Sort by triggers_at ascending
++      entries.sort((a, b) => a.triggers_at.localeCompare(b.triggers_at));
++
++      const surfaceable = listSurfaceable();
++      res.json({
++        ok: true,
++        capturedAt: new Date().toISOString(),
++        counts: {
++          active: entries.filter((a) => a.state === 'active').length,
++          scheduled: entries.filter((a) => a.state === 'scheduled').length,
++          surfaceableNow: surfaceable.length,
++        },
++        entries,
++      });
++    } catch (error: any) {
++      res.status(500).json({
++        ok: false,
++        error: 'Failed to read system alerts',
++        message: error?.message ?? String(error),
++      });
++    }
++  });
++
++  apiRouter.post('/system-alerts/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
++    try {
++      const { ackAlert } = await import('./services/system-alerts.js');
++      const id = req.params.id;
++      const by = (req.body && typeof req.body.by === 'string' && req.body.by.trim()) || undefined;
++      if (!by) {
++        res.status(400).json({
++          ok: false,
++          error: 'Missing required field: by',
++          message: 'POST body must include { "by": "<actor-identifier>" } for audit trail',
++        });
++        return;
++      }
++      const updated = ackAlert(id, by);
++      if (!updated) {
++        res.status(404).json({ ok: false, error: 'Alert not found', id });
++        return;
++      }
++      res.json({ ok: true, alert: updated });
++    } catch (error: any) {
++      res.status(500).json({
++        ok: false,
++        error: 'Failed to acknowledge alert',
++        message: error?.message ?? String(error),
++      });
++    }
++  });
++
++  // ==================== B79.TEC: Per-asset-class TEC diagnostic snapshot ====================
++  //
++  // Read-only snapshot of TEC's internal per-class state maps (cache, expiry,
++  // last-success, refresh-in-flight, consecutive-fail-count). Added 2026-05-16
++  // to investigate the TEC_STALE_FAIL_CLOSED recurrence pattern — specifically
++  // to confirm/refute whether the in-flight Map holds a stuck Promise when the
++  // staleness ceiling is breached.
++  //
++  // GET /api/diagnostics/tec-config
++  apiRouter.get('/diagnostics/tec-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
++    try {
++      const { getTECDiagnostics } = await import('./services/trailing-exit-controller.js');
++      // B-NEW-40 (2026-05-17): surface Central Clock health alongside TEC state
++      // so incident-time operators can verify the clock is running and reporting
++      // normal drift in the same payload as TEC staleness checks. Uses the
++      // existing ClockHealth interface — no type duplication.
++      const { centralClock } = await import('./services/central-clock.js');
++      const snapshot = getTECDiagnostics();
++      const clockHealth = centralClock.getHealth();
++      res.json({
++        ok: true,
++        capturedAt: new Date(snapshot.nowMs).toISOString(),
++        configTtlMs: snapshot.configTtlMs,
++        maxStalenessMs: snapshot.maxStalenessMs,
++        classes: snapshot.classes.map((c) => ({
++          assetClass: c.assetClass,
++          cached: c.cached,
++          refreshInFlight: c.refreshInFlight,
++          expiresAt: c.expiresAtMs !== null ? new Date(c.expiresAtMs).toISOString() : null,
++          msSinceExpiry: c.msSinceExpiry,
++          lastSuccessAt: c.lastSuccessAtMs !== null ? new Date(c.lastSuccessAtMs).toISOString() : null,
++          msSinceLastSuccess: c.msSinceLastSuccess,
++          secondsSinceLastSuccess:
++            c.msSinceLastSuccess !== null ? Math.round(c.msSinceLastSuccess / 1000) : null,
++          consecutiveFailCount: c.consecutiveFailCount,
++          staleByCeiling: c.staleByCeiling,
++        })),
++        centralClock: {
++          isRunning: clockHealth.isRunning,
++          tickNumber: clockHealth.tickNumber,
++          lastTickTime:
++            clockHealth.lastTickTime > 0
++              ? new Date(clockHealth.lastTickTime).toISOString()
++              : null,
++          averageDriftMs: Math.round(clockHealth.averageDrift * 10) / 10,
++          maxDriftMs: Math.round(clockHealth.maxDrift),
++          subscriberCount: clockHealth.subscribers.length,
++        },
++      });
++    } catch (error: any) {
++      res.status(500).json({
++        ok: false,
++        error: 'Failed to read TEC diagnostics',
++        message: error?.message ?? String(error),
++      });
++    }
++  });
++
+   // ==================== REB 2.11: Active Pool Stability Validation Endpoint ====================
+-  
++
+   // GET /api/diagnostics/reb-2-11 - Get REB 2.11 diagnostic buffers
+   apiRouter.get('/diagnostics/reb-2-11', authenticateToken, async (req: AuthenticatedRequest, res) => {
+     try {
+diff --git a/server/services/trailing-exit-controller.ts b/server/services/trailing-exit-controller.ts
+index f60febb1e..7bc232e7b 100644
+--- a/server/services/trailing-exit-controller.ts
++++ b/server/services/trailing-exit-controller.ts
+@@ -231,18 +231,60 @@ export function resolveTECConfig(assetClass: AssetClass): TrailingExitConfig {
+ 
+   // Background refresh on stale entry — non-blocking, fire-and-forget,
+   // coalesced via inFlight Map (Langston Q1).
++  //
++  // B-NEW-40 (2026-05-17): wrap the refresh in Promise.race against a 45s
++  // timeout so the inFlight Map ALWAYS releases — even when the underlying pg
++  // promise neither resolves nor rejects (the silent-TCP-death failure mode).
++  // Without this, a single hung refresh traps the Map entry for the rest of
++  // process lifetime, blocking every future refresh attempt and producing the
++  // permanent TEC_STALE_FAIL_CLOSED cascade observed 2026-05-15 and -16.
++  //
++  // 45s budget: pool query_timeout (30s, server/db.ts) rejects the underlying
++  // query first; the 15s buffer covers event-loop scheduling, deserialization,
++  // and GC. Tighter (30-35s) risks false timeouts on legitimate slow refreshes
++  // during transient network blips. Looser (60s+) extends worst-case stale-
++  // fail-closed window unnecessarily.
++  //
++  // Central Clock alignment: per-call one-shot deadline; NOT recurring. Plain
++  // setTimeout is correct — subscribing to Central Clock for a 45s one-shot
++  // would add subscriber churn for zero scheduling benefit. (See pre-audit
++  // §2.6 Central Clock audit + Langston Step 1 Q7.)
+   if (now >= expiresAt && !tecConfigRefreshInFlight.has(assetClass)) {
+-    const promise = refreshTECConfigForClass(assetClass)
++    const REFRESH_TIMEOUT_MS = 45_000;
++    let timeoutHandle: NodeJS.Timeout | null = null;
++    const timeoutPromise = new Promise<never>((_resolve, reject) => {
++      timeoutHandle = setTimeout(() => {
++        reject(
++          new Error(
++            `[TEC_REFRESH_TIMEOUT] assetClass=${assetClass} refresh exceeded ` +
++            `${REFRESH_TIMEOUT_MS}ms budget without resolving or rejecting. ` +
++            `Underlying pg promise is hung — releasing inFlight Map so next ` +
++            `caller can attempt a fresh refresh.`,
++          ),
++        );
++      }, REFRESH_TIMEOUT_MS);
++    });
++
++    const promise = Promise.race([
++      refreshTECConfigForClass(assetClass),
++      timeoutPromise,
++    ])
+       .catch((err) => {
+         const failCount = (tecRefreshFailCount.get(assetClass) ?? 0) + 1;
+         tecRefreshFailCount.set(assetClass, failCount);
++        const isTimeout =
++          err instanceof Error && err.message.startsWith('[TEC_REFRESH_TIMEOUT]');
++        const logTag = isTimeout ? '[TEC_REFRESH_TIMEOUT]' : '[TEC_REFRESH_FAIL]';
+         console.error(
+-          `[TEC_REFRESH_FAIL] assetClass=${assetClass} background refresh failed ` +
++          `${logTag} assetClass=${assetClass} background refresh failed ` +
+           `(consecutive_fail_count=${failCount}):`,
+           err,
+         );
+       })
+       .finally(() => {
++        if (timeoutHandle !== null) {
++          clearTimeout(timeoutHandle);
++        }
+         tecConfigRefreshInFlight.delete(assetClass);
+       });
+     tecConfigRefreshInFlight.set(assetClass, promise);
+@@ -381,6 +423,70 @@ export function getResolvedTECConfig(assetClass: AssetClass): TrailingExitConfig
+   return resolveTECConfig(assetClass);
+ }
+ 
++/**
++ * B79.TEC diagnostic accessor (added 2026-05-16 for TEC stale-fail-closed
++ * root-cause investigation per Kyle directive).
++ *
++ * Returns a read-only snapshot of the internal per-class TEC state maps
++ * so an HTTP endpoint can observe whether a refresh is in-flight, the
++ * cache's expiry/staleness, and the consecutive-fail count without
++ * mutating the maps. Purpose-built to confirm/refute the "refresh promise
++ * hangs and locks inFlight Map" hypothesis at incident time.
++ */
++export interface TECDiagnosticEntry {
++  assetClass: AssetClass;
++  cached: boolean;
++  refreshInFlight: boolean;
++  expiresAtMs: number | null;
++  msSinceExpiry: number | null;
++  lastSuccessAtMs: number | null;
++  msSinceLastSuccess: number | null;
++  consecutiveFailCount: number;
++  staleByCeiling: boolean;
++}
++
++export interface TECDiagnosticSnapshot {
++  nowMs: number;
++  configTtlMs: number;
++  maxStalenessMs: number;
++  classes: TECDiagnosticEntry[];
++}
++
++export function getTECDiagnostics(): TECDiagnosticSnapshot {
++  const now = Date.now();
++  const classes: TECDiagnosticEntry[] = [];
++  // Collect union of all keys across the four state maps so we report a
++  // row even for an asset class that's e.g. inFlight but missing from cache.
++  const allKeys = new Set<AssetClass>();
++  for (const k of tecConfigCache.keys()) allKeys.add(k);
++  for (const k of tecConfigExpiresAt.keys()) allKeys.add(k);
++  for (const k of tecConfigLastSuccessAt.keys()) allKeys.add(k);
++  for (const k of tecConfigRefreshInFlight.keys()) allKeys.add(k);
++  for (const k of tecRefreshFailCount.keys()) allKeys.add(k);
++  for (const assetClass of allKeys) {
++    const expiresAt = tecConfigExpiresAt.get(assetClass) ?? null;
++    const lastSuccess = tecConfigLastSuccessAt.get(assetClass) ?? null;
++    classes.push({
++      assetClass,
++      cached: tecConfigCache.has(assetClass),
++      refreshInFlight: tecConfigRefreshInFlight.has(assetClass),
++      expiresAtMs: expiresAt,
++      msSinceExpiry: expiresAt !== null ? now - expiresAt : null,
++      lastSuccessAtMs: lastSuccess,
++      msSinceLastSuccess: lastSuccess !== null ? now - lastSuccess : null,
++      consecutiveFailCount: tecRefreshFailCount.get(assetClass) ?? 0,
++      staleByCeiling:
++        lastSuccess !== null && now - lastSuccess > CONFIG_MAX_STALENESS_MS,
++    });
++  }
++  return {
++    nowMs: now,
++    configTtlMs: CONFIG_TTL_MS,
++    maxStalenessMs: CONFIG_MAX_STALENESS_MS,
++    classes,
++  };
++}
++
+ /**
+  * B65.4 / B79.TEC: Test-only helper. Invalidates ALL per-class cache entries
+  * so the next resolveTECConfig() call triggers a background refresh on each.
