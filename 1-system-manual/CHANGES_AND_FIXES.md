@@ -135,6 +135,10 @@ Three sub-batch hotfixes applied during Step 7 when Kyle's actual voice notes su
 - `1-system-manual/SYSTEM_IMPACT_MAP.md` "Recent Additions (B-NEW-40 — pg pool keepalive + TEC refresh timeout, 2026-05-17)"
 - `Claude Comms and Packages/Langston Design Asks/TEC_STALE_INVESTIGATION_2026-05-16_rev1.md` + `..._2026-05-17_rev2.md` (Langston reviews)
 
+### Post-session deploy follow-up (2026-05-17 EOD, Kyle bug report)
+
+Kyle reported end-of-day 2026-05-17 that the System Alerts tab was not visible in his browser. Investigation: dist/public was last built at 12:46:47Z (the original B-NEW-40 deploy). Although that build INCLUDED the `authFetch`→`apiFetch` hotfix (commit `62890eaf0` at 12:43:14Z landed pre-deploy), Kyle's browser session was not seeing the rendered tab. Re-deploy at 2026-05-17T16:11Z (PM2 #291, commit `c72ddf8dc` HEAD) resolved cleanly; Claude-in-Chrome re-verification confirmed the tab now renders with the soak alert correctly populated. Root cause not isolated with certainty (likely browser-side cache of older HTML predating the deploy, or transient asset-hash mismatch). **Process correction captured as Lesson #6 in PHASE_HISTORY Phase 24 INFRASTRUCTURE HARDENING block:** when ANY hotfix follows the initial deploy in the same session, OR when the session continues to other work that doesn't touch staging-side code, re-run `git pull && npm run build && pm2 restart dawntrader` as the LAST step before declaring UI surfaces "live to Kyle," AND re-do Claude-in-Chrome verification at end-of-session — not just at the intra-session Step 7 verification point.
+
 ---
 
 ## FINDING-2026-05-15-A — B-NEW-37 forensic surfaces TWO interacting defects in the modulation chain

@@ -50,7 +50,7 @@
 
 ## OPERATIONAL FACTS
 
-- PM2 #290 on staging since 2026-05-17 12:46:47Z (B-NEW-40 deploy). Pipeline healthy.
+- PM2 #291 on staging since 2026-05-17 16:11Z (re-deploy after Kyle bug report — System Alerts tab not visible; cleared on re-deploy. Pre: PM2 #290 from B-NEW-40 deploy at 12:46:47Z). Pipeline healthy.
 - `tec-pg-capture.timer` armed (with `ss -tnpi` snapshot for next TEC event).
 - `system-alerts-dispatcher.timer` active every 15min.
 - `cc-voice-archive-prune.timer` active daily 04:00 UTC.
