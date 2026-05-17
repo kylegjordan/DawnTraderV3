@@ -12,7 +12,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { authFetch } from '@/lib/auth';
+import { apiFetch } from '@/lib/api';
 
 interface SystemAlert {
   id: string;
@@ -77,27 +77,17 @@ export default function SystemAlertsPage() {
 
   const { data, isLoading, error, refetch } = useQuery<SystemAlertsResponse>({
     queryKey: ['/api/system-alerts'],
-    queryFn: async () => {
-      const res = await authFetch('/api/system-alerts');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    },
+    queryFn: () => apiFetch('/api/system-alerts'),
     refetchInterval: 30_000, // 30s polling per scope
   });
 
   const ackMutation = useMutation({
-    mutationFn: async ({ id, by }: { id: string; by: string }) => {
-      const res = await authFetch(`/api/system-alerts/${id}/acknowledge`, {
+    mutationFn: ({ id, by }: { id: string; by: string }) =>
+      apiFetch(`/api/system-alerts/${id}/acknowledge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ by }),
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.message ?? `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/system-alerts'] });
     },
