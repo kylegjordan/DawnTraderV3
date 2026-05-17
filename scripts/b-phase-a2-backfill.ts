@@ -27,7 +27,10 @@
  */
 
 import 'dotenv/config';
-import { Pool } from 'pg';
+// ESM default import for CommonJS pg module — same pattern as scripts/db-migrate.ts:40
+// + server/db.ts:1 + every other script in server/scripts/*.
+import pg from 'pg';
+const { Pool } = pg;
 import { computeDirectionalBias } from '../server/core/metrics/directional-bias.js';
 import { XSTOCK_SPOT_REGISTRY } from '../shared/asset-classes.js';
 import type { OHLCData } from '../server/types/market-regime.types.js';
