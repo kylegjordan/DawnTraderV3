@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS xstock_dbs_backfill (
   ema_component DOUBLE PRECISION NOT NULL,
   sentinel_zero BOOLEAN NOT NULL,
   atr DOUBLE PRECISION,
+  -- Langston Step 4 ask (2026-05-17): keep volume for future global-DBS replay.
+  -- Component analysis alone wouldn't need this; volume captures the weight that
+  -- a global weighted-median replay would use. Nullable because some pairs may
+  -- have missing volume data during historical thin-data windows.
+  volume_24h_usd DOUBLE PRECISION,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (symbol, ts)
 );

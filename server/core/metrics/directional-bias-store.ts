@@ -39,7 +39,11 @@ import { computeGlobalDirectionalBias } from './directional-bias';
 import type { GlobalDirectionalBias } from '../../types/directional-bias.types';
 // B72 (2026-05-05): GLOBAL_DBS_MIN_SAMPLE_COUNT moved to module='dbs_calculation'.
 // B-PHASE-A2 (2026-05-17): per-asset-class resolution via constructor option.
-import { getCachedNumberRequired, getCachedConstant } from '../../services/module-constants-service.js';
+// Langston Step 4 BLOCKER fix (2026-05-17): both floor lookups use the strict
+// getCachedNumberRequired pattern. If the seeded row is missing, throw loudly
+// rather than silently using a hardcoded fallback (CLAUDE.md §8 #10 + §11 —
+// no silent fallbacks for DB-governed settings, no patches).
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import type { XstockSector } from '../../../shared/asset-classes.js';
 
 /**
@@ -56,15 +60,14 @@ function getGlobalDbsMinSampleCount(assetClass: 'crypto_spot' | 'xstock_spot'): 
 }
 
 function getSectorCoverageFloor(): number {
-  // B-PHASE-A2: xStock-only knob. Crypto store never calls this.
-  // Default 7 if cold cache / row missing — matches B-PHASE-A2 Layer-1 starter.
-  try {
-    const v = getCachedConstant<number>('dbs_calculation', 'sector_coverage_floor',
-      { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' });
-    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 7;
-  } catch {
-    return 7;
-  }
+  // B-PHASE-A2 BLOCKER fix (Langston Step 4 review 2026-05-17): strict resolution
+  // via getCachedNumberRequired. xStock-only knob — crypto store never calls this.
+  // Throws loudly if the seeded row is missing rather than silently using a
+  // hardcoded default. Seeded by B-PHASE-A2 (D) migration; operator deleting
+  // the row would correctly bring the system to a halt rather than silently
+  // running with a stale default.
+  return getCachedNumberRequired('dbs_calculation', 'sector_coverage_floor',
+    { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' });
 }
 
 /**

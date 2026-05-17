@@ -125,10 +125,19 @@ async function backfillSymbol(
     if (atr <= 0) { skipped++; continue; }
     const result = computeDirectionalBias(bars, atr);
     if (!dryRun) {
+      // Langston Step 4 ask (2026-05-17): volume_24h_usd captured for future
+      // global-DBS replay. Backfill uses the rolled-up 60-min bar's volume
+      // (multiplied by close price for USD estimate). Live values come from
+      // ticker enrichment per scanner.ts — captured here as an approximation
+      // since backfill can't reach the live ticker stream.
+      const lastBar = bars[bars.length - 1] as any;
+      const vol24hUsd = Number.isFinite(lastBar.volume) && Number.isFinite(lastBar.close)
+        ? lastBar.volume * lastBar.close
+        : null;
       const insertResult = await pool.query(`
         INSERT INTO xstock_dbs_backfill
-          (symbol, sector, ts, final_score, slope_component, return_component, ema_component, sentinel_zero, atr)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          (symbol, sector, ts, final_score, slope_component, return_component, ema_component, sentinel_zero, atr, volume_24h_usd)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (symbol, ts) DO NOTHING
       `, [
         symbol, sector, ts,
@@ -138,6 +147,7 @@ async function backfillSymbol(
         result.components.emaComponent,
         result.sentinelZero,
         atr,
+        vol24hUsd,
       ]);
       inserted += insertResult.rowCount ?? 0;
     } else {
