@@ -183,10 +183,20 @@ const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
 
 /**
  * B-NEW-30 (2026-05-13): xstock_spot universe — SSOT registry pattern.
+ * B-PHASE-A2 (2026-05-17): `sector` + optional `adr`/`cryptoAdjacent` flags added.
  *
  * Single source of truth for the xstock_spot universe. Each entry carries:
- *   - `name`     — human-readable display name (REQUIRED — TypeScript enforces)
- *   - `is24_7`   — optional flag for Phase-1 extended-hours names (10 total)
+ *   - `name`             — human-readable display name (REQUIRED)
+ *   - `is24_7`           — optional flag for Phase-1 extended-hours names (10 total)
+ *   - `sector`           — GICS sector tag OR INDEX_PROXY / BROAD_ETF / INTL_ETF (REQUIRED, B-PHASE-A2)
+ *   - `adr`              — optional flag for ADR-listed names (Phase E factor work)
+ *   - `cryptoAdjacent`   — optional flag for BTC-proxy / exchange / miner names (Phase E factor work)
+ *
+ * The sector tag is consumed by `xstockDirectionalBiasStore` for partition
+ * filtering at aggregation time (GICS-only entries count toward global floor;
+ * INDEX_PROXY/BROAD_ETF/INTL_ETF stored for own-use but excluded from
+ * weighted-median aggregation). See B_PHASE_A1_DBS_design_ask_rev2.md §3 for
+ * the locked design.
  *
  * Previously the universe (`XSTOCK_SPOT_SYMBOLS`) and the display names
  * (`XSTOCK_NAMES` in `shared/asset-names.ts`) were two parallel structures
@@ -194,8 +204,8 @@ const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
  * XSTOCK_NAMES; B-NEW-30 fixed the structural issue by consolidating to
  * this registry. `XSTOCK_SPOT_SYMBOLS` + `XSTOCK_SPOT_24_7_SYMBOLS` are now
  * DERIVED from this map — adding a new xStock requires editing exactly one
- * entry here, and the type system makes `name` non-optional so forgetting
- * the display name becomes a compile error (not a runtime blank cell).
+ * entry here, and the type system makes `name` + `sector` non-optional so
+ * forgetting either becomes a compile error (not a runtime blank cell).
  *
  * The WS feed and the canonical pair-universe form (used by the scanner) is
  * `<TICKER>/<QUOTE>` without an x-suffix — indistinguishable by regex from
@@ -204,11 +214,64 @@ const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
  * before the crypto_spot regex paths in `resolveAssetClass` for
  * `exchange='kraken'`.
  */
+
+/**
+ * B-PHASE-A2 — Sector taxonomy for xStock spot universe.
+ *
+ * 11 GICS sectors (SPDR-aligned) + 3 special buckets:
+ *   - `XLK`-`XLC`: standard GICS sectors (Technology, Energy, Healthcare, Financials,
+ *     Industrials, Consumer Staples, Consumer Discretionary, Utilities, Materials,
+ *     Real Estate, Communication Services).
+ *   - `INDEX_PROXY`: SPY, QQQ. Included in per-pair DBS compute (own eval-cycle reads
+ *     own score), EXCLUDED from global aggregation (would degenerate weighted-median
+ *     to "SPY's own DBS"). Also EXCLUDED from sector-coverage floor counting.
+ *   - `BROAD_ETF`: ARKK, ARKG, XBI, GLD, TOTL, IEMG, etc. Thematic/broad ETFs that
+ *     don't fit a single GICS sector. SPY-fallback target for sector-correlation
+ *     factor work in Phase E.
+ *   - `INTL_ETF`: country/region ETFs (EWA-EWZ). No domestic-sector benchmark; SPY
+ *     fallback for Phase E factor work.
+ *
+ * Reference: B_PHASE_A1_DBS_design_ask_rev2.md §3.2.
+ */
+export type XstockSector =
+  | 'XLK'           // Technology
+  | 'XLE'           // Energy
+  | 'XLV'           // Healthcare
+  | 'XLF'           // Financials
+  | 'XLI'           // Industrials
+  | 'XLP'           // Consumer Staples
+  | 'XLY'           // Consumer Discretionary
+  | 'XLU'           // Utilities
+  | 'XLB'           // Materials
+  | 'XLRE'          // Real Estate
+  | 'XLC'           // Communication Services
+  | 'INDEX_PROXY'   // SPY / QQQ — excluded from global aggregation
+  | 'BROAD_ETF'    // ARKK, ARKG, XBI, GLD, TOTL, IEMG — SPY-fallback target
+  | 'INTL_ETF';    // EWA-EWZ — country/region ETFs
+
 export interface XstockSpotEntry {
   /** Human-readable display name (e.g., 'Apple', 'nVent Electric'). REQUIRED. */
   name: string;
   /** True for Phase-1 extended-hours names (Sun 8PM ET → Fri 8PM ET continuous). */
   is24_7?: boolean;
+  /**
+   * GICS sector tag OR special bucket (INDEX_PROXY / BROAD_ETF / INTL_ETF).
+   *
+   * **B-PHASE-A2 staging — currently optional; FLIPS TO REQUIRED at end of B-PHASE-A2-B.**
+   *
+   * Sub-task A (this commit) lands the type definition + store-side consumption with `sector?` optional.
+   * Sub-task B fills all 265 registry entries with concrete sectors AND removes the `?` so TypeScript
+   * compile-fails any future entry missing sector. Langston spot-check between A and B.
+   *
+   * Until B lands, the store's partition filter treats `sector === undefined` the same as
+   * `INDEX_PROXY / BROAD_ETF / INTL_ETF` — stored for own-use but excluded from global
+   * aggregation + sector-coverage floor counting. Graceful degrade.
+   */
+  sector?: XstockSector;
+  /** Optional: ADR-listed name (non-US underlying). Phase E factor work consumes. */
+  adr?: boolean;
+  /** Optional: BTC-proxy / exchange / miner / crypto-treasury name. Phase E factor work consumes. */
+  cryptoAdjacent?: boolean;
 }
 
 export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Map<string, XstockSpotEntry>([

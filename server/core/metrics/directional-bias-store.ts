@@ -38,21 +38,73 @@
 import { computeGlobalDirectionalBias } from './directional-bias';
 import type { GlobalDirectionalBias } from '../../types/directional-bias.types';
 // B72 (2026-05-05): GLOBAL_DBS_MIN_SAMPLE_COUNT moved to module='dbs_calculation'.
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+// B-PHASE-A2 (2026-05-17): per-asset-class resolution via constructor option.
+import { getCachedNumberRequired, getCachedConstant } from '../../services/module-constants-service.js';
+import type { XstockSector } from '../../../shared/asset-classes.js';
 
-function getGlobalDbsMinSampleCount(): number {
+/**
+ * B-PHASE-A2 — Sectors that count toward the xStock global-floor + sector-coverage-floor.
+ * INDEX_PROXY / BROAD_ETF / INTL_ETF / undefined are EXCLUDED.
+ */
+const GICS_SECTORS: ReadonlySet<XstockSector> = new Set<XstockSector>([
+  'XLK', 'XLE', 'XLV', 'XLF', 'XLI', 'XLP', 'XLY', 'XLU', 'XLB', 'XLRE', 'XLC',
+]);
+
+function getGlobalDbsMinSampleCount(assetClass: 'crypto_spot' | 'xstock_spot'): number {
   return getCachedNumberRequired('dbs_calculation', 'min_sample_count',
-    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
+    { exchange: '*', assetClass, strategy: '*', regime: '*' });
+}
+
+function getSectorCoverageFloor(): number {
+  // B-PHASE-A2: xStock-only knob. Crypto store never calls this.
+  // Default 7 if cold cache / row missing — matches B-PHASE-A2 Layer-1 starter.
+  try {
+    const v = getCachedConstant<number>('dbs_calculation', 'sector_coverage_floor',
+      { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' });
+    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 7;
+  } catch {
+    return 7;
+  }
 }
 
 /**
  * Per-pair store entry. Timestamp is the last time this pair's DBS was updated.
+ *
+ * B-PHASE-A2 (2026-05-17): optional `sector` field added for the xStock store
+ * instance. Crypto writes leave it undefined; xStock writes populate it from
+ * `XSTOCK_SPOT_REGISTRY` at the call site. xStock `publishSnapshot()` consults
+ * the field for partition filtering (GICS-sectored vs INDEX_PROXY/BROAD_ETF/INTL_ETF).
  */
 interface PairStoreEntry {
   score: number;
   timestamp: number;
   sentinelZero: boolean;
   volume: number;
+  sector?: XstockSector;
+}
+
+/**
+ * B-PHASE-A2 — Constructor option for `DirectionalBiasStore`.
+ *
+ * `mode` discriminator:
+ *   - `'crypto'`: original behavior (single floor `min_sample_count`, no sector partition).
+ *     Crypto callers use `directionalBiasStore` (4-arg `updatePair` signature back-compat).
+ *   - `'xstock'`: applies (a) sector partition filter at aggregation time (excludes
+ *     INDEX_PROXY/BROAD_ETF/INTL_ETF/undefined-sector entries from weighted-median);
+ *     (b) global-floor count counts ONLY GICS-sectored non-sentinel entries; (c) additional
+ *     `sector_coverage_floor` gate (≥N distinct GICS sectors with ≥1 non-sentinel entry each).
+ *
+ * `assetClassForKnobs`: routes `module_constants.dbs_calculation.*` reads to the
+ * per-asset-class row. xStock instance reads `asset_class='xstock_spot'` rows; crypto
+ * instance reads `'crypto_spot'` rows (which today fall through to the wildcard `*` row
+ * with min_sample_count=20).
+ *
+ * Reference: B_PHASE_A1_DBS_design_ask_rev2.md §3.1 (constructor option pattern, locked
+ * after Langston R4 review).
+ */
+export interface DirectionalBiasStoreOptions {
+  mode: 'crypto' | 'xstock';
+  assetClassForKnobs: 'crypto_spot' | 'xstock_spot';
 }
 
 /**
@@ -115,17 +167,34 @@ class DirectionalBiasStore {
   private latestSnapshot: GlobalDbsSnapshot | null = null;
   private history: HistoricalSnapshot[] = [];
   private transitions: CategoryTransition[] = [];
+  private readonly opts: DirectionalBiasStoreOptions;
+
+  /**
+   * B-PHASE-A2 (2026-05-17): constructor accepts mode + assetClassForKnobs option.
+   * Default `{ mode: 'crypto', assetClassForKnobs: 'crypto_spot' }` preserves the
+   * pre-B-PHASE-A2 behavior for the existing singleton export (`directionalBiasStore`).
+   * The new `xstockDirectionalBiasStore` singleton (exported below) uses
+   * `{ mode: 'xstock', assetClassForKnobs: 'xstock_spot' }`.
+   */
+  constructor(opts: DirectionalBiasStoreOptions = { mode: 'crypto', assetClassForKnobs: 'crypto_spot' }) {
+    this.opts = opts;
+  }
 
   /**
    * Update (or insert) a pair's DBS entry. Called whenever computePairDirectionalBias
    * produces a fresh value — typically during the scan cycle's per-pair processing.
+   *
+   * B-PHASE-A2: optional 5th `sector` parameter (xStock store only). Crypto callers
+   * pass 4 args (back-compat preserved); xStock callers pass the sector tag from
+   * `XSTOCK_SPOT_REGISTRY`.
    */
-  updatePair(symbol: string, score: number, sentinelZero: boolean, volume: number): void {
+  updatePair(symbol: string, score: number, sentinelZero: boolean, volume: number, sector?: XstockSector): void {
     this.store.set(symbol, {
       score,
       timestamp: Date.now(),
       sentinelZero,
       volume,
+      sector,
     });
   }
 
@@ -155,15 +224,57 @@ class DirectionalBiasStore {
    */
   publishSnapshot(): GlobalDbsSnapshot | null {
     this.pruneExpired();
-    const freshCount = this.store.size;
+
+    // B-PHASE-A2: xStock mode applies sector partition + GICS-only + non-sentinel counting
+    // for floor evaluation. Crypto mode uses the pre-B-PHASE-A2 count semantics (all entries).
+    //
+    // Eligible entries for the xStock global aggregation + floor are:
+    //   - sector ∈ GICS_SECTORS (XLK..XLC) — INDEX_PROXY / BROAD_ETF / INTL_ETF excluded
+    //   - sentinelZero === false — degraded compute results don't count
+    //
+    // Crypto's freshCount remains `this.store.size` (back-compat, including sentinels —
+    // discrepancy filed as RUNNING_ISSUES per B_PHASE_A1_DBS_design_ask_rev2.md §6).
+    let freshCount: number;
+    let eligibleEntries: [string, PairStoreEntry][];
+    let sectorsCovered = 0;
+
+    if (this.opts.mode === 'xstock') {
+      const sectorsSeen = new Set<XstockSector>();
+      eligibleEntries = [];
+      for (const [sym, entry] of this.store.entries()) {
+        // GICS-only + non-sentinel partition gate
+        if (entry.sector && GICS_SECTORS.has(entry.sector) && !entry.sentinelZero) {
+          eligibleEntries.push([sym, entry]);
+          sectorsSeen.add(entry.sector);
+        }
+      }
+      freshCount = eligibleEntries.length;
+      sectorsCovered = sectorsSeen.size;
+    } else {
+      // crypto mode — original behavior
+      freshCount = this.store.size;
+      eligibleEntries = Array.from(this.store.entries());
+    }
 
     // Rows 1, 2, and 3: below-floor handling.
     // Row 1 (cold start — empty store AND no prior snapshot) logs `coldStart` to align with
     // the semantic expectation that PM2 restart produces a coldStart log through the MCE
-    // computeGlobalBias path. Row 3 (partial store but < 20 pairs, no prior) logs `noSnapshot`.
+    // computeGlobalBias path. Row 3 (partial store but < floor pairs, no prior) logs `noSnapshot`.
     // Row 2 (below floor but we have a prior snapshot to carry forward) logs `degradedCoverage`.
-    const minSampleCount = getGlobalDbsMinSampleCount();
-    if (freshCount < minSampleCount) {
+    //
+    // B-PHASE-A2 (xstock mode only): the floor is dual — global-30 AND sector-coverage-7 must
+    // BOTH be satisfied. Either failing triggers the below-floor handling.
+    const minSampleCount = getGlobalDbsMinSampleCount(this.opts.assetClassForKnobs);
+    const sectorCoverageFloor = this.opts.mode === 'xstock' ? getSectorCoverageFloor() : 0;
+    const belowGlobalFloor = freshCount < minSampleCount;
+    const belowSectorFloor = this.opts.mode === 'xstock' && sectorsCovered < sectorCoverageFloor;
+    const belowFloor = belowGlobalFloor || belowSectorFloor;
+    // B-PHASE-A2: log label distinguishes xstock vs crypto store instance for operational clarity.
+    const logTag = this.opts.mode === 'xstock' ? 'GlobalDBS-xstock' : 'GlobalDBS';
+    const floorDesc = this.opts.mode === 'xstock'
+      ? `globalFloor=${minSampleCount} sectorCoverageFloor=${sectorCoverageFloor} sectorsCovered=${sectorsCovered}`
+      : `floor=${minSampleCount}`;
+    if (belowFloor) {
       if (this.latestSnapshot) {
         // Row 2: serve stale prior snapshot
         this.latestSnapshot = {
@@ -171,7 +282,7 @@ class DirectionalBiasStore {
           isStale: true,
         };
         console.log(
-          `[GlobalDBS][degradedCoverage] serving stale snapshot, liveStore=${freshCount}, floor=${minSampleCount}`
+          `[${logTag}][degradedCoverage] serving stale snapshot, liveStore=${freshCount}, ${floorDesc}`
         );
         return this.latestSnapshot;
       }
@@ -179,22 +290,25 @@ class DirectionalBiasStore {
       if (freshCount === 0) {
         // Row 1: empty store + no prior — true cold start
         console.log(
-          `[GlobalDBS][coldStart] snapshot unavailable, store has 0 pairs, floor ${minSampleCount}; returning null`
+          `[${logTag}][coldStart] snapshot unavailable, store has 0 pairs, ${floorDesc}; returning null`
         );
       } else {
         // Row 3: partial but below floor, no prior
         console.log(
-          `[GlobalDBS][noSnapshot] store below floor (${freshCount}) and no prior snapshot; returning null`
+          `[${logTag}][noSnapshot] store below floor (liveStore=${freshCount}, ${floorDesc}) and no prior snapshot; returning null`
         );
       }
       return null;
     }
 
-    // Happy-path candidate: compute from current inputs
+    // Happy-path candidate: compute from current inputs.
+    // B-PHASE-A2 xstock mode: aggregate ONLY over eligibleEntries (sector-partition filtered).
+    // Crypto mode: aggregate over the full store as before.
     const pairScores = new Map<string, number>();
     const sentinelFlags = new Map<string, boolean>();
     const volumes = new Map<string, number>();
-    for (const [sym, entry] of this.store.entries()) {
+    const aggregationSource = this.opts.mode === 'xstock' ? eligibleEntries : Array.from(this.store.entries());
+    for (const [sym, entry] of aggregationSource) {
       pairScores.set(sym, entry.score);
       sentinelFlags.set(sym, entry.sentinelZero);
       volumes.set(sym, entry.volume);
@@ -215,13 +329,13 @@ class DirectionalBiasStore {
           isStale: true,
         };
         console.log(
-          `[GlobalDBS][invalidCompute] kept prior snapshot (current compute produced non-finite score=${computed.score})`
+          `[${logTag}][invalidCompute] kept prior snapshot (current compute produced non-finite score=${computed.score})`
         );
         return this.latestSnapshot;
       }
       // No prior snapshot + invalid compute → return null
       console.log(
-        `[GlobalDBS][invalidCompute] non-finite compute AND no prior snapshot; returning null`
+        `[${logTag}][invalidCompute] non-finite compute AND no prior snapshot; returning null`
       );
       return null;
     }
@@ -283,9 +397,10 @@ class DirectionalBiasStore {
    */
   getLatestSnapshot(): GlobalDbsSnapshot | null {
     if (!this.latestSnapshot) {
-      // Row 1: cold start
+      // Row 1: cold start. B-PHASE-A2 — log tag distinguishes xstock vs crypto.
+      const logTag = this.opts.mode === 'xstock' ? 'GlobalDBS-xstock' : 'GlobalDBS';
       console.log(
-        `[GlobalDBS][coldStart] snapshot unavailable, store has ${this.store.size} pairs, floor ${getGlobalDbsMinSampleCount()}`
+        `[${logTag}][coldStart] snapshot unavailable, store has ${this.store.size} pairs, floor ${getGlobalDbsMinSampleCount(this.opts.assetClassForKnobs)}`
       );
       return null;
     }
@@ -306,10 +421,42 @@ class DirectionalBiasStore {
   }
 }
 
-/** Module-level singleton. Same pattern used elsewhere for infra singletons. */
-export const directionalBiasStore = new DirectionalBiasStore();
+/**
+ * Module-level singleton — crypto instance.
+ *
+ * Same pattern used elsewhere for infra singletons. Pre-B-PHASE-A2 callers continue
+ * using this export with the original 4-arg `updatePair` signature; mode='crypto'
+ * preserves original aggregation semantics (no sector partition, single floor).
+ */
+export const directionalBiasStore = new DirectionalBiasStore({
+  mode: 'crypto',
+  assetClassForKnobs: 'crypto_spot',
+});
 
-/** Convenience accessor (e.g. for UI/API endpoints). */
+/**
+ * Module-level singleton — xStock instance (B-PHASE-A2, NEW).
+ *
+ * Independent store for the xstock_spot universe. mode='xstock' applies:
+ *   - Sector partition filter at aggregation (INDEX_PROXY/BROAD_ETF/INTL_ETF excluded)
+ *   - Global floor counted over GICS-sectored non-sentinel entries only
+ *   - Additional `sector_coverage_floor` gate (≥N distinct GICS sectors)
+ *
+ * Callers must pass `sector` as the 5th `updatePair` argument from `XSTOCK_SPOT_REGISTRY`
+ * sector lookup. Crypto callers do NOT touch this store.
+ *
+ * Reference: B_PHASE_A1_DBS_design_ask_rev2.md §3.1.
+ */
+export const xstockDirectionalBiasStore = new DirectionalBiasStore({
+  mode: 'xstock',
+  assetClassForKnobs: 'xstock_spot',
+});
+
+/** Convenience accessor for the crypto global DBS snapshot (e.g. for UI/API endpoints). */
 export function getLatestGlobalDbsSnapshot(): GlobalDbsSnapshot | null {
   return directionalBiasStore.getLatestSnapshot();
+}
+
+/** B-PHASE-A2 convenience accessor for the xStock global DBS snapshot. */
+export function getLatestXstockGlobalDbsSnapshot(): GlobalDbsSnapshot | null {
+  return xstockDirectionalBiasStore.getLatestSnapshot();
 }
