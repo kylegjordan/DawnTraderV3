@@ -101,7 +101,16 @@ const MAX_BARS_240M = 30; // ≤30 returned per pair (matches B68.1 min_higher_t
 //   Budget posture ~4× vs the prior 60h window. Hard rollback thresholds in
 //   `B_NEW_34a_HOTFIX_SCOPE.md` §6. Acceptable short-term given Supabase
 //   warning is depleting-not-exhausted; B-NEW-35 is next-batch top priority.
-const LOOKBACK_HOURS_60M = 240;
+// B-NEW-34a tuning iteration 2026-05-18 22:13 UTC: initial 240h value caused
+// per-cycle Postgres query timeouts (`Query read timeout` from pool at 25s
+// scanner budget). Source-row scan at 240h × 21× B74-dup × 75 syms = ~22M
+// rows pre-DISTINCT-ON exceeded statement_timeout. Reduced to 168h (1 week
+// wall-clock) which still spans the 48h weekend gap + 4 days of prior RTH
+// sessions. Empirically returns ~100+ buckets for AAPL (~7× the 24-bar floor
+// for 24/7 names; non-24/7 names get ~25-30 RTH-only buckets which clears
+// the floor with margin). Per-cycle source rows reduced to ~15M, expected
+// query latency ~10-15s, fits within the 25s scanner ceiling.
+const LOOKBACK_HOURS_60M = 168;
 const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is disabled today (scanner.ts:408) so this is dead-code-safe but symmetric.
 
 /**
