@@ -206,6 +206,19 @@ async function main() {
     // Single-connection serial loop — no concurrent symbols to avoid pressure
     // on the source table while it's being written by the B74 archiver.
     max: 1,
+    // Per-symbol query timeout: 180s. Empirically observed (2026-05-18 night)
+    // that a particular symbol's DISTINCT ON aggregation can hang indefinitely
+    // without this cap (pg server-side statement_timeout absent for this DB
+    // connection; pool default has no implicit query_timeout). 180s is well
+    // above the 15-25s typical per-symbol query and well above the 120s
+    // statement_timeout we've seen on heavier batched queries — gives any
+    // legitimately-slow symbol room to complete while still bounding the
+    // worst case for hung-query recovery.
+    query_timeout: 180_000,
+    // Connection-level safety: if the socket goes silent, fail rather than
+    // wait forever. Matches the resilience posture from server/db.ts B-NEW-40.
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   });
 
   let totalBuckets = 0;
