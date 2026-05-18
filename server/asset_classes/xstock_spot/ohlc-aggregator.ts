@@ -101,16 +101,25 @@ const MAX_BARS_240M = 30; // ≤30 returned per pair (matches B68.1 min_higher_t
 //   Budget posture ~4× vs the prior 60h window. Hard rollback thresholds in
 //   `B_NEW_34a_HOTFIX_SCOPE.md` §6. Acceptable short-term given Supabase
 //   warning is depleting-not-exhausted; B-NEW-35 is next-batch top priority.
-// B-NEW-34a tuning iteration 2026-05-18 22:13 UTC: initial 240h value caused
-// per-cycle Postgres query timeouts (`Query read timeout` from pool at 25s
-// scanner budget). Source-row scan at 240h × 21× B74-dup × 75 syms = ~22M
-// rows pre-DISTINCT-ON exceeded statement_timeout. Reduced to 168h (1 week
-// wall-clock) which still spans the 48h weekend gap + 4 days of prior RTH
-// sessions. Empirically returns ~100+ buckets for AAPL (~7× the 24-bar floor
-// for 24/7 names; non-24/7 names get ~25-30 RTH-only buckets which clears
-// the floor with margin). Per-cycle source rows reduced to ~15M, expected
-// query latency ~10-15s, fits within the 25s scanner ceiling.
-const LOOKBACK_HOURS_60M = 168;
+// B-NEW-34a tuning iteration 2026-05-18 20:15 UTC: 240h then 168h both caused
+// per-cycle SCAN_TIMEOUT at 25s budget. The DISTINCT ON dedup over 15-22M
+// source rows (from B74's 18-56× duplicate writes) exceeds the budget.
+// Reduced to 120h (5 days wall-clock). Math:
+//   120h × 21× dup × 75 syms × 60 1m/h ≈ ~11M source rows pre-DISTINCT-ON
+// Empirical pre-DISTINCT-ON query latency at 120h estimated ~7-8s, fits
+// budget. Coverage trade-off:
+//   - 24/7 names: ~70 buckets (clears 24-bar floor with margin) ✓
+//   - non-24/7 names Mon morning right after ARCA reopen: catches ~6h Mon
+//     RTH so far + 24h Fri's RTH session bars = ~30 buckets ✓ (clears floor)
+//   - non-24/7 names IMMEDIATELY post-ARCA-open (first 18h before Fri bars
+//     fall outside window): would have ~6-12 buckets — BELOW floor temporarily
+// **Known short-term limitation:** Mon 01:00 UTC to ~Mon 14:30 UTC there may
+// be a ~13.5h window where non-24/7 names show insufficient_history. Each
+// subsequent ARCA-open cycle the situation improves. By the second full ARCA
+// day (Tue) all pairs are clear. This is the BEST achievable until B-NEW-35
+// (two-table architecture) reduces the per-row cost by ~100×, after which
+// we can safely widen to 240h or beyond.
+const LOOKBACK_HOURS_60M = 120;
 const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is disabled today (scanner.ts:408) so this is dead-code-safe but symmetric.
 
 /**
