@@ -1,8 +1,9 @@
-# B-NEW-36 — Off-hours session-lifecycle controller + migration-ledger reconciliation + xStock universe-split cleanup (rev 2)
+# B-NEW-36 — Off-hours session-lifecycle controller + migration-ledger reconciliation + xStock universe-split cleanup (rev 3)
 
 > **From:** Claude Code
-> **To:** Langston (Step 1 design review) + Kyle (decider)
-> **Date:** 2026-05-19 early UTC (revising scope draft from 2026-05-18 night)
+> **To:** Langston (Step 1 design review confirmation) + Kyle (decider)
+> **Date:** 2026-05-19 early UTC (rev 3 after Langston Step 1 review with R1/R2/R3 + C1/C2/C3 + Q9-followup)
+> **Status:** rev3 incorporates ALL Langston conditional-ACK revisions. Awaiting Langston confirmation; then pre-audit gate opens per Kyle directive.
 > **Type:** Combined three-sub-batch ship — ledger reconciliation (prerequisite) + lifecycle controller (the real work) + universe-split cleanup (empirical finding tonight)
 > **Kyle directive 2026-05-18 night:** "Can this be added as a part of the off-hours session-lifecycle controller batch? If it can be added, please proceed with that combined batch." → answered YES. Then Kyle directive 2026-05-19 early UTC: "if you're able to find evidence the 10 designated 24/7 names actually trade weekends, keep the split; otherwise collapse to one pool." → empirical check returned ZERO weekend activity for the 6-of-10 names already in snapshot → collapsing to one pool, dropping the designation (gated on NVDA/QQQ/SPY/TSLA confirmation when pre-warm reaches them; see Q9).
 > **Status on Hetzner staging:** B-NEW-34b code committed/pushed (commits `d9031fe8d`, `4fd780c3d`, `686d13ae4`); snapshot table created + B-NEW-34b ledger row inserted manually; pre-warm script in-flight (~163/265 symbols at last check); scanner not yet restarted pending pre-warm coverage.
@@ -124,22 +125,53 @@ Per §0.5 empirical findings: all xStocks share identical hours. Two scheduled h
 
 **No Monday 13:30 UTC ARCA-reopen hook needed** — empirically all xStocks are already trading by Sunday 8PM ET. (Cross-referenced from §0.5 Finding 2.)
 
-### State machine for vts_open_trades
+### State machine for vts_open_trades (rev3 — per Langston R1)
 
 Current schema: `vts_open_trades.closed BOOLEAN` (post-B79.0g-tx soft-delete) — binary open/closed.
 
-Proposed addition: `vts_open_trades.state VARCHAR(32)` (NULLABLE, default 'open' via app-side semantic), values:
-- `'open'` (default — actively evaluated)
-- `'weekend_suspended'` (scanner stopped + TEC + sim cycle skip)
-- (future expansion possible without schema change)
+**Per Langston R1 ACK:** the rev2 proposal (add `state` column with deferred-cleanup of `closed`) was a NO-PATCHES violation because it admitted invalid combinations like `closed=true AND state='open'`. Rev3 adopts Langston's PREFERRED shape:
 
-Why a separate column rather than reusing `closed`: closed is a binary lifecycle marker (open vs gone-forever); weekend_suspended is a temporary pause within the open lifecycle. Trades will cycle open → weekend_suspended → open every week without changing closed status.
+```sql
+ALTER TABLE vts_open_trades
+  ADD COLUMN state VARCHAR(32) NOT NULL DEFAULT 'open';
+
+-- Backfill closed rows IN THE SAME MIGRATION (atomic):
+UPDATE vts_open_trades SET state = 'closed' WHERE closed = true;
+
+-- CHECK constraint locks the two columns into consistency:
+ALTER TABLE vts_open_trades
+  ADD CONSTRAINT vts_open_trades_state_consistency
+  CHECK (
+    (closed = false AND state IN ('open', 'weekend_suspended'))
+    OR
+    (closed = true AND state = 'closed')
+  );
+```
+
+Values: `{'open', 'weekend_suspended', 'closed'}`. `closed` BOOLEAN remains as a redundant view for legacy reads; new code reads `state`. Future cleanup batch can retire `closed` once all consumers migrate to `state`, but the CHECK constraint guarantees they stay consistent in the interim — meeting NO-PATCHES because the dimension is correct AT MIGRATION TIME, not "deferred to future batch."
+
+App-side type alias:
+```ts
+type VtsOpenTradeState = 'open' | 'weekend_suspended' | 'closed';
+```
 
 VTS sim cycle (`runPhase10SimulationCycle`) filter: `WHERE state != 'weekend_suspended'` added to the open-trades query. Eliminates RUNNING_ISSUES #116 TEC stale fail-closed for xStock as a side-effect — sim cycle no longer hits xstock trades during weekend → no TEC config resolve call → no stale fail-closed log noise.
 
+**UI display (per Langston C3):** open-trades panel renders `weekend_suspended` trades with a small visual distinction — greyed-out row OR `(suspended)` suffix on the state column — so Kyle can spot paused trades at-a-glance during weekend reviews. Specific CSS / suffix shape: implementation Step 3 chooses one; Step 4 review confirms.
+
 ### Scheduled task infrastructure
 
-**Option A (RECOMMENDED — minimum-viable):** node-cron in-process scheduled tasks, registered at server boot, fired in `centralClock`'s timer space (no new process, no new infra). Two timers: Sat 01:00 UTC and Mon 01:00 UTC. Each timer wraps the corresponding hook function in `try/catch` with structured logging and a `scheduled_tasks_audit` row INSERT (NEW table, narrow schema: id, task_name, scheduled_for, fired_at, status, error_message).
+**Option A (RECOMMENDED — minimum-viable):** node-cron in-process scheduled tasks, registered at server boot, fired in `centralClock`'s timer space (no new process, no new infra). Two timers scheduled in **ET-timezone** (per Langston Q5 ACK): `cron.schedule('0 20 * * 5', weekendShutdown, { timezone: 'America/New_York' })` and `cron.schedule('0 20 * * 0', weekendRestart, { timezone: 'America/New_York' })`. This auto-handles the DST transitions (Mar 8 / Nov 1 nominally) — node-cron's timezone option uses Intl, same DST-awareness as `market-hours.ts:getETParts`. Hardcoded UTC offsets are explicitly NOT permitted because the second-week-of-March and first-week-of-November shifts would silently fire the hook at the wrong wall-clock time. Each timer wraps the corresponding hook function in `try/catch` with structured logging and a `scheduled_tasks_audit` row INSERT (NEW table, narrow schema: id, task_name, scheduled_for, fired_at, status, error_message).
+
+**Per Langston Q6 ACK — pre-warm circuit-breaker:** the in-process pre-warm function call must be wrapped so that pre-warm failure does NOT crash the server process AND does NOT block the rest of the hook from executing. Specifically: pre-warm failure → log + write `status='error'` to `scheduled_tasks_audit` with error_message + STILL ATTEMPT scanner pause / suspend trades / etc. The hook commits to its operational responsibilities regardless of pre-warm outcome — scanner needs to pause even if the snapshot didn't refresh.
+
+**Per Langston Q7 ACK — boot-time state computation:** the lifecycle controller must perform AFFIRMATIVE STATE COMPUTATION at boot, not just timer-fire reactive logic. On every server start, immediately after timer registration:
+
+1. Compute current UTC time → ET-equivalent → determine if NOW is inside the unified weekend close window.
+2. If YES: scanner should be in `paused` state on boot (do NOT subscribe to centralClock yet); skip the resume hook; wait for the next Sun-8PM-ET scheduled fire.
+3. If NO: scanner should be in `active` state on boot (subscribe to centralClock normally); proceed as today.
+
+This handles the crash-during-weekend-close-window recovery scenario: if PM2 restarts the server at Sat 12:00 UTC and the controller naively reads "no recent scheduled fire" + subscribes to centralClock, the scanner would resume mid-weekend-close and start cycling against a market that's closed. Affirmative boot-time computation prevents this.
 
 **Option B (REJECTED for scope):** external systemd timer + script. Adds operational surface area (systemd unit ownership, cron-vs-app failure mode disambiguation). Reserved for if/when scheduled-task volume grows beyond 5-10 distinct tasks.
 
@@ -176,7 +208,7 @@ Forensic-only — surfaces task execution history for operations. Bounded growth
 | `drizzle/migrations/2026-05-XX-b-new-36-scheduled-tasks-audit.sql` (NEW) | CREATE TABLE per above + index. |
 | `server/services/session-lifecycle-controller.ts` (NEW) | Two timer-fire handlers (weekendShutdown, weekendRestart); registration logic; audit-row helpers; in-process pre-warm function call (per Q6 ACK). |
 | `server/index.ts` | At boot: import + register the lifecycle controller's timers. Wrapped in same try/catch as other startup services. |
-| `server/asset_classes/xstock_spot/scanner.ts` | Add `pause()` + `resume()` methods that subscribe/unsubscribe centralClock and update `diag.isRunning`. (`stop()` is the existing teardown; the new methods are reversible-without-process-restart.) |
+| `server/asset_classes/xstock_spot/scanner.ts` | Add `pause()` + `resume()` methods that subscribe/unsubscribe centralClock and update `diag.isRunning` + new `diag.isPaused` flag. **Per Langston C1 — graceful drain semantics on `pause()`:** sets `paused=true`; the in-flight cycle (if any) finishes naturally; next centralClock tick observes `paused=true` and skips. Do NOT hard-interrupt mid-cycle (would leak DB connections + half-processed signals + cause inconsistent intermediate state). Spec: `pause()` is synchronous-with-flag-set, NOT synchronous-with-cycle-completion — callers proceed immediately and the next tick handles the no-op. (`stop()` remains as the existing teardown that fully unsubscribes; the new methods are reversible-without-process-restart.) |
 | `server/services/vts-trade-persistence.ts` | New helpers `markAllXstockWeekendSuspended()` + `unmarkAllXstockWeekendSuspended()`. Both are bulk UPDATEs by asset_class + state filter (simplified from rev1's per-symbol-list shape). |
 | `server/services/vts-runner.ts` (`runPhase10SimulationCycle`) | Add `AND state != 'weekend_suspended'` to the open-trades-fetch WHERE clause. |
 | `scripts/b-new-34b-prewarm-snapshot.ts` | Refactor: extract `runPrewarm(options)` function for in-process invocation; CLI wrapper preserved at the bottom of the same file. |
@@ -212,10 +244,18 @@ Retire the empirically-unsupported `XSTOCK_SPOT_24_7_SYMBOLS` 10-name designatio
 
 ### Acceptance criteria (Sub-batch c)
 
+**Static / unit-test criteria:**
 - `isXstockMarketOpenUTC('AAPL/USD', t)` and `isXstockMarketOpenUTC('AMZN/USD', t)` return identical values for every test time `t` (no symbol distinction).
 - Scanner `lastUniverseSize` during Mon-Thu overnight hours (e.g., Wed 23:00 UTC) returns the full ~265 not the previous 10. Verified by Claude-in-Chrome navigation to xStocks tab + Scanner Cycle metrics post-deploy.
 - `XSTOCK_SPOT_24_7_SYMBOLS` retains its export shape (empty Set) for one batch cycle; full removal queued.
 - Bar coverage for all xStocks Mon-Thu off-ARCA hours becomes consumable by scanner (was silently filtered out pre-fix).
+
+**Operational soak criteria (NEW per Langston R2):**
+- 7-day post-deploy observation window: capture `xstockSpotScanner` cycle duration p50 / p95 / p99 during Mon-Thu 23:00-04:00 UTC (the off-ARCA window where the universe expansion is ~26× the prior ~10-name effective universe).
+- **Hard fail-threshold:** p95 cycle duration > 25 seconds (the 30s centralClock interval minus headroom for downstream processing). Hitting this is a deploy-rollback or remediation trigger.
+- **Soft warning:** p95 cycle duration > 20 seconds. Trigger investigation but not immediate rollback.
+- Verification mechanism: `system-alerts` queue entry scheduled at Sub-batch (c) ship time, triggering 7 days later with verification script reference. Script reads PM2 logs + extracts duration_ms from `[B79.0a][SCAN_CYCLE_DONE]` lines filtered to the 23:00-04:00 UTC window, computes percentiles, emits PASS/SOFT-WARN/HARD-FAIL.
+- **Remediation path if hard-fail surfaces:** universe-tiering by liquidity (top-N by 30d volume gets every-cycle priority; rest get rotation slots) rather than reverting the universe-split fix. Reverting puts us back in the silent universe-shrinkage bug.
 
 ### Blast radius
 
@@ -243,19 +283,30 @@ Cross-cutting concerns to verify in Step 2 pre-audit:
 - Crypto regression — NONE by-construction (asset_class scoping on every state change; only xstock symbols affected).
 - TEC interaction — `weekend_suspended` trades fall out of sim-cycle resolveOpenVirtualTrades loop → no TEC config-resolve calls → no stale fail-closed for xstock_spot during weekend. Confirmed side-effect, not a code change to TEC.
 - B79.0n active-trading wire-in dependency — paper/live xstock trades (when wire-in lands) will also need `state` filtering; pre-audit confirms paper-execution-engine code path doesn't bypass the state check.
-- Scanner cycle budget — Sub-batch (c) increases the universe during off-ARCA hours by ~26×; pre-audit confirms B-NEW-34b's per-cycle DB cost reduction (~75-85% lower) gives sufficient headroom.
+- Scanner cycle budget — Sub-batch (c) increases the universe during off-ARCA hours by ~26×; pre-audit confirms B-NEW-34b's per-cycle DB cost reduction (~75-85% lower) gives sufficient headroom. Operational soak (R2) backstops the analytical estimate.
+- **Per Langston C2:** deploy ordering — pre-audit confirms `npm run db:migrate` is invoked BEFORE `pm2 restart` in the standard staging deploy flow (so the new `state` column exists when new vts-runner code reads it). Pre-audit step traces the deploy script (or SSH session pattern) and documents the ordering invariant explicitly.
 
 ---
 
-## §4 — Sequencing
+## §4 — Sequencing (rev3 per Langston R3 — split Step 4 review)
 
-1. Sub-batch (a) — Ledger reconciliation FIRST. Verify each of the 16 files + INSERT bookkeeping rows. After: `db:migrate` should run cleanly.
-2. Sub-batch (b) — Lifecycle controller. New migrations + new code + tests + staging deploy + Fri-8PM-ET observation gate.
-3. Sub-batch (c) — Universe-split cleanup. Code change + tests + staging deploy + post-restart scanner verification. Gated on Q9 empirical confirmation.
+**Per Langston R3 ACK:** Step 4 code review splits into two passes, not one. Single completion report covers all three sub-batches.
 
-Estimate: Sub-batch (a) ~1-2 hours. Sub-batch (b) ~1-2 days including Fri-evening live observation. Sub-batch (c) ~half-day (code is small, tests are mostly delete-cases). Combined ~2-3 days end-to-end.
+1. **Sub-batch (a) — Ledger reconciliation FIRST.** Mechanical: verify each of the 16 files + INSERT bookkeeping rows. Own commit. **Own Step 4 code review pass** (small diff, fast review — Langston reviews the per-file verification queries + the manual INSERT rows in the change list). Push after ACK. After deploy: `db:migrate` runs cleanly.
 
-**Friday 2026-05-22 8PM ET ship target** — if not met, current behavior (scanner idles with universe=0 during weekend, TEC log noise) persists for one more weekend. Acceptable but undesirable.
+2. **Sub-batch (c) — Universe-split cleanup (resequenced ahead of b per Langston Q1 ACK option).** Code change + tests + staging deploy + post-restart scanner verification. Gated on Q9 empirical confirmation (NVDA/QQQ/SPY/TSLA zero-weekend-activity in pre-warm coverage). Cleans up `market-hours.ts` predicate BEFORE (b)'s controller code references it.
+
+3. **Sub-batch (b) — Lifecycle controller.** New migrations + new code + tests + staging deploy + Fri-8PM-ET observation gate. Builds on the already-simplified `market-hours.ts` from (c).
+
+**Step 4 code review groupings:**
+- Pass 1: Sub-batch (a) standalone (DB bookkeeping, no app-code surface).
+- Pass 2: Sub-batch (b) + (c) together (scanner runtime + scheduling infra + market-hours predicate + state column + tests).
+
+Estimate: Sub-batch (a) ~1-2 hours. Sub-batch (c) ~half-day. Sub-batch (b) ~1-2 days including Fri-evening live observation. Combined ~2-3 days end-to-end.
+
+**Single Step 11 completion report** at the end covering all three sub-batches.
+
+**Friday 2026-05-22 8PM ET ship target** — if not met, current behavior (scanner idles with universe=0 during weekend, TEC log noise) persists for one more weekend. Per Langston Q8 ACK: ship clean next week beats ship rushed this week. Don't compress (b)'s testing window to hit the deadline.
 
 ---
 
@@ -282,16 +333,39 @@ Estimate: Sub-batch (a) ~1-2 hours. Sub-batch (b) ~1-2 days including Fri-evenin
   - (b) If any of the 4 unverified names DO show weekend activity (low prior, but possible), Sub-batch (c) descopes: retain `is24_7` only for the empirically-confirmed weekend-active names; document the empirical truth in System Manual.
   - (c) Confirm the gating mechanic is correct: pre-audit (Step 2) gates Sub-batch (c) on the empirical answer; if (b) fires, Sub-batch (c) doesn't block Sub-batch (a)+(b) — only Sub-batch (c) descopes.
 
+**Q9-followup ANSWER (per Langston Step 1 review):** The 10-name designation comes from **Kraken's own Phase 1 announcement blog post on 2025-12-03** at <https://blog.kraken.com/news/xstocks-247-trading>. Source list: `TSLAx, QQQx, SPYx, NVDAx, CRCLx, AAPLx, HOODx, MSTRx, GLDx, GOOGLx`. Adopted in batch B79.0c on 2026-05-09 (commit `651540cd4`, scope at `Claude Comms and Packages/Scope Files/BATCH_79_0c_SCOPE.md`). The B79.0c scope itself NOTED the empirical contradiction at design time: "xstock_spot WS archiver appears silent (`equity_spot_ticker_snap` last write 2026-05-09 11:12 UTC; `equity_spot_ohlc_1m` last write 2026-05-09 00:15 UTC). Two hypotheses: (a) Kraken WS goes silent on weekends regardless of 24/7 marker — server-side feed gap; (b) connection dropped + reconnect failing silently. B79.0c includes investigation, not necessarily fix." The follow-up B79.0L batch (2026-05-10) CONFIRMED the silence is intentional Kraken weekend feed closure, not a feed gap.
+
+**Net narrative for the change list:** Kraken's primary-source marketing claim says these 10 names trade 24/7. Kraken's WS-equities feed (our exclusive data path) has never carried weekend price activity for any xStock including those 10. The marketing claim and the feed behavior have been in contradiction since the B79.0c origin. Empirical evidence supersedes for our purposes because the WS feed is our exclusive data path — if Kraken later changes the feed behavior to match the marketing claim, we can re-add the designation via a small follow-up batch. Until then, treating the 10 as identical to the other 255 matches observed reality.
+
 ---
 
-## §6 — Ask
+## §6 — Ask (rev3)
 
-Step 1 ACK from Langston with revisions on §1-§5. Once locked, I'll write the Step 2 pre-audit (SIM consultation + per-file ledger verification SQL prep + scanner code-path trace for the universe-split cleanup). After your ACK on pre-audit, Step 3 implementation begins.
+**Rev 3 changes from rev 2 (all per Langston Step 1 review):**
 
-**Kyle directive 2026-05-19 early UTC:** "wait on the pre-implementation audit until you and Langston reach consensus on the scope." So pre-audit work begins ONLY after Langston Step 1 ACK is final.
+| Langston ask | Rev 3 response |
+|---|---|
+| R1 — state column shape | ACCEPTED preferred shape: VARCHAR(32) NOT NULL DEFAULT 'open' + same-migration backfill of closed rows + CHECK constraint enforcing closed↔state consistency. App-side type alias `VtsOpenTradeState`. Documented in §2 "State machine for vts_open_trades (rev3)". |
+| R2 — off-ARCA cycle-latency soak | ACCEPTED. Added to §2.5 acceptance criteria: 7-day post-deploy observation with p50/p95/p99 capture, hard-fail >25s p95, soft-warn >20s p95, system-alerts queue entry scheduled at ship time. Remediation path is universe-tiering by liquidity, not revert. |
+| R3 — split Step 4 code review | ACCEPTED. §4 now sequences (a) → (c) → (b), with Step 4 Pass 1 for (a) alone and Step 4 Pass 2 for (b)+(c) together. Single Step 11 completion report covers all three. |
+| C1 — pause() graceful drain | INCORPORATED into §2 code-changes table: pause() sets flag, in-flight cycle finishes naturally, next tick observes flag and skips. No hard-interrupt. |
+| C2 — migration vs code deploy ordering | INCORPORATED into §3 SIM impact: pre-audit confirms `npm run db:migrate` invoked BEFORE `pm2 restart` in standard deploy flow. Documented ordering invariant. |
+| C3 — UI panel display of weekend_suspended | INCORPORATED into §2 state-machine section: small visual distinction (greyed row OR `(suspended)` suffix). Implementation Step 3 picks one; Step 4 Pass 2 reviews. |
+| Q5 — node-cron TZ | INCORPORATED: cron.schedule expressions use `{ timezone: 'America/New_York' }` option; hardcoded UTC offsets explicitly disallowed (DST shifts). |
+| Q6 — pre-warm circuit-breaker | INCORPORATED: pre-warm failure → log + status=error audit row + continue with rest of hook (scanner pause still fires even if pre-warm errored). |
+| Q7 — boot-time state computation | INCORPORATED: lifecycle-controller.ts performs affirmative state computation at boot (not just reactive timer-fire logic) to handle crash-during-weekend-close-window recovery. |
+| Q9-followup — origin of 10-name set | ANSWERED in §5: Kraken Phase 1 blog 2025-12-03; adopted B79.0c 2026-05-09; B79.0c scope itself noted empirical contradiction at design time. Net change-list narrative documented for paper trail. |
 
-INFRASTRUCTURE NOTE (CLAUDE.md §6.5.0.a): no diff snippets to embed at Step 1 — this is design scope, not code review. For deeper inspection of B-NEW-34b code (referenced from this scope), use the staging repo at commit `686d13ae4`. DO NOT `cd /mnt/gdrive`.
+### What's still pending from Langston
 
-Reply with: (a) CLEAN ACK to proceed to Step 2 (gated on Kyle's pre-audit-after-consensus rule), OR (b) revisions on §1-§5, OR (c) substantive disagreement on the combined-sub-batch shape.
+This is a Langston-confirmation pass on the revisions, not a new question loop. Reply with one of:
 
-— Claude Code, 2026-05-19 early UTC (rev 2 of B_NEW_36_SCOPE)
+(a) **Rev 3 ACK** — all revisions cleanly incorporated; proceed to Step 2 pre-audit when Q9 empirical confirmation (NVDA/QQQ/SPY/TSLA) lands.
+(b) **Specific re-revisions** on any of the above bullets if my incorporation missed the mark.
+(c) **Substantive disagreement** — unlikely at this stage but the option is reserved.
+
+**Kyle directive 2026-05-19 early UTC:** "wait on the pre-implementation audit until you and Langston reach consensus on the scope." Pre-audit work begins ONLY after Langston rev 3 ACK is final.
+
+INFRASTRUCTURE NOTE (CLAUDE.md §6.5.0.a): no diff snippets to embed at Step 1 confirmation — this is design scope. For deeper inspection of B-NEW-34b code referenced here, use the staging repo at commit `686d13ae4`. DO NOT `cd /mnt/gdrive`.
+
+— Claude Code, 2026-05-19 early UTC (rev 3 of B_NEW_36_SCOPE)
