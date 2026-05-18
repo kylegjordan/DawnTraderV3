@@ -1,9 +1,9 @@
-# B-NEW-36 — Off-hours session-lifecycle controller + migration-ledger reconciliation + xStock universe-split cleanup (rev 3)
+# B-NEW-36 — Off-hours session-lifecycle controller + migration-ledger reconciliation + xStock universe-split cleanup (rev 4)
 
 > **From:** Claude Code
-> **To:** Langston (Step 1 design review confirmation) + Kyle (decider)
-> **Date:** 2026-05-19 early UTC (rev 3 after Langston Step 1 review with R1/R2/R3 + C1/C2/C3 + Q9-followup)
-> **Status:** rev3 incorporates ALL Langston conditional-ACK revisions. Awaiting Langston confirmation; then pre-audit gate opens per Kyle directive.
+> **To:** Langston (final ACK gate) + Kyle (decider)
+> **Date:** 2026-05-19 early UTC (rev 4 after Langston rev3 confirmation pass adding R1.1 + Q7.1)
+> **Status:** rev4 incorporates Langston rev3-pass revisions (R1.1 CHECK-constraint extension for state↔asset_class consistency; Q7.1 boot-time vts_open_trades.state reconciliation). Awaiting final Langston ACK; then pre-audit gate opens per Kyle directive.
 > **Type:** Combined three-sub-batch ship — ledger reconciliation (prerequisite) + lifecycle controller (the real work) + universe-split cleanup (empirical finding tonight)
 > **Kyle directive 2026-05-18 night:** "Can this be added as a part of the off-hours session-lifecycle controller batch? If it can be added, please proceed with that combined batch." → answered YES. Then Kyle directive 2026-05-19 early UTC: "if you're able to find evidence the 10 designated 24/7 names actually trade weekends, keep the split; otherwise collapse to one pool." → empirical check returned ZERO weekend activity for the 6-of-10 names already in snapshot → collapsing to one pool, dropping the designation (gated on NVDA/QQQ/SPY/TSLA confirmation when pre-warm reaches them; see Q9).
 > **Status on Hetzner staging:** B-NEW-34b code committed/pushed (commits `d9031fe8d`, `4fd780c3d`, `686d13ae4`); snapshot table created + B-NEW-34b ledger row inserted manually; pre-warm script in-flight (~163/265 symbols at last check); scanner not yet restarted pending pre-warm coverage.
@@ -129,7 +129,7 @@ Per §0.5 empirical findings: all xStocks share identical hours. Two scheduled h
 
 Current schema: `vts_open_trades.closed BOOLEAN` (post-B79.0g-tx soft-delete) — binary open/closed.
 
-**Per Langston R1 ACK:** the rev2 proposal (add `state` column with deferred-cleanup of `closed`) was a NO-PATCHES violation because it admitted invalid combinations like `closed=true AND state='open'`. Rev3 adopts Langston's PREFERRED shape:
+**Per Langston R1 ACK + R1.1 extension (rev 4):** the rev2 proposal (add `state` column with deferred-cleanup of `closed`) was a NO-PATCHES violation because it admitted invalid combinations like `closed=true AND state='open'`. Rev3 adopted the preferred shape. Rev4 extends the CHECK constraint to ALSO enforce `state↔asset_class` consistency per Langston R1.1: `weekend_suspended` is semantically meaningful only for `asset_class='xstock_spot'` (crypto has no weekend close). DB-side enforcement prevents the silent-stuckness failure mode where a buggy code path marks a crypto trade `weekend_suspended` → it falls out of the sim cycle's `WHERE state != 'weekend_suspended'` filter → stays stuck forever.
 
 ```sql
 ALTER TABLE vts_open_trades
@@ -138,13 +138,17 @@ ALTER TABLE vts_open_trades
 -- Backfill closed rows IN THE SAME MIGRATION (atomic):
 UPDATE vts_open_trades SET state = 'closed' WHERE closed = true;
 
--- CHECK constraint locks the two columns into consistency:
+-- CHECK constraint locks: closed↔state consistency AND state↔asset_class consistency.
 ALTER TABLE vts_open_trades
   ADD CONSTRAINT vts_open_trades_state_consistency
   CHECK (
-    (closed = false AND state IN ('open', 'weekend_suspended'))
-    OR
-    (closed = true AND state = 'closed')
+    (
+      (closed = false AND state IN ('open', 'weekend_suspended'))
+      OR
+      (closed = true AND state = 'closed')
+    )
+    AND
+    (state <> 'weekend_suspended' OR asset_class = 'xstock_spot')
   );
 ```
 
@@ -154,6 +158,8 @@ App-side type alias:
 ```ts
 type VtsOpenTradeState = 'open' | 'weekend_suspended' | 'closed';
 ```
+
+TS doesn't model row asset_class so the state↔asset_class consistency is DB-enforced only (per Langston R1.1).
 
 VTS sim cycle (`runPhase10SimulationCycle`) filter: `WHERE state != 'weekend_suspended'` added to the open-trades query. Eliminates RUNNING_ISSUES #116 TEC stale fail-closed for xStock as a side-effect — sim cycle no longer hits xstock trades during weekend → no TEC config resolve call → no stale fail-closed log noise.
 
@@ -165,13 +171,24 @@ VTS sim cycle (`runPhase10SimulationCycle`) filter: `WHERE state != 'weekend_sus
 
 **Per Langston Q6 ACK — pre-warm circuit-breaker:** the in-process pre-warm function call must be wrapped so that pre-warm failure does NOT crash the server process AND does NOT block the rest of the hook from executing. Specifically: pre-warm failure → log + write `status='error'` to `scheduled_tasks_audit` with error_message + STILL ATTEMPT scanner pause / suspend trades / etc. The hook commits to its operational responsibilities regardless of pre-warm outcome — scanner needs to pause even if the snapshot didn't refresh.
 
-**Per Langston Q7 ACK — boot-time state computation:** the lifecycle controller must perform AFFIRMATIVE STATE COMPUTATION at boot, not just timer-fire reactive logic. On every server start, immediately after timer registration:
+**Per Langston Q7 ACK + Q7.1 extension (rev 4) — boot-time affirmative state computation:** the lifecycle controller must perform affirmative state computation at boot, not just timer-fire reactive logic. On every server start, immediately after timer registration:
 
-1. Compute current UTC time → ET-equivalent → determine if NOW is inside the unified weekend close window.
-2. If YES: scanner should be in `paused` state on boot (do NOT subscribe to centralClock yet); skip the resume hook; wait for the next Sun-8PM-ET scheduled fire.
-3. If NO: scanner should be in `active` state on boot (subscribe to centralClock normally); proceed as today.
+1. Compute current UTC time → ET-equivalent → determine if NOW is inside the unified weekend close window (Fri 8PM ET → Sun 8PM ET).
+2. **Scanner subscription state:**
+   - If INSIDE-WINDOW: scanner should be in `paused` state on boot (do NOT subscribe to centralClock yet); skip the resume hook; wait for the next Sun-8PM-ET scheduled fire.
+   - If OUTSIDE-WINDOW: scanner should be in `active` state on boot (subscribe to centralClock normally); proceed as today.
+3. **Trade state reconciliation (per Langston Q7.1):** bulk-UPDATE `vts_open_trades` for `asset_class='xstock_spot' AND closed=false` to match the window state:
+   - If OUTSIDE-WINDOW: `UPDATE vts_open_trades SET state='open' WHERE asset_class='xstock_spot' AND closed=false AND state='weekend_suspended'` — clears any trades stuck-suspended from a missed Sun-restart hook.
+   - If INSIDE-WINDOW: `UPDATE vts_open_trades SET state='weekend_suspended' WHERE asset_class='xstock_spot' AND closed=false AND state='open'` — captures any trades that should have been suspended by a missed Fri-shutdown hook (or trades that opened between Friday's shutdown and the crash).
+4. Write a `scheduled_tasks_audit` row with `task_name='boot_state_reconciliation'` + `status='success'` + `meta` containing the row count + the determined window state + the action taken. Forensic-only.
 
-This handles the crash-during-weekend-close-window recovery scenario: if PM2 restarts the server at Sat 12:00 UTC and the controller naively reads "no recent scheduled fire" + subscribes to centralClock, the scanner would resume mid-weekend-close and start cycling against a market that's closed. Affirmative boot-time computation prevents this.
+This handles two failure modes the scheduled hooks alone can't cover:
+
+**Mode A — crash-during-weekend-close-window recovery (Q7 original):** PM2 restarts the server at Sat 12:00 UTC. Without affirmative boot computation, the controller naively reads "no recent scheduled fire" + subscribes to centralClock; scanner resumes mid-weekend-close and starts cycling against a market that's closed.
+
+**Mode B — silent-stuck trades across multi-day restart gap (Q7.1):** Server crashes Sat 06:00 UTC with N xstock trades in `weekend_suspended`; PM2 restarts Tue 10:00 UTC. Without boot reconciliation, trades stay `weekend_suspended` for ~5 days until the next Sun-restart hook clears them. Sim cycle skips them → no TEC evaluation → no exit evaluation → no governance. Exactly the silent-stuckness pattern this batch exists to eliminate.
+
+Both modes are closed by performing scanner subscription + trade state reconciliation TOGETHER at boot, against the same `inside-weekend-window?` computation.
 
 **Option B (REJECTED for scope):** external systemd timer + script. Adds operational surface area (systemd unit ownership, cron-vs-app failure mode disambiguation). Reserved for if/when scheduled-task volume grows beyond 5-10 distinct tasks.
 
@@ -236,7 +253,7 @@ Retire the empirically-unsupported `XSTOCK_SPOT_24_7_SYMBOLS` 10-name designatio
 
 | File | Change |
 |---|---|
-| `shared/asset-classes.ts` | Drop the `is24_7?: boolean` field from `XstockSpotEntry` interface. Remove `is24_7: true` from all 10 registry entries (AAPL, CRCL, GLD, GOOGL, HOOD, MSTR, NVDA, QQQ, SPY, TSLA). Drop the `XSTOCK_SPOT_24_7_SYMBOLS` exported `Set` — but RETAIN as an empty deprecated-aliased const for one batch cycle to avoid breaking any consumer outside this scope (Langston Q1 from B-NEW-34b: ANY-array-binding-style deprecation pattern). Schedule removal in next-batch cleanup. |
+| `shared/asset-classes.ts` | Drop the `is24_7?: boolean` field from `XstockSpotEntry` interface. Remove `is24_7: true` from all 10 registry entries (AAPL, CRCL, GLD, GOOGL, HOOD, MSTR, NVDA, QQQ, SPY, TSLA). **`XSTOCK_SPOT_24_7_SYMBOLS` exported `Set` retention is a Step 2 pre-audit decision per Langston rev3 minor:** grep all callers of `XSTOCK_SPOT_24_7_SYMBOLS`; if all are in-batch (this scope replaces them), clean removal beats dead-code retention. If grep finds out-of-batch callers, retain as empty deprecated-aliased Set for one batch cycle. Pre-audit documents the grep result + the decision. |
 | `server/asset_classes/xstock_spot/market-hours.ts` | Simplify `isXstockMarketOpenUTC(symbol, now)` to: (a) inside Fri-8PM-ET-to-Sun-8PM-ET unified weekend close → return false; (b) else return true. Drop the ARCA-aligned-vs-extended-hours branch. Drop the `XSTOCK_SPOT_24_7_SYMBOLS` import. Keep the symbol param signature for backward compat with all call sites; symbol is no longer consulted but the function-shape stays stable. |
 | `server/asset_classes/xstock_spot/scanner.ts` (lines 281-309 of the universe-build block) | Simplify the three-case logic: inside weekend close → empty universe; else → full universe. Drop the ARCA-closed-but-extended-hours-open special case (the "scan only 10 names overnight" code path). Drop the `XSTOCK_SPOT_24_7_SYMBOLS` import. |
 | `server/tests/unit/b79-0b-market-hours.test.ts` | Replace ARCA-only branch tests (which would now fail because all symbols are treated identically) with the single weekend-window predicate. Existing weekend-window tests pass through unchanged. |
@@ -339,33 +356,35 @@ Estimate: Sub-batch (a) ~1-2 hours. Sub-batch (c) ~half-day. Sub-batch (b) ~1-2 
 
 ---
 
-## §6 — Ask (rev3)
+## §6 — Ask (rev4)
 
-**Rev 3 changes from rev 2 (all per Langston Step 1 review):**
+**Rev 4 changes from rev 3 (per Langston rev3 confirmation pass):**
 
-| Langston ask | Rev 3 response |
+| Langston ask | Rev 4 response |
 |---|---|
-| R1 — state column shape | ACCEPTED preferred shape: VARCHAR(32) NOT NULL DEFAULT 'open' + same-migration backfill of closed rows + CHECK constraint enforcing closed↔state consistency. App-side type alias `VtsOpenTradeState`. Documented in §2 "State machine for vts_open_trades (rev3)". |
-| R2 — off-ARCA cycle-latency soak | ACCEPTED. Added to §2.5 acceptance criteria: 7-day post-deploy observation with p50/p95/p99 capture, hard-fail >25s p95, soft-warn >20s p95, system-alerts queue entry scheduled at ship time. Remediation path is universe-tiering by liquidity, not revert. |
-| R3 — split Step 4 code review | ACCEPTED. §4 now sequences (a) → (c) → (b), with Step 4 Pass 1 for (a) alone and Step 4 Pass 2 for (b)+(c) together. Single Step 11 completion report covers all three. |
-| C1 — pause() graceful drain | INCORPORATED into §2 code-changes table: pause() sets flag, in-flight cycle finishes naturally, next tick observes flag and skips. No hard-interrupt. |
-| C2 — migration vs code deploy ordering | INCORPORATED into §3 SIM impact: pre-audit confirms `npm run db:migrate` invoked BEFORE `pm2 restart` in standard deploy flow. Documented ordering invariant. |
-| C3 — UI panel display of weekend_suspended | INCORPORATED into §2 state-machine section: small visual distinction (greyed row OR `(suspended)` suffix). Implementation Step 3 picks one; Step 4 Pass 2 reviews. |
-| Q5 — node-cron TZ | INCORPORATED: cron.schedule expressions use `{ timezone: 'America/New_York' }` option; hardcoded UTC offsets explicitly disallowed (DST shifts). |
-| Q6 — pre-warm circuit-breaker | INCORPORATED: pre-warm failure → log + status=error audit row + continue with rest of hook (scanner pause still fires even if pre-warm errored). |
-| Q7 — boot-time state computation | INCORPORATED: lifecycle-controller.ts performs affirmative state computation at boot (not just reactive timer-fire logic) to handle crash-during-weekend-close-window recovery. |
-| Q9-followup — origin of 10-name set | ANSWERED in §5: Kraken Phase 1 blog 2025-12-03; adopted B79.0c 2026-05-09; B79.0c scope itself noted empirical contradiction at design time. Net change-list narrative documented for paper trail. |
+| R1.1 — extend CHECK constraint for state↔asset_class consistency | INCORPORATED into §2 state-machine SQL block. `weekend_suspended` is now DB-enforced as only valid for `asset_class='xstock_spot'`. Closes the silent-stuckness failure mode where a buggy code path marks a crypto trade weekend_suspended. |
+| Q7.1 — extend boot-time state computation to reconcile vts_open_trades.state | INCORPORATED into §2 boot-time section. Boot logic now does BOTH scanner-subscription reconciliation AND bulk-UPDATE of vts_open_trades.state to match the computed inside-weekend-window state. Audit row written with task_name='boot_state_reconciliation'. Closes the Mode B (silent-stuck trades across multi-day restart gap) failure scenario. |
+| Minor — XSTOCK_SPOT_24_7_SYMBOLS empty-Set retention | DEFERRED to Step 2 pre-audit. §2.5 entry updated: grep all callers; if in-batch only, clean removal; if out-of-batch, retain empty Set for one batch cycle. Pre-audit documents the decision. |
+
+**Rev 3 carry-over from Langston Step 1 review (already in scope):**
+
+| Langston ask | Status |
+|---|---|
+| R1 — state column shape | ✓ Rev3 preferred shape implemented (NOT NULL DEFAULT 'open' + same-migration backfill + CHECK closed↔state). |
+| R2 — off-ARCA cycle-latency soak | ✓ Rev3 7-day soak added to §2.5 acceptance criteria. |
+| R3 — split Step 4 code review | ✓ Rev3 sequencing (a) → (c) → (b) with Pass 1 / Pass 2 split. |
+| C1/C2/C3 + Q5/Q6/Q7/Q9-followup | ✓ All incorporated in rev3. |
 
 ### What's still pending from Langston
 
-This is a Langston-confirmation pass on the revisions, not a new question loop. Reply with one of:
+This is a Langston-confirmation pass on the two rev3-pass revisions. Reply with one of:
 
-(a) **Rev 3 ACK** — all revisions cleanly incorporated; proceed to Step 2 pre-audit when Q9 empirical confirmation (NVDA/QQQ/SPY/TSLA) lands.
-(b) **Specific re-revisions** on any of the above bullets if my incorporation missed the mark.
+(a) **Rev 4 final ACK** — all revisions cleanly incorporated; pre-audit gate clears when Q9 empirical confirmation (NVDA/QQQ/SPY/TSLA) lands.
+(b) **Specific re-revisions** on R1.1 or Q7.1 if my incorporation missed the mark.
 (c) **Substantive disagreement** — unlikely at this stage but the option is reserved.
 
-**Kyle directive 2026-05-19 early UTC:** "wait on the pre-implementation audit until you and Langston reach consensus on the scope." Pre-audit work begins ONLY after Langston rev 3 ACK is final.
+**Kyle directive 2026-05-19 early UTC:** "wait on the pre-implementation audit until you and Langston reach consensus on the scope." Pre-audit work begins ONLY after Langston rev 4 ACK is final.
 
-INFRASTRUCTURE NOTE (CLAUDE.md §6.5.0.a): no diff snippets to embed at Step 1 confirmation — this is design scope. For deeper inspection of B-NEW-34b code referenced here, use the staging repo at commit `686d13ae4`. DO NOT `cd /mnt/gdrive`.
+INFRASTRUCTURE NOTE (CLAUDE.md §6.5.0.a): no diff snippets to embed at scope review — this is design scope. For staging-side inspection use ssh staging at commit `f02196411` (rev3 commit; rev4 commit pending after this dispatch). DO NOT `cd /mnt/gdrive`.
 
-— Claude Code, 2026-05-19 early UTC (rev 3 of B_NEW_36_SCOPE)
+— Claude Code, 2026-05-19 early UTC (rev 4 of B_NEW_36_SCOPE)
