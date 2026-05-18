@@ -18,7 +18,8 @@
     "b-new-37:inversion-forensics": "tsx scripts/b-new-37-inversion-forensics.ts",
     "system-alerts": "tsx scripts/system-alerts.ts",
     "b-new-40:soak-verify": "tsx scripts/b-new-40-soak-verify.ts",
-    "b-phase-a2:backfill": "tsx scripts/b-phase-a2-backfill.ts"
+    "b-phase-a2:backfill": "tsx scripts/b-phase-a2-backfill.ts",
+    "b-new-34b:prewarm": "tsx scripts/b-new-34b-prewarm-snapshot.ts"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",

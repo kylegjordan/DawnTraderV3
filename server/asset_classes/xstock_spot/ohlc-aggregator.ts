@@ -104,21 +104,15 @@ const MAX_BARS_240M = 30; // ≤30 returned per pair (matches B68.1 min_higher_t
 // B-NEW-34a tuning iteration 2026-05-18 20:15 UTC: 240h then 168h both caused
 // per-cycle SCAN_TIMEOUT at 25s budget. The DISTINCT ON dedup over 15-22M
 // source rows (from B74's 18-56× duplicate writes) exceeds the budget.
-// Reduced to 120h (5 days wall-clock). Math:
-//   120h × 21× dup × 75 syms × 60 1m/h ≈ ~11M source rows pre-DISTINCT-ON
-// Empirical pre-DISTINCT-ON query latency at 120h estimated ~7-8s, fits
-// budget. Coverage trade-off:
-//   - 24/7 names: ~70 buckets (clears 24-bar floor with margin) ✓
-//   - non-24/7 names Mon morning right after ARCA reopen: catches ~6h Mon
-//     RTH so far + 24h Fri's RTH session bars = ~30 buckets ✓ (clears floor)
-//   - non-24/7 names IMMEDIATELY post-ARCA-open (first 18h before Fri bars
-//     fall outside window): would have ~6-12 buckets — BELOW floor temporarily
-// **Known short-term limitation:** Mon 01:00 UTC to ~Mon 14:30 UTC there may
-// be a ~13.5h window where non-24/7 names show insufficient_history. Each
-// subsequent ARCA-open cycle the situation improves. By the second full ARCA
-// day (Tue) all pairs are clear. This is the BEST achievable until B-NEW-35
-// (two-table architecture) reduces the per-row cost by ~100×, after which
-// we can safely widen to 240h or beyond.
+// Reduced to 120h (5 days wall-clock).
+//
+// B-NEW-34b (2026-05-18 night) — Lookback-tuning ABANDONED as the production
+// path. The cache now uses a snapshot-first read (xstock_spot_ohlc_60m_snapshot)
+// plus a narrow 24h live overlay window (passed as lookbackHoursOverride). The
+// 120h default below is preserved only for FORENSIC / direct callers that bypass
+// the cache layer (e.g. b-phase-a2-backfill rerun scripts, ad-hoc DB tools). The
+// hot scanner cycle no longer scans the wide window — see
+// server/services/xstock-ohlc-cache.ts NARROW_OVERLAY_HOURS_60M.
 const LOOKBACK_HOURS_60M = 120;
 const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is disabled today (scanner.ts:408) so this is dead-code-safe but symmetric.
 
@@ -135,10 +129,18 @@ const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is di
  *                  5 known collision tickers (CVX, DASH, MET, OPEN, SUI per
  *                  XSTOCK_SPOT_KRAKEN_COLLISIONS) are unambiguous here.
  * @param intervalMinutes - 60 or 240
+ * @param lookbackHoursOverride - B-NEW-34b (2026-05-18) optional override of the
+ *                  default wall-clock lookback. When the snapshot-first cache
+ *                  path is in use, the cache supplies a NARROW overlay window
+ *                  (e.g. 24h) so the live aggregator only fetches the recent
+ *                  tail. The snapshot table provides the historical bars,
+ *                  eliminating the DISTINCT-ON-over-wide-window cost.
+ *                  Undefined → use the default constants as before.
  */
 export async function aggregateXstockOHLC(
   symbols: string[],
   intervalMinutes: XstockAggregationInterval,
+  lookbackHoursOverride?: number,
 ): Promise<Map<string, OHLCData[]>> {
   const out = new Map<string, OHLCData[]>();
   for (const s of symbols) out.set(s, []);
@@ -149,12 +151,16 @@ export async function aggregateXstockOHLC(
   // block for the rationale (xStock weekend close eats 48h of any window built
   // on crypto-style "wall-clock hours = bar hours" math).
   //
-  // Math at the new 240h window for the 60m path:
-  //   60-min: 240 wall-clock h × 60 1m/h × 75 syms × ~21× B74 dup ≈ 22.7M source
-  //           rows scanned per cycle pre-DISTINCT-ON; aggregated to ~30-50
-  //           buckets per symbol post-rollup; capped to 60 by L228-232.
+  // B-NEW-34b (2026-05-18): when lookbackHoursOverride is provided (the cache's
+  // narrow-overlay path), use that instead. Otherwise fall back to the default
+  // session-shape-aware constants. Range guard: override must be a positive
+  // finite number; anything else falls back to the default.
   const maxBars = intervalMinutes === 60 ? MAX_BARS_60M : MAX_BARS_240M;
-  const lookbackHours = intervalMinutes === 60 ? LOOKBACK_HOURS_60M : LOOKBACK_HOURS_240M;
+  const defaultLookback = intervalMinutes === 60 ? LOOKBACK_HOURS_60M : LOOKBACK_HOURS_240M;
+  const lookbackHours =
+    Number.isFinite(lookbackHoursOverride) && (lookbackHoursOverride as number) > 0
+      ? (lookbackHoursOverride as number)
+      : defaultLookback;
 
   // B-NEW-34 R4 (Langston Step 4 fix): both branches use epoch-floor to align
   // to UTC boundaries WITHOUT depending on postgres session TZ.
