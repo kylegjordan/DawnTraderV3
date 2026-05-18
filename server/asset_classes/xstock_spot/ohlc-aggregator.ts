@@ -75,8 +75,34 @@ export type XstockAggregationInterval = 60 | 240;
  * and B68.1's 30-bar `min_higher_tf_samples` threshold. Source-row counts drop
  * to 270K (60-min) + 540K (240-min) ≈ 4× faster on the rollup queries.
  */
-const MAX_BARS_60M = 60;  // ~2.5 trading days of hourly history (24-bar floor + 2.5× headroom)
-const MAX_BARS_240M = 30; // ~5 trading days of 4h history (matches B68.1 min_higher_tf_samples)
+// MAX_BARS_60M / MAX_BARS_240M govern the RETURNED ARRAY CAP (most-recent N bars).
+// They are independent of LOOKBACK_HOURS_* (the DB query wall-clock window). Per
+// B-NEW-34a (2026-05-18), the lookback hours are decoupled from the cap because
+// xStock weekend close (Fri 20:00 ET → Sun 20:00 ET = 48h gap) means
+// `wall-clock hours ≠ bar-producing hours` for equities.
+const MAX_BARS_60M = 60;  // ≤60 returned per pair regardless of lookback breadth
+const MAX_BARS_240M = 30; // ≤30 returned per pair (matches B68.1 min_higher_tf_samples)
+
+// B-NEW-34a (2026-05-18) — lookback wall-clock hours are session-shape-aware.
+// xStocks have a 48-hour weekend close (Fri 20:00 ET → Sun 20:00 ET) plus
+// ~17.5 non-RTH hours per weekday for the 255 non-24/7 names. The wall-clock
+// window required to find N bars is much larger than for crypto's continuous
+// trading. 240h = 10 days = spans weekend + 4 prior RTH sessions, which yields
+// ~30-50 buckets for non-24/7 names by Mon market open, satisfying the
+// 24-bar `min_ohlc_history_bars` floor.
+//
+// Trade-off (governance: RUNNING_ISSUES #118 + B-NEW-35 promotion):
+//   240h × 60 1m bars/h × 75 symbols × ~21× B74 source-side duplication ≈
+//   22M source rows per cycle scan, on 30s cadence → ~750K rows/sec sustained
+//   read pressure on `xstock_spot_ohlc_1m`. The DISTINCT ON dedup (see L152+
+//   below) is required because B74 archiver currently writes 18-56× duplicates
+//   per (symbol, interval_begin). B-NEW-35 source-side dedup is the structural
+//   fix; until that ships, this hotfix temporarily worsens Supabase Disk IO
+//   Budget posture ~4× vs the prior 60h window. Hard rollback thresholds in
+//   `B_NEW_34a_HOTFIX_SCOPE.md` §6. Acceptable short-term given Supabase
+//   warning is depleting-not-exhausted; B-NEW-35 is next-batch top priority.
+const LOOKBACK_HOURS_60M = 240;
+const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is disabled today (scanner.ts:408) so this is dead-code-safe but symmetric.
 
 /**
  * Aggregate xstock_spot_ohlc_1m rows into higher-timeframe OHLC bars.
@@ -100,12 +126,17 @@ export async function aggregateXstockOHLC(
   for (const s of symbols) out.set(s, []);
   if (symbols.length === 0) return out;
 
-  // Lookback window sized to cache depth + buffer to ensure we have enough
-  // 1-min source bars to produce the requested rollup bar count.
-  // 60-min × 200 = 200 hours = ~8.3 days of 1-min bars.
-  // 240-min × 60  = 240 hours = 10 days of 1-min bars.
+  // B-NEW-34a (2026-05-18): lookback wall-clock hours are session-shape-aware
+  // and decoupled from the returned-array cap. See LOOKBACK_HOURS_60M comment
+  // block for the rationale (xStock weekend close eats 48h of any window built
+  // on crypto-style "wall-clock hours = bar hours" math).
+  //
+  // Math at the new 240h window for the 60m path:
+  //   60-min: 240 wall-clock h × 60 1m/h × 75 syms × ~21× B74 dup ≈ 22.7M source
+  //           rows scanned per cycle pre-DISTINCT-ON; aggregated to ~30-50
+  //           buckets per symbol post-rollup; capped to 60 by L228-232.
   const maxBars = intervalMinutes === 60 ? MAX_BARS_60M : MAX_BARS_240M;
-  const lookbackHours = (intervalMinutes * maxBars) / 60;
+  const lookbackHours = intervalMinutes === 60 ? LOOKBACK_HOURS_60M : LOOKBACK_HOURS_240M;
 
   // B-NEW-34 R4 (Langston Step 4 fix): both branches use epoch-floor to align
   // to UTC boundaries WITHOUT depending on postgres session TZ.
@@ -139,6 +170,13 @@ export async function aggregateXstockOHLC(
   // R2#1: ordered aggregation via (array_agg(... ORDER BY interval_begin))[1]
   // for open and [1 DESC] for close. R2#2: partial-bar emission — no end-of-
   // bucket gating, so the currently-forming bucket is included.
+  // B-NEW-34a (2026-05-18) addendum: lookback widened to 240h per the comment
+  // block at LOOKBACK_HOURS_60M. The DISTINCT ON scan cost scales with that
+  // window, so the per-cycle source-row count is now ~22M rather than the
+  // ~720K cited in the original 60h-era comment below. Sustained ~750K rows/sec
+  // read pressure on `xstock_spot_ohlc_1m` until B-NEW-35 source-side dedup
+  // ships. RUNNING_ISSUES #118 tracks the IO posture + hard rollback thresholds.
+  //
   // B-NEW-34 hotfix 3 (2026-05-15 — discovered post-staging-verify): the
   // `xstock_spot_ohlc_1m` table is being written by B74 with 18-56× duplicate
   // rows per (symbol, interval_begin) — the WS archive emits a fresh row for

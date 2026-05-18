@@ -32,6 +32,20 @@
 
 - **Entry-side discontinuity gating NOT BUILT.** Detector covers EXIT decisions only. Scanner does NOT consult detector before opening positions. Phase 19 live-trading prep adds entry-side counterpart.
 
+## 🚨 CRITICAL DIRECTIVE BEFORE PHASE A.3 (Kyle 2026-05-18)
+
+**xStock infrastructure has been routing into VTS-only since B79.0m (RUNNING_ISSUES #117).** Active-trading wire-in batch B79.0n was planned but NEVER SHIPPED. All xStock batches since (B79.0m.a, B79.0m.b, B79.0m.b2, B-NEW-14, B-NEW-34, B-NEW-42b, B-PHASE-A2) inherited the same gap. Kyle standing directive (re-confirmed 2026-05-18): wire active-trading code path now, full testing deferred to Phase 19.
+
+**Locked plan order:**
+1. PAUSE further xStock infrastructure additions in the current VTS-only pattern.
+2. **B79.0n — Active-trading wire-in batch.** Wire xStock filters / MCE / regime / DBS / TEC / all strategy detect paths into signal-orchestrator's active-trading dispatch. Active trading stays OFF; the code path becomes end-to-end ready. Estimated 5-10 days.
+3. **B-PHASE-A2 DBS becomes a consumer that flows automatically through B79.0n** — no extension to A.2 needed; the singleton + registry sector data + MCE non-crypto branch are all in place. B79.0n threads `propagatedDbs` from `getLatestXstockGlobalDbsSnapshot()` into the orchestrator's xStock-handling code path.
+4. **Off-hours session-lifecycle controller batch** after B79.0n — proactive Fri 8PM ET wind-down + Sun 8PM ET re-up (vs current short-circuit). Coordinates scanner / signal-orchestrator / paper-execution-engine / TEC cache via explicit session state.
+
+Phase A.3 verification can run in parallel with B79.0n design if the verification logic doesn't depend on active-trading-path outcomes — confirm before opening.
+
+---
+
 ## ⏳ NEXT — Phase A.3 (DBS verification gate)
 
 **Plan reference:** `1-system-manual/XSTOCK_CALIBRATION_PLAN.md` Phase A.3.
