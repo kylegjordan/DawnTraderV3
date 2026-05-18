@@ -11261,6 +11261,61 @@ Cache depth caps (after hotfix 2 reduction): 60 bars for 60-min (~2.5 trading da
 
 ---
 
+## xStock 60-min snapshot architecture (B-NEW-34b, 2026-05-18 night)
+
+*Added 2026-05-18 night with B-NEW-34b close.*
+
+### Problem the snapshot architecture solves
+
+The B-NEW-34 ship (2026-05-15) moved the xStock scanner from ticker-snap-based scanning to per-cycle 60-minute OHLC aggregation with a 24-bar floor. It worked Friday afternoon because the market was open and the 60-hour wall-clock lookback contained ~60 hours of bar-producing minutes. The first full weekend after deploy surfaced a structural mismatch: the xStock unified weekend close (Fri 8PM ET → Sun 8PM ET) eats 48 hours from any wall-clock window. By Monday's ARCA reopen at 13:30 UTC, the 60-hour window contained only ~12 hours of bar-producing minutes per symbol, yielding ~20 buckets — below the 24-bar floor. Scanner `insufficient_history=75` on every cycle.
+
+B-NEW-34a attempted lookback widening (60h → 240h → 168h → 120h). All three iterations failed: 240h and 168h hit the 25-second per-cycle SCAN_TIMEOUT because the Postgres DISTINCT ON dedup over B74's 18-56× duplicate source rows scales linearly with window depth; 120h ran intermittently but with no margin for further B74 source-table growth. Kyle directive 2026-05-18 22:25 UTC: lookback-tune is the wrong axis.
+
+### The architecture
+
+Pre-aggregate the 60 most-recent 60-min buckets per symbol ONCE per pre-warm run (slow query, fine for an offline job with no scanner deadline) into a dedicated snapshot table, then have the scanner-hot-path cache read from that table on cold start plus a small NARROW (24h) live-overlay window for the recent tail. The live overlay catches anything that arrived since the last snapshot refresh; the snapshot covers the historical bars that don't change minute-to-minute.
+
+Three artifacts plus one optional aggregator-API change:
+
+1. **`xstock_spot_ohlc_60m_snapshot` table.** `(symbol VARCHAR(32), bucket_ts TIMESTAMPTZ, open/high/low/close NUMERIC(20,8), volume NUMERIC(28,8), source_bar_count INTEGER, captured_at TIMESTAMPTZ)`. PK on `(symbol, bucket_ts)` for idempotent UPSERT. Descending btree index on `(symbol, bucket_ts DESC)` so the "give me the last 60 per symbol" hot read uses a backward index scan with no sort step. Bounded ~16k rows max (265 symbols × 60 buckets).
+
+2. **`scripts/b-new-34b-prewarm-snapshot.ts` pre-warm script.** Per-symbol single-SQL DISTINCT ON aggregation at 14-day lookback (default; configurable via `--days N`). UPSERTs the MAX_BARS_60M (60) most-recent buckets per symbol into snapshot via multi-row INSERT with ON CONFLICT DO UPDATE. Per-symbol latency ~15-25 seconds; total runtime 5-15 minutes for the full 265-symbol universe. Idempotent. Flags: `--symbols A/USD,B/USD` for targeted reruns, `--dry-run` for validation. Per-symbol queries (not batched) because the per-cycle scanner deadline doesn't apply — a single symbol's partition is small, the DISTINCT ON dedup runs quickly, and no cross-symbol scan blowup occurs.
+
+3. **`xstock-ohlc-cache.ts:getOHLCDataBatch` cold-miss path rewrite.** For 60-min interval cache misses:
+   - **Step 1:** `readSnapshotBars(missedSymbols)` — single SQL with a ROW_NUMBER window function partitioning by symbol and ordering by bucket_ts DESC, taking the top 60 per symbol. PK-indexed scan, cheap.
+   - **Step 2:** `aggregateXstockOHLC(missedSymbols, 60, NARROW_OVERLAY_HOURS_60M=24)` — live aggregator with the new optional `lookbackHoursOverride` parameter at 24 hours. Catches everything written to `xstock_spot_ohlc_1m` in the last 24h since the snapshot was refreshed.
+   - **Step 3:** `mergeBars(snap, live)` per symbol — Map keyed by bucket timestamp; live overrides on collision; sorted ASC; capped to 60 most-recent.
+   - **Step 4:** cache the merged result and return.
+   - **Step 5 (fire-and-forget):** `writeBackSnapshot(merged)` UPSERTs the most-recent `WRITE_BACK_RECENT_BUCKETS=24` buckets per symbol back to snapshot so the table stays ≤5min stale during active scanning. The "24" matches the overlay window — those are exactly the buckets where late-arriving 1-minute source rows can shift values.
+
+4. **Aggregator narrow-window override (new optional param).** `aggregateXstockOHLC(symbols, intervalMinutes, lookbackHoursOverride?)`. Default `LOOKBACK_HOURS_60M=120` is preserved as the FORENSIC-CALLER fallback for direct invocations (b-phase-a2-backfill, ad-hoc tools) — silently shrinking it would corrupt forensic replays in a way that's hard to detect. Scanner/cache contexts MUST pass `lookbackHoursOverride`. WARNING block at the function header documents the policy.
+
+### Net effect on per-cycle DB cost
+
+The pre-B-NEW-34b path scanned ~11M source rows per cache miss (120h × 60 1m/h × 75 syms × ~21× B74 duplication) and ran DISTINCT ON over the entire result. Post-B-NEW-34b:
+- Snapshot read: ~4,500 rows max via PK-indexed scan (~fast).
+- Live overlay: 24h × 60 × 75 × 21 = ~2.3M source rows pre-DISTINCT-ON (~4× cheaper than 60h, ~5× cheaper than 120h).
+- Write-back: 75 syms × 24 buckets = 1,800 row UPSERT in a single multi-row INSERT.
+
+Net per-cycle DB IO drop ~75-85% vs the abandoned 120h live path. The Supabase Disk IO Budget warning (received 2026-05-18 ~14:40 ET) is substantially eased.
+
+### Lifecycle and the manual pre-warm protocol
+
+The snapshot table needs a fresh-enough state at scanner cold start. During active scanning, the cache's write-back-on-miss path keeps the snapshot ≤5 min stale automatically. Between active-scanning windows (e.g., across a deploy, a long downtime, or the weekly weekend close), the snapshot can drift.
+
+**Interim manual pre-warm protocol (until B-NEW-36 lifecycle controller ships):** anyone restarting the staging scanner — for any reason — must run `npm run b-new-34b:prewarm -- --days 14` BEFORE `pm2 restart`. Skipping it means the first cache cold-miss after restart reads stale snapshot rows + the narrow 24h overlay; if the snapshot is more than 24 hours stale, a gap opens between snapshot's most-recent bucket and the live overlay's window start for 24/7 names. The B-NEW-36 batch will automate the Fri-shutdown + Sun-startup pre-warm runs as part of the off-hours session-lifecycle controller.
+
+### Reference
+
+- Implementation: commits `d9031fe8d` (initial) + `4fd780c3d` (Langston Step 4 revisions).
+- Migration: `drizzle/migrations/2026-05-18-b-new-34b-xstock-60m-snapshot.sql` + rollback.
+- Pre-warm script: `scripts/b-new-34b-prewarm-snapshot.ts`; npm script `b-new-34b:prewarm`.
+- Code: `server/services/xstock-ohlc-cache.ts` (`readSnapshotBars`, `mergeBars`, `writeBackSnapshot`, `NARROW_OVERLAY_HOURS_60M`, `WRITE_BACK_RECENT_BUCKETS`); `server/asset_classes/xstock_spot/ohlc-aggregator.ts` (`lookbackHoursOverride` param).
+- Langston Step 4 design review (APPROVE WITH 3 FINDINGS + Q1-Q7 ACK + deploy-blocker direction): `Claude Comms and Packages/Langston Design Asks/B_NEW_34b_design_review_rev1.md`.
+- RUNNING_ISSUES #118 (B-NEW-34a abandoned → B-NEW-34b shipped) + #119 (`_migrations` ledger drift, separate batch).
+
+---
+
 ## Phase 24 EXTENDED 3 — xStock Calibration Phase 0 audit findings (B-NEW-42, 2026-05-17)
 
 ### Corporate Actions
