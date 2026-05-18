@@ -136,6 +136,17 @@ const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is di
  *                  tail. The snapshot table provides the historical bars,
  *                  eliminating the DISTINCT-ON-over-wide-window cost.
  *                  Undefined → use the default constants as before.
+ *
+ * ⚠️ DEFAULT-LOOKBACK POLICY (Langston Step 4 Q4 ACK, 2026-05-18 night):
+ *     The default `LOOKBACK_HOURS_60M=120` below is the FORENSIC-CALLER value
+ *     intentionally — direct callers (b-phase-a2-backfill rerun, ad-hoc DB
+ *     tools) need a wide window for historical replay. Scanner/cache contexts
+ *     MUST pass `lookbackHoursOverride` (the cache already does so with 24h).
+ *     Do NOT silently shrink the default; it would corrupt forensic replays
+ *     in a way that's hard to detect. A scanner caller that forgets the
+ *     override only hits a SCAN_TIMEOUT — loud, recoverable. The opposite
+ *     failure mode (forensic caller silently getting too-narrow data) is the
+ *     worse error.
  */
 export async function aggregateXstockOHLC(
   symbols: string[],

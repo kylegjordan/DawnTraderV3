@@ -67,15 +67,19 @@ const DEFAULT_TTL_MS = 300_000; // 5 minutes — matches crypto ohlcCache
 // a stale snapshot at startup.
 const NARROW_OVERLAY_HOURS_60M = 24;
 
-// B-NEW-34b (2026-05-18) — write-back-on-miss row count. After merging
-// snapshot + live overlay, the cache writes the MOST RECENT N=12 buckets per
-// symbol back into the snapshot table. Why 12: the recent tail is what the
-// live aggregator just computed; older buckets in the snapshot are
-// immutable (their source 1m rows have settled). 12 buckets = 12 hours of
-// 60-min history — comfortably exceeds any plausible cache miss interval.
-// Per-batch upsert volume: 75 syms × 12 buckets = 900 rows per cache-miss
-// cycle, written in a single multi-row INSERT.
-const WRITE_BACK_RECENT_BUCKETS = 12;
+// B-NEW-34b (2026-05-18) — write-back-on-miss row count.
+//
+// Langston Step 4 review (2026-05-18 night): align write-back with the
+// live-overlay window. The narrow overlay computed NARROW_OVERLAY_HOURS_60M=24
+// FRESH buckets — those are exactly the buckets where B74's late-arriving
+// 1m duplicates could shift values meaningfully. Writing back fewer than 24
+// leaves stale snapshot values for the buckets between the cutoff and the
+// overlay edge. Writing back more is wasted IO (older buckets are immutable
+// — their source 1m rows have settled).
+//
+// 75 syms × 24 buckets = 1,800 rows per cache-miss cycle, single multi-row
+// INSERT with ON CONFLICT DO UPDATE. Trivial DB cost.
+const WRITE_BACK_RECENT_BUCKETS = NARROW_OVERLAY_HOURS_60M;
 
 interface SnapshotRow {
   symbol: string;
@@ -227,10 +231,15 @@ class XstockOHLCCache {
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // Legacy path (240-min only — currently dead per B-NEW-34 hotfix 3).
-    // Preserved verbatim from the pre-B-NEW-34b shape so the 240-min code
-    // path remains unchanged in behavior. Restored if 240-min consumption
-    // is wired (Phase D of XSTOCK_CALIBRATION_PLAN).
+    // DEAD per B-NEW-34 hotfix 3 — remove with B-NEW-35 two-table cutover.
+    // ════════════════════════════════════════════════════════════════════
+    // Legacy path (240-min only — currently disabled at the caller in
+    // scanner.ts:408). Preserved verbatim from the pre-B-NEW-34b shape so
+    // the 240-min code path remains unchanged in behavior. Restored if
+    // 240-min consumption is wired (Phase D of XSTOCK_CALIBRATION_PLAN).
+    // Langston Step 4 Q5 ACK (2026-05-18 night): mark DEAD with cutover
+    // pointer; do NOT remove tonight (not in scope for the scanner-recovery
+    // ship). B-NEW-35 owns the cleanup.
     // ════════════════════════════════════════════════════════════════════
     const fresh = await aggregateXstockOHLC(misses, intervalMinutes);
     for (const [symbol, bars] of fresh) {
@@ -258,6 +267,12 @@ class XstockOHLCCache {
     // sql template doesn't auto-bind JS arrays to postgres array params).
     // Safe: symbol list sourced from XSTOCK_SPOT_REGISTRY (hardcoded const),
     // not user input. Single-quote-escape per entry.
+    //
+    // TODO B-NEW-35: switch to `WHERE symbol = ANY($1::text[])` once we
+    // refactor the surrounding write paths. Drizzle parameterizes arrays
+    // when passed natively; the current sql.raw shape is hygiene debt
+    // (Langston Step 4 Finding 1, 2026-05-18). Functionally safe today
+    // because xStock symbols are an uppercase-ticker hardcoded set.
     const symbolListSql = symbols.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
 
     // Window-function shape: rank rows by bucket_ts DESC per symbol, keep
@@ -343,6 +358,17 @@ class XstockOHLCCache {
     // require re-running DISTINCT ON or threading the count from the
     // aggregator) — write 0 as a forensic sentinel meaning "live overlay,
     // not freshly counted". The pre-warm script writes the real count.
+    //
+    // Verified no consumer (server/) reads source_bar_count for filtering
+    // or decisioning — it's forensic-only. Per Langston Step 4 Q2 ACK.
+    // The ON CONFLICT DO UPDATE intentionally OMITS source_bar_count so
+    // pre-warm's real count is PRESERVED when a later live-overlay write-
+    // back collides on the same (symbol, bucket_ts).
+    //
+    // TODO B-NEW-35: parameterize this multi-row INSERT (currently sql.raw'd
+    // for VALUES — same hygiene debt as snapshot read; Langston Step 4
+    // Finding 1, 2026-05-18). Functionally safe today: numerics originate
+    // from OHLCData (typed `number`), symbol is registry-sourced.
     const valuesLiteralParts: string[] = [];
     for (const [symbol, bars] of mergedBySymbol) {
       if (bars.length === 0) continue;
