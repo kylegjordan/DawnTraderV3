@@ -19,6 +19,9 @@ COMMIT;
 VACUUM (VERBOSE) crypto_spot_ohlc_1m_2026_04;
 
 -- ─── May 2026 (~9.3M rows, chunked) ────────────────────────────────────
+-- Rev2: ROW_NUMBER + raised statement_timeout per xstock-spot rationale.
+SET statement_timeout = '20min';
+
 DO $$
 DECLARE
   deleted_count INTEGER;
@@ -28,19 +31,19 @@ DECLARE
 BEGIN
   LOOP
     iteration := iteration + 1;
-    WITH duplicates AS (
-      SELECT a.id
-      FROM crypto_spot_ohlc_1m_2026_05 a
-      WHERE EXISTS (
-        SELECT 1 FROM crypto_spot_ohlc_1m_2026_05 b
-        WHERE a.symbol = b.symbol
-          AND a.interval_begin = b.interval_begin
-          AND a.id < b.id
-      )
-      LIMIT chunk_size
-    )
     DELETE FROM crypto_spot_ohlc_1m_2026_05
-    WHERE id IN (SELECT id FROM duplicates);
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY symbol, interval_begin
+                 ORDER BY id DESC
+               ) AS rn
+        FROM crypto_spot_ohlc_1m_2026_05
+      ) ranked
+      WHERE rn > 1
+      LIMIT chunk_size
+    );
 
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     total_deleted := total_deleted + deleted_count;
@@ -59,5 +62,7 @@ BEGIN
   RAISE NOTICE '[B-NEW-35 Phase 1] crypto_spot_2026_05 COMPLETE: % iterations, % total rows deleted',
     iteration, total_deleted;
 END $$;
+
+RESET statement_timeout;
 
 VACUUM (VERBOSE) crypto_spot_ohlc_1m_2026_05;

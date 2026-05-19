@@ -43,8 +43,16 @@ COMMIT;
 VACUUM (VERBOSE) xstock_spot_ohlc_1m_2026_04;
 
 -- ─── May 2026 partition (large, chunked DELETE) ────────────────────────
--- ~15M rows. Chunked at 200K rows per pass with WAL-flush pauses. Loop
--- continues until no more duplicates exist.
+-- ~15M rows. Chunked at 200K rows per pass with WAL-flush pauses + per-
+-- chunk COMMIT. Loop continues until no more duplicates exist.
+--
+-- Rev2 fix: use ROW_NUMBER() window function instead of EXISTS self-join
+-- (which hit Supabase 2-min statement_timeout on FIRST iteration during
+-- xstock_perp empirical validation 2026-05-19). ROW_NUMBER is single-pass
+-- and leverages the existing (symbol, interval_begin) btree index. Plus
+-- raise per-session statement_timeout to 20 min for the heavy queries.
+SET statement_timeout = '20min';
+
 DO $$
 DECLARE
   deleted_count INTEGER;
@@ -54,20 +62,22 @@ DECLARE
 BEGIN
   LOOP
     iteration := iteration + 1;
-    -- Find duplicate IDs to delete, capped at chunk_size.
-    WITH duplicates AS (
-      SELECT a.id
-      FROM xstock_spot_ohlc_1m_2026_05 a
-      WHERE EXISTS (
-        SELECT 1 FROM xstock_spot_ohlc_1m_2026_05 b
-        WHERE a.symbol = b.symbol
-          AND a.interval_begin = b.interval_begin
-          AND a.id < b.id
-      )
-      LIMIT chunk_size
-    )
+    -- ROW_NUMBER() partitioned by (symbol, interval_begin) ordered by id
+    -- DESC: rn=1 is the keeper (highest id = latest write); rn>1 are
+    -- duplicates to delete. LIMIT short-circuits after chunk_size matches.
     DELETE FROM xstock_spot_ohlc_1m_2026_05
-    WHERE id IN (SELECT id FROM duplicates);
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY symbol, interval_begin
+                 ORDER BY id DESC
+               ) AS rn
+        FROM xstock_spot_ohlc_1m_2026_05
+      ) ranked
+      WHERE rn > 1
+      LIMIT chunk_size
+    );
 
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     total_deleted := total_deleted + deleted_count;
@@ -92,5 +102,7 @@ BEGIN
   RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 COMPLETE: % iterations, % total rows deleted',
     iteration, total_deleted;
 END $$;
+
+RESET statement_timeout;
 
 VACUUM (VERBOSE) xstock_spot_ohlc_1m_2026_05;
