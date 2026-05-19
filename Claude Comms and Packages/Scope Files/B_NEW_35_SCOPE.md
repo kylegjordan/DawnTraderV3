@@ -1,10 +1,12 @@
-# B-NEW-35 — Source-side dedup for WS-archived OHLC tables (B74 archiver UPSERT pattern)
+# B-NEW-35 — Source-side dedup for WS-archived OHLC tables (B74 archiver UPSERT pattern) — REV 2
 
 > **From:** Claude Code
-> **To:** Langston (Step 1 design review) + Kyle (decider)
-> **Date:** 2026-05-19 early UTC
+> **To:** Kyle (proceed-on-consensus authorization) + Langston (Step 1 ACK granted)
+> **Date:** 2026-05-19 early UTC (rev 2 after Langston Step 1 ACK with 6 revisions + 1 push-back)
 > **Type:** Structural source-side fix — eliminates 18-56× row duplication in xstock_spot_ohlc_1m + xstock_perp_ohlc_1m + crypto_spot_ohlc_1m
-> **Kyle directive 2026-05-19 early UTC:** "we shouldn't be satisfied with these blue chip xStocks not populating... we need to see this as a problem that we need to solve and then come up with a solution for it." → empirical investigation tonight confirmed B-NEW-34b snapshot architecture CANNOT solve the 26-missing-symbol problem because the live-aggregator fallback batched-DISTINCT-ON across heavy-traded symbols (SPY, TSLA, NVDA, QQQ) exceeds the 25-second scanner cycle budget. Source-side dedup is the only structural fix.
+> **Kyle directive 2026-05-19:** "we shouldn't be satisfied with these blue chip xStocks not populating... we need to see this as a problem that we need to solve and then come up with a solution for it." Then: "If Langston and you can converge on the solution, then please proceed."
+> **Langston Step 1 ACK 2026-05-19:** "green light to proceed to Step 2 pre-audit" with 6 revisions on Q1-Q8 + 1 push-back on tactical interim (skip — patch doesn't actually fix cycle budget because SPY+QQQ pinned benchmarks are in the missing-26 set). All revisions incorporated in rev2.
+> **Status:** consensus reached. Step 2 pre-audit begins next. Then implementation per Kyle authorization.
 
 ---
 
@@ -125,13 +127,13 @@ Per-partition execution because `DELETE ... USING` across the whole table would 
 
 ## §3 — Phased rollout + risk management
 
-### Phase 1 — Dedup cleanup (one-time, ~30-90 min)
+### Phase 1 — Dedup cleanup (one-time, ~20-30 min wallclock with parallel sessions per Langston Q1)
 
-- Per-partition DELETE-self-join keeping highest id per `(symbol, interval_begin)`.
-- Estimated run time per partition: 5-20 min depending on partition size.
-- Concurrent with B74 archiver writes: yes — DELETE doesn't block INSERTs at the row level.
-- Risk: VACUUM debt afterward. Run VACUUM (NOT FULL) per-partition immediately after each DELETE to reclaim space without table-lock.
-- Order: smallest table first (crypto_spot has the most data but xstock_spot has the most-urgent need; ordering TBD per Langston Q1).
+- **PARALLEL execution across 3 tables (Langston Q1 ACK):** open 3 psql sessions, one per table (xstock_spot, crypto_spot, xstock_perp), run independently. Zero contention because different tables. Wallclock compresses from sequential ~60-90 min to parallel ~20-30 min.
+- **Chunked DELETE per partition (Langston Q2 ACK):** 100K-500K rows per pass within each partition. Brief WAL-flush pauses between passes. Avoids single-statement DELETE generating massive WAL pressure that could risk Supabase checkpoint stalls.
+- **Empirical validation step (Langston Q2 caveat):** run smallest partition first with single-statement DELETE while monitoring archiver INSERT latency from `[B74][batch-writer]` logs. If latency stays under baseline (TBD in pre-audit), switch to single-statement for the rest. If latency spikes, stick with chunked. Pre-audit captures the baseline.
+- **Per-partition VACUUM (NOT FULL) immediately after each DELETE (Langston Q3 ACK).** Reclaims space without exclusive lock. Autovacuum compacts over time.
+- Concurrent with B74 archiver writes: yes — DELETE doesn't block INSERTs at row level. WAL pressure is the actual cost.
 
 ### Phase 2 — Add UNIQUE constraints (~1-5 min per table)
 
@@ -146,11 +148,13 @@ Per-partition execution because `DELETE ... USING` across the whole table would 
 - Verification: pick a heavy symbol (SPY), check row counts before/after deploy. Pre-deploy: ~150 rows/minute. Post-deploy: ~1 row/minute (with multiple UPDATEs of the same row internally, but only one row visible).
 - Per-minute row count delta is the success signal.
 
-### Phase 4 — Re-run pre-warm cleanly
+### Phase 4 — Re-run pre-warm cleanly (Langston Q6 ACK: UPSERT-style, NO TRUNCATE)
 
-- After Phase 3 is stable (~30 min observation), re-run `npm run b-new-34b:prewarm -- --days 14`.
+- **Skip TRUNCATE of `xstock_spot_ohlc_60m_snapshot`.** The existing 239 rows ARE correct — the duplication problem was query cost, not query correctness. DISTINCT ON in the original pre-warm picked one valid row per minute. The bucket-aggregate values match what they'd be after dedup.
+- Re-run `npm run b-new-34b:prewarm -- --days 14`.
+- The script's `INSERT ... ON CONFLICT (symbol, bucket_ts) DO UPDATE SET ...` clause: refreshes existing covered (no-op if values match), fills in the missing 26.
 - Per-symbol query is now ~20× cheaper (no duplication factor). All 265 symbols should complete in 5-15 minutes.
-- Snapshot table reaches 100% coverage.
+- **Snapshot integrity spot-check (per Langston Q6 paranoia option):** before Phase 4 starts, snapshot 5 covered symbols' last bucket OHLC values to a temp file. After Phase 4 completes, re-query the same buckets and confirm values match within ±0.01% (tiny numeric drift acceptable; >0.01% indicates a real discrepancy worth investigating).
 
 ### Phase 5 — pm2 restart to clear scanner cache + verify
 
@@ -177,38 +181,50 @@ Per-partition execution because `DELETE ... USING` across the whole table would 
 
 ---
 
-## §5 — Specific questions for Langston
+## §5 — Question table with Langston Step 1 ACK responses
 
-**Q1 — Cleanup ordering.** Three tables to dedup: xstock_spot, xstock_perp, crypto_spot. xstock_spot is the most urgent (scanner broken). crypto_spot is the most data. xstock_perp is the smallest. My pick: xstock_spot first (unblocks scanner), then crypto_spot (releases the most IO budget), then xstock_perp (cleanup-of-record). Concur?
+**Q1 — Cleanup ordering.** **Langston ACK with revision: PARALLEL sessions, not sequential.** Three psql sessions, one per table. Zero contention (different tables). Wallclock ~20-30 min total instead of sequential ~60-90 min. Phase 2 ALTERs run sequentially (fast). Phase 3 single deploy. Net: scanner recovery ~30-45 min sooner.
 
-**Q2 — Chunk size for per-partition DELETE.** Per-partition self-join DELETE across a 5-20M row partition could take 5-20 minutes wallclock and acquire many WAL writes. Alternative: chunked CTE-based DELETE (`DELETE WHERE id IN (SELECT id FROM duplicates LIMIT 100K)`) iterated until exhausted. Per-pass safer but slower overall. My pick: full per-partition DELETE in one statement per partition. Postgres handles 5-20M row deletes routinely. The MV-CC nature means no blocking. Concur, or should we go chunked?
+**Q2 — Chunk size for per-partition DELETE.** **Langston ACK with revision: CHUNKED, not single-statement.** WAL pressure is the actual cost (not row locks). Single-statement DELETE generates massive WAL, pressures Supabase shared_buffers + max_wal_size, risks checkpoint stalls. Use chunked CTE-based DELETE at 100K-500K rows per pass with brief WAL-flush pauses between passes. Interruptible if something goes sideways. **Empirical validation step:** run smallest partition single-statement first while monitoring archiver INSERT latency from `[B74][batch-writer]` logs. If latency stays at baseline, switch to single-statement for the rest. If latency spikes, keep chunked. Pre-audit captures baseline.
 
-**Q3 — VACUUM strategy post-cleanup.** Each partition will have ~95% bloat post-DELETE (95% of rows removed). Two paths: (a) `VACUUM <partition>` (lock-free, reclaims for reuse but not OS-free; depends on autovacuum to eventually compact), (b) `VACUUM FULL <partition>` (exclusive lock during the operation, reclaims space and returns to OS, brief archiver write-pause for that partition). My pick: regular VACUUM per partition immediately after each DELETE. Trade-off: disk space stays high for a few weeks until autovacuum gets around to it. Supabase dashboard will show high disk usage in the interim. Alternative: VACUUM FULL during a planned quiet window (e.g., Saturday 12:00 UTC when xstock weekend is in close). Concur with regular VACUUM?
+**Q3 — VACUUM strategy post-cleanup.** **Langston ACK: regular VACUUM (NOT FULL).** VACUUM FULL's exclusive lock would pause the archiver mid-cleanup; not worth it for cosmetic disk pressure. Supabase reuses freed space on subsequent writes; autovacuum compacts over time. If disk-usage alarms get noisy, schedule a weekend VACUUM FULL window post-soak (not in critical path).
 
-**Q4 — UPSERT semantics on bar-update fields.** When an UPSERT updates an existing row, which fields should it update? The OHLC values (open, high, low, close, volume, vwap, tradeCount) reflect the latest WS update — so they evolve toward the closed-bar value across the minute. Latest update = best snapshot. Drizzle DO UPDATE SET should refresh these. Also update `capturedAt = NOW()` so we know the last touch. Should `id` and `assetClass + exchange` remain immutable? Yes (they're invariants). Anything else to retain? My pick: replace OHLC + volume + vwap + tradeCount + capturedAt; preserve everything else.
+**Q4 — UPSERT semantics on bar-update fields.** **Langston ACK: concur.** Replace OHLC + volume + vwap + tradeCount + capturedAt; preserve `id`, `assetClass`, `exchange`. Confirmed correct because Kraken WS sends ordered, cumulatively-aggregated bar updates per symbol — the latest update IS the correct cumulative high/low/close for that minute. Replace is the right semantic, not MAX/MIN.
 
-**Q5 — Should we ALSO simplify the aggregator's DISTINCT ON CTE in this batch?** Post-B-NEW-35 the DISTINCT ON dedup in `ohlc-aggregator.ts:223-231` is functionally redundant (every (symbol, interval_begin) has exactly one row). Removing it makes the query simpler and faster. But it's also a no-op (the ON CONFLICT DO UPDATE leaves at most one row, so DISTINCT ON over one-row groups is trivially fast). My pick: remove the DISTINCT ON CTE in this batch — keeps the aggregator's read path clean. Trade-off: brief window during deploy where new code runs against not-yet-deduplicated rows (Phase 3 deploys before Phase 4 re-pre-warm). Could leave the DISTINCT ON in place as belt-and-suspenders during the deploy window, then remove in a follow-up cleanup batch. Concur with remove-in-this-batch, or prefer belt-and-suspenders?
+**Q5 — DISTINCT ON CTE in aggregator.** **Langston push-back: KEEP belt-and-suspenders in this batch.** Remove in a follow-up after 7+ days soak proving zero-duplicate operation. Cost of DISTINCT ON over single-row groups is trivial; benefit is bug-tolerance during any future migration or replay path that could briefly introduce duplicates. Reducing B-NEW-35 blast radius matters on the critical scanner path. Removal filed as a future cleanup batch (logged to RUNNING_ISSUES post-completion).
 
-**Q6 — Re-run pre-warm window for snapshot freshness.** Phase 4 re-runs `b-new-34b:prewarm --days 14`. Once UPSERT is live, the source 1m table has clean data — but the existing snapshot table (the 239 covered + 26 missing) was populated against the DUPLICATED source. The aggregate values are correct (DISTINCT ON picked one row per minute) but the snapshot wasn't running over the right-shape source. Worth a full snapshot rebuild? My pick: yes — clean slate post-cleanup. Cleared snapshot (`TRUNCATE xstock_spot_ohlc_60m_snapshot;`) then re-pre-warm. Concur?
+**Q6 — Re-run pre-warm window for snapshot freshness.** **Langston push-back: SKIP TRUNCATE, run pre-warm UPSERT-style.** The existing 239 snapshot rows ARE correct — duplication was query-cost, not query-correctness (DISTINCT ON picked one valid row per minute, and that row had correct OHLC values). Pre-warm script's existing `ON CONFLICT (symbol, bucket_ts) DO UPDATE SET ...` clause: refreshes existing covered symbols (no-op if values match), fills in the missing 26. Saves time and removes the risk of dropping a working snapshot. Spot-check 3-5 covered symbols pre/post — values should match within ±0.01%.
 
-**Q7 — Migration runner blocker carryover.** RUNNING_ISSUES #119 still applies: 16 unrecorded migrations from 2026-05-08+ block `npm run db:migrate`. B-NEW-35's migrations need to apply via the runner OR via direct psql + manual `_migrations` INSERT bypass per the B-NEW-34b deploy pattern. My pick: same bypass pattern for tonight (psql -f, manual INSERT). B-NEW-36 sub-batch (a) handles the proper ledger reconciliation when it ships. Concur, or should B-NEW-35 force the ledger reconciliation first?
+**Q7 — Migration runner blocker carryover.** **Langston ACK: psql-bypass with documented INSERT.** Each manual `_migrations` INSERT for B-NEW-35 migrations carries a comment "B-NEW-35 bypass — ledger reconciliation pending in B-NEW-36 sub-batch (a)". RUNNING_ISSUES #119 gets the three new migration files added to the reconciliation backlog so they don't get lost.
 
-**Q8 — Estimated effort.** 1-2 days including: scope review pass (~half day), pre-audit (~half day), implementation (~half day), cleanup migration execution (~30-90 min wallclock, with monitoring), code deploy (~10 min), pre-warm re-run (~10 min), scanner verification (~10 min). Step 4 code review on a small focused diff (~3 files changed). Step 11 completion report. Realistic to ship within 24-36 hours of consensus on scope? Concur?
+**Q8 — Estimated effort.** **Langston revision: BUFFER to 36-48 hours, not 24-36.** Chunked DELETE adds time; parallel dedup recovers some. Scanner recovery on xstock_spot side achievable in first 18-24 hours; clean completion-report close in 36-48 hours. Don't over-commit to 24-36 if Q2 chunked DELETE bumps Phase 1.
 
-**Q9 — Crypto/xstock-perp same fix priority?** The same duplication affects crypto_spot_ohlc_1m and xstock_perp_ohlc_1m. Crypto's signal-orchestrator doesn't read from the archive table (uses Kraken-REST), so crypto's immediate scanner cycle isn't affected. xstock_perp is dormant. Should B-NEW-35 fix all 3 tables in one batch (cleaner) or just xstock_spot now + crypto+xstock_perp in a follow-up? My pick: fix all 3 in this batch because the code change is one line and the cleanup migrations run independently per table. Crypto and xstock_perp benefit too (B70 backfill consumers, IO budget). Concur?
+**Q9 — All 3 tables in one batch?** **Langston ACK: concur.** Code change is one line, UNIQUE must exist on all three before deploy (shared `ohlc-batch-writer.ts` UPSERT path needs the constraint on every target table — partial fix would require ugly conditional UPSERT). Full-fix is right. Crypto and xstock_perp benefit too (B70 backfill consumers, IO budget recovery).
 
 ---
 
-## §6 — Ask
+## §6 — Consensus reached → Step 2 pre-audit begins
 
-Step 1 ACK from Langston with revisions on §1-§5. Once locked, I'll write the Step 2 pre-audit (SIM consultation + per-partition row-count estimates + dedup timing baseline + deploy ordering trace). After ACK on pre-audit, Step 3 implementation begins.
+**Consensus state (rev 2):**
 
-**Kyle directive 2026-05-19 early UTC:** B-NEW-35 RE-SEQUENCED ahead of B-NEW-36 because the empirical state proves B-NEW-34b cannot achieve functional scanner state without source-side dedup. B-NEW-36 (lifecycle controller) waits until B-NEW-35 ships clean. Pre-audit work on B-NEW-36 is on hold; Step 2 work resumes after B-NEW-35 Step 11 completion report closes.
+- Langston Step 1 ACK granted with 6 revisions on Q1-Q8 (all incorporated in rev2) + 1 push-back on tactical interim (skip — patch doesn't fix cycle budget because SPY+QQQ pinned benchmarks are in the missing-26 set).
+- Kyle authorization: "If Langston and you can converge on the solution, then please proceed."
+- B-NEW-36 (lifecycle controller) waits until B-NEW-35 ships clean.
 
-**Open thread for Kyle's decision:** there is also a tactical interim option — modify the B-NEW-34b cache to skip the live-aggregator fallback for snapshot-covered symbols (saving the cycle budget from the heavy missing symbols). Would give partial scanner functionality with the 239 covered names while B-NEW-35 ships properly. NOT a long-term fix — pure tactical patch. Flagged for Kyle's call: would conflict with NO PATCHES doctrine but would unblock partial trading-signal observability tonight rather than waiting 1-2 days for B-NEW-35.
+**Tactical interim DECISION: SKIPPED.** Both Langston (reasoning #1: doesn't actually unblock pinned-benchmark path; reasoning #2: NO-PATCHES doctrine; 24-36 hours short enough that patch review/revert overhead exceeds value) and the empirical data agree: ship B-NEW-35 hard.
 
-INFRASTRUCTURE NOTE (CLAUDE.md §6.5.0.a): scope is design-only, no code snippets needed inline beyond the ones already embedded above. Pre-audit will trace specific call sites + migration SQL. DO NOT `cd /mnt/gdrive`. For staging-side inspection use ssh staging at commit `90a3915b0` (current head of migration/aws-supabase).
+**Step 2 pre-audit deliverables (per Langston):**
 
-Reply with: (a) Step 1 ACK with revisions on §1-§5, (b) substantive disagreement on the phased rollout, OR (c) re-sequencing pushback.
+1. **Per-partition row-count estimates** for all three tables (xstock_spot_ohlc_1m, crypto_spot_ohlc_1m, xstock_perp_ohlc_1m). Used to size chunked DELETE batches.
+2. **Archiver INSERT latency baseline** from current `[B74][batch-writer]` log signature. Captures pre-deploy p50/p95 of flush latency for the chunked-vs-single-statement empirical validation step in Phase 1.
+3. **Migration SQL files staged for psql-bypass** — three Phase-1 cleanup files (one per table), three Phase-2 ADD CONSTRAINT files. Plus the manual `_migrations` INSERTs with bypass comments.
+4. **TRUNCATE-skip verification plan** — pre/post snapshot integrity spot-check on 5 covered symbols: capture last bucket OHLC values pre-Phase-4; re-query post-Phase-4; tolerance ±0.01%.
+5. **SIM consultation per §9.1** — verify the 4 affected components don't have blast-radius leaks beyond what's documented.
+6. **Crypto regression trace** — confirm crypto_spot scanner pipeline reads OHLC via Kraken-REST `ohlcCache`, NOT the archive table directly. B70 backfill is the only crypto consumer of the archive (which benefits from cleaner data, not breaks).
+7. **Deploy ordering invariant** — confirm npm run db:migrate-bypass runs BEFORE pm2 restart (matches B-NEW-34b pattern from earlier today).
 
-— Claude Code, 2026-05-19 early UTC (rev 1 of B_NEW_35_SCOPE)
+**Implementation authorization:** per Kyle "please proceed" given Langston consensus. Step 3 implementation begins after pre-audit completes. No additional Kyle gate between pre-audit and Step 3.
+
+INFRASTRUCTURE NOTE: rev2 incorporates Langston revisions in-line. Pre-audit will be a new file `B_NEW_35_PRE_AUDIT.md` in the same Scope Files folder.
+
+— Claude Code, 2026-05-19 early UTC (rev 2 of B_NEW_35_SCOPE — consensus reached)
