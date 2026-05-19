@@ -50,8 +50,24 @@ VACUUM (VERBOSE) xstock_spot_ohlc_1m_2026_04;
 -- 265 symbols × ~3-5s/symbol = ~15-20 min total wallclock. Per-symbol
 -- COMMIT per Langston R1.
 
+-- Rev4: recursive CTE skip-scan to enumerate unique symbols. SELECT DISTINCT
+-- hit 2-min timeout on the 3.3M-row xstock_perp partition; same pattern would
+-- fail worse on this 15M-row partition. See xstock-perp file for rationale.
 CREATE TEMP TABLE spot_symbols_2026_05 ON COMMIT PRESERVE ROWS AS
-SELECT DISTINCT symbol FROM xstock_spot_ohlc_1m_2026_05;
+WITH RECURSIVE symbol_walk AS (
+  (SELECT symbol FROM xstock_spot_ohlc_1m_2026_05 ORDER BY symbol LIMIT 1)
+  UNION ALL
+  (
+    SELECT (
+      SELECT symbol FROM xstock_spot_ohlc_1m_2026_05
+      WHERE symbol > s.symbol
+      ORDER BY symbol LIMIT 1
+    ) AS symbol
+    FROM symbol_walk s
+    WHERE s.symbol IS NOT NULL
+  )
+)
+SELECT symbol FROM symbol_walk WHERE symbol IS NOT NULL;
 
 DO $$
 DECLARE

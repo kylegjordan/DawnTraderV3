@@ -24,8 +24,24 @@ VACUUM (VERBOSE) crypto_spot_ohlc_1m_2026_04;
 -- per-symbol data is smaller (~21K rows/symbol). Expected wallclock
 -- 10-15 min.
 
+-- Rev4: recursive CTE skip-scan to enumerate unique symbols. See xstock-perp
+-- file for rationale (SELECT DISTINCT hit 2-min timeout on 3.3M-row table;
+-- this 9.3M-row crypto partition has more symbols and would fail worse).
 CREATE TEMP TABLE crypto_symbols_2026_05 ON COMMIT PRESERVE ROWS AS
-SELECT DISTINCT symbol FROM crypto_spot_ohlc_1m_2026_05;
+WITH RECURSIVE symbol_walk AS (
+  (SELECT symbol FROM crypto_spot_ohlc_1m_2026_05 ORDER BY symbol LIMIT 1)
+  UNION ALL
+  (
+    SELECT (
+      SELECT symbol FROM crypto_spot_ohlc_1m_2026_05
+      WHERE symbol > s.symbol
+      ORDER BY symbol LIMIT 1
+    ) AS symbol
+    FROM symbol_walk s
+    WHERE s.symbol IS NOT NULL
+  )
+)
+SELECT symbol FROM symbol_walk WHERE symbol IS NOT NULL;
 
 DO $$
 DECLARE

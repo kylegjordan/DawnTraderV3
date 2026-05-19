@@ -32,11 +32,32 @@ VACUUM (VERBOSE) xstock_perp_ohlc_1m_2026_04;
 -- 150 symbols × 2s = ~5 min total wallclock. Each per-symbol DELETE has its
 -- own COMMIT — per-chunk-COMMIT semantic preserved per Langston R1.
 --
--- Step 1: materialize the unique-symbol list ONCE (cheap with the index).
+-- Step 1: materialize the unique-symbol list ONCE.
 -- Step 2: iterate symbol-by-symbol; per-symbol DELETE + COMMIT.
+--
+-- Rev4 fix: SELECT DISTINCT symbol over 3.3M rows hit 2-min statement_timeout
+-- (PG planner picked sequential scan instead of index-only scan on the
+-- (symbol, interval_begin) btree, possibly due to stale stats). Replace
+-- with a recursive CTE that walks the btree index — each iteration is a
+-- single index seek (~1ms), so 150-265 symbols complete in <1 second total.
+-- This is the standard "loose index scan" / "skip scan" workaround for
+-- PostgreSQL's DISTINCT planner gap.
 
 CREATE TEMP TABLE perp_symbols_2026_05 ON COMMIT PRESERVE ROWS AS
-SELECT DISTINCT symbol FROM xstock_perp_ohlc_1m_2026_05;
+WITH RECURSIVE symbol_walk AS (
+  (SELECT symbol FROM xstock_perp_ohlc_1m_2026_05 ORDER BY symbol LIMIT 1)
+  UNION ALL
+  (
+    SELECT (
+      SELECT symbol FROM xstock_perp_ohlc_1m_2026_05
+      WHERE symbol > s.symbol
+      ORDER BY symbol LIMIT 1
+    ) AS symbol
+    FROM symbol_walk s
+    WHERE s.symbol IS NOT NULL
+  )
+)
+SELECT symbol FROM symbol_walk WHERE symbol IS NOT NULL;
 
 DO $$
 DECLARE
