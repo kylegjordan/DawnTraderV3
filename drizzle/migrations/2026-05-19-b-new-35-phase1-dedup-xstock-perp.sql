@@ -68,18 +68,33 @@ DECLARE
 BEGIN
   FOR sym IN SELECT symbol FROM perp_symbols_2026_05 ORDER BY symbol LOOP
     iteration := iteration + 1;
-    DELETE FROM xstock_perp_ohlc_1m_2026_05 a
-    USING xstock_perp_ohlc_1m_2026_05 b
-    WHERE a.symbol = sym
-      AND b.symbol = sym
-      AND a.interval_begin = b.interval_begin
-      AND a.id < b.id;
+    -- Rev5 fix: per-symbol self-join DELETE was still O(N²) within one
+    -- symbol's ~330K rows (xstock_perp has only 10 symbols → 3.3M / 10 each)
+    -- and hit 2-min timeout. Use ROW_NUMBER single-pass instead.
+    -- WHERE symbol = sym uses index seek into the symbol's range.
+    -- PARTITION BY interval_begin (no need for symbol in PARTITION since
+    -- already filtered) + ORDER BY id DESC → rn>1 are duplicates.
+    DELETE FROM xstock_perp_ohlc_1m_2026_05
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY interval_begin
+                 ORDER BY id DESC
+               ) AS rn
+        FROM xstock_perp_ohlc_1m_2026_05
+        WHERE symbol = sym
+      ) ranked
+      WHERE rn > 1
+    );
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     total_deleted := total_deleted + deleted_count;
     RAISE NOTICE '[B-NEW-35 Phase 1] xstock_perp_2026_05 symbol % (#%) deleted % rows (total %)',
       sym, iteration, deleted_count, total_deleted;
     -- Per Langston Step 2 R1: per-symbol COMMIT releases locks + flushes WAL.
     COMMIT;
+    -- Brief inter-symbol pause to give Supabase IO budget room.
+    PERFORM pg_sleep(0.2);
   END LOOP;
 
   RAISE NOTICE '[B-NEW-35 Phase 1] xstock_perp_2026_05 COMPLETE: % symbols processed, % total rows deleted',

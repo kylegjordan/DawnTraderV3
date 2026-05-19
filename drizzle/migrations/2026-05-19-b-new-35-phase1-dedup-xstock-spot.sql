@@ -78,17 +78,26 @@ DECLARE
 BEGIN
   FOR sym IN SELECT symbol FROM spot_symbols_2026_05 ORDER BY symbol LOOP
     iteration := iteration + 1;
-    DELETE FROM xstock_spot_ohlc_1m_2026_05 a
-    USING xstock_spot_ohlc_1m_2026_05 b
-    WHERE a.symbol = sym
-      AND b.symbol = sym
-      AND a.interval_begin = b.interval_begin
-      AND a.id < b.id;
+    -- Rev5: per-symbol ROW_NUMBER single-pass; see xstock-perp file for rationale.
+    DELETE FROM xstock_spot_ohlc_1m_2026_05
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY interval_begin
+                 ORDER BY id DESC
+               ) AS rn
+        FROM xstock_spot_ohlc_1m_2026_05
+        WHERE symbol = sym
+      ) ranked
+      WHERE rn > 1
+    );
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     total_deleted := total_deleted + deleted_count;
     RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 symbol % (#%) deleted % rows (total %)',
       sym, iteration, deleted_count, total_deleted;
     COMMIT;
+    PERFORM pg_sleep(0.2);
   END LOOP;
 
   RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 COMPLETE: % symbols processed, % total rows deleted',
