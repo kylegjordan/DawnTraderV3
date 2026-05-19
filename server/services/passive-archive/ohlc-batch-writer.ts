@@ -17,6 +17,7 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
+import { sql } from 'drizzle-orm';
 import { db } from '../../db.js';
 import {
   xstockSpotOhlc1m,
@@ -109,12 +110,41 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       // Without chunking, the equity-perp REST initial poll backfilled
       // 20,000 historical bars at once → bind overflow → entire batch
       // dropped silently (B74.1 verification 2026-04-30).
+      // B-NEW-35 (2026-05-19): UPSERT instead of plain INSERT to eliminate
+      // the 18-56× row-per-minute duplication that was burning Supabase
+      // disk-IO budget on writes AND blowing query timeouts on every
+      // downstream read path (aggregator DISTINCT ON, snapshot pre-warm,
+      // scanner per-cycle batched live overlay). Each Kraken WS bar-update
+      // now refreshes the in-progress minute's row instead of inserting
+      // a new row per tick. Latest WS update IS the correct cumulative
+      // OHLCV for that minute per Kraken WS contract — `onConflictDoUpdate`
+      // replaces evolving fields (open/high/low/close/volume/vwap/trade_count
+      // + captured_at touch); preserves id/asset_class/exchange (invariants).
+      //
+      // Requires UNIQUE constraint on (symbol, interval_begin) per partitioned
+      // table — added by Phase 2 migration. Phase 1 cleanup dedupes the
+      // existing rows first; Phase 3 (this code change) deploys after both.
+      //
+      // Reference: B_NEW_35_SCOPE.md §2 + Langston Step 1 Q4 ACK.
       const CHUNK_SIZE = 1000;
       for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
         const slice = rows.slice(i, i + CHUNK_SIZE);
-        await db.insert(table as any).values(slice as any);
+        await db.insert(table as any).values(slice as any)
+          .onConflictDoUpdate({
+            target: [(table as any).symbol, (table as any).intervalBegin],
+            set: {
+              open:       sql`EXCLUDED.open`,
+              high:       sql`EXCLUDED.high`,
+              low:        sql`EXCLUDED.low`,
+              close:      sql`EXCLUDED.close`,
+              volume:     sql`EXCLUDED.volume`,
+              vwap:       sql`EXCLUDED.vwap`,
+              tradeCount: sql`EXCLUDED.trade_count`,
+              capturedAt: sql`NOW()`,
+            },
+          });
       }
-      console.log(`[B74][batch-writer] ${assetClass} flushed ${rows.length} rows`);
+      console.log(`[B74][batch-writer] ${assetClass} upserted ${rows.length} rows`);
     } finally {
       releaseSlot();
     }
