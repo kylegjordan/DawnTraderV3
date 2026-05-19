@@ -18,63 +18,53 @@ COMMIT;
 
 VACUUM (VERBOSE) xstock_perp_ohlc_1m_2026_04;
 
--- ─── May 2026 (~3.3M rows, chunked — smallest of the three so this is the
--- empirical-validation candidate per Langston Q2) ──────────────────────
+-- ─── May 2026 (~3.3M rows, per-symbol iteration) ──────────────────────
 --
--- Initial implementation (rev1) used EXISTS self-join inside the chunked
--- LIMIT subquery; the self-join scanned the entire 3.3M-row partition
--- before LIMIT could short-circuit, exceeding Supabase 2-min
--- statement_timeout on the FIRST iteration (verified empirically on
--- xstock_perp 2026-05-19).
+-- Rev1 (EXISTS self-join chunked) hit Supabase 2-min statement_timeout on
+-- first iteration — full-partition scan was the bottleneck.
+-- Rev2 (ROW_NUMBER window-function chunked + SET statement_timeout=20min)
+-- ALSO hit 2-min cap — Supabase role-level statement_timeout overrides
+-- session SET (verified empirically 2026-05-19 on xstock_perp).
 --
--- Rev2 fix: use ROW_NUMBER() window function (single-pass, leverages the
--- existing (symbol, interval_begin) btree index) + raise per-session
--- statement_timeout to 20 min for the heavy materialization queries.
--- ROW_NUMBER stops generating rows after LIMIT is satisfied (PG planner
--- recognizes the LIMIT-pushdown optimization for window functions).
-SET statement_timeout = '20min';
+-- Rev3 fix: PER-SYMBOL iteration via index seek. The (symbol, interval_begin)
+-- btree index lets PG seek directly to one symbol's rows. Per-symbol data
+-- is ~22K rows (3.3M / ~150 symbols), self-join within that is fast (~1-2s).
+-- 150 symbols × 2s = ~5 min total wallclock. Each per-symbol DELETE has its
+-- own COMMIT — per-chunk-COMMIT semantic preserved per Langston R1.
+--
+-- Step 1: materialize the unique-symbol list ONCE (cheap with the index).
+-- Step 2: iterate symbol-by-symbol; per-symbol DELETE + COMMIT.
+
+CREATE TEMP TABLE perp_symbols_2026_05 ON COMMIT PRESERVE ROWS AS
+SELECT DISTINCT symbol FROM xstock_perp_ohlc_1m_2026_05;
 
 DO $$
 DECLARE
+  sym TEXT;
   deleted_count INTEGER;
   total_deleted BIGINT := 0;
   iteration INTEGER := 0;
-  chunk_size INTEGER := 200000;
 BEGIN
-  LOOP
+  FOR sym IN SELECT symbol FROM perp_symbols_2026_05 ORDER BY symbol LOOP
     iteration := iteration + 1;
-    DELETE FROM xstock_perp_ohlc_1m_2026_05
-    WHERE id IN (
-      SELECT id FROM (
-        SELECT id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY symbol, interval_begin
-                 ORDER BY id DESC
-               ) AS rn
-        FROM xstock_perp_ohlc_1m_2026_05
-      ) ranked
-      WHERE rn > 1
-      LIMIT chunk_size
-    );
-
+    DELETE FROM xstock_perp_ohlc_1m_2026_05 a
+    USING xstock_perp_ohlc_1m_2026_05 b
+    WHERE a.symbol = sym
+      AND b.symbol = sym
+      AND a.interval_begin = b.interval_begin
+      AND a.id < b.id;
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     total_deleted := total_deleted + deleted_count;
-
-    RAISE NOTICE '[B-NEW-35 Phase 1] xstock_perp_2026_05 iteration % deleted % rows (total %)',
-      iteration, deleted_count, total_deleted;
-
-    EXIT WHEN deleted_count = 0;
-    -- Per Langston Step 2 R1: explicit COMMIT releases locks + flushes WAL
-    -- + advances xmin between chunks. See xstock-spot phase1 file for
-    -- detailed rationale.
-    PERFORM pg_sleep(0.5);
+    RAISE NOTICE '[B-NEW-35 Phase 1] xstock_perp_2026_05 symbol % (#%) deleted % rows (total %)',
+      sym, iteration, deleted_count, total_deleted;
+    -- Per Langston Step 2 R1: per-symbol COMMIT releases locks + flushes WAL.
     COMMIT;
   END LOOP;
 
-  RAISE NOTICE '[B-NEW-35 Phase 1] xstock_perp_2026_05 COMPLETE: % iterations, % total rows deleted',
+  RAISE NOTICE '[B-NEW-35 Phase 1] xstock_perp_2026_05 COMPLETE: % symbols processed, % total rows deleted',
     iteration, total_deleted;
 END $$;
 
-RESET statement_timeout;
+DROP TABLE perp_symbols_2026_05;
 
 VACUUM (VERBOSE) xstock_perp_ohlc_1m_2026_05;

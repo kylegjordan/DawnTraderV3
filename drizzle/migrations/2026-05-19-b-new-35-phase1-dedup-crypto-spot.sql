@@ -18,51 +18,41 @@ COMMIT;
 
 VACUUM (VERBOSE) crypto_spot_ohlc_1m_2026_04;
 
--- ─── May 2026 (~9.3M rows, chunked) ────────────────────────────────────
--- Rev2: ROW_NUMBER + raised statement_timeout per xstock-spot rationale.
-SET statement_timeout = '20min';
+-- ─── May 2026 (~9.3M rows, per-symbol iteration) ──────────────────────
+-- Rev3 approach: per-symbol iteration via index seek per xstock-spot
+-- rationale. Crypto universe has ~445 symbols (more than xstocks), but
+-- per-symbol data is smaller (~21K rows/symbol). Expected wallclock
+-- 10-15 min.
+
+CREATE TEMP TABLE crypto_symbols_2026_05 ON COMMIT PRESERVE ROWS AS
+SELECT DISTINCT symbol FROM crypto_spot_ohlc_1m_2026_05;
 
 DO $$
 DECLARE
+  sym TEXT;
   deleted_count INTEGER;
   total_deleted BIGINT := 0;
   iteration INTEGER := 0;
-  chunk_size INTEGER := 200000;
 BEGIN
-  LOOP
+  FOR sym IN SELECT symbol FROM crypto_symbols_2026_05 ORDER BY symbol LOOP
     iteration := iteration + 1;
-    DELETE FROM crypto_spot_ohlc_1m_2026_05
-    WHERE id IN (
-      SELECT id FROM (
-        SELECT id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY symbol, interval_begin
-                 ORDER BY id DESC
-               ) AS rn
-        FROM crypto_spot_ohlc_1m_2026_05
-      ) ranked
-      WHERE rn > 1
-      LIMIT chunk_size
-    );
-
+    DELETE FROM crypto_spot_ohlc_1m_2026_05 a
+    USING crypto_spot_ohlc_1m_2026_05 b
+    WHERE a.symbol = sym
+      AND b.symbol = sym
+      AND a.interval_begin = b.interval_begin
+      AND a.id < b.id;
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     total_deleted := total_deleted + deleted_count;
-
-    RAISE NOTICE '[B-NEW-35 Phase 1] crypto_spot_2026_05 iteration % deleted % rows (total %)',
-      iteration, deleted_count, total_deleted;
-
-    EXIT WHEN deleted_count = 0;
-    -- Per Langston Step 2 R1: explicit COMMIT releases locks + flushes WAL
-    -- + advances xmin between chunks. See xstock-spot phase1 file for
-    -- detailed rationale.
-    PERFORM pg_sleep(0.5);
+    RAISE NOTICE '[B-NEW-35 Phase 1] crypto_spot_2026_05 symbol % (#%) deleted % rows (total %)',
+      sym, iteration, deleted_count, total_deleted;
     COMMIT;
   END LOOP;
 
-  RAISE NOTICE '[B-NEW-35 Phase 1] crypto_spot_2026_05 COMPLETE: % iterations, % total rows deleted',
+  RAISE NOTICE '[B-NEW-35 Phase 1] crypto_spot_2026_05 COMPLETE: % symbols processed, % total rows deleted',
     iteration, total_deleted;
 END $$;
 
-RESET statement_timeout;
+DROP TABLE crypto_symbols_2026_05;
 
 VACUUM (VERBOSE) crypto_spot_ohlc_1m_2026_05;

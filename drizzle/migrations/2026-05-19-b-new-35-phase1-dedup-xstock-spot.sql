@@ -42,67 +42,43 @@ COMMIT;
 -- VACUUM cannot run inside a transaction.
 VACUUM (VERBOSE) xstock_spot_ohlc_1m_2026_04;
 
--- ─── May 2026 partition (large, chunked DELETE) ────────────────────────
--- ~15M rows. Chunked at 200K rows per pass with WAL-flush pauses + per-
--- chunk COMMIT. Loop continues until no more duplicates exist.
+-- ─── May 2026 partition (15M rows, per-symbol iteration) ──────────────
 --
--- Rev2 fix: use ROW_NUMBER() window function instead of EXISTS self-join
--- (which hit Supabase 2-min statement_timeout on FIRST iteration during
--- xstock_perp empirical validation 2026-05-19). ROW_NUMBER is single-pass
--- and leverages the existing (symbol, interval_begin) btree index. Plus
--- raise per-session statement_timeout to 20 min for the heavy queries.
-SET statement_timeout = '20min';
+-- Rev3 approach: per-symbol iteration via index seek (empirically validated
+-- on xstock_perp). The (symbol, interval_begin) btree lets PG seek per-
+-- symbol; self-join within ~57K rows-per-symbol (15M/265) is fast.
+-- 265 symbols × ~3-5s/symbol = ~15-20 min total wallclock. Per-symbol
+-- COMMIT per Langston R1.
+
+CREATE TEMP TABLE spot_symbols_2026_05 ON COMMIT PRESERVE ROWS AS
+SELECT DISTINCT symbol FROM xstock_spot_ohlc_1m_2026_05;
 
 DO $$
 DECLARE
+  sym TEXT;
   deleted_count INTEGER;
   total_deleted BIGINT := 0;
   iteration INTEGER := 0;
-  chunk_size INTEGER := 200000;
 BEGIN
-  LOOP
+  FOR sym IN SELECT symbol FROM spot_symbols_2026_05 ORDER BY symbol LOOP
     iteration := iteration + 1;
-    -- ROW_NUMBER() partitioned by (symbol, interval_begin) ordered by id
-    -- DESC: rn=1 is the keeper (highest id = latest write); rn>1 are
-    -- duplicates to delete. LIMIT short-circuits after chunk_size matches.
-    DELETE FROM xstock_spot_ohlc_1m_2026_05
-    WHERE id IN (
-      SELECT id FROM (
-        SELECT id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY symbol, interval_begin
-                 ORDER BY id DESC
-               ) AS rn
-        FROM xstock_spot_ohlc_1m_2026_05
-      ) ranked
-      WHERE rn > 1
-      LIMIT chunk_size
-    );
-
+    DELETE FROM xstock_spot_ohlc_1m_2026_05 a
+    USING xstock_spot_ohlc_1m_2026_05 b
+    WHERE a.symbol = sym
+      AND b.symbol = sym
+      AND a.interval_begin = b.interval_begin
+      AND a.id < b.id;
     GET DIAGNOSTICS deleted_count = ROW_COUNT;
     total_deleted := total_deleted + deleted_count;
-
-    RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 iteration % deleted % rows (total %)',
-      iteration, deleted_count, total_deleted;
-
-    EXIT WHEN deleted_count = 0;
-
-    -- Per Langston Step 2 R1: explicit COMMIT inside the DO block releases
-    -- row locks, flushes WAL incrementally, advances xmin horizon, and
-    -- allows autovacuum to interleave with the loop. Without COMMIT, the
-    -- entire 10-30 min loop runs in one implicit transaction; pg_sleep
-    -- yields CPU but does NOT release locks or flush WAL.
-    --
-    -- PG 11+ supports COMMIT inside DO blocks at top-level (this file is
-    -- run via psql -f as a top-level command, so this is valid).
-    PERFORM pg_sleep(0.5);
+    RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 symbol % (#%) deleted % rows (total %)',
+      sym, iteration, deleted_count, total_deleted;
     COMMIT;
   END LOOP;
 
-  RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 COMPLETE: % iterations, % total rows deleted',
+  RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 COMPLETE: % symbols processed, % total rows deleted',
     iteration, total_deleted;
 END $$;
 
-RESET statement_timeout;
+DROP TABLE spot_symbols_2026_05;
 
 VACUUM (VERBOSE) xstock_spot_ohlc_1m_2026_05;
