@@ -49,7 +49,11 @@ BEGIN
       iteration, deleted_count, total_deleted;
 
     EXIT WHEN deleted_count = 0;
+    -- Per Langston Step 2 R1: explicit COMMIT releases locks + flushes WAL
+    -- + advances xmin between chunks. See xstock-spot phase1 file for
+    -- detailed rationale.
     PERFORM pg_sleep(0.5);
+    COMMIT;
   END LOOP;
 
   RAISE NOTICE '[B-NEW-35 Phase 1] crypto_spot_2026_05 COMPLETE: % iterations, % total rows deleted',

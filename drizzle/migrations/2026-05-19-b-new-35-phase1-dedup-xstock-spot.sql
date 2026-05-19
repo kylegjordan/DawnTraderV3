@@ -77,9 +77,16 @@ BEGIN
 
     EXIT WHEN deleted_count = 0;
 
-    -- Brief WAL-flush pause between chunks. PostgreSQL pg_sleep yields the
-    -- transaction so checkpointer + writer processes can drain.
+    -- Per Langston Step 2 R1: explicit COMMIT inside the DO block releases
+    -- row locks, flushes WAL incrementally, advances xmin horizon, and
+    -- allows autovacuum to interleave with the loop. Without COMMIT, the
+    -- entire 10-30 min loop runs in one implicit transaction; pg_sleep
+    -- yields CPU but does NOT release locks or flush WAL.
+    --
+    -- PG 11+ supports COMMIT inside DO blocks at top-level (this file is
+    -- run via psql -f as a top-level command, so this is valid).
     PERFORM pg_sleep(0.5);
+    COMMIT;
   END LOOP;
 
   RAISE NOTICE '[B-NEW-35 Phase 1] xstock_spot_2026_05 COMPLETE: % iterations, % total rows deleted',
