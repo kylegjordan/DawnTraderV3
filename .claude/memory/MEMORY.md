@@ -1,85 +1,71 @@
 # DawnTrader V3 — Claude Code Memory (Volatile State)
 
-> Stable workflow/governance/infrastructure live in `DawnTraderV3/CLAUDE.md`. This file = volatile state only. Hard cap 200 lines.
+> Stable workflow/governance/infrastructure live in `DawnTraderV3/CLAUDE.md`. Hard cap 200 lines.
 
 ---
 
-## SESSION-START PROTOCOL (every new session / post-compact)
+## SESSION-START PROTOCOL
 
-1. Read `DawnTraderV3/CLAUDE.md` (esp. §1 plain-language; §6.5.0.a embed-diff-inline; §6.5.0.b hung-instance checking; §6+§8 Langston comms; §10.5 per-turn alerts).
+1. Read `DawnTraderV3/CLAUDE.md` (esp. §1 plain-language + **two-paragraph default**; §6.5.0.a embed-diff-inline; §6.5.0.b hung-instance; §6+§8 Langston comms; §10.5 alerts).
 2. Read this file.
-3. **§10.5 alerts check (mandatory every turn):** `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"` — surface any unack'd active entries.
-4. Kyle messages me in Claude Desktop. Telegram = Langston comms + outbound visibility. **No proactive DMs to Kyle.**
+3. **§10.5 alerts check (every turn):** `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"`.
+4. Kyle in Claude Desktop. Telegram = Langston + visibility. NO proactive DMs.
 5. Acknowledge readiness in one line.
 
-**Do NOT:** confabulate; skip SIM in pre-audit; use jargon in Kyle-facing summaries; assume — verify.
-
 ---
 
-## 🚨 IMMEDIATE POST-COMPACT ACTION (Kyle directive 2026-05-19 23:00 UTC)
+## CURRENT STATE (2026-05-20 02:00 UTC — B-NEW-35 SHIPPED)
 
-**B-NEW-35 source-side dedup is IN FLIGHT.** Scope + pre-audit + Langston Step 1+2 ACK all done; consensus reached. Per Kyle proceed-on-consensus authorization, implementation began. Supabase Micro→Small tier upgrade was the unblocker.
+**B-NEW-35 COMPLETE.** Scanner recovered. All 5 phases verified.
 
-### Phase 1 dedup status (as of session-end / pre-compact)
+### What shipped
+- **Phase 1 dedup:** all 3 partitioned tables. xstock_perp: 3.22M deleted (97%). xstock_spot: 14M+ deleted across main pass + retry + SPY chunked. crypto_spot: 6.4M+ deleted. Post-dedup row counts (May 2026 partitions): xstock_spot 1.59M, crypto_spot 2.47M, xstock_perp 280K.
+- **Phase 2 UNIQUE constraints** on (symbol, interval_begin) for all 3 _ohlc_1m tables.
+- **Phase 3 UPSERT code deploy** (commit `f001002d9`) — ohlc-batch-writer.ts now uses `ON CONFLICT DO UPDATE` + in-buffer dedup hotfix (the "ON CONFLICT cannot affect row twice" failure caught & fixed mid-deploy).
+- **Phase 4 pre-warm re-run:** 265 symbols in 206 seconds, 0 errors (vs 9+ hours with 26 failures yesterday).
+- **Phase 5 scanner verified:** SCAN_CYCLE_DONE tick=60 + tick=90, 74/75 pairs scanned in ~1.3s cycle time. DBS telemetry firing (CYCLE_DBS_TIMING dbs_compute_ms=2 pairs_with_dbs=73).
+- **Alert `7b33b931` (B-PHASE-A2 telemetry verify) ACK'D** by cc-session-2026-05-20.
 
-| Table | Status | Detail |
-|---|---|---|
-| xstock_perp_ohlc_1m | ✅ COMPLETE | 3.22M rows deleted (97%), 271K remain, VACUUM clean |
-| xstock_spot_ohlc_1m | 🟡 IN FLIGHT (per-symbol bash loop) | Started ~22:20 UTC; ~3M deleted of ~14M expected by completion; ETA ~80 more min |
-| crypto_spot_ohlc_1m | ⏸️ QUEUED | Run serially after xstock_spot to avoid IO contention |
+### Operational state confirmed working
+- Archiver UPSERTs successful: `[B74][batch-writer] xstock_spot upserted N rows` / crypto_spot / xstock_perp — ongoing flushes every 5s, ~10-50 rows per flush (vs 90-200 pre-dedup, 5× cleaner).
+- Scanner cycle DB time: ~1s (was 25s timeout).
+- No more "ON CONFLICT cannot affect row a second time" errors.
+- All three layers of dedup protection in place: UNIQUE constraint (DB), UPSERT clause (code), in-buffer dedup (code).
 
-**Per-symbol bash loop is the working approach.** Earlier DO-block attempts (rev1-rev6) all failed because PG's statement_timeout counts whole DO blocks as one statement regardless of internal COMMITs. Per-symbol psql calls each get fresh 2-min budget.
+### Commits
+- `f001002d9` — in-buffer dedup hotfix
+- `aea5adb00` — MEMORY mid-deploy handoff
+- `f001002d9` ... back through Phase 1 SQL iterations
+- `e1facf6cd` `4c473ff33` `75f73c930` `1fe3b6829` `cd7e2aefe` `323538cf7` — Phase 1 SQL evolution
+- `756f3a25d` — scope rev2 Langston ACK
 
-**Script:** `/tmp/dedup_per_symbol.sh xstock_spot_ohlc_1m` (staged on staging at deploy user). To restart: `ssh root@188.245.193.8 "su - deploy -c '/tmp/dedup_per_symbol.sh xstock_spot_ohlc_1m'"`.
+### Supabase tier — SAFE TO DOWNGRADE
+Currently Medium ($60/mo) — was bumped during dedup. Post-fix write IO dropped ~20× (no more 18-56× row duplication), read IO ~5× (queries scan deduped data). Small tier ($15/mo) should comfortably handle ongoing operations. **Kyle approved downgrade — safe to revert now.**
 
-### Post-Phase-1 step-by-step
+### Locked plan — what remains
 
-**Phase 2 — ADD UNIQUE constraints:** `psql -f drizzle/migrations/2026-05-19-b-new-35-phase2-add-unique-constraints.sql` on staging. Then manual `INSERT INTO _migrations` for all 4 Phase 1+2 files with bypass comment "B-NEW-35 bypass — ledger reconciliation pending in B-NEW-36 sub-batch (a)". Per RUNNING_ISSUES #119.
+Original 4-step plan locked May 18 evening + re-sequenced today:
 
-**Phase 3 — Deploy UPSERT code:** Code already committed (commit `1fe3b6829` and earlier). Just `ssh staging "su - deploy -c 'cd /home/deploy/dawntrader && npm run build && pm2 restart dawntrader'"`.
+1. ✅ B-NEW-34b snapshot architecture (May 18 night)
+2. ✅ B-NEW-35 source-side dedup (May 19-20 — JUST SHIPPED)
+3. ⏸️ **B-NEW-36 off-hours session-lifecycle controller** — scope FINAL ACK'd by Langston at rev4. Three sub-batches: (a) `_migrations` ledger reconciliation [#119]; (b) lifecycle controller — Fri 8PM ET shutdown + Sun 8PM ET restart hooks; (c) xStock universe-split cleanup (retire XSTOCK_SPOT_24_7_SYMBOLS designation; empirically not supported per Q9). Pre-audit gate: CLEAR (Langston ACK'd at rev4 + Q9 empirically confirmed). Begin Step 2 pre-audit in next session.
+4. ⏸️ **B79.0n xStock active-trading wire-in** (#117) — wire xStock filters / MCE / regime / DBS / TEC / strategy detect through signal-orchestrator's active-trading dispatch + paper-execution-engine asset-class branching. Active trading stays OFF; codepath becomes end-to-end ready. Last in queue.
 
-**Phase 4 — Re-pre-warm + spot check:**
-- Pre-state spot-check: capture last-3 bucket OHLCV values for AAPL/JPM/JNJ/BABA/GLD from snapshot table BEFORE re-pre-warm.
-- Run: `npm run b-new-34b:prewarm -- --days 14` (should complete in 5-15 min on clean source).
-- Post-state spot-check: re-query same buckets; values should match within ±0.01%.
+### Deferred for fresh session
 
-**Phase 5 — Verify scanner:** Watch `[B79.0a][SCAN_CYCLE_DONE]` log lines. Expect `pairs_scanned ≥ 65` with `db_roundtrip_ms < 5000`. Also expect new `[B-NEW-34b][SNAPSHOT_READ]` + `[SNAPSHOT_WRITEBACK]` telemetry. Then `ack` system-alert `7b33b931` (B-PHASE-A2 telemetry verify).
-
-**Step 11 completion report:** Write `Claude Comms and Packages/Batch Completion/B_NEW_35_COMPLETION_REPORT.md` covering all 5 phases + empirical results + governance file changes.
-
-**Governance updates (MANDATORY per Step 10):** SIM (add 5 B-NEW-35 components), System Manual (add chapter), RUNNING_ISSUES (#119 update + B-NEW-35 close + add B-NEW-37 follow-up for aggregator DISTINCT-ON-CTE removal), MULTI_ASSET_VTS_EXPANSION_PLAN row, BATCH_CATALOG entry. THEN sync Langston's MEMORY per §10.b.
-
-### Open commits on `migration/aws-supabase` (newest first)
-
-- `cd7e2aefe`, `323538cf7` — B-NEW-35 Phase 1 SQL evolution rev3/rev4/rev5 (per-symbol via index seek + recursive CTE + ROW_NUMBER). NOTE: these SQL files are superseded by `/tmp/dedup_per_symbol.sh` bash loop approach — the SQL files in repo are STALE for the actual deploy path. Update them post-success.
-- `e1facf6cd` — B-NEW-35 scope rev1
-- `4c473ff33` — B-NEW-35 Step 2 pre-audit + Phase 1-3 SQL/code initial
-- `75f73c930` — B-NEW-35 Phase 1 R1 (per-chunk COMMIT)
-- `1fe3b6829` — B-NEW-35 Phase 1 rev3 + the **committed UPSERT change in `ohlc-batch-writer.ts`** (key Phase 3 artifact)
-- `756f3a25d` — B-NEW-35 scope rev2 (Langston Step 1 ACK)
-- `5b9f91b40`, `f02196411`, `8033939af` — B-NEW-36 scope rev4/3/2 (on hold pending B-NEW-35 close)
-- `686d13ae4` — B-NEW-34b governance
-- `4fd780c3d`, `d9031fe8d` — B-NEW-34b core (shipped 2026-05-18 night)
+- **B-NEW-35 Step 11 completion report.** Multi-page write-up. Has all the empirical numbers ready in this MEMORY + the commit log.
+- **B-NEW-35 governance updates (MANDATORY):** SIM (add 5+ components), System Manual chapter on source-side dedup, RUNNING_ISSUES #118/#119 closure, MULTI_ASSET_VTS_EXPANSION_PLAN row, BATCH_CATALOG entry. Pattern is post-batch governance per CLAUDE.md §3.
 
 ### Active alerts (§10.5)
-
-- `7b33b931` — B-PHASE-A2 telemetry verify, active+unack'd since 2026-05-18, **DEFER until scanner recovers + first cycles with new code emit `CYCLE_DBS_TIMING`** then ack with `npm run system-alerts -- ack 7b33b931 --by cc-session-<date>`.
-- `b83b1e4b` — B-NEW-40 14-day soak verification, scheduled 2026-05-31. No action this side.
-
-### Key facts to remember
-
-- Supabase tier: **Small** (Kyle upgraded from Micro 2026-05-19 to unblock IO budget). 2GB RAM, 196 Mbps baseline IO. ~$15/mo on Pro. Can downgrade post-B-NEW-35 once write IO drops ~20× from dedup.
-- Q9 confirmed: all 10 "designated 24/7" xStock names empirically have ZERO weekend trading activity (verified Sat 14-15 ET window). The `XSTOCK_SPOT_24_7_SYMBOLS` set is stale code — B-NEW-36 retires it.
-- B-NEW-36 scope is FINAL ACK'd by Langston at rev4 — three sub-batches: (a) ledger reconciliation, (b) lifecycle controller, (c) universe-split cleanup. Begins after B-NEW-35 closes.
-- B79.0n active-trading wire-in (RUNNING_ISSUES #117) still last in queue.
+- `b83b1e4b` — B-NEW-40 14-day soak verification scheduled 2026-05-31. No action.
+- `7b33b931` — B-PHASE-A2 telemetry verify — **ACK'D 2026-05-20**.
 
 ---
 
-## REQUIRED PRE-READS ON SESSION START
+## REQUIRED PRE-READS
 
-1. `DawnTraderV3/CLAUDE.md`
-2. This file (especially IMMEDIATE POST-COMPACT ACTION)
-3. `1-system-manual/RUNNING_ISSUES.md` entries #117, #118, #119 (B-NEW-34a abandoned; B-NEW-34b shipped; ledger drift)
-4. `Claude Comms and Packages/Scope Files/B_NEW_35_SCOPE.md` (rev2, consensus) + `B_NEW_35_PRE_AUDIT.md` (rev1, all 7 deliverables)
-5. `Claude Comms and Packages/Scope Files/B_NEW_36_SCOPE.md` (rev4, Langston FINAL ACK, on hold pending B-NEW-35)
-6. The `/tmp/dedup_per_symbol.sh` script on staging (the working dedup tool — not yet committed to repo)
+1. `DawnTraderV3/CLAUDE.md` (esp. §1 two-paragraph rule)
+2. This file
+3. `Claude Comms and Packages/Scope Files/B_NEW_35_SCOPE.md` + `B_NEW_35_PRE_AUDIT.md` (consensus reached + 7 deliverables documented — Step 11 completion report will reference these)
+4. `Claude Comms and Packages/Scope Files/B_NEW_36_SCOPE.md` (rev4 final, Langston ACK — NEXT batch)
+5. `1-system-manual/RUNNING_ISSUES.md` #117 (B79.0n unbuilt), #118 (B-NEW-34a abandoned), #119 (ledger drift)
