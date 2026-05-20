@@ -93,7 +93,25 @@ export function bufferOhlcBar(assetClass: ArchiveAssetClass, row: InsertEquitySp
 async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
   const batch = buffers[assetClass];
   if (batch.length === 0) return;
-  const rows = batch.splice(0, batch.length); // drain atomically
+  const rawRows = batch.splice(0, batch.length); // drain atomically
+
+  // B-NEW-35 (2026-05-20): de-dupe the in-buffer batch by (symbol, interval_begin)
+  // BEFORE the INSERT. Kraken WS sends multiple OHLC updates per minute as the
+  // bar evolves with each tick; the archiver buffers all of them. With ON CONFLICT
+  // DO UPDATE, PG throws "ON CONFLICT DO UPDATE command cannot affect row a
+  // second time" when one INSERT contains multiple rows that target the same
+  // unique constraint. Solution: keep only the LAST row per (symbol, interval_begin)
+  // in the buffer — the last write IS the latest WS update IS the correct
+  // cumulative OHLCV for that minute. Map insertion-order semantics give "last
+  // wins" naturally.
+  const dedupedMap = new Map<string, InsertEquitySpotOhlc1m>();
+  for (const row of rawRows) {
+    const ts = (row as any).intervalBegin instanceof Date
+      ? (row as any).intervalBegin.toISOString()
+      : String((row as any).intervalBegin);
+    dedupedMap.set(`${row.symbol}::${ts}`, row);
+  }
+  const rows = Array.from(dedupedMap.values());
   try {
     await acquireSlot();
     try {
