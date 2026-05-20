@@ -15,7 +15,7 @@
  *     (import-hygiene regression for the other HYGIENE deliverable).
  */
 
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect } from 'vitest';
 import { XSTOCK_SPOT_REGISTRY, XSTOCK_SPOT_SYMBOLS } from '../../../shared/asset-classes';
 
 const RETIRED_SYMBOLS = [

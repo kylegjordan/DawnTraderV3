@@ -27,7 +27,7 @@
  *       don't count as code-references. Low risk — helpers are sync state-setters.
  */
 
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 
