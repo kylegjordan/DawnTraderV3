@@ -40,7 +40,7 @@
 import { centralClock, type ClockTick } from '../../services/central-clock.js';
 import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
-import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS, XSTOCK_SPOT_REGISTRY } from '../../../shared/asset-classes.js';
+import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_REGISTRY } from '../../../shared/asset-classes.js';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 // B-PHASE-A2 (2026-05-17): pre-cycle DBS compute imports.
@@ -277,38 +277,32 @@ class XstockSpotScannerService {
     try {
       console.log(`[B79.0a][SCAN_CYCLE_START] tick=${tick.tickNumber}`);
 
-      // B79.0c (per-symbol predicate) + B79.0L (unified weekend close):
-      // Three states the universe-filter handles:
-      //   1. Inside unified Fri 20:00 ET → Sun 20:00 ET weekend close: ALL
-      //      xStocks closed (including the extended-hours set). Cycle scans
-      //      empty universe — recorded as cycle-skipped for legacy counter.
-      //   2. Outside weekend close, ARCA open: full xstock universe scans.
-      //   3. Outside weekend close, ARCA closed (e.g., Mon-Thu overnight):
-      //      restrict to extended-hours set (XSTOCK_SPOT_24_7_SYMBOLS) which
-      //      remain open continuously during the work-week window.
-      // Hostile-sim bypasses entirely so the no-shed posture test can run
-      // regardless of when (e.g. weekend) Step 7+8 verify happens.
-      const arcaOpenSampleSym = 'NON_24_7_SAMPLE/USD'; // any non-extended sym → ARCA schedule (not extended-hours short-circuit)
-      const arcaOpen = isXstockMarketOpenUTC(arcaOpenSampleSym);
-      // B79.0L: probe an extended-hours name to detect the unified weekend
-      // close. If AAPL/USD is also closed, we're inside the Fri-Sun close
-      // window — extended-hours set is also closed; scan empty universe.
-      const extendedHoursOpen = isXstockMarketOpenUTC('AAPL/USD');
-      const insideUnifiedWeekendClose = !arcaOpen && !extendedHoursOpen;
+      // B-NEW-36 sub-batch (c) (2026-05-20): unified two-state universe.
+      // All xStocks share identical hours per empirical Q9 verification
+      // (Sun 8PM ET → Fri 8PM ET open; Fri 8PM ET → Sun 8PM ET closed).
+      //   1. Inside weekend close: empty universe (recorded as cycle-skipped
+      //      for legacy counter).
+      //   2. Outside weekend close: full xstock universe scans (including
+      //      off-ARCA-hours pre-market + after-hours bands — previously
+      //      restricted to a 10-name subset; the restriction was empirically
+      //      wrong and silently shrank the scanner universe by ~96%).
+      // Hostile-sim bypasses so the no-shed posture test can run regardless
+      // of when (e.g. weekend) Step 7+8 verify happens.
+      // Symbol param to isXstockMarketOpenUTC is kept for backward compat
+      // but no longer consulted internally.
+      const xstockOpen = isXstockMarketOpenUTC('AAPL/USD');
 
       // Build per-cycle universe.
       let symbolList: string[];
       if (this.diag.hostileSimActive) {
         symbolList = Array.from(XSTOCK_SPOT_SYMBOLS); // hostile-sim always full
-      } else if (insideUnifiedWeekendClose) {
-        symbolList = []; // B79.0L: ALL xStocks closed during Fri-Sun window
-      } else if (arcaOpen) {
+      } else if (xstockOpen) {
         symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
       } else {
-        symbolList = Array.from(XSTOCK_SPOT_24_7_SYMBOLS); // ARCA closed but extended-hours open
+        symbolList = []; // weekend close — ALL xStocks closed
       }
       this.diag.lastUniverseSize = symbolList.length;
-      this.diag.lastArcaOpen = arcaOpen;
+      this.diag.lastArcaOpen = xstockOpen;
 
       // ── Per-cycle rotation (Kyle directive 2026-05-12) ──
       // Pre-rotation length captured above as lastUniverseSize so the
@@ -330,14 +324,10 @@ class XstockSpotScannerService {
           `(pinned=${pinned.length} rotated=${rotatedSlice.length}) cursor=${this.rotationCursor}/${rotatable.length}`,
         );
       }
-      if (!arcaOpen && !this.diag.hostileSimActive) {
+      if (!xstockOpen && !this.diag.hostileSimActive) {
         this.diag.cyclesSkippedMarketClosed++; // legacy counter, retained for compat
         if (this.diag.cyclesSkippedMarketClosed % 30 === 1) {
-          if (insideUnifiedWeekendClose) {
-            console.log(`[B79.0L][SCAN_WEEKEND_CLOSE] tick=${tick.tickNumber} universe=0 (Fri 8PM ET → Sun 8PM ET unified window)`);
-          } else {
-            console.log(`[B79.0c][SCAN_EXTENDED_ONLY] tick=${tick.tickNumber} universe=${symbolList.length} (10 names; ARCA closed but extended-hours names open)`);
-          }
+          console.log(`[B-NEW-36][SCAN_WEEKEND_CLOSE] tick=${tick.tickNumber} universe=0 (Fri 8PM ET → Sun 8PM ET unified window)`);
         }
       }
 

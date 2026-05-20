@@ -55,7 +55,6 @@ import {
   getCachedConstant,
   getCachedNumbersForModule,
 } from '../services/module-constants-service.js';
-import { XSTOCK_SPOT_24_7_SYMBOLS } from '../../shared/asset-classes.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 
 const STRATEGY_KEY = 'orb';
@@ -71,7 +70,6 @@ const RTH_OPEN_MINUTE_UTC = 30;
 const ACTIVE_WINDOW_END_HOUR_UTC = 17; // 17:00 UTC end of active breakout window
 
 let _disabledLogCount = 0;
-let _no24_7LogCount = 0;
 let _outsideWindowLogCount = 0;
 
 interface OrbContext {
@@ -149,24 +147,21 @@ export function detectORB(
   indicators: TechnicalIndicators,
   ctx?: OrbContext,
 ): StrategySignal | null {
-  // ── Triple-defense guard (Q6) — detect-internal layer ───────────────────
-  // (a) Asset-class: xstock_spot only.
+  // ── Defense guard (Q6) — detect-internal layer ──────────────────────────
+  // Asset-class: xstock_spot only.
   const assetClass = ctx?.assetClass ?? 'xstock_spot'; // dispatch passes; default for back-compat
   if (assetClass !== 'xstock_spot') return null;
 
-  // (b) Extended-hours names have no daily opening bell (Langston scope review
-  // concern #1). Per B79.0L correction 2026-05-10: these names aren't actually
-  // 24/7 — they trade Sun 8PM ET → Fri 8PM ET continuously (120 hours/week).
-  // No opening bell within the open window means ORB doesn't apply to them.
-  // The constant name XSTOCK_SPOT_24_7_SYMBOLS is preserved from B79.0c for
-  // stability across many call sites; cosmetic rename queued.
-  if (XSTOCK_SPOT_24_7_SYMBOLS.has(symbol)) {
-    _no24_7LogCount++;
-    if (_no24_7LogCount === 1 || _no24_7LogCount % 1000 === 0) {
-      console.log(`${LOG_PREFIX} ${symbol} skipped — extended-hours name has no daily opening bell (count=${_no24_7LogCount})`);
-    }
-    return null;
-  }
+  // B-NEW-36 sub-batch (c) (2026-05-20): removed the per-symbol weekend-bypass
+  // branch that short-circuited the 10 designated "24/7" names. Empirical
+  // Q9 verification showed those 10 names share identical hours with the
+  // other ~255 (Sun 8PM ET → Fri 8PM ET open; Fri 8PM ET → Sun 8PM ET
+  // closed). The bypass would have caused ORB to skip those 10 names every
+  // day at NYSE-open even though they HAVE the same opening bell as the
+  // others. Since ORB is currently disabled (`enabled=false` per B-NEW-34)
+  // the branch was dead-code; but it was also wrong-by-empirics — removed
+  // both for that reason and because re-enabling ORB without the empirical
+  // fix would have silently broken the strategy on the 10 names.
 
   // ── DB gate (cached sync API; B79.0d flipped to true) ───────────────────
   let enabled: boolean | undefined;

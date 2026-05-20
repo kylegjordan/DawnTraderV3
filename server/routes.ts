@@ -7849,7 +7849,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // NULL and are post-processed into the `dead` state below.
   apiRouter.get('/xstocks/freshness', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
-      const { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_24_7_SYMBOLS } = await import('../shared/asset-classes.js');
+      const { XSTOCK_SPOT_SYMBOLS } = await import('../shared/asset-classes.js');
 
       const symbolList = Array.from(XSTOCK_SPOT_SYMBOLS);
       // Single-quote escape: SQL identifier convention. The list is a hardcoded
@@ -7891,7 +7891,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           lastTickAt: lastTickAt !== null ? new Date(lastTickAt).toISOString() : null,
           staleSeconds,
           state,
-          is24_7: XSTOCK_SPOT_24_7_SYMBOLS.has(r.symbol),
         };
       });
 

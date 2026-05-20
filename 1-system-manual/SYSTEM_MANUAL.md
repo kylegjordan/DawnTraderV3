@@ -11241,7 +11241,7 @@ The PK `(interval_begin, symbol, id)` includes the `id` bigserial, which allows 
 
 **The aggregator workaround (B-NEW-34 hotfix 3).** `ohlc-aggregator.ts` applies `DISTINCT ON (symbol, interval_begin) ORDER BY symbol, interval_begin, captured_at DESC, id DESC` as a CTE before the bucketing CTE. This picks the latest-tick (closed-bar) snapshot per minute, then rolls up 60 of those into one 60-minute bar via the standard `array_agg(... ORDER BY)` pattern. Without the dedup, the rollup's MAX/MIN/SUM would over-count the same minute's high/low/volume dozens of times.
 
-**The structural fix (B-NEW-35, scheduled).** B-NEW-35 will rewrite the B74 archive writer to do `INSERT ... ON CONFLICT (symbol, interval_begin) DO UPDATE SET ...` keeping the latest values. Requires (a) adding a UNIQUE constraint on `(symbol, interval_begin)` per partition, which (b) requires a backfill migration to DELETE the duplicate rows first. After B-NEW-35 lands, the DISTINCT ON CTE in `ohlc-aggregator.ts` becomes redundant and is removed, AND the 240-min warm-fetch in `scanner.ts:runCycle` is re-enabled.
+**The structural fix (B-NEW-35, SHIPPED 2026-05-20).** See the dedicated chapter "Source-side dedup architecture (B-NEW-35)" below for the full structural-correctness model that replaced this DISTINCT ON workaround. The aggregator's DISTINCT ON CTE is preserved for now as defense-in-depth even though the UNIQUE constraint at the DB level now guarantees no duplicates can land.
 
 ### Cache architecture — asset-class-scoped, not shared
 
@@ -11313,6 +11313,108 @@ The snapshot table needs a fresh-enough state at scanner cold start. During acti
 - Code: `server/services/xstock-ohlc-cache.ts` (`readSnapshotBars`, `mergeBars`, `writeBackSnapshot`, `NARROW_OVERLAY_HOURS_60M`, `WRITE_BACK_RECENT_BUCKETS`); `server/asset_classes/xstock_spot/ohlc-aggregator.ts` (`lookbackHoursOverride` param).
 - Langston Step 4 design review (APPROVE WITH 3 FINDINGS + Q1-Q7 ACK + deploy-blocker direction): `Claude Comms and Packages/Langston Design Asks/B_NEW_34b_design_review_rev1.md`.
 - RUNNING_ISSUES #118 (B-NEW-34a abandoned → B-NEW-34b shipped) + #119 (`_migrations` ledger drift, separate batch).
+
+---
+
+## Source-side dedup architecture (B-NEW-35, 2026-05-20)
+
+*Added 2026-05-20 with B-NEW-35 close. Replaces the prior "B74 archive duplicate-row workaround" subsection above as the canonical structural-correctness model for B74's three WebSocket-archived OHLC tables.*
+
+### Problem the structural fix closes
+
+The B74 WebSocket OHLC archiver (`server/services/passive-archive/ohlc-batch-writer.ts`) was inserting one row per Kraken WS update rather than one row per minute. Kraken WS sends multiple OHLC updates per minute as the in-progress bar evolves, so the archive grew at 18-56× the necessary rate across all three partitioned tables (`xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m`, `crypto_spot_ohlc_1m`). Every downstream consumer that aggregated those rows (snapshot pre-warm, scanner cycle batched-live-overlay, signal-orchestrator OHLC reads) had to DISTINCT ON the duplicates at query time, and the DISTINCT ON cost scaled linearly with the duplication factor. On heavy-traded names (SPY, NVDA, QQQ, TSLA + ~22 other blue-chip equities), the cost exceeded Postgres's 2-minute statement_timeout and the query hung. The B-NEW-34 aggregator's DISTINCT ON CTE was the symptomatic workaround; B-NEW-35 closed the structural root.
+
+### The three layers of dedup protection
+
+The fix lives at three layers — DB-physical, application-UPSERT, and in-memory-buffer — so any single layer's failure does not allow duplicates to reach the table.
+
+**Layer 1 — PostgreSQL UNIQUE constraint on `(symbol, interval_begin)` for all three partitioned `_ohlc_1m` tables.** Constraint name pattern: `<table>_symbol_interval_begin_key`. Cascades automatically to every existing partition per PG partitioned-table semantics, and to every future partition the partitioning machinery creates. The DB physically rejects any attempt to insert a duplicate. If application code and in-buffer dedup both fail simultaneously, the database itself is the last line of defense — the failing INSERT returns a constraint-violation error rather than silently letting a duplicate land.
+
+**Layer 2 — Drizzle `.onConflictDoUpdate()` clause in `server/services/passive-archive/ohlc-batch-writer.ts` (lines 147-164).** Replaces the prior plain `db.insert(table).values(slice)` with:
+
+```ts
+await db.insert(table).values(slice).onConflictDoUpdate({
+  target: [table.symbol, table.intervalBegin],
+  set: {
+    open: sql`EXCLUDED.open`,
+    high: sql`EXCLUDED.high`,
+    low: sql`EXCLUDED.low`,
+    close: sql`EXCLUDED.close`,
+    volume: sql`EXCLUDED.volume`,
+    vwap: sql`EXCLUDED.vwap`,
+    tradeCount: sql`EXCLUDED.trade_count`,
+    capturedAt: sql`NOW()`,
+  },
+});
+```
+
+Semantically: the latest WS update IS the correct cumulative OHLCV for that minute per Kraken WS contract. Each new WS message for a minute-in-progress carries the cumulative open/high/low/close/volume/vwap/trade_count as of that tick. So when a later tick arrives for the same `(symbol, interval_begin)`, replacing the prior row's evolving fields with `EXCLUDED.*` is correct — the close moves to the latest value, high stays the max, low stays the min, volume is the cumulative total, etc. The `capturedAt` column gets touched to `NOW()` so audit queries can still tell when the last update happened. The `id` / `asset_class` / `exchange` columns (invariants per row) are NOT in the SET clause — they're set on initial INSERT and never modified.
+
+**Layer 3 — In-buffer Map dedup BEFORE the chunked INSERT.** At lines 105-114 of `ohlc-batch-writer.ts`, immediately after the buffer is drained:
+
+```ts
+const dedupedMap = new Map<string, InsertEquitySpotOhlc1m>();
+for (const row of rawRows) {
+  const ts = (row as any).intervalBegin instanceof Date
+    ? (row as any).intervalBegin.toISOString()
+    : String((row as any).intervalBegin);
+  dedupedMap.set(`${row.symbol}::${ts}`, row);
+}
+const rows = Array.from(dedupedMap.values());
+```
+
+This layer is structurally required, not optional. Without it, PostgreSQL throws `ON CONFLICT DO UPDATE command cannot affect row a second time` whenever a single multi-row INSERT contains two or more rows that share the conflict-target key — and the archiver's 5-second buffer routinely contains multiple WS updates for the same `(symbol, interval_begin)`. JavaScript's `Map` has insertion-order semantics; setting the same key twice keeps the second value with the original insertion position. So the loop produces a deduplicated array where each `(symbol, interval_begin)` appears exactly once with the **latest** WS update for that minute. That latest update is precisely the cumulative OHLCV per Kraken's contract, so the dropped earlier updates carry no information that the kept update doesn't.
+
+### Why the in-buffer dedup hotfix was needed mid-deploy
+
+The initial Phase 3 deployment shipped the UPSERT clause (Layer 2) but not the in-buffer Map dedup (Layer 3). PostgreSQL immediately started rejecting flushes with `ON CONFLICT DO UPDATE command cannot affect row a second time` errors, observed live in `/var/log/dawntrader/out.log`. The hotfix at commit `f001002d9` added Layer 3 and the errors stopped. After both layers are live, the database sees at most one INSERT row per `(symbol, interval_begin)` per flush, and the UPSERT semantics resolve cleanly against pre-existing rows for that minute.
+
+### Pre-warm and steady-state cost shape
+
+Pre-fix steady state: ~150 rows per minute for heavy names like SPY (some minutes >220 rows), aggregated across 265 symbols and three partitioned tables. xstock_spot May partition grew to ~14M+ rows in the first two weeks of May. Pre-warm read costs for the snapshot pre-aggregation hit Postgres statement_timeout on 26 of 265 symbols even at `--days 3`.
+
+Post-fix steady state: exactly one row per `(symbol, interval_begin)` per minute. xstock_spot May partition stabilized at 1,604,733 rows by 2026-05-20 morning. Pre-warm reads completed in 206 seconds across the full 265-symbol universe (vs 9+ hours and 26 failures pre-fix). Scanner cycle wallclock median ~530ms (vs 25-second SCAN_TIMEOUT pre-fix).
+
+Supabase Disk IO burst budget consumption dropped from 100%/day pre-fix to under 30%/day post-fix. Write IO dropped ~20× from dedup; read IO ~5× from the DISTINCT ON cost vanishing.
+
+### Deploy ordering invariant (ADD UNIQUE on actively-written tables)
+
+ADD CONSTRAINT UNIQUE on a partitioned table that is being actively written by an application-side archiver is NOT atomic with respect to the archiver's write stream. PostgreSQL takes an ACCESS EXCLUSIVE lock on the parent + each partition during constraint validation; during that lock-acquisition window, fresh writes from the archiver land and can introduce new duplicates that the constraint then rejects. The working sequence for any future structural UNIQUE-constraint addition on an actively-written table is:
+
+1. `pm2 stop dawntrader` (or whatever process owns the writes) — write stream stops.
+2. Final dedup sweep DELETE per partition — catches any duplicates landed in the lock window of the prior validation attempt.
+3. `ALTER TABLE ADD CONSTRAINT ... UNIQUE (...)` in a single transaction — partitioned-table constraint cascades to all partitions atomically.
+4. `pm2 start dawntrader` — write stream resumes. From this point, only the new code path (with the in-buffer dedup + UPSERT clause) is writing, and the UNIQUE constraint is enforced from row 1.
+
+Documented as a deploy-ordering invariant in SYSTEM_IMPACT_MAP under the B74 archiver section.
+
+### Phase 1 cleanup: bash-per-symbol DELETE pattern
+
+The Phase 1 cleanup migration that removed ~23.2M duplicate rows across three tables ran into a Postgres-specific failure mode worth recording for institutional memory. Several SQL revisions (EXISTS self-join, ROW_NUMBER + `SET statement_timeout`, per-symbol self-join, recursive CTE skip-scan, per-symbol ROW_NUMBER inside DO block) all failed within Supabase's 2-minute query cap even at the Medium compute tier. Root cause: a PL/pgSQL DO block treats its entire LOOP as one statement for `statement_timeout` purposes, regardless of internal COMMIT statements. Cumulative DO-block wallclock hits the cap even if each individual per-symbol DELETE finishes in seconds.
+
+The working approach drops out of PL/pgSQL entirely and uses a bash loop that calls `psql` once per symbol. Each `psql` invocation gets a fresh 2-minute `statement_timeout` budget. The script (`/tmp/dedup_per_symbol.sh` on staging at deploy time, archived in BATCH_CATALOG entry):
+
+```bash
+# Enumerate symbols via recursive CTE in one query
+psql -c "WITH RECURSIVE walk AS (...) SELECT symbol FROM walk" -t -A | while read sym; do
+  psql -c "DELETE FROM <table>_2026_05 WHERE symbol = '$sym' AND id NOT IN (
+             SELECT MAX(id) FROM <table>_2026_05 WHERE symbol = '$sym' GROUP BY interval_begin
+           );"
+done
+```
+
+The heaviest single symbol (SPY) still overflowed its per-symbol budget — solved by a per-day chunked DELETE script (`/tmp/dedup_spy.sh`). Same shape, but iterating by day-of-month within the symbol.
+
+**Institutional-memory rule:** future batches that need to delete bounded subsets of rows from a Supabase table > 1M rows should plan for the bash-per-symbol pattern from day one. A single SQL transaction will not finish.
+
+### Reference
+
+- Canonical deploy hash: `f001002d9` (Phase 3 code-deploy + in-buffer Map dedup hotfix).
+- Code: `server/services/passive-archive/ohlc-batch-writer.ts` lines 105-114 (Map dedup) + 147-164 (UPSERT clause).
+- Migrations: `drizzle/migrations/2026-05-19-b-new-35-phase1-dedup-{xstock-spot,xstock-perp,crypto-spot}.sql` (per-table Phase 1 cleanup; the final rev shipped uses MAX(id) NOT IN per-symbol; staging used the `/tmp/dedup_per_symbol.sh` bash-loop pattern at runtime since the in-PL/pgSQL DO-block LOOP couldn't finish) + `drizzle/migrations/2026-05-19-b-new-35-phase2-add-unique-constraints.sql` (single-transaction ADD CONSTRAINT for all three tables).
+- Completion report: `Claude Comms and Packages/Batch Completion/B_NEW_35_COMPLETION_REPORT.md`.
+- Soak verification: alert `c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf` triggers 2026-05-27T07:00:00Z (zero duplicate `(symbol, interval_begin)` rows across all three tables + Supabase Disk IO under 30%/day).
+- Five-symbol snapshot gap (handoff to B-NEW-36 sub-batch c): xstock_spot_ohlc_60m_snapshot has 260 symbols (not 265). BITF/HOLX/PARA/SAGE/WBA have zero rows in both April AND May source partitions — empirical Kraken-side absence under our canonical symbol form. Investigation deferred to B-NEW-36 universe-split cleanup.
 
 ---
 
@@ -11562,3 +11664,78 @@ Two pre-existing asymmetries surfaced during B-PHASE-A2 audits, both filed as lo
 6. **Graceful degrade preserved.** Pairs with insufficient OHLC / ATR=0 / sector missing fall through to `propagatedDbs=undefined`; MCE's non-crypto branch synthesizes neutral as before A.2. No new failure modes introduced.
 
 *Added 2026-05-17 with B-PHASE-A2 close.*
+
+---
+
+# Source-side dedup architecture (B-NEW-35, 2026-05-20)
+
+## Why this chapter exists
+
+B74's WebSocket archiver was writing 18-56× more rows than it should into the three partitioned 1-minute OHLC tables (`xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m`, `crypto_spot_ohlc_1m`). Every Kraken in-progress-bar update was producing a fresh row keyed on the auto-generated `id` column instead of updating the existing minute's row. The duplication compounded across three tables, depleted Supabase Disk IO budget at 100% per day, and made every downstream DISTINCT ON aggregation blow past Postgres's 2-minute statement_timeout on the heavy-traded symbols (SPY, NVDA, QQQ, TSLA + roughly 22 other blue-chip names). B-NEW-34b's snapshot architecture could not reach functional scanner state without the structural source-side fix.
+
+B-NEW-35 (canonical deploy hash `f001002d9`, 2026-05-20) is the architectural answer.
+
+## The three-layer protection model
+
+Each layer closes a different failure mode. None alone is sufficient. All three must remain in place.
+
+### Layer 1 — PostgreSQL UNIQUE constraint on `(symbol, interval_begin)`
+
+Added to the **parent** of each partitioned table (`xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m`, `crypto_spot_ohlc_1m`). PostgreSQL cascades the constraint to every existing partition and every future partition that the monthly-range partition key creates. The database physically rejects any second row that targets the same `(symbol, interval_begin)` tuple in any partition; no application-level vigilance can be the only safeguard.
+
+Constraint names follow the convention `<table>_symbol_interval_begin_key`. Adding the constraint on an actively-written table requires a brief `pm2 stop dawntrader` window — fresh duplicates landing during the lock-acquisition validation pass will otherwise fail the ADD CONSTRAINT. Working sequence: stop → final sweep DELETE per partition → ADD CONSTRAINT in one transaction → start.
+
+### Layer 2 — Drizzle `.onConflictDoUpdate()` in the archiver
+
+`server/services/passive-archive/ohlc-batch-writer.ts:147-164` replaces the prior plain `db.insert(table).values(slice)` with an UPSERT keyed on `[table.symbol, table.intervalBegin]`. On conflict, the writer updates the evolving fields (`open`, `high`, `low`, `close`, `volume`, `vwap`, `tradeCount`) from the EXCLUDED pseudo-row and touches `capturedAt` to `NOW()`. The latest WebSocket update IS the correct cumulative OHLCV for that minute per Kraken WS contract; dropping earlier ticks into the same minute is semantically correct, not loss of information. Chunking at 1,000 rows preserves headroom under the 65,535-bind-parameter PostgreSQL limit.
+
+### Layer 3 — In-buffer Map dedup before the chunked INSERT
+
+`server/services/passive-archive/ohlc-batch-writer.ts:105-114` runs immediately after the buffer drain and before the chunked UPSERT call. Each row is keyed in a `Map<string, InsertEquitySpotOhlc1m>` by `${symbol}::${intervalBegin_iso}`. Map insertion-order semantics give last-wins naturally. Required because Kraken WS routinely delivers multiple OHLC updates per minute, and PostgreSQL throws `"ON CONFLICT DO UPDATE command cannot affect row a second time"` whenever a single INSERT contains multiple rows that share the conflict-target key. Layer 2 alone is therefore insufficient — the application must dedup the buffer before the database sees it.
+
+This layer was added as a same-deploy hotfix in commit `f001002d9` after the failure surfaced live in the initial Phase 3 code-deploy.
+
+## Deploy ordering invariant (do not violate)
+
+The three layers must land in this order, and any future structural change to the archiver must preserve the order:
+
+1. **Phase 1 — Cleanup migration:** dedupe existing rows in all three partitioned tables BEFORE adding the UNIQUE constraint. Otherwise existing duplicates fail the constraint validation pass.
+2. **Phase 2 — ADD UNIQUE constraint:** in a `pm2 stop dawntrader` window. Restart immediately after the transaction commits.
+3. **Phase 3 — Deploy archiver code change:** Layer 2 + Layer 3 together. Deploying Layer 2 without Layer 3 produces "cannot affect row a second time" failures the moment Kraken delivers a multi-tick minute.
+
+## Institutional-memory rule — Supabase bounded-subset DELETE pattern
+
+When a future batch needs to delete a bounded subset of rows from a Supabase-hosted table larger than ~1M rows, **use a bash loop that calls `psql` once per symbol (or other narrow scoping key) — do NOT try to do it in one SQL transaction**.
+
+PostgreSQL's `statement_timeout` is enforced cumulatively across an entire PL/pgSQL DO-block LOOP regardless of internal COMMIT statements. Supabase enforces a 2-minute cap that overrides session-level `SET statement_timeout`. Five SQL revisions were attempted during B-NEW-35 Phase 1 (EXISTS self-join, ROW_NUMBER + raised statement_timeout, recursive CTE skip-scan, per-symbol self-join inside DO block, per-symbol ROW_NUMBER inside DO block); all failed within the 2-minute cap. The working approach was `/tmp/dedup_per_symbol.sh` on staging — enumerate symbols via a recursive CTE, then run `DELETE WHERE id NOT IN (SELECT MAX(id) ... GROUP BY interval_begin)` per symbol via separate `psql` invocations. Each invocation gets a fresh 2-minute budget. The heaviest single symbol (SPY) still overflowed its per-symbol budget and was handled via `/tmp/dedup_spy.sh` per-day chunked DELETE.
+
+The bash-per-symbol pattern is now the default expectation for any future Supabase DELETE work crossing the 1M-row threshold. Documented in SYSTEM_IMPACT_MAP.
+
+## Post-fix steady state (verified 2026-05-20)
+
+| Table | Row count (May 2026 partition) | Expected | Status |
+|---|---|---|---|
+| `xstock_perp_ohlc_1m_2026_05` | 278,240 | ~280K | ✅ |
+| `xstock_spot_ohlc_1m_2026_05` | 1,605,953 | ~1.59M | ✅ |
+| `crypto_spot_ohlc_1m_2026_05` | 2,494,122 | ~2.47M | ✅ |
+| Duplicate `(symbol, interval_begin)` rows | 0 / 0 / 0 | 0 | ✅ |
+| UNIQUE constraints | all 3 tables | all 3 | ✅ |
+| Scanner cycle wallclock | median ~530ms (Langston, last 20 cycles) | < 5s | ✅ (vs 25s SCAN_TIMEOUT pre-fix) |
+| Supabase Disk IO burst budget | < 30%/day | < 30%/day | ✅ (vs 100%/day pre-fix) |
+
+## What this supersedes
+
+The B-NEW-34 aggregator DISTINCT ON CTE remains in the codebase as a defensive read-side dedup, but is no longer load-bearing because Layer 1 prevents duplicates at write time. The earlier B-NEW-34 governance note characterizing the DISTINCT ON path as the structural-correctness model is updated: B-NEW-35 is the structural-correctness model; B-NEW-34's DISTINCT ON is now belt-and-suspenders defense-in-depth.
+
+## Cross-references
+
+- `CHANGES_AND_FIXES.md` BUG-2026-05-19-B — fix entry
+- `SYSTEM_IMPACT_MAP.md` "Recent Additions (B-NEW-35)" — six new component entries
+- `BATCH_CATALOG.md` B-NEW-35 row
+- `PHASE_HISTORY.md` Phase 24 EXTENDED sub-batches table B-NEW-35 row
+- `Claude Comms and Packages/Scope Files/B_NEW_35_SCOPE.md` (rev2) + `B_NEW_35_PRE_AUDIT.md`
+- `Claude Comms and Packages/Batch Completion/B_NEW_35_COMPLETION_REPORT.md`
+- RUNNING_ISSUES #118 (B-NEW-34a / 34b / 35 cluster — RESOLVED) + #119 (`_migrations` ledger drift, folded into B-NEW-36 sub-batch a) + #120 (five-symbol gap, folded into B-NEW-36 sub-batch c)
+- Soak verification alert `c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf` triggers 2026-05-27T07:00:00Z
+
+*Added 2026-05-20 with B-NEW-35 close.*

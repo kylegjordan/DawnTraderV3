@@ -73,7 +73,6 @@ interface XstockFreshnessRow {
   lastTickAt: string | null;
   staleSeconds: number | null;
   state: 'fresh' | 'stale' | 'dead';
-  is24_7: boolean;
 }
 
 interface XstocksFreshnessResponse {
@@ -207,7 +206,7 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
         </div>
         <div className="text-xs text-muted-foreground mt-1">
           Fresh ≤ {data.thresholds.freshUpToSeconds}s · Stale ≤ {data.thresholds.staleUpToSeconds}s · Dead beyond.
-          Sorted stalest-first. <span className="font-semibold">Ext</span> = Kraken Phase-1 extended-hours names (Sun 8PM ET → Fri 8PM ET continuous; closed weekends with the rest).
+          Sorted stalest-first. All xStocks share identical hours: open Sun 8PM ET → Fri 8PM ET, closed Fri 8PM ET → Sun 8PM ET.
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -216,7 +215,6 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
             <thead className="sticky top-0 bg-background">
               <tr className="border-b text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="text-left p-3">Symbol</th>
-                <th className="text-left p-3">Class</th>
                 <th className="text-right p-3">Last Tick</th>
                 <th className="text-right p-3">Stale (s)</th>
                 <th className="text-center p-3">State</th>
@@ -226,7 +224,6 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
               {data.symbols.map((row) => (
                 <tr key={row.symbol} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="p-3 font-mono">{row.symbol}</td>
-                  <td className="p-3">{row.is24_7 ? <Badge variant="outline" className="text-xs" title="Phase-1 extended-hours name (Sun 8PM ET → Fri 8PM ET continuous; closed weekends)">Ext</Badge> : <span className="text-xs text-muted-foreground" title="ARCA-aligned schedule">ARCA</span>}</td>
                   <td className="p-3 text-right font-mono text-xs">{row.lastTickAt ? format(new Date(row.lastTickAt), "MM-dd HH:mm:ss") : "—"}</td>
                   <td className="p-3 text-right font-mono">{row.staleSeconds !== null ? row.staleSeconds.toLocaleString() : "—"}</td>
                   <td className="p-3 text-center">

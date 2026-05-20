@@ -187,7 +187,6 @@ const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
  *
  * Single source of truth for the xstock_spot universe. Each entry carries:
  *   - `name`             — human-readable display name (REQUIRED)
- *   - `is24_7`           — optional flag for Phase-1 extended-hours names (10 total)
  *   - `sector`           — GICS sector tag OR INDEX_PROXY / BROAD_ETF / INTL_ETF (REQUIRED, B-PHASE-A2)
  *   - `adr`              — optional flag for ADR-listed names (Phase E factor work)
  *   - `cryptoAdjacent`   — optional flag for BTC-proxy / exchange / miner names (Phase E factor work)
@@ -202,8 +201,8 @@ const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
  * (`XSTOCK_NAMES` in `shared/asset-names.ts`) were two parallel structures
  * that could drift. B-NEW-29 (2026-05-13) patched the gap by data-filling
  * XSTOCK_NAMES; B-NEW-30 fixed the structural issue by consolidating to
- * this registry. `XSTOCK_SPOT_SYMBOLS` + `XSTOCK_SPOT_24_7_SYMBOLS` are now
- * DERIVED from this map — adding a new xStock requires editing exactly one
+ * this registry. `XSTOCK_SPOT_SYMBOLS` is now DERIVED from this map —
+ * adding a new xStock requires editing exactly one
  * entry here, and the type system makes `name` + `sector` non-optional so
  * forgetting either becomes a compile error (not a runtime blank cell).
  *
@@ -252,8 +251,6 @@ export type XstockSector =
 export interface XstockSpotEntry {
   /** Human-readable display name (e.g., 'Apple', 'nVent Electric'). REQUIRED. */
   name: string;
-  /** True for Phase-1 extended-hours names (Sun 8PM ET → Fri 8PM ET continuous). */
-  is24_7?: boolean;
   /**
    * GICS sector tag OR special bucket (INDEX_PROXY / BROAD_ETF / INTL_ETF). **REQUIRED.**
    *
@@ -272,7 +269,7 @@ export interface XstockSpotEntry {
 }
 
 export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Map<string, XstockSpotEntry>([
-  ['AAPL/USD', { name: 'Apple', is24_7: true, sector: 'XLK' }],
+  ['AAPL/USD', { name: 'Apple', sector: 'XLK' }],
   ['ABBV/USD', { name: 'AbbVie', sector: 'XLV' }],
   ['ABNB/USD', { name: 'Airbnb', sector: 'XLY' }],
   ['ADBE/USD', { name: 'Adobe', sector: 'XLK' }],
@@ -329,7 +326,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['COIN/USD', { name: 'Coinbase', sector: 'XLF', cryptoAdjacent: true }],
   ['COP/USD', { name: 'ConocoPhillips', sector: 'XLE' }],
   ['COST/USD', { name: 'Costco', sector: 'XLP' }],
-  ['CRCL/USD', { name: 'Circle', is24_7: true, sector: 'XLF', cryptoAdjacent: true }],
+  ['CRCL/USD', { name: 'Circle', sector: 'XLF', cryptoAdjacent: true }],
   ['CRWD/USD', { name: 'CrowdStrike', sector: 'XLK' }],
   ['CSCO/USD', { name: 'Cisco Systems', sector: 'XLK' }],
   ['CVS/USD', { name: 'CVS Health', sector: 'XLV' }],
@@ -373,12 +370,12 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['FOXA/USD', { name: 'Fox Corporation (A)', sector: 'XLC' }],
   ['GEV/USD', { name: 'GE Vernova', sector: 'XLI' }],
   ['GILD/USD', { name: 'Gilead Sciences', sector: 'XLV' }],
-  ['GLD/USD', { name: 'Gold ETF', is24_7: true, sector: 'BROAD_ETF' }],
+  ['GLD/USD', { name: 'Gold ETF', sector: 'BROAD_ETF' }],
   ['GLOB/USD', { name: 'Globant', sector: 'XLK', adr: true }],
   ['GLXY/USD', { name: 'Galaxy Digital', sector: 'XLF', cryptoAdjacent: true }],
   ['GM/USD', { name: 'General Motors', sector: 'XLY' }],
   ['GME/USD', { name: 'GameStop', sector: 'XLY' }],
-  ['GOOGL/USD', { name: 'Alphabet', is24_7: true, sector: 'XLC' }],
+  ['GOOGL/USD', { name: 'Alphabet', sector: 'XLC' }],
   ['GOTU/USD', { name: 'Gaotu Techedu', sector: 'XLY', adr: true }],
   ['GS/USD', { name: 'Goldman Sachs', sector: 'XLF' }],
   ['GWW/USD', { name: 'W.W. Grainger', sector: 'XLI' }],
@@ -387,7 +384,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['HIG/USD', { name: 'Hartford Financial', sector: 'XLF' }],
   ['HIVE/USD', { name: 'HIVE Digital Technologies', sector: 'XLK', cryptoAdjacent: true }],
   ['HOLX/USD', { name: 'Hologic', sector: 'XLV' }],
-  ['HOOD/USD', { name: 'Robinhood', is24_7: true, sector: 'XLF' }],
+  ['HOOD/USD', { name: 'Robinhood', sector: 'XLF' }],
   ['HUM/USD', { name: 'Humana', sector: 'XLV' }],
   ['HUT/USD', { name: 'Hut 8 Mining', sector: 'XLK', cryptoAdjacent: true }],
   ['IBM/USD', { name: 'IBM', sector: 'XLK' }],
@@ -428,7 +425,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['MS/USD', { name: 'Morgan Stanley', sector: 'XLF' }],
   ['MSCI/USD', { name: 'MSCI Inc.', sector: 'XLF' }],
   ['MSFT/USD', { name: 'Microsoft', sector: 'XLK' }],
-  ['MSTR/USD', { name: 'MicroStrategy', is24_7: true, sector: 'XLK', cryptoAdjacent: true }],
+  ['MSTR/USD', { name: 'MicroStrategy', sector: 'XLK', cryptoAdjacent: true }],
   ['MTCH/USD', { name: 'Match Group', sector: 'XLC' }],
   ['NBIX/USD', { name: 'Neurocrine Biosciences', sector: 'XLV' }],
   ['NDAQ/USD', { name: 'Nasdaq Inc.', sector: 'XLF' }],
@@ -441,7 +438,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['NTES/USD', { name: 'NetEase', sector: 'XLC', adr: true }],
   ['NTNX/USD', { name: 'Nutanix', sector: 'XLK' }],
   ['NVAX/USD', { name: 'Novavax', sector: 'XLV' }],
-  ['NVDA/USD', { name: 'Nvidia', is24_7: true, sector: 'XLK' }],
+  ['NVDA/USD', { name: 'Nvidia', sector: 'XLK' }],
   ['NVO/USD', { name: 'Novo Nordisk', sector: 'XLV', adr: true }],
   ['NVT/USD', { name: 'nVent Electric', sector: 'XLI' }],
   ['NWS/USD', { name: 'News Corporation (B)', sector: 'XLC' }],
@@ -471,7 +468,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['PWR/USD', { name: 'Quanta Services', sector: 'XLI' }],
   ['PYPL/USD', { name: 'PayPal', sector: 'XLF' }],
   ['QCOM/USD', { name: 'Qualcomm', sector: 'XLK' }],
-  ['QQQ/USD', { name: 'Nasdaq 100 ETF', is24_7: true, sector: 'INDEX_PROXY' }],
+  ['QQQ/USD', { name: 'Nasdaq 100 ETF', sector: 'INDEX_PROXY' }],
   ['RBLX/USD', { name: 'Roblox', sector: 'XLC' }],
   ['REGN/USD', { name: 'Regeneron', sector: 'XLV' }],
   ['RGEN/USD', { name: 'Repligen', sector: 'XLV' }],
@@ -493,7 +490,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['SOFI/USD', { name: 'SoFi Technologies', sector: 'XLF' }],
   ['SPG/USD', { name: 'Simon Property Group', sector: 'XLRE' }],
   ['SPGI/USD', { name: 'S&P Global', sector: 'XLF' }],
-  ['SPY/USD', { name: 'S&P 500 ETF', is24_7: true, sector: 'INDEX_PROXY' }],
+  ['SPY/USD', { name: 'S&P 500 ETF', sector: 'INDEX_PROXY' }],
   ['SRE/USD', { name: 'Sempra Energy', sector: 'XLU' }],
   ['STZ/USD', { name: 'Constellation Brands', sector: 'XLP' }],
   ['SUI/USD', { name: 'Sun Communities', sector: 'XLRE' }],
@@ -511,7 +508,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['TONX/USD', { name: 'TONX Inc.', sector: 'XLK' }],
   ['TOTL/USD', { name: 'DoubleLine Total Return ETF', sector: 'BROAD_ETF' }],
   ['TRV/USD', { name: 'Travelers', sector: 'XLF' }],
-  ['TSLA/USD', { name: 'Tesla', is24_7: true, sector: 'XLY' }],
+  ['TSLA/USD', { name: 'Tesla', sector: 'XLY' }],
   ['TT/USD', { name: 'Trane Technologies', sector: 'XLI' }],
   ['TXN/USD', { name: 'Texas Instruments', sector: 'XLK' }],
   ['UBER/USD', { name: 'Uber', sector: 'XLI' }],
@@ -599,40 +596,28 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
   'T/EUR',
 ]);
 
-/**
- * B79.0c (named) / B79.0L (semantics corrected 2026-05-10) / B-NEW-30
- * (2026-05-13: derived from XSTOCK_SPOT_REGISTRY) — xstock_spot Phase-1
- * EXTENDED-HOURS symbols.
+/*
+ * B79.0c introduced `XSTOCK_SPOT_24_7_SYMBOLS` as a 10-name set derived from
+ * `XSTOCK_SPOT_REGISTRY` via an `is24_7` flag. B-NEW-36 sub-batch (c)
+ * (2026-05-20) RETIRED that designation:
  *
- * **NAMING NOTE: NOT actually 24/7.** Per Kyle directive 2026-05-10:
- * xStocks (including these Phase-1 names) are closed Friday 8PM ET → Sunday
- * 8PM ET (48-hour weekend window). The Phase-1 names trade CONTINUOUSLY
- * during the 120-hour open window (Sun 8PM ET → Fri 8PM ET) — that's the
- * extended-hours benefit vs other xStocks. They are NOT 24/7.
+ *   - Empirical reality (Q9 verified at sub-batch (c) Step 2 pre-audit): all
+ *     10 of the designated names (AAPL/CRCL/GLD/GOOGL/HOOD/MSTR/NVDA/QQQ/SPY/
+ *     TSLA) showed ZERO bucket activity in the Sat 00:00 UTC → Mon 00:00 UTC
+ *     weekend window in `xstock_spot_ohlc_60m_snapshot`. Kraken's WS-equities
+ *     feed does not carry weekend price activity for ANY xStock including these
+ *     ten — contradicting Kraken's 2025-12-03 Phase 1 marketing blog post.
+ *   - Behavioral consequence: all xStocks share IDENTICAL trading hours: open
+ *     Sun 8PM ET → Fri 8PM ET (120 hours), closed Fri 8PM ET → Sun 8PM ET
+ *     (48 hours). The 24/5 / 24/7 distinction was empirically meaningless.
+ *   - Code consequence: the `is24_7` field is removed from the registry
+ *     interface; `XSTOCK_SPOT_24_7_SYMBOLS` is removed entirely;
+ *     `isXstockMarketOpenUTC(symbol, now)` returns the same value regardless
+ *     of `symbol` (the parameter stays in the signature for backward compat).
  *
- * The constant name `XSTOCK_SPOT_24_7_SYMBOLS` is preserved from B79.0c for
- * stability across many call sites; cosmetic rename to
- * `XSTOCK_SPOT_EXTENDED_HOURS_SYMBOLS` is queued for a future batch.
- *
- * Per Kraken Phase 1 announcement (2025-12-03) at
- * https://blog.kraken.com/news/xstocks-247-trading — ten xStock tokens trade
- * extended hours, not the ARCA-aligned schedule the rest follow.
- *
- * B-NEW-30: DERIVED from `XSTOCK_SPOT_REGISTRY` via the `is24_7` flag.
- * To add or remove a Phase-1 name, edit the corresponding entry in the
- * registry. This set is recomputed at module-load time.
- *
- * Consumed by `isXstockMarketOpenUTC(symbol, now?)` which applies the global
- * Fri-Sun weekend close to ALL xStocks first, then bypasses the daily ARCA
- * gate for these names within the open window. All 10 must already exist in
- * XSTOCK_SPOT_SYMBOLS — invariant now enforced by construction (subset of
- * registry keys).
+ * Cross-references: B_NEW_36_SCOPE.md §0.5 + §2.5; B_NEW_36_PRE_AUDIT.md §3.3
+ * + §3.4 + §5.1; RUNNING_ISSUES #120 (5-symbol gap traced separately).
  */
-export const XSTOCK_SPOT_24_7_SYMBOLS: ReadonlySet<string> = new Set(
-  Array.from(XSTOCK_SPOT_REGISTRY.entries())
-    .filter(([, meta]) => meta.is24_7 === true)
-    .map(([pair]) => pair),
-);
 
 /** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. */
 const CRYPTO_SPOT_CANONICAL = /^[A-Z0-9]{2,10}\/[A-Z0-9]{3,4}$/;

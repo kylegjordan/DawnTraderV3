@@ -2,6 +2,44 @@
 
 ---
 
+## BUG-2026-05-19-B — Source-side dedup for B74 WS-archived OHLC tables (B-NEW-35)
+
+**Severity:** Structural correctness + capacity. Recurring 25-second SCAN_TIMEOUT on every scanner cycle for ~7 days pre-fix; Supabase Disk IO burst budget at 100%/day; B-NEW-34b snapshot pre-warm hitting 26 statement_timeouts on the heaviest blue-chip names.
+
+**Surfaced by:** B-NEW-34 diagnostic queries (2026-05-15) — empirical 18-56× row duplication in `xstock_spot_ohlc_1m` per `(symbol, interval_begin)` (AAPL/USD 4876 rows for 103 distinct minutes; one minute holding 227 rows with 227 distinct OHLCV tuples and $1.78 close spread). Mitigated symptomatically by the B-NEW-34 aggregator's DISTINCT ON CTE; the snapshot architecture in B-NEW-34b could not bridge the heavy-symbol pre-warm cost. Kyle directive 2026-05-19 ("we shouldn't be satisfied with these blue chip xStocks not populating") re-sequenced B-NEW-35 ahead of B-NEW-36.
+
+**Fixed by:** B-NEW-35 (canonical deploy hash `f001002d9`, deployed 2026-05-20 to staging; Phase 3 code-deploy + in-buffer Map dedup hotfix). Three-phase rollout: Phase 1 cleanup migrations (multi-rev SQL across xstock_spot + xstock_perp + crypto_spot, finalized as per-symbol DELETE pattern via `/tmp/dedup_per_symbol.sh` bash-loop on staging — see institutional-memory note below); Phase 2 ADD UNIQUE constraints on `(symbol, interval_begin)` for all three partitioned tables during `pm2 stop dawntrader` window; Phase 3 code-deploy of UPSERT clause + in-buffer Map dedup hotfix.
+
+**Verified by:** Langston SSH+claude-cli independent verification 2026-05-20 ~07:30 UTC against staging at `f001002d9` — all 8 empirical checks passed (row counts match expected at 277,970 / 1,604,733 / 2,492,118 for xstock_perp / xstock_spot / crypto_spot May partitions; zero duplicate `(symbol, interval_begin)` rows in any of the 3 tables; UNIQUE constraints present on all 3; in-buffer Map dedup confirmed at `ohlc-batch-writer.ts:105-114`; zero `ERROR/FATAL/ON CONFLICT/duplicate key` events in `/var/log/dawntrader/out.log`; scanner cycle wallclock last-20 median ~530ms — better than CC's ~1.3s report; DBS telemetry firing per cycle 1-8ms with 73-74/75 pairs covered).
+
+**The three-layer dedup protection now landed:**
+
+1. **PostgreSQL UNIQUE constraint on `(symbol, interval_begin)` for `xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m`, `crypto_spot_ohlc_1m`** (parent tables; cascades automatically to all existing + future partitions per PG partitioned-table semantics).
+2. **Drizzle `.onConflictDoUpdate({ target: [table.symbol, table.intervalBegin], set: { open/high/low/close/volume/vwap/tradeCount: sql\`EXCLUDED.*\`, capturedAt: sql\`NOW()\` } })`** at `server/services/passive-archive/ohlc-batch-writer.ts:147-164`. Replaces prior plain `db.insert(table).values(slice)`.
+3. **In-buffer Map dedup before chunked INSERT** at `server/services/passive-archive/ohlc-batch-writer.ts:105-114`. Map keyed on `${symbol}::${intervalBegin_iso}` with insertion-order last-wins semantics. Required because PostgreSQL throws "ON CONFLICT DO UPDATE command cannot affect row a second time" when a single INSERT contains multiple rows that share the conflict-target key — and Kraken WS routinely delivers multiple updates per minute that all land in the same 5-second buffer. Latest WS update IS the correct cumulative OHLCV per Kraken contract, so dropping earlier updates is semantically correct.
+
+**Cleanup volume:** ~23.2M duplicate rows removed across the three tables (~84% reduction). xstock_perp May partition: 3.22M rows deleted (97% reduction). xstock_spot May partition: 14M+ deleted across main pass + retry + SPY per-day chunked path. crypto_spot May partition: 6.4M+ deleted. April partitions already clean from prior runs.
+
+**Post-fix steady state:** xstock_perp_2026_05 = 278,240 rows; xstock_spot_2026_05 = 1,605,953 rows; crypto_spot_2026_05 = 2,494,122 rows (captured 2026-05-20 ~09:50 UTC). Pre-warm post-fix: 265 symbols in 206 seconds with zero failures (vs 9+ hours and 26 statement_timeouts pre-fix). Scanner cycle wallclock: median ~530ms over last 20 cycles, range 275-1077ms (vs 25-second SCAN_TIMEOUT pre-fix — >40× recovery). Supabase Disk IO burst budget: write IO ~20× lower from dedup; read IO ~5× lower from DISTINCT ON cost vanishing.
+
+**Supabase tier sequencing during deploy:** Micro → Small ($15/mo, Kyle upgrade during dedup) → Medium ($60/mo, needed for SPY chunked path) → Small (back to $15/mo post-ship). Small is comfortable long-term post-structural-fix.
+
+**Institutional-memory items now codified in SYSTEM_IMPACT_MAP:**
+
+- Postgres `statement_timeout` is enforced cumulatively across a PL/pgSQL DO-block LOOP regardless of internal COMMIT statements; bounded-subset dedup on Supabase tables > 1M rows MUST use bash-per-symbol pattern (separate `psql` invocation per symbol = fresh per-call budget). Multiple SQL revisions (EXISTS self-join, ROW_NUMBER + `SET statement_timeout`, recursive CTE skip-scan, per-symbol ROW_NUMBER inside DO block) all failed within Supabase's 2-minute cap even on Medium tier; bash-per-symbol pattern succeeded.
+- ADD UNIQUE on actively-written partitioned tables requires `pm2 stop dawntrader` window or fresh duplicates landed in the lock-acquisition window will fail the constraint. Working sequence: stop → final dedup sweep → ADD CONSTRAINT in one transaction → start.
+- The "ON CONFLICT DO UPDATE command cannot affect row a second time" failure mode: any archiver that buffers multi-tick updates per minute and uses UPSERT must dedup the buffer BEFORE the chunked INSERT call. Caught live mid-deploy and resolved same-deploy via Map-based pre-flush dedup.
+
+**Five-symbol snapshot gap finding (folded into B-NEW-36 sub-batch c):** `xstock_spot_ohlc_60m_snapshot` has 260 distinct symbols (not 265 registry-listed). BITF, HOLX, PARA, SAGE, WBA have zero rows in both April AND May 2026 source partitions — empirical Kraken-side absence under our canonical symbol form, not a B-NEW-35 bug. Filed as RUNNING_ISSUES #120 + assigned to B-NEW-36 sub-batch (c) universe-split cleanup. Possible causes: Kraken delisted, canonical symbol-form drift, or never included in Kraken's xStock product. None of the five are in the designated-24/7 set; scanner active universe unaffected (73-74 of 75 universe per cycle).
+
+**Soak verification scheduled:** alert `c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf` triggers 2026-05-27T07:00:00Z — verifies zero duplicate `(symbol, interval_begin)` rows persist across all three `_ohlc_1m` tables 7 days post-ship AND Supabase Disk IO burst budget consumption stays under 30%/day (was 100%/day pre-fix).
+
+**Files changed:** see B_NEW_35_COMPLETION_REPORT.md §5 for the full enumeration. Key code at `server/services/passive-archive/ohlc-batch-writer.ts`; key migrations at `drizzle/migrations/2026-05-19-b-new-35-phase{1,2}-*.sql`; governance updates landed in this batch close to SYSTEM_MANUAL.md ("Source-side dedup architecture" chapter), SYSTEM_IMPACT_MAP.md (B-NEW-35 Recent Additions block, six new component entries), BATCH_CATALOG.md (B-NEW-35 row), PHASE_HISTORY.md (Phase 24 EXTENDED 2 row), RUNNING_ISSUES.md (#118 closure update + #120 new), MULTI_ASSET_VTS_EXPANSION_PLAN.md (B-NEW-35 row).
+
+**Cross-references:** `BUG-2026-05-19-B` here; SYSTEM_MANUAL.md "Source-side dedup architecture (B-NEW-35, 2026-05-20)"; SYSTEM_IMPACT_MAP.md "Recent Additions (B-NEW-35 — Source-side dedup for B74 WS-archived OHLC tables, 2026-05-20)"; `Claude Comms and Packages/Scope Files/B_NEW_35_SCOPE.md` (rev 2 Langston Step 1 ACK) + `B_NEW_35_PRE_AUDIT.md` + `Claude Comms and Packages/Batch Completion/B_NEW_35_COMPLETION_REPORT.md`.
+
+---
+
 ## ENHANCE-2026-05-17-A — xStock DBS foundation wired (B-PHASE-A2)
 
 **Severity:** Foundation work (RESOLVED via Phase A.2 ship).

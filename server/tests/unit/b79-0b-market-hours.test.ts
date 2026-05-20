@@ -1,22 +1,20 @@
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * B79.0b — N4 boundary tests for `isXstockMarketOpenUTC`
+ * B79.0b — boundary tests for `isXstockMarketOpenUTC`
  * (UPDATED 2026-05-10 by B79.0L for Fri 8PM ET → Sun 8PM ET close window)
+ * (UPDATED 2026-05-20 by B-NEW-36 sub-batch (c): all symbols now use the
+ *  unified predicate — no more per-symbol ARCA-aligned restriction)
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Schedule under test (B79.0L correction per Kyle directive 2026-05-10):
- *   - CLOSED Saturday all day (in ET) — fully inside the weekend window
- *   - CLOSED Friday from 8 PM ET (= 00:00 UTC Sat in EDT, 01:00 UTC Sat in EST)
- *   - CLOSED Sunday before 8 PM ET (= before 00:00 UTC Mon EDT, before 01:00 UTC Mon EST)
- *   - OPEN otherwise
+ * Schedule under test (B-NEW-36 sub-batch (c) — empirical Q9 verified):
+ *   - OPEN Sun 8PM ET → Fri 8PM ET (120-hour open window)
+ *   - CLOSED Fri 8PM ET → Sun 8PM ET (48-hour unified weekend close)
+ *   - Applies to ALL xStock symbols. Previously the 10 designated 24/7
+ *     names had a different schedule; that distinction was empirically
+ *     wrong and was removed in B-NEW-36 sub-batch (c).
  *
  * Test fixtures use May 2026 dates (EDT, UTC-4): so Fri 8 PM ET = 00:00 UTC Sat,
  * and Sun 8 PM ET = 00:00 UTC Mon.
- *
- * Phase-1 extended-hours name behavior is covered by
- * b79-0c-market-hours-per-symbol.test.ts and b79-0L-market-hours-extended-hours.test.ts.
- *
- * B79.0c (2026-05-09) — signature: symbol is REQUIRED (Langston Q4 push-back).
  *
  * Tests inject controlled clocks (no `new Date()` at runtime) for deterministic
  * boundary verification.
@@ -32,73 +30,69 @@ function utc(year: number, monthZero: number, day: number, hour: number, min: nu
   return new Date(Date.UTC(year, monthZero, day, hour, min));
 }
 
-// Sample non-24/7 xstock symbol — AMZN trades 24/5 on Kraken (not in
-// XSTOCK_SPOT_24_7_SYMBOLS), so applies the ARCA schedule under test.
-const ARCA_SYM = 'AMZN/USD';
+// Sample xStock symbol. Predicate now returns the same value for every
+// symbol — the symbol parameter is retained in the signature for backward
+// compatibility but no longer consulted internally.
+const SAMPLE_SYM = 'AMZN/USD';
 
-describe('B79.0b — isXstockMarketOpenUTC boundary cases (ARCA 24/5)', () => {
+describe('B79.0b / B-NEW-36 (c) — isXstockMarketOpenUTC boundary cases (unified weekend close)', () => {
   describe('Weekday during market hours', () => {
     it('Monday 14:30 UTC — open', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 4, 14, 30))).toBe(true);
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 4, 14, 30))).toBe(true);
     });
     it('Wednesday 16:00 UTC — open', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 6, 16, 0))).toBe(true);
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 6, 16, 0))).toBe(true);
     });
     it('Friday 14:30 UTC (before close) — open', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 14, 30))).toBe(true);
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 8, 14, 30))).toBe(true);
     });
   });
 
-  describe('Friday close transition', () => {
-    it('Friday 21:59 UTC — open (one minute before close)', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 21, 59))).toBe(true);
+  describe('Friday close transition (8 PM ET = 00:00 UTC Sat in EDT)', () => {
+    it('Friday 22:00 UTC (= 6 PM ET in EDT) — open (still pre-close)', () => {
+      // Pre-B-NEW-36 this returned false under the per-symbol ARCA-aligned
+      // 22:00 UTC rule. Now treated identically to all symbols: still open
+      // until the unified 8 PM ET (= Sat 00:00 UTC in EDT) boundary.
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 8, 22, 0))).toBe(true);
     });
-    it('Friday 22:00 UTC — closed (close boundary)', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 22, 0))).toBe(false);
+    it('Friday 23:59 UTC (= 7:59 PM ET in EDT) — open (one minute pre-close)', () => {
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 8, 23, 59))).toBe(true);
     });
-    it('Friday 23:00 UTC — closed', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 8, 23, 0))).toBe(false);
+    it('Saturday 00:00 UTC (= Fri 8 PM ET in EDT, close moment) — closed', () => {
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 9, 0, 0))).toBe(false);
     });
   });
 
   describe('Saturday — fully closed', () => {
-    it('Saturday 00:00 UTC — closed', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 9, 0, 0))).toBe(false);
-    });
     it('Saturday 14:30 UTC — closed', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 9, 14, 30))).toBe(false);
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 9, 14, 30))).toBe(false);
     });
     it('Saturday 23:59 UTC — closed', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 9, 23, 59))).toBe(false);
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 9, 23, 59))).toBe(false);
     });
   });
 
-  describe('Sunday open transition (B79.0L: 20:00 ET = 00:00 UTC Mon EDT — UPDATED from old 22:00 UTC)', () => {
+  describe('Sunday open transition (8 PM ET = 00:00 UTC Mon in EDT)', () => {
     it('Sunday 14:30 UTC — closed (before open)', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 14, 30))).toBe(false);
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 10, 14, 30))).toBe(false);
     });
-    it('Sunday 21:59 UTC — closed (still inside unified weekend window; was true under pre-B79.0L)', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 21, 59))).toBe(false);
+    it('Sunday 22:00 UTC (= 6 PM ET in EDT) — closed (still inside unified weekend window)', () => {
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 10, 22, 0))).toBe(false);
     });
-    it('Sunday 22:00 UTC — closed (was OPEN under pre-B79.0L; corrected by B79.0L Langston R1)', () => {
-      // 2026-05-10 22:00 UTC = 18:00 EDT (Sun 6 PM ET) — inside unified weekend window (Sun before 20:00 ET).
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 22, 0))).toBe(false);
+    it('Sunday 23:59 UTC (= 7:59 PM ET in EDT) — closed (one minute pre-reopen)', () => {
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 10, 23, 59))).toBe(false);
     });
-    it('Sunday 23:00 UTC — closed (was OPEN under pre-B79.0L; corrected by B79.0L Langston R1)', () => {
-      // 2026-05-10 23:00 UTC = 19:00 EDT (Sun 7 PM ET) — still inside unified weekend window.
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 10, 23, 0))).toBe(false);
+    it('Monday 00:00 UTC (= Sun 8 PM ET in EDT, reopen boundary) — open', () => {
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 11, 0, 0))).toBe(true);
     });
-    it('Monday 00:00 UTC (= Sun 20:00 EDT, 8 PM ET) — OPEN at unified reopen boundary', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 11, 0, 0))).toBe(true);
-    });
-    it('Monday 02:00 UTC (= Sun 22:00 EDT, 10 PM ET) — OPEN', () => {
-      expect(isXstockMarketOpenUTC(ARCA_SYM, utc(2026, 4, 11, 2, 0))).toBe(true);
+    it('Monday 02:00 UTC (= Sun 10 PM ET in EDT) — open', () => {
+      expect(isXstockMarketOpenUTC(SAMPLE_SYM, utc(2026, 4, 11, 2, 0))).toBe(true);
     });
   });
 
   describe('Wall-clock smoke (no injected time)', () => {
-    it('returns a boolean for non-24/7 sample symbol', () => {
-      const result = isXstockMarketOpenUTC(ARCA_SYM);
+    it('returns a boolean for the sample symbol', () => {
+      const result = isXstockMarketOpenUTC(SAMPLE_SYM);
       expect(typeof result).toBe('boolean');
     });
   });
