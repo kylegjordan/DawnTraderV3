@@ -212,6 +212,36 @@ This cap exists because MEMORY.md auto-loads into every Claude Code session — 
     - **Every architectural decision discussed must be documented BEFORE implementation.** When Kyle and CC (or Kyle and Langston) discuss a fix or feature, it goes into the right governance doc (scope, plan, workflow, RUNNING_ISSUES, roadmap) the same session it's discussed. Promises like "we'll fix that later" without an associated documented issue / batch / scope-line will be rejected. The project is too large and runs over too many phases for verbal commitments to survive without paper trail.
     - **Per-asset-class configuration is the default for behavioral knobs.** Trading-policy decisions (BE enable, trailing exits, stop policy, regime thresholds, confidence floors) must be DB-resolved with `asset_class` as a first-class scoping dimension. A global wildcard row is acceptable as a starting placeholder ONLY when the value is genuinely identical across all asset classes; the moment any asset class needs a different value, the wildcard row is replaced with explicit per-class rows. No silent fallbacks.
 
+16. **Claude Code permission-prompt regression workaround (Kyle directive 2026-05-20).** If Claude Code (the CLI tool, not the agent) starts prompting for permission on operations that were previously auto-allowed — especially compound bash commands chained with `&&`, output redirection (`>`, `>>`), or shell expansions with braces/quotes — this is a **known Claude Code v2.1.7+ regression** (GitHub issues #28183, #28023, #27139) where the compound-command safety classifier evaluates the whole command line as a single unit independently of the allow list, even when every individual subcommand is allow-listed. **The fix that worked on 2026-05-20 and should be the first move every time this recurs:** edit `.claude/settings.local.json` with this shape:
+
+    ```json
+    {
+      "defaultMode": "bypassPermissions",
+      "permissions": {
+        "defaultMode": "bypassPermissions",
+        "allow": [
+          "Bash(*)", "Bash(git:*)", "Bash(ssh:*)", "Bash(cd:*)",
+          "Bash(cat:*)", "Bash(printf:*)", "Bash(grep:*)",
+          "Bash(curl:*)", "Bash(python:*)", "Bash(python3:*)",
+          "Bash(npm:*)", "Bash(node:*)", ...
+        ],
+        "deny": [
+          "Bash(git push --force:*)", "Bash(git reset --hard:*)",
+          "Bash(rm -rf /:*)", "Bash(rm -rf ~:*)", "Bash(sudo:*)"
+        ]
+      }
+    }
+    ```
+
+    **Critical implementation details:**
+    - Set `defaultMode: "bypassPermissions"` at BOTH the top level AND inside the `permissions` block. Different Claude Code CLI versions read the key from different locations; setting both handles either schema.
+    - Use the **canonical colon-prefix syntax** `Bash(cmd:*)`, NOT the space-form `Bash(cmd *)`. The colon-prefix is the actual prefix-matcher; the space-form is a glob-match that doesn't always generalize.
+    - Explicitly include `Bash(cd:*)` — without it, every `cd ... && ...` compound triggers the hardcoded check regardless of other allow rules.
+    - The deny list still applies on top of `bypassPermissions`, so genuinely-dangerous operations (`git push --force`, `git reset --hard`, `sudo`, `rm -rf /`) are still blocked.
+    - The catastrophic-circuit-breaker patterns (`rm -rf /`, `rm -rf ~`, etc.) ALWAYS prompt regardless of any setting — that's hardcoded in Claude Code itself for safety.
+
+    **Why this matters operationally:** without this fix, the user gets prompted every 30 seconds and work grinds to a halt. The full working file is committed at `.claude/settings.local.json` as of commit `39b033738` (B-NEW-36 sub-batch (b) Step 10/11 governance close). If a future Claude Code update changes the schema again and this fix stops working, research the current canonical syntax via the GitHub issues + Claude Code docs (https://code.claude.com/docs/en/permissions) and re-derive the fix; do NOT spend hours trying to add individual rules — go straight to the structural `bypassPermissions` fix.
+
 ---
 
 ## 6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)
