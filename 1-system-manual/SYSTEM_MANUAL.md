@@ -11739,3 +11739,120 @@ The B-NEW-34 aggregator DISTINCT ON CTE remains in the codebase as a defensive r
 - Soak verification alert `c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf` triggers 2026-05-27T07:00:00Z
 
 *Added 2026-05-20 with B-NEW-35 close.*
+
+---
+
+# Off-hours session-lifecycle architecture (B-NEW-36 sub-batch (b), 2026-05-20)
+
+## Why this exists
+
+Pre-B-NEW-36, the xStock scanner kept running 30-second `centralClock` cycles with `lastUniverseSize=0` through the 48-hour weekend close window (Fri 8 PM ET → Sun 8 PM ET), and the VTS sim cycle (`resolveOpenVirtualTrades`) kept evaluating open xStock trades against stale weekend price data — driving stale-config TEC `fail-closed` log spam (RUNNING_ISSUES #116) and wasting per-cycle work on a market that wasn't trading. The off-hours session-lifecycle controller solves both by adding explicit shutdown/restart hooks that take the scanner offline + suspend the open xStock VTS trades through the weekend window.
+
+Empirical Q9 verification under B-NEW-36 sub-batch (c) confirmed that ALL xStocks — including the 10 previously-designated "Phase-1 24/7" names (AAPL/CRCL/GLD/GOOGL/HOOD/MSTR/NVDA/QQQ/SPY/TSLA) — have zero weekend bucket activity in the WS-equities feed. So the unified weekend close window is symbol-independent, and the lifecycle controller doesn't need per-symbol or per-cohort logic.
+
+## Three-layer architecture
+
+### Layer 1 — `vts_open_trades.state` column with CHECK constraint
+
+NEW column `state VARCHAR(32) NOT NULL DEFAULT 'open'`. Three valid values: `'open'`, `'weekend_suspended'`, `'closed'`. CHECK constraint `vts_open_trades_state_consistency` enforces TWO independent invariants:
+
+1. **closed↔state consistency:** `closed=false` rows must be `'open'` or `'weekend_suspended'`; `closed=true` rows must be `'closed'`.
+2. **state↔asset_class consistency:** `state='weekend_suspended'` is valid ONLY for `asset_class='xstock_spot'`. Crypto trades can never enter the suspended state — the DB physically rejects it. Defense-in-depth against bugs in code that touches the new bulk helpers.
+
+The migration also runs a same-transaction UPDATE backfilling `state='closed'` for all rows where `closed=true`, ensuring the CHECK is satisfied at activation time.
+
+**Critical caller-side guard (pre-audit §4.1):** `markOpenTradeClosed` in `vts-trade-persistence.ts` was extended to set `state='closed'` atomically with the `closed=true` flip. Without this extension, EVERY trade close after migration deploy would fail the CHECK (row would land at `closed=true, state='open'`). The extension is the difference between the migration being a working ship versus an immediate prod-breakage event.
+
+### Layer 2 — Lifecycle controller (`server/services/session-lifecycle-controller.ts`)
+
+NEW module. Public surface:
+
+- `sessionLifecycleController.init()` — call once at server boot AFTER `rehydrateOpenVtsTrades()` (in-memory Map populated) and AFTER `xstockSpotScanner.start()` (scanner running). The init() performs boot-time affirmative state reconciliation (per Langston Q7 + Q7.1) then registers two scheduled timers.
+- `sessionLifecycleController.shutdown()` — idempotent tear-down for tests / graceful PM2 shutdown.
+
+**Boot-time affirmative reconciliation:** computes `insideWeekendWindow` via `!isXstockMarketOpenUTC('AAPL/USD')` (symbol-independent post-(c)). Two reconciliation actions performed against the computed window state:
+
+1. **Trade state:** if inside-window, call `markAllXstockWeekendSuspended(openVirtualTradesMap)` — bulk UPDATE `vts_open_trades SET state='weekend_suspended' WHERE asset_class='xstock_spot' AND closed=false AND state='open'`, mirror to in-memory Map. If outside-window, call `unmarkAllXstockWeekendSuspended(...)` — inverse.
+2. **Scanner state:** if inside-window, call `xstockSpotScanner.pause()`. If outside-window and scanner found in a paused state (e.g., from a missed Sun-restart hook), call `xstockSpotScanner.resume()`. Otherwise leave alone.
+
+Both actions wrapped in try/catch with audit-row writes (`scheduled_tasks_audit task_name='boot_state_reconciliation'`). On error, the controller still registers the scheduled timers — boot reconciliation is best-effort; the scheduled timers are the long-term reliability backstop.
+
+**Scheduled timers** via `node-cron@^4.2.1`:
+
+- `cron.schedule('0 20 * * 5', weekendShutdown, { timezone: 'America/New_York', name: 'b-new-36-weekend-shutdown', noOverlap: true })` — fires Fri 8 PM ET wall-clock (timezone-aware, DST-tracked by Intl, same library as `market-hours.ts:getETParts`).
+- `cron.schedule('0 20 * * 0', weekendRestart, { timezone: 'America/New_York', name: 'b-new-36-weekend-restart', noOverlap: true })` — fires Sun 8 PM ET wall-clock.
+
+**Fri 8 PM ET shutdown hook** does, in order:
+1. `runPrewarmWithCircuitBreaker({ lookbackDays: 14, tag: 'SHUTDOWN' })` — refresh `xstock_spot_ohlc_60m_snapshot` so Sun-restart cold reads include the closing-week bars.
+2. `markAllXstockWeekendSuspended(openVirtualTradesMap)` — bulk-suspend open trades.
+3. `xstockSpotScanner.pause()` — scanner stops doing per-cycle work but stays subscribed to centralClock.
+4. Audit row written with status / meta.
+
+**Sun 8 PM ET restart hook** does, in order:
+1. `runPrewarmWithCircuitBreaker(...)` — refresh-on-restart (per Langston Q3 of B-NEW-34b ACK).
+2. `xstockSpotScanner.resume()` — scanner resumes per-cycle work on next centralClock tick.
+3. `unmarkAllXstockWeekendSuspended(...)` — bulk-restore trades to 'open'.
+4. Audit row.
+
+### Layer 3 — Pre-warm circuit-breaker (Q6)
+
+In-process pre-warm via `import('../../scripts/b-new-34b-prewarm-snapshot.js').runPrewarm(...)` (extracted as named export during B-NEW-36 (b); CLI wrapper preserved via `import.meta.url`-based direct-invocation detection).
+
+The hook wraps the call in `runPrewarmWithCircuitBreaker()` which catches any error, logs `[B-NEW-36][PREWARM_<TAG>] FAIL — continuing hook`, and returns `{ status: 'error', errorMessage }`. Hook bodies then proceed to suspend/restore trades AND pause/resume the scanner regardless of pre-warm outcome. Pre-warm failure stays observable via the audit row (`status='error'` with `error_message`) but never blocks the operational responsibilities — the scanner needs to pause/resume even if the snapshot didn't refresh.
+
+## Scanner pause/resume semantics
+
+`XstockSpotScannerService.pause()` is graceful-drain semantics, distinct from `stop()`:
+
+- `stop()` unsubscribes `xstockSpotScanner` from `centralClock` AND nulls the `clockTickHandler` reference. Resumption requires a fresh `start()`.
+- `pause()` ONLY sets `isPaused = true` + writes `diag.isPaused = true`. The `centralClock` subscription stays live; the `clockTickHandler` reference stays live; the handler's first action on every tick is `if (this.isPaused) return;` so it observes the flag and no-ops.
+
+Result: `resume()` is just a flag-flip — no resubscribe needed. An in-flight cycle that was already running when `pause()` was called completes naturally (gated by the separate `isScanning` flag); only the NEXT centralClock tick observes the pause.
+
+A low-frequency log line fires every 600 ticks while paused (every ~10 min) so a stuck-paused scanner is detectable in PM2 logs but doesn't fill the log across a 48-hour weekend.
+
+## Forensic table `scheduled_tasks_audit`
+
+Schema:
+- `id SERIAL PK`
+- `task_name VARCHAR(64) NOT NULL` — `'weekend_shutdown'` | `'weekend_restart'` | `'boot_state_reconciliation'`
+- `scheduled_for TIMESTAMPTZ NOT NULL` — when the task was supposed to fire (for boot rows = `fired_at`)
+- `fired_at TIMESTAMPTZ` — when it actually fired
+- `status VARCHAR(32) NOT NULL` — `'pending'` | `'success'` | `'error'`
+- `error_message TEXT` — populated when `status='error'`
+- `meta JSONB` — task-specific context (snapshot row counts, suspended trade counts, computed window state, pre-warm symbol-error count, etc.)
+- `created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+
+Index `idx_scheduled_tasks_audit_name_status_fired` on `(task_name, status, fired_at DESC)` for operator queries like "show me the last 10 weekend_shutdown fires" or "did any boot reconciliation fail recently".
+
+No production code reads this table — it's operator-only. Bounded growth: 2 timers × ~52 weeks + N PM2 boots/year ≈ low hundreds of rows annually.
+
+## Deploy ordering invariant
+
+The deploy chain MUST run `npm run db:migrate` between `npm run build` and `pm2 restart dawntrader` so the `state` column exists when the new vts-runner code reads it on boot. Standard staging deploy is:
+
+```bash
+ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && \
+  git pull origin migration/aws-supabase && \
+  npm run build && \
+  npm run db:migrate && \
+  pm2 restart dawntrader'"
+```
+
+Without the `db:migrate` step, every trade close fails the CHECK constraint AND `rehydrateOpenTrades` fails on the missing column. B-NEW-36 sub-batch (a) (`_migrations` ledger reconciliation) is the prerequisite that lets `db:migrate` run cleanly through the runner — without (a)'s 17-row backfill, the runner would fail on an unrelated pending migration's assertion before reaching B-NEW-36's two migrations.
+
+## Side-effect: closes RUNNING_ISSUES #116 for xstock_spot weekend instance
+
+The VTS sim cycle's iteration filter (`if (t.state === 'weekend_suspended') continue;`) means `resolveTECConfig()` is NOT called for xstock_spot during the weekend window. This eliminates the stale-config `TEC_STALE_FAIL_CLOSED` log spam that was the primary observable failure of #116. Crypto_perp and xstock_perp are still subject to the underlying refresh-on-demand pattern; their fail-closed noise is residual and tracked at #116.
+
+## Cross-references
+
+- `BATCH_CATALOG.md` B-NEW-36 row
+- `PHASE_HISTORY.md` B-NEW-36 row (combined a+b+c entry)
+- `SYSTEM_IMPACT_MAP.md` "Recent Additions (B-NEW-36)" — new component entries
+- `Claude Comms and Packages/Scope Files/B_NEW_36_SCOPE.md` (rev4) + `B_NEW_36_PRE_AUDIT.md` (§1-§8 + §9 re-validation)
+- `Claude Comms and Packages/Batch Completion/B_NEW_36_b_COMPLETION_REPORT.md`
+- `RUNNING_ISSUES.md` #116 (partially resolved by side-effect) + #117 (B79.0n unbuilt — next in locked sequence) + #119 (RESOLVED by sub-batch a) + #120 (deferred by sub-batch c trace) + #121 (NEW — `setNullReason` ReferenceError flagged by Langston during Step 8)
+- `/home/langston/CLAUDE.md` §12 dispatch-anchoring rule (added during this batch's governance pass)
+
+*Added 2026-05-20 with B-NEW-36 sub-batch (b) close.*

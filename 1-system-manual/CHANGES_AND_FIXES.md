@@ -2,6 +2,28 @@
 
 ---
 
+## BUG-2026-05-20-A — Off-hours session-lifecycle controller closes #116 by side-effect + pre-emptively avoids CHECK-constraint trade-close failure (B-NEW-36 sub-batch (b))
+
+**Risk class:** PRE-EMPTIVE FIX (critical guard caught at pre-audit Step 2 §4.1 — would have manifested as a CHECK-constraint violation on every trade close post-deploy if missed) + RESOLVED-BY-SIDE-EFFECT of #116 TEC stale fail-closed log noise for xstock_spot during weekend window.
+
+**What landed (commit `4a997eae2`, deploy 2026-05-20 ~12:05 UTC):**
+
+- NEW DB column `vts_open_trades.state VARCHAR(32) NOT NULL DEFAULT 'open'` with CHECK constraint `vts_open_trades_state_consistency` enforcing closed↔state AND state↔asset_class consistency (weekend_suspended xstock_spot-only).
+- `markOpenTradeClosed` extended to atomically set `state='closed'` in the same UPDATE — without this extension every trade close would have failed the CHECK on deploy. Pre-audit §4.1 critical guard.
+- NEW `server/services/session-lifecycle-controller.ts` with two `node-cron` scheduled timers (Fri 8PM ET shutdown + Sun 8PM ET restart, `timezone: 'America/New_York'`), boot-time affirmative state reconciliation per Langston Q7+Q7.1, Q6 pre-warm circuit-breaker.
+- NEW `scheduled_tasks_audit` forensic table for operator visibility into timer fires + boot reconciliations.
+- Scanner `pause()`/`resume()` methods preserving `clockTickHandler` reference (graceful-drain semantics distinct from `stop()`/`start()`).
+- VTS sim cycle iteration filter `if (t.state === 'weekend_suspended') continue;` in both symbol-collection and per-trade evaluation loops.
+- `runPrewarm()` extracted as named export from B-NEW-34b pre-warm script for in-process invocation from the scheduled hooks.
+
+**Side-effect on #116:** sim cycle no longer routes weekend-suspended xstock_spot trades to TEC eval during the Fri 8PM ET → Sun 8PM ET window — eliminates the `TEC_STALE_FAIL_CLOSED` log spam for that asset class in that window. Crypto_perp + xstock_perp residual fail-closed noise still open (#116 marked PARTIALLY RESOLVED).
+
+**Critical guards verified post-deploy:** boot reconciliation audit row `status='success'` with `insideWeekendWindow=false` / `scannerAction='none'` / `tradesAffected=0` for Wed mid-day UTC deploy time; 162 open trades all `state='open'`, 924 closed all `state='closed'`, zero `weekend_suspended` rows. CHECK constraint deployed with both R1+R1.1 clauses verified via `pg_get_constraintdef`. Scanner running mid-week (73 pairs in latest cycle post-restart).
+
+**Cross-references:** `BUG-2026-05-20-A` here; SYSTEM_MANUAL.md "Off-hours session-lifecycle architecture (B-NEW-36 sub-batch (b), 2026-05-20)"; SYSTEM_IMPACT_MAP.md "Recent Additions (B-NEW-36 — Off-hours session-lifecycle controller + ledger reconciliation + universe-split cleanup, 2026-05-20)"; `Claude Comms and Packages/Scope Files/B_NEW_36_SCOPE.md` (rev 4 Langston FINAL ACK) + `B_NEW_36_PRE_AUDIT.md` (§1-§8 + §9 re-validation block) + `Claude Comms and Packages/Batch Completion/B_NEW_36_b_COMPLETION_REPORT.md`. Langston Step 4 + Step 8 CLEAN ACK both relayed verbatim to Telegram topic 21.
+
+---
+
 ## BUG-2026-05-19-B — Source-side dedup for B74 WS-archived OHLC tables (B-NEW-35)
 
 **Severity:** Structural correctness + capacity. Recurring 25-second SCAN_TIMEOUT on every scanner cycle for ~7 days pre-fix; Supabase Disk IO burst budget at 100%/day; B-NEW-34b snapshot pre-warm hitting 26 statement_timeouts on the heaviest blue-chip names.
