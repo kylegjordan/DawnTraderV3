@@ -39,8 +39,8 @@
 - `e1facf6cd` `4c473ff33` `75f73c930` `1fe3b6829` `cd7e2aefe` `323538cf7` — Phase 1 SQL evolution
 - `756f3a25d` — scope rev2 Langston ACK
 
-### Supabase tier — SAFE TO DOWNGRADE
-Currently Medium ($60/mo) — was bumped during dedup. Post-fix write IO dropped ~20× (no more 18-56× row duplication), read IO ~5× (queries scan deduped data). Small tier ($15/mo) should comfortably handle ongoing operations. **Kyle approved downgrade — safe to revert now.**
+### Supabase tier — Small (downgraded 2026-05-20)
+Kyle downgraded back to Small tier ($15/mo, 2GB RAM, 196 Mbps baseline IO) post-B-NEW-35-ship. Confirmed comfortable for post-fix workload (write IO dropped ~20× from dedup, read IO ~5×). Tier sequence today: Micro (initial) → Small (Kyle's first upgrade during dedup) → Medium (needed for heavy-symbol cleanup) → Small (back to baseline post-ship).
 
 ### Locked plan — what remains
 
@@ -51,10 +51,27 @@ Original 4-step plan locked May 18 evening + re-sequenced today:
 3. ⏸️ **B-NEW-36 off-hours session-lifecycle controller** — scope FINAL ACK'd by Langston at rev4. Three sub-batches: (a) `_migrations` ledger reconciliation [#119]; (b) lifecycle controller — Fri 8PM ET shutdown + Sun 8PM ET restart hooks; (c) xStock universe-split cleanup (retire XSTOCK_SPOT_24_7_SYMBOLS designation; empirically not supported per Q9). Pre-audit gate: CLEAR (Langston ACK'd at rev4 + Q9 empirically confirmed). Begin Step 2 pre-audit in next session.
 4. ⏸️ **B79.0n xStock active-trading wire-in** (#117) — wire xStock filters / MCE / regime / DBS / TEC / strategy detect through signal-orchestrator's active-trading dispatch + paper-execution-engine asset-class branching. Active trading stays OFF; codepath becomes end-to-end ready. Last in queue.
 
-### Deferred for fresh session
+### Langston independent verification (2026-05-20 ~07:30 UTC) — VERIFIED ✅
+Empirical checks all passed against staging at deployed commit `f001002d9`:
+- xstock_perp 277,970 / xstock_spot 1,604,733 / crypto_spot 2,492,118 (expected ~280K / 1.59M / 2.47M)
+- 0 duplicate (symbol, interval_begin) rows in any of the 3 tables
+- UNIQUE constraints present on all 3
+- Hotfix Map dedup verified at ohlc-batch-writer.ts:105-114
+- Zero DB errors in /var/log/dawntrader/out.log post-deploy
+- Scanner cycle wallclock: median ~530ms (last 20 cycles, range 275-1077ms) — BETTER than the 1.3s CC reported
+- DBS compute 1-8ms, pairs_with_dbs 73-74/75
 
-- **B-NEW-35 Step 11 completion report.** Multi-page write-up. Has all the empirical numbers ready in this MEMORY + the commit log.
-- **B-NEW-35 governance updates (MANDATORY):** SIM (add 5+ components), System Manual chapter on source-side dedup, RUNNING_ISSUES #118/#119 closure, MULTI_ASSET_VTS_EXPANSION_PLAN row, BATCH_CATALOG entry. Pattern is post-batch governance per CLAUDE.md §3.
+### Deferred for fresh session (folded into B-NEW-35 Step 11 + minor next-batch items)
+
+- **B-NEW-35 Step 11 completion report.** Multi-page write-up. Empirical numbers + Langston verification + commit log all ready in this MEMORY.
+- **B-NEW-35 governance updates (MANDATORY):** SIM (add 5+ components), System Manual chapter on source-side dedup, RUNNING_ISSUES #118/#119 closure, MULTI_ASSET_VTS_EXPANSION_PLAN row, BATCH_CATALOG entry. Per CLAUDE.md §3. **Use `f001002d9` as canonical deploy hash** (Langston flagged my earlier `19e80f76b` was the post-deploy governance commit, not the deploy itself).
+- **NEW investigation item (Langston flag):** trace why the xStock 60-min snapshot has 260 symbols (not 265). 5-symbol gap from pre-warm result. Possible causes: 5 symbols had no source rows in the 14-day look-back window, 5 dropped from XSTOCK_SPOT_REGISTRY between pre-warm and now, or silent-skip in the snapshot path. Not blocking (scanner still reads 73-74/75 universe). Trace + document in Step 11 OR roll into B-NEW-36 sub-batch (c) since universe-cleanup is in scope there anyway.
+- **B-NEW-35 7-day soak verification SCHEDULED ✅** Alert id `c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf`, triggers `2026-05-27T07:00:00Z` (state=scheduled). Verifies: zero duplicate (symbol, interval_begin) rows persisted across all 3 _ohlc_1m tables 7 days post-ship + Supabase Disk IO burst budget consumption stays under 30 percent per day. Per Kyle directive + Langston suggestion.
+
+### Active alerts (§10.5)
+- `b83b1e4b` — B-NEW-40 14-day soak verification scheduled 2026-05-31. No action.
+- `c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf` — **NEW** B-NEW-35 7-day dedup soak scheduled 2026-05-27. No action until then.
+- `7b33b931` — B-PHASE-A2 telemetry verify — ACK'D 2026-05-20.
 
 ### Active alerts (§10.5)
 - `b83b1e4b` — B-NEW-40 14-day soak verification scheduled 2026-05-31. No action.
