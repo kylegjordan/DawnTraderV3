@@ -81,6 +81,12 @@ const HOSTILE_SIM_SLEEP_MS = 28_000;
 interface ScannerDiagnostics {
   isRunning: boolean;
   isScanning: boolean;
+  // B-NEW-36 (2026-05-20): paused state distinct from stopped. When paused,
+  // the scanner is subscribed-but-no-op-on-tick: clockTickHandler still
+  // checks isPaused first and skips work without unsubscribing. Set by
+  // pause(); cleared by resume(). Surfaced on /api/xstocks/filter-diagnostics
+  // so the dashboard can show paused vs running vs stopped at a glance.
+  isPaused: boolean;
   lastTickAt: number | null;
   lastCycleDurationMs: number | null;
   cyclesCompleted: number;
@@ -132,6 +138,12 @@ interface TickerSnapRow extends Record<string, unknown> {
 class XstockSpotScannerService {
   private isRunning = false;
   private isScanning = false;
+  // B-NEW-36 (2026-05-20): pause flag for the off-hours session-lifecycle
+  // controller. Distinct from stop()/start() — pause() keeps the
+  // clockTickHandler reference and the centralClock subscription intact;
+  // the handler observes isPaused at every tick and skips work without
+  // unsubscribing. resume() re-arms; no clockTickHandler rebuild needed.
+  private isPaused = false;
   private clockTickHandler: ((tick: ClockTick) => Promise<void>) | null = null;
 
   // ── Per-cycle rotation (Kyle directive 2026-05-12) ──
@@ -155,6 +167,7 @@ class XstockSpotScannerService {
   private diag: ScannerDiagnostics = {
     isRunning: false,
     isScanning: false,
+    isPaused: false,
     lastTickAt: null,
     lastCycleDurationMs: null,
     cyclesCompleted: 0,
@@ -208,6 +221,19 @@ class XstockSpotScannerService {
 
     this.clockTickHandler = async (tick: ClockTick) => {
       this.diag.lastTickAt = tick.timestamp;
+      // B-NEW-36 (2026-05-20): graceful drain semantics for pause(). When
+      // paused, observe the flag and no-op without unsubscribing — the
+      // session-lifecycle controller toggles this around the Fri 8PM ET →
+      // Sun 8PM ET weekend window. In-flight cycle (if any) finishes
+      // naturally because isScanning is checked separately below.
+      if (this.isPaused) {
+        // Low-frequency log so a stuck-paused scanner is detectable, but
+        // not so chatty it fills logs across a 48-hour weekend.
+        if (tick.tickNumber % 600 === 0) {
+          console.log(`[B-NEW-36][SCAN_PAUSED] tickNumber=${tick.tickNumber} no-op (weekend window)`);
+        }
+        return;
+      }
       if (!this.isRunning || this.isScanning) {
         if (this.isScanning) {
           console.log(`[B79.0a][SKIP] tickNumber=${tick.tickNumber} reason=scan_in_progress`);
@@ -259,9 +285,61 @@ class XstockSpotScannerService {
     }
     this.isRunning = false;
     this.isScanning = false;
+    this.isPaused = false;
     this.diag.isRunning = false;
     this.diag.isScanning = false;
+    this.diag.isPaused = false;
     console.log('[B79.0a][SHUTDOWN] XstockSpotScanner stopped');
+  }
+
+  /**
+   * B-NEW-36 (2026-05-20) — graceful pause for the off-hours session-lifecycle
+   * controller. Distinct from stop():
+   *   - The centralClock subscription stays active.
+   *   - The clockTickHandler reference is preserved (so resume() doesn't
+   *     have to rebuild it; capture is held via closures over scanner state).
+   *   - The handler observes isPaused at every tick and returns immediately.
+   *
+   * Graceful drain: if a cycle is already in-flight when pause() is called,
+   * it finishes naturally (isScanning gate); the NEXT tick observes isPaused
+   * and no-ops. Synchronous-with-flag-set (caller proceeds immediately).
+   *
+   * Idempotent. Logs a single transition line for traceability.
+   */
+  pause(): void {
+    if (!this.isRunning) {
+      console.warn('[B-NEW-36][SCAN_PAUSE_NOOP] scanner not running — ignoring pause()');
+      return;
+    }
+    if (this.isPaused) {
+      return;
+    }
+    this.isPaused = true;
+    this.diag.isPaused = true;
+    console.log('[B-NEW-36][SCAN_PAUSE] XstockSpotScanner paused (centralClock subscription retained)');
+  }
+
+  /**
+   * B-NEW-36 (2026-05-20) — resume after a pause(). Idempotent.
+   * No clockTickHandler rebuild — the existing handler resumes on the next
+   * centralClock tick because isPaused is now false.
+   */
+  resume(): void {
+    if (!this.isRunning) {
+      console.warn('[B-NEW-36][SCAN_RESUME_NOOP] scanner not running — call start() instead');
+      return;
+    }
+    if (!this.isPaused) {
+      return;
+    }
+    this.isPaused = false;
+    this.diag.isPaused = false;
+    console.log('[B-NEW-36][SCAN_RESUME] XstockSpotScanner resumed (next clock tick will scan)');
+  }
+
+  /** B-NEW-36 (2026-05-20) — public read-only access to the paused state. */
+  getIsPaused(): boolean {
+    return this.isPaused;
   }
 
   /**

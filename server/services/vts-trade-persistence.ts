@@ -40,6 +40,15 @@ import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
 import { safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 
+/**
+ * B-NEW-36 (2026-05-20) — lifecycle marker on vts_open_trades.state.
+ * 'open' = normal active trade
+ * 'weekend_suspended' = paused during Fri 8PM ET → Sun 8PM ET (xstock_spot only;
+ *   DB CHECK constraint enforces the asset_class scoping)
+ * 'closed' = trade is closed (mirrors closed=true)
+ */
+export type VtsOpenTradeState = 'open' | 'weekend_suspended' | 'closed';
+
 // We intentionally use a typed-but-flexible structural type for the trade
 // record passed in. The full `OpenVirtualTrade` interface lives in
 // vts-runner.ts and depends on many internal types; we just need the
@@ -60,6 +69,10 @@ export interface OpenVirtualTradeRecord {
   strategy: string;
   pool: 'ideal' | 'rotational';
   openedAt: number;        // epoch ms
+  // B-NEW-36: lifecycle marker hydrated from the new vts_open_trades.state
+  // column. Optional in the structural type because pre-B-NEW-36 in-memory
+  // trade records may not carry it; readers default to 'open'.
+  state?: VtsOpenTradeState;
   // Everything else flows through `context`.
   [key: string]: any;
 }
@@ -120,16 +133,105 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
  * carry the closed-history forward through the next boot's rehydrate
  * (which filters `WHERE closed=false`) and are GC'd by
  * `sweepClosedOpenTrades` at boot.
+ *
+ * B-NEW-36 (2026-05-20) extension: also flip `state` to 'closed' in the
+ * same UPDATE. The vts_open_trades_state_consistency CHECK constraint
+ * requires `closed=true AND state='closed'` together; without this the
+ * close UPDATE fails for every trade once the B-NEW-36 migration lands.
+ * Pre-audit §4.1.
  */
 export async function markOpenTradeClosed(tradeId: string): Promise<void> {
   await db.execute(sql`
     UPDATE vts_open_trades
        SET closed = true,
            closed_at = NOW(),
+           state = 'closed',
            updated_at = NOW()
      WHERE id = ${tradeId}
        AND closed = false
   `);
+}
+
+/**
+ * B-NEW-36 (2026-05-20) — bulk-mark all open xstock_spot trades as
+ * weekend_suspended. Called by the off-hours session-lifecycle controller
+ * on Friday 8 PM ET and at boot when inside the weekend-close window.
+ *
+ * Per pre-audit §4.2: this helper also mirrors the state change onto the
+ * in-memory Map records so the sim cycle's iteration filter sees the new
+ * state immediately. Caller passes a reference to the
+ * `openVirtualTrades` Map (keyed by trade id); we mutate entries in place.
+ *
+ * Returns the number of DB rows updated.
+ */
+export async function markAllXstockWeekendSuspended(
+  inMemoryMap: Map<string, { assetClass: AssetClass; state?: VtsOpenTradeState }>,
+): Promise<{ updated: number }> {
+  const r = await db.execute<{ count: string }>(sql`
+    WITH u AS (
+      UPDATE vts_open_trades
+         SET state = 'weekend_suspended', updated_at = NOW()
+       WHERE asset_class = 'xstock_spot'
+         AND closed = false
+         AND state = 'open'
+       RETURNING id
+    )
+    SELECT COUNT(*)::text AS count FROM u
+  `);
+  const rows = (r as any).rows ?? (r as unknown as any[]);
+  const updated = parseInt(String(rows[0]?.count ?? '0'), 10);
+
+  // Mirror to in-memory Map.
+  let inMemoryMirrored = 0;
+  for (const trade of inMemoryMap.values()) {
+    if (trade.assetClass === 'xstock_spot' && trade.state === 'open') {
+      trade.state = 'weekend_suspended';
+      inMemoryMirrored++;
+    }
+  }
+
+  console.log(
+    `[B-NEW-36][SUSPEND_XSTOCK] db_rows=${updated} memory_mirrored=${inMemoryMirrored}`,
+  );
+  return { updated };
+}
+
+/**
+ * B-NEW-36 (2026-05-20) — bulk-restore all weekend-suspended xstock_spot
+ * trades to 'open'. Called on Sunday 8 PM ET and at boot when outside the
+ * weekend-close window. Mirrors to in-memory Map per pre-audit §4.2.
+ *
+ * Returns the number of DB rows updated.
+ */
+export async function unmarkAllXstockWeekendSuspended(
+  inMemoryMap: Map<string, { assetClass: AssetClass; state?: VtsOpenTradeState }>,
+): Promise<{ updated: number }> {
+  const r = await db.execute<{ count: string }>(sql`
+    WITH u AS (
+      UPDATE vts_open_trades
+         SET state = 'open', updated_at = NOW()
+       WHERE asset_class = 'xstock_spot'
+         AND closed = false
+         AND state = 'weekend_suspended'
+       RETURNING id
+    )
+    SELECT COUNT(*)::text AS count FROM u
+  `);
+  const rows = (r as any).rows ?? (r as unknown as any[]);
+  const updated = parseInt(String(rows[0]?.count ?? '0'), 10);
+
+  let inMemoryMirrored = 0;
+  for (const trade of inMemoryMap.values()) {
+    if (trade.assetClass === 'xstock_spot' && trade.state === 'weekend_suspended') {
+      trade.state = 'open';
+      inMemoryMirrored++;
+    }
+  }
+
+  console.log(
+    `[B-NEW-36][RESTORE_XSTOCK] db_rows=${updated} memory_mirrored=${inMemoryMirrored}`,
+  );
+  return { updated };
 }
 
 /**
@@ -154,11 +256,12 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     strategy: string;
     pool: string;
     opened_at: Date;
+    state: string;
     context: Record<string, any>;
   }>(sql`
     SELECT id, symbol, asset_class, entry_price, stop_loss, take_profit,
            position_size, dollar_value, quantity, regime, signal_type, strategy,
-           pool, opened_at, context
+           pool, opened_at, state, context
     FROM vts_open_trades
     WHERE closed = false
   `);
@@ -183,6 +286,10 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     strategy: r.strategy,
     pool: r.pool as 'ideal' | 'rotational',
     openedAt: new Date(r.opened_at).getTime(),
+    // B-NEW-36: surface state on the rehydrated record so the sim-cycle
+    // iteration filter sees it post-restart. Defaults to 'open' for
+    // belt-and-suspenders; DB CHECK guarantees the value is valid.
+    state: (r.state as VtsOpenTradeState) ?? 'open',
     ...(r.context ?? {}),
   }));
 }

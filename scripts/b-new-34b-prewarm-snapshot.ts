@@ -9,6 +9,12 @@
  * days) and UPSERTs the most-recent 60 buckets per symbol into the new
  * xstock_spot_ohlc_60m_snapshot table.
  *
+ * B-NEW-36 (2026-05-20): refactored to expose `runPrewarm(options)` as a
+ * named export so the off-hours session-lifecycle controller can invoke
+ * the pre-warm logic in-process from its Fri-8PM-ET / Sun-8PM-ET timer
+ * hooks (per scope §2 Q6 + pre-audit §3.8). CLI wrapper preserved at the
+ * bottom so `npm run b-new-34b:prewarm` still works.
+ *
  * Why per-symbol single-SQL: the live aggregator runs ONE SQL across all
  * 75 rotation-batch symbols using DISTINCT ON over a 60-120h window. At
  * widening windows that became too slow against B74's 18-56× duplicate
@@ -32,6 +38,10 @@
  * SSH on staging (post-deploy):
  *   ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && \
  *     npm run b-new-34b:prewarm -- --days 14'"
+ *
+ * In-process (B-NEW-36 lifecycle controller):
+ *   import { runPrewarm } from '../../scripts/b-new-34b-prewarm-snapshot.js';
+ *   const result = await runPrewarm({ lookbackDays: 14 });
  *
  * Reference: RUNNING_ISSUES #118 (B-NEW-34a abandonment + B-NEW-34b pivot);
  *            MULTI_ASSET_VTS_EXPANSION_PLAN.md row 2026-05-18 evening;
@@ -172,48 +182,76 @@ async function upsertSnapshot(
   return result.rowCount ?? 0;
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const lookbackDays = Number(getFlag(args, 'days') ?? '14');
-  const symbolsArg = getFlag(args, 'symbols');
-  const dryRun = hasFlag(args, 'dry-run');
+/**
+ * B-NEW-36 (2026-05-20): named export so the off-hours session-lifecycle
+ * controller can invoke pre-warm in-process from its scheduled hooks.
+ *
+ * @param options.lookbackDays   How far back to scan source partitions (default 14).
+ * @param options.symbols        Restrict to these symbols; defaults to full registry.
+ * @param options.dryRun         Aggregate but skip the UPSERT writes.
+ * @param options.connectionString Override DATABASE_URL (mostly for tests).
+ *
+ * Returns a result summary. Throws ONLY on construction-time misconfiguration
+ * (invalid lookbackDays, empty symbol set, missing DATABASE_URL). Per-symbol
+ * errors are caught and counted in `symbolErrors`; the function completes the
+ * batch regardless so the controller's circuit-breaker (scope §2 Q6) can decide
+ * whether to surface a partial failure.
+ */
+export interface RunPrewarmOptions {
+  lookbackDays?: number;
+  symbols?: string[];
+  dryRun?: boolean;
+  connectionString?: string;
+}
+
+export interface RunPrewarmResult {
+  totalSeconds: number;
+  symbolsProcessed: number;
+  symbolsWithData: number;
+  symbolsEmpty: number;
+  symbolErrors: number;
+  totalBuckets: number;
+  totalUpserts: number;
+  dryRun: boolean;
+}
+
+export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPrewarmResult> {
+  const lookbackDays = options.lookbackDays ?? 14;
+  const dryRun = options.dryRun ?? false;
+  const connectionString = options.connectionString ?? process.env.DATABASE_URL;
 
   if (!Number.isFinite(lookbackDays) || lookbackDays <= 0) {
-    console.error(`Invalid --days value: ${lookbackDays}`);
-    process.exit(1);
+    throw new Error(`[B-NEW-34b] runPrewarm: invalid lookbackDays=${lookbackDays}`);
   }
 
-  const targetSymbols = symbolsArg
-    ? symbolsArg.split(',').map((s) => s.trim()).filter(Boolean)
+  const targetSymbols = options.symbols && options.symbols.length > 0
+    ? options.symbols
     : Array.from(XSTOCK_SPOT_REGISTRY.keys());
 
-  // Sanity check — bail if registry empty (likely import path issue).
   if (targetSymbols.length === 0) {
-    console.error('[B-NEW-34b] No target symbols. Registry empty or --symbols arg malformed.');
-    process.exit(1);
+    throw new Error('[B-NEW-34b] runPrewarm: empty target symbol set');
   }
 
-  if (!process.env.DATABASE_URL) {
-    console.error('DATABASE_URL not set');
-    process.exit(1);
+  if (!connectionString) {
+    throw new Error('[B-NEW-34b] runPrewarm: DATABASE_URL not set');
   }
 
-  console.log(`[B-NEW-34b] Pre-warm starting: ${targetSymbols.length} symbols, ${lookbackDays} days lookback, dry-run=${dryRun}`);
+  console.log(
+    `[B-NEW-34b] Pre-warm starting: ${targetSymbols.length} symbols, ` +
+    `${lookbackDays} days lookback, dry-run=${dryRun}`,
+  );
   const startMs = Date.now();
 
+  // Fresh pool per invocation. Scope §2 Q6: this runs at most twice/week
+  // from the lifecycle controller + ad-hoc CLI; no need to share a pool.
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString,
     // Single-connection serial loop — no concurrent symbols to avoid pressure
     // on the source table while it's being written by the B74 archiver.
     max: 1,
     // Per-symbol query timeout: 180s. Empirically observed (2026-05-18 night)
     // that a particular symbol's DISTINCT ON aggregation can hang indefinitely
-    // without this cap (pg server-side statement_timeout absent for this DB
-    // connection; pool default has no implicit query_timeout). 180s is well
-    // above the 15-25s typical per-symbol query and well above the 120s
-    // statement_timeout we've seen on heavier batched queries — gives any
-    // legitimately-slow symbol room to complete while still bounding the
-    // worst case for hung-query recovery.
+    // without this cap.
     query_timeout: 180_000,
     // Connection-level safety: if the socket goes silent, fail rather than
     // wait forever. Matches the resilience posture from server/db.ts B-NEW-40.
@@ -227,39 +265,49 @@ async function main() {
   let symbolsEmpty = 0;
   let symbolErrors = 0;
 
-  for (let i = 0; i < targetSymbols.length; i++) {
-    const symbol = targetSymbols[i];
-    try {
-      const rows = await aggregateOneSymbol(pool, symbol, lookbackDays);
-      if (rows.length === 0) {
-        symbolsEmpty++;
-        if ((i + 1) % 25 === 0) {
-          console.log(`[B-NEW-34b] progress: ${i + 1}/${targetSymbols.length} processed, ${totalBuckets} buckets, ${totalUpserts} upserted, ${symbolsEmpty} empty`);
+  try {
+    for (let i = 0; i < targetSymbols.length; i++) {
+      const symbol = targetSymbols[i];
+      try {
+        const rows = await aggregateOneSymbol(pool, symbol, lookbackDays);
+        if (rows.length === 0) {
+          symbolsEmpty++;
+          if ((i + 1) % 25 === 0) {
+            console.log(
+              `[B-NEW-34b] progress: ${i + 1}/${targetSymbols.length} processed, ` +
+              `${totalBuckets} buckets, ${totalUpserts} upserted, ${symbolsEmpty} empty`,
+            );
+          }
+          continue;
         }
-        continue;
+        symbolsWithData++;
+        totalBuckets += rows.length;
+        if (!dryRun) {
+          const upserted = await upsertSnapshot(pool, symbol, rows);
+          totalUpserts += upserted;
+        } else {
+          totalUpserts += rows.length;
+        }
+        if ((i + 1) % 25 === 0) {
+          const elapsedSec = ((Date.now() - startMs) / 1000).toFixed(1);
+          console.log(
+            `[B-NEW-34b] progress: ${i + 1}/${targetSymbols.length} processed, ` +
+            `${totalBuckets} buckets, ${totalUpserts} upserted (${elapsedSec}s elapsed)`,
+          );
+        }
+      } catch (err) {
+        symbolErrors++;
+        console.warn(
+          `[B-NEW-34b] ${symbol} pre-warm error: ${err instanceof Error ? err.message : err}`,
+        );
       }
-      symbolsWithData++;
-      totalBuckets += rows.length;
-      if (!dryRun) {
-        const upserted = await upsertSnapshot(pool, symbol, rows);
-        totalUpserts += upserted;
-      } else {
-        totalUpserts += rows.length;
-      }
-      if ((i + 1) % 25 === 0) {
-        const elapsedSec = ((Date.now() - startMs) / 1000).toFixed(1);
-        console.log(`[B-NEW-34b] progress: ${i + 1}/${targetSymbols.length} processed, ${totalBuckets} buckets, ${totalUpserts} upserted (${elapsedSec}s elapsed)`);
-      }
-    } catch (err) {
-      symbolErrors++;
-      console.warn(`[B-NEW-34b] ${symbol} pre-warm error: ${err instanceof Error ? err.message : err}`);
     }
+  } finally {
+    await pool.end();
   }
 
-  await pool.end();
-
-  const totalSec = ((Date.now() - startMs) / 1000).toFixed(1);
-  console.log(`[B-NEW-34b] Pre-warm complete in ${totalSec}s:`);
+  const totalSeconds = (Date.now() - startMs) / 1000;
+  console.log(`[B-NEW-34b] Pre-warm complete in ${totalSeconds.toFixed(1)}s:`);
   console.log(`  Symbols processed:      ${targetSymbols.length} total (${symbolErrors} errors)`);
   console.log(`  Symbols with data:      ${symbolsWithData}`);
   console.log(`  Symbols empty:          ${symbolsEmpty} (no 1-min source bars in window)`);
@@ -267,12 +315,49 @@ async function main() {
   console.log(`  Rows upserted:          ${totalUpserts}`);
   console.log(`  Mode:                   ${dryRun ? 'DRY-RUN (no INSERTs)' : 'LIVE'}`);
 
-  if (symbolErrors > 0) {
-    process.exit(2);
+  return {
+    totalSeconds,
+    symbolsProcessed: targetSymbols.length,
+    symbolsWithData,
+    symbolsEmpty,
+    symbolErrors,
+    totalBuckets,
+    totalUpserts,
+    dryRun,
+  };
+}
+
+// ── CLI wrapper ───────────────────────────────────────────────────────────────
+// Preserved so `npm run b-new-34b:prewarm` continues to work.
+// Detection: only call main() when this file is invoked as the entrypoint,
+// not when it's imported as a module (the lifecycle controller imports it).
+const isDirectInvocation =
+  typeof process !== 'undefined' &&
+  process.argv[1] &&
+  import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`;
+
+async function main() {
+  const args = process.argv.slice(2);
+  const lookbackDaysArg = getFlag(args, 'days');
+  const lookbackDays = Number(lookbackDaysArg ?? '14');
+  const symbolsArg = getFlag(args, 'symbols');
+  const dryRun = hasFlag(args, 'dry-run');
+
+  const symbols = symbolsArg
+    ? symbolsArg.split(',').map((s) => s.trim()).filter(Boolean)
+    : undefined;
+
+  try {
+    const result = await runPrewarm({ lookbackDays, symbols, dryRun });
+    if (result.symbolErrors > 0) {
+      process.exit(2);
+    }
+  } catch (err) {
+    console.error('[B-NEW-34b] fatal:', err instanceof Error ? err.message : err);
+    process.exit(1);
   }
 }
 
-main().catch((err) => {
-  console.error('[B-NEW-34b] fatal:', err);
-  process.exit(1);
-});
+if (isDirectInvocation) {
+  main();
+}

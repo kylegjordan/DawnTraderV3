@@ -519,6 +519,16 @@ interface OpenVirtualTrade {
   // exit loop can route to the correct per-class config without a lookup.
   // Populated at trade-open via resolveAssetClass(symbol, exchange).
   assetClass: AssetClass;
+  // B-NEW-36 (2026-05-20): lifecycle marker hydrated from vts_open_trades.state.
+  // 'open' = normal active trade (default; new inserts get DB DEFAULT 'open').
+  // 'weekend_suspended' = paused by the off-hours session-lifecycle controller
+  //   during Fri 8PM ET → Sun 8PM ET (xstock_spot ONLY; DB CHECK enforces).
+  //   resolveOpenVirtualTrades() skips trades with this state so the TEC exit
+  //   path doesn't churn against stale weekend data.
+  // 'closed' = terminal (mirrors closed=true; the sim cycle's Map.has() gate
+  //   means closed trades are already absent from the Map, but the column is
+  //   kept consistent for DB-side queries).
+  state?: import('./vts-trade-persistence.js').VtsOpenTradeState;
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;
@@ -585,6 +595,23 @@ interface OpenVirtualTrade {
 }
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
+
+/**
+ * B-NEW-36 (2026-05-20): expose the in-memory open-trades Map for the
+ * off-hours session-lifecycle controller. The controller's bulk-suspend /
+ * bulk-restore helpers (markAllXstockWeekendSuspended /
+ * unmarkAllXstockWeekendSuspended) mirror their DB UPDATE into the Map so
+ * the sim cycle's `if (t.state === 'weekend_suspended') continue;` filter
+ * sees the new state immediately (next tick) instead of waiting for the
+ * next rehydrate at server restart.
+ *
+ * The Map's value type is structurally compatible with the helpers' loose
+ * `{ assetClass; state? }` shape; the cast is internal-module-safe because
+ * `OpenVirtualTrade.assetClass` and `.state` carry the expected types.
+ */
+export function getOpenVirtualTradesMap(): Map<string, { assetClass: AssetClass; state?: import('./vts-trade-persistence.js').VtsOpenTradeState }> {
+  return openVirtualTrades as unknown as Map<string, { assetClass: AssetClass; state?: import('./vts-trade-persistence.js').VtsOpenTradeState }>;
+}
 
 // B79.0g — rehydrate the in-memory Map from vts_open_trades at server boot.
 // Called once from server/index.ts after DB connection but before scanner
@@ -2020,6 +2047,13 @@ async function resolveOpenVirtualTrades(): Promise<{
   const cryptoSymbols = new Set<string>();
   const xstockSymbols = new Set<string>();
   for (const t of openVirtualTrades.values()) {
+    // B-NEW-36 (2026-05-20): skip weekend-suspended trades. The off-hours
+    // session-lifecycle controller marks all open xstock_spot trades as
+    // weekend_suspended on Fri 8PM ET and restores them on Sun 8PM ET; in
+    // between, the sim cycle must not evaluate them (stale weekend data
+    // would otherwise drive TEC stale-config fail-closed log noise — the
+    // #116 noise this batch exists to eliminate). Pre-audit §4.2.
+    if (t.state === 'weekend_suspended') continue;
     if (t.assetClass === 'xstock_spot') xstockSymbols.add(t.symbol);
     else cryptoSymbols.add(t.symbol);
   }
@@ -2106,6 +2140,9 @@ async function resolveOpenVirtualTrades(): Promise<{
   // The B64b 7-day MAX_HOLD_MS safety valve is preserved as a stale-cleanup
   // outer bound.
   for (const [tradeId, trade] of openVirtualTrades) {
+    // B-NEW-36 (2026-05-20): skip weekend-suspended trades. See the
+    // symbol-collection loop above for full rationale (pre-audit §4.2).
+    if (trade.state === 'weekend_suspended') continue;
     const holdDurationMs = now - trade.openedAt;
     // B79.0m.b2: pass assetClass so xstock trades route to xstock_spot_ticker_snap
     // instead of priceCache (which only has crypto prices via Kraken REST).
