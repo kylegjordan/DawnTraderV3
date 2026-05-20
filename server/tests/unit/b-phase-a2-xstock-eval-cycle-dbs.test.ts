@@ -29,8 +29,10 @@ describe('B-PHASE-A2 — XSTOCK_SPOT_REGISTRY sector completeness', () => {
     }
   });
 
-  it('registry size matches expected 265 entries (drift guard)', () => {
-    expect(XSTOCK_SPOT_REGISTRY.size).toBe(265);
+  it('registry size matches expected 260 entries (drift guard)', () => {
+    // B79.0n.HYGIENE 2026-05-20: trimmed 265 → 260 (removed BITF/HOLX/PARA/SAGE/WBA;
+    // zero data Apr+May 2026). See KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
+    expect(XSTOCK_SPOT_REGISTRY.size).toBe(260);
   });
 
   it('all sector values are in the allowed XstockSector union', () => {

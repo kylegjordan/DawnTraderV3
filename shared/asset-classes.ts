@@ -303,7 +303,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['BIDU/USD', { name: 'Baidu', sector: 'XLC', adr: true }],
   ['BIIB/USD', { name: 'Biogen', sector: 'XLV' }],
   ['BILI/USD', { name: 'Bilibili', sector: 'XLC', adr: true }],
-  ['BITF/USD', { name: 'Bitfarms', sector: 'XLK', cryptoAdjacent: true }],
+  // B79.0n.HYGIENE 2026-05-20: BITF/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
   ['BLDP/USD', { name: 'Ballard Power', sector: 'XLI', adr: true }],
   ['BLNK/USD', { name: 'Blink Charging', sector: 'XLI' }],
   ['BMBL/USD', { name: 'Bumble', sector: 'XLC' }],
@@ -383,7 +383,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['HD/USD', { name: 'Home Depot', sector: 'XLY' }],
   ['HIG/USD', { name: 'Hartford Financial', sector: 'XLF' }],
   ['HIVE/USD', { name: 'HIVE Digital Technologies', sector: 'XLK', cryptoAdjacent: true }],
-  ['HOLX/USD', { name: 'Hologic', sector: 'XLV' }],
+  // B79.0n.HYGIENE 2026-05-20: HOLX/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
   ['HOOD/USD', { name: 'Robinhood', sector: 'XLF' }],
   ['HUM/USD', { name: 'Humana', sector: 'XLV' }],
   ['HUT/USD', { name: 'Hut 8 Mining', sector: 'XLK', cryptoAdjacent: true }],
@@ -448,7 +448,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['ORCL/USD', { name: 'Oracle', sector: 'XLK' }],
   ['OXY/USD', { name: 'Occidental Petroleum', sector: 'XLE' }],
   ['PANW/USD', { name: 'Palo Alto Networks', sector: 'XLK' }],
-  ['PARA/USD', { name: 'Paramount Global', sector: 'XLC' }],
+  // B79.0n.HYGIENE 2026-05-20: PARA/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
   ['PATH/USD', { name: 'UiPath', sector: 'XLK' }],
   ['PCG/USD', { name: 'PG&E', sector: 'XLU' }],
   ['PDD/USD', { name: 'PDD Holdings', sector: 'XLY', adr: true }],
@@ -479,7 +479,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['ROOT/USD', { name: 'Root Inc.', sector: 'XLF' }],
   ['ROP/USD', { name: 'Roper Technologies', sector: 'XLK' }],
   ['RTX/USD', { name: 'RTX Corporation', sector: 'XLI' }],
-  ['SAGE/USD', { name: 'Sage Therapeutics', sector: 'XLV' }],
+  // B79.0n.HYGIENE 2026-05-20: SAGE/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
   ['SAP/USD', { name: 'SAP', sector: 'XLK', adr: true }],
   ['SHEL/USD', { name: 'Shell', sector: 'XLE', adr: true }],
   ['SHOP/USD', { name: 'Shopify', sector: 'XLK', adr: true }],
@@ -524,7 +524,7 @@ export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Ma
   ['VRTX/USD', { name: 'Vertex Pharmaceuticals', sector: 'XLV' }],
   ['VTRS/USD', { name: 'Viatris', sector: 'XLV' }],
   ['VZ/USD', { name: 'Verizon', sector: 'XLC' }],
-  ['WBA/USD', { name: 'Walgreens Boots Alliance', sector: 'XLP' }],
+  // B79.0n.HYGIENE 2026-05-20: WBA/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
   ['WBD/USD', { name: 'Warner Bros. Discovery', sector: 'XLC' }],
   ['WFC/USD', { name: 'Wells Fargo', sector: 'XLF' }],
   ['XBI/USD', { name: 'SPDR S&P Biotech ETF', sector: 'BROAD_ETF' }],

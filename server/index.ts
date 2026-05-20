@@ -13,12 +13,44 @@ import chapletRouter from "../chaplet/index.js"; // Phase M4: Chaplet Context Se
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
 import regimeMapRouter from "./routes/regime-map.js"; // Phase 14: Dynamic regime map API
 import version from "./version.json";
+// B79.0n.HYGIENE 2026-05-20: null-reason-tracker boot-time round-trip smoke test
+// guards against future bundling drift that could silently break the helper (e.g.
+// tree-shaking removing the export, hoisting placing it out of scope, or a no-op
+// shim wiring set/get to different module instances). Historical context:
+// 64,494 occurrences of "setNullReason is not defined" accumulated in PM2 error
+// log across 304 restart cycles before the current bundle resolved the issue.
+// This round-trip check fails fast at boot if the bug ever returns, instead of
+// accumulating thousands of catch-wrapped runtime errors per cycle.
+import { setNullReason, getNullReason, resetNullReason } from './utils/null-reason-tracker.js';
 
 // Phase 3C: Performance profiling
 const SERVER_START_TIME = performance.now();
 
 console.log('[BOOT]', process.env.COMMIT_SHA || 'local', new Date().toISOString());
 console.log(`[BOOT] DawnTrader v${version.version} - Phase ${version.phase}`);
+
+// B79.0n.HYGIENE: null-reason-tracker round-trip smoke test (fail-fast on bundling drift)
+try {
+  setNullReason('boot_smoke_test');
+  const r = getNullReason();
+  resetNullReason();
+  if (r !== 'boot_smoke_test') {
+    console.error(
+      '[CRITICAL][B79.0n.HYGIENE] null-reason-tracker smoke test FAILED: getNullReason returned',
+      JSON.stringify(r),
+      'expected "boot_smoke_test". Bundle integrity check failed — refusing to boot.',
+    );
+    process.exit(1);
+  }
+  console.log('[BOOT][B79.0n.HYGIENE] null-reason-tracker smoke test OK');
+} catch (e) {
+  console.error(
+    '[CRITICAL][B79.0n.HYGIENE] null-reason-tracker smoke test THREW:',
+    e instanceof Error ? `${e.message}\n${e.stack}` : String(e),
+    '— refusing to boot.',
+  );
+  process.exit(1);
+}
 
 const app = express();
 

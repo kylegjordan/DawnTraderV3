@@ -47,6 +47,16 @@ export const KNOWN_NONEXISTENT_NAMES = [
     reason: 'Subscribe accepted silently but no candle messages ever flowed. Ticker feed for the same symbols worked normally, proving WS connection healthy. B74 v1 implemented WS-candles based on initial doc-reading assumption; B74.1 verified by live probe that the feed name does not exist. Implementation switched to REST polling at 60s interval.',
     ref: 'BUG-2026-04-30-I in CHANGES_AND_FIXES.md, RUNNING_ISSUES #41 (RESOLVED)',
   },
+  {
+    exchange: 'Kraken (xStock product / ws-equities feed)',
+    type: 'xStock symbol with zero data in 2-month archive window',
+    badName: 'BITF/USD, HOLX/USD, PARA/USD, SAGE/USD, WBA/USD',
+    badContext: 'Five xStock symbols in shared/asset-classes.ts:XSTOCK_SPOT_REGISTRY had zero OHLC rows in both xstock_spot_ohlc_1m (April + May 2026) and xstock_spot_ohlc_60m_snapshot (260 of 265 symbols populated). Tickers are valid US equities (Bitfarms / Hologic / Paramount Global / Sage Therapeutics / Walgreens Boots Alliance) but our Kraken xStock product subscription returns no candle data for them.',
+    correctAlternative: 'No positive confirmation available. Kraken public AssetPairs API does not index xStocks at all (their xStock instruments route exclusively through wss://ws-equities.kraken.com with no public introspection endpoint). B-NEW-36 sub-batch (c) confirmed AssetPairs returns EQuery:Unknown asset pair for ALL xStock symbols including known-good AAPL/TSLA/AMZN. Operationally: do NOT re-add these five to XSTOCK_SPOT_REGISTRY without first verifying Kraken-side support via a method that surfaces in a future "Kraken xStock universe audit" mini-batch.',
+    dateDiscovered: '2026-05-20',
+    reason: 'Zero rows across 2 months in our archive despite registry inclusion. xStock product carries only a subset of US-listed equities and the subset has shifted at least once during this archive window (possible delisting, never-tokenized, or different symbol form on Kraken side — unverifiable via public API).',
+    ref: 'RUNNING_ISSUES #120 (DEFERRED — Kraken-side investigation gated). B-NEW-36 sub-batch (c) trace report 2026-05-20. B79.0n.HYGIENE registry trim 2026-05-20.',
+  },
 ] as const;
 
 /**
