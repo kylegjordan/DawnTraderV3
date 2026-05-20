@@ -139,6 +139,25 @@ The volatile MEMORY.md MUST NEVER EXCEED 200 lines. Every time MEMORY.md is upda
 
 This cap exists because MEMORY.md auto-loads into every Claude Code session — runaway growth wastes context every turn.
 
+### 3.3 Asset-class onboarding learning-capture rule (Kyle directive 2026-05-20 — Phase 24 standing rule)
+
+**Time-bounded:** this rule applies from 2026-05-20 through the end of Phase 24 (the multi-asset VTS expansion + xStock active-trading wire-in arc). After Phase 24 closes with a finalized `ASSET_CLASS_ONBOARDING_WORKFLOW.md`, this rule converts to "ad-hoc update when substantive learnings surface" (the standard governance discipline for evolving docs).
+
+**Why this exists:** B79.0n is structured as ~17 sub-batches that each audit one subsystem for asset-class awareness. Every sub-batch will surface concrete, reusable patterns about what an asset-class onboarding actually requires. If we don't capture those learnings as they emerge, the next asset class (perpetual futures, then 4th/5th asset classes) will re-discover the same mistakes in real time. The goal: at end of Phase 24, the onboarding workflow is concrete enough that 90-95% of the guesswork is eliminated for the next asset class.
+
+**The rule:** every Phase 24 batch (including this umbrella's sub-batches AND any other B79.x batches outside the umbrella, e.g., the end-of-arc workflow consolidation batch) MUST include a dedicated section in its `BATCH_N_COMPLETION_REPORT.md` titled **"Asset-class onboarding workflow learnings."** Standing rule lives at the Phase level, not the umbrella level (per Langston B79.0n umbrella v1 review item 12, 2026-05-20). That section identifies:
+
+- **(a) What worked well** — patterns / shapes / call-site conventions that should become reusable templates for the next asset class. Example: "Step 4.5 type-enforced caller-resolves on storage APIs caught the SQE silent-fallback before runtime — keep this as a mandatory pre-audit discipline for every new asset class."
+- **(b) What surprised us** — pitfalls that future asset-class onboardings need to avoid. Example: "Dead inline hooks from prior onboardings (B79.0d ORB) had latent bugs that only surfaced when activated — every onboarding's pre-audit must include a 'dead code awakens' check."
+- **(c) Recurring structural patterns** observed across asset-class boundaries. Example: "Every component with `assetClass?:` optional in its signature is a future silent-fallback bug — these should all become REQUIRED."
+- **(d) Concrete edits proposed to `ASSET_CLASS_ONBOARDING_WORKFLOW.md`** — specific section additions, rule strengthenings, checklist items. Cite section + proposed text. Edits get applied as part of the same governance turn.
+
+**Empty section is fine if nothing substantive emerged** — explicitly state "No new onboarding learnings this batch." Don't add filler.
+
+**Phase 24 closure batch:** at end of Phase 24, a dedicated review batch consolidates all learnings into a finalized `ASSET_CLASS_ONBOARDING_WORKFLOW.md`. The finalization batch reviews every prior Phase 24 batch's learnings section and distills them into the canonical workflow document.
+
+**Where the actual workflow doc lives:** `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` (already exists; gets edited continuously through Phase 24).
+
 ---
 
 ## 4. Canonical File Locations (post-reorganization, 2026-04-14)
