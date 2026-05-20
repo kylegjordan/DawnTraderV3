@@ -234,9 +234,16 @@ This cap exists because MEMORY.md auto-loads into every Claude Code session — 
     ```
 
     **Critical implementation details:**
-    - Set `defaultMode: "bypassPermissions"` at BOTH the top level AND inside the `permissions` block. Different Claude Code CLI versions read the key from different locations; setting both handles either schema.
+    - **THE LOAD-BEARING LINE IS THE TOP-LEVEL `"defaultMode": "bypassPermissions"` AT LINE 2 OF THE JSON FILE — OUTSIDE THE `permissions` BLOCK.** This is the canonical Claude Code config schema for session-wide permission-mode override. If this line ever gets deleted or moved inside the `permissions` block only, prompts will return. **MUST be at the ROOT level of the JSON object, between the opening `{` and the `"permissions": {` key.** Looks like this in the file:
+      ```json
+      {
+        "defaultMode": "bypassPermissions",   ← THIS LINE. DO NOT DELETE.
+        "permissions": { ... }
+      }
+      ```
+    - Also set `"defaultMode": "bypassPermissions"` INSIDE the `permissions` block (belt-and-suspenders — different Claude Code CLI versions have read the key from different locations across releases). But the TOP-LEVEL line is the one that actually works in the current version.
     - Use the **canonical colon-prefix syntax** `Bash(cmd:*)`, NOT the space-form `Bash(cmd *)`. The colon-prefix is the actual prefix-matcher; the space-form is a glob-match that doesn't always generalize.
-    - Explicitly include `Bash(cd:*)` — without it, every `cd ... && ...` compound triggers the hardcoded check regardless of other allow rules.
+    - Explicitly include `Bash(cd:*)` in the allow list — without it, every `cd ... && ...` compound triggers the hardcoded check regardless of other allow rules.
     - The deny list still applies on top of `bypassPermissions`, so genuinely-dangerous operations (`git push --force`, `git reset --hard`, `sudo`, `rm -rf /`) are still blocked.
     - The catastrophic-circuit-breaker patterns (`rm -rf /`, `rm -rf ~`, etc.) ALWAYS prompt regardless of any setting — that's hardcoded in Claude Code itself for safety.
 
