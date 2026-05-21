@@ -36,6 +36,9 @@ import { getRegimePerformance, checkConfidenceDrift } from '../logging/vts-telem
 import { calculateDirectionalIntegrity, calculateVolNoise } from '../../utils/analysis-utils.js';
 // Directive 12.1.2: Import canonical cost model (replaces calculateFriction flat-rate helper)
 import { getCachedCostMetrics, computeTotalRoundTripCost } from '../math/cost-model.js';
+// B79.0n.MCE: resolveAssetClass — getCachedCostMetrics now REQUIRES an explicit
+// asset class; evaluateTradeExpectancy resolves it from the symbol (interim).
+import { resolveAssetClass } from '../../../shared/asset-classes.js';
 import { covarianceEngine } from '../../utils/covariance-engine.js';
 // Batch 19G VN HF: Unused SYSTEM_GUARDS import removed
 // B72 (2026-05-05): ROI_FLEX_MULTIPLIER, ROI_MIN, ROI_MAX, FRICTION_SAFETY_BUFFER
@@ -547,7 +550,11 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): T
   
   // Directive 12.1.2: Use canonical cost model — real per-pair fee/slippage/spread
   // getCachedCostMetrics always returns valid defaults on cache miss (exchange-defaults.ts)
-  const costMetrics = getCachedCostMetrics(symbol);
+  // B79.0n.MCE: getCachedCostMetrics now REQUIRES assetClass. evaluateTradeExpectancy
+  // takes no asset-class param, so the class is resolved from the symbol via
+  // resolveAssetClass (interim — flagged in B79.0n.MCE Step 3 diff per Langston C2;
+  // a future batch threading assetClass through the expectancy kernel removes it).
+  const costMetrics = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
   const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
   const friction = frictionPct * tradeMeta.entryPrice;
   

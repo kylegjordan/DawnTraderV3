@@ -582,7 +582,9 @@ export async function evaluateXstockPairForVTS(
         const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
 
         // Net EV gate.
-        const costMetrics = getCachedCostMetrics(symbol);
+        // B79.0n.MCE: assetClass REQUIRED — this is the xStock eval cycle, so
+        // the file-level ASSET_CLASS constant ('xstock_spot') is passed directly.
+        const costMetrics = getCachedCostMetrics(symbol, ASSET_CLASS);
         const totalFriction = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + spread;
         const DI = Math.min(100, Math.max(0, predictiveConfidence * 100));
         let kernelResult;

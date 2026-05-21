@@ -140,6 +140,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
       ohlcData: ohlc,
       dbsScore: 0.5,
       regimeConfig: DEFAULT_REGIME_CONFIG,
+      assetClass: 'crypto_spot' as const, // B79.0n.MCE: BackfillContext now requires assetClass.
     };
     const age = regimePhaseStore.tick('BTC/USD', 'TFS', ohlc[ohlc.length - 1].timestamp + 1, ctx);
     expect(age).toBe(0); // enteredAt = now → age 0
@@ -156,6 +157,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
       ohlcData: ohlc,
       dbsScore: 0.5,
       regimeConfig: DEFAULT_REGIME_CONFIG,
+      assetClass: 'crypto_spot' as const, // B79.0n.MCE: BackfillContext now requires assetClass.
     };
     const age = regimePhaseStore.tick('BTC/USD', 'TREND_FRIENDLY_STABLE', now, ctx);
     expect(age).toBe(12 * 60 * 60 * 1000); // exactly 12h (window cap)
@@ -168,6 +170,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
       ohlcData: ohlc,
       dbsScore: 0.5,
       regimeConfig: DEFAULT_REGIME_CONFIG,
+      assetClass: 'crypto_spot' as const, // B79.0n.MCE: BackfillContext now requires assetClass.
     };
     const age1 = regimePhaseStore.tick('BTC/USD', 'TREND_FRIENDLY_STABLE', now, ctx);
     expect(age1).toBe(12 * 60 * 60 * 1000);
@@ -184,6 +187,7 @@ describe('B67.3.5 — regimePhaseStore backfill from OHLC history', () => {
       ohlcData: ohlc,
       dbsScore: 0.5,
       regimeConfig: DEFAULT_REGIME_CONFIG,
+      assetClass: 'crypto_spot' as const, // B79.0n.MCE: BackfillContext now requires assetClass.
     };
     regimePhaseStore.tick('BTC/USD', 'TREND_FRIENDLY_STABLE', now, ctx);
     // Pair transitions to STRUCTURAL_TRANSITION — enteredAt should be the

@@ -50,37 +50,54 @@ import {
 import { CRYPTO_SPOT_FRICTION } from '../../asset_classes/crypto_spot/friction.js';
 import { XSTOCK_SPOT_FRICTION } from '../../asset_classes/xstock_spot/friction.js';
 import type { AssetClassFrictionModel } from '../../asset_classes/types.js';
-
-let _unknownAssetClassWarned = false;
+// B79.0n.MCE: AssetClass type for the REQUIRED-assetClass refactor. The prior
+// `assetClass: string = 'crypto_spot'` silent defaults + warn-once unknown
+// fallback are removed — no silent degradation (CLAUDE.md §11 + §15).
+import type { AssetClass } from '../../../shared/asset-classes.js';
 
 /**
- * B79: resolve the per-asset-class friction model. Defaults to crypto_spot
- * for back-compat. Unknown asset_class strings warn-once and fall back to
- * crypto_spot so a single misrouted signal cannot crash PM2.
+ * B79.0n.MCE: resolve the per-asset-class friction model. `assetClass` is
+ * REQUIRED — the prior crypto_spot silent default + warn-once unknown-class
+ * fallback are removed. An asset class with no friction model wired fails
+ * HARD (exhaustive switch). The throw is a deliberate forcing function: when
+ * perpetual-futures or any other asset class begins routing through the cost
+ * model, the error names exactly the work required before a consumer can
+ * reach this branch.
  */
-export function getFrictionForAssetClass(assetClass: string = 'crypto_spot'): AssetClassFrictionModel {
+export function getFrictionForAssetClass(assetClass: AssetClass): AssetClassFrictionModel {
   switch (assetClass) {
     case 'crypto_spot':
       return CRYPTO_SPOT_FRICTION;
     case 'xstock_spot':
       return XSTOCK_SPOT_FRICTION;
-    default:
-      if (!_unknownAssetClassWarned) {
-        // eslint-disable-next-line no-console
-        console.warn(`[B79][cost-model] unknown assetClass=${assetClass}; falling back to crypto_spot friction (warn-once)`);
-        _unknownAssetClassWarned = true;
-      }
-      return CRYPTO_SPOT_FRICTION;
+    case 'crypto_perp':
+    case 'xstock_perp':
+    case 'equity_spot':
+    case 'equity_futures':
+    case 'commodity_futures':
+    case 'fx_spot':
+      throw new Error(
+        `[B79.0n.MCE][cost-model] assetClass='${assetClass}' has no friction model wired. ` +
+        `Onboarding this asset class requires a friction module at ` +
+        `server/asset_classes/${assetClass}/friction.ts + a case in getFrictionForAssetClass. ` +
+        `File a RUNNING_ISSUES entry and scope the work before any consumer reaches this branch.`,
+      );
+    default: {
+      // Exhaustiveness check — if a new value is added to AssetClass, this
+      // assignment fails to compile until the switch handles it.
+      const _exhaustive: never = assetClass;
+      throw new Error(`[B79.0n.MCE][cost-model] unreachable assetClass=${String(_exhaustive)}`);
+    }
   }
 }
 
 /**
- * B79: per-asset-class default cost components (fee/slippage/spread).
+ * B79.0n.MCE: per-asset-class default cost components (fee/slippage/spread).
  * Used as the fallback when no per-symbol cached metrics are available.
- * Per-pair overrides (if any) supersede the defaults.
+ * Per-pair overrides (if any) supersede the defaults. `assetClass` REQUIRED.
  */
 export function getDefaultCostComponentsForAssetClass(
-  assetClass: string = 'crypto_spot',
+  assetClass: AssetClass,
   symbol?: string,
 ): CostComponents {
   const friction = getFrictionForAssetClass(assetClass);
@@ -108,7 +125,10 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
   return (fee * 2) + (slippage * 2) + spread;
 }
 
-export function getCachedCostMetrics(symbol: string, assetClass: string = 'crypto_spot'): CostComponents {
+export function getCachedCostMetrics(symbol: string, assetClass: AssetClass): CostComponents {
+  // B79.0n.MCE: `assetClass` is REQUIRED — the prior crypto_spot silent default
+  // is removed. Every caller passes an explicit asset class.
+  //
   // B79: cost-cache currently keyed by symbol only (no asset_class dimension).
   // Existing seed values for that cache are crypto_spot defaults from
   // exchange-defaults.ts, so this stays exact for crypto_spot back-compat.

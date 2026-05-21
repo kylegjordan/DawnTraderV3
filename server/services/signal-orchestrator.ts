@@ -497,8 +497,16 @@ export class SignalOrchestrator {
     let _phase15bDbsCategory: string = 'UNKNOWN';
     try {
       const mce = getMarketContextEngine();
-      const mceCtx = mce.computeContext(rawSignal.symbol);
-      _phase15bDbsCategory = mceCtx.directionalBias?.category ?? 'UNKNOWN';
+      // B79.0n.MCE: this observational telemetry wants the already-computed
+      // directionalBias category for the symbol — it must READ the cached
+      // context, not recompute it. The prior `computeContext(rawSignal.symbol)`
+      // call passed only a symbol (computeContext needs OHLC + price + volume),
+      // so it could never produce a real context — the try/catch silently
+      // swallowed the failure and this telemetry always emitted 'UNKNOWN'.
+      // getCachedContext is the correct read-only API; assetClass resolved
+      // from the symbol.
+      const mceCtx = mce.getCachedContext(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'));
+      _phase15bDbsCategory = mceCtx?.directionalBias?.category ?? 'UNKNOWN';
     } catch { /* MCE not ready */ }
     emitConsumerTelemetry({
       cycleId: Date.now(),
@@ -724,7 +732,8 @@ export class SignalOrchestrator {
       const outcomeFeedbackConfig = mce.getCurrentOutcomeFeedbackConfig();
       const regimeAgeConfig = mce.getCurrentRegimeAgeConfig();
       const fullRegimeConfig = mce.getCurrentRegimeConfig();
-      const symbolCtx = mce.getCachedContext(rawSignal.symbol);
+      // B79.0n.MCE: append required assetClass — the cache is keyed by (symbol, assetClass).
+      const symbolCtx = mce.getCachedContext(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'));
       const strategyKey = (rawSignal as any).strategy ?? 'unknown';
       const regimeLabel = extendedMetrics.regime ?? 'UNKNOWN';
       const baseConf = extendedMetrics.confidence ?? 0.5;
@@ -898,6 +907,9 @@ export class SignalOrchestrator {
               higherTfOhlc.length >= multiTfConfig.minHigherTfSamples ? higherTfOhlc : null,
               multiTfConfig,
               fullRegimeConfig ?? undefined,
+              // B79.0n.MCE: resolve the pair's asset class for the higher-TF
+              // re-classification (no assetClass var in scope at this hook).
+              resolveAssetClass(rawSignal.symbol, 'kraken'),
             );
             modulatedConfChain *= result.factor;
             alternateInputs.push({ kind: 'b68_1', result, config: multiTfConfig });
@@ -933,6 +945,9 @@ export class SignalOrchestrator {
             dbsSlope,
             macroModifier: macroValue,
             regimeConfig: fullRegimeConfig,
+            // B79.0n.MCE: resolve the pair's asset class for the b68_5
+            // label-counterfactual re-classification (no assetClass var in scope here).
+            assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
           });
           console.log(
             `[B68.5][gate] pair=${rawSignal.symbol} dbs=${dbsScore.toFixed(3)} ` +
@@ -1034,7 +1049,8 @@ export class SignalOrchestrator {
     // DEPRECATED: captureSignalForVTS() no longer called from signal orchestrator
 
     // Directive 11.3A: Compute net geometry with cost-aware adjustments
-    const costMetrics = getCachedCostMetrics(rawSignal.symbol);
+    // B79.0n.MCE: assetClass REQUIRED — resolved from the signal symbol.
+    const costMetrics = getCachedCostMetrics(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'));
     const netGeometry = computeNetGeometry(
       rawSignal.entryPrice,
       rawSignal.stopPrice,
@@ -1316,7 +1332,8 @@ export class SignalOrchestrator {
             category: ((poolPair as any).dbsCategory as string) || 'NEUTRAL',
             slope: (poolPair as any).dbsSlope as number | undefined,
           } : undefined;
-          const context = mce.computeContext(symbol, ohlcData, currentPrice, volume24h, undefined, propagatedDbs);
+          // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
+          const context = mce.computeContext(symbol, ohlcData, currentPrice, volume24h, undefined, propagatedDbs, resolveAssetClass(symbol, 'kraken'));
 
           // Pattern recognition
           const candles = ohlcData.map(d => ({
@@ -1466,7 +1483,8 @@ export class SignalOrchestrator {
         category: ((poolEntry as any).dbsCategory as string) || 'NEUTRAL',
         slope: (poolEntry as any).dbsSlope as number | undefined,
       } : undefined;
-      const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20, orchestratorDbs);
+      // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
+      const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20, orchestratorDbs, resolveAssetClass(symbol, 'kraken'));
 
       console.log(`[Phase13][MCE] ${symbol}: regime=${mceContext.regime.regime}, weight=${mceContext.regime.regimeWeight.toFixed(2)}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
 
@@ -1932,7 +1950,8 @@ export class SignalOrchestrator {
 
           if (entry <= 0 || target <= 0 || stop <= 0) return false;
 
-          const costMetrics = getCachedCostMetrics(symbol);
+          // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
+          const costMetrics = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
           const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
           const frictionPerUnit = frictionPct * entry;
           const DI = calculateDirectionalIntegrity(closePrices);

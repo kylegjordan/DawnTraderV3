@@ -25,6 +25,9 @@ import {
   REGIME_FAMILY,
   type MultiTfAgreementConfig,
 } from '../../core/metrics/multi-tf-agreement';
+// B79.0n.MCE: DEFAULT_REGIME_CONFIG needed so the test calls can pass the
+// (now-required) assetClass positional arg after the defaulted regimeConfig arg.
+import { DEFAULT_REGIME_CONFIG } from '../../core/metrics/market-regime';
 import type { OHLCData, MarketRegimeType } from '../../types/market-regime.types';
 import { REGIMES } from '../../config/canonical-regime-strategy-map';
 
@@ -108,7 +111,7 @@ describe('B68.1 multi-TF agreement', () => {
 
   describe('cold-start handling', () => {
     it('returns factor=1.0 + COLD_START when higher-TF OHLC is null', () => {
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, null, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, null, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       expect(result.factor).toBe(1.0);
       expect(result.agreement).toBe('COLD_START');
       expect(result.coldStart).toBe(true);
@@ -118,7 +121,7 @@ describe('B68.1 multi-TF agreement', () => {
 
     it('returns factor=1.0 + COLD_START when higher-TF OHLC has fewer than min samples', () => {
       const shortOhlc = makeStrongUpwardTrend(20); // 20 < 30 min
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, shortOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, shortOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       expect(result.factor).toBe(1.0);
       expect(result.agreement).toBe('COLD_START');
       expect(result.coldStart).toBe(true);
@@ -129,7 +132,7 @@ describe('B68.1 multi-TF agreement', () => {
   describe('three-state agreement', () => {
     it('CONFIRMED — both TFS yields factor=1.05 (boost)', () => {
       const higherTfOhlc = makeStrongUpwardTrend(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       // The higher-TF classifier should also land on TFS for strong-uptrend OHLC.
       // (Path A: positive momentum × ADX). If it does, agreement is CONFIRMED.
       // Tolerate COMPATIBLE if classifier lands on a sibling-family regime
@@ -151,6 +154,8 @@ describe('B68.1 multi-TF agreement', () => {
         REGIMES.STRUCTURAL_TRANSITION,
         makeStrongUpwardTrend(60),
         CFG,
+        DEFAULT_REGIME_CONFIG,
+        'crypto_spot' as const,
       );
       // Active=ST is in transition family; higher will be directional family.
       // eitherIsTransition→true → COMPATIBLE.
@@ -161,7 +166,7 @@ describe('B68.1 multi-TF agreement', () => {
 
     it('CONFLICTED — directional active vs range higher yields factor=0.95 (penalty)', () => {
       const higherTfOhlc = makeRangeBound(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       // Higher-TF should classify as RBS (low vol + low ADX + low DBS branch).
       // active=TFS (directional) vs higher=RBS (range) — neither is ST.
       // So agreement should be CONFLICTED.
@@ -174,7 +179,7 @@ describe('B68.1 multi-TF agreement', () => {
 
     it('COMPATIBLE — when active is ST and higher is anything (universal-compat)', () => {
       const higherTfOhlc = makeRangeBound(60);
-      const result = computeMultiTfAgreement(REGIMES.STRUCTURAL_TRANSITION, higherTfOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.STRUCTURAL_TRANSITION, higherTfOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       // Active is transition family → eitherIsTransition=true → COMPATIBLE
       // (unless labels happened to match exactly).
       expect(['CONFIRMED', 'COMPATIBLE']).toContain(result.agreement);
@@ -196,7 +201,7 @@ describe('B68.1 multi-TF agreement', () => {
           timestamp: i * 60_000,
         });
       }
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, ohlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, ohlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       // Whatever the higher-TF lands on, if it's ST → COMPATIBLE.
       if (result.higherTfRegime === REGIMES.STRUCTURAL_TRANSITION) {
         expect(result.agreement).toBe('COMPATIBLE');
@@ -214,7 +219,7 @@ describe('B68.1 multi-TF agreement', () => {
       const wideCfg: MultiTfAgreementConfig = { ...CFG, sensitivity: 1.0 };
       // confirmed → raw 1.0 + 0.5*1.0*2 = 2.0; clamp at factorMax=1.05.
       const higherTfOhlc = makeStrongUpwardTrend(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, wideCfg);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, wideCfg, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       if (result.agreement === 'CONFIRMED') {
         expect(result.factor).toBeCloseTo(1.05, 5); // clamped
       }
@@ -223,7 +228,7 @@ describe('B68.1 multi-TF agreement', () => {
     it('factor=1.0 when sensitivity=0 (rollback path)', () => {
       const flatCfg: MultiTfAgreementConfig = { ...CFG, sensitivity: 0 };
       const higherTfOhlc = makeStrongUpwardTrend(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, flatCfg);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, flatCfg, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       // sensitivity=0 → raw = 1.0 + 0 = 1.0 regardless of agreementScore.
       expect(result.factor).toBeCloseTo(1.0, 5);
     });
@@ -232,7 +237,7 @@ describe('B68.1 multi-TF agreement', () => {
   describe('higher-TF classifier reuse', () => {
     it('exposes higher-TF metrics in result for ablation metadata', () => {
       const higherTfOhlc = makeStrongUpwardTrend(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       expect(result.higherTfSampleCount).toBe(60);
       expect(typeof result.higherTfVolatility).toBe('number');
       expect(typeof result.higherTfMomentum).toBe('number');
@@ -242,7 +247,7 @@ describe('B68.1 multi-TF agreement', () => {
 
     it('higher-TF Path A only — DBS=0 hardcoded; classifier still classifies meaningfully', () => {
       const higherTfOhlc = makeStrongUpwardTrend(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       // With DBS=0 the classifier should still find TFS via Path A (mom + ADX).
       expect(result.higherTfRegime).not.toBeNull();
       expect(result.higherTfMomentum).toBeGreaterThan(0); // positive trend
@@ -252,7 +257,7 @@ describe('B68.1 multi-TF agreement', () => {
   describe('buildB68_1Alternate (counterfactual)', () => {
     it('emits ablation row with explicit zero higher-TF DBS fields (refinement D.1)', () => {
       const higherTfOhlc = makeStrongUpwardTrend(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       const alt = buildB68_1Alternate(0.85, 'TREND_FRIENDLY_STABLE', result, CFG);
       expect(alt.factorName).toBe('b68_1_multi_tf_agreement');
       expect(alt.factorState).toBe('alternate_disabled');
@@ -266,7 +271,7 @@ describe('B68.1 multi-TF agreement', () => {
 
     it('counterfactual divide-out approximation', () => {
       const higherTfOhlc = makeStrongUpwardTrend(60);
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, higherTfOhlc, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       const realConf = 0.85;
       const alt = buildB68_1Alternate(realConf, 'TREND_FRIENDLY_STABLE', result, CFG);
       // confidence_without_factor × factor === confidence_with_factor (within rounding)
@@ -275,7 +280,7 @@ describe('B68.1 multi-TF agreement', () => {
     });
 
     it('cold-start ablation row carries cold_start flag + COLD_START agreement label', () => {
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, null, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, null, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       const alt = buildB68_1Alternate(0.7, 'TREND_FRIENDLY_STABLE', result, CFG);
       expect(alt.alternateDecision.metadata?.cold_start).toBe(true);
       expect(alt.alternateDecision.metadata?.agreement).toBe('COLD_START');
@@ -284,7 +289,7 @@ describe('B68.1 multi-TF agreement', () => {
     });
 
     it('zero-factor safety — alternate falls back to realConfidence', () => {
-      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, null, CFG);
+      const result = computeMultiTfAgreement(REGIMES.TREND_FRIENDLY_STABLE, null, CFG, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       const corrupted: typeof result = { ...result, factor: 0 };
       const alt = buildB68_1Alternate(0.7, 'TREND_FRIENDLY_STABLE', corrupted, CFG);
       // factor=0 path returns realConfidence (no division-by-zero blowup)

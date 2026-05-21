@@ -969,7 +969,10 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   const cfg = resolveTECConfig(assetClass);
 
   // Directive 11.3A: Get cost metrics for net-aware floor calculations
-  const costMetrics = getCachedCostMetrics(update.symbol);
+  // B79.0n.MCE: assetClass REQUIRED — the TEC controller already carries the
+  // per-trade `assetClass` (resolved above for resolveTECConfig), so the cost
+  // lookup uses that cycle-context value directly.
+  const costMetrics = getCachedCostMetrics(update.symbol, assetClass);
   const netBreakeven = computeNetBreakeven(state.entryPrice, costMetrics);
   // B65.4.1 (2026-04-26): rung floor placement uses a slippage buffer above the
   // just-hit target so reversals can't fall below the gain we already achieved.

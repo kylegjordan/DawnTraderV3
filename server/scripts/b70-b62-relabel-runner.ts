@@ -154,6 +154,9 @@ async function relabelOne(
           0, // dbsSlope — unavailable historically; 0 is the safe default
           1.0, // macroModifier — unavailable historically; neutral
           DEFAULT_REGIME_CONFIG,
+          // B79.0n.MCE: one-off relabel script — pass crypto_spot explicitly
+          // (the required assetClass arg; this runner has no per-class context).
+          'crypto_spot' as const,
         );
         const retroactiveLabel = result.regime;
         const labelDiff = originalLabel !== retroactiveLabel;

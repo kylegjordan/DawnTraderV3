@@ -41,6 +41,9 @@ import { buildB68_2Alternate, type VolumeRegimeResult, type VolumeRegimeConfig }
 import { buildB68_3Alternate, type PairCorrelationResult, type PairCorrelationConfig } from '../core/metrics/pair-correlation.js';
 import { buildB68_4Alternate, buildB68_5Alternate } from '../core/metrics/regime-age-factor.js';
 import type { OHLCData, RegimeConfig } from '../types/market-regime.types.js';
+// B79.0n.MCE: AssetClass threaded into the b68_5 ablation input so the
+// label-counterfactual re-classification uses the pair's real asset class.
+import type { AssetClass } from '../../shared/asset-classes.js';
 
 /**
  * Discriminated-union inputs for every factor that emits an alternate row.
@@ -104,6 +107,10 @@ export type FactorAlternateInput =
       dbsSlope: number;
       macroModifier: number;
       regimeConfig: RegimeConfig;
+      // B79.0n.MCE: REQUIRED — the pair's asset class. `buildB68_5Alternate`
+      // re-runs `calculatePairRegime`, which now requires an explicit asset
+      // class so the counterfactual uses the correct per-class thresholds.
+      assetClass: AssetClass;
     };
 
 /**
@@ -178,6 +185,7 @@ function buildOneAlternate(
         input.regimeConfig,
         realRegimeLabel,
         realConfidenceFinal,
+        input.assetClass, // B79.0n.MCE: pair's asset class threaded via FactorAlternateInput.
       );
     default: {
       // Exhaustiveness check — TS errors if a kind is missing

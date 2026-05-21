@@ -28,6 +28,9 @@ import { SYSTEM_GUARDS } from '../config/system-guards.js';
 // B72 (2026-05-05): CALIBRATION_TRIGGER_INTERVAL moved to module='vts_service'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 import { computeTotalRoundTripCost, getCachedCostMetrics } from '../core/math/cost-model.js';
+// B79.0n.MCE: resolveAssetClass — getCachedCostMetrics now REQUIRES an explicit
+// asset class; resolved from the signal symbol.
+import { resolveAssetClass } from '../../shared/asset-classes.js';
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
@@ -331,7 +334,8 @@ export class VTSService extends EventEmitter {
     }
 
     const grossProfit = (exitPrice - entry) / entry;
-    const costMetrics = getCachedCostMetrics(signal.symbol);
+    // B79.0n.MCE: assetClass REQUIRED — resolved from the signal symbol.
+    const costMetrics = getCachedCostMetrics(signal.symbol, resolveAssetClass(signal.symbol, 'kraken'));
     const frictionRate = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
     const netProfit = grossProfit - frictionRate;
 

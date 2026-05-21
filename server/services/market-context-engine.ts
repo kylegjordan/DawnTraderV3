@@ -39,6 +39,11 @@ import type {
   MCEConfig,
   MacroContext,
 } from '../types/market-context.js';
+// B79.0n.MCE: AssetClass type for the REQUIRED-assetClass refactor of
+// computeContext + getCachedContext. The per-symbol context cache key is
+// extended from `${symbol}` to `${symbol}:${assetClass}` to prevent any
+// cross-asset-class cache pollution at the symbol level.
+import type { AssetClass } from '../../shared/asset-classes.js';
 import { DEFAULT_MCE_CONFIG } from '../types/market-context.js';
 import type { OHLCData, RegimeCalculationResult, RegimeConfig } from '../types/market-regime.types';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
@@ -70,7 +75,7 @@ import {
   type MacroModifierConfig,
   type MacroModifierResult,
 } from '../core/metrics/macro-modifier.js';
-import { getConstant, getCachedConstant } from './module-constants-service.js';
+import { getConstant, getCachedConstant, countModuleRowsByAssetClass } from './module-constants-service.js';
 // B67.2: phase dimension (EARLY/PRIME/LATE on existing 5 regimes).
 // Per-pair age tracked by regimePhaseStore singleton; MCE ticks the store on
 // every cycle and computes the phase from age + boundary constants. Phase
@@ -316,6 +321,14 @@ export class MarketContextEngine {
         this.firstRefreshPending = false;
         this.assembleRegimeConfig();
         console.log('[Phase14][MCE] First refresh complete — all 9 config groups loaded');
+        // B79.0n.MCE — verification anchor (Langston Step 2 C5): confirm the
+        // per-class `dbs_calculation` rows from the B79.0n.MCE seed migration
+        // are physically present post-restart. countModuleRowsByAssetClass
+        // counts EXACT asset_class rows (no resolver fall-through), so this
+        // log proves the migration applied — not just that the resolver found
+        // SOME row. Absence of this line, or crypto/xstock counts of 0, is the
+        // Step 8 signal that the migration didn't take.
+        void this.logDbsCalculationRowCoverage();
       } catch (err) {
         console.error(
           '[Phase14][MCE] First refresh failed; will retry on next timer tick:',
@@ -347,6 +360,30 @@ export class MarketContextEngine {
       }
     }));
     this.assembleRegimeConfig();
+  }
+
+  /**
+   * B79.0n.MCE — verification-anchor probe (Langston Step 2 C5). Logs the
+   * count of explicit per-asset-class `dbs_calculation` rows so Step 8
+   * verification has a positive signal that the seed migration applied.
+   * Best-effort: a probe failure logs but does not disrupt MCE startup.
+   */
+  private async logDbsCalculationRowCoverage(): Promise<void> {
+    try {
+      const counts = await countModuleRowsByAssetClass('dbs_calculation');
+      const cryptoN = counts['crypto_spot'] ?? 0;
+      const xstockN = counts['xstock_spot'] ?? 0;
+      console.log(
+        `[B79.0n.MCE][CACHE_REFRESH] picked up ${cryptoN + xstockN} module_constants rows ` +
+        `for asset_class=crypto_spot+xstock_spot (modules: dbs_calculation; ` +
+        `crypto_spot=${cryptoN}, xstock_spot=${xstockN})`,
+      );
+    } catch (err) {
+      console.error(
+        '[B79.0n.MCE][CACHE_REFRESH] probe failed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   /** B68.5 + B67.3.5 + B67.5-prep: assemble final RegimeConfig from sub-states. */
@@ -766,9 +803,13 @@ export class MarketContextEngine {
    * symbol from MCE's per-symbol cache (60s TTL). Returns null if the cache
    * entry is missing or expired. Consumers (ablation hooks downstream of
    * computeContext) use this to read phase + age without re-computing.
+   *
+   * B79.0n.MCE: `assetClass` is REQUIRED — the cache is keyed by
+   * (symbol, assetClass). A reader must know the asset class to retrieve the
+   * context that `computeContext` stored for that same (symbol, assetClass).
    */
-  getCachedContext(symbol: string): MarketContext | null {
-    const entry = this.cache.get(symbol);
+  getCachedContext(symbol: string, assetClass: AssetClass): MarketContext | null {
+    const entry = this.cache.get(`${symbol}:${assetClass}`);
     if (!entry) return null;
     if (entry.expiresAt < Date.now()) return null;
     return entry.context;
@@ -851,21 +892,36 @@ export class MarketContextEngine {
    * @param ohlcData - OHLC candles in OHLCData format
    * @param currentPrice - Smoothed current price (from Kalman filter or raw)
    * @param volume24h - 24h volume from ticker
-   * @param smaPeriod - Optional SMA period override (default from config)
+   * @param smaPeriod - SMA period override, or undefined to use config default
    */
   computeContext(
     symbol: string,
     ohlcData: OHLCData[],
     currentPrice: number,
     volume24h: number,
-    smaPeriod?: number,
-    propagatedDbs?: { score: number; category: string; slope?: number }, // B63: DBS propagated from FX5 scanner pre-filter (REQUIRED for crypto_spot; synthesized neutral for non-crypto per B79.0m.b)
-    assetClass: string = 'crypto_spot', // B79.0m.b: asset-class param + conditional DBS + per-class macro modifier. Default crypto_spot preserves back-compat.
+    // B79.0n.MCE: smaPeriod + propagatedDbs are now required-but-nullable
+    // (`T | undefined` rather than `T?`). TypeScript forbids a REQUIRED
+    // parameter (assetClass, below) from following an OPTIONAL one (TS1016),
+    // so these become positionally-required — callers already pass them
+    // positionally (every call site passes 6-7 args, some with `undefined`),
+    // so this is signature-shape-only, no caller change.
+    smaPeriod: number | undefined,
+    propagatedDbs: { score: number; category: string; slope?: number } | undefined, // B63: DBS propagated from FX5 scanner pre-filter (REQUIRED for crypto_spot; synthesized neutral for non-crypto per B79.0m.b)
+    // B79.0n.MCE: REQUIRED — the prior `assetClass: string = 'crypto_spot'`
+    // silent default is removed. Every caller passes an explicit asset class.
+    assetClass: AssetClass,
   ): MarketContext {
     const now = Date.now();
 
+    // B79.0n.MCE: per-symbol context cache is keyed by (symbol, assetClass).
+    // The prior `${symbol}`-only key risked serving a wrong-class context if
+    // the same symbol string were ever computed for two asset classes within
+    // the 60s TTL window. Defense-in-depth — symbol namespaces don't collide
+    // today, but the dimension is bounded (≤8 classes) so the cost is trivial.
+    const cacheKey = `${symbol}:${assetClass}`;
+
     // Check cache
-    const cached = this.cache.get(symbol);
+    const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       return cached.context;
     }
@@ -977,6 +1033,9 @@ export class MarketContextEngine {
       dbsSlope,
       macroModifierValue,
       this.regimeConfig,
+      // B79.0n.MCE: thread the cycle's asset class so xstock_spot signals are
+      // classified against xStock regime thresholds, not crypto's.
+      assetClass,
     );
 
     // ── B67.2: tick regime-phase store + compute phase ────────────────────
@@ -996,6 +1055,7 @@ export class MarketContextEngine {
       ohlcData,
       dbsScore: directionalBias.score,
       regimeConfig: this.regimeConfig,
+      assetClass, // B79.0n.MCE: thread asset class into the backfill walk's calculatePairRegime call.
     });
     const phase: RegimePhase = computePhase(
       phaseAgeMs,
@@ -1054,8 +1114,8 @@ export class MarketContextEngine {
       macro: macroContext,
     };
 
-    // Cache
-    this.cache.set(symbol, {
+    // Cache — B79.0n.MCE: keyed by (symbol, assetClass) via `cacheKey` above.
+    this.cache.set(cacheKey, {
       context,
       expiresAt: now + this.config.cacheTTLMs,
     });

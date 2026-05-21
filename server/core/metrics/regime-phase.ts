@@ -40,6 +40,9 @@
 import * as fs from 'fs';
 import type { OHLCData, RegimeConfig } from '../../types/market-regime.types';
 import { calculatePairRegime } from './market-regime';
+// B79.0n.MCE: AssetClass threaded through BackfillContext so the backfill
+// walk re-runs calculatePairRegime with the pair's real asset class.
+import type { AssetClass } from '../../../shared/asset-classes';
 
 export type RegimePhase = 'EARLY' | 'PRIME' | 'LATE';
 
@@ -68,6 +71,12 @@ export interface BackfillContext {
   dbsScore: number;
   /** Resolved regime config from module_constants. */
   regimeConfig: RegimeConfig;
+  /**
+   * B79.0n.MCE: REQUIRED — the pair's asset class. The backfill walk re-runs
+   * `calculatePairRegime`, which now requires an explicit asset class so the
+   * historical re-classification uses the correct per-class regime thresholds.
+   */
+  assetClass: AssetClass;
   /** Optional: number of windows to walk backward (default 12). */
   windowsToWalk?: number;
   /** Optional: window size in ms (default 60min). */
@@ -264,6 +273,7 @@ class RegimePhaseStore {
              // RegimeConfig.b68_5DbsSlopeMin = 0 means slope=0 admits.
         1.0, // identity macro modifier — backfill is for label, not modulation
         ctx.regimeConfig,
+        ctx.assetClass, // B79.0n.MCE: pair's asset class threaded via BackfillContext.
       );
       if (result.regime !== currentRegime) {
         // Found the boundary: pair was in a different regime at window w,

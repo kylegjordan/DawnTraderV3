@@ -272,20 +272,10 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
   });
 
   describe('Cost Metrics', () => {
-    it('should update and retrieve transaction cost factor', async () => {
-      const { updateCostData, getTransactionCostFactor, clearCostCache } = await import('../../core/metrics/cost-metrics.js');
-      clearCostCache();
-      
-      const spread = 0.001;
-      const slippage = 0.0005;
-      const avgReturn = 0.005;
-      
-      const data = updateCostData('BTC/USD', spread, slippage, avgReturn);
-      
-      expect(data.costFactor).toBe((spread + slippage) / avgReturn);
-      expect(getTransactionCostFactor('BTC/USD')).toBe(data.costFactor);
-    });
-
+    // B79.0n.MCE (2026-05-21, Langston Q-VI option a): removed the
+    // 'should update and retrieve transaction cost factor' test — it
+    // exclusively exercised the dead-code chain (updateCostData +
+    // getTransactionCostFactor) deleted from cost-metrics.ts this batch.
     it('should classify costs correctly', async () => {
       const { getCostClassification } = await import('../../core/metrics/cost-metrics.js');
       

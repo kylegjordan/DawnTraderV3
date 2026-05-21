@@ -52,6 +52,9 @@ import type {
   FactorAlternate,
   RegimeDecision,
 } from '../../services/factor-ablation-emitter.js';
+// B79.0n.MCE: AssetClass threaded into computeMultiTfAgreement so the
+// higher-TF re-classification uses the pair's real asset class.
+import type { AssetClass } from '../../../shared/asset-classes.js';
 
 /**
  * Family grouping for cross-TF agreement scoring. Logic-only (not tunable):
@@ -112,6 +115,10 @@ export function computeMultiTfAgreement(
   higherTfOhlc: OHLCData[] | null,
   config: MultiTfAgreementConfig,
   regimeConfig: RegimeConfig = DEFAULT_REGIME_CONFIG,
+  // B79.0n.MCE: REQUIRED — the pair's asset class. Passed through to the
+  // higher-TF `calculatePairRegime` call, which now requires an explicit
+  // asset class so the higher-TF re-classification uses per-class thresholds.
+  assetClass: AssetClass,
 ): MultiTfAgreementResult {
   // Cold-start guard: insufficient higher-TF samples. Returns identity factor.
   if (!higherTfOhlc || higherTfOhlc.length < config.minHigherTfSamples) {
@@ -138,6 +145,7 @@ export function computeMultiTfAgreement(
     0, // higherTfDbsSlope — Path A only in v1
     1.0, // macroModifier — no compounding
     regimeConfig,
+    assetClass, // B79.0n.MCE: pair's asset class threaded into the higher-TF re-classification.
   );
 
   // Three-state agreement

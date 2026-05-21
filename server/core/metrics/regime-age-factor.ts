@@ -30,6 +30,9 @@ import type { OHLCData, RegimeConfig } from '../../types/market-regime.types.js'
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { calculatePairRegime, computeMomentum, computeADX } from './market-regime.js';
 import { REGIMES } from '../../config/canonical-regime-strategy-map.js';
+// B79.0n.MCE: AssetClass threaded through buildB68_5Alternate so the
+// label-counterfactual re-classification uses the pair's real asset class.
+import type { AssetClass } from '../../../shared/asset-classes.js';
 
 // ─── B68.4 — Freshness factor ─────────────────────────────────────────────
 
@@ -126,6 +129,10 @@ export function buildB68_5Alternate(
   regimeConfig: RegimeConfig,
   realRegimeLabel: string,
   realConfidence: number,
+  // B79.0n.MCE: REQUIRED — the pair's asset class. Passed through to the
+  // re-run of `calculatePairRegime`, which now requires an explicit asset
+  // class so the counterfactual uses the correct per-class thresholds.
+  assetClass: AssetClass,
 ): FactorAlternate {
   // Re-run classification with the gate effectively disabled (momentum min
   // very permissive). Any pair that was REJECTED by the real classifier's
@@ -143,6 +150,7 @@ export function buildB68_5Alternate(
     dbsSlope,
     macroModifier,
     ungatedConfig,
+    assetClass, // B79.0n.MCE: pair's asset class threaded into the counterfactual re-classification.
   );
   const gateFlipped = altResult.regime !== realRegimeLabel;
   const realMomentum = computeMomentum(ohlcData);

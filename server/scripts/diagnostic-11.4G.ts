@@ -153,7 +153,9 @@ async function runDiagnosticSweep(pairLimit: number = 100): Promise<void> {
     // Diagnostic script — identity dbsSlope (0) + identity modifier (1.0) +
     // default regime config explicitly. Default config sets b68_5DbsSlopeMin=0
     // so Path B always admits in the diagnostic.
-    const regimeResult = calculatePairRegime(ohlcData, 0, 0, 1.0, DEFAULT_REGIME_CONFIG);
+    // B79.0n.MCE: one-off diagnostic script — pass crypto_spot explicitly
+    // (the required assetClass arg; this script has no per-asset-class context).
+    const regimeResult = calculatePairRegime(ohlcData, 0, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
     trace.regime = regimeResult.regime;
     
     const candles = ohlcData.map(o => ({

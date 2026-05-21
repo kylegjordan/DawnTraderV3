@@ -913,7 +913,8 @@ async function generatePhase10Signal(
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
   // B63: DBS is a hard pipeline contract — must be propagated from scanner via pair object.
-  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, propagatedDbs);
+  // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
+  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, propagatedDbs, resolveAssetClass(symbol, 'kraken'));
   const regimeResult = mceContext.raw;
   const regime = regimeResult.regime;
 
@@ -1167,7 +1168,8 @@ async function generatePhase10Signal(
   
   const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
   
-  const costMetrics = getCachedCostMetrics(symbol);
+  // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
+  const costMetrics = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
   const frictionCost = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
   
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1442,7 +1444,8 @@ async function generatePhase10Signal(
       try { const ta = getTelemetryAggregator(); return ta.getDominantRegime?.()?.regime ?? regime; } catch { return regime; }
     })(),
     pairFriction: (() => {
-      const cm = getCachedCostMetrics(symbol);
+      // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
+      const cm = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     })(),
     globalFriction: getGlobalFriction(), // HF6: Read cached global friction from market-indicators
@@ -1581,7 +1584,8 @@ async function generatePhase10Signal(
     const _macro = _mce.getCurrentMacroContext();
     const _macroConfig = _mce.getCurrentMacroConfig();
     const _phaseWeights = _mce.getCurrentPhaseWeights();
-    const _ctx = _mce.getCachedContext(symbol);
+    // B79.0n.MCE: append required assetClass — the cache is keyed by (symbol, assetClass).
+    const _ctx = _mce.getCachedContext(symbol, resolveAssetClass(symbol, 'kraken'));
 
     // B67.1 macro modifier — stash for chain-final dispatch
     if (_macro === null || _macroConfig === null) {
@@ -1749,6 +1753,9 @@ async function generatePhase10Signal(
           higherTfOhlc.length >= _multiTfConfig.minHigherTfSamples ? higherTfOhlc : null,
           _multiTfConfig,
           _fullRegimeConfig ?? undefined,
+          // B79.0n.MCE: resolve the pair's asset class for the higher-TF
+          // re-classification (no assetClass var in scope at this hook).
+          resolveAssetClass(symbol, 'kraken'),
         );
         _modulatedConfChain *= result.factor;
         _alternateInputs.push({ kind: 'b68_1', result, config: _multiTfConfig });
@@ -1782,6 +1789,9 @@ async function generatePhase10Signal(
           dbsSlope,
           macroModifier: macroValue,
           regimeConfig: _fullRegimeConfig,
+          // B79.0n.MCE: resolve the pair's asset class for the b68_5
+          // label-counterfactual re-classification (no assetClass var in scope here).
+          assetClass: resolveAssetClass(symbol, 'kraken'),
         });
         console.log(
           `[B68.5][gate] pair=${symbol} dbs=${dbsScore.toFixed(3)} ` +
@@ -2871,7 +2881,8 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
   })();
   const resolvedPairFriction = input.pairFriction ?? (() => {
     try {
-      const cm = getCachedCostMetrics(input.symbol);
+      // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
+      const cm = getCachedCostMetrics(input.symbol, resolveAssetClass(input.symbol, 'kraken'));
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     } catch {
       return undefined;
@@ -3208,7 +3219,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             slope: (pair as any).dbsSlope as number | undefined,
           }
         : undefined;
-      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, pairPropagatedDbs);
+      // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
+      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, pairPropagatedDbs, resolveAssetClass(pair.symbol, 'kraken'));
       const pairRegime = mceContext.regime.regime as MarketRegimeType;
       const regimeStrategies = getStrategiesForRegime(pairRegime);
       

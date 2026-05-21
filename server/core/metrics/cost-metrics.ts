@@ -25,15 +25,12 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { updateCachedCostMetrics, getCachedCostMetrics as getCostModelMetrics } from '../math/cost-model.js';
-import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE, DEFAULT_SPREAD as CANONICAL_SPREAD } from '../../config/exchange-defaults.js';
-// B72 (2026-05-05): DEFAULT_AVG_RETURN moved to module='cost_model'.
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
-
-function getDefaultAvgReturn(): number {
-  return getCachedNumberRequired('cost_model', 'default_avg_return',
-    { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
-}
+// B79.0n.MCE (2026-05-21, Langston Q-VI option a): removed the dead cost-model
+// import alias + the getCachedNumberRequired import + getDefaultAvgReturn — all
+// three were used only by the now-deleted dead-code chain (getDefaultAvgReturn /
+// updateCostData / getTransactionCostFactor). The chain had zero production
+// callers (test-only). See B79.0n.MCE completion report for the disposition.
+import { DEFAULT_SPREAD as CANONICAL_SPREAD } from '../../config/exchange-defaults.js';
 
 export interface CostData {
   symbol: string;
@@ -47,21 +44,9 @@ export interface CostData {
 
 const costCache: Map<string, CostData> = new Map();
 const spreadCache: Map<string, { spread: number; timestamp: number }> = new Map();
-const CACHE_TTL_MS = 60_000;
 const SPREAD_CACHE_TTL_MS = 30_000;
 
-const DEFAULT_SLIPPAGE = CANONICAL_SLIPPAGE;     // Batch 18J: from exchange-defaults.ts (0.05%)
-// DEFAULT_AVG_RETURN now read via getDefaultAvgReturn() (B72).
-const DEFAULT_FEE = DEFAULT_TAKER_FEE;           // Batch 18J: from exchange-defaults.ts (0.26%)
 const DEFAULT_SPREAD = CANONICAL_SPREAD;          // Batch 18J: from exchange-defaults.ts (0.10%)
-
-export function getTransactionCostFactor(symbol: string): number {
-  const cached = costCache.get(symbol);
-  if (cached && Date.now() - cached.timestamp.getTime() < CACHE_TTL_MS) {
-    return cached.costFactor;
-  }
-  return 0.0005;
-}
 
 export async function getCurrentSpread(symbol: string): Promise<number> {
   const cached = spreadCache.get(symbol);
@@ -101,43 +86,12 @@ export function getCachedSpread(symbol: string): number {
   return DEFAULT_SPREAD;
 }
 
-export function updateSpreadCache(symbol: string, spread: number): void {
-  spreadCache.set(symbol, { spread, timestamp: Date.now() });
-  const costModelMetrics = getCostModelMetrics(symbol);
-  updateCachedCostMetrics(symbol, costModelMetrics.fee, costModelMetrics.slippage, spread);
-}
-
-export function updateCostData(
-  symbol: string,
-  spread: number,
-  slippage: number = DEFAULT_SLIPPAGE,
-  avgReturn: number = getDefaultAvgReturn(),
-  fee: number = DEFAULT_FEE
-): CostData {
-  if (avgReturn <= 0) {
-    console.warn(`[11.3A][CostMetrics] Invalid avgReturn for ${symbol}: ${avgReturn}`);
-    avgReturn = getDefaultAvgReturn();
-  }
-
-  const costFactor = (spread + slippage) / avgReturn;
-  
-  const data: CostData = {
-    symbol,
-    spread,
-    slippage,
-    costFactor,
-    avgReturn,
-    fee,
-    timestamp: new Date(),
-  };
-
-  costCache.set(symbol, data);
-  updateCachedCostMetrics(symbol, fee, slippage, spread);
-  
-  console.log(`[11.3A][CostMetrics] ${symbol} costFactor=${costFactor.toFixed(4)} (spread=${(spread * 100).toFixed(3)}%, slippage=${(slippage * 100).toFixed(3)}%, fee=${(fee * 100).toFixed(3)}%)`);
-  
-  return data;
-}
+// B79.0n.MCE (2026-05-21, Langston Q-VI option a): updateSpreadCache +
+// updateCostData were deleted as dead code. updateSpreadCache had zero
+// consumers anywhere in the codebase; updateCostData + getTransactionCostFactor
+// were exercised only by an integration test. The chain was a Directive-11.3A
+// orphan that B72 incidentally migrated a constant for. Deleting it removed
+// the last consumer of cost_model.default_avg_return.
 
 export function getCostCache(): Map<string, CostData> {
   return new Map(costCache);

@@ -2019,7 +2019,8 @@ export class PaperExecutionEngine {
       // from MCE's cached snapshot for this symbol; values may be undefined if
       // MCE cache is cold for this pair (rare).
       const _b67_2_1_mce = (() => { try { return getMarketContextEngine(); } catch { return null; } })();
-      const _b67_2_1_ctx = _b67_2_1_mce?.getCachedContext(signal.symbol) ?? null;
+      // B79.0n.MCE: append required assetClass — the cache is keyed by (symbol, assetClass).
+      const _b67_2_1_ctx = _b67_2_1_mce?.getCachedContext(signal.symbol, resolveAssetClass(signal.symbol, 'kraken')) ?? null;
       const _b67_2_1_macro = _b67_2_1_mce?.getCurrentMacroContext() ?? null;
       const _b67_2_1_phaseWeights = _b67_2_1_mce?.getCurrentPhaseWeights() ?? null;
       const _b67_2_1_phase = _b67_2_1_ctx?.regime.phase ?? null;

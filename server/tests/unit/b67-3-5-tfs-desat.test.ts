@@ -65,7 +65,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
     // upward move that the last 30 candles alone show ≥ 2% momentum (the
     // saturation point for the default 0.020 momentum scale).
     const ohlc = makeOhlc({ count: 60, endPrice: 106, perStepNoise: 0.001 });
-    const result = calculatePairRegime(ohlc, 0.7, 0, 1.0, DEFAULT_REGIME_CONFIG);
+    const result = calculatePairRegime(ohlc, 0.7, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
     expect(result.regime).toBe(REGIMES.TREND_FRIENDLY_STABLE);
     expect(result.confidence).toBeGreaterThan(0.80);
     expect(result.confidence).toBeLessThanOrEqual(0.90);
@@ -74,7 +74,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
   it('moderate pair lands in the mid range (~0.55-0.75)', () => {
     // Moderate momentum (~1%), moderate vol, |DBS|=0.4
     const ohlc = makeOhlc({ endPrice: 101, perStepNoise: 0.005 });
-    const result = calculatePairRegime(ohlc, 0.4, 0, 1.0, DEFAULT_REGIME_CONFIG);
+    const result = calculatePairRegime(ohlc, 0.4, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
     if (result.regime === REGIMES.TREND_FRIENDLY_STABLE) {
       expect(result.confidence).toBeGreaterThanOrEqual(0.50);
       expect(result.confidence).toBeLessThan(0.80);
@@ -85,7 +85,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
     // Even with positive momentum, |DBS|=0 collapses the multiplicative product
     // → factor product = 0 → confidence = min (0.50).
     const ohlc = makeOhlc({ endPrice: 102, perStepNoise: 0.001 });
-    const result = calculatePairRegime(ohlc, 0, 0, 1.0, DEFAULT_REGIME_CONFIG);
+    const result = calculatePairRegime(ohlc, 0, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
     if (result.regime === REGIMES.TREND_FRIENDLY_STABLE) {
       expect(result.confidence).toBeCloseTo(0.50, 2);
     }
@@ -101,7 +101,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
     ];
     for (const c of cases) {
       const ohlc = makeOhlc({ endPrice: c.end, perStepNoise: c.noise });
-      const result = calculatePairRegime(ohlc, c.dbs, 0, 1.0, DEFAULT_REGIME_CONFIG);
+      const result = calculatePairRegime(ohlc, c.dbs, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
       if (result.regime === REGIMES.TREND_FRIENDLY_STABLE) {
         // Pre-modifier raw is what the desat formula produces; macroModifier=1.0
         // makes post-modifier == raw. Final clamp is [0.4, 1.0], so we check
@@ -114,8 +114,8 @@ describe('B67.3.5 — TFS branch desaturation', () => {
 
   it('macro modifier still scales the desaturated raw confidence', () => {
     const ohlc = makeOhlc({ count: 60, endPrice: 106, perStepNoise: 0.001 });
-    const baseline = calculatePairRegime(ohlc, 0.7, 0, 1.0, DEFAULT_REGIME_CONFIG);
-    const boosted = calculatePairRegime(ohlc, 0.7, 0, 1.05, DEFAULT_REGIME_CONFIG);
+    const baseline = calculatePairRegime(ohlc, 0.7, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
+    const boosted = calculatePairRegime(ohlc, 0.7, 0, 1.05, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
     if (baseline.regime === REGIMES.TREND_FRIENDLY_STABLE) {
       // boosted ≈ baseline × 1.05 (until clamped at 1.0 ceiling)
       const expected = Math.min(baseline.confidence * 1.05, 1.0);
@@ -134,7 +134,7 @@ describe('B67.3.5 — TFS branch desaturation', () => {
       b68_5DbsSlopeMin: 0.0,
       b67_5PostCompositionFloor: 0.45,
     };
-    const result = calculatePairRegime(ohlc, 0.7, 0, 1.0, tightConfig);
+    const result = calculatePairRegime(ohlc, 0.7, 0, 1.0, tightConfig, 'crypto_spot' as const);
     if (result.regime === REGIMES.TREND_FRIENDLY_STABLE) {
       expect(result.confidence).toBeGreaterThanOrEqual(0.60);
       expect(result.confidence).toBeLessThanOrEqual(0.80);

@@ -619,7 +619,11 @@ class ReadyToBuyService {
     let geometryRefreshed = false;
     
     if (shouldRecalculateGeometry(signal, currentVol, currentSpread)) {
-      const costMetrics = getCachedCostMetrics(normalizedSymbol);
+      // B79.0n.MCE: getCachedCostMetrics now REQUIRES assetClass. RtbSignal DB
+      // rows lack an asset_class column (schema gap tracked for RTB batch #11),
+      // so the class is resolved from the symbol via resolveAssetClass — the
+      // same interim STORAGE established for the RTB SQEInput sites.
+      const costMetrics = getCachedCostMetrics(normalizedSymbol, resolveAssetClass(normalizedSymbol, 'kraken'));
       const entryPrice = parseFloat(signal.entryPrice?.toString() || '0');
       const stopPrice = parseFloat(signal.stopPrice?.toString() || '0');
       const targetPrice = parseFloat(signal.targetPrice?.toString() || '0');

@@ -158,6 +158,29 @@ export async function getConstant<T = unknown>(
 }
 
 /**
+ * B79.0n.MCE: count the raw `module_constants` rows for a module, grouped by
+ * the EXACT `asset_class` value on each row (no resolver hierarchy applied).
+ *
+ * This is a verification helper, NOT a resolution path — it deliberately does
+ * NOT do most-specific-wins matching. It answers "how many explicit per-class
+ * rows physically exist for this module" so a caller can confirm a seed
+ * migration's per-class rows are present (vs. silently falling through to a
+ * wildcard row, which the resolver would mask).
+ *
+ * Uses the same 60s-TTL `loadModule` cache as the resolvers.
+ */
+export async function countModuleRowsByAssetClass(
+  moduleName: string,
+): Promise<Record<string, number>> {
+  const rows = await loadModule(moduleName);
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    counts[row.assetClass] = (counts[row.assetClass] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
  * Bulk resolver: returns a map of { constantName → resolved value } for all
  * constants under a module that have at least one compatible row. Convenient
  * for modules that read many constants at once (e.g. TEC pulls 4 values

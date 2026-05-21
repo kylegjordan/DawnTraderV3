@@ -45,7 +45,7 @@ describe('B67.5-prep — post-composition floor', () => {
     // Use a flat-price series with very low macro modifier to drive raw
     // confidence below 0.55 — terminal clamp should pin it to 0.55.
     const ohlc = makeOhlc(100, 30);
-    const result = calculatePairRegime(ohlc, 0, 0, 0.5, customCfg);
+    const result = calculatePairRegime(ohlc, 0, 0, 0.5, customCfg, 'crypto_spot' as const);
     // After raw × 0.5 macro modifier, pre-clamp value drops well below 0.55.
     // Floor should clamp it to 0.55 exactly.
     expect(result.confidence).toBeGreaterThanOrEqual(0.55);
@@ -53,7 +53,7 @@ describe('B67.5-prep — post-composition floor', () => {
 
   it('floor 0.45 lower than confidence: no clamp engages', () => {
     const ohlc = makeOhlc(100, 30);
-    const result = calculatePairRegime(ohlc, 0, 0, 1.0, DEFAULT_REGIME_CONFIG);
+    const result = calculatePairRegime(ohlc, 0, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
     // Result should be the raw classifier output (≥ 0.45 floor doesn't engage
     // because macro=1.0 doesn't push it below the natural classifier output).
     expect(result.confidence).toBeGreaterThanOrEqual(0.45);
@@ -66,7 +66,7 @@ describe('B67.5-prep — post-composition floor', () => {
       b67_5PostCompositionFloor: 0.0,
     };
     const ohlc = makeOhlc(100, 30);
-    const result = calculatePairRegime(ohlc, 0, 0, 0.1, noFloorCfg);
+    const result = calculatePairRegime(ohlc, 0, 0, 0.1, noFloorCfg, 'crypto_spot' as const);
     // With floor=0 and macro=0.1, confidence × macro can be very low.
     // No clamp at the bottom means the natural classifier output × macro
     // can produce values < 0.45.

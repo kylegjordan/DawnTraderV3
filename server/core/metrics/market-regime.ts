@@ -23,6 +23,10 @@
 import type { OHLCData, MarketRegimeType, RegimeCalculationResult, RegimeConfig } from '../../types/market-regime.types';
 import { REGIME_WEIGHTS } from '../../types/market-regime.types';
 import { REGIMES } from '../../config/canonical-regime-strategy-map';
+// B79.0n.MCE: AssetClass type for the REQUIRED-assetClass refactor of
+// calculatePairRegime. The prior `assetClass: string = 'crypto_spot'` silent
+// default is removed — every caller now passes an explicit asset class.
+import type { AssetClass } from '../../../shared/asset-classes.js';
 import {
   RBS_VOL_MAX,
   RBS_DX_MAX,
@@ -102,10 +106,17 @@ export function computeVolatility(ohlcData: OHLCData[]): number {
 }
 
 export function computeMomentum(ohlcData: OHLCData[]): number {
-  // HF7: Extended lookback from 14 to 30 candles for more stable momentum
-  // 14 candles at 15-min = 3.5hr (too jittery, single pullback flips sign)
-  // 30 candles at 15-min = 7.5hr (captures intraday trends, reduces noise)
-  // Signal orchestrator uses 60-min candles so 14*60=14hr; 30*15=7.5hr is closer parity
+  // HF7: Extended lookback from 14 to 30 candles for more stable momentum.
+  //
+  // B79.0n.MCE bar-interval invariant (2026-05-21): ALL MCE-fed pipelines —
+  // crypto signal-orchestrator, xstock_spot eval-cycle, VTS shadow path, and
+  // the B-PHASE-A2 backfill — consume 60-minute OHLC bars (verified in
+  // B79_0n_MCE_PRE_AUDIT §6). The hardcoded 30-bar lookback therefore produces
+  // an INVARIANT wall-clock window across asset classes: 30 bars × 60-min =
+  // 30 hours, identical for crypto_spot and xstock_spot. No per-asset-class
+  // lookback constant is needed. If a future asset class introduces a non-
+  // 60-min bar interval (1-min ticks, 5-min FX bars), this invariant breaks
+  // and per-class lookback constants must migrate to module_constants.
   const lookback = Math.min(30, ohlcData.length);
   if (lookback < 5) return 0;
 
@@ -119,6 +130,9 @@ export function computeMomentum(ohlcData: OHLCData[]): number {
 }
 
 export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
+  // B79.0n.MCE bar-interval invariant: `period=14` × 60-min bars = 14 hours,
+  // identical across crypto_spot and xstock_spot (both consume 60-min OHLC).
+  // See computeMomentum above for the full invariant rationale.
   if (ohlcData.length < period + 1) return 0;
 
   const trueRanges: number[] = [];
@@ -212,7 +226,11 @@ export function calculatePairRegime(
   dbsSlope: number,
   macroModifier: number,
   regimeConfig: RegimeConfig,
-  assetClass: string = 'crypto_spot',
+  // B79.0n.MCE: REQUIRED — the prior `assetClass: string = 'crypto_spot'`
+  // silent default is removed. Every caller passes an explicit asset class;
+  // omitting it is now a compile error. xstock_spot signals can no longer
+  // silently route through crypto's regime thresholds.
+  assetClass: AssetClass,
 ): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
   const mom = computeMomentum(ohlcData);
@@ -252,7 +270,8 @@ export function calculatePairRegime(
   let confidence: number;
 
   // HF7: Recalibrated thresholds for crypto market data
-  // computeADX returns DX (not Wilder's smoothed ADX). Crypto DX runs 35-90 on 15-min.
+  // computeADX returns DX (not Wilder's smoothed ADX). Crypto DX runs 35-90 on 60-min bars
+  // (B79.0n.MCE: corrected stale "15-min" reference — all MCE pipelines consume 60-min OHLC).
   //   DX < 45 = balanced/ranging (weak directional pressure)
   //   DX 45-55 = moderate directional movement
   //   DX > 55 = strong directional movement
@@ -398,7 +417,11 @@ export function getDynamicRegimeScore(ohlcData: OHLCData[]): {
   // also required. This advisory function (per SIM §5.4) doesn't have macro
   // context or DBS slope available — pass 0.0 / 1.0 explicitly for identity
   // (advisory call, not the live classification path).
-  const result = calculatePairRegime(ohlcData, 0, 0, 1.0, DEFAULT_REGIME_CONFIG);
+  // B79.0n.MCE: advisory path (per SIM §5.4 — not the live classification
+  // route, no routing decision flows from this). Pass crypto_spot explicitly
+  // as the neutral asset class; this convenience function has no symbol or
+  // asset-class context available.
+  const result = calculatePairRegime(ohlcData, 0, 0, 1.0, DEFAULT_REGIME_CONFIG, 'crypto_spot' as const);
   const score = calculateRegimeScore(result.regime, {
     adx: result.adx,
     volatility: result.volatility
