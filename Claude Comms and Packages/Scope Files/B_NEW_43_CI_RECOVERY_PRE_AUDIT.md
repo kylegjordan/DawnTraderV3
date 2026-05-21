@@ -460,6 +460,18 @@ The detector's first line of logic (`price-discontinuity-detector.ts:247`) is `i
 
 **Impact on B-NEW-43 Phase 2 (revises §3.5):** the b-new-42b cluster (11 failures) is **ONE root cause**, not 11 individual investigations — the harness must seed the xStock universe. The same empty-`XSTOCK_SPOT_SYMBOLS` mechanism very likely also explains the ≈4 `b79-0f-asset-class-collisions` "expected 'crypto_spot' to be 'xstock_spot'" failures (`asset-classes.ts:483` resolves to crypto when `XSTOCK_SPOT_SYMBOLS.has()` is false). So ≈15 of the ≈31 ASSERTION cluster collapse into this single boot-populated-universe root cause — Phase 2's genuine-assertion tail is correspondingly **smaller** than §3.5 estimated.
 
-**Surfaced to Kyle** 2026-05-22 (plain-language) per Langston's Q5 strengthening — Kyle to decide whether the boot-window-race verification warrants a fast-follow runtime check in parallel with B-NEW-43, or is folded into B-NEW-43 Phase 2.
+**Surfaced to Kyle** 2026-05-22 (plain-language) per Langston's Q5 strengthening. **Kyle directed "verify now, in parallel"** — verification done, §13.3.
 
-— Claude Code, 2026-05-22 (Step 2 consensus addendum)
+### §13.3 — b-new-42b runtime-safety verification (Kyle-directed, 2026-05-22) — ✅ NO RUNTIME RISK
+
+Kyle chose verify-now over defer. The two residual concerns from §13.2 were checked:
+
+**(1) Boot-window race — RESOLVED, no race exists.** Call path: `isDiscontinuityActive` is consumed only by `tec-evaluator.ts:303` and `trailing-exit-controller.ts:1051` (the TEC trailing-exit path). The xStock universe is initialised in `server/index.ts:55-96` as a **top-level `await xstockUniverseService.initializeFromDB()`** with a 5-layer fallback chain (DB → file cache → bootstrap) and **`process.exit(1)` if all layers are exhausted** ("refusing to boot"). That block completes **before `const app = express()` at line 98** — before routes register, before the server listens, before any trading/exit loop starts. `XSTOCK_SPOT_SYMBOLS` is therefore a **hard boot gate**: by the time any detector consumer can run, the universe is guaranteed populated, or the process exited. No consumer can observe the empty set.
+
+**(2) Module-load-time capture sweep — clean.** All 9 code usages of `XSTOCK_SPOT_SYMBOLS` across `server/` + `shared/` (excluding tests) are **call-time** — inside functions, route handlers, or the post-init boot block. Zero module-load-time captures (no `const X = new Set(XSTOCK_SPOT_SYMBOLS)` or `.size`/`.has` evaluated at import). The exported `XSTOCK_SPOT_SYMBOLS` is a stable reference to `_xstockSymbolsInternal`, mutated **in place** by `_replaceXstockUniverse()`, so even a held reference sees the populated contents after boot.
+
+**Verdict: production runtime is SAFE. No fast-follow runtime batch needed.** The price-discontinuity detector works correctly in production — every consumer runs post-boot. B79.0n.UNIVERSE-DISCOVERY did the boot-gating correctly (hard `await` + `process.exit(1)` on total failure).
+
+**The only residual is the test-coverage gap** (already B-NEW-43 Phase 2 scope): the b-new-42b harness must seed the universe (`_replaceXstockUniverse()` in `beforeEach`) so the 11 tests can run. Until B-NEW-43 Phase 2 lands, the price-spike protection has no passing automated test — but the feature itself is sound. This is a test-infrastructure fix, not a runtime fix; it stays inside B-NEW-43, no parallel batch.
+
+— Claude Code, 2026-05-22 (Step 2 consensus addendum + runtime-safety verification)
