@@ -166,12 +166,14 @@ async function probeKrakenWs(candidates: Set<string>): Promise<{ ok: boolean; ac
 
     const ws = new WebSocket(KRAKEN_WS_URL);
     let timeoutHandle: NodeJS.Timeout | null = null;
+    let openTimeoutHandle: NodeJS.Timeout | null = null;
     let resolved = false;
 
     const finish = (ok: boolean, partial: boolean, error?: string): void => {
       if (resolved) return;
       resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (openTimeoutHandle) clearTimeout(openTimeoutHandle);
       try { ws.close(); } catch { /* ignore */ }
       const summary = `accepted=${accepted.size} rejected=${rejected.size} collected=${collected}/${expected}`;
       if (partial) {
@@ -182,7 +184,19 @@ async function probeKrakenWs(candidates: Set<string>): Promise<{ ok: boolean; ac
       resolve({ ok, accepted, rejected, partial, error });
     };
 
+    // B79.0n.UNIVERSE-DISCOVERY Step 4 fix-forward (Langston Concern B):
+    // Global WS-open timeout. Guards against DNS hang / TCP RST / TLS handshake
+    // stall where ws.on('error') and ws.on('close') don't fire. Without this,
+    // the discovery cycle would hang forever in that failure mode.
+    openTimeoutHandle = setTimeout(() => {
+      finish(false, true, 'ws open timeout (no open event in 10s)');
+    }, 10_000);
+
     ws.on('open', async () => {
+      if (openTimeoutHandle) {
+        clearTimeout(openTimeoutHandle);
+        openTimeoutHandle = null;
+      }
       logInfo(`Kraken WS connected; sending ${chunks.length} chunk subscribes (chunk=${KRAKEN_PROBE_CHUNK_SIZE}, sleep=${KRAKEN_PROBE_INTER_BATCH_SLEEP_MS}ms)`);
       for (let i = 0; i < chunks.length; i++) {
         try {
@@ -249,22 +263,103 @@ async function probeKrakenWs(candidates: Set<string>): Promise<{ ok: boolean; ac
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Finnhub returns generic industry strings. Map to our internal sector enum.
+ * Finnhub returns specific sub-industry strings from /stock/profile2's
+ * `finnhubIndustry` field — NOT broad GICS sector names. Map sub-industries
+ * to our internal sector enum.
+ *
+ * Mapping table calibrated 2026-05-21 against empirical Finnhub responses
+ * for 18 representative symbols (AAPL/NVDA/MRNA/BA/KO/MA/PG/JNJ/CAT/F/MSTR/
+ * COIN/HOOD/GOOGL/META/TSLA/SPY/GLD) per Langston Step 4 Concern A.
+ *
+ * Observed sub-industries from that probe:
+ *   Technology, Semiconductors, Biotechnology, Aerospace & Defense,
+ *   Beverages, Financial Services, Consumer products, Pharmaceuticals,
+ *   Machinery, Automobiles, Media, (null for ETFs SPY/GLD)
+ *
+ * ETFs/index proxies return null `finnhubIndustry` and get UNCATEGORIZED;
+ * the override table re-classifies them to INDEX_PROXY / BROAD_ETF / INTL_ETF.
+ *
+ * Order matters: more-specific matches checked before broader ones to avoid
+ * collisions (e.g. "Financial Services" matches financ-substring before any
+ * conflicting term).
  */
 function mapFinnhubIndustryToSector(industry: string | undefined): XstockSector {
   if (!industry) return 'UNCATEGORIZED' as XstockSector;
   const i = industry.toLowerCase();
+
+  // XLK — Technology (includes hardware, software, semiconductors, IT services)
   if (i.includes('technology')) return 'XLK';
+  if (i.includes('semiconductor')) return 'XLK';
+  if (i.includes('software')) return 'XLK';
+  if (i.includes('computer')) return 'XLK';
+  if (i.includes('it services')) return 'XLK';
+  if (i.includes('information technology')) return 'XLK';
+  if (i.includes('electronic')) return 'XLK';
+
+  // XLV — Healthcare (pharma, biotech, devices, providers, life sciences)
   if (i.includes('health')) return 'XLV';
+  if (i.includes('pharmaceutical')) return 'XLV';
+  if (i.includes('biotechnology') || i.includes('biotech')) return 'XLV';
+  if (i.includes('medical')) return 'XLV';
+  if (i.includes('hospital')) return 'XLV';
+  if (i.includes('life science')) return 'XLV';
+  if (i.includes('drug')) return 'XLV';
+
+  // XLF — Financials (banks, insurance, capital markets, exchanges)
   if (i.includes('financ') || i.includes('bank') || i.includes('insurance')) return 'XLF';
+  if (i.includes('capital market')) return 'XLF';
+  if (i.includes('investment service')) return 'XLF';
+  if (i.includes('diversified financial')) return 'XLF';
+
+  // XLC — Communications (media, telecom, entertainment, internet content)
   if (i.includes('communication') || i.includes('media') || i.includes('telecom')) return 'XLC';
-  if (i.includes('consumer cyclical') || i.includes('consumer discretionary') || i.includes('retail') || i.includes('automotive')) return 'XLY';
-  if (i.includes('consumer defensive') || i.includes('consumer staples') || i.includes('beverage') || i.includes('tobacco')) return 'XLP';
-  if (i.includes('energy') || i.includes('oil') || i.includes('gas')) return 'XLE';
+  if (i.includes('entertainment')) return 'XLC';
+  if (i.includes('internet content')) return 'XLC';
+  if (i.includes('publishing')) return 'XLC';
+  if (i.includes('broadcasting')) return 'XLC';
+
+  // XLY — Consumer Discretionary (autos, retail, hotels, restaurants, leisure, apparel)
+  if (i.includes('automobile') || i.includes('automotive') || i.includes('auto manufacturer')) return 'XLY';
+  if (i.includes('consumer cyclical') || i.includes('consumer discretionary')) return 'XLY';
+  if (i.includes('retail')) return 'XLY';
+  if (i.includes('apparel') || i.includes('clothing') || i.includes('footwear') || i.includes('luxury')) return 'XLY';
+  if (i.includes('hotel') || i.includes('restaurant') || i.includes('leisure') || i.includes('lodging')) return 'XLY';
+  if (i.includes('travel') || i.includes('gaming') || i.includes('casino')) return 'XLY';
+  if (i.includes('homebuilders')) return 'XLY';
+
+  // XLP — Consumer Staples (beverages, food, tobacco, household, personal care)
+  if (i.includes('consumer defensive') || i.includes('consumer staples') || i.includes('consumer products') || i.includes('consumer goods')) return 'XLP';
+  if (i.includes('beverage')) return 'XLP';
+  if (i.includes('tobacco')) return 'XLP';
+  if (i.includes('food')) return 'XLP';
+  if (i.includes('household')) return 'XLP';
+  if (i.includes('personal care') || i.includes('personal products')) return 'XLP';
+  if (i.includes('agricultural')) return 'XLP';
+
+  // XLE — Energy (oil, gas, equipment, services, refining)
+  if (i.includes('energy') || i.includes('oil') || i.includes('gas') || i.includes('petroleum') || i.includes('refining')) return 'XLE';
+
+  // XLI — Industrials (aerospace, defense, machinery, transports, construction, engineering)
   if (i.includes('industrial')) return 'XLI';
+  if (i.includes('aerospace') || i.includes('defense')) return 'XLI';
+  if (i.includes('machinery')) return 'XLI';
+  if (i.includes('transportation') || i.includes('airline') || i.includes('shipping') || i.includes('railroad') || i.includes('logistics')) return 'XLI';
+  if (i.includes('construction') || i.includes('engineering')) return 'XLI';
+  if (i.includes('conglomerate')) return 'XLI';
+
+  // XLRE — Real Estate (REITs, real estate services)
   if (i.includes('real estate') || i.includes('reit')) return 'XLRE';
+
+  // XLU — Utilities (electric, water, gas distribution, regulated)
   if (i.includes('utilit')) return 'XLU';
-  if (i.includes('material') || i.includes('chemical') || i.includes('mining')) return 'XLB';
+  if (i.includes('electric utility') || i.includes('water utility') || i.includes('gas distribution')) return 'XLU';
+
+  // XLB — Materials (chemicals, mining, metals, paper, packaging)
+  if (i.includes('material')) return 'XLB';
+  if (i.includes('chemical')) return 'XLB';
+  if (i.includes('mining') || i.includes('metals')) return 'XLB';
+  if (i.includes('paper') || i.includes('packaging') || i.includes('forestry')) return 'XLB';
+
   return 'UNCATEGORIZED' as XstockSector;
 }
 
