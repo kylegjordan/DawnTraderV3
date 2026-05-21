@@ -25,6 +25,30 @@
  */
 import { getXstockName } from './asset-classes.js';
 
+/**
+ * B79.0n.UD-HOTFIX (2026-05-21): client-side overlay map for xStock names.
+ * The XSTOCK_SPOT_REGISTRY in shared/asset-classes.ts is bundled empty into
+ * the client (it gets dynamically populated at server boot from the DB).
+ * The frontend fetches /api/xstocks/asset-names once on app mount and calls
+ * setXstockNameOverlay() to populate this overlay. getAssetName() consults
+ * this overlay BEFORE falling through to the (empty client-side) registry.
+ *
+ * Server-side, this overlay stays empty — server reads directly from the
+ * populated registry. No behavior change server-side.
+ */
+const _xstockNameOverlay = new Map<string, string>();
+
+export function setXstockNameOverlay(entries: Record<string, string>): void {
+  _xstockNameOverlay.clear();
+  for (const [symbol, name] of Object.entries(entries)) {
+    if (symbol && name) _xstockNameOverlay.set(symbol, name);
+  }
+}
+
+export function _getXstockNameOverlaySize(): number {
+  return _xstockNameOverlay.size;
+}
+
 /** Crypto top symbols seen across the universe (active trades + benchmarks). */
 export const CRYPTO_NAMES: Record<string, string> = {
   // ─── Top 50 by market cap (rough order) ────────────────────────────────
@@ -229,8 +253,14 @@ export function getAssetName(
   }
 
   if (assetClass.startsWith('xstock') || assetClass.startsWith('equity')) {
-    // B-NEW-30: read from SSOT registry in asset-classes.ts. getXstockName
-    // takes the FULL pair (e.g. 'AAPL/USD'), not just the base symbol.
+    // B79.0n.UD-HOTFIX: check client-side overlay first. The XSTOCK_SPOT_REGISTRY
+    // bundled into the client is empty post-B79.0n.UNIVERSE-DISCOVERY (registry
+    // is server-side dynamic). Frontend fetches /api/xstocks/asset-names once
+    // and calls setXstockNameOverlay() to populate the overlay.
+    const overlay = _xstockNameOverlay.get(pair);
+    if (overlay) return overlay;
+    // B-NEW-30 server-side path: read from SSOT registry in asset-classes.ts.
+    // getXstockName takes the FULL pair (e.g. 'AAPL/USD'), not just the base symbol.
     const name = getXstockName(pair);
     if (name) return name;
     _warnUnmappedOnce(pair, assetClass);

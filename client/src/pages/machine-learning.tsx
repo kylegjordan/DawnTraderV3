@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AssetClassBadge } from "@/components/ui/asset-class-badge";
-import { getAssetName } from "@shared/asset-names";
+import { getAssetName, setXstockNameOverlay } from "@shared/asset-names";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown, Filter, LineChart } from "lucide-react";
@@ -3271,6 +3271,22 @@ function DbsPairTrackingPanel({ data, isLoading }: { data: FilterDiagnosticsData
 export default function MachineLearningPage() {
   const [activeTab, setActiveTab] = useState("open");
   const queryClient = useQueryClient();
+
+  // B79.0n.UD-HOTFIX (2026-05-21): fetch the server-side xStock name map once
+  // and populate the client-side overlay used by getAssetName(). The bundled
+  // XSTOCK_SPOT_REGISTRY in shared/asset-classes.ts is empty client-side
+  // post-B79.0n.UNIVERSE-DISCOVERY (server-populated at boot). Refresh hourly
+  // to pick up newly-discovered symbols from the daily 06:00 UTC cron.
+  useQuery<{ ok: boolean; count: number; names: Record<string, string> }>({
+    queryKey: ['/api/xstocks/asset-names'],
+    queryFn: async () => {
+      const data = await apiFetch('/api/xstocks/asset-names');
+      if (data && data.names) setXstockNameOverlay(data.names);
+      return data;
+    },
+    refetchInterval: 60 * 60 * 1000,  // 1 hour
+    staleTime: 30 * 60 * 1000,
+  });
 
   const { data: openData, isLoading: openLoading, refetch: refetchOpen } = useQuery<{
     success: boolean;

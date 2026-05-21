@@ -7947,6 +7947,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/xstocks/asset-names — B79.0n.UD-HOTFIX (2026-05-21).
+  // Returns { 'AAPL/USD': 'Apple Inc', ... } from server-side XSTOCK_SPOT_REGISTRY.
+  // Client fetches once on mount and calls setXstockNameOverlay() to populate
+  // the client-side overlay. The bundled XSTOCK_SPOT_REGISTRY in shared/
+  // asset-classes.ts is empty client-side post-B79.0n.UNIVERSE-DISCOVERY
+  // (it gets dynamically populated at server boot, not at client build time).
+  apiRouter.get('/xstocks/asset-names', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { XSTOCK_SPOT_REGISTRY } = await import('../shared/asset-classes.js');
+      const names: Record<string, string> = {};
+      for (const [symbol, entry] of XSTOCK_SPOT_REGISTRY.entries()) {
+        if (entry.name) names[symbol] = entry.name;
+      }
+      res.json({ ok: true, count: Object.keys(names).length, names });
+    } catch (error: any) {
+      console.error('[B79.0n.UD-HOTFIX][asset-names] failed:', error);
+      res.status(500).json({ ok: false, error: error?.message ?? String(error) });
+    }
+  });
+
   // GET /api/internal/universe-discovery/health — lightweight diagnostic
   // surface. Doesn't wire to Grafana now but the endpoint exists for future
   // monitoring (Langston Q9 #4).
