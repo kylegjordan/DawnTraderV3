@@ -1,4 +1,8 @@
-# B-NEW-43 — CI Recovery — Scope (Step 1 draft)
+# B-NEW-43 — CI Recovery — Scope (rev2 — FINALIZED, Langston Step 1 ACK)
+
+> **rev2 (2026-05-21):** Langston Step 1 ACK received — all 5 §8 questions concur, all 3 Kyle decisions sound, 6 code-level concerns folded in below (scope-tightening, not approach-changing — Langston: "fold them into the Step 2 pre-audit checklist and we're aligned"). Scope is FINALIZED. Folded: (1) routes.ts/storage.ts commit-chunking discipline → §3 Phase 1; (2) module-warming harness mirrors-production-not-hides rule → §3 Phase 2.1; (3) genuine-assertion-tail per-failure individual surfacing → §3 Phase 2 + §4; (4) "batch adding a required knob updates the canonical test fixture" → §3 Phase 3; (5) CI-workflow YAML own Step-4 review → §3 Phase 2.2; (6) "fake-green audit" git-grep at phase boundaries → §4. Plus Q2 local-mirror sync protocol → §3 Phase 0; Q3 CI database schema bootstrap → §3 Phase 2.2.
+
+
 
 > **Proposed batch ID:** B-NEW-43 (number to be confirmed against BATCH_CATALOG — B-NEW-41 + B-NEW-42b are the most recent B-NEW entries in memory).
 > **Type:** Standalone CI-health batch. NOT part of the B79.0n umbrella arc.
@@ -88,9 +92,17 @@ The investigation shows both reds cluster heavily. The batch is phased so the ch
 
 ### Phase 0 — Restore local typecheck (do FIRST)
 
-Establish a second clone of the repo on a **non-GDrive local disk** (e.g. `C:\dev\DawnTraderV3`) used purely for `tsc` + `vitest`. The GDrive-mounted clone stays the canonical working copy (Langston's mount visibility, governance docs). The local mirror is sync-from-canonical for fast type/test feedback. Document the runbook in CLAUDE.md (a new "Local verification environment" section). ~half day. This unblocks every subsequent phase — the fixer can iterate locally instead of waiting 3-4 min per CI round-trip.
+Establish a second clone of the repo on a **non-GDrive local disk** (e.g. `C:\dev\DawnTraderV3`) used purely for `tsc` + `vitest`. The GDrive-mounted clone stays the canonical working copy (Langston's mount visibility, governance docs). Document the runbook in CLAUDE.md (a new "Local verification environment" section). ~half day. This unblocks every subsequent phase — the fixer can iterate locally instead of waiting 3-4 min per CI round-trip.
 
-**Alternative considered:** run tsc on the staging server. Rejected — staging is at the deployed commit; syncing uncommitted changes there pollutes the deploy environment.
+**Sync protocol — ONE-DIRECTION-EDIT discipline (Langston Q2 concern — split-brain prevention).** Two working copies is a drift hazard. The rule:
+- **Code edits land in the local mirror ONLY** (where `tsc` + `vitest` run fast). Push to GitHub from the mirror.
+- **The GDrive clone is refreshed via `git pull` only** — never edited for code. It stays canonical for governance-doc authoring + Langston's FUSE-mount visibility.
+- **No bidirectional rsync.** Bidirectional sync is the classic split-brain footgun — explicitly forbidden. Git is the single sync channel (mirror → push → GDrive clone pulls).
+- The CLAUDE.md runbook documents this as a hard rule.
+
+**Alternatives considered + rejected:**
+- *tsc on the staging server* — rejected: staging is at the deployed commit; syncing uncommitted changes there pollutes the deploy environment.
+- *A non-staging Hetzner dev box* — rejected vs the local C:-drive mirror on workflow-simplicity grounds: a remote box means SSH-based editing or a sync-to-remote step, whereas the local mirror keeps editing on Kyle's laptop with zero added latency. The mirror is the simplest path to a fast local typecheck for a laptop-based workflow.
 
 ### Phase 1 — TypeScript errors → green
 
@@ -102,16 +114,31 @@ Root-cause-first, NOT file-by-file-symptom-chasing. Order:
 4. **`routes.ts` deep-clean** — at 213 errors this file is the epicenter and likely needs its own focused sub-phase even after the cross-cutting type fixes land. Expect 20-40 distinct root causes within this one file.
 5. **Long-tail residual** — individual errors not covered by a cluster.
 
+**Commit-chunking discipline (Langston concern 1).** A single mega-commit of 213 errors in `routes.ts` makes the Step 4 review impractical. `routes.ts` fixes are chunked by logical route section (auth routes / VTS routes / scanner routes / etc.) so each commit is ~20-40 errors and individually reviewable. Same constraint on `storage.ts` (59 errors) — split by storage-method group. Each chunk-commit is independently Langston-reviewable; the Step 4 review proceeds chunk-by-chunk rather than as one unreviewable blob.
+
 ### Phase 2 — Test failures → green
 
 1. **Module-warming harness fix (~52 failures)** — establish a shared test-setup helper that pre-warms the required `module_constants` modules in `beforeAll`. ONE harness fix pattern resolves the bulk.
-2. **CI PostgreSQL service (~8 failures)** — add a `postgres` service container to the CI workflow so DB-dependent integration tests can run. (Decision point — see §6.)
+
+   **MIRRORS-production-not-HIDES rule (Langston concern 2).** The harness `beforeAll` pre-warms **exactly the module list the production boot sequence pre-warms** (`prefetchModule` calls in the server bootstrap path). The harness fix matches production reality — production warms these modules at startup, so a test that warms the same set is testing the real configured state, not masking a gap. **Hard rule:** if a test needs a module that the production boot sequence does NOT warm, that is a code-side bug (a sync read of an un-warmed module) to surface and fix — NOT a reason to extend the harness warm-list beyond production's. The pre-audit enumerates production's exact warm-list as the authoritative reference.
+
+2. **CI PostgreSQL service (~8 failures)** — add a `postgres` service container to the CI workflow so DB-dependent integration tests can run (§6 C — Kyle-LOCKED).
+
+   **CI database schema bootstrap (Langston Q3 concern).** A bare Postgres container has no schema — without bootstrapping, the ~8 `ECONNREFUSED` failures just convert to `relation does not exist` failures (same red, different reason). **Decision: the CI workflow runs `npm run db:push` (Drizzle `drizzle-kit push`, already an npm script) against the CI Postgres in a workflow step BEFORE `vitest`.** Drizzle's `db:push` syncs the schema directly from `shared/schema.ts` — no separate committed schema dump to maintain (it can't drift from the source of truth). The workflow wires `DATABASE_URL` to the service container's ephemeral credentials. Pre-audit confirms the exact service-container config + env wiring.
+
+   **CI-workflow YAML own-Step-4-review (Langston concern 5).** The `.github/workflows/` YAML diff (Postgres service + db:push step + DATABASE_URL wiring) is small but high-blast-radius — it gates every future CI run. It gets its OWN explicit Step 4 review attention, in its own commit, NOT bundled with test-code edits.
+
 3. **`sector_coverage_floor` fixture updates (~6 failures)** — update test module-fixtures to include the B-PHASE-A2 knob.
+
 4. **Genuine assertion-failure tail (~13-30)** — investigate each; fix real code/test drift. THIS is where care is needed — a failing assertion may be a real bug, not a stale test.
+
+   **Per-failure individual surfacing (Langston concern 3).** This is where the "silence the test" temptation lives. Each genuine assertion failure gets, in the Step 4 review: (a) what the test asserts, (b) what the code actually does, (c) which is correct and why. These are NOT buried in a bulk commit alongside fixture updates — each genuine failure (or a tight cluster of ~3 closely-related ones) gets its own commit with a per-commit justification block. A failing assertion that turns out to be a real code bug is surfaced to Kyle, not silently "fixed" by adjusting the test.
 
 ### Phase 3 — Lock it
 
 Add a per-batch CI-status confirmation to the canonical Step 5 workflow + a CLAUDE.md note, so a future silent regression to red is caught immediately rather than discovered N batches later.
+
+**Required-knob / test-fixture drift rule (Langston concern 4).** The `sector_coverage_floor` failures exist because B-PHASE-A2 added a required `module_constants` knob but did not update the canonical test fixture in the same batch. Phase 3 adds a standing rule to CLAUDE.md governance: **when a batch adds a required `module_constants` knob (or any required config key the test harness reads), the SAME batch updates the canonical test fixture / harness warm-list.** This is folded into the per-batch CI-status confirmation step so the drift cannot recur silently.
 
 ---
 
@@ -123,6 +150,8 @@ Add a per-batch CI-status confirmation to the canonical Step 5 workflow + a CLAU
 - Every test "fix" must preserve the test's intent. If a test genuinely asserts wrong behavior, that is a code bug to surface, not a test to silence.
 - Each phase gets a Langston code-level review of the actual diff (this batch is high-touch — many files — so review discipline matters MORE, not less).
 - Any error that genuinely cannot be fixed without a larger refactor is documented as a tracked RUNNING_ISSUES residual with a justification — never `@ts-expect-error`-ed into fake-green silently.
+
+**Fake-green audit at every phase boundary (Langston concern 6).** At the end of Phase 1 AND the end of Phase 2, run an explicit suppression-audit: `git diff` the batch's range and `git grep` for any NEWLY-introduced `@ts-expect-error`, `@ts-ignore`, `as any`, `!` non-null assertion, or `it.skip` / `describe.skip`. **Zero tolerance** — every such introduction must either be removed (real fix applied instead) or carry a tracked RUNNING_ISSUES entry with an explicit justification reviewed by Langston. This is a lightweight mechanical check that catches the slippery fix-by-suppression failure mode before it ships. The audit result is recorded in the completion report.
 
 ---
 
