@@ -287,6 +287,21 @@ function mapFinnhubIndustryToSector(industry: string | undefined): XstockSector 
   if (!industry) return 'UNCATEGORIZED' as XstockSector;
   const i = industry.toLowerCase();
 
+  // CRITICAL substring-collision guards (must run BEFORE the broader patterns):
+  //   "Biotechnology" contains "technology" — disambiguate to XLV not XLK
+  //   "Information Technology" → caught by the biotech-first ordering below
+  if (i.includes('biotechnology') || i.includes('biotech')) return 'XLV';
+
+  // XLV — Healthcare (pharma, biotech, devices, providers, life sciences).
+  // Listed BEFORE XLK because some healthcare sub-industries contain "tech"-
+  // adjacent substrings; specificity-first ordering prevents collisions.
+  if (i.includes('health')) return 'XLV';
+  if (i.includes('pharmaceutical')) return 'XLV';
+  if (i.includes('medical')) return 'XLV';
+  if (i.includes('hospital')) return 'XLV';
+  if (i.includes('life science')) return 'XLV';
+  if (i.includes('drug')) return 'XLV';
+
   // XLK — Technology (includes hardware, software, semiconductors, IT services)
   if (i.includes('technology')) return 'XLK';
   if (i.includes('semiconductor')) return 'XLK';
@@ -295,15 +310,6 @@ function mapFinnhubIndustryToSector(industry: string | undefined): XstockSector 
   if (i.includes('it services')) return 'XLK';
   if (i.includes('information technology')) return 'XLK';
   if (i.includes('electronic')) return 'XLK';
-
-  // XLV — Healthcare (pharma, biotech, devices, providers, life sciences)
-  if (i.includes('health')) return 'XLV';
-  if (i.includes('pharmaceutical')) return 'XLV';
-  if (i.includes('biotechnology') || i.includes('biotech')) return 'XLV';
-  if (i.includes('medical')) return 'XLV';
-  if (i.includes('hospital')) return 'XLV';
-  if (i.includes('life science')) return 'XLV';
-  if (i.includes('drug')) return 'XLV';
 
   // XLF — Financials (banks, insurance, capital markets, exchanges)
   if (i.includes('financ') || i.includes('bank') || i.includes('insurance')) return 'XLF';

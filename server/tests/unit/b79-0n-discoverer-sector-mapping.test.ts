@@ -71,6 +71,14 @@ describe('B79.0n.UNIVERSE-DISCOVERY Finnhub industry → sector mapping regressi
   function mapFinnhubIndustryToSector(industry: string | undefined): string {
     if (!industry) return 'UNCATEGORIZED';
     const i = industry.toLowerCase();
+    // Critical substring-collision guard: "Biotechnology" includes "technology"
+    if (i.includes('biotechnology') || i.includes('biotech')) return 'XLV';
+    if (i.includes('health')) return 'XLV';
+    if (i.includes('pharmaceutical')) return 'XLV';
+    if (i.includes('medical')) return 'XLV';
+    if (i.includes('hospital')) return 'XLV';
+    if (i.includes('life science')) return 'XLV';
+    if (i.includes('drug')) return 'XLV';
     if (i.includes('technology')) return 'XLK';
     if (i.includes('semiconductor')) return 'XLK';
     if (i.includes('software')) return 'XLK';
@@ -78,13 +86,6 @@ describe('B79.0n.UNIVERSE-DISCOVERY Finnhub industry → sector mapping regressi
     if (i.includes('it services')) return 'XLK';
     if (i.includes('information technology')) return 'XLK';
     if (i.includes('electronic')) return 'XLK';
-    if (i.includes('health')) return 'XLV';
-    if (i.includes('pharmaceutical')) return 'XLV';
-    if (i.includes('biotechnology') || i.includes('biotech')) return 'XLV';
-    if (i.includes('medical')) return 'XLV';
-    if (i.includes('hospital')) return 'XLV';
-    if (i.includes('life science')) return 'XLV';
-    if (i.includes('drug')) return 'XLV';
     if (i.includes('financ') || i.includes('bank') || i.includes('insurance')) return 'XLF';
     if (i.includes('capital market')) return 'XLF';
     if (i.includes('investment service')) return 'XLF';
