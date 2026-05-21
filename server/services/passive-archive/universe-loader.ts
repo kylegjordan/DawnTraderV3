@@ -50,10 +50,24 @@ async function loadStaticUniverse(filename: string): Promise<StaticUniverseConfi
 }
 
 // B69: renamed for consistency with asset class taxonomy (equity_spot → xstock_spot)
+// B79.0n.UNIVERSE-DISCOVERY 2026-05-21: switched from static JSON file read to
+// in-memory XSTOCK_SPOT_SYMBOLS read. `xstocks-universe.json` was DELETED in
+// this sub-batch — universe is now DB-backed via xstock_spot_universe table
+// (populated by xstock-universe-discoverer.ts at daily 06:00 UTC + boot-time
+// init via universe-service.ts). The B74 archiver consumer doesn't need to
+// know — it just gets the same string[] back as before.
+//
+// IMPORTANT: this is async only for back-compat with the existing call
+// signature. The actual read is synchronous against an in-memory Set
+// populated at server boot. If called BEFORE the universe-service has
+// completed initializeFromDB(), returns an empty array (universe-service
+// boot in server/index.ts runs BEFORE the archiver subscriber starts, so
+// the empty-array case shouldn't occur at runtime).
 export async function loadXstockSpotUniverse(): Promise<string[]> {
-  const cfg = await loadStaticUniverse('xstocks-universe.json');
-  console.log(`[B74][universe] xstock_spot loaded: ${cfg.symbols.length} symbols from ${cfg._endpoint}`);
-  return cfg.symbols;
+  const { XSTOCK_SPOT_SYMBOLS } = await import('../../../shared/asset-classes.js');
+  const symbols = Array.from(XSTOCK_SPOT_SYMBOLS).sort();
+  console.log(`[B74][universe] xstock_spot loaded: ${symbols.length} symbols from XSTOCK_SPOT_SYMBOLS (DB-backed via B79.0n.UNIVERSE-DISCOVERY)`);
+  return symbols;
 }
 
 /** @deprecated Use loadXstockSpotUniverse(). */

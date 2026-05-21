@@ -18,8 +18,42 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, it, expect } from 'vitest';
-import { XSTOCK_SPOT_REGISTRY } from '../../../shared/asset-classes';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { XSTOCK_SPOT_REGISTRY, _replaceXstockUniverse, type XstockSpotEntry } from '../../../shared/asset-classes';
+
+// B79.0n.UNIVERSE-DISCOVERY 2026-05-21: the registry is now DB-backed and empty
+// at module-init. Populate with a known 15-symbol fixture covering the D17
+// spot-check names so the static-shape assertions below continue to validate
+// the sector-mapping contract (the contract didn't change — only the
+// population mechanism did).
+beforeAll(() => {
+  const fixture = new Map<string, XstockSpotEntry>([
+    ['AAPL/USD',  { name: 'Apple',           sector: 'XLK' }],
+    ['MSFT/USD',  { name: 'Microsoft',       sector: 'XLK' }],
+    ['NVDA/USD',  { name: 'Nvidia',          sector: 'XLK' }],
+    ['JPM/USD',   { name: 'JPMorgan Chase',  sector: 'XLF' }],
+    ['BAC/USD',   { name: 'Bank of America', sector: 'XLF' }],
+    ['XOM/USD',   { name: 'ExxonMobil',      sector: 'XLE' }],
+    ['CVX/USD',   { name: 'Chevron',         sector: 'XLE' }],
+    ['JNJ/USD',   { name: 'Johnson & Johnson', sector: 'XLV' }],
+    ['ELV/USD',   { name: 'Elevance Health', sector: 'XLV' }],
+    ['PG/USD',    { name: 'Procter & Gamble', sector: 'XLP' }],
+    ['KO/USD',    { name: 'Coca-Cola',       sector: 'XLP' }],
+    ['RTX/USD',   { name: 'RTX Corporation', sector: 'XLI' }],
+    ['AMZN/USD',  { name: 'Amazon',          sector: 'XLY' }],
+    ['TSLA/USD',  { name: 'Tesla',           sector: 'XLY' }],
+    ['GOOGL/USD', { name: 'Alphabet',        sector: 'XLC' }],
+    ['SPY/USD',   { name: 'S&P 500 ETF',     sector: 'INDEX_PROXY' }],
+    ['QQQ/USD',   { name: 'Nasdaq 100 ETF',  sector: 'INDEX_PROXY' }],
+    ['GLD/USD',   { name: 'Gold ETF',        sector: 'BROAD_ETF' }],
+    ['EWA/USD',   { name: 'Australia ETF',   sector: 'INTL_ETF' }],
+    ['MSTR/USD',  { name: 'MicroStrategy',   sector: 'XLK', cryptoAdjacent: true }],
+    ['COIN/USD',  { name: 'Coinbase',        sector: 'XLF', cryptoAdjacent: true }],
+    ['BABA/USD',  { name: 'Alibaba',         sector: 'XLY', adr: true }],
+    ['ASML/USD',  { name: 'ASML Holding',    sector: 'XLK', adr: true }],
+  ]);
+  _replaceXstockUniverse(fixture);
+});
 
 describe('B-PHASE-A2 — XSTOCK_SPOT_REGISTRY sector completeness', () => {
   it('every registry entry has a defined sector field (runtime check)', () => {
@@ -29,10 +63,13 @@ describe('B-PHASE-A2 — XSTOCK_SPOT_REGISTRY sector completeness', () => {
     }
   });
 
-  it('registry size matches expected 260 entries (drift guard)', () => {
-    // B79.0n.HYGIENE 2026-05-20: trimmed 265 → 260 (removed BITF/HOLX/PARA/SAGE/WBA;
-    // zero data Apr+May 2026). See KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
-    expect(XSTOCK_SPOT_REGISTRY.size).toBe(260);
+  it.skip('SKIPPED post-UNIVERSE-DISCOVERY: registry size range check moved to b79-0n-universe-service.test.ts', () => {
+    // B79.0n.UNIVERSE-DISCOVERY 2026-05-21: registry is now DB-backed + populated
+    // by universe-service.initializeFromDB() at boot. At test module load time
+    // the registry is empty. Range check moved to universe-service Layer 4
+    // bootstrap test where the registry IS synchronously populated.
+    expect(XSTOCK_SPOT_REGISTRY.size).toBeGreaterThanOrEqual(100);
+    expect(XSTOCK_SPOT_REGISTRY.size).toBeLessThanOrEqual(2000);
   });
 
   it('all sector values are in the allowed XstockSector union', () => {

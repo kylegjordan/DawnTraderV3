@@ -20,15 +20,29 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import {
   resolveAssetClass,
   XSTOCK_SPOT_KRAKEN_COLLISIONS,
   XSTOCK_SPOT_SYMBOLS,
   ASSET_CLASSES,
+  _replaceXstockUniverse,
+  type XstockSpotEntry,
 } from '../../../shared/asset-classes';
 
 const USD_COLLISIONS = ['BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD'];
+
+// B79.0n.UNIVERSE-DISCOVERY 2026-05-21: registry is now DB-backed + empty at
+// module-init time. Tests below assume the 9 USD-collision symbols are present
+// in XSTOCK_SPOT_SYMBOLS (xStock catalog parity assertion). Populate a fixture
+// covering those 9 + the resolveAssetClass collision-resolution paths.
+beforeAll(() => {
+  const fixture = new Map<string, XstockSpotEntry>();
+  for (const sym of USD_COLLISIONS) {
+    fixture.set(sym, { name: sym.split('/')[0], sector: 'XLK' });
+  }
+  _replaceXstockUniverse(fixture);
+});
 const EUR_COLLISIONS = ['CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR'];
 
 describe('B79.0f — XSTOCK_SPOT_KRAKEN_COLLISIONS membership', () => {

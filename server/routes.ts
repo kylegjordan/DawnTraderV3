@@ -7920,6 +7920,126 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ────────────────────────────────────────────────────────────────────────
+  // B79.0n.UNIVERSE-DISCOVERY: management endpoints
+  // ────────────────────────────────────────────────────────────────────────
+
+  // POST /api/internal/universe-discovery/refresh — manual trigger for the
+  // discovery cycle. Used by the deploy-script post-restart curl (non-blocking
+  // per Q-PA-6 ACK) + ops manual invocation. Auth-protected per CLAUDE.md.
+  apiRouter.post('/internal/universe-discovery/refresh', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { runDiscovery } = await import('./services/xstock-universe-discoverer.js');
+      const result = await runDiscovery('manual_endpoint');
+      res.json({
+        ok: true,
+        run_id: result.runId,
+        duration_ms: result.durationMs,
+        symbols_discovered: result.symbolsDiscovered,
+        symbols_marked_stale: result.symbolsMarkedStale,
+        symbols_marked_delisted: result.symbolsMarkedDelisted,
+        source_chain_status: result.sourceChainStatus,
+        error_log: result.errorLog,
+      });
+    } catch (error: any) {
+      console.error('[B79.0n.UNIVERSE-DISCOVERY][refresh] failed:', error);
+      res.status(500).json({ ok: false, error: error?.message ?? String(error) });
+    }
+  });
+
+  // GET /api/internal/universe-discovery/health — lightweight diagnostic
+  // surface. Doesn't wire to Grafana now but the endpoint exists for future
+  // monitoring (Langston Q9 #4).
+  apiRouter.get('/internal/universe-discovery/health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { xstockUniverseService } = await import('./asset_classes/xstock_spot/universe-service.js');
+      const { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_REGISTRY } = await import('../shared/asset-classes.js');
+
+      // Aggregate snapshot from latest discovery_runs row
+      const lastRunResult = await db.execute<{
+        started_at: string;
+        completed_at: string | null;
+        source_chain_status: any;
+        triggered_by: string;
+      }>(sql`
+        SELECT started_at::text, completed_at::text, source_chain_status, triggered_by
+        FROM discovery_runs
+        ORDER BY started_at DESC
+        LIMIT 1
+      `);
+      const lastRunRows = (lastRunResult as any).rows ?? [];
+      const lastRun = Array.isArray(lastRunRows) && lastRunRows[0] ? lastRunRows[0] : null;
+
+      const lastSuccessResult = await db.execute<{ started_at: string }>(sql`
+        SELECT started_at::text
+        FROM discovery_runs
+        WHERE error_log IS NULL
+          AND (source_chain_status->'kraken_ws'->>'ok')::boolean = true
+        ORDER BY started_at DESC
+        LIMIT 1
+      `);
+      const lastSuccessRows = (lastSuccessResult as any).rows ?? [];
+      const lastSuccess = Array.isArray(lastSuccessRows) && lastSuccessRows[0]
+        ? lastSuccessRows[0].started_at
+        : null;
+
+      // Sector + delisted + stale aggregates
+      const aggResult = await db.execute<{
+        sectors_present: number;
+        is_delisted_count: number;
+        stale_warn_count: number;
+        total_active: number;
+      }>(sql`
+        SELECT
+          (SELECT COUNT(DISTINCT sector) FROM xstock_spot_universe WHERE is_delisted = false)::int AS sectors_present,
+          (SELECT COUNT(*) FROM xstock_spot_universe WHERE is_delisted = true)::int AS is_delisted_count,
+          (SELECT COUNT(*) FROM xstock_spot_universe
+            WHERE is_delisted = false
+              AND last_seen_at < now() - INTERVAL '7 days'
+              AND last_seen_at >= now() - INTERVAL '30 days')::int AS stale_warn_count,
+          (SELECT COUNT(*) FROM xstock_spot_universe WHERE is_delisted = false)::int AS total_active
+      `);
+      const aggRows = (aggResult as any).rows ?? [];
+      const agg = Array.isArray(aggRows) && aggRows[0] ? aggRows[0] : { sectors_present: 0, is_delisted_count: 0, stale_warn_count: 0, total_active: 0 };
+
+      // Source-chain completeness pct
+      const chainResult = await db.execute<{ coingecko_pct: number; kraken_ws_pct: number; finnhub_pct: number }>(sql`
+        SELECT
+          ROUND(100.0 * SUM(CASE WHEN (source_chain->>'coingecko')::boolean THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0), 1) AS coingecko_pct,
+          ROUND(100.0 * SUM(CASE WHEN (source_chain->>'kraken_ws_accept')::boolean THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0), 1) AS kraken_ws_pct,
+          ROUND(100.0 * SUM(CASE WHEN (source_chain->>'finnhub')::boolean THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0), 1) AS finnhub_pct
+        FROM xstock_spot_universe
+        WHERE is_delisted = false
+      `);
+      const chainRows = (chainResult as any).rows ?? [];
+      const chain = Array.isArray(chainRows) && chainRows[0] ? chainRows[0] : { coingecko_pct: 0, kraken_ws_pct: 0, finnhub_pct: 0 };
+
+      const cacheState = xstockUniverseService.getCacheState();
+
+      res.json({
+        ok: true,
+        last_successful_run: lastSuccess,
+        last_attempted_run: lastRun?.started_at ?? null,
+        last_run_triggered_by: lastRun?.triggered_by ?? null,
+        snapshot_size: XSTOCK_SPOT_SYMBOLS.size,
+        registry_size: XSTOCK_SPOT_REGISTRY.size,
+        sectors_present: Number(agg.sectors_present),
+        is_delisted_count: Number(agg.is_delisted_count),
+        stale_warn_count: Number(agg.stale_warn_count),
+        total_active_in_db: Number(agg.total_active),
+        source_chain_completeness_pct: {
+          coingecko: Number(chain.coingecko_pct ?? 0),
+          kraken_ws_accept: Number(chain.kraken_ws_pct ?? 0),
+          finnhub: Number(chain.finnhub_pct ?? 0),
+        },
+        cache_state: cacheState,
+      });
+    } catch (error: any) {
+      console.error('[B79.0n.UNIVERSE-DISCOVERY][health] failed:', error);
+      res.status(500).json({ ok: false, error: error?.message ?? String(error) });
+    }
+  });
+
   // GET /api/diagnostics/tec-bootstrap - B79.TEC: per-asset-class TEC config
   // bootstrap status. Returns ready=true once primeTECConfig() has warmed
   // every ACTIVE asset class. Used by Step 7 first-pass verify + ops health

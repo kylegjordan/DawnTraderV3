@@ -246,7 +246,22 @@ export type XstockSector =
   | 'XLC'           // Communication Services
   | 'INDEX_PROXY'   // SPY / QQQ — excluded from global aggregation
   | 'BROAD_ETF'    // ARKK, ARKG, XBI, GLD, TOTL, IEMG — SPY-fallback target
-  | 'INTL_ETF';    // EWA-EWZ — country/region ETFs
+  | 'INTL_ETF'     // EWA-EWZ — country/region ETFs
+  | 'UNCATEGORIZED'; // B79.0n.UNIVERSE-DISCOVERY: symbols where Finnhub metadata is unavailable. Excluded from B-PHASE-A2 sector-coverage floor counting until manual curation lands.
+
+/**
+ * B79.0n.UNIVERSE-DISCOVERY 2026-05-21: runtime allow-list of valid sector
+ * values. Mirrors the XstockSector union as a Set for O(1) membership checks
+ * at DB-load time when coercing raw `sector` strings from `xstock_spot_universe`.
+ * Also referenced by the DB CHECK constraint (must stay in sync — see
+ * 2026-05-21-b79-0n-universe-discovery.sql).
+ */
+export const _XSTOCK_SECTOR_VALUES_FOR_CHECK: ReadonlySet<string> = new Set<string>([
+  'XLK', 'XLV', 'XLF', 'XLC', 'XLY', 'XLP', 'XLE', 'XLI',
+  'XLRE', 'XLU', 'XLB',
+  'BROAD_ETF', 'INDEX_PROXY', 'INTL_ETF',
+  'UNCATEGORIZED',
+]);
 
 export interface XstockSpotEntry {
   /** Human-readable display name (e.g., 'Apple', 'nVent Electric'). REQUIRED. */
@@ -268,280 +283,47 @@ export interface XstockSpotEntry {
   cryptoAdjacent?: boolean;
 }
 
-export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = new Map<string, XstockSpotEntry>([
-  ['AAPL/USD', { name: 'Apple', sector: 'XLK' }],
-  ['ABBV/USD', { name: 'AbbVie', sector: 'XLV' }],
-  ['ABNB/USD', { name: 'Airbnb', sector: 'XLY' }],
-  ['ADBE/USD', { name: 'Adobe', sector: 'XLK' }],
-  ['AEP/USD', { name: 'American Electric Power', sector: 'XLU' }],
-  ['AFL/USD', { name: 'Aflac', sector: 'XLF' }],
-  ['AIG/USD', { name: 'AIG', sector: 'XLF' }],
-  ['ALL/USD', { name: 'Allstate', sector: 'XLF' }],
-  ['ALNY/USD', { name: 'Alnylam Pharmaceuticals', sector: 'XLV' }],
-  ['AMAT/USD', { name: 'Applied Materials', sector: 'XLK' }],
-  ['AMC/USD', { name: 'AMC Entertainment', sector: 'XLC' }],
-  ['AMD/USD', { name: 'AMD', sector: 'XLK' }],
-  ['AMGN/USD', { name: 'Amgen', sector: 'XLV' }],
-  ['AMT/USD', { name: 'American Tower', sector: 'XLRE' }],
-  ['AMZN/USD', { name: 'Amazon', sector: 'XLY' }],
-  ['AON/USD', { name: 'Aon', sector: 'XLF' }],
-  ['ARCT/USD', { name: 'Arcturus Therapeutics', sector: 'XLV' }],
-  ['ARKG/USD', { name: 'ARK Genomic Revolution ETF', sector: 'BROAD_ETF' }],
-  ['ARKK/USD', { name: 'ARK Innovation ETF', sector: 'BROAD_ETF' }],
-  ['ASML/USD', { name: 'ASML Holding', sector: 'XLK', adr: true }],
-  ['AUR/USD', { name: 'Aurora Innovation', sector: 'XLI' }],
-  ['AVB/USD', { name: 'AvalonBay Communities', sector: 'XLRE' }],
-  ['AXP/USD', { name: 'American Express', sector: 'XLF' }],
-  ['BABA/USD', { name: 'Alibaba', sector: 'XLY', adr: true }],
-  ['BAC/USD', { name: 'Bank of America', sector: 'XLF' }],
-  ['BAX/USD', { name: 'Baxter International', sector: 'XLV' }],
-  ['BBBY/USD', { name: 'Bed Bath & Beyond', sector: 'XLY' }],
-  ['BCC/USD', { name: 'Boise Cascade', sector: 'XLB' }],
-  ['BDX/USD', { name: 'Becton Dickinson', sector: 'XLV' }],
-  ['BE/USD', { name: 'Bloom Energy', sector: 'XLI' }],
-  ['BHC/USD', { name: 'Bausch Health', sector: 'XLV', adr: true }],
-  ['BIDU/USD', { name: 'Baidu', sector: 'XLC', adr: true }],
-  ['BIIB/USD', { name: 'Biogen', sector: 'XLV' }],
-  ['BILI/USD', { name: 'Bilibili', sector: 'XLC', adr: true }],
-  // B79.0n.HYGIENE 2026-05-20: BITF/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
-  ['BLDP/USD', { name: 'Ballard Power', sector: 'XLI', adr: true }],
-  ['BLNK/USD', { name: 'Blink Charging', sector: 'XLI' }],
-  ['BMBL/USD', { name: 'Bumble', sector: 'XLC' }],
-  ['BMY/USD', { name: 'Bristol Myers Squibb', sector: 'XLV' }],
-  ['BNTX/USD', { name: 'BioNTech', sector: 'XLV', adr: true }],
-  ['BTBT/USD', { name: 'Bit Digital', sector: 'XLK', cryptoAdjacent: true }],
-  ['BTI/USD', { name: 'British American Tobacco', sector: 'XLP', adr: true }],
-  ['BUD/USD', { name: 'Anheuser-Busch InBev', sector: 'XLP', adr: true }],
-  ['CB/USD', { name: 'Chubb', sector: 'XLF' }],
-  ['CBOE/USD', { name: 'Cboe Global Markets', sector: 'XLF' }],
-  ['CCI/USD', { name: 'Crown Castle', sector: 'XLRE' }],
-  ['CHPT/USD', { name: 'ChargePoint', sector: 'XLI' }],
-  ['CI/USD', { name: 'Cigna', sector: 'XLV' }],
-  ['CIFR/USD', { name: 'Cipher Mining', sector: 'XLK', cryptoAdjacent: true }],
-  ['CL/USD', { name: 'Colgate-Palmolive', sector: 'XLP' }],
-  ['CLSK/USD', { name: 'CleanSpark', sector: 'XLK', cryptoAdjacent: true }],
-  ['CMCSA/USD', { name: 'Comcast', sector: 'XLC' }],
-  ['CME/USD', { name: 'CME Group', sector: 'XLF' }],
-  ['CNC/USD', { name: 'Centene', sector: 'XLV' }],
-  ['COIN/USD', { name: 'Coinbase', sector: 'XLF', cryptoAdjacent: true }],
-  ['COP/USD', { name: 'ConocoPhillips', sector: 'XLE' }],
-  ['COST/USD', { name: 'Costco', sector: 'XLP' }],
-  ['CRCL/USD', { name: 'Circle', sector: 'XLF', cryptoAdjacent: true }],
-  ['CRWD/USD', { name: 'CrowdStrike', sector: 'XLK' }],
-  ['CSCO/USD', { name: 'Cisco Systems', sector: 'XLK' }],
-  ['CVS/USD', { name: 'CVS Health', sector: 'XLV' }],
-  ['CVX/USD', { name: 'Chevron', sector: 'XLE' }],
-  ['D/USD', { name: 'Dominion Energy', sector: 'XLU' }],
-  ['DASH/USD', { name: 'DoorDash', sector: 'XLY' }],
-  ['DE/USD', { name: 'Deere & Company', sector: 'XLI' }],
-  ['DEO/USD', { name: 'Diageo', sector: 'XLP', adr: true }],
-  ['DFDV/USD', { name: 'DeFi Development Corp', sector: 'XLF', cryptoAdjacent: true }],
-  ['DHR/USD', { name: 'Danaher', sector: 'XLV' }],
-  ['DIS/USD', { name: 'Disney', sector: 'XLC' }],
-  ['DLR/USD', { name: 'Digital Realty', sector: 'XLRE' }],
-  ['DTE/USD', { name: 'DTE Energy', sector: 'XLU' }],
-  ['DUK/USD', { name: 'Duke Energy', sector: 'XLU' }],
-  ['ED/USD', { name: 'Consolidated Edison', sector: 'XLU' }],
-  ['EDU/USD', { name: 'New Oriental Education', sector: 'XLY', adr: true }],
-  ['EIX/USD', { name: 'Edison International', sector: 'XLU' }],
-  ['ELV/USD', { name: 'Elevance Health', sector: 'XLV' }],
-  ['EMR/USD', { name: 'Emerson Electric', sector: 'XLI' }],
-  ['EQIX/USD', { name: 'Equinix', sector: 'XLRE' }],
-  ['EQR/USD', { name: 'Equity Residential', sector: 'XLRE' }],
-  ['EQT/USD', { name: 'EQT Corporation', sector: 'XLE' }],
-  ['ESS/USD', { name: 'Essex Property Trust', sector: 'XLRE' }],
-  ['EVGO/USD', { name: 'EVgo', sector: 'XLU' }],
-  ['EWA/USD', { name: 'Australia ETF', sector: 'INTL_ETF' }],
-  ['EWC/USD', { name: 'Canada ETF', sector: 'INTL_ETF' }],
-  ['EWG/USD', { name: 'Germany ETF', sector: 'INTL_ETF' }],
-  ['EWI/USD', { name: 'Italy ETF', sector: 'INTL_ETF' }],
-  ['EWL/USD', { name: 'Switzerland ETF', sector: 'INTL_ETF' }],
-  ['EWN/USD', { name: 'Netherlands ETF', sector: 'INTL_ETF' }],
-  ['EWP/USD', { name: 'Spain ETF', sector: 'INTL_ETF' }],
-  ['EWQ/USD', { name: 'France ETF', sector: 'INTL_ETF' }],
-  ['EWS/USD', { name: 'Singapore ETF', sector: 'INTL_ETF' }],
-  ['EWU/USD', { name: 'United Kingdom ETF', sector: 'INTL_ETF' }],
-  ['EWZ/USD', { name: 'Brazil ETF', sector: 'INTL_ETF' }],
-  ['EXC/USD', { name: 'Exelon', sector: 'XLU' }],
-  ['F/USD', { name: 'Ford', sector: 'XLY' }],
-  ['FAST/USD', { name: 'Fastenal', sector: 'XLI' }],
-  ['FCEL/USD', { name: 'FuelCell Energy', sector: 'XLI' }],
-  ['FOX/USD', { name: 'Fox Corporation (B)', sector: 'XLC' }],
-  ['FOXA/USD', { name: 'Fox Corporation (A)', sector: 'XLC' }],
-  ['GEV/USD', { name: 'GE Vernova', sector: 'XLI' }],
-  ['GILD/USD', { name: 'Gilead Sciences', sector: 'XLV' }],
-  ['GLD/USD', { name: 'Gold ETF', sector: 'BROAD_ETF' }],
-  ['GLOB/USD', { name: 'Globant', sector: 'XLK', adr: true }],
-  ['GLXY/USD', { name: 'Galaxy Digital', sector: 'XLF', cryptoAdjacent: true }],
-  ['GM/USD', { name: 'General Motors', sector: 'XLY' }],
-  ['GME/USD', { name: 'GameStop', sector: 'XLY' }],
-  ['GOOGL/USD', { name: 'Alphabet', sector: 'XLC' }],
-  ['GOTU/USD', { name: 'Gaotu Techedu', sector: 'XLY', adr: true }],
-  ['GS/USD', { name: 'Goldman Sachs', sector: 'XLF' }],
-  ['GWW/USD', { name: 'W.W. Grainger', sector: 'XLI' }],
-  ['HCA/USD', { name: 'HCA Healthcare', sector: 'XLV' }],
-  ['HD/USD', { name: 'Home Depot', sector: 'XLY' }],
-  ['HIG/USD', { name: 'Hartford Financial', sector: 'XLF' }],
-  ['HIVE/USD', { name: 'HIVE Digital Technologies', sector: 'XLK', cryptoAdjacent: true }],
-  // B79.0n.HYGIENE 2026-05-20: HOLX/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
-  ['HOOD/USD', { name: 'Robinhood', sector: 'XLF' }],
-  ['HUM/USD', { name: 'Humana', sector: 'XLV' }],
-  ['HUT/USD', { name: 'Hut 8 Mining', sector: 'XLK', cryptoAdjacent: true }],
-  ['IBM/USD', { name: 'IBM', sector: 'XLK' }],
-  ['ICE/USD', { name: 'Intercontinental Exchange', sector: 'XLF' }],
-  ['IEMG/USD', { name: 'Core MSCI Emerging Markets ETF', sector: 'BROAD_ETF' }],
-  ['INTC/USD', { name: 'Intel', sector: 'XLK' }],
-  ['JD/USD', { name: 'JD.com', sector: 'XLY', adr: true }],
-  ['JNJ/USD', { name: 'Johnson & Johnson', sector: 'XLV' }],
-  ['JPM/USD', { name: 'JPMorgan Chase', sector: 'XLF' }],
-  ['KO/USD', { name: 'Coca-Cola', sector: 'XLP' }],
-  ['LCID/USD', { name: 'Lucid Group', sector: 'XLY' }],
-  ['LECO/USD', { name: 'Lincoln Electric', sector: 'XLI' }],
-  ['LI/USD', { name: 'Li Auto', sector: 'XLY', adr: true }],
-  ['LIDR/USD', { name: 'AEye Inc.', sector: 'XLK' }],
-  ['LLY/USD', { name: 'Eli Lilly', sector: 'XLV' }],
-  ['LMND/USD', { name: 'Lemonade', sector: 'XLF' }],
-  ['LMT/USD', { name: 'Lockheed Martin', sector: 'XLI' }],
-  ['LNC/USD', { name: 'Lincoln National', sector: 'XLF' }],
-  ['LOW/USD', { name: "Lowe's", sector: 'XLY' }],
-  ['LRCX/USD', { name: 'Lam Research', sector: 'XLK' }],
-  ['LYFT/USD', { name: 'Lyft', sector: 'XLI' }],
-  ['MAA/USD', { name: 'Mid-America Apartment', sector: 'XLRE' }],
-  ['MCD/USD', { name: "McDonald's", sector: 'XLY' }],
-  ['MCK/USD', { name: 'McKesson', sector: 'XLV' }],
-  ['MCO/USD', { name: "Moody's", sector: 'XLF' }],
-  ['MDB/USD', { name: 'MongoDB', sector: 'XLK' }],
-  ['MDLZ/USD', { name: 'Mondelez International', sector: 'XLP' }],
-  ['MDT/USD', { name: 'Medtronic', sector: 'XLV' }],
-  ['MET/USD', { name: 'MetLife', sector: 'XLF' }],
-  ['META/USD', { name: 'Meta Platforms', sector: 'XLC' }],
-  ['MMM/USD', { name: '3M', sector: 'XLI' }],
-  ['MO/USD', { name: 'Altria Group', sector: 'XLP' }],
-  ['MOH/USD', { name: 'Molina Healthcare', sector: 'XLV' }],
-  ['MPC/USD', { name: 'Marathon Petroleum', sector: 'XLE' }],
-  ['MRK/USD', { name: 'Merck', sector: 'XLV' }],
-  ['MRNA/USD', { name: 'Moderna', sector: 'XLV' }],
-  ['MRVL/USD', { name: 'Marvell Technology', sector: 'XLK' }],
-  ['MS/USD', { name: 'Morgan Stanley', sector: 'XLF' }],
-  ['MSCI/USD', { name: 'MSCI Inc.', sector: 'XLF' }],
-  ['MSFT/USD', { name: 'Microsoft', sector: 'XLK' }],
-  ['MSTR/USD', { name: 'MicroStrategy', sector: 'XLK', cryptoAdjacent: true }],
-  ['MTCH/USD', { name: 'Match Group', sector: 'XLC' }],
-  ['NBIX/USD', { name: 'Neurocrine Biosciences', sector: 'XLV' }],
-  ['NDAQ/USD', { name: 'Nasdaq Inc.', sector: 'XLF' }],
-  ['NEE/USD', { name: 'NextEra Energy', sector: 'XLU' }],
-  ['NET/USD', { name: 'Cloudflare', sector: 'XLK' }],
-  ['NFLX/USD', { name: 'Netflix', sector: 'XLC' }],
-  ['NIO/USD', { name: 'NIO', sector: 'XLY', adr: true }],
-  ['NKE/USD', { name: 'Nike', sector: 'XLY' }],
-  ['NOW/USD', { name: 'ServiceNow', sector: 'XLK' }],
-  ['NTES/USD', { name: 'NetEase', sector: 'XLC', adr: true }],
-  ['NTNX/USD', { name: 'Nutanix', sector: 'XLK' }],
-  ['NVAX/USD', { name: 'Novavax', sector: 'XLV' }],
-  ['NVDA/USD', { name: 'Nvidia', sector: 'XLK' }],
-  ['NVO/USD', { name: 'Novo Nordisk', sector: 'XLV', adr: true }],
-  ['NVT/USD', { name: 'nVent Electric', sector: 'XLI' }],
-  ['NWS/USD', { name: 'News Corporation (B)', sector: 'XLC' }],
-  ['NWSA/USD', { name: 'News Corporation (A)', sector: 'XLC' }],
-  ['O/USD', { name: 'Realty Income', sector: 'XLRE' }],
-  ['OPEN/USD', { name: 'Opendoor Technologies', sector: 'XLRE' }],
-  ['ORCL/USD', { name: 'Oracle', sector: 'XLK' }],
-  ['OXY/USD', { name: 'Occidental Petroleum', sector: 'XLE' }],
-  ['PANW/USD', { name: 'Palo Alto Networks', sector: 'XLK' }],
-  // B79.0n.HYGIENE 2026-05-20: PARA/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
-  ['PATH/USD', { name: 'UiPath', sector: 'XLK' }],
-  ['PCG/USD', { name: 'PG&E', sector: 'XLU' }],
-  ['PDD/USD', { name: 'PDD Holdings', sector: 'XLY', adr: true }],
-  ['PEP/USD', { name: 'PepsiCo', sector: 'XLP' }],
-  ['PFE/USD', { name: 'Pfizer', sector: 'XLV' }],
-  ['PG/USD', { name: 'Procter & Gamble', sector: 'XLP' }],
-  ['PGR/USD', { name: 'Progressive', sector: 'XLF' }],
-  ['PH/USD', { name: 'Parker-Hannifin', sector: 'XLI' }],
-  ['PLD/USD', { name: 'Prologis', sector: 'XLRE' }],
-  ['PLTR/USD', { name: 'Palantir', sector: 'XLK' }],
-  ['PLUG/USD', { name: 'Plug Power', sector: 'XLI' }],
-  ['PM/USD', { name: 'Philip Morris International', sector: 'XLP' }],
-  ['PNR/USD', { name: 'Pentair', sector: 'XLI' }],
-  ['PRU/USD', { name: 'Prudential Financial', sector: 'XLF' }],
-  ['PSA/USD', { name: 'Public Storage', sector: 'XLRE' }],
-  ['PSX/USD', { name: 'Phillips 66', sector: 'XLE' }],
-  ['PWR/USD', { name: 'Quanta Services', sector: 'XLI' }],
-  ['PYPL/USD', { name: 'PayPal', sector: 'XLF' }],
-  ['QCOM/USD', { name: 'Qualcomm', sector: 'XLK' }],
-  ['QQQ/USD', { name: 'Nasdaq 100 ETF', sector: 'INDEX_PROXY' }],
-  ['RBLX/USD', { name: 'Roblox', sector: 'XLC' }],
-  ['REGN/USD', { name: 'Regeneron', sector: 'XLV' }],
-  ['RGEN/USD', { name: 'Repligen', sector: 'XLV' }],
-  ['RIVN/USD', { name: 'Rivian', sector: 'XLY' }],
-  ['RKT/USD', { name: 'Rocket Companies', sector: 'XLF' }],
-  ['RMD/USD', { name: 'ResMed', sector: 'XLV' }],
-  ['ROK/USD', { name: 'Rockwell Automation', sector: 'XLI' }],
-  ['ROOT/USD', { name: 'Root Inc.', sector: 'XLF' }],
-  ['ROP/USD', { name: 'Roper Technologies', sector: 'XLK' }],
-  ['RTX/USD', { name: 'RTX Corporation', sector: 'XLI' }],
-  // B79.0n.HYGIENE 2026-05-20: SAGE/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
-  ['SAP/USD', { name: 'SAP', sector: 'XLK', adr: true }],
-  ['SHEL/USD', { name: 'Shell', sector: 'XLE', adr: true }],
-  ['SHOP/USD', { name: 'Shopify', sector: 'XLK', adr: true }],
-  ['SLB/USD', { name: 'Schlumberger', sector: 'XLE' }],
-  ['SNDK/USD', { name: 'SanDisk', sector: 'XLK' }],
-  ['SNOW/USD', { name: 'Snowflake', sector: 'XLK' }],
-  ['SO/USD', { name: 'Southern Company', sector: 'XLU' }],
-  ['SOFI/USD', { name: 'SoFi Technologies', sector: 'XLF' }],
-  ['SPG/USD', { name: 'Simon Property Group', sector: 'XLRE' }],
-  ['SPGI/USD', { name: 'S&P Global', sector: 'XLF' }],
-  ['SPY/USD', { name: 'S&P 500 ETF', sector: 'INDEX_PROXY' }],
-  ['SRE/USD', { name: 'Sempra Energy', sector: 'XLU' }],
-  ['STZ/USD', { name: 'Constellation Brands', sector: 'XLP' }],
-  ['SUI/USD', { name: 'Sun Communities', sector: 'XLRE' }],
-  ['SUPN/USD', { name: 'Supernus Pharmaceuticals', sector: 'XLV' }],
-  ['T/USD', { name: 'AT&T', sector: 'XLC' }],
-  ['TAL/USD', { name: 'TAL Education', sector: 'XLY', adr: true }],
-  ['TAP/USD', { name: 'Molson Coors', sector: 'XLP' }],
-  ['TER/USD', { name: 'Teradyne', sector: 'XLK' }],
-  ['TEVA/USD', { name: 'Teva Pharmaceuticals', sector: 'XLV', adr: true }],
-  ['TGT/USD', { name: 'Target', sector: 'XLY' }],
-  ['THC/USD', { name: 'Tenet Healthcare', sector: 'XLV' }],
-  ['TME/USD', { name: 'Tencent Music', sector: 'XLC', adr: true }],
-  ['TMO/USD', { name: 'Thermo Fisher Scientific', sector: 'XLV' }],
-  ['TMUS/USD', { name: 'T-Mobile', sector: 'XLC' }],
-  ['TONX/USD', { name: 'TONX Inc.', sector: 'XLK' }],
-  ['TOTL/USD', { name: 'DoubleLine Total Return ETF', sector: 'BROAD_ETF' }],
-  ['TRV/USD', { name: 'Travelers', sector: 'XLF' }],
-  ['TSLA/USD', { name: 'Tesla', sector: 'XLY' }],
-  ['TT/USD', { name: 'Trane Technologies', sector: 'XLI' }],
-  ['TXN/USD', { name: 'Texas Instruments', sector: 'XLK' }],
-  ['UBER/USD', { name: 'Uber', sector: 'XLI' }],
-  ['UHS/USD', { name: 'Universal Health Services', sector: 'XLV' }],
-  ['UL/USD', { name: 'Unilever', sector: 'XLP', adr: true }],
-  ['UPS/USD', { name: 'UPS', sector: 'XLI' }],
-  ['URI/USD', { name: 'United Rentals', sector: 'XLI' }],
-  ['UWMC/USD', { name: 'UWM Holdings', sector: 'XLF' }],
-  ['VIA/USD', { name: 'Via Renewables', sector: 'XLU' }],
-  ['VICI/USD', { name: 'VICI Properties', sector: 'XLRE' }],
-  ['VLO/USD', { name: 'Valero Energy', sector: 'XLE' }],
-  ['VOYA/USD', { name: 'Voya Financial', sector: 'XLF' }],
-  ['VRTX/USD', { name: 'Vertex Pharmaceuticals', sector: 'XLV' }],
-  ['VTRS/USD', { name: 'Viatris', sector: 'XLV' }],
-  ['VZ/USD', { name: 'Verizon', sector: 'XLC' }],
-  // B79.0n.HYGIENE 2026-05-20: WBA/USD removed — zero data Apr+May 2026; see KNOWN_NONEXISTENT_NAMES + RUNNING_ISSUES #120.
-  ['WBD/USD', { name: 'Warner Bros. Discovery', sector: 'XLC' }],
-  ['WFC/USD', { name: 'Wells Fargo', sector: 'XLF' }],
-  ['XBI/USD', { name: 'SPDR S&P Biotech ETF', sector: 'BROAD_ETF' }],
-  ['XEL/USD', { name: 'Xcel Energy', sector: 'XLU' }],
-  ['XOM/USD', { name: 'ExxonMobil', sector: 'XLE' }],
-  ['XPEV/USD', { name: 'XPeng', sector: 'XLY', adr: true }],
-  ['XYL/USD', { name: 'Xylem', sector: 'XLI' }],
-  ['XYZ/USD', { name: 'Block (XYZ)', sector: 'XLF' }],
-  ['ZTS/USD', { name: 'Zoetis', sector: 'XLV' }],
-]);
+// B79.0n.UNIVERSE-DISCOVERY 2026-05-21: the 260-row Map literal that
+// previously occupied lines 286-552 was replaced with a dynamically-
+// populated Map. The seed for the new shape lives in the DB table
+// `xstock_spot_universe` (seeded by 2026-05-21-b79-0n-universe-discovery.sql
+// from this exact registry shape at the cutover commit). The runtime
+// population path runs at server boot in server/index.ts via
+// xstockUniverseService.initializeFromDB() (5-layer fallback chain).
+//
+// Callers consume XSTOCK_SPOT_REGISTRY + XSTOCK_SPOT_SYMBOLS unchanged
+// — interface preserved. Iterators + .get/.has lookups + .size reads
+// at any post-boot time return the dynamically-loaded contents.
+//
+// Manual edits to add/remove xStock symbols are NO LONGER the right
+// pattern. Add/remove via the DB tables xstock_spot_universe (auto-
+// discovered) + xstock_spot_universe_overrides (manual curation flags).
+
+const _xstockRegistryInternal = new Map<string, XstockSpotEntry>();
+const _xstockSymbolsInternal = new Set<string>();
+
+export const XSTOCK_SPOT_REGISTRY: ReadonlyMap<string, XstockSpotEntry> = _xstockRegistryInternal;
+export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = _xstockSymbolsInternal;
 
 /**
- * Back-compat: derived universe set. DO NOT add entries here — edit
- * `XSTOCK_SPOT_REGISTRY` above. Existing `.has()` callers + iteration
- * sites work unchanged.
+ * B79.0n.UNIVERSE-DISCOVERY 2026-05-21: bulk-replace the in-memory universe.
+ * Called by xstockUniverseService at boot (DB / file-cache / bootstrap fallback)
+ * and after every successful discovery refresh. NOT a public API — the leading
+ * underscore is a deliberate signal that only the universe-service should call this.
  */
-export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set(XSTOCK_SPOT_REGISTRY.keys());
+export function _replaceXstockUniverse(entries: ReadonlyMap<string, XstockSpotEntry>): void {
+  _xstockRegistryInternal.clear();
+  _xstockSymbolsInternal.clear();
+  for (const [symbol, entry] of entries) {
+    _xstockRegistryInternal.set(symbol, entry);
+    _xstockSymbolsInternal.add(symbol);
+  }
+}
+
+// B79.0n.UNIVERSE-DISCOVERY 2026-05-21: duplicate XSTOCK_SPOT_SYMBOLS export
+// REMOVED here. The canonical declaration now lives above (line ~306) as a
+// ReadonlySet view of the mutable internal _xstockSymbolsInternal set,
+// kept in sync with XSTOCK_SPOT_REGISTRY by _replaceXstockUniverse.
 
 /** Look up the human-readable display name for an xstock pair. Returns null if unknown. */
 export function getXstockName(pair: string): string | null {

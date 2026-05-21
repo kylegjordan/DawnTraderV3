@@ -52,6 +52,49 @@ try {
   process.exit(1);
 }
 
+// B79.0n.UNIVERSE-DISCOVERY 2026-05-21: 5-layer fallback initialization of the
+// xStock universe. Pre-discovery boot population from xstock_spot_universe DB
+// table; falls through to file cache → bootstrap → fail-fast as documented in
+// universe-service.ts. Per Langston Q-PA-4 diagnostic enhancement: distinguish
+// "DB unreachable" from "DB reachable but table empty" (= seed migration didn't
+// run).
+{
+  const { xstockUniverseService } = await import('./asset_classes/xstock_spot/universe-service.js');
+  const initResult = await xstockUniverseService.initializeFromDB();
+  if (!initResult.ok || initResult.rowCount === 0) {
+    if (initResult.dbReachable && initResult.rowCount === 0) {
+      console.error(
+        '[CRITICAL][B79.0n.UNIVERSE-DISCOVERY] DB reachable but xstock_spot_universe table is empty — ' +
+        'seed migration (drizzle/migrations/2026-05-21-b79-0n-universe-discovery.sql) likely never ran. ' +
+        'Run `npm run db:migrate` and re-deploy.',
+      );
+    } else if (!initResult.dbReachable) {
+      console.warn('[BOOT][B79.0n.UNIVERSE-DISCOVERY] Layer 2 DB unreachable; attempting Layer 3 file cache');
+    }
+    const fileCacheOk = await xstockUniverseService.loadFromFileCache();
+    if (!fileCacheOk) {
+      console.warn('[BOOT][B79.0n.UNIVERSE-DISCOVERY] Layer 3 file cache miss; attempting Layer 4 bootstrap');
+      const bootstrapOk = xstockUniverseService.loadBootstrap();
+      if (!bootstrapOk) {
+        console.error('[CRITICAL][B79.0n.UNIVERSE-DISCOVERY] all 5 fallback layers exhausted; refusing to boot');
+        process.exit(1);
+      }
+      console.warn('[BOOT][B79.0n.UNIVERSE-DISCOVERY] using BOOTSTRAP fallback (layer 4) — discovery service is degraded');
+    } else {
+      console.warn('[BOOT][B79.0n.UNIVERSE-DISCOVERY] using FILE_CACHE fallback (layer 3)');
+    }
+  }
+  const { XSTOCK_SPOT_SYMBOLS } = await import('../shared/asset-classes.js');
+  console.log(
+    `[BOOT][B79.0n.UNIVERSE-DISCOVERY] universe loaded: ${XSTOCK_SPOT_SYMBOLS.size} symbols ` +
+    `(db_reachable=${initResult.dbReachable}, db_rows=${initResult.rowCount}, source=${xstockUniverseService.getCacheState().source})`,
+  );
+
+  // Register daily 06:00 UTC discovery cron (Q-PA-6 ACK same-host shape)
+  const { registerXstockUniverseCron } = await import('./services/xstock-universe-cron.js');
+  registerXstockUniverseCron();
+}
+
 const app = express();
 
 // CORS Configuration - restrict access to allowed origins only
