@@ -159,8 +159,11 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
     console.log('[32.D-Fix.6] Empty watchlist detected - querying screener for eligible pairs');
     
     // Phase 41F-L.E2E-PURGE: Get mode-level settings
-    // B79.0n.STORAGE (2026-05-21): paper-sim service reads canonical crypto baseline.
-    const filters = await storage.getCanonicalScreenerConfig({ mode });
+    // B79.0n.STORAGE (2026-05-21 + Langston Step 4 reclassification): empty-watchlist
+    // auto-populate is a runtime crypto-trading routing path (feeds
+    // krakenService.getEligiblePairs + seeds paper-sim watchlist). Use explicit
+    // crypto_spot per (a) crypto-intentional category, NOT the canonical-baseline helper.
+    const filters = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: 'active_quant' });
     
     if (!filters) {
       console.log('[32.D-Fix.6] No filters found - skipping watchlist population');

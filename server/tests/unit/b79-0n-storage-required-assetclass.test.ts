@@ -47,4 +47,25 @@ describe('[B79.0n.STORAGE] getScreenerFilters requires assetClass', () => {
     }
     expect(typeof diagnosticCaller).toBe('function');
   });
+
+  // B79.0n.STORAGE (2026-05-21 + Langston Step 4 BLOCKER fix): the upsertScreenerFilters
+  // UPDATE WHERE clause previously matched `(mode, filterPath)` only. After the seed
+  // migration creates 2 rows per (mode, filterPath) (crypto_spot + xstock_spot), that
+  // WHERE matched BOTH rows — either violating the unique index or silently
+  // cross-corrupting data. Fix: assetClass added to WHERE + REQUIRED on data shape.
+  it('TYPE LOCK — upsertScreenerFilters REQUIRES assetClass on data shape', () => {
+    function callerMissingUpsertAssetClass(storage: IStorage) {
+      // @ts-expect-error — assetClass is REQUIRED on upsert data per B79.0n.STORAGE BLOCKER fix
+      return storage.upsertScreenerFilters({ mode: 'paper', filterPath: 'active_quant' });
+    }
+    function callerWithUpsertAssetClass(storage: IStorage) {
+      return storage.upsertScreenerFilters({
+        mode: 'paper',
+        assetClass: 'xstock_spot',
+        filterPath: 'active_quant'
+      });
+    }
+    expect(typeof callerMissingUpsertAssetClass).toBe('function');
+    expect(typeof callerWithUpsertAssetClass).toBe('function');
+  });
 });

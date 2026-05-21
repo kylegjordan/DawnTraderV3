@@ -240,7 +240,11 @@ export interface IStorage {
   // getCanonicalScreenerConfig() helper (never mis-route as asset-class-aware).
   getScreenerFilters(params: { mode: 'live' | 'paper'; assetClass: AssetClass; filterPath?: string }): Promise<ScreenerFilters | null>;
   getCanonicalScreenerConfig(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null>;
-  upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters>;
+  // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on upsert data shape per Langston
+  // Step 4 BLOCKER. UPDATE WHERE clause now scopes by (mode, asset_class, filter_path)
+  // matching the unique index — prevents cross-class corruption when 2 rows share
+  // (mode, filter_path) post-seed-migration.
+  upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { assetClass: AssetClass; lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters>;
 
   // Filter diagnostics methods
   getFilterDiagnostics(params: { mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
@@ -977,14 +981,21 @@ export class DatabaseStorage implements IStorage {
     return this.getScreenerFilters({ ...params, assetClass: 'crypto_spot' });
   }
 
-  // Batch 19G: Upsert by (mode, filterPath) composite key
-  // B79.0n.STORAGE (2026-05-21): assetClass passed-through to getScreenerFilters.
-  // The InsertScreenerFilters shape already carries asset_class from the caller's data.
-  async upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters> {
+  // Batch 19G: Upsert by (mode, filterPath) composite key.
+  // B79.0n.STORAGE (2026-05-21 + Langston Step 4 BLOCKER fix): assetClass is REQUIRED
+  // on the data shape AND added to the UPDATE WHERE clause. Without this, the seed
+  // migration creates 2 rows per (mode, filterPath) (crypto_spot + xstock_spot) and
+  // a `(mode, filterPath)`-only WHERE matches BOTH rows — either violates the
+  // (mode, asset_class, filter_path) unique index OR silently cross-corrupts data
+  // between the two classes. This was exactly the silent-default footgun this batch
+  // exists to eliminate.
+  async upsertScreenerFilters(
+    data: Omit<InsertScreenerFilters, 'userId'> & { assetClass: AssetClass; lastUpdatedBy?: string; filterPath?: string }
+  ): Promise<ScreenerFilters> {
     const filterPath = data.filterPath || 'active_quant';
     const existing = await this.getScreenerFilters({
       mode: data.mode,
-      assetClass: (data.assetClass ?? 'crypto_spot') as AssetClass,
+      assetClass: data.assetClass,
       filterPath
     });
 
@@ -1000,6 +1011,7 @@ export class DatabaseStorage implements IStorage {
         .set(updateData)
         .where(and(
           eq(screenerFilters.mode, data.mode),
+          eq(screenerFilters.assetClass, data.assetClass),
           eq(screenerFilters.filterPath, filterPath)
         ))
         .returning();

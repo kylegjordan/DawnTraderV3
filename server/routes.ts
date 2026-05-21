@@ -2404,8 +2404,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       }
       
+      // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on upsert. UI edit endpoint
+      // is currently the canonical crypto baseline editor; mirror that explicitly.
+      // Per-class UI editing is a future capability (would require asset-class param
+      // on the request body + a per-class UI surface — out of B79.0n.STORAGE scope).
       const updatePayload = {
         mode: current.mode,
+        assetClass: 'crypto_spot' as const,
         filterPath, // Batch 19G: Include filterPath in upsert
         ...updatedFilterValues,
         managedByLottie: false,

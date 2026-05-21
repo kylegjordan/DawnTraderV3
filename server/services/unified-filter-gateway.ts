@@ -138,8 +138,11 @@ class UnifiedFilterGateway {
     }
 
     try {
-      // B79.0n.STORAGE (2026-05-21): unified-filter-gateway hydration reads canonical crypto baseline.
-      const filters = await storage.getCanonicalScreenerConfig({ mode });
+      // B79.0n.STORAGE (2026-05-21 + Langston Step 4 reclassification): runtime
+      // crypto-routing path — feeds krakenService.getEligiblePairs(...) and writes
+      // to activeFilterPool.addSurvivors(...). Use explicit crypto_spot per
+      // (a) crypto-intentional category, NOT the canonical-baseline helper.
+      const filters = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: 'active_quant' });
       if (!filters) {
         console.log(`[9.8.C][UnifiedFilter] No screener filters for ${mode}, skipping hydration`);
         return;
@@ -187,8 +190,9 @@ class UnifiedFilterGateway {
    */
   private async getUniverseCount(mode: 'live' | 'paper'): Promise<number> {
     try {
-      // B79.0n.STORAGE (2026-05-21): universe count reads canonical crypto baseline.
-      const filters = await storage.getCanonicalScreenerConfig({ mode });
+      // B79.0n.STORAGE (2026-05-21 + Langston Step 4 reclassification): drives the
+      // crypto pool-sizing path; explicit crypto_spot per (a) category.
+      const filters = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: 'active_quant' });
       return filters?.universeSize || 100;
     } catch {
       return 100;
