@@ -1,9 +1,16 @@
-# B79.0n — UMBRELLA tracker: xStock active-trading wire-in + systemic asset-class awareness (rev 2 — Langston FINAL ACK)
+# B79.0n — UMBRELLA tracker: xStock active-trading wire-in + systemic asset-class awareness (rev 3 — UNIVERSE-DISCOVERY inserted)
 
-> **Status:** rev 2 Langston FINAL ACK 2026-05-20 PM. Green light to draft sub-batch scopes and start the arc. v1 came back with 11 items from "prove-me-wrong" review; v2 absorbed 11 items, counter-proposed on 3 (items 2, 6, 13c); Langston concurred on all 3 counter-proposals.
+> **Status:** rev 3 drafted 2026-05-21 PM after HYGIENE close + mid-batch Kyle architectural directive. Awaiting Langston concurrence on the umbrella restructuring; combined dispatch with `B79.0n.UNIVERSE-DISCOVERY` Step 1 scope.
+> **rev 2 status (superseded):** Langston FINAL ACK 2026-05-20 PM (commit `6e9810171`). 17 sub-batches. v1 came back with 11 items from "prove-me-wrong" review; v2 absorbed 11 items, counter-proposed on 3 (items 2, 6, 13c); Langston concurred on all 3 counter-proposals.
 > **Origin:** Kyle directive 2026-05-20 PM. Original rev3 of `B79_0n_SCOPE.md` (Langston rev3 FINAL ACK) was the seed; Kyle's subsequent review expanded scope into systemic asset-class awareness across the active-trading pipeline.
 > **Phase:** Phase 24 (multi-asset onboarding).
 > **Locked sequence position:** last item before Phase 19 live-trading gate.
+
+> **Rev 3 changes (per Kyle directive 2026-05-21 PM, mid-B79.0n.HYGIENE design conversation):**
+> - **NEW sub-batch `B79.0n.UNIVERSE-DISCOVERY` inserted as #2** (between HYGIENE and STORAGE). Replaces the hardcoded `XSTOCK_SPOT_REGISTRY` (also `xstocks-universe.json`) with a dynamically-populated universe sourced from a three-service discovery chain. Rationale: crypto auto-discovers from Kraken REST `AssetPairs` endpoint live every cycle (~1,544 pairs), but Kraken's public REST API does not index xStock instruments at all (xStocks only stream through `wss://ws-equities.kraken.com` with no list-all message). Hand-maintained registry scales poorly as Kraken adds tokenized stocks; Kyle has zero visibility into newly-supported names without manual probe.
+> - **Sub-batch count 17 → 18.** STORAGE shifts 2→3; all subsequent Tier 1 sub-batches shift +1 (MCE 4, STRATEGY 5, PATTERN-DETECT 6, CONFIDENCE-CHAIN 7, SCORING 8, TEC 9, TELEMETRY 10, RTB 11, RTB-REFRESH 12, POOL 13, ORCHESTRATOR 14, EXECUTION 15, WIRE-IN 16); Tier 2 also shifts (ML-CALIBRATION 17, OBSERVABILITY 18).
+> - **Dependency graph:** UNIVERSE-DISCOVERY is independent of STORAGE (operates at a lower architectural layer — discovers WHAT symbols exist before STORAGE decides HOW to persist data for them). STORAGE depends on UNIVERSE-DISCOVERY because the dynamic registry shape (DB-backed snapshot table + accessor service) is established by UNIVERSE-DISCOVERY and consumed by STORAGE's silent-fallback audit. ORCHESTRATOR, EXECUTION, WIRE-IN all transitively depend on UNIVERSE-DISCOVERY.
+> - **Sister-issue logging:** RUNNING_ISSUES #125 NEW (dynamic universe discovery — the issue that motivates this sub-batch); #120 PARTIALLY CLOSED with full-closure concern (Kraken-side xStock universe audit) ABSORBED into UNIVERSE-DISCOVERY rather than remaining as a separate deferred follow-up.
 
 > **Rev 2 changes (per Langston v1 review):**
 > - **§0 wording fix (Langston item 5):** Run-Mode Controller has 3 modes (vts | paper_sim | live). Routing is `vts vs (paper_sim | live)`. Active-trading path = paper_sim mode + live mode (both go through orchestrator).
@@ -31,42 +38,44 @@ The original B79.0n was scoped as "wire xStock into active-trading dispatch" —
 
 ---
 
-## §1 — The 17 sub-batches
+## §1 — The 18 sub-batches (rev 3 — UNIVERSE-DISCOVERY inserted)
 
-Two tiers. Tier 1 (12 batches) is the critical active-trading path; Tier 2 (5 batches) is the learning/observability adjacent systems that also cross asset-class boundaries and would otherwise drag into Phase 19.
+Two tiers. Tier 1 (16 batches) is the critical active-trading path; Tier 2 (2 batches) is the learning/observability adjacent systems that also cross asset-class boundaries and would otherwise drag into Phase 19.
 
-### Tier 1 — Critical active-trading path (15 batches; was 14 in v1 — TELEMETRY promoted per Langston item 9)
+### Tier 1 — Critical active-trading path (16 batches; was 15 in v2 — UNIVERSE-DISCOVERY inserted)
 
 | # | Name | Canonical scope file | What it covers | Dependencies |
 |---|---|---|---|---|
-| 1 | **B79.0n.HYGIENE** | `B79_0n_HYGIENE_SCOPE.md` | `setNullReason` ReferenceError fix (#121) + 5-symbol Kraken-gap registry trim (#120). Small, fast, clears noise before bigger work. | None |
-| 2 | **B79.0n.STORAGE** | `B79_0n_STORAGE_SCOPE.md` | Codebase-wide silent-crypto-fallback audit + SQE bug fix (`signal_quality_evaluator.ts:143`) + storage API REQUIRED-assetClass refactor (Langston rev2 §11.4). Root-cause fixes the systemic pattern before downstream batches inherit it. | None (foundational) |
-| 3 | **B79.0n.MCE** | `B79_0n_MCE_SCOPE.md` | Market Context Engine asset-class plumbing: regime classifier, IMF metric weights, DBS computation, Directional Integrity, **cost-model.ts (EV-side cost model only — slippage-fee-model.ts moved to EXECUTION per CC counter-proposal item 2)**, friction estimates, macro modifier, indicator computations (VWAP / ATR / EMA / BB / RSI). | STORAGE |
-| 4 | **B79.0n.STRATEGY** | `B79_0n_STRATEGY_SCOPE.md` | Strategy engine + every quant detector method + `_SE_KEY` resolver specificity + Hybrid Integration Service (quant+pattern ensemble) + Strategy Sync per-asset-class `strategy_settings` rows + **strategy-mapper.ts (Directive 11.4H.6G Canonical Regime-Strategy Enforcement) — per Langston item 7**. | STORAGE |
-| 5 | **B79.0n.PATTERN-DETECT** | `B79_0n_PATTERN_DETECT_SCOPE.md` | Pattern recognition modules (candlestick detectors, chart-pattern recognizers, pattern strength scoring). Audit whether already asset-class-aware via xStock VTS usage; close gaps. | STORAGE |
-| 6 | **B79.0n.CONFIDENCE-CHAIN** | `B79_0n_CONFIDENCE_CHAIN_SCOPE.md` | b67_1 through b67_4 + b68_1 through b68_5 modulator chain asset-class awareness. Pre-audit verifies whether modulators differ per asset class — could be no-op or could surface per-class parameter need. | STORAGE |
-| 7 | **B79.0n.SCORING** | `B79_0n_SCORING_SCOPE.md` | FinalScore + RankingScore + HybridScore + PredictiveConfidence + Net Expectancy Kernel + Adaptive Goals Weight System + SQE finalScoreMin/regimeWeightMin thresholds + ranking-weights + normalization bounds. Architecture-only plumbing; values calibration deferred. | STORAGE |
-| 8 | **B79.0n.TEC** | `B79_0n_TEC_SCOPE.md` | Trailing Exit Controller + TEC Evaluator + xStock Structural Discontinuity Detector (B-NEW-42 already asset-class-aware) + Exit Strategy Replay Service + crypto_perp+xstock_perp residual #116 background timer fix. | STORAGE |
-| 9 | **B79.0n.TELEMETRY** | `B79_0n_TELEMETRY_SCOPE.md` | **Telemetry Aggregator per-asset-class buckets. Promoted from Tier 2 per Langston item 9 — RTB's Adaptive Ratio Manager consumes telemetry, so RTB depends on TELEMETRY (not reverse). Hard-pinned to ship before WIRE-IN.** | STORAGE |
-| 10 | **B79.0n.RTB** | `B79_0n_RTB_SCOPE.md` | Ready-to-Buy queue management + Adaptive Ratio Manager + TCL (Trade Candidate List) watchdog + cross-asset top-signal selection + FinalScore gap safety rule. | STORAGE, SCORING, **TELEMETRY (dep direction corrected per Langston item 9)** |
-| 11 | **B79.0n.RTB-REFRESH** | `B79_0n_RTB_REFRESH_SCOPE.md` | RTB Refresh Service (split per Kyle's flag — distinct subsystem with its own 1-second cycle). Verify whether per-asset-class refresh cadence is needed. | RTB |
-| 12 | **B79.0n.POOL** | `B79_0n_POOL_SCOPE.md` | Active Filter Pool `addSurvivors` signature change — REQUIRED `assetClass: AssetClass` parameter. All existing callers (fx5-scanner, unified-filter-gateway) updated to pass `'crypto_spot'` explicitly. New `getActivePoolByAssetClass()` accessor for diagnostics. **Primary market-hours gate at admission per Langston item 1 — don't admit closed-market xStock pairs to activeFilterPool. Consults `xstock_spot/market-hours.ts` at admission time.** | STORAGE |
-| 13 | **B79.0n.ORCHESTRATOR** | `B79_0n_ORCHESTRATOR_SCOPE.md` | Signal orchestrator `evaluateSymbol` asset-class branching at every strategy detect call site + B79.0d ORB inline hook reachability verification + per-strategy signal-count logging instrumentation + **defense-in-depth market-hours check at evaluateSymbol entry (Langston item 1)**. | MCE, STRATEGY, PATTERN-DETECT, **CONFIDENCE-CHAIN (added per Langston item 10 — explicit > transitive through SCORING)**, SCORING, POOL |
-| 14 | **B79.0n.EXECUTION** | `B79_0n_EXECUTION_SCOPE.md` | Paper-execution-engine asset-class branching + Paper Position Sizing + Dynamic Sizing Engine + Pre-Execution Validator + Trade Safety + Guardrails V2 + log-only dry-run journal + side-door audit. **Plus rev 2 additions per Langston items 2/3/4/6/13c:** (a) **slippage-fee-model.ts asset-class awareness** — consumed by realtime-paper-executor.ts (CC counter-proposed move here from MCE per item 2 since this is an execution-side concern). (b) **risk-concentration.ts** (Directive 9.4) — Σ\|ρ_ij\| × w_j correlation analyzer with per-class ρ matrices (crypto-internal ρ≈0.7+ differs structurally from crypto-vs-xStock ρ≈0.2-0.4). (c) **dynamic-slots.ts REQUIRED-assetClass** — `getDynamicSlots(mode, assetClass)` signature change. (d) **Pre-audit enumeration of all 4 executor layers** (paper-execution-engine, realtime-paper-executor, trade-executor, trading-engine) — determine if all 4 need asset-class branching or if there's clean delegation; scope adjusts based on pre-audit findings (CC counter-proposal on item 6). (e) **Tick-size / lot-size / whole-share enforcement for xStock** — prevents silent zero-rounding when small allocation rounds to zero shares (CC moved from Langston's Phase-19-deferred to in-arc per item 13c since silent zero-trade is a real production bug we can prevent now). | ORCHESTRATOR, TEC |
-| 15 | **B79.0n.WIRE-IN** | `B79_0n_WIRE_IN_SCOPE.md` | The actual wire-in: xStock scanner mode-aware routing (gates on Run-Mode Controller mode — `vts` keeps eval-cycle path, `paper_sim`/`live` admits to activeFilterPool), survivor admission to `activeFilterPool` in active mode (vts mode keeps today's `eval-cycle.ts → registerOpenVtsTrade`), Passive Archive Pipeline tag verification. | All Tier 1 prior **including TELEMETRY (hard-pinned per Langston item 9)** |
+| 1 | **B79.0n.HYGIENE** ✅ CLOSED 2026-05-21 | `B79_0n_HYGIENE_SCOPE.md` + `B79_0n_HYGIENE_PRE_AUDIT.md` + `B79_0n_HYGIENE_CHANGE_LIST.md` + `B79_0n_HYGIENE_STEP_7_VERIFICATION.md` + `B79_0n_HYGIENE_COMPLETION_REPORT.md` | `setNullReason` ReferenceError fix (#121, RESOLVED — pre-audit found bug already self-resolved by current bundle; shipped structural fence instead) + 5-symbol Kraken-gap registry trim (#120, PARTIAL — full-closure concern absorbed into UNIVERSE-DISCOVERY below). Small, fast, cleared noise before bigger work. | None |
+| 2 | **B79.0n.UNIVERSE-DISCOVERY** ← NEXT | `B79_0n_UNIVERSE_DISCOVERY_SCOPE.md` (pending) | **NEW per Kyle directive 2026-05-21 PM.** Replace hardcoded `XSTOCK_SPOT_REGISTRY` (`shared/asset-classes.ts:271-540`) + hardcoded `xstocks-universe.json` with a dynamically-populated universe sourced from a three-service discovery chain: (1) **CoinGecko tokenized-stocks category** for "what tokenized stocks does Backed Finance currently issue" (CoinGecko already wired in `external-macro-feed.ts:9-10` for `/global` endpoint; public endpoints no API key required); (2) **Kraken WebSocket subscription probe** to confirm which CoinGecko-listed symbols Kraken's xStock product currently accepts subscriptions for at `wss://ws-equities.kraken.com`; (3) **Finnhub** (already wired in `server/services/stocks.ts`; `FINNHUB_API_KEY` may need re-provisioning per BOOT log) for per-symbol sector / cryptoAdjacent / ADR flag lookup. DB-cached snapshot with daily refresh + ad-hoc trigger. Fallback chain on service unavailability: last-known-good snapshot → small hard-coded bootstrap set → fail-fast at boot. Convert exact-equality size asserts (`b-phase-a2-xstock-eval-cycle-dbs.test.ts:33` + `b79-0n-hygiene-registry-trim.test.ts`) to range asserts (`size >= MIN && size <= MAX`). **Supersedes RUNNING_ISSUES #120 full-closure** (the manual "Kraken xStock universe audit" mini-batch becomes obsolete — turned into a daily background job). **Crypto regression NONE by construction** — only `xstock_spot` registry shape changes; crypto's REST `AssetPairs` discovery in `market-scanner.ts:551-554` is untouched. | None (independent like HYGIENE — operates at a lower architectural layer than STORAGE) |
+| 3 | **B79.0n.STORAGE** | `B79_0n_STORAGE_SCOPE.md` | Codebase-wide silent-crypto-fallback audit + SQE bug fix (`signal_quality_evaluator.ts:143`) + storage API REQUIRED-assetClass refactor (Langston rev2 §11.4). Root-cause fixes the systemic pattern before downstream batches inherit it. **Inherits dynamic registry from UNIVERSE-DISCOVERY.** | UNIVERSE-DISCOVERY |
+| 4 | **B79.0n.MCE** | `B79_0n_MCE_SCOPE.md` | Market Context Engine asset-class plumbing: regime classifier, IMF metric weights, DBS computation, Directional Integrity, **cost-model.ts (EV-side cost model only — slippage-fee-model.ts moved to EXECUTION per CC counter-proposal item 2)**, friction estimates, macro modifier, indicator computations (VWAP / ATR / EMA / BB / RSI). | STORAGE |
+| 5 | **B79.0n.STRATEGY** | `B79_0n_STRATEGY_SCOPE.md` | Strategy engine + every quant detector method + `_SE_KEY` resolver specificity + Hybrid Integration Service (quant+pattern ensemble) + Strategy Sync per-asset-class `strategy_settings` rows + **strategy-mapper.ts (Directive 11.4H.6G Canonical Regime-Strategy Enforcement) — per Langston item 7**. | STORAGE |
+| 6 | **B79.0n.PATTERN-DETECT** | `B79_0n_PATTERN_DETECT_SCOPE.md` | Pattern recognition modules (candlestick detectors, chart-pattern recognizers, pattern strength scoring). Audit whether already asset-class-aware via xStock VTS usage; close gaps. | STORAGE |
+| 7 | **B79.0n.CONFIDENCE-CHAIN** | `B79_0n_CONFIDENCE_CHAIN_SCOPE.md` | b67_1 through b67_4 + b68_1 through b68_5 modulator chain asset-class awareness. Pre-audit verifies whether modulators differ per asset class — could be no-op or could surface per-class parameter need. | STORAGE |
+| 8 | **B79.0n.SCORING** | `B79_0n_SCORING_SCOPE.md` | FinalScore + RankingScore + HybridScore + PredictiveConfidence + Net Expectancy Kernel + Adaptive Goals Weight System + SQE finalScoreMin/regimeWeightMin thresholds + ranking-weights + normalization bounds. Architecture-only plumbing; values calibration deferred. | STORAGE |
+| 9 | **B79.0n.TEC** | `B79_0n_TEC_SCOPE.md` | Trailing Exit Controller + TEC Evaluator + xStock Structural Discontinuity Detector (B-NEW-42 already asset-class-aware) + Exit Strategy Replay Service + crypto_perp+xstock_perp residual #116 background timer fix. | STORAGE |
+| 10 | **B79.0n.TELEMETRY** | `B79_0n_TELEMETRY_SCOPE.md` | **Telemetry Aggregator per-asset-class buckets. Promoted from Tier 2 per Langston item 9 — RTB's Adaptive Ratio Manager consumes telemetry, so RTB depends on TELEMETRY (not reverse). Hard-pinned to ship before WIRE-IN.** | STORAGE |
+| 11 | **B79.0n.RTB** | `B79_0n_RTB_SCOPE.md` | Ready-to-Buy queue management + Adaptive Ratio Manager + TCL (Trade Candidate List) watchdog + cross-asset top-signal selection + FinalScore gap safety rule. | STORAGE, SCORING, **TELEMETRY** |
+| 12 | **B79.0n.RTB-REFRESH** | `B79_0n_RTB_REFRESH_SCOPE.md` | RTB Refresh Service (split per Kyle's flag — distinct subsystem with its own 1-second cycle). Verify whether per-asset-class refresh cadence is needed. | RTB |
+| 13 | **B79.0n.POOL** | `B79_0n_POOL_SCOPE.md` | Active Filter Pool `addSurvivors` signature change — REQUIRED `assetClass: AssetClass` parameter. All existing callers (fx5-scanner, unified-filter-gateway) updated to pass `'crypto_spot'` explicitly. New `getActivePoolByAssetClass()` accessor for diagnostics. **Primary market-hours gate at admission per Langston item 1 — don't admit closed-market xStock pairs to activeFilterPool. Consults `xstock_spot/market-hours.ts` at admission time.** | STORAGE |
+| 14 | **B79.0n.ORCHESTRATOR** | `B79_0n_ORCHESTRATOR_SCOPE.md` | Signal orchestrator `evaluateSymbol` asset-class branching at every strategy detect call site + B79.0d ORB inline hook reachability verification + per-strategy signal-count logging instrumentation + **defense-in-depth market-hours check at evaluateSymbol entry (Langston item 1)**. | MCE, STRATEGY, PATTERN-DETECT, CONFIDENCE-CHAIN, SCORING, POOL |
+| 15 | **B79.0n.EXECUTION** | `B79_0n_EXECUTION_SCOPE.md` | Paper-execution-engine asset-class branching + Paper Position Sizing + Dynamic Sizing Engine + Pre-Execution Validator + Trade Safety + Guardrails V2 + log-only dry-run journal + side-door audit. Plus rev 2 additions per Langston items 2/3/4/6/13c (slippage-fee-model.ts + risk-concentration.ts + dynamic-slots.ts REQUIRED-assetClass + 4-executor-layer pre-audit + tick-size/lot-size/whole-share enforcement). | ORCHESTRATOR, TEC |
+| 16 | **B79.0n.WIRE-IN** | `B79_0n_WIRE_IN_SCOPE.md` | The actual wire-in: xStock scanner mode-aware routing (gates on Run-Mode Controller mode — `vts` keeps eval-cycle path, `paper_sim`/`live` admits to activeFilterPool), survivor admission to `activeFilterPool` in active mode, Passive Archive Pipeline tag verification. | All Tier 1 prior **including TELEMETRY (hard-pinned per Langston item 9) and UNIVERSE-DISCOVERY (hard-pinned per rev 3)** |
 
-### Tier 2 — Learning + observability (2 batches; was 3 in v1 — TELEMETRY promoted out)
+### Tier 2 — Learning + observability (2 batches; unchanged from v2)
 
 | # | Name | Canonical scope file | What it covers | Dependencies | Priority |
 |---|---|---|---|---|---|
-| 16 | **B79.0n.ML-CALIBRATION** | `B79_0n_ML_CALIBRATION_SCOPE.md` | ML Calibration Service stratification per asset class (separate 10-HYBRID counters + separate calibration cycles per class so crypto outcomes don't pollute xStock recalibration). | STORAGE, TELEMETRY | **HIGH** (impacts long-term learning correctness) |
-| 17 | **B79.0n.OBSERVABILITY** | `B79_0n_OBSERVABILITY_SCOPE.md` | Drift Detector per-{strategy, assetClass} baselines + Regime Archiver assetClass tagging + Drift Dashboard asset-class filter. | STORAGE | MEDIUM (diagnostics, not critical path but useful before Phase 19) |
+| 17 | **B79.0n.ML-CALIBRATION** | `B79_0n_ML_CALIBRATION_SCOPE.md` | ML Calibration Service stratification per asset class (separate 10-HYBRID counters + separate calibration cycles per class so crypto outcomes don't pollute xStock recalibration). | STORAGE, TELEMETRY | **HIGH** (impacts long-term learning correctness) |
+| 18 | **B79.0n.OBSERVABILITY** | `B79_0n_OBSERVABILITY_SCOPE.md` | Drift Detector per-{strategy, assetClass} baselines + Regime Archiver assetClass tagging + Drift Dashboard asset-class filter. | STORAGE | MEDIUM (diagnostics, not critical path but useful before Phase 19) |
 
-### Sub-batch dependency graph (rev 2 — corrected per Langston items 9 + 10)
+### Sub-batch dependency graph (rev 3 — UNIVERSE-DISCOVERY inserted as #2)
 
 ```
-HYGIENE                               (independent)
-   └─→ STORAGE                        (foundational)
+HYGIENE ✅ CLOSED                     (independent, sub-batch 1)
+UNIVERSE-DISCOVERY ← NEXT             (independent, sub-batch 2 — NEW per Kyle 2026-05-21 PM)
+   └─→ STORAGE                        (foundational; now depends on UNIVERSE-DISCOVERY)
          ├─→ MCE
          ├─→ STRATEGY
          ├─→ PATTERN-DETECT
@@ -74,15 +83,15 @@ HYGIENE                               (independent)
          ├─→ SCORING
          ├─→ TEC
          ├─→ POOL
-         ├─→ TELEMETRY ─→ RTB ─→ RTB-REFRESH          (corrected: telemetry feeds RTB's ARM)
+         ├─→ TELEMETRY ─→ RTB ─→ RTB-REFRESH          (telemetry feeds RTB's ARM)
          │                ├─→ ML-CALIBRATION (T2)
          └─→ OBSERVABILITY (T2)
    └─→ ORCHESTRATOR (depends on MCE+STRATEGY+PATTERN+CONFIDENCE-CHAIN+SCORING+POOL)
          └─→ EXECUTION (depends on ORCHESTRATOR+TEC)
-               └─→ WIRE-IN (depends on ALL T1 prior, INCLUDING TELEMETRY — hard-pin)
+               └─→ WIRE-IN (depends on ALL T1 prior, INCLUDING TELEMETRY + UNIVERSE-DISCOVERY — hard-pin)
 ```
 
-Middle batches (MCE, STRATEGY, PATTERN-DETECT, CONFIDENCE-CHAIN, SCORING, TEC, TELEMETRY, POOL) are independent of each other once STORAGE lands — could ship in any order; sequential probably gives cleaner reviews. **TELEMETRY must close before WIRE-IN** so ARM has per-asset-class telemetry buckets when xStock survivors enter the pool.
+UNIVERSE-DISCOVERY and HYGIENE are both independent (no STORAGE dep) — they operate at lower architectural layers than the foundational asset-class-awareness work. STORAGE depends on UNIVERSE-DISCOVERY because the dynamic registry shape (DB-backed snapshot + accessor service) is established by UNIVERSE-DISCOVERY and consumed by STORAGE's silent-fallback audit (which now audits across whatever symbols the dynamic registry currently contains, not against a hardcoded list of 260). Middle batches (MCE, STRATEGY, PATTERN-DETECT, CONFIDENCE-CHAIN, SCORING, TEC, TELEMETRY, POOL) are independent of each other once STORAGE lands — could ship in any order; sequential probably gives cleaner reviews. **TELEMETRY must close before WIRE-IN** so ARM has per-asset-class telemetry buckets when xStock survivors enter the pool. **UNIVERSE-DISCOVERY must close before STORAGE** so the dynamic registry shape is the consumption target throughout the arc.
 
 ---
 
@@ -150,21 +159,22 @@ The first sub-batch (B79.0n.HYGIENE) gets a detailed scope written immediately a
 
 | Sub-batch | Scope file | Status | Notes |
 |---|---|---|---|
-| HYGIENE | not yet drafted | NOT STARTED | First sub-batch; starts after umbrella lock |
-| STORAGE | not yet drafted | NOT STARTED | Foundational; second after HYGIENE |
+| HYGIENE | `B79_0n_HYGIENE_SCOPE.md` (+ pre-audit + change list + Step 7 verification + completion report) | ✅ CLOSED 2026-05-21 | Deploy `6050165cf`; Langston Step 8 ACK all 8 checks PASS. Bug self-resolved + structural fence shipped. |
+| UNIVERSE-DISCOVERY | drafting 2026-05-21 PM (this dispatch) | SCOPING — NEXT | NEW per Kyle 2026-05-21 PM. Replaces hardcoded registry with dynamic CoinGecko + Kraken WS probe + Finnhub chain. |
+| STORAGE | not yet drafted | NOT STARTED | Foundational; now depends on UNIVERSE-DISCOVERY |
 | MCE | not yet drafted | NOT STARTED | |
 | STRATEGY | not yet drafted | NOT STARTED | |
 | PATTERN-DETECT | not yet drafted | NOT STARTED | |
 | CONFIDENCE-CHAIN | not yet drafted | NOT STARTED | Pre-audit verifies need |
 | SCORING | not yet drafted | NOT STARTED | |
 | TEC | not yet drafted | NOT STARTED | |
+| TELEMETRY | not yet drafted | NOT STARTED | Tier 1 HIGH (promoted in v2); consumed by RTB |
 | RTB | not yet drafted | NOT STARTED | |
 | RTB-REFRESH | not yet drafted | NOT STARTED | Split from RTB per Kyle |
 | POOL | not yet drafted | NOT STARTED | |
 | ORCHESTRATOR | not yet drafted | NOT STARTED | |
 | EXECUTION | not yet drafted | NOT STARTED | |
 | WIRE-IN | not yet drafted | NOT STARTED | Last in dependency chain |
-| TELEMETRY | not yet drafted | NOT STARTED | T2 HIGH |
 | ML-CALIBRATION | not yet drafted | NOT STARTED | T2 HIGH |
 | OBSERVABILITY | not yet drafted | NOT STARTED | T2 MED |
 
