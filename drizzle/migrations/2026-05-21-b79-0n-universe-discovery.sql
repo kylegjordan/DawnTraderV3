@@ -108,7 +108,6 @@ CREATE INDEX idx_discovery_runs_started_at ON discovery_runs(started_at);
 -- =====================================================================
 
 INSERT INTO xstock_spot_universe (symbol, name, sector, crypto_adjacent, adr, source_chain) VALUES
-INSERT INTO xstock_spot_universe (symbol, name, sector, crypto_adjacent, adr, source_chain) VALUES
   ('AAPL/USD', 'Apple', 'XLK', false, false, '{"coingecko":false,"kraken_ws_accept":false,"finnhub":false,"override_applied":true,"seed":true}'::jsonb),
   ('ABBV/USD', 'AbbVie', 'XLV', false, false, '{"coingecko":false,"kraken_ws_accept":false,"finnhub":false,"override_applied":true,"seed":true}'::jsonb),
   ('ABNB/USD', 'Airbnb', 'XLY', false, false, '{"coingecko":false,"kraken_ws_accept":false,"finnhub":false,"override_applied":true,"seed":true}'::jsonb),
@@ -370,11 +369,9 @@ INSERT INTO xstock_spot_universe (symbol, name, sector, crypto_adjacent, adr, so
   ('XYZ/USD', 'Block (XYZ)', 'XLF', false, false, '{"coingecko":false,"kraken_ws_accept":false,"finnhub":false,"override_applied":true,"seed":true}'::jsonb),
   ('ZTS/USD', 'Zoetis', 'XLV', false, false, '{"coingecko":false,"kraken_ws_accept":false,"finnhub":false,"override_applied":true,"seed":true}'::jsonb)
 ON CONFLICT (symbol) DO NOTHING;
-ON CONFLICT (symbol) DO NOTHING;
 
 -- xstock_spot_universe_overrides seed (56 rows: cryptoAdjacent / adr / non-GICS sector classifications)
 
-INSERT INTO xstock_spot_universe_overrides (symbol, sector_override, crypto_adjacent_override, adr_override, name_override, notes) VALUES
 INSERT INTO xstock_spot_universe_overrides (symbol, sector_override, crypto_adjacent_override, adr_override, name_override, notes) VALUES
   ('ARKG/USD', 'BROAD_ETF', NULL, NULL, NULL, 'B79.0n.UNIVERSE-DISCOVERY seed: sector=BROAD_ETF'),
   ('ARKK/USD', 'BROAD_ETF', NULL, NULL, NULL, 'B79.0n.UNIVERSE-DISCOVERY seed: sector=BROAD_ETF'),
@@ -433,14 +430,11 @@ INSERT INTO xstock_spot_universe_overrides (symbol, sector_override, crypto_adja
   ('XBI/USD', 'BROAD_ETF', NULL, NULL, NULL, 'B79.0n.UNIVERSE-DISCOVERY seed: sector=BROAD_ETF'),
   ('XPEV/USD', NULL, NULL, true, NULL, 'B79.0n.UNIVERSE-DISCOVERY seed: ADR')
 ON CONFLICT (symbol) DO NOTHING;
-ON CONFLICT (symbol) DO NOTHING;
 
 -- =====================================================================
--- _migrations ledger entry (matches B-NEW-36 sub-batch (a) pattern)
+-- _migrations ledger entry is handled automatically by the db-migrate.ts
+-- runner (INSERT INTO _migrations (name) on success). No explicit ledger
+-- INSERT in this migration file.
 -- =====================================================================
-
-INSERT INTO _migrations (filename, applied_at) VALUES
-  ('2026-05-21-b79-0n-universe-discovery.sql', now())
-ON CONFLICT (filename) DO NOTHING;
 
 COMMIT;
