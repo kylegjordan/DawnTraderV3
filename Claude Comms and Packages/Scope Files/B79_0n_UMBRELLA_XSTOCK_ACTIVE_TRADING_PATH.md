@@ -1,11 +1,18 @@
-# B79.0n — UMBRELLA tracker: xStock active-trading wire-in + systemic asset-class awareness (rev 3 — UNIVERSE-DISCOVERY inserted)
+# B79.0n — UMBRELLA tracker: xStock active-trading wire-in + systemic asset-class awareness (rev 4 — B72 prior-arc context added per sub-batch)
 
-> **Status:** rev 3 drafted 2026-05-21 PM after HYGIENE close + mid-batch Kyle architectural directive. Awaiting Langston concurrence on the umbrella restructuring; combined dispatch with `B79.0n.UNIVERSE-DISCOVERY` Step 1 scope.
+> **Status:** rev 4 drafted 2026-05-21 PM during B79.0n.STORAGE Step 4 review window per Kyle ask. **Sub-batch count unchanged at 18** — the arc is the same. What changes is the per-sub-batch *scope of remaining work*: B72 (shipped 2026-05-05) + B72.1 (2026-05-05) + B72.2 (2026-05-06) already did the API-side wiring (sync-read API, hard-fail discipline, module_constants resolver) for many of the systems this umbrella covers, so several sub-batches reduce in size to **per-class seed rows + resolver-key tightening + direct asset-class branching for non-lever code**.
+> **rev 3 status (superseded):** drafted 2026-05-21 PM after HYGIENE close; UNIVERSE-DISCOVERY inserted as sub-batch #2.
 > **rev 2 status (superseded):** Langston FINAL ACK 2026-05-20 PM (commit `6e9810171`). 17 sub-batches. v1 came back with 11 items from "prove-me-wrong" review; v2 absorbed 11 items, counter-proposed on 3 (items 2, 6, 13c); Langston concurred on all 3 counter-proposals.
 > **Origin:** Kyle directive 2026-05-20 PM. Original rev3 of `B79_0n_SCOPE.md` (Langston rev3 FINAL ACK) was the seed; Kyle's subsequent review expanded scope into systemic asset-class awareness across the active-trading pipeline.
 > **Phase:** Phase 24 (multi-asset onboarding).
 > **Locked sequence position:** last item before Phase 19 live-trading gate.
 
+> **Rev 4 changes (per Kyle directive 2026-05-21 PM during B79.0n.STORAGE Step 4 window):**
+> - **No sub-batch count change.** Arc remains 18 sub-batches (16 Tier 1 + 2 Tier 2).
+> - **Prior-arc context section added (§1.5 below).** Documents what B72 + B72.1 + B72.2 already did so each sub-batch's scope of remaining work is honest. Several sub-batches shrink materially: STRATEGY (#5), SCORING (#8), MCE (#4), EXECUTION (#15) all have their API-side wiring done already; remaining work is per-class seed rows + resolver-key tightening + direct asset-class branching for non-lever code. RTB (#11), ORCHESTRATOR (#14), PATTERN-DETECT (#6), OBSERVABILITY (#18) have modest wiring done. CONFIDENCE-CHAIN (#7), TEC (#9), TELEMETRY (#10), RTB-REFRESH (#12), POOL (#13), WIRE-IN (#16), ML-CALIBRATION (#17) have no B72 overlap.
+> - **Stale stale-reference correction in tracking docs:** BATCH_CATALOG.md row 171 (the pre-shipping planning entry) was incorrectly marked QUEUED; corrected 2026-05-21 to point at the actual ship rows 212-214. POST_AUDIT_ROADMAP.md references at lines 970, 1146, 1319, 1344 corrected to past-tense.
+> - **Discovery context:** Kyle pushed back on STORAGE pre-audit during Step 4 window — "are you sure B72 has not shipped?" — surfacing that I had read the stale catalog row 171 as authoritative. B72 absolutely shipped 2026-05-05 with extensive coverage (34 modules / ~163 rows / 18-of-18 canonical strategies DB-tunable). My STORAGE pre-audit was correctly scoped because B72 worked on **Layer 2 (`module_constants`)** while STORAGE works on **Layer 1 (`screener_filters` API surface + REQUIRED-assetClass type-level enforcement)**. Distinct concerns. But the downstream sub-batches in this umbrella all benefit from B72 work — hence this rev.
+>
 > **Rev 3 changes (per Kyle directive 2026-05-21 PM, mid-B79.0n.HYGIENE design conversation):**
 > - **NEW sub-batch `B79.0n.UNIVERSE-DISCOVERY` inserted as #2** (between HYGIENE and STORAGE). Replaces the hardcoded `XSTOCK_SPOT_REGISTRY` (also `xstocks-universe.json`) with a dynamically-populated universe sourced from a three-service discovery chain. Rationale: crypto auto-discovers from Kraken REST `AssetPairs` endpoint live every cycle (~1,544 pairs), but Kraken's public REST API does not index xStock instruments at all (xStocks only stream through `wss://ws-equities.kraken.com` with no list-all message). Hand-maintained registry scales poorly as Kraken adds tokenized stocks; Kyle has zero visibility into newly-supported names without manual probe.
 > - **Sub-batch count 17 → 18.** STORAGE shifts 2→3; all subsequent Tier 1 sub-batches shift +1 (MCE 4, STRATEGY 5, PATTERN-DETECT 6, CONFIDENCE-CHAIN 7, SCORING 8, TEC 9, TELEMETRY 10, RTB 11, RTB-REFRESH 12, POOL 13, ORCHESTRATOR 14, EXECUTION 15, WIRE-IN 16); Tier 2 also shifts (ML-CALIBRATION 17, OBSERVABILITY 18).
@@ -95,6 +102,63 @@ UNIVERSE-DISCOVERY and HYGIENE are both independent (no STORAGE dep) — they op
 
 ---
 
+## §1.5 — B72 prior-arc context per sub-batch (rev 4)
+
+**Recap of B72 + B72.1 + B72.2 (shipped 2026-05-05/06).** The comprehensive lever-to-`module_constants` sweep migrated **~180 inventoried levers across 34 modules** (~163 rows live in production sync-read paths) to a DB-tunable architecture with the following load-bearing pieces:
+
+- **Sync-read API** in `module-constants-service.ts`: `prefetchModule()` + `getCachedConstant<T>()` + `getCachedNumberRequired()` + `getCachedNumbersForModule()`. 60-second background refresher propagates SQL UPDATEs without redeploy.
+- **Boot hard-fail discipline** in `server/startup/b72-warmup.ts`: every PROMOTE module read from sync code MUST be in `PREFETCH_MODULES`. Server boot throws if any prefetch returns zero rows.
+- **`getCachedNumberRequired` throws on cold cache, missing row, OR non-numeric value** — no silent fallbacks anywhere in B72-wired code.
+- **Resolution-scope discipline** documented per row: default GLOBAL `(*, *, *, *)`; per-regime where regime-specific (`roi_gating`, `learning_governance`); per-strategy where strategy-internal (all 18 canonical strategies + DBS routing guards); per-exchange (`cost_model` kraken-only); **per-asset-class where asset-class-specific** (`pattern_pool_gates` crypto_spot, `trailing_exit` crypto_spot today).
+
+**Critical distinction this umbrella's sub-batches preserve:** B72 wired the **API-side discipline** (read from DB, hard-fail on missing). It did NOT (and explicitly chose not to) seed per-asset-class rows for every module — most rows are at wildcard scope today. The umbrella sub-batches do the **per-asset-class seeding + resolver-key tightening** for the modules where xStock needs values different from crypto's wildcards. They also do the **direct code branching** for non-lever logic (friction model selection, market hours, sector-aware paths) that the module_constants pattern doesn't cover.
+
+### Sub-batches that SHRINK materially (API-side wiring done by B72; remaining work is data + non-lever code)
+
+| Sub-batch | What B72 already did | Remaining work in this umbrella sub-batch |
+|---|---|---|
+| **#4 MCE** | Wired `regime_classifier` (5 TFS fields from B67.3.5 era), `regime_age` (5 rows incl. B68.4), `dbs_calculation` (1 lever wildcard — see RUNNING_ISSUES #115), `cost_model` (1 lever kraken-only). | Per-class seed rows for thresholds where xStock differs (regime_classifier already has `xstock_spot` branch via `regime-thresholds.ts` from B78). Direct branching for: friction estimates, macro modifier per-class signal (RUNNING_ISSUES #123 — known follow-up post-arc), indicator computations (VWAP / ATR / EMA / BB / RSI) that aren't lever-driven. Resolver-key tightening where wildcards need per-class values. |
+| **#5 STRATEGY** | **Wired all 18 canonical strategies to read from `module_constants` via `getCachedNumbersForModule('strategy.<key>', key)` (B72 Slices 3a-b + B72.2 Slices 1-5).** 18-of-18 DB-tunable today. `strategy_dbs_routing_guards` atomic group (B72 Commit A: 4 rows + integration test). `strategy_settings` table schema unchanged. | **No detect-method wiring needed** — done. Remaining: (a) per-class seed rows under `strategy.<key>` modules where xStock needs different parameters than crypto (often "none required" if behavior is parameter-symmetric); (b) `_SE_KEY` resolver specificity — currently wildcard, needs `assetClass: input.assetClass` per cycle; (c) Hybrid Integration Service per-asset-class composition; (d) Strategy Sync per-asset-class `strategy_settings` rows audit; (e) `strategy-mapper.ts` (Directive 11.4H.6G Canonical Regime-Strategy Enforcement) per Langston item 7. |
+| **#8 SCORING** | **B72 Slice 4 wired the entire scoring chain:** 3-layer SQE precedence (`screener_filters → sqe_config → SQE_DEFAULT_THRESHOLDS static mirror`), net-expectancy-kernel caller-injection refactor (`expectancy_kernel.pwin_floor/ceiling` + `directional_integrity.di_pwin_factor`), `vts_scoring`, `goals_weighting`, `expectancy_tuning`, `expectancy_gates`, `cost_geometry`. | **`_SQE_GK` parameterization** (`assetClass: '*'` → `assetClass: input.assetClass`) — STORAGE deferred this to SCORING explicitly. Per-class seed rows for `sqe_config.{crypto_spot,xstock_spot}.min_final_score` + `.min_regime_weight` when xStock needs different thresholds (RUNNING_ISSUES entry filed at STORAGE close). Same for ranking-weights + normalization bounds. |
+| **#15 EXECUTION** | **Wired `position_sizing` (11 levers — the biggest single migration in B72), `paper_sizing`, `paper_execution` (4 levers).** | Per-class seed rows for position sizing where xStock needs different (likely material — different leverage, different lot-size constraints, different friction). Direct asset-class branching at the 4 executor layers (paper-execution-engine, realtime-paper-executor, trade-executor, trading-engine — pre-audit per Langston item 13c). `slippage-fee-model.ts` + `risk-concentration.ts` + `dynamic-slots.ts` REQUIRED-assetClass refactor. Tick-size/lot-size/whole-share enforcement for xStock. |
+
+### Sub-batches that SHRINK MODESTLY (small B72 footprint; most work remains)
+
+| Sub-batch | What B72 already did | Remaining work |
+|---|---|---|
+| **#6 PATTERN-DETECT** | Wired `pattern_pool_gates` (1 lever at crypto_spot scope). B72 Slice 3b touched the 6 pattern strategy files (inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, support_bounce, strong_bull_trend — these are pattern-DEPENDENT strategies, not the pattern-recognition primitives). | Pattern recognition modules themselves (candlestick detectors, chart-pattern recognizers, pattern strength scoring) — audit whether already asset-class-aware via xStock VTS usage; close gaps. Per-class seed for `pattern_pool_gates.xstock_spot.*` rows. |
+| **#11 RTB** | Wired `rtb_ranking` (1 lever), `rtb_config` (1 lever), `queue_admission` (1 lever). | Adaptive Ratio Manager per-class telemetry consumption (depends on TELEMETRY first). TCL watchdog per-asset-class. Cross-asset top-signal selection logic. FinalScore gap safety rule per-class. Per-class seed for the 3 modules above. |
+| **#14 ORCHESTRATOR** | Wired `signal_orchestrator` (4 levers). | Per-cycle asset-class branching at every strategy detect call site (the wildcard `_SE_KEY` use cases). B79.0d ORB inline hook reachability verification. Per-strategy signal-count logging instrumentation. Defense-in-depth market-hours check at `evaluateSymbol` entry (Langston item 1). |
+| **#18 OBSERVABILITY (T2)** | Wired `drift_detector` (1 lever). | Drift Detector per-{strategy, assetClass} baseline shape. Regime Archiver `assetClass` tagging. Drift Dashboard asset-class filter UI. |
+
+### Sub-batches that DO NOT CHANGE (no B72 overlap)
+
+- **#3 STORAGE** (in flight) — B72 worked on Layer 2 (`module_constants`); this batch works on Layer 1 (`screener_filters` API + REQUIRED-assetClass type enforcement). Distinct concerns.
+- **#7 CONFIDENCE-CHAIN** — b67_1 through b67_4 + b68_1 through b68_5 modulator chain. Pre-audit verifies whether modulators differ per asset class; could be no-op.
+- **#9 TEC** — Trailing Exit Controller asset-class-aware via B65.x already; this sub-batch adds residual #116 background timer fix + Structural Discontinuity Detector verification.
+- **#10 TELEMETRY** — Per-asset-class telemetry buckets; depends on knowing lazy-allocate pattern (from UNIVERSE-DISCOVERY learnings §10).
+- **#12 RTB-REFRESH** — Distinct subsystem with 1-second cycle; per-class refresh cadence audit.
+- **#13 POOL** — `activeFilterPool.addSurvivors()` signature change + primary market-hours gate at admission (Langston item 1).
+- **#16 WIRE-IN** — The actual mode-aware routing + survivor admission; depends on all Tier 1 prior including TELEMETRY + UNIVERSE-DISCOVERY (hard-pinned).
+- **#17 ML-CALIBRATION (T2)** — ML Calibration Service per-class stratification.
+
+### Implication for sub-batch scope-file drafts
+
+When each sub-batch's scope file is drafted (Step 1), it MUST include a **"B72 prior-arc context"** section that explicitly enumerates:
+
+1. **Which `module_constants` modules B72 already wired for this subsystem** (with the row at `BATCH_CATALOG.md` row 214 as reference).
+2. **Which of those wired modules need per-class seed rows** vs. which stay at wildcard scope.
+3. **Which non-lever code paths need direct asset-class branching** (the things B72's pattern doesn't cover).
+4. **What changes (if any) to the wired-module resolver keys** (`assetClass: '*'` → `assetClass: input.assetClass`).
+
+This keeps the scope files honest about what work actually remains and prevents re-doing B72's API-side wiring. Sub-batch completion reports also get a "B72 prior-arc context" close-out section confirming what was wired vs. what was newly added.
+
+### Where this came from
+
+Discovered 2026-05-21 PM during B79.0n.STORAGE Step 4 review window. Kyle pushed back on the original STORAGE pre-audit text that incorrectly said B72 was queued: *"Are you sure B72 was not implemented?"* The push-back surfaced that I had read `BATCH_CATALOG.md` row 171 (the pre-shipping planning entry) as authoritative when the actual ship rows are 212-214. B72 absolutely shipped + B72.1 + B72.2. STORAGE pre-audit's scope was correctly framed because Layer 1 (storage API) and Layer 2 (module_constants) are distinct, but the umbrella's downstream sub-batches all benefit from B72's API-side work — hence this rev. Catalog row 171 + 4 POST_AUDIT_ROADMAP references corrected in the same governance pass.
+
+---
+
 ## §2 — Standing rules for every sub-batch
 
 Every sub-batch in this umbrella MUST follow all of the following, in addition to the standard 11-step workflow:
@@ -159,24 +223,26 @@ The first sub-batch (B79.0n.HYGIENE) gets a detailed scope written immediately a
 
 | Sub-batch | Scope file | Status | Notes |
 |---|---|---|---|
-| HYGIENE | `B79_0n_HYGIENE_SCOPE.md` (+ pre-audit + change list + Step 7 verification + completion report) | ✅ CLOSED 2026-05-21 | Deploy `6050165cf`; Langston Step 8 ACK all 8 checks PASS. Bug self-resolved + structural fence shipped. |
-| UNIVERSE-DISCOVERY | drafting 2026-05-21 PM (this dispatch) | SCOPING — NEXT | NEW per Kyle 2026-05-21 PM. Replaces hardcoded registry with dynamic CoinGecko + Kraken WS probe + Finnhub chain. |
-| STORAGE | not yet drafted | NOT STARTED | Foundational; now depends on UNIVERSE-DISCOVERY |
-| MCE | not yet drafted | NOT STARTED | |
-| STRATEGY | not yet drafted | NOT STARTED | |
-| PATTERN-DETECT | not yet drafted | NOT STARTED | |
-| CONFIDENCE-CHAIN | not yet drafted | NOT STARTED | Pre-audit verifies need |
-| SCORING | not yet drafted | NOT STARTED | |
-| TEC | not yet drafted | NOT STARTED | |
-| TELEMETRY | not yet drafted | NOT STARTED | Tier 1 HIGH (promoted in v2); consumed by RTB |
-| RTB | not yet drafted | NOT STARTED | |
-| RTB-REFRESH | not yet drafted | NOT STARTED | Split from RTB per Kyle |
-| POOL | not yet drafted | NOT STARTED | |
-| ORCHESTRATOR | not yet drafted | NOT STARTED | |
-| EXECUTION | not yet drafted | NOT STARTED | |
-| WIRE-IN | not yet drafted | NOT STARTED | Last in dependency chain |
-| ML-CALIBRATION | not yet drafted | NOT STARTED | T2 HIGH |
-| OBSERVABILITY | not yet drafted | NOT STARTED | T2 MED |
+| Sub-batch | Scope file | Status | B72 prior-arc | Notes |
+|---|---|---|---|---|
+| HYGIENE | `B79_0n_HYGIENE_SCOPE.md` (+ pre-audit + change list + Step 7 verification + completion report) | ✅ CLOSED 2026-05-21 | n/a | Deploy `6050165cf`; Langston Step 8 ACK all 8 checks PASS. Bug self-resolved + structural fence shipped. |
+| UNIVERSE-DISCOVERY | `B79_0n_UNIVERSE_DISCOVERY_*.md` (scope + pre-audit + change list + Step 7 verification + Step 8 ACK + completion report) | ✅ CLOSED 2026-05-21 | n/a | Deploy `c97ceec81` PM2 #308. 479 symbols discovered, 489 active in DB, 15 sectors, 10.2% UNCATEGORIZED, 100% Finnhub enrichment. Step 8 Langston ACK all 7 in-window gates verified independently. |
+| STORAGE | `B79_0n_STORAGE_*.md` (scope + pre-audit + change list + Step 4 review with BLOCKER fix-forward) | 🚧 STEP 4 RE-ACK in flight | none (Layer 1 vs B72's Layer 2 — distinct concerns) | Deploy commit pending Step 4 RE-ACK. 32 → 35 caller updates (3 additional via compile-driven audit); BLOCKER fix-forward addressed upsertScreenerFilters WHERE clause missing assetClass; 3 reclassifications (d→a) per Langston Step 4. |
+| MCE | not yet drafted | NOT STARTED | **MATERIAL SHRINK** — B72 wired `regime_classifier` + `regime_age` + `dbs_calculation` + `cost_model`. Remaining: per-class seed + non-lever code branching (friction, indicators, macro modifier). |
+| STRATEGY | not yet drafted | NOT STARTED | **MAJOR SHRINK** — B72 + B72.2 wired all 18 canonical strategies. Remaining: per-class seed (often none if symmetric) + `_SE_KEY` resolver tightening + Hybrid Integration + Strategy Sync + strategy-mapper. |
+| PATTERN-DETECT | not yet drafted | NOT STARTED | modest — B72 wired `pattern_pool_gates`; pattern recognition primitives unchanged. |
+| CONFIDENCE-CHAIN | not yet drafted | NOT STARTED | none — no B72 overlap. Pre-audit verifies whether modulators differ per asset class. |
+| SCORING | not yet drafted | NOT STARTED | **MATERIAL SHRINK** — B72 Slice 4 wired SQE precedence + expectancy_kernel + vts_scoring + goals_weighting. Remaining: `_SQE_GK` parameterization (STORAGE deferred) + per-class seed. |
+| TEC | not yet drafted | NOT STARTED | none — TEC was already asset-class-aware via B65.x. Sub-batch covers residual #116 + Structural Discontinuity Detector verification. |
+| TELEMETRY | not yet drafted | NOT STARTED | none — telemetry aggregator per-class buckets are new infrastructure. Tier 1 HIGH (promoted in v2); consumed by RTB. |
+| RTB | not yet drafted | NOT STARTED | modest — B72 wired `rtb_ranking` + `rtb_config` + `queue_admission`. Remaining: ARM (depends on TELEMETRY) + TCL watchdog + per-class seed. |
+| RTB-REFRESH | not yet drafted | NOT STARTED | none — split from RTB per Kyle. |
+| POOL | not yet drafted | NOT STARTED | none — `activeFilterPool.addSurvivors()` signature change is new work. |
+| ORCHESTRATOR | not yet drafted | NOT STARTED | modest — B72 wired `signal_orchestrator` (4 levers). Remaining: per-cycle asset-class branching at strategy detect call sites + market-hours defense-in-depth. |
+| EXECUTION | not yet drafted | NOT STARTED | **MATERIAL SHRINK** — B72 wired `position_sizing` (11 levers!) + `paper_sizing` + `paper_execution`. Remaining: per-class seed (likely meaningful for xStock — different leverage/lot/friction) + 4-executor-layer branching + tick/lot/whole-share enforcement. |
+| WIRE-IN | not yet drafted | NOT STARTED | none — the actual mode-aware routing is new wiring. Last in dependency chain. |
+| ML-CALIBRATION | not yet drafted | NOT STARTED | none — per-class ML stratification is new. T2 HIGH. |
+| OBSERVABILITY | not yet drafted | NOT STARTED | modest — B72 wired `drift_detector` (1 lever). Remaining: per-{strategy, assetClass} baselines + Regime Archiver tagging + Dashboard filter UI. T2 MED. |
 
 This tracker gets updated at every sub-batch's Step 1 (scope drafted), Step 4 (Langston ACK), Step 6 (deployed), Step 11 (closed).
 
