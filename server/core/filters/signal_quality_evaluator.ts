@@ -37,7 +37,7 @@ import { getCachedNumberRequired } from '../../services/module-constants-service
 // B79: xstock_spot weekend-pause + per-asset-class strategy whitelist.
 // safeResolveAssetClass returns null on unknown — we treat null as
 // crypto_spot back-compat to keep existing behavior identical.
-import { safeResolveAssetClass } from '../../../shared/asset-classes.js';
+import { safeResolveAssetClass, type AssetClass } from '../../../shared/asset-classes.js';
 import { isXstockMarketOpenUTC } from '../../asset_classes/xstock_spot/market-hours.js';
 import { isStrategyEnabledForAssetClass } from '../../config/canonical-regime-strategy-map.js';
 
@@ -74,6 +74,9 @@ export interface SQEInput {
   symbol: string;
   strategy: string;
   mode: 'paper' | 'live';
+  // B79.0n.STORAGE (2026-05-21): assetClass is REQUIRED. Routes Layer 1 (screener_filters)
+  // lookup to the correct per-class row instead of silently reading crypto thresholds.
+  assetClass: AssetClass;
   finalScore?: number;
   regimeWeight?: number;
   confidence?: number;
@@ -120,8 +123,12 @@ export interface SQEBatchResult {
 /**
  * Directive 11.0B: Get SQE thresholds from screener config
  * Reads finalScoreMin and regimeWeightMin from screener_filters table
+ *
+ * B79.0n.STORAGE (2026-05-21): assetClass is REQUIRED. Layer 1 (screener_filters) now
+ * routes per-class; Layer 2 (module_constants 'sqe_config') stays wildcard for this
+ * batch (per-class deferred to SCORING — see RUNNING_ISSUES module_constants asymmetry).
  */
-export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live'): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
+export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live', assetClass: AssetClass): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
   // B72 precedence chain: screener_filters → module_constants → static mirror.
   // Layer 2 (module_constants) is the new B72-introduced authority: when
   // screener_filters has no row OR has a missing field, the seeded
@@ -140,7 +147,7 @@ export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live'): Promis
   }
 
   try {
-    const filters = await storage.getScreenerFilters({ mode });
+    const filters = await storage.getScreenerFilters({ mode, assetClass });
     if (filters) {
       return {
         finalScoreMin: parseFloat(filters.finalScoreMin || String(mcDefaults.minFinalScore)),
@@ -233,8 +240,9 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     console.warn(`[SQE][MISSING] RegimeWeight not pre-computed for ${canonicalSymbol}/${input.strategy} — defaulting to 0`);
   }
   
-  // Load thresholds from screener config (configurable via UI)
-  const thresholds = await getSQEThresholdsFromConfig(input.mode);
+  // Load thresholds from screener config (configurable via UI).
+  // B79.0n.STORAGE (2026-05-21): assetClass plumbed from input.
+  const thresholds = await getSQEThresholdsFromConfig(input.mode, input.assetClass);
   
   // Phase 14.5: Pattern pool signals use elevated quality floor
   const effectiveMinFinalScore = input.sourcePool === 'pattern'
@@ -510,14 +518,19 @@ class SignalQualityEvaluatorService {
   private cachedThresholds: Map<string, { thresholds: { finalScoreMin: number; regimeWeightMin: number }; cachedAt: number }> = new Map();
   private cacheTTL = 60000; // 1 minute cache
   
-  async getThresholds(mode: 'paper' | 'live'): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
-    const cached = this.cachedThresholds.get(mode);
+  // B79.0n.STORAGE (2026-05-21): cache key extended to `${mode}:${assetClass}` so
+  // crypto and xStock cycles do not share cached thresholds. Without this, a crypto
+  // cycle's threshold load would return on a later xStock cycle (or vice versa) and
+  // silently route the wrong values.
+  async getThresholds(mode: 'paper' | 'live', assetClass: AssetClass): Promise<{ finalScoreMin: number; regimeWeightMin: number }> {
+    const cacheKey = `${mode}:${assetClass}`;
+    const cached = this.cachedThresholds.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < this.cacheTTL) {
       return cached.thresholds;
     }
-    
-    const thresholds = await getSQEThresholdsFromConfig(mode);
-    this.cachedThresholds.set(mode, { thresholds, cachedAt: Date.now() });
+
+    const thresholds = await getSQEThresholdsFromConfig(mode, assetClass);
+    this.cachedThresholds.set(cacheKey, { thresholds, cachedAt: Date.now() });
     return thresholds;
   }
   

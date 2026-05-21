@@ -159,7 +159,8 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
     console.log('[32.D-Fix.6] Empty watchlist detected - querying screener for eligible pairs');
     
     // Phase 41F-L.E2E-PURGE: Get mode-level settings
-    const filters = await storage.getScreenerFilters({ mode });
+    // B79.0n.STORAGE (2026-05-21): paper-sim service reads canonical crypto baseline.
+    const filters = await storage.getCanonicalScreenerConfig({ mode });
     
     if (!filters) {
       console.log('[32.D-Fix.6] No filters found - skipping watchlist population');

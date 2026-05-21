@@ -2196,7 +2196,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       // Get screener filters from storage (Batch 19G: with filterPath)
-      const screenerData = await storage.getScreenerFilters({ mode, filterPath });
+      // B79.0n.STORAGE (2026-05-21): UI display reads canonical crypto baseline.
+      const screenerData = await storage.getCanonicalScreenerConfig({ mode, filterPath });
 
       if (!screenerData) {
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}, filterPath: ${filterPath}` });
@@ -2358,7 +2359,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[FiltersV2:${requestId}] Updating - filterName=${filterName}, value=${value}`);
       
       // Batch 19G: Read by (mode, filterPath) composite key
-      const current = await storage.getScreenerFilters({ mode, filterPath });
+      // B79.0n.STORAGE (2026-05-21): UI edit endpoint reads canonical crypto baseline.
+      const current = await storage.getCanonicalScreenerConfig({ mode, filterPath });
 
       if (!current) {
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}, filterPath: ${filterPath}` });
@@ -2533,7 +2535,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const scanResult = result;
 
       // Phase 41F-L.E2E-PURGE: Get screener filter thresholds (mode-level only)
-      const screenerSettings = await storage.getScreenerFilters({ mode });
+      // B79.0n.STORAGE (2026-05-21): UI scan result reads canonical crypto baseline.
+      const screenerSettings = await storage.getCanonicalScreenerConfig({ mode });
 
       // Calculate top failure reason from breakdown
       // Phase 8.8.2: Corrected FilterBreakdown schema
@@ -3386,7 +3389,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode = req.mode!;
 
-      const screenerFilters = await storage.getScreenerFilters({ mode });
+      // B79.0n.STORAGE (2026-05-21): Filter Insights UI reads canonical crypto baseline.
+      const screenerFilters = await storage.getCanonicalScreenerConfig({ mode });
       if (!screenerFilters) {
         return res.status(404).json({ error: 'No screener filters found for mode: ' + mode });
       }
@@ -3506,8 +3510,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       try {
         // 1. Validate Goals Engine configuration exists (mode-level)
         // [9.7] Use guardrails_v2 instead of legacy guardrails table
+        // B79.0n.STORAGE (2026-05-21): pre-flight check reads canonical crypto baseline.
         const [filters, guardrails] = await Promise.all([
-          storage.getScreenerFilters({ mode }),
+          storage.getCanonicalScreenerConfig({ mode }),
           storage.getGuardrailsV2({ mode })
         ]);
         
@@ -12496,7 +12501,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { contextBridge } = await import('./services/context-bridge.js');
       
       // Phase 41F-L.E2E-PURGE: Get screener filters from mode-level config
-      const screenerFilters = await storage.getScreenerFilters({ mode });
+      // B79.0n.STORAGE (2026-05-21): paper-sim filtered-pairs reads canonical crypto baseline.
+      const screenerFilters = await storage.getCanonicalScreenerConfig({ mode });
       if (!screenerFilters) {
         return res.status(400).json({ error: 'Screener filters not configured for this mode' });
       }
@@ -13855,7 +13861,8 @@ Provide specific, actionable recommendations.`,
       
       if (!testSettings && userId) {
         // Phase 41F-L.E2E-PURGE: Load from mode-level screener filters
-        const screenerSettings = await storage.getScreenerFilters({ mode });
+        // B79.0n.STORAGE (2026-05-21): test endpoint reads canonical crypto baseline.
+        const screenerSettings = await storage.getCanonicalScreenerConfig({ mode });
         
         if (screenerSettings) {
           testSettings = {
@@ -20814,7 +20821,8 @@ Please:
       } : null;
       
       // Fetch Filters from screener_filters (16 fields)
-      const filtersData = await storage.getScreenerFilters({ mode });
+      // B79.0n.STORAGE (2026-05-21): UI fetches canonical crypto baseline for display.
+      const filtersData = await storage.getCanonicalScreenerConfig({ mode });
       const filters = filtersData ? {
         minVolume: parseFloat(String(filtersData.minVolume)),
         minLiquidity: parseFloat(String(filtersData.minLiquidity)),

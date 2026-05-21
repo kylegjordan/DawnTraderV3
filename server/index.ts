@@ -990,7 +990,8 @@ app.use((req, res, next) => {
       // Helper function to build config snapshot (same logic as endpoint)
       async function buildConfigSnapshot(mode: 'paper' | 'live') {
         const guardrailsData = await storage.getGuardrailsV2({ mode });
-        const filtersData = await storage.getScreenerFilters({ mode });
+        // B79.0n.STORAGE (2026-05-21): boot-time config snapshot reads canonical crypto baseline.
+        const filtersData = await storage.getCanonicalScreenerConfig({ mode });
         const activePreset = await storage.getActiveGoalsPreset({ mode });
         
         const guardrails = guardrailsData ? {
@@ -1071,7 +1072,8 @@ app.use((req, res, next) => {
       try {
         const validateFilterCoherence = async (mode: 'paper' | 'live') => {
           // Fetch filter data from database
-          const filtersData = await storage.getScreenerFilters({ mode });
+          // B79.0n.STORAGE (2026-05-21): FilterCoherence telemetry reads canonical crypto baseline.
+          const filtersData = await storage.getCanonicalScreenerConfig({ mode });
           
           if (!filtersData) {
             return { 

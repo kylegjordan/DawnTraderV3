@@ -96,7 +96,8 @@ export class PaperSimDiagnosticService {
     }
 
     // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
-    const screenerSettings = await storage.getScreenerFilters({ mode });
+    // B79.0n.STORAGE (2026-05-21): paper-sim diagnostic reads canonical crypto baseline.
+    const screenerSettings = await storage.getCanonicalScreenerConfig({ mode });
     
     // Phase 41F-L.E2E-PURGE: User-level settings removed - using mode-level defaults
     const tradingSettings = {

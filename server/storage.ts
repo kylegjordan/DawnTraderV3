@@ -1,4 +1,6 @@
 import { normalizeToInternalSymbol } from './markets/kraken-symbol-resolver';
+// B79.0n.STORAGE (2026-05-21): AssetClass type for REQUIRED-assetClass storage API.
+import type { AssetClass } from '../shared/asset-classes';
 import { 
   users, 
   tradingSettings,
@@ -232,7 +234,12 @@ export interface IStorage {
 
   // Screener filters methods (global settings per mode)
   // Batch 19G: filterPath support for 4-path filter architecture
-  getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string; assetClass?: string }): Promise<ScreenerFilters | null>;
+  // B79.0n.STORAGE (2026-05-21): assetClass is REQUIRED — no silent crypto_spot default.
+  // Per Langston rev2 §11.4 + Step 2 ACK: every caller passes explicit assetClass.
+  // For UI/diagnostic baselines that intentionally want canonical crypto values, use
+  // getCanonicalScreenerConfig() helper (never mis-route as asset-class-aware).
+  getScreenerFilters(params: { mode: 'live' | 'paper'; assetClass: AssetClass; filterPath?: string }): Promise<ScreenerFilters | null>;
+  getCanonicalScreenerConfig(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null>;
   upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters>;
 
   // Filter diagnostics methods
@@ -945,26 +952,41 @@ export class DatabaseStorage implements IStorage {
 
   // Screener filters methods (global settings per mode - Phase 27.F.15.A)
   // Batch 19G: filterPath support — defaults to 'active_quant' for backward compatibility
-  // B79.0m.a: assetClass support — defaults to 'crypto_spot' for backward compat;
-  // unique index now (mode, asset_class, filter_path) so xstock can coexist.
-  async getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string; assetClass?: string }): Promise<ScreenerFilters | null> {
+  // B79.0n.STORAGE (2026-05-21): assetClass is REQUIRED. The B79.0m.a backward-compat
+  // default to 'crypto_spot' was the silent-fallback footgun that routed all xStock
+  // SQE cycles to crypto thresholds. Removed. Callers must pass explicit assetClass.
+  async getScreenerFilters(params: { mode: 'live' | 'paper'; assetClass: AssetClass; filterPath?: string }): Promise<ScreenerFilters | null> {
     const filterPath = params.filterPath || 'active_quant';
-    const assetClass = params.assetClass || 'crypto_spot';
     const [result] = await db
       .select()
       .from(screenerFilters)
       .where(and(
         eq(screenerFilters.mode, params.mode),
         eq(screenerFilters.filterPath, filterPath),
-        eq(screenerFilters.assetClass, assetClass)
+        eq(screenerFilters.assetClass, params.assetClass)
       ));
     return result || null;
   }
 
+  // B79.0n.STORAGE (2026-05-21): canonical crypto_spot baseline accessor for UI display
+  // and diagnostic reference panels. NEVER use this for runtime signal/screener/SQE
+  // routing — use getScreenerFilters({mode, assetClass, ...}) with the explicit asset
+  // class derived from the signal/cycle context. The whole point of B79.0n.STORAGE is
+  // preventing the silent-fallback footgun this helper could become if misused.
+  async getCanonicalScreenerConfig(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null> {
+    return this.getScreenerFilters({ ...params, assetClass: 'crypto_spot' });
+  }
+
   // Batch 19G: Upsert by (mode, filterPath) composite key
+  // B79.0n.STORAGE (2026-05-21): assetClass passed-through to getScreenerFilters.
+  // The InsertScreenerFilters shape already carries asset_class from the caller's data.
   async upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string; filterPath?: string }): Promise<ScreenerFilters> {
     const filterPath = data.filterPath || 'active_quant';
-    const existing = await this.getScreenerFilters({ mode: data.mode, filterPath });
+    const existing = await this.getScreenerFilters({
+      mode: data.mode,
+      assetClass: (data.assetClass ?? 'crypto_spot') as AssetClass,
+      filterPath
+    });
 
     const updateData = {
       ...data,

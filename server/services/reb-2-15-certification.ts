@@ -126,7 +126,8 @@ export class REB215Certification {
     const warnings: string[] = [];
     const errors: string[] = [];
 
-    const baseFilters = await storage.getScreenerFilters({ mode });
+    // B79.0n.STORAGE (2026-05-21): REB 2.15 certification reads canonical crypto baseline.
+    const baseFilters = await storage.getCanonicalScreenerConfig({ mode });
     if (!baseFilters) {
       errors.push(`No base filters found for mode: ${mode}`);
       return this.buildErrorResult(errors, startTime);

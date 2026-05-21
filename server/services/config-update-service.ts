@@ -205,7 +205,8 @@ export async function getGoals(userId: string, mode: 'live' | 'paper') {
 export async function getScreeners(userId: string, mode: 'live' | 'paper') {
   try {
     // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
-    const screenerData = await storage.getScreenerFilters({ mode });
+    // B79.0n.STORAGE (2026-05-21): canonical crypto_spot baseline for UI display.
+    const screenerData = await storage.getCanonicalScreenerConfig({ mode });
     return screenerData;
   } catch (error: any) {
     console.error('[ConfigUpdateService] Error fetching screener filters:', error);

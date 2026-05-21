@@ -79,8 +79,11 @@ interface LiveThresholds {
 
 async function loadLiveThresholds(): Promise<LiveThresholds> {
   const defaults = getSQEDefaultThresholds();
-  const paperThresholds = await getSQEThresholdsFromConfig('paper');
-  const liveThresholds = await getSQEThresholdsFromConfig('live');
+  // B79.0n.STORAGE (2026-05-21): diagnostic CLI reads canonical crypto baseline.
+  // Explicit literal (not via getCanonicalScreenerConfig helper) since this is a
+  // one-off CLI tool, not a route handler — Langston Step 2 re-ACK wording note.
+  const paperThresholds = await getSQEThresholdsFromConfig('paper', 'crypto_spot');
+  const liveThresholds = await getSQEThresholdsFromConfig('live', 'crypto_spot');
   
   return {
     paper: paperThresholds,

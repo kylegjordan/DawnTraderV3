@@ -138,7 +138,8 @@ class UnifiedFilterGateway {
     }
 
     try {
-      const filters = await storage.getScreenerFilters({ mode });
+      // B79.0n.STORAGE (2026-05-21): unified-filter-gateway hydration reads canonical crypto baseline.
+      const filters = await storage.getCanonicalScreenerConfig({ mode });
       if (!filters) {
         console.log(`[9.8.C][UnifiedFilter] No screener filters for ${mode}, skipping hydration`);
         return;
@@ -186,7 +187,8 @@ class UnifiedFilterGateway {
    */
   private async getUniverseCount(mode: 'live' | 'paper'): Promise<number> {
     try {
-      const filters = await storage.getScreenerFilters({ mode });
+      // B79.0n.STORAGE (2026-05-21): universe count reads canonical crypto baseline.
+      const filters = await storage.getCanonicalScreenerConfig({ mode });
       return filters?.universeSize || 100;
     } catch {
       return 100;

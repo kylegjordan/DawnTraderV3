@@ -1439,22 +1439,24 @@ router.get('/imf-status', requireAuth, async (_req: Request, res: Response) => {
     const mode = 'paper' as const; // IMF status always shows paper mode filters
 
     // Batch 19G: Read all 4 filter rows from DB
+    // B79.0n.STORAGE (2026-05-21): UI diagnostic display reads canonical crypto_spot baseline.
+    // For asset-class-aware routing use getScreenerFilters({mode, assetClass, ...}) with explicit class.
     const [activeQuantRow, activePatternRow, vtsQuantRow, vtsPatternRow,
            activeTrendRow, activeReversalRow, activeBreakoutRow, activeOscillatorRow,
            vtsTrendRow, vtsReversalRow, vtsBreakoutRow, vtsOscillatorRow] = await Promise.all([
-      storage.getScreenerFilters({ mode, filterPath: 'active_quant' }),
-      storage.getScreenerFilters({ mode, filterPath: 'active_pattern' }),
-      storage.getScreenerFilters({ mode, filterPath: 'vts_quant' }),
-      storage.getScreenerFilters({ mode, filterPath: 'vts_pattern' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'active_quant' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'active_pattern' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'vts_quant' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'vts_pattern' }),
       // Batch 42: Family-specific rows
-      storage.getScreenerFilters({ mode, filterPath: 'active_trend' }),
-      storage.getScreenerFilters({ mode, filterPath: 'active_reversal' }),
-      storage.getScreenerFilters({ mode, filterPath: 'active_breakout' }),
-      storage.getScreenerFilters({ mode, filterPath: 'active_oscillator' }),
-      storage.getScreenerFilters({ mode, filterPath: 'vts_trend' }),
-      storage.getScreenerFilters({ mode, filterPath: 'vts_reversal' }),
-      storage.getScreenerFilters({ mode, filterPath: 'vts_breakout' }),
-      storage.getScreenerFilters({ mode, filterPath: 'vts_oscillator' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'active_trend' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'active_reversal' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'active_breakout' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'active_oscillator' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'vts_trend' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'vts_reversal' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'vts_breakout' }),
+      storage.getCanonicalScreenerConfig({ mode, filterPath: 'vts_oscillator' }),
     ]);
 
     // B54: Helper to extract filter column data from DB row — NO hardcoded fallbacks.

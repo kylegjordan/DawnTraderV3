@@ -17,6 +17,7 @@ describe('[11.0D] SQE Dynamic Configuration', () => {
         symbol: 'BTC/USD',
         strategy: 'SCALP',
         mode: 'paper' as const,
+        assetClass: 'crypto_spot' as const,  // B79.0n.STORAGE: REQUIRED
         confidence: 0.7,
         regimeWeight: 0.5,
       };
@@ -33,6 +34,7 @@ describe('[11.0D] SQE Dynamic Configuration', () => {
         symbol: 'ETH/USD',
         strategy: 'MOMENTUM',
         mode: 'paper' as const,
+        assetClass: 'crypto_spot' as const,  // B79.0n.STORAGE: REQUIRED
         finalScore: 0.5,
         trendStrength: 0.6,
         volatility: 0.2,
@@ -50,6 +52,7 @@ describe('[11.0D] SQE Dynamic Configuration', () => {
         symbol: 'SOL/USD',
         strategy: 'TREND',
         mode: 'live' as const,
+        assetClass: 'crypto_spot' as const,  // B79.0n.STORAGE: REQUIRED
         finalScore: 0.75,
         regimeWeight: 0.65,
       };

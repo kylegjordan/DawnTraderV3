@@ -685,7 +685,8 @@ export class Fx5ScannerService {
   private async scanMode(mode: 'paper' | 'live'): Promise<ScanResult | null> {
     try {
       // Batch 19G: Load quant filters (primary) — backward compatible default path
-      const filters = await storage.getScreenerFilters({ mode, filterPath: 'active_quant' });
+      // B79.0n.STORAGE (2026-05-21): FX5 is the crypto scanner; assetClass is explicit.
+      const filters = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: 'active_quant' });
       if (!filters) {
         console.warn(`[FX5Scanner][${mode}] No filters found for active_quant, skipping scan`);
         return null;
@@ -734,7 +735,7 @@ export class Fx5ScannerService {
       // Previously always loaded 'active_quant' regardless of passive learning state.
       // In VTS/passive learning, vts_quant has different thresholds (e.g., minPrice $0.05 vs $0.25).
       if (isPassiveLearningMode) {
-        const vtsQuantRow = await storage.getScreenerFilters({ mode, filterPath: 'vts_quant' });
+        const vtsQuantRow = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: 'vts_quant' });
         if (vtsQuantRow) {
           Object.assign(filters, vtsQuantRow);
           console.log(`[19G][HF3][FX5] Quant filters reloaded from vts_quant (passive learning): minPrice=${vtsQuantRow.minPrice}, minVolume=${vtsQuantRow.minVolume}`);
@@ -743,7 +744,7 @@ export class Fx5ScannerService {
 
       // Batch 19G: Load pattern filter row from DB for dual-path scanning
       const patternFilterPath = isPassiveLearningMode ? 'vts_pattern' : 'active_pattern';
-      const patternDbRow = await storage.getScreenerFilters({ mode, filterPath: patternFilterPath });
+      const patternDbRow = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: patternFilterPath });
       // Batch 19G HF2: Map ALL DB fields for pattern filter (not just 3)
       // Previously only volume/spread/history were mapped; minPrice, maxPrice,
       // excludeStablecoins, minLiquidity, minMarketCap fell back to quant values.
@@ -766,7 +767,7 @@ export class Fx5ScannerService {
       // Batch 19G: Also load quant IMF DB row for VTS relaxed thresholds
       const quantFilterPath = isPassiveLearningMode ? 'vts_quant' : 'active_quant';
       const quantDbRow = isPassiveLearningMode
-        ? await storage.getScreenerFilters({ mode, filterPath: 'vts_quant' })
+        ? await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: 'vts_quant' })
         : filters; // Active quant is already loaded as 'filters'
       // B54: DB is sole authority — no hardcoded fallbacks for quant IMF.
       if (!quantDbRow) {
@@ -798,7 +799,7 @@ export class Fx5ScannerService {
 
     for (const family of familyFilterPaths) {
       const familyPath = isPassiveLearningMode ? `vts_${family}` : `active_${family}`;
-      const familyRow = await storage.getScreenerFilters({ mode, filterPath: familyPath });
+      const familyRow = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: familyPath });
       familyDbRows[family] = familyRow;
       if (!familyRow) {
         console.error(`[BATCH34][CONFIG_MISSING] No DB row found for family filter path '${familyPath}' \u2014 family IMF filtering will be SKIPPED. Check screener_filters table.`);
@@ -819,7 +820,7 @@ export class Fx5ScannerService {
       // and instead use this relaxed profile. This is the architectural authority Kyle
       // intended when B63 was designed — strong-DBS pairs get their own global lane.
       const strongTrendFilterPath = isPassiveLearningMode ? 'vts_strong_trend' : 'active_strong_trend';
-      const strongTrendDbRow = await storage.getScreenerFilters({ mode, filterPath: strongTrendFilterPath });
+      const strongTrendDbRow = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: strongTrendFilterPath });
       const strongTrendFilters = strongTrendDbRow ? {
         minVolume: parseFloat(strongTrendDbRow.minVolume || '250000'),
         minPrice: parseFloat(strongTrendDbRow.minPrice || '0.01'),

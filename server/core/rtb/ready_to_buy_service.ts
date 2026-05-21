@@ -31,6 +31,8 @@ import { getCachedNumberRequired } from '../../services/module-constants-service
 const _RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
 import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
+// B79.0n.STORAGE (2026-05-21): resolveAssetClass + AssetClass type for SQEInput population.
+import { resolveAssetClass, type AssetClass } from '../../../shared/asset-classes';
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
@@ -643,18 +645,25 @@ class ReadyToBuyService {
     ));
     
     // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
+    // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput. RtbSignal carries
+    // optional assetClass on the row (see line 110); fall through to resolveAssetClass
+    // for legacy rows where the column is null (pre-B79.0g migration window).
+    const sqeAssetClass = (signal.assetClass as AssetClass | null | undefined)
+      ?? resolveAssetClass(normalizedSymbol, 'kraken');
+
     const sqeInput: SQEInput = {
       signalId: signal.signalId,
       symbol: normalizedSymbol,
       strategy: signal.strategy,
       mode,
+      assetClass: sqeAssetClass,
       confidence: confidence,
       finalScore: refreshedFinalScore,
       regimeWeight: regimeWeight,
       trendStrength: metadata.trendStrength ?? 0.5,
       volatility: currentVol,
     };
-    
+
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
     
     if (!sqeResult.passed) {
@@ -861,11 +870,16 @@ class ReadyToBuyService {
               ));
               
               // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
+              // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput.
+              const sqeAssetClass = (signal.assetClass as AssetClass | null | undefined)
+                ?? resolveAssetClass(normalizedSymbol, 'kraken');
+
               const sqeInput: SQEInput = {
                 signalId: signal.signalId,
                 symbol: normalizedSymbol,
                 strategy: signal.strategy,
                 mode,
+                assetClass: sqeAssetClass,
                 confidence: confidence,
                 finalScore: refreshedFinalScore,
                 regimeWeight: regimeWeight,

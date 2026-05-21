@@ -29,7 +29,8 @@ import { StrategyEngine, StrategySignal } from './strategy-engine';
 // B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B79.0d: synchronous resolveAssetClass for ORB dispatch guard.
-import { resolveAssetClass } from '../../shared/asset-classes.js';
+// B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput.assetClass population.
+import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
 // import { FilteredPairsService } from './filtered-pairs-service';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -564,11 +565,18 @@ export class SignalOrchestrator {
       sqeRegimeStability = stabilityResult.stability;
     } catch { /* stability unavailable — SQE governance gate will be skipped */ }
 
+    // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput. Resolves via the
+    // raw signal's metadata (set by the upstream cycle) or falls through to the
+    // resolveAssetClass(symbol, exchange) primary resolver. NO silent crypto default.
+    const sqeAssetClass = (rawSignal.metadata?.assetClass as AssetClass | undefined)
+      ?? resolveAssetClass(rawSignal.symbol, 'kraken');
+
     const sqeInput: SQEInput = {
       signalId,
       symbol: rawSignal.symbol,
       strategy: strategyId,
       mode: sizingContext.mode,
+      assetClass: sqeAssetClass,
       confidence: extendedMetrics.confidence,
       finalScore: extendedMetrics.finalScore,
       regimeWeight: extendedMetrics.regimeWeight,

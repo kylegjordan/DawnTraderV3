@@ -110,7 +110,8 @@ export class REB212TestHarness {
     console.log(`[REB2.12] Starting controlled cycle: ${cycleId}`);
     console.log(`[REB2.12] Overrides:`, JSON.stringify(overrides));
 
-    const baseFilters = await storage.getScreenerFilters({ mode });
+    // B79.0n.STORAGE (2026-05-21): REB 2.12 test harness reads canonical crypto baseline.
+    const baseFilters = await storage.getCanonicalScreenerConfig({ mode });
     if (!baseFilters) {
       throw new Error(`No base filters found for mode: ${mode}`);
     }
