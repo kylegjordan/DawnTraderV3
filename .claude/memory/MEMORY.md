@@ -36,7 +36,7 @@ Standalone CI-health batch. Scope rev2 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`ad2b370
 
 **Step 2 pre-audit — 3 corrections to scope, all Langston-ACK'd:** (1) `db:push` is BROKEN on this schema (drizzle-kit PG-ARRAY introspection bug — the documented reason `db-migrate.ts` exists) — Phase 2.2 MUST use `npm run db:migrate` (also the only path that seeds the `module_constants` rows the 54 not-warm tests need); (2) the CI typecheck job has `continue-on-error: true` — THE silent-regression mechanism — must be removed after Phase 1 reaches green; (3) ~80-130 distinct fixes (above scoped 40-70), effort ~5.25-7d, stays one batch. Phase 0 gains 2 tasks: empty-Postgres `db:migrate` validation + the b-new-42b diagnostic.
 
-**🚩 b-new-42b cross-batch regression (diagnostic done, surfaced to Kyle):** price-discontinuity-detector test passed 11/11 at ship (2026-05-17, run 26001413225), now fails 11/11; detector+test byte-identical since. Cause = commit `230348507` (B79.0n.UNIVERSE-DISCOVERY) made `XSTOCK_SPOT_SYMBOLS` boot-populated (empty at module load); unit tests run no boot → detector early-returns for all xStocks. Production likely fine (boot populates universe) but boot-window-race + zero test coverage need verification — **awaiting Kyle decision** on fast-follow vs fold into Phase 2. Phase 2: b-new-42b's 11 + ~4 b79-0f failures = ONE root cause (harness must seed xStock universe).
+**b-new-42b cross-batch regression — diagnosed + runtime-VERIFIED (Kyle directed verify-now):** price-discontinuity-detector test passed 11/11 at ship (2026-05-17, run 26001413225), now fails 11/11; detector+test byte-identical. Cause = commit `230348507` (B79.0n.UNIVERSE-DISCOVERY) made `XSTOCK_SPOT_SYMBOLS` boot-populated (empty at module load); unit tests run no boot → detector early-returns for all xStocks. **Runtime verified SAFE:** universe init is a hard boot gate in `index.ts:55-96` (top-level await + `process.exit(1)` on total fallback failure) completing before the Express app; all 9 `XSTOCK_SPOT_SYMBOLS` code usages are call-time (zero module-load captures). No fast-follow runtime batch needed. Only residual = test-coverage gap → B-NEW-43 Phase 2 (harness seeds universe via `_replaceXstockUniverse()` in beforeEach). Phase 2: b-new-42b's 11 + ~4 b79-0f failures = ONE root cause.
 
 ### Active alerts (§10.5)
 - `c82c256c` — B-NEW-35 7-day dedup soak 2026-05-27. No action.
@@ -49,7 +49,7 @@ Standalone CI-health batch. Scope rev2 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`ad2b370
 
 ## NEXT IMMEDIATE STEPS (2026-05-22)
 
-B-NEW-43 Step 2 pre-audit DONE + Langston consensus. **B-NEW-43 IMPLEMENTATION (Step 3 = Phase 0) waits for B79.0n.MCE Step 11 to close.** Open: Kyle decision on the b-new-42b fast-follow question (verify boot-window race now, in parallel — vs fold into B-NEW-43 Phase 2).
+B-NEW-43 Step 2 pre-audit DONE + Langston consensus; b-new-42b runtime-verified safe (no fast-follow needed). **B-NEW-43 IMPLEMENTATION (Step 3 = Phase 0) waits for B79.0n.MCE Step 11 to close.** No open B-NEW-43 decisions.
 
 **B79.0n.MCE close-out (as steps come due):**
 1. **2 soak alerts firing today** — `d4b2e590` (11:55Z, UD+STORAGE 24h regression) + `2af50871` (13:00Z, UD cron self-fire). Both still future as of 2026-05-21T22Z. Surface plain-language, run comparisons, ack.
