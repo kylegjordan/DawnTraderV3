@@ -645,11 +645,10 @@ class ReadyToBuyService {
     ));
     
     // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
-    // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput. RtbSignal carries
-    // optional assetClass on the row (see line 110); fall through to resolveAssetClass
-    // for legacy rows where the column is null (pre-B79.0g migration window).
-    const sqeAssetClass = (signal.assetClass as AssetClass | null | undefined)
-      ?? resolveAssetClass(normalizedSymbol, 'kraken');
+    // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput. RtbSignal DB row
+    // does not carry asset_class today (schema gap tracked for RTB batch #11). Resolve
+    // from the symbol via resolveAssetClass(symbol, 'kraken').
+    const sqeAssetClass = resolveAssetClass(normalizedSymbol, 'kraken');
 
     const sqeInput: SQEInput = {
       signalId: signal.signalId,
@@ -871,8 +870,8 @@ class ReadyToBuyService {
               
               // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
               // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput.
-              const sqeAssetClass = (signal.assetClass as AssetClass | null | undefined)
-                ?? resolveAssetClass(normalizedSymbol, 'kraken');
+              // Resolve from symbol via resolveAssetClass (RtbSignal DB row lacks asset_class).
+              const sqeAssetClass = resolveAssetClass(normalizedSymbol, 'kraken');
 
               const sqeInput: SQEInput = {
                 signalId: signal.signalId,
