@@ -967,7 +967,7 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 **Effort:** 1-2 weeks. Larger than the original feasibility note's 3-5 day estimate because this scope adds: (a) the symbol normalizer service so different exchanges' symbol conventions map cleanly, (b) the VTS-process partition (own PM2 process, own state), and (c) a dedicated FX5 scanner instance so the data layer split is clean.
 
 **Dependencies:**
-- B72 lever-to-`module_constants` sweep should complete first so the new components land DB-tunable from day one.
+- ~~B72 lever-to-`module_constants` sweep should complete first~~ ✅ **B72 SHIPPED 2026-05-05** (+ B72.1 2026-05-05 + B72.2 2026-05-06); 34 modules / ~163 rows in production sync-read paths; 18/18 canonical strategies DB-tunable. New components land DB-tunable.
 - `INDEPENDENT_VTS_DATA_FEED_FEASIBILITY.md` is the architectural reference.
 
 ### 19.0.1 Symbol Normalizer Service (NEW)
@@ -1143,7 +1143,7 @@ May be split into multiple sub-deploys per the original scope. May be partially 
 
 **Status:** added 2026-04-26 after B65.6 closed via SKIP. Sits between SQE recalibration (19.4) and AMR (19.5). The gate's job is to use 1-2 weeks of clean active-paper-trading data to decide which currently-post-live items might need to move pre-live.
 
-**Trigger:** runs once after the trading engine is verified working in paper mode (19.1–19.3), SQE recalibration is complete (19.4), and B72 lever-to-`module_constants` migration is complete. By this point the system is stable, observable, and tunable from the database — the prerequisites for collecting decision-grade observational data.
+**Trigger:** runs once after the trading engine is verified working in paper mode (19.1–19.3), SQE recalibration is complete (19.4), and ~~B72 lever-to-`module_constants` migration is complete~~ **B72 lever migration is complete (✅ shipped 2026-05-05; B72.1 2026-05-05; B72.2 2026-05-06)**. By this point the system is stable, observable, and tunable from the database — the prerequisites for collecting decision-grade observational data.
 
 **Reference document:** `Claude Comms and Packages/Scope Files/B65_6_FINDINGS_PAPER.md` — captures the per-pair classifier work that was done pre-Phase-19 and intentionally NOT shipped, so future-CC reading this gate during Phase 19 has the full record of what was tested and why we deferred to observation rather than building a fix in advance.
 
@@ -1316,7 +1316,7 @@ Restart paper with adaptive response live. Confirm that mode transitions fire wh
 
 **Status:** Formally inserted into the roadmap on 2026-04-26 in response to Kyle's question about where comprehensive lever-to-database migration lives. The phase has existed as an architectural plan in `Claude Comms and Packages/Scope Files/MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md` since B63 close, but was not formally scheduled as a discrete phase header in this roadmap until now.
 
-**Refinement 2026-04-26 (Kyle directive):** Comprehensive lever-to-`module_constants` migration was originally placed here, but per Kyle's go-live design intent, all levers must be DB-tunable BEFORE live trading. Lever migration moves to **B72 pre-launch** (final pre-Phase-19 batch). Phase 21.4 retains only the 8-module architectural extraction work, which is the heavy structural decomposition that benefits from live-trading evidence on which modules need which resolution scopes.
+**Refinement 2026-04-26 (Kyle directive):** Comprehensive lever-to-`module_constants` migration was originally placed here, but per Kyle's go-live design intent, all levers must be DB-tunable BEFORE live trading. Lever migration moves to **B72 pre-launch** (final pre-Phase-19 batch). **B72 SHIPPED 2026-05-05 + B72.1 2026-05-05 + B72.2 2026-05-06** — 34 modules / ~163 rows now live. Phase 21.4 retains only the 8-module architectural extraction work, which is the heavy structural decomposition that benefits from live-trading evidence on which modules need which resolution scopes.
 
 **Goal:** Extract 8 canonical modules from the current monolith. The 5D `(exchange, asset_class, filter, strategy, regime)` resolution matrix is already in place (B65.1 module_constants infrastructure + B72 comprehensive lever migration); Phase 21.4 wires the modules together against that matrix.
 
@@ -1341,9 +1341,9 @@ Per `MODULARIZATION_SYNTHESIS_FROM_B63_AUDITS.md`:
 7. **Profitability** — net-EV computation with friction, slippage, fees
 8. **Ranking** — ranks eligible signals for slot allocation
 
-### 21.4.2 ~~Comprehensive lever-to-`module_constants` migration~~ — MOVED TO B72 (pre-launch)
+### 21.4.2 ~~Comprehensive lever-to-`module_constants` migration~~ — MOVED TO B72 (pre-launch) — ✅ SHIPPED 2026-05-05
 
-Per Kyle directive 2026-04-26: comprehensive lever migration moves to **B72 pre-launch** as the final pre-Phase-19 batch. Original go-live design intent is that all levers are DB-tunable before live trading. This phase retains only the architectural extraction work (§21.4.1).
+Per Kyle directive 2026-04-26: comprehensive lever migration moved to **B72 pre-launch** as the final pre-Phase-19 batch. **B72 SHIPPED 2026-05-05** + **B72.1 SHIPPED 2026-05-05** + **B72.2 SHIPPED 2026-05-06**. 34 modules / ~163 rows live in production sync-read paths; 18/18 canonical strategies DB-tunable. Original go-live design intent (all levers DB-tunable before live trading) achieved. This phase retains only the architectural extraction work (§21.4.1). See `BATCH_CATALOG.md` rows 212-214 + `BATCH_72_COMPLETION_REPORT.md` + `BATCH_72_2_COMPLETION_REPORT.md`.
 
 ### 21.4.3 storage.ts modularization (folded in from Phase 16.2)
 
