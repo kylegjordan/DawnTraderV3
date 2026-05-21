@@ -1,6 +1,6 @@
 # B-NEW-43 — CI Recovery — Pre-Implementation Audit (Step 2)
 
-> **Status:** Step 2 pre-audit — awaiting Langston review.
+> **Status:** Step 2 pre-audit — **Langston Step 2 ACK received, consensus reached** (2026-05-22). See §13 for the consensus record + the b-new-42b diagnostic Langston requested.
 > **Scope reference:** `Claude Comms and Packages/Scope Files/B_NEW_43_CI_RECOVERY_SCOPE.md` rev2 (FINALIZED, Langston Step 1 ACK).
 > **Author:** Claude Code, 2026-05-22.
 > **Evidence base:** GitHub Actions CI run **26255691977** (latest run on `migration/aws-supabase`, push "Memory sync: B79.0n.MCE Steps 1-5 done + B-NEW-43 scope finalized", 2026-05-21T22:01Z). This commit changed only `MEMORY.md` + the scope file — zero code change vs the B79.0n.MCE Step-5 fix-forward — so the error set is identical to the run the scope cited (26245428198) and is the current, stable baseline.
@@ -410,3 +410,56 @@ Plus one new test root cause (vi.mock hoist, §3.6) and one governance finding (
 Recommend: Langston Step-2 review of this audit, decision on Q1-Q5, then proceed to Phase 0.
 
 — Claude Code, 2026-05-22 (B-NEW-43 CI-Recovery Step 2 pre-implementation audit)
+
+---
+
+## §13 — Step 2 consensus record + b-new-42b diagnostic (addendum, 2026-05-22)
+
+### §13.1 — Langston Step 2 ACK
+
+Langston returned **Step 2 pre-audit ACK**. He confirmed the three load-bearing findings (db:push→db:migrate, continue-on-error removal, no-canonical-fixture), approved the warm-list cross-check + the "import `warmModuleConstantsForSyncCallers()` directly" recommendation, and answered the six open questions:
+
+- **Q1** (empty-Postgres `db:migrate` validation in Phase 0) — ✅ concur, in-scope Phase 0; specifically validate `2026-05-03-b69-asset-class-retag.sql` and any data-retag/UPDATE migration on a fresh DB; make non-empty-DB-safe migrations idempotent/guarded before Phase 2.2 depends on the migrate path.
+- **Q2** (`db:push` → `db:migrate`) — ✅ confirmed.
+- **Q3** (canonical module-constants fixture) — ✅ **path (i)**: Phase 2 creates a canonical warm-helper (calls `warmModuleConstantsForSyncCallers()`), migrates inline mocks onto it for warm-path cases; tests that genuinely need a *mock* keep inline mocks. Phase-3 governance rule must explicitly cover BOTH "update the canonical warm-helper AND any inline per-test mock that lists knobs."
+- **Q4** (root-cause count 80-130 vs 40-70) — ✅ concur, stays one batch; Phase 0 calibration is the recheck gate; re-surface split to Kyle per scope §6A only if >6 d confirmed.
+- **Q5** (genuine bugs surface) — ✅ concur the handling, **with a strengthening for b-new-42b** — see §13.2.
+- **Q6** (b-new-36 + alert `283bd74e` coupling) — ✅ noted.
+
+**Two additions to Phase 0** (consensus): (1) the b-new-42b CI-history diagnostic + Kyle surface, done below in §13.2; (2) the empty-Postgres `db:migrate` validation per Q1.
+
+**Non-blocking flags accepted:** file a RUNNING_ISSUES follow-on for the hardcoded `postgresql://test:test@localhost:5432/test` in `vitest.config.ts` (env-driven test DB URL — not in B-NEW-43 scope); §3.6 vi.mock hoist folds into Phase 2; Step-10 governance adds a SIM note that the CI typecheck gate is load-bearing; same dead-code discipline as `vts-runner.ts:877` applies to the `routes.ts` Walter/ai-analyst excision residue (delete dead refs, but escalate if a type fix would resurrect dead code); fake-green baseline approved.
+
+### §13.2 — b-new-42b diagnostic (Langston's requested Phase-0 pre-work) — 🚩 CONFIRMED CROSS-BATCH REGRESSION
+
+Langston's pushback asked: did `b-new-42b-price-discontinuity-detector.test.ts` ever pass in CI, and if it regressed, which commit. Diagnostic run 2026-05-22:
+
+**Evidence chain:**
+- The detector source (`server/services/price-discontinuity-detector.ts`) AND its test file were both added in exactly **one** commit — `d8e0f5885` (B-NEW-42b ship, 2026-05-17 22:09) — and **neither has been modified since** (`git log` confirms a single commit for each file).
+- In B-NEW-42b's own ship CI run (run **26001413225**, commit d8e0f5885), the b-new-42b test **PASSED 11/11** — every test `✓`. (That run was already red overall — 73 other failures — but b-new-42b's own suite was green.)
+- In the current CI run (26255691977) the same byte-identical test **FAILS 11/11**, all "expected false to be true."
+
+**Root cause — commit `230348507` (B79.0n.UNIVERSE-DISCOVERY Phase B-F, 2026-05-21).** That batch converted `XSTOCK_SPOT_SYMBOLS` in `shared/asset-classes.ts` from a **statically module-load-populated** Set:
+```ts
+export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = new Set(XSTOCK_SPOT_REGISTRY.keys());
+```
+to a Set that is **empty at module load** and only filled in **at server boot** by `xstockUniverseService.initializeFromDB()` (via `_replaceXstockUniverse()`):
+```ts
+const _xstockSymbolsInternal = new Set<string>();          // empty at import
+export const XSTOCK_SPOT_SYMBOLS: ReadonlySet<string> = _xstockSymbolsInternal;
+```
+The detector's first line of logic (`price-discontinuity-detector.ts:247`) is `if (!XSTOCK_SPOT_SYMBOLS.has(symbol)) return { active: false };`. In a **unit test there is no `server/index.ts` boot sequence**, so `_xstockSymbolsInternal` stays empty, so the detector treats every xStock symbol (`AAPL/USD`, `KO/USD`) as non-xStock and early-returns `{ active: false }` — hence all 11 xStock-path assertions fail "expected false to be true." (The one crypto test still passes — `BTC/USD` is non-xStock either way.)
+
+**This is a textbook cross-batch cascade regression** — the exact failure class B-NEW-43 exists to prevent. UNIVERSE-DISCOVERY's change silently broke b-new-42b's tests; because CI was already red (and the typecheck gate non-blocking), nobody saw it.
+
+**Runtime-safety assessment (for Kyle's decision):**
+- **Production is most likely unaffected** — `server/index.ts` runs `xstockUniverseService.initializeFromDB()` at boot, so `XSTOCK_SPOT_SYMBOLS` is populated before live trading. A boot-populated universe is a legitimate design (CLAUDE.md §15 "cold-start warmup is acceptable").
+- **Two real residual concerns** that need explicit verification (NOT assumed away):
+  1. **Boot-window race** — if the price-discontinuity detector (or any other `XSTOCK_SPOT_SYMBOLS` consumer) can execute before `initializeFromDB()` completes, it sees an empty Set and **fails open** (returns "no discontinuity" → spike protection OFF). For a *protection* layer, failing-open during the startup window is a §15 cold-start concern. UNIVERSE-DISCOVERY's boot sequencing must be checked to confirm no consumer runs in that window.
+  2. **Zero working test coverage** — until the test harness is fixed to populate the universe (call `_replaceXstockUniverse()` in `beforeEach`), the price-spike protection has **no passing automated test at all**.
+
+**Impact on B-NEW-43 Phase 2 (revises §3.5):** the b-new-42b cluster (11 failures) is **ONE root cause**, not 11 individual investigations — the harness must seed the xStock universe. The same empty-`XSTOCK_SPOT_SYMBOLS` mechanism very likely also explains the ≈4 `b79-0f-asset-class-collisions` "expected 'crypto_spot' to be 'xstock_spot'" failures (`asset-classes.ts:483` resolves to crypto when `XSTOCK_SPOT_SYMBOLS.has()` is false). So ≈15 of the ≈31 ASSERTION cluster collapse into this single boot-populated-universe root cause — Phase 2's genuine-assertion tail is correspondingly **smaller** than §3.5 estimated.
+
+**Surfaced to Kyle** 2026-05-22 (plain-language) per Langston's Q5 strengthening — Kyle to decide whether the boot-window-race verification warrants a fast-follow runtime check in parallel with B-NEW-43, or is folded into B-NEW-43 Phase 2.
+
+— Claude Code, 2026-05-22 (Step 2 consensus addendum)
