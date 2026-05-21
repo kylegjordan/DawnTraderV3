@@ -45,10 +45,12 @@ Standalone CI-health batch. Scope `Claude Comms and Packages/Scope Files/B_NEW_4
 
 ## NEXT IMMEDIATE STEPS (2026-05-22)
 
-1. **Handle the 2 soak alerts firing today** — `d4b2e590` (11:55Z, UD+STORAGE 24h regression) + `2af50871` (13:00Z, UD cron self-fire). Surface plain-language, run comparisons, ack.
+**PRIMARY TASK — B-NEW-43 Step 2 pre-implementation audit.** Kyle directive 2026-05-22: run the pre-audit NOW (post-compaction). It is planning/analysis only — no code — so it does NOT conflict with B79.0n.MCE's remaining steps and does NOT need deployed-MCE as a baseline (the CI-error set is stable as of commit `38b672e5c`). Run it during the MCE deploy/soak wait windows; do NOT gate it behind MCE Step 11. **Kyle stressed: SIM consultation + code-level review are CRITICAL.** Trace blast radius for every component B-NEW-43 touches (`routes.ts`, `storage.ts`, many service files, `.github/workflows/` CI config, the test harness). Cluster the ~694 TS errors + 98 test failures by root cause. Deliverable: `Claude Comms and Packages/Scope Files/B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` → Langston Step 2 review. Only B-NEW-43 IMPLEMENTATION (Step 3+) waits for B79.0n.MCE Step 11 to close.
+
+**B79.0n.MCE close-out (runs in parallel with the pre-audit, as steps come due):**
+1. **2 soak alerts firing today** — `d4b2e590` (11:55Z, UD+STORAGE 24h regression) + `2af50871` (13:00Z, UD cron self-fire). Surface plain-language, run comparisons, ack.
 2. **B79.0n.MCE Step 6 deploy** at ≥12:00Z — deploy + run migration + create the MCE-specific 24h soak alert.
 3. **B79.0n.MCE Steps 7-11** — CC verify, Langston Step 8 second-pass, Step 10 governance, Step 11 completion report.
-4. **Then B-NEW-43** — Step 2 pre-audit (Kyle stressed SIM consultation + code-level review are CRITICAL), then full 11-step workflow per the finalized scope rev2.
 
 ### Recent commits
 - `ad2b37018` — B-NEW-43 CI Recovery scope rev2 (FINALIZED, Langston ACK)
