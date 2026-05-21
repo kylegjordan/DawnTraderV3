@@ -142,16 +142,16 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
       const { getCachedCostMetrics } = await import('../../core/math/cost-model.js');
       const { DEFAULT_TAKER_FEE } = await import('../../config/exchange-defaults.js');
       
-      const metrics = getCachedCostMetrics('ADA/USD');
-      
+      const metrics = getCachedCostMetrics('ADA/USD', 'crypto_spot'); // B79.0n.MCE: assetClass REQUIRED
+
       expect(metrics.fee).toBe(DEFAULT_TAKER_FEE);
     });
     
     it('C2: default fee should be 0.26% (taker)', async () => {
       const { getCachedCostMetrics } = await import('../../core/math/cost-model.js');
       
-      const metrics = getCachedCostMetrics('XRP/USD');
-      
+      const metrics = getCachedCostMetrics('XRP/USD', 'crypto_spot'); // B79.0n.MCE: assetClass REQUIRED
+
       expect(metrics.fee).toBe(0.0026);
     });
     

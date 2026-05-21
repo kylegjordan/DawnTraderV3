@@ -145,8 +145,8 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
     it('should return default costs for unknown symbols', async () => {
       const { getCachedCostMetrics, DEFAULT_FEE, DEFAULT_SLIPPAGE } = await import('../../core/math/cost-model.js');
       
-      const metrics = getCachedCostMetrics('UNKNOWN/PAIR');
-      
+      const metrics = getCachedCostMetrics('UNKNOWN/PAIR', 'crypto_spot'); // B79.0n.MCE: assetClass REQUIRED
+
       expect(metrics.fee).toBe(DEFAULT_FEE);
       expect(metrics.slippage).toBe(DEFAULT_SLIPPAGE);
     });
@@ -154,8 +154,8 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
     it('should include spread from price cache', async () => {
       const { getCachedCostMetrics } = await import('../../core/math/cost-model.js');
       
-      const metrics = getCachedCostMetrics('BTC/USD');
-      
+      const metrics = getCachedCostMetrics('BTC/USD', 'crypto_spot'); // B79.0n.MCE: assetClass REQUIRED
+
       expect(metrics.spread).toBeGreaterThanOrEqual(0);
     });
   });
