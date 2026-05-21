@@ -365,6 +365,85 @@ Distilled from B-NEW-14 (xstock_spot `max_bid_ask_spread` gate sitting inert for
 
 ---
 
+### Step 4.9 — REQUIRED-assetClass storage API pattern (B79.0n.STORAGE canonical pattern, 2026-05-21)
+
+**Standing rule:** for any storage API surface (or any module-level method) that returns asset-class-scoped configuration, the `assetClass` parameter MUST be a typed REQUIRED parameter (`assetClass: AssetClass`) — NEVER an optional with silent default. The B79.0n.STORAGE worked example (`storage.getScreenerFilters`) is the canonical pattern.
+
+#### The pattern
+
+```ts
+// BAD — silent fallback to crypto_spot
+getScreenerFilters(params: {
+  mode: 'live' | 'paper';
+  filterPath?: string;
+  assetClass?: string;  // ← optional + defaulted to 'crypto_spot' = silent footgun
+}): Promise<ScreenerFilters | null>;
+
+// GOOD — type-level enforcement of caller-resolves
+getScreenerFilters(params: {
+  mode: 'live' | 'paper';
+  assetClass: AssetClass;  // ← REQUIRED, no default; TS compile-error if omitted
+  filterPath?: string;
+}): Promise<ScreenerFilters | null>;
+```
+
+The pattern composes with three additional elements:
+
+**1. Dedicated `getCanonicalScreenerConfig({mode, filterPath?})` helper** for UI/diagnostic display where the intent is genuinely "show the canonical crypto baseline":
+
+```ts
+async getCanonicalScreenerConfig(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null> {
+  // Returns the canonical crypto_spot baseline for UI display and diagnostic reference.
+  // NEVER use this for runtime signal/screener/SQE routing — use getScreenerFilters({mode, assetClass, ...})
+  // with the explicit asset class derived from the signal/cycle context. The whole point of REQUIRED-assetClass
+  // is preventing the silent-fallback footgun this helper could become if misused.
+  return this.getScreenerFilters({ ...params, assetClass: 'crypto_spot' });
+}
+```
+
+**Use a banner-style "NEVER use this for runtime routing" docstring.** The deliberate uppercase + "NEVER" caught 3 misclassified sites at Langston's Step 4 code review (unified-filter-gateway x2 + paper-sim-service x1 were initially routed through the helper but were actually runtime crypto-trading paths; reclassified to (a) crypto-intentional explicit before deploy).
+
+**2. Cache key extension** for any caller-side cache that previously keyed by mode alone:
+
+```ts
+// BEFORE: cache.set(mode, value)
+// AFTER:  cache.set(`${mode}:${assetClass}`, value)
+```
+
+Memory cost is `O(k)` where k = number of (mode, asset_class) combinations (4 max today: paper+live × crypto+xstock). Cache-isolation regression test at `b79-0n-storage-sqe-asset-class-routing.test.ts` warms `paper:crypto_spot`, reads `paper:xstock_spot`, asserts distinct storage calls — copy this test shape for any future cache-key dimension addition.
+
+**3. `@ts-expect-error` regression-lock test** in a dedicated unit-test file:
+
+```ts
+it('TYPE LOCK — calling getScreenerFilters without assetClass MUST be a compile error', () => {
+  function callerMissingAssetClass(storage: IStorage) {
+    // @ts-expect-error — assetClass is REQUIRED per B79.0n.STORAGE
+    return storage.getScreenerFilters({ mode: 'paper' });
+  }
+  expect(typeof callerMissingAssetClass).toBe('function');
+});
+```
+
+If a future refactor accidentally re-introduces the optional parameter shape, the `@ts-expect-error` directive becomes "Unused" (because the omission no longer errors) and TypeScript rejects the file. CI breaks. This is the canonical pattern for any type-system-enforced contract.
+
+#### Why this pattern is load-bearing
+
+**Pre-audit grep undercounts by ~20%.** B79.0n.STORAGE's initial grep identified 32 silent-fallback sites; the actual compile-driven audit found 38 (6 additional surfaced because the regex pattern matched only certain call shapes while TypeScript's reference graph captures every caller). **Rule:** treat pre-audit grep counts as **lower bounds**. TypeScript at implementation time will surface the rest.
+
+**Same-batch migrations + WHERE clauses must be co-audited.** B79.0n.STORAGE shipped a seed migration that created 2 rows per `(mode, filter_path)` (crypto + xStock). The `upsertScreenerFilters` UPDATE WHERE clause was `(mode, filterPath)`-only — would match BOTH rows and silently cross-corrupt fields. Langston caught this at Step 4. **Rule:** when a batch ships both a schema/data change AND code that operates on that schema, the pre-audit must explicitly cross-reference WHERE/JOIN clauses against the new row population shape.
+
+**Layer 1 vs Layer 2 distinction in DB-backed config.** Per the broader 3-layer precedence chain (Layer 1 = primary table; Layer 2 = module_constants fallback; Layer 3 = static const catastrophic fallback), B79.0n.STORAGE refactors Layer 1; per-class Layer 2 rows are typically deferred to a separate batch with explicit promote-to-active triggers (Phase 19 calibration, third asset class onboarding, or the next sub-batch in the arc begins regardless).
+
+#### Dispatch infrastructure rule (CLAUDE.md §6.5.0.a reaffirmed)
+
+For Langston code reviews involving diff verification: **every dispatch MUST include the no-gdrive instruction at the TOP, AND embed load-bearing diff content inline.** B79.0n.STORAGE's Step 4 RE-ACK v1 dispatch hung 10+ min on `git -C /mnt/gdrive ... grep` FUSE I/O — D-state stuck processes can't be kill -9'd. v2 dispatch with embedded-diff inline + explicit `DO NOT git-grep against /mnt/gdrive — use ssh deploy@188.245.193.8` instruction at the top completed cleanly. **Even when Langston has been told before, the prompt structure drives behavior.** Codify in every dispatch.
+
+#### Where this pattern came from
+
+B79.0n.STORAGE worked example (deploy `ab3153ce5`, 2026-05-21). See `Claude Comms and Packages/Batch Completion/B79_0n_STORAGE_COMPLETION_REPORT.md` §10 for the full set of onboarding learnings + concrete code references.
+
+---
+
 ### Section D.1 — Concrete code-extension templates (Phase 24 reference)
 
 Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.

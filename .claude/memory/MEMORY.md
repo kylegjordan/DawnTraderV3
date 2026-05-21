@@ -6,7 +6,7 @@
 
 ## SESSION-START PROTOCOL
 
-1. Read `DawnTraderV3/CLAUDE.md` (esp. §1 plain-language + two-paragraph default; §3.3 Phase-24 learning-capture; §5 #15 NO PATCHES + #16 permission-prompt fix; §6 Langston comms; §10.5 alerts).
+1. Read `DawnTraderV3/CLAUDE.md` (esp. §1 plain-language + two-paragraph default; §3.3 Phase-24 learning-capture; §5 #15 NO PATCHES + #16 permission-prompt fix; §6 Langston comms; §6.5.0.a embedded-diff + no-gdrive dispatch pattern; §10.5 alerts).
 2. Read this file.
 3. **§10.5 alerts check (every turn):** `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"`.
 4. Kyle in Claude Desktop. Telegram = Langston verbatim relay + visibility. Kyle directive 2026-05-20: summaries TO KYLE go in THIS session, not Telegram-only. Langston-verbatim relays to Telegram STILL mandatory per §6.5 step 3.
@@ -14,68 +14,69 @@
 
 ---
 
-## CURRENT STATE (2026-05-21 PM — B79.0n.UNIVERSE-DISCOVERY CLOSED, NEXT IS B79.0n.STORAGE)
+## CURRENT STATE (2026-05-21 PM — B79.0n.STORAGE CLOSED, NEXT IS B79.0n.MCE)
 
-**B79.0n.UNIVERSE-DISCOVERY CLOSED 2026-05-21.** Deploy commit `c97ceec81` (PM2 #308). Step 8 Langston ACK clean (all 7 of 7 in-window gates reproduced independently via `ssh staging`). Three non-blocking findings concurred. One new watch item.
+**B79.0n.STORAGE CLOSED 2026-05-21.** Deploy commit `ab3153ce5` (PM2 #310 at 14:59:28Z). Langston Step 4 RE-ACK + Step 8 ACK both clean.
 
 **What shipped:**
-- Replaces hardcoded `XSTOCK_SPOT_REGISTRY` + deleted `xstocks-universe.json` with dynamic DB-backed universe populated by three-service chain (CoinGecko prime-mover + Kraken WS subscription probe ground-truth + Finnhub per-symbol enrichment).
-- 3 new DB tables: `xstock_spot_universe` (PK symbol, sector CHECK constraint), `xstock_spot_universe_overrides` (preserves curator decisions), `discovery_runs` (forensic audit).
-- 5-layer fallback at boot: live → DB snapshot → file cache → bootstrap → fail-fast.
-- Daily 06:00 UTC cron + `POST /api/internal/universe-discovery/refresh` + `GET .../health`.
-- Stale (>7d log-only) + delisted (>30d auto-`UPDATE is_delisted=true`) lifecycle anchored on `last_seen_at` (data arrival), not WS-accept.
-- 35 new unit tests GREEN (5 enum integrity + 12 universe-service contracts + 18 Finnhub-industry regression locks).
+- `storage.getScreenerFilters({mode, assetClass: AssetClass, filterPath?})` — REQUIRED assetClass, no silent crypto default.
+- NEW `storage.getCanonicalScreenerConfig({mode, filterPath?})` helper for UI/diagnostic display with banner NEVER-for-routing docstring.
+- NEW `SQEInput.assetClass` REQUIRED field; plumb through `getSQEThresholdsFromConfig` + `evaluateSignalQuality` + `SignalQualityEvaluatorService.getThresholds` with cache key extended `${mode}` → `${mode}:${assetClass}`.
+- 38 caller sites updated (pre-audit 32 + 6 surfaced via compile-driven audit). Final: 10 (a) crypto-intentional + 1 (c) SQE bug fix + 21 (d) diagnostic helper + 6 already-correct.
+- Seed migration `2026-05-21-b79-0n-storage-xstock-screener-filters-seed.sql` — 10 xStock rows cloned from crypto baseline (idempotent ON CONFLICT DO NOTHING). Coverage 12/12 on all 4 (asset_class, mode) combos post-deploy.
+- upsertScreenerFilters Step 4 BLOCKER fix: REQUIRED-assetClass on data shape + UPDATE WHERE 3-clause `(mode, asset_class, filter_path)` (was 2-clause; would silently cross-corrupt rows post-seed).
+- 2 new test files (8 tests total): required-assetclass.test.ts with `@ts-expect-error` upsert regression lock + sqe-asset-class-routing.test.ts with cache-isolation case.
 
-**First live cycle:** run_id=1, manual_endpoint, duration 603 200 ms (Finnhub leg dominant ~9m50s), symbols_discovered=479, 489 active in DB. **15 sectors** (gate ≥7 ✓), **10.2% UNCATEGORIZED** (gate ≤20% ✓), **100% Finnhub enrichment** (gate ≥80% ✓).
+**Langston review trail:** Step 1 ACK + 3 concerns A/B/C → Step 2 ACK + 4 asks (row count: 10 missing + arithmetic + RUNNING_ISSUES wording + cache-isolation test) → Step 2 RE-ACK APPROVED → Step 4 NOT YET ACK + 1 BLOCKER + 3 (d)→(a) reclassifications → Step 4 RE-ACK APPROVED → Step 8 ACK (independent staging verification: xStock cycle durations 1111/1142/1146/1160/**1288ms peak** — 19× under 25s ceiling).
 
-**Empirical universe delta:** 260 (hardcoded pre-deploy) → 489 (DB post-cycle) = **+229** previously-uncatalogued Kraken-traded xStock pairs. Validates Kyle's architectural concern that manual maintenance was leaving real gaps.
+**Dispatch infrastructure lesson (CLAUDE.md §6.5.0.a reaffirmed):** Step 4 RE-ACK v1 dispatch hung 10+ min on `git -C /mnt/gdrive` FUSE I/O — D-state stuck. v2 with embedded-diff inline + explicit "DO NOT git-grep against /mnt/gdrive — use ssh deploy@staging" at TOP completed cleanly. Pattern codified in ASSET_CLASS_ONBOARDING_WORKFLOW Step 4.9 + completion report §10(d).
 
-**Identity-mechanism clarification for record (Kyle question 2026-05-21):** asset identity = symbol string + Kraken WS-accept (binary ground truth); industry classification = METADATA sector label applied AFTER universe inclusion; +229 new symbols are real distinct Kraken-traded pairs, NOT misclassifications.
+**Umbrella rev 4 (commit ab3153ce5) — KEY ARTIFACT:** B72 prior-arc context section (§1.5) enumerates per-sub-batch what B72/B72.1/B72.2 already did + what remains. **STRATEGY (#5) + SCORING (#8) + MCE (#4) + EXECUTION (#15) shrink materially** because B72 wired their API-side modules. RTB/ORCHESTRATOR/PATTERN-DETECT/OBSERVABILITY shrink modestly. CONFIDENCE-CHAIN/TEC/TELEMETRY/RTB-REFRESH/POOL/WIRE-IN/ML-CALIBRATION no overlap. **New mandate:** every future sub-batch scope file MUST include a B72 prior-arc context section at Step 1.
 
-**Infrastructure scaling absorbed cleanly (verified 12:26 UTC):** 9 of 10 sampled newly-discovered symbols received bars in the last hour (BABA 34, ASML 17, AMZN 12, etc.). Scanner cycle median ~373ms (down from ~530ms pre-discovery because cursor-rotated batches of 75 cap per-cycle work regardless of universe size). Expected steady-state OHLC write rate ~223k bars/24h (1.86× pre-discovery 120k). Supabase Small tier expected to fit; need 24h IO measurement.
+**Stale-reference corrections (commit f6f823c60):** Kyle's "Are you sure B72 was not implemented?" surfaced that BATCH_CATALOG.md row 171 (pre-shipping planning entry) had been incorrectly read as authoritative. Row 171 + 4 POST_AUDIT_ROADMAP refs corrected to past-tense. Actual ship rows are 212-214 (B72.2 + B72.1 + B72 main).
 
 ### Active alerts (§10.5)
 - `c82c256c` — B-NEW-35 7-day dedup soak 2026-05-27. No action.
 - `b83b1e4b` — B-NEW-40 14-day soak 2026-05-31. No action.
-- `283bd74e` — B-NEW-36 weekend_shutdown timer fire 2026-05-22 8:05 PM ET. No action.
-- `d4b2e590` — **B79.0n.UD 24h crypto regression-lock soak fires 2026-05-22T11:55:57Z.** Thresholds: FX5 pool ±5%, signal gen ±5%, VTS trade rate ±5%, active-trade ±1-2/day OR ±15% 7d.
-- `2af50871` — **B79.0n.UD 06:00 UTC cron self-fire review fires 2026-05-22T13:00:00Z.** Confirm run_id=2 exists with `triggered_by='cron_daily'`; check source_chain_status, error_log; compare sector distribution stability.
+- `283bd74e` — B-NEW-36 weekend_shutdown timer 2026-05-22 8:05 PM ET. No action.
+- `d4b2e590` — **B79.0n.UD + STORAGE 24h crypto regression-lock soak fires 2026-05-22T11:55:57Z.** Same-day deploys (UD 11:51 UTC + STORAGE 14:59 UTC) share this baseline comparison. Thresholds: FX5 pool ±5%, signal gen ±5%, VTS ±5%, active-trade ±1-2/day OR ±15% 7d.
+- `2af50871` — **B79.0n.UD 06:00 UTC cron self-fire review fires 2026-05-22T13:00:00Z.** Confirm run_id=2 exists with `triggered_by='cron_daily'`.
 
 ---
 
 ## NEXT IMMEDIATE STEP
 
-**B79.0n.STORAGE** — sub-batch 3 of 18 in umbrella v3. Inherits the dynamic universe via `XSTOCK_SPOT_SYMBOLS` import. Operates at storage API layer.
+**B79.0n.MCE** — sub-batch 4 of 18 in umbrella v4. Scope is "Market Context Engine asset-class plumbing." Per umbrella rev 4 §1.5 B72 prior-arc context, MCE **shrinks materially** because B72 already wired `regime_classifier` + `regime_age` + `dbs_calculation` + `cost_model`. Remaining work for MCE sub-batch: per-class seed rows where xStock needs different values + direct asset-class branching for non-lever code (friction estimates, indicator computations VWAP/ATR/EMA/BB/RSI, macro modifier per-class signal — RUNNING_ISSUES #123 deferred). Each scope file from here forward MUST include B72 prior-arc context section per umbrella rev 4 standing rule.
 
 **Pending soak verifications tomorrow (2026-05-22):**
-1. 11:55Z alert `d4b2e590` — 24h crypto regression-lock comparison vs pre-deploy 24h baseline
-2. 13:00Z alert `2af50871` — psql `discovery_runs ORDER BY run_id DESC LIMIT 3` to verify cron_daily fired
-3. After both: also check Supabase IO consumption to confirm Small tier holds at 489-symbol scale
+1. 11:55Z alert `d4b2e590` — 24h crypto regression comparison vs pre-deploy 24h baseline (covers UD + STORAGE)
+2. 13:00Z alert `2af50871` — psql `discovery_runs ORDER BY run_id DESC LIMIT 3` to verify cron_daily fired for UD
+3. Also check Supabase IO consumption at 489-symbol scale to confirm Small tier holds
 
-### Recent commits (B79.0n.UNIVERSE-DISCOVERY chain)
-- `c97ceec81` — fix-forward 3: duplicate INSERT in seed migration (deploy commit)
-- `3a6ae65cd` — fix-forward 2: biotech substring-collision
-- `747f8779b` — Step 4 fix-forward Concerns A+B+C (heuristic expansion + WS-open timeout + UNCATEGORIZED gate)
-- `b7b4b9c2f` — fix-forward: `db.execute<T>` generic constraint
-- `230348507` — Phase B-F primary implementation
+### Recent commits (STORAGE chain)
+- `ab3153ce5` — umbrella rev 4 (B72 prior-arc context per sub-batch; deploy commit)
+- `f6f823c60` — B72 stale-reference corrections (BATCH_CATALOG row 171 + 4 POST_AUDIT_ROADMAP refs)
+- `512429ab9` — Step 4 BLOCKER fix + 3 (d)→(a) reclassifications
+- `c8c7143e4` — RTB resolveAssetClass-only fix
+- `c8cb22e1c` — Step 3 implementation (24 files, 1153/-56 LOC)
 
-### RUNNING_ISSUES touched (Step 10/11 close)
-- **#125 RESOLVED** — dynamic universe discovery (this batch IS the resolution)
-- **#120 SUPERSEDED** — Kraken xStock universe-audit motivation rolls into daily background job
-- **#126 OPEN** — Layer 3 file cache EACCES; relocate to `${HOME}/.dawntrader-cache/` per Langston Step 8 Option 2 preference (NO PATCHES doctrine)
-- **#127 OPEN** — Finnhub re-enrichment monthly stable fields + daily fresh-listed only
-- **#128 OPEN** — Cron self-fire one-shot watch (closes after tomorrow's verification)
+### RUNNING_ISSUES touched at Step 10/11 close
+- **NEW** — module_constants sqe_config per-class deferred to SCORING with explicit promote-to-active triggers per Langston Q-S2-4
+- **NEW** — RtbSignal DB row lacks asset_class column (RTB batch #11 scope)
+- **NEW** — xStock screener_filters rows placeholder-cloned from crypto (Phase 19 calibration)
+- **NEW** — vts-runner/vts-service `assetClass?:` optional params flagged for STRATEGY #5
+- **NEW** — tsconfig `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` flagged for future TS-hardening sweep
 
 ### Permissions reminder
-`.claude/settings.local.json` has `defaultMode: "bypassPermissions"` at TOP LEVEL (line 2) AND inside permissions block. Addresses Claude Code v2.1.7+ regression where compound bash commands prompt even with allow rules. Per CLAUDE.md §5 #16.
+`.claude/settings.local.json` `defaultMode: "bypassPermissions"` at TOP LEVEL (line 2) AND inside permissions block. CLAUDE.md §5 #16 — load-bearing line; do NOT delete.
 
 ---
 
 ## REQUIRED PRE-READS (FIRST 3 MINUTES OF NEXT SESSION)
 
-1. `DawnTraderV3/CLAUDE.md` (esp. §1 + §3.3 Phase-24 learning rule + §5 #15 NO PATCHES + §6 Langston comms + §10.5 alerts)
+1. `DawnTraderV3/CLAUDE.md` (esp. §1 + §3.3 + §5 #15-16 + §6.5.0.a + §10.5)
 2. This file
-3. `Claude Comms and Packages/Batch Completion/B79_0n_UNIVERSE_DISCOVERY_COMPLETION_REPORT.md` (just-closed batch; see §10 onboarding learnings — esp. (b.bis) forward-looking items for next sub-batches + (b.tris) infrastructure scaling table)
-4. `Claude Comms and Packages/Scope Files/B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md` (umbrella v3)
-5. `1-system-manual/RUNNING_ISSUES.md` #126 / #127 / #128 (open follow-ups from this batch)
-6. `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` Step 4.8 (NEW — Dynamic universe discovery canonical pattern landed this batch)
+3. `Claude Comms and Packages/Batch Completion/B79_0n_STORAGE_COMPLETION_REPORT.md` (just-closed; see §2 B72 prior-arc context + §10 onboarding learnings)
+4. `Claude Comms and Packages/Scope Files/B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md` (rev 4 — §1.5 B72-prior-arc per sub-batch is mandatory reading before drafting MCE scope)
+5. `1-system-manual/RUNNING_ISSUES.md` 4 new STORAGE entries (sqe_config per-class deferred + RtbSignal schema gap + placeholder-cloned thresholds + vts-runner optional assetClass)
+6. `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` Step 4.9 (NEW — REQUIRED-assetClass storage API + cache key extension + getCanonicalScreenerConfig helper template)

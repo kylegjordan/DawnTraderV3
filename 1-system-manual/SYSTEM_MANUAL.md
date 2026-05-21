@@ -11949,3 +11949,77 @@ After source-chain completion, `runDiscovery()` walks every existing universe ro
 - SIM entry: see "Recent Additions (B79.0n.UNIVERSE-DISCOVERY)" section of `SYSTEM_IMPACT_MAP.md`
 - Onboarding canonical pattern: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Step 4.8 (the dynamic-universe-discovery template generalized for next asset class)
 - Identity-mechanism question + answer documented in completion report §7 (Kyle question 2026-05-21)
+
+---
+
+# Storage API REQUIRED-assetClass + Layer 1 / Layer 2 distinction (B79.0n.STORAGE)
+
+*Added 2026-05-21 with B79.0n.STORAGE close.*
+
+## Architectural model
+
+DawnTrader's screener configuration follows a **3-layer precedence chain** established by B72 Slice 4 (commit `ba7703df6`, 2026-05-05) and refined per-asset-class by B79.0n.STORAGE (deploy `ab3153ce5`, 2026-05-21):
+
+1. **Layer 1: `screener_filters` table** — the **primary configuration source**, runtime-overridable via UI, asset-class-scoped per the unique index `(mode, asset_class, filter_path)`. Read at every signal cycle by `storage.getScreenerFilters({mode, assetClass: AssetClass, filterPath?})`.
+2. **Layer 2: `module_constants.sqe_config`** — the **fallback default**, code-warm-loaded at boot via B72's sync-read API (`getCachedNumberRequired`), currently mostly wildcard scope `assetClass: '*'`.
+3. **Layer 3: `SQE_DEFAULT_THRESHOLDS` static const** — the **catastrophic fallback**, mirrors the seeded module_constants row, consulted only when module_constants warmup hasn't completed and a non-runtime consumer imports the const for static reference.
+
+## The REQUIRED-assetClass discipline (B79.0n.STORAGE)
+
+Before B79.0n.STORAGE, Layer 1 reads silently defaulted to `'crypto_spot'` when callers omitted `assetClass`. This was the **silent-crypto-fallback footgun**: the SQE production bug at `signal_quality_evaluator.ts:143` called `storage.getScreenerFilters({ mode })` with no asset class, silently returning crypto's `finalScoreMin` + `regimeWeightMin` for every signal regardless of which class was being evaluated.
+
+The fix is **type-level enforcement**:
+
+```ts
+// Pre-B79.0n.STORAGE:
+getScreenerFilters(params: { mode: 'live' | 'paper'; filterPath?: string; assetClass?: string })
+
+// Post-B79.0n.STORAGE:
+getScreenerFilters(params: { mode: 'live' | 'paper'; assetClass: AssetClass; filterPath?: string })
+```
+
+TypeScript compile-error if any caller omits `assetClass`. The compile-driven audit at implementation time surfaced **6 silent-fallback sites that the manual pre-audit grep missed** (paper-sim-diagnostic + paper-sim-service + reb-2-12 + reb-2-15 + unified-filter-gateway x2) — ~19% pre-audit undercount. TypeScript's reference graph is a better audit tool than ripgrep for "every caller of method X."
+
+## The canonical-baseline helper
+
+For genuinely-diagnostic readers that intentionally want the canonical crypto baseline for UI display (Filter Diagnostics panel, Settings UI, boot config snapshot, etc.), B79.0n.STORAGE introduced a dedicated helper:
+
+```ts
+async getCanonicalScreenerConfig(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null> {
+  // Returns the canonical crypto_spot baseline for UI display and diagnostic reference.
+  // NEVER use this for runtime signal/screener/SQE routing — use getScreenerFilters({mode, assetClass, ...})
+  // with the explicit asset class derived from the signal/cycle context. The whole point of B79.0n.STORAGE is
+  // preventing the silent-fallback footgun this helper could become if misused.
+  return this.getScreenerFilters({ ...params, assetClass: 'crypto_spot' });
+}
+```
+
+The banner-style "NEVER use this for runtime routing" docstring is deliberate: Langston's Step 4 review caught 3 sites that initially routed through this helper but were actually runtime crypto-trading paths (unified-filter-gateway x2 + paper-sim-service x1). Reclassified to (a) crypto-intentional explicit before deploy. The docstring tone made the misuse easy to identify.
+
+## Cache key extension pattern
+
+`SignalQualityEvaluatorService.getThresholds` was previously keyed by `mode` alone. Post-batch:
+
+```ts
+async getThresholds(mode: 'paper' | 'live', assetClass: AssetClass) {
+  const cacheKey = `${mode}:${assetClass}`;
+  // ... cache lookup + storage call ...
+}
+```
+
+Memory cost is `O(k)` not `O(k²)` because k=4 max (paper+live × crypto+xstock). The cache-isolation regression test at `b79-0n-storage-sqe-asset-class-routing.test.ts` warms `paper:crypto_spot` then reads `paper:xstock_spot` and asserts distinct storage calls — locks the cache shape against silent regression.
+
+## Layer 2 (`module_constants.sqe_config`) per-class deferred to SCORING
+
+B79.0n.STORAGE made Layer 1 per-class but kept Layer 2 (the `module_constants.sqe_config` rows that `getSQEModuleDefaults()` reads via wildcard `_SQE_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' }`) at wildcard scope. The asymmetry is acceptable because Layer 1 is dominant; Layer 2 is fallback only when Layer 1 has no row or missing field.
+
+Per Langston Step 2 Q-S2-4 ACK, Layer 2 per-class promotion to active work is deferred to SCORING batch (#8) with explicit triggers: (a) xStock requires different `min_final_score` / `min_regime_weight` than crypto (Phase 19 calibration gate), OR (b) any third asset class onboards (3-class asymmetry compounds harder than 2-class), OR (c) SCORING batch begins regardless. Promotion to active = `_SQE_GK` parameterized by assetClass + `getSQEModuleDefaults(assetClass)` REQUIRED param + per-class `module_constants.sqe_config.{crypto_spot,xstock_spot}.min_final_score/.min_regime_weight` rows seeded.
+
+Tracked at RUNNING_ISSUES #129.
+
+## Cross-references
+
+- Completion report: `Claude Comms and Packages/Batch Completion/B79_0n_STORAGE_COMPLETION_REPORT.md`
+- SIM entry: see "Recent Additions (B79.0n.STORAGE)" section of `SYSTEM_IMPACT_MAP.md`
+- Onboarding canonical pattern: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Step 4.9 (the REQUIRED-assetClass storage API + cache-key extension + getCanonicalScreenerConfig helper template)
+- B72 prior-arc context per umbrella rev 4: `B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md` §1.5 (Layer 1 vs Layer 2 distinction documented)
