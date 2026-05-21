@@ -116,13 +116,13 @@ class XstockUniverseService {
    */
   async initializeFromDB(): Promise<InitResult> {
     try {
-      const result = await db.execute<DbUniverseRow>(sql`
+      const result: any = await db.execute(sql`
         SELECT symbol, name, sector, crypto_adjacent, adr, is_delisted
         FROM xstock_spot_universe
         WHERE is_delisted = false
         ORDER BY symbol
       `);
-      const rows = (result as { rows?: DbUniverseRow[] }).rows ?? (result as unknown as DbUniverseRow[]);
+      const rows: DbUniverseRow[] = (result?.rows ?? result ?? []) as DbUniverseRow[];
       const rowsArr: DbUniverseRow[] = Array.isArray(rows) ? rows : [];
       const entries = rowsToEntries(rowsArr);
       _replaceXstockUniverse(entries);

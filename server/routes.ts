@@ -7956,21 +7956,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_REGISTRY } = await import('../shared/asset-classes.js');
 
       // Aggregate snapshot from latest discovery_runs row
-      const lastRunResult = await db.execute<{
-        started_at: string;
-        completed_at: string | null;
-        source_chain_status: any;
-        triggered_by: string;
-      }>(sql`
+      const lastRunResult: any = await db.execute(sql`
         SELECT started_at::text, completed_at::text, source_chain_status, triggered_by
         FROM discovery_runs
         ORDER BY started_at DESC
         LIMIT 1
       `);
-      const lastRunRows = (lastRunResult as any).rows ?? [];
+      const lastRunRows: any[] = (lastRunResult?.rows ?? lastRunResult ?? []);
       const lastRun = Array.isArray(lastRunRows) && lastRunRows[0] ? lastRunRows[0] : null;
 
-      const lastSuccessResult = await db.execute<{ started_at: string }>(sql`
+      const lastSuccessResult: any = await db.execute(sql`
         SELECT started_at::text
         FROM discovery_runs
         WHERE error_log IS NULL
@@ -7978,18 +7973,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         ORDER BY started_at DESC
         LIMIT 1
       `);
-      const lastSuccessRows = (lastSuccessResult as any).rows ?? [];
+      const lastSuccessRows: any[] = (lastSuccessResult?.rows ?? lastSuccessResult ?? []);
       const lastSuccess = Array.isArray(lastSuccessRows) && lastSuccessRows[0]
         ? lastSuccessRows[0].started_at
         : null;
 
       // Sector + delisted + stale aggregates
-      const aggResult = await db.execute<{
-        sectors_present: number;
-        is_delisted_count: number;
-        stale_warn_count: number;
-        total_active: number;
-      }>(sql`
+      const aggResult: any = await db.execute(sql`
         SELECT
           (SELECT COUNT(DISTINCT sector) FROM xstock_spot_universe WHERE is_delisted = false)::int AS sectors_present,
           (SELECT COUNT(*) FROM xstock_spot_universe WHERE is_delisted = true)::int AS is_delisted_count,
@@ -7999,11 +7989,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
               AND last_seen_at >= now() - INTERVAL '30 days')::int AS stale_warn_count,
           (SELECT COUNT(*) FROM xstock_spot_universe WHERE is_delisted = false)::int AS total_active
       `);
-      const aggRows = (aggResult as any).rows ?? [];
+      const aggRows: any[] = (aggResult?.rows ?? aggResult ?? []);
       const agg = Array.isArray(aggRows) && aggRows[0] ? aggRows[0] : { sectors_present: 0, is_delisted_count: 0, stale_warn_count: 0, total_active: 0 };
 
       // Source-chain completeness pct
-      const chainResult = await db.execute<{ coingecko_pct: number; kraken_ws_pct: number; finnhub_pct: number }>(sql`
+      const chainResult: any = await db.execute(sql`
         SELECT
           ROUND(100.0 * SUM(CASE WHEN (source_chain->>'coingecko')::boolean THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0), 1) AS coingecko_pct,
           ROUND(100.0 * SUM(CASE WHEN (source_chain->>'kraken_ws_accept')::boolean THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0), 1) AS kraken_ws_pct,
@@ -8011,7 +8001,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         FROM xstock_spot_universe
         WHERE is_delisted = false
       `);
-      const chainRows = (chainResult as any).rows ?? [];
+      const chainRows: any[] = (chainResult?.rows ?? chainResult ?? []);
       const chain = Array.isArray(chainRows) && chainRows[0] ? chainRows[0] : { coingecko_pct: 0, kraken_ws_pct: 0, finnhub_pct: 0 };
 
       const cacheState = xstockUniverseService.getCacheState();

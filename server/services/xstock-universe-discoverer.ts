@@ -326,11 +326,11 @@ interface OverrideRow {
 async function loadOverrides(): Promise<Map<string, OverrideRow>> {
   const out = new Map<string, OverrideRow>();
   try {
-    const result = await db.execute<OverrideRow>(sql`
+    const result: any = await db.execute(sql`
       SELECT symbol, sector_override, crypto_adjacent_override, adr_override, name_override
       FROM xstock_spot_universe_overrides
     `);
-    const rows = (result as { rows?: OverrideRow[] }).rows ?? (result as unknown as OverrideRow[]);
+    const rows: OverrideRow[] = (result?.rows ?? result ?? []) as OverrideRow[];
     for (const r of (Array.isArray(rows) ? rows : [])) out.set(r.symbol, r);
   } catch (err) {
     logWarn(`loadOverrides failed (proceeding with empty overrides):`, err);
@@ -369,31 +369,27 @@ async function upsertUniverseRow(
 
 async function applyStaleAndDelistedLifecycle(): Promise<{ stale: number; delisted: number }> {
   // Stale: last_seen_at in [7d ago, 30d ago] → log warn line per row, no DB change
-  const staleResult = await db.execute<{ symbol: string; days_stale: number }>(sql`
+  const staleResult: any = await db.execute(sql`
     SELECT symbol, EXTRACT(EPOCH FROM (now() - last_seen_at)) / 86400 AS days_stale
     FROM xstock_spot_universe
     WHERE is_delisted = false
       AND last_seen_at < now() - INTERVAL '${sql.raw(String(STALE_THRESHOLD_DAYS))} days'
       AND last_seen_at >= now() - INTERVAL '${sql.raw(String(DELISTED_THRESHOLD_DAYS))} days'
   `);
-  const staleRows = (staleResult as { rows?: Array<{ symbol: string; days_stale: number }> }).rows
-    ?? (staleResult as unknown as Array<{ symbol: string; days_stale: number }>);
-  const staleArr = Array.isArray(staleRows) ? staleRows : [];
+  const staleArr: Array<{ symbol: string; days_stale: number }> = (staleResult?.rows ?? staleResult ?? []);
   for (const r of staleArr) {
     logWarn(`[STALE_SYMBOL] symbol=${r.symbol} days_stale=${Number(r.days_stale).toFixed(1)} last_seen_at=<>${DELISTED_THRESHOLD_DAYS}d`);
   }
 
   // Delisted: last_seen_at > 30d ago → set is_delisted=true
-  const delistedResult = await db.execute<{ symbol: string }>(sql`
+  const delistedResult: any = await db.execute(sql`
     UPDATE xstock_spot_universe
     SET is_delisted = true, updated_at = now()
     WHERE is_delisted = false
       AND last_seen_at < now() - INTERVAL '${sql.raw(String(DELISTED_THRESHOLD_DAYS))} days'
     RETURNING symbol
   `);
-  const delistedRows = (delistedResult as { rows?: Array<{ symbol: string }> }).rows
-    ?? (delistedResult as unknown as Array<{ symbol: string }>);
-  const delistedArr = Array.isArray(delistedRows) ? delistedRows : [];
+  const delistedArr: Array<{ symbol: string }> = (delistedResult?.rows ?? delistedResult ?? []);
   for (const r of delistedArr) {
     logWarn(`[DELISTED_AUTO] symbol=${r.symbol} reason="no_data_>${DELISTED_THRESHOLD_DAYS}_days"`);
   }
@@ -410,7 +406,7 @@ async function writeDiscoveryRun(
   triggeredBy: 'cron_daily' | 'manual_endpoint' | 'boot_smoke',
   errorLog?: string,
 ): Promise<number> {
-  const result = await db.execute<{ run_id: number }>(sql`
+  const result: any = await db.execute(sql`
     INSERT INTO discovery_runs (
       started_at, completed_at, duration_ms, source_chain_status,
       symbols_discovered, symbols_marked_stale, symbols_marked_delisted,
@@ -423,8 +419,7 @@ async function writeDiscoveryRun(
     )
     RETURNING run_id
   `);
-  const rows = (result as { rows?: Array<{ run_id: number }> }).rows
-    ?? (result as unknown as Array<{ run_id: number }>);
+  const rows: Array<{ run_id: number }> = (result?.rows ?? result ?? []);
   return Array.isArray(rows) && rows[0] ? rows[0].run_id : 0;
 }
 
