@@ -11856,3 +11856,96 @@ The VTS sim cycle's iteration filter (`if (t.state === 'weekend_suspended') cont
 - `/home/langston/CLAUDE.md` §12 dispatch-anchoring rule (added during this batch's governance pass)
 
 *Added 2026-05-20 with B-NEW-36 sub-batch (b) close.*
+
+---
+
+# xStock dynamic universe discovery (B79.0n.UNIVERSE-DISCOVERY)
+
+*Added 2026-05-21 with B79.0n.UNIVERSE-DISCOVERY close.*
+
+## Architectural model
+
+The xStock universe — the set of tokenized-stock pairs Kraken's WS-equities feed accepts subscriptions for — is **dynamic, DB-backed, and self-refreshing**. The hardcoded `XSTOCK_SPOT_REGISTRY` Map literal and the parallel-sync `server/config/xstocks-universe.json` file (both retired in this batch) have been replaced with an in-memory registry populated at module-init time from `xstock_spot_universe`, which is in turn populated by a three-service discovery chain running daily at 06:00 UTC plus on-demand via the `POST /api/internal/universe-discovery/refresh` route.
+
+## Why this architecture exists
+
+The crypto-side path calls Kraken's REST `AssetPairs` endpoint live on every scanner cycle and adapts automatically to whatever pairs Kraken currently reports (~1,544 today). The xStock path has no equivalent endpoint: Kraken's public REST API does **not** index xStock instruments at all — verified empirically in B-NEW-36 sub-batch (c) where `AssetPairs` returned `EQuery:Unknown asset pair` for ALL xStock symbols including known-good `AAPL/USD`. xStocks stream exclusively through `wss://ws-equities.kraken.com` and that WebSocket has no "list all symbols" message. Before this batch, the only way to know what xStocks Kraken supports was a manual one-shot subscription probe; since the April 2026 probe, the registry was hand-maintained — Kraken kept adding tokenized stocks over time and we had no automated way to discover them.
+
+## Identity-mechanism invariant (critical correctness property)
+
+**Asset identity = symbol string + Kraken WS subscription accept.** Industry classification (the Finnhub `finnhubIndustry` field that maps to our sector column) is **metadata**, NOT identity. The discovery pipeline:
+
+1. Asks CoinGecko `xstocks-ecosystem` category for what tokenized stocks Backed Finance currently issues
+2. Sends Kraken WS subscribe requests for each candidate and observes binary accept/reject
+3. For accepted symbols only, asks Finnhub `/stock/profile2` for the underlying company's industry → maps to our sector enum
+
+Step 2 (Kraken WS-accept) is ground truth — it's the only thing that determines whether a symbol is in our universe. Step 3 (Finnhub) is metadata-attaching and does NOT decide existence. A symbol where Finnhub returns an unrecognized industry string falls into `UNCATEGORIZED` but remains in the universe and remains tradeable.
+
+This means: misclassified industry labels (like the biotech→technology collision we fixed in Step 4) **can never produce phantom symbols or hide real ones**. They produce wrong sector labels on correctly-identified symbols. The +229 symbols discovered in the first live cycle are real distinct Kraken-traded pairs that the hand-maintained registry was missing, not misclassifications of existing ones.
+
+## Three-service discovery chain
+
+```
+┌────────────────┐    prime mover               ┌─────────────────┐    enrichment      ┌──────────────────────┐
+│   CoinGecko    │ ───────────────────────────▶ │  Kraken WS      │ ────────────────▶  │  Finnhub             │
+│  xstocks-      │  "what tokenized stocks does │  subscription   │  "of those Kraken  │  /stock/profile2     │
+│  ecosystem     │   Backed Finance issue?"     │  probe          │   accepts, what    │  "sector + GICS      │
+│                │   126 candidates             │  Ground truth.  │   underlying       │   metadata for       │
+│  Public, free, │                              │  481 candidates │   companies?"      │   each one"          │
+│  no API key    │                              │  (CoinGecko ∪   │  479 accepted +    │  60 req/min ceiling  │
+│                │                              │  S&P 500)       │  2 rejected =      │  ~10 min for 479     │
+└────────────────┘                              └─────────────────┘  binary result     └──────────────────────┘
+```
+
+Each leg has a defined role and is substitutable for the next asset class onboarding (see `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Step 4.8 for the canonical-pattern generalization).
+
+## DB schema
+
+Three tables in `drizzle/migrations/2026-05-21-b79-0n-universe-discovery.sql`:
+
+- **`xstock_spot_universe`** — the universe itself. PK on `symbol`. `sector TEXT` with CHECK constraint covering 15 valid values (11 GICS SPDR + INDEX_PROXY + BROAD_ETF + INTL_ETF + UNCATEGORIZED). `is_delisted BOOLEAN DEFAULT false`. `last_seen_at`, `first_seen_at` timestamps drive the lifecycle. `crypto_adjacent`, `is_adr` flags + `source_chain JSONB` per row. Indexed on `is_delisted`, `last_seen_at`, `sector`.
+- **`xstock_spot_universe_overrides`** — PK on symbol references `xstock_spot_universe`. Explicit `override_is_delisted`, `override_sector`, `override_crypto_adjacent`, `override_is_adr` columns (NULL = no override). `runDiscovery()` applies non-null overrides AFTER the live source-chain fields are written, so curator decisions survive every re-discovery cycle.
+- **`discovery_runs`** — forensic audit. `run_id BIGSERIAL`. `triggered_by` CHECK in `'cron_daily'` / `'manual_endpoint'` / `'boot_smoke'`. `duration_ms` + `symbols_discovered/stale/delisted`. `source_chain_status JSONB` carries per-leg `{ok, count/enriched_count, partial/error}`. `error_log TEXT` for cycle-level failures.
+
+**Schema choice — VARCHAR + CHECK instead of PostgreSQL ENUM:** sidesteps the `ALTER TYPE ... ADD VALUE` same-transaction restriction. Updating the CHECK constraint when a new sector is added is `ALTER TABLE` with brief lock — works without a transaction restart.
+
+## 5-layer fallback chain at boot
+
+In `server/index.ts:51-90`, the universe-service `initializeFromDB()` is the primary path. If the DB read returns `ok=false` OR `rowCount=0`:
+
+1. **Live DB read** (Layer 1) — `SELECT * FROM xstock_spot_universe WHERE is_delisted=false`. Normal path.
+2. **DB snapshot** (Layer 2) — implicitly: Layer 1 is itself a snapshot read; if the most recent discovery cycle failed, Layer 1 returns the cycle-before-that's data because rows aren't deleted, only updated.
+3. **File cache** (Layer 3) — `${HOME}/.dawntrader-cache/xstock-universe-cache.json` (currently broken at `/var/lib/dawntrader` per RUNNING_ISSUES #126; relocation queued).
+4. **Bootstrap set** (Layer 4) — 20-symbol mega-cap hand-curated fallback in `server/asset_classes/xstock_spot/universe-bootstrap.ts`. Designed to keep system alive through DB-down + file-cache-corrupted scenarios.
+5. **Fail-fast** (Layer 5) — `process.exit(1)` if all prior layers fail at boot. Catastrophic config loss should crash the process, not start with an empty universe.
+
+## Stale → delisted lifecycle (anchored on data arrival, not WS-accept)
+
+After source-chain completion, `runDiscovery()` walks every existing universe row:
+
+- `last_seen_at < NOW() - INTERVAL '30 days'` → `UPDATE is_delisted=true`. Excluded from active universe (the `WHERE is_delisted=false` filter in `initializeFromDB()`).
+- `last_seen_at < NOW() - INTERVAL '7 days'` → log `[STALE_SYMBOL]` warn (no DB write, log-only signal).
+- Re-discovery un-delists via the upsert `ON CONFLICT (symbol) DO UPDATE SET ... is_delisted=false`. A symbol can be delisted on day 30, reappear on day 31, and immediately be active again.
+
+**Why anchor on `last_seen_at` (data arrival), NOT WS-accept:** Kraken WS-equities accepts subscriptions for symbols whose underlying has been delisted from public markets — the accept is necessary but not sufficient for active data. PARA/USD (B79.0n.HYGIENE retired symbol) reappeared in the universe via WS-accept after this batch, but `last_seen_at` doesn't update until 1m bars actually flow. Anchoring lifecycle on data arrival is the only reliable way to detect "WS says yes but no data flows."
+
+## Cron + on-demand API
+
+- `server/services/xstock-universe-cron.ts` registers node-cron `0 6 * * *` UTC, wrapping `runDiscovery('cron_daily')` in try/catch. Single failed cycle does NOT crash process.
+- `POST /api/internal/universe-discovery/refresh` — triggers `runDiscovery('manual_endpoint')` and returns the audit row JSON. Bearer-authenticated.
+- `GET /api/internal/universe-discovery/health` — counters self-check from DB SSOT. Bearer-authenticated.
+
+## Empirical first-cycle metrics (2026-05-21T11:41:51Z manual_endpoint)
+
+- Duration: 603 200 ms (~10m03s). Finnhub leg dominant (~9m50s) because 479 symbols × 60 req/min ceiling.
+- 489 active in DB after cycle (260 seed + 229 newly-discovered).
+- 15 distinct sectors (gate ≥7 ✓). UNCATEGORIZED 50/489 = 10.2% (gate ≤20% ✓).
+- Finnhub enrichment 479/479 = 100% (gate ≥80% ✓).
+- Universe-size empirical delta vs pre-deploy hardcoded: **+229 symbols**. The hand-maintained registry was missing ~88% additional Kraken-traded xStock pairs.
+
+## Cross-references
+
+- Completion report: `Claude Comms and Packages/Batch Completion/B79_0n_UNIVERSE_DISCOVERY_COMPLETION_REPORT.md`
+- SIM entry: see "Recent Additions (B79.0n.UNIVERSE-DISCOVERY)" section of `SYSTEM_IMPACT_MAP.md`
+- Onboarding canonical pattern: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Step 4.8 (the dynamic-universe-discovery template generalized for next asset class)
+- Identity-mechanism question + answer documented in completion report §7 (Kyle question 2026-05-21)

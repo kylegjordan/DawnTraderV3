@@ -312,6 +312,59 @@ Distilled from B-NEW-14 (xstock_spot `max_bid_ask_spread` gate sitting inert for
 
 ---
 
+### Step 4.8 — Dynamic universe discovery (B79.0n.UNIVERSE-DISCOVERY canonical pattern, 2026-05-21)
+
+**Standing rule:** if the exchange has NO public list-all endpoint for instruments in this asset class, scope dynamic discovery as a **first-tier batch in the onboarding sequence (not a follow-up)**. Hardcoded registries are a structural cost that compounds — every new instrument the exchange adds is a manual maintenance task, and operators have zero visibility into newly-supported names without an out-of-band audit. The xstock_spot worked example (B79.0n.UNIVERSE-DISCOVERY) is the canonical pattern.
+
+**The three-service discovery chain (canonical shape):**
+
+| Role | Function | Example (xstock_spot) | Generalization (next asset class) |
+|------|----------|------------------------|------------------------------------|
+| **Prime mover** | Cheap, public, by-issuer catalog. Answers: "what instruments exist in this product family?" | CoinGecko `xstocks-ecosystem` category (no API key, 126 candidates) | For crypto-perp: Kraken Futures REST `/derivatives/api/v3/instruments`. For the next class: identify the publisher's free public catalog endpoint. |
+| **Ground truth** | Exchange's accept/reject mechanism. Answers: "does the exchange actually stream/trade this pair right now?" Binary result. | Kraken WebSocket subscription probe at `wss://ws-equities.kraken.com` (chunked 100/batch + 500ms inter-chunk sleep + 15s collection window + 10s WS-open timeout) | For crypto-perp: Kraken Futures WS channel-subscribe. For the next class: identify the exchange's accept-or-reject mechanism (REST `info` call, WS subscribe attempt, etc.). |
+| **Enrichment** | Per-symbol metadata (sector, GICS, ADR flag, fundamentals) for grouping/filtering. Does NOT decide whether a symbol exists. | Finnhub `/stock/profile2` (~75 substring patterns across 11 GICS SPDR sectors + 3 special buckets + UNCATEGORIZED) | For crypto-perp: CoinGecko derivatives endpoint OR exchange-specific (funding rate, mark price, position-limit metadata). For the next class: identify the metadata source. |
+
+**The 5-layer fallback chain at boot:**
+
+1. **Live discovery** — runs at the daily cron tick + on-demand POST endpoint
+2. **DB snapshot** — `initializeFromDB()` at boot reads the most recent successful `discovery_runs` cohort
+3. **File cache** — `${HOME}/.dawntrader-cache/<class>-universe-cache.json` (HOME-relative, NOT `/var/lib/...` per RUNNING_ISSUES #126 + Langston Step 8 preference Option 2)
+4. **Bootstrap set** — small hand-curated mega-cap fallback at `server/asset_classes/<class>/universe-bootstrap.ts` (~20 symbols)
+5. **Fail-fast** — `process.exit(1)` if all prior layers fail at boot
+
+**DB schema (canonical 3-table pattern):**
+
+- `<class>_universe` — PK on symbol; sector with CHECK constraint (NOT PostgreSQL ENUM — sidesteps `ALTER TYPE` same-transaction restriction); `is_delisted BOOLEAN DEFAULT false`; `last_seen_at`, `first_seen_at`; metadata flags (`crypto_adjacent`, `is_adr`, etc.); `source_chain JSONB`
+- `<class>_universe_overrides` — PK on symbol referencing the universe table; explicit `override_*` columns (NULL = no override); `reason TEXT`, `created_at`, `created_by`. `runDiscovery()` applies non-null override values AFTER source-chain fields are set, so curator decisions survive every re-discovery
+- `discovery_runs` — BIGSERIAL `run_id`; `triggered_by` CHECK in ('cron_daily','manual_endpoint','boot_smoke'); duration_ms; symbols_discovered/stale/delisted; `source_chain_status JSONB`; `error_log TEXT`. Indexed by `started_at` for forensic queries
+
+**Lifecycle (canonical pattern):**
+- Re-discovery un-delists: `ON CONFLICT (symbol) DO UPDATE SET ... is_delisted = false`
+- Stale gate: >7 days since `last_seen_at` → log `[STALE_SYMBOL]` (no DB write, log-only signal)
+- Delisted gate: >30 days since `last_seen_at` → `UPDATE is_delisted = true` (removed from active universe)
+- **Anchor the lifecycle on `last_seen_at` (data arrival), NOT on WS-accept.** Exchange WS subscription accept is necessary but not sufficient for active data — some symbols accept subscribes but never stream (delisted underlying / suspended / instrument inactive). This is the only reliable way to detect "the WS feed says yes but no data flows."
+
+**Per-leg mandatory rules:**
+
+- **Every external WS or REST call MUST have an explicit timeout AND a deterministic partial-response abort path.** WS-open timeout guard (10s recommended) prevents DNS / TLS handshake / TCP-RST-without-close-event from hanging the discovery cycle indefinitely. Collection-window timeout (15s recommended) handles silent stalls during message accumulation. On either timeout firing, the cycle writes a `partial=true` audit row and aborts — Layer 2 fallback covers.
+- **Every classification heuristic MUST have parameterized regression-lock tests covering empirically-probed boundary cases + a measurement gate post-cycle + a documented expansion-trigger criterion.** Substring-collision bugs in industry-classification heuristics are inevitable; biotech-vs-technology was the obvious one; gas-vs-utility is the next likely one. Empirically-probe the live API at scope time, then lock the probe results as regression tests.
+- **Use `const result: any = await db.execute(sql\`...\`)` pattern, NOT `db.execute<T>()` generic.** Drizzle's generic requires `T extends Record<string, unknown>`. Custom row interfaces that satisfy field-by-field but not the broader constraint will TS2344. Codebase-canonical pattern: cast `result.rows` to your row type at the call site.
+- **Never explicitly INSERT into `_migrations` from a migration file** — the runner auto-inserts. Column name is `name`, not `filename`.
+- **Any tool that assembles migration SQL from multiple source files MUST validate by `psql -f <migration> -1` against an empty schema before committing.** Single-transaction validation catches duplicate statements that succeed individually but fail in transaction order.
+- **Components live under `server/asset_classes/<class>/` should be asset-class-bound by location, NOT by an optional `assetClass?:` parameter.** Optional params are silent-fallback magnets. The location is the binding.
+
+**Test-assert range pattern:** convert exact-equality test asserts to range form (`size >= MIN && size <= MAX`) so universe growth doesn't break tests. Example from B79.0n: `expect(snapshot.size).toBeGreaterThanOrEqual(MIN_EXPECTED); expect(snapshot.size).toBeLessThanOrEqual(MAX_EXPECTED);` where MIN/MAX have headroom for natural growth (e.g., 200 / 800 for an asset class with 480 current symbols + 12-month expected growth budget).
+
+**API trigger surface:** every dynamic-discovery batch ships TWO routes:
+- `POST /api/internal/universe-discovery/refresh` (or class-scoped equivalent) — on-demand trigger; returns the full audit row from the run
+- `GET /api/internal/universe-discovery/health` — counters self-check; useful for ops monitoring + Step 7 verification gates
+
+**Cron cadence:** daily refresh at 06:00 UTC via node-cron `0 6 * * *`. Wrap the invocation in try/catch — a single failed cycle should NOT crash the process; failures should be visible in `discovery_runs.error_log` + via PM2 logs.
+
+**Worked example for B79 xstock_spot:** see `Claude Comms and Packages/Batch Completion/B79_0n_UNIVERSE_DISCOVERY_COMPLETION_REPORT.md` for the full implementation walkthrough including code paths, source-chain timing breakdown, and 10-section retrospective.
+
+---
+
 ### Section D.1 — Concrete code-extension templates (Phase 24 reference)
 
 Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.
