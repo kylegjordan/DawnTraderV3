@@ -152,12 +152,6 @@ export interface AuthenticatedRequest extends Request {
     isAdmin?: boolean;
     role?: UserRole;
     permissions?: Permission[];
-    // B-NEW-43 chunk 4 (2026-05-22): the authenticated user's trading mode.
-    // Populated in authenticateToken from the DB user row (always set there,
-    // hence required). ~20 routes read req.user.tradingMode; before this it
-    // was never assigned (TS2339 + a latent always-'paper' bug — see the
-    // B-NEW-43 chunk-4 change list).
-    tradingMode: 'live' | 'paper';
   };
   mode?: 'live' | 'paper';
 }
@@ -206,10 +200,6 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
       isAdmin: user?.isAdmin || false,
       role: userRole,
       permissions,
-      // B-NEW-43 chunk 4 (2026-05-22): populate tradingMode from the DB user row
-      // (fetched above). It was never set before — ~20 routes read
-      // req.user.tradingMode and silently always resolved to 'paper'.
-      tradingMode: user.tradingMode ?? 'paper',
     };
     next();
   } catch (error) {
@@ -18519,7 +18509,7 @@ Please:
   apiRouter.get('/alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       
       const AlertsService = (await import('./services/alerts-service')).default;
       const alerts = await AlertsService.getUnacknowledgedAlerts(userId, mode);
@@ -18579,7 +18569,7 @@ Please:
   apiRouter.post('/alerts/acknowledge-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       
       console.log(`[AlertAPI] Acknowledging all alerts for user ${userId} in ${mode} mode`);
       
@@ -18607,7 +18597,7 @@ Please:
       console.error('[AlertAPI] Error acknowledging all alerts:', error);
       console.error('[AlertAPI] Error details:', {
         userId: req.user?.id,
-        mode: req.user?.tradingMode,
+        mode: req.mode,
         message: error.message,
         stack: error.stack
       });
@@ -18619,7 +18609,7 @@ Please:
   apiRouter.post('/alerts/mute-low-severity', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       
       const AlertsService = (await import('./services/alerts-service')).default;
       const alerts = await AlertsService.muteLowSeverity(userId, mode);
@@ -19233,7 +19223,7 @@ Please:
   // Phase 9.2: Strategic Plan Management
   apiRouter.post('/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { strategicPlannerService } = await import('./services/strategic-planner');
       
       const plan = await strategicPlannerService.createPlan(req.user!.id, req.body, mode);
@@ -19274,7 +19264,7 @@ Please:
 
   apiRouter.patch('/strategic/plans/:planId/progress', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { strategicPlannerService } = await import('./services/strategic-planner');
       
       const plan = await strategicPlannerService.updatePlanProgress(
@@ -19293,7 +19283,7 @@ Please:
 
   apiRouter.patch('/strategic/plans/:planId/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { strategicPlannerService } = await import('./services/strategic-planner');
       
       
@@ -19313,7 +19303,7 @@ Please:
 
   apiRouter.get('/strategic/recommendations', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { strategicPlannerService } = await import('./services/strategic-planner');
       
       const recommendations = await strategicPlannerService.generateRecommendations(req.user!.id, mode);
@@ -19328,7 +19318,7 @@ Please:
   // Phase 9.2: Learning Profile Management
   apiRouter.post('/learning/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { continuousLearningEngine } = await import('./services/continuous-learning');
       
       const profile = await continuousLearningEngine.initializeProfile(req.user!.id, req.body.weights, mode);
@@ -19355,7 +19345,7 @@ Please:
 
   apiRouter.patch('/learning/profile/:profileId/weights', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { continuousLearningEngine } = await import('./services/continuous-learning');
       
       
@@ -19376,7 +19366,7 @@ Please:
 
   apiRouter.patch('/learning/profile/:profileId/phase', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { continuousLearningEngine } = await import('./services/continuous-learning');
       
       const profile = await continuousLearningEngine.updatePhase(
@@ -19395,7 +19385,7 @@ Please:
 
   apiRouter.get('/learning/profile/:profileId/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { continuousLearningEngine } = await import('./services/continuous-learning');
       
       const evaluation = await continuousLearningEngine.evaluatePerformance(
@@ -19415,7 +19405,7 @@ Please:
   // Phase 9.3: Strategic Simulation & Memory
   apiRouter.post('/simulation/run', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { simulationEngine } = await import('./services/simulation-engine');
       
       const simulation = await simulationEngine.runSimulation(
@@ -19464,7 +19454,7 @@ Please:
 
   apiRouter.patch('/simulation/:simulationId/outcome', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { simulationEngine } = await import('./services/simulation-engine');
       
       const simulation = await simulationEngine.updateActualOutcome(
@@ -19487,7 +19477,7 @@ Please:
 
   apiRouter.post('/simulation/decision', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { simulationEngine } = await import('./services/simulation-engine');
       
       const trace = await simulationEngine.simulateDecision(
@@ -19505,7 +19495,7 @@ Please:
 
   apiRouter.post('/strategic/memory/capture', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { strategicMemory } = await import('./services/strategic-memory');
       
       const snapshot = await strategicMemory.captureLesson(
@@ -19536,7 +19526,7 @@ Please:
 
   apiRouter.post('/strategic/memory/extract', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { strategicMemory } = await import('./services/strategic-memory');
       
       const lessons = await strategicMemory.extractLessonsFromSimulations(req.user!.id, mode);
@@ -19551,7 +19541,7 @@ Please:
   // Phase 9.4: Reflective Intelligence API Endpoints
   apiRouter.post('/reflection/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
       
       const reflection = await reflectiveIntelligence.reflect(
@@ -19569,7 +19559,7 @@ Please:
 
   apiRouter.post('/reflection/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
       
       const audit = await reflectiveIntelligence.auditDecision(
@@ -19616,7 +19606,7 @@ Please:
   // Phase 9.5: Ethical Reasoning & Value Alignment API Endpoints
   apiRouter.post('/ethics/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const mode = (req.mode || 'paper');
       const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
       
       const audit = await ethicalReasoningEngine.evaluateAction(
