@@ -13,7 +13,11 @@ import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFrom
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
 import { formulaAuditService } from "./services/formula-audit";
 import { AlertsService } from "./services/alerts-service";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent, strategyParamSchema } from "@shared/schema";
+// B-NEW-43 (2026-05-22): missing imports — dailyBriefService / semanticMemory / systemAlerts
+// were used in this file with no import (TS2304 "Cannot find name"). All three are defined
+// (daily-brief.ts, shared/schema.ts) — genuine missing-import errors, not dead references.
+import { dailyBriefService } from "./services/daily-brief";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent, strategyParamSchema, semanticMemory, systemAlerts } from "@shared/schema";
 import { z } from 'zod';
 import { validateGuardrails, validateFilters, validateNoLegacyKeys, LegacyFieldError } from "../types/config";
 import { databaseMonitor } from "./services/database-monitor";
@@ -13263,85 +13267,6 @@ Provide specific, actionable recommendations.`,
     } catch (error) {
       console.error('Error resolving error log:', error);
       res.status(500).json({ error: 'Failed to resolve error log' });
-    }
-  });
-
-  // AI Opportunities routes
-  apiRouter.get('/ai/opportunities', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { status, type, minProbability } = req.query;
-      
-      const opportunities = await aiOpportunitiesService.getOpportunitiesForUser(userId, {
-        status: status as string | undefined,
-        type: type as string | undefined,
-        minProbability: minProbability ? parseFloat(minProbability as string) : undefined
-      });
-      
-      res.json(opportunities);
-    } catch (error) {
-      console.error('Error fetching AI opportunities:', error);
-      res.status(500).json({ error: 'Failed to fetch opportunities' });
-    }
-  });
-
-  apiRouter.get('/ai/opportunities/latest-run', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const latestRun = await aiOpportunitiesService.getLatestRun(userId);
-      res.json(latestRun || null);
-    } catch (error) {
-      console.error('Error fetching latest run:', error);
-      res.status(500).json({ error: 'Failed to fetch latest run' });
-    }
-  });
-
-  apiRouter.get('/ai/opportunities/validation-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const report = await aiOpportunitiesService.getValidationReport(userId);
-      res.json(report);
-    } catch (error) {
-      console.error('Error generating validation report:', error);
-      res.status(500).json({ error: 'Failed to generate validation report' });
-    }
-  });
-
-  apiRouter.patch('/ai/opportunities/:id/status', async (req: AuthenticatedRequest, res) => {
-    try {
-      const { id } = req.params;
-      const { status } = req.body;
-      
-      await aiOpportunitiesService.updateOpportunityStatus(id, status);
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Error updating opportunity status:', error);
-      res.status(500).json({ error: 'Failed to update opportunity status' });
-    }
-  });
-
-  apiRouter.post('/ai/opportunities/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      
-      // Phase 41F-L.E2E-PURGE: AI features enabled by default (no user-level feature flags)
-      
-      // Generate for this user only (with cooldown protection)
-      await aiOpportunitiesService.generateOpportunitiesForSingleUser(userId);
-      
-      // Audit log the manual trigger
-      await storage.createAuditLog({
-        userId,
-        actionType: 'manual_opportunity_generation',
-        gptResponse: 'User manually triggered AI opportunities generation',
-        status: 'completed'
-      });
-      
-      res.json({ success: true, message: 'Opportunity generation started for your account' });
-    } catch (error) {
-      console.error('Error starting opportunity generation:', error);
-      const errorMessage = (error as Error).message || 'Failed to start opportunity generation';
-      res.status(429).json({ error: errorMessage }); // 429 for rate limiting
     }
   });
 
