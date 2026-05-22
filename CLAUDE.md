@@ -249,6 +249,8 @@ This cap exists because MEMORY.md auto-loads into every Claude Code session — 
 
     **Why this matters operationally:** without this fix, the user gets prompted every 30 seconds and work grinds to a halt. The full working file is committed at `.claude/settings.local.json` as of commit `39b033738` (B-NEW-36 sub-batch (b) Step 10/11 governance close). If a future Claude Code update changes the schema again and this fix stops working, research the current canonical syntax via the GitHub issues + Claude Code docs (https://code.claude.com/docs/en/permissions) and re-derive the fix; do NOT spend hours trying to add individual rules — go straight to the structural `bypassPermissions` fix.
 
+17. **xStock trading window is 24/5 — NOT US regular trading hours (Kyle directive 2026-05-22).** xStocks (tokenized equities) trade **24 hours a day, Sunday through Friday** — a continuous ~5-day window, off only for the weekend (Friday close → Sunday open; the B-NEW-36 `weekend_shutdown` / `weekend_restart` timers manage that boundary). When reasoning about xStock trade activity — why a trade has not closed, why prices are or are not updating, whether a scanner cycle should be running — **never assume xStocks follow US equity regular trading hours (≈13:30–20:00 UTC).** They are live around the clock on weekdays. "It's overnight / off-hours" is **NOT** a valid explanation for xStock trades not closing, or xStock prices being blank/stale, during the Sun–Fri window. If xStock trades are not closing, or xStock prices are blank, inside that window, that is a real problem to investigate — not expected behavior.
+
 ---
 
 ## 6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)
