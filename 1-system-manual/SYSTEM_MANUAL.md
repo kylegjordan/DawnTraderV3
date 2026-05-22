@@ -10822,9 +10822,40 @@ Rows seeded but source-side wiring deferred — each needs different pattern tha
 - `trade-safety` `guardrail_defaults` — pre-existing fallback path.
 - 17-vs-9 strategy reconciliation pass — only 9 strategy files in `server/strategies/`; CLAUDE.md cites 17 canonical strategies. Map remaining 8 to actual file locations.
 
+## Wildcard-retirement migration pattern (B79.0n.MCE, 2026-05-22)
+
+When a `module_constants` lever currently seeded at global wildcard `(*, *, *, *)` scope is consumed by an asset-class-aware caller, the wildcard row is itself a silent-fallback footgun: a `crypto_spot` caller and an `xstock_spot` caller both resolve to the same wildcard row (score 0 in the most-specific-wins hierarchy), so both classes silently inherit one shared value. The resolver's wildcard support is correct as a *feature* (legitimate scope resolution for genuinely cross-class levers like math constants); the *data shape* — a wildcard row serving multiple asset classes that actually need independent values — is what makes a specific lever buggy from the per-class-awareness lens. **The fix lives at the data layer, not the resolver layer.**
+
+The canonical migration pattern, established by B79.0n.MCE for `dbs_calculation.min_sample_count` and reusable for any future wildcard-retirement:
+
+1. **Add an explicit `crypto_spot` row** cloning the wildcard's value byte-for-byte (preserves crypto behavior — crypto-by-construction-NONE invariant).
+2. **Add an explicit `xstock_spot` row** (and any other live asset class) — placeholder-cloned from the same value at seed time; later per-class calibration replaces it.
+3. **Retire the wildcard row via an `EXISTS`-gated `DELETE`** that fires *only after* both class-scoped replacement rows are confirmed present. There is no orphan window where the wildcard is gone but the class rows do not yet exist.
+
+Implementation rules:
+- Wrap the whole migration in a single `BEGIN ... COMMIT` transaction — partial failure rolls back fully.
+- Inserts use `ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING` (the 6-tuple unique index); the `DELETE` is `EXISTS`-gated. Together these make the migration idempotent — a re-run after a successful pass is a no-op.
+- **Scope every WHERE clause to the exact `constant_name`.** A migration that retires `dbs_calculation` wildcards must filter `constant_name = 'min_sample_count'` exactly so it cannot collaterally retire a different `dbs_calculation` constant (e.g. B-PHASE-A2's `sector_coverage_floor` xstock_spot row).
+- Ship a `*-rollback.sql` companion file (re-insert the wildcard, delete the class rows) — manual-only, not auto-run by deploy, available if post-deploy verification fails.
+- The resolver-key-tightening code change and the seed migration **must ship in the same commit**. Tightening before the seed makes per-class reads hard-fail until the rows exist; seeding before tightening leaves the wildcard live for an interim. The atomic pair eliminates both windows.
+
+Net row delta for a single-constant single-variant retirement is **+1** (1 wildcard retired, 2 class rows added). A boot-time telemetry probe (`[B79.0n.MCE][CACHE_REFRESH] picked up N module_constants rows ...`) confirms the cache picked up the new per-class rows after the first refresh cycle.
+
+## MCE three-cache-layer model (B79.0n.MCE, 2026-05-22)
+
+The Market Context Engine singleton owns **three distinct cache layers** that are frequently conflated. They have different owners, TTLs, key shapes, and update cadences — a change to one does not affect the others:
+
+| Cache | Owner | TTL | Key shape | Purpose |
+|---|---|---|---|---|
+| Per-symbol MarketContext | `server/services/market-context-engine.ts` singleton | 60s | `${symbol}:${assetClass}` (was `${symbol}` pre-B79.0n.MCE) | The per-symbol regime + DBS + indicator context computed by `computeContext` / read by `getCachedContext` |
+| Module-constants rowset | `server/services/module-constants-service.ts` `cache: Map<string, CachedModule>` | 60s | `${moduleName}` | The raw `module_constants` rows for a module, filled by `loadModule` warming or the 9-group orchestrator |
+| 9-group config refresh | `refreshAllConfigs()` orchestrator inside `market-context-engine.ts` | per-MCE-refresh tick | n/a (in-memory typed fields) | Pre-fetches 9 module groups in parallel every MCE refresh tick — `macro_modifier`, `regime_phase`, `regime_classifier`, `outcome_feedback`, `regime_age`, `path_b_sustainability`, `volume_regime`, `pair_correlation`, `multi_tf_agreement` |
+
+B79.0n.MCE extended **only** the per-symbol MarketContext cache key from `${symbol}` to `${symbol}:${assetClass}` (defense-in-depth against cross-class context collision; pre-audit confirmed no crypto/xStock symbol-namespace overlap today). The per-call `getCachedNumberRequired` reads that the wildcard-retirement migration affects consult the *module-constants rowset* cache — a separate layer from the 9-group orchestrator. The 9-group orchestrator's first-refresh hard-fail + keep-prior-on-failure semantics are unaffected by per-class seed migrations.
+
 ---
 
-*End of Configuration Surface appendix. Last updated 2026-05-05 with B72 main close.*
+*End of Configuration Surface appendix. Last updated 2026-05-22 with B79.0n.MCE wildcard-retirement pattern + MCE three-cache-layer model.*
 
 ---
 

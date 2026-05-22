@@ -444,6 +444,72 @@ B79.0n.STORAGE worked example (deploy `ab3153ce5`, 2026-05-21). See `Claude Comm
 
 ---
 
+### Step 4.10 — REQUIRED-assetClass on compute-side / math surface APIs + fail-hard exhaustive switch + wildcard-retirement migration (B79.0n.MCE canonical pattern, 2026-05-22)
+
+**Standing rule:** Step 4.9 covered the *storage / data-access* layer. B79.0n.MCE extends the same REQUIRED-assetClass discipline to the *compute / math* layer — regime classification (`calculatePairRegime`), the Market Context Engine (`computeContext`), and the cost model (`getFrictionForAssetClass` + friends). The pattern is the same (typed REQUIRED parameter, no silent default), with three compute-layer-specific additions.
+
+#### Addition 1 — Fail-hard exhaustive switch for asset-class enum branching
+
+When a function branches on `assetClass` to select a per-class artifact (a friction model, a threshold set), use a TypeScript-exhaustive `switch` with a `never`-typed default — NOT a warn-once-fallback:
+
+```ts
+// BAD — warn-once-fallback silently degrades to crypto behavior
+function getFrictionForAssetClass(assetClass: string = 'crypto_spot'): FrictionModel {
+  switch (assetClass) {
+    case 'crypto_spot': return CRYPTO_SPOT_FRICTION;
+    case 'xstock_spot': return XSTOCK_SPOT_FRICTION;
+    default:
+      if (!_warned) { console.warn('unknown assetClass; falling back to crypto'); _warned = true; }
+      return CRYPTO_SPOT_FRICTION;   // ← silent wrong answer
+  }
+}
+
+// GOOD — REQUIRED param + fail-hard on unwired classes + compile-time exhaustiveness
+function getFrictionForAssetClass(assetClass: AssetClass): FrictionModel {
+  switch (assetClass) {
+    case 'crypto_spot': return CRYPTO_SPOT_FRICTION;
+    case 'xstock_spot': return XSTOCK_SPOT_FRICTION;
+    case 'crypto_perp':
+    case 'xstock_perp':
+      throw new Error(`[batch][cost-model] assetClass='${assetClass}' has no friction model wired — file as RUNNING_ISSUES + add to scope before consuming`);
+    default: {
+      const _exhaustive: never = assetClass;   // ← compile-fails if AssetClass gains a value
+      throw new Error(`[batch][cost-model] unreachable assetClass=${String(_exhaustive)}`);
+    }
+  }
+}
+```
+
+Two things this buys: (a) the `const _exhaustive: never` line is a compile-time tripwire — if a future asset class is added to the `AssetClass` union without a `case`, the file fails to compile; (b) the explicit `throw` on a not-yet-wired class is a *forcing function* — when perpetual-futures onboarding begins, the throw makes the missing friction-model work immediately visible instead of letting a wrong value flow silently. This is the canonical recipe; the warn-once-fallback is the anti-pattern.
+
+#### Addition 2 — Cache-key extension at compute-side singletons
+
+Same shape as Step 4.9's storage-side cache-key extension, applied to a compute singleton. The Market Context Engine's per-symbol context cache key went `${symbol}` → `${symbol}:${assetClass}`. Generalize: **any compute-side cache whose key is a primary identifier (symbol, mode, pair) gains the `assetClass` dimension as `${primaryId}:${assetClass}`.** Memory cost is `O(k)` (k = number of asset classes, bounded ≤ ~10). Note that a single subsystem can own *multiple* cache layers with different keys — be explicit about which one is being extended (the MCE owns three: per-symbol context, module-constants rowset, 9-group config refresh; B79.0n.MCE extended only the first). Document the cache-layer inventory so the next onboarding does not conflate them.
+
+#### Addition 3 — Wildcard-retirement migration for `module_constants` levers (Layer-2 per-class promotion)
+
+When a `module_constants` lever is seeded at global wildcard `(*, *, *, *)` scope but is consumed by an asset-class-aware caller, the wildcard row itself is a silent-fallback footgun — every asset class resolves to the same shared row. The resolver's wildcard support is correct as a *feature*; the *data shape* (one wildcard serving classes that need independent values) is the bug. **Fix at the data layer, not the resolver.** Canonical migration shape (B79.0n.MCE worked example, `dbs_calculation.min_sample_count`):
+
+1. Add an explicit `crypto_spot` row cloning the wildcard value byte-for-byte (crypto-by-construction-NONE invariant).
+2. Add an explicit `xstock_spot` row (placeholder-cloned at seed; per-class calibration replaces it later).
+3. Retire the wildcard via an **`EXISTS`-gated `DELETE`** that fires only after both class rows are confirmed present — **no orphan window** where the wildcard is gone but the class rows do not yet exist.
+
+Implementation rules: wrap in a single `BEGIN/COMMIT`; inserts use `ON CONFLICT ... DO NOTHING` + the `EXISTS`-gated DELETE for idempotency; scope every WHERE clause to the exact `constant_name` so a sibling constant under the same module (e.g. B-PHASE-A2's `dbs_calculation.sector_coverage_floor`) cannot be collaterally retired; ship a manual-only `*-rollback.sql` companion; and ship the resolver-key-tightening code change and the migration **in the same commit** (tightening-first hard-fails until rows exist; seeding-first leaves the wildcard live for an interim). Net row delta for a single-constant single-variant retirement is **+1**.
+
+#### Why this pattern is load-bearing
+
+**Type-enforced REQUIRED-assetClass catches silent-fallback bugs at compile time.** B79.0n.MCE made `assetClass` REQUIRED on five surface APIs; the TypeScript compiler then enumerated every caller (`getCachedCostMetrics` alone had 9 production callers all passing only `symbol` — an active footgun that would have routed every xStock signal through crypto friction once active-trading enabled). The compiler is a more reliable audit tool than a grep — same lesson as Step 4.9, reaffirmed.
+
+**`grep` false-positive on `assetClass: <var>`.** A grep for the wildcard literal `assetClass: '*'` to find silent-fallback resolver sites produces *false positives* — a site already written as `assetClass: someVariable` (correctly per-class) reads, at a glance, like a candidate. B79.0n.MCE pre-audit v1 flagged `directional-bias-store.ts:59` for resolver-key tightening on exactly this basis; a direct code read showed the parameter was already per-class-resolved (B-PHASE-A2 had shipped it 4 days earlier). **Rule:** never flag a resolver-key site from a grep hit alone — open the file and confirm whether the `assetClass` field is a literal `'*'` or a passed variable before scoping work to it.
+
+**Dead inline code chains awaken latent bugs / hygiene debt.** B79.0n.MCE pre-audit v2 found that `cost-metrics.ts`'s `getDefaultAvgReturn → updateCostData → getTransactionCostFactor` chain had zero production callers — an orphan from an earlier directive era that B72 had nonetheless migrated a `module_constants` row for. The dead chain was deleted (Q-VI option a); the now-orphaned `cost_model.default_avg_return` row + a stale `b72-warmup.ts` prefetch entry were filed as RUNNING_ISSUES cleanups. **Rule:** every onboarding pre-audit must include a "dead code awakens / dead code lingers" check — when a REQUIRED-assetClass refactor touches a subsystem, grep the subsystem for functions with zero production callers; they are either deleted in-batch (small + contained) or filed as tracked cleanup. Do not leave orphan code + orphan DB rows undocumented.
+
+#### Where this pattern came from
+
+B79.0n.MCE worked example (deploy `aa0564107`, 2026-05-22). See `Claude Comms and Packages/Batch Completion/B79_0n_MCE_COMPLETION_REPORT.md` §10 for the full set of onboarding learnings + concrete code references; see `SYSTEM_MANUAL.md` Configuration Surface appendix for the wildcard-retirement migration pattern + the MCE three-cache-layer model.
+
+---
+
 ### Section D.1 — Concrete code-extension templates (Phase 24 reference)
 
 Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.
