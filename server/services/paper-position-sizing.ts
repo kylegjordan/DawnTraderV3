@@ -54,6 +54,13 @@ export interface PaperPositionSizingParams {
   stopPrice: number;
   symbol: string;
   strategy: StrategyType;
+  /**
+   * B-NEW-43 chunk 3 (2026-05-22): the signal's source pool ('quant' | 'pattern').
+   * Phase 14.5 pattern-pool reduced sizing keys off this. Optional — absent
+   * defaults to 'quant' (the standard lane). Previously read from an undeclared
+   * `signal` reference (TS2304); now passed explicitly by callers.
+   */
+  sourcePool?: string;
 }
 
 export interface PaperPositionSizingResult {
@@ -130,7 +137,9 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
   const safeMaxPositionPct = Number.isFinite(maxPositionPct) && maxPositionPct > 0 ? maxPositionPct : 10.00;
   const safeMaxTotalExposurePct = Number.isFinite(maxTotalExposurePct) && maxTotalExposurePct > 0 ? maxTotalExposurePct : 100;
   // Phase 14.5: Pattern pool signals use reduced position sizing (15% vs 25%)
-  const signalSourcePool = (signal as any)?.metadata?.sourcePool || 'quant';
+  // B-NEW-43 chunk 3 (2026-05-22): sourcePool now arrives as a typed param —
+  // the prior `signal` reference was undeclared (TS2304).
+  const signalSourcePool = params.sourcePool || 'quant';
   let effectiveMaxPositionPct = safeMaxPositionPct;
   if (signalSourcePool === 'pattern') {
     const patternMaxPct = PATTERN_POOL_GUARDRAILS.MAX_POSITION_PCT * 100; // 15

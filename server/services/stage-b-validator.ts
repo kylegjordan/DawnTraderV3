@@ -7,6 +7,7 @@
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { StrategyEngine } from './strategy-engine';
 import { storage } from '../storage';
+import { buildSettingsFromGuardrails } from './guardrail-settings';
 import type { TradingSettings } from '@shared/schema';
 
 interface ValidationMetrics {
@@ -51,19 +52,10 @@ export class StageBValidator {
 
     const startTime = Date.now();
     
-    // Get user settings
-// Phase 41F-L.E2E-PURGE: DISABLED -     let settings = await storage.getTradingSettings(userId);
-    if (!settings) {
-      console.log('   No existing settings found, creating defaults...');
-      await storage.createTradingSettings({
-        userId,
-        riskPerTrade: '2',
-        maxExposurePercent: '10',
-        maxOpenTrades: 5
-      });
-// Phase 41F-L.E2E-PURGE: DISABLED -       settings = await storage.getTradingSettings(userId);
-      if (!settings) throw new Error('Failed to create settings');
-    }
+    // B-NEW-43 chunk 3 (2026-05-22): Phase 41F-L purged user-level getTradingSettings;
+    // settings now derive from mode-level guardrails_v2. Stage-B is a paper-mode
+    // validation harness. NOTE: legacy validation harness — see RUNNING_ISSUES #136.
+    const settings = await buildSettingsFromGuardrails('paper', userId);
 
     // Initialize results for all 8 strategies
     const strategyNames = [
@@ -188,21 +180,10 @@ export class StageBValidator {
 
     const startTime = Date.now();
     
-    // Get user settings or create defaults
-// Phase 41F-L.E2E-PURGE: DISABLED -     let settings = await storage.getTradingSettings(userId);
-    if (!settings) {
-      console.log('   No existing settings found, creating defaults...');
-      await storage.createTradingSettings({
-        userId,
-        riskPerTrade: '2',
-        maxExposurePercent: '10',
-        maxOpenTrades: 5
-      });
-// Phase 41F-L.E2E-PURGE: DISABLED -       settings = await storage.getTradingSettings(userId);
-      if (!settings) {
-        throw new Error('Failed to create trading settings');
-      }
-    }
+    // B-NEW-43 chunk 3 (2026-05-22): Phase 41F-L purged user-level getTradingSettings;
+    // settings now derive from mode-level guardrails_v2. Stage-B is a paper-mode
+    // validation harness. NOTE: legacy validation harness — see RUNNING_ISSUES #136.
+    const settings = await buildSettingsFromGuardrails('paper', userId);
 
     // Initialize results for all 8 strategies
     const strategyNames = [

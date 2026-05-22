@@ -1,6 +1,7 @@
 import { ParsedIntent, validateCommandSafety, generateConfirmationMessage } from './intent-parser';
 import { storage } from '../storage';
 import { TradingEngine } from './trading-engine';
+import { buildSettingsFromGuardrails, getPortfolioBalanceV2 } from './guardrail-settings';
 
 export interface CommandResult {
   success: boolean;
@@ -39,8 +40,9 @@ export class CommandRouter {
 
   async routeCommand(intent: ParsedIntent, userId: string): Promise<CommandResult> {
     // Validate command safety first
-// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(userId);
-    const safety = validateCommandSafety(intent, settings);
+    // B-NEW-43 chunk 3 (2026-05-22): Phase 41F-L purged user-level getTradingSettings;
+    // validateCommandSafety's currentSettings param is optional — call without it.
+    const safety = validateCommandSafety(intent);
 
     if (!safety.safe) {
       return {
@@ -284,9 +286,12 @@ export class CommandRouter {
       }
 
       if (parameters.riskPercent !== undefined) {
-// Phase 41F-L.E2E-PURGE: DISABLED -         const settings = await storage.getTradingSettings(userId);
-        if (settings && settings.portfolioValue) {
-          const portfolioValue = parseFloat(settings.portfolioValue);
+        // B-NEW-43 chunk 3 (2026-05-22): Phase 41F-L purged user-level getTradingSettings;
+        // portfolio value now comes from mode-level portfolio_state. CommandRouter is
+        // dead code (never invoked) — see RUNNING_ISSUES #136 — migration completed to keep CI green.
+        const cfgMode: 'live' | 'paper' = parameters.mode ?? 'paper';
+        const portfolioValue = await getPortfolioBalanceV2(cfgMode);
+        if (portfolioValue > 0) {
           const riskAmount = (portfolioValue * parameters.riskPercent) / 100;
           updates.riskPerTrade = riskAmount.toFixed(2);
         }
@@ -411,8 +416,11 @@ export class CommandRouter {
 
     // Settings
     if (entity === 'settings') {
-// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
-      
+      // B-NEW-43 chunk 3 (2026-05-22): Phase 41F-L purged user-level getTradingSettings;
+      // settings now derive from mode-level guardrails_v2. CommandRouter is dead code
+      // (never invoked) — see RUNNING_ISSUES #136 — migration completed to keep CI green.
+      const statusMode: 'live' | 'paper' = intent.parameters.mode ?? 'paper';
+      const settings = await buildSettingsFromGuardrails(statusMode);
       return {
         success: true,
         message: 'Current settings retrieved',

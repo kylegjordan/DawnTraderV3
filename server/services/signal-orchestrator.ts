@@ -433,6 +433,9 @@ export class SignalOrchestrator {
       stopPrice: rawSignal.stopPrice,
       symbol: rawSignal.symbol,
       strategy: strategyId,
+      // B-NEW-43 chunk 3: thread the signal's source pool so Phase 14.5
+      // pattern-pool reduced sizing applies (was an undeclared ref in TS2304).
+      sourcePool: rawSignal.metadata?.sourcePool,
     });
 
     // Phase 8.8.3-C5-2: Guardrail Input Verification - log balance used for trade sizing
@@ -1069,10 +1072,14 @@ export class SignalOrchestrator {
       preComputedNotional: sizingResult.estimatedValue,
       signalId,
       // Directive 11.0E: Confidence is the primary quality metric
-      confidence: confidence,
-      finalScore: signalFinalScore,
-      regimeWeight: regimeWeight,
-      hybridScore: hybridScore,
+      // B-NEW-43 chunk 3 (2026-05-22): source from extendedMetrics — mirrors the
+      // sqeSignalInput builder above (~lines 653-656). The bare confidence/
+      // signalFinalScore/regimeWeight/hybridScore locals were removed in the
+      // extendedMetrics consolidation; these references were left dangling (TS2304).
+      confidence: extendedMetrics.confidence,
+      finalScore: extendedMetrics.finalScore,
+      regimeWeight: extendedMetrics.regimeWeight,
+      hybridScore: (rawSignal as any).hybridScore ?? extendedMetrics.confidence,
       volatility: extendedMetrics.volatility,
       // Directive 11.3A: Net expectancy fields
       netExpectedEdge: netGeometry.netExpectedEdge,
@@ -1080,7 +1087,7 @@ export class SignalOrchestrator {
       totalRoundTripCost: totalCost,
     };
 
-    console.log(`[11.0E][SIZED_SIGNAL] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, FinalScore=${signalFinalScore.toFixed(4)}`);
+    console.log(`[11.0E][SIZED_SIGNAL] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}, FinalScore=${extendedMetrics.finalScore.toFixed(4)}`);
 
     // Directive 11.0E: Capture pricing and risk metrics for learning dataset (FinalScore-native)
     // Directive 11.3A: Enhanced with net expectancy metrics
@@ -1091,9 +1098,9 @@ export class SignalOrchestrator {
       exit: rawSignal.targetPrice,
       stop: rawSignal.stopPrice,
       spread: costMetrics.spread,
-      finalScore: signalFinalScore, // Directive 11.0E: PRIMARY metric
-      confidence: confidence,
-      regimeWeight: regimeWeight,
+      finalScore: extendedMetrics.finalScore, // Directive 11.0E: PRIMARY metric
+      confidence: extendedMetrics.confidence,
+      regimeWeight: extendedMetrics.regimeWeight,
       volatility: extendedMetrics.volatility,
       // Directive 11.3A: Net expectancy fields
       netExpectedEdge: netGeometry.netExpectedEdge,
@@ -1225,7 +1232,7 @@ export class SignalOrchestrator {
             enabledCount: selectedStrategies.length
           }));
 
-          const signals = await this.evaluateSymbol(symbol, settings, filters, sizingContext, vnMaxVeto);
+          const signals = await this.evaluateSymbol(symbol, settings, filters, sizingContext, fx5Survivors, symbolFamilies, STRATEGY_FAMILY_MAP, HYBRID_FAMILY_ELIGIBILITY, vnMaxVeto);
           symbolsEvaluated++;
           strategiesRun += this.enabledStrategies.size;
           signalsGenerated += signals.length;
@@ -1419,6 +1426,13 @@ export class SignalOrchestrator {
     settings: TradingSettings,
     filters: ScreenerFilters,
     sizingContext: SizingContext,
+    // B-NEW-43 chunk 3 (2026-05-22): these 4 were free variables left dangling when
+    // evaluateSymbol was extracted out of evaluateMarket (TS2304). They are computed
+    // in evaluateMarket — thread them through as parameters to complete the extraction.
+    fx5Survivors: ReturnType<typeof activeFilterPool.getActivePool>,
+    symbolFamilies: Map<string, Set<string>>,
+    STRATEGY_FAMILY_MAP: Record<string, string>,
+    HYBRID_FAMILY_ELIGIBILITY: Record<string, string[]>,
     vnMaxVeto: number = 0.93  // Batch 19G VN HF: DB-driven VN veto threshold
   ): Promise<SizedStrategySignal[]> {
     const signals: SizedStrategySignal[] = [];

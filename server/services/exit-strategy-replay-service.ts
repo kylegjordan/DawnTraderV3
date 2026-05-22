@@ -343,7 +343,7 @@ export async function replayAndPersist(ctx: ReplayContext): Promise<void> {
       .map(e => e.variantId);
     console.log(
       `[B73][exit-replay] ${ctx.symbol} ${ctx.tradeId} regime=${ctx.regime} ` +
-      `bars=${ohlcBars.length} TP_variants=[${winners.join(',')}]`,
+      `bars=${replayBars.length} TP_variants=[${winners.join(',')}]`,
     );
   } catch (err) {
     console.error(

@@ -105,6 +105,10 @@ class ContextRefreshCoordinator extends EventEmitter {
       await this.updateCortex(mode, freshData, traceId);
 
       // Directive 12.2.3: systemTruthDiagnostic truth check removed (file deleted in Batch 7A)
+      // B-NEW-43 chunk 3 (2026-05-22): discrepancy detection was produced by that
+      // removed truth-check; with it gone the count is always 0 (matches the
+      // catch-path RefreshResult below). The dangling name caused TS2304/TS18004.
+      const discrepanciesFound = 0;
 
       // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
       const latencyMs = Date.now() - start;
@@ -646,6 +650,10 @@ class ContextRefreshCoordinator extends EventEmitter {
       await this.updateCortex(mode, freshData, finalTraceId);
 
       // Directive 12.2.3: systemTruthDiagnostic truth check removed (file deleted in Batch 7A)
+      // B-NEW-43 chunk 3 (2026-05-22): discrepancy detection was produced by that
+      // removed truth-check; with it gone the count is always 0 (matches the
+      // catch-path RefreshResult below). The dangling name caused TS2304/TS18004.
+      const discrepanciesFound = 0;
 
       // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
       const latencyMs = Date.now() - start;

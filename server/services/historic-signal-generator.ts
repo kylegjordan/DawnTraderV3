@@ -1,6 +1,7 @@
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { StrategyEngine, type TechnicalIndicators, type StrategySignal } from './strategy-engine';
 import { storage } from '../storage';
+import { buildSettingsFromGuardrails } from './guardrail-settings';
 import type { TradingSettings, InsertHistoricSignal, PriceData } from '@shared/schema';
 
 // Simple symbol to Kraken pair mapping (for user convenience)
@@ -108,11 +109,10 @@ export class HistoricSignalGenerator {
     let errorCount = 0;
     let apiCalls = 0;
 
-    // Get user settings for strategy parameters
-// Phase 41F-L.E2E-PURGE: DISABLED -     const userSettings = await storage.getTradingSettings(userId);
-    if (!userSettings) {
-      throw new Error(`No trading settings found for user ${userId}`);
-    }
+    // B-NEW-43 chunk 3 (2026-05-22): Phase 41F-L purged user-level getTradingSettings;
+    // strategy params now derive from mode-level guardrails_v2. Historic backfill is
+    // a paper-mode analysis tool. NOTE: legacy backfill harness — see RUNNING_ISSUES #136.
+    const userSettings = await buildSettingsFromGuardrails('paper', userId);
 
     // Process each symbol
     for (const symbol of symbols) {

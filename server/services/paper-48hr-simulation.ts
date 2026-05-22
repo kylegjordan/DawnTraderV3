@@ -1,4 +1,5 @@
 import { storage } from '../storage';
+import { buildSettingsFromGuardrails } from './guardrail-settings';
 import { PaperExecutionEngine } from './paper-execution-engine';
 import { PaperPortfolioManager } from './paper-portfolio-manager';
 import fs from 'fs';
@@ -413,10 +414,13 @@ export class Paper48HrSimulation {
   }
 
   private async analyzeRiskManagement(trades: any[]): Promise<any> {
-// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(this.userId);
+    // B-NEW-43 chunk 3 (2026-05-22): Phase 41F-L purged user-level getTradingSettings;
+    // risk params now derive from mode-level guardrails_v2. Paper-48hr sim is paper-mode.
+    // NOTE: legacy simulation harness — see RUNNING_ISSUES #136.
+    const settings = await buildSettingsFromGuardrails('paper');
     return {
-      riskPerTrade: parseFloat(settings?.riskPerTrade || '0'),
-      maxExposurePercent: parseFloat(settings?.maxExposurePercent || '0'),
+      riskPerTrade: parseFloat(String(settings.riskPerTradePct ?? '0')),
+      maxExposurePercent: parseFloat(String(settings.maxExposurePercent ?? '0')),
       adherence: 'All trades respected risk parameters'
     };
   }

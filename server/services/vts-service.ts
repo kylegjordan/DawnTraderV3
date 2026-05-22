@@ -351,7 +351,7 @@ export class VTSService extends EventEmitter {
       exitTime: Date.now(),
       grossProfit,
       netProfit,
-      fees: friction,
+      fees: frictionRate,
       status: 'closed',
       calibrated: true
     };

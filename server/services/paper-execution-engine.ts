@@ -2524,6 +2524,9 @@ export class PaperExecutionEngine {
             stopPrice: signal.stopPrice,
             symbol: signal.symbol,
             strategy: signal.strategy as any,
+            // B-NEW-43 chunk 3: thread the signal's source pool so Phase 14.5
+            // pattern-pool reduced sizing applies (was an undeclared ref in TS2304).
+            sourcePool: (signal as any)?.metadata?.sourcePool,
           });
           
           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
