@@ -14,23 +14,13 @@
 
 ---
 
-## CURRENT STATE (2026-05-22 — B79.0n.MCE DEPLOYED + Step 7 verified; Steps 8/10/11 remain. B-NEW-43 Step 2 pre-audit DONE + Langston ACK)
+## CURRENT STATE (2026-05-22 — B79.0n.MCE CLOSED (Steps 1-11); B-NEW-43 CI Recovery is the next active batch)
 
-### B79.0n.MCE — sub-batch 4 of 18 (umbrella v4). Steps 1-7 done (deployed + first-pass verified); Steps 8, 10, 11 remain.
+### B79.0n.MCE — CLOSED 2026-05-22 (sub-batch 4 of 18, umbrella v4). Pending only Kyle's formal acknowledgment.
 
-**DEPLOYED 2026-05-22 ~12:10Z** — staging at commit `aa0564107`, PM2 #311, migration `2026-05-22-b79-0n-mce-dbs-per-class.sql` applied (1 pending → applied clean). Payload commits `c69320545` (Step 3-4 impl) + `713fd7ae2` (Step 5 fix-forward).
+Deployed staging commit `aa0564107`, PM2 #311, migration `2026-05-22-b79-0n-mce-dbs-per-class.sql` applied clean. Removed the silent `assetClass='crypto_spot'` default from 3 MCE/cost-model surface API groups (`calculatePairRegime`, `MCE.computeContext`, `cost-model.ts` ×3) — now REQUIRED `AssetClass` + perp fail-hard exhaustive switch; MCE per-symbol cache key → `${symbol}:${assetClass}`; per-class `dbs_calculation` seed migration (wildcard retired, net +1); `cost-metrics.ts` dead-chain removed; 6 new unit tests. Steps 1-11 done; Langston ACK at Steps 1/2/4/8 ("shipped clean"). Step 7+8 verified — `[B79.0n.MCE][CACHE_REFRESH]` probe fired (crypto_spot=1 + xstock_spot=8). Completion report `B79_0n_MCE_COMPLETION_REPORT.md`, governance close commit `7c7ca70e3` — 14/15 objectives YES, 1 PARTIAL (CI all-4-green = pre-existing B-NEW-43 debt, zero new MCE errors). Governance done: BATCH_CATALOG, PHASE_HISTORY, SIM, SYSTEM_MANUAL (wildcard-retirement pattern + 3-cache-layer model), RUNNING_ISSUES (#133 orphan `cost_model.default_avg_return` + #134 b72-warmup prefetch cleanup), ASSET_CLASS_ONBOARDING_WORKFLOW (Step 4.10). 24h soak alert `616dfcf3` fires 2026-05-23T12:10Z.
 
-**What it does:** removes the silent `assetClass='crypto_spot'` default from 3 MCE surface APIs — `calculatePairRegime`, `MCE.computeContext`, and `cost-model.ts` (`getFrictionForAssetClass` + `getDefaultCostComponentsForAssetClass` + `getCachedCostMetrics`) — all now REQUIRED `assetClass: AssetClass`. Perp/non-spot classes fail-hard (exhaustive switch + RUNNING_ISSUES-pointing error). MCE per-symbol cache key extended `${symbol}` → `${symbol}:${assetClass}`. 2 ablation paths (`buildB68_5Alternate`, `computeMultiTfAgreement`) + `BackfillContext` thread assetClass. Seed migration `2026-05-22-b79-0n-mce-dbs-per-class.sql` — per-class `dbs_calculation.min_sample_count` rows + wildcard retirement (net +1 row) + rollback companion. Dead-code cleanup: deleted `cost-metrics.ts` dead chain (`getDefaultAvgReturn` + `updateCostData` + `getTransactionCostFactor` + `updateSpreadCache`) per Langston Q-VI(a). 6 new unit tests.
-
-**Langston trail:** Step 1 rev2 ACK → Step 2 pre-audit v2 ACK (after Kyle pushed for thorough SIM + code review; v1 had 3 errors — directional-bias-store already per-class from B-PHASE-A2, cost-metrics dead code, caller over-count) → Step 4 code-review ACK clear-to-push (5 asks concur, 4 nits).
-
-**CI status (run 26245428198):** Build ✓ Docker ✓. TypeScript Check ✗ + Test Suite ✗ — BUT verified clean-relative-to-baseline: ZERO new server TS errors (signal-orchestrator −1 from the telemetry fix), test failures identical 98 to STORAGE baseline, all 6 new MCE tests pass. CI red is 100% pre-existing debt → B-NEW-43.
-
-**Step 6-7 DONE.** Deploy gate cleared (≥12:00Z + d4b2e590 24h UD regression check came back CLEAN — no crypto regression). Step 7 first-pass verify: HTTP 200, PM2 online stable, migration applied, `[B79.0n.MCE][CACHE_REFRESH]` probe fired at 12:09:52Z (crypto_spot=1 + xstock_spot=8 = 9 dbs_calculation rows — per-class resolution confirmed working), universes loaded (xstock 489 / crypto 422), boot-time heartbeat spike settled (no recurrence), no new errors. MCE 24h soak alert created (triggers 2026-05-23T12:10Z). **Remaining:** Step 8 (Langston second-pass — grep PM2 for `[B79.0n.MCE][CACHE_REFRESH]`) → Step 10 governance → Step 11 completion report.
-
-**Governance owed at Step 10:** BATCH_CATALOG, PHASE_HISTORY, SIM, SYSTEM_MANUAL (Layer-2 wildcard-retirement migration pattern + 3-cache-layer table from pre-audit §1.5), RUNNING_ISSUES (incl. NEW orphan `cost_model.default_avg_return` row + `b72-warmup.ts` prefetch cleanup), ASSET_CLASS_ONBOARDING_WORKFLOW, completion report with §3.3 onboarding learnings.
-
-### B-NEW-43 CI Recovery — Step 2 pre-audit DONE + Langston ACK/consensus. Runs AFTER B79.0n.MCE Step 11, BEFORE B79.0n sub-batch #5.
+### B-NEW-43 CI Recovery — NOW THE ACTIVE BATCH. Step 2 pre-audit DONE + Langston consensus. Implementation (Step 3 = Phase 0) starts next. Runs BEFORE B79.0n sub-batch #5.
 
 Standalone CI-health batch. Scope rev2 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`ad2b37018`); pre-audit `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` (`eb9bfc06b` + §13 Step-2-consensus addendum `7a892bbdb`). **CI baseline (run 26255691977):** 696 TS errors (TS2339 220 / TS2345 114 / TS2304 87; routes.ts 213, storage.ts 59 — 40 of which = one missing `TradingMode` import) + 98 test failures (≈54 module-not-warm, ≈31 assertion, ≈9 DB-conn, 5 stale-knob-mock, 1 vi.mock-hoist). 4 phases P0-P3. Kyle LOCKED: one batch, runs before sub-batch #5, CI Postgres approved.
 
@@ -43,25 +33,23 @@ Standalone CI-health batch. Scope rev2 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`ad2b370
 - `b83b1e4b` — B-NEW-40 14-day soak 2026-05-31. No action.
 - `283bd74e` — B-NEW-36 weekend_shutdown timer verify 2026-05-23 00:05Z. No action.
 - `d4b2e590` — ✅ ACK'd 2026-05-22 — UD 24h crypto regression check ran: NO regression (FX5 pool healthy ~200-230; signal eval volume up; VTS crypto rate elevated not depressed — daily counts span 20-190 so the −8.6% window-delta is noise per §13). No RUNNING_ISSUES filed.
-- `2af50871` — **B79.0n.UD 06:00Z cron self-fire review — fires 2026-05-22T13:00:00Z (TODAY, ~1h out).** psql `discovery_runs ORDER BY run_id DESC LIMIT 3` — verify run_id=2 `triggered_by='cron_daily'`.
-- `<new>` — **B79.0n.MCE 24h post-deploy soak — fires 2026-05-23T12:10Z.** Grep error.log for B79.0n.MCE fail-hard throws (expect zero); confirm CACHE_REFRESH still firing; crypto regression vs baseline. No action until then.
+- `2af50871` — **B79.0n.UD 06:00Z cron self-fire review — fires 2026-05-22T13:00:00Z (TODAY).** psql `discovery_runs ORDER BY run_id DESC LIMIT 3` — verify run_id=2 `triggered_by='cron_daily'`.
+- `616dfcf3` — **B79.0n.MCE 24h post-deploy soak — fires 2026-05-23T12:10Z.** Grep error.log for B79.0n.MCE fail-hard throws (expect zero); confirm CACHE_REFRESH still firing; crypto regression vs baseline. No action until then.
 
 ---
 
 ## NEXT IMMEDIATE STEPS (2026-05-22)
 
-Kyle wants momentum — close B79.0n.MCE today, then start B-NEW-43 (neither waits on the 24h soak; soak is a background monitor). Order:
-1. **B79.0n.MCE Step 8** — dispatch Langston second-pass (grep staging PM2 for `[B79.0n.MCE][CACHE_REFRESH]`, verify per-class dbs_calculation rows, HTTP 200, no fail-hard throws).
-2. **B79.0n.MCE Step 10** — governance docs (see "Governance owed" above).
-3. **B79.0n.MCE Step 11** — completion report w/ §3.3 onboarding learnings → Kyle ack → batch CLOSED.
-4. **2af50871 alert** — fires 13:00Z (~1h out): psql `discovery_runs` verify run_id=2 `triggered_by='cron_daily'`. Surface + ack.
-5. **B-NEW-43 implementation** — starts after MCE Step 11 closes. Step 3 = Phase 0 (local typecheck mirror clone — zero staging impact). Then Phase 0 also: empty-Postgres db:migrate validation + b-new-42b CI-history note already done.
+B79.0n.MCE CLOSED (Steps 1-11; awaiting Kyle ack). Next:
+1. **B-NEW-43 CI Recovery — Step 3 = Phase 0** is the active work. Phase 0: stand up a local typecheck mirror clone on a non-GDrive disk (one-direction-edit sync protocol per scope §3); validate a clean `npm run db:migrate` against an empty Postgres; b-new-42b CI-history diagnostic already done (§13.3 of pre-audit). Then Phase 1 (TS errors root-cause-first) → Phase 2 (test failures) → Phase 3 (lock CI). Use `db:migrate` NOT `db:push`; remove typecheck `continue-on-error:true` after Phase 1 green.
+2. **2af50871 alert** — fires 13:00Z today: psql `discovery_runs` verify run_id=2 `triggered_by='cron_daily'`. Surface + ack when due.
+3. **616dfcf3 alert** — B79.0n.MCE 24h soak, fires 2026-05-23T12:10Z. Background monitor.
 
 ### Recent commits
-- `aa0564107` — CLAUDE.md §5 #17 xStock 24/5 (remote HEAD; staging deployed at this commit)
-- `c11b15792` / `57dbace3f` — B-NEW-43 pre-audit §13.3 b-new-42b runtime-verify + memory sync
-- `7a892bbdb` / `eb9bfc06b` — B-NEW-43 pre-audit + §13 Step-2 consensus
-- `713fd7ae2` / `c69320545` — B79.0n.MCE Step 5 fix-forward + Step 3-4 impl (the deployed payload)
+- `7c7ca70e3` — B79.0n.MCE Step 10-11 governance close + completion report
+- `aa0564107` — CLAUDE.md §5 #17 xStock 24/5 (staging deployed at this commit)
+- `c11b15792` / `7a892bbdb` / `eb9bfc06b` — B-NEW-43 pre-audit + §13 consensus + §13.3 b-new-42b verify
+- `713fd7ae2` / `c69320545` — B79.0n.MCE deployed payload (Step 5 fix-forward + Step 3-4 impl)
 
 ### Parked items
 - Roadmap sequencing changes (2026-05-21) recorded in POST_AUDIT_ROADMAP.md — regime confidence-chain calibration → Phase 19; crypto_perp/Phase 25 → post-launch; VTS partition → post-launch; daily loss-budget → optional Phase 19.
@@ -74,8 +62,8 @@ Kyle wants momentum — close B79.0n.MCE today, then start B-NEW-43 (neither wai
 ---
 
 ## REQUIRED PRE-READS (next session)
-1. `DawnTraderV3/CLAUDE.md` (§1 + §3.3 + §5 #15-16 + §6.5.0.a + §10.5)
+1. `DawnTraderV3/CLAUDE.md` (§1 + §3.3 + §5 #15-17 + §6.5.0.a + §10.5)
 2. This file
-3. `Claude Comms and Packages/Scope Files/B79_0n_MCE_SCOPE.md` (rev5) + `B79_0n_MCE_PRE_AUDIT.md` (v2) + `Change Lists/B79_0n_MCE_CHANGE_LIST.md`
-4. `Claude Comms and Packages/Scope Files/B_NEW_43_CI_RECOVERY_SCOPE.md` (rev2 — FINALIZED; the batch after B79.0n.MCE closes)
-5. `Claude Comms and Packages/Scope Files/B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md` (rev 4 — §1.5 B72-prior-arc per sub-batch)
+3. `Claude Comms and Packages/Scope Files/B_NEW_43_CI_RECOVERY_SCOPE.md` (rev2 FINALIZED) + `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` (incl. §13 Step-2 consensus + §13.3 b-new-42b verify) — the ACTIVE batch
+4. `Claude Comms and Packages/Scope Files/B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md` (rev 4 — §1.5 B72-prior-arc per sub-batch)
+5. `Claude Comms and Packages/Batch Completion/B79_0n_MCE_COMPLETION_REPORT.md` (closed sub-batch 4 — reference only)
