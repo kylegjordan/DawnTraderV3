@@ -20,13 +20,15 @@
 
 Deployed staging commit `aa0564107`, PM2 #311, migration `2026-05-22-b79-0n-mce-dbs-per-class.sql` applied clean. Removed the silent `assetClass='crypto_spot'` default from 3 MCE/cost-model surface API groups (`calculatePairRegime`, `MCE.computeContext`, `cost-model.ts` ×3) — now REQUIRED `AssetClass` + perp fail-hard exhaustive switch; MCE per-symbol cache key → `${symbol}:${assetClass}`; per-class `dbs_calculation` seed migration (wildcard retired, net +1); `cost-metrics.ts` dead-chain removed; 6 new unit tests. Steps 1-11 done; Langston ACK at Steps 1/2/4/8 ("shipped clean"). Step 7+8 verified — `[B79.0n.MCE][CACHE_REFRESH]` probe fired (crypto_spot=1 + xstock_spot=8). Completion report `B79_0n_MCE_COMPLETION_REPORT.md`, governance close commit `7c7ca70e3` — 14/15 objectives YES, 1 PARTIAL (CI all-4-green = pre-existing B-NEW-43 debt, zero new MCE errors). Governance done: BATCH_CATALOG, PHASE_HISTORY, SIM, SYSTEM_MANUAL (wildcard-retirement pattern + 3-cache-layer model), RUNNING_ISSUES (#133 orphan `cost_model.default_avg_return` + #134 b72-warmup prefetch cleanup), ASSET_CLASS_ONBOARDING_WORKFLOW (Step 4.10). 24h soak alert `616dfcf3` fires 2026-05-23T12:10Z.
 
-### B-NEW-43 CI Recovery — NOW THE ACTIVE BATCH. Step 2 pre-audit DONE + Langston consensus. Implementation (Step 3 = Phase 0) starts next. Runs BEFORE B79.0n sub-batch #5.
+### B-NEW-43 CI Recovery — ACTIVE BATCH, IN IMPLEMENTATION (Step 3, Phase 0). Scope rev3 (Phase 4 alert-fix folded in). Runs BEFORE B79.0n sub-batch #5.
 
-Standalone CI-health batch. Scope rev2 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`ad2b37018`); pre-audit `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` (`eb9bfc06b` + §13 Step-2-consensus addendum `7a892bbdb`). **CI baseline (run 26255691977):** 696 TS errors (TS2339 220 / TS2345 114 / TS2304 87; routes.ts 213, storage.ts 59 — 40 of which = one missing `TradingMode` import) + 98 test failures (≈54 module-not-warm, ≈31 assertion, ≈9 DB-conn, 5 stale-knob-mock, 1 vi.mock-hoist). 4 phases P0-P3. Kyle LOCKED: one batch, runs before sub-batch #5, CI Postgres approved.
+Standalone CI-health batch. Scope rev3 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`17abbb3e3`); pre-audit `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` (`eb9bfc06b` + §13 Step-2-consensus addendum `7a892bbdb`). **CI baseline (run 26255691977):** 696 TS errors (TS2339 220 / TS2345 114 / TS2304 87; routes.ts 213, storage.ts 59 — 40 of which = one missing `TradingMode` import) + 98 test failures (≈54 module-not-warm, ≈31 assertion, ≈9 DB-conn, 5 stale-knob-mock, 1 vi.mock-hoist). 5 phases P0-P4 (P4 = alert-notification fix, added rev3). Kyle LOCKED: one batch, runs before sub-batch #5, CI Postgres approved.
 
 **Step 2 pre-audit — 3 corrections to scope, all Langston-ACK'd:** (1) `db:push` is BROKEN on this schema (drizzle-kit PG-ARRAY introspection bug — the documented reason `db-migrate.ts` exists) — Phase 2.2 MUST use `npm run db:migrate` (also the only path that seeds the `module_constants` rows the 54 not-warm tests need); (2) the CI typecheck job has `continue-on-error: true` — THE silent-regression mechanism — must be removed after Phase 1 reaches green; (3) ~80-130 distinct fixes (above scoped 40-70), effort ~5.25-7d, stays one batch. Phase 0 gains 2 tasks: empty-Postgres `db:migrate` validation + the b-new-42b diagnostic.
 
 **b-new-42b cross-batch regression — diagnosed + runtime-VERIFIED (Kyle directed verify-now):** price-discontinuity-detector test passed 11/11 at ship (2026-05-17, run 26001413225), now fails 11/11; detector+test byte-identical. Cause = commit `230348507` (B79.0n.UNIVERSE-DISCOVERY) made `XSTOCK_SPOT_SYMBOLS` boot-populated (empty at module load); unit tests run no boot → detector early-returns for all xStocks. **Runtime verified SAFE:** universe init is a hard boot gate in `index.ts:55-96` (top-level await + `process.exit(1)` on total fallback failure) completing before the Express app; all 9 `XSTOCK_SPOT_SYMBOLS` code usages are call-time (zero module-load captures). No fast-follow runtime batch needed. Only residual = test-coverage gap → B-NEW-43 Phase 2 (harness seeds universe via `_replaceXstockUniverse()` in beforeEach). Phase 2: b-new-42b's 11 + ~4 b79-0f failures = ONE root cause.
+
+**rev3 — Phase 4 added (Kyle directive 2026-05-22):** fold in the system-alerts active-push fix (RUNNING_ISSUES #135). Phase 4 = the SOLE runtime change in B-NEW-43 (the `fire-due` dispatcher gains Telegram-post + Langston-invoke on alert promotion); runs strictly LAST; own pre-audit addendum + Step 4 + staging deploy + Step 7/8 verify. Scope rev3 dispatched to Langston for ACK (non-blocking — Phases 0-3 proceed). **Phase 0 IN PROGRESS:** mirror clone to `C:/dev/DawnTraderV3` + `npm install` running in background — proves npm install works off the GDrive FUSE mount; then validate empty-Postgres `db:migrate`, document the runbook in CLAUDE.md.
 
 ### Active alerts (§10.5)
 - `c82c256c` — B-NEW-35 7-day dedup soak 2026-05-27. No action.
@@ -40,16 +42,18 @@ Standalone CI-health batch. Scope rev2 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`ad2b370
 
 ## NEXT IMMEDIATE STEPS (2026-05-22)
 
-B79.0n.MCE CLOSED (Steps 1-11; awaiting Kyle ack). Next:
-1. **B-NEW-43 CI Recovery — Step 3 = Phase 0** is the active work. Phase 0: stand up a local typecheck mirror clone on a non-GDrive disk (one-direction-edit sync protocol per scope §3); validate a clean `npm run db:migrate` against an empty Postgres; b-new-42b CI-history diagnostic already done (§13.3 of pre-audit). Then Phase 1 (TS errors root-cause-first) → Phase 2 (test failures) → Phase 3 (lock CI). Use `db:migrate` NOT `db:push`; remove typecheck `continue-on-error:true` after Phase 1 green.
-2. **2af50871 alert** — fires 13:00Z today: psql `discovery_runs` verify run_id=2 `triggered_by='cron_daily'`. Surface + ack when due.
-3. **616dfcf3 alert** — B79.0n.MCE 24h soak, fires 2026-05-23T12:10Z. Background monitor.
+B79.0n.MCE CLOSED + Kyle-acknowledged. B-NEW-43 is the active batch. Next:
+1. **B-NEW-43 Phase 0 — IN PROGRESS.** Mirror clone to `C:/dev/DawnTraderV3` + `npm install` running (background task). When done: verify `npx tsc --noEmit` runs; validate a clean `npm run db:migrate` against an empty Postgres; document the "Local verification environment" runbook in CLAUDE.md (one-direction-edit sync protocol per scope §3). Then Phase 1 (TS errors root-cause-first) → Phase 2 (test failures) → Phase 3 (lock CI) → Phase 4 (alert active-push fix, rev3). Use `db:migrate` NOT `db:push`; remove typecheck `continue-on-error:true` after Phase 1 green.
+2. **Langston rev3 ACK** — scope rev3 (Phase 4 addition) dispatched; awaiting his ACK (non-blocking for Phases 0-3).
+3. **2af50871 alert** — fires 13:00Z today: psql `discovery_runs` verify run_id=2 `triggered_by='cron_daily'`. Surface + ack when due.
+4. **616dfcf3 alert** — B79.0n.MCE 24h soak, fires 2026-05-23T12:10Z. Background monitor.
 
 ### Recent commits
+- `17abbb3e3` — B-NEW-43 scope rev3 (Phase 4 alert-notification fix folded in)
+- `15f6fcafc` — RUNNING_ISSUES #135 (system-alerts no active push)
 - `7c7ca70e3` — B79.0n.MCE Step 10-11 governance close + completion report
 - `aa0564107` — CLAUDE.md §5 #17 xStock 24/5 (staging deployed at this commit)
-- `c11b15792` / `7a892bbdb` / `eb9bfc06b` — B-NEW-43 pre-audit + §13 consensus + §13.3 b-new-42b verify
-- `713fd7ae2` / `c69320545` — B79.0n.MCE deployed payload (Step 5 fix-forward + Step 3-4 impl)
+- `eb9bfc06b` / `7a892bbdb` — B-NEW-43 pre-audit + §13 consensus + §13.3 b-new-42b verify
 
 ### Parked items
 - Roadmap sequencing changes (2026-05-21) recorded in POST_AUDIT_ROADMAP.md — regime confidence-chain calibration → Phase 19; crypto_perp/Phase 25 → post-launch; VTS partition → post-launch; daily loss-budget → optional Phase 19.
