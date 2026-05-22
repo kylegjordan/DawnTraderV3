@@ -1,7 +1,12 @@
 import { normalizeToInternalSymbol } from './markets/kraken-symbol-resolver';
 // B79.0n.STORAGE (2026-05-21): AssetClass type for REQUIRED-assetClass storage API.
 import type { AssetClass } from '../shared/asset-classes';
-import { 
+// B-NEW-43 (2026-05-22): TradingMode ('paper' | 'live') — was used 40× in this file
+// with no import (40 of storage.ts's 59 TS2304 errors). Imported from the lib-level
+// event-bus module. NOTE: TradingMode is duplicate-defined in 6+ files — type-dedup
+// debt tracked separately; B-NEW-43 fixes the missing import, not the duplication.
+import type { TradingMode } from './lib/event-bus';
+import {
   users, 
   tradingSettings,
   guardrails,

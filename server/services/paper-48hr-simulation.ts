@@ -300,7 +300,7 @@ export class Paper48HrSimulation {
   private async generateAIAnalysis(): Promise<void> {
     try {
       // Get all trades from the simulation
-      const allTrades = await storage.getPaperSimTrades(this.userId);
+      const allTrades = await storage.getPaperSimTrades('paper');
       
       // Calculate behavioral metrics
       const analysis = {
@@ -331,8 +331,8 @@ export class Paper48HrSimulation {
 
   private async getCurrentSummary(): Promise<SimulationSummary> {
     // Get all trades for this user in paper mode
-    const allTrades = await storage.getPaperSimTrades(this.userId);
-    const openPositions = await storage.getPaperSimOpenPositions(this.userId);
+    const allTrades = await storage.getPaperSimTrades('paper');
+    const openPositions = await storage.getPaperSimOpenPositions('paper');
 
     // Calculate metrics
     const closedTrades = allTrades.filter((t: any) => t.status === 'closed');

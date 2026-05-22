@@ -466,8 +466,8 @@ export class PaperPortfolioManager {
   }
 
   async getPortfolioMetrics(): Promise<PortfolioMetrics> {
-    const stats = await storage.getPaperSimStats(this.userId);
-    const trades = await storage.getPaperSimTrades(this.userId, { limit: 1000, closedOnly: true });
+    const stats = await storage.getPaperSimStats(this.mode);
+    const trades = await storage.getPaperSimTrades(this.mode, { limit: 1000, closedOnly: true });
 
     // Calculate max drawdown
     const maxDrawdown = this.calculateMaxDrawdown(trades);
@@ -504,9 +504,9 @@ export class PaperPortfolioManager {
   }
 
   async checkPortfolioHealth(): Promise<PortfolioHealth> {
-    const stats = await storage.getPaperSimStats(this.userId);
-    const trades = await storage.getPaperSimTrades(this.userId, { limit: 1000, closedOnly: true });
-    const openPositions = await storage.getPaperSimOpenPositions(this.userId);
+    const stats = await storage.getPaperSimStats(this.mode);
+    const trades = await storage.getPaperSimTrades(this.mode, { limit: 1000, closedOnly: true });
+    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
 
     const issues: string[] = [];
     let status: 'healthy' | 'warning' | 'critical' = 'healthy';
@@ -560,14 +560,14 @@ export class PaperPortfolioManager {
   }
 
   async closeAllPositions(reason: string = 'manual_close'): Promise<void> {
-    const openPositions = await storage.getPaperSimOpenPositions(this.userId);
+    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
     
     console.log(`[PaperPortfolio:${this.userId}] Closing all ${openPositions.length} positions - ${reason}`);
 
     for (const position of openPositions) {
       try {
         // Find the corresponding trade
-        const trades = await storage.getPaperSimTradesBySymbol(this.userId, position.symbol);
+        const trades = await storage.getPaperSimTradesBySymbol(this.mode, position.symbol);
         const trade = trades.find(t => t.openedAt && !t.closedAt);
         
         if (trade) {
