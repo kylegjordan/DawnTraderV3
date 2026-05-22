@@ -503,6 +503,25 @@ ssh root@188.245.193.8 "su - deploy -c 'pm2 list'"
 ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d "{\"username\":\"testuser123\",\"password\":\"SecurePass123!\"}" | python3 -c "import json,sys; print(json.load(sys.stdin)[\"accessToken\"])") && curl -s -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/vts/filter-diagnostics'
 ```
 
+### 7.1 Local verification environment — the B-NEW-43 mirror clone (2026-05-22)
+
+**Why it exists.** The canonical working copy lives on the Google Drive FUSE mount (`G:\My Drive\...\DawnTraderV3`). `npm install` cannot complete there — npm's many-small-files write pattern triggers `EBADF` / `TAR_ENTRY_ERROR` on the FUSE layer, so `node_modules` is permanently incomplete and `npx tsc` produces ~18k cascade errors from missing type defs (unusable). B-NEW-43 Phase 0 established a second clone on a local NTFS disk where `npm install` works.
+
+**The mirror:** `C:\dev\DawnTraderV3` — a `--depth 1 --single-branch --branch migration/aws-supabase` shallow clone (a full clone fails with `early EOF` — the repo carries years of archives; shallow is small + reliable and still supports commit + push fine). `npm install` there completes in ~26 s; `npx tsc --noEmit` runs to completion and produces the authoritative error set (verified 2026-05-22: exactly 696 errors — identical to CI run 26255691977). `npx vitest` (3.2.4) resolves and runs.
+
+**Commands (run from `C:\dev\DawnTraderV3`):**
+- `npx tsc --noEmit` — local typecheck, ~1-2 min vs a 3-4 min CI round-trip.
+- `npx vitest run` — local test suite.
+- `git pull origin migration/aws-supabase` — refresh the mirror to current before a work session.
+
+**Sync protocol — ONE-DIRECTION-EDIT discipline (HARD RULE, split-brain prevention).** Two working copies is a drift hazard. The rule:
+- **Code edits land in the `C:\dev` mirror ONLY.** Push to GitHub from the mirror.
+- **The GDrive clone (`G:\My Drive\...`) is refreshed via `git pull` only** — never edited for code. It stays canonical for governance-doc authoring + Langston's FUSE-mount visibility.
+- **No bidirectional sync** (rsync etc.) — that is the classic split-brain footgun. Git is the single sync channel: mirror → push → GDrive clone pulls.
+- Governance docs (scope / pre-audit / completion reports, `1-system-manual/`, `MEMORY.md`) may still be authored in the GDrive clone — they don't need `tsc`. **Code** (`server/`, `client/`, `shared/`, `drizzle/`, test files) is **mirror-only**.
+
+**Standing fixture.** The mirror is not torn down at B-NEW-43 close — it remains the local typecheck/test environment for every future batch. Keep it refreshed via `git pull`.
+
 ---
 
 ## 8. Langston Operations Reference (post-OpenClaw, 2026-05-06)
