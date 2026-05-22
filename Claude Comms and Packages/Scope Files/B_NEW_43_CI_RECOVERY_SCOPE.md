@@ -1,4 +1,6 @@
-# B-NEW-43 — CI Recovery — Scope (rev2 — FINALIZED, Langston Step 1 ACK)
+# B-NEW-43 — CI Recovery — Scope (rev3 — Phase 4 alert-notification fix folded in per Kyle directive)
+
+> **rev3 (2026-05-22):** Kyle directive — fold the system-alerts active-push notification fix (RUNNING_ISSUES #135) into B-NEW-43 as a new **Phase 4**. Rationale (Kyle's call): small, self-contained ops-hardening; avoids a separate single-item batch; thematically adjacent to Phase 3 (both prevent silent failures going unnoticed). **Material implication surfaced to Kyle:** B-NEW-43 is no longer purely type-and-test-only — Phase 4 IS a runtime change (the system-alerts dispatcher gains Telegram-post + Langston-invoke behavior). §7 amended to carve out Phase 4; Phase 4 gets its own staging deploy + Step 4/7/8 verification + a focused pre-audit addendum authored when Phase 4 is reached. Phases 0-3 (the CI work) are unchanged and unaffected — Phase 4 runs strictly last so it cannot entangle them. Added: objective 6 (§2), Phase 4 (§3), §6(A)/(B) updated, §7 amended. Awaiting Langston ACK of this addition.
 
 > **rev2 (2026-05-21):** Langston Step 1 ACK received — all 5 §8 questions concur, all 3 Kyle decisions sound, 6 code-level concerns folded in below (scope-tightening, not approach-changing — Langston: "fold them into the Step 2 pre-audit checklist and we're aligned"). Scope is FINALIZED. Folded: (1) routes.ts/storage.ts commit-chunking discipline → §3 Phase 1; (2) module-warming harness mirrors-production-not-hides rule → §3 Phase 2.1; (3) genuine-assertion-tail per-failure individual surfacing → §3 Phase 2 + §4; (4) "batch adding a required knob updates the canonical test fixture" → §3 Phase 3; (5) CI-workflow YAML own Step-4 review → §3 Phase 2.2; (6) "fake-green audit" git-grep at phase boundaries → §4. Plus Q2 local-mirror sync protocol → §3 Phase 0; Q3 CI database schema bootstrap → §3 Phase 2.2.
 
@@ -83,6 +85,7 @@ The working clone lives on a Google Drive FUSE mount (`G:\My Drive\...`). `npm i
 | 3 | CI Test Suite → GREEN | CI run shows Test Suite ✓ |
 | 4 | CI cannot silently regress to red unnoticed again | A per-batch CI-status confirmation step is added to the canonical workflow (Step 5) + documented in CLAUDE.md |
 | 5 | CLAUDE.md §7 "ALL 4 GREEN" claim corrected to reflect reality + the recovery | §7 updated; PHASE_HISTORY / BATCH_CATALOG record the recovery |
+| 6 | System-alerts queue actively pushes when an alert fires (RUNNING_ISSUES #135) — no longer relies solely on the §10.5 per-turn pull check | The `fire-due` dispatcher posts each newly-promoted alert to Telegram topic 21 + invokes Langston; verified by a test alert firing → Telegram post observed + a Langston session running |
 
 ---
 
@@ -140,6 +143,16 @@ Add a per-batch CI-status confirmation to the canonical Step 5 workflow + a CLAU
 
 **Required-knob / test-fixture drift rule (Langston concern 4).** The `sector_coverage_floor` failures exist because B-PHASE-A2 added a required `module_constants` knob but did not update the canonical test fixture in the same batch. Phase 3 adds a standing rule to CLAUDE.md governance: **when a batch adds a required `module_constants` knob (or any required config key the test harness reads), the SAME batch updates the canonical test fixture / harness warm-list.** This is folded into the per-batch CI-status confirmation step so the drift cannot recur silently.
 
+### Phase 4 — System-alerts active-push notification (folded in rev3, Kyle directive 2026-05-22)
+
+**Runs LAST, strictly after Phase 3.** Closes RUNNING_ISSUES #135. The system-alerts queue is currently passive — the `fire-due` dispatcher cron only flips a scheduled alert to `state=active` when `triggers_at` passes; it posts nothing and invokes no one. The sole surfacing path is the CLAUDE.md §10.5 per-turn pull check, which has two coverage gaps: (a) it only runs while a CC session is actively in progress; (b) Langston — a non-persistent process invoked per `claude -p` — cannot run it autonomously at all.
+
+**Fix:** when `fire-due` promotes an alert to active, it additionally (1) posts the alert (title + body, plain text) to Telegram topic 21 via `cc-comms-bridge` so Kyle sees it, and (2) invokes Langston via SSH+`claude -p` with the alert body so a Langston session actually runs and performs the §10.5 surfacing. The push is idempotent — an already-pushed alert is not re-pushed (guard on a `pushed_at` field or equivalent on the alert record).
+
+**This phase IS a runtime change** (unlike Phases 0-3 — see §7). It therefore: gets a focused **pre-audit addendum** authored when Phase 4 begins (blast radius: the `fire-due` dispatcher + its cron wrapper, `cc-comms-bridge`, the Langston SSH-invoke path, the alert-record schema if a `pushed_at` guard field is added); gets its **own Step 4 review**; lands in its **own commit(s)**; and requires a **staging deploy** (the dispatcher runs on staging) plus Step 7/8 verification. Effort ~0.5-1 day.
+
+**Verification:** schedule a near-future test alert; on fire, confirm (a) it posts to Telegram topic 21 and (b) a Langston session runs and surfaces it; then remove/ack the test alert. Langston's Step 8 independently re-confirms.
+
 ---
 
 ## §4 — Risk discipline (NON-NEGOTIABLE)
@@ -167,7 +180,7 @@ Recommended: **B-NEW-43 runs BEFORE the next B79.0n sub-batch (#5).** Rationale 
 
 **Kyle decisions LOCKED 2026-05-21:**
 
-(A) **Batch size — ONE batch with internal Phases 0-3.** ✅ LOCKED. The phases are tightly coupled (green TS is the precondition for meaningful green tests) and a single completion report keeps the recovery coherent. If the effort estimate after Phase 0 calibration exceeds ~6 days, CC re-surfaces a split proposal to Kyle — otherwise it stays one batch.
+(A) **Batch size — ONE batch with internal Phases 0-4** (Phase 4 added rev3 per Kyle directive). ✅ LOCKED. Phases 0-3 are tightly coupled (green TS is the precondition for meaningful green tests) and a single completion report keeps the recovery coherent. Phase 4 (alert-notification fix) is a deliberately-isolated last phase — independent of the CI work, runs strictly after Phase 3. If the effort estimate after Phase 0 calibration exceeds ~8 days, CC re-surfaces a split proposal to Kyle — otherwise it stays one batch.
 
 (C) **CI PostgreSQL service — APPROVED.** ✅ LOCKED. A `postgres` service container is added to the CI workflow so the ~8 DB-dependent integration tests run rather than being skipped. Requires a `.github/workflows/` CI-workflow file change (in scope for Phase 2).
 
@@ -175,7 +188,7 @@ Recommended: **B-NEW-43 runs BEFORE the next B79.0n sub-batch (#5).** Rationale 
 
 **Standing items (not decisions — recorded for the record):**
 
-(B) **Effort estimate.** Honest range: **3-6 focused days.** Phase 0 ~0.5d; Phase 1 ~1.5-3d (routes.ts is the wildcard); Phase 2 ~1-1.5d; Phase 3 ~0.5d. Firms up after Phase 0 + the first TS2339 cluster fix calibrates the per-cluster rate. If it trends past ~6d, CC re-surfaces the split option per (A).
+(B) **Effort estimate.** Honest range (pre-audit-revised §11 + Phase 4): **~5.75-8 focused days.** Phase 0 ~0.75-1d; Phase 1 ~2.5-3.5d (routes.ts is the wildcard); Phase 2 ~1.5-2d; Phase 3 ~0.5d; Phase 4 ~0.5-1d. Firms up after Phase 0 + the first TS2339 cluster fix calibrates the per-cluster rate. If it trends past ~8d, CC re-surfaces the split option per (A).
 
 (D) **Green target.** Aim for FULL green on both checks. If a genuine hard residual emerges it gets a tracked RUNNING_ISSUES entry with justification — but the default target is zero. NOT `@ts-expect-error`-faked.
 
@@ -186,7 +199,7 @@ Recommended: **B-NEW-43 runs BEFORE the next B79.0n sub-batch (#5).** Rationale 
 ## §7 — What this batch does NOT do
 
 - Does not touch asset-class / B79.0n functionality.
-- Does not change runtime behavior — type fixes + test-harness fixes only. Any change that would alter runtime behavior is out of scope and gets flagged to Kyle.
+- **Phases 0-3 do not change runtime behavior** — type fixes + test-harness fixes + CI-config only. Any runtime-behavior change within Phases 0-3 is out of scope and gets flagged to Kyle. **Phase 4 is the sole, deliberate exception** (folded in rev3): it is an isolated runtime change to the system-alerts dispatcher, with its own pre-audit addendum, Step 4 review, staging deploy, and verification — kept strictly last so it cannot entangle the Phases 0-3 type/test work.
 - Does not rewrite `routes.ts` architecture — it fixes the type errors in place. A routes.ts structural refactor, if warranted, is a separate future batch.
 
 ---
