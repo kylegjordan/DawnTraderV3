@@ -152,6 +152,12 @@ export interface AuthenticatedRequest extends Request {
     isAdmin?: boolean;
     role?: UserRole;
     permissions?: Permission[];
+    // B-NEW-43 chunk 4 (2026-05-22): the authenticated user's trading mode.
+    // Populated in authenticateToken from the DB user row (always set there,
+    // hence required). ~20 routes read req.user.tradingMode; before this it
+    // was never assigned (TS2339 + a latent always-'paper' bug — see the
+    // B-NEW-43 chunk-4 change list).
+    tradingMode: 'live' | 'paper';
   };
   mode?: 'live' | 'paper';
 }
@@ -194,12 +200,16 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
     // Always recompute permissions from current DB role, ignore stale token permissions
     const permissions = getPermissionsForRole(userRole as UserRole);
     
-    req.user = { 
-      id: decoded.id, 
+    req.user = {
+      id: decoded.id,
       username: decoded.username,
       isAdmin: user?.isAdmin || false,
       role: userRole,
-      permissions
+      permissions,
+      // B-NEW-43 chunk 4 (2026-05-22): populate tradingMode from the DB user row
+      // (fetched above). It was never set before — ~20 routes read
+      // req.user.tradingMode and silently always resolved to 'paper'.
+      tradingMode: user.tradingMode ?? 'paper',
     };
     next();
   } catch (error) {
