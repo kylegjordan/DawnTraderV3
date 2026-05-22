@@ -14,13 +14,13 @@
 
 ---
 
-## CURRENT STATE (2026-05-22 — B79.0n.MCE CLOSED (Steps 1-11); B-NEW-43 CI Recovery is the next active batch)
+## CURRENT STATE (2026-05-22 — B79.0n.MCE CLOSED + Kyle-acknowledged; B-NEW-43 CI Recovery ACTIVE — Phase 1 in progress, chunks 1-2 done)
 
-### B79.0n.MCE — CLOSED 2026-05-22 (sub-batch 4 of 18, umbrella v4). Pending only Kyle's formal acknowledgment.
+### B79.0n.MCE — CLOSED + Kyle-acknowledged 2026-05-22 (sub-batch 4 of 18, umbrella v4). Fully done.
 
 Deployed staging commit `aa0564107`, PM2 #311, migration `2026-05-22-b79-0n-mce-dbs-per-class.sql` applied clean. Removed the silent `assetClass='crypto_spot'` default from 3 MCE/cost-model surface API groups (`calculatePairRegime`, `MCE.computeContext`, `cost-model.ts` ×3) — now REQUIRED `AssetClass` + perp fail-hard exhaustive switch; MCE per-symbol cache key → `${symbol}:${assetClass}`; per-class `dbs_calculation` seed migration (wildcard retired, net +1); `cost-metrics.ts` dead-chain removed; 6 new unit tests. Steps 1-11 done; Langston ACK at Steps 1/2/4/8 ("shipped clean"). Step 7+8 verified — `[B79.0n.MCE][CACHE_REFRESH]` probe fired (crypto_spot=1 + xstock_spot=8). Completion report `B79_0n_MCE_COMPLETION_REPORT.md`, governance close commit `7c7ca70e3` — 14/15 objectives YES, 1 PARTIAL (CI all-4-green = pre-existing B-NEW-43 debt, zero new MCE errors). Governance done: BATCH_CATALOG, PHASE_HISTORY, SIM, SYSTEM_MANUAL (wildcard-retirement pattern + 3-cache-layer model), RUNNING_ISSUES (#133 orphan `cost_model.default_avg_return` + #134 b72-warmup prefetch cleanup), ASSET_CLASS_ONBOARDING_WORKFLOW (Step 4.10). 24h soak alert `616dfcf3` fires 2026-05-23T12:10Z.
 
-### B-NEW-43 CI Recovery — ACTIVE BATCH, IN IMPLEMENTATION (Step 3, Phase 0). Scope rev3 (Phase 4 alert-fix folded in). Runs BEFORE B79.0n sub-batch #5.
+### B-NEW-43 CI Recovery — ACTIVE BATCH, IN IMPLEMENTATION — Phase 1 (chunks 1-2 done, local tsc 696→646). Scope rev3 (Phase 4 alert-fix folded in). Runs BEFORE B79.0n sub-batch #5.
 
 Standalone CI-health batch. Scope rev3 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`17abbb3e3`); pre-audit `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` (`eb9bfc06b` + §13 Step-2-consensus addendum `7a892bbdb`). **CI baseline (run 26255691977):** 696 TS errors (TS2339 220 / TS2345 114 / TS2304 87; routes.ts 213, storage.ts 59 — 40 of which = one missing `TradingMode` import) + 98 test failures (≈54 module-not-warm, ≈31 assertion, ≈9 DB-conn, 5 stale-knob-mock, 1 vi.mock-hoist). 5 phases P0-P4 (P4 = alert-notification fix, added rev3). Kyle LOCKED: one batch, runs before sub-batch #5, CI Postgres approved.
 
@@ -49,18 +49,18 @@ Standalone CI-health batch. Scope rev3 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`17abbb3
 ## NEXT IMMEDIATE STEPS (2026-05-22)
 
 B-NEW-43 Phase 1: chunk 1 + chunk 2 DONE + Langston-ACK'd + pushed — local tsc now **646** (was 696). **Cadence (Kyle directive 2026-05-22): per chunk — fix → Langston Step 4 → report to Kyle → Kyle says go/no-go on the next chunk. Do NOT report mid-chunk.** Next:
-1. **AWAITING Kyle's go for chunk 3** + **AWAITING Kyle's clarification of "delete and remove them"** — Kyle said "Please delete and remove them and continue"; "them" is ambiguous (the AI-Opps endpoints, already deleted in chunk 2 — vs the 2 legacy files paper-48hr-simulation/paper-portfolio-manager, which carry import blast-radius). Asked Kyle which. Do NOT delete anything until clarified.
+1. **AWAITING Kyle's go for chunk 3.** (The 2026-05-22 "delete and remove them" was resolved — Kyle confirmed it was confusion from an option-prompt; nothing further to delete.)
 2. **Chunk 3+ when greenlit** (scope §3 Phase 1): the `settings` cluster (14, per-case investigation) + signal-orchestrator family-map block (incl. undeclared `fx5Survivors`/`symbolFamilies`) + `OpenAI` legacy dead-code + the remaining TS2304 singletons → TS2339 type-definition cluster (~15-22, incl. `req.user` narrow type = 20) → TS2345 → routes.ts deep-clean → long tail. Each chunk: fix on mirror → local tsc verify → commit → Langston Step 4 → push → report. After Phase 1 green: remove typecheck `continue-on-error:true` from ci.yml. Then Phase 2 (`db:migrate` NOT `db:push`) → Phase 3 (lock CI) → Phase 4 (alert active-push fix).
 3. **616dfcf3 alert** — B79.0n.MCE 24h soak, fires 2026-05-23T12:10Z. Background monitor.
 
 **Mirror workflow:** code on `C:/dev/DawnTraderV3` (identity configured: kylegjordan); before each push `git checkout -- package-lock.json` (npm-install dirties it) then `git pull --rebase`; push; GDrive clone is governance-docs + `git pull`-only.
 
-### Recent commits
-- `17abbb3e3` — B-NEW-43 scope rev3 (Phase 4 alert-notification fix folded in)
-- `15f6fcafc` — RUNNING_ISSUES #135 (system-alerts no active push)
+### Recent commits (origin HEAD `d4c23f126`)
+- `bf78c46` — B-NEW-43 Phase 1 chunk 2 (deleted 5 dead AI-Opps routes + 3 missing imports)
+- `387b2d3` — B-NEW-43 Phase 1 chunk 1 (TS2304 TradingMode cluster + userId-bug fix)
+- `42f220563` — CLAUDE.md §7.1 local-mirror runbook (Phase 0)
 - `7c7ca70e3` — B79.0n.MCE Step 10-11 governance close + completion report
-- `aa0564107` — CLAUDE.md §5 #17 xStock 24/5 (staging deployed at this commit)
-- `eb9bfc06b` / `7a892bbdb` — B-NEW-43 pre-audit + §13 consensus + §13.3 b-new-42b verify
+- `17abbb3e3` — B-NEW-43 scope rev3 (Phase 4 alert-notification fix folded in)
 
 ### Parked items
 - Roadmap sequencing changes (2026-05-21) recorded in POST_AUDIT_ROADMAP.md — regime confidence-chain calibration → Phase 19; crypto_perp/Phase 25 → post-launch; VTS partition → post-launch; daily loss-budget → optional Phase 19.
@@ -75,6 +75,6 @@ B-NEW-43 Phase 1: chunk 1 + chunk 2 DONE + Langston-ACK'd + pushed — local tsc
 ## REQUIRED PRE-READS (next session)
 1. `DawnTraderV3/CLAUDE.md` (§1 + §3.3 + §5 #15-17 + §6.5.0.a + §10.5)
 2. This file
-3. `Claude Comms and Packages/Scope Files/B_NEW_43_CI_RECOVERY_SCOPE.md` (rev2 FINALIZED) + `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` (incl. §13 Step-2 consensus + §13.3 b-new-42b verify) — the ACTIVE batch
+3. `Claude Comms and Packages/Scope Files/B_NEW_43_CI_RECOVERY_SCOPE.md` (rev3 — Phase 4 folded in) + `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` (incl. §13 Step-2 consensus + §13.3 b-new-42b verify) — the ACTIVE batch
 4. `Claude Comms and Packages/Scope Files/B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md` (rev 4 — §1.5 B72-prior-arc per sub-batch)
 5. `Claude Comms and Packages/Batch Completion/B79_0n_MCE_COMPLETION_REPORT.md` (closed sub-batch 4 — reference only)
