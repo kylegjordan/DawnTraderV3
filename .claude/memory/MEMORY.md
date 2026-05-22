@@ -28,24 +28,25 @@ Standalone CI-health batch. Scope rev3 `B_NEW_43_CI_RECOVERY_SCOPE.md` (`17abbb3
 
 **b-new-42b cross-batch regression — diagnosed + runtime-VERIFIED (Kyle directed verify-now):** price-discontinuity-detector test passed 11/11 at ship (2026-05-17, run 26001413225), now fails 11/11; detector+test byte-identical. Cause = commit `230348507` (B79.0n.UNIVERSE-DISCOVERY) made `XSTOCK_SPOT_SYMBOLS` boot-populated (empty at module load); unit tests run no boot → detector early-returns for all xStocks. **Runtime verified SAFE:** universe init is a hard boot gate in `index.ts:55-96` (top-level await + `process.exit(1)` on total fallback failure) completing before the Express app; all 9 `XSTOCK_SPOT_SYMBOLS` code usages are call-time (zero module-load captures). No fast-follow runtime batch needed. Only residual = test-coverage gap → B-NEW-43 Phase 2 (harness seeds universe via `_replaceXstockUniverse()` in beforeEach). Phase 2: b-new-42b's 11 + ~4 b79-0f failures = ONE root cause.
 
-**rev3 — Phase 4 added (Kyle directive 2026-05-22):** fold in the system-alerts active-push fix (RUNNING_ISSUES #135). Phase 4 = the SOLE runtime change in B-NEW-43 (the `fire-due` dispatcher gains Telegram-post + Langston-invoke on alert promotion); runs strictly LAST; own pre-audit addendum + Step 4 + staging deploy + Step 7/8 verify. Scope rev3 dispatched to Langston for ACK (non-blocking — Phases 0-3 proceed). **Phase 0 IN PROGRESS:** mirror clone to `C:/dev/DawnTraderV3` + `npm install` running in background — proves npm install works off the GDrive FUSE mount; then validate empty-Postgres `db:migrate`, document the runbook in CLAUDE.md.
+**rev3 — Phase 4 added (Kyle directive 2026-05-22):** fold in the system-alerts active-push fix (RUNNING_ISSUES #135). Phase 4 = the SOLE runtime change in B-NEW-43 (the `fire-due` dispatcher gains Telegram-post + Langston-invoke on alert promotion); runs strictly LAST; own pre-audit addendum + Step 4 + staging deploy + Step 7/8 verify. **Langston ACK'd rev3** — 8 concerns recorded for the Phase-4 pre-audit addendum + a §5 escape clause added (if Phases 0-3 close green but Phase 4 snags, B-NEW-43 closes on the CI work + Phase 4 splits to a follow-up).
+
+**Phase 0 COMPLETE (2026-05-22):** mirror clone at `C:/dev/DawnTraderV3` (shallow `--depth 1` — full clone failed `early EOF` on the large repo); `npm install` works there (26s, 658 pkgs) — proven off-FUSE; `npx tsc --noEmit` runs → exactly 696 errors (= CI run 26255691977, authoritative); vitest 3.2.4 available; CLAUDE.md §7.1 runbook + ONE-DIRECTION-EDIT sync protocol documented (commit `42f220563`). **Empty-Postgres `db:migrate` validation (pre-audit Q1) → moved to Phase 2.2** — no local Docker/Postgres on the dev machine; the CI Postgres added in Phase 2.2 IS the environment, and its `db:migrate` step succeeding is that validation. **Code edits now land in the `C:/dev` mirror ONLY; push from there; GDrive clone is `git pull`-only.**
 
 ### Active alerts (§10.5)
 - `c82c256c` — B-NEW-35 7-day dedup soak 2026-05-27. No action.
 - `b83b1e4b` — B-NEW-40 14-day soak 2026-05-31. No action.
 - `283bd74e` — B-NEW-36 weekend_shutdown timer verify 2026-05-23 00:05Z. No action.
 - `d4b2e590` — ✅ ACK'd 2026-05-22 — UD 24h crypto regression check ran: NO regression (FX5 pool healthy ~200-230; signal eval volume up; VTS crypto rate elevated not depressed — daily counts span 20-190 so the −8.6% window-delta is noise per §13). No RUNNING_ISSUES filed.
-- `2af50871` — **B79.0n.UD 06:00Z cron self-fire review — fires 2026-05-22T13:00:00Z (TODAY).** psql `discovery_runs ORDER BY run_id DESC LIMIT 3` — verify run_id=2 `triggered_by='cron_daily'`.
+- `2af50871` — ✅ ACK'd 2026-05-22 — UD 06:00Z cron self-fire verified: discovery_runs run_id=2 `triggered_by=cron_daily` started 06:00:00Z, duration 605797ms, 479 symbols, no error_log; universe stable (489 active / 15 sectors). All-green.
 - `616dfcf3` — **B79.0n.MCE 24h post-deploy soak — fires 2026-05-23T12:10Z.** Grep error.log for B79.0n.MCE fail-hard throws (expect zero); confirm CACHE_REFRESH still firing; crypto regression vs baseline. No action until then.
 
 ---
 
 ## NEXT IMMEDIATE STEPS (2026-05-22)
 
-B79.0n.MCE CLOSED + Kyle-acknowledged. B-NEW-43 is the active batch. Next:
-1. **B-NEW-43 Phase 0 — IN PROGRESS.** Mirror clone to `C:/dev/DawnTraderV3` + `npm install` running (background task). When done: verify `npx tsc --noEmit` runs; validate a clean `npm run db:migrate` against an empty Postgres; document the "Local verification environment" runbook in CLAUDE.md (one-direction-edit sync protocol per scope §3). Then Phase 1 (TS errors root-cause-first) → Phase 2 (test failures) → Phase 3 (lock CI) → Phase 4 (alert active-push fix, rev3). Use `db:migrate` NOT `db:push`; remove typecheck `continue-on-error:true` after Phase 1 green.
-2. **Langston rev3 ACK** — scope rev3 (Phase 4 addition) dispatched; awaiting his ACK (non-blocking for Phases 0-3).
-3. **2af50871 alert** — fires 13:00Z today: psql `discovery_runs` verify run_id=2 `triggered_by='cron_daily'`. Surface + ack when due.
+B79.0n.MCE CLOSED + Kyle-acknowledged. B-NEW-43 active; Phase 0 COMPLETE. Next:
+1. **B-NEW-43 Phase 1 — TS errors root-cause-first.** Work ON THE MIRROR (`C:/dev/DawnTraderV3`), push from there. Order (scope §3 Phase 1): TS2304 quick wins first (the `TradingMode` import in `storage.ts` clears ~40 errors — single highest-leverage fix) → TS2339 type-definition cluster (~15-22 root causes incl. the `req.user` narrow type = 20 errors) → TS2345 → routes.ts deep-clean (chunk by section banner, ~20-40 errors/commit) → long tail. Each chunk gets Langston Step 4 review. After Phase 1 reaches green: remove typecheck `continue-on-error:true` from ci.yml. Then Phase 2 (test failures — `db:migrate` NOT `db:push`) → Phase 3 (lock CI) → Phase 4 (alert active-push fix).
+2. **616dfcf3 alert** — B79.0n.MCE 24h soak, fires 2026-05-23T12:10Z. Background monitor.
 4. **616dfcf3 alert** — B79.0n.MCE 24h soak, fires 2026-05-23T12:10Z. Background monitor.
 
 ### Recent commits
