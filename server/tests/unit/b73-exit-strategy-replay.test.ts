@@ -259,14 +259,12 @@ describe('B73 Variant C — higher BE trigger', () => {
 // VARIANT E — Vol-conditional skip
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe('B73 Variant E — vol-conditional skip', () => {
-  // B-NEW-43 Phase 2 chunk 12 (2026-05-23): test "runs as no-BE (Variant F)
-  // when volatility is above P75 threshold" REMOVED. Variant E delegates to
-  // F when vol > P75 — but F's behavior changed (B73.3, see Variant F block
-  // above). E's equivalence-to-F assertion still holds in principle but the
-  // expected exit reason ('TP_target_hit') is no longer reachable. Phase-19
-  // follow-up: rewrite paired with Variant F. RUNNING_ISSUES #137.
-});
+// B-NEW-43 Phase 2 chunk 13 (2026-05-23): "B73 Variant E — vol-conditional
+// skip" describe block REMOVED entirely (was emptied in chunk 12; vitest
+// errors on empty describe with "No test found in suite"). The single test
+// inside was REMOVED in chunk 12. Phase-19 follow-up: rewrite Variant E
+// test paired with Variant F under the new B73.3 post-target-trailing
+// semantics. RUNNING_ISSUES #137.
 
 // ──────────────────────────────────────────────────────────────────────────────
 // TRAILING STATE MACHINE (Variants G/H/I)
@@ -392,17 +390,12 @@ describe('B73 — SELL trade direction (inverted checks)', () => {
 // EDGE: simultaneous target + SL (gap bar)
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe('B73 — gap-bar edge case', () => {
-  // B-NEW-43 Phase 2 chunk 12 (2026-05-23): test "non-A variants resolve
-  // target wins when both target and SL hit on same bar" REMOVED. The single-
-  // bar setup (high 106 / low 97) hits target AND original SL on the same
-  // candle. Variant F under the new B73.3 logic transitions to trailing-
-  // after-target on the target side, then either trails to TRAIL_hit (if
-  // trail level hit on same bar — unlikely with these bounds) or TIMEOUT.
-  // The test expected 'TP_target_hit' which is no longer Variant F's
-  // resolution path. Phase-19 follow-up: rewrite to assert the new bar-
-  // resolution-order behavior. RUNNING_ISSUES #137.
-});
+// B-NEW-43 Phase 2 chunk 13 (2026-05-23): "B73 — gap-bar edge case" describe
+// block REMOVED entirely (was emptied in chunk 12; vitest errors on empty
+// describe with "No test found in suite"). The single test inside was
+// REMOVED in chunk 12. Phase-19 follow-up: rewrite the gap-bar edge-case
+// test against the new B73.3 bar-resolution-order behavior. RUNNING_ISSUES
+// #137.
 
 // ──────────────────────────────────────────────────────────────────────────────
 // METADATA + SHAPE
