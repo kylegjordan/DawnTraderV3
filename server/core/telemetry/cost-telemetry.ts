@@ -96,7 +96,15 @@ export async function persistCostSnapshot(): Promise<CostSnapshot | null> {
     await db.insert(telemetryHistory).values({
       symbol: COST_METRICS_SYMBOL,
       mode: COST_METRICS_MODE as 'paper' | 'live',
-      regime: REGIMES.BULL_STABLE,
+      // B-NEW-43 chunk 11 (2026-05-23): `BULL_STABLE` was the predecessor of
+      // `TREND_FRIENDLY_STABLE` in the canonical regime renaming; cost telemetry
+      // is not regime-conditional (it tracks costs across all regimes) but the
+      // `regime` field in the telemetry row is required. Using the canonical
+      // current name preserves the historical semantic (trend-up regime) while
+      // matching the live REGIMES enum. Phase 19 may choose a different
+      // sentinel (e.g., a dedicated "ALL" / "N_A" regime value) if cost
+      // telemetry warrants its own scope.
+      regime: REGIMES.TREND_FRIENDLY_STABLE,
       finalScore: totalCost.toString(),
       hybridScore: stats.avgFee.toString(),
       regimeWeight: stats.avgSlippage.toString(),

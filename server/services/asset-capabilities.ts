@@ -71,8 +71,32 @@ export class AssetCapabilitiesService {
       }
 
       const pairs = pairsData.result;
-      
-      for (const [pairName, pairInfo] of Object.entries(pairs)) {
+
+      // B-NEW-43 chunk 11 (2026-05-23): local minimal type for the Kraken
+      // /AssetPairs response entries. The upstream getAssetPairs() returns
+      // a loosely-typed structure where pairsData.result entries surface as
+      // `unknown` to TS (TS18046 on every property read in the loop body).
+      // This interface captures the fields this loop actually reads — narrow
+      // enough that adding/removing fields here is a deliberate scope
+      // decision, broad enough that the 11 reads below all type-check. Same
+      // external-boundary pattern as chunk 7's resolveJsonModule casts:
+      // narrowing an imprecise upstream API shape to the documented fields
+      // the consumer needs. No `as any` (prohibited); the cast on
+      // Object.entries below is the single boundary assertion.
+      interface KrakenPairInfo {
+        altname?: string;
+        base?: string;
+        quote?: string;
+        pair_decimals?: number;
+        lot_decimals?: number;
+        margin_call?: number;
+        margin_stop?: number;
+        ordermin?: string;
+        tick_size?: string;
+        costmin?: string;
+      }
+
+      for (const [pairName, pairInfo] of Object.entries(pairs) as [string, KrakenPairInfo][]) {
         try {
           // Skip if it's not a spot pair or doesn't have altname
           if (!pairInfo.altname) continue;
