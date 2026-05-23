@@ -39,6 +39,7 @@
 # the file's only job there is to satisfy the ledger.
 
 2026-04-22-initial-schema.sql
+2026-04-22b-initial-seed-data.sql
 2026-04-23-b65-add-base-currency-to-trades.sql
 2026-04-23-b65-add-exchange-asset-class.sql
 2026-04-23-b65-create-module-constants.sql

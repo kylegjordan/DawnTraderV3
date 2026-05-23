@@ -49,17 +49,21 @@ CREATE TABLE IF NOT EXISTS _migrations (
   checksum TEXT
 );
 
--- Mark the initial-schema migration as applied at its conceptual creation date
--- (2026-04-22, the day BEFORE B65.1-HF3 / 2026-04-23 introduced the file-based
--- runner). The exact timestamp does not matter for ledger semantics — only the
--- name is checked by listPendingMigrationFiles() in scripts/db-migrate.ts.
+-- Mark the initial-schema migration + the initial-seed-data migration as
+-- applied at their conceptual creation date (2026-04-22, the day BEFORE
+-- B65.1-HF3 / 2026-04-23 introduced the file-based runner). The exact
+-- timestamp does not matter for ledger semantics — only the name is
+-- checked by listPendingMigrationFiles() in scripts/db-migrate.ts.
 INSERT INTO _migrations (name, applied_at)
-VALUES ('2026-04-22-initial-schema.sql', '2026-04-22T00:00:00+00:00')
+VALUES
+  ('2026-04-22-initial-schema.sql',     '2026-04-22T00:00:00+00:00'),
+  ('2026-04-22b-initial-seed-data.sql', '2026-04-22T00:00:01+00:00')
 ON CONFLICT (name) DO NOTHING;
 
--- Verify the insert worked (or was a no-op because it was already there).
+-- Verify the inserts worked (or were no-ops because they were already there).
 SELECT name, applied_at
 FROM _migrations
-WHERE name = '2026-04-22-initial-schema.sql';
+WHERE name IN ('2026-04-22-initial-schema.sql', '2026-04-22b-initial-seed-data.sql')
+ORDER BY name;
 
 COMMIT;
