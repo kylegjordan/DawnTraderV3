@@ -14,7 +14,7 @@
 
 ---
 
-## CURRENT STATE (2026-05-23 PM — B-NEW-43 FULLY CLOSED. Next batch: B79.0n.STRATEGY = umbrella sub-batch 5 of 18.)
+## CURRENT STATE (2026-05-24 — B79.0n.STRATEGY STEP 1 LOCKED. Next: Step 2 pre-audit.)
 
 ### B-NEW-43 (CI Recovery) — 🟢 FULLY CLOSED 2026-05-23
 
@@ -32,28 +32,48 @@ CI all-4-green at head commit. All 4 phases shipped + governance landed + RUNNIN
 
 **Latent bugs surfaced:** `BUG-2026-05-23-A` (paper-portfolio-manager userId-as-mode-key; pre-fix metrics SUSPECT) + `BUG-2026-05-23-B` (dead AI-Opps routes). Both in CHANGES_AND_FIXES.
 
-### 🟢 NEXT BATCH: B79.0n.STRATEGY (umbrella sub-batch 5 of 18)
+### 🟢 IN-FLIGHT BATCH: B79.0n.STRATEGY (umbrella sub-batch 5 of 18) — Step 1 ✅ ACK 2026-05-24
 
-**Phase 24 (multi-asset VTS expansion, xStocks active-trading wire-in).** Umbrella scope at `Claude Comms and Packages/Scope Files/B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md`. Sub-batches 1-4 SHIPPED (HYGIENE, UNIVERSE-DISCOVERY, STORAGE, MCE); #5 STRATEGY is what we start.
+**Phase 24 (multi-asset VTS expansion).** Step 1 (Scope) DONE — v2.1 at commit `8fda3666d`. Langston FINAL ACK received 2026-05-23 23:18Z (Telegram msg 4151 verbatim relay). Scope file: `Claude Comms and Packages/Scope Files/B79_0n_STRATEGY_SCOPE.md` (78KB).
 
-**Scope coverage (from umbrella rev 4 §Tier 1 table):**
-- Strategy engine + every quant detector method
-- `_SE_KEY` resolver specificity
-- Hybrid Integration Service (quant+pattern ensemble)
-- Strategy Sync per-asset-class `strategy_settings` rows
-- strategy-mapper.ts (Directive 11.4H.6G Canonical Regime-Strategy Enforcement) — per Langston umbrella-review item 7
+**Scope key decisions (LOCKED):**
+- 19 canonical strategies (10 file-based + 9 in-class) — CLAUDE.md persona §3 off-by-one to fix at §10 governance close
+- 7 files / 66 `strategyEngine.detect*` calls = full caller surface (signal-orchestrator 18, vts-runner 18, routes.ts 12, stage-b-validator 8, strategy-validator 4, historic-signal-generator 3, paper-sim-diagnostic 3)
+- Per-file disposition matrix at scope §3.0 — production paths (c) cycle-context; harness paths (a) crypto-intentional `'crypto_spot' as const`; some (d) Phase 16 register candidates
+- `_SE_KEY` factory + 19 detect methods + `callStrategyDetect` all gain REQUIRED `assetClass: AssetClass`
+- `strategy_settings` schema +`asset_class` column; UNIQUE → `(globalContextId, mode, strategy, asset_class)`. Net data rows +42 (crypto +4 from new CORE_STRATEGIES entries strong_bull_trend + orb × 2 modes; xstock +38 from 19 × 2 modes)
+- `strategy-mapper.ts` per-class via nested `byAssetClass` JSON (Option A); xstock subtree = snapshot crypto minus defensive_hedge + add orb to TFS+IE
+- `hybrid-integration.ts` `selectHybridStrategy` taxonomy fix (BUG-007 closure: legacy `H1_TREND_SNIPER` etc. → canonical hybrid keys)
+- 18 NEW xstock_spot strategy_gates rows (10 enabled=true + 9 enabled=false per E-2 NO-SILENT-FALLBACK approval; orb pre-exists)
+- Step 11 governance close: SYSTEM_MANUAL Ch2 (17→19 strategies), SIM (per-class dispatch surface), CLAUDE.md persona §3 off-by-one, CHANGES_AND_FIXES (BUG-007/RISK-014 RESOLVED), RUNNING_ISSUES (5+ deferred follow-ups)
 
-**Dependencies:** STORAGE only (sub-batch 3, SHIPPED 2026-05-21).
+**Langston Q-A through Q-G:** all 7 CC recommendations CONCURRED.
+- Q-A: Option A nested byAssetClass JSON
+- Q-B: (B-1) ship default snapshot-crypto-minus-defensive_hedge-plus-orb
+- Q-C: (C-2) add REQUIRED-assetClass to liquidity_trap, keep disabled
+- Q-D: (D-1) return quant.strategy in non-hybrid fallback
+- Q-E: (E-2) seed all 19 explicit per-class gate rows
+- Q-F: blind pre-audit + Step 2 ACK gate (if F-3 surfaces 5+ levers, escalate to Langston BEFORE Step 3)
+- Q-G: fresh STRATEGY soak baseline
 
-**Why this sub-batch:** B72 already wired the API-side discipline (sync-read via `getCachedNumberRequired`, hard-fail on missing row) for `strategy.*` modules; STRATEGY's work is the per-class seed rows + REQUIRED-AssetClass type enforcement at strategy detect call sites + Hybrid Integration Service plumbing. Umbrella v4 §1.5 notes STRATEGY shrinks materially vs un-B72'd estimate because the API-side reads already exist.
+**Step 1 commits:** `84f74cdd2` (scope v1) → `288ba6ce1` (scope v2 conditional-ACK fixes) → `8fda3666d` (v2.1 nit fixes)
 
-**Scope file `B79_0n_STRATEGY_SCOPE.md` DOES NOT EXIST YET** — Step 1 of this batch is to WRITE it (per standard 11-step workflow per CLAUDE.md §2).
+### 🟢 NEXT: Step 2 Pre-audit
 
-### Workflow to start B79.0n.STRATEGY (per CLAUDE.md §2):
+Draft `Claude Comms and Packages/Scope Files/B79_0n_STRATEGY_PRE_AUDIT.md` covering:
+- SIM consultation for every affected component (strategy-engine, strategy-mapper, strategy-sync, hybrid-integration, signal-orchestrator, vts-runner, routes.ts, validation harnesses)
+- Compile-driven detect-method-caller enumeration (run `npx tsc --noEmit` on the C:/dev mirror after adding REQUIRED-AssetClass to _SE_KEY + a representative detect method, capture all the errors as the authoritative caller-site list)
+- Per-class lever F-1/F-2/F-3 audit (read each of 19 `strategy.*` module's params; decide which are asset-class-meaningful)
+- B72 prior-arc context section per umbrella §1.5 standing rule
+- Q-F gate disposition (if 5+ levers asset-class-meaningful, escalate to Langston BEFORE Step 3)
+- routes.ts per-route disposition (the 12 calls)
+- Per CLAUDE.md §3.3 Phase 24 standing rule: completion report onboarding-learnings section placeholder
 
-1. **Step 1 Scope** — draft `Claude Comms and Packages/Scope Files/B79_0n_STRATEGY_SCOPE.md` covering the items above. Dispatch to Langston for ACK.
-2. **Step 2 Pre-audit** — MANDATORY consult `1-system-manual/SYSTEM_IMPACT_MAP.md` for every component affected. Trace upstream/downstream/shared-state/background-execution/blast-radius. Document in `B79_0n_STRATEGY_PRE_AUDIT.md`. Dispatch to Langston.
-3. **Steps 3-11** — implementation → Langston code review → push → CI green (per §5 #19 must be green before batch close) → staging deploy → first-pass verify → Langston second-pass verify → iterate → governance updates (BATCH_CATALOG, PHASE_HISTORY, SIM if components added, SYSTEM_MANUAL if architecture changes, CHANGES_AND_FIXES, RUNNING_ISSUES, MEMORY both, Langston MEMORY) → completion report.
+Dispatch to Langston for Step 2 ACK via §6.5.0.a embedded-diff + no-gdrive pattern.
+
+### Steps 3-11 (after Step 2 ACK):
+
+implementation → Langston code review → push → CI green (per §5 #19 must be green before batch close) → staging deploy → first-pass verify → Langston second-pass verify → iterate → governance updates (BATCH_CATALOG, PHASE_HISTORY, SIM if components added, SYSTEM_MANUAL if architecture changes, CHANGES_AND_FIXES, RUNNING_ISSUES, MEMORY both, Langston MEMORY) → completion report.
 
 ### Active alerts (§10.5)
 - 0 active-unacked.
