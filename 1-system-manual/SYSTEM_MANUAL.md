@@ -4758,6 +4758,36 @@ clearModuleConstantsCache(): void
 
 The Phase-11 `EXECUTION_CONFIG` const was deleted in B65.2. All live consumers were migrated to `module_constants` BEFORE the file deletion to keep the build green. The Phase-4 RISK-031 (DSE 2% cap vs. guardrails 10/30%) is no longer file-pinned — it's a `module_constants.risk_sizing.max_position_risk` row that can be tuned per (exchange, asset_class, strategy, regime) without redeploy. The semantic concern (DSE caps before the guardrail can bind) remains and is tracked in CHANGES_AND_FIXES as RISK-031, deferred per Kyle.
 
+### 12.6 DB bootstrap (B-NEW-43 Phase 2 chunk 4, 2026-05-23)
+
+Two paths exist for setting up a fresh Postgres for DawnTrader:
+
+**Path A — Fresh empty Postgres (CI, new dev environments, eventual production from scratch):**
+
+```bash
+# 1. Set DATABASE_URL pointing at the empty PG.
+# 2. Run db:migrate top-to-bottom.
+DATABASE_URL=postgresql://user:pass@host:5432/db npm run db:migrate
+```
+
+`scripts/db-migrate.ts` reads `drizzle/migrations/MANIFEST.txt` (REQUIRED — hard-fails if missing), validates that every non-rollback `.sql` file in `drizzle/migrations/` is in the manifest exactly once (catches drift at PR-time), then applies migrations in manifest order. The first manifest entry is `2026-04-22-initial-schema.sql` — the pg_dump of the schema state that existed on staging Supabase before B65.1-HF3 (2026-04-23) introduced the file-based migration runner. Every subsequent manifest entry is a delta against that baseline.
+
+**Path B — Bootstrap from staging dump (cloning staging to a new environment):**
+
+```bash
+# 1. pg_dump --schema-only --no-owner --no-privileges --schema=public staging
+#    apply to the new empty PG.
+# 2. Mark 2026-04-22-initial-schema.sql as already applied:
+psql "$DATABASE_URL" -f 1-system-manual/staging-coordination/2026-04-22-initial-schema-mark-applied.sql
+# 3. Run db:migrate — it will skip the initial-schema entry (ledger says applied)
+#    and apply only the deltas.
+DATABASE_URL=... npm run db:migrate
+```
+
+The staging-coordination SQL exists because staging itself is in this state: it has the schema from the pre-file-runner era, never marked in the `_migrations` ledger as having applied a named "initial-schema" migration. Before the next staging `db:migrate` run after B-NEW-43 Phase 2 chunk 4 lands, run the coordination SQL on staging to insert the ledger row.
+
+**Why this matters:** without the bootstrap path being explicit, a future env-bootstrap that copies the staging schema would hit "type already exists" / "table already exists" on first `db:migrate`, abort the entire batch (transactional), and the operator would have no obvious path forward. The coordination SQL is the documented, repeatable bypass for the bootstrap-from-dump case.
+
 ---
 
 ## 13. TradeBob (Cache Layer)

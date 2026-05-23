@@ -29,7 +29,16 @@
 # the filesystem any more (b67-1-restore-shadow-flag.sql,
 # b-new-35-phase1-dedup-xstock-spot-rev6.sql) — files were removed/renamed in later
 # batches; ledger still tracks them, manifest does not.
+#
+# 2026-04-22-initial-schema.sql (B-NEW-43 Phase 2 chunk 4): added at the TOP
+# because every other migration is a delta against the pre-2026-04-23 schema
+# state. Captured via pg_dump --schema-only against staging Supabase. On staging
+# this migration is marked applied via the one-time SQL at
+# 1-system-manual/staging-coordination/2026-04-22-initial-schema-mark-applied.sql
+# BEFORE the next staging db:migrate run — staging already has the schema, so
+# the file's only job there is to satisfy the ledger.
 
+2026-04-22-initial-schema.sql
 2026-04-23-b65-add-base-currency-to-trades.sql
 2026-04-23-b65-add-exchange-asset-class.sql
 2026-04-23-b65-create-module-constants.sql
