@@ -6,8 +6,15 @@
 --
 -- Source: pg_dump --schema-only --no-owner --no-privileges --schema=public
 --         --no-comments against staging Supabase (PG 17.6), 2026-05-23.
--- Cleaned: stripped psql meta-commands (backslash-restrict / backslash-unrestrict);
---          CREATE SCHEMA public → CREATE SCHEMA IF NOT EXISTS public.
+-- Cleaned:
+--   - Stripped psql meta-commands (backslash-restrict / backslash-unrestrict;
+--     not valid SQL via node-postgres).
+--   - CREATE SCHEMA public → CREATE SCHEMA IF NOT EXISTS public (the public
+--     schema pre-exists on every fresh Postgres).
+--   - Removed the CREATE TABLE public._migrations block + the ADD CONSTRAINT
+--     _migrations_pkey block. The _migrations ledger is created by
+--     db-migrate.ts:ensureLedger() at run-start; including the dump's
+--     equivalent triggers "relation already exists" on a fresh PG.
 -- All other CREATE TABLE / TYPE / INDEX / SEQUENCE / VIEW statements emit
 -- as-is per Langston Q3.6 idempotency policy (hard-fail if a fresh PG already
 -- has them — signals state inconsistency).
@@ -1113,17 +1120,6 @@ CREATE TYPE public.walter_view_mode AS ENUM (
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
-
---
--- Name: _migrations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public._migrations (
-    name text NOT NULL,
-    applied_at timestamp with time zone DEFAULT now() NOT NULL,
-    checksum text
-);
-
 
 --
 -- Name: actuation_policies; Type: TABLE; Schema: public; Owner: -
@@ -10079,14 +10075,6 @@ ALTER TABLE ONLY public.xstock_spot_ohlc_1m ALTER COLUMN id SET DEFAULT nextval(
 --
 
 ALTER TABLE ONLY public.xstock_spot_ticker_snap ALTER COLUMN id SET DEFAULT nextval('public.equity_spot_ticker_snap_id_seq'::regclass);
-
-
---
--- Name: _migrations _migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public._migrations
-    ADD CONSTRAINT _migrations_pkey PRIMARY KEY (name);
 
 
 --
