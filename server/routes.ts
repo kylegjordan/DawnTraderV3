@@ -170,8 +170,21 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
   }
   
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { 
-      id: string; 
+    // B-NEW-43 chunk 9 (2026-05-23): JWT verify-cast cluster — canonical
+    // site (10 occurrences across routes.ts + 7 sub-routes share the same
+    // pattern). The jwt library type-declares `verify(token, secret)` with
+    // overloads including `void` (the callback-form variant). With no
+    // callback passed at any of our 10 call sites — verified by grep:
+    // every `jwt.verify(` is 2-argument — the runtime returns the decoded
+    // payload, but TS conflates the overload returns into
+    // `Jwt & JwtPayload & void` and the direct cast fails with TS2352
+    // because `void` has no overlap. Bridged via the TS-recommended
+    // `as unknown as T` external-boundary form (same pattern as the
+    // chunk-7 resolveJsonModule JSON-import casts; not on the prohibited-
+    // suppression list; the other 9 sites are mechanically identical
+    // and reference this comment via the chunk-9 commit message).
+    const decoded = jwt.verify(token, JWT_SECRET) as unknown as {
+      id: string;
       username: string;
       role?: UserRole;
       permissions?: Permission[];
@@ -958,7 +971,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(401).json({ valid: false, error: 'No token provided' });
       }
       
-      const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+      const decoded = jwt.verify(token, JWT_SECRET) as unknown as { id: string; username: string };
       res.json({ valid: true, user: decoded });
     } catch (error) {
       res.status(401).json({ valid: false, error: 'Invalid or expired token' });
@@ -974,7 +987,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: 'Refresh token is required' });
       }
       
-      const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as { id: string };
+      const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as unknown as { id: string };
       const user = await storage.getUser(decoded.id);
       
       if (!user) {

@@ -36,7 +36,7 @@ function auditOrAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
     return res.status(401).json({ error: 'No token provided' });
   }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as unknown as { id: string; username: string };
     req.user = decoded;
     next();
   } catch {
