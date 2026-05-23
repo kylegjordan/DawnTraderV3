@@ -224,7 +224,14 @@ export function checkRegimeTransition(newRegime: MarketRegime): void {
       explanation: explainRegimeChange(lastRegime, newRegime),
       previousValue: lastRegime,
       newValue: newRegime,
-      severity: newRegime === 'EXTREME_NOISE' ? 'warning' : 'info',
+      // B-NEW-43 chunk 8 (2026-05-23): the prior `newRegime === 'EXTREME_NOISE'`
+      // ternary was always-false (TS2367) — EXTREME_NOISE is a vol-noise veto
+      // state, NOT a member of CanonicalRegimeType, so a regime-transition event
+      // can structurally never report EXTREME_NOISE. The behavior collapses to
+      // always-'info' (which is what the runtime already produced). If/when
+      // EXTREME_NOISE warning surfacing is wanted, the signal has to come from
+      // the veto path, not the regime path — Phase 19 territory.
+      severity: 'info',
     });
   }
   lastRegime = newRegime;

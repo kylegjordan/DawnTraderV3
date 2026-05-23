@@ -289,8 +289,14 @@ function syncBaseline() {
   baseline.last_synced_by_batch = 'B-NEW-43 (chunk 7+ — sync after clean-error fixes)';
 
   writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2) + '\n');
+  // Note (Langston chunk-7 nit): `cleared` counts errors cleared on files that
+  // REMAIN in the baseline (count > 0 after sync). Errors on files that were
+  // dropped entirely (count went to 0) are NOT included in `cleared` — they
+  // are tallied via `removed` instead. So the two numbers together describe
+  // the full shrinkage; reading `cleared` alone can look contradictory next
+  // to `removed`. Both are reported here for transparency.
   console.log(
-    `[baseline] Synced. ${cleared} errors cleared from baseline, ${removed} files dropped entirely (errors went to 0). New baseline: ${total} errors across ${newFiles.length} files.`,
+    `[baseline] Synced. ${cleared} errors cleared on files still in baseline, ${removed} files dropped entirely (their counts went to 0). New baseline: ${total} errors across ${newFiles.length} files.`,
   );
 }
 

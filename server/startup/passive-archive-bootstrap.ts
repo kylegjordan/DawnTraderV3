@@ -124,10 +124,10 @@ export async function passiveArchiveBootstrap(): Promise<void> {
   console.log('[B74][bootstrap] starting passive archive pipeline...');
 
   // Read kill-switch + tuning constants
-  const equityEnabled = (await getConstant<boolean>('passive_archive', 'b74_equity_capture_enabled', {})) ?? true;
-  const perpEnabled = (await getConstant<boolean>('passive_archive', 'b74_perp_capture_enabled', {})) ?? true;
-  const cryptoEnabled = (await getConstant<boolean>('passive_archive', 'b74_crypto_capture_enabled', {})) ?? true;
-  const tickerThrottleMs = (await getConstant<number>('passive_archive', 'b74_ticker_snapshot_min_interval_ms', {})) ?? 1000;
+  const equityEnabled = (await getConstant<boolean>('passive_archive', 'b74_equity_capture_enabled', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' })) ?? true;
+  const perpEnabled = (await getConstant<boolean>('passive_archive', 'b74_perp_capture_enabled', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' })) ?? true;
+  const cryptoEnabled = (await getConstant<boolean>('passive_archive', 'b74_crypto_capture_enabled', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' })) ?? true;
+  const tickerThrottleMs = (await getConstant<number>('passive_archive', 'b74_ticker_snapshot_min_interval_ms', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' })) ?? 1000;
 
   setTickerThrottle(tickerThrottleMs);
 

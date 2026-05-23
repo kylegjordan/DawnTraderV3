@@ -3,8 +3,8 @@
   "frozen_at_commit": "0519224",
   "frozen_at_iso": "2026-05-23T01:59:15.905Z",
   "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 574,
-  "file_count": 82,
+  "total_errors": 569,
+  "file_count": 80,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -702,14 +702,6 @@
       }
     },
     {
-      "path": "server/startup/passive-archive-bootstrap.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Boot/startup infrastructure (4 errors). Current/operational. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS2345": 4
-      }
-    },
-    {
       "path": "server/storage.ts",
       "phase_tag": "Phase 19 (majority) + B-NEW-43 (some)",
       "context": "DatabaseStorage class (19 errors). Mode-keyed current infrastructure (used by VTS path), but many errors are \"Property X does not exist on DatabaseStorage\" pointing at internal references to methods removed in prior cleanups (similar to the Phase 41F-L `getTradingSettings` purge handled in chunks 1-3). Per-case investigation: storage-method removal stragglers are typically Phase 19 (the consumer methods are active-trading-path) but some may be cleanable as schema-drift TS2353 in chunk 7+.",
@@ -727,18 +719,10 @@
       "errors": {
         "TS2367": 1
       }
-    },
-    {
-      "path": "server/utils/market-events.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Utility (1 error). Current/operational. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS2367": 1
-      }
     }
   ],
   "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
   "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
-  "last_synced_at_iso": "2026-05-23T04:51:11.031Z",
+  "last_synced_at_iso": "2026-05-23T09:02:06.568Z",
   "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }
