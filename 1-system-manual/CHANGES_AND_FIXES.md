@@ -2,6 +2,37 @@
 
 ---
 
+## BUG-2026-05-23-A — Paper-portfolio-manager + paper-48hr-simulation userId-passed-as-mode-key latent bug (B-NEW-43 Phase 1 chunk 1)
+
+**Risk class:** LATENT — silent empty-data path masked by `continue-on-error: true` on the typecheck job. Historical metrics from these two surfaces are SUSPECT (the bug had been live an unknown long period — both surfaces predate the mode-based architecture).
+
+**What landed (commit `387b2d3`, B-NEW-43 Phase 1 chunk 1, pushed 2026-05-22):**
+
+- `server/storage.ts` — added the missing `TradingMode` import from `./lib/event-bus`. The missing import cleared 40 TS2304 errors and surfaced the latent bug below.
+- `server/services/paper-portfolio-manager.ts` — 7 sites: storage API call sites that expect a `TradingMode` key were being passed `this.userId` instead. The `TradingMode` import made the contract visible. Per Kyle directive (remove legacy userId dependency), the call sites were updated to pass `this.mode`.
+- `server/services/paper-48hr-simulation.ts` — 3 sites: same shape. Updated to pass the literal `'paper'`.
+
+**Why this had been silent:** the storage layer's mode-keyed lookup APIs accepted a generic string and returned an empty result on no-match. With userId passed where a mode key was expected, the lookups always returned empty. The 48-hour-paper-simulation reports and the paper portfolio metrics surfaces have been running on empty data for the period during which both files have existed in their current shape. The pre-fix typecheck `continue-on-error: true` setting (removed in B-NEW-43 chunk 5) was the silent-regression mechanism — the TS error was emitted on every build but suppressed.
+
+**Historical-metrics implication (per Langston Phase-1-close note 2, 2026-05-23):** any pre-fix portfolio history or 48h-paper-simulation report drawn from these surfaces should be treated as not reflecting actual data. If a future audit needs accurate historical numbers from those surfaces, this fix is the demarcation line.
+
+**Cross-references:** B-NEW-43 Phase 1 chunk 1 in `Claude Comms and Packages/Batch Completion/B_NEW_43_PHASE_1_COMPLETION_REPORT.md`. The two files themselves are flagged in RUNNING_ISSUES #136(a) + #136(b) as Phase-16 removal candidates — Kyle 2026-05-22 ("definitely legacy, should be marked for removal/deletion" and "not sure what it does — possibly dashboard-related — probably can be looked at for deletion"). The userId-coupling that produced this bug is the same pattern that makes both files Phase-16 register entries.
+
+---
+
+## BUG-2026-05-23-B — Five dead AI-Opportunities route handlers deleted (B-NEW-43 Phase 1 chunk 2)
+
+**Risk class:** DEAD-CODE REMOVAL. Routes returned HTTP 500 when called because the underlying `aiOpportunitiesService` was removed in a prior cleanup but the route handlers were orphaned.
+
+**What landed (commit `bf78c46`, B-NEW-43 Phase 1 chunk 2, pushed 2026-05-22):**
+
+- `server/routes.ts` — 5 AI-Opportunities route handlers deleted (Kyle-approved removal).
+- 3 genuine missing imports added: `dailyBriefService`, `semanticMemory`, `systemAlerts`.
+
+**Companion orphan in frontend (flagged for Phase 16 removal — RUNNING_ISSUES #136(c)):** `client/src/components/ai/ai-opportunities-tab.tsx` + `client/src/components/ai/validation-reports-tab.tsx` consume the now-deleted endpoints. UI was already non-functional pre-fix (endpoints 500'd). Components are now fully orphaned.
+
+---
+
 ## BUG-2026-05-20-A — Off-hours session-lifecycle controller closes #116 by side-effect + pre-emptively avoids CHECK-constraint trade-close failure (B-NEW-36 sub-batch (b))
 
 **Risk class:** PRE-EMPTIVE FIX (critical guard caught at pre-audit Step 2 §4.1 — would have manifested as a CHECK-constraint violation on every trade close post-deploy if missed) + RESOLVED-BY-SIDE-EFFECT of #116 TEC stale fail-closed log noise for xstock_spot during weekend window.

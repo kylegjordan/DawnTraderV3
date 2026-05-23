@@ -32,6 +32,26 @@
 
 ---
 
+### 2026-05-23 update — Phase 19 runs BEFORE Phase 16 (B-NEW-43 Phase 1 close)
+
+**Decision (Kyle approved 2026-05-23 on joint CC + Langston advisory):** Phase 19 (active-trading-path restoration walkthrough) runs BEFORE Phase 16 (DB/legacy cleanup). The restoration walkthrough creates ground truth on what is dead vs. dormant; cleanup then acts on that ground truth instead of guessing. Infra-clean parts of Phase 16 (DB schema rationalization / column drops independent of active-trading code surface) can still front-run safely. Surfaced during B-NEW-43 Phase 1 chunk 6 audit; locked at Phase 1 close (2026-05-23, baseline frozen at 488 errors / 68 files). Source-of-truth lists: Phase 19 intake = RUNNING_ISSUES #137 + baseline-file `files[]` with `phase_tag.startsWith("Phase 19")`; Phase 16 legacy register = RUNNING_ISSUES #136.
+
+---
+
+### 2026-05-21 update — Pre-launch scope tightened (Kyle directive)
+
+Four sequencing changes locked 2026-05-21 to keep the pre-launch path focused:
+
+1. **Regime classifier confidence-chain calibration moved INTO Phase 19** (new §19.0.A). VTS and active-trading outcomes are not comparable populations — VTS opens simulated trades on every filter-survivor against every strategy in a regime family, while active trading runs SQE filtering on top. Calibrating chain modifiers against VTS conflates two different populations and produces verdicts that won't transfer to live. The B-NEW-33 / B-NEW-36 / B-NEW-37 / B-NEW-39 workstream pauses; data continues accumulating; calibration verdicts re-run against paper-active outcomes once paper-active path is healthy. B-NEW-39 phase-1 floor fix (structural correction) stays in place. B67.5 consumer-gate design also parked until paper-active calibration produces decision-grade verdicts.
+
+2. **Crypto_perp (Phase 25 / B80) deferred to POST-LAUNCH.** Only ~10 perpetual pairs at Kraken Futures; the May 2026 xStocks universe discovery (220+ additional tokenized equities, total ~450+ Fortune 500 / NASDAQ / ETFs / index funds) gives the launch a deeply diversified pair set. Marginal universe expansion from perps doesn't justify the calendar cost pre-launch.
+
+3. **VTS partition + Exchange-Data Adapter (Phase 19.0) deferred to POST-LAUNCH** — possibly never built. Requires solving API rate-limit budgeting across multiple alternate-source exchanges and a partitioned data storage design before the partition itself can land. Phase 19 paper-mode audit accepts the start-stop interruption to VTS data accumulation as a known cost.
+
+4. **Daily loss-budget service + auto-trip wiring promoted to dedicated OPTIONAL Phase 19 batch (§19.0.B).** Previously buried in 19.4.5 item 9. If Phase 19 observation shows the manual kill switch + per-trade guardrails are absorbing real-world loss patterns adequately, the auto-trip wiring can ship later.
+
+---
+
 ### 2026-05-10 update — Phase 24 (xstock_spot onboarding) CLOSED
 
 Phase 24 (B79 + B79.TEC + B79.0a-0g + B79.0h governance retrospective) closed 2026-05-10. xstock_spot fully onboarded across 9 sub-batches + governance retrospective. **Canonical onboarding workflow** at `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` is now battle-tested through this stretch — Sections H.1.x (post-mortem) and H.1.y (updated decision rules) are the high-value content for B80 (crypto_perp / Phase 25) implementer.
@@ -60,7 +80,7 @@ Phase 24 (B79 + B79.TEC + B79.0a-0g + B79.0h governance retrospective) closed 20
 - B79.x — Kraken WS-equities weekend silence investigation (RUNNING_ISSUES #89; Kraken Pro feed-tier OR REST polling fallback)
 - B79.x — failure-mode taxonomy implementation (LULD halts, circuit breakers, dividends, splits, earnings) — **PARTIALLY ADDRESSED 2026-05-17 by B-NEW-42 audit + B-NEW-42b price-discontinuity-detector hotfix.** Splits, halts, and known ex-dividend dates are now structurally short-circuited at the TEC exit-decision path (stop-check + target-lock-promote) for OPEN positions. Earnings handling deferred to Phase D. Curated ex-dividend calendar (60 entries Q3+Q4 2026 for 15 div-paying symbols) at `1-system-manual/audits/b-new-42/dividend-calendar-seed.json` is the interim posture; Phase D auto-feed (Yahoo Finance) replaces it without changing the consumer (detector reads via `entries[]` schema contract). **Entry-side gap accepted per Kyle directive 2026-05-17 (Option A):** the detector does NOT gate the scanner; new entries on a halt-resume gap or split-effected price are still possible. Live-trading prep in Phase 19 must add the entry-side counterpart (mirror-image scanner consult). VTS + paper modes treat bad entries as observation/learning signal; no real-money exposure.
 
-**Phase 25 (B80 crypto_perp) — apply the workflow.** First batch in Phase 25; same workflow doc with H.1.x checklist applied explicitly before code; perp-specific deltas (funding rate per-pair, leverage/liquidation, perpetual settlement, 8-hour funding windows). Phase 25 batches B80, B80.1+ as observation dictates.
+**Phase 25 (B80 crypto_perp) — DEFERRED to POST-LAUNCH (Kyle directive 2026-05-21).** Originally scheduled to follow B79 as the next asset-class onboarding. Pushed to post-launch for three converging reasons: (1) the xStocks universe expanded substantially when ~220 additional tokenized equities were discovered to be feeding the system (final universe ~450+ tokenized equities — Fortune 500, NASDAQ, ETFs, index funds), giving the launch a deeply diversified pair set without needing perps; (2) Kraken Futures has only ~10 perpetual pairs, so the marginal universe gain from onboarding it pre-launch is small relative to the time cost; (3) even with the canonical onboarding workflow in hand, a clean perp onboarding (Day 0 friction extraction, funding-rate per-pair macro extension, leverage/liquidation guardrails, perpetual settlement, observation window) still consumes calendar weeks the launch path would rather spend on Phase 19 paper-mode audit. Phase 25 now sits AFTER Phase 21 live activation. The canonical workflow documentation remains valid for the eventual perp onboarding — the move is timing only, not approach.
 
 ---
 
@@ -75,8 +95,8 @@ Per Kyle directive 2026-05-07: skip Phase 16 cleanup for now and use the 8-day o
 | **B78** | SHIPPED 2026-05-07 (`de827f37b`) | Modularization scaffold. `server/asset_classes/{crypto_spot,crypto_perp,xstock_spot}/` + `server/exchanges/kraken/`. crypto_spot regime-thresholds extracted (leaf module). Aggregator scoped to crypto_spot. Madge 47→47. |
 | **B78.1** | NEXT | **Cycle break only.** DI inversion of `kraken-websocket-adapter ↔ live-pricing-adapter` via event-emitter pattern. Move ws-adapter into `exchanges/kraken/` after cycle is broken. Behavioral verify required (data-feed surgery — PM2 log side-by-side diff against pre-deploy baseline). |
 | **B79** | After B78.1 | Xstock_spot (Kraken XStocks Pro). **Day 0:** per-asset-class friction extraction (`asset_classes/<class>/friction.ts` populated; `cost-model.ts` consumes per-asset-class overlays via module_constants resolution hierarchy). Then xstock_spot weekend-pause logic, 3-layer threshold derivation, strategy gate audit, SQE asset-class threshold rows. |
-| **B80** | After B79 | Crypto_perp (Kraken Futures). Funding-rate per-pair extension to B67.1 macro modifier. crypto_perp friction.ts populated (interface defined in B79 Day 0). |
-| **B81** | After B80 | **Day 0:** filter-as-first-class promotion (`module_name='filter:<name>'` rows in `module_constants`; `pattern-pool-filters.ts` becomes a thin DB consumer). Then RTB ranking parity (`expectedNetReturnR` primitive, pool-relative normalization) + SQE asset-class threshold rows. Removes B78 re-export shims (RUNNING_ISSUES #73). |
+| **B80** | **DEFERRED POST-LAUNCH (Kyle directive 2026-05-21)** | Crypto_perp (Kraken Futures). Only ~10 perpetual pairs; marginal pre-launch universe gain too small to justify the calendar cost given xStocks already provides 450+ tokenized equities. Picks up after Phase 21 live activation. |
+| **B81** | After B79 (B80 no longer a prerequisite) | **Day 0:** filter-as-first-class promotion (`module_name='filter:<name>'` rows in `module_constants`; `pattern-pool-filters.ts` becomes a thin DB consumer). Then RTB ranking parity (`expectedNetReturnR` primitive, pool-relative normalization) + SQE asset-class threshold rows. Removes B78 re-export shims (RUNNING_ISSUES #73). |
 
 This stretch is **observational** for the new asset classes — VTS-path is what gets behaviorally verified. Live-trading testing of xstock_spot / crypto_perp is Phase 19 territory (component-by-component active trading audit). Live-trading enablement is downstream of Phase 19.
 
@@ -956,9 +976,11 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 
 ---
 
-## Phase 19.0: VTS Partition + Exchange-Data Adapter (NEW 2026-04-26, renumbered from 18.5 same-day per Kyle directive: Phase 18 = ML/post-launch, can't reuse the number)
+## Phase 19.0: VTS Partition + Exchange-Data Adapter — DEFERRED TO POST-LAUNCH (Kyle directive 2026-05-21)
 
-**Status:** First sub-section of Phase 19. Sits BEFORE 19.1 Paper Trading Run because the partition is a prerequisite for running the rest of Phase 19 effectively — without it, every active-trading-engine restart during Phase 19 audit work interrupts VTS data accumulation.
+**Status (2026-05-21):** DEFERRED to post-launch — possibly never built. Kyle's reasoning: the partition would require solving two non-trivial upstream problems first — (a) API rate-limit budgeting across Kraken + Binance + Coinbase + KuCoin so the alternate-source data feed doesn't blow through quotas, and (b) a data storage system design for the partitioned VTS process (separate writers, partition-aware archive tables, retention policy alignment). Neither is sized or planned. Rather than block Phase 19 paper-mode audit on that work, accept the start-stop interruption to VTS data accumulation during audit cycles as a known cost and proceed. Post-launch we reassess whether the partition still earns its build cost or whether the same goal can be achieved more cheaply.
+
+**Original rationale (preserved for reference):** First sub-section of Phase 19. Sits BEFORE 19.1 Paper Trading Run because the partition is a prerequisite for running the rest of Phase 19 effectively — without it, every active-trading-engine restart during Phase 19 audit work interrupts VTS data accumulation.
 
 **Why this phase exists:** during Phase 19 the team will be repeatedly starting and stopping the active-trading engine to audit and fix it. Today VTS shares the trading-engine process and Kraken API budget — so every active-trading restart interrupts VTS data accumulation. To preserve continuous VTS observation through the start-stop cycles of Phase 19 paper-mode audit, VTS needs to be partitioned into a process that runs independently of the active-trading engine, with its own data feed (Binance + Coinbase + KuCoin combined fallback chain), and its own scan engine (FX5 instance) so it doesn't compete for Kraken API budget when active trading is running.
 
@@ -1029,6 +1051,42 @@ This makes the ~5% coverage gap explicit and trackable — if specific missing p
 ## Phase 19: Paper Mode Audit & Debug (Weeks 34-37)
 
 **Goal**: Run the complete system end-to-end in Paper Mode with all components active (MCE, real VTS, Directional Bias, Short Trading, Predictive Execution, ML). Find and fix everything before live capital.
+
+### 19.0.A — Regime classifier confidence-chain calibration (MOVED HERE 2026-05-21, Kyle directive)
+
+**Status (2026-05-21):** Moved INTO Phase 19. Previously the active workstream blocking B67.5 (factor consumer-gate design) — `B-NEW-33` calibration tool, `B-NEW-36` diagnostic spike, `B-NEW-37` forensics, `B-NEW-39` phase-1 floor revert. Kyle directive 2026-05-21: stop trying to calibrate the confidence-chain modifiers against VTS outcomes — VTS and active-trading wins/losses are not comparable. VTS opens simulated trades on every filter-survivor against every strategy in a regime family (broad coverage by design); active trading runs a strict SQE filter on top that removes signals VTS retains. So VTS is observing losers (and some winners) the active path will never see, and active trading is filtering for a tighter subset than VTS measures. Calibrating the confidence chain against VTS data therefore conflates two different populations and produces verdicts that won't transfer to live.
+
+**The calibration moves into Phase 19** for the same reason SQE recalibration (19.4) was moved into Phase 19 — once the paper-active path is running cleanly, the chain modifiers get calibrated against active-paper-mode outcomes (the apples-to-apples population) instead of VTS outcomes.
+
+**What stays preserved through the move:**
+- The 10-factor catalog + `b76_chain_final` framework version + nightly `regime_factor_alternates` accumulation continue running in the background. Data continues to build; the calibration verdict just isn't read until paper-active turns on.
+- The B-NEW-39 phase-1 fix (post-composition floor reverted 0.20 → 0.45) stays in place — it was a structural correction, not a calibration outcome.
+- B67.5 consumer-gate design is similarly parked. Confidence chain is currently shadow-modulating; nothing downstream actually consumes it as a decision input. That's the right posture until calibration can be done against the right population.
+
+**What changes when Phase 19 opens:**
+- Replay tool re-runs against paper-active outcome data (mode='paper_active' or equivalent) instead of VTS outcomes.
+- Decision-grade gates (n ≥ 150/tertile, |spread| ≥ 7pp, p < 0.05) stay locked.
+- Per-factor verdicts re-derived; KEEP / DROP / INCONCLUSIVE rolled into the B67.5 consumer-gate design.
+- The B-NEW-37 forensic finding that the b68_5 sustainability gate is uniformly over-aggressive (Δconf identical between winners and losers) gets re-validated against paper-active data, not VTS data. If the same finding holds, the gate is recalibrated or deprecated per Phase 19.0.3 — TFS sustainability-gate decision tree.
+
+**Why this is the right move:** calibrating sensors against a population the sensors won't actually serve produces measurements that don't survive the population change. Same reason SQE recalibration was moved into Phase 19. Same family of problem.
+
+### 19.0.B — Daily loss-budget service + kill-switch auto-trip (OPTIONAL Phase 19 batch, Kyle directive 2026-05-21)
+
+**Status (2026-05-21):** Optional Phase 19 batch. Previously listed as item 9 in the 19.4.5 observational decision gate as "BLOCKING FOR LIVE-TRADING ACTIVATION." Promoted to a dedicated Phase 19 batch slot rather than buried inside the observational gate so it has its own visibility, but flagged optional — if Phase 19 observation shows the existing manual kill-switch + per-trade guardrails are already absorbing real-world loss patterns adequately, the auto-trip wiring can ship later. If Phase 19 observation shows the gap is materially exposing capital, the batch fires.
+
+**The gap:** today the kill switch's `dailyLossKillSwitchPct` threshold (~25%) lives in `guardrails_v2` but is checked manually via UI/API. No service watches running daily P&L and trips automatically. `tripKillSwitch()` accepts `lossPercent`/`threshold` params but is never called by a budget aggregator. There is no `server/services/daily-loss-budget.ts`.
+
+**Scope if the batch fires:**
+- Build `server/services/daily-loss-budget.ts` — rolling 24h P&L aggregator across paper + live trades.
+- Wire auto-trip when `dailyPnL / portfolioValue ≤ -dailyLossKillSwitchPct`.
+- Trade-mode-aware (paper-active aggregation lifts into live aggregation when live mode activates).
+- DB-tunable threshold via `module_constants` (already present in `guardrails_v2`).
+- Same service can later be a regime-confidence consumer (original B67 "Consumer #6" scope).
+
+**Effort:** ~1-2 weeks if fired. Otherwise zero work.
+
+
 
 ### 19.0.3 — TFS sustainability gate value-scope decision (NEW 2026-05-17, Kyle directive)
 
@@ -1161,7 +1219,7 @@ The gate watches for several conditions that, if observed, would justify pulling
 
 8. **Low-volume pair exclusion from moonbag eligibility (added 2026-04-28, Kyle directive 2026-04-28).** Flagged decision for later: should low-volume pairs be EXCLUDED from moonbag/ladder eligibility entirely so they always exit at original target rather than ratcheting? Evidence from B65.4.1 verification 2026-04-28 (`B65_4_1_LADDER_TABLE_2026_04_28.md`): the ladder's biggest losses are concentrated on illiquid pairs (2Z/USD, ATH/USD, GWEI/USD, RENDER/USD/EUR, TAO/EUR) where slippage on the stop-out fill swallows the slippage buffer and pushes actual exit below the original target value. High-volume pairs (JUP, SNX, INX) show clean hotfix behavior. **Decision is deferred to allow more data accumulation** — Kyle directive 2026-04-28: "the longer we let it run, the more data we'll see, and it will be easier to make that decision." The decision belongs in the Phase 19.4.5 observational decision gate alongside item 7 (ladder net contribution). Implementation if approved: new `module_constants` entry `moonbag_min_volume_24h_usd` (seed e.g., $500K), checked in `isMoonbagQualifier` (`server/services/trailing-exit-controller.ts`) alongside the existing strategy/source-pool qualifier list. Pair-by-pair, DB-tunable. ~1-2 days work.
 
-9. **Daily loss budget service + kill-switch auto-trip wiring (added 2026-04-28, Kyle directive 2026-04-28).** ⚠️ **BLOCKING FOR LIVE-TRADING ACTIVATION.** Surfaced during B67 V2 pre-audit code-level inspection: (a) **no daily-loss aggregator service exists in the codebase** (grep on `dailyPnL|daily_pnl|aggregate.*loss` returns no service-level matches); (b) **the kill switch's `dailyLossKillSwitchPct` threshold is configured in `guardrails_v2` table (probably 25%) but no automated enforcement code exists** — `tripKillSwitch()` accepts `lossPercent`/`threshold` params but is only called manually via UI/API. The 25% kill switch is currently a manual safety mechanism, not an automated one. Phase 19 paper observation watches whether daily-loss-budget protection would have caught real loss patterns. **This gap MUST be closed before any real capital is at risk in live trading.** Live-trading activation is gated on this work being complete and tested. If Phase 19 observation supports building, build `server/services/daily-loss-budget.ts` (rolling 24h aggregator) AND wire kill-switch auto-trip when `dailyPnL / portfolioValue ≤ -dailyLossKillSwitchPct`. The same batch covers both: aggregator + auto-trip share infrastructure. Resulting service can ALSO be a regime-confidence consumer (B67 had originally scoped this as "Consumer #6"; Kyle directive 2026-04-28 deferred it here). Implementation effort if approved: ~1-2 weeks. **Independent safety-gap framing:** the auto-trip gap exists today regardless of B67 outcome — a hotfix to wire auto-trip on the existing manual mechanism can ship before Phase 19 if observation shows real risk OR if live-trading activation date approaches without the full service being ready.
+9. **Daily loss budget service + kill-switch auto-trip wiring (moved to dedicated 19.0.B 2026-05-21).** ⚠️ **Now sits as OPTIONAL Phase 19 batch 19.0.B above — see that section for full scope.** Item retained here for cross-reference only. Surfaced during B67 V2 pre-audit code-level inspection: (a) **no daily-loss aggregator service exists in the codebase** (grep on `dailyPnL|daily_pnl|aggregate.*loss` returns no service-level matches); (b) **the kill switch's `dailyLossKillSwitchPct` threshold is configured in `guardrails_v2` table (probably 25%) but no automated enforcement code exists** — `tripKillSwitch()` accepts `lossPercent`/`threshold` params but is only called manually via UI/API. The 25% kill switch is currently a manual safety mechanism, not an automated one. Phase 19 paper observation watches whether daily-loss-budget protection would have caught real loss patterns. **This gap MUST be closed before any real capital is at risk in live trading.** Live-trading activation is gated on this work being complete and tested. If Phase 19 observation supports building, build `server/services/daily-loss-budget.ts` (rolling 24h aggregator) AND wire kill-switch auto-trip when `dailyPnL / portfolioValue ≤ -dailyLossKillSwitchPct`. The same batch covers both: aggregator + auto-trip share infrastructure. Resulting service can ALSO be a regime-confidence consumer (B67 had originally scoped this as "Consumer #6"; Kyle directive 2026-04-28 deferred it here). Implementation effort if approved: ~1-2 weeks. **Independent safety-gap framing:** the auto-trip gap exists today regardless of B67 outcome — a hotfix to wire auto-trip on the existing manual mechanism can ship before Phase 19 if observation shows real risk OR if live-trading activation date approaches without the full service being ready.
 
 **Decision artifacts:** at the end of the observation period, the gate produces a written decision document (likely named `PHASE_19_OBSERVATIONAL_DECISIONS.md` when it lands) that lists, for each of the 9 items above:
 
@@ -1353,17 +1411,17 @@ Phase 16.2's "storage.ts must be modularized BEFORE legacy tables are dropped" i
 
 ---
 
-## Phase 21.5: Exchange Expansion — XStocks + Perpetual Futures (Post-Live)
+## Phase 21.5: Exchange Expansion — Perpetual Futures (Post-Live)
 
-**Goal**: Expand tradeable asset classes by adding Kraken XStocks (tokenized stocks/ETFs) and Perpetual Futures to the scanning and trading pipeline. This is the first major feature addition after going live.
+**Status (2026-05-21):** XStocks already integrated pre-launch (Phase 24 closed 2026-05-10; xstock_spot universe expanded to ~450+ tokenized equities including Fortune 500 / NASDAQ / ETFs / index funds after the May discovery of ~220 previously-unrecognized feeds). Phase 21.5 now narrows to PERPETUAL FUTURES only.
 
-**Why post-live**: The system needs to be proven with live crypto spot trading before expanding to new asset classes. Live trade data and operational experience inform how new asset types are integrated.
+**Goal**: Onboard Kraken Futures (~10 perpetual pairs) as the next asset class after live activation. Apply the canonical asset-class onboarding workflow (`ASSET_CLASS_ONBOARDING_WORKFLOW.md`) refined through xstock_spot.
 
-### 21.5.1 Kraken XStocks Integration
-- Add Kraken XStocks API endpoints (tokenized stocks, ETFs)
-- Asset-class-specific filter profiles in screener_filters DB
-- Strategy eligibility per asset class (some strategies may not apply to stocks)
-- UI: asset class selector/filter in trading and analytics views
+**Why post-live**: Kraken Futures has only ~10 perp pairs — the marginal universe expansion is small relative to the 450+ tokenized equities the live system already trades. The calendar weeks needed for a clean perp onboarding (Day 0 friction extraction, funding-rate macro extension, leverage/liquidation guardrails, perpetual settlement, observation window) are better spent on Phase 19 paper audit pre-launch and reserved for post-launch when live data is informing the onboarding choices.
+
+### 21.5.1 ~~Kraken XStocks Integration~~ — ✅ COMPLETE PRE-LAUNCH (Phase 24, 2026-05-10)
+
+xstock_spot fully onboarded across 9 sub-batches. ~450+ tokenized equities feeding the system post-discovery (May 2026). See Phase 24 close note above.
 
 ### 21.5.2 Perpetual Futures Integration
 - Add Kraken Futures API endpoints
