@@ -27,6 +27,7 @@ import {
   _testGetSymbolEntry,
   _testInjectDividendCalendar,
 } from '../../services/price-discontinuity-detector.js';
+import { seedXstockUniverse } from '../helpers/seed-xstock-universe.js';
 
 // Test symbol guaranteed to be in XSTOCK_SPOT_SYMBOLS (per shared/asset-classes.ts).
 // AAPL/USD is canonical xStock storage form.
@@ -38,6 +39,11 @@ const CRYPTO_SYMBOL = 'BTC/USD';
 beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
+  // B-NEW-43 Phase 2: seed XSTOCK_SPOT_SYMBOLS via the same _replaceXstockUniverse()
+  // path the universe-service uses post-boot. Pre-B79.0n.UNIVERSE-DISCOVERY the
+  // universe was module-load-populated; post-commit-230348507 it requires explicit
+  // boot/seed which unit tests don't run. See server/tests/helpers/seed-xstock-universe.ts.
+  seedXstockUniverse();
   _testClearAllState();
   // Inject empty dividend calendar by default; specific tests override.
   _testInjectDividendCalendar([]);
