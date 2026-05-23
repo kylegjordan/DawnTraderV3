@@ -3,7 +3,7 @@
   "frozen_at_commit": "0519224",
   "frozen_at_iso": "2026-05-23T01:59:15.905Z",
   "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 519,
+  "total_errors": 513,
   "file_count": 71,
   "files": [
     {
@@ -116,12 +116,12 @@
         "TS2820": 1,
         "TS2339": 71,
         "TS2552": 4,
-        "TS2554": 11,
         "TS2769": 4,
         "TS2352": 1,
         "TS2783": 1,
         "TS2353": 18,
         "TS2307": 5,
+        "TS2554": 5,
         "TS7006": 7,
         "TS2741": 1,
         "TS2551": 1
@@ -642,6 +642,6 @@
   ],
   "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
   "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
-  "last_synced_at_iso": "2026-05-23T09:31:35.303Z",
+  "last_synced_at_iso": "2026-05-23T09:37:25.596Z",
   "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }

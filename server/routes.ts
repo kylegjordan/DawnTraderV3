@@ -4425,7 +4425,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // [9.6.3] Read portfolio balance from portfolio_state (mode-level)
       const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
-      const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
+      const initialBalance = await getPortfolioBalanceV2(mode) || 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -4511,7 +4511,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // [9.6.3] Read portfolio balance from portfolio_state (mode-level)
       const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
-      const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
+      const initialBalance = await getPortfolioBalanceV2(mode) || 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -4590,7 +4590,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // [9.6.3] Read portfolio balance from portfolio_state (mode-level)
       const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
-      const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
+      const initialBalance = await getPortfolioBalanceV2(mode) || 50000;
       const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/stats → mode-based only');
       const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
@@ -4929,7 +4929,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const today = new Date().toISOString().split('T')[0];
       
-      const brief = await storage.getPaperDailyBrief(userId, today);
+      // B-NEW-43 chunk 14: Phase 41F-L userId-purge straggler.
+      // storage.getPaperDailyBrief takes only `(date)` per the modern
+      // mode-based architecture; the prior userId arg was a holdover from
+      // the user-coupled era.
+      const brief = await storage.getPaperDailyBrief(today);
       res.json(brief || null);
     } catch (error) {
       console.error('Error fetching today\'s paper brief:', error);
@@ -4942,7 +4946,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const { status, limit } = req.query;
       
-      const briefs = await storage.getPaperDailyBriefs(userId, {
+      // B-NEW-43 chunk 14: Phase 41F-L userId-purge straggler — same as
+      // getPaperDailyBrief above. Modern signature takes `(filters?)` only.
+      const briefs = await storage.getPaperDailyBriefs({
         status: status as string,
         limit: limit ? parseInt(limit as string) : 30
       });
@@ -11113,7 +11119,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (!systemContext) {
           return res.status(500).json({ error: 'System context not found for paper mode' });
         }
-        const portfolioState = await storage.getPortfolioState(systemContext.id, 'paper');
+        // B-NEW-43 chunk 14: storage.getPortfolioState takes a single params
+        // object (globalContextId?, userId?, mode); caller was passing two
+        // positional args (id, 'paper'). Restructured to the modern shape.
+        const portfolioState = await storage.getPortfolioState({ globalContextId: systemContext.id, mode: 'paper' });
         balance = portfolioState ? parseFloat(portfolioState.cash || '10000') : 10000;
         console.log(`[PaperSim] Soft reset using existing balance: $${balance}`);
       }
