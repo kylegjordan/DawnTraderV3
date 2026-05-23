@@ -83,38 +83,14 @@ describe('B68.5 — Path B sustainability gate', () => {
     }
   });
 
-  it('Path B with negative slope is rejected (label != TFS)', () => {
-    // Same OHLC + DBS as previous, but slope = -0.05 < slopeMin=0.0 → reject.
-    // Result should fall through to one of the other regime branches.
-    const ohlc = makeOhlc({ count: 60, endPrice: 101, perStepNoise: 0.001 });
-    const cfgWithGate = cfgWithSlope(0.0);
-    const cfgUngated = cfgWithSlope(Number.NEGATIVE_INFINITY);
-    const gated = calculatePairRegime(ohlc, 0.5, -0.05, 1.0, cfgWithGate, 'crypto_spot' as const);
-    const ungated = calculatePairRegime(ohlc, 0.5, -0.05, 1.0, cfgUngated, 'crypto_spot' as const);
-    // The gated version may or may not be TFS depending on Path A — but it
-    // should match the ungated version less often than chance. We assert
-    // the specific label-flip case: when ungated Path B admits to TFS, the
-    // gated version with neg slope must NOT classify as TFS (assuming Path
-    // A is not also satisfied, which the makeOhlc setup avoids).
-    if (ungated.regime === REGIMES.TREND_FRIENDLY_STABLE) {
-      // The gate flipped the label
-      expect(gated.regime).not.toBe(REGIMES.TREND_FRIENDLY_STABLE);
-    }
-  });
-
-  it('seed b68_5DbsSlopeMin = 0.0 rejects exactly the negative-slope Path B cases', () => {
-    const ohlc = makeOhlc({ count: 60, endPrice: 101, perStepNoise: 0.001 });
-    const cfg = cfgWithSlope(0.0);
-    const slopePos = calculatePairRegime(ohlc, 0.5, 0.001, 1.0, cfg, 'crypto_spot' as const);
-    const slopeNeg = calculatePairRegime(ohlc, 0.5, -0.001, 1.0, cfg, 'crypto_spot' as const);
-    // Same DBS, slope sign differs → Path B gate either admits both or
-    // flips the negative case. In the case where Path A is not active,
-    // the positive-slope case should be more likely to land in TFS than
-    // the negative-slope case.
-    // Loose assertion: at minimum, the negative case should not be TFS
-    // when the positive case is TFS.
-    if (slopePos.regime === REGIMES.TREND_FRIENDLY_STABLE) {
-      expect(slopeNeg.regime).not.toBe(REGIMES.TREND_FRIENDLY_STABLE);
-    }
-  });
+  // B-NEW-43 Phase 2 chunk 10 (2026-05-23): two tests REMOVED that asserted
+  // the OLD `b68_5DbsSlopeMin` slope gate would reject Path B candidates
+  // with negative slope. Per server/services/market-context-engine.ts:400
+  // comment, the classifier now reads `b68_5PathBMomentumMin` and the old
+  // dbsSlopeMin is retained as a legacy back-compat field only. The slope-
+  // based gate behavior is no longer the production path; the new
+  // momentum-based gate has no test coverage yet (registered as Phase-19
+  // follow-up in RUNNING_ISSUES #137). When momentum-gate tests are
+  // written, the test names/intents can be carried forward from the
+  // pre-2026-05-23 git history of this file.
 });
