@@ -54,6 +54,20 @@ CREATE SCHEMA IF NOT EXISTS public;
 
 
 --
+-- B-NEW-43 Phase 2 chunk 4 (2026-05-23): Required extensions for DT.
+-- pgvector is referenced by semantic_memory.embedding column type
+-- (public.vector(1536)) + HNSW index (public.vector_cosine_ops). Not
+-- emitted by pg_dump default; added here so a fresh PG matching the
+-- pgvector/pgvector:pg17 CI image gets the type registered before
+-- any column reference. gen_random_uuid() is built-in PG 13+ — no
+-- pgcrypto / uuid-ossp extension needed. pg_stat_statements is for
+-- monitoring; not runtime-required. supabase_vault is Supabase-only
+-- and intentionally excluded.
+--
+CREATE EXTENSION IF NOT EXISTS vector;
+
+
+--
 -- Name: agent_state; Type: TYPE; Schema: public; Owner: -
 --
 

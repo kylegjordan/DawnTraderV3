@@ -64,7 +64,12 @@ jobs:
     # the full rationale).
     services:
       postgres:
-        image: postgres:17-alpine
+        # B-NEW-43 Phase 2 chunk 4.2: pgvector/pgvector:pg17 (PG 17 + pgvector ext)
+        # instead of bare postgres:17-alpine. Staging Supabase has pgvector
+        # enabled (semantic_memory.embedding column type public.vector(1536) +
+        # HNSW index public.vector_cosine_ops). The initial-schema migration
+        # references both. Bare postgres:17-alpine doesn't ship pgvector.
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
