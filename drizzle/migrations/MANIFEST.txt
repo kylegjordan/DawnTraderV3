@@ -1,0 +1,98 @@
+# B-NEW-43 Phase 2 chunk 3 (2026-05-23): Explicit migration ordering manifest.
+#
+# Why this exists: scripts/db-migrate.ts previously lex-sorted forward migrations
+# from this directory. On the same date, suffix-sort produced wrong ordering for
+# the b65 cluster (b65-2-trailing-exit-seeds tried to INSERT INTO module_constants
+# before b65-create-module-constants ran CREATE TABLE). Pre-audit §7 + §10 Q1
+# predicted this; B-NEW-43 Phase 2 chunk 2 (CI Postgres) surfaced it as the first
+# real fresh-empty-Postgres apply since the migrations were authored.
+#
+# This manifest seeds order from staging's _migrations.applied_at — the empirically-
+# correct order that produced the working production schema. CI's fresh-empty
+# Postgres now follows that same order.
+#
+# Rules:
+#   - Blank lines and lines starting with `#` are skipped.
+#   - Each non-comment line must be a real file in drizzle/migrations/.
+#   - Rollback files (`*rollback*`) are NEVER in this manifest — db-migrate auto-skips them.
+#   - Every non-rollback *.sql file in drizzle/migrations/ MUST appear here exactly once
+#     (db-migrate.ts validates this at run start and hard-fails on drift).
+#   - When you add a new migration, also add it here in the position you want
+#     it applied. The drift-validator will keep you honest.
+#
+# Bypass: there is none. The runner hard-fails if MANIFEST.txt is missing or
+# the contents drift from drizzle/migrations/. This is intentional (no silent
+# fallback to lex sort — Langston Step-2 design ACK constraint #1).
+#
+# Source: staging _migrations.applied_at ORDER BY applied_at, name (2026-05-23 pull,
+# intersection with current filesystem). Two staging-applied entries are NOT in
+# the filesystem any more (b67-1-restore-shadow-flag.sql,
+# b-new-35-phase1-dedup-xstock-spot-rev6.sql) — files were removed/renamed in later
+# batches; ledger still tracks them, manifest does not.
+
+2026-04-23-b65-add-base-currency-to-trades.sql
+2026-04-23-b65-add-exchange-asset-class.sql
+2026-04-23-b65-create-module-constants.sql
+2026-11-0G-schema-hardening.sql
+2026-11-0H-add-pool-to-telemetry.sql
+2026-11-0J-telemetry-sizes.sql
+2026-11-1A-persistent-intelligence.sql
+2026-11-1B-adaptive-learning.sql
+2026-04-23-b65-2-trailing-exit-seeds-and-trade-mode.sql
+2026-04-25-b65-4-add-ladder-rungs.sql
+2026-04-26-b65-4-1-rung-floor-buffer-seed.sql
+2026-04-28-b65-4-2-ladder-observability-columns.sql
+2026-04-28-b67-0-regime-factor-alternates.sql
+2026-04-28-b67-3-per-underlying-cap-pair-hash.sql
+2026-04-28-b67-1-macro-modifier.sql
+2026-04-29-b67-1-remove-shadow-flag.sql
+2026-04-29-b67-2-phase-dimension.sql
+2026-04-29-b67-1-funding-oi-weights.sql
+2026-04-29-b67-2-1-trade-record-confidence-columns.sql
+2026-04-29-b67-3-5-tfs-desat.sql
+2026-04-30-b67-b73-ablation-fixes.sql
+2026-04-30-b73-exit-strategy-alternates.sql
+2026-05-01-b67-4-cheap-tier.sql
+2026-05-01-b74-passive-archive-tables.sql
+2026-05-02-b68-2-volume-regime.sql
+2026-05-02-b68-3-pair-correlation.sql
+2026-05-03-b67-5-prep-floor.sql
+2026-05-03-b68-1-multi-tf-agreement.sql
+2026-05-05-b70-data-archive-tables.sql
+2026-05-05-b70-3-path-b-momentum-gate.sql
+2026-05-05-b72-1-strategy-modes-naming-reseed.sql
+2026-05-05-b72-cleanup-duplicate-regime.sql
+2026-05-05-b72-dbs-routing-guards.sql
+2026-05-05-b72-lever-sweep.sql
+2026-05-06-b72-2-quant-lever-sweep.sql
+2026-05-06-b75-data-lifecycle.sql
+2026-05-07-b79-screener-filters-asset-class.sql
+2026-05-07-b79-xstock-module-constants.sql
+2026-05-08-b79-0a-data-freshness-window.sql
+2026-05-08-b79-0a-sqe-wildcard-promotion.sql
+2026-05-18-b-new-34b-xstock-60m-snapshot.sql
+2026-05-19-b-new-35-phase1-dedup-crypto-spot.sql
+2026-05-19-b-new-35-phase1-dedup-xstock-perp.sql
+2026-05-19-b-new-35-phase1-dedup-xstock-spot.sql
+2026-05-19-b-new-35-phase2-add-unique-constraints.sql
+2026-05-08-b79-tec-per-class-be-rows.sql
+2026-05-10-b79-0e-rename-equity-to-xstock.sql
+2026-05-10-b79-0g-tx-data-lifecycle-seed.sql
+2026-05-10-b79-0g-tx-vts-open-trades-soft-delete.sql
+2026-05-10-b79-0g-vts-open-trades.sql
+2026-05-11-b79-0m-a-screener-filters-asset-class-index.sql
+2026-05-11-b79-0m-a-xstock-family-imf-seeds.sql
+2026-05-11-b79-0m-a-xstock-regime-classifier-seeds.sql
+2026-05-11-b79-0m-a-xstock-strategy-gates-seeds.sql
+2026-05-11-b79-0m-b-xstock-active-quant-row.sql
+2026-05-11-b79-0m-b-xstock-tec-enable.sql
+2026-05-11-b79-0m-b2-xstock-pattern-rows.sql
+2026-05-12-b-new-1-xstock-global-tighten.sql
+2026-05-17-b-new-42b-price-discontinuity-detector-constants.sql
+2026-05-17-b-phase-a2-dbs-backfill-table.sql
+2026-05-17-b-phase-a2-dbs-xstock-constants.sql
+2026-05-20-b-new-36-scheduled-tasks-audit.sql
+2026-05-20-b-new-36-vts-open-trades-state.sql
+2026-05-21-b79-0n-universe-discovery.sql
+2026-05-21-b79-0n-storage-xstock-screener-filters-seed.sql
+2026-05-22-b79-0n-mce-dbs-per-class.sql

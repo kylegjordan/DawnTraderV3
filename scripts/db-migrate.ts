@@ -47,6 +47,15 @@ const MIGRATIONS_DIR = path.resolve(
   'migrations',
 );
 
+// B-NEW-43 Phase 2 chunk 3 (2026-05-23): MANIFEST.txt makes migration ordering
+// explicit + auditable. Pre-B-NEW-43 the runner lex-sorted forward migrations,
+// which produced wrong ordering for the b65 cluster (the b65-2-trailing-exit-seeds
+// INSERT migration sorted before b65-create-module-constants CREATE TABLE).
+// MANIFEST.txt is REQUIRED — no lex-sort fallback (Langston Step-2 design ACK
+// constraint #1: silent fallback would silently mask exactly the regression
+// we're fixing here).
+const MANIFEST_PATH = path.join(MIGRATIONS_DIR, 'MANIFEST.txt');
+
 async function ensureLedger(client: Client): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS _migrations (
@@ -62,14 +71,84 @@ async function getAppliedMigrations(client: Client): Promise<Set<string>> {
   return new Set(rows.map((r) => r.name));
 }
 
-function listPendingMigrationFiles(applied: Set<string>): string[] {
-  const all = fs
-    .readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith('.sql'))
-    .filter((f) => !f.toLowerCase().includes('rollback'))
-    .sort(); // lexicographic = date-prefixed chronological
+/**
+ * Read MANIFEST.txt — strip blank lines + `#` comments. Hard-fail if missing.
+ */
+function readManifest(): string[] {
+  if (!fs.existsSync(MANIFEST_PATH)) {
+    throw new Error(
+      `[db-migrate] MANIFEST.txt is REQUIRED at ${MANIFEST_PATH} but missing. ` +
+        'Migration ordering must be explicit (no silent lex-sort fallback — that ' +
+        'would silently re-introduce the b65-2/b65-create-module-constants ordering ' +
+        'regression B-NEW-43 Phase 2 chunk 3 fixed). Add MANIFEST.txt with one ' +
+        'forward-migration filename per line.',
+    );
+  }
+  return fs
+    .readFileSync(MANIFEST_PATH, 'utf-8')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'));
+}
 
-  return all.filter((f) => !applied.has(f));
+/**
+ * Validate manifest matches filesystem: bijection between manifest lines and
+ * non-rollback `*.sql` files in MIGRATIONS_DIR. Hard-fails on any drift
+ * (Langston Step-2 design ACK constraint #2: developer-adds-migration-but-
+ * forgets-MANIFEST is caught at PR-time by CI, not at staging-deploy time).
+ */
+function validateManifest(manifest: string[]): void {
+  const manifestSet = new Set(manifest);
+  if (manifestSet.size !== manifest.length) {
+    const dupes = manifest.filter((f, i) => manifest.indexOf(f) !== i);
+    throw new Error(
+      `[db-migrate] MANIFEST.txt has duplicate entries: ${Array.from(new Set(dupes)).join(', ')}`,
+    );
+  }
+
+  const fsForward = new Set(
+    fs
+      .readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith('.sql'))
+      .filter((f) => !f.toLowerCase().includes('rollback')),
+  );
+
+  const inManifestRollback = manifest.filter((f) => f.toLowerCase().includes('rollback'));
+  if (inManifestRollback.length > 0) {
+    throw new Error(
+      `[db-migrate] MANIFEST.txt contains rollback files (never legal here): ${inManifestRollback.join(', ')}`,
+    );
+  }
+
+  const missingFromManifest: string[] = [];
+  for (const f of fsForward) {
+    if (!manifestSet.has(f)) missingFromManifest.push(f);
+  }
+  const missingFromFs: string[] = [];
+  for (const f of manifest) {
+    if (!fsForward.has(f)) missingFromFs.push(f);
+  }
+
+  if (missingFromManifest.length > 0 || missingFromFs.length > 0) {
+    const msgs: string[] = [];
+    if (missingFromManifest.length > 0) {
+      msgs.push(
+        `Files in drizzle/migrations/ NOT in MANIFEST.txt (forgot to add?): ${missingFromManifest.join(', ')}`,
+      );
+    }
+    if (missingFromFs.length > 0) {
+      msgs.push(
+        `Lines in MANIFEST.txt NOT in drizzle/migrations/ (renamed/deleted file?): ${missingFromFs.join(', ')}`,
+      );
+    }
+    throw new Error(`[db-migrate] MANIFEST.txt drift detected:\n  - ${msgs.join('\n  - ')}`);
+  }
+}
+
+function listPendingMigrationFiles(applied: Set<string>): string[] {
+  const manifest = readManifest();
+  validateManifest(manifest);
+  return manifest.filter((f) => !applied.has(f));
 }
 
 async function applyMigration(client: Client, filename: string): Promise<void> {
