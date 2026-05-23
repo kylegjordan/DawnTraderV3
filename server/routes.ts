@@ -14474,7 +14474,7 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
       
-      const audits = await storage.listStrategySettingsAudit({ userId, limit });
+      const audits = await storage.listStrategySettingsAudit({ limit });
       res.json({ ok: true, audits });
     } catch (error: any) {
       console.error('Strategy audit fetch error:', error);
@@ -15094,13 +15094,13 @@ Provide specific, actionable recommendations.`,
       // Get calibration logs using existing method
       let logs;
       if (mode) {
-        const latest = await storage.getLatestCalibration({ userId, mode, maxAgeHours: hours });
+        const latest = await storage.getLatestCalibration({ mode, maxAgeHours: hours });
         logs = latest ? [latest] : [];
       } else {
         // Get both modes
         const [liveLogs, paperLogs] = await Promise.all([
-          storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: hours }),
-          storage.getLatestCalibration({ userId, mode: 'paper', maxAgeHours: hours })
+          storage.getLatestCalibration({ mode: 'live', maxAgeHours: hours }),
+          storage.getLatestCalibration({ mode: 'paper', maxAgeHours: hours })
         ]);
         logs = [liveLogs, paperLogs].filter(Boolean);
       }
@@ -15232,8 +15232,8 @@ Provide specific, actionable recommendations.`,
         portfolioAdjustments,
         transparencyLogs,
       ] = await Promise.all([
-        storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 168 }),
-        storage.getLatestCalibration({ userId, mode: 'paper', maxAgeHours: 168 }),
+        storage.getLatestCalibration({ mode: 'live', maxAgeHours: 168 }),
+        storage.getLatestCalibration({ mode: 'paper', maxAgeHours: 168 }),
         storage.getIntradayAdjustments(userId, { hours: 168, limit: 3 }),
         storage.getAILessons(userId, { hours: 168, limit: 3 }),
         storage.getPortfolioAdjustments({ hours: 168, limit: 3 }),
@@ -15425,7 +15425,7 @@ Provide specific, actionable recommendations.`,
       const paperAccuracy = await storage.getPredictionAccuracy(userId, 'paper', undefined, 1);
       
       // Calculate transfer success rate (fallbacks in last 24h)
-      const calibrationLive = await storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 24 });
+      const calibrationLive = await storage.getLatestCalibration({ mode: 'live', maxAgeHours: 24 });
       const hasFallback = calibrationLive && calibrationLive.source === 'paper-fallback';
       const transferSuccessRate = hasFallback ? 100 : 0;
       
@@ -15477,7 +15477,7 @@ Provide specific, actionable recommendations.`,
       }
       
       // Check source data availability
-      const liveCalibration = await storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 24 });
+      const liveCalibration = await storage.getLatestCalibration({ mode: 'live', maxAgeHours: 24 });
       const paperCalibration = await storage.getLatestPaperCalibration(userId);
       
       // Test the production HTTP endpoint by making an actual request
