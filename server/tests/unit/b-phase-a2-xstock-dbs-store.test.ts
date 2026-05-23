@@ -38,12 +38,18 @@ import type { XstockSector } from '../../../shared/asset-classes';
 
 // Mock module-constants-service so tests don't require a warm DB cache.
 // Returns the seed values that A.2 migration will set in module_constants.
+// B-NEW-43 Phase 2 chunk 8 (2026-05-23): added sector_coverage_floor handling
+// to getCachedNumberRequired — the directional-bias-store now reads it via
+// the required path (was getCachedConstant when this mock was written).
 vi.mock('../../services/module-constants-service.js', () => ({
   getCachedNumberRequired: (module: string, knob: string, key: any) => {
     if (module !== 'dbs_calculation') throw new Error(`unexpected module ${module}`);
     if (knob === 'min_sample_count') {
       // crypto wildcard -> 20; xstock_spot row -> 30
       return key.assetClass === 'xstock_spot' ? 30 : 20;
+    }
+    if (knob === 'sector_coverage_floor' && key.assetClass === 'xstock_spot') {
+      return 7;
     }
     throw new Error(`unexpected required knob ${knob}`);
   },

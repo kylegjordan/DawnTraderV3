@@ -175,23 +175,14 @@ describe('B79.0d — ORB detect', () => {
     expect(result).toBeNull();
   });
 
-  it('(g) 24/7 symbol (TSLA/USD) returns null — no opening bell semantics', () => {
-    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 2000 };
-    const result = detectORB('TSLA/USD', makeOpenRangeBars(), indicators, {
-      assetClass: 'xstock_spot', symbol: 'TSLA/USD', now: NOW_AFTER_RANGE,
-    });
-    expect(result).toBeNull();
-  });
-
-  it('(g2) all 10 24/7 names skipped during active window', () => {
-    const names = ['AAPL/USD', 'CRCL/USD', 'GLD/USD', 'GOOGL/USD', 'HOOD/USD',
-                   'MSTR/USD', 'NVDA/USD', 'QQQ/USD', 'SPY/USD', 'TSLA/USD'];
-    const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 2000 };
-    for (const sym of names) {
-      const result = detectORB(sym, makeOpenRangeBars(), indicators, {
-        assetClass: 'xstock_spot', symbol: sym, now: NOW_AFTER_RANGE,
-      });
-      expect(result).toBeNull();
-    }
-  });
+  // B-NEW-43 Phase 2 chunk 8 (2026-05-23): tests (g) and (g2) REMOVED.
+  // They asserted that the 10 named symbols ('AAPL', 'TSLA', etc.) would be
+  // SKIPPED during the active ORB window because they were once treated as
+  // "24/7" names with no opening-bell semantics. B-NEW-36 sub-batch (c)
+  // (2026-05-20, server/strategies/orb.ts:156-165) REMOVED that per-symbol
+  // weekend-bypass after empirical Q9 verification showed those 10 names
+  // share identical Sun-8PM-ET-open → Fri-8PM-ET-close hours with the
+  // other ~255 xStocks. The tests asserted deprecated behavior; the current
+  // behavior (ORB applies normally to all xStocks during the active window)
+  // is covered by tests (a)-(f) above.
 });

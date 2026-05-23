@@ -124,6 +124,9 @@ import {
 import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
 // B-NEW-42b: clear per-symbol detector state between tests so each starts cold.
 import { _testClearAllState as _testClearDetectorState } from '../../services/price-discontinuity-detector.js';
+// B-NEW-43 Phase 2 chunk 8 (2026-05-23): seed XSTOCK_SPOT_SYMBOLS so the
+// discontinuity detector recognizes test symbols as in-universe.
+import { seedXstockUniverse } from '../helpers/seed-xstock-universe.js';
 
 // Seed all module_constants rows required by primeTECConfig
 function seedAllConstants() {
@@ -176,6 +179,7 @@ const xstockContext = {
 
 describe('B-NEW-42 §2.1.4 — TEC split-resilience (VERIFIES B-NEW-42b FIX)', () => {
   beforeEach(async () => {
+    seedXstockUniverse();
     clearModuleConstantsCache();
     seedAllConstants();
     _testClearEngineConfigCache();

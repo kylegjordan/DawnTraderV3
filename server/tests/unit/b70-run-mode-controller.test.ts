@@ -16,7 +16,14 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const isEngineActiveMock = vi.fn();
+// B-NEW-43 Phase 2 chunk 8 (2026-05-23): vi.mock is hoisted to the top of the
+// file (before any const declarations). Referring to a top-level `const
+// isEngineActiveMock = vi.fn()` from inside the vi.mock factory fails with
+// ReferenceError because the factory runs before the const initializer. Use
+// vi.hoisted() to define the mock fn in a hoist-safe way per vitest docs.
+const { isEngineActiveMock } = vi.hoisted(() => ({
+  isEngineActiveMock: vi.fn(),
+}));
 
 vi.mock('../../services/trading-state-sync.js', () => ({
   tradingStateSync: {

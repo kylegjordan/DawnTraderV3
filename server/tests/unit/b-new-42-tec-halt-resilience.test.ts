@@ -98,6 +98,13 @@ import { clearModuleConstantsCache } from '../../services/module-constants-servi
 // B-NEW-42b: clear per-symbol detector state between tests.
 import { _testClearAllState as _testClearDetectorState } from '../../services/price-discontinuity-detector.js';
 
+// B-NEW-43 Phase 2 chunk 8 (2026-05-23): seed XSTOCK_SPOT_SYMBOLS so the
+// detector recognizes AAPL/USD + TSLA/USD as in-universe. Without this
+// the detector early-returns "not in xStock universe" and the halt-
+// resilience short-circuit doesn't engage, causing the post-fix stop-
+// suppression to be missed.
+import { seedXstockUniverse } from '../helpers/seed-xstock-universe.js';
+
 function seedAllConstants() {
   const wildcard = {
     moduleName: 'trailing_exit',
@@ -139,6 +146,7 @@ const xstockContext = {
 
 describe('B-NEW-42 §2.3.3 — TEC halt-resilience (VERIFIES B-NEW-42b FIX)', () => {
   beforeEach(async () => {
+    seedXstockUniverse();
     clearModuleConstantsCache();
     seedAllConstants();
     _testClearEngineConfigCache();
