@@ -1,3 +1,14 @@
+-- db-migrate:skip
+-- B-NEW-43 Phase 2 chunk 4.7 (2026-05-23): bulk skip-marker added. This
+-- migration's effects are already captured in 2026-04-22-initial-schema.sql
+-- (pg_dump of staging state on 2026-05-23). On a fresh empty Postgres,
+-- initial-schema applies the FINAL state; re-running this delta would
+-- duplicate-create or otherwise conflict (idempotent ALTER-IF-NOT-EXISTS
+-- migrations would no-op but still run unnecessarily; non-idempotent ones
+-- would error). Skip-marker ledger-records as applied without running the
+-- SQL. See scripts/db-migrate.ts SKIP_MARKER + 1-system-manual/staging-
+-- coordination/2026-04-22-initial-schema-mark-applied.sql for the full
+-- staging-vs-CI bootstrap divergence model.
 -- B65.1 Migration 3 of 3 — Create module_constants table + seed TEC defaults
 --
 -- Purpose: create the central 5-dimensional constants table that will hold all
