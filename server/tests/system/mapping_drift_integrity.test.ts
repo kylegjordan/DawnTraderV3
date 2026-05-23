@@ -17,6 +17,17 @@ import { computeDriftScore, aggregateDriftStats, ema } from '../../core/analytic
 import { DRIFT_CANONICAL } from '../../config/drift-definitions';
 import { DRIFT_DESCRIPTIONS, getDriftDescription } from '../../config/drift-descriptions';
 import { CANONICAL_SCHEMA_VERSION } from '../../config/canonical-regime-strategy-map';
+import { prefetchModule } from '../../services/module-constants-service.js';
+// B-NEW-43 Phase 2 chunk 6 (2026-05-23): warm module_constants modules
+// read by code under test. Server boot calls prefetchModule for all
+// PREFETCH_MODULES; unit tests must do the same explicitly. CI Postgres
+// (chunks 4.0-4.7) populates module_constants via db:migrate; this hook
+// loads the rows into the sync-read cache.
+import { beforeAll as __b43_beforeAll } from 'vitest';
+__b43_beforeAll(async () => {
+  await prefetchModule("drift_detector");
+});
+
 
 describe('Mapping Drift Integrity — Directive 11.7F', () => {
   

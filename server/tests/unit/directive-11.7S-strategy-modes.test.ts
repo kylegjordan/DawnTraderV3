@@ -25,6 +25,17 @@ import {
   type StrategyMode,
   type StrategyModeOverlay,
 } from '../../core/governance/strategy-modes';
+import { prefetchModule } from '../../services/module-constants-service.js';
+// B-NEW-43 Phase 2 chunk 6 (2026-05-23): warm module_constants modules
+// read by code under test. Server boot calls prefetchModule for all
+// PREFETCH_MODULES; unit tests must do the same explicitly. CI Postgres
+// (chunks 4.0-4.7) populates module_constants via db:migrate; this hook
+// loads the rows into the sync-read cache.
+import { beforeAll as __b43_beforeAll } from 'vitest';
+__b43_beforeAll(async () => {
+  await prefetchModule("governance_modes");
+});
+
 
 describe('Directive 11.7S: Strategy Mode Modulation', () => {
   beforeEach(() => {
