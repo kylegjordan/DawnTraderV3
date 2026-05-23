@@ -23,7 +23,13 @@ interface CanonicalEntry {
 
 type CanonicalMapType = Record<string, CanonicalEntry | string>;
 
-const typedCanonicalMap = canonicalMap as CanonicalMapType;
+// B-NEW-43 chunk 7 (2026-05-23): `resolveJsonModule` (enabled in tsconfig
+// chunk 7) types canonicalMap as the JSON's literal shape including the
+// `_schema` + `_metadata` leading-underscore keys. The existing cast to
+// CanonicalMapType (regime-name -> CanonicalEntry record) is bridged via
+// `unknown` per the TS-recommended external-boundary form; consumers
+// look up by regime name only and never read the metadata keys.
+const typedCanonicalMap = canonicalMap as unknown as CanonicalMapType;
 
 export function getFavoredStrategiesForRegime(regime: string): string[] {
   const canonical = typedCanonicalMap[regime] as CanonicalEntry | undefined;

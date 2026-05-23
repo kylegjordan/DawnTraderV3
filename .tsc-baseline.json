@@ -3,8 +3,8 @@
   "frozen_at_commit": "0519224",
   "frozen_at_iso": "2026-05-23T01:59:15.905Z",
   "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 585,
-  "file_count": 91,
+  "total_errors": 574,
+  "file_count": 82,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -96,27 +96,11 @@
       }
     },
     {
-      "path": "server/core/strategy-mapper.ts",
-      "phase_tag": "Phase 19",
-      "context": "Core risk / strategy infrastructure (1 error). Active-trading-path. Phase 19 owns.",
-      "errors": {
-        "TS2732": 1
-      }
-    },
-    {
       "path": "server/core/telemetry/cost-telemetry.ts",
       "phase_tag": "Phase 19 or B-NEW-43",
       "context": "Server core infrastructure (1 error). May be current/operational or active-trading-adjacent. Triage in chunk 7+: if confidently current, fix; otherwise Phase 19.",
       "errors": {
         "TS2339": 1
-      }
-    },
-    {
-      "path": "server/index.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Server entry point (1 error). Current/operational boot path. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS2732": 1
       }
     },
     {
@@ -193,14 +177,6 @@
       "errors": {
         "TS2352": 1,
         "TS2769": 1
-      }
-    },
-    {
-      "path": "server/routes/status.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Sub-route (1 error). Routes mix current/operational (VTS-path, calibration, pricing, status) with active-trading-path. Triage in chunk 7+: VTS-path / status-only routes are B-NEW-43-fixable; active-trading-only routes are Phase 19.",
-      "errors": {
-        "TS2732": 1
       }
     },
     {
@@ -534,14 +510,6 @@
       }
     },
     {
-      "path": "server/services/metrics-core.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Operational infrastructure (2 errors). Current. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS18047": 2
-      }
-    },
-    {
       "path": "server/services/narrative-feed.ts",
       "phase_tag": "Phase 19",
       "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
@@ -606,14 +574,6 @@
       "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
       "errors": {
         "TS2339": 2
-      }
-    },
-    {
-      "path": "server/services/response-cache.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Operational infrastructure (1 error). Current. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS2769": 1
       }
     },
     {
@@ -742,27 +702,11 @@
       }
     },
     {
-      "path": "server/startup/lazy-loader.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Boot/startup infrastructure (1 error). Current/operational. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS2339": 1
-      }
-    },
-    {
       "path": "server/startup/passive-archive-bootstrap.ts",
       "phase_tag": "B-NEW-43",
       "context": "Boot/startup infrastructure (4 errors). Current/operational. Pick off in a future B-NEW-43 chunk.",
       "errors": {
         "TS2345": 4
-      }
-    },
-    {
-      "path": "server/startup/test-user-seeder.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Boot/startup infrastructure (1 error). Current/operational. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS2339": 1
       }
     },
     {
@@ -791,24 +735,10 @@
       "errors": {
         "TS2367": 1
       }
-    },
-    {
-      "path": "server/utils/validate-canonical.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Utility (1 error). Current/operational. Pick off in a future B-NEW-43 chunk.",
-      "errors": {
-        "TS2732": 1
-      }
-    },
-    {
-      "path": "shared/schema.ts",
-      "phase_tag": "B-NEW-43",
-      "context": "Type definitions (2 errors). Current. Likely simple type fixes.",
-      "errors": {
-        "TS1117": 2
-      }
     }
   ],
   "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
-  "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)"
+  "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
+  "last_synced_at_iso": "2026-05-23T04:51:11.031Z",
+  "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }

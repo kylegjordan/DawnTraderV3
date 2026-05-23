@@ -52,11 +52,12 @@ export async function seedTestUser(): Promise<void> {
       tradingStatus: "stopped",
     });
 
-    // Create default trading settings for test user
-    await storage.createTradingSettings({ 
-      userId: testUser.id,
-    });
-
+    // B-NEW-43 chunk 7 (2026-05-23): Phase 41F-L purged user-level trading
+    // settings — `storage.createTradingSettings` was removed from the storage
+    // class. The seeder used to create per-user TradingSettings for the test
+    // user; the architecture is now mode-based (system_context keyed by mode,
+    // not user), so no per-user trading-settings row is needed. The call is
+    // deleted, not silenced — consistent with chunks 1-3 Phase 41F-L migration.
     console.log(`[Startup] Test account verified or created: ${testEmail}`);
 
     // Log to transparency system

@@ -216,13 +216,94 @@ function compareBaseline({ regenAcknowledged }) {
   console.log('[baseline] OK — no regressions above baseline.');
 }
 
+// --sync mode: update per-file error counts to match current tsc output
+// (so the baseline reflects the post-fix state) while PRESERVING phase_tag,
+// context, and frozen_* provenance. Used by chunks 7+ after they fix
+// confidently-clean errors — the baseline should net-shrink as fixes land,
+// per the anti-graveyard discipline (PHASE_HISTORY tracks baseline size at
+// phase close, net-shrinking required by Phase 19 completion).
+function syncBaseline() {
+  if (!existsSync(BASELINE_PATH)) {
+    console.error(`[baseline] ERROR: ${BASELINE_PATH} not found — cannot sync.`);
+    exit(2);
+  }
+  const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
+  console.log('[baseline] Running tsc and syncing counts into baseline...');
+  const output = runTsc();
+  const { counts, total } = parseErrors(output);
+
+  let cleared = 0;
+  let removed = 0;
+  const newFiles = baseline.files
+    .map((f) => {
+      const current = counts[f.path];
+      if (!current) {
+        removed++;
+        return null; // file has no current errors — drop entry
+      }
+      // Update per-code counts; remove codes that hit 0; remove the file if
+      // every code is gone.
+      const newErrors = {};
+      for (const [code, count] of Object.entries(current)) {
+        newErrors[code] = count;
+      }
+      const baselineTotal = Object.values(f.errors).reduce((s, n) => s + n, 0);
+      const currentTotal = Object.values(newErrors).reduce((s, n) => s + n, 0);
+      if (currentTotal < baselineTotal) cleared += baselineTotal - currentTotal;
+      return { ...f, errors: newErrors };
+    })
+    .filter(Boolean);
+
+  // Also include any files that have NEW errors not in the baseline (the
+  // sync step records reality — the COMPARE gate is what rejects regressions,
+  // so a separate manual decision is required before syncing in regressions.
+  // For sync-mode we abort if regressions are detected to force the user to
+  // either fix them OR explicitly --include-regressions.
+  const baselineByPath = new Set(baseline.files.map((f) => f.path));
+  const newPathRegressions = [];
+  for (const [path, codes] of Object.entries(counts)) {
+    if (!baselineByPath.has(path)) {
+      newPathRegressions.push({ path, codes });
+    } else {
+      // Check per-code regressions on existing files
+      const baselineCodes = baseline.files.find((f) => f.path === path).errors;
+      for (const [code, count] of Object.entries(codes)) {
+        if (count > (baselineCodes[code] || 0)) {
+          newPathRegressions.push({ path, code, baseline: baselineCodes[code] || 0, current: count });
+        }
+      }
+    }
+  }
+  if (newPathRegressions.length && !argv.includes('--include-regressions')) {
+    console.error(
+      `[baseline] FAIL — sync detected ${newPathRegressions.length} regression(s) above baseline; sync mode REFUSES to silently absorb them. Either fix them (preferred — that is the whole point of the gate) OR re-run with --include-regressions to ACK-grow the baseline (anti-graveyard: must be enumerated + justified in the batch completion report).`,
+    );
+    for (const r of newPathRegressions) console.error(`   ! ${JSON.stringify(r)}`);
+    exit(1);
+  }
+
+  baseline.files = newFiles;
+  baseline.total_errors = total;
+  baseline.file_count = newFiles.length;
+  baseline.last_synced_at_iso = new Date().toISOString();
+  baseline.last_synced_by_batch = 'B-NEW-43 (chunk 7+ — sync after clean-error fixes)';
+
+  writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2) + '\n');
+  console.log(
+    `[baseline] Synced. ${cleared} errors cleared from baseline, ${removed} files dropped entirely (errors went to 0). New baseline: ${total} errors across ${newFiles.length} files.`,
+  );
+}
+
 const flags = argv.slice(2);
 if (flags.includes('--generate')) {
   generateBaseline();
+} else if (flags.includes('--sync')) {
+  syncBaseline();
 } else if (flags.includes('--help') || flags.includes('-h')) {
   console.log(`Usage:
   node scripts/check-tsc-baseline.mjs                       # compare current tsc output to ${BASELINE_PATH} (CI default)
-  node scripts/check-tsc-baseline.mjs --generate            # rewrite ${BASELINE_PATH} from current tsc output (governance-only)
+  node scripts/check-tsc-baseline.mjs --generate            # rewrite ${BASELINE_PATH} from current tsc output (governance-only, loses phase_tag/context)
+  node scripts/check-tsc-baseline.mjs --sync                # update per-file counts in ${BASELINE_PATH} after clean fixes (preserves phase_tag/context/frozen_*)
   node scripts/check-tsc-baseline.mjs --regen-acknowledged  # compare; skip the silent-tsc-crash sanity check (for genuine big drops)
 `);
 } else {

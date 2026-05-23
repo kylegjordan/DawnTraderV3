@@ -22,11 +22,16 @@ export async function lazyLoadServices() {
       // Directive 12.2.3: Analytics Scheduler removed (file deleted in Batch 7A)
       // Directive 12.2.3: System Health Monitor / BobCore integration removed (bob-core deleted in Batch 7A)
 
-      // System Health Monitor (standalone — no longer integrated with BobCore)
+      // System Health Monitor (standalone — no longer integrated with BobCore).
+      // B-NEW-43 chunk 7 (2026-05-23): the prior `startPeriodicChecks()` call was a
+      // dangling reference — the SystemHealthMonitor class is record-only (stat
+      // recorders + read accessors); there is no periodic-checks lifecycle to start.
+      // The import-and-no-op IIFE is preserved as a lifecycle-step placeholder
+      // (the surrounding Promise.all expects a result here); removal of the dead
+      // method call alone fixes TS2339 without restructuring the lazy-loader.
       (async () => {
         try {
-          const { systemHealthMonitor } = await import('../services/system-health-monitor');
-          systemHealthMonitor.startPeriodicChecks();
+          await import('../services/system-health-monitor');
           return 'SystemHealthMonitor';
         } catch (error) {
           console.error('[Lazy] SystemHealthMonitor failed:', error);

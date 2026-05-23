@@ -280,16 +280,19 @@ class ResponseCacheService {
     details?: any
   ): Promise<void> {
     try {
+      // B-NEW-43 chunk 7 (2026-05-23): `aiTransparencyLog` schema has no
+       // `details` column — the structured detail object is serialized into
+       // the existing `notes` text field. Same information, schema-honest.
       await db.insert(aiTransparencyLog).values({
         userId,
         taskName: "cache-layer",
         success: true,
         resultSummary: `Cache ${action}`,
-        details: {
+        notes: JSON.stringify({
           endpoint,
           action,
           ...details,
-        },
+        }),
       });
     } catch (error) {
       console.error("[ResponseCache] Error logging to transparency:", error);

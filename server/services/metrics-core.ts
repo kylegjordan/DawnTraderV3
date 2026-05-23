@@ -101,7 +101,10 @@ class MetricsCore {
         // Phase 27.F.15.D: Use live pricing for live mode unrealized P/L
         if (mode === 'live') {
           const currentPrice = livePricingAdapter.getPrice(trade.symbol);
-          if (currentPrice) {
+          // B-NEW-43 chunk 7 (2026-05-23): narrow currentPrice.price to non-null —
+          // the schema allows null on the price column; the earlier truthy-check
+          // narrowed currentPrice but not the nested .price field (TS18047).
+          if (currentPrice && currentPrice.price !== null) {
             const currentValue = currentPrice.price * quantity;
             const positionPL = currentValue - tradeValue;
             unrealizedPL += positionPL;

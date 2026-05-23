@@ -1772,9 +1772,10 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   // Batch 19E: Source pool tracking for pattern scanning analysis
   sourcePool: varchar("source_pool", { length: 20 }), // 'quant' | 'pattern' | 'hybrid' | 'xstock' (nullable for existing records)
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
-  // B69 (2026-05-03): asset class + exchange dimensions for multi-asset-class routing.
-  exchange: text("exchange").notNull().default("kraken"),
-  assetClass: text("asset_class").notNull().default("crypto_spot"),
+  // B-NEW-43 chunk 7 (2026-05-23): the B69 `exchange` + `assetClass` columns
+  // are already declared earlier in this table at lines ~1744-1745 — the
+  // duplicate declarations here were a copy-paste from another paper-sim
+  // table and never caught because tsc was running with continue-on-error.
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),
   strategyIdx: index("paper_sim_open_positions_strategy_idx").on(table.strategyName),
