@@ -32,7 +32,6 @@ export class ScreenerRecalibrationTask implements Omit<ScheduledTask, 'lastRun' 
     try {
       // Get latest calibration to avoid duplicates
       const latestCalibration = await storage.getLatestCalibration({
-        userId,
         mode: 'paper',
         maxAgeHours: 4
       });

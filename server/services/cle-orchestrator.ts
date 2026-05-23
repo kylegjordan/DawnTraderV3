@@ -252,7 +252,6 @@ export class CLEOrchestratorService {
     // Create filter calibration entry with autonomous-learning source
     // Update minVolume as a proxy for learning adjustment
     await storage.createCalibration({
-      userId,
       mode,
       minVolume: pattern.accuracyImprovement.toString(),
       reason: `Autonomous learning detected: +${(pattern.accuracyImprovement * 100).toFixed(1)}% accuracy, -${(pattern.pnlVarianceReduction * 100).toFixed(1)}% variance (sample: ${pattern.sampleSize})`,
@@ -284,7 +283,6 @@ export class CLEOrchestratorService {
     pattern: LearningPattern
   ): Promise<void> {
     await storage.createPortfolioAdjustment({
-      userId,
       mode,
       adjustmentType: 'risk-parameter',
       parameter: 'pnl-variance',
@@ -440,7 +438,6 @@ export class CLEOrchestratorService {
     
     // Transfer to Live with paper-fallback marker
     await storage.createCalibration({
-      userId,
       mode: 'live',
       minVolume: latestPaper.minVolume,
       minPrice: latestPaper.minPrice,

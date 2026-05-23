@@ -179,7 +179,6 @@ export class HistoricSignalGenerator {
         for (const signal of evaluatedSignals) {
           try {
             await storage.createHistoricSignal({
-              userId,
               symbol: krakenSymbol,
               exchange: 'Kraken',
               strategyId: signal.strategy,

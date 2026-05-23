@@ -167,7 +167,6 @@ export class AlertActionHandler {
     if (action === 'approve') {
       // Enable the strategy
       await storage.upsertStrategySettings({
-        userId,
         mode: mode || 'paper',
         strategy,
         enabled: true,

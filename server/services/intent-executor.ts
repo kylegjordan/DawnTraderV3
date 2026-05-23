@@ -408,7 +408,6 @@ class IntentExecutionService {
     }
     
     const guardrailsData = await storage.upsertGuardrails({
-      userId,
       mode,
       ...guardrails
     });

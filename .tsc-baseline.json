@@ -3,8 +3,8 @@
   "frozen_at_commit": "0519224",
   "frozen_at_iso": "2026-05-23T01:59:15.905Z",
   "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 513,
-  "file_count": 71,
+  "total_errors": 506,
+  "file_count": 70,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -190,8 +190,7 @@
       "phase_tag": "Phase 19",
       "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
       "errors": {
-        "TS2339": 1,
-        "TS2353": 1
+        "TS2339": 1
       }
     },
     {
@@ -236,7 +235,7 @@
       "phase_tag": "Phase 19",
       "context": "Active-trading-path service (7 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
       "errors": {
-        "TS2353": 7
+        "TS2353": 4
       }
     },
     {
@@ -361,20 +360,11 @@
       }
     },
     {
-      "path": "server/services/historic-signal-generator.ts",
-      "phase_tag": "Phase 16",
-      "context": "Historic signal backfill tool. Already on Phase-16 legacy register (#136). Removal candidate after Phase 19 confirms unused.",
-      "errors": {
-        "TS2353": 1
-      }
-    },
-    {
       "path": "server/services/intent-executor.ts",
       "phase_tag": "Phase 19",
       "context": "Active-trading-path service (4 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
       "errors": {
-        "TS2345": 3,
-        "TS2353": 1
+        "TS2345": 3
       }
     },
     {
@@ -508,7 +498,6 @@
       "phase_tag": "Phase 19",
       "context": "Active-trading-path service (3 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
       "errors": {
-        "TS2353": 1,
         "TS2554": 1,
         "TS2345": 1
       }
@@ -642,6 +631,6 @@
   ],
   "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
   "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
-  "last_synced_at_iso": "2026-05-23T09:37:25.596Z",
+  "last_synced_at_iso": "2026-05-23T09:47:49.318Z",
   "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }
