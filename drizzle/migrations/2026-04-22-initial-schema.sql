@@ -64,7 +64,7 @@ CREATE SCHEMA IF NOT EXISTS public;
 -- monitoring; not runtime-required. supabase_vault is Supabase-only
 -- and intentionally excluded.
 --
-CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
 
 
 --
