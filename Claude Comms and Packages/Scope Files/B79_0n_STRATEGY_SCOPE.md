@@ -828,7 +828,7 @@ Reply: **scope v1 FINAL ACK** / **specific decisions on Q-A through Q-G** / **su
 | (B) xStock map content B-1/B-2 | **APPROVED (B-1)** ship default shape. Calibration of weights/favored ordering is Phase 19 refinement gate. |
 | (C) liquidity_trap C-1/C-2/C-3 | **APPROVED (C-2)** — REQUIRED-assetClass for shape consistency, keep disabled state. CLAUDE.md §5 #18 don't-delete-in-flight; file (C-3) deletion decision as RUNNING_ISSUES per §7 #2 (already in scope). |
 | (D) Hybrid fallback D-1/D-2 | **APPROVED (D-1)** with inline comment. Note: defensively stronger alternative (throw on non-hybrid quant) is a HybridSignal-contract investigation better treated separately. |
-| (E) strategy_gates seed coverage E-1/E-2 | **APPROVED (E-2)** seed all 19 explicit per-class gate rows. NO-SILENT-FALLBACK + NO-PATCHES doctrine. **v2 NOTE:** 19 (not 18) per strategy-count reconciliation; 9 enabled=true matching `XSTOCK_SPOT_ENABLED_STRATEGIES` + 10 enabled=false for not-yet-enabled (including the 2 newly-added crypto-onboarded `strong_bull_trend` + `orb` which on xStock get enabled=true since they're already wired there, but on crypto get enabled=false). Migration row count delta in §3.7 to be reconciled at Step 3 implementation. |
+| (E) strategy_gates seed coverage E-1/E-2 | **APPROVED (E-2)** seed all 19 explicit per-class gate rows for xstock_spot. NO-SILENT-FALLBACK + NO-PATCHES doctrine. **v2 NOTE (per Langston v2 ACK nit #1 reconciliation):** authoritative breakdown matches §3.7 INSERT list: **10 enabled=true** (the 10 in `XSTOCK_SPOT_ENABLED_STRATEGIES`: vwap_pullback, breakout, mean_reversion, range_trade, sma_trend_ride, strong_bull_trend, morning_star, inside_bar_reversal, support_bounce, orb) + **9 enabled=false** (the 9 NOT in the enabled set: abcd_long, vwap_bounce, dhma, pivot_shift, reverse_impulse, defensive_hedge, adaptive_flow, volatility_edge, liquidity_trap). ORB's enabled=true row pre-exists from B79.0d (ON CONFLICT no-op). Net new module_constants rows: 18 (matches §5.2 #12). |
 | (F) per-class lever seeding F-1/F-2/F-3 | **APPROVED blind pre-audit + Step 2 ACK gate.** Expected F-1 (zero levers asset-class-meaningful) per umbrella §1.5. **Langston condition:** if F-3 surfaces (5+ levers), scope-split decision back at his desk before Step 3 — don't unilaterally absorb. Pre-audit also documents `volume_confirm_min_history` candidate if F-2 surfaces. |
 | (G) soak baseline | **APPROVED fresh baseline.** Document in completion report which window was used; if STRATEGY deploys before 2026-05-25T12:00Z target, flag MCE-stabilization-overlap partial baseline. |
 
@@ -845,6 +845,38 @@ Reply: **scope v1 FINAL ACK** / **specific decisions on Q-A through Q-G** / **su
 ---
 
 Reply: **scope v2 FINAL ACK** / **further iteration on v2 deltas** / **specific concerns on the §3.0 disposition matrix or row-count reconciliation**.
+
+---
+
+## §10 — Governance close deliverables (v2 — Langston nit #2 consolidation)
+
+At Step 10 governance close, the following docs MUST be updated. The completion report's "governance files changed" list MUST include each of these by name per CLAUDE.md §3 Tier 1 + Tier 2 discipline + §10 of the 11-step workflow.
+
+### Tier 1 (mandatory every batch)
+- `1-system-manual/BATCH_CATALOG.md` — add B79.0n.STRATEGY entry under Phase 24.
+- `1-system-manual/PHASE_HISTORY.md` — update Phase 24 status (5 of 18 sub-batches shipped).
+- `Claude Comms and Packages/Scope Files/B79_0n_STRATEGY_SCOPE.md` — this file (already written, will be v3+ if Step 4 surfaces iterations).
+- `Claude Comms and Packages/Scope Files/B79_0n_STRATEGY_PRE_AUDIT.md` — written in Step 2.
+- `Claude Comms and Packages/Change Lists/B79_0n_STRATEGY_CHANGE_LIST.md` — written in Step 4.
+- `Claude Comms and Packages/Batch Completion/B79_0n_STRATEGY_COMPLETION_REPORT.md` — written in Step 11.
+- `.claude/memory/MEMORY.md` (in-repo persistence copy) + `~/.claude/projects/.../memory/MEMORY.md` (truth file) per CLAUDE.md §3.1 two-file pattern.
+- `/home/langston/MEMORY.md` (Helsinki) per CLAUDE.md §3 step 10.b mandatory Langston memory sync.
+
+### Tier 2 (when applicable — applicable to STRATEGY based on scope content)
+- `1-system-manual/SYSTEM_MANUAL.md` Chapter 2 (lines 1225-1900) — **MANDATORY** per §2 EXECUTION row. Current text references 17 strategies, old regime names, deleted DSS service. Update to 19 strategies + canonical 5 regimes + post-DSS shape. Resolves stale BUG-006 / BUG-007 / RISK-014.
+- `1-system-manual/SYSTEM_IMPACT_MAP.md` — **MANDATORY** per §2 EXECUTION row. New section on per-class strategy dispatch surface (7-file/66-call mapping); update strategy-mapper.ts SIM entry for per-class shape; update strategy-sync.ts SIM entry for per-class sync; update hybrid-integration.ts SIM entry for canonical taxonomy.
+- `CLAUDE.md` persona §3 strategy count — **MANDATORY** per §2 EXECUTION row. Fix off-by-one (18 → 19; 9 file-based → 10 file-based). Update line-range citation from `365-385` (stale) to `384-406` (current `STRATEGY_DISPLAY_NAMES` location).
+- `1-system-manual/CHANGES_AND_FIXES.md` — add B79.0n.STRATEGY entry. Mark BUG-007 (Hybrid Strategy Types legacy) + RISK-014 (Strategy Sync 8/17/19 coverage) as RESOLVED-BY-B79.0n.STRATEGY.
+- `1-system-manual/RUNNING_ISSUES.md` — file the deferred follow-ups per §7 (liquidity_trap revival/removal decision; HYBRID_PARAMS promotion; UI strategy-toggle per-class; strategy-sync userId-as-mode-key legacy; Strategy Signal Audit Engine stale metrics → Phase 16 register #136).
+- `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md` — update §9 threshold table population if STRATEGY surfaces any per-class threshold deltas; update §12 log row with B79.0n.STRATEGY ship summary.
+- `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — per CLAUDE.md §3.3 Phase 24 standing rule, completion report includes onboarding-learnings section + concrete edits proposed to this doc (per §8 of this scope file).
+
+### Step 11 completion report verification gate
+The completion report MUST list every governance file actually changed by sha + commit ref, and MUST contain:
+1. Objectives checklist with YES/NO/PARTIAL per §1 + §5.2 criteria
+2. Asset-class onboarding learnings section per CLAUDE.md §3.3 (or explicit "No new onboarding learnings this batch")
+3. CI per-batch confirmation per CLAUDE.md §5 #19 — cite the green run ID + status
+4. Plain-language summary for Kyle per CLAUDE.md §1 + §11 two-paragraph default
 
 ---
 
