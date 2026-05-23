@@ -46,7 +46,7 @@
 
 **Phase 3 (`cc4e74339`):** CLAUDE.md §5 #19 added — CI per-batch confirmation rule. Every batch close MUST verify all 4 CI jobs green on head commit before marking complete. B-NEW-43 itself is the first-time application.
 
-**Phase 4 (`bf60d8f`):** system-alerts active-push fix (RUNNING_ISSUES #135). `scripts/system-alerts.ts` extended: Telegram routing now posts warning + critical promotions to group topic 21 (was only critical → Kyle DM); fire-and-forget SSH+claude-cli invoke to Langston on Helsinki so a session runs the §10.5 surfacing on his side; `LANGSTON_INVOKE=0` disable knob. Code shipped + CI green. **STAGING WIRING DECISION DEFERRED TO KYLE** — bot token file `/etc/langston/ccdt-bot.env` does not exist on Frankfurt (staging); credential placement is Kyle's choice (scp from Helsinki vs migrate dispatcher to Helsinki vs HTTP proxy). Scope §5 escape clause invoked for end-to-end verification.
+**Phase 4 (`bf60d8f` + `6153115` hotfix):** system-alerts active-push fix (RUNNING_ISSUES #135 RESOLVED). `scripts/system-alerts.ts` extended: Telegram routing now posts warning + critical promotions to group topic 21 (was only critical → Kyle DM); fire-and-forget SSH+claude-cli invoke to Langston on Helsinki so a session runs the §10.5 surfacing on his side; `LANGSTON_INVOKE=0` disable knob. Kyle-authorized 2026-05-23 token scp from Helsinki to staging `/etc/langston/ccdt-bot.env` (mode 640 root:deploy). Hotfix `6153115` fixed JS-default-parameter quirk in telegramSend's Markdown-fail-fallback (was infinite-recursing because explicit `undefined` re-uses default 'Markdown'; switched sentinel to `'plain'`). End-to-end verified on staging via 3 manual test alerts; final test post-hotfix delivered cleanly via plain-text fallback. #135 closed.
 
 **🟢 B-NEW-43 BATCH CLOSED 2026-05-23** at head commit `3ba5e63` with CI all-4-green at run `26343291671`. Full completion report at `Claude Comms and Packages/Batch Completion/B_NEW_43_COMPLETION_REPORT.md`. BATCH_CATALOG.md + PHASE_HISTORY.md entries added. Next: resume B79.0n umbrella sub-batches 5-18 (xStocks active-trading-path audit, ~14 sub-batches).
 
@@ -66,7 +66,7 @@
 ## NEXT IMMEDIATE STEPS (2026-05-23 — post-B-NEW-43 close)
 
 1. **Resume B79.0n umbrella sub-batches 5-18** (~14 sub-batches remaining; xStocks active-trading-path audit). Sub-batch #5 was queued behind B-NEW-43 per Kyle's lock.
-2. **RUNNING_ISSUES #135 staging-wiring decision (Kyle):** scp `/etc/langston/ccdt-bot.env` from Helsinki to staging? Migrate dispatcher to Helsinki? Add HTTP proxy? B-NEW-43 Phase 4 code is green in CI; ops decision pending.
+2. ~~RUNNING_ISSUES #135 staging-wiring decision~~ — RESOLVED 2026-05-23. Kyle authorized token scp; verified end-to-end.
 3. **616dfcf3 alert (B79.0n.MCE 24h soak)** — STILL ACTIVE, unacknowledged. Initial inspection found ZERO recurring CACHE_REFRESH log lines (only one at deploy time 12:09Z). May indicate (a) probe deploy-only-not-recurring (alert wording misleading) or (b) refresh path broken. Needs proper investigation.
 4. **Staging coordination — ACTION REQUIRED BEFORE NEXT STAGING `db:migrate`:** run `1-system-manual/staging-coordination/2026-04-22-initial-schema-mark-applied.sql` on staging. Without it, the next staging db:migrate run would conflict on initial-schema + initial-seed-data.
 5. After B79.0n umbrella close: **Phase 25 — Adaptive Market Response** (Kyle confirmed 2026-05-23; moved from §18.9 to Phase 25). Then **Phase 19** active-trading audit walkthrough.
