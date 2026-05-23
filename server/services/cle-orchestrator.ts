@@ -409,7 +409,7 @@ export class CLEOrchestratorService {
 
   private async checkAndTransferPaperLearnings(userId: string): Promise<void> {
     // Check if Live calibrations are stale (> 24 hours)
-    const liveCalibrations = await storage.getRecentCalibrations({ userId, mode: 'live', limit: 10 });
+    const liveCalibrations = await storage.getRecentCalibrations({ mode: 'live', limit: 10 });
     
     if (liveCalibrations.length === 0) {
       await this.transferPaperToLive(userId);
@@ -426,7 +426,7 @@ export class CLEOrchestratorService {
   }
 
   private async transferPaperToLive(userId: string): Promise<void> {
-    const paperCalibrations = await storage.getRecentCalibrations({ userId, mode: 'paper', limit: 5 });
+    const paperCalibrations = await storage.getRecentCalibrations({ mode: 'paper', limit: 5 });
     
     if (paperCalibrations.length === 0) {
       console.log('[CLEOrchestrator] No Paper calibrations to transfer');
@@ -561,7 +561,7 @@ export class CLEOrchestratorService {
   }
 
   private async calculateTransferSuccessRate(userId: string): Promise<number> {
-    const liveCalibrations = await storage.getRecentCalibrations({ userId, mode: 'live', limit: 50 });
+    const liveCalibrations = await storage.getRecentCalibrations({ mode: 'live', limit: 50 });
     
     if (liveCalibrations.length === 0) return 0;
     
@@ -598,7 +598,7 @@ export class CLEOrchestratorService {
     const fromDate = new Date();
     fromDate.setHours(fromDate.getHours() - 24);
     
-    const recentCalibrations = await storage.getRecentCalibrations({ userId, mode: 'paper', limit: 10, maxAgeHours: 24 });
+    const recentCalibrations = await storage.getRecentCalibrations({ mode: 'paper', limit: 10, maxAgeHours: 24 });
     const autonomousCalibrations = recentCalibrations.filter((c: any) => 
       c.source === 'autonomous-learning'
     );

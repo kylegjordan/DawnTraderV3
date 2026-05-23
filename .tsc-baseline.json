@@ -3,8 +3,8 @@
   "frozen_at_commit": "0519224",
   "frozen_at_iso": "2026-05-23T01:59:15.905Z",
   "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 493,
-  "file_count": 70,
+  "total_errors": 488,
+  "file_count": 68,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -231,14 +231,6 @@
       }
     },
     {
-      "path": "server/services/cle-orchestrator.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (7 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
-      "errors": {
-        "TS2353": 4
-      }
-    },
-    {
       "path": "server/services/command-router.ts",
       "phase_tag": "Phase 16",
       "context": "Natural-language command router. Already on Phase-16 legacy register (#136). 100% dead — instantiated at routes.ts:103 but `.routeCommand` / `.confirmCommand` never invoked anywhere in server/. Removal candidate.",
@@ -400,14 +392,6 @@
       "context": "Current/operational service with active-trading-path adjacency (1 error). Triage in chunk 7+: if VTS-path-only / simple type fix, B-NEW-43; if active-trading-only, Phase 19.",
       "errors": {
         "TS2339": 1
-      }
-    },
-    {
-      "path": "server/services/market-scan-task.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
-      "errors": {
-        "TS2353": 1
       }
     },
     {
@@ -631,6 +615,6 @@
   ],
   "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
   "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
-  "last_synced_at_iso": "2026-05-23T10:00:09.948Z",
+  "last_synced_at_iso": "2026-05-23T10:06:53.917Z",
   "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }

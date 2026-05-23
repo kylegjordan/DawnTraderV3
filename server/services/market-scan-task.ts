@@ -37,7 +37,7 @@ export class MarketScanTask implements Omit<ScheduledTask, 'lastRun' | 'nextRun'
     try {
       console.log(`[MarketScan] Scanning ${mode} mode for user ${userId}...`);
       
-      const results = await storage.getScreenerResults({ userId, mode, limit: 100 });
+      const results = await storage.getScreenerResults({ mode, limit: 100 });
       
       console.log(`[MarketScan] Found ${results.length} eligible pairs for user ${userId} (${mode} mode)`);
       return results.length;
