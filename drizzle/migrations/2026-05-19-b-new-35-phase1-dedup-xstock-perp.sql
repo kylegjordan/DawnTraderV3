@@ -1,3 +1,10 @@
+-- db-migrate:skip
+-- B-NEW-43 Phase 2 chunk 4.5 (2026-05-23): skip-marker added. Contains
+-- VACUUM and DO $$ ... COMMIT patterns that require top-level psql -f
+-- execution (incompatible with db-migrate.ts's simple-query batch).
+-- Already applied on staging via external psql -f; no-op on fresh empty
+-- PG (no rows to dedup). db-migrate ledger-records this file as applied
+-- without running the SQL. See scripts/db-migrate.ts SKIP_MARKER comment.
 -- B-NEW-35 Phase 1 — Dedup cleanup for xstock_perp_ohlc_1m
 --
 -- Same shape as the xstock_spot equivalent. See header of

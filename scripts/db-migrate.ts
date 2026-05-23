@@ -151,9 +151,33 @@ function listPendingMigrationFiles(applied: Set<string>): string[] {
   return manifest.filter((f) => !applied.has(f));
 }
 
+// B-NEW-43 Phase 2 chunk 4.5 (2026-05-23): some legacy data-migration files
+// (notably the B-NEW-35 Phase 1 dedup migrations) contain VACUUM and DO $$
+// blocks with embedded COMMIT — patterns that REQUIRE top-level execution
+// outside any transaction. node-postgres `client.query(multiStmtSql)` cannot
+// satisfy that (the simple-query batch wraps everything implicitly). On
+// staging these files were applied via psql -f then manually recorded in
+// _migrations. On a fresh CI Postgres there's no data to dedup anyway —
+// they're effectively no-ops.
+//
+// To bridge this: a `-- db-migrate:skip` header marker tells this runner
+// to INSERT the ledger row for the file but NOT execute the SQL. Use ONLY
+// for files that are (a) already applied on staging via an external path
+// AND (b) no-op on fresh empty PG.
+const SKIP_MARKER = /^--\s*db-migrate:skip\b/m;
+
 async function applyMigration(client: Client, filename: string): Promise<void> {
   const full = path.join(MIGRATIONS_DIR, filename);
   const sql = fs.readFileSync(full, 'utf-8');
+
+  // Detect skip-marker (see SKIP_MARKER comment above).
+  if (SKIP_MARKER.test(sql)) {
+    console.log(`[db-migrate] ⊘ ${filename} (skip-marker present — ledger-only)`);
+    await client.query('INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT DO NOTHING', [
+      filename,
+    ]);
+    return;
+  }
 
   // The migration file is expected to contain its own BEGIN/COMMIT. We run it
   // as one statement so its transaction semantics are preserved. If the file
