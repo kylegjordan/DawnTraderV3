@@ -17,12 +17,24 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi, afterEach } from 'vitest';
 import {
   directionalBiasStore,
   getLatestGlobalDbsSnapshot,
   GLOBAL_DBS_MIN_SAMPLE_COUNT,
 } from '../../core/metrics/directional-bias-store';
+import { prefetchModule } from '../../services/module-constants-service.js';
+
+// B-NEW-43 Phase 2 chunk 5 (2026-05-23): directional-bias-store calls
+// getCachedNumberRequired('dbs_calculation', 'min_sample_count', ...) on
+// every getLatestSnapshot/publishSnapshot — that requires the module to
+// be warm. Server boot calls prefetchModule for all PREFETCH_MODULES;
+// unit tests must do the same explicitly. Without CI Postgres the
+// prefetch errors with connection-refused; with CI Postgres it succeeds
+// and the cache is populated.
+beforeAll(async () => {
+  await prefetchModule('dbs_calculation');
+});
 
 function populateStore(count: number, baseScore = 0.1): void {
   for (let i = 0; i < count; i++) {

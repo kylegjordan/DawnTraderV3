@@ -14,12 +14,21 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   loadEquitySpotUniverse,
   loadEquityPerpUniverse,
   loadCryptoSpotUniverse,
 } from '../../services/passive-archive/universe-loader';
+import { seedXstockUniverse } from '../helpers/seed-xstock-universe.js';
+
+// B-NEW-43 Phase 2 chunk 5 (2026-05-23): seed XSTOCK_SPOT_SYMBOLS via the
+// same _replaceXstockUniverse() path the universe-service uses post-boot.
+// loadEquitySpotUniverse reads from the in-memory XSTOCK_SPOT_SYMBOLS Set
+// which is empty at module-load time (post-B79.0n.UNIVERSE-DISCOVERY).
+beforeAll(() => {
+  seedXstockUniverse();
+});
 
 describe('B74 — universe loader: static equity configs', () => {
   it('loads xStocks universe with at least 10 known symbols', async () => {
