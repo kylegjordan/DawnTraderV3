@@ -753,14 +753,14 @@ export class Fx5ScannerService {
         console.error(`[B54][CRITICAL] Pattern filter DB row missing for '${patternFilterPath}'. Pattern path DISABLED this cycle.`);
       }
       const activePatternGlobalFilters = patternDbRow ? {
-        MIN_VOLUME_USD: parseFloat(patternDbRow.minVolume),
-        MAX_BID_ASK_SPREAD: parseFloat(patternDbRow.maxBidAskSpread),
+        MIN_VOLUME_USD: parseFloat(patternDbRow.minVolume ?? 'NaN'),
+        MAX_BID_ASK_SPREAD: parseFloat(patternDbRow.maxBidAskSpread ?? 'NaN'),
         MIN_HISTORY_DAYS: patternDbRow.minHistoryDays,
-        MIN_PRICE: parseFloat(patternDbRow.minPrice),
-        MAX_PRICE: parseFloat(patternDbRow.maxPrice),
+        MIN_PRICE: parseFloat(patternDbRow.minPrice ?? 'NaN'),
+        MAX_PRICE: parseFloat(patternDbRow.maxPrice ?? 'NaN'),
         EXCLUDE_STABLECOINS: patternDbRow.excludeStablecoins,
-        MIN_LIQUIDITY: parseFloat(patternDbRow.minLiquidity),
-        MIN_MARKET_CAP: parseFloat(patternDbRow.minMarketCap),
+        MIN_LIQUIDITY: parseFloat(patternDbRow.minLiquidity ?? 'NaN'),
+        MIN_MARKET_CAP: parseFloat(patternDbRow.minMarketCap ?? 'NaN'),
       } : null;
       console.log(`[19G][FX5] Pattern global filters from DB (${patternFilterPath}):`, activePatternGlobalFilters);
 
@@ -774,9 +774,9 @@ export class Fx5ScannerService {
         console.error(`[B54][CRITICAL] Quant filter DB row missing for '${quantFilterPath}'. Quant IMF thresholds unavailable.`);
       }
       const dbVtsImfThresholds = quantDbRow ? {
-        LQ_MIN: parseFloat(quantDbRow.lqMin),
-        VN_MAX: parseFloat(quantDbRow.vnMax),
-        CORR_MAX: parseFloat(quantDbRow.corrMax),
+        LQ_MIN: parseFloat(quantDbRow.lqMin ?? 'NaN'),
+        VN_MAX: parseFloat(quantDbRow.vnMax ?? 'NaN'),
+        CORR_MAX: parseFloat(quantDbRow.corrMax ?? 'NaN'),
       } : null;
 
       // Batch 19G: Load pattern IMF thresholds from DB for pattern pool filtering

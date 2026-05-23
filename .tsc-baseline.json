@@ -3,7 +3,7 @@
   "frozen_at_commit": "0519224",
   "frozen_at_iso": "2026-05-23T01:59:15.905Z",
   "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 534,
+  "total_errors": 525,
   "file_count": 71,
   "files": [
     {
@@ -337,7 +337,6 @@
       "phase_tag": "Phase 19 or B-NEW-43",
       "context": "Current/operational service with active-trading-path adjacency (15 errors). Triage in chunk 7+: if VTS-path-only / simple type fix, B-NEW-43; if active-trading-only, Phase 19.",
       "errors": {
-        "TS2345": 9,
         "TS2322": 1,
         "TS18047": 3,
         "TS2353": 1,
@@ -643,6 +642,6 @@
   ],
   "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
   "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
-  "last_synced_at_iso": "2026-05-23T09:18:48.135Z",
+  "last_synced_at_iso": "2026-05-23T09:24:46.674Z",
   "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }
