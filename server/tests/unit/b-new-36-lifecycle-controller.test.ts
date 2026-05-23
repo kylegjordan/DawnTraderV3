@@ -21,18 +21,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ── Mock db.execute and capture SQL fragments + params. ──────────────────────
 const dbCalls: Array<{ sql: string; params: any[] }> = [];
 const dbExecute = vi.fn(async (q: any) => {
-  // B-NEW-43 Phase 2 chunk 13 (2026-05-23): restored original sqlText logic
-  // (was mixing all chunk values via `c?.value ?? c` which works for both
-  // StringChunk and Param). Added explicit params extraction since Drizzle
-  // SQL doesn't expose q.params at the top level — Param objects live IN
-  // the queryChunks alongside StringChunks. A StringChunk's .value is a
-  // string[] (for the literal SQL text); a Param's .value is the bound
-  // value of any type. Distinguish by Array.isArray.
+  // B-NEW-43 Phase 2 chunk 14 (2026-05-23): Drizzle's sql template tag
+  // (per node_modules/drizzle-orm/sql/sql.js) pushes ALTERNATING StringChunk
+  // objects + RAW param values into queryChunks. RAW values are NOT wrapped
+  // in any Param object — they're just the value (string, number, Date,
+  // etc.). To extract params: exclude StringChunk entries (those have
+  // `.value: string[]`). Everything else IS a raw param.
   const chunks = (q?.queryChunks ?? []) as any[];
   const sqlText = chunks.map((c: any) => c?.value ?? c).join(' ');
-  const params = chunks
-    .filter((c: any) => c && c.value !== undefined && !Array.isArray(c.value))
-    .map((c: any) => c.value);
+  const isStringChunk = (c: any) =>
+    c && typeof c === 'object' && Array.isArray(c.value);
+  const params = chunks.filter((c: any) => !isStringChunk(c));
   dbCalls.push({ sql: sqlText, params });
   if (sqlText.toUpperCase().includes('SELECT COUNT')) {
     return { rows: [{ count: '0' }] } as any;
