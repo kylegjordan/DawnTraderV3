@@ -20,11 +20,25 @@
 //     in the completion report (else the batch is incomplete at Step 8).
 //
 // Modes:
-//   node scripts/check-tsc-baseline.mjs              # compare (CI default)
-//   node scripts/check-tsc-baseline.mjs --generate   # rewrite the baseline
+//   node scripts/check-tsc-baseline.mjs                       # compare (CI default)
+//   node scripts/check-tsc-baseline.mjs --generate            # rewrite the baseline
+//   node scripts/check-tsc-baseline.mjs --regen-acknowledged  # compare; skip the silent-tsc-crash sanity check
 //
 // Generate mode is for the initial freeze and for deliberate, governance-
 // reviewed updates. It MUST be invoked manually — CI never regenerates.
+//
+// Note on file renames: a file rename registers as a regression (old file
+// vanishes, new file is unknown to baseline). That is correct governance
+// behavior — you cannot silently rename a file to dodge the gate. To rename
+// a file, regenerate the baseline as part of the same rename commit.
+//
+// Note on the silent-tsc-crash sanity check: if `npx tsc` exits with no
+// parseable error output (toolchain breakage, stack trace instead of errors),
+// the script would otherwise parse 0 current errors and treat the delta as
+// `baseline.total_errors` drops — i.e. mistake a tool failure for a clean
+// state. The check fails the gate if `current_total < baseline_total * 0.5`
+// to surface that case. Pass `--regen-acknowledged` to bypass it when you
+// genuinely cleared > 50% of errors in one batch (rare).
 
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -100,7 +114,7 @@ function generateBaseline() {
   );
 }
 
-function compareBaseline() {
+function compareBaseline({ regenAcknowledged }) {
   if (!existsSync(BASELINE_PATH)) {
     console.error(
       `[baseline] ERROR: ${BASELINE_PATH} not found. Run with --generate to create it (governance-reviewed, not in CI).`,
@@ -110,9 +124,46 @@ function compareBaseline() {
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
   const baselineByPath = new Map(baseline.files.map((f) => [f.path, f.errors]));
 
+  // Polish (Langston chunk-5 observation 2): re-derive total_errors / file_count
+  // from files[] and warn if the stored metadata disagrees. Prevents a future
+  // hand-edit landing inconsistent metadata.
+  const derivedTotal = baseline.files.reduce(
+    (sum, f) => sum + Object.values(f.errors).reduce((s, n) => s + n, 0),
+    0,
+  );
+  const derivedFileCount = baseline.files.length;
+  if (
+    typeof baseline.total_errors === 'number' &&
+    baseline.total_errors !== derivedTotal
+  ) {
+    console.warn(
+      `[baseline] WARNING: stored total_errors=${baseline.total_errors} disagrees with files[] derived total=${derivedTotal}. Hand-edit drift? Regenerating would resync.`,
+    );
+  }
+  if (
+    typeof baseline.file_count === 'number' &&
+    baseline.file_count !== derivedFileCount
+  ) {
+    console.warn(
+      `[baseline] WARNING: stored file_count=${baseline.file_count} disagrees with files[] derived count=${derivedFileCount}.`,
+    );
+  }
+
   console.log('[baseline] Running tsc and comparing to baseline...');
   const output = runTsc();
   const { counts, total } = parseErrors(output);
+
+  // Polish (Langston chunk-5 observation 1): silent-tsc-crash sanity check.
+  // If `npx tsc` produced no parseable errors and we are well below the
+  // baseline total, that almost certainly means tsc did not actually run
+  // (toolchain breakage, stack-trace-instead-of-errors). Fail loudly so
+  // we do not mistake a tool failure for "everything is fixed!".
+  if (!regenAcknowledged && total < derivedTotal * 0.5) {
+    console.error(
+      `[baseline] FAIL — current tsc reported ${total} errors but baseline is ${derivedTotal}. A drop >50% in one run almost certainly means tsc did not actually run (toolchain breakage, stack trace instead of errors, missing dependencies). If you genuinely cleared >50% of errors in one batch, re-run with --regen-acknowledged to bypass this check.`,
+    );
+    exit(1);
+  }
 
   const regressions = []; // (file, code) count above baseline
   const newPaths = []; // file with errors that is not in baseline at all
@@ -165,14 +216,15 @@ function compareBaseline() {
   console.log('[baseline] OK — no regressions above baseline.');
 }
 
-const cmd = argv[2];
-if (cmd === '--generate') {
+const flags = argv.slice(2);
+if (flags.includes('--generate')) {
   generateBaseline();
-} else if (cmd === '--help' || cmd === '-h') {
+} else if (flags.includes('--help') || flags.includes('-h')) {
   console.log(`Usage:
-  node scripts/check-tsc-baseline.mjs              # compare current tsc output to ${BASELINE_PATH} (CI default)
-  node scripts/check-tsc-baseline.mjs --generate   # rewrite ${BASELINE_PATH} from current tsc output (governance-only)
+  node scripts/check-tsc-baseline.mjs                       # compare current tsc output to ${BASELINE_PATH} (CI default)
+  node scripts/check-tsc-baseline.mjs --generate            # rewrite ${BASELINE_PATH} from current tsc output (governance-only)
+  node scripts/check-tsc-baseline.mjs --regen-acknowledged  # compare; skip the silent-tsc-crash sanity check (for genuine big drops)
 `);
 } else {
-  compareBaseline();
+  compareBaseline({ regenAcknowledged: flags.includes('--regen-acknowledged') });
 }
