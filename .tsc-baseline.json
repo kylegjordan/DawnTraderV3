@@ -569,8 +569,8 @@
     },
     {
       "path": "server/services/paper-portfolio-manager.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path signal-pipeline component (5 errors). Phase 19 restoration owns.",
+      "phase_tag": "Phase 16",
+      "context": "Legacy `PaperPortfolioManager` service. Already on Phase-16 legacy register (RUNNING_ISSUES #136b). Kyle 2026-05-22: \"not sure what it does — possibly dashboard-related — probably can be looked at for deletion.\" Surfaced during B-NEW-43 Phase 1 chunk 1 (carried the userId-as-mode bug). Removal candidate. (Override added in chunk 6 Langston-Step-4 fixup — was previously picked up by the signal-pipeline path-pattern as Phase 19; the #136-register precedence rule now applies.)",
       "errors": {
         "TS2554": 4,
         "TS2353": 1
@@ -809,6 +809,6 @@
       }
     }
   ],
-  "last_audited_at_iso": "2026-05-23T02:14:44.987Z",
+  "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
   "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)"
 }

@@ -75,6 +75,11 @@ const overrides = {
     context:
       'Legacy 48-hour paper simulation harness. Already on Phase-16 legacy register (RUNNING_ISSUES #136a). Deeply userId-coupled, predates mode-based architecture. Removal candidate.',
   },
+  'server/services/paper-portfolio-manager.ts': {
+    phase_tag: 'Phase 16',
+    context:
+      'Legacy `PaperPortfolioManager` service. Already on Phase-16 legacy register (RUNNING_ISSUES #136b). Kyle 2026-05-22: "not sure what it does — possibly dashboard-related — probably can be looked at for deletion." Surfaced during B-NEW-43 Phase 1 chunk 1 (carried the userId-as-mode bug). Removal candidate. (Override added in chunk 6 Langston-Step-4 fixup — was previously picked up by the signal-pipeline path-pattern as Phase 19; the #136-register precedence rule now applies.)',
+  },
   'server/services/command-router.ts': {
     phase_tag: 'Phase 16',
     context:
