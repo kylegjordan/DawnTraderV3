@@ -39,12 +39,15 @@ const CRYPTO_SYMBOL = 'BTC/USD';
 beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
+  _testClearAllState();
   // B-NEW-43 Phase 2: seed XSTOCK_SPOT_SYMBOLS via the same _replaceXstockUniverse()
   // path the universe-service uses post-boot. Pre-B79.0n.UNIVERSE-DISCOVERY the
   // universe was module-load-populated; post-commit-230348507 it requires explicit
   // boot/seed which unit tests don't run. See server/tests/helpers/seed-xstock-universe.ts.
+  // Ordering note (per Langston Step 4 defense-in-depth): runs AFTER _testClearAllState
+  // so that any future expansion of _testClearAllState's reach (e.g. clearing universe
+  // state) doesn't silently un-seed.
   seedXstockUniverse();
-  _testClearAllState();
   // Inject empty dividend calendar by default; specific tests override.
   _testInjectDividendCalendar([]);
 });

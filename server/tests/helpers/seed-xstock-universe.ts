@@ -16,7 +16,15 @@
  * Use in any unit test that depends on a non-empty xStock universe:
  *
  *     import { seedXstockUniverse } from '../helpers/seed-xstock-universe.js';
- *     beforeEach(() => { seedXstockUniverse(); });
+ *     beforeEach(() => {
+ *       // ... other setup, including any `_testClearAllState()` calls ...
+ *       seedXstockUniverse();
+ *     });
+ *
+ * **Ordering caveat:** call this AFTER any test-state-reset helpers that clear
+ * shared in-process state. Today no `_testClearAllState()` clears the universe
+ * registry, but if that contract ever changes, putting the seed last keeps the
+ * fixture stable.
  *
  * This is the B-NEW-43 Phase 2 fix for the b-new-42b cross-batch regression
  * documented in `B_NEW_43_CI_RECOVERY_PRE_AUDIT.md` §13.3.
