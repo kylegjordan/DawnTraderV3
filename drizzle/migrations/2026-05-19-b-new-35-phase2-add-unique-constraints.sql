@@ -1,3 +1,11 @@
+-- db-migrate:skip
+-- B-NEW-43 Phase 2 chunk 4.6 (2026-05-23): skip-marker added. The 3 UNIQUE
+-- constraints created by this migration are already in
+-- 2026-04-22-initial-schema.sql (pg_dump captured staging state which
+-- includes these constraints). On a fresh PG, initial-schema creates them;
+-- this file would then duplicate-create → error. Skip-marker ledger-records
+-- as applied without running. Same pattern as the Phase 1 dedup files —
+-- staging-applied schema-state-already-in-dump migrations.
 -- B-NEW-35 Phase 2 — Add UNIQUE constraint on (symbol, interval_begin) for
 -- all 3 partitioned _ohlc_1m tables. Must run AFTER Phase 1 cleanup completes
 -- on all 3 tables, otherwise the constraint addition would fail on existing
