@@ -121,12 +121,21 @@ async function telegramSend(
   chatId: number,
   text: string,
   threadId?: number,
-  parseMode: 'Markdown' | undefined = 'Markdown',
+  parseMode: 'Markdown' | 'plain' = 'Markdown',
 ): Promise<boolean> {
+  // B-NEW-43 Phase 4 chunk-12 (2026-05-23, post-token-deploy hotfix):
+  // The parseMode parameter previously defaulted to 'Markdown' with type
+  // `'Markdown' | undefined`. The Markdown-parse-fail fallback recursed with
+  // explicit `undefined`, but JS default-parameter semantics treat explicit-
+  // undefined as use-the-default, so the recursion re-enabled Markdown
+  // forever — producing the infinite "returned not-ok: can't parse entities"
+  // loop observed when Phase 4 first went live on staging with a real token.
+  // Switched the sentinel to the literal string 'plain' so the recursion is
+  // explicit and the default-substitution trap is gone.
   try {
     const body: Record<string, unknown> = { chat_id: chatId, text };
     if (threadId !== undefined) body.message_thread_id = threadId;
-    if (parseMode) body.parse_mode = parseMode;
+    if (parseMode === 'Markdown') body.parse_mode = 'Markdown';
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -135,9 +144,9 @@ async function telegramSend(
     const data = (await res.json()) as { ok?: boolean; description?: string };
     if (!data.ok) {
       console.warn(`[fire-due] Telegram send to chat=${chatId} thread=${threadId} returned not-ok:`, data.description);
-      // Markdown parse failures: retry once without parse_mode.
-      if (parseMode && data.description?.toLowerCase().includes("can't parse")) {
-        return telegramSend(token, chatId, text, threadId, undefined);
+      // Markdown parse failures: retry once with parseMode='plain' (no recursion past this — 'plain' branch falls through to return false).
+      if (parseMode === 'Markdown' && data.description?.toLowerCase().includes("can't parse")) {
+        return telegramSend(token, chatId, text, threadId, 'plain');
       }
     }
     return data.ok ?? false;
