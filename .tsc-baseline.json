@@ -3,8 +3,8 @@
   "frozen_at_commit": "0519224",
   "frozen_at_iso": "2026-05-23T01:59:15.905Z",
   "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 559,
-  "file_count": 80,
+  "total_errors": 546,
+  "file_count": 73,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -63,14 +63,6 @@
       }
     },
     {
-      "path": "server/core/audit/signal_lifecycle_audit.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Server core infrastructure (1 error). May be current/operational or active-trading-adjacent. Triage in chunk 7+: if confidently current, fix; otherwise Phase 19.",
-      "errors": {
-        "TS2741": 1
-      }
-    },
-    {
       "path": "server/core/logging/vts-telemetry.ts",
       "phase_tag": "Phase 19 or B-NEW-43",
       "context": "Server core infrastructure (2 errors). May be current/operational or active-trading-adjacent. Triage in chunk 7+: if confidently current, fix; otherwise Phase 19.",
@@ -126,7 +118,6 @@
       "phase_tag": "Phase 19 (majority) + Phase 16 (some) + B-NEW-43 (schema-drift fixable)",
       "context": "Top-error file (183 errors). Multiple clusters: (a) ~85 TS2339 are active-trading-path latent bugs in route handlers — Phase 19. (req.user.tradingMode subcluster was fixed in chunk 4 redo; remaining = portfolio_state row-property mismatches, scheduled_tasks_audit field reads, intent-task row reads, etc.) (b) ~25 TS2353 + ~10 TS2322 are schema drift — route bodies declaring fields that no longer exist on insert / WS-event types (userId on TradingSettings inserts, custom WebSocket event-type literals not in the canonical enum). These are B-NEW-43-fixable once each schema source-of-truth is confirmed current — chunk 7+. (c) ~25 TS2345 are argument-shape mismatches on storage / service calls — mostly Phase 19. Phase 19 walkthrough owns the active-trading subset; chunk 7+ can pick off the schema-drift fixes after a brief source-of-truth check.",
       "errors": {
-        "TS2769": 9,
         "TS2322": 15,
         "TS2345": 24,
         "TS7017": 5,
@@ -136,6 +127,7 @@
         "TS2552": 4,
         "TS2554": 11,
         "TS2551": 4,
+        "TS2769": 4,
         "TS2352": 1,
         "TS2783": 1,
         "TS2353": 18,
@@ -144,59 +136,10 @@
       }
     },
     {
-      "path": "server/routes/calibration.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Sub-route (2 errors). Routes mix current/operational (VTS-path, calibration, pricing, status) with active-trading-path. Triage in chunk 7+: VTS-path / status-only routes are B-NEW-43-fixable; active-trading-only routes are Phase 19.",
-      "errors": {
-        "TS2769": 1
-      }
-    },
-    {
-      "path": "server/routes/paper_validation.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Sub-route (2 errors). Routes mix current/operational (VTS-path, calibration, pricing, status) with active-trading-path. Triage in chunk 7+: VTS-path / status-only routes are B-NEW-43-fixable; active-trading-only routes are Phase 19.",
-      "errors": {
-        "TS2769": 1
-      }
-    },
-    {
-      "path": "server/routes/pricing.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Sub-route (2 errors). Routes mix current/operational (VTS-path, calibration, pricing, status) with active-trading-path. Triage in chunk 7+: VTS-path / status-only routes are B-NEW-43-fixable; active-trading-only routes are Phase 19.",
-      "errors": {
-        "TS2769": 1
-      }
-    },
-    {
-      "path": "server/routes/regime-archive.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Sub-route (2 errors). Routes mix current/operational (VTS-path, calibration, pricing, status) with active-trading-path. Triage in chunk 7+: VTS-path / status-only routes are B-NEW-43-fixable; active-trading-only routes are Phase 19.",
-      "errors": {
-        "TS2769": 1
-      }
-    },
-    {
-      "path": "server/routes/tlva.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Sub-route (2 errors). Routes mix current/operational (VTS-path, calibration, pricing, status) with active-trading-path. Triage in chunk 7+: VTS-path / status-only routes are B-NEW-43-fixable; active-trading-only routes are Phase 19.",
-      "errors": {
-        "TS2769": 1
-      }
-    },
-    {
-      "path": "server/routes/vts-audit.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Sub-route (2 errors). Routes mix current/operational (VTS-path, calibration, pricing, status) with active-trading-path. Triage in chunk 7+: VTS-path / status-only routes are B-NEW-43-fixable; active-trading-only routes are Phase 19.",
-      "errors": {
-        "TS2769": 1
-      }
-    },
-    {
       "path": "server/routes/vts.ts",
       "phase_tag": "Phase 19 or B-NEW-43",
       "context": "VTS route surface (44 errors, mostly TS2345 argument-shape mismatches). VTS is CURRENTLY RUNNING (passive learning) so this file is operational, but the routes entangle with active-trading-path data shapes. Triage in chunk 7+: VTS-only argument mismatches are B-NEW-43-fixable; active-trading-shape mismatches go to Phase 19.",
       "errors": {
-        "TS2769": 1,
         "TS2345": 42
       }
     },
@@ -716,6 +659,6 @@
   ],
   "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
   "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
-  "last_synced_at_iso": "2026-05-23T09:06:46.979Z",
+  "last_synced_at_iso": "2026-05-23T09:13:06.471Z",
   "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }

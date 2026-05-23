@@ -109,14 +109,24 @@ const userPendingConfirmations = new Map<string, string>(); // userId -> confirm
 
 // JWT secrets for authentication
 // Directive 12.1.3: JWT secrets must come from environment — no fallback
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
-}
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
-if (!JWT_REFRESH_SECRET) {
-  throw new Error('FATAL: JWT_REFRESH_SECRET environment variable is not set. Server cannot start without it.');
-}
+const JWT_SECRET: string = (() => {
+  // B-NEW-43 chunk 10: IIFE preserves narrowing across function boundaries.
+  // The prior top-level if-throw narrowed the const for the module scope only;
+  // inner functions that referenced JWT_SECRET saw it widened back to string|undefined,
+  // producing TS2769 on jwt.verify/jwt.sign calls. IIFE returns string directly.
+  const s = process.env.JWT_SECRET;
+  if (!s) throw new Error('FATAL: JWT_SECRET environment variable is not set. Server cannot start without it.');
+  return s;
+})();
+const JWT_REFRESH_SECRET: string = (() => {
+  // B-NEW-43 chunk 10: IIFE preserves narrowing across function boundaries.
+  // The prior top-level if-throw narrowed the const for the module scope only;
+  // inner functions that referenced JWT_REFRESH_SECRET saw it widened back to string|undefined,
+  // producing TS2769 on jwt.verify/jwt.sign calls. IIFE returns string directly.
+  const s = process.env.JWT_REFRESH_SECRET;
+  if (!s) throw new Error('FATAL: JWT_REFRESH_SECRET environment variable is not set. Server cannot start without it.');
+  return s;
+})();
 
 // Issue access and refresh tokens (Phase 27.3: includes permissions, fail closed)
 function issueTokens(user: { id: string; username: string; role?: UserRole }) {

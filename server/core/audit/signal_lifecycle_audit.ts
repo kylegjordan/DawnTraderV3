@@ -394,6 +394,13 @@ class SignalLifecycleAuditService {
       EXPIRED_SIGNAL: 0,
       NO_PRICE: 0,
       SQE_QUALITY_REJECT: 0,
+      // B-NEW-43 chunk 10 (2026-05-23): PER_UNDERLYING_CAP is in the
+      // RejectionReason union but was missing from this initializer
+      // (Record<RejectionReason, number> required all keys). Added 0
+      // default; the lifecycle audit didn't crash because no rejection
+      // event currently carries this reason value, but the Record-type
+      // contract was unsatisfied.
+      PER_UNDERLYING_CAP: 0,
       OTHER: 0,
     };
 
