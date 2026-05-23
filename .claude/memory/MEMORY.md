@@ -44,6 +44,12 @@
 
 **🟢 PHASE 2 COMPLETE — CI all 4 jobs GREEN at commit `b5fb9fe`** (run 26343130292). Test Suite: 1417 passed / 7 skipped / 0 failed. TypeScript Check, Build, Docker Build all green.
 
+**Phase 3 (`cc4e74339`):** CLAUDE.md §5 #19 added — CI per-batch confirmation rule. Every batch close MUST verify all 4 CI jobs green on head commit before marking complete. B-NEW-43 itself is the first-time application.
+
+**Phase 4 (`bf60d8f`):** system-alerts active-push fix (RUNNING_ISSUES #135). `scripts/system-alerts.ts` extended: Telegram routing now posts warning + critical promotions to group topic 21 (was only critical → Kyle DM); fire-and-forget SSH+claude-cli invoke to Langston on Helsinki so a session runs the §10.5 surfacing on his side; `LANGSTON_INVOKE=0` disable knob. Code shipped + CI green. **STAGING WIRING DECISION DEFERRED TO KYLE** — bot token file `/etc/langston/ccdt-bot.env` does not exist on Frankfurt (staging); credential placement is Kyle's choice (scp from Helsinki vs migrate dispatcher to Helsinki vs HTTP proxy). Scope §5 escape clause invoked for end-to-end verification.
+
+**🟢 B-NEW-43 BATCH CLOSED 2026-05-23** at head commit `3ba5e63` with CI all-4-green at run `26343291671`. Full completion report at `Claude Comms and Packages/Batch Completion/B_NEW_43_COMPLETION_REPORT.md`. BATCH_CATALOG.md + PHASE_HISTORY.md entries added. Next: resume B79.0n umbrella sub-batches 5-18 (xStocks active-trading-path audit, ~14 sub-batches).
+
 **Test status post-chunk-5 (CI run 26332635303):** 18 failing test files / 77 failing tests (was 71 suites / 103 tests local pre-Phase-2). Remaining failures:
 - b63-item16-dbs-store, b68-5-path-b-sustainability, b73-exit-strategy-replay (4), b79-0m-b2-pattern-filter — module-not-warm pattern; need beforeAll prefetchModule calls
 - b79-0d-orb 24/7 tests (g, g2) — assertion drift: B-NEW-36 sub-batch (c) removed the per-symbol weekend-bypass for the 10 named symbols (empirical verification showed they share hours with other xStocks); test cases test deprecated behavior. Hold for Langston review on delete-vs-rewrite call.
@@ -57,17 +63,19 @@
 
 ---
 
-## NEXT IMMEDIATE STEPS (2026-05-23)
+## NEXT IMMEDIATE STEPS (2026-05-23 — post-B-NEW-43 close)
 
-1. **Phase 3 — lock CI per-batch confirmation rule.** Codify the standing rule into CLAUDE.md or an auto-loaded doc that every batch close MUST confirm CI green status. Small chunk.
-2. **Phase 4 — system-alerts active-push fix (RUNNING_ISSUES #135).** Sole runtime change in B-NEW-43. fire-due dispatcher gains Telegram-post + Langston-invoke on alert promotion. Own pre-audit addendum + Step 4 + staging deploy + Step 7/8 verify.
-3. **B-NEW-43 batch close governance** after Phases 3+4 land — BATCH_CATALOG entry + PHASE_HISTORY update + full B-NEW-43 completion report.
+1. **Resume B79.0n umbrella sub-batches 5-18** (~14 sub-batches remaining; xStocks active-trading-path audit). Sub-batch #5 was queued behind B-NEW-43 per Kyle's lock.
+2. **RUNNING_ISSUES #135 staging-wiring decision (Kyle):** scp `/etc/langston/ccdt-bot.env` from Helsinki to staging? Migrate dispatcher to Helsinki? Add HTTP proxy? B-NEW-43 Phase 4 code is green in CI; ops decision pending.
+3. **616dfcf3 alert (B79.0n.MCE 24h soak)** — STILL ACTIVE, unacknowledged. Initial inspection found ZERO recurring CACHE_REFRESH log lines (only one at deploy time 12:09Z). May indicate (a) probe deploy-only-not-recurring (alert wording misleading) or (b) refresh path broken. Needs proper investigation.
 4. **Staging coordination — ACTION REQUIRED BEFORE NEXT STAGING `db:migrate`:** run `1-system-manual/staging-coordination/2026-04-22-initial-schema-mark-applied.sql` on staging. Without it, the next staging db:migrate run would conflict on initial-schema + initial-seed-data.
-5. **616dfcf3 alert (B79.0n.MCE 24h soak)** — STILL ACTIVE, unacknowledged. Initial inspection found ZERO recurring CACHE_REFRESH log lines (only one at deploy time 12:09Z). May indicate either (a) probe is deploy-only, not recurring (in which case alert wording is misleading); or (b) refresh path broken. Surface to Kyle for proper investigation.
-6. After B-NEW-43 close: resume B79.0n umbrella sub-batches 5-18 (~14 sub-batches; xStocks active-trading-path audit).
+5. After B79.0n umbrella close: **Phase 25 — Adaptive Market Response** (Kyle confirmed 2026-05-23; moved from §18.9 to Phase 25). Then **Phase 19** active-trading audit walkthrough.
 
-### Recent commits (origin HEAD `b5fb9fe` 🟢 CI all-green)
-- `b5fb9fe` — B-NEW-43 Phase 2 chunk 14 (b-new-36 mock: raw params from queryChunks — CI GREEN)
+### Recent commits (origin HEAD post-batch-close at `3ba5e63` 🟢 CI all-green run 26343291671)
+- (batch-close governance commits — BATCH_CATALOG + PHASE_HISTORY + completion report — landing in this session's final push)
+- `3ba5e63` — B-NEW-43 Phase 4 (system-alerts active-push fix — `bf60d8f` rebased over Phase-3 governance)
+- `cc4e74339` — B-NEW-43 Phase 3 (CLAUDE.md §5 #19 CI per-batch confirmation rule)
+- `b5fb9fe` — B-NEW-43 Phase 2 chunk 14 (b-new-36 mock: raw params from queryChunks — CI all-4-green)
 - `84d8c45` — B-NEW-43 Phase 2 chunk 13 (remove empty b73 describes + restore b-new-36 sqlText)
 - `1100bf3` — B-NEW-43 Phase 2 chunk 12 (remove 4 b73 variant tests + refine b-new-36 mock)
 - `fa2d00a` — B-NEW-43 Phase 2 chunk 11 (b-new-36 Drizzle SQL params extraction)
