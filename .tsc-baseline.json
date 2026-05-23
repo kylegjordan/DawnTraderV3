@@ -1,0 +1,812 @@
+{
+  "version": 1,
+  "frozen_at_commit": "0519224",
+  "frozen_at_iso": "2026-05-23T01:59:15.905Z",
+  "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
+  "total_errors": 585,
+  "file_count": 91,
+  "files": [
+    {
+      "path": "client/src/components/alerts/alert-banner.tsx",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "client/src/components/goals/copy-to-live-modal.tsx",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2307": 1
+      }
+    },
+    {
+      "path": "client/src/components/goals/guardrails-tab.tsx",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2307": 1
+      }
+    },
+    {
+      "path": "client/src/components/system/enhanced-system-monitoring.tsx",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 8
+      }
+    },
+    {
+      "path": "client/src/components/trading/active-trades-v2.tsx",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS7053": 2
+      }
+    },
+    {
+      "path": "client/src/components/trading/ready-to-buy-table.tsx",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "client/src/pages/machine-learning.tsx",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS18046": 23
+      }
+    },
+    {
+      "path": "server/core/audit/signal_lifecycle_audit.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2741": 1
+      }
+    },
+    {
+      "path": "server/core/logging/vts-telemetry.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 2
+      }
+    },
+    {
+      "path": "server/core/risk/dynamic-sizing-engine.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2552": 1
+      }
+    },
+    {
+      "path": "server/core/rtb/ready_to_buy_service.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 8,
+        "TS2353": 1
+      }
+    },
+    {
+      "path": "server/core/strategy-mapper.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2732": 1
+      }
+    },
+    {
+      "path": "server/core/telemetry/cost-telemetry.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/index.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2732": 1
+      }
+    },
+    {
+      "path": "server/jobs/feed-integrity-auto-check.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2503": 1
+      }
+    },
+    {
+      "path": "server/jobs/learning-feedback.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 3,
+        "TS2352": 1,
+        "TS2353": 1
+      }
+    },
+    {
+      "path": "server/routes.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2769": 9,
+        "TS2352": 4,
+        "TS2322": 15,
+        "TS2345": 24,
+        "TS7017": 5,
+        "TS2820": 1,
+        "TS2339": 71,
+        "TS2307": 6,
+        "TS2552": 4,
+        "TS2554": 11,
+        "TS2551": 4,
+        "TS2783": 1,
+        "TS2353": 18,
+        "TS7006": 9,
+        "TS2741": 1
+      }
+    },
+    {
+      "path": "server/routes/calibration.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 1,
+        "TS2769": 1
+      }
+    },
+    {
+      "path": "server/routes/paper_validation.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 1,
+        "TS2769": 1
+      }
+    },
+    {
+      "path": "server/routes/pricing.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 1,
+        "TS2769": 1
+      }
+    },
+    {
+      "path": "server/routes/regime-archive.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 1,
+        "TS2769": 1
+      }
+    },
+    {
+      "path": "server/routes/status.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2732": 1
+      }
+    },
+    {
+      "path": "server/routes/tlva.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 1,
+        "TS2769": 1
+      }
+    },
+    {
+      "path": "server/routes/vts-audit.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 1,
+        "TS2769": 1
+      }
+    },
+    {
+      "path": "server/routes/vts.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 1,
+        "TS2769": 1,
+        "TS2345": 42
+      }
+    },
+    {
+      "path": "server/scripts/replay-ablation.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/actuation-policy.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2353": 1,
+        "TS2561": 2
+      }
+    },
+    {
+      "path": "server/services/adaptive-learning-repository.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2769": 4,
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/adaptive-objective-engine.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/adaptive-scan-manager.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/ai-summary-task.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/alert-action-handler.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1,
+        "TS2353": 1
+      }
+    },
+    {
+      "path": "server/services/asset-capabilities.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS18046": 11
+      }
+    },
+    {
+      "path": "server/services/auto_test_harness.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/services/autonomy-controller.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1,
+        "TS1355": 1,
+        "TS2554": 3,
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/autonomy-scheduler.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 1,
+        "TS2339": 14,
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/c13-validation-service.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 2
+      }
+    },
+    {
+      "path": "server/services/cle-orchestrator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2353": 7
+      }
+    },
+    {
+      "path": "server/services/command-router.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 2
+      }
+    },
+    {
+      "path": "server/services/commitTradeAndUpdatePortfolio.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1,
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/data-archive/partition-exporter.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS7022": 2
+      }
+    },
+    {
+      "path": "server/services/diagnostic-controller.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2353": 2,
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/drift-dashboard-aggregator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2440": 1,
+        "TS2339": 1,
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/drift-detector.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/ethical-reasoner.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2393": 2
+      }
+    },
+    {
+      "path": "server/services/ethical-reasoning-engine.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2352": 2
+      }
+    },
+    {
+      "path": "server/services/ethics-consensus-orchestrator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 3,
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/experience-memory.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/factor-ablation-emitter.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/fx5-scanner.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 9,
+        "TS2322": 1,
+        "TS18047": 3,
+        "TS2353": 1,
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/services/gemini-adaptive-profiler.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/services/guardrail-policy.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 3,
+        "TS2307": 1
+      }
+    },
+    {
+      "path": "server/services/historic-signal-generator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2353": 1
+      }
+    },
+    {
+      "path": "server/services/intent-executor.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 3,
+        "TS2353": 1
+      }
+    },
+    {
+      "path": "server/services/knowledge-retrieval.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 1,
+        "TS2322": 2,
+        "TS2551": 2,
+        "TS2367": 1
+      }
+    },
+    {
+      "path": "server/services/m5d-validation-service.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 2
+      }
+    },
+    {
+      "path": "server/services/m5e-validation-service.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 2
+      }
+    },
+    {
+      "path": "server/services/market-context-engine.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/services/market-scan-task.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2353": 1
+      }
+    },
+    {
+      "path": "server/services/memory-lifecycle.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 2
+      }
+    },
+    {
+      "path": "server/services/metrics-core.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS18047": 2
+      }
+    },
+    {
+      "path": "server/services/narrative-feed.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS18048": 1
+      }
+    },
+    {
+      "path": "server/services/paper-48hr-simulation.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 2,
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/services/paper-execution-engine.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 4,
+        "TS2339": 3
+      }
+    },
+    {
+      "path": "server/services/paper-portfolio-manager.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2554": 4,
+        "TS2353": 1
+      }
+    },
+    {
+      "path": "server/services/paper_validation_engine.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/services/per-underlying-cap.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 3
+      }
+    },
+    {
+      "path": "server/services/pre-execution-validator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 2
+      }
+    },
+    {
+      "path": "server/services/reasoning-orchestrator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 2
+      }
+    },
+    {
+      "path": "server/services/response-cache.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2769": 1
+      }
+    },
+    {
+      "path": "server/services/run-mode-controller.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/screener-recalibration-task.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2353": 1,
+        "TS2554": 1,
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2353": 3,
+        "TS2307": 1,
+        "TS2339": 8,
+        "TS2322": 1,
+        "TS2345": 4,
+        "TS7053": 1,
+        "TS7006": 1
+      }
+    },
+    {
+      "path": "server/services/stage-b-validator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 3
+      }
+    },
+    {
+      "path": "server/services/state-awareness.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/services/system-config.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 1
+      }
+    },
+    {
+      "path": "server/services/system-health-check-task.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/telemetry-aggregator.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2322": 2,
+        "TS2339": 1,
+        "TS2345": 3
+      }
+    },
+    {
+      "path": "server/services/trading-engine.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 2
+      }
+    },
+    {
+      "path": "server/services/trailing-exit-controller.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2554": 2,
+        "TS2739": 3
+      }
+    },
+    {
+      "path": "server/services/unified-core.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 5,
+        "TS2339": 10,
+        "TS2551": 3,
+        "TS7006": 3
+      }
+    },
+    {
+      "path": "server/services/vts-runner.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2561": 2,
+        "TS2551": 6,
+        "TS2353": 3,
+        "TS2322": 3,
+        "TS2339": 25,
+        "TS2739": 3,
+        "TS2345": 1
+      }
+    },
+    {
+      "path": "server/services/vts-service.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2367": 1,
+        "TS2322": 3
+      }
+    },
+    {
+      "path": "server/startup/lazy-loader.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/startup/passive-archive-bootstrap.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2345": 4
+      }
+    },
+    {
+      "path": "server/startup/test-user-seeder.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2339": 1
+      }
+    },
+    {
+      "path": "server/storage.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2769": 4,
+        "TS2741": 1,
+        "TS2339": 12,
+        "TS2353": 2
+      }
+    },
+    {
+      "path": "server/strategies/inside-bar-reversal.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2367": 1
+      }
+    },
+    {
+      "path": "server/utils/market-events.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2367": 1
+      }
+    },
+    {
+      "path": "server/utils/validate-canonical.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS2732": 1
+      }
+    },
+    {
+      "path": "shared/schema.ts",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
+      "errors": {
+        "TS1117": 2
+      }
+    }
+  ]
+}

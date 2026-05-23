@@ -19,11 +19,17 @@ concurrency:
 
 jobs:
   typecheck:
-    name: TypeScript Check
+    name: TypeScript Check (baseline gate)
     runs-on: ubuntu-latest
-    # Non-blocking: codebase has ~20 pre-existing TSC errors in files not related to migration.
-    # This job reports status but does not gate build/test/docker.
-    continue-on-error: true
+    # B-NEW-43 chunk 5 (2026-05-23): replaced `continue-on-error: true` (which
+    # silently swallowed ALL tsc errors and let the codebase accumulate ~700
+    # type errors unnoticed) with a per-file-per-code baseline-comparison gate.
+    # The frozen baseline lives at `.tsc-baseline.json` (585 errors at freeze,
+    # commit 0519224, B-NEW-43). CI fails on any (file, code) count above
+    # baseline or any new (file, code) pair. See scripts/check-tsc-baseline.mjs
+    # for the comparison logic and the anti-graveyard discipline (per-batch
+    # enumeration + Kyle-approval soft cap on additions). No `continue-on-error`
+    # — the gate gates.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,8 +43,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: TypeScript check
-        run: npx tsc --noEmit
+      - name: TypeScript baseline-comparison gate
+        run: node scripts/check-tsc-baseline.mjs
 
   test:
     name: Test Suite
