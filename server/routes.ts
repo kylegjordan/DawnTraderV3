@@ -16418,7 +16418,6 @@ Provide specific, actionable recommendations.`,
         // Phase 27.5.2: Create audit log entry (non-blocking)
         try {
           await storage.createGoalAuditLog({
-            userId,
             mode: mode as 'live' | 'paper',
             action: previousGoal ? 'updated' : 'created',
             metricName: goal.metricName,
@@ -16633,7 +16632,6 @@ Please:
         // Phase 27.5.2: Create audit log entry for AI-applied goals (non-blocking)
         try {
           await storage.createGoalAuditLog({
-            userId,
             mode: mode as 'live' | 'paper',
             action: 'applied',
             metricName: goal.metricName,
@@ -17103,7 +17101,6 @@ Please:
       });
 
       await storage.insertStrategySettingsAudit({
-        userId,
         mode,
         strategy: strategy as any,
         prevParams: (prev?.params ?? null) as any,
@@ -17182,7 +17179,6 @@ Please:
       // Legacy: Handle strategy settings updates
       else if (approval.strategyName && approval.proposedValue) {
         await storage.upsertStrategySettings({
-          userId,
           mode: approval.mode as any,
           strategy: approval.strategyName as any,
           enabled: true,
@@ -17190,7 +17186,6 @@ Please:
         });
         
         await storage.insertStrategySettingsAudit({
-          userId,
           mode: approval.mode as any,
           strategy: approval.strategyName as any,
           prevParams: approval.currentValue as any,
