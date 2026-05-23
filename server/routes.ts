@@ -3571,7 +3571,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         
         // 3. Quick Kraken API connectivity check (non-blocking)
         try {
-          const KrakenService = (await import('./services/kraken-service.ts')).KrakenService;
+          // B-NEW-43 chunk 13 (2026-05-23): correct import path is
+          // './services/kraken' (which re-exports the KrakenService class from
+          // server/exchanges/kraken/kraken.ts via `export * from`). The prior
+          // './services/kraken-service.ts' was a stale path AND had a `.ts`
+          // extension that TS rejects without allowImportingTsExtensions.
+          // Behavior-capable but low-risk: activates a previously-silent-failing
+          // Kraken connectivity health check in the status endpoint (the
+          // dynamic-import was throwing and the surrounding try/catch swallowed
+          // it; now the check actually runs).
+          const KrakenService = (await import('./services/kraken')).KrakenService;
           const kraken = new KrakenService();
           const serverTime = await Promise.race([
             kraken.getServerTime(),
@@ -5021,7 +5030,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         losses: 0,
         winRate: 0,
         balanceSource: 'portfolio_state_table',
-        syncTimestamp: portfolioState.lastUpdated?.getTime() || Date.now()
+        // B-NEW-43 chunk 13 (2026-05-23): schema field is `lastUpdate` not
+        // `lastUpdated` — read the actual column. The prior `lastUpdated?.getTime()`
+        // was always undefined-via-optional-chaining → fell through to Date.now(),
+        // so the status-endpoint syncTimestamp has been "now" instead of the
+        // portfolio's actual last update time. Behavior-capable but low-risk:
+        // this is a diagnostic-field timestamp; activating the real value is
+        // the intended behavior of the field.
+        syncTimestamp: portfolioState.lastUpdate?.getTime() || Date.now()
       });
     } catch (error) {
       console.error('Error fetching paper portfolio state:', error);
@@ -14667,7 +14683,13 @@ Provide specific, actionable recommendations.`,
       console.log(`[CLEANUP] Acknowledging all feed_health and formula_audit alerts for user ${userId}`);
       
       // Get all unacknowledged feed_health and formula_audit alerts
-      const alerts = await AlertsService.getAlerts(userId);
+      // B-NEW-43 chunk 13: AlertsService.getAlerts is gone; the current
+      // method is `getAllAlerts(userId, mode, limit)` per alerts-service.ts:117.
+      // The caller intent is the same — fetch the user's alerts. Adding `'paper'`
+      // mode (the live system is paper since Phase 8) so the call type-checks
+      // against the modern signature; this status endpoint was silently
+      // throwing-and-empty-returning prior to the fix.
+      const alerts = await AlertsService.getAllAlerts(userId, 'paper');
       const healthAlerts = alerts.filter(a => 
         a.alertType === 'feed_health' || a.alertType === 'formula_audit'
       );
@@ -18093,7 +18115,13 @@ Please:
 
       // 6. Recent Errors (last 24 hours)
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const recentErrors = await storage.getAIErrorLogs?.(userId, yesterday) || [];
+      // B-NEW-43 chunk 13: storage.getAIErrorLogs is gone; the current method
+      // is `getErrorLogs(userId?, filters?)` per storage.ts:364. The caller
+      // intent is the same. Optional chaining preserved on the method call as
+      // a defensive belt-and-suspenders (the method exists per the interface,
+      // but the prior `?.` form was already there — preserving it keeps the
+      // diff minimal).
+      const recentErrors = await storage.getErrorLogs?.(userId) || [];
 
       // 7. Construct comprehensive audit report
       const auditReport = {
