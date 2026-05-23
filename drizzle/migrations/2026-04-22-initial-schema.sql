@@ -20775,3 +20775,14 @@ ALTER TABLE ONLY public.walter_pending_approvals
 --
 
 
+-- B-NEW-43 Phase 2 chunk 4.4 (2026-05-23): the SET pg_catalog.set_config(
+-- 'search_path', '', false) line at the top of this dump sets search_path
+-- to empty for the connection that applies the file. That setting is sticky
+-- on the client connection — db-migrate.ts then runs INSERT INTO _migrations
+-- on the same client and fails with "relation _migrations does not exist"
+-- because the empty search_path can't find an unqualified table reference.
+-- Reset search_path here so subsequent queries on the same connection see
+-- the default schema chain.
+RESET search_path;
+
+
