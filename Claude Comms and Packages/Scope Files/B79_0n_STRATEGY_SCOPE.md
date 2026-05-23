@@ -1,10 +1,16 @@
-# B79.0n.STRATEGY — Scope (v1)
+# B79.0n.STRATEGY — Scope (v2 — post Langston Step 1 conditional ACK)
 
 > **Sub-batch:** 5 of 18 in the B79.0n umbrella v4 arc.
 > **Phase:** Phase 24 (multi-asset onboarding).
 > **Dependencies:** STORAGE (closed 2026-05-21, commit `ab3153ce5`). MCE (closed 2026-05-22, commit `aa0564107`). UNIVERSE-DISCOVERY + HYGIENE both closed 2026-05-21.
-> **Status:** v1 awaiting Langston Step 1 ACK.
+> **Status:** v2 awaiting Langston Step 1 RE-ACK (3 v2 inserts per his conditional-ACK reply 2026-05-23 PM).
 > **Standing rules applied:** umbrella rev 4 §1.5 B72 prior-arc context section (§2 below) + CLAUDE.md §3.3 onboarding-learnings placeholder + §11 NO-SILENT-FALLBACK doctrine + §2.2 per-metric crypto regression-lock + §2.3 crypto-by-construction-NONE invariant + §15 NO-PATCHES.
+
+> **v2 changes (post Langston Step 1 conditional ACK 2026-05-23 PM):**
+> - **Completeness fix (Langston blocker):** §0 numeric delta paragraph + §3 caller-site enumeration expanded from "2 dispatch surfaces" to "**7 files, 66 `strategyEngine.detect*` calls**" — empirically confirmed via grep on staging-side mirror. The validation/diagnostic/backfill harnesses (strategy-validator, stage-b-validator, historic-signal-generator, paper-sim-diagnostic) + routes.ts each call detect methods directly and will compile-fail at REQUIRED-AssetClass. Per-file disposition matrix added at §3.0.
+> - **Strategy count reconciliation (Langston minor #1 + #2):** Restated as **19 strategies** (9 in-class quant + 10 file-based: 8 from Directive 12.3.2 + strong_bull_trend B63 + orb B79.0d). The "18 canonical" count in CLAUDE.md persona §3 is OFF-BY-ONE — file-based count is 10, not 9. Persona doc edit added to §10 governance close.
+> - **Row-count math fix (Langston minor #3):** §5.2 #10 corrected. crypto_spot needs +4 rows (`strong_bull_trend` + `orb` × 2 modes — never synced before) PLUS xstock_spot 19 strategies × 2 modes = +38 rows. **Total net add: +42** (not +36).
+> - **Q-A through Q-G all concur** with CC's recommendations per Langston's dispositions in the conditional-ACK reply. Specific cross-references inline below.
 
 ---
 
@@ -13,11 +19,15 @@
 **🚨 THIS BATCH DOES NOT ENABLE LIVE XSTOCK ACTIVE-TRADING STRATEGY DISPATCH.** Per umbrella sequencing, xStock signals do not reach the crypto active-trading orchestrator path (`signal-orchestrator.ts → SQE → RTB → executor`) until WIRE-IN closes (sub-batch #16). xStock strategy detection continues running ONLY via the existing VTS shadow path (`xstock_spot/eval-cycle.ts` calling the shared `callStrategyDetect` dispatcher from `vts-runner.ts`), already live since B79.0j. What changes in this batch is that EVERY strategy detect method STOPS silently routing xStock callers through crypto-scoped `module_constants` wildcards; instead they route via REQUIRED `assetClass` parameters with no defaults, the same pattern STORAGE established at the screener_filters API surface and MCE just established at the regime + cost-model surface.
 
 **🚨 NUMERIC DELTAS (PREVIOUSLY-STATED-VS-NOW):**
-- Sub-batch count: still 18 (no change since umbrella rev 4).
-- Strategy count: **18 canonical strategies** (9 in-class quant + 9 file-based: 8 from Directive 12.3.2 + strong_bull_trend B63 + orb B79.0d). Note: per the legacy `STRATEGIES` const in `canonical-regime-strategy-map.ts:364-382`, the count there reads as 17 because `strong_bull_trend` and `orb` are present in `STRATEGY_DISPLAY_NAMES` (lines 402-405) but missing from the older `STRATEGIES` enum. The 18-count is governance-current (CLAUDE.md persona §1).
-- Detect-call-site count: **2 dispatch surfaces**, not 3 — confirmed via pre-audit grep below. Surface A = `signal-orchestrator.ts:1562-1854` (16 inline blocks for crypto active trading; `liquidity_trap` disabled at orchestrator, `orb` xstock-only). Surface B = `vts-runner.ts:callStrategyDetect()` lines 821-899 (centralized switch consumed by BOTH crypto VTS and xstock_spot/eval-cycle.ts).
-- Module-constants resolver-tightening sites: estimate **20-26** (the `_SE_KEY('...')` calls in `strategy-engine.ts` lines 108, 234-235, 362-364, 474, 563-564, 649, 744, 830-831, 1043, 1186 = 14 sites; plus the 9 file-based modules' `assetClass: '*'` resolver keys; minus ORB which is already class-aware). Pre-audit will confirm exact count via compile-driven audit.
-- File-based strategy modules to touch: **9** (`adaptive-flow.ts`, `defensive-hedge.ts`, `inside-bar-reversal.ts`, `morning-star.ts`, `pivot-shift.ts`, `reverse-impulse.ts`, `support-bounce.ts`, `volatility-edge.ts`, `strong-bull-trend.ts`). ORB (`orb.ts`) is the 10th file-based but is already class-aware — exemplar pattern this batch generalizes.
+
+| Field | v1 said | v2 says | Reason |
+|---|---|---|---|
+| Sub-batch count | 18 | 18 | (no change since umbrella rev 4) |
+| Strategy count | "18 canonical strategies (9 in-class quant + 9 file-based)" | **19 canonical strategies (9 in-class quant + 10 file-based)** | 10 file-based confirmed empirically: `adaptive-flow.ts`, `defensive-hedge.ts`, `inside-bar-reversal.ts`, `morning-star.ts`, `orb.ts`, `pivot-shift.ts`, `reverse-impulse.ts`, `strong-bull-trend.ts`, `support-bounce.ts`, `volatility-edge.ts`. 19 `detect[A-Z]\w+\(` methods empirically confirmed on `StrategyEngine` class. CLAUDE.md persona §3 OFF-BY-ONE noted; persona doc edit added to §10 governance close. |
+| Detect-call-site surface | "2 dispatch surfaces, ~16-18 calls" | **7 files, 66 `strategyEngine.detect*` calls** | Empirically grep-confirmed: `signal-orchestrator.ts` (18 calls — incl. wrapper duplicates), `vts-runner.ts` (18 — `callStrategyDetect` switch + scattered uses), `routes.ts` (12 — admin/audit/legacy endpoints), `stage-b-validator.ts` (8), `strategy-validator.ts` (4), `historic-signal-generator.ts` (3), `paper-sim-diagnostic.ts` (3). Per-file disposition matrix at §3.0 below. **This is the critical v2 fix per Langston blocker.** |
+| Module-constants resolver-tightening sites | estimate 20-26 | estimate **23+** (14 in-class quant `_SE_KEY` sites + 9 file-based wildcard-resolver sites, minus ORB which is already class-aware). Pre-audit Step 2 confirms exact count via compile-driven audit. | Pre-audit gate unchanged. |
+| File-based strategy modules to touch | 9 | **9** (`adaptive-flow.ts`, `defensive-hedge.ts`, `inside-bar-reversal.ts`, `morning-star.ts`, `pivot-shift.ts`, `reverse-impulse.ts`, `support-bounce.ts`, `volatility-edge.ts`, `strong-bull-trend.ts`). ORB (`orb.ts`) is the 10th file-based, already class-aware (exemplar pattern this batch generalizes). Count of file-based MODULES to touch = 9; total file-based modules in repo = 10. | Both numbers reconciled inline. |
+| `strategy_settings` row delta | +36 (18 × 2 modes × 1 new asset class) | **+42** (crypto_spot gets +4 rows from `strong_bull_trend` + `orb` × 2 modes — never synced before by `CORE_STRATEGIES` which was 17-item; PLUS xstock_spot 19 × 2 modes = +38; total = +42) | §5.2 #10 math fix per Langston minor #3. |
 
 ---
 
@@ -80,7 +90,8 @@ This batch does NOT calibrate per-class strategy parameters. xStock `strategy.*`
 | `strategy-mapper.ts` (Directive 11.4H.6G) per-class support | **Per-class regime → favored-strategies mapping.** Today `getFavoredStrategiesForRegime(regime)` returns a class-agnostic list from `mapping-regime-strategy.json`. New signature: `getFavoredStrategiesForRegime(regime, assetClass)`. Three implementation options on the table — see §9 Open Question Q-A. Default proposal: nested `byAssetClass: { crypto_spot: {...regimes}, xstock_spot: {...regimes} }` in the canonical JSON + thin per-class TS dispatcher at `server/core/strategy-mapper.ts` (no per-class wrappers in `server/asset_classes/<class>/` because the dispatcher itself isn't per-class — it lookups by class). For xStock, initial map: snapshot crypto-side mapping as-is for the 5 regimes, then surgically remove `defensive_hedge` (BTC-decorrelation strategy, doesn't apply to xStocks) + add `orb` to TFS + IE regimes (per xStock-specific opening-range microstructure). Defer further per-class calibration to Phase 19. | Calibration of per-class regime→strategy mapping values (which strategies favor which xStock regimes) is a Phase 19 calibration concern; we ship a reasonable shape (clone of crypto minus defensive_hedge plus orb routing) and let Phase 19 measurements refine. |
 | `hybrid-integration.ts` `selectHybridStrategy()` taxonomy | **Replace legacy types (H1_TREND_SNIPER / H2_SLINGSHOT / H3_GATECRASHER / H4_MOMENTUM_LINK) with canonical hybrid keys (pivot_shift / reverse_impulse / defensive_hedge / adaptive_flow / volatility_edge).** Closes BUG-007 from SYSTEM_MANUAL §1851. Add a new branch for non-hybrid strategies (strong_bull_trend, orb) that returns the strategy key itself instead of synthesizing a hybrid taxonomy entry. **No per-class behavior change** in this batch — hybrid integration is class-agnostic by design (the confluence math doesn't depend on asset class). | HYBRID_PARAMS promotion from compile-time `system-guards.js` to `module_constants` deferred to Phase 19 (no asset-class-meaningful difference observed today). |
 | `STRATEGIES` const at `canonical-regime-strategy-map.ts:364-382` | **Add `STRONG_BULL_TREND` + `ORB` entries** to make it 19-key-complete (matches `STRATEGY_DISPLAY_NAMES` at lines 402-405). Small + obvious closure of the inconsistency. | None. |
-| `SYSTEM_MANUAL.md` Chapter 2 (lines 1225-1900) | **Governance update at Step 10.** Current text references 17 strategies, old regime names (BULL_STABLE / BEAR_VOLATILE etc.), and a DSS service that was deleted in Batch 14. Update to reflect current 18-strategy + canonical 5-regime + post-DSS shape. Resolves stale BUG-006 / BUG-007 / RISK-014 closure entries. | None — Tier-2 doc update is part of this batch's governance close. |
+| `SYSTEM_MANUAL.md` Chapter 2 (lines 1225-1900) | **Governance update at Step 10.** Current text references 17 strategies, old regime names (BULL_STABLE / BEAR_VOLATILE etc.), and a DSS service that was deleted in Batch 14. Update to reflect current **19-strategy** + canonical 5-regime + post-DSS shape. Resolves stale BUG-006 / BUG-007 / RISK-014 closure entries. | None — Tier-2 doc update is part of this batch's governance close. |
+| `CLAUDE.md` persona §3 strategy count (Langston minor #1 — v2 NEW) | **Governance update at Step 10.** Current persona text reads "18 canonical strategies (9 file-based in `server/strategies/` + 9 in-class quant `detect*` methods)" — OFF-BY-ONE. Update to "**19 canonical strategies** (10 file-based in `server/strategies/` + 9 in-class quant `detect*` methods)". Also update the line-range citation from `365-385` (stale) to `384-406` (current `STRATEGY_DISPLAY_NAMES` location). | None. |
 
 **Resolver-key tightening rule (this batch's contribution to the pattern):** at every `getCachedNumbersForModule('strategy.<name>', _SE_KEY('<name>'))` call site, the `_SE_KEY` factory now requires `assetClass` as a second arg. The factory returns `{ exchange: '*', assetClass, strategy, regime: '*' }` — wildcard exchange + wildcard regime are preserved (strategy params don't vary by exchange or regime), but `assetClass` becomes the cycle's REQUIRED parameter. This is the MCE-pattern wildcard-retirement semantics scoped to the strategy-resolver layer.
 
@@ -111,6 +122,29 @@ This batch does NOT calibrate per-class strategy parameters. xStock `strategy.*`
 ## §3 — Code changes
 
 Concrete file:line modifications. Pre-audit (Step 2) will expand the caller-site enumeration via compile-driven audit; this section captures the load-bearing surface API changes.
+
+### §3.0 — Detect-method caller surface enumeration (v2 — Langston blocker fix)
+
+Empirically confirmed via `grep -rn 'strategyEngine\.detect[A-Z]' server/` from the local mirror at `C:\dev\DawnTraderV3`:
+
+| File | `strategyEngine.detect*` calls | Role | Threading disposition |
+|---|---:|---|---|
+| `server/services/signal-orchestrator.ts` | 18 | **Surface A — crypto active trading dispatch.** Lines 1562-1854 (16 inline `if (activeStrategies.has(...))` blocks). 18 occurrences total because 2 strategies (vwap_pullback, sma_trend_ride) have wrapper-like duplicate calls within the same block. | **(c) cycle-context.** Each dispatch threads `assetClass` from `resolveAssetClass(symbol, 'kraken')` already computed at line 1501 for the MCE call. Captured once into a local + reused across all 18 sites. |
+| `server/services/vts-runner.ts` | 18 | **Surface B — centralized VTS detect dispatcher.** `callStrategyDetect()` switch lines 821-899 (19 cases including one disabled `liquidity_trap` null-return). Additional scattered uses for strategy-override paths in the same file. Exported + consumed by `xstock_spot/eval-cycle.ts` (line 48-54) so xStock VTS shares the same dispatcher. | **(c) cycle-context.** `callStrategyDetect` signature promoted `symbol?: string, assetClass?: string` → REQUIRED `symbol: string, assetClass: AssetClass`. Each case threads `assetClass`. The B79.0j fail-safe "missing symbol/assetClass ctx; null-return" branch at lines 888-892 is REMOVED (dead code post-promotion). |
+| `server/routes.ts` | 12 | **Admin / audit / legacy endpoint surface.** Pre-audit Step 2 enumerates each — most likely candidates for `(c) cycle-context` (where the route resolves a symbol) OR `(a) crypto-intentional 'crypto_spot' as const` (for crypto-only audit endpoints) OR **(d) Phase 16 legacy-component register candidate** per CLAUDE.md §5 #18 (if the endpoint is dead code from pre-canonical-map era). Disposition per-route at pre-audit. | Per-route at Step 2. |
+| `server/services/stage-b-validator.ts` | 8 | **Stage B Paper Trading Validation harness.** Lines 289-346 (8 detect calls for vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap). File header: "Stage B Paper Trading Validation Service" — synthetic-test harness. | **(a) crypto-intentional `'crypto_spot' as const`.** Stage B is a crypto-only synthetic test harness from pre-multi-asset era; no asset-class threading needed inside the harness. Inline comment documents intent. |
+| `server/services/strategy-validator.ts` | 4 | **Synthetic test engine.** Lines 246, 295, 344, 382 (4 calls for vwap_pullback, breakout, mean_reversion, range_trading). Generates test price patterns and validates strategy signal generation. | **(a) crypto-intentional `'crypto_spot' as const`** for the synthetic test patterns (each strategy is tested with crypto-tuned synthesis). Inline comment documents intent. ALSO flag as **Phase 16 legacy-component register candidate** per CLAUDE.md §5 #18 — strategy-validator only tests 4 of 19 strategies, references pre-canonical-map architecture; likely a delete candidate but don't delete in-flight. |
+| `server/services/historic-signal-generator.ts` | 3 | **Historic signal backfill.** 3 detect calls per line 289-293. Used for replaying historic data through strategies. | **(c) cycle-context** if the backfill operates on multiple asset classes, OR **(a) crypto-intentional** if crypto-only. Pre-audit Step 2 reads the file to decide. |
+| `server/services/paper-sim-diagnostic.ts` | 3 | **Phase 27.F.12 PaperSim Diagnostic.** Lines 462-464 (3 detect calls). Diagnostic-only — generates paper-sim diagnostic data. | **(a) crypto-intentional** per file header context (Phase 27 was crypto-only). Inline comment. |
+
+**Total touched files: 7. Total `strategyEngine.detect*` calls: 66.**
+
+**Threading-disposition legend:**
+- **(a) crypto-intentional explicit `'crypto_spot' as const`** — caller is a crypto-only path (synthetic-test harness, legacy crypto-audit endpoint). TypeScript REQUIRED-AssetClass is satisfied by literal `'crypto_spot'`; semantically identical to today's silent default. Inline comment documents intent so future diff-readers don't mistake it for a missed asset-class threading.
+- **(c) cycle-context** — caller has the symbol available and threads `resolveAssetClass(symbol, 'kraken')`. Production-path threading.
+- **(d) Phase 16 legacy-component register candidate** — caller looks like dead code from pre-multi-asset era; mark for Phase 16 deletion review per CLAUDE.md §5 #18 (don't delete in-flight). Logged to RUNNING_ISSUES #136 Phase 16 register entry at governance close.
+
+**Step 3 (implementation) discipline:** every detect-method-caller file gets touched in the same commit as the StrategyEngine signature change. TypeScript compile is the verification — if any caller is missed, build fails. Step 4 diff review (Langston) verifies each of the 7 files is threaded correctly per the disposition matrix above.
 
 ### §3.1 — `server/services/strategy-engine.ts`
 
@@ -164,6 +198,8 @@ detectVWAPPullback(
 Same pattern applied to all 9 in-class quant detect methods (`detectVWAPPullback`, `detectABCDLong`, `detectSMATrendRide`, `detectBreakout`, `detectMeanReversion`, `detectRangeTrading`, `detectVWAPBounce`, `detectLiquidityTrap`, `detectDHMA`) AND all 9 in-class wrappers that delegate to file-based modules (`detectMorningStar`, `detectInsideBarReversal`, `detectSupportBounce`, `detectPivotShift`, `detectReverseImpulse`, `detectDefensiveHedge`, `detectAdaptiveFlow`, `detectVolatilityEdge`, `detectStrongBullTrend`). Each wrapper passes `assetClass` through to the file-based detect function.
 
 `detectORB` (line 1533) is **already class-aware** — its existing `ctx?: { assetClass: string; symbol: string; now?: Date }` parameter gets PROMOTED to REQUIRED `ctx: { assetClass: AssetClass; symbol: string; now?: Date }` (consistency with the rest; removes the silent default that defaults `ctx.assetClass` to `'xstock_spot'` per orb.ts header comment).
+
+**Uniform shape after this batch: all 19 detect methods on `StrategyEngine` REQUIRE `assetClass: AssetClass` (or `ctx.assetClass: AssetClass` for ORB).** No silent defaults anywhere.
 
 **Helper method `detectBullishReversal` (line 1040):** also reads from `module_constants` via `_SE_KEY('vwap_pullback')` — needs `assetClass` threaded through from its caller (`detectVWAPPullback`).
 
@@ -322,7 +358,7 @@ async syncAllUsers(): Promise<{ totalAdded: number; usersProcessed: number }> {
 }
 ```
 
-xStock rows seeded with `enabled: false` for all 18 (active-trading not wired yet; rows exist for future enablement). Crypto rows preserve current `enabled` state (no behavior change).
+xStock rows seeded with `enabled: false` for all **19 strategies** (active-trading not wired yet; rows exist for future enablement). Crypto rows preserve current `enabled` state — but `strong_bull_trend` + `orb` are NEWLY added to `CORE_STRATEGIES`, so crypto also gets 2 new rows per mode (4 new crypto rows total) seeded with `enabled: false` (preserving the existing not-yet-enabled state for these strategies on crypto).
 
 ### §3.6 — `shared/schema.ts` `strategySettings` table
 
@@ -381,21 +417,38 @@ ALTER TABLE strategy_settings_audit ADD COLUMN asset_class VARCHAR(20);
 UPDATE strategy_settings_audit SET asset_class = 'crypto_spot' WHERE asset_class IS NULL;
 ALTER TABLE strategy_settings_audit ALTER COLUMN asset_class SET NOT NULL;
 
--- Step 4: Seed strategy_gates rows for xstock_spot strategies (9 new + 1 existing orb = 10 total enabled)
--- Per XSTOCK_SPOT_ENABLED_STRATEGIES (canonical-regime-strategy-map.ts:1920: 6 quant + 3 file pattern + ORB).
--- ORB already seeded by B79.0d migration. Add the other 9 here with enabled=true.
--- Pre-audit confirms exact list of 6 quant + 3 file pattern entries.
+-- Step 4: Seed strategy_gates rows for ALL 19 strategies × xstock_spot (Langston E-2 approved).
+-- Per XSTOCK_SPOT_ENABLED_STRATEGIES (canonical-regime-strategy-map.ts:1920): 6 quant + 3 file pattern + ORB = 10 enabled.
+-- The other 9 strategies (xstock-not-yet-enabled) get explicit `enabled=false` rows per NO-SILENT-FALLBACK doctrine.
+-- ORB already seeded by B79.0d migration (`enabled=true`) — ON CONFLICT preserves it.
+-- Pre-audit confirms exact list of which 10 are in XSTOCK_SPOT_ENABLED_STRATEGIES.
+
 INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, set_by)
 VALUES
-  ('strategy_gates', '*', 'xstock_spot', 'vwap_pullback',       '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'breakout',            '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'mean_reversion',      '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'range_trade',         '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'sma_trend_ride',      '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'strong_bull_trend',   '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'morning_star',        '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'inside_bar_reversal', '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy'),
-  ('strategy_gates', '*', 'xstock_spot', 'support_bounce',      '*', 'enabled', 'true'::jsonb, 'b79-0n-strategy')
+  -- The 10 enabled (matching XSTOCK_SPOT_ENABLED_STRATEGIES). ORB already exists → ON CONFLICT no-op.
+  ('strategy_gates', '*', 'xstock_spot', 'vwap_pullback',       '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'breakout',            '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'mean_reversion',      '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'range_trade',         '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'sma_trend_ride',      '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'strong_bull_trend',   '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'morning_star',        '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'inside_bar_reversal', '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'support_bounce',      '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'orb',                 '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),
+  -- The 9 NOT-yet-enabled (NOT in XSTOCK_SPOT_ENABLED_STRATEGIES). Explicit false per NO-SILENT-FALLBACK.
+  -- Pre-audit Step 2 confirms the exact 9 — likely: abcd_long, vwap_bounce, dhma, pivot_shift, reverse_impulse,
+  -- defensive_hedge, adaptive_flow, volatility_edge, liquidity_trap. Defensive_hedge specifically excluded for
+  -- xStock per §3.8 (BTC-decorrelation-only strategy); liquidity_trap also disabled globally per Batch 70.3.
+  ('strategy_gates', '*', 'xstock_spot', 'abcd_long',           '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'vwap_bounce',         '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'dhma',                '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'pivot_shift',         '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'reverse_impulse',     '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'defensive_hedge',     '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'adaptive_flow',       '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'volatility_edge',     '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy'),
+  ('strategy_gates', '*', 'xstock_spot', 'liquidity_trap',      '*', 'enabled', 'false'::jsonb, 'b79-0n-strategy')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
 
 -- Step 5: Per-class strategy.* lever seeds — DEFERRED to pre-audit.
@@ -412,17 +465,24 @@ COMMIT;
 
 ```sql
 BEGIN;
--- Reverse strategy_gates xstock_spot rows
+-- Reverse strategy_gates xstock_spot rows seeded by this batch (preserves ORB row from B79.0d via set_by filter)
 DELETE FROM module_constants
-WHERE module_name = 'strategy_gates' AND asset_class = 'xstock_spot' AND set_by = 'b79-0n-strategy';
+WHERE module_name = 'strategy_gates'
+  AND asset_class = 'xstock_spot'
+  AND set_by = 'b79-0n-strategy';
+-- (ORB pre-existing row stays — set_by ≠ 'b79-0n-strategy')
 -- Reverse strategy_settings_audit schema
-DROP INDEX IF EXISTS strategy_settings_audit_asset_class_idx;
 ALTER TABLE strategy_settings_audit DROP COLUMN asset_class;
 -- Reverse strategy_settings schema
 DROP INDEX IF EXISTS strategy_settings_global_context_mode_strategy_asset_class_idx;
 CREATE UNIQUE INDEX strategy_settings_global_context_mode_strategy_idx
   ON strategy_settings (global_context_id, mode, strategy);
 ALTER TABLE strategy_settings DROP COLUMN asset_class;
+-- Note: rollback does NOT remove strategy_settings rows added by this batch (the 4 crypto +
+-- 38 xstock new rows). Those are data not schema; if rollback is needed for data, separate
+-- DELETE statements scoped by (strategy IN ('strong_bull_trend','orb') AND asset_class='crypto_spot')
+-- OR (asset_class='xstock_spot') would be added — but data-rollback is rarely the right move
+-- (the rows are inert until UI flips enabled=true).
 COMMIT;
 ```
 
@@ -599,10 +659,10 @@ All 4 GitHub Actions checks green: TypeScript Check, Test Suite, Build, Docker B
 7. `b79-0n-xstock-vts-strategy-routing.test.ts` — passes (integration test, mock DB OK).
 8. `b79-0n-orb-class-aware-regression.test.ts` — passes (ORB exemplar regression-lock).
 9. xStock scanner shadow path continues evaluating per cycle on staging (PM2 logs grep for `[B79.0m.b2]` lines tagged with `xstock_spot` AND for the new `[B79.0n.STRATEGY]` per-class strategy detect resolution log).
-10. `strategy_settings` row count: **net add equal to 18 × 2 modes × 1 new asset class (xstock_spot) = 36 new rows** (existing crypto_spot rows preserved + backfilled with `assetClass='crypto_spot'`).
+10. `strategy_settings` row count (v2 — corrected per Langston minor #3): **net add +42 new rows total.** Breakdown: crypto_spot gains **+4 rows** (2 new `CORE_STRATEGIES` entries — `strong_bull_trend` + `orb` — × 2 modes — both seeded with `enabled: false` to match current not-yet-enabled state for these strategies on crypto); xstock_spot gains **+38 rows** (19 strategies × 2 modes — all seeded with `enabled: false` because active-trading not wired yet). Existing 17 × 2 = 34 crypto_spot rows are PRESERVED with `enabled` state intact and backfilled with `assetClass='crypto_spot'` via the schema migration (§3.7 step 1).
 11. `strategy_settings_audit` schema migration applied (no row delta — audit log historical-only).
-12. `module_constants` row delta: **net +9** (the 9 new `strategy_gates.xstock_spot.<strategy>.enabled` rows; ORB row pre-exists from B79.0d). Composition: 1 module (`strategy_gates`) × 9 strategies × 1 constant (`enabled`) × 1 asset class (`xstock_spot`) = 9 new rows.
-13. **`SELECT COUNT(*) FROM module_constants WHERE module_name='strategy_gates' AND asset_class='xstock_spot' AND constant_name='enabled'` returns 10** (the 9 new + the pre-existing orb row from B79.0d).
+12. `module_constants` row delta (v2 — corrected per Langston E-2 approval): **net +18** (the 18 new `strategy_gates.xstock_spot.<strategy>.enabled` rows; ORB row pre-exists from B79.0d). Composition: 1 module (`strategy_gates`) × 18 strategies × 1 constant (`enabled`) × 1 asset class (`xstock_spot`) = 18 new rows. Of those 18: 9 with `enabled=true` (matching XSTOCK_SPOT_ENABLED_STRATEGIES minus ORB which already exists) + 9 with `enabled=false` (explicit not-yet-enabled per NO-SILENT-FALLBACK).
+13. **`SELECT COUNT(*) FROM module_constants WHERE module_name='strategy_gates' AND asset_class='xstock_spot' AND constant_name='enabled'` returns 19** (the 18 new + the pre-existing orb row from B79.0d).
 14. PM2 boot log contains: `[B79.0n.STRATEGY][CACHE_REFRESH] picked up N module_constants rows for strategy.* (asset_class=crypto_spot+xstock_spot)` where N reflects the number of strategy-tunable rows. Emitted from strategy-engine's first cache-refresh cycle post-boot. Step 8 verification looks for this positive signal.
 15. **Crypto active-trading path continues firing strategies normally** — PM2 logs grep for `[Phase13][MCE]` followed by `activeStrategies=[...]` for crypto pairs, and at least one `[VWAP Strategy] ✅ Signal generated` (or any per-strategy log) per minute during US market hours. Zero `[B79.0n.STRATEGY] silent-default` warnings (those should never log because the parameter is REQUIRED).
 16. **xStock VTS shadow path continues firing strategies normally** — PM2 logs grep for `[B79.0m.b2]` cycle markers + at least one xstock strategy null-reason log per cycle.
@@ -760,6 +820,34 @@ Reply: **scope v1 FINAL ACK** / **specific decisions on Q-A through Q-G** / **su
 
 ---
 
+## §9.5 — v2 status of open questions (Langston Step 1 conditional ACK dispositions folded)
+
+| Q | Status (per Langston Step 1 conditional ACK reply 2026-05-23 PM) |
+|---|---|
+| (A) JSON shape Option A/B/C | **APPROVED Option A** (nested `byAssetClass`). SSOT preservation for sync-canonical-bridge.ts + drift-detector + Mapping Drift UI decisive. |
+| (B) xStock map content B-1/B-2 | **APPROVED (B-1)** ship default shape. Calibration of weights/favored ordering is Phase 19 refinement gate. |
+| (C) liquidity_trap C-1/C-2/C-3 | **APPROVED (C-2)** — REQUIRED-assetClass for shape consistency, keep disabled state. CLAUDE.md §5 #18 don't-delete-in-flight; file (C-3) deletion decision as RUNNING_ISSUES per §7 #2 (already in scope). |
+| (D) Hybrid fallback D-1/D-2 | **APPROVED (D-1)** with inline comment. Note: defensively stronger alternative (throw on non-hybrid quant) is a HybridSignal-contract investigation better treated separately. |
+| (E) strategy_gates seed coverage E-1/E-2 | **APPROVED (E-2)** seed all 19 explicit per-class gate rows. NO-SILENT-FALLBACK + NO-PATCHES doctrine. **v2 NOTE:** 19 (not 18) per strategy-count reconciliation; 9 enabled=true matching `XSTOCK_SPOT_ENABLED_STRATEGIES` + 10 enabled=false for not-yet-enabled (including the 2 newly-added crypto-onboarded `strong_bull_trend` + `orb` which on xStock get enabled=true since they're already wired there, but on crypto get enabled=false). Migration row count delta in §3.7 to be reconciled at Step 3 implementation. |
+| (F) per-class lever seeding F-1/F-2/F-3 | **APPROVED blind pre-audit + Step 2 ACK gate.** Expected F-1 (zero levers asset-class-meaningful) per umbrella §1.5. **Langston condition:** if F-3 surfaces (5+ levers), scope-split decision back at his desk before Step 3 — don't unilaterally absorb. Pre-audit also documents `volume_confirm_min_history` candidate if F-2 surfaces. |
+| (G) soak baseline | **APPROVED fresh baseline.** Document in completion report which window was used; if STRATEGY deploys before 2026-05-25T12:00Z target, flag MCE-stabilization-overlap partial baseline. |
+
+---
+
+## §9.6 — v2 status of scope-completeness concerns (Langston blocker fix folded)
+
+| Concern | v2 disposition |
+|---|---|
+| 2-dispatch-surface enumeration too narrow | **RESOLVED** — §0 numeric delta + §3.0 caller-site matrix expanded to 7 files, 66 calls. Per-file disposition (a)/(c)/(d) at §3.0. Step 4 diff review verifies each file threaded correctly. |
+| Strategy count off-by-one (18 vs 19) | **RESOLVED** — §0 numeric delta restated as 19. §3.1 + §3.5 inline references updated to 19. §10 governance close adds CLAUDE.md persona §3 doc-edit. |
+| §5.2 #10 row-count math | **RESOLVED** — corrected from +36 to +42. Crypto_spot +4 from new CORE_STRATEGIES entries × 2 modes; xstock_spot +38 (19 × 2 modes). |
+
+---
+
+Reply: **scope v2 FINAL ACK** / **further iteration on v2 deltas** / **specific concerns on the §3.0 disposition matrix or row-count reconciliation**.
+
+---
+
 INFRASTRUCTURE NOTE per CLAUDE.md §6.5.0.a + §6.5.0.b: this scope file is staged in your inbox at `/home/langston/inbox/b79-0n/B79_0n_STRATEGY_SCOPE.md`. **DO NOT `cd /mnt/gdrive` or run `git -C` against the gdrive mount — it will hang on FUSE I/O (B-NEW-42b empirical: D-state stuck processes, can't be kill -9'd; STORAGE Step 4 RE-ACK hung 10+ min before re-dispatch).** For repo-side verification use `ssh deploy@188.245.193.8 'cd /home/deploy/dawntrader && git ...'` — staging server has same code at same commit. Embedded diff snippets above are sufficient for your review without needing to fetch additional repo content.
 
-— Claude Code, 2026-05-24 PM (B79.0n.STRATEGY Step 1 scope v1)
+— Claude Code, 2026-05-24 AM (B79.0n.STRATEGY Step 1 scope v2 — post Langston conditional ACK)
