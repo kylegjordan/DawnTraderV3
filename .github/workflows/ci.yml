@@ -49,6 +49,33 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    # B-NEW-43 Phase 2 chunk 2 (2026-05-23): CI Postgres service container + db:migrate
+    # bootstrap added per pre-audit §4.3 + §7. Previously the test job ran against
+    # a hardcoded `postgresql://test:test@localhost:5432/test` URL (vitest.config.ts:10)
+    # with NOTHING listening — producing the ~9 DB_CONNECTION failures and the ~54
+    # NOT_WARM failures (warmModuleConstantsForSyncCallers hard-throws on zero rows
+    # in `module_constants`, which only gets populated by data-migration files).
+    # The `db:migrate` step applies all ~58-60 forward migrations (rollback files
+    # auto-skipped by scripts/db-migrate.ts) → full schema + seed rows → harness
+    # warming succeeds. Service container publishes Postgres on host port 5432
+    # to match the vitest hardcode (no vitest config change needed).
+    # MUST use `db:migrate` NOT `db:push` — drizzle-kit push is broken on this
+    # schema's PG ARRAY column defaults (see scripts/db-migrate.ts header for
+    # the full rationale).
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,10 +89,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Apply database migrations (schema + seed data)
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
       - name: Run tests
         run: npx vitest run --reporter=verbose
         env:
           NODE_ENV: test
+          # vitest.config.ts:10 hardcodes the same URL — host-port-published
+          # service container makes both this step + vitest agree without
+          # touching vitest.config.ts. Setting here for explicitness.
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
           # B-NEW-32 (2026-05-15): external-macro-feed.ts requires this env var
           # at module-import time per the no-silent-fallback discipline. Tests
           # that import transitively (e.g. b68-4-regime-age via market-context-
