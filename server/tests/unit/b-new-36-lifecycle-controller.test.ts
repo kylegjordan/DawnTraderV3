@@ -21,8 +21,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ── Mock db.execute and capture SQL fragments + params. ──────────────────────
 const dbCalls: Array<{ sql: string; params: any[] }> = [];
 const dbExecute = vi.fn(async (q: any) => {
-  const sqlText = (q?.queryChunks ?? []).map((c: any) => c?.value ?? c).join(' ');
-  dbCalls.push({ sql: sqlText, params: q?.params ?? [] });
+  const chunks = (q?.queryChunks ?? []) as any[];
+  // Build sqlText by joining StringChunk segments (Param values are interpolation
+  // placeholders, not SQL syntax). Build params by filtering Param chunks
+  // (StringChunk.value is string[]; Param.value is the bound value of any type).
+  // B-NEW-43 Phase 2 chunk 11 (2026-05-23): the prior implementation read
+  // `q.params` which Drizzle SQL instances don't expose at the top level
+  // (params are embedded in queryChunks as Param objects). Test assertions
+  // doing `audit.params.find((p) => p === 'name')` got undefined.
+  const sqlText = chunks
+    .filter((c: any) => c && Array.isArray(c.value))
+    .map((c: any) => c.value.join(''))
+    .join(' ');
+  const params = chunks
+    .filter((c: any) => c && !Array.isArray(c.value) && 'value' in c)
+    .map((c: any) => c.value);
+  dbCalls.push({ sql: sqlText, params });
   if (sqlText.toUpperCase().includes('SELECT COUNT')) {
     return { rows: [{ count: '0' }] } as any;
   }
