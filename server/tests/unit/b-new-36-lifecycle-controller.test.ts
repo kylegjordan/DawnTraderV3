@@ -22,16 +22,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const dbCalls: Array<{ sql: string; params: any[] }> = [];
 const dbExecute = vi.fn(async (q: any) => {
   const chunks = (q?.queryChunks ?? []) as any[];
-  // Build sqlText by joining StringChunk segments (Param values are interpolation
-  // placeholders, not SQL syntax). Build params by filtering Param chunks
-  // (StringChunk.value is string[]; Param.value is the bound value of any type).
-  // B-NEW-43 Phase 2 chunk 11 (2026-05-23): the prior implementation read
-  // `q.params` which Drizzle SQL instances don't expose at the top level
-  // (params are embedded in queryChunks as Param objects). Test assertions
-  // doing `audit.params.find((p) => p === 'name')` got undefined.
+  // B-NEW-43 Phase 2 chunk 12 (2026-05-23): build sqlText AND params from
+  // queryChunks. StringChunk has .value: string[] (the literal SQL text
+  // segments). Param has .value: any (the bound value). The original code
+  // used `c?.value ?? c` which mixed both into sqlText AND read q.params
+  // (nonexistent on Drizzle SQL) for params. Now: sqlText accumulates ALL
+  // chunk values (stringified for arrays); params extracts only Param chunks.
   const sqlText = chunks
-    .filter((c: any) => c && Array.isArray(c.value))
-    .map((c: any) => c.value.join(''))
+    .map((c: any) => {
+      if (!c) return '';
+      if (Array.isArray(c.value)) return c.value.join('');
+      if ('value' in c) return String(c.value);
+      return String(c);
+    })
     .join(' ');
   const params = chunks
     .filter((c: any) => c && !Array.isArray(c.value) && 'value' in c)
