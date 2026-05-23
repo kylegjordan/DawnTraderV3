@@ -100,10 +100,17 @@ describe('B79.0m.b2 — Pattern Filter', () => {
     expect(result.counters.failed_min_price).toBe(1);
   });
 
-  it('(c) ohlc.length < 60 → pattern_history_N_lt_60 + tripwire prefix', async () => {
-    const result = await evaluateXstockPatternFilter('AAPL/USD', makeOhlc(50), 200, 0, 'paper');
+  it('(c) ohlc.length below min_ohlc_history_bars → pattern_history_N_lt_M + tripwire prefix', async () => {
+    // B-NEW-43 Phase 2 chunk 9 (2026-05-23): test was written assuming a
+    // 60-bar floor (the 1-min-era default). B-NEW-34 (2026-05-15) replaced
+    // that with a 24-bar floor (60-min-era) per module_constants seed
+    // 'xstock_spot.min_ohlc_history_bars' = 24. With makeOhlc(50), 50 > 24
+    // so the filter passes the history check. Use 20 bars (below 24) +
+    // threshold-agnostic regex so the test stays correct regardless of
+    // future floor changes.
+    const result = await evaluateXstockPatternFilter('AAPL/USD', makeOhlc(20), 200, 0, 'paper');
     expect(result.passed).toBe(false);
-    expect(result.failureReason).toMatch(/^pattern_history_\d+_lt_60$/);
+    expect(result.failureReason).toMatch(/^pattern_history_\d+_lt_\d+$/);
     // The eval-cycle increments patternRejectByMinHistory when failureReason starts with 'pattern_history_'.
     expect(result.failureReason?.startsWith('pattern_history_')).toBe(true);
   });

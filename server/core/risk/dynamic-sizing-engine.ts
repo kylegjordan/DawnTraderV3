@@ -354,4 +354,15 @@ export function resetDSEHistory(): void {
   console.log('[11.3][DSE] History reset');
 }
 
-export { DSE_CONFIG };
+// B-NEW-43 Phase 2 chunk 9 (2026-05-23): module-level DSE_CONFIG export via
+// Proxy. Previously `export { DSE_CONFIG }` referred to a nonexistent module-
+// level binding (the only DSE_CONFIG declarations are function-local consts
+// inside getDSEConfig()-using functions). Tests importing DSE_CONFIG got
+// undefined. The Proxy lazily delegates property access to getDSEConfig(),
+// preserving the back-compat shape promised by the 2026-05-05 B72 comment
+// at line 87.
+export const DSE_CONFIG = new Proxy({} as ReturnType<typeof getDSEConfig>, {
+  get(_target, prop: string) {
+    return (getDSEConfig() as Record<string, unknown>)[prop];
+  },
+});
