@@ -29,17 +29,31 @@ import {
   _replaceXstockUniverse,
   type XstockSpotEntry,
 } from '../../../shared/asset-classes';
+import { UNIVERSE_BOOTSTRAP_SET } from '../../asset_classes/xstock_spot/universe-bootstrap.js';
 
 const USD_COLLISIONS = ['BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD'];
 
 // B79.0n.UNIVERSE-DISCOVERY 2026-05-21: registry is now DB-backed + empty at
-// module-init time. Tests below assume the 9 USD-collision symbols are present
-// in XSTOCK_SPOT_SYMBOLS (xStock catalog parity assertion). Populate a fixture
-// covering those 9 + the resolveAssetClass collision-resolution paths.
+// module-init time. Tests below assume the 9 USD-collision symbols + the
+// non-collision xStock tickers (AAPL, TSLA, NVDA, GLD, ...) are present in
+// XSTOCK_SPOT_SYMBOLS. Populate a single fixture covering both:
+//   - production Layer-4 UNIVERSE_BOOTSTRAP_SET (AAPL/TSLA/NVDA/GLD/...) for
+//     the membership-fast-path tests at L112-128
+//   - the 9 USD_COLLISIONS for the collision-resolution paths
+// B-NEW-43 Phase 2 chunk 3 (2026-05-23): this test file had 4 failing assertions
+// before the bootstrap-seed was added — `resolveAssetClass('AAPL/USD', 'kraken')`
+// was returning `crypto_spot` because AAPL/USD wasn't in the fixture.
 beforeAll(() => {
   const fixture = new Map<string, XstockSpotEntry>();
+  // Bootstrap-set first so unit-tests faithfully reflect production fallback state.
+  for (const { symbol, entry } of UNIVERSE_BOOTSTRAP_SET) {
+    fixture.set(symbol, entry);
+  }
+  // Extend with the 9 USD_COLLISIONS not in the bootstrap set.
   for (const sym of USD_COLLISIONS) {
-    fixture.set(sym, { name: sym.split('/')[0], sector: 'XLK' });
+    if (!fixture.has(sym)) {
+      fixture.set(sym, { name: sym.split('/')[0], sector: 'XLK' });
+    }
   }
   _replaceXstockUniverse(fixture);
 });
