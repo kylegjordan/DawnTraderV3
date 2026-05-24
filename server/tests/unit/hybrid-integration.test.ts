@@ -70,7 +70,10 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       expect(hybrids[0].signalType).toBe('HYBRID');
       expect(hybrids[0].symbol).toBe('BTCUSD');
       expect(hybrids[0].patternType).toBe('PINBAR');
-      expect(hybrids[0].hybridStrategy).toBe('H1_TREND_SNIPER');
+      // B79.0n.STRATEGY (2026-05-24): selectHybridStrategy now derives from pattern
+      // dimension (canonical hybrid keys) instead of legacy H1/H2/H3/H4 enum.
+      // PINBAR → reverse_impulse per Directive 11.4H.6G PATTERN_TO_HYBRID.
+      expect(hybrids[0].hybridStrategy).toBe('reverse_impulse');
       expect(hybrids[0].hybridScore).toBeGreaterThanOrEqual(HYBRID_PARAMS.MIN_SCORE);
     });
 
@@ -128,7 +131,12 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       expect(hybrids[0].componentScores.ml).toBe(0.7);
     });
 
-    it('selects H2_SLINGSHOT for breakout strategy', () => {
+    // B79.0n.STRATEGY (2026-05-24): legacy H1/H2/H3/H4 taxonomy retired (BUG-007 closure).
+    // selectHybridStrategy now derives from PATTERN dimension, not from QUANT.strategy.
+    // The breakout + mean_reversion tests below verify that varying quant.strategy with
+    // the same PINBAR pattern produces the same canonical hybrid (reverse_impulse) —
+    // demonstrating the new pattern-driven contract.
+    it('PINBAR pattern always maps to reverse_impulse regardless of quant strategy (was H2_SLINGSHOT for breakout)', () => {
       const breakoutQuant: QuantSignal = {
         ...baseQuant,
         strategy: 'breakout',
@@ -137,10 +145,10 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       const hybrids = service.detectConfluence([breakoutQuant], [basePattern]);
 
       expect(hybrids.length).toBe(1);
-      expect(hybrids[0].hybridStrategy).toBe('H2_SLINGSHOT');
+      expect(hybrids[0].hybridStrategy).toBe('reverse_impulse');
     });
 
-    it('selects H3_GATECRASHER for mean_reversion strategy', () => {
+    it('PINBAR pattern always maps to reverse_impulse regardless of quant strategy (was H3_GATECRASHER for mean_reversion)', () => {
       const meanRevQuant: QuantSignal = {
         ...baseQuant,
         strategy: 'mean_reversion',
@@ -149,7 +157,7 @@ describe('Directive 10.4 — Hybrid Integration', () => {
       const hybrids = service.detectConfluence([meanRevQuant], [basePattern]);
 
       expect(hybrids.length).toBe(1);
-      expect(hybrids[0].hybridStrategy).toBe('H3_GATECRASHER');
+      expect(hybrids[0].hybridStrategy).toBe('reverse_impulse');
     });
 
     it('multiple confluences generates multiple hybrids', () => {

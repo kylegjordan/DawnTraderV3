@@ -33,7 +33,9 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v2.0.0';
+// B79.0n.STRATEGY (2026-05-24): bumped v2.0.0 → v3.0.0 with byAssetClass nested
+// shape. Schema version matches bridge/canonical/mapping-regime-strategy.json._schema.
+export const CANONICAL_SCHEMA_VERSION = 'regime-mapping/v3.0.0';
 export const CANONICAL_SCHEMA_METADATA = {
   updatedAt: '2026-04-12T00:00:00Z',  // B59: Updated from 2026-03-05. Sync script now uses fresh timestamps.
   source: 'VTS',

@@ -139,41 +139,50 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
   
   describe('Bridge JSON Validation', () => {
     
-    test('Bridge JSON exists and has valid schema', () => {
+    test('Bridge JSON exists and has valid schema (v3.0.0 byAssetClass nested per B79.0n.STRATEGY)', () => {
       const jsonPath = path.join(process.cwd(), 'bridge/canonical/mapping-regime-strategy.json');
-      
+
       expect(fs.existsSync(jsonPath)).toBe(true);
-      
+
       const content = fs.readFileSync(jsonPath, 'utf8');
       const bridge = JSON.parse(content);
-      
+
       expect(bridge._schema).toBeDefined();
-      expect(bridge._schema).toContain('v2.0');
+      expect(bridge._schema).toContain('v3.0');  // B79.0n.STRATEGY: v2.0 → v3.0 byAssetClass nested
+      expect(bridge.byAssetClass).toBeDefined();
+      expect(bridge.byAssetClass.crypto_spot).toBeDefined();
+      expect(bridge.byAssetClass.xstock_spot).toBeDefined();
     });
-    
-    test('Bridge JSON contains all canonical regimes', () => {
+
+    test('Bridge JSON contains all canonical regimes per asset class (v3.0.0 byAssetClass shape)', () => {
       const jsonPath = path.join(process.cwd(), 'bridge/canonical/mapping-regime-strategy.json');
       const content = fs.readFileSync(jsonPath, 'utf8');
       const bridge = JSON.parse(content);
-      
+
       const expectedRegimes = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
-      
-      for (const regime of expectedRegimes) {
-        expect(bridge[regime]).toBeDefined();
-        expect(bridge[regime].favoredStrategies).toBeDefined();
-        expect(Array.isArray(bridge[regime].favoredStrategies)).toBe(true);
+
+      // B79.0n.STRATEGY: nested byAssetClass — crypto + xstock both have all 5 regimes
+      for (const assetClass of ['crypto_spot', 'xstock_spot']) {
+        for (const regime of expectedRegimes) {
+          expect(bridge.byAssetClass[assetClass][regime]).toBeDefined();
+          expect(bridge.byAssetClass[assetClass][regime].favoredStrategies).toBeDefined();
+          expect(Array.isArray(bridge.byAssetClass[assetClass][regime].favoredStrategies)).toBe(true);
+        }
       }
     });
-    
-    test('SMA Trend Ride is in IMPULSE_EXPANSION (v2.0.0 realignment)', () => {
+
+    test('SMA Trend Ride is in IMPULSE_EXPANSION (v2.0.0 realignment) — crypto + xstock', () => {
       const jsonPath = path.join(process.cwd(), 'bridge/canonical/mapping-regime-strategy.json');
       const content = fs.readFileSync(jsonPath, 'utf8');
       const bridge = JSON.parse(content);
-      
-      expect(bridge.IMPULSE_EXPANSION.favoredStrategies).toContain('sma_trend_ride');
-      expect(bridge.TREND_FRIENDLY_STABLE.favoredStrategies).not.toContain('sma_trend_ride');
+
+      // B79.0n.STRATEGY: now per-asset-class — both classes inherit IE realignment
+      for (const assetClass of ['crypto_spot', 'xstock_spot']) {
+        expect(bridge.byAssetClass[assetClass].IMPULSE_EXPANSION.favoredStrategies).toContain('sma_trend_ride');
+        expect(bridge.byAssetClass[assetClass].TREND_FRIENDLY_STABLE.favoredStrategies).not.toContain('sma_trend_ride');
+      }
     });
-    
+
   });
   
   describe('Aggregate Statistics', () => {
@@ -203,8 +212,8 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
 
   describe('Directive 11.7F-B — Per-Strategy DriftScore Integration', () => {
     
-    test('Schema version is v2.0.0', () => {
-      expect(CANONICAL_SCHEMA_VERSION).toBe('regime-mapping/v2.0.0');
+    test('Schema version is v3.0.0 (per B79.0n.STRATEGY byAssetClass migration)', () => {
+      expect(CANONICAL_SCHEMA_VERSION).toBe('regime-mapping/v3.0.0');
     });
 
     test('Simulated drift data with 10 pairs and random Z-scores', () => {
