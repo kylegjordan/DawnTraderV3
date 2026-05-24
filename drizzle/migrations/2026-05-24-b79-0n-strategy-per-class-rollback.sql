@@ -2,7 +2,7 @@
 -- NOT auto-run by db:migrate; manual execution if Step 7 verification fails.
 --
 -- Reverses (per Langston gov flag 1 in Step 2 ACK symmetric-rollback requirement):
---   1. 18 strategy_gates.xstock_spot rows seeded by this batch (set_by filter preserves ORB)
+--   1. 18 strategy_gates.xstock_spot rows seeded by this batch (updated_by filter preserves ORB)
 --   2. strategy_settings_audit asset_class column
 --   3. strategy_settings UNIQUE constraint + asset_class column (restore original UNIQUE)
 --
@@ -15,11 +15,11 @@
 BEGIN;
 
 -- Step 1: Reverse strategy_gates xstock_spot rows seeded by this batch
--- (set_by='b79-0n-strategy' filter preserves the pre-existing ORB row from B79.0d)
+-- (updated_by='b79-0n-strategy' filter preserves the pre-existing ORB row from B79.0d)
 DELETE FROM module_constants
 WHERE module_name = 'strategy_gates'
   AND asset_class = 'xstock_spot'
-  AND set_by = 'b79-0n-strategy';
+  AND updated_by = 'b79-0n-strategy';
 
 -- Step 2: Reverse strategy_settings_audit schema
 ALTER TABLE strategy_settings_audit DROP COLUMN IF EXISTS asset_class;

@@ -58,7 +58,7 @@ ALTER TABLE strategy_settings_audit ALTER COLUMN asset_class SET NOT NULL;
 -- ORB's enabled=true row pre-exists from B79.0d migration; ON CONFLICT preserves it.
 -- 18 new rows total (9 enabled=true + 9 enabled=false; ORB ON CONFLICT no-op).
 
-INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, set_by)
+INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
 VALUES
   -- 10 enabled=true (matching XSTOCK_SPOT_ENABLED_STRATEGIES). ORB ON CONFLICT no-op.
   ('strategy_gates', '*', 'xstock_spot', 'vwap_pullback',       '*', 'enabled', 'true'::jsonb,  'b79-0n-strategy'),

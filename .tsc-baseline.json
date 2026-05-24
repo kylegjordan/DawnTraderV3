@@ -1,87 +1,79 @@
 {
   "version": 1,
-  "frozen_at_commit": "0519224",
-  "frozen_at_iso": "2026-05-23T01:59:15.905Z",
-  "frozen_by_batch": "B-NEW-43 (chunk 5 — baseline-gate infrastructure)",
-  "total_errors": 488,
-  "file_count": 68,
+  "frozen_at_commit": "b0a4292",
+  "frozen_at_iso": "2026-05-24T00:45:31.049Z",
+  "frozen_by_batch": "B79.0n.STRATEGY Step 3 (regenerated 488→494; +6 net delta from pre-existing post-B-NEW-43-freeze TS2345 in routes.ts/alert-action-handler/intent-executor MINUS B79.0n.STRATEGY drops in paper-execution-engine TS2322 + dynamic-sizing-engine TS2552 + inside-bar-reversal TS2367 SELL dead-code cleanup; verified pre-stash baseline shows routes.ts had 32 TS2345 errors pre-batch identical to post-batch — see B79_0n_STRATEGY_COMPLETION_REPORT for full justification per anti-graveyard discipline)",
+  "total_errors": 494,
+  "file_count": 66,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
-      "phase_tag": "Phase 16",
-      "context": "Frontend UI (1 error). UI rewrites/cleanups are Phase 16 territory. Per-file Phase-16 audit may reclassify as B-NEW-43 if confidently current.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1
       }
     },
     {
       "path": "client/src/components/goals/copy-to-live-modal.tsx",
-      "phase_tag": "Phase 16",
-      "context": "Frontend UI (1 error). UI rewrites/cleanups are Phase 16 territory. Per-file Phase-16 audit may reclassify as B-NEW-43 if confidently current.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2307": 1
       }
     },
     {
       "path": "client/src/components/goals/guardrails-tab.tsx",
-      "phase_tag": "Phase 16",
-      "context": "Frontend UI (1 error). UI rewrites/cleanups are Phase 16 territory. Per-file Phase-16 audit may reclassify as B-NEW-43 if confidently current.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2307": 1
       }
     },
     {
       "path": "client/src/components/system/enhanced-system-monitoring.tsx",
-      "phase_tag": "Phase 16",
-      "context": "Frontend UI (8 errors). UI rewrites/cleanups are Phase 16 territory. Per-file Phase-16 audit may reclassify as B-NEW-43 if confidently current.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 8
       }
     },
     {
       "path": "client/src/components/trading/active-trades-v2.tsx",
-      "phase_tag": "Phase 16",
-      "context": "Frontend UI (2 errors). UI rewrites/cleanups are Phase 16 territory. Per-file Phase-16 audit may reclassify as B-NEW-43 if confidently current.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS7053": 2
       }
     },
     {
       "path": "client/src/components/trading/ready-to-buy-table.tsx",
-      "phase_tag": "Phase 16",
-      "context": "Frontend UI (1 error). UI rewrites/cleanups are Phase 16 territory. Per-file Phase-16 audit may reclassify as B-NEW-43 if confidently current.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 1
       }
     },
     {
       "path": "client/src/pages/machine-learning.tsx",
-      "phase_tag": "Phase 16",
-      "context": "Machine-learning page UI (23 errors). Likely UI for a backend feature that was superseded by current architecture. Phase 16 review confirms removal vs. rebuild.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS18046": 23
       }
     },
     {
       "path": "server/core/logging/vts-telemetry.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Server core infrastructure (2 errors). May be current/operational or active-trading-adjacent. Triage in chunk 7+: if confidently current, fix; otherwise Phase 19.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 2
       }
     },
     {
-      "path": "server/core/risk/dynamic-sizing-engine.ts",
-      "phase_tag": "Phase 19",
-      "context": "Core risk / strategy infrastructure (1 error). Active-trading-path. Phase 19 owns.",
-      "errors": {
-        "TS2552": 1
-      }
-    },
-    {
       "path": "server/core/rtb/ready_to_buy_service.ts",
-      "phase_tag": "Phase 19",
-      "context": "Ready-To-Buy service (8 errors). Active-trading-path. SQESignalInput latent-bug cluster — `input.ngc` / `input.riskScore` / `input.profitRate` read at lines 1595/1652/1653/1656/1692/1693/1701, never set by the signal-orchestrator producer (~643-669) or declared on the interface (88-114). `input.ngc.toFixed(4)` at line 1595 would throw on undefined; signal-orchestrator wraps the call in .catch() so the throw is silently swallowed — RTB queueing via that path may be silently failing. Phase 19 restoration decides whether ngc/riskScore/profitRate stay in the contract.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 8,
         "TS2353": 1
@@ -89,16 +81,16 @@
     },
     {
       "path": "server/jobs/feed-integrity-auto-check.ts",
-      "phase_tag": "Phase 19",
-      "context": "Background job — active-trading-path (1 error). Phase 19 restoration decides.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2503": 1
       }
     },
     {
       "path": "server/jobs/learning-feedback.ts",
-      "phase_tag": "Phase 19",
-      "context": "Background job — active-trading-path (5 errors). Phase 19 restoration decides.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 3,
         "TS2352": 1,
@@ -107,11 +99,11 @@
     },
     {
       "path": "server/routes.ts",
-      "phase_tag": "Phase 19 (majority) + Phase 16 (some) + B-NEW-43 (schema-drift fixable)",
-      "context": "Top-error file (183 errors). Multiple clusters: (a) ~85 TS2339 are active-trading-path latent bugs in route handlers — Phase 19. (req.user.tradingMode subcluster was fixed in chunk 4 redo; remaining = portfolio_state row-property mismatches, scheduled_tasks_audit field reads, intent-task row reads, etc.) (b) ~25 TS2353 + ~10 TS2322 are schema drift — route bodies declaring fields that no longer exist on insert / WS-event types (userId on TradingSettings inserts, custom WebSocket event-type literals not in the canonical enum). These are B-NEW-43-fixable once each schema source-of-truth is confirmed current — chunk 7+. (c) ~25 TS2345 are argument-shape mismatches on storage / service calls — mostly Phase 19. Phase 19 walkthrough owns the active-trading subset; chunk 7+ can pick off the schema-drift fixes after a brief source-of-truth check.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 15,
-        "TS2345": 24,
+        "TS2345": 32,
         "TS7017": 5,
         "TS2820": 1,
         "TS2339": 71,
@@ -129,24 +121,24 @@
     },
     {
       "path": "server/routes/vts.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "VTS route surface (44 errors, mostly TS2345 argument-shape mismatches). VTS is CURRENTLY RUNNING (passive learning) so this file is operational, but the routes entangle with active-trading-path data shapes. Triage in chunk 7+: VTS-only argument mismatches are B-NEW-43-fixable; active-trading-shape mismatches go to Phase 19.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 42
       }
     },
     {
       "path": "server/scripts/replay-ablation.ts",
-      "phase_tag": "Phase 19",
-      "context": "Replay/ablation script (1 error). Active-trading-path post-hoc analysis. Phase 19 owns.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 1
       }
     },
     {
       "path": "server/services/actuation-policy.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (3 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2353": 1,
         "TS2561": 2
@@ -154,8 +146,8 @@
     },
     {
       "path": "server/services/adaptive-learning-repository.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (5 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2769": 4,
         "TS2322": 1
@@ -163,48 +155,49 @@
     },
     {
       "path": "server/services/adaptive-objective-engine.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 1
       }
     },
     {
       "path": "server/services/adaptive-scan-manager.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 1
       }
     },
     {
       "path": "server/services/ai-summary-task.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 1
       }
     },
     {
       "path": "server/services/alert-action-handler.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
-        "TS2339": 1
+        "TS2339": 1,
+        "TS2345": 1
       }
     },
     {
       "path": "server/services/auto_test_harness.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1
       }
     },
     {
       "path": "server/services/autonomy-controller.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (6 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1,
         "TS1355": 1,
@@ -214,8 +207,8 @@
     },
     {
       "path": "server/services/autonomy-scheduler.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (16 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 1,
         "TS2339": 14,
@@ -224,24 +217,24 @@
     },
     {
       "path": "server/services/c13-validation-service.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 2
       }
     },
     {
       "path": "server/services/command-router.ts",
-      "phase_tag": "Phase 16",
-      "context": "Natural-language command router. Already on Phase-16 legacy register (#136). 100% dead — instantiated at routes.ts:103 but `.routeCommand` / `.confirmCommand` never invoked anywhere in server/. Removal candidate.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 2
       }
     },
     {
       "path": "server/services/commitTradeAndUpdatePortfolio.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1,
         "TS2322": 1
@@ -249,16 +242,16 @@
     },
     {
       "path": "server/services/data-archive/partition-exporter.ts",
-      "phase_tag": "Phase 19",
-      "context": "Data-archive infrastructure (2 errors). Active-trading-path observability (signal-eval archive, partition exports, etc.). Phase 19 owns.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS7022": 2
       }
     },
     {
       "path": "server/services/diagnostic-controller.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (3 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2353": 2,
         "TS2322": 1
@@ -266,8 +259,8 @@
     },
     {
       "path": "server/services/drift-dashboard-aggregator.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (3 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2440": 1,
         "TS2339": 1,
@@ -276,32 +269,32 @@
     },
     {
       "path": "server/services/drift-detector.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 1
       }
     },
     {
       "path": "server/services/ethical-reasoner.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2393": 2
       }
     },
     {
       "path": "server/services/ethical-reasoning-engine.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2352": 2
       }
     },
     {
       "path": "server/services/ethics-consensus-orchestrator.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (4 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 3,
         "TS2322": 1
@@ -309,24 +302,24 @@
     },
     {
       "path": "server/services/experience-memory.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 1
       }
     },
     {
       "path": "server/services/factor-ablation-emitter.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 1
       }
     },
     {
       "path": "server/services/fx5-scanner.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Current/operational service with active-trading-path adjacency (15 errors). Triage in chunk 7+: if VTS-path-only / simple type fix, B-NEW-43; if active-trading-only, Phase 19.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 1,
         "TS18047": 3,
@@ -336,16 +329,16 @@
     },
     {
       "path": "server/services/gemini-adaptive-profiler.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1
       }
     },
     {
       "path": "server/services/guardrail-policy.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (4 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 3,
         "TS2307": 1
@@ -353,16 +346,16 @@
     },
     {
       "path": "server/services/intent-executor.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (4 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
-        "TS2345": 3
+        "TS2345": 6
       }
     },
     {
       "path": "server/services/knowledge-retrieval.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (6 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 1,
         "TS2322": 2,
@@ -372,48 +365,48 @@
     },
     {
       "path": "server/services/m5d-validation-service.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 2
       }
     },
     {
       "path": "server/services/m5e-validation-service.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 2
       }
     },
     {
       "path": "server/services/market-context-engine.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Current/operational service with active-trading-path adjacency (1 error). Triage in chunk 7+: if VTS-path-only / simple type fix, B-NEW-43; if active-trading-only, Phase 19.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1
       }
     },
     {
       "path": "server/services/memory-lifecycle.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 2
       }
     },
     {
       "path": "server/services/narrative-feed.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS18048": 1
       }
     },
     {
       "path": "server/services/paper-48hr-simulation.ts",
-      "phase_tag": "Phase 16",
-      "context": "Legacy 48-hour paper simulation harness. Already on Phase-16 legacy register (RUNNING_ISSUES #136a). Deeply userId-coupled, predates mode-based architecture. Removal candidate.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 2,
         "TS2339": 1
@@ -421,17 +414,16 @@
     },
     {
       "path": "server/services/paper-execution-engine.ts",
-      "phase_tag": "Phase 19",
-      "context": "Paper execution engine (7 errors). Active-trading-path. StrategySignal extended-field reads (signalType / patternType / patternStrength) on a too-narrow union, strategy-key narrowing mismatches. Phase 19 restoration owns.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
-        "TS2322": 4,
         "TS2339": 3
       }
     },
     {
       "path": "server/services/paper-portfolio-manager.ts",
-      "phase_tag": "Phase 16",
-      "context": "Legacy `PaperPortfolioManager` service. Already on Phase-16 legacy register (RUNNING_ISSUES #136b). Kyle 2026-05-22: \"not sure what it does — possibly dashboard-related — probably can be looked at for deletion.\" Surfaced during B-NEW-43 Phase 1 chunk 1 (carried the userId-as-mode bug). Removal candidate. (Override added in chunk 6 Langston-Step-4 fixup — was previously picked up by the signal-pipeline path-pattern as Phase 19; the #136-register precedence rule now applies.)",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2554": 4,
         "TS2353": 1
@@ -439,48 +431,48 @@
     },
     {
       "path": "server/services/paper_validation_engine.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1
       }
     },
     {
       "path": "server/services/per-underlying-cap.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (3 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 3
       }
     },
     {
       "path": "server/services/pre-execution-validator.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 2
       }
     },
     {
       "path": "server/services/reasoning-orchestrator.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 2
       }
     },
     {
       "path": "server/services/run-mode-controller.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 1
       }
     },
     {
       "path": "server/services/screener-recalibration-task.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (3 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2554": 1,
         "TS2345": 1
@@ -488,8 +480,8 @@
     },
     {
       "path": "server/services/signal-orchestrator.ts",
-      "phase_tag": "Phase 19",
-      "context": "Signal orchestrator (8 errors remaining post-chunks 1-4). Active-trading-path signal evaluation. PredictionInput shape mismatches, missing `../../config/strategy-governance.js` module (TS2307), ExtendedSignalMetrics narrowness (driftScore/volZ/regime). Phase 19 walkthrough.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2353": 3,
         "TS2307": 1,
@@ -502,40 +494,40 @@
     },
     {
       "path": "server/services/stage-b-validator.ts",
-      "phase_tag": "Phase 16",
-      "context": "Stage-B validation harness — tests \"8 strategies\" but the system now has 18. Already on Phase-16 legacy register (#136). Removal candidate.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 3
       }
     },
     {
       "path": "server/services/state-awareness.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2339": 1
       }
     },
     {
       "path": "server/services/system-config.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 1
       }
     },
     {
       "path": "server/services/system-health-check-task.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (1 error). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 1
       }
     },
     {
       "path": "server/services/telemetry-aggregator.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (6 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2322": 2,
         "TS2339": 1,
@@ -544,16 +536,16 @@
     },
     {
       "path": "server/services/trading-engine.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (2 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 2
       }
     },
     {
       "path": "server/services/trailing-exit-controller.ts",
-      "phase_tag": "Phase 19",
-      "context": "Active-trading-path service (5 errors). Dormant since active trading went off at Phase 8 close (Nov 2025). Phase 19 restoration walkthrough decides each cluster.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2554": 2,
         "TS2739": 3
@@ -561,8 +553,8 @@
     },
     {
       "path": "server/services/unified-core.ts",
-      "phase_tag": "Phase 19",
-      "context": "Unified core service (21 errors). Active-trading-path orchestrator. Phase 19 restoration owns.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2345": 5,
         "TS2339": 10,
@@ -572,8 +564,8 @@
     },
     {
       "path": "server/services/vts-runner.ts",
-      "phase_tag": "Phase 19",
-      "context": "VTS runner (43 errors). Currently running (passive learning). Phase10TradeRecord cluster (B70.2 at-entry-context archive at lines ~1882-1921 reads ~13 fields the producer at line 1543 never sets — silently archives undefined). Also: regime-confidence reads on a too-narrow type, OHLCResponse-vs-OHLCData[] mismatches, CanonicalRegimeType narrowing. Phase 19 restoration decides which feature wiring stays vs. is superseded by current architecture. The B70.2 archive feature was a Kyle directive (2026-05-05) — Phase 19 either populates the missing fields or replaces the archive mechanism.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2561": 2,
         "TS2551": 6,
@@ -586,8 +578,8 @@
     },
     {
       "path": "server/services/vts-service.ts",
-      "phase_tag": "Phase 19 or B-NEW-43",
-      "context": "Current/operational service with active-trading-path adjacency (4 errors). Triage in chunk 7+: if VTS-path-only / simple type fix, B-NEW-43; if active-trading-only, Phase 19.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2367": 1,
         "TS2322": 3
@@ -595,26 +587,14 @@
     },
     {
       "path": "server/storage.ts",
-      "phase_tag": "Phase 19 (majority) + B-NEW-43 (some)",
-      "context": "DatabaseStorage class (19 errors). Mode-keyed current infrastructure (used by VTS path), but many errors are \"Property X does not exist on DatabaseStorage\" pointing at internal references to methods removed in prior cleanups (similar to the Phase 41F-L `getTradingSettings` purge handled in chunks 1-3). Per-case investigation: storage-method removal stragglers are typically Phase 19 (the consumer methods are active-trading-path) but some may be cleanable as schema-drift TS2353 in chunk 7+.",
+      "phase_tag": "TBD (audit pending — B-NEW-43 chunk 6)",
+      "context": "TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
       "errors": {
         "TS2769": 4,
         "TS2741": 1,
         "TS2339": 12,
         "TS2353": 2
       }
-    },
-    {
-      "path": "server/strategies/inside-bar-reversal.ts",
-      "phase_tag": "Phase 19",
-      "context": "Strategy detect method (1 error). Active-trading-path. Phase 19 owns strategy-engine restoration.",
-      "errors": {
-        "TS2367": 1
-      }
     }
-  ],
-  "last_audited_at_iso": "2026-05-23T02:22:33.534Z",
-  "last_audited_by_batch": "B-NEW-43 (chunk 6 audit — phase_tag + context populated; Phase-19 intake seed)",
-  "last_synced_at_iso": "2026-05-23T10:06:53.917Z",
-  "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
+  ]
 }
