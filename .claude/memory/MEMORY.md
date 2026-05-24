@@ -52,9 +52,10 @@ CI all-4-green at run 26347883994 / commit `85ea78e`. Staging deployed at `85ea7
 
 ### Workflow to start B79.0n.PATTERN-DETECT (per CLAUDE.md §2):
 
-1. **Step 1 Scope** — draft `Claude Comms and Packages/Scope Files/B79_0n_PATTERN_DETECT_SCOPE.md` covering pattern recognition primitives + per-class pattern_pool_gates seeding + B72 prior-arc context section per umbrella v4 §1.5 standing rule. Dispatch to Langston for ACK.
-2. **Step 2 Pre-audit** — MANDATORY consult `1-system-manual/SYSTEM_IMPACT_MAP.md` for every component affected. Trace upstream/downstream/shared-state/background-execution/blast-radius. Document in `B79_0n_PATTERN_DETECT_PRE_AUDIT.md`. Dispatch to Langston.
-3. **Steps 3-11** — implementation → Langston code review → push → CI green (per §5 #19) → staging deploy → first-pass verify → Langston second-pass verify → iterate → governance updates → completion report.
+1. **Step 1.a (MANDATORY per CLAUDE.md §2 1.a, codified 2026-05-24 from B79.0n.STRATEGY learning):** BEFORE drafting the scope, read `1-system-manual/SYSTEM_IMPACT_MAP.md` AND `1-system-manual/SYSTEM_MANUAL.md` sections for every PATTERN-DETECT component — `pattern-recognizer.ts` (6 pattern types: PINBAR / ENGULFING / INSIDE_BAR / THREE_SOLDIERS / MORNING_STAR / ABCD), `pattern-pool-filters.ts` (per-class config), `module_constants.pattern_pool_gates`, the 3 pattern strategies + 5 hybrid strategies consuming pattern signals, scanPatterns call sites, normalizePatternToCanonical (B57 single-source-of-truth), pattern recognition preloader. Scope's architectural claims (caller-site counts, dependencies, blast-radius) MUST come from these reads — not from grep or memory.
+2. **Step 1 Scope** — draft `Claude Comms and Packages/Scope Files/B79_0n_PATTERN_DETECT_SCOPE.md` covering pattern recognition primitives + per-class pattern_pool_gates seeding + B72 prior-arc context section per umbrella v4 §1.5 standing rule. Dispatch to Langston for ACK.
+3. **Step 2 Pre-audit** — DEEPER pass through SIM + System Manual (per-component upstream/downstream/shared-state/background-execution/blast-radius). Document in `B79_0n_PATTERN_DETECT_PRE_AUDIT.md`. Dispatch to Langston.
+4. **Steps 3-11** — implementation → Langston code review → push → CI green (per §5 #19) → staging deploy → first-pass verify → Langston second-pass verify → iterate → governance updates → completion report.
 
 ### Active alerts (§10.5)
 - 0 active-unacked (confirmed via `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"` at 2026-05-23 turn-start).
