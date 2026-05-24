@@ -1352,12 +1352,15 @@ export class SignalOrchestrator {
             timestamp: d.time * 1000,
           }));
 
-          const patternSignals = getPatternRecognizer().scanPatterns(candles, symbol);
+          // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded
+          // through scanPatterns + patternToTradeSignal. Signal-orchestrator is
+          // the crypto active-trading path — class is crypto_spot by construction.
+          const patternSignals = getPatternRecognizer().scanPatterns(candles, symbol, 'crypto_spot');
           const buyPatterns = patternSignals.filter(p => p.direction === 'BUY');
 
           for (const patternSig of buyPatterns) {
             const atr = context.indicators?.atr ?? (currentPrice * 0.02);
-            const tradeSignal = getPatternRecognizer().patternToTradeSignal(patternSig, currentPrice, atr);
+            const tradeSignal = getPatternRecognizer().patternToTradeSignal(patternSig, currentPrice, atr, 'crypto_spot');
 
             const rawSignal = {
               symbol,
@@ -1660,8 +1663,10 @@ export class SignalOrchestrator {
         timeframe: '1h' as const  // Directive 10.7: Tag with source timeframe
       }));
       
-      let patternSignals = patternRecognizer.scanPatterns(candles, symbol);
-      
+      // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded
+      // through scanPatterns (crypto_spot by construction — orchestrator path).
+      let patternSignals = patternRecognizer.scanPatterns(candles, symbol, 'crypto_spot');
+
       // Directive 10.7: Multi-Timeframe Cascade (when enabled)
       // Cascade to lower timeframes for additional pattern confirmation
       // Reuses already-fetched 1H candles to avoid duplicate Kraken requests
@@ -1681,9 +1686,11 @@ export class SignalOrchestrator {
             { preloadedGlobalData }
           );
           
-          const globalPatterns = globalPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol));
-          const tacticalPatterns = tacticalPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol));
-          const precisionPatterns = precisionPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol));
+          // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` on the
+          // multi-timeframe cascade fan-out (crypto_spot — orchestrator path).
+          const globalPatterns = globalPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol, 'crypto_spot'));
+          const tacticalPatterns = tacticalPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol, 'crypto_spot'));
+          const precisionPatterns = precisionPairs.flatMap(r => patternRecognizer.scanPatterns(r.candles, r.symbol, 'crypto_spot'));
           
           const cascadePatterns = [...globalPatterns, ...tacticalPatterns, ...precisionPatterns];
           
@@ -1864,7 +1871,8 @@ export class SignalOrchestrator {
         // Only process BUY patterns for long-only trading
         if (patternSig.direction !== 'BUY') continue;
         
-        const tradeSignal = patternRecognizer.patternToTradeSignal(patternSig, currentPrice, atr);
+        // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded.
+        const tradeSignal = patternRecognizer.patternToTradeSignal(patternSig, currentPrice, atr, 'crypto_spot');
         
         // Build StrategySignal-compatible object
         const rawPatternSignal = {

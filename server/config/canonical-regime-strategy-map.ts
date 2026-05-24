@@ -629,15 +629,25 @@ export function normalizePatternToCanonical(pattern: string | null): CanonicalPa
  * If a pattern is detected and matches a HYBRID/PATTERN strategy, prefer that strategy.
  * This ensures HYBRID/PATTERN signals appear when pattern recognition detects matches.
  *
+ * B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED `assetClass: AssetClass` parameter
+ * added per Langston R-2 (A) decision — plumbing-only this batch. Function body
+ * unchanged (stays on CANONICAL_REGIME_STRATEGY_MAP[regime] — single-pick semantic
+ * preserved by construction for crypto byte-identity). Future SCORING /
+ * ORCHESTRATOR batch may refactor the body to route through v3.0.0
+ * `getFavoredStrategiesForRegime(regime, assetClass)`; that refactor is OUT
+ * of PATTERN-DETECT scope per pre-audit §-10 R-2 (A).
+ *
  * @param regime - Current market regime
  * @param detectedPattern - Pattern detected by pattern recognizer (null if none)
  * @param symbolHash - Optional hash for deterministic diversity (0-99)
+ * @param assetClass - Per-class scope (plumbing only — body unchanged in B79.0n.PATTERN-DETECT)
  * @returns Strategy definition matching the context, plus trace info
  */
 export function selectContextAwareStrategy(
   regime: CanonicalRegimeType,
   detectedPattern: string | null,
-  symbolHash?: number
+  symbolHash: number | undefined,
+  assetClass: import('../../shared/asset-classes.js').AssetClass,
 ): {
   signalType: CanonicalSignalType;
   strategy: string;

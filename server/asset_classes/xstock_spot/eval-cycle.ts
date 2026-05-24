@@ -405,7 +405,9 @@ export async function evaluateXstockPairForVTS(
       close: o.close,
       volume: o.volume,
     }));
-    const detectedPatterns = scanPatterns(candles, symbol);
+    // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded —
+    // xstock VTS path passes the file-scope ASSET_CLASS = 'xstock_spot' const.
+    const detectedPatterns = scanPatterns(candles, symbol, ASSET_CLASS);
 
     // ── 5. Regime-strategy set (the universe of strategies before per-lane filter) ──
     const regimeStrategies = getStrategiesForRegime(regime);

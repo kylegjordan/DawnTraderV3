@@ -73,4 +73,12 @@ export const DEFAULT_ASSET_CLASS = 'crypto_spot';
 // The 'quant-oscillation' entry appears to be a pre-existing typo (scanner generates 'quant-oscillator').
 // Not fixing that pre-existing inconsistency here; following the scanner's actual output naming for the new entry.
 export type SourcePool = 'quant-trend' | 'quant-reversal' | 'quant-breakout' | 'quant-oscillation' | 'quant-strong_trend' | 'pattern' | 'hybrid';
-export type AssetClass = 'crypto_spot'; // Extend when new asset classes added
+
+// B79.0n.PATTERN-DETECT (2026-05-24) — AssetClass type unification.
+// Previously this file declared `export type AssetClass = 'crypto_spot'` — a
+// narrow literal that shadowed the canonical shared type and gave consumers
+// (e.g. active-filter-pool.ts) a crypto-only guarantee that didn't match the
+// multi-class reality. Now re-exports the canonical taxonomy from
+// `@shared/asset-classes` so every importer of this file picks up the full
+// AssetClass union. SourcePool stays here (semantic-aligned with pool concept).
+export type { AssetClass } from '@shared/asset-classes';

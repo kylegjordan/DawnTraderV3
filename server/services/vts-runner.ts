@@ -938,7 +938,10 @@ async function generatePhase10Signal(
   }));
   
   // Batch 44: Use pre-detected patterns when available (avoids duplicate scanPatterns call)
-  const detectedPatterns = preDetectedPatterns ?? scanPatterns(candles, symbol);
+  // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` resolved from
+  // the call-site symbol via resolveAssetClass (same convention as the MCE
+  // contextual resolve at line ~3219).
+  const detectedPatterns = preDetectedPatterns ?? scanPatterns(candles, symbol, resolveAssetClass(symbol, 'kraken'));
   const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
   if (counters && isQuantPool(sourcePool)) {
     if (detectedPattern) { counters.quantPatternDetected = (counters.quantPatternDetected ?? 0) + 1; }
@@ -964,10 +967,14 @@ async function generatePhase10Signal(
     console.log(`[11.8C][VTS] ${symbol}: Using regime-scoped strategy=${strategy} signalType=${signalType}`);
   } else {
     const sHash = symbolToHash(symbol);
+    // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded —
+    // crypto VTS path (selectContextAwareStrategy body unchanged per R-2 (A);
+    // forward-load for SCORING / ORCHESTRATOR refactor).
     const strategySelection = selectContextAwareStrategy(
-      regime, 
+      regime,
       detectedPattern?.pattern ?? null,
-      sHash
+      sHash,
+      resolveAssetClass(symbol, 'kraken'),
     );
     signalType = strategySelection.signalType;
     strategy = strategySelection.strategy;
@@ -3251,7 +3258,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           volume: o.volume,
         }));
 
-        const detectedPatterns = scanPatterns(candles, pair.symbol);
+        // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` via resolver.
+        const detectedPatterns = scanPatterns(candles, pair.symbol, resolveAssetClass(pair.symbol, 'kraken'));
         outerLoopDetectedPatterns = detectedPatterns; // Batch 44: Cache for inner loop
         const buyPatterns = detectedPatterns.filter(p => p.direction === 'BUY');
 
@@ -3313,7 +3321,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             timestamp: o.timestamp, open: o.open, high: o.high,
             low: o.low, close: o.close, volume: o.volume,
           }));
-          const detectedPatterns = scanPatterns(candles, pair.symbol);
+          // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` via resolver.
+          const detectedPatterns = scanPatterns(candles, pair.symbol, resolveAssetClass(pair.symbol, 'kraken'));
           const buyPatterns = detectedPatterns.filter(p => p.direction === 'BUY');
           if (buyPatterns.length > 0) {
             // Only include pattern/hybrid strategies whose canonical pattern was detected

@@ -342,7 +342,7 @@ describe('Directive 10.7 — Multi-Timeframe Expansion', () => {
         { timestamp: 3, open: 99, high: 108, low: 98, close: 107, volume: 1500, timeframe: '15m' },
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       
       for (const signal of signals) {
         expect(signal.metadata).toBeDefined();
@@ -399,8 +399,9 @@ describe('Directive 10.7 — Multi-Timeframe Expansion', () => {
         { timestamp: 3, open: 108, high: 115, low: 106, close: 113, volume: 1500, timeframe: '15m' },
       ];
       
-      const patterns1h = scanPatterns(candles1h, 'BTCUSD');
-      const patterns15m = scanPatterns(candles15m, 'BTCUSD');
+      // B79.0n.PATTERN-DETECT — REQUIRED-`assetClass` per-class scope.
+      const patterns1h = scanPatterns(candles1h, 'BTCUSD', 'crypto_spot');
+      const patterns15m = scanPatterns(candles15m, 'BTCUSD', 'crypto_spot');
       
       if (patterns1h.length > 0 && patterns15m.length > 0) {
         expect(patterns1h[0].metadata?.timeframe).toBe('1h');

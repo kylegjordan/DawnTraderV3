@@ -20,6 +20,14 @@
 
 import type { PatternType, SignalType, Candle, PatternSignal, Timeframe } from '../types';
 import { CANDLE_INTERVALS_MS, TIMEFRAME_WEIGHTS, HYBRID_PARAMS } from '../config/system-guards.js';
+// B79.0n.PATTERN-DETECT (2026-05-24) — REQUIRED-assetClass plumbing per
+// CLAUDE.md NO PATCHES (rule 15). The 6 detect functions + scanPatterns +
+// patternToTradeSignal now type-enforce per-class scoping at the signature.
+// Body branching deferred to Layer-3 (xStock shadow-mode evidence). See
+// B79_0n_PATTERN_DETECT_SCOPE.md §3 + pre-audit §-8/§-9 for the deferral
+// rationale. AssetClass parameter is plumbed through without behavioural
+// change — crypto numerics stay byte-identical (NONE-by-construction).
+import type { AssetClass } from '@shared/asset-classes';
 
 export type { PatternType, SignalType, Candle, PatternSignal, Timeframe };
 
@@ -103,7 +111,7 @@ function candleRange(candle: Candle): number {
  * B54: Relaxed from 2× to 1.5× for crypto (wicky candles are normal).
  * Directional dominance (wick > 2× opposite wick) retained as quality filter.
  */
-function detectPinbar(candles: Candle[], symbol: string, avgVolume: number): PatternSignal | null {
+function detectPinbar(candles: Candle[], symbol: string, avgVolume: number, assetClass: AssetClass): PatternSignal | null {  // B79.0n.PATTERN-DETECT — REQUIRED per-class scope (plumbing-only; body unchanged)
   if (candles.length < 2) return null;
   
   const current = candles[candles.length - 1];
@@ -161,7 +169,7 @@ function detectPinbar(candles: Candle[], symbol: string, avgVolume: number): Pat
  * Detect Momentum Engulfing pattern
  * Candle body fully engulfs prior body; volume spike > 1.2× average
  */
-function detectEngulfing(candles: Candle[], symbol: string, avgVolume: number): PatternSignal | null {
+function detectEngulfing(candles: Candle[], symbol: string, avgVolume: number, assetClass: AssetClass): PatternSignal | null {  // B79.0n.PATTERN-DETECT — REQUIRED per-class scope (plumbing-only; body unchanged)
   if (candles.length < 2) return null;
   
   const current = candles[candles.length - 1];
@@ -227,7 +235,7 @@ function detectEngulfing(candles: Candle[], symbol: string, avgVolume: number): 
  * High < PrevHigh AND Low > PrevLow (compression setup)
  * B54: Added 0.1% tolerance — crypto bars often touch parent range by a fraction of a pip.
  */
-function detectInsideBar(candles: Candle[], symbol: string): PatternSignal | null {
+function detectInsideBar(candles: Candle[], symbol: string, assetClass: AssetClass): PatternSignal | null {  // B79.0n.PATTERN-DETECT — REQUIRED per-class scope (plumbing-only; body unchanged)
   if (candles.length < 2) return null;
 
   const current = candles[candles.length - 1];
@@ -267,7 +275,7 @@ function detectInsideBar(candles: Candle[], symbol: string): PatternSignal | nul
  * Detect Three White Soldiers pattern (bullish)
  * Three consecutive bullish candles, each closing higher
  */
-function detectThreeSoldiers(candles: Candle[], symbol: string): PatternSignal | null {
+function detectThreeSoldiers(candles: Candle[], symbol: string, assetClass: AssetClass): PatternSignal | null {  // B79.0n.PATTERN-DETECT — REQUIRED per-class scope (plumbing-only; body unchanged)
   if (candles.length < 3) return null;
   
   const c1 = candles[candles.length - 3];
@@ -310,7 +318,7 @@ function detectThreeSoldiers(candles: Candle[], symbol: string): PatternSignal |
  * Detect Morning Star pattern
  * Bear → Doji/Small → Bull (closing > halfway into first candle)
  */
-function detectMorningStar(candles: Candle[], symbol: string): PatternSignal | null {
+function detectMorningStar(candles: Candle[], symbol: string, assetClass: AssetClass): PatternSignal | null {  // B79.0n.PATTERN-DETECT — REQUIRED per-class scope (plumbing-only; body unchanged)
   if (candles.length < 3) return null;
   
   const c1 = candles[candles.length - 3]; // First: Bearish
@@ -366,7 +374,7 @@ function detectMorningStar(candles: Candle[], symbol: string): PatternSignal | n
  * BC retrace must be 38.2%-78.6% of AB leg (Fibonacci zone)
  * Scans the last 15-50 candles for the A-B-C-D sequence
  */
-function detectABCD(candles: Candle[], symbol: string): PatternSignal | null {
+function detectABCD(candles: Candle[], symbol: string, assetClass: AssetClass): PatternSignal | null {  // B79.0n.PATTERN-DETECT — REQUIRED per-class scope (plumbing-only; body unchanged)
   if (candles.length < 12) return null; // Batch 53: 15→12, allow detection in shorter windows
 
   // Use last 50 candles (or less if not available)
@@ -484,32 +492,43 @@ function calculateAvgVolume(candles: Candle[], lookback: number = 20): number {
  * Directive 10.7: Applies timeframe-aware strength weighting.
  * Patterns from lower timeframes (5m) receive reduced weight compared to higher (1h).
  */
-export function scanPatterns(candles: Candle[], symbol: string = 'UNKNOWN'): PatternSignal[] {
+// B79.0n.PATTERN-DETECT (2026-05-24) — REQUIRED `assetClass: AssetClass`
+// added as third parameter (was: `symbol: string = 'UNKNOWN'` default-eligible).
+// All 5 production caller sites updated to thread the call-site asset class:
+//   - signal-orchestrator.ts (4 sites — crypto active trading + multi-tf cascade)
+//   - vts-runner.ts (3 sites — crypto VTS pool eval)
+//   - xstock_spot/eval-cycle.ts (1 site — xstock VTS pool eval)
+//   - diagnostic-11.4G.ts (1 site — dev tool)
+// + 3 test files updated for signature ripple. Per CLAUDE.md NO PATCHES
+// (rule 15), no silent fallback — caller must pass the asset class
+// explicitly. Default 'UNKNOWN' symbol kept for back-compat with older
+// diagnostic call shapes.
+export function scanPatterns(candles: Candle[], symbol: string, assetClass: AssetClass): PatternSignal[] {
   if (candles.length < 3) return [];
-  
+
   const signals: PatternSignal[] = [];
   const avgVolume = calculateAvgVolume(candles);
-  
+
   const timeframe = candles[candles.length - 1]?.timeframe;
-  
-  // Detect each pattern type
-  const pinbar = detectPinbar(candles, symbol, avgVolume);
+
+  // Detect each pattern type — assetClass threaded for future Layer-3 branching
+  const pinbar = detectPinbar(candles, symbol, avgVolume, assetClass);
   if (pinbar) signals.push(pinbar);
-  
-  const engulfing = detectEngulfing(candles, symbol, avgVolume);
+
+  const engulfing = detectEngulfing(candles, symbol, avgVolume, assetClass);
   if (engulfing) signals.push(engulfing);
-  
-  const insideBar = detectInsideBar(candles, symbol);
+
+  const insideBar = detectInsideBar(candles, symbol, assetClass);
   if (insideBar) signals.push(insideBar);
-  
-  const threeSoldiers = detectThreeSoldiers(candles, symbol);
+
+  const threeSoldiers = detectThreeSoldiers(candles, symbol, assetClass);
   if (threeSoldiers) signals.push(threeSoldiers);
-  
-  const morningStar = detectMorningStar(candles, symbol);
+
+  const morningStar = detectMorningStar(candles, symbol, assetClass);
   if (morningStar) signals.push(morningStar);
 
   // Batch 19F: ABCD harmonic measured-move pattern
-  const abcd = detectABCD(candles, symbol);
+  const abcd = detectABCD(candles, symbol, assetClass);
   if (abcd) signals.push(abcd);
 
   for (const signal of signals) {
@@ -535,10 +554,17 @@ export function scanPatterns(candles: Candle[], symbol: string = 'UNKNOWN'): Pat
 /**
  * Convert PatternSignal to StrategySignal-compatible format
  */
+// B79.0n.PATTERN-DETECT (2026-05-24) — REQUIRED `assetClass: AssetClass`.
+// Per Langston R-1 (A) + R-6 + R-7: orphan today (test-only callers), but
+// threaded for type-discipline consistency with the 6 detect functions +
+// scanPatterns. Forward-loads correctly for Phase 19 active-trading
+// restoration. ATR multipliers (1.5× stop / 2.5× target) stay hardcoded —
+// per-class tuning deferred to Layer-3 (SIM §11263 flag).
 export function patternToTradeSignal(
   pattern: PatternSignal,
   currentPrice: number,
-  atr: number = 0
+  atr: number,
+  assetClass: AssetClass,
 ): {
   symbol: string;
   strategy: string;
@@ -575,17 +601,20 @@ export function patternToTradeSignal(
 }
 
 // Singleton instance for service access
+// B79.0n.PATTERN-DETECT (2026-05-24) — instance methods mirror REQUIRED-
+// assetClass discipline on the underlying free functions.
 class PatternRecognizerService {
-  scanPatterns(candles: Candle[], symbol: string): PatternSignal[] {
-    return scanPatterns(candles, symbol);
+  scanPatterns(candles: Candle[], symbol: string, assetClass: AssetClass): PatternSignal[] {
+    return scanPatterns(candles, symbol, assetClass);
   }
-  
+
   patternToTradeSignal(
     pattern: PatternSignal,
     currentPrice: number,
-    atr?: number
+    atr: number | undefined,
+    assetClass: AssetClass,
   ) {
-    return patternToTradeSignal(pattern, currentPrice, atr);
+    return patternToTradeSignal(pattern, currentPrice, atr ?? 0, assetClass);
   }
 }
 

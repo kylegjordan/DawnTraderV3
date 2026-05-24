@@ -168,7 +168,9 @@ async function runDiagnosticSweep(pairLimit: number = 100): Promise<void> {
     }));
     
     trace.patternDetectorCalled = true;
-    const detectedPatterns = scanPatterns(candles, pair.symbol);
+    // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` — diagnostic
+    // tool is crypto-only by intent (debugs the crypto active-trading path).
+    const detectedPatterns = scanPatterns(candles, pair.symbol, 'crypto_spot');
     trace.patternsDetected = detectedPatterns.map(p => p.pattern);
     trace.patternCount = detectedPatterns.length;
     
@@ -180,10 +182,13 @@ async function runDiagnosticSweep(pairLimit: number = 100): Promise<void> {
     // Directive 11.4G: Use context-aware strategy selection WITH detected pattern
     const detectedPatternName = detectedPatterns.length > 0 ? detectedPatterns[0].pattern : null;
     const sHash = symbolToHash(pair.symbol);
+    // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` — diagnostic
+    // tool is crypto-only by intent.
     const { signalType, strategy, selectionReason } = selectContextAwareStrategy(
-      trace.regime, 
-      detectedPatternName, 
-      sHash
+      trace.regime,
+      detectedPatternName,
+      sHash,
+      'crypto_spot',
     );
     trace.assignedSignalType = signalType;
     trace.assignedStrategy = strategy;

@@ -29,7 +29,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 3000, open: 101, high: 101.5, low: 80, close: 100.5, volume: 1200 }
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       const pinbar = signals.find(s => s.pattern === 'PINBAR');
       
       expect(pinbar).toBeDefined();
@@ -47,7 +47,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 3000, open: 100, high: 120, low: 99.5, close: 100.5, volume: 1200 }
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       const pinbar = signals.find(s => s.pattern === 'PINBAR');
       
       expect(pinbar).toBeDefined();
@@ -63,8 +63,8 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 3000, open: 100, high: 100.1, low: 70, close: 99.9, volume: 1500 }
       ];
       
-      expect(() => scanPatterns(candles, 'BTCUSD')).not.toThrow();
-      const signals = scanPatterns(candles, 'BTCUSD');
+      expect(() => scanPatterns(candles, 'BTCUSD', 'crypto_spot')).not.toThrow();
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       expect(Array.isArray(signals)).toBe(true);
       console.log(`[10.2][TEST] Extreme data handling: ${signals.length} patterns detected`);
     });
@@ -78,7 +78,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 22000, open: 100, high: 105, low: 99.5, close: 104, volume: 1500 }
       );
       
-      const signals = scanPatterns(candles, 'ETHUSD');
+      const signals = scanPatterns(candles, 'ETHUSD', 'crypto_spot');
       const engulfing = signals.find(s => s.pattern === 'ENGULFING');
       
       expect(engulfing).toBeDefined();
@@ -93,7 +93,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 22000, open: 103, high: 104, low: 98, close: 98.5, volume: 1500 }
       );
       
-      const signals = scanPatterns(candles, 'ETHUSD');
+      const signals = scanPatterns(candles, 'ETHUSD', 'crypto_spot');
       const engulfing = signals.find(s => s.pattern === 'ENGULFING');
       
       expect(engulfing).toBeDefined();
@@ -113,7 +113,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 3000, open: 100, high: 140, low: 70, close: 120, volume: 800 }
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       const insideBar = signals.find(s => s.pattern === 'INSIDE_BAR');
       
       expect(insideBar).toBeDefined();
@@ -130,7 +130,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 3000, open: 104, high: 110, low: 103.5, close: 109, volume: 1200 }
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       const soldiers = signals.find(s => s.pattern === 'THREE_SOLDIERS');
       
       expect(soldiers).toBeDefined();
@@ -148,7 +148,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 3000, open: 100, high: 115, low: 99, close: 112, volume: 1400 }
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       const morningStar = signals.find(s => s.pattern === 'MORNING_STAR');
       
       expect(morningStar).toBeDefined();
@@ -166,7 +166,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 3000, open: 100.1, high: 100.6, low: 99.7, close: 100.2, volume: 1020 }
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       
       expect(signals.length).toBe(0);
       console.log(`[10.2][TEST] Random noise: 0 patterns detected (expected)`);
@@ -177,7 +177,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         { timestamp: 1000, open: 100, high: 105, low: 95, close: 102, volume: 1000 }
       ];
       
-      const signals = scanPatterns(candles, 'BTCUSD');
+      const signals = scanPatterns(candles, 'BTCUSD', 'crypto_spot');
       
       expect(signals.length).toBe(0);
       console.log(`[10.2][TEST] Insufficient data: 0 patterns detected (expected)`);
@@ -195,7 +195,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         metadata: { wickRatio: 3.5 }
       };
       
-      const tradeSignal = patternToTradeSignal(patternSignal, 50000, 500);
+      const tradeSignal = patternToTradeSignal(patternSignal, 50000, 500, 'crypto_spot');
       
       expect(tradeSignal.symbol).toBe('BTCUSD');
       expect(tradeSignal.signalType).toBe('PATTERN');
@@ -218,7 +218,7 @@ describe('Directive 10.2 — Pattern Recognizer', () => {
         timestamp: Date.now()
       };
       
-      const tradeSignal = patternToTradeSignal(patternSignal, 3000, 50);
+      const tradeSignal = patternToTradeSignal(patternSignal, 3000, 50, 'crypto_spot');
       
       expect(tradeSignal.signalType).toBe('PATTERN');
       console.log(`[10.2][TEST] SignalType correctly set to 'PATTERN'`);
