@@ -2,6 +2,24 @@
 
 ---
 
+## CLOSURE-2026-05-24-A — BUG-007 (Hybrid Strategy Types legacy taxonomy) + RISK-014 (Strategy Sync 8/17-stale coverage) RESOLVED-BY B79.0n.STRATEGY
+
+**Risk class:** RESOLVED. Both issues were documented as legacy concerns in SYSTEM_MANUAL Chapter 2 (§1851 + §1878 respectively) since the canonical regime-strategy map was wired in Batch 13 + Directive 12.3.2. They sat as known-stale for ~3 months until the B79.0n.STRATEGY per-asset-class plumbing batch surfaced them as collateral cleanup opportunities — both fixed in the same atomic commit (`af99bd5` / `85ea78e`).
+
+**BUG-007 — Hybrid Strategy Types in hybrid-integration.ts Are Legacy.** `selectHybridStrategy()` returned legacy taxonomy strings (H1_TREND_SNIPER / H2_SLINGSHOT / H3_GATECRASHER / H4_MOMENTUM_LINK) that didn't match the canonical hybrid strategies (pivot_shift / reverse_impulse / defensive_hedge / adaptive_flow / volatility_edge). **Fix:** replaced the quant-driven lookup with a pattern-driven map (PATTERN_TO_HYBRID — MORNING_STAR → pivot_shift, PINBAR → reverse_impulse, ENGULFING → defensive_hedge, TRI_STAR → adaptive_flow, ABCD → volatility_edge) + added a `quant_fallback` marker for non-hybrid quant signals. Updated `HybridStrategyType` union in `server/types.ts`. Updated 3 unit tests in `hybrid-integration.test.ts` to assert canonical taxonomy + added regression-lock test in NEW `b79-0n-hybrid-integration-canonical.test.ts` (6 tests including legacy-taxonomy-never-returned assertion).
+
+**RISK-014 — Strategy Sync Only Covers 17 of 19 Strategies.** `CORE_STRATEGIES` const in `strategy-sync.ts` was 17 entries pre-batch (missing `strong_bull_trend` from B63 + `orb` from B79.0d). Sync would skip seeding strategy_settings rows for those two strategies on app startup, so they couldn't be UI-toggle-enabled even when they were live in code paths. **Fix:** expanded CORE_STRATEGIES to 19 entries. Also added per-asset-class outer loop (`SYNC_ASSET_CLASSES = ['crypto_spot', 'xstock_spot']`) so sync seeds rows for both classes. Also added `'orb'` to `strategyTypeEnum` in `shared/schema.ts` (which closed the schema-vs-code mismatch surfaced when sync started inserting 'orb' rows).
+
+**Side effect — `STRATEGIES` const completion** at `canonical-regime-strategy-map.ts:364-388`: was 17 entries, now 19 (added STRONG_BULL_TREND + ORB) — matches `STRATEGY_DISPLAY_NAMES` SSOT at lines 402-405.
+
+**Side effect — inside-bar-reversal.ts SELL dead-code cleanup** (server/strategies/inside-bar-reversal.ts): the SELL branches (RSI filter + price-calc) were unreachable since B79.0m.b2 added LONG-only enforcement at lines 131-135. TypeScript's TS2367 narrowing surfaced the dead code after my AssetClass import added to the file. Removed the SELL branches; kept `IB_SELL_RSI_MIN` module_constant for Phase 16 cleanup.
+
+**SYSTEM_MANUAL Chapter 2** (lines 1225-1900) — has additional stale references to the pre-Batch-13 DSS architecture, 17-strategy count, and old regime names (BULL_STABLE, BEAR_VOLATILE, etc.) that pre-date the canonical 5-regime model. **Marked as in-flight follow-up for next Phase 16 governance review** — too large to rewrite in this batch.
+
+**Confirmation:** B79.0n.STRATEGY Step 8 second-pass (Langston) verified zero `H1_TREND_SNIPER` references in staging PM2 logs; `CORE_STRATEGIES.length === 19` verified via `strategy_settings.xstock_spot` row count of 38 (= 19 × 2 modes); `STRATEGIES` const completion verified via `STRATEGIES.STRONG_BULL_TREND` + `STRATEGIES.ORB` being addressable.
+
+---
+
 ## BUG-2026-05-23-A — Paper-portfolio-manager + paper-48hr-simulation userId-passed-as-mode-key latent bug (B-NEW-43 Phase 1 chunk 1)
 
 **Risk class:** LATENT — silent empty-data path masked by `continue-on-error: true` on the typecheck job. Historical metrics from these two surfaces are SUSPECT (the bug had been live an unknown long period — both surfaces predate the mode-based architecture).

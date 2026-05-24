@@ -2258,3 +2258,45 @@ B-PHASE-A2 ships the xStock-specific Directional Bias Score (DBS) foundation per
 - CHANGES_AND_FIXES `ENHANCE-2026-05-17-A` — fix entry
 - RUNNING_ISSUES #114 (crypto sentinel-counting asymmetry, low-severity future hardening) + #115 (Langston Step 8 discovery — crypto wildcard rows sparseness, Tier 3 cleanup)
 - B-PHASE-E-PRE-1 placeholder (SPDR offline-feed integration; queued from §3.3 11/11-missing escalation) in MULTI_ASSET_VTS_EXPANSION_PLAN + XSTOCK_CALIBRATION_PLAN Phase E sections
+
+---
+
+## B79.0n.STRATEGY (2026-05-24) — Per-asset-class strategy plumbing additions
+
+Sub-batch 5 of 18 in the B79.0n umbrella v4 arc. Implementation commit `af99bd5` then `85ea78e` (Step 5 hotfix-2); CI all-4-green at run 26347883994; staging deployed at 85ea78e on 2026-05-24 around 00:55Z.
+
+### Components touched (high-level)
+
+- `_SE_KEY` factory at `server/services/strategy-engine.ts:23` — REQUIRED `assetClass: AssetClass` parameter (was wildcard). HIGH blast radius — every strategy detect resolves through this factory.
+- 19 detect methods on `StrategyEngine` class + 10 file-based detect functions in `server/strategies/*.ts` — REQUIRED `assetClass` on every signature. HIGH blast radius.
+- `callStrategyDetect` dispatcher at `server/services/vts-runner.ts:821-899` — symbol+assetClass promoted optional to REQUIRED. B79.0j fail-safe at lines 888-892 removed. HIGH blast radius.
+- Caller surface — 7 files / 66 calls: signal-orchestrator (18) + vts-runner internal (1) + xstock_spot/eval-cycle (1) + routes.ts (12) + stage-b-validator (8) + strategy-validator (4) + historic-signal-generator (3) + paper-sim-diagnostic (3). Production callers thread cycle-resolved assetClass; legacy/diagnostic callers thread crypto_spot as const.
+- `bridge/canonical/mapping-regime-strategy.json` schema — v2.0.0 (flat) to v3.0.0 (nested byAssetClass). Crypto subtree byte-identical to v2.0.0; xStock subtree = crypto minus defensive_hedge + add orb to TFS+IE. HIGH blast radius (consumed by strategy-mapper + sync-canonical-bridge + drift-detector + Mapping Drift UI).
+- `server/core/strategy-mapper.ts` (Directive 11.4H.6G) — getFavoredStrategiesForRegime + getFavoredSignalTypesForRegime + getCanonicalRegimes all REQUIRE assetClass. NEW getCanonicalAssetClasses. HARD-FAIL on unknown asset class. HIGH blast radius.
+- `server/utils/validate-canonical.ts` — per-(assetClass, regime) tuple iteration. LOW blast radius.
+- `server/services/strategy-sync.ts` — CORE_STRATEGIES expanded 17 to 19 (added strong_bull_trend + orb). Per-asset-class outer loop adds SYNC_ASSET_CLASSES iteration. MEDIUM blast radius.
+- `shared/schema.ts` `strategy_settings` + `strategy_settings_audit` tables — added asset_class column (NOT NULL after crypto_spot backfill); UNIQUE swapped. Schema migration `2026-05-24-b79-0n-strategy-per-class.sql`. HIGH blast radius.
+- `shared/schema.ts` `strategyTypeEnum` — extended with orb. Separate migration `2026-05-24a-b79-0n-strategy-enum-orb.sql` runs first per MANIFEST.txt order. MEDIUM blast radius.
+- `server/services/hybrid-integration.ts` `selectHybridStrategy` — BUG-007 closure: legacy taxonomy replaced with canonical hybrid keys via pattern-to-hybrid map + quant_fallback marker. MEDIUM blast radius.
+- `server/types.ts` `HybridStrategyType` — union changed from legacy to canonical hybrid keys. LOW blast radius.
+- `server/config/canonical-regime-strategy-map.ts` `STRATEGIES` const — was 17 entries; now 19 (RISK-014 closure). LOW blast radius.
+- `server/strategies/inside-bar-reversal.ts` — SELL dead-code branches removed (TS2367 surfaced). LOW blast radius.
+- `module_constants.strategy_gates.xstock_spot.<strategy>.enabled` rows — 18 NEW rows seeded. LOW blast radius.
+- `module_constants.strategy.<name>.*` rows — ZERO changes (F-1 lever audit outcome). NONE blast radius.
+
+### If I Change X, Check Y — B79.0n.STRATEGY additions
+
+- If you change `_SE_KEY` factory in strategy-engine.ts then all 14 in-class `_SE_KEY` call sites + 10 file-based getCachedNumbersForModule resolver-key sites + every caller of every detect method (all 66 sites across 7 files) MUST update in same atomic commit. TS compile gate enforces.
+- If you change a strategy REQUIRED-assetClass signature then the 7 caller files MUST all update. TS compile gate enforces.
+- If you add a new strategy then (i) STRATEGY_DISPLAY_NAMES + STRATEGIES const + STRATEGY_FAMILY_MAP in canonical-regime-strategy-map.ts; (ii) CORE_STRATEGIES in strategy-sync.ts; (iii) callStrategyDetect switch in vts-runner.ts; (iv) signal-orchestrator dispatch block; (v) module_constants.strategy.<name>.* rows; (vi) module_constants.strategy_gates.<class>.<name>.enabled rows per class; (vii) strategy_settings rows via sync; (viii) detect method on StrategyEngine class with REQUIRED assetClass; (ix) strategyTypeEnum in shared/schema.ts + matching ALTER TYPE migration; (x) per-class entry in mapping-regime-strategy.json byAssetClass for every asset class.
+- If you change selectHybridStrategy taxonomy then check downstream HybridSignal.hybridStrategy consumers (telemetry + UI display). Pre-batch B79.0n.STRATEGY verified no programmatic string-compare consumers.
+- If you change mapping-regime-strategy.json shape then sync-canonical-bridge.ts + drift-detector + Mapping Drift UI tab + any consumer of getFavoredStrategiesForRegime must handle the shape.
+- If you change strategy_settings schema then storage.ts methods + strategy-sync.ts + UI strategy-toggle.
+- If you flip a module_constants.strategy_gates.xstock_spot.<strategy>.enabled value then UPDATE the row via psql; cached sync API picks up on next 60s refresh tick; no restart needed.
+
+### Strategy count after B79.0n.STRATEGY
+
+- Total canonical strategies: 19 (was 17 pre-batch; +2 = strong_bull_trend from B63 + orb from B79.0d).
+- Composition: 9 in-class quant detect methods in strategy-engine.ts + 10 file-based detect functions in server/strategies/.
+- SSOT: STRATEGY_DISPLAY_NAMES in canonical-regime-strategy-map.ts lines 384-406.
+- xStock-enabled subset: 10 strategies per XSTOCK_SPOT_ENABLED_STRATEGIES set; 9 currently enabled=true on staging (ORB disabled per B-NEW-34).
