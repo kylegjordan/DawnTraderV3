@@ -906,11 +906,28 @@ async function generatePhase10Signal(
   preDetectedPatterns?: any[], // Batch 44: Pre-detected patterns from outer loop (avoids duplicate scanPatterns)
   propagatedDbs?: { score: number; category: string; slope?: number } // B63: DBS pre-filter propagation (hard contract)
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
+  // B79.0n.PATTERN-DETECT (2026-05-24, post-Step-8 iteration): capture-and-reuse
+  // asset-class resolution at function entry. Replaces the prior pattern of
+  // calling resolveAssetClass() at each downstream consumer (which threw on
+  // B69-unregistered symbols like H/USD and amplified COLLISION_RESOLVE WARNs
+  // for collision-set symbols like DASH/SUI). Uses safeResolveAssetClass —
+  // null → skip the pair cleanly (no signal generated). Pre-existing B79.0n.MCE
+  // line at the MCE call below now consumes the captured _assetClass instead
+  // of re-resolving (eliminates one duplicate resolve per pair-cycle, dedupes
+  // WARN logs by ~3x for collision symbols, and converts a fail-hard throw on
+  // unregistered symbols to a clean skip-return-null — Langston Step 8 flag).
+  const _assetClass = safeResolveAssetClass(symbol, 'kraken');
+  if (_assetClass === null) {
+    // safeResolveAssetClass already logged a WARN with the symbol; nothing more
+    // to do — caller treats null return as "no signal possible for this pair".
+    return null;
+  }
+
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
   // B63: DBS is a hard pipeline contract — must be propagated from scanner via pair object.
-  // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
-  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, propagatedDbs, resolveAssetClass(symbol, 'kraken'));
+  // B79.0n.MCE: required assetClass parameter (captured once above, reused here).
+  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, propagatedDbs, _assetClass);
   const regimeResult = mceContext.raw;
   const regime = regimeResult.regime;
 
@@ -938,10 +955,10 @@ async function generatePhase10Signal(
   }));
   
   // Batch 44: Use pre-detected patterns when available (avoids duplicate scanPatterns call)
-  // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` resolved from
-  // the call-site symbol via resolveAssetClass (same convention as the MCE
-  // contextual resolve at line ~3219).
-  const detectedPatterns = preDetectedPatterns ?? scanPatterns(candles, symbol, resolveAssetClass(symbol, 'kraken'));
+  // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` reused from
+  // the captured _assetClass at function entry (Langston Step 8 iteration —
+  // capture-and-reuse eliminates COLLISION_RESOLVE WARN amplification).
+  const detectedPatterns = preDetectedPatterns ?? scanPatterns(candles, symbol, _assetClass);
   const detectedPattern = detectedPatterns.length > 0 ? detectedPatterns[0] : null;
   if (counters && isQuantPool(sourcePool)) {
     if (detectedPattern) { counters.quantPatternDetected = (counters.quantPatternDetected ?? 0) + 1; }
@@ -967,14 +984,13 @@ async function generatePhase10Signal(
     console.log(`[11.8C][VTS] ${symbol}: Using regime-scoped strategy=${strategy} signalType=${signalType}`);
   } else {
     const sHash = symbolToHash(symbol);
-    // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded —
-    // crypto VTS path (selectContextAwareStrategy body unchanged per R-2 (A);
-    // forward-load for SCORING / ORCHESTRATOR refactor).
+    // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` reused from
+    // the captured _assetClass at function entry (Langston Step 8 iteration).
     const strategySelection = selectContextAwareStrategy(
       regime,
       detectedPattern?.pattern ?? null,
       sHash,
-      resolveAssetClass(symbol, 'kraken'),
+      _assetClass,
     );
     signalType = strategySelection.signalType;
     strategy = strategySelection.strategy;
@@ -3212,6 +3228,20 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       // and simulate trades for ALL strategies mapped to that regime.
       // This generates N trades per pair (where N = regime-compatible strategy count).
       // ══════════════════════════════════════════════════════════════════════════════
+      // B79.0n.PATTERN-DETECT (2026-05-24, post-Step-8 iteration): capture-and-reuse
+      // asset-class resolution at outer-loop pair entry. Eliminates the prior pattern
+      // of calling resolveAssetClass() at MCE + outer-scanPatterns + inner-scanPatterns
+      // (3 separate throws/WARNs per pair iteration). Uses safeResolveAssetClass —
+      // null → skip pair cleanly. Converts the fail-hard throw on B69-unregistered
+      // symbols (e.g. H/USD — Langston Step 8 flag) into a clean per-pair skip.
+      const _pairAssetClass = safeResolveAssetClass(pair.symbol, 'kraken');
+      if (_pairAssetClass === null) {
+        // WARN already logged by safeResolveAssetClass. Skip this pair cleanly.
+        vtsEvalCounters.pairsSkippedNoPrice = vtsEvalCounters.pairsSkippedNoPrice ?? 0;
+        // (Counter shared with no-price skip — both are "pair unprocessable" semantics.)
+        continue;
+      }
+
       // Phase 13: MCE computes regime + indicators in a single pass (cached per symbol)
       const mce = getMarketContextEngine();
       // B63: DBS propagated from FX5 scanner pre-filter via pair object. Hard contract.
@@ -3222,8 +3252,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             slope: (pair as any).dbsSlope as number | undefined,
           }
         : undefined;
-      // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
-      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, pairPropagatedDbs, resolveAssetClass(pair.symbol, 'kraken'));
+      // B79.0n.MCE: required assetClass parameter (captured once above, reused here).
+      const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, pairPropagatedDbs, _pairAssetClass);
       const pairRegime = mceContext.regime.regime as MarketRegimeType;
       const regimeStrategies = getStrategiesForRegime(pairRegime);
       
@@ -3258,8 +3288,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           volume: o.volume,
         }));
 
-        // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` via resolver.
-        const detectedPatterns = scanPatterns(candles, pair.symbol, resolveAssetClass(pair.symbol, 'kraken'));
+        // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` reused
+        // from outer-loop capture (Langston Step 8 iteration).
+        const detectedPatterns = scanPatterns(candles, pair.symbol, _pairAssetClass);
         outerLoopDetectedPatterns = detectedPatterns; // Batch 44: Cache for inner loop
         const buyPatterns = detectedPatterns.filter(p => p.direction === 'BUY');
 
@@ -3321,8 +3352,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             timestamp: o.timestamp, open: o.open, high: o.high,
             low: o.low, close: o.close, volume: o.volume,
           }));
-          // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` via resolver.
-          const detectedPatterns = scanPatterns(candles, pair.symbol, resolveAssetClass(pair.symbol, 'kraken'));
+          // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` reused
+          // from outer-loop capture (Langston Step 8 iteration).
+          const detectedPatterns = scanPatterns(candles, pair.symbol, _pairAssetClass);
           const buyPatterns = detectedPatterns.filter(p => p.direction === 'BUY');
           if (buyPatterns.length > 0) {
             // Only include pattern/hybrid strategies whose canonical pattern was detected

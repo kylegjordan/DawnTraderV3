@@ -17,25 +17,38 @@
 
 ## CURRENT STATE (2026-05-24 — B79.0n.PATTERN-DETECT Step 1 ACK'd by Langston; in Step 2 pre-audit. Autonomous-run grant active.)
 
-### B79.0n.PATTERN-DETECT — 🟡 IN STEP 2 (Step 1 ACK 2026-05-24)
+### B79.0n.PATTERN-DETECT — 🟡 IN STEP 5 (Steps 1+2+3+4 ACK'd by Langston 2026-05-24)
 
 - **Position:** umbrella sub-batch 6 of 18 (Phase 24, multi-asset VTS expansion).
 - **Dependencies (all CLOSED):** STORAGE, MCE, STRATEGY, UNIVERSE-DISCOVERY, HYGIENE, REGISTRY.
-- **Scope v1 committed:** `d050040` — `Claude Comms and Packages/Scope Files/B79_0n_PATTERN_DETECT_SCOPE.md` (279 lines).
-- **Langston Step 1 ACK:** received 2026-05-24 ~06:56Z (4790-byte reply). Decisions: Q-A DEFER, Q-B Option (i) rename xstock rows to crypto nomenclature, Q-C Option (a) seed 15/85 RSI defaults, Q-D Option (b) preloader to Phase 16 register, Q-E/Q-F pre-audit confirm, Q-G DEFER, Q-H N/A. ONE extra Step 2 cross-check: grep-verify zero current consumers of legacy xstock row names ('final_score_floor' / 'max_position_pct').
-- **In scope:** REQUIRED-`assetClass: AssetClass` plumbing on scanPatterns + 6 detect functions (PINBAR/ENGULFING/INSIDE_BAR/THREE_SOLDIERS/MORNING_STAR/ABCD) + patternToTradeSignal + PatternRecognizerService class methods. F-2 naming-drift fix on `module_constants.pattern_pool_gates.xstock_spot.*` (rename final_score_floor → pattern_final_score_min; max_position_pct → pattern_max_position_pct; seed pattern_rsi_min=15 + pattern_rsi_max=85). AssetClass type unification at `crypto_spot/pattern-pool-filters.ts:76`. 4 new unit tests. Crypto NONE-by-construction regression invariant.
-- **Out of scope (deferred to Layer-3):** per-class numeric tuning of 11 detect-function thresholds; ATR multiplier per-class tuning; migration of detect-function literals to `module_constants`. Per umbrella v4 §1.5 "modest shrink" sizing.
-- **Caller surface:** scanPatterns 5 production sites + 3 test sites + 1 diagnostic; patternToTradeSignal 1 (orphan suspected); preloader 1 production + 1 test; selectContextAwareStrategy 2 production + 1 diagnostic (pre-audit confirms alive/dead).
-- **Telegram one-paragraph Step 1 close posted at msg_id 4161 + Langston verbatim relay at preceding msg.**
+- **Scope v1 committed:** `d050040` — `Claude Comms and Packages/Scope Files/B79_0n_PATTERN_DETECT_SCOPE.md` (279 lines). Step 1 ACK.
+- **Pre-audit v1 committed:** `74f420b` — Step 2 ACK with 7 R-decisions ALL Option (A).
+- **Step 3 atomic commit:** `2fc09f0` — chunks A-G (17 files, +831/−89). Migration + recognizer signatures + caller threading + filter-file rewrites + selectContextAwareStrategy + 4 new tests + 3 existing test updates.
+- **Step 4 change list committed:** `d870138` — Langston ACK clean. Approved to Step 6 on CI green.
+- **CI run for d870138:** `26372084239` (in_progress as of post-commit). Run `26372040148` for 2fc09f0 was cancelled (superseded by next push).
+- **Local gates:** tsc baseline 494 unchanged (zero regression); 96 tests pass (4 new + 2 existing pattern test files).
+- **Telegram msg ids:** Step 1 close `4161`, Step 2 close (2-chunk verbatim), Step 3+4 close `4169`.
 
-### Step 2 work-in-progress (Pre-audit deeper dive)
+### Step 5+6 work-in-progress (CI watch + staging deploy)
 
-1. ✅ Langston Q-B grep cross-check: verify zero consumers of `'final_score_floor'` / `'max_position_pct'` paired with xstock_spot asset class anywhere in server/+shared/+scripts/.
-2. ✅ Q-E disposition: confirm whether `selectContextAwareStrategy` (canonical-regime-strategy-map.ts:637) is still live in vts-runner.ts post-STRATEGY v3.0.0 byAssetClass.
-3. ✅ Q-F disposition: confirm whether `PATTERN_POOL_STRATEGIES` const (crypto_spot/pattern-pool-filters.ts:53-64) is still consumed.
-4. ✅ Per-component upstream/downstream/shared-state/background-execution/blast-radius for all 13 affected components.
-5. ✅ Pre-audit file at `Claude Comms and Packages/Scope Files/B79_0n_PATTERN_DETECT_PRE_AUDIT.md`.
-6. ✅ Dispatch pre-audit to Langston for Step 2 ACK.
+1. ⏳ CI run 26372084239 — wait for all-4-green (TypeScript Check, Test Suite, Build, Docker Build)
+2. ⏳ Step 6: ssh staging — git pull + db:migrate + npm run build + pm2 restart
+3. ⏳ Step 7: CC first-pass — PM2 logs + psql verify xstock_spot pattern_pool_gates rows have converged names + UI Claude-in-Chrome
+4. ⏳ Step 8: Langston second-pass UI verification
+5. ⏳ Step 10+11: governance + completion report + MEMORY sync (3-way)
+
+### Langston ACKs locked
+- **R-1**: thread REQUIRED-assetClass on patternToTradeSignal — DONE
+- **R-2**: plumbing-only on selectContextAwareStrategy — DONE
+- **R-3**: parallel XSTOCK_PATTERN_POOL_GUARDRAILS const — DONE
+- **R-4**: leave PATTERN_POOL_STRATEGIES + Phase 16 register — DONE
+- **R-5**: single migration file BEGIN/COMMIT — DONE
+- **R-6**: mirror R-1 in 2 tests — DONE
+- **R-7**: YES thread assetClass into patternToTradeSignal — DONE
+
+### Langston Step 4 mild notes (CC's call to address now or in completion-report)
+- §6 dynamic `import('...').AssetClass` form: "acceptable" but `import type` would be more idiomatic if no actual circular-dep
+- §8 xstock_spot deprecated shim: "soft concern not block" — could delete now since 0 importers vs keeping Phase 16 register
 
 ### Active alerts (§10.5)
 - 0 active-unacked (confirmed 2026-05-24 turn-start, full queue all scheduled or acked).
