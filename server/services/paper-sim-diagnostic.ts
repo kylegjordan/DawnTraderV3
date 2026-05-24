@@ -459,9 +459,11 @@ export class PaperSimDiagnosticService {
     };
 
     // Run strategy detectors (lightweight - no position sizing)
-    const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData);
-    const abcdSignal = this.strategyEngine.detectABCDLong(priceData, settings);
-    const smaSignal = this.strategyEngine.detectSMATrendRide(indicators, priceData, settings);
+    // B79.0n.STRATEGY (2026-05-24): paper-sim-diagnostic is crypto-only Phase 27.F.12
+    // diagnostic probe. Threading 'crypto_spot' as const. Phase 16 register entry #136-n.
+    const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData, 'crypto_spot');
+    const abcdSignal = this.strategyEngine.detectABCDLong(priceData, settings, 'crypto_spot');
+    const smaSignal = this.strategyEngine.detectSMATrendRide(indicators, priceData, settings, 'crypto_spot');
 
     const signals = [vwapSignal, abcdSignal, smaSignal].filter(s => s !== null);
 

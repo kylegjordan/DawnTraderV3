@@ -19,8 +19,18 @@ import type { PatternInput } from '../strategies/strategy-helpers.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72.2: In-class quant strategies read tunable params from module_constants.
 import { getCachedNumbersForModule, getCachedConstant } from './module-constants-service.js';
+import type { AssetClass } from '@shared/asset-classes';
 
-const _SE_KEY = (strategy: string) => ({ exchange: '*', assetClass: '*', strategy, regime: '*' });
+// B79.0n.STRATEGY (2026-05-24): REQUIRED assetClass parameter. Was wildcard `'*'`
+// pre-batch — every detect method silently inherited crypto-scoped wildcard rows
+// regardless of actual asset class. Now per-class scoped at the resolver layer;
+// xStock callers route to xstock_spot rows (when seeded) or wildcard fallback.
+// Caller surface: 7 files / 66 sites (compile-driven enumeration captured at
+// B79_0n_STRATEGY_PRE_AUDIT.md §3.2). TypeScript REQUIRED signature is the
+// forcing function — every caller must pass an explicit AssetClass.
+const _SE_KEY = (strategy: string, assetClass: AssetClass) => ({
+  exchange: '*', assetClass, strategy, regime: '*',
+});
 
 /**
  * Compute ATR (Average True Range) from PriceData array.
@@ -92,7 +102,8 @@ export class StrategyEngine {
   detectVWAPPullback(
     indicators: TechnicalIndicators,
     settings: TradingSettings,
-    priceHistory?: PriceData[]
+    priceHistory: PriceData[] | undefined,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B63 Item 11: vwap_pullback PROMOTED into strong-trend lane. The prior B63 Item 6
     // `dbs >= 0.35` exclusion has been REMOVED — vwap_pullback is now eligible on both:
@@ -105,7 +116,8 @@ export class StrategyEngine {
     // entering LONG against a strong downtrend. 15 mirror-defect trades in B62 72h window
     // per BATCH_63_COUNTERFACTUAL_AUDIT. Block here.
     // B72.2: levers resolved from module_constants 'strategy.vwap_pullback'.
-    const c = getCachedNumbersForModule('strategy.vwap_pullback', _SE_KEY('vwap_pullback'));
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.vwap_pullback', _SE_KEY('vwap_pullback', assetClass));
     if ((indicators.dbsScore ?? 0) <= c['counter_trend_long_dbs_floor']) {
       setNullReason('b63b_counter_trend_long_exclusion');
       return null;
@@ -122,8 +134,8 @@ export class StrategyEngine {
     // Rules: Price above VWAP; pullback to VWAP within threshold; volume confirmation; bullish reversal
     const priceAboveVWAP = currentPrice > vwap;
     const nearVWAP = Math.abs(currentPrice - vwap) / vwap <= pullbackThreshold; // ✅ Using user setting
-    const hasReversalPattern = this.detectBullishReversal(indicators);
-    
+    const hasReversalPattern = this.detectBullishReversal(indicators, assetClass);
+
     // ✅ Volume confirmation using user setting (volumeMultiplier)
     // Calculate average volume from prior candles (minimum required for reliable comparison)
     if (!priceHistory || priceHistory.length < c['volume_confirm_min_history']) {
@@ -160,6 +172,7 @@ export class StrategyEngine {
       // When vts-runner routes this detector via quant-strong_trend sourcePool, it attaches
       // { stopAtrMultiplier, targetAsRMultiple } to indicators. Use those in place of the
       // default vwap_pullback geometry. Default path (no override) preserves prior behavior.
+      // B79.0n.STRATEGY note: assetClass is in scope for any downstream helper calls below.
       const override = indicators.strongTrendGeometryOverride;
       let stopPrice: number;
       let finalTarget: number;
@@ -227,12 +240,14 @@ export class StrategyEngine {
 
   // ABCD Long Strategy
   detectABCDLong(
-    priceHistory: PriceData[], 
-    settings: TradingSettings
+    priceHistory: PriceData[],
+    settings: TradingSettings,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.abcd_long'.
-    const c = getCachedNumbersForModule('strategy.abcd_long', _SE_KEY('abcd_long'));
-    const exitTypeDefault = getCachedConstant<string>('strategy.abcd_long', 'exit_type_default', _SE_KEY('abcd_long')) ?? 'target';
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.abcd_long', _SE_KEY('abcd_long', assetClass));
+    const exitTypeDefault = getCachedConstant<string>('strategy.abcd_long', 'exit_type_default', _SE_KEY('abcd_long', assetClass)) ?? 'target';
     // User-configured settings with defaults (defaults sourced from module_constants).
     const minConsolidation = settings.abcdMinConsolidation || c['min_consolidation_bars_default'];
     const breakoutThreshold = parseFloat(settings.abcdBreakoutThreshold || c['breakout_threshold_pct_default'].toString()) / 100;
@@ -350,7 +365,8 @@ export class StrategyEngine {
   detectSMATrendRide(
     indicators: TechnicalIndicators,
     priceHistory: PriceData[],
-    settings: TradingSettings
+    settings: TradingSettings,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B63 Item 10: Counter-trend LONG guard (mirror-defect fix). sma_trend_ride is a
     // LONG-only trend-riding strategy; firing on strong NEGATIVE DBS pairs means entering
@@ -359,9 +375,10 @@ export class StrategyEngine {
     // high-positive-DBS pairs are routed exclusively to Path D per B63 Item 4 and do not
     // reach sma_trend_ride's quant family.)
     // B72.2: levers resolved from module_constants 'strategy.sma_trend_ride'.
-    const c = getCachedNumbersForModule('strategy.sma_trend_ride', _SE_KEY('sma_trend_ride'));
-    const entryConditionDefault = getCachedConstant<string>('strategy.sma_trend_ride', 'entry_condition_default', _SE_KEY('sma_trend_ride')) ?? 'above';
-    const exitConditionDefault = getCachedConstant<string>('strategy.sma_trend_ride', 'exit_condition_default', _SE_KEY('sma_trend_ride')) ?? 'break';
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.sma_trend_ride', _SE_KEY('sma_trend_ride', assetClass));
+    const entryConditionDefault = getCachedConstant<string>('strategy.sma_trend_ride', 'entry_condition_default', _SE_KEY('sma_trend_ride', assetClass)) ?? 'above';
+    const exitConditionDefault = getCachedConstant<string>('strategy.sma_trend_ride', 'exit_condition_default', _SE_KEY('sma_trend_ride', assetClass)) ?? 'break';
     if (((indicators as any).dbsScore ?? 0) <= c['counter_trend_long_dbs_floor']) {
       setNullReason('b63b_counter_trend_long_exclusion');
       return null;
@@ -468,10 +485,12 @@ export class StrategyEngine {
   // Breakout Strategy
   detectBreakout(
     priceHistory: PriceData[],
-    params: any
+    params: any,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.breakout'.
-    const c = getCachedNumbersForModule('strategy.breakout', _SE_KEY('breakout'));
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.breakout', _SE_KEY('breakout', assetClass));
     const minConsolidationBars = params.minConsolidationBars || c['min_consolidation_bars'];
     const breakoutBuffer = (params.breakoutBuffer || c['breakout_buffer_pct']) / 100;
     const volumeMultiplier = params.volumeMultiplier || c['volume_multiplier'];
@@ -557,11 +576,13 @@ export class StrategyEngine {
   detectMeanReversion(
     indicators: TechnicalIndicators,
     priceHistory: PriceData[],
-    params: any
+    params: any,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.mean_reversion'.
-    const c = getCachedNumbersForModule('strategy.mean_reversion', _SE_KEY('mean_reversion'));
-    const meanTypeDefault = getCachedConstant<string>('strategy.mean_reversion', 'mean_type_default', _SE_KEY('mean_reversion')) ?? 'vwap';
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.mean_reversion', _SE_KEY('mean_reversion', assetClass));
+    const meanTypeDefault = getCachedConstant<string>('strategy.mean_reversion', 'mean_type_default', _SE_KEY('mean_reversion', assetClass)) ?? 'vwap';
     const meanType = params.meanType || meanTypeDefault;
     const smaLength = params.smaLength || c['sma_length_default'];
     // Batch 18H: ATR-based dynamic deviation for crypto markets — max(floor, mult×ATR/price)
@@ -595,7 +616,7 @@ export class StrategyEngine {
     const isOversold = deviation < -deviationThreshold;
     
     // Reversal confirmation
-    const hasReversal = this.detectBullishReversal(indicators);
+    const hasReversal = this.detectBullishReversal(indicators, assetClass);
     
     if (isOversold && hasReversal) {
       const entryPrice = currentPrice * c['entry_premium_mult'];
@@ -643,10 +664,12 @@ export class StrategyEngine {
   // Range Trading Strategy
   detectRangeTrading(
     priceHistory: PriceData[],
-    params: any
+    params: any,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.range_trade'.
-    const c = getCachedNumbersForModule('strategy.range_trade', _SE_KEY('range_trade'));
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.range_trade', _SE_KEY('range_trade', assetClass));
     const minRangeDurationHours = params.minRangeDurationHours || c['min_range_duration_hours'];
     const minBoundaryTouches = params.minBoundaryTouches || c['min_boundary_touches'];
     // Batch 45: Entry zone proportional to range width — bottom 25% of range instead of fixed %.
@@ -738,10 +761,12 @@ export class StrategyEngine {
   detectVWAPBounce(
     indicators: TechnicalIndicators,
     priceHistory: PriceData[],
-    params: any
+    params: any,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.vwap_bounce'.
-    const c = getCachedNumbersForModule('strategy.vwap_bounce', _SE_KEY('vwap_bounce'));
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.vwap_bounce', _SE_KEY('vwap_bounce', assetClass));
     const vwapProximity = (params.vwapProximity || c['vwap_proximity_pct']) / 100;
     const minVWAPSlope = (params.minVWAPSlope || c['min_vwap_slope_pct']) / 100;
     const volumeMultiplier = params.volumeMultiplier || c['volume_multiplier'];
@@ -824,11 +849,14 @@ export class StrategyEngine {
   // Liquidity Trap Strategy
   detectLiquidityTrap(
     priceHistory: PriceData[],
-    params: any
+    params: any,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope (Q-C C-2: shape consistency)
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.liquidity_trap'.
-    const c = getCachedNumbersForModule('strategy.liquidity_trap', _SE_KEY('liquidity_trap'));
-    const minStopZoneSizeDefault = getCachedConstant<string>('strategy.liquidity_trap', 'min_stop_zone_size', _SE_KEY('liquidity_trap')) ?? 'medium';
+    // B79.0n.STRATEGY: per-class resolver scope (strategy is disabled at orchestrator/VTS per Batch 70.3
+    // but REQUIRED-assetClass kept for shape consistency across all 19 detect methods).
+    const c = getCachedNumbersForModule('strategy.liquidity_trap', _SE_KEY('liquidity_trap', assetClass));
+    const minStopZoneSizeDefault = getCachedConstant<string>('strategy.liquidity_trap', 'min_stop_zone_size', _SE_KEY('liquidity_trap', assetClass)) ?? 'medium';
     const maxTrapExtension = (params.maxTrapExtension || c['max_trap_extension_pct']) / 100;
     const trapReturnBars = params.trapReturnBars || c['trap_return_bars'];
     const minStopZoneSize = params.minStopZoneSize || minStopZoneSizeDefault;
@@ -1037,10 +1065,14 @@ export class StrategyEngine {
   }
 
   // Helper methods
-  private detectBullishReversal(indicators: TechnicalIndicators): boolean {
+  // B79.0n.STRATEGY (2026-05-24): assetClass threaded from callers (detectVWAPPullback
+  // + detectMeanReversion). Helper reads strategy.vwap_pullback levers — needs the
+  // caller's resolved asset class to scope the row lookup correctly.
+  private detectBullishReversal(indicators: TechnicalIndicators, assetClass: AssetClass): boolean {
     // Batch 45: ATR-relative pullback depth check.
     // B72.2: thresholds resolved from module_constants 'strategy.vwap_pullback'.
-    const c = getCachedNumbersForModule('strategy.vwap_pullback', _SE_KEY('vwap_pullback'));
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.vwap_pullback', _SE_KEY('vwap_pullback', assetClass));
     const { currentPrice, vwap, low24h, high24h } = indicators;
     const atr = indicators.atr ?? (high24h - low24h) * c['atr_fallback_daily_range_frac'];
     if (atr <= 0 || vwap <= 0) return false;
@@ -1180,10 +1212,12 @@ export class StrategyEngine {
   detectDHMA(
     indicators: TechnicalIndicators,
     priceHistory: PriceData[],
-    params: any
+    params: any,
+    assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.dhma'.
-    const c = getCachedNumbersForModule('strategy.dhma', _SE_KEY('dhma'));
+    // B79.0n.STRATEGY: per-class resolver scope.
+    const c = getCachedNumbersForModule('strategy.dhma', _SE_KEY('dhma', assetClass));
     const theta_OBI = params.theta_OBI || c['theta_obi'];
     const epsilon_micro = params.epsilon_micro || c['epsilon_micro'];
     const tau_toxicity = params.tau_toxicity || c['tau_toxicity'];
@@ -1410,8 +1444,11 @@ export class StrategyEngine {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // Directive 12.3.2: 8 New Strategy Detection Methods
+  // Directive 12.3.2: 8 New Strategy Detection Methods (file-based wrappers)
   // Each delegates to its corresponding module in server/strategies/
+  //
+  // B79.0n.STRATEGY (2026-05-24): all wrappers gain REQUIRED `assetClass: AssetClass`
+  // parameter, threaded into the file-based detect function's matching parameter.
   // ═══════════════════════════════════════════════════════════════
 
   /**
@@ -1421,9 +1458,10 @@ export class StrategyEngine {
   detectMorningStar(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectMorningStar(indicators, candles, patternSignal);
+    return detectMorningStar(indicators, candles, patternSignal, assetClass);
   }
 
   /**
@@ -1433,9 +1471,10 @@ export class StrategyEngine {
   detectInsideBarReversal(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectInsideBarReversal(indicators, candles, patternSignal);
+    return detectInsideBarReversal(indicators, candles, patternSignal, assetClass);
   }
 
   /**
@@ -1445,9 +1484,10 @@ export class StrategyEngine {
   detectSupportBounce(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectSupportBounce(indicators, candles, patternSignal);
+    return detectSupportBounce(indicators, candles, patternSignal, assetClass);
   }
 
   /**
@@ -1457,9 +1497,10 @@ export class StrategyEngine {
   detectPivotShift(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectPivotShift(indicators, candles, patternSignal);
+    return detectPivotShift(indicators, candles, patternSignal, assetClass);
   }
 
   /**
@@ -1469,9 +1510,10 @@ export class StrategyEngine {
   detectReverseImpulse(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectReverseImpulse(indicators, candles, patternSignal);
+    return detectReverseImpulse(indicators, candles, patternSignal, assetClass);
   }
 
   /**
@@ -1482,9 +1524,10 @@ export class StrategyEngine {
     indicators: TechnicalIndicators,
     candles: PriceData[],
     patternSignal: PatternInput | null,
-    btcCandles?: PriceData[]
+    btcCandles: PriceData[] | undefined,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectDefensiveHedge(indicators, candles, patternSignal, btcCandles);
+    return detectDefensiveHedge(indicators, candles, patternSignal, assetClass, btcCandles);
   }
 
   /**
@@ -1494,9 +1537,10 @@ export class StrategyEngine {
   detectAdaptiveFlow(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectAdaptiveFlow(indicators, candles, patternSignal);
+    return detectAdaptiveFlow(indicators, candles, patternSignal, assetClass);
   }
 
   /**
@@ -1506,9 +1550,10 @@ export class StrategyEngine {
   detectVolatilityEdge(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectVolatilityEdge(indicators, candles, patternSignal);
+    return detectVolatilityEdge(indicators, candles, patternSignal, assetClass);
   }
 
   /**
@@ -1519,22 +1564,25 @@ export class StrategyEngine {
   detectStrongBullTrend(
     indicators: TechnicalIndicators,
     candles: PriceData[],
-    patternSignal: PatternInput | null
+    patternSignal: PatternInput | null,
+    assetClass: AssetClass,
   ): StrategySignal | null {
-    return detectStrongBullTrend(indicators, candles, patternSignal);
+    return detectStrongBullTrend(indicators, candles, patternSignal, assetClass);
   }
 
   /**
    * B79.0d: Opening Range Breakout (ORB) — xstock_spot only, 14:30–17:00 UTC active window.
    * Triple-defense asset-class guard (detect-internal + this method's caller in
-   * signal-orchestrator + SQE whitelist). Default ctx assetClass='xstock_spot'
-   * but signal-orchestrator passes the resolved class explicitly.
+   * signal-orchestrator + SQE whitelist).
+   *
+   * B79.0n.STRATEGY (2026-05-24): ctx promoted to REQUIRED (was optional with default
+   * `'xstock_spot'` for back-compat). All callers now pass explicit ctx.assetClass.
    */
   detectORB(
     symbol: string,
     candles: PriceData[],
     indicators: TechnicalIndicators,
-    ctx?: { assetClass: string; symbol: string; now?: Date }
+    ctx: { assetClass: AssetClass; symbol: string; now?: Date },
   ): StrategySignal | null {
     return detectORB(symbol, candles, indicators, ctx);
   }

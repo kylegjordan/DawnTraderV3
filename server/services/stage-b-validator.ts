@@ -283,20 +283,24 @@ export class StageBValidator {
       };
 
       // Test each strategy
+      // B79.0n.STRATEGY (2026-05-24): Stage B Paper Trading Validation harness is
+      // crypto-only synthetic test by intent (relaxedMode test fixtures). All 8 detect
+      // calls thread 'crypto_spot' as const. Phase 16 register entry #136-k —
+      // synthetic test engine is likely a deletion candidate; mark-don't-delete-in-flight.
       const signals = [];
-      
+
       // 1. VWAP Pullback
-      const vwapSignal = strategyEngine.detectVWAPPullback(indicators, settings, priceData);
+      const vwapSignal = strategyEngine.detectVWAPPullback(indicators, settings, priceData, 'crypto_spot');
       if (vwapSignal) signals.push({ ...vwapSignal, symbol });
-      
+
       // 2. ABCD Long
-      const abcdSignal = strategyEngine.detectABCDLong(priceData, settings);
+      const abcdSignal = strategyEngine.detectABCDLong(priceData, settings, 'crypto_spot');
       if (abcdSignal) signals.push({ ...abcdSignal, symbol });
-      
+
       // 3. SMA Trend Ride
-      const smaSignal = strategyEngine.detectSMATrendRide(indicators, priceData, settings);
+      const smaSignal = strategyEngine.detectSMATrendRide(indicators, priceData, settings, 'crypto_spot');
       if (smaSignal) signals.push({ ...smaSignal, symbol });
-      
+
       // 4. Breakout (ULTRA-RELAXED for validation only)
       // B72.2: standard branch reads params from module_constants 'strategy.breakout'.
       const breakoutSignal = strategyEngine.detectBreakout(priceData, relaxedMode ? {
@@ -305,9 +309,9 @@ export class StageBValidator {
         breakoutBuffer: 0.1,          // Ultra-relaxed: 0.1% (prod: 1%)
         volumeMultiplier: 0.5,        // Ultra-relaxed: 0.5x (prod: 2x)
         targetMultiplier: 2
-      } : {});
+      } : {}, 'crypto_spot');
       if (breakoutSignal) signals.push({ ...breakoutSignal, symbol });
-      
+
       // 5. Mean Reversion (ULTRA-RELAXED for validation only)
       // B72.2: standard branch reads params from module_constants 'strategy.mean_reversion'.
       const meanRevSignal = strategyEngine.detectMeanReversion(indicators, priceData, relaxedMode ? {
@@ -316,9 +320,9 @@ export class StageBValidator {
         partialExitPercent: 50,
         stopLossBuffer: 0.05,         // Ultra-relaxed: 5% (prod: 1.5%)
         smaLength: 5                  // Ultra-relaxed: 5 (prod: 20)
-      } : {});
+      } : {}, 'crypto_spot');
       if (meanRevSignal) signals.push({ ...meanRevSignal, symbol });
-      
+
       // 6. Range Trading (ULTRA-RELAXED for validation only)
       // B72.2: standard branch reads params from module_constants 'strategy.range_trade'.
       const rangeSignal = strategyEngine.detectRangeTrading(priceData, relaxedMode ? {
@@ -327,9 +331,9 @@ export class StageBValidator {
         minBoundaryTouches: 2,        // Ultra-relaxed: 2 touches (prod: 3)
         entryZoneWidth: 1.0,          // Ultra-relaxed: 1% (prod: 0.5%)
         stopLossBeyond: 2.0           // Ultra-relaxed: 2% (prod: 1%)
-      } : {});
+      } : {}, 'crypto_spot');
       if (rangeSignal) signals.push({ ...rangeSignal, symbol });
-      
+
       // 7. VWAP Bounce (ULTRA-RELAXED for validation only)
       // B72.2: standard branch reads params from module_constants 'strategy.vwap_bounce'.
       const vwapBounceSignal = strategyEngine.detectVWAPBounce(indicators, priceData, relaxedMode ? {
@@ -338,9 +342,9 @@ export class StageBValidator {
         volumeMultiplier: 0.5,        // Ultra-relaxed: 0.5x (prod: 1.3x)
         maxPullbackBars: 10,          // Ultra-relaxed: 10 bars (prod: 5)
         partialExitR: 1.5             // Unchanged
-      } : {});
+      } : {}, 'crypto_spot');
       if (vwapBounceSignal) signals.push({ ...vwapBounceSignal, symbol });
-      
+
       // 8. Liquidity Trap (ULTRA-RELAXED for validation only)
       // B72.2: standard branch reads params from module_constants 'strategy.liquidity_trap'.
       const liqTrapSignal = strategyEngine.detectLiquidityTrap(priceData, relaxedMode ? {
@@ -349,7 +353,7 @@ export class StageBValidator {
         minStopZoneSize: 'small',     // Ultra-relaxed: small (prod: medium)
         minLevelTouches: 2,           // Ultra-relaxed: 2 touches (prod: 3)
         volumeRatio: 0.5              // Ultra-relaxed: 0.5x (prod: 1.5x)
-      } : {});
+      } : {}, 'crypto_spot');
       if (liqTrapSignal) signals.push({ ...liqTrapSignal, symbol });
       
       // Process signals (conflict resolution: best score wins)

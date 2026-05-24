@@ -10567,32 +10567,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
               // overrides so the admin diagnostic exercises the same DB-resolved config
               // the production paths use. Settings-bearing detectors get an empty
               // settings object (no operator overrides).
+              // B79.0n.STRATEGY (2026-05-24): all 9 calls thread 'crypto_spot' as const
+              // — admin diagnostic is crypto-only by intent (synthetic test data, no
+              // per-class fixtures). Flagged Phase 16 register entry #136-i for
+              // potential consolidation/deletion during Phase 16 cleanup pass.
               case 'vwap_pullback':
-                result = strategyEngine.detectVWAPPullback(mockIndicators, {} as any, mockOHLC as any);
+                result = strategyEngine.detectVWAPPullback(mockIndicators, {} as any, mockOHLC as any, 'crypto_spot');
                 break;
               case 'abcd_long':
-                result = strategyEngine.detectABCDLong(mockOHLC as any, {} as any);
+                result = strategyEngine.detectABCDLong(mockOHLC as any, {} as any, 'crypto_spot');
                 break;
               case 'sma_trend_ride':
-                result = strategyEngine.detectSMATrendRide(mockIndicators, mockOHLC as any, {} as any);
+                result = strategyEngine.detectSMATrendRide(mockIndicators, mockOHLC as any, {} as any, 'crypto_spot');
                 break;
               case 'breakout':
-                result = strategyEngine.detectBreakout(mockOHLC as any, {});
+                result = strategyEngine.detectBreakout(mockOHLC as any, {}, 'crypto_spot');
                 break;
               case 'mean_reversion':
-                result = strategyEngine.detectMeanReversion(mockIndicators, mockOHLC as any, {});
+                result = strategyEngine.detectMeanReversion(mockIndicators, mockOHLC as any, {}, 'crypto_spot');
                 break;
               case 'range_trading':
-                result = strategyEngine.detectRangeTrading(mockOHLC as any, {});
+                result = strategyEngine.detectRangeTrading(mockOHLC as any, {}, 'crypto_spot');
                 break;
               case 'vwap_bounce':
-                result = strategyEngine.detectVWAPBounce(mockIndicators, mockOHLC as any, {});
+                result = strategyEngine.detectVWAPBounce(mockIndicators, mockOHLC as any, {}, 'crypto_spot');
                 break;
               case 'liquidity_trap':
-                result = strategyEngine.detectLiquidityTrap(mockOHLC as any, {});
+                result = strategyEngine.detectLiquidityTrap(mockOHLC as any, {}, 'crypto_spot');
                 break;
               case 'dhma':
-                result = strategyEngine.detectDHMA(mockIndicators, mockOHLC as any, {});
+                result = strategyEngine.detectDHMA(mockIndicators, mockOHLC as any, {}, 'crypto_spot');
                 break;
             }
             executionResult = result ? 'SIGNAL_GENERATED' : 'NO_SIGNAL';
@@ -14302,9 +14306,12 @@ Provide specific, actionable recommendations.`,
             low24h: Math.min(...priceData.slice(-24).map(p => parseFloat(p.low)))
           };
 
-          const vwapSignal = strategyEngine.detectVWAPPullback(indicators, settings);
-          const abcdSignal = strategyEngine.detectABCDLong(priceData, settings);
-          const smaSignal = strategyEngine.detectSMATrendRide(indicators, priceData, settings);
+          // B79.0n.STRATEGY (2026-05-24): admin "test strategies for watchlist" endpoint
+          // is crypto-only legacy (KrakenService-only, pre-multi-asset). Threading
+          // 'crypto_spot' as const. Flagged Phase 16 register entry #136-j.
+          const vwapSignal = strategyEngine.detectVWAPPullback(indicators, settings, undefined, 'crypto_spot');
+          const abcdSignal = strategyEngine.detectABCDLong(priceData, settings, 'crypto_spot');
+          const smaSignal = strategyEngine.detectSMATrendRide(indicators, priceData, settings, 'crypto_spot');
 
           results.push({
             symbol: pair.symbol,

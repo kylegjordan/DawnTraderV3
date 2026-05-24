@@ -285,12 +285,14 @@ export class HistoricSignalGenerator {
       for (const strategy of strategies) {
         let signal: StrategySignal | null = null;
 
+        // B79.0n.STRATEGY (2026-05-24): historic backfill harness is crypto-only legacy
+        // (3-strategy hardcoded). Threading 'crypto_spot' as const. Phase 16 register #136-m.
         if (strategy === 'vwap_pullback') {
-          signal = this.strategyEngine.detectVWAPPullback(indicators, settings, windowHistory as PriceData[]);
+          signal = this.strategyEngine.detectVWAPPullback(indicators, settings, windowHistory as PriceData[], 'crypto_spot');
         } else if (strategy === 'abcd_long') {
-          signal = this.strategyEngine.detectABCDLong(windowHistory as PriceData[], settings);
+          signal = this.strategyEngine.detectABCDLong(windowHistory as PriceData[], settings, 'crypto_spot');
         } else if (strategy === 'sma_trend_ride') {
-          signal = this.strategyEngine.detectSMATrendRide(indicators, windowHistory as PriceData[], settings);
+          signal = this.strategyEngine.detectSMATrendRide(indicators, windowHistory as PriceData[], settings, 'crypto_spot');
         }
 
         if (signal) {

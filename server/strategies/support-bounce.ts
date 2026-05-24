@@ -30,6 +30,7 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { PriceData } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 import {
   calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
   minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
@@ -80,11 +81,13 @@ interface SupportCluster {
 function identifySupportLevels(
   ohlc: OHLCCandle[],
   currentPrice: number,
-  effectiveATR: number
+  effectiveATR: number,
+  assetClass: AssetClass,  // B79.0n.STRATEGY — threaded from detectSupportBounce caller
 ): SupportCluster[] {
   // B72: bulk read — same module as detectSupportBounce.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.support_bounce', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const SB_LOOKBACK_CANDLES       = c.support_level_lookback_bars;
   const SB_CLUSTER_TOLERANCE_BASE = c.support_cluster_tolerance_base;
@@ -154,13 +157,15 @@ function identifySupportLevels(
 export function detectSupportBounce(
   indicators: TechnicalIndicators,
   candles: any[],
-  patternSignal: PatternInput | null
+  patternSignal: PatternInput | null,
+  assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
 
   // B72: bulk read all strategy levers from module_constants.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.support_bounce', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const SB_LOOKBACK_CANDLES       = c.support_level_lookback_bars;
   const SB_PROXIMITY              = c.min_support_proximity_required;
@@ -188,7 +193,7 @@ export function detectSupportBounce(
   }
 
   // ── Condition 1: Valid support level exists ──────────────────────────────
-  const supportLevels = identifySupportLevels(ohlc, currentPrice, effectiveATR);
+  const supportLevels = identifySupportLevels(ohlc, currentPrice, effectiveATR, assetClass);
   if (supportLevels.length === 0) {
     console.log(`${LOG_PREFIX} No valid support level found within ${(c.max_support_distance_from_price * 100).toFixed(1)}%. Skipping.`);
     setNullReason('range_not_found');

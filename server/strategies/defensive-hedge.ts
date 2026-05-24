@@ -18,6 +18,7 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { PriceData } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 import {
   calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
   minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
@@ -82,11 +83,13 @@ export function detectDefensiveHedge(
   indicators: TechnicalIndicators,
   candles: any[],
   patternSignal: PatternInput | null,
-  btcCandles?: any[]
+  assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope (5th positional; btcCandles moves to 6th)
+  btcCandles?: any[],
 ): StrategySignal | null {
   // B72: bulk read all strategy levers from module_constants.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.defensive_hedge', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const DH_CORR_WINDOW         = c.correlation_lookback_bars;
   const DH_VOL_WINDOW          = c.volatility_lookback_bars;
@@ -102,10 +105,11 @@ export function detectDefensiveHedge(
 
   // B63 + B72: Belt-and-braces for Path D LONG-only leak.
   // Threshold sourced from module_constants (group with strong_bull_trend).
+  // B79.0n.STRATEGY: per-class resolver scope (value class-invariant; shape consistency).
   const dbsGuardThreshold = getCachedNumberRequired(
     'strategy_dbs_routing_guards',
     'dbs_min_threshold',
-    { exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*' },
+    { exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*' },
   );
   if (((indicators as any).dbsScore ?? 0) >= dbsGuardThreshold) {
     setNullReason('b63_strong_dbs_exclusion');

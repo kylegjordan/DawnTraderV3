@@ -51,6 +51,7 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { PriceData } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 import {
   getCachedConstant,
   getCachedNumbersForModule,
@@ -73,7 +74,7 @@ let _disabledLogCount = 0;
 let _outsideWindowLogCount = 0;
 
 interface OrbContext {
-  assetClass: string;
+  assetClass: AssetClass;  // B79.0n.STRATEGY — was `string`; now typed to AssetClass union
   symbol: string;
   now?: Date; // injectable for tests; defaults Date.now()
 }
@@ -145,11 +146,14 @@ export function detectORB(
   symbol: string,
   priceData: PriceData[],
   indicators: TechnicalIndicators,
-  ctx?: OrbContext,
+  ctx: OrbContext,  // B79.0n.STRATEGY — REQUIRED (was optional with 'xstock_spot' back-compat default)
 ): StrategySignal | null {
   // ── Defense guard (Q6) — detect-internal layer ──────────────────────────
   // Asset-class: xstock_spot only.
-  const assetClass = ctx?.assetClass ?? 'xstock_spot'; // dispatch passes; default for back-compat
+  // B79.0n.STRATEGY: ctx now REQUIRED; no back-compat default. Caller surface
+  // (signal-orchestrator dispatch block + vts-runner callStrategyDetect + xstock_spot
+  // eval-cycle) all pass explicit ctx.assetClass.
+  const assetClass = ctx.assetClass;
   if (assetClass !== 'xstock_spot') return null;
 
   // B-NEW-36 sub-batch (c) (2026-05-20): removed the per-symbol weekend-bypass
@@ -164,11 +168,14 @@ export function detectORB(
   // fix would have silently broken the strategy on the 10 names.
 
   // ── DB gate (cached sync API; B79.0d flipped to true) ───────────────────
+  // B79.0n.STRATEGY: resolver-key uses ctx.assetClass instead of hardcoded 'xstock_spot'
+  // for shape consistency across all 19 strategies. Behavior unchanged — the asset-class
+  // guard above already returned null for non-xstock_spot callers.
   let enabled: boolean | undefined;
   try {
     enabled = getCachedConstant<boolean>(
       'strategy_gates', 'enabled',
-      { exchange: '*', assetClass: 'xstock_spot', strategy: STRATEGY_KEY, regime: '*' },
+      { exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*' },
     );
   } catch {
     enabled = undefined;
@@ -182,13 +189,14 @@ export function detectORB(
   }
 
   // ── Time-window check (Q1+Q3) — uses injectable clock for tests ─────────
-  const now = ctx?.now ?? new Date();
+  const now = ctx.now ?? new Date();
 
   // Read Layer-1 thresholds in bulk (B72 pattern).
+  // B79.0n.STRATEGY: resolver-key uses ctx.assetClass for shape consistency.
   let c: Record<string, number>;
   try {
     c = getCachedNumbersForModule('strategy.orb', {
-      exchange: '*', assetClass: 'xstock_spot', strategy: STRATEGY_KEY, regime: '*',
+      exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
     });
   } catch {
     return null; // module not warm — fail-soft

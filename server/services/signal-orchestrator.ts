@@ -1498,7 +1498,11 @@ export class SignalOrchestrator {
         slope: (poolEntry as any).dbsSlope as number | undefined,
       } : undefined;
       // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
-      const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20, orchestratorDbs, resolveAssetClass(symbol, 'kraken'));
+      // B79.0n.STRATEGY (2026-05-24): capture assetClass into local for reuse across
+      // the 18-strategy dispatch block below + any other resolver-key sites in this
+      // function (avoids 18× resolveAssetClass calls).
+      const assetClass = resolveAssetClass(symbol, 'kraken');
+      const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20, orchestratorDbs, assetClass);
 
       console.log(`[Phase13][MCE] ${symbol}: regime=${mceContext.regime.regime}, weight=${mceContext.regime.regimeWeight.toFixed(2)}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
 
@@ -1560,7 +1564,7 @@ export class SignalOrchestrator {
       
       // Directive 10.1: Only run strategies allowed for current regime
       if (activeStrategies.has('vwap_pullback')) {
-        const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny);
+        const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'vwap_pullback', sizingContext);
@@ -1569,7 +1573,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('abcd_long')) {
-        const rawSignal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings);
+        const rawSignal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'abcd_long', sizingContext);
@@ -1578,7 +1582,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('sma_trend_ride')) {
-        const rawSignal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings);
+        const rawSignal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'sma_trend_ride', sizingContext);
@@ -1588,7 +1592,7 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('breakout')) {
         // B72.2: detector reads params from module_constants 'strategy.breakout'.
-        const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {});
+        const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {}, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'breakout', sizingContext);
@@ -1598,7 +1602,7 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('mean_reversion')) {
         // B72.2: detector reads params from module_constants 'strategy.mean_reversion'.
-        const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {});
+        const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {}, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'mean_reversion', sizingContext);
@@ -1608,7 +1612,7 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('range_trading')) {
         // B72.2: detector reads params from module_constants 'strategy.range_trade'.
-        const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {});
+        const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {}, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'range_trading', sizingContext);
@@ -1618,7 +1622,7 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('vwap_bounce')) {
         // B72.2: detector reads params from module_constants 'strategy.vwap_bounce'.
-        const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {});
+        const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {}, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'vwap_bounce', sizingContext);
@@ -1636,7 +1640,7 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('dhma')) {
         // B72.2: detector reads params from module_constants 'strategy.dhma'.
-        const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {});
+        const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {}, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'dhma', sizingContext);
@@ -1747,7 +1751,7 @@ export class SignalOrchestrator {
       const bestPattern = patternSignals.length > 0 ? patternSignals[0] : null; // kept for log line below
 
       if (activeStrategies.has('morning_star')) {
-        const rawSignal = this.strategyEngine.detectMorningStar(indicators, ohlcAsAny, buildPatternInputForStrategy('morning_star'));
+        const rawSignal = this.strategyEngine.detectMorningStar(indicators, ohlcAsAny, buildPatternInputForStrategy('morning_star'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'morning_star' as any, sizingContext);
@@ -1756,7 +1760,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('inside_bar_reversal')) {
-        const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, buildPatternInputForStrategy('inside_bar_reversal'));
+        const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, buildPatternInputForStrategy('inside_bar_reversal'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'inside_bar_reversal' as any, sizingContext);
@@ -1765,7 +1769,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('support_bounce')) {
-        const rawSignal = this.strategyEngine.detectSupportBounce(indicators, ohlcAsAny, buildPatternInputForStrategy('support_bounce'));
+        const rawSignal = this.strategyEngine.detectSupportBounce(indicators, ohlcAsAny, buildPatternInputForStrategy('support_bounce'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'support_bounce' as any, sizingContext);
@@ -1774,7 +1778,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('pivot_shift')) {
-        const rawSignal = this.strategyEngine.detectPivotShift(indicators, ohlcAsAny, buildPatternInputForStrategy('pivot_shift'));
+        const rawSignal = this.strategyEngine.detectPivotShift(indicators, ohlcAsAny, buildPatternInputForStrategy('pivot_shift'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'pivot_shift' as any, sizingContext);
@@ -1783,7 +1787,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('reverse_impulse')) {
-        const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, buildPatternInputForStrategy('reverse_impulse'));
+        const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, buildPatternInputForStrategy('reverse_impulse'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'reverse_impulse' as any, sizingContext);
@@ -1794,7 +1798,7 @@ export class SignalOrchestrator {
       if (activeStrategies.has('defensive_hedge')) {
         // Defensive hedge requires BTC candle data for correlation calculation
         // TODO: Pass BTC OHLC from pricing service cache when available
-        const rawSignal = this.strategyEngine.detectDefensiveHedge(indicators, ohlcAsAny, buildPatternInputForStrategy('defensive_hedge'));
+        const rawSignal = this.strategyEngine.detectDefensiveHedge(indicators, ohlcAsAny, buildPatternInputForStrategy('defensive_hedge'), undefined, assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'defensive_hedge' as any, sizingContext);
@@ -1803,7 +1807,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('adaptive_flow')) {
-        const rawSignal = this.strategyEngine.detectAdaptiveFlow(indicators, ohlcAsAny, buildPatternInputForStrategy('adaptive_flow'));
+        const rawSignal = this.strategyEngine.detectAdaptiveFlow(indicators, ohlcAsAny, buildPatternInputForStrategy('adaptive_flow'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'adaptive_flow' as any, sizingContext);
@@ -1812,7 +1816,7 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('volatility_edge')) {
-        const rawSignal = this.strategyEngine.detectVolatilityEdge(indicators, ohlcAsAny, buildPatternInputForStrategy('volatility_edge'));
+        const rawSignal = this.strategyEngine.detectVolatilityEdge(indicators, ohlcAsAny, buildPatternInputForStrategy('volatility_edge'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'volatility_edge' as any, sizingContext);
@@ -1823,7 +1827,7 @@ export class SignalOrchestrator {
       // B63: Strong Bull Trend (Path D) — QUANT, LONG-only, evaluates only on quant-strong_trend sourcePool pairs.
       // Strategy's internal DBS guard provides belt-and-braces if routing leaks.
       if (activeStrategies.has('strong_bull_trend')) {
-        const rawSignal = this.strategyEngine.detectStrongBullTrend(indicators, ohlcAsAny, buildPatternInputForStrategy('strong_bull_trend'));
+        const rawSignal = this.strategyEngine.detectStrongBullTrend(indicators, ohlcAsAny, buildPatternInputForStrategy('strong_bull_trend'), assetClass);
         if (rawSignal) {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'strong_bull_trend' as any, sizingContext);

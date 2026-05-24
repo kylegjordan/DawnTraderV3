@@ -130,14 +130,29 @@ export interface TradeSignalContext {
 // --------------------------------------------------------------------------
 
 /**
- * Named hybrid strategy playbooks for DSS routing.
- * Each represents a distinct confluence pattern.
+ * Named hybrid strategy playbooks for canonical regime-strategy map routing.
+ *
+ * B79.0n.STRATEGY (2026-05-24): replaces legacy H1_TREND_SNIPER / H2_SLINGSHOT /
+ * H3_GATECRASHER / H4_MOMENTUM_LINK enum (stale since canonical map was wired in
+ * Batch 13; BUG-007 closure per SYSTEM_MANUAL §1851). New union matches the 5
+ * canonical hybrid strategy keys + a 'quant-fallback' marker for non-hybrid quant
+ * signals that somehow reach selectHybridStrategy (defensive fallback; should not
+ * happen in practice — see selectHybridStrategy inline comment).
+ *
+ * The 5 canonical hybrids per `canonical-regime-strategy-map.ts` STRATEGY_DISPLAY_NAMES:
+ * - pivot_shift     (MORNING_STAR pattern × RSI/ADX confluence)
+ * - reverse_impulse (PINBAR pattern × momentum exhaustion)
+ * - defensive_hedge (ENGULFING pattern × BTC-decorrelation)
+ * - adaptive_flow   (TRI_STAR pattern × low-vol chop)
+ * - volatility_edge (ABCD pattern × volatility expansion)
  */
 export type HybridStrategyType =
-  | 'H1_TREND_SNIPER'     // Trend-following with pattern confirmation
-  | 'H2_SLINGSHOT'        // Momentum breakout with pattern setup
-  | 'H3_GATECRASHER'      // Mean-reversion with reversal pattern
-  | 'H4_MOMENTUM_LINK';   // Directional momentum with pattern alignment
+  | 'pivot_shift'
+  | 'reverse_impulse'
+  | 'defensive_hedge'
+  | 'adaptive_flow'
+  | 'volatility_edge'
+  | 'quant_fallback';  // Non-hybrid quant marker (defensive fallback — rare)
 
 /**
  * Component scores for hybrid signal explainability.

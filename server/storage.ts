@@ -273,8 +273,11 @@ export interface IStorage {
   deleteOldScreenerResults(params: { mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
 
   // Strategy settings methods
-  getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null>;
-  listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]>;
+  // B79.0n.STRATEGY (2026-05-24): assetClass added — REQUIRED on getStrategySettings (single-row
+  // lookup needs full key); OPTIONAL on listStrategySettings (cross-class iteration is a valid
+  // admin/UI use case; default behavior returns all classes for that context+mode).
+  getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string; assetClass: string }): Promise<StrategySettings | null>;
+  listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; assetClass?: string }): Promise<StrategySettings[]>;
   upsertStrategySettings(row: InsertStrategySettings): Promise<StrategySettings>;
   insertStrategySettingsAudit(row: InsertStrategySettingsAudit): Promise<void>;
   listStrategySettingsAudit(params: { limit?: number }): Promise<StrategySettingsAudit[]>;
@@ -1250,7 +1253,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Strategy settings methods (Phase 8.5 Addendum K.3 - Global Context)
-  async getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null> {
+  // B79.0n.STRATEGY (2026-05-24): assetClass parameter added to all method signatures.
+  // Existing callers MUST pass assetClass (REQUIRED at TS-compile per Langston Q-F gate).
+  // List signature defaults assetClass to undefined → returns all classes for back-compat
+  // with callers that legitimately want cross-class iteration (e.g., admin UI).
+  async getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string; assetClass: string }): Promise<StrategySettings | null> {
     const contextId = params.globalContextId || 'default';
     const [result] = await db
       .select()
@@ -1259,23 +1266,26 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(strategySettings.globalContextId, contextId),
           eq(strategySettings.mode, params.mode),
-          eq(strategySettings.strategy, params.strategy as any)
+          eq(strategySettings.strategy, params.strategy as any),
+          eq(strategySettings.assetClass, params.assetClass),
         )
       );
     return result || null;
   }
 
-  async listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]> {
+  async listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; assetClass?: string }): Promise<StrategySettings[]> {
     const contextId = params.globalContextId || 'default';
+    const whereClauses = [
+      eq(strategySettings.globalContextId, contextId),
+      eq(strategySettings.mode, params.mode),
+    ];
+    if (params.assetClass !== undefined) {
+      whereClauses.push(eq(strategySettings.assetClass, params.assetClass));
+    }
     return await db
       .select()
       .from(strategySettings)
-      .where(
-        and(
-          eq(strategySettings.globalContextId, contextId),
-          eq(strategySettings.mode, params.mode)
-        )
-      )
+      .where(and(...whereClauses))
       .orderBy(strategySettings.strategy);
   }
 
@@ -1284,7 +1294,7 @@ export class DatabaseStorage implements IStorage {
       .insert(strategySettings)
       .values(row)
       .onConflictDoUpdate({
-        target: [strategySettings.globalContextId, strategySettings.mode, strategySettings.strategy],
+        target: [strategySettings.globalContextId, strategySettings.mode, strategySettings.strategy, strategySettings.assetClass],
         set: {
           enabled: row.enabled ?? true,
           params: row.params,

@@ -243,7 +243,9 @@ export class StrategyValidator {
       vwapVolumeMultiplier: '1.3' // Use correct key name and lower threshold
     } as any; // Type assertion for test settings
 
-    const signal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData);
+    // B79.0n.STRATEGY (2026-05-24): strategy-validator is crypto-only synthetic test
+    // engine. Threading 'crypto_spot' as const. Phase 16 register entry #136-l.
+    const signal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData, 'crypto_spot');
 
     const result: ValidationResult = {
       strategy: 'vwap_pullback',
@@ -292,7 +294,7 @@ export class StrategyValidator {
       targetMultiplier: 2.0
     };
 
-    const signal = this.strategyEngine.detectBreakout(priceData, params);
+    const signal = this.strategyEngine.detectBreakout(priceData, params, 'crypto_spot');
 
     const result: ValidationResult = {
       strategy: 'breakout',
@@ -341,7 +343,7 @@ export class StrategyValidator {
       volumeMultiplier: 1.3
     };
 
-    const signal = this.strategyEngine.detectMeanReversion(indicators, priceData, params);
+    const signal = this.strategyEngine.detectMeanReversion(indicators, priceData, params, 'crypto_spot');
 
     const result: ValidationResult = {
       strategy: 'mean_reversion',
@@ -379,7 +381,7 @@ export class StrategyValidator {
       invalidationBuffer: 0.3
     };
 
-    const signal = this.strategyEngine.detectRangeTrading(priceData, params);
+    const signal = this.strategyEngine.detectRangeTrading(priceData, params, 'crypto_spot');
 
     const result: ValidationResult = {
       strategy: 'range_trading',

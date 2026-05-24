@@ -378,7 +378,12 @@ export const STRATEGIES = {
   VWAP_BOUNCE: 'vwap_bounce' as const,
   VOLATILITY_EDGE: 'volatility_edge' as const,
   DHMA: 'dhma' as const,
-  LIQUIDITY_TRAP: 'liquidity_trap' as const
+  LIQUIDITY_TRAP: 'liquidity_trap' as const,
+  // B79.0n.STRATEGY (2026-05-24): STRATEGIES const completion — was 17, now 19.
+  // STRATEGY_DISPLAY_NAMES (lines 402-405) already had these two; this enum
+  // catches up. RISK-014 closure per SYSTEM_MANUAL §1878.
+  STRONG_BULL_TREND: 'strong_bull_trend' as const,  // B63
+  ORB: 'orb' as const,                              // B79.0d
 } as const;
 
 export const STRATEGY_DISPLAY_NAMES: Record<string, string> = {

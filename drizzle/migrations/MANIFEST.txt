@@ -106,3 +106,5 @@
 2026-05-21-b79-0n-universe-discovery.sql
 2026-05-21-b79-0n-storage-xstock-screener-filters-seed.sql
 2026-05-22-b79-0n-mce-dbs-per-class.sql
+2026-05-24a-b79-0n-strategy-enum-orb.sql
+2026-05-24-b79-0n-strategy-per-class.sql

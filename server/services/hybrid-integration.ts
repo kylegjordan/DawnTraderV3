@@ -205,21 +205,30 @@ export class HybridIntegrationService {
     return hybrids;
   }
 
-  private selectHybridStrategy(quant: QuantSignal, pattern: PatternSignal): HybridStrategyType {
-    const trendStrategies = ['sma_trend_ride', 'vwap_pullback', 'vwap_bounce'];
-    const momentumStrategies = ['breakout', 'dhma'];
-    const reversionStrategies = ['mean_reversion', 'range_trading'];
-    
-    if (trendStrategies.includes(quant.strategy)) {
-      return 'H1_TREND_SNIPER';
-    }
-    if (momentumStrategies.includes(quant.strategy)) {
-      return 'H2_SLINGSHOT';
-    }
-    if (reversionStrategies.includes(quant.strategy)) {
-      return 'H3_GATECRASHER';
-    }
-    return 'H4_MOMENTUM_LINK';
+  /**
+   * B79.0n.STRATEGY (2026-05-24): replaces legacy H1_TREND_SNIPER / H2_SLINGSHOT /
+   * H3_GATECRASHER / H4_MOMENTUM_LINK taxonomy (stale since canonical map was wired
+   * in Batch 13; BUG-007 closure per SYSTEM_MANUAL §1851). New mapping derives the
+   * canonical hybrid strategy from the pattern dimension of the confluence
+   * (per Directive 11.4H.6G PATTERN_TO_HYBRID).
+   *
+   * Fallback to 'quant_fallback' returns when the pattern doesn't match a canonical
+   * hybrid (rare — should only happen if a non-hybrid quant signal reaches this code
+   * path with a non-canonical pattern). Per Q-D Langston ACK, defensive-stronger
+   * alternative (throw) deferred to a separate HybridSignal-contract investigation.
+   */
+  private selectHybridStrategy(_quant: QuantSignal, pattern: PatternSignal): HybridStrategyType {
+    const PATTERN_TO_HYBRID: Record<string, HybridStrategyType> = {
+      MORNING_STAR:   'pivot_shift',
+      PINBAR:         'reverse_impulse',
+      ENGULFING:      'defensive_hedge',
+      TRI_STAR:       'adaptive_flow',
+      ABCD:           'volatility_edge',
+    };
+    const candidate = PATTERN_TO_HYBRID[pattern.pattern as string];
+    if (candidate) return candidate;
+    // Non-hybrid quant fallback — pattern doesn't map to a canonical hybrid.
+    return 'quant_fallback';
   }
 
   getHybridParamsInfo(): string {

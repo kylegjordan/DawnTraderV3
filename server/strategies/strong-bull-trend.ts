@@ -35,6 +35,7 @@
  */
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
+import type { AssetClass } from '@shared/asset-classes';
 import { parseCandles } from './strategy-helpers';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
@@ -66,15 +67,17 @@ const LOG_PREFIX = '[B63][STRONG_BULL_TREND]';
 export function detectStrongBullTrend(
   indicators: TechnicalIndicators,
   candles: any[],
-  _patternSignal: any | null
+  _patternSignal: any | null,
+  assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
 ): StrategySignal | null {
   const dbs = indicators.dbsScore ?? 0;
   const dbsSlope = indicators.dbsSlope ?? 0;
   const atr = indicators.atr ?? 0;
 
   // B72: bulk read all strategy levers from module_constants.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.strong_bull_trend', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const SBT_DONCHIAN_N            = c.donchian_lookback_bars;
   const SBT_BREAKOUT_BUFFER_ATR   = c.breakout_buffer_atr_mult;
@@ -88,10 +91,11 @@ export function detectStrongBullTrend(
 
   // B72: DBS routing-guard threshold from module_constants (group with the
   // 3 parallel guards in defensive_hedge / reverse_impulse / morning_star).
+  // B79.0n.STRATEGY: per-class resolver scope (value class-invariant; shape consistency).
   const sbtDbsMin = getCachedNumberRequired(
     'strategy_dbs_routing_guards',
     'dbs_min_threshold',
-    { exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*' },
+    { exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*' },
   );
 
   // ── Gate 1: DBS magnitude + sign (LONG only) ─────────────────────────────

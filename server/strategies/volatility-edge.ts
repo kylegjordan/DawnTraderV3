@@ -21,6 +21,7 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { PriceData } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 import {
   calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
   minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
@@ -66,11 +67,13 @@ const LOG_PREFIX   = '[12.3.2][VOLATILITY_EDGE]';
 export function detectVolatilityEdge(
   indicators: TechnicalIndicators,
   candles: any[],
-  patternSignal: PatternInput | null
+  patternSignal: PatternInput | null,
+  assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
 ): StrategySignal | null {
   // B72: bulk read all strategy levers from module_constants.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.volatility_edge', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const VE_A_VOL_MULT          = c.a_point_volume_threshold_multiplier;
   const VE_MIN_VOL_PERCENTILE  = c.min_volatility_percentile;

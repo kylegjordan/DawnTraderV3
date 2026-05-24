@@ -92,11 +92,15 @@ function getExpandedRegimeDescriptionFromCanonical(regime: string): ExpandedRegi
   const canonicalRegime = normalizeRegime(regime);
   const narrative = REGIME_NARRATIVES[canonicalRegime];
 
+  // B79.0n.STRATEGY (2026-05-24): global regime descriptions are crypto-centric pending
+  // Phase 17 UI consolidation (per-asset-class regime tabs). Hardcoded 'crypto_spot' here
+  // preserves byte-identical behavior — pre-batch the map was flat (no asset_class scope);
+  // post-batch the crypto subtree of v3.0.0 is byte-identical to the flat shape.
   return {
     title: narrative.title,
     description: narrative.description,
-    favoredStrategies: getFavoredStrategiesForRegime(canonicalRegime),
-    favoredSignalTypes: getFavoredSignalTypesForRegime(canonicalRegime)
+    favoredStrategies: getFavoredStrategiesForRegime(canonicalRegime, 'crypto_spot'),
+    favoredSignalTypes: getFavoredSignalTypesForRegime(canonicalRegime, 'crypto_spot')
   };
 }
 
@@ -291,8 +295,14 @@ export function getMarketIndicators(): MarketIndicators {
   const frictionStatus = describeFriction(frictionResult.score);
 
   // Directive 11.4H.6A Task 1: Use strategy mapper for dynamic regime-based strategies/signals
-  const favoredStrategies = getFavoredStrategiesForRegime(regimeKey);
-  const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey);
+  // B79.0n.STRATEGY (2026-05-24): global market-indicators view is crypto-centric (single
+  // global regime per the system's pre-multi-asset architecture). Per-asset-class regime
+  // routing happens at MCE → mceContext.regime.allowedStrategies (orchestrator line 1506);
+  // this function provides the global summary for the UI. Threading 'crypto_spot' here
+  // preserves byte-identical pre-batch behavior. Phase 17 UI consolidation may add a
+  // per-asset-class global regime view.
+  const favoredStrategies = getFavoredStrategiesForRegime(regimeKey, 'crypto_spot');
+  const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey, 'crypto_spot');
 
   console.log(`[Phase14][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
   // Directive 11.4H.6G: Canonical logging for regime-strategy mapping

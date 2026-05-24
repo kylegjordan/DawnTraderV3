@@ -47,7 +47,12 @@ export const strategyTypeEnum = pgEnum("strategy_type", [
   "adaptive_flow",
   "volatility_edge",
   // B63: Strong Bull Trend (Path D) — QUANT, LONG-only, exclusive quant-strong_trend routing
-  "strong_bull_trend"
+  "strong_bull_trend",
+  // B79.0d: Opening Range Breakout — xstock_spot QUANT, 14:30–17:00 UTC active window
+  // (added to enum in B79.0n.STRATEGY 2026-05-24 — B79.0d shipped detect + module_constants
+  // rows; CORE_STRATEGIES updated to 19; this enum addition closes the strategy_settings
+  // schema-vs-code mismatch surfaced by `npx tsc --noEmit` post-CORE_STRATEGIES update).
+  "orb"
 ]);
 export const tradeStatusEnum = pgEnum("trade_status", ["open", "closed", "cancelled"]);
 export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
@@ -589,28 +594,34 @@ export const regimeFactorAlternates = pgTable("regime_factor_alternates", {
 export type RegimeFactorAlternate = typeof regimeFactorAlternates.$inferSelect;
 export type InsertRegimeFactorAlternate = typeof regimeFactorAlternates.$inferInsert;
 
-// Strategy Settings (per mode, per user, per strategy)
-// Phase 2C: Single-tenant - userId removed
+// Strategy Settings (per mode, per asset class, per strategy)
+// Phase 2C: Single-tenant — userId removed.
+// B79.0n.STRATEGY (2026-05-24): asset_class column added (NOT NULL after backfill);
+// UNIQUE constraint swapped to (globalContextId, mode, strategy, asset_class). Migration
+// at 2026-05-24-b79-0n-strategy-per-class.sql.
 export const strategySettings = pgTable("strategy_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
+  assetClass: varchar("asset_class", { length: 20 }).notNull(),  // B79.0n.STRATEGY
   enabled: boolean("enabled").notNull().default(true),
   params: jsonb("params").notNull(),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueGlobalContextModeStrategy: uniqueIndex("strategy_settings_global_context_mode_strategy_idx").on(table.globalContextId, table.mode, table.strategy),
+  uniqueGlobalContextModeStrategyAssetClass: uniqueIndex("strategy_settings_global_context_mode_strategy_asset_class_idx").on(table.globalContextId, table.mode, table.strategy, table.assetClass),
 }));
 
 // Strategy Settings Audit Log - GLOBAL per mode
+// B79.0n.STRATEGY: same asset_class addition for audit-table parity (per Langston gov flag).
 export const strategySettingsAudit = pgTable("strategy_settings_audit", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
+  assetClass: varchar("asset_class", { length: 20 }).notNull(),  // B79.0n.STRATEGY
   prevParams: jsonb("prev_params"),
   nextParams: jsonb("next_params").notNull(),
   actorType: text("actor_type").notNull(), // 'user' | 'ai'

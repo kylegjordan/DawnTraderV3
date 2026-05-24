@@ -17,6 +17,7 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { PriceData } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 import {
   calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
   minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
@@ -61,11 +62,13 @@ const LOG_PREFIX   = '[12.3.2][REVERSE_IMPULSE]';
 export function detectReverseImpulse(
   indicators: TechnicalIndicators,
   candles: any[],
-  patternSignal: PatternInput | null
+  patternSignal: PatternInput | null,
+  assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
 ): StrategySignal | null {
   // B72: bulk read all strategy levers from module_constants.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.reverse_impulse', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const RI_MIN_STRENGTH       = c.min_pattern_strength;
   const RI_MOMENTUM_THRESHOLD = c.momentum_threshold_negative;
@@ -81,10 +84,11 @@ export function detectReverseImpulse(
 
   // B63 + B72: Belt-and-braces for Path D LONG-only leak.
   // Threshold sourced from module_constants (group with strong_bull_trend).
+  // B79.0n.STRATEGY: per-class resolver scope (value class-invariant; shape consistency).
   const dbsGuardThreshold = getCachedNumberRequired(
     'strategy_dbs_routing_guards',
     'dbs_min_threshold',
-    { exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*' },
+    { exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*' },
   );
   if (((indicators as any).dbsScore ?? 0) >= dbsGuardThreshold) {
     setNullReason('b63_strong_dbs_exclusion');

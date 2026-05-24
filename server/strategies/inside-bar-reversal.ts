@@ -24,6 +24,7 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { PriceData } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 import {
   calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
   minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
@@ -64,13 +65,15 @@ const LOG_PREFIX = '[12.3.2][INSIDE_BAR_REVERSAL]';
 export function detectInsideBarReversal(
   indicators: TechnicalIndicators,
   candles: any[],
-  patternSignal: PatternInput | null
+  patternSignal: PatternInput | null,
+  assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
 
   // B72: bulk read all strategy levers from module_constants.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.inside_bar_reversal', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const IB_MAX_COMPRESSION    = c.max_compression_ratio;
   const IB_VOL_MULT           = c.volume_threshold_multiplier;
@@ -149,13 +152,13 @@ export function detectInsideBarReversal(
 
   // ── Condition 5: RSI filter ──────────────────────────────────────────────
   const rsi = calculateRSI(ohlc, 14);
-  if (direction === 'BUY' && rsi >= 65) {
+  // B79.0n.STRATEGY (2026-05-24): SELL branch dead-code removed (cleanup surfaced by
+  // tsc TS2367 narrowing — direction is constrained to 'BUY' literal at line 136 since
+  // B79.0m.b2's LONG-only enforcement at lines 131-135 returns null for all SELL paths).
+  // Pre-cleanup the SELL RSI filter at the removed line was unreachable. IB_SELL_RSI_MIN
+  // module_constant retained for documentation; can be removed in Phase 16 cleanup pass.
+  if (rsi >= 65) {
     console.log(`${LOG_PREFIX} BUY RSI filter: RSI=${rsi.toFixed(2)} >= 65. Skipping.`);
-    setNullReason('indicator_filter');
-    return null;
-  }
-  if (direction === 'SELL' && rsi <= IB_SELL_RSI_MIN) {
-    console.log(`${LOG_PREFIX} SELL RSI filter: RSI=${rsi.toFixed(2)} <= ${IB_SELL_RSI_MIN}. Skipping.`);
     setNullReason('indicator_filter');
     return null;
   }
@@ -173,15 +176,11 @@ export function detectInsideBarReversal(
   let stopPrice: number;
   let targetPrice: number;
 
-  if (direction === 'BUY') {
-    entryPrice  = parentHigh * (1 + IB_BREAKOUT_BUFFER);
-    stopPrice   = parentLow * (1 - IB_STOP_BUFFER);
-    targetPrice = entryPrice + IB_TARGET_ATR_MULT * effectiveATR;
-  } else {
-    entryPrice  = parentLow * (1 - IB_BREAKOUT_BUFFER);
-    stopPrice   = parentHigh * (1 + IB_STOP_BUFFER);
-    targetPrice = entryPrice - IB_TARGET_ATR_MULT * effectiveATR;
-  }
+  // B79.0n.STRATEGY: SELL branch dead-code removed per tsc narrowing.
+  // direction is always 'BUY' here (see line 136 explicit type annotation).
+  entryPrice  = parentHigh * (1 + IB_BREAKOUT_BUFFER);
+  stopPrice   = parentLow * (1 - IB_STOP_BUFFER);
+  targetPrice = entryPrice + IB_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {

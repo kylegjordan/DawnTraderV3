@@ -23,6 +23,7 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { PriceData } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 import {
   calculateATR, calculateRSI, calculateSMA, calculateAvgVolume, calculateMomentum,
   minMomentum, calculateADXSeries, calculateADX, calculateReturnStdDev,
@@ -62,13 +63,15 @@ const LOG_PREFIX = '[12.3.2][PIVOT_SHIFT]';
 export function detectPivotShift(
   indicators: TechnicalIndicators,
   candles: any[],
-  patternSignal: PatternInput | null
+  patternSignal: PatternInput | null,
+  assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
 ): StrategySignal | null {
   const { currentPrice, volume } = indicators;
 
   // B72: bulk read all strategy levers from module_constants.
+  // B79.0n.STRATEGY: per-class resolver scope.
   const c = getCachedNumbersForModule('strategy.pivot_shift', {
-    exchange: '*', assetClass: '*', strategy: STRATEGY_KEY, regime: '*',
+    exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*',
   });
   const PS_RSI_LOW           = c.rsi_neutral_zone_low;
   const PS_RSI_HIGH          = c.rsi_neutral_zone_high;

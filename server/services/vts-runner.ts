@@ -814,41 +814,45 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
  * Phase 14 HF6: Call strategy-specific detect function.
  * Maps strategy name to the correct StrategyEngine detect method.
  * Uses the EXACT same parameters as the signal orchestrator for parity.
+ *
+ * B79.0n.STRATEGY (2026-05-24): `symbol` + `assetClass` promoted from optional
+ * to REQUIRED. The B79.0j fail-safe at the orb case is removed because the
+ * TypeScript REQUIRED-parameter discipline now catches missing-arg sites at
+ * compile time — no runtime null-return needed.
+ *
+ * B79.0m.b: exported so xstock-side eval-cycle.ts can dispatch strategy detect
+ * without duplicating the per-strategy switch. Crypto path inside this module
+ * still calls it locally (unchanged behavior).
  */
-// B79.0m.b: exported so xstock-side eval-cycle.ts can dispatch strategy detect
-// without duplicating the per-strategy switch. Crypto path inside this module
-// still calls it locally (unchanged behavior).
 export function callStrategyDetect(
   strategy: string,
   indicators: any,
   ohlcData: any[],
   patternInput: PatternInput | null,
-  // B79.0j (2026-05-10): added for ORB which requires symbol + assetClass ctx.
-  // Pre-existing dispatchers ignore these — additive, no behavior change.
-  symbol?: string,
-  assetClass?: string,
+  symbol: string,         // B79.0n.STRATEGY — REQUIRED (was optional)
+  assetClass: AssetClass, // B79.0n.STRATEGY — REQUIRED + typed (was optional `string`)
 ): StrategySignal | null {
   switch (strategy) {
     // ── Quant strategies ──
     case 'vwap_pullback':
-      return strategyEngine.detectVWAPPullback(indicators, STRATEGY_CALL_SETTINGS, ohlcData);
+      return strategyEngine.detectVWAPPullback(indicators, STRATEGY_CALL_SETTINGS, ohlcData, assetClass);
     case 'abcd_long':
-      return strategyEngine.detectABCDLong(ohlcData, STRATEGY_CALL_SETTINGS);
+      return strategyEngine.detectABCDLong(ohlcData, STRATEGY_CALL_SETTINGS, assetClass);
     case 'sma_trend_ride':
-      return strategyEngine.detectSMATrendRide(indicators, ohlcData, STRATEGY_CALL_SETTINGS);
+      return strategyEngine.detectSMATrendRide(indicators, ohlcData, STRATEGY_CALL_SETTINGS, assetClass);
     case 'breakout':
       // B72.2: detector reads params from module_constants 'strategy.breakout'.
-      return strategyEngine.detectBreakout(ohlcData, {});
+      return strategyEngine.detectBreakout(ohlcData, {}, assetClass);
     case 'mean_reversion':
       // B72.2: detector reads params from module_constants 'strategy.mean_reversion'.
-      return strategyEngine.detectMeanReversion(indicators, ohlcData, {});
+      return strategyEngine.detectMeanReversion(indicators, ohlcData, {}, assetClass);
     case 'range_trading':
     case 'range_trade':  // HF6B: Alias for canonical strategy map name
       // B72.2: detector reads params from module_constants 'strategy.range_trade'.
-      return strategyEngine.detectRangeTrading(ohlcData, {});
+      return strategyEngine.detectRangeTrading(ohlcData, {}, assetClass);
     case 'vwap_bounce':
       // B72.2: detector reads params from module_constants 'strategy.vwap_bounce'.
-      return strategyEngine.detectVWAPBounce(indicators, ohlcData, {});
+      return strategyEngine.detectVWAPBounce(indicators, ohlcData, {}, assetClass);
     case 'liquidity_trap':
       // Batch 45: DISABLED — strategy produces bearish geometry (stop > entry, target < entry)
       // which is incompatible with long-only system. Confirmed by system manual spec and
@@ -858,39 +862,31 @@ export function callStrategyDetect(
       return null;
     case 'dhma':
       // B72.2: detector reads params from module_constants 'strategy.dhma'.
-      return strategyEngine.detectDHMA(indicators, ohlcData, {});
+      return strategyEngine.detectDHMA(indicators, ohlcData, {}, assetClass);
     // ── Pattern + Hybrid strategies ──
     case 'morning_star':
-      return strategyEngine.detectMorningStar(indicators, ohlcData, patternInput);
+      return strategyEngine.detectMorningStar(indicators, ohlcData, patternInput, assetClass);
     case 'inside_bar_reversal':
-      return strategyEngine.detectInsideBarReversal(indicators, ohlcData, patternInput);
+      return strategyEngine.detectInsideBarReversal(indicators, ohlcData, patternInput, assetClass);
     case 'support_bounce':
-      return strategyEngine.detectSupportBounce(indicators, ohlcData, patternInput);
+      return strategyEngine.detectSupportBounce(indicators, ohlcData, patternInput, assetClass);
     case 'pivot_shift':
-      return strategyEngine.detectPivotShift(indicators, ohlcData, patternInput);
+      return strategyEngine.detectPivotShift(indicators, ohlcData, patternInput, assetClass);
     case 'reverse_impulse':
-      return strategyEngine.detectReverseImpulse(indicators, ohlcData, patternInput);
+      return strategyEngine.detectReverseImpulse(indicators, ohlcData, patternInput, assetClass);
     case 'defensive_hedge':
       // Phase 14.1 HF8 (A3): Pass BTC candles for Spearman correlation (needs >= 32 candles)
-      return strategyEngine.detectDefensiveHedge(indicators, ohlcData, patternInput, btcOhlcCache.length >= 32 ? btcOhlcCache : undefined);
+      // B79.0n.STRATEGY: assetClass threads BEFORE btcCandles per wrapper signature.
+      return strategyEngine.detectDefensiveHedge(indicators, ohlcData, patternInput, btcOhlcCache.length >= 32 ? btcOhlcCache : undefined, assetClass);
     case 'adaptive_flow':
-      return strategyEngine.detectAdaptiveFlow(indicators, ohlcData, patternInput);
+      return strategyEngine.detectAdaptiveFlow(indicators, ohlcData, patternInput, assetClass);
     case 'volatility_edge':
-      return strategyEngine.detectVolatilityEdge(indicators, ohlcData, patternInput);
+      return strategyEngine.detectVolatilityEdge(indicators, ohlcData, patternInput, assetClass);
     // B63: Strong Bull Trend (Path D) — QUANT, LONG-only
     case 'strong_bull_trend':
-      return strategyEngine.detectStrongBullTrend(indicators, ohlcData, patternInput);
-    // B79.0d strategy registered in B79.0j VTS dispatch (was silently
-    // 100%-nulling on VTS path; orchestrator path was already correct).
-    // ORB needs symbol + assetClass ctx; both are passed by caller at
-    // line ~1010 once their threading is added.
+      return strategyEngine.detectStrongBullTrend(indicators, ohlcData, patternInput, assetClass);
+    // B79.0d strategy. B79.0n.STRATEGY: ctx promoted to REQUIRED; fail-safe removed.
     case 'orb':
-      if (!symbol || !assetClass) {
-        // Fail-safe: if caller hasn't been updated to thread symbol/assetClass,
-        // log once and null-return rather than silently mis-dispatching.
-        console.warn(`[B79.0j][VTS] orb dispatch missing symbol/assetClass ctx; null-return`);
-        return null;
-      }
       return strategyEngine.detectORB(symbol, ohlcData as any, indicators, { assetClass, symbol });
     default:
       console.warn(`[HF6][VTS] Unknown strategy: ${strategy}, no detect function available`);
