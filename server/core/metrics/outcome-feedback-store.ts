@@ -38,6 +38,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import type { FactorAlternate } from '../../services/factor-ablation-emitter.js';
 import type { RegimeDecision } from '../../services/factor-ablation-emitter.js';
 // B79.0n.CONFIDENCE-CHAIN (2026-05-25): per-class threading for metadata
@@ -224,7 +225,6 @@ class OutcomeFeedbackStore {
       }
       // Ensure the parent directory exists (idempotent — `data/` is part of
       // the staging deploy; the mkdir is defensive for fresh hosts + tests).
-      const path = require('path');
       const dir = path.dirname(PERSIST_FILE_NEW);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });

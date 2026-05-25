@@ -38,6 +38,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import type { OHLCData, RegimeConfig } from '../../types/market-regime.types';
 import { calculatePairRegime } from './market-regime';
 // B79.0n.MCE: AssetClass threaded through BackfillContext so the backfill
@@ -205,7 +206,6 @@ class RegimePhaseStore {
       for (const [symbol, entry] of this.entries) {
         data[symbol] = entry;
       }
-      const path = require('path');
       const dir = path.dirname(PERSIST_FILE_NEW);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
