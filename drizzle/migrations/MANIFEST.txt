@@ -109,3 +109,4 @@
 2026-05-24a-b79-0n-strategy-enum-orb.sql
 2026-05-24-b79-0n-strategy-per-class.sql
 2026-05-24b-b79-0n-pattern-detect-naming-converge.sql
+2026-05-25-b79-0n-confidence-chain-per-class-seed.sql
