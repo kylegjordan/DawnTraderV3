@@ -113,6 +113,59 @@ function parseTickerSnap(data: any): void {
   state.cumulativeTickerSnaps++;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// B-NEW-44 (2026-05-25) — Diagnostic observability for non-data WS messages.
+//
+// Pre-existing behavior: handleMessage routed only `channel:'ohlc'` and
+// `channel:'ticker'` data messages and silently dropped everything else.
+// That made Kraken's subscribe-acknowledgements, errors, and status messages
+// invisible — when the ohlc channel went silent on 2026-05-25 we had no way
+// to tell whether the subscribe was rejected, accepted-with-warning, or
+// accepted-cleanly-but-silent.
+//
+// This addition surfaces non-data messages for forensic inspection without
+// changing routing behavior. Rate-limited per-key (1/60s) per Langston
+// review refinement so recurring heartbeats don't flood logs long-term.
+//
+// PERMANENT observability, not a temporary debug switch. Reference:
+// `Claude Comms and Packages/Langston Design Asks/B_NEW_36_XSTOCK_OHLC_DIAGNOSTIC_2026-05-25.md`.
+// ═════════════════════════════════════════════════════════════════════════════
+const DIAG_NON_DATA_LOG_INTERVAL_MS = 60_000;
+const seenNonDataKeys = new Map<string, number>();
+
+function classifyNonDataKey(msg: any): string {
+  if (typeof msg?.method === 'string') return `method:${msg.method}`;
+  if (msg?.error != null) {
+    const code = msg.error.code ?? msg.error.message ?? 'unknown';
+    return `error:${String(code)}`;
+  }
+  if (typeof msg?.channel === 'string') return `channel:${msg.channel}`;
+  return 'other';
+}
+
+function logDiagNonDataMessage(msg: any): void {
+  const key = classifyNonDataKey(msg);
+  const now = Date.now();
+  const last = seenNonDataKeys.get(key) ?? 0;
+  if (now - last < DIAG_NON_DATA_LOG_INTERVAL_MS) return;
+  seenNonDataKeys.set(key, now);
+  let payload: string;
+  try {
+    payload = JSON.stringify(msg);
+  } catch {
+    payload = '<unserializable>';
+  }
+  const truncated = payload.length > 800 ? `${payload.slice(0, 800)}...[truncated ${payload.length - 800}b]` : payload;
+  console.log(`[B74][equity-spot][DIAG] non-data message (key=${key}): ${truncated}`);
+}
+
+// Test-only export — allows unit tests to clear rate-limit state between cases.
+export function _resetDiagNonDataState(): void {
+  seenNonDataKeys.clear();
+}
+
+export { logDiagNonDataMessage as _logDiagNonDataMessageForTests };
+
 function handleMessage(raw: WebSocket.RawData): void {
   state.lastMsgAt = Date.now();
   let msg: any;
@@ -125,6 +178,11 @@ function handleMessage(raw: WebSocket.RawData): void {
     for (const bar of msg.data) parseOhlcBar(bar);
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
     for (const snap of msg.data) parseTickerSnap(snap);
+  } else {
+    // B-NEW-44: route everything that isn't an ohlc/ticker data message into
+    // the diagnostic logger. Includes subscribe-ack, errors, status updates,
+    // and any future channels Kraken introduces.
+    logDiagNonDataMessage(msg);
   }
 }
 
