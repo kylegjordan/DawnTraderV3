@@ -1368,13 +1368,22 @@ export class PaperExecutionEngine {
         const { getMarketContextEngine } = await import('./market-context-engine.js');
         const cfg = getMarketContextEngine().getCurrentOutcomeFeedbackConfig();
         if (cfg !== null) {
-          outcomeFeedbackStore.updateEma(
-            regimeAtOpen,
-            strategyName,
-            netPnlPercent,
-            cfg.alpha,
-            Date.now(),
-          );
+          // B79.0n.CONFIDENCE-CHAIN: per-class store key — resolve from
+          // position.symbol via safeResolveAssetClass + skip if unresolvable
+          // (rare; logs WARN). Per-class isolation prevents crypto outcome
+          // contamination of xstock signals and vice-versa.
+          const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+          const _assetClass = safeResolveAssetClass(position.symbol, 'kraken');
+          if (_assetClass !== null) {
+            outcomeFeedbackStore.updateEma(
+              _assetClass,
+              regimeAtOpen,
+              strategyName,
+              netPnlPercent,
+              cfg.alpha,
+              Date.now(),
+            );
+          }
         }
       }
     } catch (err) {

@@ -809,7 +809,8 @@ export class SignalOrchestrator {
 
       // ── B67.4 outcome feedback ────────────────────────────────────────
       if (outcomeFeedbackConfig !== null) {
-        const entry = outcomeFeedbackStore.peek(regimeLabel, strategyKey);
+        // B79.0n.CONFIDENCE-CHAIN: per-class store key isolation.
+        const entry = outcomeFeedbackStore.peek(_pairAssetClass, regimeLabel, strategyKey);
         const outcome = computeOutcomeFeedbackFactor(entry, outcomeFeedbackConfig, _pairAssetClass);
         modulatedConfChain *= outcome.factor;
         alternateInputs.push({

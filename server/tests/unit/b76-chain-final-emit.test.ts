@@ -51,22 +51,22 @@ function divideOutFixture(realConfidenceFinal: number, factor: number) {
 describe('B76 — buildB67_4Alternate divide-out semantics', () => {
   it('alt.conf = realConfidenceFinal / factor for normal factor', () => {
     const fix = divideOutFixture(0.6, 0.95);
-    const alt = buildB67_4Alternate(fix.realConfidenceFinal, 'TFS', { factor: fix.factor, coldStart: false }, {
+    const alt = buildB67_4Alternate(fix.realConfidenceFinal, 'TFS', { factor: fix.factor, coldStart: false, assetClass: 'crypto_spot' }, {
       regime: 'TFS', strategy: 'vwap_pullback', entry: undefined,
-    });
+    }, 'crypto_spot');
     expect(alt.factorName).toBe('b67_4_outcome_feedback');
     expect(alt.alternateDecision.confidence).toBeCloseTo(fix.expected, 6);
   });
   it('factor = 0 → no division (alt = real)', () => {
-    const alt = buildB67_4Alternate(0.6, 'TFS', { factor: 0, coldStart: true }, {
+    const alt = buildB67_4Alternate(0.6, 'TFS', { factor: 0, coldStart: true, assetClass: 'crypto_spot' }, {
       regime: 'TFS', strategy: 'x', entry: undefined,
-    });
+    }, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBe(0.6);
   });
   it('factor = 1.0 → idempotent (alt == real)', () => {
-    const alt = buildB67_4Alternate(0.6, 'TFS', { factor: 1.0, coldStart: false }, {
+    const alt = buildB67_4Alternate(0.6, 'TFS', { factor: 1.0, coldStart: false, assetClass: 'crypto_spot' }, {
       regime: 'TFS', strategy: 'x', entry: undefined,
-    });
+    }, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBeCloseTo(0.6, 6);
   });
 });
@@ -75,12 +75,12 @@ describe('B76 — buildB67_4Alternate divide-out semantics', () => {
 
 describe('B76 — buildB68_4Alternate divide-out semantics', () => {
   it('penalty factor (<1.0) → alt > real', () => {
-    const alt = buildB68_4Alternate(0.5, 'TFS', { factor: 0.92, coldStart: false, ageHours: 12 }, 6);
+    const alt = buildB68_4Alternate(0.5, 'TFS', { factor: 0.92, coldStart: false, ageHours: 12 }, 6, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBeGreaterThan(0.5);
     expect(alt.factorName).toBe('b68_4_regime_age');
   });
   it('boost factor (>1.0) → alt < real', () => {
-    const alt = buildB68_4Alternate(0.5, 'TFS', { factor: 1.05, coldStart: false, ageHours: 0 }, 6);
+    const alt = buildB68_4Alternate(0.5, 'TFS', { factor: 1.05, coldStart: false, ageHours: 0 }, 6, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBeLessThan(0.5);
   });
 });
@@ -89,12 +89,12 @@ describe('B76 — buildB68_4Alternate divide-out semantics', () => {
 
 describe('B76 — buildB67_2Alternate divide-by-weight semantics', () => {
   it('alt.conf = realConfidenceFinal / weight for normal weight', () => {
-    const alt = buildB67_2Alternate(0.6, 'TFS', 'PRIME', 1800, 'vwap_pullback', 0.9);
+    const alt = buildB67_2Alternate(0.6, 'TFS', 'PRIME', 1800, 'vwap_pullback', 0.9, 'crypto_spot');
     expect(alt.factorName).toBe('b67_2_phase_preference');
     expect(alt.alternateDecision.confidence).toBeCloseTo(0.6 / 0.9, 6);
   });
   it('weight = 0 → no division', () => {
-    const alt = buildB67_2Alternate(0.6, 'TFS', 'EARLY', 0, 'x', 0);
+    const alt = buildB67_2Alternate(0.6, 'TFS', 'EARLY', 0, 'x', 0, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBe(0.6);
   });
 });
@@ -110,21 +110,22 @@ describe('B76 — B68.1/B68.2/B68.3 divide-out parity', () => {
       coldStart: false,
     } as any, {
       higherTfIntervalMinutes: 240, minHigherTfSamples: 50, factorMin: 0.95, factorMax: 1.05,
-    } as any);
+    } as any, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBeCloseTo(0.7 / 0.97, 6);
   });
   it('B68.2: alt.conf = real / factor', () => {
     const alt = buildB68_2Alternate(0.7, 'TFS', {
       score: 0.1, factor: 0.96, label: 'NEUTRAL', sampleCount: 30,
       coldStart: false, hasLiquidationSpike: false,
-    } as any, { lookbackBars: 30 } as any);
+    } as any, { lookbackBars: 30 } as any, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBeCloseTo(0.7 / 0.96, 6);
   });
   it('B68.3: alt.conf = real / factor', () => {
     const alt = buildB68_3Alternate(0.7, 'TFS', {
       correlationToBtc: 0.5, decorrelationScore: 0.5, factor: 1.025, label: 'ORTHOGONAL',
       sampleCount: 50, coldStart: false, btcReferenceAvailable: true, isBtcSelfReference: false,
-    } as any, { lookbackBars: 50 } as any);
+      computeDisabled: false,
+    } as any, { lookbackBars: 50 } as any, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBeCloseTo(0.7 / 1.025, 6);
   });
 });

@@ -1673,7 +1673,8 @@ async function generatePhase10Signal(
 
     // ── B67.4 outcome feedback (cheap-tier bundle) ────────────────────
     if (_outcomeFeedbackConfig !== null) {
-      const entry = outcomeFeedbackStore.peek(_regimeLabel, strategy);
+      // B79.0n.CONFIDENCE-CHAIN: per-class store key isolation.
+      const entry = outcomeFeedbackStore.peek(_assetClass, _regimeLabel, strategy);
       const outcome = computeOutcomeFeedbackFactor(entry, _outcomeFeedbackConfig, _assetClass);
       _modulatedConfChain *= outcome.factor;
       _alternateInputs.push({

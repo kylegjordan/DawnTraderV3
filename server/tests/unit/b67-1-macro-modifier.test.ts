@@ -34,6 +34,8 @@ const DEFAULT_CONFIG: MacroModifierConfig = {
   modifierMax: 1.05,
   staleSeconds: 300,
   zScoreMinSampleCount: 48,
+  // B79.0n.CONFIDENCE-CHAIN: crypto path active; xstock has the no-op flag = true.
+  assetClassNoOpActive: false,
 };
 
 function freshSnapshot(overrides: Partial<MacroSnapshot> = {}): MacroSnapshot {
@@ -74,7 +76,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingRate: 0.00025, // mean=0.00005, sd=0.00002, z=+10
         mcapMomentum: 0.0,
       });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(0.85);
       expect(result.fallbackActive).toBe(false);
       expect(result.staleDataFlag).toBe(false);
@@ -88,7 +90,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingRate: -0.00015, // z=-10
         mcapMomentum: 0.05, // z=+10
       });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(1.05);
     });
 
@@ -98,7 +100,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingRate: 0.00005,
         mcapMomentum: 0.0,
       });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBeCloseTo(1.0, 6);
       expect(result.btcDomZ).toBeCloseTo(0, 6);
     });
@@ -111,7 +113,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingRate: 0.00005, // z=0
         mcapMomentum: 0.0, // z=0
       });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       // 1.0 + 0.40 × -1 + 0 + 0 = 0.60 → clamps to 0.85
       expect(result.value).toBe(0.85);
     });
@@ -122,7 +124,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingRate: 0.00007, // z=+1
         mcapMomentum: 0.0,
       });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       // 1.0 + 0 + 0.35 × -1 + 0 = 0.65 → clamps to 0.85
       expect(result.value).toBe(0.85);
     });
@@ -133,7 +135,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingRate: 0.00005, // z=0
         mcapMomentum: 0.005, // z=+1
       });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       // 1.0 + 0 + 0 + 0.25 × +1 = 1.25 → clamps to 1.05
       expect(result.value).toBe(1.05);
     });
@@ -150,7 +152,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingRate: 0.00010, // z = (0.0001-0.00005)/0.0005 = 0.1
         mcapMomentum: 0.005, // z = (0.005-0)/0.05 = 0.1
       });
-      const result = computeMacroModifier(snap, baseline, DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, baseline, DEFAULT_CONFIG, 'crypto_spot');
       // 1.0 + 0.40×-0.2 + 0.35×-0.1 + 0.25×0.1 = 1.0 - 0.08 - 0.035 + 0.025 = 0.91
       expect(result.value).toBeCloseTo(0.91, 4);
       expect(result.fallbackActive).toBe(false);
@@ -160,7 +162,7 @@ describe('B67.1 — computeMacroModifier', () => {
   describe('cold-start fallback (sample-count floor)', () => {
     it('forces modifier=1.0 + fallbackActive when btc baseline below floor', () => {
       const baseline = readyBaseline({ btcDominanceSampleCount: 47 });
-      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG);
+      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(1.0);
       expect(result.fallbackActive).toBe(true);
       expect(result.staleDataFlag).toBe(false);
@@ -168,14 +170,14 @@ describe('B67.1 — computeMacroModifier', () => {
 
     it('forces modifier=1.0 + fallbackActive when funding baseline below floor', () => {
       const baseline = readyBaseline({ fundingSampleCount: 10 });
-      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG);
+      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(1.0);
       expect(result.fallbackActive).toBe(true);
     });
 
     it('forces modifier=1.0 + fallbackActive when mcap baseline below floor', () => {
       const baseline = readyBaseline({ mcapMomentumSampleCount: 0 });
-      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG);
+      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(1.0);
       expect(result.fallbackActive).toBe(true);
     });
@@ -186,7 +188,7 @@ describe('B67.1 — computeMacroModifier', () => {
         fundingSampleCount: 48,
         mcapMomentumSampleCount: 48,
       });
-      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG);
+      const result = computeMacroModifier(freshSnapshot(), baseline, DEFAULT_CONFIG, 'crypto_spot');
       expect(result.fallbackActive).toBe(false);
     });
   });
@@ -194,7 +196,7 @@ describe('B67.1 — computeMacroModifier', () => {
   describe('stale-data fallback', () => {
     it('forces modifier=1.0 + staleDataFlag when snapshot age > staleSeconds', () => {
       const snap = freshSnapshot({ ageSeconds: 301 });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(1.0);
       expect(result.staleDataFlag).toBe(true);
       expect(result.fallbackActive).toBe(false);
@@ -203,7 +205,7 @@ describe('B67.1 — computeMacroModifier', () => {
     it('respects custom staleSeconds threshold', () => {
       const snap = freshSnapshot({ ageSeconds: 60 });
       const cfg = { ...DEFAULT_CONFIG, staleSeconds: 30 };
-      const result = computeMacroModifier(snap, readyBaseline(), cfg);
+      const result = computeMacroModifier(snap, readyBaseline(), cfg, 'crypto_spot');
       expect(result.staleDataFlag).toBe(true);
     });
   });
@@ -211,14 +213,14 @@ describe('B67.1 — computeMacroModifier', () => {
   describe('missing inputs', () => {
     it('triggers fallback when btcDominance is undefined', () => {
       const snap = freshSnapshot({ btcDominance: undefined });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(1.0);
       expect(result.fallbackActive).toBe(true);
     });
 
     it('triggers fallback when fundingRate is undefined', () => {
       const snap = freshSnapshot({ fundingRate: undefined });
-      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG);
+      const result = computeMacroModifier(snap, readyBaseline(), DEFAULT_CONFIG, 'crypto_spot');
       expect(result.value).toBe(1.0);
       expect(result.fallbackActive).toBe(true);
     });
@@ -250,7 +252,7 @@ describe('B67.1 — buildB67_1Alternates (per-input split)', () => {
   }
 
   it('returns 3 alternate rows, one per external input', () => {
-    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TREND_FRIENDLY_STABLE', true, BASE_CONFIG);
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TREND_FRIENDLY_STABLE', true, BASE_CONFIG, 'crypto_spot');
     expect(alts).toHaveLength(3);
     expect(alts.map((a) => a.factorName)).toEqual([
       'b67_1_btc_dominance',
@@ -271,7 +273,7 @@ describe('B67.1 — buildB67_1Alternates (per-input split)', () => {
     //   without_btc = clamp(1.0 - 0.105 - 0.025) = clamp 0.87 → 0.87 (within band)
     //   without_funding = clamp(1.0 - 0.20 - 0.025) = clamp 0.775 → 0.85
     //   without_mcap = clamp(1.0 - 0.20 - 0.105) = clamp 0.695 → 0.85
-    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG);
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG, 'crypto_spot');
     const btcAlt = alts.find((a) => a.factorName === 'b67_1_btc_dominance')!;
     const fundingAlt = alts.find((a) => a.factorName === 'b67_1_funding_rates')!;
     const mcapAlt = alts.find((a) => a.factorName === 'b67_1_mcap_momentum')!;
@@ -283,13 +285,13 @@ describe('B67.1 — buildB67_1Alternates (per-input split)', () => {
   it('confidence_without_factor reflects the counterfactual modifier ratio', () => {
     // confidence_without = modulated × (counterfactual / actual)
     // For btc: 0.736 × (0.87 / 0.92) ≈ 0.696
-    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG);
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG, 'crypto_spot');
     const btcAlt = alts.find((a) => a.factorName === 'b67_1_btc_dominance')!;
     expect(btcAlt.alternateDecision.metadata.confidence_without_factor).toBeCloseTo(0.736 * (0.87 / 0.92), 4);
   });
 
   it('preserves per-input metadata (z-score + weight) on each alternate', () => {
-    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG);
+    const alts = buildB67_1Alternates(0.736, makeModifier(), 'TFS', true, BASE_CONFIG, 'crypto_spot');
     const btcAlt = alts.find((a) => a.factorName === 'b67_1_btc_dominance')!;
     const fundingAlt = alts.find((a) => a.factorName === 'b67_1_funding_rates')!;
     const mcapAlt = alts.find((a) => a.factorName === 'b67_1_mcap_momentum')!;
@@ -309,7 +311,7 @@ describe('B67.1 — buildB67_1Alternates (per-input split)', () => {
       mcapZ: NaN,
       fallbackActive: true,
     });
-    const alts = buildB67_1Alternates(0.7, fallbackModifier, 'TFS', true, BASE_CONFIG);
+    const alts = buildB67_1Alternates(0.7, fallbackModifier, 'TFS', true, BASE_CONFIG, 'crypto_spot');
     expect(alts).toHaveLength(3);
     for (const alt of alts) {
       expect(alt.alternateDecision.metadata.counterfactual_modifier_value).toBe(1.0);
@@ -319,7 +321,7 @@ describe('B67.1 — buildB67_1Alternates (per-input split)', () => {
 
   it('handles modifier.value=0 edge case without division-by-zero', () => {
     const zeroModifier = makeModifier({ value: 0 });
-    const alts = buildB67_1Alternates(0.5, zeroModifier, 'TFS', true, BASE_CONFIG);
+    const alts = buildB67_1Alternates(0.5, zeroModifier, 'TFS', true, BASE_CONFIG, 'crypto_spot');
     for (const alt of alts) {
       // Ratio falls back to modulatedConfidence directly when actual modifier is 0
       expect(alt.alternateDecision.metadata.confidence_without_factor).toBe(0.5);

@@ -65,7 +65,23 @@ export interface OutcomeFeedbackConfig {
   expiryHours: number;
 }
 
-const PERSIST_FILE = '/tmp/b67-4-outcome-feedback.json';
+/**
+ * B79.0n.CONFIDENCE-CHAIN (2026-05-25):
+ *   - NEW path: persistent under `/home/deploy/dawntrader/data/` so the file
+ *     survives staging restarts (`/tmp/` was getting wiped on pm2 restart).
+ *   - LEGACY path: prior production location at `/tmp/`. On first boot post-
+ *     deploy the constructor reads from new-path first; if absent, falls back
+ *     to legacy + re-keys every entry under the `crypto_spot_` prefix (since
+ *     all pre-CONFIDENCE-CHAIN trades were crypto by construction) and writes
+ *     to the new path. Legacy file stays at its old location (will be wiped
+ *     on next pm2 restart but the data is already in the new path).
+ *   - HARD-FAIL on corrupt new-path data: per Langston Step 2 clarification 1,
+ *     the constructor does NOT silently fall back to legacy when the new path
+ *     is corrupt. Throws with a clear error message — operator investigates.
+ */
+const PERSIST_FILE_NEW = '/home/deploy/dawntrader/data/b67-4-outcome-feedback.json';
+const PERSIST_FILE_LEGACY = '/tmp/b67-4-outcome-feedback.json';
+
 /**
  * Constructor-time default expiry — used only for the load-from-disk sweep on
  * process startup, before MCE's first refresh has resolved the
@@ -82,42 +98,122 @@ class OutcomeFeedbackStore {
     this.loadFromDisk();
   }
 
-  private key(regime: string, strategy: string): string {
-    return `${regime}_${strategy}`;
+  /**
+   * B79.0n.CONFIDENCE-CHAIN: key shape is now `<assetClass>_<regime>_<strategy>`.
+   * Pre-CONFIDENCE-CHAIN shape was `<regime>_<strategy>` — disk-load migration
+   * re-keys legacy entries with `crypto_spot_` prefix on first boot.
+   */
+  private key(assetClass: string, regime: string, strategy: string): string {
+    return `${assetClass}_${regime}_${strategy}`;
+  }
+
+  /**
+   * Detect the legacy 2-token key shape (`<regime>_<strategy>`) vs the new
+   * 3-token shape (`<assetClass>_<regime>_<strategy>`). Legacy keys have
+   * exactly 1 underscore; new keys have at least 2. Used during the
+   * crypto_spot-prefix re-key migration.
+   *
+   * Edge case: regime + strategy names containing underscores (e.g.,
+   * `range_trade`) — both shapes have ≥1 underscore. We disambiguate by
+   * checking whether the FIRST token is a known asset class.
+   */
+  private isNewShapeKey(tupleKey: string): boolean {
+    // Known asset class prefixes — extend as ASSET_CLASSES grows.
+    const KNOWN_PREFIXES = ['crypto_spot_', 'crypto_perp_', 'xstock_spot_', 'xstock_perp_'];
+    return KNOWN_PREFIXES.some(p => tupleKey.startsWith(p));
   }
 
   private loadFromDisk(): void {
-    try {
-      if (!fs.existsSync(PERSIST_FILE)) return;
-      const raw = fs.readFileSync(PERSIST_FILE, 'utf-8');
-      const data = JSON.parse(raw) as Record<string, OutcomeFeedbackEntry>;
-      const now = Date.now();
-      let loaded = 0;
-      let expired = 0;
-      for (const [tupleKey, entry] of Object.entries(data)) {
-        if (
-          entry &&
-          Number.isFinite(entry.ema_pnl_pct) &&
-          Number.isFinite(entry.sample_count) &&
-          Number.isFinite(entry.last_update)
-        ) {
-          if (now - entry.last_update > DEFAULT_LOAD_EXPIRY_MS) {
-            expired++;
-            continue;
+    const now = Date.now();
+    // Try the NEW persistent path first.
+    if (fs.existsSync(PERSIST_FILE_NEW)) {
+      try {
+        const raw = fs.readFileSync(PERSIST_FILE_NEW, 'utf-8');
+        const data = JSON.parse(raw) as Record<string, OutcomeFeedbackEntry>;
+        let loaded = 0;
+        let expired = 0;
+        for (const [tupleKey, entry] of Object.entries(data)) {
+          if (
+            entry &&
+            Number.isFinite(entry.ema_pnl_pct) &&
+            Number.isFinite(entry.sample_count) &&
+            Number.isFinite(entry.last_update)
+          ) {
+            if (now - entry.last_update > DEFAULT_LOAD_EXPIRY_MS) {
+              expired++;
+              continue;
+            }
+            this.entries.set(tupleKey, entry);
+            loaded++;
           }
-          this.entries.set(tupleKey, entry);
-          loaded++;
         }
+        console.log(
+          `[B67.4][outcomeFeedbackStore] Loaded ${loaded} tuples from NEW path ${PERSIST_FILE_NEW} (expired ${expired})`,
+        );
+        return;
+      } catch (err) {
+        // HARD-FAIL on corrupt new-path data (Langston Step 2 clarification 1).
+        // No silent fallback to legacy — the file at the canonical path was
+        // unparseable and the legacy data may be stale; manual investigation
+        // is the correct response.
+        throw new Error(
+          `[B67.4][outcomeFeedbackStore][load-corrupt] new-path JSON at ${PERSIST_FILE_NEW} ` +
+          `is unparseable — cowardly refusing to silently fall back to legacy /tmp/ data ` +
+          `which may be stale. Manual investigation required. Inner error: ` +
+          (err instanceof Error ? err.message : String(err)),
+        );
       }
-      console.log(
-        `[B67.4][outcomeFeedbackStore] Loaded ${loaded} tuples from ${PERSIST_FILE} (expired ${expired})`,
-      );
-    } catch (err) {
-      console.warn(
-        '[B67.4][outcomeFeedbackStore] Failed to load persisted state:',
-        err instanceof Error ? err.message : err,
-      );
     }
+
+    // NEW path absent — try the LEGACY path + re-key under crypto_spot prefix.
+    if (fs.existsSync(PERSIST_FILE_LEGACY)) {
+      try {
+        const raw = fs.readFileSync(PERSIST_FILE_LEGACY, 'utf-8');
+        const data = JSON.parse(raw) as Record<string, OutcomeFeedbackEntry>;
+        let loaded = 0;
+        let expired = 0;
+        let rekeyed = 0;
+        for (const [tupleKey, entry] of Object.entries(data)) {
+          if (
+            entry &&
+            Number.isFinite(entry.ema_pnl_pct) &&
+            Number.isFinite(entry.sample_count) &&
+            Number.isFinite(entry.last_update)
+          ) {
+            if (now - entry.last_update > DEFAULT_LOAD_EXPIRY_MS) {
+              expired++;
+              continue;
+            }
+            // If the legacy entry already has a new-shape key (rare — only
+            // happens if a prior partial-migration left mixed entries), load
+            // it as-is. Otherwise re-key under crypto_spot prefix.
+            const newKey = this.isNewShapeKey(tupleKey)
+              ? tupleKey
+              : `crypto_spot_${tupleKey}`;
+            this.entries.set(newKey, entry);
+            if (newKey !== tupleKey) rekeyed++;
+            loaded++;
+          }
+        }
+        console.log(
+          `[B67.4][outcomeFeedbackStore] Loaded ${loaded} tuples from LEGACY path ${PERSIST_FILE_LEGACY} ` +
+          `(expired ${expired}, re-keyed ${rekeyed} under crypto_spot prefix); will persist to NEW path on next write`,
+        );
+        // Persist immediately to the new path so subsequent boots use it.
+        this.saveToDisk();
+      } catch (err) {
+        console.warn(
+          '[B67.4][outcomeFeedbackStore] Failed to load LEGACY persisted state:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+      return;
+    }
+
+    // Neither path exists — cold start.
+    console.log(
+      `[B67.4][outcomeFeedbackStore] Cold start — no persisted state at NEW or LEGACY path`,
+    );
   }
 
   private saveToDisk(): void {
@@ -126,7 +222,14 @@ class OutcomeFeedbackStore {
       for (const [tupleKey, entry] of this.entries) {
         data[tupleKey] = entry;
       }
-      fs.writeFileSync(PERSIST_FILE, JSON.stringify(data));
+      // Ensure the parent directory exists (idempotent — `data/` is part of
+      // the staging deploy; the mkdir is defensive for fresh hosts + tests).
+      const path = require('path');
+      const dir = path.dirname(PERSIST_FILE_NEW);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(PERSIST_FILE_NEW, JSON.stringify(data));
     } catch (err) {
       console.warn(
         '[B67.4][outcomeFeedbackStore] Failed to persist state:',
@@ -148,6 +251,7 @@ class OutcomeFeedbackStore {
    * Persists synchronously on every update (≤ 90 entries, ≤ 100B each → trivial).
    */
   updateEma(
+    assetClass: AssetClass,
     regime: string,
     strategy: string,
     netPnlPct: number,
@@ -156,17 +260,17 @@ class OutcomeFeedbackStore {
   ): void {
     if (!Number.isFinite(netPnlPct)) {
       console.warn(
-        `[B67.4][outcomeFeedbackStore] non-finite netPnlPct dropped: regime=${regime} strategy=${strategy} value=${netPnlPct}`,
+        `[B67.4][outcomeFeedbackStore] non-finite netPnlPct dropped: asset_class=${assetClass} regime=${regime} strategy=${strategy} value=${netPnlPct}`,
       );
       return;
     }
     if (!Number.isFinite(alpha) || alpha <= 0 || alpha > 1) {
       console.warn(
-        `[B67.4][outcomeFeedbackStore] invalid alpha dropped: regime=${regime} strategy=${strategy} value=${alpha}`,
+        `[B67.4][outcomeFeedbackStore] invalid alpha dropped: asset_class=${assetClass} regime=${regime} strategy=${strategy} value=${alpha}`,
       );
       return;
     }
-    const k = this.key(regime, strategy);
+    const k = this.key(assetClass, regime, strategy);
     const existing = this.entries.get(k);
     let nextEma: number;
     let nextCount: number;
@@ -185,7 +289,7 @@ class OutcomeFeedbackStore {
     });
     this.saveToDisk();
     console.log(
-      `[B67.4][feedback] regime=${regime} strategy=${strategy} ` +
+      `[B67.4][feedback] asset_class=${assetClass} regime=${regime} strategy=${strategy} ` +
         `ema_pnl_pct=${nextEma.toFixed(3)} sample_count=${nextCount}`,
     );
   }
@@ -193,9 +297,10 @@ class OutcomeFeedbackStore {
   /**
    * Read accessor — returns the entry for a tuple, or undefined if untracked.
    * Caller must NOT mutate the returned object.
+   * B79.0n.CONFIDENCE-CHAIN: REQUIRED-assetClass for per-class isolation.
    */
-  peek(regime: string, strategy: string): OutcomeFeedbackEntry | undefined {
-    return this.entries.get(this.key(regime, strategy));
+  peek(assetClass: AssetClass, regime: string, strategy: string): OutcomeFeedbackEntry | undefined {
+    return this.entries.get(this.key(assetClass, regime, strategy));
   }
 
   /** Number of tracked tuples. Diagnostic. */

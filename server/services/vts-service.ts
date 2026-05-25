@@ -926,13 +926,20 @@ export class VTSService extends EventEmitter {
       const notional = tradeData.positionSize * tradeData.entryPrice;
       if (cfg !== null && notional > 0 && Number.isFinite(tradeData.pnl)) {
         const netPnlPct = (tradeData.pnl / notional) * 100;
-        outcomeFeedbackStore.updateEma(
-          tradeData.regime,
-          tradeData.strategy,
-          netPnlPct,
-          cfg.alpha,
-          Date.now(),
-        );
+        // B79.0n.CONFIDENCE-CHAIN: per-class store key — resolve via the
+        // tradeData.symbol so VTS-side close hooks isolate crypto vs xstock.
+        const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+        const _assetClass = safeResolveAssetClass(tradeData.symbol, 'kraken');
+        if (_assetClass !== null) {
+          outcomeFeedbackStore.updateEma(
+            _assetClass,
+            tradeData.regime,
+            tradeData.strategy,
+            netPnlPct,
+            cfg.alpha,
+            Date.now(),
+          );
+        }
       }
     } catch (err) {
       console.warn(

@@ -103,7 +103,17 @@ interface PairPhaseEntry {
 // from the prior process. Without this, every PM2 restart resets every
 // pair's age to 0 → all pairs show EARLY for the first 2h, the dashboard
 // is uninformative.
-const PERSIST_FILE = '/tmp/regime-phase-store.json';
+/**
+ * B79.0n.CONFIDENCE-CHAIN (2026-05-25): persistent path moved out of /tmp/
+ * (which gets wiped on pm2 restart) into /home/deploy/dawntrader/data/. Same
+ * path-family as outcomeFeedbackStore + paper-portfolio-manager state. The
+ * constructor prefers the new path; falls back to legacy /tmp/ for one
+ * migration cycle. Unlike outcomeFeedbackStore, there is NO key-shape
+ * change — the phase store has always been keyed by `symbol` (asset class
+ * doesn't enter the key because symbols don't collide cross-class).
+ */
+const PERSIST_FILE_NEW = '/home/deploy/dawntrader/data/regime-phase-store.json';
+const PERSIST_FILE_LEGACY = '/tmp/regime-phase-store.json';
 const STALE_HARD_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h: drop entries older than this
 
 class RegimePhaseStore {
@@ -115,34 +125,78 @@ class RegimePhaseStore {
   }
 
   private loadFromDisk(): void {
-    try {
-      if (!fs.existsSync(PERSIST_FILE)) return;
-      const raw = fs.readFileSync(PERSIST_FILE, 'utf-8');
-      const data = JSON.parse(raw) as Record<string, PairPhaseEntry>;
-      const now = Date.now();
-      let loaded = 0;
-      let expired = 0;
-      for (const [symbol, entry] of Object.entries(data)) {
-        if (entry && entry.regime && Number.isFinite(entry.enteredAt)) {
-          // Drop entries whose lastSeenAt is older than 24h — they're
-          // probably stale from a long-ago run, not relevant to current state.
-          if (entry.lastSeenAt && now - entry.lastSeenAt > STALE_HARD_EXPIRY_MS) {
-            expired++;
-            continue;
+    const now = Date.now();
+    // B79.0n.CONFIDENCE-CHAIN: try NEW persistent path first.
+    if (fs.existsSync(PERSIST_FILE_NEW)) {
+      try {
+        const raw = fs.readFileSync(PERSIST_FILE_NEW, 'utf-8');
+        const data = JSON.parse(raw) as Record<string, PairPhaseEntry>;
+        let loaded = 0;
+        let expired = 0;
+        for (const [symbol, entry] of Object.entries(data)) {
+          if (entry && entry.regime && Number.isFinite(entry.enteredAt)) {
+            if (entry.lastSeenAt && now - entry.lastSeenAt > STALE_HARD_EXPIRY_MS) {
+              expired++;
+              continue;
+            }
+            this.entries.set(symbol, entry);
+            loaded++;
           }
-          this.entries.set(symbol, entry);
-          loaded++;
         }
+        console.log(
+          `[B67.2][regimePhaseStore] Loaded ${loaded} pairs from NEW path ${PERSIST_FILE_NEW} (expired ${expired})`,
+        );
+        return;
+      } catch (err) {
+        // HARD-FAIL on corrupt new-path data — no silent fallback to legacy
+        // (consistent with outcomeFeedbackStore disposition per Langston Step 2
+        // clarification 1).
+        throw new Error(
+          `[B67.2][regimePhaseStore][load-corrupt] new-path JSON at ${PERSIST_FILE_NEW} ` +
+          `is unparseable — cowardly refusing to silently fall back to legacy /tmp/ data. ` +
+          `Manual investigation required. Inner error: ` +
+          (err instanceof Error ? err.message : String(err)),
+        );
       }
-      console.log(
-        `[B67.2][regimePhaseStore] Loaded ${loaded} pairs from ${PERSIST_FILE} (expired ${expired})`,
-      );
-    } catch (err) {
-      console.warn(
-        '[B67.2][regimePhaseStore] Failed to load persisted state:',
-        err instanceof Error ? err.message : err,
-      );
     }
+
+    // NEW path absent — fall back to LEGACY /tmp/ once. No re-key needed
+    // (regime-phase-store has always been symbol-keyed; B79.0n.CONFIDENCE-CHAIN
+    // only changes the file path).
+    if (fs.existsSync(PERSIST_FILE_LEGACY)) {
+      try {
+        const raw = fs.readFileSync(PERSIST_FILE_LEGACY, 'utf-8');
+        const data = JSON.parse(raw) as Record<string, PairPhaseEntry>;
+        let loaded = 0;
+        let expired = 0;
+        for (const [symbol, entry] of Object.entries(data)) {
+          if (entry && entry.regime && Number.isFinite(entry.enteredAt)) {
+            if (entry.lastSeenAt && now - entry.lastSeenAt > STALE_HARD_EXPIRY_MS) {
+              expired++;
+              continue;
+            }
+            this.entries.set(symbol, entry);
+            loaded++;
+          }
+        }
+        console.log(
+          `[B67.2][regimePhaseStore] Loaded ${loaded} pairs from LEGACY path ${PERSIST_FILE_LEGACY} ` +
+          `(expired ${expired}); will persist to NEW path on next write`,
+        );
+        // Persist immediately to the new path so subsequent boots use it.
+        this.saveToDisk();
+      } catch (err) {
+        console.warn(
+          '[B67.2][regimePhaseStore] Failed to load LEGACY persisted state:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+      return;
+    }
+
+    console.log(
+      `[B67.2][regimePhaseStore] Cold start — no persisted state at NEW or LEGACY path`,
+    );
   }
 
   private saveToDisk(): void {
@@ -151,7 +205,12 @@ class RegimePhaseStore {
       for (const [symbol, entry] of this.entries) {
         data[symbol] = entry;
       }
-      fs.writeFileSync(PERSIST_FILE, JSON.stringify(data));
+      const path = require('path');
+      const dir = path.dirname(PERSIST_FILE_NEW);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(PERSIST_FILE_NEW, JSON.stringify(data));
       this.dirty = false;
     } catch (err) {
       console.warn(
