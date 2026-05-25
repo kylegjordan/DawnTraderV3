@@ -1,8 +1,9 @@
-# B79.0n.CONFIDENCE-CHAIN — Pre-audit (v1)
+# B79.0n.CONFIDENCE-CHAIN — Pre-audit (v1.1 with addendum)
 
-**Status:** v1 — pending Langston review.
+**Status:** v1.1 — Langston Step 2 ACK with 4 non-blocking clarifications + 2 new risks. v1.1 addendum incorporates all 4 below in §10.
 **Author:** Claude Code, 2026-05-25.
 **Predecessor:** `B79_0n_CONFIDENCE_CHAIN_SCOPE.md` (commit `8293ed5d2`, Langston Step 1 ACK 2026-05-25 with D-1..D-5 ✅ AGREE + 7 nuances A-G to address).
+**Step 2 ACK:** 2026-05-25 (Langston reply) — conditional on §10 addendum addressing clarifications 1-4 + R-10 / R-11 added.
 
 ---
 
@@ -432,4 +433,177 @@ Step 3 chunks (revised 7-chunk plan):
 
 ---
 
-**End of pre-audit v1. Awaiting Langston Step 2 review.**
+---
+
+## §10 — v1.1 ADDENDUM: Langston Step 2 clarifications resolved
+
+### §10.1 — Clarification 1 — Legacy-file disposition (uniform pattern)
+
+**Decision:** **No rename. Prefer-new-path order.**
+
+Chunk 5 implements:
+
+1. Constructor of `OutcomeFeedbackStore` + `RegimePhaseStore` reads from the NEW path (`/home/deploy/dawntrader/data/<file>.json`) FIRST. If present, load + done.
+2. If new path is ABSENT, read from the legacy `/tmp/<file>.json`. If present, load + immediately write to the new path. Legacy file stays in place at the old `/tmp/` location (it will be wiped on next pm2 restart anyway).
+3. **HARD-FAIL on partial corrupt new-path data.** If the new path JSON parse fails, the constructor throws `[B67.4][outcomeFeedbackStore][load-corrupt] new-path JSON is unparseable — cowardly refusing to silently fall back to legacy /tmp/ data which may be stale. Manual investigation required.`. NO silent fallback to legacy when new path is corrupt — per Langston nuance D caveat.
+4. Per the §1.6 atomicity finding, both stores' constructors run synchronously at import resolution before any close-hook can fire — no race.
+
+**Unit test pattern (in `b79-0n-confidence-chain-outcome-feedback-isolation.test.ts`):**
+
+```ts
+describe('legacy-vs-new path resolution', () => {
+  it('new path present → loads from new, ignores legacy', () => { ... });
+  it('only legacy present → loads from legacy, writes to new', () => { ... });
+  it('new path corrupt + legacy present → throws hard, does NOT silently fall back', () => { ... });
+  it('both absent → cold-start empty state', () => { ... });
+});
+```
+
+### §10.2 — Clarification 2 — Paper-execution-engine caller surface (R-10)
+
+**Confirmed undercount.** Grep of `paper-execution-engine.ts:2019-2065`:
+
+- Line 2021: `_b67_2_1_mce = getMarketContextEngine()`
+- Line 2023: `_b67_2_1_ctx = _b67_2_1_mce?.getCachedContext(signal.symbol, resolveAssetClass(signal.symbol, 'kraken'))` — ✅ already per-class
+- **Line 2024: `_b67_2_1_macro = _b67_2_1_mce?.getCurrentMacroContext() ?? null`** — ❌ global, needs assetClass threading
+- **Line 2025: `_b67_2_1_phaseWeights = _b67_2_1_mce?.getCurrentPhaseWeights() ?? null`** — ❌ global, needs assetClass threading
+- Line 2028: `_b67_2_1_phaseWeights[\`${signal.strategy}_${_b67_2_1_phase}\`]` — global blob lookup, needs per-class blob
+
+**Caller-surface table revision** (§3):
+
+| Function | OLD count | NEW count | Added sites |
+|---|---|---|---|
+| `MCE.getCurrentMacroContext` | not in original table | 3 | paper-execution-engine:2024 |
+| `MCE.getCurrentMacroConfig` | 2 | 3 | paper-execution-engine (if accessed) |
+| `MCE.getCurrentPhaseWeights` | 2 | **3** | paper-execution-engine:2025 |
+| Discriminated-union `kind: 'b67_2'` arms | 16 (8+8) | **16+1=17** if paper-exec rebuilds emit an alternate (verify) |
+
+**Threading approach for paper-execution-engine.ts trade-close hook:** the same `resolveAssetClass(signal.symbol, 'kraken')` value computed at line 2023 is reused for both new per-class accessor calls. Single capture-and-reuse block per the B79.0n.PATTERN-DETECT Step 9 pattern.
+
+**Action item for Chunk B+D:** add the paper-execution-engine sites to the threading checklist explicitly.
+
+**R-10 added to §7 risk register below.**
+
+### §10.3 — Clarification 3 — xstock strategy count (CONFIRMED 9)
+
+**DB probe 2026-05-25:** `SELECT strategy FROM module_constants WHERE module_name='strategy_gates' AND asset_class='xstock_spot' AND constant_name='enabled' AND value::text='true' ORDER BY strategy;` returns 9 rows. Explicit list of 9 enabled xstock strategies:
+
+1. `breakout`
+2. `inside_bar_reversal`
+3. `mean_reversion`
+4. `morning_star`
+5. `pivot_shift`
+6. `range_trade`
+7. `sma_trend_ride`
+8. `vwap_bounce`
+9. `vwap_pullback`
+
+**JSONB blob row count for `regime_phase.xstock_spot.strategy_phase_weights`:** 9 strategies × 3 phases (EARLY / PRIME / LATE) = **27 cells** at neutral 1.0 initial.
+
+**Migration enumerates** `strategy_gates.xstock_spot.*.enabled=true` rows at run-time, NOT a hardcoded list — so a future strategy enablement automatically forces a missing-key throw at first xstock signal that uses that strategy, triggering the seed-row addition.
+
+**Note on the 10 disabled strategies** (abcd_long, adaptive_flow, defensive_hedge, dhma, liquidity_trap, orb, reverse_impulse, strong_bull_trend, support_bounce, volatility_edge): NOT seeded in the xstock_spot weights blob. If any of these get enabled in a future batch, the migration for that batch MUST seed the relevant 3 phase rows alongside the gate flip. Risk that this is forgotten is mitigated by the fail-hard on missing-key at signal-time.
+
+### §10.4 — Clarification 4 — MCE refresh atomicity (atomic Map-replace pattern)
+
+**Pattern adopted for §2 / Chunk 3 design:**
+
+```ts
+// BEFORE (in-place mutation — drift risk):
+private macroConfigByClass: Map<AssetClass, MacroModifierConfig> = new Map();
+private async refreshMacroConfig(): Promise<void> {
+  for (const assetClass of ASSET_CLASSES) {
+    const config = await resolvePerClass(assetClass);
+    this.macroConfigByClass.set(assetClass, config);  // in-place mutation; readers can see partial state
+  }
+}
+
+// AFTER (atomic Map-replace — no drift window):
+private macroConfigByClass: ReadonlyMap<AssetClass, MacroModifierConfig> = new Map();
+private async refreshMacroConfig(): Promise<void> {
+  const nextMap = new Map<AssetClass, MacroModifierConfig>();
+  for (const assetClass of ASSET_CLASSES) {
+    nextMap.set(assetClass, await resolvePerClass(assetClass));
+  }
+  this.macroConfigByClass = nextMap;  // single-reference replace; readers see either old state OR new state, never mixed
+}
+```
+
+**Pattern applies to all 7 refresh methods** in MCE. The cache field type becomes `ReadonlyMap<AssetClass, T>` so accidental in-place mutation is a TypeScript error.
+
+**Accessor pattern:**
+
+```ts
+getCurrentMacroConfig(assetClass: AssetClass): MacroModifierConfig {
+  const cfg = this.macroConfigByClass.get(assetClass);
+  if (!cfg) {
+    throw new Error(`[B79.0n.CONFIDENCE-CHAIN][missing-class] MCE.getCurrentMacroConfig(${assetClass}) — no cached config for asset class. Refresh hasn't fired yet OR class not in ASSET_CLASSES enum.`);
+  }
+  return cfg;
+}
+```
+
+Throw-on-missing per Langston D-5 disposition. Cold-start window: the very first refresh cycle on process boot MAY return undefined briefly; consumers are expected to not call accessors before `MCE.start()` completes its first refresh (which IS awaited at boot).
+
+**R-11 added to §7 risk register below.**
+
+### §10.5 — UI grep (nuance F) — RESOLVED clean
+
+Pre-batch grep of `client/src/` for hardcoded crypto-only modulator readers:
+
+```
+client/src/pages/analytics.tsx:1448  // commentary line — universe enum doc string
+client/src/pages/analytics.tsx:1455  type 'equity_spot' | 'equity_perp' | 'crypto_spot'  — universe enum
+client/src/pages/analytics.tsx:1493  'crypto_spot' → 'Crypto pairs'  — display-mapping
+client/src/pages/analytics.tsx:3271  comment ref to BATCH_82 crypto_spot context  — explicit per-tab rendering
+```
+
+NONE of these are load-bearing for the confidence chain — all are universe-enum / display-mapping / commentary. The `xstocks-tab.tsx` exists as the xstock UI surface; it reads from xstock-specific endpoints already.
+
+**Nuance F resolution:** clean. No in-batch UI scope creep. Step 7 / Step 8 verification will confirm no live render breakage.
+
+### §10.6 — Risk register additions
+
+**R-10 — Ablation-rebuild trade-close hook runs against wrong per-class config if `assetClass` not threaded through.**
+
+- **Severity:** HIGH (silently wrong factor values pollute the outcome-feedback EMA → feedback contaminates b67_4 modulator → bad calibration data over time).
+- **Detection:** would not surface in compile (existing global accessor signatures don't fail-loud); only surfaces in data drift over days/weeks of mixed-class trade flow.
+- **Mitigation:** Chunk B+D adds paper-execution-engine.ts:2024-2025 to the threading checklist explicitly (§10.2); unit test asserts xstock-trade-close ablation rebuild reads xstock per-class config; PM2 log line includes `asset_class` field on every ablation-rebuild emit for forensic auditability.
+
+**R-11 — Mid-refresh read sees stale xstock + fresh crypto (or vice versa).**
+
+- **Severity:** LOW (configs change rarely; drift self-heals on next refresh).
+- **Mitigation:** atomic Map-replace pattern per §10.4. Cache field type is `ReadonlyMap<>` so accidental in-place mutation is a compile error.
+
+### §10.7 — Non-blocking suggestions accepted
+
+- **Step 11 completion report** will include plain-language Kyle-facing note: "xStock pair-correlation modulator ships as off in version 1; the diagnostic panel will show a `compute_disabled: true` flag on every xStock signal until the SPY-relative correlation calibration follow-up batch flips the enable flag."
+
+### §10.8 — Caller-surface revision (consolidated)
+
+Final updated table for §3 (incorporates §10.2):
+
+| Function gaining REQUIRED `assetClass` | Caller sites | New sites added by §10.2 |
+|---|---|---|
+| `computeMacroModifier` | 1 — MCE | — |
+| `computeOutcomeFeedbackFactor` | 2 — signal-orchestrator + vts-runner | — |
+| `computeVolumeRegime` | 2 — signal-orchestrator + vts-runner | — |
+| `computePairCorrelation` | 2 — signal-orchestrator + vts-runner | — |
+| `computeFreshnessFactor` | 2 — signal-orchestrator + vts-runner | — |
+| `applyPhasePreference` | 2 — signal-orchestrator + vts-runner | — |
+| `outcomeFeedbackStore.updateEma` | 2 — paper-execution-engine + vts-runner | — |
+| `outcomeFeedbackStore.peek` | 2 — signal-orchestrator + vts-runner | — |
+| `MCE.getCurrentMacroConfig` | 2 → **3** | + paper-execution-engine:2024 |
+| `MCE.getCurrentMacroContext` | not tracked → **3** | new surface — paper-execution-engine + sig-orch + vts-runner |
+| `MCE.getCurrentPhaseWeights` | 2 → **3** | + paper-execution-engine:2025 |
+| `MCE.getCurrentOutcomeFeedbackConfig` | 2 | — |
+| `MCE.getCurrentRegimeAgeConfig` | 2 | — |
+| `MCE.getCurrentVolumeRegimeConfig` | 2 | — |
+| `MCE.getCurrentPairCorrelationConfig` | 2 | — |
+| `MCE.getCurrentMultiTfAgreementConfig` | 2 | — |
+
+**Revised total surface estimate:** ~53 distinct call sites across 6 files (was ~50 across 5; added paper-execution-engine.ts as 6th).
+
+---
+
+**End of pre-audit v1.1. All 4 Langston clarifications addressed + 2 new risks added (R-10/R-11) + UI grep clean. Cleared to begin Step 3 Chunk 1.**
