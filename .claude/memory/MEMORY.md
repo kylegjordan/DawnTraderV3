@@ -15,39 +15,45 @@
 
 ---
 
-## CURRENT STATE (2026-05-25 — B79.0n.PATTERN-DETECT FULLY CLOSED 2026-05-24. Next: B79.0n.CONFIDENCE-CHAIN = umbrella sub-batch 7 of 18, parallel-eligible with SCORING + TEC.)
+## CURRENT STATE (2026-05-25 — B79.0n.CONFIDENCE-CHAIN Step 1 ACK LOCKED, Step 2 pre-audit drafting)
 
-### B79.0n.PATTERN-DETECT — 🟢 FULLY CLOSED 2026-05-24
+### 🟡 IN-FLIGHT: B79.0n.CONFIDENCE-CHAIN (umbrella sub-batch 7 of 18)
 
-CI all-4-green at run `26373689049` / commit `c0479b2`. Staging deployed at `c0479b2` on 2026-05-24 ~21:51Z. All Langston ACKs (Step 1+2+4+8) FINAL.
+**Step 1 Scope LOCKED 2026-05-25** — commit `8293ed5d2` on origin. Scope at `Claude Comms and Packages/Scope Files/B79_0n_CONFIDENCE_CHAIN_SCOPE.md` (347 lines). Langston ACK with D-1..D-5 all ✅ AGREE + 7 nuances (A-G) to fold into Step 2 pre-audit OR scope v2.
 
-**Highlights:**
-- Per-class plumbing on pattern-recognition layer — TypeScript REQUIRED-`assetClass: AssetClass` discipline across `scanPatterns` + 6 internal detect functions + `patternToTradeSignal` + `PatternRecognizerService` class methods + `selectContextAwareStrategy`.
-- DB naming-drift fix on `pattern_pool_gates.xstock_spot.*`: renamed `final_score_floor → pattern_final_score_min` + `max_position_pct → pattern_max_position_pct` (matches crypto convention); seeded 2 NEW xstock RSI bound rows (15/85 from crypto defaults).
-- AssetClass type unification at `crypto_spot/pattern-pool-filters.ts:76` (replaced narrow literal with shared canonical re-export). `xstock_spot/pattern-pool-filters.ts` rewritten to getter-shape mirroring crypto.
-- Step 9 iteration (post-Langston Step 8 H/USD throw flag): capture-and-reuse refactor at 2 vts-runner function/loop scopes. H/USD-style throws ELIMINATED at 6 sites; COLLISION_RESOLVE WARN amplification reduced ~33%.
-- 4 NEW unit test files / 40 tests / all passing + 2 existing tests updated.
-- F-1 lever audit: PATTERN_TO_CANONICAL + normalizePatternToCanonical class-invariant by construction.
-- BUG-008 + ANOMALY-PROD-2026-05-24 marked RESOLVED.
+**Architectural truth from Step 1.a read (2026-05-25):**
+- Modulators live in `server/core/metrics/` (NOT `server/core/modulators/` as initial directive paraphrased)
+- 9 modulators: b67_1 macro-modifier, b67_2 phase-preference, b67_3 TFS-desat, b67_4 outcome-feedback, b68_1 multi-tf-agreement, b68_2 volume-regime, b68_3 pair-correlation, b68_4 regime-age, b68_5 path-B
+- F-1/F-2 lever audit: 4 F-2 (b67_1 / b67_2 / b67_4 / b68_3) + 5 F-1 (b67_3 / b68_1 / b68_2 / b68_4 / b68_5)
+- 16 chain-composition push sites (8 in signal-orchestrator + 8 in vts-runner)
+- 7 MCE accessors + 7 refresh methods need REQUIRED-assetClass refactor
+- DB: 7 of 9 modulator modules have ZERO xstock_spot rows (only regime_classifier + path_b_sustainability have partial seeds from B79.0n.MCE)
 
-**Anti-graveyard:** zero new `as any` / `@ts-expect-error` (outside dedicated type-lock test file with 12 documented directives) / `@ts-ignore` / `!`. Baseline at 494 unchanged.
+**Langston's 5 D-decisions ✅ AGREE:**
+- D-1: b67_1 macro xstock no-op (factor=1.0 + `asset_class_no_op_active` flag); equity macro feed deferred to Phase 24
+- D-2: b68_3 SPY/USD reference + `compute_correlation_enabled = false` default for xstock until SPY OHLC pipeline verified
+- D-3: b67_2 per-class JSONB row pattern (clone-from-crypto v1 + post-deploy calibrate)
+- D-4: outcome-feedback legacy-as-crypto migration semantic (re-key existing entries under `crypto_spot` prefix)
+- D-5: canonical ASSET_CLASSES enumeration source + fail-hard on missing-class
 
-**Full report:** `Claude Comms and Packages/Batch Completion/B79_0n_PATTERN_DETECT_COMPLETION_REPORT.md`. All governance updated (BATCH_CATALOG, PHASE_HISTORY, SIM additions deferred to system-mgmt rewrite, CHANGES_AND_FIXES CLOSURE-2026-05-24-B, RUNNING_ISSUES #136 (r/s/t/u) + #139 NEW).
+**Langston's 7 nuances (A-G) for Step 2:**
+- A: Confirm canonical xstock SPY ticker (likely `SPYx/USD` Backed-Finance convention, not `SPY/USD`) — DB query needed
+- B: D-3 strategy-key mismatch — seed xstock_spot blob with xstock strategy keys (neutral 1.0) + fail-hard on missing-key
+- C: outcome-feedback `.backup` retention — move out of `/tmp/` (purged on staging restart) to persistent path
+- D: atomicity boot sequence — verify migration completes BEFORE close-hooks accept updateEma calls
+- E: SIM §B69 wording edit — "macro modifier (per-class — crypto inputs for crypto_spot; no-op for xstock_spot)"
+- F: UI panel hardcoded crypto accessor paths check — document as Step 8 watch-item if any
+- G: Chunk sequencing — Chunks B + D land together (single tsc state) before E threads chain-composition sites
 
-### 🟢 NEXT BATCH: B79.0n.CONFIDENCE-CHAIN (umbrella sub-batch 7 of 18)
+**Next:** Step 2 pre-audit drafting (per-component upstream/downstream/blast-radius enumeration + the 7 nuances as explicit pre-audit findings).
 
-Per umbrella v4 row 7: "b67_1 through b67_4 + b68_1 through b68_5 modulator chain asset-class awareness. Pre-audit verifies whether modulators differ per asset class — could be no-op or could surface per-class parameter need." **Parallel-eligible with SCORING (#8) + TEC (#9).** Kyle chooses ordering when next session starts.
+### Workflow status (per CLAUDE.md §2):
+1. ✅ Step 1.a Architectural read — DONE
+2. ✅ Step 1 Scope + Langston ACK — DONE
+3. 🟡 Step 2 Pre-audit — IN PROGRESS
+4. Steps 3-11 — pending
 
-**Dependencies:** STORAGE (#3 closed 2026-05-21).
-
-**Scope file `B79_0n_CONFIDENCE_CHAIN_SCOPE.md` DOES NOT EXIST YET.** Step 1 of next batch is to WRITE it.
-
-### Workflow to start B79.0n.CONFIDENCE-CHAIN (per CLAUDE.md §2):
-
-1. **Step 1.a (MANDATORY per CLAUDE.md §2 1.a):** BEFORE drafting the scope, read SIM + System Manual sections for every CONFIDENCE-CHAIN component — `server/core/modulators/b67_1_*.ts` through `b67_4_*.ts` + `b68_1_*.ts` through `b68_5_*.ts` chain, signal-quality-evaluator modulator integration points, multi-tf-agreement + regime-phase backfill (already partially threaded by B79.0n.MCE for assetClass), modulator call sites in ready-to-buy-service + signal-orchestrator. Architectural claims must come from reads, not grep estimates.
-2. Step 1 Scope → dispatch to Langston for ACK.
-3. Step 2 Pre-audit → DEEPER per-component analysis. Dispatch to Langston.
-4. Steps 3-11 — implementation → Langston code review → CI green → staging deploy → verification → governance → completion report.
+### Open follow-ups (not blocking CONFIDENCE-CHAIN)
 
 ### Active alerts (§10.5)
 - 0 active-unacked (confirmed 2026-05-24 turn-start, all scheduled/acked).
