@@ -15,11 +15,51 @@
 
 ---
 
-## CURRENT STATE (2026-05-25 — B79.0n.CONFIDENCE-CHAIN Step 1 ACK LOCKED, Step 2 pre-audit drafting)
+## CURRENT STATE (2026-05-25 — B79.0n.CONFIDENCE-CHAIN Step 3 Chunks 1+2 committed locally on mirror; Chunks 3-7 pending)
 
 ### 🟡 IN-FLIGHT: B79.0n.CONFIDENCE-CHAIN (umbrella sub-batch 7 of 18)
 
-**Step 1 Scope LOCKED 2026-05-25** — commit `8293ed5d2` on origin. Scope at `Claude Comms and Packages/Scope Files/B79_0n_CONFIDENCE_CHAIN_SCOPE.md` (347 lines). Langston ACK with D-1..D-5 all ✅ AGREE + 7 nuances (A-G) to fold into Step 2 pre-audit OR scope v2.
+**Step 1 Scope LOCKED 2026-05-25 commit `8293ed5d2`.** Langston ACK D-1..D-5 ✅ AGREE + 7 nuances.
+
+**Step 2 Pre-audit v1.1 LOCKED 2026-05-25 commit `aa8a81f49`.** Addendum addressed all 4 Langston Step 2 clarifications (legacy-file disposition, paper-execution-engine caller surface R-10, xstock=9 strategies, MCE atomic Map-replace R-11). UI grep clean.
+
+**Step 3 PROGRESS (4 of 7 chunks PUSHED to origin):**
+- ✅ Chunk 1 (migration SQL `2026-05-25-b79-0n-confidence-chain-per-class-seed.sql` + rollback) — commit `9537794`
+- ✅ Chunk 2 (modulator signatures + FactorAlternateInput arms — 8 files) — commit `1e8a531`
+- ✅ Chunk 3 (MCE per-class refresh + accessor refactor for macro / pair-correlation / regime-phase) — commit `32c1b2b` (combined with Chunk 4)
+- ✅ Chunk 4 (chain-composition threading at 16 push sites + 8 per-class accessor switches across signal-orchestrator + vts-runner) — commit `32c1b2b`
+- ⏸️ **Chunk 5 (outcome-feedback store key migration + persistent path move /home/deploy/dawntrader/data/)** — NEXT
+- ⏸️ Chunk 6 (unit tests: 4 new files + ~94 existing test updates)
+- ⏸️ Chunk 7 (local tsc + vitest + baseline:check final gate)
+
+**Origin HEAD: `32c1b2b`. CI run `26404507951` in progress.**
+
+**Architectural decisions locked during Chunks 3+4:**
+- Only 3 of 7 MCE config modules got the per-class Map refactor (macro_modifier, pair_correlation, regime_phase) — the others (outcome_feedback, regime_age, volume_regime, multi_tf_agreement, regime_classifier, path_b_sustainability) keep their global single-config caches because their math is class-invariant by construction (F-1) and they don't have per-class flags
+- macroConfigByClass / pairCorrelationConfigByClass / phaseWeightsByClass + phaseEarlyMaxHoursByClass + phasePrimeMaxHoursByClass — 5 new ReadonlyMap fields with atomic Map-replace (R-11)
+- New accessors: getMacroConfigForClass / getPairCorrelationConfigForClass / getPhaseWeightsForClass / getPhaseEarlyMaxHoursForClass / getPhasePrimeMaxHoursForClass — null-on-cold-start / null-on-missing-class (logs warning)
+- Legacy accessors retained (getCurrentMacroConfig etc.) returning crypto_spot for back-compat
+- Per-class enumeration source: hardcoded `['crypto_spot', 'xstock_spot'] as const` inline because seed migration only covers these 2 of 4 active asset classes (perp classes onboard in future batch with their own seed migrations)
+- safeResolveAssetClass + skip-on-null at signal-orchestrator chain entry (`_pairAssetClass`); vts-runner reuses `_assetClass` already captured at function entry per B79.0n.PATTERN-DETECT Step 9
+- Local tsc clean at baseline 494 (zero net new errors). Anti-graveyard preserved.
+
+**Remaining work for next session:**
+
+Chunk 5 (outcome-feedback store key migration):
+- Update outcomeFeedbackStore.updateEma + peek signatures to take `assetClass: AssetClass` first param
+- Internal Map key becomes `<assetClass>_<regime>_<strategy>` (currently `<regime>_<strategy>`)
+- Disk-load migration: read legacy `/tmp/b67-4-outcome-feedback.json`, re-key under `crypto_spot_` prefix, write to new path `/home/deploy/dawntrader/data/b67-4-outcome-feedback.json`. Same migration for regime-phase-store at `/tmp/regime-phase-store.json` → `/home/deploy/dawntrader/data/regime-phase-store.json`
+- Hard-fail on corrupt new-path data (no silent fallback to legacy per Langston nuance D)
+- Update consumers: signal-orchestrator line 794, vts-runner line 1671 (entry lookup); trade-close hooks in paper-execution-engine + vts-runner (updateEma calls)
+
+Chunk 6 (unit tests):
+- 4 new test files: b79-0n-confidence-chain-required-assetclass.test.ts, b79-0n-confidence-chain-outcome-feedback-isolation.test.ts, b79-0n-confidence-chain-mce-per-class-resolve.test.ts, b79-0n-confidence-chain-asset-class-no-op.test.ts
+- ~94 existing tests need updates for new signatures (b67-1-macro-modifier.test.ts, b67-2-phase-dimension.test.ts, b67-4-outcome-feedback.test.ts, b68-1/2/3/4/5.test.ts, b76-chain-final-emit.test.ts)
+
+Chunk 7 (final verification):
+- Local tsc + vitest + npm run baseline:check
+- Confirm CI all-4-green on Hetzner staging deploy
+- Step 6 staging deploy + Steps 7-11 batch close
 
 **Architectural truth from Step 1.a read (2026-05-25):**
 - Modulators live in `server/core/metrics/` (NOT `server/core/modulators/` as initial directive paraphrased)
