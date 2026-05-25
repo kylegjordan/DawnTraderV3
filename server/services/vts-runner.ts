@@ -1601,10 +1601,12 @@ async function generatePhase10Signal(
   {
     const _mce = getMarketContextEngine();
     const _macro = _mce.getCurrentMacroContext();
-    const _macroConfig = _mce.getCurrentMacroConfig();
-    const _phaseWeights = _mce.getCurrentPhaseWeights();
+    // B79.0n.CONFIDENCE-CHAIN: per-class accessor with global fallback for back-compat.
+    const _macroConfig = _mce.getMacroConfigForClass(_assetClass) ?? _mce.getCurrentMacroConfig();
+    const _phaseWeights = _mce.getPhaseWeightsForClass(_assetClass) ?? _mce.getCurrentPhaseWeights();
     // B79.0n.MCE: append required assetClass — the cache is keyed by (symbol, assetClass).
-    const _ctx = _mce.getCachedContext(symbol, resolveAssetClass(symbol, 'kraken'));
+    // Reuse the captured _assetClass instead of re-resolving (B79.0n.PATTERN-DETECT Step 9 capture-and-reuse).
+    const _ctx = _mce.getCachedContext(symbol, _assetClass);
 
     // B67.1 macro modifier — stash for chain-final dispatch
     if (_macro === null || _macroConfig === null) {
@@ -1615,6 +1617,7 @@ async function generatePhase10Signal(
         modifier: _macro.modifier,
         admissionPossible: true,
         config: _macroConfig,
+        assetClass: _assetClass,
       });
     }
 
@@ -1631,7 +1634,7 @@ async function generatePhase10Signal(
       const phase = _ctx.regime.phase;
       const phaseAgeSeconds = _ctx.regime.phaseAgeSeconds;
       try {
-        const modulated = applyPhasePreference(strategy, phase, _phaseWeights, _baseConf);
+        const modulated = applyPhasePreference(strategy, phase, _phaseWeights, _baseConf, _assetClass);
         const weight = _phaseWeights[`${strategy}_${phase}`];
         _modulatedConfChain = modulated;
         _alternateInputs.push({
@@ -1640,6 +1643,7 @@ async function generatePhase10Signal(
           phaseAgeSeconds,
           strategy,
           phaseWeight: weight,
+          assetClass: _assetClass,
         });
       } catch (err) {
         console.error(
@@ -1652,12 +1656,13 @@ async function generatePhase10Signal(
     // ── B68.4 freshness factor (cheap-tier bundle) ────────────────────
     if (_regimeAgeConfig !== null) {
       const ageMs = regimePhaseStore.peekAgeMs(symbol, Date.now());
-      const freshness = computeFreshnessFactor(ageMs, _regimeAgeConfig);
+      const freshness = computeFreshnessFactor(ageMs, _regimeAgeConfig, _assetClass);
       _modulatedConfChain *= freshness.factor;
       _alternateInputs.push({
         kind: 'b68_4',
         result: freshness,
         targetAgeHours: _regimeAgeConfig.targetAgeHours,
+        assetClass: _assetClass,
       });
       console.log(
         `[B68.4][freshness] pair=${symbol} age_hours=${freshness.ageHours.toFixed(2)} factor=${freshness.factor.toFixed(4)}`,
@@ -1669,12 +1674,13 @@ async function generatePhase10Signal(
     // ── B67.4 outcome feedback (cheap-tier bundle) ────────────────────
     if (_outcomeFeedbackConfig !== null) {
       const entry = outcomeFeedbackStore.peek(_regimeLabel, strategy);
-      const outcome = computeOutcomeFeedbackFactor(entry, _outcomeFeedbackConfig);
+      const outcome = computeOutcomeFeedbackFactor(entry, _outcomeFeedbackConfig, _assetClass);
       _modulatedConfChain *= outcome.factor;
       _alternateInputs.push({
         kind: 'b67_4',
         result: outcome,
         context: { regime: _regimeLabel, strategy, entry },
+        assetClass: _assetClass,
       });
     } else {
       console.warn('[B67.4][vts-runner] outcome feedback config null at ablation hook — cold-start race');
@@ -1686,9 +1692,9 @@ async function generatePhase10Signal(
     const _volumeRegimeConfig = _mce.getCurrentVolumeRegimeConfig();
     if (_volumeRegimeConfig !== null && ohlcData && ohlcData.length >= _volumeRegimeConfig.minSamples) {
       try {
-        const result = computeVolumeRegime(ohlcData, _volumeRegimeConfig);
+        const result = computeVolumeRegime(ohlcData, _volumeRegimeConfig, _assetClass);
         _modulatedConfChain *= result.factor;
-        _alternateInputs.push({ kind: 'b68_2', result, config: _volumeRegimeConfig });
+        _alternateInputs.push({ kind: 'b68_2', result, config: _volumeRegimeConfig, assetClass: _assetClass });
         console.log(
           `[B68.2][volume] pair=${symbol} score=${result.score.toFixed(3)} ` +
             `factor=${result.factor.toFixed(4)} label=${result.label}` +
@@ -1710,7 +1716,7 @@ async function generatePhase10Signal(
     // [0.95, 1.05] — boost only. BTC OHLC fetched from ohlcCache (cache
     // read; microsecond latency). Self-reference handled inside
     // computePairCorrelation (factor=1.0 + SELF_REFERENCE flag).
-    const _pairCorrelationConfig = _mce.getCurrentPairCorrelationConfig();
+    const _pairCorrelationConfig = _mce.getPairCorrelationConfigForClass(_assetClass) ?? _mce.getCurrentPairCorrelationConfig();
     if (_pairCorrelationConfig !== null && ohlcData && ohlcData.length >= _pairCorrelationConfig.minSamples) {
       try {
         const btcRaw = await ohlcCache.getOHLCData(_pairCorrelationConfig.btcReferenceSymbol, 60);
@@ -1727,9 +1733,10 @@ async function generatePhase10Signal(
           ohlcData,
           btcOhlc.length >= _pairCorrelationConfig.minSamples ? btcOhlc : null,
           _pairCorrelationConfig,
+          _assetClass,
         );
         _modulatedConfChain *= result.factor;
-        _alternateInputs.push({ kind: 'b68_3', result, config: _pairCorrelationConfig });
+        _alternateInputs.push({ kind: 'b68_3', result, config: _pairCorrelationConfig, assetClass: _assetClass });
         console.log(
           `[B68.3][correlation] pair=${symbol} corr=${result.correlationToBtc.toFixed(3)} ` +
             `decorr=${result.decorrelationScore.toFixed(3)} factor=${result.factor.toFixed(4)} ` +
@@ -1772,12 +1779,11 @@ async function generatePhase10Signal(
           higherTfOhlc.length >= _multiTfConfig.minHigherTfSamples ? higherTfOhlc : null,
           _multiTfConfig,
           _fullRegimeConfig ?? undefined,
-          // B79.0n.MCE: resolve the pair's asset class for the higher-TF
-          // re-classification (no assetClass var in scope at this hook).
-          resolveAssetClass(symbol, 'kraken'),
+          // B79.0n.CONFIDENCE-CHAIN: reuse captured _assetClass (B79.0n.PATTERN-DETECT Step 9 capture-and-reuse).
+          _assetClass,
         );
         _modulatedConfChain *= result.factor;
-        _alternateInputs.push({ kind: 'b68_1', result, config: _multiTfConfig });
+        _alternateInputs.push({ kind: 'b68_1', result, config: _multiTfConfig, assetClass: _assetClass });
         console.log(
           `[B68.1][multi-tf] pair=${symbol} active=${result.activeTfRegime} ` +
             `higher=${result.higherTfRegime ?? 'COLD'} agree=${result.agreement} ` +

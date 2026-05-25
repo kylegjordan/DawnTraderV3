@@ -31,6 +31,9 @@ import { getCachedNumberRequired } from './module-constants-service.js';
 // B79.0d: synchronous resolveAssetClass for ORB dispatch guard.
 // B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput.assetClass population.
 import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+// B79.0n.CONFIDENCE-CHAIN: capture-and-reuse pattern at chain composition entry.
+// safeResolveAssetClass returns null + logs WARN on unresolvable (vs throw).
+import { safeResolveAssetClass } from '../../shared/asset-classes.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - use activeFilterPool instead
 // import { FilteredPairsService } from './filtered-pairs-service';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -709,9 +712,21 @@ export class SignalOrchestrator {
     let modulatedConfChain = extendedMetrics.confidence ?? 0.5;
     {
       const mce = getMarketContextEngine();
+      // B79.0n.CONFIDENCE-CHAIN: capture-and-reuse asset class for the chain
+      // block per CLAUDE.md §5 #15 (B79.0n.PATTERN-DETECT Step 9 capture-and-reuse pattern).
+      // safeResolveAssetClass returns null on unresolvable + logs WARN — avoids
+      // per-call throws in the hot loop. Skip the entire chain block when null.
+      const _pairAssetClass = safeResolveAssetClass(rawSignal.symbol, 'kraken');
+      if (_pairAssetClass === null) {
+        console.warn(`[B79.0n.CONFIDENCE-CHAIN][orchestrator] cannot resolve asset class for ${rawSignal.symbol} — skipping ablation hook`);
+        // Skip all factor pushes; chain stays at base confidence.
+      } else {
+      // Per-class accessors (B79.0n.CONFIDENCE-CHAIN) — pulled FIRST so all
+      // 7 push sites below can thread `_pairAssetClass` uniformly. Legacy
+      // global accessors retained for non-per-class data (cold-start logging).
       const macro = mce.getCurrentMacroContext();
-      const macroConfig = mce.getCurrentMacroConfig();
-      const phaseWeights = mce.getCurrentPhaseWeights();
+      const macroConfig = mce.getMacroConfigForClass(_pairAssetClass) ?? mce.getCurrentMacroConfig();
+      const phaseWeights = mce.getPhaseWeightsForClass(_pairAssetClass) ?? mce.getCurrentPhaseWeights();
 
       // B67.1 macro modifier — per-input split into 3 factor rows
       if (macro === null || macroConfig === null) {
@@ -725,6 +740,7 @@ export class SignalOrchestrator {
           modifier: macro.modifier,
           admissionPossible: true,
           config: macroConfig,
+          assetClass: _pairAssetClass,
         });
       }
 
@@ -751,7 +767,7 @@ export class SignalOrchestrator {
         const phaseAgeSeconds = symbolCtx?.regime.phaseAgeSeconds ?? 0;
         if (phase) {
           try {
-            const modulated = applyPhasePreference(strategyKey, phase, phaseWeights, baseConf);
+            const modulated = applyPhasePreference(strategyKey, phase, phaseWeights, baseConf, _pairAssetClass);
             const weight = phaseWeights[`${strategyKey}_${phase}`];
             modulatedConfChain = modulated;
             // B76: stash; alt.conf computed in Pass 2 from chain-final.
@@ -761,6 +777,7 @@ export class SignalOrchestrator {
               phaseAgeSeconds,
               strategy: strategyKey,
               phaseWeight: weight,
+              assetClass: _pairAssetClass,
             });
           } catch (err) {
             // applyPhasePreference throws on missing weight key. Log loudly.
@@ -775,12 +792,13 @@ export class SignalOrchestrator {
       // ── B68.4 freshness factor ────────────────────────────────────────
       if (regimeAgeConfig !== null) {
         const ageMs = regimePhaseStore.peekAgeMs(rawSignal.symbol, Date.now());
-        const freshness = computeFreshnessFactor(ageMs, regimeAgeConfig);
+        const freshness = computeFreshnessFactor(ageMs, regimeAgeConfig, _pairAssetClass);
         modulatedConfChain *= freshness.factor;
         alternateInputs.push({
           kind: 'b68_4',
           result: freshness,
           targetAgeHours: regimeAgeConfig.targetAgeHours,
+          assetClass: _pairAssetClass,
         });
         console.log(
           `[B68.4][freshness] pair=${rawSignal.symbol} age_hours=${freshness.ageHours.toFixed(2)} factor=${freshness.factor.toFixed(4)}`,
@@ -792,12 +810,13 @@ export class SignalOrchestrator {
       // ── B67.4 outcome feedback ────────────────────────────────────────
       if (outcomeFeedbackConfig !== null) {
         const entry = outcomeFeedbackStore.peek(regimeLabel, strategyKey);
-        const outcome = computeOutcomeFeedbackFactor(entry, outcomeFeedbackConfig);
+        const outcome = computeOutcomeFeedbackFactor(entry, outcomeFeedbackConfig, _pairAssetClass);
         modulatedConfChain *= outcome.factor;
         alternateInputs.push({
           kind: 'b67_4',
           result: outcome,
           context: { regime: regimeLabel, strategy: strategyKey, entry },
+          assetClass: _pairAssetClass,
         });
       } else {
         console.warn('[B67.4][orchestrator] outcome feedback config null at ablation hook — cold-start race');
@@ -816,9 +835,9 @@ export class SignalOrchestrator {
         const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
         if (ohlc && Array.isArray(ohlc) && ohlc.length >= volumeRegimeConfig.minSamples) {
           try {
-            const result = computeVolumeRegime(ohlc, volumeRegimeConfig);
+            const result = computeVolumeRegime(ohlc, volumeRegimeConfig, _pairAssetClass);
             modulatedConfChain *= result.factor;
-            alternateInputs.push({ kind: 'b68_2', result, config: volumeRegimeConfig });
+            alternateInputs.push({ kind: 'b68_2', result, config: volumeRegimeConfig, assetClass: _pairAssetClass });
             console.log(
               `[B68.2][volume] pair=${rawSignal.symbol} score=${result.score.toFixed(3)} ` +
                 `factor=${result.factor.toFixed(4)} label=${result.label}` +
@@ -842,7 +861,7 @@ export class SignalOrchestrator {
       // BTC OHLC fetched on-demand from ohlcCache (cache read; microsecond
       // latency per Langston cc-inbox #884 D.1). Self-reference handled
       // inside computePairCorrelation (factor=1.0 + SELF_REFERENCE flag).
-      const pairCorrelationConfig = mce.getCurrentPairCorrelationConfig();
+      const pairCorrelationConfig = mce.getPairCorrelationConfigForClass(_pairAssetClass) ?? mce.getCurrentPairCorrelationConfig();
       if (pairCorrelationConfig !== null && symbolCtx !== null) {
         const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
         if (ohlc && Array.isArray(ohlc) && ohlc.length >= pairCorrelationConfig.minSamples) {
@@ -862,9 +881,10 @@ export class SignalOrchestrator {
               ohlc,
               btcOhlc.length >= pairCorrelationConfig.minSamples ? btcOhlc : null,
               pairCorrelationConfig,
+              _pairAssetClass,
             );
             modulatedConfChain *= result.factor;
-            alternateInputs.push({ kind: 'b68_3', result, config: pairCorrelationConfig });
+            alternateInputs.push({ kind: 'b68_3', result, config: pairCorrelationConfig, assetClass: _pairAssetClass });
             console.log(
               `[B68.3][correlation] pair=${rawSignal.symbol} corr=${result.correlationToBtc.toFixed(3)} ` +
                 `decorr=${result.decorrelationScore.toFixed(3)} factor=${result.factor.toFixed(4)} ` +
@@ -910,12 +930,12 @@ export class SignalOrchestrator {
               higherTfOhlc.length >= multiTfConfig.minHigherTfSamples ? higherTfOhlc : null,
               multiTfConfig,
               fullRegimeConfig ?? undefined,
-              // B79.0n.MCE: resolve the pair's asset class for the higher-TF
-              // re-classification (no assetClass var in scope at this hook).
-              resolveAssetClass(rawSignal.symbol, 'kraken'),
+              // B79.0n.CONFIDENCE-CHAIN: reuse captured _pairAssetClass instead
+              // of re-resolving (avoids redundant resolveAssetClass call).
+              _pairAssetClass,
             );
             modulatedConfChain *= result.factor;
-            alternateInputs.push({ kind: 'b68_1', result, config: multiTfConfig });
+            alternateInputs.push({ kind: 'b68_1', result, config: multiTfConfig, assetClass: _pairAssetClass });
             console.log(
               `[B68.1][multi-tf] pair=${rawSignal.symbol} active=${result.activeTfRegime} ` +
                 `higher=${result.higherTfRegime ?? 'COLD'} agree=${result.agreement} ` +
@@ -948,9 +968,9 @@ export class SignalOrchestrator {
             dbsSlope,
             macroModifier: macroValue,
             regimeConfig: fullRegimeConfig,
-            // B79.0n.MCE: resolve the pair's asset class for the b68_5
-            // label-counterfactual re-classification (no assetClass var in scope here).
-            assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
+            // B79.0n.CONFIDENCE-CHAIN: reuse captured _pairAssetClass for the b68_5
+            // label-counterfactual re-classification.
+            assetClass: _pairAssetClass,
           });
           console.log(
             `[B68.5][gate] pair=${rawSignal.symbol} dbs=${dbsScore.toFixed(3)} ` +
@@ -968,6 +988,7 @@ export class SignalOrchestrator {
       // its consumer (this clamp) has been live since B70.3/B72-family.
       const orchFloor = fullRegimeConfig?.b67_5PostCompositionFloor ?? 0.4;
       modulatedConfChain = Math.max(orchFloor, Math.min(1.0, modulatedConfChain));
+      } // end else-branch (_pairAssetClass !== null) for B79.0n.CONFIDENCE-CHAIN
     }
 
     // ── B76 PASS 2: dispatch stashed inputs with chain-final reference ──

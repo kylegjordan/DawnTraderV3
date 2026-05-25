@@ -44,6 +44,10 @@ import type {
 // extended from `${symbol}` to `${symbol}:${assetClass}` to prevent any
 // cross-asset-class cache pollution at the symbol level.
 import type { AssetClass } from '../../shared/asset-classes.js';
+// B79.0n.CONFIDENCE-CHAIN: per-class refresh enumeration. Today the per-class
+// migration seeds only crypto_spot + xstock_spot; perp classes onboard in a
+// future batch alongside their config seed migrations. Hardcoded inline to
+// avoid silently picking up unseeded classes from ASSET_CLASSES.
 import { DEFAULT_MCE_CONFIG } from '../types/market-context.js';
 import type { OHLCData, RegimeCalculationResult, RegimeConfig } from '../types/market-regime.types';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
@@ -175,7 +179,19 @@ export class MarketContextEngine {
   // and recompute modifier. Avoids hammering module_constants on every pair.
   private macroCachedAt: number = 0;
   private macroCachedContext: MacroContext | null = null;
+  /**
+   * B67.1 legacy: the GLOBAL (crypto_spot) macro modifier config. Held for
+   * back-compat callers that read via `getCurrentMacroConfig()` (no arg).
+   * B79.0n.CONFIDENCE-CHAIN per-class consumers use `macroConfigByClass`.
+   */
   private macroConfigCache: MacroModifierConfig | null = null;
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — per-class macro config map. Populated by
+   * `refreshMacroConfig` via `ASSET_CLASSES` enumeration. Replaced atomically
+   * to avoid mid-refresh stale-mix reads (R-11 mitigation). Accessed via
+   * `getMacroConfigForClass(assetClass)`.
+   */
+  private macroConfigByClass: ReadonlyMap<AssetClass, MacroModifierConfig> = new Map();
 
   // ─── B67.2: phase dimension config cache ──────────────────────────────────
   // Phase boundaries + strategy-phase weights resolved on the same refresh
@@ -185,6 +201,10 @@ export class MarketContextEngine {
   private phaseEarlyMaxHours: number | null = null;
   private phasePrimeMaxHours: number | null = null;
   private phaseWeights: Record<string, number> | null = null;
+  // B79.0n.CONFIDENCE-CHAIN: per-class maps. Legacy globals above hold crypto_spot values.
+  private phaseWeightsByClass: ReadonlyMap<AssetClass, Record<string, number>> = new Map();
+  private phaseEarlyMaxHoursByClass: ReadonlyMap<AssetClass, number> = new Map();
+  private phasePrimeMaxHoursByClass: ReadonlyMap<AssetClass, number> = new Map();
 
   // ─── B67.3.5: TFS desaturation config ─────────────────────────────────────
   // Five tunable scales for the continuous TFS confidence formula. Resolved
@@ -222,7 +242,11 @@ export class MarketContextEngine {
   // Pure function over OHLC + BTC reference. BTC reference fetched at emit
   // hook from ohlcCache (cache read, not network — microsecond latency per
   // Langston cc-inbox #884 D.1). No prefetch into MCE state at v1.
+  // B79.0n.CONFIDENCE-CHAIN: legacy field = crypto_spot config; per-class
+  // map populated by refreshPairCorrelationConfig + read via
+  // getPairCorrelationConfigForClass(assetClass).
   private pairCorrelationConfig: PairCorrelationConfig | null = null;
+  private pairCorrelationConfigByClass: ReadonlyMap<AssetClass, PairCorrelationConfig> = new Map();
 
   // ─── B68.1: multi-TF agreement config block ──────────────────────────────
   // Pure function over OHLC; higher-TF series fetched at emit hook from
@@ -406,77 +430,169 @@ export class MarketContextEngine {
     }
   }
 
-  /** B67.1 — macro modifier (7 constants). */
+  /** B67.1 — macro modifier (8 constants — 7 numeric + 1 boolean no-op flag).
+   *
+   * **B79.0n.CONFIDENCE-CHAIN (2026-05-25):** per-class enumeration with
+   * atomic Map-replace (R-11 mitigation). The new `assetClassNoOpActive` flag
+   * lets the modifier function short-circuit at compute time for asset classes
+   * without functional macro inputs (e.g., xstock_spot). Per-class consumers
+   * use `getMacroConfigForClass(assetClass)`; the legacy `getCurrentMacroConfig()`
+   * accessor remains and returns the crypto_spot config for back-compat. */
   private async refreshMacroConfig(): Promise<void> {
     const snapshot = getLatestMacroSnapshot();
-    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
-    const [btcW, fundW, mcapW, modMin, modMax, staleSec, zMinN] = await Promise.all([
-      getConstant<number>('macro_modifier', 'b67_1_btc_dominance_weight', RES_KEY),
-      getConstant<number>('macro_modifier', 'b67_1_funding_weight', RES_KEY),
-      getConstant<number>('macro_modifier', 'b67_1_mcap_momentum_weight', RES_KEY),
-      getConstant<number>('macro_modifier', 'b67_1_modifier_min', RES_KEY),
-      getConstant<number>('macro_modifier', 'b67_1_modifier_max', RES_KEY),
-      getConstant<number>('macro_modifier', 'b67_1_external_feed_stale_seconds', RES_KEY),
-      getConstant<number>('macro_modifier', 'b67_1_zscore_min_sample_count', RES_KEY),
-    ]);
-    const missing: string[] = [];
-    if (btcW === undefined)     missing.push('b67_1_btc_dominance_weight');
-    if (fundW === undefined)    missing.push('b67_1_funding_weight');
-    if (mcapW === undefined)    missing.push('b67_1_mcap_momentum_weight');
-    if (modMin === undefined)   missing.push('b67_1_modifier_min');
-    if (modMax === undefined)   missing.push('b67_1_modifier_max');
-    if (staleSec === undefined) missing.push('b67_1_external_feed_stale_seconds');
-    if (zMinN === undefined)    missing.push('b67_1_zscore_min_sample_count');
-    if (missing.length > 0) {
-      throw new Error(
-        `[B67.1] missing module_constants in macro_modifier module: ${missing.join(', ')}. ` +
-        `Run migration 2026-04-28-b67-1-macro-modifier.sql to seed.`,
-      );
-    }
-    const cfg: MacroModifierConfig = {
-      enabled: true,
-      btcDominanceWeight: btcW as number,
-      fundingWeight: fundW as number,
-      mcapMomentumWeight: mcapW as number,
-      modifierMin: modMin as number,
-      modifierMax: modMax as number,
-      staleSeconds: staleSec as number,
-      zScoreMinSampleCount: zMinN as number,
-    };
-    this.macroConfigCache = cfg;
     const baseline = getLatestMacroBaseline();
-    const result: MacroModifierResult = computeMacroModifier(snapshot, baseline, cfg);
+    const nextMap = new Map<AssetClass, MacroModifierConfig>();
+    // B79.0n.CONFIDENCE-CHAIN: enumerate only asset classes seeded by the
+     // per-class migration. Perp classes (crypto_perp, xstock_perp) onboard
+     // in a future batch when their config rows are seeded.
+     for (const ac of (['crypto_spot', 'xstock_spot'] as const)) {
+      const RES_KEY = { exchange: '*', assetClass: ac, strategy: '*', regime: '*' } as any;
+      const [btcW, fundW, mcapW, modMin, modMax, staleSec, zMinN, noOp] = await Promise.all([
+        getConstant<number>('macro_modifier', 'b67_1_btc_dominance_weight', RES_KEY),
+        getConstant<number>('macro_modifier', 'b67_1_funding_weight', RES_KEY),
+        getConstant<number>('macro_modifier', 'b67_1_mcap_momentum_weight', RES_KEY),
+        getConstant<number>('macro_modifier', 'b67_1_modifier_min', RES_KEY),
+        getConstant<number>('macro_modifier', 'b67_1_modifier_max', RES_KEY),
+        getConstant<number>('macro_modifier', 'b67_1_external_feed_stale_seconds', RES_KEY),
+        getConstant<number>('macro_modifier', 'b67_1_zscore_min_sample_count', RES_KEY),
+        getConstant<boolean>('macro_modifier', 'b67_1_asset_class_no_op_active', RES_KEY),
+      ]);
+      const missing: string[] = [];
+      if (btcW === undefined)     missing.push('b67_1_btc_dominance_weight');
+      if (fundW === undefined)    missing.push('b67_1_funding_weight');
+      if (mcapW === undefined)    missing.push('b67_1_mcap_momentum_weight');
+      if (modMin === undefined)   missing.push('b67_1_modifier_min');
+      if (modMax === undefined)   missing.push('b67_1_modifier_max');
+      if (staleSec === undefined) missing.push('b67_1_external_feed_stale_seconds');
+      if (zMinN === undefined)    missing.push('b67_1_zscore_min_sample_count');
+      if (noOp === undefined)     missing.push('b67_1_asset_class_no_op_active');
+      if (missing.length > 0) {
+        throw new Error(
+          `[B67.1][asset_class=${ac}] missing module_constants in macro_modifier module: ${missing.join(', ')}. ` +
+          `Run migration 2026-05-25-b79-0n-confidence-chain-per-class-seed.sql.`,
+        );
+      }
+      nextMap.set(ac, {
+        enabled: true,
+        btcDominanceWeight: btcW as number,
+        fundingWeight: fundW as number,
+        mcapMomentumWeight: mcapW as number,
+        modifierMin: modMin as number,
+        modifierMax: modMax as number,
+        staleSeconds: staleSec as number,
+        zScoreMinSampleCount: zMinN as number,
+        assetClassNoOpActive: noOp as boolean,
+      });
+    }
+    // Atomic Map-replace (R-11): readers see either old or new map, never mixed state.
+    this.macroConfigByClass = nextMap;
+
+    // Compute the GLOBAL macro context using the crypto_spot config (snapshot
+    // is crypto-native — BTC dominance, funding rates, crypto mcap — so the
+    // global "result" stays scoped to crypto for back-compat readers).
+    const cryptoCfg = nextMap.get('crypto_spot');
+    if (!cryptoCfg) {
+      throw new Error(`[B67.1] crypto_spot config missing post-refresh — unexpected.`);
+    }
+    this.macroConfigCache = cryptoCfg;
+    const result: MacroModifierResult = computeMacroModifier(snapshot, baseline, cryptoCfg, 'crypto_spot');
     this.macroCachedContext = { snapshot, modifier: result };
     this.macroCachedAt = Date.now();
     console.log(
-      `[B67.1][modifier] value=${result.value.toFixed(4)} ` +
+      `[B67.1][modifier] crypto_spot value=${result.value.toFixed(4)} ` +
         `btcZ=${result.btcDomZ.toFixed(3)} fundZ=${result.fundingZ.toFixed(3)} ` +
         `mcapZ=${result.mcapZ.toFixed(3)} fallback=${result.fallbackActive} ` +
-        `stale=${result.staleDataFlag}`,
+        `stale=${result.staleDataFlag} | per_class_count=${nextMap.size}`,
     );
   }
 
-  /** B67.2 — phase boundaries + strategy-phase weights (3 constants). */
-  private async refreshPhaseConfig(): Promise<void> {
-    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
-    const [earlyHrs, primeHrs, weightsBlob] = await Promise.all([
-      getConstant<number>('regime_phase', 'b67_2_early_phase_max_hours', RES_KEY),
-      getConstant<number>('regime_phase', 'b67_2_prime_phase_max_hours', RES_KEY),
-      getConstant<Record<string, number>>('regime_phase', 'b67_2_strategy_phase_weights', RES_KEY),
-    ]);
-    const missing: string[] = [];
-    if (earlyHrs === undefined)    missing.push('b67_2_early_phase_max_hours');
-    if (primeHrs === undefined)    missing.push('b67_2_prime_phase_max_hours');
-    if (weightsBlob === undefined) missing.push('b67_2_strategy_phase_weights');
-    if (missing.length > 0) {
-      throw new Error(
-        `[B67.2] missing module_constants in regime_phase module: ${missing.join(', ')}. ` +
-        `Run migration 2026-04-29-b67-2-phase-dimension.sql to seed.`,
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — per-class macro config accessor. Returns null
+   * during cold-start (before first refresh completes). Returns null + logs
+   * a warning if the asset class is not in the cached map (means the refresh
+   * succeeded but didn't seed all enumerated classes — bug).
+   */
+  getMacroConfigForClass(assetClass: AssetClass): MacroModifierConfig | null {
+    if (this.macroConfigByClass.size === 0) return null; // cold-start
+    const cfg = this.macroConfigByClass.get(assetClass);
+    if (!cfg) {
+      console.warn(
+        `[B79.0n.CONFIDENCE-CHAIN][missing-class] getMacroConfigForClass(${assetClass}) ` +
+        `— class not in cached map (map has ${this.macroConfigByClass.size} entries: ${Array.from(this.macroConfigByClass.keys()).join(',')}). ` +
+        `Refresh may have skipped this class OR class not in ASSET_CLASSES enum.`,
       );
+      return null;
     }
-    this.phaseEarlyMaxHours = earlyHrs as number;
-    this.phasePrimeMaxHours = primeHrs as number;
-    this.phaseWeights = weightsBlob as Record<string, number>;
+    return cfg;
+  }
+
+  /** B67.2 — phase boundaries + strategy-phase weights (3 constants per class).
+   *
+   * **B79.0n.CONFIDENCE-CHAIN (2026-05-25):** per-class JSONB blob — crypto_spot
+   * has 18 strategies × 3 phases = 54 cells; xstock_spot has 9 enabled
+   * strategies × 3 phases = 27 cells. Per-class enumeration + atomic Map-replace.
+   * Legacy globals (`phaseEarlyMaxHours` etc.) hold crypto_spot values for
+   * back-compat readers. Per-class consumers use the new accessors. */
+  private async refreshPhaseConfig(): Promise<void> {
+    const nextWeightsMap = new Map<AssetClass, Record<string, number>>();
+    const nextEarlyMap = new Map<AssetClass, number>();
+    const nextPrimeMap = new Map<AssetClass, number>();
+    // B79.0n.CONFIDENCE-CHAIN: enumerate only asset classes seeded by the
+     // per-class migration. Perp classes (crypto_perp, xstock_perp) onboard
+     // in a future batch when their config rows are seeded.
+     for (const ac of (['crypto_spot', 'xstock_spot'] as const)) {
+      const RES_KEY = { exchange: '*', assetClass: ac, strategy: '*', regime: '*' } as any;
+      const [earlyHrs, primeHrs, weightsBlob] = await Promise.all([
+        getConstant<number>('regime_phase', 'b67_2_early_phase_max_hours', RES_KEY),
+        getConstant<number>('regime_phase', 'b67_2_prime_phase_max_hours', RES_KEY),
+        getConstant<Record<string, number>>('regime_phase', 'b67_2_strategy_phase_weights', RES_KEY),
+      ]);
+      const missing: string[] = [];
+      if (earlyHrs === undefined)    missing.push('b67_2_early_phase_max_hours');
+      if (primeHrs === undefined)    missing.push('b67_2_prime_phase_max_hours');
+      if (weightsBlob === undefined) missing.push('b67_2_strategy_phase_weights');
+      if (missing.length > 0) {
+        throw new Error(
+          `[B67.2][asset_class=${ac}] missing module_constants in regime_phase module: ${missing.join(', ')}. ` +
+          `Run migration 2026-05-25-b79-0n-confidence-chain-per-class-seed.sql.`,
+        );
+      }
+      nextWeightsMap.set(ac, weightsBlob as Record<string, number>);
+      nextEarlyMap.set(ac, earlyHrs as number);
+      nextPrimeMap.set(ac, primeHrs as number);
+    }
+    // Atomic Map-replace (R-11).
+    this.phaseWeightsByClass = nextWeightsMap;
+    this.phaseEarlyMaxHoursByClass = nextEarlyMap;
+    this.phasePrimeMaxHoursByClass = nextPrimeMap;
+    // Legacy globals = crypto_spot for back-compat.
+    const cryptoWeights = nextWeightsMap.get('crypto_spot');
+    const cryptoEarly = nextEarlyMap.get('crypto_spot');
+    const cryptoPrime = nextPrimeMap.get('crypto_spot');
+    if (!cryptoWeights || cryptoEarly === undefined || cryptoPrime === undefined) {
+      throw new Error(`[B67.2] crypto_spot config missing post-refresh — unexpected.`);
+    }
+    this.phaseEarlyMaxHours = cryptoEarly;
+    this.phasePrimeMaxHours = cryptoPrime;
+    this.phaseWeights = cryptoWeights;
+  }
+
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — per-class phase weights accessor. Returns null
+   * during cold-start OR when the class isn't in the map. Consumers use this
+   * to feed `applyPhasePreference(..., weights=<per-class blob>, ..., assetClass)`.
+   */
+  getPhaseWeightsForClass(assetClass: AssetClass): Record<string, number> | null {
+    if (this.phaseWeightsByClass.size === 0) return null;
+    return this.phaseWeightsByClass.get(assetClass) ?? null;
+  }
+  getPhaseEarlyMaxHoursForClass(assetClass: AssetClass): number | null {
+    if (this.phaseEarlyMaxHoursByClass.size === 0) return null;
+    return this.phaseEarlyMaxHoursByClass.get(assetClass) ?? null;
+  }
+  getPhasePrimeMaxHoursForClass(assetClass: AssetClass): number | null {
+    if (this.phasePrimeMaxHoursByClass.size === 0) return null;
+    return this.phasePrimeMaxHoursByClass.get(assetClass) ?? null;
   }
 
   /** B67.3.5 — TFS desaturation scales (5 constants). */
@@ -588,53 +704,87 @@ export class MarketContextEngine {
     };
   }
 
-  /** B68.3 — Pair correlation config (8 constants per Langston cc-inbox #883). */
+  /** B68.3 — Pair correlation config (9 constants — 8 numeric/string + 1 boolean compute-enabled flag).
+   *
+   * **B79.0n.CONFIDENCE-CHAIN (2026-05-25):** per-class enumeration with atomic
+   * Map-replace. xstock_spot defaults `computeCorrelationEnabled = false`
+   * pending SPY-relative correlation calibration follow-up; the function
+   * short-circuits to factor=1.0 + `compute_disabled: true` metadata when false. */
   private async refreshPairCorrelationConfig(): Promise<void> {
-    const RES_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as any;
-    const [
-      lookbackBars,
-      btcRefSymbol,
-      factorMin,
-      factorMax,
-      sensitivity,
-      minSamples,
-      driftingThr,
-      idiosyncraticThr,
-    ] = await Promise.all([
-      getConstant<number>('pair_correlation', 'b68_3_lookback_bars', RES_KEY),
-      getConstant<string>('pair_correlation', 'b68_3_btc_reference_symbol', RES_KEY),
-      getConstant<number>('pair_correlation', 'b68_3_factor_min', RES_KEY),
-      getConstant<number>('pair_correlation', 'b68_3_factor_max', RES_KEY),
-      getConstant<number>('pair_correlation', 'b68_3_sensitivity', RES_KEY),
-      getConstant<number>('pair_correlation', 'b68_3_min_samples', RES_KEY),
-      getConstant<number>('pair_correlation', 'b68_3_drifting_threshold', RES_KEY),
-      getConstant<number>('pair_correlation', 'b68_3_idiosyncratic_threshold', RES_KEY),
-    ]);
-    const missing: string[] = [];
-    if (lookbackBars === undefined)    missing.push('b68_3_lookback_bars');
-    if (btcRefSymbol === undefined)    missing.push('b68_3_btc_reference_symbol');
-    if (factorMin === undefined)       missing.push('b68_3_factor_min');
-    if (factorMax === undefined)       missing.push('b68_3_factor_max');
-    if (sensitivity === undefined)     missing.push('b68_3_sensitivity');
-    if (minSamples === undefined)      missing.push('b68_3_min_samples');
-    if (driftingThr === undefined)     missing.push('b68_3_drifting_threshold');
-    if (idiosyncraticThr === undefined) missing.push('b68_3_idiosyncratic_threshold');
-    if (missing.length > 0) {
-      throw new Error(
-        `[B68.3] missing module_constants in pair_correlation module: ${missing.join(', ')}. ` +
-        `Run migration 2026-05-02-b68-3-pair-correlation.sql to seed.`,
-      );
+    const nextMap = new Map<AssetClass, PairCorrelationConfig>();
+    // B79.0n.CONFIDENCE-CHAIN: enumerate only asset classes seeded by the
+     // per-class migration. Perp classes (crypto_perp, xstock_perp) onboard
+     // in a future batch when their config rows are seeded.
+     for (const ac of (['crypto_spot', 'xstock_spot'] as const)) {
+      const RES_KEY = { exchange: '*', assetClass: ac, strategy: '*', regime: '*' } as any;
+      const [
+        lookbackBars, btcRefSymbol, factorMin, factorMax, sensitivity,
+        minSamples, driftingThr, idiosyncraticThr, computeEnabled,
+      ] = await Promise.all([
+        getConstant<number>('pair_correlation', 'b68_3_lookback_bars', RES_KEY),
+        getConstant<string>('pair_correlation', 'b68_3_btc_reference_symbol', RES_KEY),
+        getConstant<number>('pair_correlation', 'b68_3_factor_min', RES_KEY),
+        getConstant<number>('pair_correlation', 'b68_3_factor_max', RES_KEY),
+        getConstant<number>('pair_correlation', 'b68_3_sensitivity', RES_KEY),
+        getConstant<number>('pair_correlation', 'b68_3_min_samples', RES_KEY),
+        getConstant<number>('pair_correlation', 'b68_3_drifting_threshold', RES_KEY),
+        getConstant<number>('pair_correlation', 'b68_3_idiosyncratic_threshold', RES_KEY),
+        getConstant<boolean>('pair_correlation', 'b68_3_compute_correlation_enabled', RES_KEY),
+      ]);
+      const missing: string[] = [];
+      if (lookbackBars === undefined)    missing.push('b68_3_lookback_bars');
+      if (btcRefSymbol === undefined)    missing.push('b68_3_btc_reference_symbol');
+      if (factorMin === undefined)       missing.push('b68_3_factor_min');
+      if (factorMax === undefined)       missing.push('b68_3_factor_max');
+      if (sensitivity === undefined)     missing.push('b68_3_sensitivity');
+      if (minSamples === undefined)      missing.push('b68_3_min_samples');
+      if (driftingThr === undefined)     missing.push('b68_3_drifting_threshold');
+      if (idiosyncraticThr === undefined) missing.push('b68_3_idiosyncratic_threshold');
+      if (computeEnabled === undefined)  missing.push('b68_3_compute_correlation_enabled');
+      if (missing.length > 0) {
+        throw new Error(
+          `[B68.3][asset_class=${ac}] missing module_constants in pair_correlation module: ${missing.join(', ')}. ` +
+          `Run migration 2026-05-25-b79-0n-confidence-chain-per-class-seed.sql.`,
+        );
+      }
+      nextMap.set(ac, {
+        lookbackBars: lookbackBars as number,
+        btcReferenceSymbol: btcRefSymbol as string,
+        factorMin: factorMin as number,
+        factorMax: factorMax as number,
+        sensitivity: sensitivity as number,
+        minSamples: minSamples as number,
+        driftingThreshold: driftingThr as number,
+        idiosyncraticThreshold: idiosyncraticThr as number,
+        computeCorrelationEnabled: computeEnabled as boolean,
+      });
     }
-    this.pairCorrelationConfig = {
-      lookbackBars: lookbackBars as number,
-      btcReferenceSymbol: btcRefSymbol as string,
-      factorMin: factorMin as number,
-      factorMax: factorMax as number,
-      sensitivity: sensitivity as number,
-      minSamples: minSamples as number,
-      driftingThreshold: driftingThr as number,
-      idiosyncraticThreshold: idiosyncraticThr as number,
-    };
+    // Atomic Map-replace (R-11).
+    this.pairCorrelationConfigByClass = nextMap;
+    // Legacy global accessor returns crypto_spot for back-compat.
+    const cryptoCfg = nextMap.get('crypto_spot');
+    if (!cryptoCfg) {
+      throw new Error(`[B68.3] crypto_spot config missing post-refresh — unexpected.`);
+    }
+    this.pairCorrelationConfig = cryptoCfg;
+  }
+
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — per-class pair-correlation config accessor.
+   * Same null-on-cold-start / null-on-missing-class semantics as
+   * `getMacroConfigForClass`.
+   */
+  getPairCorrelationConfigForClass(assetClass: AssetClass): PairCorrelationConfig | null {
+    if (this.pairCorrelationConfigByClass.size === 0) return null;
+    const cfg = this.pairCorrelationConfigByClass.get(assetClass);
+    if (!cfg) {
+      console.warn(
+        `[B79.0n.CONFIDENCE-CHAIN][missing-class] getPairCorrelationConfigForClass(${assetClass}) ` +
+        `— class not in cached map (has ${this.pairCorrelationConfigByClass.size} entries).`,
+      );
+      return null;
+    }
+    return cfg;
   }
 
   /**
