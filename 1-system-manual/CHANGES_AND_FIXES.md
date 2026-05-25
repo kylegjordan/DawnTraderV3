@@ -2,6 +2,27 @@
 
 ---
 
+## CLOSURE-2026-05-25 — B79.0n.CONFIDENCE-CHAIN: confidence-modulator chain per-class plumbing + outcome-feedback store key migration + esbuild dynamic-require hotfix
+
+**Risk class:** RESOLVED (proactive plumbing — closes silent-crypto-fallback at the confidence-modulator chain). Per-class disposition decisions D-1 through D-5 (Langston Step 1 ACK ✅ AGREE) cover the 4 F-2 modulators with behavioral divergence: macro xstock no-op, pair-correlation reference symbol per class, phase-preference per-class JSONB blob, outcome-feedback per-class store key. R-10 (paper-execution close-hook silently-wrong-class) + R-11 (mid-refresh stale-mix read) both mitigated.
+
+**Sub-issues closed in this batch:**
+
+- **Per-class plumbing on 9 modulator modules** — 65 new `xstock_spot` rows + 2 new global flag constants seeded via migration `2026-05-25-b79-0n-confidence-chain-per-class-seed.sql` (idempotent BEGIN/COMMIT, rollback companion).
+- **7 modulator surface APIs REQUIRED-`assetClass: AssetClass`** — type-system enforcement at compute + builder layer; metadata.asset_class stamping for dashboard / replay filterability.
+- **MCE atomic Map-replace pattern (R-11)** — `ReadonlyMap<AssetClass, T>` cache fields swapped atomically per refresh cycle; readers see complete-state old map OR complete-state new map, never partial.
+- **R-10 trade-close hook fix** — `paper-execution-engine.ts:1371` + `vts-service.ts:929` resolve `assetClass` from `position.symbol` / `tradeData.symbol` via `safeResolveAssetClass + skip-on-null` before `outcomeFeedbackStore.updateEma`. Prevents silent crypto-key contamination of xstock EMA data at trade close.
+- **Outcome-feedback store key shape + path move** — internal Map key `<regime>_<strategy>` → `<assetClass>_<regime>_<strategy>`; persistent path `/tmp/b67-4-outcome-feedback.json` → `/home/deploy/dawntrader/data/b67-4-outcome-feedback.json`; first-boot disk-load migration re-keys legacy entries under `crypto_spot_` prefix; HARD-FAIL on corrupt new-path data (no silent fallback to legacy). Same path move for `regime-phase-store.json`. Survives pm2 restart.
+
+**Hotfixes during deploy:**
+
+- **`da92a79` — MANIFEST.txt drift.** CI caught the missing migration entry in `drizzle/migrations/MANIFEST.txt`; added the filename + redeployed.
+- **`b6e45a8` — esbuild dynamic-require fix.** Step 7 first-pass verification caught `Dynamic require of "path" is not supported` errors from `saveToDisk()` inside `OutcomeFeedbackStore` + `RegimePhaseStore`. Root cause: esbuild ESM bundle output doesn't support runtime `require()`. Fix: replaced inline `const path = require('path')` with top-of-file `import * as path from 'path'` in both store files. The persistence-store call sites were previously-undocumented dynamic-require externals — worth noting in the next esbuild config audit per Langston Step 8 observation.
+
+**Reference:** `Claude Comms and Packages/Scope Files/B79_0n_CONFIDENCE_CHAIN_SCOPE.md` v1 (commit `8293ed5d2`), `B79_0n_CONFIDENCE_CHAIN_PRE_AUDIT.md` v1.1 (commit `aa8a81f49`), `B79_0n_CONFIDENCE_CHAIN_STEP3_CHANGE_LIST.md` (commit `3efb745`), `B79_0n_CONFIDENCE_CHAIN_COMPLETION_REPORT.md` (this batch — Step 11).
+
+---
+
 ## CLOSURE-2026-05-24-B — BUG-008 (pattern_pool_gates xstock_spot naming drift) + ANOMALY-PROD-2026-05-24 (H/USD vts-runner fail-hard throw) RESOLVED-BY B79.0n.PATTERN-DETECT
 
 **Risk class:** RESOLVED. Both issues surfaced during B79.0n.PATTERN-DETECT execution (Step 2 pre-audit for BUG-008; Langston Step 8 verification for ANOMALY-PROD-2026-05-24) and were fixed in-batch as collateral cleanup.

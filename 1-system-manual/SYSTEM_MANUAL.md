@@ -10761,6 +10761,36 @@ Emit hooks live in `server/services/signal-orchestrator.ts` (active path, curren
 
 ---
 
+## B79.0n.CONFIDENCE-CHAIN per-class addendum (2026-05-25)
+
+**Per-class invariant:** every modulator in the b67_x + b68_x family now reads its configuration from per-asset-class rows in `module_constants` (or per-class JSONB blobs for the phase-preference weights). The pre-B79.0n.CONFIDENCE-CHAIN behavior — every modulator reading from a single global `asset_class='*'` wildcard row — is replaced with first-class per-class resolution. The market-context-engine maintains atomic per-class config maps for the 3 modulators with behavioral divergence (macro / pair-correlation / phase-preference); the other 4 modulators (outcome-feedback, regime-age, volume, multi-tf) keep their global single-config caches because their math is class-invariant by construction (F-1) and they don't carry per-class behavioral flags.
+
+**Per-class disposition per modulator:**
+
+| Modulator | crypto_spot | xstock_spot | F-1 / F-2 |
+|---|---|---|---|
+| b67_1 macro | BTC dominance + crypto funding + crypto mcap momentum z-score formula (full math) | **NO-OP via `assetClassNoOpActive=true`** — factor short-circuits to 1.0 with NaN z-scores + `metadata.asset_class_no_op_active=true`. Crypto-native inputs are meaningless for equity exposure. Equity-macro feed (VIX / DXY / SPY momentum) deferred to a Phase 24 follow-up. | **F-2** |
+| b67_2 phase | 18 strategies × 3 phases = 54 cells in `strategy_phase_weights` JSONB blob | 9 xStock-enabled strategies × 3 phases = 27 cells in per-class JSONB blob at neutral 1.0 (calibration follow-up will tune); fail-hard on missing-strategy key | **F-2** (per-class blob shape; strategies differ per class) |
+| b67_3 TFS-desat | regime_classifier desat constants (full per-class via B79.0n.MCE) | regime_classifier desat constants (per-class) | F-1 math; F-2 config tuning |
+| b67_4 outcome-feedback | Store keyed `<crypto_spot>_<regime>_<strategy>` | Store keyed `<xstock_spot>_<regime>_<strategy>` — fully isolated; crypto outcomes do NOT contaminate xstock EMAs | **F-2** (key isolation required) |
+| b68_1 multi-tf | Per-class via B79.0n.MCE (`calculatePairRegime` REQUIRED-assetClass) | Per-class | F-1 math |
+| b68_2 volume | Pure OHLC math | Pure OHLC math; class-invariant by construction | **F-1** |
+| b68_3 pair correlation | Spearman vs `XBT/USD` reference; `computeCorrelationEnabled=true` | Spearman vs `SPY/USD` reference; `computeCorrelationEnabled=false` v1 default pending SPY-relative calibration follow-up — factor short-circuits to 1.0 + `metadata.compute_disabled=true` | **F-2** (reference symbol differs) |
+| b68_4 regime-age | freshness factor formula | freshness factor formula (same math) | F-1 |
+| b68_5 path-B sustainability | Per-class via B79.0n.MCE (`calculatePairRegime` REQUIRED-assetClass) | Per-class | F-1 |
+
+**Outcome-feedback store persistence:** moved from `/tmp/b67-4-outcome-feedback.json` (purged on pm2 restart) to `/home/deploy/dawntrader/data/b67-4-outcome-feedback.json` (persistent across restarts). Internal Map key shape changed from `<regime>_<strategy>` to `<assetClass>_<regime>_<strategy>`. First-boot disk-load migration re-keys legacy entries under `crypto_spot_` prefix (pre-CONFIDENCE-CHAIN was crypto-only by construction). HARD-FAIL on corrupt new-path data — no silent fallback to legacy /tmp/ when canonical state file is unparseable (Langston Step 2 clarification 1). Same path move for `regime-phase-store.json` (no key change required).
+
+**MCE atomic Map-replace pattern (R-11 mitigation):** `macroConfigByClass` / `pairCorrelationConfigByClass` / `phaseWeightsByClass` are typed as `ReadonlyMap<AssetClass, T>`. Each refresh cycle builds a NEW map locally + atomically swaps the reference via single assignment. Readers see either the old map's complete state OR the new map's complete state — never a partial state where one class is updated and another isn't. The `ReadonlyMap` type makes accidental in-place mutation a TypeScript error.
+
+**Chain-composition capture-and-reuse (R-10 mitigation):** signal-orchestrator + vts-runner resolve `_pairAssetClass = safeResolveAssetClass(symbol, 'kraken')` once at chain-block entry. If null, skip the entire ablation block + WARN (structurally unreachable defense-in-depth — upstream regime classifier uses STRICT `resolveAssetClass` which would have thrown earlier). All 16 push sites (8 per file × 2 files) thread the captured asset class through the `FactorAlternateInput` discriminated-union arms — TS exhaustiveness check enforces. Same pattern applied to paper-execution-engine + vts-service close-hooks for `outcomeFeedbackStore.updateEma` (resolves from `position.symbol` / `tradeData.symbol`).
+
+---
+
+*End of B79.0n.CONFIDENCE-CHAIN per-class addendum.*
+
+---
+
 # Appendix — Data Capture Architecture (B70 + B70.1, 2026-05-04 → 2026-05-05)
 
 > **Why this exists.** Future ML, Trend Mining Engine, and post-launch analysis need a per-pair, per-cycle context log with all feature inputs and modulator chain values, joinable by timestamp across the system's full lifecycle (VTS today → paper-sim Phase 19 → live Phase 21). Before B70 the system had three disconnected data sources (B74 OHLC archives / B67+B73 ablation rows / VTS counter logs) and none captured per-pair context. B70 added the missing layer.
