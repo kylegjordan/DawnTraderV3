@@ -510,6 +510,82 @@ B79.0n.MCE worked example (deploy `aa0564107`, 2026-05-22). See `Claude Comms an
 
 ---
 
+### Step 4.11 — Pattern recognition primitives REQUIRED-`assetClass` discipline (B79.0n.PATTERN-DETECT canonical pattern, 2026-05-24)
+
+**Standing rule:** the same REQUIRED-`assetClass` discipline that Step 4.9 (storage) + Step 4.10 (compute) established now extends to the **pattern recognition layer** — the candlestick-detection routines that sit upstream of strategy detect methods.
+
+Every entry point into the pattern recognition subsystem gains REQUIRED `assetClass: AssetClass` at the TypeScript signature:
+
+- The top-level fan-out function (`scanPatterns(candles, symbol, assetClass)` in DawnTrader's case).
+- Every internal detect function (`detectPinbar` / `detectEngulfing` / etc.) gains the parameter, threaded through from the fan-out function.
+- The pattern-to-trade-signal converter (`patternToTradeSignal(pattern, currentPrice, atr, assetClass)`).
+- Any class-method wrapper around these (the singleton `PatternRecognizerService`).
+- The context-aware strategy picker (`selectContextAwareStrategy(regime, pattern, hash, assetClass)`).
+
+**Body branching is NOT introduced by the plumbing batch.** All hardcoded thresholds inside the detect functions (PINBAR wick ratio, INSIDE_BAR tolerance, MORNING_STAR body/range, ABCD Fib bounds, ATR multipliers) stay byte-identical for the original asset class. Per-class numeric tuning is a **Layer-3 batch** that lands once the new asset class has shadow-mode evidence — typically 4–12 weeks of cycle data showing where the original-class threshold is or isn't fit-for-purpose. PATTERN-DETECT plumbs the parameter through; the per-class branching decision is evidence-gated.
+
+**F-1 invariance lock-down:** the pattern *taxonomy* map (`PATTERN_TO_CANONICAL` / `normalizePatternToCanonical`) and the canonical pattern types enum (`CANONICAL_PATTERN_TYPES`) are **class-invariant by construction** — a PINBAR is a PINBAR regardless of asset class. These surfaces MUST NOT gain `assetClass` parameters. A dedicated F-1 invariance regression test (e.g. `b79-0n-pattern-detect-f1-invariance.test.ts`) locks the exact-shape assertion so a future drift attempt fails CI.
+
+**Where this pattern came from**
+
+B79.0n.PATTERN-DETECT worked example (deploy `c0479b2`, 2026-05-24). See `Claude Comms and Packages/Batch Completion/B79_0n_PATTERN_DETECT_COMPLETION_REPORT.md` §1 + §7 for the full set of onboarding learnings; see `SYSTEM_IMPACT_MAP.md` "Recent Additions (B79.0n.PATTERN-DETECT)" section for component-level deltas; see `SYSTEM_MANUAL.md` §4 (Pattern Strategies) for the post-batch signature spec.
+
+---
+
+### Step 4.12 — Pattern-pool gates naming convergence (B79.0n.PATTERN-DETECT canonical pattern, 2026-05-24)
+
+**Standing rule:** every per-class `module_constants` row uses the SAME `constant_name` across asset classes; the resolver-key's `asset_class` field is the per-class differentiator. Different short-names for the same semantic lever across asset classes is a real bug, not a convention choice.
+
+**Recognising the bug:** if you see rows like `module_constants.pattern_pool_gates.crypto_spot.pattern_final_score_min` AND `module_constants.pattern_pool_gates.xstock_spot.final_score_floor` (same semantic value, different name), that's per-class scoping that drifted onto the `constant_name` column when it should have stayed on the `asset_class` column. F-2 lever drift. Fix in a forward-converge migration:
+
+1. Run an idempotent UPDATE that renames the divergent constant_name to match the canonical name from the original asset class.
+2. WHERE clause is fully-scoped (module_name + exchange + asset_class + strategy + regime + constant_name = legacy_name). UPDATE 0 rows is the no-op shape when re-run.
+3. ON CONFLICT DO NOTHING (or equivalent) on any subsequent INSERT of new sibling rows.
+4. Update the consumer file (`<class>/pattern-pool-filters.ts` or equivalent) to use the converged name in its `getCachedNumberRequired(...)` calls.
+5. Pre-batch grep BEFORE the rename migration: confirm zero current production consumers read via the legacy name as a string literal (catches DB-readers; the schema layer's getter file is already going to be updated as part of the rewrite).
+6. Test: dedicated test file mocks the resolver and asserts the getter calls the correct key string.
+
+**Recognising the design pressure:** the bug class arises when an asset class is onboarded asymmetrically. xStock's pattern-pool gates were seeded in May 2026 (B79_inherit_crypto era) with abbreviated short-names, while crypto's already-existing rows used a `pattern_*` prefix convention. The asymmetry persisted because no consumer read the xStock rows from the DB — they were forward-loaded scaffolding. The grep-before-rename step is what made the convergence safe to ship.
+
+**Where this pattern came from**
+
+B79.0n.PATTERN-DETECT worked example. Migration `2026-05-24b-b79-0n-pattern-detect-naming-converge.sql`; pre-audit §-0 grep cross-check that confirmed zero current production consumers; completion report §2 for the H/USD throw narrative + the Step 9 iteration that addressed it.
+
+---
+
+### Step 4.13 — Capture-and-reuse asset-class resolution at function/loop entry (B79.0n.PATTERN-DETECT canonical pattern, 2026-05-24)
+
+**Standing rule:** when a function or loop iteration needs the asset class at multiple downstream consumers, resolve it ONCE at the function/loop entry, store in a local variable (e.g. `_assetClass`), and reuse across every downstream call. Do NOT re-call the resolver at each consumer site.
+
+```ts
+async function generateSignal(symbol: string, ...) {
+  // Capture once at entry. Use safeResolveAssetClass — null → skip.
+  const _assetClass = safeResolveAssetClass(symbol, 'kraken');
+  if (_assetClass === null) {
+    return null;  // graceful skip; no throw
+  }
+  // Now reuse _assetClass at every downstream call:
+  const mceContext = mce.computeContext(symbol, ohlc, ..., _assetClass);
+  const patterns = scanPatterns(candles, symbol, _assetClass);
+  const selection = selectContextAwareStrategy(regime, pattern, hash, _assetClass);
+  // ... etc
+}
+```
+
+**Why this matters:**
+
+1. **Resolver throws on unregistered symbols.** The original `resolveAssetClass(symbol, exchange)` throws when the symbol doesn't match any registered pattern. Multiple call sites in the same function body multiply the throw exposure — each new resolver call is a new fail-hard point for unregistered symbols. Use `safeResolveAssetClass` (returns null + logs WARN) at the capture site, and the caller decides skip vs default.
+2. **Collision-symbol WARN amplification.** When `resolveAssetClass` succeeds with a known-collision symbol (a ticker that exists in two asset classes' raw namespaces), it logs a per-call WARN. N call sites = N WARNs per function invocation. Capture-and-reuse deduplicates the WARN to 1 per function-entry.
+3. **Forward-loading.** When a future Layer-3 batch wants to wire per-class branching, the existing capture-and-reuse local variable is the single point to inject the branch — no need to refactor multiple consumer sites.
+
+**Recognising the bug:** if you find a function body with 3+ identical `resolveAssetClass(symbol, exchange)` calls, that's the smell. Refactor to capture-and-reuse before adding any new call site.
+
+**Where this pattern came from**
+
+B79.0n.PATTERN-DETECT Step 9 iteration (commit `c0479b2`, 2026-05-24). Langston Step 8 second-pass flagged a pre-existing H/USD fail-hard throw at the original `vts-runner.ts:913` MCE call; investigation showed PATTERN-DETECT's 4 new `resolveAssetClass` call sites would have throw-amplified on the same symbols if the pre-existing throw hadn't shadowed them. The capture-and-reuse refactor consolidated 6 throwing sites (2 pre-existing + 4 new) to 2 capture calls and eliminated H/USD-style throws at all six. The remaining ~10 pre-existing throwing `resolveAssetClass` sites elsewhere in vts-runner.ts were out of scope and filed as RUNNING_ISSUES #139 (Phase 19 cleanup batch).
+
+---
+
 ### Section D.1 — Concrete code-extension templates (Phase 24 reference)
 
 Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.

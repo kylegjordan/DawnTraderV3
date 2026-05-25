@@ -1620,21 +1620,51 @@ The most sophisticated strategy — uses Level-2 order book data, not OHLCV cand
 
 ## 4. PATTERN Strategies (3)
 
-**Pattern Recognition Service**: `server/services/pattern-recognizer.ts` (481 lines, Directive 10.2)
+**Pattern Recognition Service**: `server/services/pattern-recognizer.ts` (601 lines, Directive 10.2 LOCKED)
 
 Pattern recognition is the **detection service** — it identifies candlestick formations in OHLCV data. The 3 pattern **strategies** are specific trading strategies that USE pattern detection as their primary entry signal.
 
-### 5 Canonical Patterns (Detection Layer)
+### B79.0n.PATTERN-DETECT (2026-05-24) — REQUIRED-`assetClass` discipline
+
+Per Sub-batch 6 of 18 in the B79.0n umbrella v4 arc, every entry point into the pattern recognition subsystem now requires explicit asset-class scoping at the TypeScript signature:
+
+- `scanPatterns(candles: Candle[], symbol: string, assetClass: AssetClass): PatternSignal[]` — third parameter REQUIRED (was a 2-arg call with `symbol: string = 'UNKNOWN'` default).
+- All 6 internal detect functions (`detectPinbar`, `detectEngulfing`, `detectInsideBar`, `detectThreeSoldiers`, `detectMorningStar`, `detectABCD`) gain `assetClass: AssetClass` as their last parameter. Body branching: NONE — plumbing-only.
+- `patternToTradeSignal(pattern, currentPrice, atr, assetClass)` gains REQUIRED `assetClass` (and `atr` is now REQUIRED — the prior `atr: number = 0` default was removed; class-method wrapper bridges `atr: number | undefined → atr ?? 0`).
+- `PatternRecognizerService` class methods mirror REQUIRED-`assetClass` discipline.
+- `selectContextAwareStrategy(regime, detectedPattern, symbolHash, assetClass)` gains REQUIRED `assetClass` 4th parameter; body unchanged (still operates on `CANONICAL_REGIME_STRATEGY_MAP[regime]`).
+
+The 11 hardcoded detect-function thresholds remain inline literals — they are byte-identical to pre-B79.0n.PATTERN-DETECT crypto behavior. Per-class numeric tuning of these thresholds is deferred to a Layer-3 batch once xStock shadow-mode evidence is available. PATTERN-DETECT plumbs `assetClass` through; downstream branching is a future evidence-gated decision.
+
+`PATTERN_TO_CANONICAL` map + `normalizePatternToCanonical` function are **class-invariant by construction** (a PINBAR is a PINBAR regardless of asset class) and MUST NOT gain `assetClass` parameters. F-1 invariance regression-locked in `b79-0n-pattern-detect-f1-invariance.test.ts`.
+
+### 6 Canonical Patterns (Detection Layer)
 
 | Pattern | Detection Logic | Direction | Base Strength |
 |---------|----------------|-----------|---------------|
 | **PINBAR** | Wick > 1.5× body (B54: relaxed from 2× for crypto), wick > 2× opposite wick | BUY or SELL | 0.6 + wick ratio |
 | **ENGULFING** | Body fully engulfs prior body | BUY or SELL | 0.65 + engulf ratio + volume bonus |
 | **MORNING_STAR** | Bear (body/range > 0.3, B54: relaxed from 0.4) → Doji → Bull, close > midpoint of bear | BUY only | 0.7 + recovery + gap bonus |
-| **INSIDE_BAR** → mapped to ENGULFING | High < prevHigh AND Low > prevLow (B54: 0.1% tolerance) | Based on parent | 0.6 + compression |
+| **INSIDE_BAR** | High < prevHigh AND Low > prevLow (B54: 0.1% tolerance) — promoted to canonical Batch 19F (was mapped to ENGULFING) | Based on parent | 0.6 + compression |
 | **THREE_SOLDIERS** → mapped to MORNING_STAR | 3 consecutive bullish, each closing higher (B54: 0.25% opens-in-body tolerance) | BUY only | 0.75 + total gain |
+| **ABCD** | A-B-C-D harmonic measured move; BC retrace 0.350-0.820 of AB leg (B53: widened from classical Fib 0.382-0.786); min 12 candles | BUY only | 0.6 + golden ratio quality |
 
 Timeframe weighting: 1h = 1.0, 15m = 0.8, 5m = 0.6.
+
+### Pattern-pool gates DB schema (post-B79.0n.PATTERN-DETECT)
+
+`module_constants.pattern_pool_gates.<asset_class>.*` rows govern pattern-pool admission + RSI bounds + guardrails. Naming converged across asset classes by B79.0n.PATTERN-DETECT (2026-05-24) — previously crypto_spot used `pattern_*` names and xstock_spot used different short names; that F-2 lever drift bug was closed via migration `2026-05-24b-b79-0n-pattern-detect-naming-converge.sql`.
+
+| Constant | crypto_spot | xstock_spot | Resolver site |
+|---|---|---|---|
+| `pattern_final_score_min` | 0.45 | 0.45 | `<class>/pattern-pool-filters.ts` getter `FINAL_SCORE_FLOOR` |
+| `pattern_max_position_pct` | 0.15 | 0.50 | `<class>/pattern-pool-filters.ts` getter `MAX_POSITION_PCT` |
+| `pattern_rsi_min` | 15 | 15 | `<class>/pattern-pool-filters.ts` getter `RSI_MIN` |
+| `pattern_rsi_max` | 85 | 85 | `<class>/pattern-pool-filters.ts` getter `RSI_MAX` |
+
+**Per-class scoping discipline**: scoping belongs on the `asset_class` column, not on the `constant_name` column. Same semantic lever uses the SAME constant_name across asset classes; the resolver-key's `assetClass` field is what differentiates.
+
+xstock pattern_max_position_pct is elevated to 0.50 (vs crypto 0.15) per B79.0m.b2 design — pattern-pool relaxations on xstock are by intentional design, not configuration drift.
 
 ### 4.1 Morning Star / Evening Star
 **Canonical Regime**: BULL_STABLE, TRANSITION
