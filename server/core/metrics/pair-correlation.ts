@@ -52,10 +52,20 @@ import type {
   FactorAlternate,
   RegimeDecision,
 } from '../../services/factor-ablation-emitter.js';
+// B79.0n.CONFIDENCE-CHAIN: per-class threading + reference-symbol-per-class
+// resolution + compute_correlation_enabled flag handling.
+import type { AssetClass } from '../../../shared/asset-classes.js';
 
 /** Resolved config — supplied by MCE via `refreshPairCorrelationConfig()`. */
 export interface PairCorrelationConfig {
   lookbackBars: number;
+  /**
+   * The reference symbol whose correlation is measured against the pair.
+   * Per-class via B79.0n.CONFIDENCE-CHAIN — crypto_spot resolves to
+   * `'XXBTZUSD'` (BTC); xstock_spot resolves to `'SPY/USD'` (S&P 500 INDEX_PROXY).
+   * The field name retains `btc` for historical continuity but the semantic
+   * is "broad-market reference symbol per asset class."
+   */
   btcReferenceSymbol: string;
   factorMin: number;
   factorMax: number;
@@ -63,6 +73,14 @@ export interface PairCorrelationConfig {
   minSamples: number;
   driftingThreshold: number;
   idiosyncraticThreshold: number;
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — when false, `computePairCorrelation` short-
+   * circuits to factor=1.0 + `computeDisabled: true` in the result. Used for
+   * asset classes where the reference symbol's OHLC pipeline is not yet
+   * calibrated for correlation (e.g., xstock_spot vs SPY pending follow-up).
+   * Resolved from `module_constants.pair_correlation.<assetClass>.b68_3_compute_correlation_enabled`.
+   */
+  computeCorrelationEnabled: boolean;
 }
 
 /** Computation result — score + factor + diagnostic flags. */
@@ -82,7 +100,14 @@ export interface PairCorrelationResult {
   /** True when the evaluated pair IS the BTC reference (degenerate case). */
   isBtcSelfReference: boolean;
   /** Informational label from |correlationToBtc| vs configured thresholds. */
-  label: 'IDIOSYNCRATIC' | 'DRIFTING' | 'NEUTRAL' | 'SELF_REFERENCE';
+  label: 'IDIOSYNCRATIC' | 'DRIFTING' | 'NEUTRAL' | 'SELF_REFERENCE' | 'COMPUTE_DISABLED';
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — true when `config.computeCorrelationEnabled` was
+   * false and the function short-circuited to factor=1.0. Used for asset
+   * classes where the reference-symbol correlation pipeline is not yet
+   * calibrated (e.g., xstock_spot vs SPY pending follow-up batch).
+   */
+  computeDisabled: boolean;
 }
 
 /**
@@ -95,7 +120,26 @@ export function computePairCorrelation(
   pairOhlc: OHLCData[],
   btcOhlc: OHLCData[] | null,
   config: PairCorrelationConfig,
+  assetClass: AssetClass,
 ): PairCorrelationResult {
+  // B79.0n.CONFIDENCE-CHAIN per-class compute-disabled short-circuit. Used
+  // for asset classes where the reference-symbol correlation pipeline is not
+  // yet calibrated (e.g., xstock_spot vs SPY pending follow-up batch). Emits
+  // with the disabled flag for downstream filterability.
+  if (!config.computeCorrelationEnabled) {
+    return {
+      correlationToBtc: 0,
+      decorrelationScore: 0,
+      factor: 1.0,
+      coldStart: false,
+      sampleCount: 0,
+      btcReferenceAvailable: false,
+      isBtcSelfReference: false,
+      label: 'COMPUTE_DISABLED',
+      computeDisabled: true,
+    };
+  }
+
   // §A.1.2: self-reference guard — pair IS the BTC reference symbol. Trading
   // BTC vs itself is degenerate; emit row with explicit flag (per cc-inbox
   // #883 B.6 — emit-with-flag, not skip-emit, keeps ablation dataset clean).
@@ -109,8 +153,13 @@ export function computePairCorrelation(
       btcReferenceAvailable: true,
       isBtcSelfReference: true,
       label: 'SELF_REFERENCE',
+      computeDisabled: false,
     };
   }
+  // Suppress unused-var warning — assetClass is part of the type contract
+  // for downstream metadata stamping in buildB68_3Alternate, even though the
+  // pure-function math is class-invariant (F-1 per scope §8).
+  void assetClass;
 
   // §A.1.1: cold-start when either pair OR BTC OHLC is short. Both must have
   // ≥ N bars. BTC missing entirely (cache cold-start) is also cold-start.
@@ -125,6 +174,7 @@ export function computePairCorrelation(
       btcReferenceAvailable: btcAvailable,
       isBtcSelfReference: false,
       label: 'NEUTRAL',
+      computeDisabled: false,
     };
   }
 
@@ -183,6 +233,7 @@ export function computePairCorrelation(
     btcReferenceAvailable: true,
     isBtcSelfReference: false,
     label,
+    computeDisabled: false,
   };
 }
 
@@ -199,6 +250,7 @@ export function buildB68_3Alternate(
   realRegimeLabel: string,
   result: PairCorrelationResult,
   config: PairCorrelationConfig,
+  assetClass: AssetClass,
 ): FactorAlternate {
   const confidenceWithoutFactor =
     result.factor > 0 ? realConfidence / result.factor : realConfidence;
@@ -219,6 +271,11 @@ export function buildB68_3Alternate(
       btc_reference_available: result.btcReferenceAvailable,
       is_btc_self_reference: result.isBtcSelfReference,
       label: result.label,
+      // B79.0n.CONFIDENCE-CHAIN: stamp asset class + reference symbol used +
+      // compute-disabled flag for dashboard / replay filterability.
+      asset_class: assetClass,
+      reference_symbol: config.btcReferenceSymbol,
+      compute_disabled: result.computeDisabled,
     },
   };
 

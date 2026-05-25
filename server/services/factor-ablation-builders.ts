@@ -58,6 +58,9 @@ export type FactorAlternateInput =
       modifier: MacroModifierResult;
       admissionPossible: boolean;
       config: MacroModifierConfig;
+      // B79.0n.CONFIDENCE-CHAIN: REQUIRED — threaded into buildB67_1Alternates
+      // for per-class metadata stamping.
+      assetClass: AssetClass;
     }
   | {
       kind: 'b67_2';
@@ -65,35 +68,45 @@ export type FactorAlternateInput =
       phaseAgeSeconds: number;
       strategy: string;
       phaseWeight: number;
+      // B79.0n.CONFIDENCE-CHAIN: REQUIRED — per-class JSONB weight blob resolved
+      // upstream; stamp class into metadata downstream.
+      assetClass: AssetClass;
     }
   | {
       kind: 'b67_4';
-      result: { factor: number; coldStart: boolean };
+      result: { factor: number; coldStart: boolean; assetClass: AssetClass };
       context: {
         regime: string;
         strategy: string;
         entry: OutcomeFeedbackEntry | undefined;
       };
+      // B79.0n.CONFIDENCE-CHAIN: REQUIRED — per-class store key (Chunk 5).
+      assetClass: AssetClass;
     }
   | {
       kind: 'b68_1';
       result: MultiTfAgreementResult;
       config: MultiTfAgreementConfig;
+      // B79.0n.CONFIDENCE-CHAIN: REQUIRED — for per-class metadata stamping.
+      assetClass: AssetClass;
     }
   | {
       kind: 'b68_2';
       result: VolumeRegimeResult;
       config: VolumeRegimeConfig;
+      assetClass: AssetClass;
     }
   | {
       kind: 'b68_3';
       result: PairCorrelationResult;
       config: PairCorrelationConfig;
+      assetClass: AssetClass;
     }
   | {
       kind: 'b68_4';
       result: { factor: number; coldStart: boolean; ageHours: number };
       targetAgeHours: number;
+      assetClass: AssetClass;
     }
   | {
       // B68.5 is the special case — label-counterfactual, not divide-out. The
@@ -131,6 +144,7 @@ function buildOneAlternate(
         realRegimeLabel,
         input.admissionPossible,
         input.config,
+        input.assetClass,
       );
     case 'b67_2':
       return buildB67_2Alternate(
@@ -140,6 +154,7 @@ function buildOneAlternate(
         input.phaseAgeSeconds,
         input.strategy,
         input.phaseWeight,
+        input.assetClass,
       );
     case 'b67_4':
       return buildB67_4Alternate(
@@ -147,6 +162,7 @@ function buildOneAlternate(
         realRegimeLabel,
         input.result,
         input.context,
+        input.assetClass,
       );
     case 'b68_1':
       return buildB68_1Alternate(
@@ -154,6 +170,7 @@ function buildOneAlternate(
         realRegimeLabel,
         input.result,
         input.config,
+        input.assetClass,
       );
     case 'b68_2':
       return buildB68_2Alternate(
@@ -161,6 +178,7 @@ function buildOneAlternate(
         realRegimeLabel,
         input.result,
         input.config,
+        input.assetClass,
       );
     case 'b68_3':
       return buildB68_3Alternate(
@@ -168,6 +186,7 @@ function buildOneAlternate(
         realRegimeLabel,
         input.result,
         input.config,
+        input.assetClass,
       );
     case 'b68_4':
       return buildB68_4Alternate(
@@ -175,6 +194,7 @@ function buildOneAlternate(
         realRegimeLabel,
         input.result,
         input.targetAgeHours,
+        input.assetClass,
       );
     case 'b68_5':
       return buildB68_5Alternate(

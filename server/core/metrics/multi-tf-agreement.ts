@@ -207,6 +207,7 @@ export function buildB68_1Alternate(
   realRegimeLabel: string,
   result: MultiTfAgreementResult,
   config: MultiTfAgreementConfig,
+  assetClass: AssetClass,
 ): FactorAlternate {
   const confidenceWithoutFactor =
     result.factor > 0 ? realConfidence / result.factor : realConfidence;
@@ -234,6 +235,8 @@ export function buildB68_1Alternate(
       confidence_with_factor: realConfidence,
       confidence_without_factor: confidenceWithoutFactor,
       cold_start: result.coldStart,
+      // B79.0n.CONFIDENCE-CHAIN: stamp asset class for dashboard / replay filterability.
+      asset_class: assetClass,
     },
   };
 

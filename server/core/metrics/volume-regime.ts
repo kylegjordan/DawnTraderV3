@@ -51,6 +51,8 @@ import type {
   FactorAlternate,
   RegimeDecision,
 } from '../../services/factor-ablation-emitter.js';
+// B79.0n.CONFIDENCE-CHAIN: per-class threading for metadata stamping.
+import type { AssetClass } from '../../../shared/asset-classes.js';
 
 /** Resolved config — supplied by MCE via `refreshVolumeRegimeConfig()`. */
 export interface VolumeRegimeConfig {
@@ -92,6 +94,11 @@ export interface VolumeRegimeResult {
 export function computeVolumeRegime(
   ohlcData: OHLCData[],
   config: VolumeRegimeConfig,
+  // B79.0n.CONFIDENCE-CHAIN: REQUIRED. Stamped into result metadata
+  // downstream. Math is class-invariant by construction (F-1 per scope §8);
+  // the parameter exists for chain-uniformity discipline.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _assetClass: AssetClass,
 ): VolumeRegimeResult {
   // Cold-start: insufficient bars to compute a meaningful score.
   if (!ohlcData || ohlcData.length < config.minSamples) {
@@ -170,6 +177,7 @@ export function buildB68_2Alternate(
   realRegimeLabel: string,
   result: VolumeRegimeResult,
   config: VolumeRegimeConfig,
+  assetClass: AssetClass,
 ): FactorAlternate {
   const confidenceWithoutFactor =
     result.factor > 0 ? realConfidence / result.factor : realConfidence;
@@ -189,6 +197,8 @@ export function buildB68_2Alternate(
       regime_at_eval: realRegimeLabel,
       has_liquidation_spike: result.hasLiquidationSpike,
       label: result.label,
+      // B79.0n.CONFIDENCE-CHAIN: stamp asset class for dashboard / replay filterability.
+      asset_class: assetClass,
     },
   };
 

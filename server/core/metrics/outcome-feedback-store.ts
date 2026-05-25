@@ -40,6 +40,9 @@
 import * as fs from 'fs';
 import type { FactorAlternate } from '../../services/factor-ablation-emitter.js';
 import type { RegimeDecision } from '../../services/factor-ablation-emitter.js';
+// B79.0n.CONFIDENCE-CHAIN (2026-05-25): per-class threading for metadata
+// stamping + future per-class store key shape (full implementation in Chunk 5).
+import type { AssetClass } from '../../../shared/asset-classes.js';
 
 /** Per-tuple stored entry. Reset implicitly via `expiry` sweep on disk-load. */
 export interface OutcomeFeedbackEntry {
@@ -245,13 +248,18 @@ export const outcomeFeedbackStore = new OutcomeFeedbackStore();
 export function computeOutcomeFeedbackFactor(
   entry: OutcomeFeedbackEntry | undefined,
   config: OutcomeFeedbackConfig,
-): { factor: number; coldStart: boolean } {
+  // B79.0n.CONFIDENCE-CHAIN: REQUIRED. The pair's asset class. Currently used
+  // for metadata stamping at the buildAlternate hook; in Chunk 5 the store
+  // key shape becomes <assetClass>_<regime>_<strategy> so the entry lookup
+  // is naturally per-class — no further computation here.
+  assetClass: AssetClass,
+): { factor: number; coldStart: boolean; assetClass: AssetClass } {
   if (!entry || entry.sample_count < config.minSamples) {
-    return { factor: 1.0, coldStart: true };
+    return { factor: 1.0, coldStart: true, assetClass };
   }
   const raw = 1.0 + (entry.ema_pnl_pct * config.sensitivity) / 100;
   const clamped = Math.max(config.factorMin, Math.min(config.factorMax, raw));
-  return { factor: clamped, coldStart: false };
+  return { factor: clamped, coldStart: false, assetClass };
 }
 
 /**
@@ -266,12 +274,13 @@ export function computeOutcomeFeedbackFactor(
 export function buildB67_4Alternate(
   realConfidence: number,
   realRegimeLabel: string,
-  feedbackResult: { factor: number; coldStart: boolean },
+  feedbackResult: { factor: number; coldStart: boolean; assetClass: AssetClass },
   context: {
     regime: string;
     strategy: string;
     entry: OutcomeFeedbackEntry | undefined;
   },
+  assetClass: AssetClass,
 ): FactorAlternate {
   // confidence_without_factor: divide-out the feedback factor to recover what
   // the modulated confidence would have been without B67.4.
@@ -291,6 +300,10 @@ export function buildB67_4Alternate(
       ema_pnl_pct: context.entry?.ema_pnl_pct ?? 0,
       sample_count: context.entry?.sample_count ?? 0,
       cold_start: feedbackResult.coldStart,
+      // B79.0n.CONFIDENCE-CHAIN: stamp asset class. The feedbackResult itself
+      // carries assetClass too; mirror into top-level metadata for dashboard
+      // / replay filterability.
+      asset_class: assetClass,
     },
   };
 

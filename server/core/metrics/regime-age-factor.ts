@@ -54,6 +54,12 @@ import type { AssetClass } from '../../../shared/asset-classes.js';
 export function computeFreshnessFactor(
   ageMs: number | undefined,
   config: RegimeAgeConfig,
+  // B79.0n.CONFIDENCE-CHAIN: REQUIRED. Stamped into buildB68_4Alternate
+  // downstream. Math is class-invariant by construction (F-1 per scope §8);
+  // the parameter exists for chain-uniformity + per-class target_age_hours
+  // which IS captured via the config field.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _assetClass: AssetClass,
 ): { factor: number; coldStart: boolean; ageHours: number } {
   if (ageMs === undefined || !Number.isFinite(ageMs)) {
     return { factor: 1.0, coldStart: true, ageHours: 0 };
@@ -79,6 +85,7 @@ export function buildB68_4Alternate(
   realRegimeLabel: string,
   freshnessResult: { factor: number; coldStart: boolean; ageHours: number },
   targetAgeHours: number,
+  assetClass: AssetClass,
 ): FactorAlternate {
   const confidenceWithoutFactor =
     freshnessResult.factor > 0 ? realConfidence / freshnessResult.factor : realConfidence;
@@ -95,6 +102,9 @@ export function buildB68_4Alternate(
       phase_age_seconds: Math.floor(freshnessResult.ageHours * 3600),
       target_age_hours: targetAgeHours,
       cold_start: freshnessResult.coldStart,
+      // B79.0n.CONFIDENCE-CHAIN: stamp asset class. target_age_hours already
+      // varies per-class via DB (crypto=6.0 / xstock=2.0 RTH-adjusted).
+      asset_class: assetClass,
     },
   };
 

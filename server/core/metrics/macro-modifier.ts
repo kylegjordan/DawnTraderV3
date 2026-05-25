@@ -96,7 +96,17 @@ export interface MacroBaseline {
 
 /**
  * Module-constants-resolved configuration. Caller resolves once per cycle and
- * passes in. All numeric.
+ * passes in. All numeric except the per-class no-op flag.
+ *
+ * **B79.0n.CONFIDENCE-CHAIN (2026-05-25):** added `assetClassNoOpActive` flag.
+ * When true, `computeMacroModifier` short-circuits at the top and returns
+ * `value: 1.0` with `assetClassNoOpActive: true` in the result. Used for
+ * asset classes where the crypto-native macro inputs (BTC dominance, funding
+ * rates, crypto mcap momentum) are meaningless (e.g., `xstock_spot`). Long-
+ * term equity macro inputs (VIX, DXY, SPY momentum) are deferred to a
+ * Phase 24 macro-feed batch. NO PATCHES discipline (CLAUDE.md §5 #15) —
+ * per-class disposition is an explicit DB-resolved value, not a hardcoded
+ * conditional.
  */
 export interface MacroModifierConfig {
   enabled: boolean;
@@ -107,6 +117,12 @@ export interface MacroModifierConfig {
   modifierMax: number;
   staleSeconds: number;
   zScoreMinSampleCount: number;
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — when true, `computeMacroModifier` short-circuits
+   * to factor=1.0 + `assetClassNoOpActive=true` in the result regardless of
+   * inputs. Resolved from `module_constants.macro_modifier.<assetClass>.b67_1_asset_class_no_op_active`.
+   */
+  assetClassNoOpActive: boolean;
 }
 
 /**
@@ -126,6 +142,14 @@ export interface MacroModifierResult {
   fallbackActive: boolean;
   /** True when snapshot age exceeds staleSeconds. */
   staleDataFlag: boolean;
+  /**
+   * B79.0n.CONFIDENCE-CHAIN — true when the modifier short-circuited because
+   * the per-class config has `assetClassNoOpActive: true`. Distinct telemetry
+   * dimension from `fallbackActive` (cold-start) and `staleDataFlag` (feed
+   * failure) — this is a legitimate per-class design disposition, not a
+   * runtime fault.
+   */
+  assetClassNoOpActive: boolean;
 }
 
 /**
@@ -153,16 +177,41 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * Pure macro modifier function. See module header for formula + semantics.
  *
+ * **B79.0n.CONFIDENCE-CHAIN (2026-05-25):** added REQUIRED `assetClass` for
+ * downstream metadata stamping + new short-circuit at the top of the function
+ * when `config.assetClassNoOpActive === true`. Used for asset classes where
+ * crypto-native macro inputs are meaningless (e.g., `xstock_spot`).
+ *
  * @param snapshot — current macro inputs (BTC dom / funding / mcap)
  * @param baseline — rolling-window stats for z-score normalization
- * @param config   — module_constants-resolved configuration
+ * @param config   — module_constants-resolved configuration (per-class)
+ * @param assetClass — REQUIRED. The pair's asset class. Stamped into result
+ *                     metadata downstream for ablation row auditability.
  * @returns        — modifier value + per-input z-scores + fallback flags
  */
+import type { AssetClass } from '../../../shared/asset-classes';
+
 export function computeMacroModifier(
   snapshot: MacroSnapshot,
   baseline: MacroBaseline,
   config: MacroModifierConfig,
+  assetClass: AssetClass,
 ): MacroModifierResult {
+  // B79.0n.CONFIDENCE-CHAIN per-class no-op: when the class's config has the
+  // flag active, the modifier function short-circuits to identity. xstock_spot
+  // disposition v1; equity-macro inputs follow in a Phase 24 batch.
+  if (config.assetClassNoOpActive) {
+    return {
+      value: 1.0,
+      btcDomZ: NaN,
+      fundingZ: NaN,
+      mcapZ: NaN,
+      fallbackActive: false,
+      staleDataFlag: false,
+      assetClassNoOpActive: true,
+    };
+  }
+
   // Stale-data fallback: snapshot too old → modifier = 1.0 + flag.
   if (snapshot.ageSeconds > config.staleSeconds) {
     return {
@@ -172,6 +221,7 @@ export function computeMacroModifier(
       mcapZ: 0,
       fallbackActive: false,
       staleDataFlag: true,
+      assetClassNoOpActive: false,
     };
   }
 
@@ -221,6 +271,7 @@ export function computeMacroModifier(
       mcapZ: mcapZ === null ? NaN : mcapZ,
       fallbackActive: true,
       staleDataFlag: false,
+      assetClassNoOpActive: false,
     };
   }
 
@@ -242,6 +293,7 @@ export function computeMacroModifier(
     mcapZ: mcapZ,
     fallbackActive: false,
     staleDataFlag: false,
+    assetClassNoOpActive: false,
   };
 }
 
@@ -286,6 +338,7 @@ export function buildB67_1Alternates(
   regimeLabel: string,
   admissionPossible: boolean,
   config: MacroModifierConfig,
+  assetClass: AssetClass,
 ): Array<{
   factorName: 'b67_1_btc_dominance' | 'b67_1_funding_rates' | 'b67_1_mcap_momentum';
   factorState: 'alternate_disabled';
@@ -334,6 +387,10 @@ export function buildB67_1Alternates(
     actual_modifier_value: modifier.value,
     fallback_active: modifier.fallbackActive,
     stale_data_flag: modifier.staleDataFlag,
+    // B79.0n.CONFIDENCE-CHAIN: stamp asset class + no-op state in metadata for
+    // dashboard / replay filterability.
+    asset_class: assetClass,
+    asset_class_no_op_active: modifier.assetClassNoOpActive,
   };
 
   return [

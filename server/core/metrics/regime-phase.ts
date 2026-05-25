@@ -372,13 +372,16 @@ export function applyPhasePreference(
   phase: RegimePhase,
   weights: Record<string, number>,
   baseConfidence: number,
+  assetClass: AssetClass,
 ): number {
   const key = `${strategy}_${phase}`;
   const weight = weights[key];
   if (weight === undefined) {
     throw new Error(
-      `[B67.2][missing-weight] no entry for ${key} in strategy_phase_weights blob. ` +
-      `Migration must seed all 54 cells. Add to module_constants and redeploy.`,
+      `[B67.2][missing-weight] no entry for ${key} in strategy_phase_weights blob ` +
+      `for asset_class=${assetClass}. B79.0n.CONFIDENCE-CHAIN: per-class blob — ` +
+      `migration must seed all (strategy × phase) cells for this asset class. ` +
+      `Add to module_constants and redeploy.`,
     );
   }
   return baseConfidence * weight;
@@ -411,6 +414,7 @@ export function buildB67_2Alternate(
   phaseAgeSeconds: number,
   strategy: string,
   phaseWeight: number,
+  assetClass: AssetClass,
 ): FactorAlternate {
   const confidenceWithoutFactor =
     phaseWeight > 0 ? realConfidenceFinal / phaseWeight : realConfidenceFinal;
@@ -427,6 +431,8 @@ export function buildB67_2Alternate(
       phase_age_seconds: phaseAgeSeconds,
       strategy_phase_weight: phaseWeight,
       regime_label: realRegimeLabel,
+      // B79.0n.CONFIDENCE-CHAIN: stamp asset class for dashboard / replay filterability.
+      asset_class: assetClass,
     },
   };
 
