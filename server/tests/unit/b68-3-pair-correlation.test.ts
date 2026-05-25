@@ -33,6 +33,8 @@ const CFG: PairCorrelationConfig = {
   minSamples: 30,
   driftingThreshold: 0.70,
   idiosyncraticThreshold: 0.30,
+  // B79.0n.CONFIDENCE-CHAIN: enable compute for existing crypto-side tests.
+  computeCorrelationEnabled: true,
 };
 
 /** Build OHLC where close moves linearly upward (each bar +1 from previous). */
@@ -115,7 +117,7 @@ function makeNoisy(count: number, seed = 1): OHLCData[] {
 describe('B68.3 — computePairCorrelation', () => {
   it('self-reference: pair = btcReferenceSymbol → factor=1.0, label=SELF_REFERENCE', () => {
     const ohlc = makeUpward(30);
-    const result = computePairCorrelation('XXBTZUSD', ohlc, ohlc, CFG);
+    const result = computePairCorrelation('XXBTZUSD', ohlc, ohlc, CFG, 'crypto_spot');
     expect(result.factor).toBe(1.0);
     expect(result.label).toBe('SELF_REFERENCE');
     expect(result.isBtcSelfReference).toBe(true);
@@ -125,14 +127,14 @@ describe('B68.3 — computePairCorrelation', () => {
   it('cold-start: pair OHLC short → factor=1.0, coldStart=true', () => {
     const ohlc = makeUpward(20); // 20 < minSamples 30
     const btc = makeUpward(30);
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
     expect(result.coldStart).toBe(true);
     expect(result.factor).toBe(1.0);
   });
 
   it('cold-start: BTC OHLC null → factor=1.0, btc_reference_available=false', () => {
     const ohlc = makeUpward(30);
-    const result = computePairCorrelation('SOL/USD', ohlc, null, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, null, CFG, 'crypto_spot');
     expect(result.coldStart).toBe(true);
     expect(result.factor).toBe(1.0);
     expect(result.btcReferenceAvailable).toBe(false);
@@ -141,7 +143,7 @@ describe('B68.3 — computePairCorrelation', () => {
   it('cold-start: BTC OHLC short → factor=1.0, btc_reference_available=false', () => {
     const ohlc = makeUpward(30);
     const btc = makeUpward(20);
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
     expect(result.coldStart).toBe(true);
     expect(result.btcReferenceAvailable).toBe(false);
   });
@@ -149,7 +151,7 @@ describe('B68.3 — computePairCorrelation', () => {
   it('perfect correlation: pair tracks BTC exactly → corr=+1, decorr=0, factor=1.0', () => {
     const ohlc = makeUpward(30);
     const btc = makeUpward(30); // identical series
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
     expect(result.correlationToBtc).toBeCloseTo(1.0, 4);
     expect(result.decorrelationScore).toBeCloseTo(0, 4);
     // Factor = 1 + 0 × 0.05 = 1.00 → clamp to floor 0.95? No: 1.00 is between
@@ -165,7 +167,7 @@ describe('B68.3 — computePairCorrelation', () => {
     // noisy series with negated deltas.
     const btc = makeNoisy(60, 1).slice(-30);
     const pair = makeAntiCorrelatedToNoisy(60, 1).slice(-30);
-    const result = computePairCorrelation('SOL/USD', pair, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', pair, btc, CFG, 'crypto_spot');
     // Returns should be strongly negatively correlated
     expect(result.correlationToBtc).toBeLessThan(-0.5);
     // §D.2: |corr| ≥ 0.70 → DRIFTING (not IDIOSYNCRATIC); since the construction
@@ -180,7 +182,7 @@ describe('B68.3 — computePairCorrelation', () => {
   it('zero correlation: independent series → decorr near 1, factor near ceiling', () => {
     const ohlc = makeNoisy(60, 1).slice(-30);
     const btc = makeNoisy(60, 7).slice(-30); // different seed
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
     expect(Math.abs(result.correlationToBtc)).toBeLessThan(0.5);
     expect(result.decorrelationScore).toBeGreaterThan(0.5);
     // Factor in (1.0, 1.05] range
@@ -193,7 +195,7 @@ describe('B68.3 — computePairCorrelation', () => {
     // Use independent series → high decorrelation
     const ohlc = makeNoisy(60, 1).slice(-30);
     const btc = makeNoisy(60, 7).slice(-30);
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, aggressiveCfg);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, aggressiveCfg, 'crypto_spot');
     // Raw factor = 1 + decorr × 0.5; for any decorr > 0.1 will exceed 1.05
     expect(result.factor).toBeLessThanOrEqual(1.05);
   });
@@ -202,7 +204,7 @@ describe('B68.3 — computePairCorrelation', () => {
     // Construct series with |corr| around 0.0 (independent noise)
     const ohlc = makeNoisy(60, 1).slice(-30);
     const btc = makeNoisy(60, 11).slice(-30);
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
     if (Math.abs(result.correlationToBtc) <= CFG.idiosyncraticThreshold) {
       expect(result.label).toBe('IDIOSYNCRATIC');
     }
@@ -212,7 +214,7 @@ describe('B68.3 — computePairCorrelation', () => {
     // Strongly correlated series
     const ohlc = makeUpward(30);
     const btc = makeUpward(30, 50); // same shape, different start
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
     expect(Math.abs(result.correlationToBtc)).toBeGreaterThanOrEqual(0.70);
     expect(result.label).toBe('DRIFTING');
   });
@@ -222,7 +224,7 @@ describe('B68.3 — computePairCorrelation', () => {
     // function returns one of the four valid labels
     const ohlc = makeNoisy(60, 3).slice(-30);
     const btc = makeNoisy(60, 4).slice(-30);
-    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+    const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
     expect(['IDIOSYNCRATIC', 'DRIFTING', 'NEUTRAL', 'SELF_REFERENCE']).toContain(result.label);
   });
 
@@ -230,7 +232,7 @@ describe('B68.3 — computePairCorrelation', () => {
     for (let seed = 1; seed < 10; seed++) {
       const ohlc = makeNoisy(60, seed).slice(-30);
       const btc = makeNoisy(60, seed + 5).slice(-30);
-      const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG);
+      const result = computePairCorrelation('SOL/USD', ohlc, btc, CFG, 'crypto_spot');
       expect(result.decorrelationScore).toBeGreaterThanOrEqual(0);
       expect(result.decorrelationScore).toBeLessThanOrEqual(1);
     }
@@ -249,7 +251,7 @@ describe('B68.3 — buildB68_3Alternate', () => {
       isBtcSelfReference: false,
       label: 'IDIOSYNCRATIC' as const,
     };
-    const alt = buildB68_3Alternate(0.6, 'TFS', result, CFG);
+    const alt = buildB68_3Alternate(0.6, 'TFS', result, CFG, 'crypto_spot');
     expect(alt.factorName).toBe('b68_3_pair_correlation');
     expect(alt.factorState).toBe('alternate_disabled');
     const meta = alt.alternateDecision.metadata as any;
@@ -271,7 +273,7 @@ describe('B68.3 — buildB68_3Alternate', () => {
       isBtcSelfReference: false,
       label: 'NEUTRAL' as const,
     };
-    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG);
+    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG, 'crypto_spot');
     const meta = alt.alternateDecision.metadata as any;
     expect(Number.isFinite(meta.confidence_without_factor)).toBe(true);
   });
@@ -287,7 +289,7 @@ describe('B68.3 — buildB68_3Alternate', () => {
       isBtcSelfReference: true,
       label: 'SELF_REFERENCE' as const,
     };
-    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG);
+    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG, 'crypto_spot');
     const meta = alt.alternateDecision.metadata as any;
     expect(meta.is_btc_self_reference).toBe(true);
     expect(meta.label).toBe('SELF_REFERENCE');
