@@ -3315,3 +3315,23 @@ familyMismatchDenominatorTotal: 5408
 2. **Schema-column drift causes silent panel failures.** Endpoint queries against columns that don't exist (`regime`, `null_reason`) caught by try/catch — panel sections went empty, no logs. Lesson: when DB schemas change, the queries referencing old column names need an audit pass, not just "it'll fail silently and we'll catch it later."
 3. **In-memory state beats expensive aggregations.** The slow-load fix replaced two complex DB queries with cheap in-memory reads from the scanner's lifetime accumulator. The in-memory state was already populated; the endpoint just wasn't reading it. Lesson: when an endpoint is slow, audit whether the data it queries from DB is already available in process memory.
 4. **Generous filters ≠ generous signal flow.** A wide-open pattern filter admits pairs but doesn't generate signals — the strategy detect functions correctly reject when there's no pattern shape. Tuning filters won't help signal flow; the bottleneck is at detect time. Layer-3 calibration needs to address strategy thresholds, not just filter thresholds.
+
+---
+
+## CLOSURE-2026-05-26 — B79.0n.SCORING + B79.0n.TEC
+
+**Deploy chain:** Step 6 initial deploy `ceeaa15c6` (TEC + SCORING migrations + Step 3 code chunks); R-5 hotfix-deploy `29bfda74f` (added `assetClass=` + threshold tags to SQE_EVAL log line). Cumulative CI GREEN at `9952111f8`, run `26428529329` (2m35s).
+
+**B79.0n.SCORING summary:** 8 new sqe_config rows (4 perp coverage + 4 crypto_spot numeric-threshold promotion). Predictive-confidence cache key F-2 fix `${assetClass}:${regime}:${strategy}` (3 callers threaded). Static-mirror-fallback counter via `getSQEStaticMirrorFallbackStats()`. **TWO-STEP per Langston D-5:** wildcard retirement deferred to B79.0n.SCORING.b after 48h verify-gate. F-1 resolver hooks for SCORE_WEIGHTS + RANKING_WEIGHTS bundled into .b.
+
+**B79.0n.TEC summary:** Closes RUNNING_ISSUES #85 (deferred-from-B79.TEC HARD-FAIL extension). 32 new trailing_exit rows (perp coverage + crypto_spot + xstock_spot moonbag/persistence) + EXISTS-gated wildcard retirement (Migration 2, single-batch confirmed via clean grep). HARD-FAIL coverage softened from strict 11-key throw to observable per-key fallback counter — Langston ACK Option A; B79.0n.TEC.b restores strict throw within 7d of verify-gate close. tec-evaluator.resolveTECConstants consolidated to sync per-class cache lookup. trailing-exit-controller.ts:107 comment chronology updated citing Kyle 2026-05-21 directive (D-1 root cause via DB probe).
+
+**Five-round CI iteration on TEC** (MANIFEST drift hotfix → idempotent A.2 backfill block → HARD-FAIL retreat) reveals two new institutional patterns codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.17-§4.18.
+
+**Side effect:** pre-deploy `TEC_STALE_FAIL_CLOSED` errors firing every 60s through 02:46 UTC (B-NEW-40 stale-cache fence) STOPPED post-restart — deploy fixed a separate live issue as cleanup.
+
+**Lessons:**
+1. **Commit + push ≠ deployed.** R-5 follow-up commit `29bfda74f` was committed/pushed AFTER Step 6 deploy but never `git pull`ed to staging — Langston Step 8 SHA cross-check caught it. Codified in §4.17.
+2. **CI initial-schema pg_dump may diverge from staging.** TEC Migration 1 v1 assumed rows existed on staging from B79.0m.b era; absent from CI's fresh-DB baseline. Hotfix added idempotent A.2 backfill block. Codified in §4.18.
+3. **Strict HARD-FAIL extension can break existing test fixtures.** 7 TEC test files use per-class break_even_enabled + wildcard for other 10 keys; strict extension would require ~308 row-insert fixture refactor. Soft-fallback counter + 48h verify-gate + deferred strict throw is the pragmatic NO-PATCHES-compliant compromise.
+4. **Build parity ≠ runtime parity.** SQE_EVAL R-5 schema is build-verified by Langston but runtime emission remains dormant (VTS-shadow has no candidates passing strategy detection in current regime). Schema-parity-only Step 8 ACK with dormant-test caveat documented in completion reports.

@@ -739,4 +739,14 @@ Items requiring decision before / during the relevant batch.
 
 ---
 
+## Update 2026-05-26 — B79.0n.SCORING + B79.0n.TEC closed (sub-batches 8 + 9 of umbrella v4)
+
+**Sub-batch 8 — B79.0n.SCORING CLOSED 2026-05-26** (Step 6 deploy `ceeaa15c6` + R-5 hotfix `29bfda74f`, PM2 #322). SQE module_constants per-class extension for `crypto_perp` + `xstock_perp`; `crypto_spot` numeric threshold promotion from code-side hardcoded defaults to DB (values verbatim per Langston D-4: 25/25/10/0.005). Predictive-confidence cache key F-2 fix: `${assetClass}:${regime}:${strategy}` (cross-class telemetry contamination eliminated, 3 callers threaded). Static-mirror-fallback counter via `getSQEStaticMirrorFallbackStats()`. SQE_EVAL log line now carries `assetClass=` + threshold tags (R-5 schema parity, runtime dormant-test). **TWO-STEP per Langston D-5 pushback:** B79.0n.SCORING.b queued for EXISTS-gated wildcard retirement + F-1 resolver hooks for SCORE_WEIGHTS + RANKING_WEIGHTS after 48h verify-gate close. [Completion report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_SCORING_COMPLETION_REPORT.md).
+
+**Sub-batch 9 — B79.0n.TEC CLOSED 2026-05-26** (same deploy chain). TEC module_constants per-class extension from 5 keys × 4 active classes (B79.0m.b legacy) to all 11 keys × 4 active classes (44 total rows; 0 wildcard post-Migration-2). HARD-FAIL kill-switch on `break_even_enabled` preserved; other 10 keys softened from strict `requireKey<T>` throw to observable `pick(key, TEC_DEFAULTS.x)` with per-key `[B79.0n.TEC][PICK_FALLBACK]` counter via `getTECPickFallbackStats()`. `tec-evaluator.resolveTECConstants` consolidated to sync per-class cache lookup (eliminates async DB round-trip + silent `catch → DEFAULTS` fallback). `trailing-exit-controller.ts:107` comment chronology updated citing Kyle 2026-05-21 directive (D-1 root cause). **B79.0n.TEC.b queued** for strict 11-key HARD-FAIL restoration via `requireKey<T>` (7-day SLA per Langston Step 4 ACK). [Completion report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_TEC_COMPLETION_REPORT.md).
+
+After SCORING.b + TEC.b close, 8 sub-batches remain (10-18); xStock active-trading flip lands at sub-batch 18.
+
+---
+
 *End of MULTI_ASSET_VTS_EXPANSION_PLAN.md. Living document — update at every batch boundary. Move to `_archive/` when Phase 19 closes.*

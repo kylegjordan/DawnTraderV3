@@ -329,3 +329,28 @@
 - **CRITICAL:** 0
 - **IN PROGRESS:** 1 (#42 — narration leak)
 - **OPEN:** 8 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification; **#73 B78 shim cleanup in B81; #74 B78 24-48h cadence forward-watch**) — #105 RESOLVED 2026-05-13 (BATCH_80)
+
+---
+
+## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
+
+### #85 RESOLVED 2026-05-26 — B79.TEC HARD-FAIL coverage extension (deferred-from-B79.TEC)
+Original: B79.TEC introduced HARD-FAIL coverage for `break_even_enabled` only; explicit comment at `trailing-exit-controller.ts:358-359` noted the deferred follow-up to extend coverage to all 11 TEC keys. **Resolution path:** B79.0n.TEC ships per-class rows for all 11 keys × 4 active classes (Migration 1) + wildcard retirement (Migration 2). Code-side strict `requireKey<T>` throw on all 11 keys was retreated to observable `pick(key, TEC_DEFAULTS.x)` with per-key counter (Langston ACK Option A — 7 test fixtures use mocked-db pattern that broke under strict throw). **B79.0n.TEC.b restores strict throw within 7d of 48h verify-gate close.**
+
+### #141 DEFERRED 2026-05-26 — B79.0n.TEC.b strict 11-key HARD-FAIL restoration
+After B79.0n.TEC 48h verify-gate close (clock started 02:47 UTC 2026-05-26; +24h at 02:47 UTC 2026-05-27; +48h at 02:47 UTC 2026-05-28), `getTECPickFallbackStats()` counter must be zero across all 11 keys. If clean: ship B79.0n.TEC.b restoring strict `requireKey<T>` throw in `refreshTECConfigForClass`. If counter has fired non-zero: investigate root cause before .b. **SLA: 7 days post-48h-verify-gate-close per Langston Step 4 ACK condition #1.**
+
+### #142 DEFERRED 2026-05-26 — B79.0n.SCORING.b wildcard retirement + F-1 resolver hooks
+After B79.0n.SCORING 48h verify-gate close (same clock), if `getSQEStaticMirrorFallbackStats().count === 0`: ship Migration 2 (EXISTS-gated `DELETE` for `sqe_config` wildcard rows `min_final_score` + `min_regime_weight`) + F-1 resolver hooks for `SCORE_WEIGHTS` (D-1) and `RANKING_WEIGHTS` (D-2) — both Day-1 no-op. If counter has fired: investigate before .b.
+
+### #143 DEFERRED 2026-05-26 — R-5 SQE_EVAL runtime observation
+R-5 schema-parity verified at build time (source line 354 + `dist/index.js` agree on `assetClass=` + threshold tags). Runtime emission still 0 across 69m post-restart — VTS-shadow + current market regime produces 0 non-null candidates. First-fire trigger paths: (a) regime shift producing non-null quant/pattern candidates OR (b) active-trading flip at sub-batch 18. Whoever observes first post-hold fire should sanity-check payload matches v2 schema and post to batch thread. Schema-mismatch would re-open.
+
+### #144 OPEN 2026-05-26 — Perp-activation pre-flight checklist (Langston C-1)
+When `crypto_perp` or `xstock_perp` are scheduled for activation (currently not in near-term roadmap per umbrella v4): verify TEC per-class rows present for all 11 keys for the activating class (Migration 1 already seeded crypto_perp + xstock_perp); verify SQE per-class rows present for `min_final_score` + `min_regime_weight` (Migration 1 already seeded both); audit any silent-fallback paths that may still inherit `crypto_spot` defaults under the new perp class.
+
+### #145 OPEN 2026-05-26 — PHASE_HISTORY sub-batches 5/6/7 backfill gap
+PHASE_HISTORY.md ends at sub-batch 4 (MCE) then jumps to 8/9 (SCORING/TEC). Sub-batches 5 (STRATEGY), 6 (PATTERN-DETECT), 7 (CONFIDENCE-CHAIN) closed earlier but their entries were never added to PHASE_HISTORY. Tier-3 cleanup batch should backfill these from their respective completion reports.
+
+### #146 OPEN 2026-05-26 — Deploy-SHA verification routinization
+B79.0n.TEC Step 6 deploy was at `ceeaa15c6`, R-5 follow-up commit `29bfda74f` was authored AFTER but not deployed to staging until Langston's Step 8 SHA cross-check caught the drift. Step 6 deploy procedure should include automated "verify staging HEAD matches intended deploy SHA" step. Codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.17.

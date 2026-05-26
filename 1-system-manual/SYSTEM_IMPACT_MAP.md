@@ -2366,3 +2366,53 @@ Sub-batch 5 of 18 in the B79.0n umbrella v4 arc. Implementation commit `af99bd5`
 - `PATTERN_TO_CANONICAL` map at `canonical-regime-strategy-map.ts:602-614` is CLASS-INVARIANT BY CONSTRUCTION. A PINBAR is a PINBAR regardless of asset class. F-1 invariance regression-locked via `b79-0n-pattern-detect-f1-invariance.test.ts`.
 - `normalizePatternToCanonical` has no `assetClass` parameter and MUST NOT have one in the future.
 - `CANONICAL_PATTERN_TYPES` exact-shape regression test locks the 6 types + null union.
+
+---
+
+## Recent Additions (B79.0n.SCORING + B79.0n.TEC, 2026-05-26)
+
+### B79.0n.SCORING — SQE per-class threshold extension + predictive-confidence per-class cache key
+
+**Subsystem:** Signal Quality Evaluator (SQE) — gate authority between Signal Orchestrator output and RTB queue entry.
+
+- **`server/core/filters/signal_quality_evaluator.ts`** — `getSQEThresholdsFromConfig(mode, assetClass)` Layer 2 (`module_constants 'sqe_config'`) extended per-class (was wildcard-only pre-B79.0n.SCORING). New `getSQEStaticMirrorFallbackStats()` observability accessor + `_b79nScoringStaticMirrorFallbackCount` counter increments when `getSQEModuleDefaults()` catch handler fires (cache cold-start). SQE_EVAL log line at lines 354 + 458 now includes `assetClass=`, `thresholdFinalScoreMin=`, `thresholdRegimeWeightMin=` tags (R-5 schema; runtime dormant-test).
+- **`server/core/utils/score-calculator.ts`** — `getPredictiveConfidence` signature changed from `(symbol, regime, strategy)` → `(assetClass: AssetClass, symbol, regime, strategy)`. Cache key extended from `${regime}:${strategy}` → `${assetClass}:${regime}:${strategy}`. F-2 fix per pre-audit §2.5: cross-class telemetry contamination (xstock + crypto VTS telemetry winRate collapsing to same cache slot) eliminated by per-class cache isolation. 3 callers threaded.
+
+**Migration 1 (2026-05-26-b79-0n-scoring-perclass-seed.sql):** 8 new rows = 4 perp coverage for B79.0a-promoted `min_final_score`/`min_regime_weight` + 4 crypto_spot promotion of `adx_min/di_min_quant/di_min_pattern/momentum_min` (values verbatim per Langston D-4: 25/25/10/0.005). **B79.0n.SCORING.b** queued for Migration 2 (EXISTS-gated wildcard `DELETE` for `min_final_score` + `min_regime_weight`) + F-1 resolver hooks for `SCORE_WEIGHTS` + `RANKING_WEIGHTS` (Day-1 no-op surfaces).
+
+**Blast radius:** CRITICAL — SQE is the final gate between signal generation and RTB queue. Predictive-confidence cache feeds the ROI gate (SQE) + RTB cost-aware ranking.
+
+### B79.0n.TEC — All-keys per-class config + tec-evaluator consolidation + comment chronology fix
+
+**Subsystem:** Trailing Exit Controller (TEC) — break-even latch + target lock + moonbag/ladder logic.
+
+- **`server/services/trailing-exit-controller.ts`** — `refreshTECConfigForClass(assetClass)` extended per-class coverage from 1 key (`break_even_enabled` HARD-FAIL kill-switch) to 11 keys via `ALL_TEC_KEYS` SSOT. Kill-switch HARD-FAIL preserved on `break_even_enabled` via `hasExplicitAssetClassRow`. Other 10 keys SOFTENED from initially-drafted strict `requireKey<T>` throw back to observable `pick(key, TEC_DEFAULTS.x)` with per-key `[B79.0n.TEC][PICK_FALLBACK]` counter via `getTECPickFallbackStats()` (Langston ACK Option A — 7 test fixtures use mocked-db pattern incompatible with strict throw). `TEC_DEFAULTS` demoted to type-template-only at runtime (comment flag). Line 107 comment chronology updated with full citation of Kyle 2026-05-21 `disable-xstock-be` directive (D-1 root cause via DB probe).
+- **`server/services/tec-evaluator.ts`** — `resolveTECConstants(context)` consolidated from async `getModuleConstants` round-trip + silent `catch → DEFAULTS` fallback to SYNC `resolveTECConfig(context.assetClass)` per-class cache lookup. Eliminates duplicate DB round-trip per exit-cycle + silent DEFAULTS fallback (anti-pattern). `evaluateTECExit` caller drops `await`. `getModuleConstants` import removed.
+
+**Migration 1 (2026-05-26-b79-0n-tec-perclass-seed.sql):** 32 new rows (8 perp coverage for 4 hot keys + 24 moonbag/persistence × 4 active classes) + idempotent A.2 backfill block (8 spot rows) for CI's fresh-DB baseline. `moonbag_qualifying_strategies = []` ALL CLASSES per Kyle 2026-05-05 variant-K alignment.
+
+**Migration 2 (2026-05-26-b79-0n-tec-wildcard-retire.sql):** EXISTS-gated `DELETE` for all 11 TEC keys. Single-batch confirmed safe via Langston D-4 pre-audit grep (zero consumers reading `assetClass='*'` directly).
+
+**B79.0n.TEC.b** queued for strict 11-key HARD-FAIL restoration via `requireKey<T>` (7-day SLA per Langston Step 4 ACK condition #1).
+
+**Blast radius:** CRITICAL — TEC owns exit-decision authority for every paper + live trade. The kill-switch HARD-FAIL preserved on `break_even_enabled` ensures operator-flip safety; other 10 keys' counter-based observability provides 48h verify-gate evidence before strict throw restoration.
+
+### Modification risks ("things that break if X changes")
+
+- **Re-enable strict `requireKey<T>` throw without first updating 7 TEC test fixtures**: tests break en masse. B79.0n.TEC.b must batch the fixture refactor + strict throw together.
+- **Revert `getPredictiveConfidence` to 3-arg signature (drop assetClass)**: cross-class cache contamination returns. F-2 lock test at `b79-0n-scoring-predictive-confidence-isolation.test.ts` (queued for B79.0n.SCORING.b test additions).
+- **Remove SQE_EVAL `assetClass=` tag from log line**: R-5 runtime probe loses its anchor; B79.0n.SCORING.b verify-gate close depends on this tag being present at first observed fire.
+- **Delete wildcard rows for `sqe_config` before B79.0n.SCORING.b 48h verify-gate close**: removes resolver-correctness safety net during the gate window. Wait until counter confirmed zero across full gate window.
+
+### Telemetry
+
+- `[B79.0n.SCORING][SQE_STATIC_MIRROR_FALLBACK] count=N mode=... assetClass=...` — emitted from SQE `getSQEThresholdsFromConfig` catch handler when `getSQEModuleDefaults()` throws. Verify-gate target: 0 fires across 48h post-deploy.
+- `[B79.0n.TEC][PICK_FALLBACK] assetClass=... key=... count=N` — emitted from `refreshTECConfigForClass` `pick(key, fallback)` when DB row is absent for both per-class AND wildcard. Verify-gate target: 0 fires per key across 48h.
+- `[11.0B][SQE_EVAL] ... assetClass=<class> thresholdFinalScoreMin=<num> thresholdRegimeWeightMin=<num> ...` — R-5 schema; runtime dormant on staging (VTS-shadow has 0 candidates passing strategy detection in current regime). First-fire trigger: regime shift OR active-trading flip at sub-batch 18.
+
+### Cross-references
+
+- Completion reports: `Claude Comms and Packages/Batch Completion/B79_0n_SCORING_COMPLETION_REPORT.md` + `B79_0n_TEC_COMPLETION_REPORT.md`
+- Scope + Pre-audit + Change-list documents in `Claude Comms and Packages/Scope Files/` + `Change Lists/`
+- Onboarding patterns: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.15 (promote-then-retire) + §4.16 (all-keys HARD-FAIL coverage) + §4.17 (deploy-SHA verification) + §4.18 (CI initial-schema divergence)
+- RUNNING_ISSUES: #85 RESOLVED (deferred-from-B79.TEC HARD-FAIL extension); #141 DEFERRED (B79.0n.TEC.b); #142 DEFERRED (B79.0n.SCORING.b); #143 DEFERRED (R-5 runtime observation); #144 OPEN (perp-activation pre-flight); #146 OPEN (deploy-SHA verification routinization).

@@ -277,6 +277,13 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 
 ---
 
+## B79.0n umbrella — sub-batch entries (added in-flight as each closes)
+
+| # | Sub-batch | Status | Closed | Deploy SHA chain | Completion report |
+|---|---|---|---|---|---|
+| 8 | B79.0n.SCORING | CLOSED (`.b` queued) | 2026-05-26 | `ceeaa15c6` (Step 6) + `29bfda74f` (R-5 hotfix) | [report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_SCORING_COMPLETION_REPORT.md) |
+| 9 | B79.0n.TEC | CLOSED (`.b` queued) | 2026-05-26 | same deploy chain | [report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_TEC_COMPLETION_REPORT.md) |
+
 ## Notes
 
 - Some early and mid-series commit hashes are still unavailable from the currently accessible source set and are intentionally left as `—`.

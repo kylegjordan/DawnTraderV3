@@ -1207,4 +1207,50 @@ Mandatory per Kyle directive 2026-05-10:
 
 ---
 
+## §4.15 — Promote-then-retire two-step pattern for module_constants wildcard retirement (B79.0n.SCORING 2026-05-26)
+
+When promoting a wildcard module_constants row to per-class rows AND retiring the wildcard, sequence as TWO BATCHES with a 48h verify-gate between:
+
+1. **Batch X (promotion + observability):** Migration 1 seeds per-class rows for every ACTIVE asset class. Code adds an observable fallback counter (e.g., `getSQEStaticMirrorFallbackStats()`, `getTECPickFallbackStats()`) that increments when the resolver's safety-net path fires. Wildcard rows REMAIN as resolver-correctness safety net.
+2. **Wait 48h post-deploy.** Observe counter stays at zero across at least one weekend transition AND one full UTC day cycle.
+3. **Batch X.b (retirement):** If counter remained zero — ship Migration 2 (EXISTS-gated wildcard `DELETE` for all keys) + any deferred F-1 resolver hooks. Single-batch atomic close.
+4. **If counter has fired any non-zero amount:** investigate root cause (cache-key bug, asset-class string mismatch, dropped param in cascade) BEFORE retiring wildcard. The 48h gap buys RESOLVER correctness verification — not just DELETE safety.
+
+**Source:** B79.0n.SCORING Langston D-5 disposition; mirrored on TEC side. Prior arc: B79.TEC / B79.TEC.b shipped this shape first; B79.0a tried to promote-then-retire but the .b retirement was never authored (scheduling drift — see RUNNING_ISSUES note).
+
+## §4.16 — All-keys HARD-FAIL coverage for module-constants per-class surfaces (B79.0n.TEC 2026-05-26)
+
+When extending HARD-FAIL coverage to ALL keys (not just a kill-switch canary):
+
+1. Every key in the surface MUST have explicit per-class rows for every active asset class.
+2. Boot-time primer iterates `getActiveAssetClasses()` SSOT and HARD-FAILs on any missing per-class row.
+3. NO `pick(key, DEFAULT)` runtime fallback path — DEFAULTS const is TYPE TEMPLATE only.
+4. Companion evaluator/orchestrator (e.g., `tec-evaluator.ts`) READS from the per-class cache, NEVER re-resolves async via `getModuleConstants`.
+5. Tests: type-lock + HARD-FAIL coverage test (one per key) + spy-asserted-zero-DB-calls steady-state test on the evaluator.
+
+**Anti-pattern caught in B79.0n.TEC:** strict HARD-FAIL extension broke 7 test fixtures using per-class `break_even_enabled` + wildcard for other 10 keys. Two paths: (A) atomic fixture refactor + strict throw, OR (B) soft-fallback counter + defer strict throw to follow-up batch with verify-gate. B79.0n.TEC took path B (Langston ACK Option A); B79.0n.TEC.b restores strict throw within 7d of verify-gate close.
+
+## §4.17 — Step 6 deploy-SHA verification (B79.0n.TEC 2026-05-26)
+
+After Step 6 deploy:
+
+1. **Verify staging HEAD matches intended deploy SHA.** Don't assume the latest commit on `migration/aws-supabase` is what's running.
+2. **If a follow-up commit lands between Step 6 and Step 8** (e.g., R-5 hotfix adding observability tags): re-deploy with `git pull + npm run build + pm2 restart` + re-run Step 7 first-pass BEFORE dispatching Step 8.
+3. **Cite the actual deployed SHA chain in completion report**, not the latest commit.
+
+**Source:** B79.0n.SCORING R-5 follow-up commit `29bfda74f` was committed/pushed AFTER Step 6 deploy but never `git pull`ed to staging; Langston Step 8 SHA cross-check caught it. Re-deployed at 03:56:27Z restart.
+
+## §4.18 — CI initial-schema pg_dump may diverge from staging (B79.0n.TEC 2026-05-26)
+
+When extending per-class rows that depend on prior migrations, include idempotent `ON CONFLICT DO NOTHING` backfill blocks so CI's fresh-DB baseline matches staging's accumulated state:
+
+1. CI's `initial-schema.sql` is a pg_dump of staging at a specific moment. It does NOT replay the full migration chain; pre-skip-marker migrations are ledger-only on CI.
+2. Rows existing on staging from prior batches (e.g., B79.0m.b seeded crypto_spot + xstock_spot hot keys) may NOT be in the pg_dump baseline.
+3. Migration 1 should include an A.2 idempotent backfill block for any rows the boot-time primer requires that may be absent on CI. `ON CONFLICT DO NOTHING` means staging skips; CI seeds.
+4. Verification assertion should count ALL per-class rows (not just `updated_by` stamped) so the A.2 block doesn't artificially trip the assertion on staging.
+
+**Source:** B79.0n.TEC Migration 1 v1 assumed crypto_spot + xstock_spot had explicit rows for 4 TEC hot keys (true on staging from B79.0m.b; absent from CI's pg_dump). primeTECConfig HARD-FAILed at boot in `b65-tec-parity.test` + `b80-tec-per-trade-keying.test`. Hotfix `e7aa96c7a` added the A.2 backfill block.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*

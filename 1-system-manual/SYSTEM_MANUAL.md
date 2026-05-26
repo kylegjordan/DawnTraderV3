@@ -12144,3 +12144,32 @@ Tracked at RUNNING_ISSUES #129.
 - SIM entry: see "Recent Additions (B79.0n.STORAGE)" section of `SYSTEM_IMPACT_MAP.md`
 - Onboarding canonical pattern: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` Step 4.9 (the REQUIRED-assetClass storage API + cache-key extension + getCanonicalScreenerConfig helper template)
 - B72 prior-arc context per umbrella rev 4: `B79_0n_UMBRELLA_XSTOCK_ACTIVE_TRADING_PATH.md` §1.5 (Layer 1 vs Layer 2 distinction documented)
+
+---
+
+## B79.0n.SCORING — SQE Layer-2 per-class extension + predictive-confidence per-class cache key (2026-05-26)
+
+**Architectural change:** SQE threshold resolver's Layer 2 (`module_constants 'sqe_config'`) extended from wildcard to per-class for `min_final_score` + `min_regime_weight`. The 3-layer cascade (screener_filters → module_constants → static const) PRESERVED but Layer 2 now class-routed. Static-mirror fallback observable via `getSQEStaticMirrorFallbackStats()` counter — 48h verify-gate target zero.
+
+**`getPredictiveConfidence` per-class cache key (F-2 fix):** Previously `${regime}:${strategy}` collapsed crypto + xstock telemetry winRate to same cache slot. Now `${assetClass}:${regime}:${strategy}`. Empirical finding: xstock BULL_STABLE/momentum_breakout winRate is structurally distinct from crypto BULL_STABLE/momentum_breakout winRate; collapsing them silently biased one class with the other's data.
+
+**TWO-STEP per Langston D-5:** B79.0n.SCORING ships promotion + counter; B79.0n.SCORING.b ships wildcard retirement + F-1 resolver hooks for `SCORE_WEIGHTS` + `RANKING_WEIGHTS` after 48h verify-gate close.
+
+## B79.0n.TEC — All-keys per-class TEC config + tec-evaluator consolidation (2026-05-26)
+
+**Architectural change:** Closes RUNNING_ISSUES #85 (deferred-from-B79.TEC). TEC `refreshTECConfigForClass` extended from 1-key HARD-FAIL (`break_even_enabled`) to 11-key per-class config resolution via `ALL_TEC_KEYS` SSOT.
+
+**HARD-FAIL doctrine retreat (Langston ACK Option A):** Strict `requireKey<T>` throw on all 11 keys initially drafted but softened to observable `pick(key, TEC_DEFAULTS.x)` with per-key `[B79.0n.TEC][PICK_FALLBACK]` counter via `getTECPickFallbackStats()`. Reason: 7 existing TEC test fixtures use mocked-db pattern providing per-class `break_even_enabled` + wildcard for other 10 keys; strict throw would break all 7 simultaneously. Kill-switch HARD-FAIL preserved on `break_even_enabled` (the operator-flip canary). B79.0n.TEC.b restores strict throw within 7d of 48h verify-gate close (Langston SLA).
+
+**`tec-evaluator.resolveTECConstants` consolidation (D-3):** Previously async `getModuleConstants` round-trip + silent `catch → DEFAULTS` fallback (lines 222-227). Now SYNC per-class cache lookup via `resolveTECConfig(context.assetClass)`. Eliminates duplicate DB round-trip per exit-cycle + the silent DEFAULTS-fallback anti-pattern that B79.0n.TEC was designed to close.
+
+**xstock_spot.break_even_enabled chronology (D-1 root cause):** DB probe revealed `updated_by='kyle-directive-2026-05-21-disable-xstock-be'` — Kyle manually reverted on 2026-05-21 a week after the 2026-05-11 B79.0m.b enable migration. `trailing-exit-controller.ts:107` comment block updated with full chronology citation. Variant-K alignment preserved at code-level.
+
+**Active-trading impact today: zero** (paper_sim_trades + trades both empty; VTS-shadow uses inline governance, not the SQE/TEC evaluator path most of the time).
+
+## Cross-references
+
+- B79.0n.SCORING completion report: `Claude Comms and Packages/Batch Completion/B79_0n_SCORING_COMPLETION_REPORT.md`
+- B79.0n.TEC completion report: `Claude Comms and Packages/Batch Completion/B79_0n_TEC_COMPLETION_REPORT.md`
+- SIM entries: see "Recent Additions (B79.0n.SCORING + B79.0n.TEC, 2026-05-26)" section of `SYSTEM_IMPACT_MAP.md`
+- Onboarding patterns shipped: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.15 (promote-then-retire two-step) + §4.16 (all-keys HARD-FAIL coverage) + §4.17 (Step 6 deploy-SHA verification) + §4.18 (CI initial-schema pg_dump divergence)
