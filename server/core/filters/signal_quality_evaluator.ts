@@ -44,6 +44,26 @@ import { isStrategyEnabledForAssetClass } from '../../config/canonical-regime-st
 let _b79WeekendSkipCount = 0;
 let _b79StrategyDisabledCount = 0;
 
+// B79.0n.SCORING (2026-05-26 OBJ-4): static-mirror fallback observability counter.
+// Fires when getSQEModuleDefaults() throws (module_constants cold cache or
+// missing row). Used to verify the 48h gate before B79.0n.SCORING.b wildcard
+// retirement — counter MUST stay at 0 across at least one weekend + one full
+// UTC-day-cycle post-deploy. See pre-audit §6 + §7 §4.15 onboarding entry.
+let _b79nScoringStaticMirrorFallbackCount = 0;
+let _b79nScoringStaticMirrorLastFireMs = 0;
+const SQE_STATIC_MIRROR_LOG_EVERY = 100;
+
+/**
+ * B79.0n.SCORING diagnostic accessor. Returns counter snapshot for
+ * `/api/diagnostics/sqe-fallback-counter` route + tests.
+ */
+export function getSQEStaticMirrorFallbackStats(): { count: number; lastFireMs: number } {
+  return {
+    count: _b79nScoringStaticMirrorFallbackCount,
+    lastFireMs: _b79nScoringStaticMirrorLastFireMs,
+  };
+}
+
 const _SQE_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 
 /**
@@ -139,7 +159,23 @@ export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live', assetCl
   } catch (err) {
     // module_constants not warm or row missing — fall back to static mirror.
     // This is the only place in SQE where the static const is consulted at runtime.
-    console.warn(`[SQE][CONFIG] module_constants 'sqe_config' unavailable, using static mirror:`, err);
+    //
+    // B79.0n.SCORING (2026-05-26 OBJ-4): observable counter. The 48h verify-gate
+    // before B79.0n.SCORING.b wildcard retirement REQUIRES this counter to stay
+    // at zero across at least one weekend transition + one full UTC-day cycle.
+    // Any non-zero count is a signal that the per-class resolver chain has a
+    // gap (cache-key bug, asset-class string mismatch, dropped param) — investigate
+    // before retiring the wildcard safety net.
+    _b79nScoringStaticMirrorFallbackCount++;
+    _b79nScoringStaticMirrorLastFireMs = Date.now();
+    if (_b79nScoringStaticMirrorFallbackCount % SQE_STATIC_MIRROR_LOG_EVERY === 1) {
+      console.warn(
+        `[B79.0n.SCORING][SQE_STATIC_MIRROR_FALLBACK] count=${_b79nScoringStaticMirrorFallbackCount} ` +
+        `mode=${mode} assetClass=${assetClass} — module_constants cache cold or row missing. ` +
+        `48h verify-gate REQUIRES this counter to stay at 0 before wildcard retirement.`,
+        err,
+      );
+    }
     mcDefaults = {
       minFinalScore: SQE_DEFAULT_THRESHOLDS.MIN_FINAL_SCORE,
       minRegimeWeight: SQE_DEFAULT_THRESHOLDS.MIN_REGIME_WEIGHT,
@@ -261,7 +297,8 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   // Directive 11.7C Task 5: Regime-Aware ROI Gate with PredictiveConfidence (SQE parity with VTS)
   // Only apply if entry/target/regime are provided
   if (input.entryPrice && input.targetPrice && input.regime) {
-    const predictiveConf = getPredictiveConfidence(canonicalSymbol, input.regime, input.strategy);
+    // B79.0n.SCORING (2026-05-26): assetClass threaded for per-class cache-key isolation
+    const predictiveConf = getPredictiveConfidence(input.assetClass, canonicalSymbol, input.regime, input.strategy);
     if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, predictiveConf)) {
       const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
       const dynamicROI = getDynamicROIThreshold(input.regime, predictiveConf);

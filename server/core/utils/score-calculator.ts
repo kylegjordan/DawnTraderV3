@@ -13,6 +13,10 @@
 
 import { SCORE_WEIGHTS } from '../../config/score-weights.config.js';
 import { getRegimePerformance, getVTSTelemetry } from '../logging/vts-telemetry.js';
+// B79.0n.SCORING (2026-05-26): AssetClass required for predictive-confidence
+// cache-key extension (F-2 per pre-audit §2.5 — was scope-derived empirical
+// finding, not D-disposition territory per Langston ACK clarification 4).
+import type { AssetClass } from '../../../shared/asset-classes.js';
 
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
@@ -78,42 +82,55 @@ export function calculateRegimeWeight(metrics: SignalMetrics): number {
 
 /**
  * Directive 11.7C Task 4: PredictiveConfidence Source
- * 
+ *
  * Derives PredictiveConfidence from VTS telemetry winRate for a given
  * regime × strategy combination. Uses sigmoid transformation to convert
  * winRate to confidence score, with neutral fallback (0.5) when no data.
- * 
+ *
  * Formula: confidence = sigmoid((winRate - 0.5) × 6)
- * 
+ *
+ * B79.0n.SCORING (2026-05-26): cache key extended from `${regime}:${strategy}`
+ * to `${assetClass}:${regime}:${strategy}` to prevent cross-class telemetry
+ * contamination. xstock BULL_STABLE/momentum_breakout winRate is structurally
+ * distinct from crypto BULL_STABLE/momentum_breakout winRate — collapsing
+ * them onto the same cache slot would silently bias one class with the
+ * other's data. F-2 fix per pre-audit §2.5 empirical finding.
+ *
+ * @param assetClass - Asset class of the symbol (REQUIRED, drives cache isolation)
  * @param symbol - Trading pair symbol (for future per-symbol tracking)
  * @param regime - Market regime (e.g., BULL_STABLE)
  * @param strategy - Strategy name (e.g., momentum_breakout)
  * @returns PredictiveConfidence bounded [0.0, 1.0]
  */
-export function getPredictiveConfidence(symbol: string, regime: string, strategy: string): number {
-  const cacheKey = `${regime}:${strategy}`;
+export function getPredictiveConfidence(
+  assetClass: AssetClass,
+  symbol: string,
+  regime: string,
+  strategy: string,
+): number {
+  const cacheKey = `${assetClass}:${regime}:${strategy}`;
   const now = Date.now();
-  
+
   const cached = predictiveConfidenceCache.get(cacheKey);
   if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
     return cached.value;
   }
-  
+
   const perf = getRegimePerformance(regime, strategy);
   if (!perf || perf.winRate == null) {
     return 0.5;
   }
-  
+
   const confidence = sigmoid((perf.winRate - 0.5) * 6);
   const boundedConfidence = Math.min(Math.max(confidence, 0.0), 1.0);
-  
+
   predictiveConfidenceCache.set(cacheKey, { value: boundedConfidence, timestamp: now });
-  
+
   const telemetry = getVTSTelemetry();
   if (telemetry.regimePerformance[regime]?.[strategy]) {
     (telemetry.regimePerformance[regime][strategy] as unknown as { predictiveConfidence: number }).predictiveConfidence = boundedConfidence;
   }
-  
+
   return boundedConfidence;
 }
 

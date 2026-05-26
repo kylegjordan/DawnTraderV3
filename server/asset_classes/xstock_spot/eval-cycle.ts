@@ -574,7 +574,9 @@ export async function evaluateXstockPairForVTS(
         const stopLoss = strategySignal.stopPrice;
         const spread = 0.001;
         const hybridScore = computeRealHybridScore(strategyKey, mceContext.indicators, ohlc as any, regime);
-        const predictiveConfidence = getPredictiveConfidence(symbol, regime, strategyKey);
+        // B79.0n.SCORING (2026-05-26): assetClass threaded for per-class cache-key isolation.
+        // xstock_spot file — hardcoded class literal matches file scope.
+        const predictiveConfidence = getPredictiveConfidence('xstock_spot' as const, symbol, regime, strategyKey);
         const regimeScoreRaw = calculateRegimeScore(regime, {
           adx: (mceContext.raw as any)?.adx ?? 0,
           volatility: (mceContext.raw as any)?.volatility ?? 0,

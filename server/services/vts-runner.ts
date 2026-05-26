@@ -1114,7 +1114,9 @@ async function generatePhase10Signal(
   
   // Phase 14: Real strategy score calculation (no Math.random)
   const hybridScore = computeRealHybridScore(strategy, mceContext.indicators, ohlcData, regime);
-  const predictiveConfidence = getPredictiveConfidence(symbol, regime, strategy);
+  // B79.0n.SCORING (2026-05-26): assetClass threaded for per-class cache-key isolation.
+  // Reuses _resolvedAssetClass captured at line 1086 (safeResolveAssetClass + crypto_spot fallback).
+  const predictiveConfidence = getPredictiveConfidence(_resolvedAssetClass, symbol, regime, strategy);
 
   // B62: Half-wired DBS modifier removed. Was dead code — biasModifier was computed
   // but never consumed. See B61 provisional findings report.
