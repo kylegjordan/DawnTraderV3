@@ -72,11 +72,34 @@ describe('B79.0b — asset-class-instances factory', () => {
     expect(triad?.ratioManager).toBeDefined();
   });
 
-  it('getAssetClassInstances on unsupported asset class throws', () => {
-    // crypto_perp / xstock_perp / equity_spot / etc. are NOT in the dispatcher
-    // switch (per asset-class-instances.ts:138-149). Throw is by design —
-    // explicit mis-routing surfaces immediately rather than silently corrupting.
-    expect(() => getAssetClassInstances('crypto_perp' as any)).toThrow(/unsupported/i);
-    expect(() => getAssetClassInstances('equity_spot' as any)).toThrow(/unsupported/i);
+  it('getAssetClassInstances on reserved-future class throws (B79.0n.TELEMETRY: was "unsupported" until 2026-05-26)', () => {
+    // B79.0n.TELEMETRY (2026-05-26): crypto_perp + xstock_perp moved from
+    // "unsupported throws" to "factory-managed triads" — the whole point of
+    // sub-batch #10. The 4 reserved-future classes (equity_spot,
+    // equity_futures, commodity_futures, fx_spot) still throw with
+    // [CLASS_NOT_WIRED] surfacing the ASSET_CLASS_REGISTRY[X].active flag
+    // so call sites can self-correct.
+    expect(() => getAssetClassInstances('equity_spot' as any)).toThrow(/CLASS_NOT_WIRED/);
+    expect(() => getAssetClassInstances('equity_futures' as any)).toThrow(/CLASS_NOT_WIRED/);
+    expect(() => getAssetClassInstances('commodity_futures' as any)).toThrow(/CLASS_NOT_WIRED/);
+    expect(() => getAssetClassInstances('fx_spot' as any)).toThrow(/CLASS_NOT_WIRED/);
+  });
+
+  it('getAssetClassInstances on crypto_perp + xstock_perp now returns valid triads (B79.0n.TELEMETRY)', () => {
+    // B79.0n.TELEMETRY (2026-05-26): completes the 4-of-4 active-class
+    // coverage. These two classes previously THREW; now they return
+    // dedicated in-memory triads via the same Variant C path as xstock_spot.
+    const cryptoPerpTriad = getAssetClassInstances('crypto_perp' as any);
+    const xstockPerpTriad = getAssetClassInstances('xstock_perp' as any);
+    expect(cryptoPerpTriad).not.toBeNull();
+    expect(cryptoPerpTriad?.telemetry).toBeDefined();
+    expect(cryptoPerpTriad?.ratioManager).toBeDefined();
+    expect(cryptoPerpTriad?.inMemoryOnly).toBe(true);
+    expect(xstockPerpTriad).not.toBeNull();
+    expect(xstockPerpTriad?.telemetry).toBeDefined();
+    expect(xstockPerpTriad?.ratioManager).toBeDefined();
+    expect(xstockPerpTriad?.inMemoryOnly).toBe(true);
+    // Cross-class distinct instances:
+    expect(cryptoPerpTriad?.telemetry).not.toBe(xstockPerpTriad?.telemetry);
   });
 });
