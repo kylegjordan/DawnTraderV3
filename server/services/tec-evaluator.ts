@@ -61,13 +61,17 @@
  * scenarios. Changes to this file must keep those tests green.
  */
 
-import { getModuleConstants } from './module-constants-service.js';
+// B79.0n.TEC (2026-05-26): resolveTECConfig now SOLE source of TEC R-multiplier
+// knobs via the per-class cache. getModuleConstants import dropped — eliminates
+// the duplicate DB round-trip per exit-cycle + the silent DEFAULTS-fallback path.
+// See pre-audit §4.2 + D-3 Langston ACK.
 import {
   updatePosition as tecUpdatePosition,
   shouldClosePosition as tecShouldClose,
   isMoonbagQualifier,
   canEnterMoonbag,
   getConcurrentMoonbagCount,
+  resolveTECConfig,
   type TrailingUpdateResult,
   type TrailingStateSeed,
   type CallerMode,
@@ -183,48 +187,29 @@ export interface TECExitDecision {
   rungTargetHistory?: number[];
 }
 
-const DEFAULTS = {
-  breakEvenTriggerR: 1.0,
-  targetLockR: 1.5,
-  trailDistanceAtrMultiplier: 1.0,
-};
-
 /**
- * Load and resolve the 3 TEC tuning constants for the given context.
- * Falls back to hardcoded defaults if the DB has no matching row. The
- * defaults match the B65.1 seed migration, so behavior is bit-identical
- * to pre-B65.2 when the DB is in its shipped state.
+ * B79.0n.TEC (2026-05-26): Load + resolve the 3 TEC tuning constants from the
+ * per-class cache. SYNC — the cache is pre-warmed by `primeTECConfig()` at
+ * boot before `server.listen()`, so steady-state reads are sync map lookups.
+ *
+ * Replaces the prior async `getModuleConstants` round-trip + silent
+ * `catch → DEFAULTS` fallback (D-3 disposition). The cache itself HARD-FAILs
+ * on missing per-class rows during primeTECConfig (B79.0n.TEC HARD-FAIL
+ * extension), so this function NEVER returns DEFAULTS at runtime — it only
+ * throws if resolveTECConfig throws (cache-miss or staleness ceiling).
+ *
+ * Behavior change vs B65.2: zero DB round-trips per exit-cycle (was 1/cycle);
+ * fail-loud on cache invariant violation (was silent DEFAULTS fallback).
  */
-async function resolveTECConstants(
+function resolveTECConstants(
   context: TECExitContext,
-): Promise<TECExitDecision['resolvedConstants']> {
-  const key = {
-    exchange: context.exchange ?? '*',
-    assetClass: context.assetClass, // B79.TEC: non-optional AssetClass; never '*'
-    strategy: context.strategy ?? '*',
-    regime: context.regime ?? '*',
+): TECExitDecision['resolvedConstants'] {
+  const snapshot = resolveTECConfig(context.assetClass);
+  return {
+    breakEvenTriggerR: snapshot.breakEvenTriggerR,
+    targetLockR: snapshot.targetLockR,
+    trailDistanceAtrMultiplier: snapshot.trailDistanceAtrMultiplier,
   };
-
-  try {
-    const rows = await getModuleConstants('trailing_exit', key);
-    return {
-      breakEvenTriggerR:
-        typeof rows.break_even_trigger_r === 'number'
-          ? rows.break_even_trigger_r
-          : DEFAULTS.breakEvenTriggerR,
-      targetLockR:
-        typeof rows.target_lock_r === 'number' ? rows.target_lock_r : DEFAULTS.targetLockR,
-      trailDistanceAtrMultiplier:
-        typeof rows.trail_distance_atr_multiplier === 'number'
-          ? rows.trail_distance_atr_multiplier
-          : DEFAULTS.trailDistanceAtrMultiplier,
-    };
-  } catch (err) {
-    // Do not fail a trade resolution because the constants service is down.
-    // Log once per decision and fall back to seeded defaults.
-    console.error('[B65.2][TEC] moduleConstantsService read failed; using defaults:', err);
-    return { ...DEFAULTS };
-  }
 }
 
 /**
@@ -232,7 +217,8 @@ async function resolveTECConstants(
  * match the order documented in the file header for parity tests to pass.
  */
 export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecision> {
-  const resolvedConstants = await resolveTECConstants(input.context);
+  // B79.0n.TEC (2026-05-26): resolveTECConstants is now sync (per-class cache lookup).
+  const resolvedConstants = resolveTECConstants(input.context);
 
   // 1. Stale-price branch (no usable price).
   //    If held beyond max, force-close at entry (zombie cleanup).
