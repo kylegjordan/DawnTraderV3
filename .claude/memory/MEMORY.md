@@ -73,7 +73,31 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 - SCORING pre-audit: `/home/langston/inbox/b79-0n-scoring/PRE_AUDIT_v1.md` (in-repo at `Claude Comms and Packages/Scope Files/`)
 - TEC pre-audit: `/home/langston/inbox/b79-0n-tec/PRE_AUDIT_v1.md`
 
-**Background dispatches:** SCORING retry-1 in flight (initial dispatch bfl72a3qm failed bash-escape); TEC b9p9ax5q4 running normally.
+**Background dispatches:**
+- 🟢 TEC pre-audit Step 2 ACK RECEIVED (b9p9ax5q4 completed): APPROVED FOR STEP 3 with R-1 (probe NOW) + R-2 (call-site enumeration) + N-1..N-4 inline notes. Telegram chunks 4215+4216 relayed.
+- 🟡 SCORING pre-audit retry-2 in flight (bteg6y80m, ~1:30 elapsed at last check, Langston-side RUNNING normally).
+
+**🟢 R-1 RESOLVED — xstock_spot.break_even_enabled root-cause:**
+DB row: `updated_by = 'kyle-directive-2026-05-21-disable-xstock-be'` on **2026-05-21 16:26:00 UTC**.
+→ Hypothesis 2 CONFIRMED: Kyle intentionally reverted on 2026-05-21 after the 2026-05-11 B79.0m.b enable migration had successfully set it to true.
+→ Step 3 chunk 5 comment text MUST cite this exact chronology, NOT Hypothesis 1's "migration never applied" framing.
+
+**Step 3 chunk 5 comment text (locked):**
+```
+// xstock_spot → break_even_enabled = false (CURRENT LIVE STATE per 'kyle-directive-2026-05-21-disable-xstock-be')
+//
+// Chronology:
+//   - 2026-05-08 B79.TEC: seeded false for all 4 active classes
+//   - 2026-05-11 B79.0m.b: UPDATE xstock_spot → true (BE-protect for xstocks enabled)
+//   - 2026-05-13: documented enable-state in this code-comment block
+//   - 2026-05-21 Kyle directive: reverted to false (disable-xstock-be)
+//
+// Respect current live state. Operator-flip via DB UPDATE when ready to re-enable.
+```
+
+**N-2 follow-up:** §4.16 onboarding entry must note "EXISTS-gate IN-clause hardcodes active-class list; future-proof via getActiveAssetClasses() SSOT requires server-side pg_temp function or node-driven migration wrapper — non-trivial in pure SQL."
+
+**N-3 cross-batch dependency flag:** SCORING calibration window will see ZERO moonbag-mode VTS outcome telemetry per F-1. If any SCORING work needs moonbag-mode outcome signals, that's a conflict — flagged in TEC ACK for cross-check.
 
 **SCORING Step 1 Langston dispositions:**
 - D-1 SCORE_WEIGHTS = F-1 with resolver hook
