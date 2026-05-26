@@ -73,7 +73,34 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 - SCORING pre-audit: `/home/langston/inbox/b79-0n-scoring/PRE_AUDIT_v1.md` (in-repo at `Claude Comms and Packages/Scope Files/`)
 - TEC pre-audit: `/home/langston/inbox/b79-0n-tec/PRE_AUDIT_v1.md`
 
-**🟢 STEP 6 DEPLOY SUCCESSFUL — STEP 7 FIRST-PASS VERIFICATION PASS — 48H VERIFY-GATE CLOCK STARTED 02:47 UTC**
+**🟢 B79.0n.SCORING + B79.0n.TEC FULLY CLOSED 2026-05-26 — both `.b` follow-ups queued**
+
+**Final close commits:**
+- `b458588e5` Step 11 completion reports (TEC + SCORING)
+- `33bcb5e99` Step 10 governance — ALL 8 Tier 1+2 docs ACTUALLY edited
+
+**Deploy chain (final):**
+- `ceeaa15c6` — Step 6 initial deploy (TEC + SCORING migrations + Step 3 code)
+- `29bfda74f` — R-5 hotfix-deploy (SQE_EVAL log line gets `assetClass=` + threshold tags)
+
+**Langston Step 1 + 2 + 4 + 8 ALL ACK FINAL** (chunked relays 4206-4231 to Telegram topic 21).
+
+**Both .b follow-ups queued (RUNNING_ISSUES #141 + #142):**
+- B79.0n.TEC.b: strict 11-key HARD-FAIL restoration via `requireKey<T>` (7-day SLA after 48h verify-gate close)
+- B79.0n.SCORING.b: EXISTS-gated wildcard retirement + F-1 resolver hooks for SCORE_WEIGHTS + RANKING_WEIGHTS (after 48h verify-gate close)
+
+**48h verify-gate clock: started 2026-05-26 02:47 UTC** (R-5 pull restart at 03:56 UTC reset PM2 uptime but counters preserved). Counter probes so far:
+- +1h: 0 PICK_FALLBACK / 0 SQE_STATIC_MIRROR ✓
+- +69min: 0 fires, 0 SQE_EVAL runtime (dormant — Langston schema-parity ACK with deferred runtime evidence)
+- Next: +24h (2026-05-27 02:47 UTC) + +48h (2026-05-28 02:47 UTC)
+
+**Active-trading impact today:** ZERO. paper_sim_trades + trades both empty. R-5 runtime evidence deferred to active-trading flip at umbrella v4 sub-batch 18 (or regime shift producing non-null candidates earlier).
+
+**Remaining umbrella v4 work (8 sub-batches):**
+- 10-17: per-class sub-batches (TBD per umbrella structure)
+- 18: xStock active-trading flip (the umbrella close — depends on all prior sub-batches being in steady state)
+
+**🟢 Original directive: SCORING + TEC parallel-eligible per umbrella v4 row 8/9 — COMPLETED per Kyle 2026-05-25 evening overnight directive.**
 
 **Step 4 ACK received from Langston** (chunks 4221-4223 relayed): ACK both batches, Option A on TEC, SCORING F-1 hooks rolled into B79.0n.SCORING.b. 3 conditions: B79.0n.TEC.b SLA within 7d of verify-gate close; Step 7/8 must snapshot getTECPickFallbackStats() pre-deploy/+1h/+24h/+48h; C-1 perp-activation pre-flight in RUNNING_ISSUES Step 10.
 
