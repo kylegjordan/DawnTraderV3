@@ -65,37 +65,58 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 
 **Follow-up commit `cb078223a` (2026-05-25 evening) — CLAUDE.md consolidation pass.** Kyle directive 2026-05-25 + Langston ACK "Ship it" clean. CLAUDE.md 731 → 519 lines (29% line / 37% byte reduction; ~8k tokens removed from per-session auto-load). New companion archive `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` (268 lines, read-on-demand) holds 23 labeled sections of discipline-origin paragraphs + empirical-evidence narratives + reference-exemplar stories. CLAUDE.md uses `see history doc §X` pointers (~25 occurrences). Every load-bearing operational content preserved verbatim (JSON shapes, bash command snippets, mcp__Claude_in_Chrome__* tool invocations, alerts-check procedure).
 
-### 🟢 IN-FLIGHT: SCORING (#8) + TEC (#9) — Step 1 DISPATCHED, awaiting Langston ACK
+### 🟢 IN-FLIGHT: SCORING (#8) + TEC (#9) — Step 2 pre-audits dispatched (HEAD a9c08f1d3)
 
-Both scope files drafted + committed at HEAD `a2d9639f5`. Staged to Langston inbox via SCP:
-- `/home/langston/inbox/b79-0n-scoring/SCOPE_v1.md` (16 OBJ + D-1..D-5)
-- `/home/langston/inbox/b79-0n-tec/SCOPE_v1.md` (14 OBJ + D-1..D-4)
+**Step 1 → ACK with revisions received and integrated (both batches).** Verbatim relays posted to Telegram chunks 4206-4213. Plain-language summary posted (chunk 4214).
 
-Dispatched in parallel via SSH+claude-cli (background): SCORING=bu4dm0y9m, TEC=b3mz9rl83. Visibility messages posted to Telegram topic 21 (chunks 4203 + 4204). Plain-language summary posted to Telegram (chunk 4205) + Claude Desktop conversation.
+**Step 2 pre-audits drafted + committed + dispatched** (HEAD `a9c08f1d3`):
+- SCORING pre-audit: `/home/langston/inbox/b79-0n-scoring/PRE_AUDIT_v1.md` (in-repo at `Claude Comms and Packages/Scope Files/`)
+- TEC pre-audit: `/home/langston/inbox/b79-0n-tec/PRE_AUDIT_v1.md`
 
-**SCORING (#8) gap-analysis findings (Step 1.a complete):**
-- SQE input gate already type-locked per-class (B79.0n.STORAGE 2026-05-21)
-- Layer 2 `module_constants 'sqe_config'` EXPLICITLY DEFERRED to this batch per code comment at `signal_quality_evaluator.ts:128`
-- crypto_perp + xstock_perp have ZERO sqe_config rows → silent-fallback to wildcard if activated
-- crypto_spot quant/pattern thresholds (adx_min, di_min_quant, di_min_pattern, momentum_min) are CODE-side hardcoded; need DB promotion per CLAUDE.md §11 no-hard-coded-fallback discipline
-- `getPredictiveConfidence` cache key `${regime}:${strategy}` lacks assetClass → cross-class telemetry contamination
+**Background dispatches:** SCORING retry-1 in flight (initial dispatch bfl72a3qm failed bash-escape); TEC b9p9ax5q4 running normally.
 
-**TEC (#9) gap-analysis findings (Step 1.a complete):**
-- 11 TEC keys but only `break_even_enabled` HARD-FAIL covered (B79.TEC explicit deferral, RUNNING_ISSUES #85)
-- 6 keys wildcard-only (moonbag suite 5 + persistence_debounce_ms)
-- crypto_perp + xstock_perp have ONLY break_even_enabled row
-- `tec-evaluator.resolveTECConstants` is duplicate async DB call with silent `catch → DEFAULTS` fallback at lines 222-227 — bypasses per-class cache
-- DOC-vs-DB drift: `trailing-exit-controller.ts:107` says xstock_spot.break_even_enabled=TRUE, DB shows false (D-1 disposition needed)
+**SCORING Step 1 Langston dispositions:**
+- D-1 SCORE_WEIGHTS = F-1 with resolver hook
+- D-2 RANKING_WEIGHTS = F-1 same hook
+- D-3 PATTERN_POOL_GUARDRAILS = F-2 structurally (CONFIRMED: xstock_spot/pattern-pool-filters.ts EXISTS with DB-getter — already done)
+- D-4 crypto_spot numeric promotion = code defaults verbatim
+- D-5 = **TWO-STEP** (Langston pushed back hard) — SCORING + SCORING.b after 48h verify-gate
 
-**Background dispatch status:** check every 5-10 min per CLAUDE.md §6.5.0.b. If >12 min with 0-byte reply file: investigate per §6.5.0.b procedure. Reply files at `/tmp/langston_scoring_reply.txt` + `/tmp/langston_tec_reply.txt`.
+**TEC Step 1 Langston dispositions + CRITICAL FINDING:**
+- 🟢 **F-1: moonbag_qualifying_strategies = `[]` is INTENTIONAL** — `updated_by = 'kyle-2026-05-05-disable-trailing-after-target'` on 2026-05-05 12:19 UTC. Variant-K alignment per B75 winner. NOT a drift. Last-7d staging logs confirm zero `[9.2][MODE] → TRAILING_TAKE` events. Langston Caveat 1 hypothesis empirically right, disposition revised.
+- 🟢 **F-2: VTS DOES route through tec-evaluator** (vts-runner.ts:43 + 2218). Initial bypass hypothesis refuted.
+- 🟢 **F-3: zero active-trading impact** — paper_sim_trades + trades both EMPTY. Active trading hasn't fired any positions.
+- D-1: REVISE (no auto-default to Option B; root-cause first). Recommendation: Option B (comment update) with chronology cite — most likely Hypothesis 1 (B79.0m.b migration tagged "PARTIAL" in commit 3b84dc756 may not have applied).
+- D-2: F-2 structurally (per-class rows) but Day-1 values ALL `[]` matching variant K
+- D-3: ACK consolidate
+- D-4: Single batch CONFIRMED (clean grep — zero direct-wildcard consumers)
+- C-1: no perp activation near-term; governance note only
+- C-2: Pre-deploy baseline snapshot SQL in pre-audit §6
+- C-3: Confirmed via D-4 grep
 
-**Next steps (after Langston ACK arrives):**
-1. Verbatim relay to Telegram per CLAUDE.md §6.5.1 step 3 (both replies)
-2. Plain-language Kyle summaries to Telegram + Claude Desktop
-3. Begin Step 2 pre-audit drafting for both batches in parallel (deeper SIM + caller-surface compile probes)
-4. Update MEMORY after Step 2 drafts complete
+**Next steps (after Step 2 ACKs arrive):**
+1. Verbatim relay both ACKs to Telegram (chunked ≤3500 chars per chunk; no Markdown parse to avoid 400 errors)
+2. Plain-language Kyle summary
+3. Begin Step 3 implementation for BOTH batches in parallel (sequence chunks per pre-audit §6 / §5)
+4. Update MEMORY at each Step 3 chunk close
 
-After SCORING + TEC + remaining 8 sub-batches (10-18), umbrella closes with active-trading flip for xStocks.
+**Pre-audit findings summary for re-spawn after compaction:**
+
+For SCORING:
+- Migration 1 spec ready in pre-audit §5.1 (8 new rows: 4 perp + 4 crypto_spot numeric)
+- Code chunks 1-9 sequenced in pre-audit §6
+- Deploy outside NYSE 13:30 UTC (R-2)
+- Step 7 probe: signal-orchestrator log tail confirming per-class threshold-values (R-5)
+- §4.15 onboarding entry: promote-then-retire two-step pattern
+
+For TEC:
+- Migration 1 spec ready in pre-audit §5.1 (32 new rows: 8 perp hot-keys + 24 moonbag/persistence)
+- Migration 2 spec ready (single-batch confirmed): EXISTS-gated DELETE for all 11 TEC keys
+- Code chunks 1-7 in pre-audit §6
+- D-1 comment update with chronology cite (Kyle 2026-05-05 directive)
+- §4.16 onboarding entry: all-keys HARD-FAIL coverage pattern
+
+After SCORING + TEC close + remaining 8 sub-batches (10-18), umbrella closes with active-trading flip for xStocks.
 
 ---
 
