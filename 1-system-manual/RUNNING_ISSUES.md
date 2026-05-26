@@ -354,3 +354,11 @@ PHASE_HISTORY.md ends at sub-batch 4 (MCE) then jumps to 8/9 (SCORING/TEC). Sub-
 
 ### #146 OPEN 2026-05-26 — Deploy-SHA verification routinization
 B79.0n.TEC Step 6 deploy was at `ceeaa15c6`, R-5 follow-up commit `29bfda74f` was authored AFTER but not deployed to staging until Langston's Step 8 SHA cross-check caught the drift. Step 6 deploy procedure should include automated "verify staging HEAD matches intended deploy SHA" step. Codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.17.
+
+## B79.0n.TELEMETRY closure entries (2026-05-26)
+
+### #147 DEFERRED 2026-05-26 — B79.0n.TELEMETRY.b per-class disk persistence
+B79.0n.TELEMETRY shipped Variant C (in-memory only by construction) for `crypto_perp` + `xstock_perp` + `xstock_spot` factory-managed `TelemetryAggregator` instances. **No SLA today** — all 3 non-crypto_spot active classes are in dormant or VTS-shadow mode, so cross-restart state preservation is not a real requirement yet. Opens when the first non-crypto_spot active class **actually persists telemetry across restarts in live trading**. Structural unblock: parameterize the disk-path + persist-timer infrastructure at `telemetry-aggregator.ts:1600-1602` by `assetClass`. Pattern: clone the global singleton's persist-timer arming + disk-path resolution into a per-class-keyed factory variant; verify each instance's disk path is isolated (no cross-class disk-state contamination). Cross-reference: ASSET_CLASS_ONBOARDING_WORKFLOW §4.19 (per-class-instance + non-arming-read patterns).
+
+### #148 OPEN 2026-05-26 — Pre-existing MarketDataHealthCheck EACCES on `/home/runner` path
+Surfaced during B79.0n.TELEMETRY Step 7 error-log review (NOT related to TELEMETRY batch). `writeHealthLog` throws `EACCES: permission denied, mkdir '/home/runner'` because the mkdir target is hardcoded to `/home/runner` (looks like a CI runner path bleed into production code). Fires once per ~hourly MarketDataHealthCheck cycle. Pre-existing — not introduced by TELEMETRY; surfaced because Step 7 verification includes routine error-log inspection. Flagged as a future Tier-3 cleanup. Not blocking. Resolution: locate the hardcoded `/home/runner` mkdir call site in `server/services/market-data-health-check.ts` (or wherever `writeHealthLog` lives), replace with a process-CWD-relative or env-var-resolved path. Validation: 0 EACCES log lines for 1 hour after fix.

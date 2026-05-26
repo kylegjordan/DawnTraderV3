@@ -283,6 +283,7 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 |---|---|---|---|---|---|
 | 8 | B79.0n.SCORING | CLOSED (`.b` queued) | 2026-05-26 | `ceeaa15c6` (Step 6) + `29bfda74f` (R-5 hotfix) | [report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_SCORING_COMPLETION_REPORT.md) |
 | 9 | B79.0n.TEC | CLOSED (`.b` queued) | 2026-05-26 | same deploy chain | [report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_TEC_COMPLETION_REPORT.md) |
+| 10 | B79.0n.TELEMETRY | CLOSED (`.b` deferred — no SLA) | 2026-05-26 | `02bad33a6` (Step 6 deploy, PM2 #323 at 18:01:48Z; CI run `26465795903` all-4-green) — preceded by `12e451d037` (Step 3 implementation, +980/−48 LOC across 12 files = 7 prod + 5 new test) + `33ecd32b9` (Step 4 change list) + `019c4875b` (Step 2 pre-audit v1) + `4e790cf0d` (Step 1 scope v1) | [report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_TELEMETRY_COMPLETION_REPORT.md) |
 
 ## Notes
 

@@ -5736,6 +5736,66 @@ Tracks per-pair: finalScore, hybridScore, regimeWeight, regimeScore, predictiveC
 
 The telemetry aggregator feeds the **AdaptiveScanManager** with ranked pair lists and the **DynamicStrategySelector** with regime-aware metrics. It is the central data collection point for the entire VTS feedback loop.
 
+### 10.9 — B79.0n.TELEMETRY: Per-class instance bootstrap pattern (2026-05-26)
+
+**Sub-batch 10 of 18 in the B79.0n umbrella v4 arc.** Deploy commit `02bad33a6`. Completes the B79.0a per-asset-class `TelemetryAggregator` instance pattern.
+
+#### 4-of-4 active-class coverage table
+
+| Asset class | Pre-batch route | Post-batch route | Disk persistence |
+|---|---|---|---|
+| `crypto_spot` | Global singleton via no-touch fence (factory returns `null`) | UNCHANGED — global singleton (18mo+ live disk-persist state preserved) | YES (global singleton's `setInterval(persist, 5min)` arm) |
+| `xstock_spot` | Dedicated in-memory triad (B79.0a) | UNCHANGED — same in-memory triad | NO (in-memory only by construction) |
+| `crypto_perp` | **THROW** — `[CLASS_UNHANDLED]` | **NEW** — dedicated in-memory triad via factory | NO (Variant C — in-memory only) |
+| `xstock_perp` | **THROW** — `[CLASS_UNHANDLED]` | **NEW** — dedicated in-memory triad via factory | NO (Variant C — in-memory only) |
+| `forex_spot` / `forex_perp` / `equity_spot` / `equity_perp` (reserved-future) | THROW (`[CLASS_UNHANDLED]`) | **NEW** — explicit `[CLASS_NOT_WIRED]` throw (distinct from `[CLASS_INVALID]`) | N/A — onboarding not started |
+
+#### Variant C disk-persist resolution
+
+Per Langston AGREE on scope Q1, the new instances are **in-memory only by construction** — direct `new TelemetryAggregatorService()` bypasses the global singleton's `setInterval(persist, 5min)` arming code path. The persist-timer arming is structurally gated INSIDE `getTelemetryAggregator()` (the global-singleton accessor function in `server/services/telemetry-aggregator.ts`) — direct construction at `server/services/asset-class-instances.ts`'s factory site simply does not invoke that code path. **Variant C is safe by structure, not by policy** — no flag-check, no opt-out path. The 3 factory-managed instances never accidentally write disk state because the persist-timer construct never fires for them.
+
+If a non-crypto_spot active class flips to active trading and the in-memory-only state needs to persist across PM2 restarts, the follow-up sub-batch (**TELEMETRY.b**) parameterizes the disk-path + persist-timer infrastructure at `telemetry-aggregator.ts:1600-1602` by `assetClass`. No SLA today — xstock_spot + xstock_perp + crypto_perp all in dormant or VTS-shadow mode, so cross-restart persistence is not required.
+
+#### `assertNever` exhaustive-switch enforcement pattern
+
+The factory's switch over `AssetClass` is terminated by an `assertNever(class)` call that takes a parameter of type `never`. TypeScript compile-fails if any value of the `AssetClass` union is not handled by an explicit `case` arm above. Pattern matches the STRATEGY / MCE / PATTERN-DETECT precedents from earlier B79.0n sub-batches — consistency win at the asset-class-onboarding boundary.
+
+#### `peekTelemetryInstance()` non-arming-read companion pattern
+
+To support the new `getTelemetryInstanceStats()` accessor (which reads per-instance `recordCount` + `lastWriteAt` for the 48h verify-gate signal), B79.0n.TELEMETRY introduces a **non-arming-read companion** at `server/services/telemetry-aggregator.ts`:
+
+```typescript
+// Returns the module-level instance reference without invoking the
+// persist-timer arm. Safe to call from a read accessor; cannot
+// accidentally arm Variant C invariant.
+export function peekTelemetryInstance(
+  assetClass: AssetClass
+): TelemetryAggregatorService | null { ... }
+```
+
+The `peek*` prefix signals "non-arming, returns whatever module-level state is currently held, may be `null` if instance never constructed." A caller that needs to arm-then-read should use a distinctly-named API (`getOrCreateTelemetryInstance()` shape).
+
+**Reusable precedent.** The `peek<X>` non-arming-read pattern is codified in `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.19 as the reusable shape for read-only stats accessors that must NOT trigger side-effects (persist-timer arming, cache materialization, etc.). Future factories that own persistent state should ship a `peek*` companion at the same time as their construction API.
+
+#### `getTelemetryInstanceStats()` accessor + 48h verify-gate signal
+
+```typescript
+export function getTelemetryInstanceStats(): {
+  crypto_spot: null | InstanceStats;  // null — global singleton, not factory-managed
+  crypto_perp: InstanceStats;          // recordCount + lastWriteAt
+  xstock_spot: InstanceStats;
+  xstock_perp: InstanceStats;
+}
+```
+
+Backs the 48h verify-gate alert `1f34cf84-a37c-425c-a1c4-54924b053061` (triggers_at 2026-05-28T18:01:48Z). Invariant: `crypto_perp.recordCount === 0` and `xstock_perp.recordCount === 0` for the entirety of the gate window because per-class VTS-writer threading is deferred to WIRE-IN (#16) — the perp instances exist but their write-path is not wired yet. Crypto_spot continues growing normally via the global singleton (no-touch fence held).
+
+#### Cross-reference
+
+- §7.6 (this chapter) entry remains as-is for the legacy global singleton; this 10.9 subsection documents the NEW per-class wrapper layer above the singleton.
+- SIM "Recent additions (B79.0n.TELEMETRY — Phase 24 — 2026-05-26)" mirrors the component-level enumeration with blast-radius analysis.
+- ASSET_CLASS_ONBOARDING_WORKFLOW §4.19 codifies the per-class-instance + non-arming-read patterns as reusable shapes with B79.0n.TELEMETRY as the worked example.
+
 ---
 
 ## 11. Adaptive Learning Repository — SQL-Backed Weight Persistence

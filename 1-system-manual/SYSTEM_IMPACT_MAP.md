@@ -2416,3 +2416,67 @@ Sub-batch 5 of 18 in the B79.0n umbrella v4 arc. Implementation commit `af99bd5`
 - Scope + Pre-audit + Change-list documents in `Claude Comms and Packages/Scope Files/` + `Change Lists/`
 - Onboarding patterns: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.15 (promote-then-retire) + §4.16 (all-keys HARD-FAIL coverage) + §4.17 (deploy-SHA verification) + §4.18 (CI initial-schema divergence)
 - RUNNING_ISSUES: #85 RESOLVED (deferred-from-B79.TEC HARD-FAIL extension); #141 DEFERRED (B79.0n.TEC.b); #142 DEFERRED (B79.0n.SCORING.b); #143 DEFERRED (R-5 runtime observation); #144 OPEN (perp-activation pre-flight); #146 OPEN (deploy-SHA verification routinization).
+
+---
+
+## Recent additions (B79.0n.TELEMETRY — Phase 24 — 2026-05-26)
+
+Sub-batch 10 of 18 in the B79.0n umbrella v4 arc. Step 6 deploy commit `02bad33a6`, PM2 #323 at 18:01:48Z; CI all-4-green at run `26465795903`. Completes the B79.0a per-asset-class `TelemetryAggregator` instance pattern.
+
+**Architecture summary.** Pre-batch the factory at `server/services/asset-class-instances.ts` covered only 2 of 4 active asset classes — `crypto_spot` via the no-touch fence (returns `null` so callers fall back to the global `telemetry-aggregator.ts` singleton at the 18mo+ live disk-persist state) and `xstock_spot` via a dedicated in-memory triad. `crypto_perp` + `xstock_perp` threw. RTB's Adaptive Ratio Manager (sub-batch #11) depends on all 4 active classes having per-class telemetry instances. Sub-batch #10 extends the factory to **4-of-4 active classes** (crypto_perp + xstock_perp gain dedicated in-memory triads of their own), adds 3 new bootstrap functions, adds compile-time `assertNever` exhaustive-switch enforcement, and adds explicit `[CLASS_NOT_WIRED]` throws for the 4 reserved-future classes (`forex_spot`/`forex_perp`/`equity_spot`/`equity_perp`) from ASSET_CLASS_REGISTRY. Adds a non-arming `peekTelemetryInstance()` read export to back the new `getTelemetryInstanceStats()` accessor that serves the 48h verify-gate signal (perp `recordCount === 0` invariant — perp VTS-writer per-class threading is deferred to WIRE-IN #16).
+
+**Variant C in-memory-only invariant.** Per Langston AGREE on scope Q1, new instances are in-memory only **by construction** — direct `new TelemetryAggregatorService()` bypasses the global singleton's `setInterval(persist, 5min)` arm because the persist-timer arming is structurally gated INSIDE `getTelemetryAggregator()` (the global-singleton accessor) **only**. Direct construction is safe by structure, not by policy — no flag-check, no opt-out path. The 3 factory-managed instances never accidentally write disk state because the persist-timer construct never fires for them.
+
+**crypto_spot asymmetry preserved.** The 18mo+ live disk-persist state at the global singleton is untouched. Crypto_spot continues routing VTS writes through the global singleton (no-touch fence returns null → callers fall back). The 3 new factory-managed instances (crypto_perp + xstock_perp + xstock_spot) stay in-memory.
+
+### Components touched
+
+- **`server/services/asset-class-instances.ts`** — factory extended:
+  - Added 2 new lazy caches (`crypto_perp` + `xstock_perp` private instance refs).
+  - Added 2 new bootstrap functions paired with the existing `xstock_spot` triad.
+  - Replaced 2-of-4 switch with `assertNever`-terminated exhaustive switch over `AssetClass` union — TypeScript compile-fails if any active or reserved-future class is missed.
+  - `[CLASS_NOT_WIRED]` throws for the 4 reserved-future classes (`forex_spot`/`forex_perp`/`equity_spot`/`equity_perp`) — clearly distinct from `[CLASS_INVALID]`.
+  - New `getTelemetryInstanceStats(): { crypto_spot: null | InstanceStats; crypto_perp: InstanceStats; xstock_spot: InstanceStats; xstock_perp: InstanceStats }` accessor — calls `peekTelemetryInstance(class)` for each (non-arming read), returns recordCount + lastWriteAt per non-singleton instance, null for crypto_spot.
+- **`server/services/telemetry-aggregator.ts`** — new exports + per-instance observability fields:
+  - `peekTelemetryInstance(class: AssetClass): TelemetryAggregatorService | null` — non-arming-read companion that returns the module-level instance reference without triggering persist-timer construction. Reusable pattern (codified ASSET_CLASS_ONBOARDING_WORKFLOW §4.19).
+  - 3 new read methods + 2 new instance fields on `TelemetryAggregatorService` for per-instance observability counters (`recordCount`, `lastWriteAt`, plus `getInstanceStats()` returning the pair).
+  - Persist-timer arming code path unchanged — still gated inside `getTelemetryAggregator()` so direct construction (factory-managed instances) cannot accidentally arm it.
+- **`server/index.ts`** — boot pre-warm of 3 factory-managed triads (crypto_perp + xstock_perp + xstock_spot). HARD-FAIL via `process.exit(1)` if any bootstrap raises (e.g., persist-timer arming detected via assertion).
+- **4 production caller-site annotations** (routes/vts-runner/market-indicators/fx5-scanner) — non-routing comment-only annotations marking which call sites flow through the global singleton vs the factory. No behavioral change; documentary intent for the WIRE-IN #16 batch when per-class VTS-writer threading lands.
+
+### Note on §7.6 existing entry
+
+The existing **§7.6 Telemetry Aggregator** entry remains as-is for the legacy global singleton (`server/services/telemetry-aggregator.ts`'s `getTelemetryAggregator()`). B79.0n.TELEMETRY adds a NEW per-class wrapper layer above that singleton — `server/services/asset-class-instances.ts` factory dispatch. Both are live; crypto_spot routes to the global singleton via the no-touch fence; the other 3 active classes route to the factory's in-memory triads.
+
+### Boot pre-warm + HARD-FAIL semantics
+
+`server/index.ts` calls `getTelemetryAggregatorInstance('crypto_perp')`, `getTelemetryAggregatorInstance('xstock_perp')`, `getTelemetryAggregatorInstance('xstock_spot')` at boot — pre-warms all 3 factory-managed triads + smoke-tests that direct construction (Variant C invariant) succeeds without persist-timer arming. If any bootstrap raises, `process.exit(1)` per Kyle NO PATCHES policy — boot does not silently degrade to no-telemetry-for-class-X.
+
+### Disposition: TELEMETRY.b is the persistence follow-up (no SLA today)
+
+If a non-crypto_spot active class flips to active trading and the in-memory-only telemetry state needs to persist across PM2 restarts, the follow-up sub-batch (TELEMETRY.b) parameterizes the disk-path + persist-timer infrastructure at `telemetry-aggregator.ts:1600-1602` by `assetClass`. **No SLA today** — xstock_spot + xstock_perp + crypto_perp all in dormant or VTS-shadow mode, so cross-restart persistence is not required. TELEMETRY.b opens when the first non-crypto_spot active class actually persists telemetry across restarts in live trading.
+
+### Verify-gate signal + 48h alert
+
+`getTelemetryInstanceStats()` accessor exposes per-instance `recordCount`. 48h verify-gate (alert `1f34cf84-a37c-425c-a1c4-54924b053061`, triggers_at 2026-05-28T18:01:48Z) checks:
+- `crypto_perp.recordCount === 0` (no VTS-writer threading yet — WIRE-IN #16)
+- `xstock_perp.recordCount === 0` (same)
+- `xstock_spot.recordCount` — observability TBD (xstock_spot writers wired pre-TELEMETRY, but in dormant pricing window today)
+- `crypto_spot.recordCount` (via global singleton, NOT factory) — invariant: continues to grow normally; no-touch-fence held
+
+### "If I Change X, Check Y" — B79.0n.TELEMETRY additions
+
+- If you add a new `AssetClass` enum value, the `assertNever` switch in `asset-class-instances.ts` HARD-FAILs at compile. Add a bootstrap function + dedicated triad cache OR an explicit `[CLASS_NOT_WIRED]` throw before pushing.
+- If you change `peekTelemetryInstance()` to actually arm persist (defeating Variant C), the `getTelemetryInstanceStats()` accessor will accidentally trigger persist-timer construction on every read. Keep `peek*` strictly non-arming; if you need an arm-then-read API, name it `getOrCreateTelemetryInstance()` distinctly.
+- If you remove a `[CLASS_NOT_WIRED]` throw without adding a real triad, asset-class onboarding silently passes through the no-touch fence pattern (returns null) and reads of the new class hit the global singleton instead of a dedicated instance. Always pair removal with a real triad + bootstrap.
+- If you wire per-class VTS writers (WIRE-IN #16), `crypto_perp` + `xstock_perp` recordCount will start growing — verify-gate invariant changes from `=== 0` to `> 0` post-WIRE-IN. Update the alert assertion shape at that batch.
+
+### Phase 24 onboarding workflow cross-reference
+
+- `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.19 codifies the per-class-instance pattern + non-arming-read companion pattern as a reusable worked example with B79.0n.TELEMETRY's `peekTelemetryInstance()` as the canonical reference implementation.
+
+### Cross-references
+
+- Completion report: `Claude Comms and Packages/Batch Completion/B79_0n_TELEMETRY_COMPLETION_REPORT.md`
+- Scope + Pre-audit + Change-list: `Claude Comms and Packages/Scope Files/B79_0n_TELEMETRY_SCOPE.md` + `B79_0n_TELEMETRY_PRE_AUDIT.md` + `Change Lists/B79_0n_TELEMETRY_STEP3_CHANGE_LIST.md`
+- RUNNING_ISSUES: #143 DEFERRED (TELEMETRY.b persistence follow-up — no SLA today); #144 OPEN (pre-existing MarketDataHealthCheck EACCES on `/home/runner` path — unrelated finding from Step 7 error-log review).

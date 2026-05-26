@@ -1253,4 +1253,114 @@ When extending per-class rows that depend on prior migrations, include idempoten
 
 ---
 
+## §4.19 — Per-class-instance pattern + non-arming-read companion (B79.0n.TELEMETRY 2026-05-26)
+
+**When a class owns persistent state (timers, disk paths, side-effecting setIntervals), the per-class instance pattern is the canonical onboarding approach.** Two paired discipline shapes:
+
+### Shape 1 — Per-class factory dispatch with `assertNever` exhaustive switch
+
+Pattern source: `server/services/asset-class-instances.ts` (B79.0n.TELEMETRY canonical implementation).
+
+```typescript
+import { assertNever } from '@shared/assert-never';
+import type { AssetClass } from '@shared/asset-classes';
+
+// Module-level lazy caches (one per active class).
+let _cryptoPerpInstance: TelemetryAggregatorService | null = null;
+let _xstockPerpInstance: TelemetryAggregatorService | null = null;
+let _xstockSpotInstance: TelemetryAggregatorService | null = null;
+// NOTE: crypto_spot intentionally NOT cached here — flows through
+// the global singleton via the no-touch fence pattern.
+
+export function getTelemetryAggregatorInstance(
+  assetClass: AssetClass
+): TelemetryAggregatorService | null {
+  switch (assetClass) {
+    case 'crypto_spot':
+      return null;  // No-touch fence — caller falls back to global singleton.
+    case 'crypto_perp':
+      if (!_cryptoPerpInstance) {
+        _cryptoPerpInstance = bootstrapCryptoPerpTelemetry();
+      }
+      return _cryptoPerpInstance;
+    case 'xstock_perp':
+      if (!_xstockPerpInstance) {
+        _xstockPerpInstance = bootstrapXstockPerpTelemetry();
+      }
+      return _xstockPerpInstance;
+    case 'xstock_spot':
+      if (!_xstockSpotInstance) {
+        _xstockSpotInstance = bootstrapXstockSpotTelemetry();
+      }
+      return _xstockSpotInstance;
+    case 'forex_spot':
+    case 'forex_perp':
+    case 'equity_spot':
+    case 'equity_perp':
+      throw new Error(`[CLASS_NOT_WIRED] assetClass=${assetClass}`);
+    default:
+      return assertNever(assetClass);  // TS compile-fails if class added without case.
+  }
+}
+```
+
+**Discipline rules:**
+- The switch is **always** terminated by `assertNever(assetClass)`, even when every arm above already returns or throws. The exhaustiveness check is the compile-time guarantee that no class is silently fall-through-defaulted.
+- The 4 reserved-future classes (`forex_spot`, `forex_perp`, `equity_spot`, `equity_perp`) get **explicit `[CLASS_NOT_WIRED]` throws** — distinct from `[CLASS_INVALID]`. The marker tells the reader at the throw site "this asset class is a valid future enum value; onboarding work is required to wire it" rather than "this is a bug."
+- The canonical class (`crypto_spot` in this example, where 18mo+ live disk-persist state lives at the global singleton) flows through the **no-touch fence pattern** — factory returns `null`, callers fall back. This protects the asymmetric mature state from accidental disruption during onboarding work.
+
+### Shape 2 — Non-arming-read companion (the `peek*` pattern)
+
+When the factory's construction code path arms persistent infrastructure (`setInterval`, disk-path attach, side-effecting cache materialization), the **factory function itself is unsafe to call from a read-only stats accessor**. Ship a **non-arming-read companion** at the same time as the construction API:
+
+```typescript
+// Returns the module-level instance reference WITHOUT triggering construction.
+// Safe to call from a read accessor; cannot accidentally arm persist-timer / etc.
+export function peekTelemetryInstance(
+  assetClass: AssetClass
+): TelemetryAggregatorService | null {
+  switch (assetClass) {
+    case 'crypto_spot':  return peekGlobalTelemetrySingleton();
+    case 'crypto_perp':  return _cryptoPerpInstance;     // module-level state, no construction
+    case 'xstock_perp':  return _xstockPerpInstance;
+    case 'xstock_spot':  return _xstockSpotInstance;
+    // reserved-future: return null (no instance was ever constructed)
+    default:             return null;
+  }
+}
+
+// Read accessor that powers verify-gate signals — uses peek*, NOT factory.
+export function getTelemetryInstanceStats() {
+  return {
+    crypto_spot: peekTelemetryInstance('crypto_spot')?.getInstanceStats() ?? null,
+    crypto_perp: peekTelemetryInstance('crypto_perp')?.getInstanceStats() ?? blankStats(),
+    xstock_spot: peekTelemetryInstance('xstock_spot')?.getInstanceStats() ?? blankStats(),
+    xstock_perp: peekTelemetryInstance('xstock_perp')?.getInstanceStats() ?? blankStats(),
+  };
+}
+```
+
+**Discipline rules:**
+- The `peek*` prefix signals "non-arming, returns whatever module-level state is currently held, may be `null` if the instance was never constructed."
+- A caller that needs to arm-then-read should use a **distinctly-named API** (e.g., `getOrCreateTelemetryInstance()`). Conflating the two shapes under one function name is how verify-gate stats accessors accidentally arm persistence machinery.
+- The `peek*` companion is shipped **as part of the same batch** as the construction API — not as a follow-up. Verify-gate signals are usually wired into the same batch that introduces the construction surface.
+
+### Variant C (in-memory-only) is the right default
+
+Until empirical evidence requires persistence, **new per-class instances should be in-memory only by construction**. The persist-timer arming code path should be structurally gated inside the global-singleton accessor only — direct `new XxxService()` construction at the factory site should not invoke it. This makes Variant C **safe by structure, not by policy** (no flag-check, no opt-out path).
+
+The persist-by-asset-class follow-up batch (e.g., `TELEMETRY.b`) lands when the first non-canonical class flips to active trading and cross-restart state preservation becomes a real requirement. **No SLA today** is the correct disposition — opens-on-demand, not blocking.
+
+### Worked example reference
+
+B79.0n.TELEMETRY (sub-batch 10 of B79.0n umbrella v4 arc, deploy `02bad33a6` 2026-05-26) is the **canonical reference implementation** for both shapes:
+- Factory dispatch at `server/services/asset-class-instances.ts` (4-of-4 active-class coverage + `assertNever` + `[CLASS_NOT_WIRED]` throws).
+- Non-arming-read companion at `server/services/telemetry-aggregator.ts` (`peekTelemetryInstance()` + `getInstanceStats()` + `getTelemetryInstanceStats()` accessor).
+- Variant C in-memory-only invariant preserved across crypto_perp + xstock_perp + xstock_spot.
+- crypto_spot asymmetry (18mo+ live disk-persist state at global singleton) preserved untouched via the no-touch fence pattern.
+
+See SYSTEM_MANUAL.md §10.9 + SYSTEM_IMPACT_MAP.md "Recent additions (B79.0n.TELEMETRY — Phase 24 — 2026-05-26)" for full component-level enumeration.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
