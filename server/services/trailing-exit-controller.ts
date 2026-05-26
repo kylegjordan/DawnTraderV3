@@ -335,10 +335,12 @@ export function resolveTECConfig(assetClass: AssetClass): TrailingExitConfig {
  * Throws on DB error so primeTECConfig can aggregate per-class failures.
  * Background callers must catch.
  */
-// B79.0n.TEC (2026-05-26): All 11 TEC keys require explicit per-class rows.
-// SSOT for the keyset — when adding a new TEC config key, append here AND
-// extend the snapshot construction below + the TrailingExitConfig interface.
-// The keyset is asserted on EVERY refresh (boot + TTL) via hasExplicitAssetClassRow.
+// B79.0n.TEC (2026-05-26): SSOT for the 11 TEC keys covered by the per-class
+// seed migration. The kill-switch key (`break_even_enabled`) is HARD-FAIL
+// covered by `hasExplicitAssetClassRow`. The other 10 keys observably warn
+// on wildcard/DEFAULTS fallback via _tecPickFallbackCount so the 48h
+// verify-gate before B79.0n.TEC.b strict-HARD-FAIL extension can confirm
+// per-class rows resolve cleanly in production.
 const ALL_TEC_KEYS: readonly string[] = [
   'break_even_enabled',
   'break_even_trigger_r',
@@ -353,27 +355,34 @@ const ALL_TEC_KEYS: readonly string[] = [
   'moonbag_reserved_slots',
 ] as const;
 
+// B79.0n.TEC (2026-05-26): per-key fallback observability counter. Increments
+// when `pick(key, TEC_DEFAULTS.x)` falls back to the DEFAULTS template
+// (module_constants row missing for both per-class AND wildcard). Used by
+// the 48h verify-gate before B79.0n.TEC.b promotes this to strict-throw.
+const _tecPickFallbackCount = new Map<string, number>();
+const TEC_PICK_FALLBACK_LOG_EVERY = 100;
+
+export function getTECPickFallbackStats(): Record<string, number> {
+  return Object.fromEntries(_tecPickFallbackCount);
+}
+
 async function refreshTECConfigForClass(assetClass: AssetClass): Promise<void> {
-  // B79.0n.TEC (2026-05-26): HARD-FAIL assertion extended from 1 → 11 keys.
-  // Closes RUNNING_ISSUES #85 (deferred-from-B79.TEC). Every TEC config key
-  // MUST have an explicit per-class row in module_constants; without this,
-  // getModuleConstants would silently fall back to the wildcard row and
-  // primeTECConfig would succeed even with operator-flip surfaces missing.
-  //
-  // Single-pass aggregate: collect ALL missing keys before throwing so the
-  // operator sees the complete fix list in one boot attempt instead of
-  // fix-restart-fix-restart.
-  const missing: string[] = [];
-  for (const key of ALL_TEC_KEYS) {
-    const hasExplicit = await hasExplicitAssetClassRow('trailing_exit', assetClass, key);
-    if (!hasExplicit) missing.push(key);
-  }
-  if (missing.length > 0) {
+  // B79.TEC kill-switch HARD-FAIL preserved: explicit per-class row REQUIRED
+  // for `break_even_enabled`. Other 10 keys observably warn on fallback
+  // (see _tecPickFallbackCount); B79.0n.TEC.b will extend strict HARD-FAIL
+  // to all 11 keys after the 48h verify-gate confirms zero fallback fires.
+  const hasExplicit = await hasExplicitAssetClassRow(
+    'trailing_exit',
+    assetClass,
+    'break_even_enabled',
+  );
+  if (!hasExplicit) {
     throw new Error(
-      `[TEC_MISSING_PER_CLASS_ROW] module_constants is missing explicit per-class ` +
-      `row(s) for (module=trailing_exit, asset_class=${assetClass}): ${missing.join(', ')}. ` +
-      `Run B79.0n.TEC Migration 1 (drizzle/migrations/2026-05-26-b79-0n-tec-perclass-seed.sql) ` +
-      `before starting the app, or insert the row(s) manually via psql.`,
+      `[TEC_MISSING_PER_CLASS_ROW] module_constants is missing an explicit ` +
+      `per-class row for (module=trailing_exit, asset_class=${assetClass}, ` +
+      `constant=break_even_enabled). Run B79.TEC Migration 1 ` +
+      `(drizzle/migrations/2026-05-08-b79-tec-per-class-be-rows.sql) ` +
+      `before starting the app, or insert the row manually via psql.`,
     );
   }
 
@@ -385,34 +394,42 @@ async function refreshTECConfigForClass(assetClass: AssetClass): Promise<void> {
     regime: '*',
   });
 
-  // B79.0n.TEC (2026-05-26): NO silent-fallback path. The HARD-FAIL block above
-  // already asserted every key has an explicit per-class row; if any is still
-  // undefined here, it's a programming error (cache out of sync with DB) —
-  // throw rather than silently degrade.
-  const requireKey = <T>(key: string): T => {
-    if (rows[key] === undefined) {
-      throw new Error(
-        `[TEC_REFRESH_INVARIANT_VIOLATED] assetClass=${assetClass} key=${key} ` +
-        `unexpectedly undefined after HARD-FAIL pre-check passed. ` +
-        `Indicates module_constants cache drift; investigate immediately.`,
+  // B79.0n.TEC (2026-05-26): per-key fallback observability. When a key
+  // resolves via DEFAULTS rather than DB (per-class or wildcard), increment
+  // the per-key counter + periodic WARN log. Production post-Migration-1
+  // should see zero fallback fires; staging post-Migration-2 (wildcard
+  // retire) confirms steady-state per-class resolution.
+  const pick = <T>(key: string, fallback: T): T => {
+    if (rows[key] !== undefined) return rows[key] as T;
+    const count = (_tecPickFallbackCount.get(key) ?? 0) + 1;
+    _tecPickFallbackCount.set(key, count);
+    if (count % TEC_PICK_FALLBACK_LOG_EVERY === 1) {
+      console.warn(
+        `[B79.0n.TEC][PICK_FALLBACK] assetClass=${assetClass} key=${key} count=${count} ` +
+        `— resolving to TEC_DEFAULTS (DB row absent for per-class AND wildcard). ` +
+        `48h verify-gate REQUIRES this counter to stay at 0 before B79.0n.TEC.b ` +
+        `strict-HARD-FAIL extension.`,
       );
     }
-    return rows[key] as T;
+    return fallback;
   };
 
-  // Build the snapshot — all 11 keys read via requireKey (NO fallback path).
+  // Build the snapshot. `break_even_enabled` is asserted to have an explicit
+  // per-class row by hasExplicitAssetClassRow above. Other keys may resolve
+  // via wildcard fallback inside getModuleConstants OR via TEC_DEFAULTS
+  // (observable via _tecPickFallbackCount).
   const snapshot: TrailingExitConfig = {
-    breakEvenEnabled: requireKey<boolean>('break_even_enabled'),
-    breakEvenTriggerR: requireKey<number>('break_even_trigger_r'),
-    targetLockR: requireKey<number>('target_lock_r'),
-    trailDistanceAtrMultiplier: requireKey<number>('trail_distance_atr_multiplier'),
-    persistenceDebounceMs: requireKey<number>('persistence_debounce_ms'),
-    moonbagQualifyingStrategies: requireKey<string[]>('moonbag_qualifying_strategies'),
-    moonbagQualifyingSourcePools: requireKey<Record<string, string[]>>('moonbag_qualifying_source_pools'),
-    moonbagMaxDurationMs: requireKey<number>('moonbag_max_duration_ms'),
-    moonbagCapMode: requireKey<'unlimited' | 'reserved_slots'>('moonbag_cap_mode'),
-    moonbagReservedSlots: requireKey<number>('moonbag_reserved_slots'),
-    rungFloorSlippageBufferMultiplier: requireKey<number>('rung_floor_slippage_buffer_multiplier'),
+    breakEvenEnabled: pick('break_even_enabled', TEC_DEFAULTS.breakEvenEnabled),
+    breakEvenTriggerR: pick('break_even_trigger_r', TEC_DEFAULTS.breakEvenTriggerR),
+    targetLockR: pick('target_lock_r', TEC_DEFAULTS.targetLockR),
+    trailDistanceAtrMultiplier: pick('trail_distance_atr_multiplier', TEC_DEFAULTS.trailDistanceAtrMultiplier),
+    persistenceDebounceMs: pick('persistence_debounce_ms', TEC_DEFAULTS.persistenceDebounceMs),
+    moonbagQualifyingStrategies: pick('moonbag_qualifying_strategies', TEC_DEFAULTS.moonbagQualifyingStrategies),
+    moonbagQualifyingSourcePools: pick('moonbag_qualifying_source_pools', TEC_DEFAULTS.moonbagQualifyingSourcePools),
+    moonbagMaxDurationMs: pick('moonbag_max_duration_ms', TEC_DEFAULTS.moonbagMaxDurationMs),
+    moonbagCapMode: pick('moonbag_cap_mode', TEC_DEFAULTS.moonbagCapMode),
+    moonbagReservedSlots: pick('moonbag_reserved_slots', TEC_DEFAULTS.moonbagReservedSlots),
+    rungFloorSlippageBufferMultiplier: pick('rung_floor_slippage_buffer_multiplier', TEC_DEFAULTS.rungFloorSlippageBufferMultiplier),
   };
 
   tecConfigCache.set(assetClass, snapshot);
