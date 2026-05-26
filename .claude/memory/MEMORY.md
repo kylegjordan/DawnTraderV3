@@ -73,7 +73,49 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 - SCORING pre-audit: `/home/langston/inbox/b79-0n-scoring/PRE_AUDIT_v1.md` (in-repo at `Claude Comms and Packages/Scope Files/`)
 - TEC pre-audit: `/home/langston/inbox/b79-0n-tec/PRE_AUDIT_v1.md`
 
-**🟡 STEP 3 PART 1 PUSHED — CI ITERATION IN PROGRESS**
+**🟢 STEP 6 DEPLOY SUCCESSFUL — STEP 7 FIRST-PASS VERIFICATION PASS — 48H VERIFY-GATE CLOCK STARTED 02:47 UTC**
+
+**Step 4 ACK received from Langston** (chunks 4221-4223 relayed): ACK both batches, Option A on TEC, SCORING F-1 hooks rolled into B79.0n.SCORING.b. 3 conditions: B79.0n.TEC.b SLA within 7d of verify-gate close; Step 7/8 must snapshot getTECPickFallbackStats() pre-deploy/+1h/+24h/+48h; C-1 perp-activation pre-flight in RUNNING_ISSUES Step 10.
+
+**Step 6 deploy at 2026-05-26 ~02:47 UTC** — all 3 migrations applied cleanly:
+- 2026-05-26-b79-0n-tec-perclass-seed.sql ✓
+- 2026-05-26-b79-0n-tec-wildcard-retire.sql ✓
+- 2026-05-26-b79-0n-scoring-perclass-seed.sql ✓
+
+**Post-deploy state verified:**
+- TEC: 44 rows total = 11 keys × 4 active classes; 0 wildcard rows (Migration 2 EXISTS-gate worked) ✓
+- SCORING: +8 rows (4 perp + 4 crypto_spot numeric); B79.0n.SCORING stamped=8 ✓
+- B79.0n.TEC stamped=32 (the 8 A.2 idempotent backfill rows for spot classes skipped because rows already present on staging — assertion counts ALL per-class rows so passed at 44) ✓
+- HTTP 200 (142ms) ✓
+- PM2 online (pid 1663995, restart 321) ✓
+
+**Pre-deploy baseline (C-2 anchor for completion report):**
+- VTS open: 74 / closed: 70 (last 24h: 144 opened / 102 closed)
+- TEC pre-rows: crypto_perp=1 / crypto_spot=5 / xstock_perp=1 / xstock_spot=5
+- SQE pre-rows: wildcard=2 / crypto_spot=2 / xstock_spot=6
+
+**Step 7 first-pass verification PASS:**
+- TEC_STALE_FAIL_CLOSED errors (pre-deploy issue ~02:35-02:44 UTC) STOPPED post-restart ✓
+- 0 PICK_FALLBACK fires (counter clean — verify-gate clock starts) ✓
+- 0 SQE_STATIC_MIRROR_FALLBACK fires ✓
+- FX5Scanner running normally (evaluated=343, eligible=52 at 02:47:15Z) ✓
+- B74 batch writers + ticker writers operating ✓
+- ⚠️ SQE_EVAL log pattern not yet observed (warmup; signals haven't passed SQE post-restart)
+
+**48h verify-gate clock started 02:47 UTC. Next snapshots:**
+- +1h: 2026-05-26 03:47 UTC
+- +24h: 2026-05-27 02:47 UTC
+- +48h: 2026-05-28 02:47 UTC
+
+**Next steps (Step 7 deep verification + Step 8 dispatch):**
+1. +1h: probe getTECPickFallbackStats() + getSQEStaticMirrorFallbackStats() via PM2 logs or direct node script
+2. R-5 SQE_EVAL log-tail confirming `assetClass=` tag presence after warmup
+3. Dispatch Step 8 Langston second-pass verification
+4. Step 10 governance (ALL 8 docs ACTUALLY edited per Kyle PATTERN-DETECT directive)
+5. Step 11 completion reports (TEC + SCORING separate) including R-4 no-touch-fence sentence + Phase 24 onboarding learnings + C-1 RUNNING_ISSUES entry + C-2 baseline numbers cite
+6. 3-way MEMORY sync at close
+
+After SCORING + TEC close + 8 remaining sub-batches (10-18), umbrella closes with active-trading flip for xStocks.
 
 CI failure cascade (each commit cancelled prior in-flight):
 - TEC initial (2f7d66fed) → MANIFEST drift (SCORING line included but file not in commit)
