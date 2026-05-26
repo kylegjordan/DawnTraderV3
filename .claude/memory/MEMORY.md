@@ -73,6 +73,24 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 - SCORING pre-audit: `/home/langston/inbox/b79-0n-scoring/PRE_AUDIT_v1.md` (in-repo at `Claude Comms and Packages/Scope Files/`)
 - TEC pre-audit: `/home/langston/inbox/b79-0n-tec/PRE_AUDIT_v1.md`
 
+**🟡 NEXT BATCH: B79.0n.TELEMETRY (#10) per Kyle directive 2026-05-26 morning**
+
+Kyle awoke + approved starting TELEMETRY (#10) in parallel with the SCORING/TEC verify-gate clock. Required scope-process inputs (must be done in Step 1.a):
+1. **Navigate to staging trading page via Claude-in-Chrome** to inspect existing telemetry tabs — Kyle warns there is substantial telemetry already wired in across many phases. DO NOT reinvent the map. Catalog what's there before scoping new work.
+2. Consult `1-system-manual/SYSTEM_IMPACT_MAP.md` for Telemetry Aggregator + downstream consumers (RTB Adaptive Ratio Manager + ML Calibration).
+3. Consult `1-system-manual/SYSTEM_MANUAL.md` for telemetry architecture (chapters on telemetry / VTS telemetry / regime performance / etc.).
+4. Once scope agreed + Langston Step 1 ACK, autonomously complete the sub-batch through full 11-step workflow.
+
+**Per umbrella v4 row #10:** "Telemetry Aggregator per-asset-class buckets. Promoted from Tier 2 per Langston item 9 — RTB's Adaptive Ratio Manager consumes telemetry, so RTB depends on TELEMETRY. Hard-pinned to ship before WIRE-IN." Dependencies: STORAGE (closed). Downstream blocked: RTB (#11), RTB-REFRESH (#12), ML-CALIBRATION (#17), WIRE-IN (#16).
+
+**Verify-gate alerts scheduled (Kyle directive — surface alerts properly so CC + Langston see them):**
+- +24h: 2026-05-27T02:47:00Z — title "B79.0n.SCORING + B79.0n.TEC +24h verify-gate snapshot" (state=scheduled, category=soak_verification, severity=warning)
+- +48h: 2026-05-28T02:47:00Z — title "B79.0n.SCORING + B79.0n.TEC +48h verify-gate CLOSE" (state=scheduled, same metadata)
+
+§10.5 alerts check protocol: every turn `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"`. When state=active AND acknowledged_at=null AND triggers_at <= NOW(): surface IN RESPONSE to Kyle (not just verify the log read). ACK via `ssh root@188.245.193.8 "cd /home/deploy/dawntrader && npm run system-alerts -- ack <id> --by cc-session-2026-05-26"` after probe completes.
+
+**Kyle's CRITICAL flag about SCORING.b:** the 48h static-mirror-fallback verify-gate is WEAK observability in current VTS-shadow mode because SQE_EVAL only fires when signal-orchestrator/RTB processes a non-null candidate (zero fires across 69 min post-deploy). Recommend: re-scope SCORING.b to BUNDLE into sub-batch 18 active-trading flip when SQE_EVAL actually fires + provides observable runtime evidence. TEC.b's counter is observable independently (refreshTECConfigForClass runs at boot + 60s TTL). Update RUNNING_ISSUES #142 accordingly at start of TELEMETRY scope work.
+
 **🟢 B79.0n.SCORING + B79.0n.TEC FULLY CLOSED 2026-05-26 — both `.b` follow-ups queued**
 
 **Final close commits:**
