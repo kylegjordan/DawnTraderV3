@@ -15,7 +15,28 @@
 
 ---
 
-## CURRENT STATE (2026-05-25 — B79.0n.CONFIDENCE-CHAIN FULLY CLOSED; Next: SCORING #8 or TEC #9 parallel-eligible)
+## CURRENT STATE (2026-05-25 evening — B79.0n.CONFIDENCE-CHAIN FULLY CLOSED + CLAUDE.md consolidation shipped; Kyle directive: run SCORING #8 + TEC #9 IN PARALLEL overnight)
+
+### 🟢 KYLE OVERNIGHT DIRECTIVE 2026-05-25 evening
+
+Kyle going to bed; wants work to continue through the night. Move forward with **SCORING (#8) AND TEC (#9) IN PARALLEL** under the B79.0n umbrella (both parallel-eligible per umbrella v4 row 8/9). Iterate to consensus + verified, confirmed correct completion autonomously with Langston, full 11-step workflow per batch. **MANDATORY:** review SIM + System Manual during scope (Step 1.a discipline) AND again during the extremely-thorough code-level audit (Step 2 pre-audit — go deeper than Step 1 surface). **Update MEMORY after EVERY step** to ensure seamless continuation if compaction fires mid-workflow.
+
+**Recommended sequencing for parallel run (CC's judgment unless overridden):**
+- Step 1 scope drafts for BOTH SCORING + TEC in parallel (read SIM + System Manual for both surfaces simultaneously)
+- Dispatch both scope files to Langston in parallel for Step 1 ACK
+- Step 2 pre-audits for both in parallel (deeper SIM consultation per component)
+- Implementation can interleave by chunk OR run each batch end-to-end depending on file-overlap analysis from pre-audit
+- Push as SEPARATE batches with SEPARATE CI confirmations (per CLAUDE.md §5 #19) — do not bundle into a single commit
+- Each gets its own Step 4 code review dispatch, Step 6 staging deploy, Steps 7-8 verification, Steps 10-11 governance + completion report
+
+**Per-batch deliverables required (each of SCORING + TEC):**
+- `B79_0n_SCORING_SCOPE.md` / `B79_0n_TEC_SCOPE.md` in `Claude Comms and Packages/Scope Files/`
+- `B79_0n_SCORING_PRE_AUDIT.md` / `B79_0n_TEC_PRE_AUDIT.md`
+- `B79_0n_SCORING_STEP3_CHANGE_LIST.md` / `B79_0n_TEC_STEP3_CHANGE_LIST.md` in `Claude Comms and Packages/Change Lists/`
+- `B79_0n_SCORING_COMPLETION_REPORT.md` / `B79_0n_TEC_COMPLETION_REPORT.md` in `Claude Comms and Packages/Batch Completion/`
+- All 8 Tier 1 + Tier 2 governance docs ACTUALLY edited (BATCH_CATALOG / PHASE_HISTORY / SIM / System Manual / ASSET_CLASS_ONBOARDING_WORKFLOW with §4.15+ / MULTI_ASSET_VTS_EXPANSION_PLAN / CHANGES_AND_FIXES / RUNNING_ISSUES) — Kyle directive from PATTERN-DETECT close: ACTUALLY-edited, not just listed-as-updated
+- Per Phase 24 standing rule (CLAUDE.md §3.3): completion reports MUST include "Asset-class onboarding workflow learnings" 4-section block
+- 3-way MEMORY sync at every close (truth + in-repo + Langston Helsinki via SSH+heredoc per CLAUDE.md §2 step 10.b)
 
 ### B79.0n.CONFIDENCE-CHAIN — 🟢 FULLY CLOSED 2026-05-25
 
@@ -42,9 +63,15 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 
 **Full report:** `Claude Comms and Packages/Batch Completion/B79_0n_CONFIDENCE_CHAIN_COMPLETION_REPORT.md`.
 
-### 🟢 NEXT BATCH: SCORING (#8) OR TEC (#9) parallel-eligible
+**Follow-up commit `cb078223a` (2026-05-25 evening) — CLAUDE.md consolidation pass.** Kyle directive 2026-05-25 + Langston ACK "Ship it" clean. CLAUDE.md 731 → 519 lines (29% line / 37% byte reduction; ~8k tokens removed from per-session auto-load). New companion archive `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` (268 lines, read-on-demand) holds 23 labeled sections of discipline-origin paragraphs + empirical-evidence narratives + reference-exemplar stories. CLAUDE.md uses `see history doc §X` pointers (~25 occurrences). Every load-bearing operational content preserved verbatim (JSON shapes, bash command snippets, mcp__Claude_in_Chrome__* tool invocations, alerts-check procedure).
 
-Kyle chooses ordering when next session starts. Both sub-batches were locked parallel-eligible per umbrella v4 row 8/9 and CONFIDENCE-CHAIN closure unblocks both. After SCORING + TEC + remaining 8 sub-batches (10-18), umbrella closes with active-trading flip for xStocks.
+### 🟢 NEXT BATCHES: SCORING (#8) + TEC (#9) — RUN IN PARALLEL per Kyle overnight directive
+
+Both parallel-eligible per umbrella v4 row 8/9. After SCORING + TEC + remaining 8 sub-batches (10-18), umbrella closes with active-trading flip for xStocks.
+
+**SCORING (#8) scope per umbrella v4:** signal-quality-evaluator (SQE) surface per-class. SQE composes the final signal score from regime confidence + DBS + multi-tf agreement + freshness + outcome-feedback + other factor inputs into the FinalScore that RTB consumes. Pre-audit verifies whether SQE composition logic differs per asset class — likely F-2 because xstock has different friction profile + different strategy enablement set.
+
+**TEC (#9) scope per umbrella v4:** trailing-exit-controller surface per-class. TEC owns break-even latching, target-lock, trailing-stop, moonbag, weekend-suspended state transitions. Has per-class config already (B79.TEC seeded BE/target-lock/trail-distance per class earlier per Langston D-4 of B79.0m.b). Pre-audit verifies whether TEC's evaluator + close-hook + per-class config resolution is consistent + audits for any silent crypto-fallback in TEC internals.
 
 ---
 
