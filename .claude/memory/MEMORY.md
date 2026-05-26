@@ -73,7 +73,33 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 - SCORING pre-audit: `/home/langston/inbox/b79-0n-scoring/PRE_AUDIT_v1.md` (in-repo at `Claude Comms and Packages/Scope Files/`)
 - TEC pre-audit: `/home/langston/inbox/b79-0n-tec/PRE_AUDIT_v1.md`
 
-**🟢 BOTH STEP 2 PRE-AUDIT ACKs RECEIVED — STEP 3 GREEN-LIT FOR BOTH BATCHES**
+**🟡 STEP 3 PART 1 PUSHED FOR BOTH BATCHES — AWAITING CI**
+
+- TEC pushed at `2f7d66fed` (Step 3 implementation) → CI FAILED on MANIFEST drift (SCORING line included but file not in commit) → hotfix `a26d19348` pushed (removed dangling SCORING manifest line) → CI re-running
+- SCORING pushed at `a177508f2` (Step 3 part 1: predictive-confidence per-class + Migration 1 + static-mirror counter) → CI in_progress
+
+**Step 3 part 1 deliverables landed:**
+
+TEC (a26d19348):
+- Migration 1 (32 rows) + Migration 2 (EXISTS-gated retire) in same deploy
+- trailing-exit-controller.ts: HARD-FAIL coverage 1 → 11 keys; ALL_TEC_KEYS SSOT; requireKey<T> helper eliminates pick→DEFAULTS silent fallback; TEC_DEFAULTS demoted to type-template-only
+- trailing-exit-controller.ts:107 comment block updated with full chronology (kyle-directive-2026-05-21-disable-xstock-be)
+- tec-evaluator.ts: resolveTECConstants now sync (per-class cache); evaluator caller dropped await; getModuleConstants import removed
+
+SCORING (a177508f2):
+- Migration 1 (8 rows): crypto_perp + xstock_perp coverage for min_final_score + min_regime_weight; crypto_spot promotion for adx_min/di_min_quant/di_min_pattern/momentum_min
+- score-calculator.ts: getPredictiveConfidence(assetClass, symbol, regime, strategy) — F-2 cache-key isolation
+- signal_quality_evaluator.ts: OBJ-4 static-mirror fallback counter + getSQEStaticMirrorFallbackStats() accessor
+- 3 callers threaded: signal_quality_evaluator.ts:264, vts-runner.ts:1117, xstock_spot/eval-cycle.ts:577
+
+**D-3 confirmed at Step 3 first move:** crypto_spot/pattern-pool-filters.ts EXISTS with same DB-getter pattern (line 43). No D-3 code work needed.
+
+**Deferred to follow-up (NOT blocking):**
+- F-1 resolver hooks for SCORE_WEIGHTS + RANKING_WEIGHTS (D-1/D-2) — Day-1 no-op
+- /api/diagnostics/sqe-fallback-counter route (accessor function exists; route plumbing for Step 7)
+- TEC test files (`b79-0n-tec-*.test.ts` × 4 per pre-audit §4)
+- SCORING test files (`b79-0n-scoring-*.test.ts` × 5 per pre-audit §4)
+- Old: pre-audit §6 details for the original SCORING Step 1 dispatch ACKs.
 
 - TEC ACK (b9p9ax5q4): APPROVED with R-1 + R-2 required revisions, N-1..N-4 inline notes. Telegram chunks 4215+4216.
 - SCORING ACK (bteg6y80m retry-2): APPROVED with 5 non-blocking clarifications + R-2 deploy-window revision (post-20:00 UTC weekdays DST, NOT 18:00). Telegram chunks 4217+4218.
