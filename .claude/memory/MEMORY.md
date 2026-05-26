@@ -65,13 +65,37 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 
 **Follow-up commit `cb078223a` (2026-05-25 evening) — CLAUDE.md consolidation pass.** Kyle directive 2026-05-25 + Langston ACK "Ship it" clean. CLAUDE.md 731 → 519 lines (29% line / 37% byte reduction; ~8k tokens removed from per-session auto-load). New companion archive `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` (268 lines, read-on-demand) holds 23 labeled sections of discipline-origin paragraphs + empirical-evidence narratives + reference-exemplar stories. CLAUDE.md uses `see history doc §X` pointers (~25 occurrences). Every load-bearing operational content preserved verbatim (JSON shapes, bash command snippets, mcp__Claude_in_Chrome__* tool invocations, alerts-check procedure).
 
-### 🟢 NEXT BATCHES: SCORING (#8) + TEC (#9) — RUN IN PARALLEL per Kyle overnight directive
+### 🟢 IN-FLIGHT: SCORING (#8) + TEC (#9) — Step 1 DISPATCHED, awaiting Langston ACK
 
-Both parallel-eligible per umbrella v4 row 8/9. After SCORING + TEC + remaining 8 sub-batches (10-18), umbrella closes with active-trading flip for xStocks.
+Both scope files drafted + committed at HEAD `a2d9639f5`. Staged to Langston inbox via SCP:
+- `/home/langston/inbox/b79-0n-scoring/SCOPE_v1.md` (16 OBJ + D-1..D-5)
+- `/home/langston/inbox/b79-0n-tec/SCOPE_v1.md` (14 OBJ + D-1..D-4)
 
-**SCORING (#8) scope per umbrella v4:** signal-quality-evaluator (SQE) surface per-class. SQE composes the final signal score from regime confidence + DBS + multi-tf agreement + freshness + outcome-feedback + other factor inputs into the FinalScore that RTB consumes. Pre-audit verifies whether SQE composition logic differs per asset class — likely F-2 because xstock has different friction profile + different strategy enablement set.
+Dispatched in parallel via SSH+claude-cli (background): SCORING=bu4dm0y9m, TEC=b3mz9rl83. Visibility messages posted to Telegram topic 21 (chunks 4203 + 4204). Plain-language summary posted to Telegram (chunk 4205) + Claude Desktop conversation.
 
-**TEC (#9) scope per umbrella v4:** trailing-exit-controller surface per-class. TEC owns break-even latching, target-lock, trailing-stop, moonbag, weekend-suspended state transitions. Has per-class config already (B79.TEC seeded BE/target-lock/trail-distance per class earlier per Langston D-4 of B79.0m.b). Pre-audit verifies whether TEC's evaluator + close-hook + per-class config resolution is consistent + audits for any silent crypto-fallback in TEC internals.
+**SCORING (#8) gap-analysis findings (Step 1.a complete):**
+- SQE input gate already type-locked per-class (B79.0n.STORAGE 2026-05-21)
+- Layer 2 `module_constants 'sqe_config'` EXPLICITLY DEFERRED to this batch per code comment at `signal_quality_evaluator.ts:128`
+- crypto_perp + xstock_perp have ZERO sqe_config rows → silent-fallback to wildcard if activated
+- crypto_spot quant/pattern thresholds (adx_min, di_min_quant, di_min_pattern, momentum_min) are CODE-side hardcoded; need DB promotion per CLAUDE.md §11 no-hard-coded-fallback discipline
+- `getPredictiveConfidence` cache key `${regime}:${strategy}` lacks assetClass → cross-class telemetry contamination
+
+**TEC (#9) gap-analysis findings (Step 1.a complete):**
+- 11 TEC keys but only `break_even_enabled` HARD-FAIL covered (B79.TEC explicit deferral, RUNNING_ISSUES #85)
+- 6 keys wildcard-only (moonbag suite 5 + persistence_debounce_ms)
+- crypto_perp + xstock_perp have ONLY break_even_enabled row
+- `tec-evaluator.resolveTECConstants` is duplicate async DB call with silent `catch → DEFAULTS` fallback at lines 222-227 — bypasses per-class cache
+- DOC-vs-DB drift: `trailing-exit-controller.ts:107` says xstock_spot.break_even_enabled=TRUE, DB shows false (D-1 disposition needed)
+
+**Background dispatch status:** check every 5-10 min per CLAUDE.md §6.5.0.b. If >12 min with 0-byte reply file: investigate per §6.5.0.b procedure. Reply files at `/tmp/langston_scoring_reply.txt` + `/tmp/langston_tec_reply.txt`.
+
+**Next steps (after Langston ACK arrives):**
+1. Verbatim relay to Telegram per CLAUDE.md §6.5.1 step 3 (both replies)
+2. Plain-language Kyle summaries to Telegram + Claude Desktop
+3. Begin Step 2 pre-audit drafting for both batches in parallel (deeper SIM + caller-surface compile probes)
+4. Update MEMORY after Step 2 drafts complete
+
+After SCORING + TEC + remaining 8 sub-batches (10-18), umbrella closes with active-trading flip for xStocks.
 
 ---
 
