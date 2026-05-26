@@ -349,10 +349,12 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   
   const status = passed ? 'PASS' : 'FAIL';
   const reason = passed ? 'thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  console.log(`[11.0B][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} finalScore=${finalScore.toFixed(4)} regimeWeight=${regimeWeight.toFixed(4)} reason=${reason}`);
-  
+  // B79.0n.SCORING (2026-05-26 R-5): include assetClass tag so Step 7 resolver-
+  // consumption probe can confirm per-class threshold resolution via log-tail.
+  console.log(`[11.0B][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} assetClass=${input.assetClass} finalScore=${finalScore.toFixed(4)} regimeWeight=${regimeWeight.toFixed(4)} thresholdFinalScoreMin=${thresholds.finalScoreMin} thresholdRegimeWeightMin=${thresholds.regimeWeightMin} reason=${reason}`);
+
   performanceMonitor.recordSQEEvaluation(passed);
-  
+
   dataAggregator.capture('SQE_EVAL', {
     symbol: canonicalSymbol,
     strategy: input.strategy,
@@ -455,7 +457,8 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   
   const status = passed ? 'PASS' : 'FAIL';
   const reason = passed ? 'thresholds_met' : failures[0]?.split(' ')[0] || 'unknown';
-  console.log(`[11.0D][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} finalScore=${finalScore.toFixed(4)} regimeWeight=${regimeWeight.toFixed(4)} reason=${reason}`);
+  // B79.0n.SCORING (2026-05-26 R-5): include assetClass tag in sync path too.
+  console.log(`[11.0D][SQE_EVAL] ${status} symbol=${canonicalSymbol} strategy=${input.strategy} assetClass=${input.assetClass} finalScore=${finalScore.toFixed(4)} regimeWeight=${regimeWeight.toFixed(4)} reason=${reason}`);
   
   performanceMonitor.recordSQEEvaluation(passed);
   
