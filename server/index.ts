@@ -760,6 +760,35 @@ app.use((req, res, next) => {
     );
   }
 
+  // ─── B79.0n.TELEMETRY: Pre-warm per-class AssetClassInstances triads ───
+  // Force-bootstrap all 3 factory-managed triads (xstock_spot + xstock_perp
+  // + crypto_perp) at boot so the [B79.0n.TELEMETRY][BOOT] log lines fire
+  // predictably and any construction failure HARD-FAILs at boot (not at
+  // lazy first-call hours later). xstock_spot pre-warm here means the
+  // subsequent xstockSpotScanner.start consumes an already-cached triad
+  // (lazy-singleton idempotency).
+  //
+  // Runs AFTER loadTrailingStates + vts_open_trades rehydrate (so any
+  // per-class state pulls have completed) and BEFORE xstockSpotScanner.
+  //
+  // HARD-FAIL on any throw: no degraded boot with partial telemetry
+  // coverage. NO_FALLBACK per CLAUDE.md §5 #15.
+  try {
+    const {
+      getXstockSpotInstances,
+      getXstockPerpInstances,
+      getCryptoPerpInstances,
+    } = await import('./services/asset-class-instances.js');
+    getXstockSpotInstances();
+    getXstockPerpInstances();
+    getCryptoPerpInstances();
+    console.log('[B79.0n.TELEMETRY] All 3 factory-managed AssetClassInstances pre-warmed at boot (4-of-4 active-class telemetry coverage achieved)');
+  } catch (telemetryBootErr) {
+    console.error('[B79.0n.TELEMETRY][BOOT_FAIL] AssetClassInstances pre-warm threw on boot:', telemetryBootErr);
+    console.error('[B79.0n.TELEMETRY][BOOT_FAIL] Cannot accept traffic without all 4 active asset-class telemetry instances initialized. Exiting.');
+    process.exit(1);
+  }
+
   // ─── B79.0a: Live xstock_spot scanner (HARD-FAIL on boot per Langston rev 1 #4) ───
   // Subscribes to centralClock; observability scanner Day 1 (no signal-orchestrator
   // wiring yet — that's B79.x post-Layer-3). Runs BEFORE server.listen so the

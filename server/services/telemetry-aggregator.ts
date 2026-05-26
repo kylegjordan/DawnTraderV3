@@ -140,6 +140,39 @@ export class TelemetryAggregatorService {
     ['rotational', { pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() }],
   ]);
 
+  // B79.0n.TELEMETRY (2026-05-26): per-instance observability counters
+  // for the per-class instance pattern. Read via getRecordCount() /
+  // getLastWriteAt() / getPairCount() — aggregated across all 4 active
+  // class instances by getTelemetryInstanceStats() in asset-class-instances.ts.
+  // Increment site: inside recordPairTelemetry() after the M70 caller guard
+  // (blocked writes do NOT increment — preserves M70 signal integrity).
+  private _recordCount = 0;
+  private _lastWriteAt: number | null = null;
+
+  /**
+   * B79.0n.TELEMETRY: monotonic count of accepted recordPairTelemetry() calls
+   * since instance construction. Resets to 0 on instance restart.
+   */
+  public getRecordCount(): number {
+    return this._recordCount;
+  }
+
+  /**
+   * B79.0n.TELEMETRY: epoch-ms timestamp of the most recent accepted
+   * recordPairTelemetry() call. Null if no calls have landed yet.
+   */
+  public getLastWriteAt(): number | null {
+    return this._lastWriteAt;
+  }
+
+  /**
+   * B79.0n.TELEMETRY: count of unique symbols currently tracked in
+   * pairTelemetry. Pure read of the Map size.
+   */
+  public getPairCount(): number {
+    return this.pairTelemetry.size;
+  }
+
   /**
    * Record telemetry for a pair
    * Directive 11.2 R1: Added pool parameter for segmented performance tracking
@@ -175,6 +208,11 @@ export class TelemetryAggregatorService {
       return;
     }
     const now = Date.now();
+    // B79.0n.TELEMETRY: increment observability counters AFTER M70 guard
+    // passes. Counters track accepted writes only — blocked writes (non-vts
+    // caller) do NOT increment, preserving the M70 signal integrity.
+    this._recordCount++;
+    this._lastWriteAt = now;
     const existing = this.pairTelemetry.get(symbol) || [];
     
     // Prune old entries outside the history window
@@ -1653,6 +1691,27 @@ export function getTelemetryAggregator(): TelemetryAggregatorService {
     }
     console.log('[10.8][Telemetry] TelemetryAggregatorService initialized (11.4C.3-C cache purged on startup)');
   }
+  return telemetryInstance;
+}
+
+/**
+ * B79.0n.TELEMETRY (2026-05-26): non-arming read-only peek at the global
+ * singleton state. Returns null if singleton not yet armed (avoids
+ * triggering rehydrate + persist-timer arm just for a stats read).
+ *
+ * Consumed by getTelemetryInstanceStats() in asset-class-instances.ts —
+ * the per-class observability accessor needs to read crypto_spot stats
+ * WITHOUT side-effecting the global singleton (which would arm the
+ * 60s persist-timer if not already armed). Module-scoped state read only;
+ * no setter exposed — callers cannot mutate the singleton via this export.
+ *
+ * Cold-boot semantic (Langston Step 2 ACK clarification 1): on a fresh
+ * boot where getTelemetryAggregator() has never been called, this returns
+ * null and the caller should construct a crypto_spot stats row with
+ * { recordCount: 0, lastWriteAt: null, pairCount: 0, source: 'global-singleton' }.
+ * Crypto_spot is active — zero ≠ inactive for crypto_spot.
+ */
+export function peekTelemetryInstance(): TelemetryAggregatorService | null {
   return telemetryInstance;
 }
 

@@ -658,6 +658,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Directive 10.9D: Telemetry Summary endpoint for Diagnostics UI
   apiRouter.get('/telemetry/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      // [B79.0n.TELEMETRY] global-singleton-by-design — crypto-only API
+      // reader; per-class extension deferred to OBSERVABILITY #18.
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
       const aggregator = getTelemetryAggregator();
       const summary = aggregator.getTelemetrySummaryWithCoefficients();
@@ -674,6 +676,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Directive 11.4H.5-Fix: Benchmark pool returns ALL benchmark symbols regardless of telemetry
   apiRouter.get('/pairs/ranked', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      // [B79.0n.TELEMETRY] global-singleton-by-design — crypto-only API
+      // reader; per-class extension deferred to OBSERVABILITY #18.
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
       const { getTypeForStrategy } = await import('./config/canonical-regime-strategy-map.js');
       const { mapFrictionVisual } = await import('./core/metrics/cost-metrics.js');
@@ -1972,6 +1976,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/system/entropy - Real-time entropy values of regime distributions
   apiRouter.get('/system/entropy', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      // [B79.0n.TELEMETRY] global-singleton-by-design — crypto-only API
+      // reader; per-class extension deferred to OBSERVABILITY #18.
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator.js');
       const telemetry = getTelemetryAggregator();
       const rankedPairs = telemetry.getRankedPairs(1000);
@@ -2034,6 +2040,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Directive 11.7I-01: Fixed telemetryService import
   apiRouter.get('/system/mapping-drift', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
+      // [B79.0n.TELEMETRY] global-singleton-by-design — crypto-only API
+      // reader; per-class extension deferred to OBSERVABILITY #18.
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator');
       const telemetryService = getTelemetryAggregator();
       const driftAnalysis = telemetryService.computeMappingDrift();
@@ -2094,6 +2102,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Directive 11.7I-01: Fixed telemetryService import
   apiRouter.get('/system/mapping-drift/export', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
+      // [B79.0n.TELEMETRY] global-singleton-by-design — crypto-only API
+      // reader; per-class extension deferred to OBSERVABILITY #18.
       const { getTelemetryAggregator } = await import('./services/telemetry-aggregator');
       const telemetryService = getTelemetryAggregator();
       const driftAnalysis = telemetryService.computeMappingDrift();

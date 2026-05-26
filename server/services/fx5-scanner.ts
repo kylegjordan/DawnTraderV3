@@ -45,6 +45,10 @@ import {
   passesCoreMetricFilters,
   // Batch 19G VN HF: CORE_METRIC_THRESHOLDS import removed — DB-driven thresholds used directly
 } from '../utils/analysis-utils.js';
+// [B79.0n.TELEMETRY] global-singleton-by-design — crypto FX5 scanner;
+// xstock_spot uses its own per-class telemetry instance via the factory
+// (B79.0a); xstock_perp + crypto_perp scanners (when wired in WIRE-IN #16)
+// will likewise resolve via getAssetClassInstances(assetClass).telemetry.
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';

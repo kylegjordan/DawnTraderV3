@@ -254,6 +254,9 @@ export function getFrictionSampleSize(): number {
 }
 
 export function getMarketIndicators(): MarketIndicators {
+  // [B79.0n.TELEMETRY] global-singleton-by-design — `/api/market-indicators`
+  // is a crypto-only reader for the Analytics → Overview tab; per-class
+  // extension belongs in OBSERVABILITY #18 (Q3 deferral).
   // Directive 11.4H.4A-Fix: Get dominant regime from live telemetry instead of stale cache
   const telemetry = getTelemetryAggregator();
   // Phase 14.5: Mode-aware regime sourcing

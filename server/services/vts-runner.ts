@@ -1461,6 +1461,8 @@ async function generatePhase10Signal(
     regimeStability,      // 11.7S: Regime stability for observability
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C: Multi-strategy identification
     // Phase 14: Snapshot 6 context dimensions at trade OPEN
+    // [B79.0n.TELEMETRY] currently crypto-only writer — per-class threading
+    // deferred to WIRE-IN #16 (M70 invariant: VTS is the only authorized writer).
     globalRegime: (() => {
       try { const ta = getTelemetryAggregator(); return ta.getDominantRegime?.()?.regime ?? regime; } catch { return regime; }
     })(),
@@ -2405,6 +2407,8 @@ async function resolveOpenVirtualTrades(): Promise<{
     phase10SessionTrades.push(closedTradeRecord);
     
     // Update telemetry with actual outcome
+    // [B79.0n.TELEMETRY] currently crypto-only writer — per-class threading
+    // deferred to WIRE-IN #16 (M70 invariant: VTS is the only authorized writer).
     const telemetry = getTelemetryAggregator();
     telemetry.recordPairTelemetry(trade.symbol, {
       finalScore: trade.finalScore,
@@ -2899,6 +2903,8 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
   // ~1414-1426. Without these, the open-trades CSV/UI showed empty
   // globalRegime/pairFriction/globalFriction/globalDirectionalBias/
   // globalDirectionalBiasScore columns for every xstock trade.
+  // [B79.0n.TELEMETRY] currently crypto-only reader — getDominantRegime
+  // on the global singleton; per-class extension deferred to WIRE-IN #16.
   const resolvedGlobalRegime: MarketRegimeType = input.globalRegime ?? (() => {
     try {
       const ta = getTelemetryAggregator();
@@ -3666,6 +3672,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         vtsEvalCounters.signalsGenerated++;
         if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsGenerated = (vtsEvalCounters.patternSignalsGenerated ?? 0) + 1; } else { vtsEvalCounters.quantSignalsGenerated = (vtsEvalCounters.quantSignalsGenerated ?? 0) + 1; }
 
+        // [B79.0n.TELEMETRY] currently crypto-only writer — per-class
+        // threading deferred to WIRE-IN #16 (M70: VTS-only writer).
         const telemetry = getTelemetryAggregator();
         telemetry.recordPairTelemetry(pair.symbol, {
           finalScore: tradeRecord.finalScore,
