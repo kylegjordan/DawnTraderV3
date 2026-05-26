@@ -73,9 +73,20 @@ Deploy commit `b6e45a8` (PM2 #319 at 18:00Z; CI all-4-green at run `26413160763`
 - SCORING pre-audit: `/home/langston/inbox/b79-0n-scoring/PRE_AUDIT_v1.md` (in-repo at `Claude Comms and Packages/Scope Files/`)
 - TEC pre-audit: `/home/langston/inbox/b79-0n-tec/PRE_AUDIT_v1.md`
 
-**Background dispatches:**
-- 🟢 TEC pre-audit Step 2 ACK RECEIVED (b9p9ax5q4 completed): APPROVED FOR STEP 3 with R-1 (probe NOW) + R-2 (call-site enumeration) + N-1..N-4 inline notes. Telegram chunks 4215+4216 relayed.
-- 🟡 SCORING pre-audit retry-2 in flight (bteg6y80m, ~1:30 elapsed at last check, Langston-side RUNNING normally).
+**🟢 BOTH STEP 2 PRE-AUDIT ACKs RECEIVED — STEP 3 GREEN-LIT FOR BOTH BATCHES**
+
+- TEC ACK (b9p9ax5q4): APPROVED with R-1 + R-2 required revisions, N-1..N-4 inline notes. Telegram chunks 4215+4216.
+- SCORING ACK (bteg6y80m retry-2): APPROVED with 5 non-blocking clarifications + R-2 deploy-window revision (post-20:00 UTC weekdays DST, NOT 18:00). Telegram chunks 4217+4218.
+
+**R-2 deploy-window revision (SCORING):** post-20:00 UTC weekdays (DST) or post-21:00 UTC (standard time) or weekend. Pre-audit §6 said "18:00-23:00" which is mid-NYSE-session in DST — needs fixing before Step 6.
+
+**SCORING Step 3 clarifications to fold inline during chunks:**
+1. `boot_orchestrator.ts:95` + `system-guards.ts:170` SCORE_WEIGHTS consumers — add one-line disposition (stay static const = observability-only) in chunk 6
+2. signal-orchestrator + vts-runner footnote in chunk 6 (direct consumer vs assetClass threader)
+3. Enumerate getPredictiveConfidence ready_to_buy_service callers (line numbers) in chunk 4
+4. Rename §4.3 label to drop D-5 cross-reference
+5. Confirm SQE_EVAL log line has `assetClass=` tag before relying on Step 7 probe
+6. Step 3 first move: `ls server/asset_classes/crypto_spot/pattern-pool-filters.ts` to confirm equivalent file exists
 
 **🟢 R-1 RESOLVED — xstock_spot.break_even_enabled root-cause:**
 DB row: `updated_by = 'kyle-directive-2026-05-21-disable-xstock-be'` on **2026-05-21 16:26:00 UTC**.
