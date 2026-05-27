@@ -2549,3 +2549,84 @@ The existing **§4.3 RTB Service** entry remains accurate for the global queue s
 - Architectural synthesis (Step 1.a): `Claude Comms and Packages/Langston Design Asks/B79_0n_RTB_ARCHITECTURAL_SYNTHESIS.md`
 - Step 4 R1 re-ACK + Step 8 verify dispatches: `Claude Comms and Packages/Langston Design Asks/B79_0n_RTB_STEP4_R1_REACK.md` + `B79_0n_RTB_STEP8_VERIFY.md`
 - RUNNING_ISSUES: see #142 .b follow-ups for per-class cadence calibration when xstock active-trading evidence window opens.
+
+---
+
+## Recent additions (B79.0n.ORCHESTRATOR — Phase 24 — 2026-05-27)
+
+Sub-batch 12 of 16 in the B79.0n umbrella v4 arc — **renumbered from #13 after POOL (#12) SKIPPED 2026-05-27** per Kyle directive (POOL's selection-problem doesn't apply to xStock's 489-pair universe; perp classes are post-launch). Step 6 deploy commit `5e08568`, PM2 #325 at 13:17:34Z; CI all-4-green at run `26513242197`. **Per-class consumer-site swap pattern + POOL skip cleanup.**
+
+**Architecture summary.** Pre-batch, 3 consumer files (`paper-position-sizing.ts:29+145`, `signal_quality_evaluator.ts:28+285`, `routes.ts:12645`) imported `PATTERN_POOL_GUARDRAILS` directly from `crypto_spot/pattern-pool-filters.js` — meaning xstock pattern signals were sized + evaluated against crypto's 0.15 cap / 0.45 floor regardless of their actual asset class. Each xstock module has its own equivalent (`XSTOCK_PATTERN_POOL_GUARDRAILS` with DB-resolved getters per B79.0n.PATTERN-DETECT) but the consumers never called it. This batch closes that gap with a domain-specific dispatcher.
+
+**The pattern (canonical reference: B79.0n.MCE `getFrictionForAssetClass`).** New file `server/asset_classes/pattern-pool-dispatch.ts` (~80 LOC):
+
+```typescript
+export function getPatternPoolGuardrailsForAssetClass(
+  assetClass: AssetClass,
+): PatternPoolGuardrails {
+  switch (assetClass) {
+    case 'crypto_spot':  return PATTERN_POOL_GUARDRAILS;
+    case 'xstock_spot':  return XSTOCK_PATTERN_POOL_GUARDRAILS;
+    case 'crypto_perp':
+    case 'xstock_perp':
+    case 'equity_spot':
+    case 'equity_futures':
+    case 'commodity_futures':
+    case 'fx_spot':
+      throw new Error(`[B79.0n.ORCHESTRATOR][CLASS_NOT_WIRED] ...`);
+    default: {
+      const _exhaustive: never = assetClass;
+      throw new Error(`[B79.0n.ORCHESTRATOR][dispatch] unreachable assetClass=${String(_exhaustive)}`);
+    }
+  }
+}
+```
+
+**Discipline rules (Langston Step 1 §6 ACK):**
+1. Exhaustive switch — all 8 AssetClass union members covered
+2. `_exhaustive: never` in default — compile-time exhaustiveness lock
+3. `[CLASS_NOT_WIRED]` throws for 6 non-spot classes with ASSET_CLASS_ONBOARDING_WORKFLOW §4.22 activation breadcrumbs in the error message
+4. Return type explicitly `PatternPoolGuardrails` (not inferred) — locks shape contract
+
+### Components touched
+
+- **`server/asset_classes/pattern-pool-dispatch.ts`** — NEW dispatcher file (~80 LOC). Imports `PATTERN_POOL_GUARDRAILS` from `crypto_spot/pattern-pool-filters.js` + `XSTOCK_PATTERN_POOL_GUARDRAILS` from `xstock_spot/pattern-pool-filters.js` + `AssetClass` type from `shared/asset-classes.js`. Exports `getPatternPoolGuardrailsForAssetClass` function + `PatternPoolGuardrails` interface.
+
+- **`server/services/paper-position-sizing.ts`** — import swap (line 29) + interface `PaperPositionSizingParams` gains REQUIRED `assetClass: AssetClass` field + usage swap at line 145 (`getPatternPoolGuardrailsForAssetClass(params.assetClass).MAX_POSITION_PCT`). Caller threading at 2 sites: `paper-execution-engine.ts:2529` + `signal-orchestrator.ts:432` — both pass `resolveAssetClass(signal.symbol, 'kraken')` deterministically per Langston Step 2 Probe 8 ACK (no-silent-fallback; throws on B69-unregistered symbols).
+
+- **`server/core/filters/signal_quality_evaluator.ts`** — import swap (line 28) + usage swap at line 285 (`getPatternPoolGuardrailsForAssetClass(input.assetClass).FINAL_SCORE_FLOOR`). `input.assetClass` already REQUIRED per B79.0n.STORAGE.
+
+- **`server/routes.ts`** — `/pattern-pool` endpoint (line 12645) gains optional `?assetClass=` query param + per-class dispatch with 400 on invalid class. NEW endpoint `GET /api/diagnostics/orchestrator-per-class-state` iterates 4 active classes returning either `{ patternPoolGuardrails: {...} }` (crypto_spot + xstock_spot) or `{ status: 'CLASS_NOT_WIRED', reason }` (crypto_perp + xstock_perp). No-auth public per B79.0a pattern. Step 8 verify-gate target.
+
+- **`server/services/signal-orchestrator.ts:101`** — dead-import cleanup. Pre-batch imported 3 symbols from `crypto_spot/pattern-pool-filters.js`: `PATTERN_POOL_STRATEGIES + PATTERN_POOL_GUARDRAILS + DEFAULT_ASSET_CLASS`. Step 1.a probe confirmed first 2 are unused in file body. Cleaned to import `DEFAULT_ASSET_CLASS` only (still referenced at lines 670 + 1397 in the crypto-only path documented by docstring at lines 1377-1379 "Signal-orchestrator is the crypto active-trading path — class is crypto_spot by construction").
+
+- **`server/services/asset-class-instances.ts`** — POOL skip cleanup. `ratioManager: AdaptiveRatioManager` field deleted from `AssetClassInstances` interface (line 92 pre-batch) + `AdaptiveRatioManager` import deleted (line 86) + 3 dead factory ARM constructions deleted (xstock_spot @ line 144 pre-batch, xstock_perp @ line 167, crypto_perp @ line 183). Crypto's module-level `adaptiveRatioManager` singleton at `adaptive-ratio-manager.ts:307` UNTOUCHED — live ARM for crypto's FX5 scanner.
+
+- **3 test file dispositions:**
+  - DELETE `server/tests/unit/b79-0n-telemetry-arm-injection.test.ts` (entire 95 LOC tested the now-removed contract)
+  - REFACTOR `server/tests/unit/b79-0a-arm-injection.test.ts` (removed `new AdaptiveRatioManager({}, customTelemetry)` test; kept crypto singleton-fallback tests)
+  - REFACTOR `server/tests/unit/b79-0b-asset-class-instances.test.ts` + `server/tests/unit/b79-0n-telemetry-factory.test.ts` (7 `.ratioManager` refs → `.failureTracker` / `.scanManager` / `.telemetry` assertions)
+
+- **3 NEW test files (27 new tests):**
+  - `server/tests/unit/b79-0n-orchestrator-dispatcher.test.ts` (11 tests: active classes + perp CLASS_NOT_WIRED + reserved-future CLASS_NOT_WIRED + return-type shape)
+  - `server/tests/unit/b79-0n-orchestrator-consumer-swaps.test.ts` (7 tests: source-file structural assertions for import + interface contract)
+  - `server/tests/integration/b79-0n-orchestrator-cascade.test.ts` (8 tests: sizing cascade with xstock 0.50 vs crypto 0.15 divergence; SQE cascade; dispatcher resilience). Key-aware DB mock at section §1 catches the wrong-value-threaded-correctly bug class (Langston Q1 refinement).
+
+### "If I Change X, Check Y" — B79.0n.ORCHESTRATOR additions
+
+- **Add a new `AssetClass` enum value** → `_exhaustive: never` in `pattern-pool-dispatch.ts` default branch HARD-FAILs at compile. Add a `case` returning the new class's PatternPoolGuardrails-shaped object OR an explicit `[CLASS_NOT_WIRED]` throw before pushing.
+- **Add a new consumer of pattern-pool guardrails** → use `getPatternPoolGuardrailsForAssetClass(assetClass)` from `server/asset_classes/pattern-pool-dispatch.js` — NOT direct import from `crypto_spot/pattern-pool-filters.js` (anti-pattern; the consumer-site swap pattern §4.22 exists exactly to prevent this regression).
+- **Remove the per-class plumbing** → if a future batch decides pattern pool guardrails should be wildcard again, the dispatcher must stay but every case returns the same source. Don't bypass the dispatcher.
+- **Change the `PatternPoolGuardrails` interface shape** → update BOTH `crypto_spot/pattern-pool-filters.ts` and `xstock_spot/pattern-pool-filters.ts` to expose the new keys + the dispatcher's return type contract. Both modules use the `get`-property pattern; adding/renaming requires symmetric updates.
+- **POOL re-opens as a sub-batch** (xStock universe grows past 1500 pairs or scanner cycle slows beyond 200ms p95) → revisit the AdaptiveRatioManager factory wiring. The 3 deleted bootstrap calls would need to be re-introduced; the `ratioManager` field re-added to `AssetClassInstances`; the test refactors reversed. See `MULTI_ASSET_VTS_EXPANSION_PLAN.md` POOL skip closure entry for re-evaluation triggers.
+
+### Phase 24 onboarding workflow cross-reference
+
+- `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.22 codifies the **per-class consumer-site swap pattern (with-existing-module-shape)** with B79.0n.ORCHESTRATOR as the canonical reference implementation. This is the cheaper sibling pattern to the full F-1 resolver-with-EXISTS-gate pattern that lives at OBSERVABILITY (#16) for situations where the per-class module already exists and the consumer just needs to call it.
+
+### Cross-references
+
+- Completion report: `Claude Comms and Packages/Batch Completion/B79_0n_ORCHESTRATOR_COMPLETION_REPORT.md`
+- Scope + Pre-audit + Change-list: `Claude Comms and Packages/Scope Files/B79_0n_ORCHESTRATOR_SCOPE.md` + `B79_0n_ORCHESTRATOR_PRE_AUDIT.md` + `Change Lists/B79_0n_ORCHESTRATOR_STEP3_CHANGE_LIST.md`
+- Architectural synthesis (Step 1.a) + 2-round iteration + Step 8 verify: `Claude Comms and Packages/Langston Design Asks/B79_0n_ORCHESTRATOR_ARCHITECTURAL_SYNTHESIS.md` + `B79_0n_ORCHESTRATOR_STEP1A_REPLY_v1.md` + `B79_0n_ORCHESTRATOR_PREAUDIT_REPLY_v1.md` + `B79_0n_ORCHESTRATOR_STEP8_VERIFY.md`
+- RUNNING_ISSUES: see new R-6 (xstock 0.50 vs crypto 0.15 cap behavioral correction — Phase 19 calibration validates xstock placeholder value when WIRE-IN #14 flips active trading).

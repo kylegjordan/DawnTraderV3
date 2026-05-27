@@ -2,6 +2,36 @@
 
 ---
 
+## CLOSURE-2026-05-27 (afternoon) — B79.0n.ORCHESTRATOR: per-class consumer-site swap pattern + POOL skip cleanup + new dispatcher file + per-class diagnostic endpoint
+
+**Risk class:** RESOLVED (per-class plumbing — closes the last 3 production consumer sites that imported `PATTERN_POOL_GUARDRAILS` directly from `crypto_spot/`). xstock pattern signals now route to xstock's 0.50 position cap via dispatcher (real behavioral correction; takes effect at WIRE-IN #14). Sub-batch 12 of 16 in B79.0n umbrella v4 arc — **renumbered from #13 after POOL (#12) SKIPPED 2026-05-27** per Kyle directive.
+
+**Sub-issues closed in this batch:**
+
+- **New dispatcher at `server/asset_classes/pattern-pool-dispatch.ts`.** Mirrors B79.0n.MCE `getFrictionForAssetClass` co-location pattern. Exhaustive switch on 8-member AssetClass union + `_exhaustive: never` + `[CLASS_NOT_WIRED]` throws for 6 non-spot classes with activation breadcrumbs + explicit `PatternPoolGuardrails` return type.
+- **Consumer-site swap #1 — `paper-position-sizing.ts`:** `sizePaperPositionForSignal` signature gains REQUIRED `assetClass: AssetClass` field; 2 callers threaded with `resolveAssetClass(signal.symbol, 'kraken')` deterministic per Langston Step 2 Probe 8 ACK no-silent-fallback; line 145 reads `getPatternPoolGuardrailsForAssetClass(params.assetClass).MAX_POSITION_PCT * 100`. xstock pattern signals correctly route to 0.50 cap (DB-resolved) instead of crypto-bound 0.15.
+- **Consumer-site swap #2 — `signal_quality_evaluator.ts`:** line 28 import swap + line 285 reads `getPatternPoolGuardrailsForAssetClass(input.assetClass).FINAL_SCORE_FLOOR`. `input.assetClass` already REQUIRED per B79.0n.STORAGE — no fallback needed.
+- **Consumer-site swap #3 — `routes.ts:12645` `/pattern-pool` endpoint:** gains optional `?assetClass=` query param with 400-on-invalid validation; per-class dispatcher call returns matching guardrails.
+- **Dead-import cleanup at `signal-orchestrator.ts:101`:** Step 1.a probe found `PATTERN_POOL_STRATEGIES + PATTERN_POOL_GUARDRAILS` unused; kept `DEFAULT_ASSET_CLASS` (live at lines 670 + 1397).
+- **POOL skip cleanup at `asset-class-instances.ts`:** 3 dead factory ARM constructions deleted (xstock_spot/xstock_perp/crypto_perp) + `ratioManager` field removed from `AssetClassInstances` interface + AdaptiveRatioManager import removed. Crypto's module-level `adaptiveRatioManager` singleton at `adaptive-ratio-manager.ts:307` UNTOUCHED — live ARM for crypto's FX5 scanner.
+- **3 POOL test file dispositions:** DELETE `b79-0n-telemetry-arm-injection.test.ts` (95 LOC tested removed contract); REFACTOR `b79-0a-arm-injection.test.ts` (removed injected-telemetry test; kept crypto singleton-fallback tests); REFACTOR `b79-0b-asset-class-instances.test.ts` + `b79-0n-telemetry-factory.test.ts` (7 `.ratioManager` refs → `.failureTracker`/`.scanManager`/`.telemetry` assertions).
+- **NEW `/api/diagnostics/orchestrator-per-class-state` endpoint** — no-auth public (B79.0a pattern); returns per-class JSON `{ patternPoolGuardrails: {...} }` for wired classes + `{ status: 'CLASS_NOT_WIRED', reason }` for perps. Step 8 verify-gate target.
+- **27 new tests** across 3 files (11 unit dispatcher + 7 unit consumer-swaps + 8 integration cascade). Integration §1 key-aware DB mock catches wrong-value-threaded-correctly bug class per Langston Q1 refinement.
+
+**Step 1.a 2-round iteration with Langston:** Langston Q2 push back on F-1 lever audit deferral pushed back on shadow-data pollution argument — CC refined Q2 surface (cost-model.ts + market-regime.ts ARE already proper dispatchers per B79.0n.MCE; signal-orchestrator.ts had 2 dead + 1 live import) → 2 real swaps + 1 diagnostic + 1 dead-import cleanup. Langston Q2(b) pull-in ACK. Step 2 Probe 7 corrected: fx5-scanner.ts:74 is ATR loop body NOT import; B54 Fix 4 explicitly removed PATTERN_POOL_THRESHOLDS import; `pattern-filter-profile.ts` shim has ZERO live consumers (RUNNING_ISSUES #73 already tracking B81 deletion). Step 2 Probe 8 ACK: symbol-only `resolveAssetClass(signal.symbol, 'kraken')` deterministic at both call sites.
+
+**No deploy hotfixes.** Single-pass deploy clean: `git pull` → `npm install` (up-to-date) → `npm run build` (1 pre-existing warning) → `pm2 restart`. Step 7 first-pass verification GREEN: HTTP 200, diagnostic endpoint returns correct 4-class shape with xstock_spot showing 0.50 MAX_POSITION_PCT (behavioral correction observable), zero error-log hits. Step 8 Langston second-pass ACK GREEN — all 5 probes passed.
+
+**Active-trading impact:** ZERO today (active trading off). Behavioral correction (xstock pattern signals routing to 0.50 cap vs crypto's 0.15) takes effect at WIRE-IN (#14); Phase 19 calibration validates xstock's 0.50 placeholder value.
+
+**Crypto regression:** NONE by construction. Crypto signals continue reading the same DB-resolved values via the dispatcher; only the routing layer changes.
+
+**Minor cosmetic note (non-blocking, deferred to Phase 16):** the perp `reason` field in `/api/diagnostics/orchestrator-per-class-state` truncates to `"[B79."` because the endpoint code uses `err.message.split('.')[0]`. The dots inside `[B79.0n.ORCHESTRATOR]` break the split early. Flag for future polish.
+
+**Reference:** `Claude Comms and Packages/Scope Files/B79_0n_ORCHESTRATOR_SCOPE.md` v1 (commit `5e08568` after rebase) + `Claude Comms and Packages/Scope Files/B79_0n_ORCHESTRATOR_PRE_AUDIT.md` + `Claude Comms and Packages/Change Lists/B79_0n_ORCHESTRATOR_STEP3_CHANGE_LIST.md` + Langston review trail at `Claude Comms and Packages/Langston Design Asks/B79_0n_ORCHESTRATOR_*.md` + `B79_0n_ORCHESTRATOR_COMPLETION_REPORT.md` (this batch — Step 11).
+
+---
+
 ## CLOSURE-2026-05-27 — B79.0n.RTB: per-class queue partitioning + cadence seed + LOCKED-module bucket refactor + rtb_queue_refresher retirement
 
 **Risk class:** RESOLVED (proactive plumbing — extends per-class discipline through the RTB queue layer + cadence behavior + closes the `RtbSignal` asset_class schema gap filed by B79.0n.STORAGE as Tier 3). **Combines former sub-batch #11 RTB + former #12 RTB-REFRESH** per Kyle directive 2026-05-27 (same surface; combine reduces sequencing risk + duplicate Step 1/2 work). Per Langston Step 4 review CLEAN-WITH-R1 (R1 landed) + Step 8 second-pass GREEN.

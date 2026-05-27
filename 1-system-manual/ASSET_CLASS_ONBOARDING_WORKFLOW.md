@@ -1542,4 +1542,121 @@ See RUNNING_ISSUES.md #152 for the boundary documentation entry.
 
 ---
 
+## §4.22 — Per-class consumer-site swap pattern with-existing-module-shape (B79.0n.ORCHESTRATOR 2026-05-27)
+
+**Lesson learned:** asset-class divergence work splits cleanly into two patterns with very different scopes. The cheap one — when per-class modules already exist with compatible shapes — is mechanical: replace direct imports of the crypto module at the consumer sites with calls to a small domain-specific dispatcher. The expensive one — full F-1 resolver-with-EXISTS-gated divergence — requires shadow-data observability scaffolding to drive when per-class values are allowed to differ from crypto baseline. Use the cheap pattern when the per-class module already exists; defer the expensive pattern to OBSERVABILITY (#16) where the evidence-gathering infrastructure lives.
+
+**Decision tree:**
+
+```
+Does the per-class module (e.g., xstock_spot/pattern-pool-filters.ts) already exist?
+├── YES + shapes match crypto's interface
+│      → §4.22 consumer-site swap pattern (this section). Cheap, mechanical.
+├── YES + shapes diverge
+│      → Shape-harmonize per the module-shape-convergence pattern at §4.18 first,
+│        THEN apply §4.22.
+└── NO
+       → Either §4.20 4-phase migration (if backed by DB rows) OR build the module
+         from scratch at the per-class onboarding batch. Don't apply §4.22 yet —
+         per-class module must exist first.
+```
+
+**The §4.22 pattern (canonical reference: B79.0n.ORCHESTRATOR's `pattern-pool-dispatch.ts`):**
+
+### Step 1 — Identify the swap surface
+
+`grep -rn "from .*asset_classes/crypto_spot/<module>" server/` to enumerate consumer sites. Categorize each hit:
+
+1. **True class-bound consumer** — reads `<EXPORT>` from crypto module, uses it as if it were class-invariant. SWAP target.
+2. **Already-dispatcher** — imports both crypto + xstock variants, dispatches by `assetClass` parameter (e.g., `cost-model.ts` for `CRYPTO_SPOT_FRICTION` + `XSTOCK_SPOT_FRICTION`). NOT a swap target — already correct.
+3. **Dead import** — imports the symbol but doesn't reference it in file body. Cleanup target (delete the import) but not a swap.
+4. **Type-only re-export** — imports `type X` for re-exporting. NOT a swap target (types are class-agnostic).
+5. **Re-export shim** (legacy back-compat) — file like `pattern-filter-profile.ts` that does `export * from '...crypto_spot/...'`. NOT a swap target — Phase 16 removal candidate per existing RUNNING_ISSUES.
+
+The Step 1.a probe for B79.0n.ORCHESTRATOR initially identified 6 candidate sites; refined analysis showed 2 were already-dispatchers (cost-model + market-regime), 1 was dead-import (signal-orchestrator.ts:101), 1 was type-only re-export (active-filter-pool.ts), 1 was shim (pattern-filter-profile.ts), leaving 3 real consumer sites (paper-position-sizing + SQE + routes diagnostic) + 1 dead-import cleanup.
+
+### Step 2 — Author the dispatcher
+
+Domain-specific file at `server/asset_classes/<domain>-dispatch.ts` (NOT a central `dispatch.ts` SSOT — central files create all-classes-import-from-every-domain coupling). Mirrors B79.0n.MCE's `getFrictionForAssetClass` at `server/core/math/cost-model.ts:67-89` pattern.
+
+```typescript
+import type { AssetClass } from '../../shared/asset-classes.js';
+import { <CRYPTO_EXPORT> } from './crypto_spot/<module>.js';
+import { <XSTOCK_EXPORT> } from './xstock_spot/<module>.js';
+
+export interface <DispatcherReturnType> {
+  readonly <KEY_1>: <type>;
+  readonly <KEY_2>: <type>;
+}
+
+export function get<Domain>ForAssetClass(
+  assetClass: AssetClass,
+): <DispatcherReturnType> {
+  switch (assetClass) {
+    case 'crypto_spot':  return <CRYPTO_EXPORT>;
+    case 'xstock_spot':  return <XSTOCK_EXPORT>;
+    case 'crypto_perp':
+    case 'xstock_perp':
+    case 'equity_spot':
+    case 'equity_futures':
+    case 'commodity_futures':
+    case 'fx_spot':
+      throw new Error(
+        `[B79.0n.<BATCH>][CLASS_NOT_WIRED] assetClass='${assetClass}' has no <domain> wired. ` +
+        `If activating: (1) create server/asset_classes/${assetClass}/<module>.ts; ` +
+        `(2) seed module_constants <module_namespace> rows; (3) add a case here. ` +
+        `See ASSET_CLASS_ONBOARDING_WORKFLOW.md §4.22.`,
+      );
+    default: {
+      const _exhaustive: never = assetClass;
+      throw new Error(`[B79.0n.<BATCH>][dispatch] unreachable assetClass=${String(_exhaustive)}`);
+    }
+  }
+}
+```
+
+**Discipline rules (Langston Step 1 §6 ACK for B79.0n.ORCHESTRATOR):**
+1. Exhaustive switch — every AssetClass union member explicitly handled (including ALL 8 — both active 4 and reserved-future 4; the `_exhaustive: never` is a safety net not a substitute)
+2. `_exhaustive: never` in default — compile-time exhaustiveness lock that errors at `tsc` if a new AssetClass is added
+3. `[CLASS_NOT_WIRED]` throws for non-active classes with activation breadcrumbs in the error message (file path to create + DB seed instruction + switch-case addition + this §4.22 reference)
+4. Return type explicitly typed (not inferred) — locks the shape contract
+
+### Step 3 — Swap consumer sites
+
+At each true class-bound consumer site identified in Step 1:
+
+- **Replace import:** `import { <EXPORT> } from '<crypto_path>'` → `import { get<Domain>ForAssetClass } from '<dispatcher_path>'`
+- **Replace usage:** `<EXPORT>.<KEY>` → `get<Domain>ForAssetClass(<assetClass>).<KEY>`
+- **Thread `assetClass`:** if the consumer doesn't already have `assetClass` in scope, add it as a REQUIRED parameter (B79.0n.STORAGE pattern) AND update all caller sites to pass it via `resolveAssetClass(symbol, 'kraken')` deterministically — NOT via metadata-fallback (Langston Step 2 Probe 8 no-silent-fallback discipline). If metadata.assetClass and resolveAssetClass disagree for a symbol, that's a real bug we want surfaced at the consumer boundary, not silently reconciled.
+
+### Step 4 — Tests
+
+Three categories:
+- **Unit tests on the dispatcher** — active classes return correct value; perp classes throw `[CLASS_NOT_WIRED]`; reserved-future classes throw `[CLASS_NOT_WIRED]`; return-type shape contract (key presence + types).
+- **Unit tests on the consumer sites** — source-file string assertions that the swap landed (imports point at dispatcher; old direct imports absent). Cheap regression locks.
+- **Integration test on the cascade** — key-aware DB mock (different values per class) drives the full path and asserts xstock vs crypto get DIFFERENT values where the DB rows differ. Catches the wrong-value-threaded-correctly bug class (Langston Q1 refinement) — i.e., a consumer that has `assetClass` in scope but accidentally hardcodes a class somewhere mid-cascade.
+
+### Step 5 — Add a per-class diagnostic endpoint
+
+If the swap is non-trivial (>1 consumer), add `GET /api/diagnostics/<batch>-per-class-state` returning the dispatcher's output for all 4 active classes. No-auth public per B79.0a pattern. Step 8 verify-gate target for the deploy.
+
+### When NOT to use §4.22 — use F-1 resolver-with-EXISTS-gate (deferred to OBSERVABILITY #16) instead
+
+If the per-class module doesn't exist yet OR if the divergence needs evidence-gated promotion (e.g., wildcard-to-per-class for cost values that haven't been calibrated yet), §4.22 doesn't apply. The full F-1 resolver pattern (see RUNNING_ISSUES #142 SCORING.b disposition) requires shadow-data observability + EXISTS-gated DB migration to safely diverge xstock from crypto baseline. That work lives at OBSERVABILITY (#16) + active-trading flip where the evidence-gathering infrastructure is built. Don't try to compress F-1 resolver work into §4.22 — they're different sized problems.
+
+### Worked example reference
+
+B79.0n.ORCHESTRATOR (sub-batch 12 of B79.0n umbrella v4 arc, deploy `5e08568` 2026-05-27) is the **canonical reference implementation**:
+- Dispatcher at `server/asset_classes/pattern-pool-dispatch.ts` (~80 LOC)
+- 3 production consumer-site swaps (`paper-position-sizing.ts:145` + `signal_quality_evaluator.ts:285` + `routes.ts:12645` diagnostic)
+- 1 dead-import cleanup (`signal-orchestrator.ts:101`)
+- 27 new tests (11 unit dispatcher + 7 unit consumer-swaps + 8 integration cascade with key-aware DB mock)
+- 1 new diagnostic endpoint `/api/diagnostics/orchestrator-per-class-state`
+- Real behavioral correction visible at deploy: xstock pattern signals route to 0.50 MAX_POSITION_PCT (DB-resolved) instead of crypto-bound 0.15
+- Total scope: 2-3 days; net production LOC +148/-67 + test +338/-54 + 1 file delete (95 LOC)
+
+See CHANGES_AND_FIXES.md "CLOSURE-2026-05-27 (afternoon) — B79.0n.ORCHESTRATOR" + SYSTEM_MANUAL.md §19.5 + SYSTEM_IMPACT_MAP.md "Recent additions (B79.0n.ORCHESTRATOR — Phase 24 — 2026-05-27)" for full component-level enumeration.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
