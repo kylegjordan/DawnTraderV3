@@ -335,7 +335,12 @@ class RTBRefreshService {
           if (!assetClass) {
             try {
               assetClass = resolveAssetClass(signal.symbol, 'kraken');
-            } catch {
+            } catch (err) {
+              // B79.0n.RTB N2 (Langston Step 4 non-blocking note): surface
+              // upstream gaps where neither signal.assetClass column nor
+              // resolveAssetClass could resolve. Defaulting to crypto_spot
+              // matches the non-active-class warn below.
+              console.warn(`[B79.0n.RTB][BUCKET_ASSIGN] resolveAssetClass threw for signalKey=${signalKey} symbol=${signal.symbol}; defaulting to crypto_spot. err=${(err as Error)?.message ?? String(err)}`);
               assetClass = 'crypto_spot';
             }
           }

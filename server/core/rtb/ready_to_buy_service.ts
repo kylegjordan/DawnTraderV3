@@ -1666,6 +1666,14 @@ class ReadyToBuyService {
       await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore SQE signal');
     }
 
+    // B79.0n.RTB N1 (Langston Step 4 non-blocking note): surface upstream gaps
+    // where SQEInput.assetClass is missing. Silent crypto_spot fallback hides
+    // bugs in caller threading (B79.0n.STORAGE was supposed to thread assetClass
+    // end-to-end; any unthreaded path triggers this warn).
+    if (!input.assetClass) {
+      console.warn(`[B79.0n.RTB][QUEUE_FALLBACK] queueSQESignal received missing assetClass; defaulting to crypto_spot. symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`);
+    }
+
     // Phase 14.5: Persist routing and ranking metadata for auditability
     const enrichedMetadata = {
       ...(input.metadata || {}),
