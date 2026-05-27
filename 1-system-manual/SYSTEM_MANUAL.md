@@ -5039,6 +5039,32 @@ console.warn('[8.8.4-A3.R1][PROMOTION_ORDER] Signal was removed from RTB but tra
 
 This is a design trade-off to prevent double-activation, but means failed promotions lose signals permanently.
 
+### 19.4 — B79.0n.RTB: Per-class queue partitioning (2026-05-27)
+
+B79.0n.RTB (sub-batch 11 of 18 in the B79.0n umbrella v4 arc) extends every previously-global RTB surface to per-class. Schema-side: `rtb_signals.asset_class VARCHAR(32)` first-class column with 4-phase production-safe migration. Code-side: `signalBuckets: Map<AssetClass, Map<number, Set<string>>>` nested per-class buckets in `rtb-refresh-service.ts` (Langston C-1 Option A — starvation-safe under shared CPU pressure). Module-constants seed: 4 `rtb_config.refresh_interval_ms = 30000` rows across crypto_spot/crypto_perp/xstock_spot/xstock_perp (uniform value per Kyle directive; per-class plumbing exists so xstock value can change via DB-only update later without code change).
+
+**Class-invariant FSM thresholds via `_RTB_GK` wildcard.** All 8 FSM-threshold read sites in `ready_to_buy_service.ts` (lines 149/163/186/205/212/215/218/1090/1458) use the wildcard resolver `_RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' }`. Per Langston C-8 §3.4 lock — FSM thresholds (TCL barrier, signal threshold live, promotion gates) are class-invariant today. Per-class divergence requires EXISTS-gated explicit-row evidence (e.g., xstock active-trading observability evidence) before promoting the wildcard to per-class seeds.
+
+**Shared global ACT pool preserved.** Adaptive Concurrency Tuner (ACT pool 3-10 default 5) is shared across all 4 active classes per Langston C-2. ACT measures process-level CPU, not asset-class metric; per-class isolation comes from Option A nested buckets, not from ACT split.
+
+**New per-class observability:**
+- `getQueueDepth(): Record<AssetClass, Record<TradingMode, number>>` — hierarchical count Map keyed by class → mode → depth.
+- `getQueuedSignals(mode, assetClass?)` + `getRankedSignals(mode, limit, assetClass?)` — optional per-class filter for hot read paths via the new `rtb_signals_mode_asset_class_status_idx` composite index.
+
+**Legacy `rtb_queue_refresher.ts` RETIRED.** Zero production callers verified via Grep across server/client/shared. `ReadyToBuyService.startRefreshCycle` is canonical via `PaperExecutionEngine` lifecycle. `server/index.ts` retired-comment block at line 1329 references the deletion.
+
+**Boot pre-warm + HARD-FAIL.** `server/index.ts` enumerates 4 active classes + their cadence values at boot; HARD-FAIL via `process.exit(1)` if any rtb_config.refresh_interval_ms row missing. Log line: `[B79.0n.RTB][BOOT] 4-class refresh cadence loaded: crypto_spot=30000ms crypto_perp=30000ms xstock_spot=30000ms xstock_perp=30000ms`.
+
+**4-phase migration pattern (canonical reference for future asset-class column adds).** Phase 1 nullable `ADD COLUMN` + module_constants seed → Phase 2 backfill script with dual-path metadata-jsonb→`resolveAssetClass` fallback → Phase 3 `CHECK` constraint + composite index (precondition gate: 0 nulls) → Phase 4 `SET NOT NULL` contingent on 48h zero-null gate. Captured as ASSET_CLASS_ONBOARDING_WORKFLOW §4.20 with B79.0n.RTB as worked example.
+
+**LOCKED-module override pattern (canonical reference for Kyle-authorized per-class scope without algorithmic redesign).** `rtb-refresh-service.ts` `signalBuckets` topology refactor authorized per umbrella v4 row #11: per-class bucket allocation + per-class pool sizing + per-class ACT calibration in scope; algorithmic redesign / cadence changes / ACT scaler rewrites OUT of scope. Captured as ASSET_CLASS_ONBOARDING_WORKFLOW §4.21 with B79.0n.RTB as worked example.
+
+**Active-trading impact today ZERO.** paper_sim_trades + trades both empty; per-class buckets stay empty until scanner pipeline emits signals; structural pre-warm-only exercise. Active signal flow lands in WIRE-IN (#16).
+
+**Cross-references.**
+- SIM "Recent additions (B79.0n.RTB — Phase 24 — 2026-05-27)" mirrors the component-level enumeration with blast-radius analysis.
+- ASSET_CLASS_ONBOARDING_WORKFLOW §4.20 (4-phase migration pattern) + §4.21 (LOCKED-module override pattern) codify the reusable shapes.
+
 ---
 
 ## 20. Cross-References

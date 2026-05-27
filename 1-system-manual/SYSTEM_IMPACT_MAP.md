@@ -2480,3 +2480,72 @@ If a non-crypto_spot active class flips to active trading and the in-memory-only
 - Completion report: `Claude Comms and Packages/Batch Completion/B79_0n_TELEMETRY_COMPLETION_REPORT.md`
 - Scope + Pre-audit + Change-list: `Claude Comms and Packages/Scope Files/B79_0n_TELEMETRY_SCOPE.md` + `B79_0n_TELEMETRY_PRE_AUDIT.md` + `Change Lists/B79_0n_TELEMETRY_STEP3_CHANGE_LIST.md`
 - RUNNING_ISSUES: #143 DEFERRED (TELEMETRY.b persistence follow-up — no SLA today); #144 OPEN (pre-existing MarketDataHealthCheck EACCES on `/home/runner` path — unrelated finding from Step 7 error-log review).
+
+---
+
+## Recent additions (B79.0n.RTB — Phase 24 — 2026-05-27)
+
+Sub-batch 11 of 18 in the B79.0n umbrella v4 arc. **Combines former sub-batch #11 RTB + former #12 RTB-REFRESH** per Kyle directive 2026-05-27. Step 6 deploy commit `6fd6bcac6`, PM2 #324 at 11:10:31Z; CI all-4-green at run `26507336347` on `a4ac36c`; backfill-dotenv hotfix `6fd6bca` rebased on `a4ac36c`. Per-class queue partitioning + cadence seed batch — extends RTB queue layer + cadence to first-class per-asset-class behavior using the same `assetClass: AssetClass` discipline as the rest of the B79.0n arc.
+
+**Architecture summary.** Pre-batch the RTB layer was global: a single `signalBuckets: Map<number, Set<string>>` (10 buckets indexed 0-9) sharded by signal-key hash, with a single `REFRESH_INTERVAL_MS = 30000` constant and a single `rtb_signals` row schema with no asset-class column. Per-class queue depth was inferable only via `metadata.assetClass` jsonb extraction at read time — slow + non-indexable + cross-class pool sizing impossible without aggregation. This batch (a) adds `rtb_signals.asset_class VARCHAR(32)` as a first-class column with backfill via 4-phase production-safe migration; (b) refactors `signalBuckets` to nested per-class structure `Map<AssetClass, Map<number, Set<string>>>` (Langston C-1 Option A — global+tagging Option B starves xstock under shared CPU pressure); (c) seeds 4 module_constants `rtb_config.refresh_interval_ms = 30000ms` rows (uniform across crypto_spot/crypto_perp/xstock_spot/xstock_perp per Kyle directive — per-class plumbing exists so xstock value can change via DB-only update later without code change); (d) preserves shared global Adaptive Concurrency Tuner (ACT pool 3-10 default 5) per Langston C-2 (ACT measures process-level CPU, not asset-class metric; per-class isolation comes from Option A nested buckets, not from ACT split); (e) retires legacy `rtb_queue_refresher.ts` (zero production callers verified via Grep across server/client/shared).
+
+**Caller surface 25 across 4 RTB component files (2,655 LOC total):**
+- `server/core/rtb/ready_to_buy_service.ts` (1,809 LOC) — core queue + per-signal FSM refresh. Modified: `queueSQESignal` populates `assetClass: input.assetClass || 'crypto_spot'` on both `enrichedMetadata` jsonb and the new first-class column; N1 inline warn surfaces silent crypto_spot fallback. `getQueuedSignals(mode, assetClass?)` + `getRankedSignals(mode, limit, assetClass?)` gain optional asset-class filter. New `getQueueDepth(): Record<AssetClass, Record<TradingMode, number>>` per-class telemetry probe.
+- `server/services/rtb-refresh-service.ts` (846 LOC) — **LOCKED-module** refactor per Kyle directive 2026-05-27 (override authorizes per-class bucket allocation + getBucketStats fix; algorithm/cadence/ACT scaler UNTOUCHED). `signalBuckets: Map<AssetClass, Map<number, Set<string>>>` nested per-class; `lastBucketAssignment: Map<string, { assetClass: AssetClass; bucketIndex: number }>` tracks per-signal assignment; `RTB_ACTIVE_CLASSES: readonly AssetClass[]` const + non-active-class warn path. `assignSignalsToBuckets` resolves assetClass from signal row column → `resolveAssetClass(symbol,'kraken')` fallback → non-active default-to-crypto_spot warn (N2 inline warn). `refreshModeSignals` aggregates per-class buckets at given index via `bucketKeysAtIndex` Set union. `getBucketStats()` bug surfaced via locked-module test (was `signalBuckets.get(i)` with number when keyed by AssetClass post-refactor) — fixed in same chunk to aggregate per-class sizes at each index.
+- `server/core/rtb/tcl_watchdog.ts` — JSDoc on `checkSignalThresholdLive` documents NEW-Q1 (global count tiebreak — wait-then-promote semantics preserved) + NEW-Q2 (lock acquisition order — assetClass lock obtained AFTER mode lock per existing invariant).
+- `server/core/rtb/rtb_queue_refresher.ts` — **DELETED** (zero production callers; `ReadyToBuyService.startRefreshCycle` is canonical via `PaperExecutionEngine` lifecycle). `server/index.ts` retired-comment block updated to reference the deletion.
+
+**`_RTB_GK` wildcard resolver at 8 FSM-threshold read sites** (lines 149, 163, 186, 205, 212, 215, 218, 1090, 1458 in `ready_to_buy_service.ts`): `_RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' }` — all FSM thresholds class-invariant today per Langston C-8 §3.4 lock. Per-class divergence requires EXISTS-gated explicit-row evidence (e.g., xstock active-trading observability evidence) before promoting the wildcard to per-class seeds — bundled into B79.0n.OBSERVABILITY (#18) or sub-batch 18 active-trading flip.
+
+**Schema migration (4-phase production-safe pattern, B-NEW-35 promote-then-retire precedent):**
+- Phase 1 (`2026-05-27-b79-0n-rtb-phase1.sql`): `ALTER TABLE rtb_signals ADD COLUMN IF NOT EXISTS asset_class VARCHAR(32) NULL` + 4 `INSERT INTO module_constants ... ON CONFLICT DO NOTHING` for refresh_interval_ms seeds + DO block fails-loud if seed count != 4.
+- Phase 2 (`scripts/b79-0n-rtb-backfill-asset-class.ts`): dual-path backfill `WHERE asset_class IS NULL` — try `metadata->>'assetClass'` jsonb extraction first, fallback to `resolveAssetClass(symbol, 'kraken')` per row. Idempotent. Step 6 dotenv-import hotfix `6fd6bca` added `import 'dotenv/config'` so standalone npm script invocation loads .env.
+- Phase 3 (`2026-05-27-b79-0n-rtb-phase3.sql`): precondition DO block fails-loud if any nulls remain → `ADD CONSTRAINT rtb_signals_asset_class_not_null_chk CHECK (asset_class IS NOT NULL)` + `CREATE INDEX rtb_signals_mode_asset_class_status_idx ON rtb_signals (mode, asset_class, status)` for hot per-class queue reads.
+- Phase 4 (deferred): `SET NOT NULL` contingent on §6.4 48h zero-null gate.
+
+**Boot pre-warm + HARD-FAIL semantics.** `server/index.ts` enumerates 4 active classes + cadence values at boot, calls `getModuleConstantsService().getConstant('rtb_config', { exchange: '*', assetClass, strategy: '*', regime: '*' }, 'refresh_interval_ms')` for each class, HARD-FAILs via `process.exit(1)` if any row missing. Log line: `[B79.0n.RTB][BOOT] 4-class refresh cadence loaded: crypto_spot=30000ms crypto_perp=30000ms xstock_spot=30000ms xstock_perp=30000ms`.
+
+**Step 7 first-pass verification gates.** HTTP 200; boot pre-warm log at 11:10:31Z; HARD-FAIL gate held; retire-line `[B79.0n.RTB] rtb_queue_refresher.ts retired` at 11:10:34Z; `_migrations` ledger shows both Phase 1 + Phase 3 applied 11:09:21Z; `\d rtb_signals` confirms column + CHECK + index; 4 module_constants rows present; zero error-log hits on `fatal|uncaught|throw|asset_class.*null|B79.0n.RTB.*ERROR` grep; UI login screen renders cleanly. Backfill clean NO-OP against empty rtb_signals.
+
+**Active-trading impact today ZERO.** paper_sim_trades + trades both empty; per-class buckets stay empty until scanner pipeline emits signals; structural pre-warm-only exercise. Active signal flow lands in WIRE-IN (#16). Per-class buckets become observable when scanner emits new SQE → RTB signals carrying assetClass.
+
+### Components touched
+
+- **`server/core/rtb/ready_to_buy_service.ts`** — queue accessors gain optional per-class filter; new `getQueueDepth()` per-class telemetry; queueSQESignal populates new column + jsonb metadata + N1 warn.
+- **`server/services/rtb-refresh-service.ts`** — LOCKED-module override: nested per-class buckets, `RTB_ACTIVE_CLASSES` const, getBucketStats fix, `bucketKeysAtIndex` aggregation, N2 warn, shared ACT preserved.
+- **`server/core/rtb/tcl_watchdog.ts`** — JSDoc documenting NEW-Q1 + NEW-Q2 decisions.
+- **`server/core/rtb/rtb_queue_refresher.ts`** — DELETED (legacy file, zero callers).
+- **`server/lib/event-bus.ts`** — `PromotionEvent.assetClass?: string` optional-additive field per Langston C-7.
+- **`shared/schema.ts`** — `rtbSignals.assetClass = varchar('asset_class', { length: 32 })` + `modeAssetClassStatusIdx: index('rtb_signals_mode_asset_class_status_idx').on(table.mode, table.assetClass, table.status)`.
+- **`server/storage.ts`** — `IStorage.getRtbSignals` filter type extended with optional `assetClass?: string`; `upsertRtbSignal` SET clause includes `assetClass: data.assetClass`.
+- **`server/index.ts`** — boot pre-warm enumerates 4 active classes + cadence values + HARD-FAIL; retired-comment block at line 1329 references rtb_queue_refresher deletion.
+- **`scripts/b79-0n-rtb-backfill-asset-class.ts`** — NEW ~170 LOC dual-path backfill with `import 'dotenv/config'`.
+- **`drizzle/migrations/2026-05-27-b79-0n-rtb-phase1.sql`** + **`2026-05-27-b79-0n-rtb-phase3.sql`** + companion rollback files; MANIFEST.txt entries at positions 115-116.
+- **`package.json`** — `b79-0n-rtb-backfill` npm script entry.
+- **11 new unit test files in `server/tests/unit/`** — isolation + cadence + fsm-isolation + tcl-barrier (5-run determinism) + queue-depth + class-not-wired + locked-module + schema-legacy + schema-postcheck + promotion-event + cold-boot. 53 tests total, pass in 3.33s locally.
+
+### Note on §4.3 existing entry
+
+The existing **§4.3 RTB Service** entry remains accurate for the global queue surface. B79.0n.RTB extends it with per-class partitioning at every previously-global surface — column, buckets, queue-depth, cadence-rows-by-class — while preserving the global ACT pool + class-invariant FSM thresholds (`_RTB_GK` wildcard). When the §4.3 entry needs to mention asset-class behavior post-batch, refer to this Recent additions section for the architecture.
+
+### "If I Change X, Check Y" — B79.0n.RTB additions
+
+- If you add a new `AssetClass` to `ASSET_CLASS_REGISTRY`, the `RTB_ACTIVE_CLASSES` const in `rtb-refresh-service.ts` is the canonical "active for RTB partitioning" list. Adding to ASSET_CLASS_REGISTRY without adding to RTB_ACTIVE_CLASSES means the new class lands in the non-active-class warn path (defaults to crypto_spot). Add to both if the new class is meant to receive its own per-class bucket set.
+- If you remove the `_RTB_GK` wildcard at any of the 8 FSM-threshold read sites and replace with `assetClass` parameter, you also need a per-class seed migration AND EXISTS-gated wildcard retirement (B79.0n.SCORING precedent at sub-batch #8) — single-touch breaks the class-invariant invariant currently relied on by Langston C-8.
+- If you change `signalBuckets` topology (e.g., add a third nesting level), `getBucketStats()` aggregation logic + `refreshModeSignals` bucketKeysAtIndex union code must be updated together. The test `b79-0n-rtb-locked-module.test.ts` surfaced the original bug — keep its coverage when refactoring.
+- If you wire scanner pipeline to actually emit signals (WIRE-IN #16), per-class bucket assignSignalsToBuckets will fire and the N2 warn path will become observable for any signal where assetClass column is null AND resolveAssetClass throws — investigate root cause rather than silently defaulting to crypto_spot.
+- If you flip Phase 4 (`SET NOT NULL` on rtb_signals.asset_class), confirm zero-null gate at the 48h soak window first. The CHECK constraint already enforces NOT NULL for writes; Phase 4 is for ORM/Drizzle type-level enforcement (NOT NULL vs nullable VARCHAR).
+- If you change the cadence value for any one class via `UPDATE module_constants SET value='<new>' WHERE module_name='rtb_config' AND asset_class='<class>'` (DB-only path), boot pre-warm logs will show the new value on next PM2 restart. No code change needed. Per-class divergence pathway is operationally live.
+
+### Phase 24 onboarding workflow cross-reference
+
+- `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.20 codifies the 4-phase production-safe migration pattern (Phase 1 nullable ADD COLUMN + Phase 2 backfill script + Phase 3 CHECK + Phase 4 SET NOT NULL contingent) with B79.0n.RTB's `rtb_signals.asset_class` migration as the canonical reference implementation.
+- `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.21 codifies the LOCKED-module override pattern (Kyle-authorized per-class scope without algorithmic redesign) with B79.0n.RTB's `rtb-refresh-service.ts` `signalBuckets` refactor as the canonical reference implementation.
+
+### Cross-references
+
+- Completion report: `Claude Comms and Packages/Batch Completion/B79_0n_RTB_COMPLETION_REPORT.md`
+- Scope + Pre-audit + Change-list: `Claude Comms and Packages/Scope Files/B79_0n_RTB_SCOPE.md` + `B79_0n_RTB_PRE_AUDIT.md` + `Change Lists/B79_0n_RTB_STEP3_CHANGE_LIST.md`
+- Architectural synthesis (Step 1.a): `Claude Comms and Packages/Langston Design Asks/B79_0n_RTB_ARCHITECTURAL_SYNTHESIS.md`
+- Step 4 R1 re-ACK + Step 8 verify dispatches: `Claude Comms and Packages/Langston Design Asks/B79_0n_RTB_STEP4_R1_REACK.md` + `B79_0n_RTB_STEP8_VERIFY.md`
+- RUNNING_ISSUES: see #142 .b follow-ups for per-class cadence calibration when xstock active-trading evidence window opens.

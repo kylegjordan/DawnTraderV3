@@ -1363,4 +1363,183 @@ See SYSTEM_MANUAL.md §10.9 + SYSTEM_IMPACT_MAP.md "Recent additions (B79.0n.TEL
 
 ---
 
+## §4.20 — 4-phase production-safe ADD-COLUMN migration pattern (B79.0n.RTB 2026-05-27)
+
+**Lesson learned:** when adding an `asset_class VARCHAR(32)` column to a table that's hot-written by live production code, the naive single-migration approach (`ADD COLUMN ... NOT NULL DEFAULT '<value>'`) fails for two reasons. First, it rewrites every existing row in one transaction — locking the table for as long as the rewrite takes, which on a million-row table can be minutes. Second, it doesn't give the writer code a chance to populate the new column on incoming rows BEFORE the constraint takes effect — incoming inserts between Phase 1 and PM2 restart with new code will fail the NOT NULL check.
+
+**The 4-phase pattern (canonical reference: B79.0n.RTB's `rtb_signals.asset_class` migration):**
+
+### Phase 1 — `ADD COLUMN nullable + seed cadence rows` (transactional, idempotent)
+```sql
+BEGIN;
+ALTER TABLE <table_name>
+  ADD COLUMN IF NOT EXISTS asset_class VARCHAR(32) NULL;
+
+-- Seed any module_constants rows that boot code expects to read (HARD-FAIL gate
+-- at boot expects them — pre-seeding closes the window between migration apply
+-- and PM2 restart).
+INSERT INTO module_constants ...
+ON CONFLICT (...) DO NOTHING;
+
+-- Verify seed count (fails-loud at apply time, not at boot time):
+DO $$
+DECLARE row_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO row_count FROM module_constants WHERE ...;
+  IF row_count != <expected> THEN
+    RAISE EXCEPTION 'Phase 1 verification FAILED: expected % rows, found %', <expected>, row_count;
+  END IF;
+END $$;
+COMMIT;
+```
+
+After Phase 1, the column exists with all-NULL values. Existing readers are unaffected; new writes will leave it NULL unless writer code is updated. Writer code update (Chunk E in B79.0n.RTB) populates the column on every new insert AND continues writing the metadata jsonb form (dual-write for backwards compatibility during the deploy window).
+
+### Phase 2 — Backfill script (idempotent, dual-path)
+```typescript
+// scripts/<batch>-backfill-<column>.ts
+import 'dotenv/config';  // CRITICAL: standalone CLI invocation doesn't auto-load .env
+import { db } from '../server/db.js';
+import { sql } from 'drizzle-orm';
+// ...
+
+const nullRows = await db.execute(sql`
+  SELECT id, symbol, metadata->>'assetClass' AS metadata_class
+  FROM <table>
+  WHERE asset_class IS NULL
+  ORDER BY <timestamp_col> ASC
+`);
+
+for (const row of nullRows) {
+  // Path 1: try jsonb metadata extraction first
+  let resolved = row.metadata_class && VALID_CLASSES.has(row.metadata_class)
+    ? row.metadata_class
+    : null;
+
+  // Path 2: fall back to symbol-based resolution
+  if (!resolved) {
+    try {
+      resolved = resolveAssetClass(row.symbol, 'kraken');
+    } catch {
+      // Either path may fail for genuinely-unresolvable rows; Phase 3 CHECK
+      // will catch any residual nulls.
+    }
+  }
+
+  if (resolved) {
+    await db.execute(sql`UPDATE <table> SET asset_class = ${resolved} WHERE id = ${row.id}`);
+  }
+}
+```
+
+**Critical: `import 'dotenv/config'` at the top.** `npm run <script>` doesn't auto-load `.env`. Without this line, `server/db.ts` throws `DATABASE_URL must be set` immediately on import. B79.0n.RTB Step 6 deploy surfaced this — hotfix `6fd6bca` added the one-line import. Pattern: match `scripts/db-migrate.ts` which has `import 'dotenv/config'` at line 37 from B-NEW-43.
+
+**Idempotent via `WHERE asset_class IS NULL`** — re-running picks up only un-backfilled rows. Safe to run multiple times.
+
+### Phase 3 — CHECK constraint + index (transactional, idempotent, fails-loud on precondition)
+```sql
+BEGIN;
+
+-- Precondition: zero nulls must remain after Phase 2 backfill completion.
+DO $$
+DECLARE null_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO null_count FROM <table> WHERE asset_class IS NULL;
+  IF null_count > 0 THEN
+    RAISE EXCEPTION 'Phase 3 PRECONDITION FAILED: % rows still have asset_class IS NULL. Run Phase 2 backfill before applying Phase 3.', null_count;
+  END IF;
+END $$;
+
+-- CHECK constraint enforces NOT NULL at the row level (Phase 4 column-level
+-- SET NOT NULL is contingent on §6.4 48h zero-null gate).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = '<table>' AND constraint_name = '<table>_asset_class_not_null_chk'
+  ) THEN
+    ALTER TABLE <table>
+      ADD CONSTRAINT <table>_asset_class_not_null_chk
+      CHECK (asset_class IS NOT NULL);
+  END IF;
+END $$;
+
+-- Index for hot per-class read paths.
+CREATE INDEX IF NOT EXISTS <table>_mode_asset_class_status_idx
+  ON <table> (mode, asset_class, status);
+
+COMMIT;
+```
+
+### Phase 4 — `SET NOT NULL` (deferred, contingent on 48h zero-null gate)
+```sql
+-- Phase 4 is NOT in the same batch. It ships only after monitoring confirms
+-- zero nulls during a 48h soak window post-Phase-3.
+ALTER TABLE <table> ALTER COLUMN asset_class SET NOT NULL;
+```
+
+Phase 4 is filed as a RUNNING_ISSUES entry (B79.0n.RTB filed #150) and ships as a 1-row DB-only migration once the gate clears. The CHECK constraint already enforces NOT NULL for writes; Phase 4 is for ORM/Drizzle type-level enforcement (NOT NULL vs nullable VARCHAR in schema introspection).
+
+**Special case — empty source table.** When the table being modified is empty pre-migration (B79.0n.RTB's `rtb_signals` was 0 rows), Phase 3 precondition trivially passes with 0 nulls. The 4-phase pattern still applies — the backfill script becomes a NO-OP but exercises the script path AND captures the production CLI invocation pattern for future non-empty cases.
+
+**MANIFEST.txt drift.** Adding migration files requires explicit entries in `drizzle/migrations/MANIFEST.txt` AND using `git add -f` (the `.gitignore` rule `*.sql` ignores migrations otherwise). B79.0n.RTB Step 3 first CI push failed because the two new migrations weren't in MANIFEST.txt; hotfix `298cb2e` added the entries. Same pattern from SCORING+TEC iteration — pattern codified in §4.16. ALWAYS append new migration files to MANIFEST.txt as part of the same commit.
+
+### Worked example reference
+
+B79.0n.RTB (sub-batch 11 of B79.0n umbrella v4 arc, deploy `6fd6bcac6` 2026-05-27) is the **canonical reference implementation** for the 4-phase pattern:
+- Phase 1: `drizzle/migrations/2026-05-27-b79-0n-rtb-phase1.sql` + rollback companion.
+- Phase 2: `scripts/b79-0n-rtb-backfill-asset-class.ts` with `import 'dotenv/config'` at top + dual-path resolution + `WHERE asset_class IS NULL` idempotency.
+- Phase 3: `drizzle/migrations/2026-05-27-b79-0n-rtb-phase3.sql` with precondition DO block + CHECK constraint + composite index.
+- Phase 4: deferred to RUNNING_ISSUES #150 — ships after 48h zero-null gate post-WIRE-IN (#16) when scanner pipeline starts emitting signals.
+
+See CHANGES_AND_FIXES.md "CLOSURE-2026-05-27" + SYSTEM_MANUAL.md §19.4 + SYSTEM_IMPACT_MAP.md "Recent additions (B79.0n.RTB — Phase 24 — 2026-05-27)" for full component-level enumeration.
+
+---
+
+## §4.21 — LOCKED-module override pattern: per-class scope without algorithmic redesign (B79.0n.RTB 2026-05-27)
+
+**Lesson learned:** when a per-class plumbing batch needs to touch a module that's been explicitly LOCKED (e.g., LOCKED-module fence comment at file top, or "do not touch this except for X" directive in CLAUDE.md / umbrella plan), the touch must be Kyle-authorized AND scope-bounded. Without the authorization + scope boundary, "per-class touch" can drift into "algorithmic redesign while we're in here" — which is the exact failure mode the LOCK was meant to prevent.
+
+**The LOCKED-module override pattern (canonical reference: B79.0n.RTB's `rtb-refresh-service.ts` `signalBuckets` refactor):**
+
+### Step 1 — Kyle-authorized scope expansion via umbrella row directive
+The umbrella plan (e.g., `MULTI_ASSET_VTS_EXPANSION_PLAN.md` or sub-batch row in BATCH_CATALOG.md) explicitly authorizes the LOCKED-module touch. For B79.0n.RTB: umbrella v4 row #11 authorizes "per-class bucket allocation + per-class pool sizing + per-class ACT calibration" — narrow, surgical, well-defined.
+
+### Step 2 — Explicit IN-scope / OUT-of-scope enumeration before Step 3
+The scope document MUST contain an explicit table or §-block listing what's IN and what's OUT of the override:
+
+> **LOCKED-module override scope (B79.0n.RTB):**
+> - **IN scope:** per-class bucket allocation (`signalBuckets` topology refactor + `lastBucketAssignment` field shape + `RTB_ACTIVE_CLASSES` const + non-active-class warn path); `getBucketStats()` aggregation fix (necessary collateral from topology change).
+> - **OUT of scope:** algorithmic redesign of `refreshModeSignals` logic, ACT pool sizing changes, cadence value changes (except the per-class seed which is a separate concern not a redesign), `signal-key-hash` modulus / shard-count changes, any new bucket-rebalancing logic.
+
+If a scope drift is observed mid-implementation (e.g., "while I'm in here, I might as well fix this other bug"), STOP and either (a) re-scope explicitly with Kyle, OR (b) defer the drift to a follow-up batch.
+
+### Step 3 — Langston Step 4 review confirms no algorithmic-redesign drift
+Langston's Step 4 code review must explicitly confirm that the diff matches the IN-scope enumeration. Diffs that touch lines outside the LOCKED-module override scope are flagged as drift — either re-scope or revert.
+
+For B79.0n.RTB: Langston Step 4 review CLEAN-WITH-R1 confirmed the diff stayed in scope (algorithm/cadence/ACT scaler all untouched), with the only revision being R1 (package.json script in HEAD).
+
+### Step 4 — Document the LOCKED-module override in governance
+The completion report + SIM/System Manual updates must explicitly call out:
+1. Which module was LOCKED before.
+2. What override was authorized.
+3. What the override scope was.
+4. What stayed untouched (i.e., what the LOCK still protects).
+
+For B79.0n.RTB: `rtb-refresh-service.ts` was LOCKED pre-batch; umbrella v4 row #11 authorized per-class bucket allocation override; shared global ACT pool (3-10 default 5) + cadence behavior (still 30000ms uniform via the seed pattern) + refreshModeSignals algorithm all untouched. SYSTEM_MANUAL.md §19.4 + CHANGES_AND_FIXES.md "CLOSURE-2026-05-27" + SIM "Recent additions (B79.0n.RTB)" all document this.
+
+### Worked example reference
+
+B79.0n.RTB (sub-batch 11 of B79.0n umbrella v4 arc, deploy `6fd6bcac6` 2026-05-27) is the **canonical reference implementation**:
+- LOCKED-before: `server/services/rtb-refresh-service.ts` was an existing 846-LOC module that no batch had touched since B65.1; treated as architectural fixture.
+- Override authorized: umbrella v4 row #11 authorized per-class bucket allocation per Langston C-1 Option A.
+- IN-scope diff: `signalBuckets` nested topology, `RTB_ACTIVE_CLASSES` const, `assignSignalsToBuckets` per-class resolution, `refreshModeSignals` bucketKeysAtIndex aggregation, `getBucketStats()` fix.
+- OUT-of-scope (preserved): shared global ACT pool, refreshModeSignals algorithm, cadence behavior (still 30000ms via per-class seed pattern, not via code-level changes), signal-key-hash modulus, bucket count (still 10).
+- Langston Step 4 review: CLEAN-WITH-R1 (R1 unrelated to LOCKED-module scope; landed in fix-up `a4ac36c`).
+- Step 8 verification: confirmed via psql + log probes that runtime behavior matches IN-scope intent (per-class buckets present in topology, ACT pool unchanged at 3-10 default 5).
+
+See RUNNING_ISSUES.md #152 for the boundary documentation entry.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
