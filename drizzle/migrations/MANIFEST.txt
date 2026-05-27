@@ -37,7 +37,6 @@
 # 1-system-manual/staging-coordination/2026-04-22-initial-schema-mark-applied.sql
 # BEFORE the next staging db:migrate run — staging already has the schema, so
 # the file's only job there is to satisfy the ledger.
-
 2026-04-22-initial-schema.sql
 2026-04-22b-initial-seed-data.sql
 2026-04-23-b65-add-base-currency-to-trades.sql
@@ -113,3 +112,5 @@
 2026-05-26-b79-0n-tec-perclass-seed.sql
 2026-05-26-b79-0n-tec-wildcard-retire.sql
 2026-05-26-b79-0n-scoring-perclass-seed.sql
+2026-05-27-b79-0n-rtb-phase1.sql
+2026-05-27-b79-0n-rtb-phase3.sql
