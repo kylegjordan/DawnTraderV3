@@ -12694,38 +12694,102 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // B79.0n.ORCHESTRATOR (2026-05-27): per-class orchestrator state diagnostic.
-  // No-auth public (B79.0a pattern). Returns pattern pool guardrails for all 4
-  // active asset classes — verify-gate target for Step 8 second-pass review +
-  // ongoing operational visibility into per-class dispatch values.
+  // B79.0n.ORCHESTRATOR (2026-05-27) + B79.0n.EXECUTION (2026-05-27 CHUNK C):
+  // per-class state diagnostic. No-auth public (B79.0a pattern). URL retained
+  // for continuity per Langston Step 1 Q3 ACK (URL says "orchestrator" but
+  // payload covers orchestrator + execution layers + future additions).
+  //
+  // Schema v2 payload (B79.0n.EXECUTION): nested-by-layer with explicit
+  // top-level keys + `_meta` registry surfacing schemaVersion, coverage,
+  // lastReviewed timestamp, and knownGaps registry (operator-visible inline,
+  // no need to consult docs). Reusable doctrine documented in System Manual
+  // §6.0 "Per-class state surfaces".
+  //
+  // Closing a knownGaps entry MUST remove it from the payload and bump
+  // _meta.lastReviewed (ASSET_CLASS_ONBOARDING_WORKFLOW §4.24 rule).
   apiRouter.get('/diagnostics/orchestrator-per-class-state', async (_req: AuthenticatedRequest, res) => {
     try {
       const { getPatternPoolGuardrailsForAssetClass } = await import('./asset_classes/pattern-pool-dispatch.js');
-      const perClass: Record<string, { patternPoolGuardrails: { FINAL_SCORE_FLOOR: number; MAX_POSITION_PCT: number } } | { status: string; reason: string }> = {};
+      const { storage } = await import('./storage');
+      const { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE } = await import('./config/exchange-defaults.js');
+
       const activeClasses = ['crypto_spot', 'crypto_perp', 'xstock_spot', 'xstock_perp'] as const;
+      type ClassState = { patternPoolGuardrails: { FINAL_SCORE_FLOOR: number; MAX_POSITION_PCT: number } } | { status: string; reason: string };
+      const orchestratorPerClass: Record<string, ClassState> = {};
       for (const cls of activeClasses) {
         try {
           const g = getPatternPoolGuardrailsForAssetClass(cls);
-          perClass[cls] = {
+          orchestratorPerClass[cls] = {
             patternPoolGuardrails: {
               FINAL_SCORE_FLOOR: g.FINAL_SCORE_FLOOR,
               MAX_POSITION_PCT: g.MAX_POSITION_PCT,
             },
           };
         } catch (err) {
-          perClass[cls] = {
+          orchestratorPerClass[cls] = {
             status: 'CLASS_NOT_WIRED',
             reason: err instanceof Error ? err.message.split('.')[0] + '.' : String(err),
           };
         }
       }
+
+      // B79.0n.EXECUTION CHUNK C: execution-layer state per active class.
+      // openPositions: live count from paper_sim_open_positions table by mode/class.
+      // recentCloses24h: count from paper_sim_trades closed within last 24h.
+      // feePercent/slippagePercent: surfaces current values (WILDCARD class-member
+      // today; flagged in _meta.knownGaps for Phase 25/26 calibration).
+      const executionPerClass: Record<string, { openPositions: number; recentCloses24h: number; feePercent: number; slippagePercent: number } | { status: string }> = {};
+      try {
+        const paperSimOpen = await storage.getPaperSimOpenPositions('paper');
+        const recentClosedAll = await storage.getPaperSimTrades('paper', { closedOnly: true, limit: 500 });
+        const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+        const recentClosed24h = recentClosedAll.filter((t: any) => {
+          if (!t.closedAt) return false;
+          const closedAtMs = new Date(t.closedAt).getTime();
+          return closedAtMs >= cutoffMs;
+        });
+        const wildcardFee = DEFAULT_TAKER_FEE * 100;
+        const wildcardSlip = DEFAULT_SLIPPAGE * 100;
+        for (const cls of activeClasses) {
+          if (cls === 'crypto_perp' || cls === 'xstock_perp') {
+            executionPerClass[cls] = { status: 'CLASS_NOT_WIRED' };
+            continue;
+          }
+          const open = paperSimOpen.filter((p: any) => p.assetClass === cls).length;
+          const closed = recentClosed24h.filter((t: any) => t.assetClass === cls).length;
+          executionPerClass[cls] = {
+            openPositions: open,
+            recentCloses24h: closed,
+            feePercent: wildcardFee,
+            slippagePercent: wildcardSlip,
+          };
+        }
+      } catch (execErr) {
+        // Surface execution-layer compute failure without breaking orchestrator
+        for (const cls of activeClasses) {
+          executionPerClass[cls] = { status: 'CLASS_NOT_WIRED' };
+        }
+        console.warn('[B79.0n.EXECUTION] per-class-state execution-layer compute failed:', execErr);
+      }
+
       res.json({
         ts: new Date().toISOString(),
-        batch: 'B79.0n.ORCHESTRATOR',
-        perClass,
+        batch: 'B79.0n.ORCHESTRATOR+EXECUTION',
+        orchestrator: orchestratorPerClass,
+        execution: executionPerClass,
+        _meta: {
+          schemaVersion: 2,
+          coverage: ['orchestrator', 'execution'],
+          lastReviewed: '2026-05-27',
+          knownGaps: [
+            'fee/slippage dispatch is class-member wildcard (paper-execution-engine.ts:126-127); per-class dispatch deferred to Phase 25/26 calibration',
+            'sizing-core risk-pct/max-position-pct mode-keyed not class-keyed (paper-position-sizing.ts:141-180); deferred to Phase 25/26',
+            'narrative-feed TRADE_OPENED/TRADE_CLOSED payload lacks assetClass; dormant — re-review at narrative-feed activation or annual audit',
+          ],
+        },
       });
     } catch (error) {
-      console.error('[B79.0n.ORCHESTRATOR] orchestrator-per-class-state error:', error);
+      console.error('[B79.0n.ORCHESTRATOR+EXECUTION] per-class-state error:', error);
       res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Failed' });
     }
   });

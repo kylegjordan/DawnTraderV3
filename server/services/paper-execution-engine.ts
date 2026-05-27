@@ -1368,12 +1368,20 @@ export class PaperExecutionEngine {
         const { getMarketContextEngine } = await import('./market-context-engine.js');
         const cfg = getMarketContextEngine().getCurrentOutcomeFeedbackConfig();
         if (cfg !== null) {
-          // B79.0n.CONFIDENCE-CHAIN: per-class store key — resolve from
-          // position.symbol via safeResolveAssetClass + skip if unresolvable
-          // (rare; logs WARN). Per-class isolation prevents crypto outcome
-          // contamination of xstock signals and vice-versa.
+          // B79.0n.EXECUTION CHUNK B (2026-05-27): position-record SSOT.
+          // Read assetClass directly from the position record (canonical SSOT
+          // write at createPaperSimOpenPosition L2147). Defensive fallback to
+          // safeResolveAssetClass is BELT-AND-SUSPENDERS, NOT load-bearing —
+          // L922 B79.TEC NO_FALLBACK hard-fails on a position missing
+          // assetClass before flow ever reaches this hook. The fallback locks
+          // safe behavior against future drift (e.g., new caller paths that
+          // bypass L922 invariants). Per-class isolation prevents crypto
+          // outcome contamination of xstock signals and vice-versa.
+          // [Pre-B79.0n.EXECUTION: re-resolved from symbol via
+          // safeResolveAssetClass(position.symbol, 'kraken') — drift cleanup
+          // per Langston Step 1.a Q4-B audit + Step 2 B2 reframe.]
           const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
-          const _assetClass = safeResolveAssetClass(position.symbol, 'kraken');
+          const _assetClass = (position as any).assetClass ?? safeResolveAssetClass(position.symbol, 'kraken');
           if (_assetClass !== null) {
             outcomeFeedbackStore.updateEma(
               _assetClass,
@@ -1542,6 +1550,17 @@ export class PaperExecutionEngine {
     );
 
     // Phase 8.8.4-C.12: Emit TRADE_CLOSED event (triggers RTB promotion via event handler)
+    // B79.0n.EXECUTION CHUNK A (2026-05-27): populate assetClass from position
+    // record (canonical SSOT write at L2147 createPaperSimOpenPosition). Same
+    // C-7 doctrine as PromotionEvent — additive optional field, zero handler
+    // breakage. See TradeClosedEvent interface in server/lib/event-bus.ts.
+    const _tcAssetClass = (position as any).assetClass as string | undefined;
+    // B79.0n.EXECUTION CHUNK A canary (per Langston Step 2 B2) — runtime probe
+    // for operators to confirm assetClass populates correctly per class once
+    // xstock active trading lights up at WIRE-IN (#14). Optional, no-cost.
+    console.log(
+      `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED] mode=${this.mode} class=${_tcAssetClass ?? 'undefined'} symbol=${position.symbol} tradeId=${trade?.id || positionId}`
+    );
     eventBus.emitTradeClosed({
       mode: this.mode,
       symbol: position.symbol,
@@ -1549,6 +1568,7 @@ export class PaperExecutionEngine {
       tradeId: trade?.id || positionId,
       pnl: netPnl,
       timestamp: new Date().toISOString(),
+      assetClass: _tcAssetClass,
     });
   }
 

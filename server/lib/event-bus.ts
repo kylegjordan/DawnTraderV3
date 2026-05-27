@@ -28,6 +28,22 @@ export interface TradeClosedEvent {
   tradeId: string;
   pnl: number;
   timestamp: string;
+  /**
+   * B79.0n.EXECUTION (2026-05-27, CHUNK A): asset class of the closed trade.
+   * Optional in v1 per Langston Step 2 ACK + same C-7 doctrine as
+   * PromotionEvent above — additive field is safe for all 3 current listeners
+   * (paper-execution-engine self-handler L184-188 mode-filter only,
+   * c13-validation-service L103-107 collection only, c14-validation-service
+   * L123-127 collection only); none use exhaustive switch or
+   * `keyof TradeClosedEvent` enumeration.
+   *
+   * Populated from position.assetClass at the emit site (paper-execution-engine
+   * L1545 — read from the canonical SSOT, not re-resolved from symbol).
+   * Same-symbol-across-classes is structurally possible post-B79.0n.RTB;
+   * consumers that need to disambiguate read this field; consumers that don't
+   * are unaffected.
+   */
+  assetClass?: string;
 }
 
 export interface PromotionEvent {
