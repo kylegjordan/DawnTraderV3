@@ -130,9 +130,9 @@ This batch covers:
 - Per-class FSM state-transition routing — refresh advances per-class state without crossing classes
 
 **OBJ-3.** **`rtb-refresh-service.ts` (LOCKED — authorized per B79.0n row #11) per-class extension:**
-- Bucket allocation **decision needed at Step 2 pre-audit (Langston open Q):** Option A nested per-class buckets `Map<AssetClass, Map<0..7, Set<signalId>>>` OR Option B global 8 buckets with assetClass tagging at signal level. CC lean: Option B (preserves bucket-count + ACT semantics; per-class isolation via tagging rather than fragmentation). Final decision at Step 2.
+- Bucket allocation **decision deferred to Step 2 pre-audit per §9.1 C-1 starvation-scenario code walk.** No pre-evidence lean.
 - Per-class refresh cadence (Kyle locked 30s uniform v1; v1 keeps single cadence row even though per-class plumbing exists; future Phase E calibration can populate per-class differently via DB-only update)
-- Per-class ACT calibration **decision needed at Step 2 pre-audit (Langston open Q):** does each class get its own ACT pool, or shared global pool with per-class accounting? CC lean: shared global ACT pool (simpler; ACT is about CPU + duration not per-class load characteristics today). Final decision at Step 2.
+- Per-class ACT calibration **decision deferred to Step 2 pre-audit per §9.1 C-2 ACT tuner code walk.** No pre-evidence lean.
 
 **OBJ-4.** **`rtb_queue_refresher.ts` retirement (Kyle directive 2026-05-27).** Verification complete — `rg "rtb_queue_refresher|rtbQueueRefresher" server/ client/ shared/` returns ZERO production callers. Retirement steps:
 - Delete `server/core/rtb/rtb_queue_refresher.ts` file
@@ -226,7 +226,8 @@ Two-phase phasing per B-NEW-35 promote-then-retire pattern. Phase 1 = add nullab
 | T5 | `getQueueDepth` accessor accuracy across 4 active classes × 2 modes | `b79-0n-rtb-queue-depth.test.ts` | ~50 |
 | T6 | Reserved-future class throws `[CLASS_NOT_WIRED]` on per-class read paths | `b79-0n-rtb-class-not-wired.test.ts` | ~30 |
 | T7 | LOCKED-module per-class extension preserves bucket-assignment + ACT behavior on global path (no regression for crypto_spot) | `b79-0n-rtb-locked-module.test.ts` | ~80 |
-| T8 | Schema backwards-compat: legacy `assetClass=null` rows treated as crypto_spot with deprecation WARN | `b79-0n-rtb-schema-legacy.test.ts` | ~50 |
+| T8a | Pre-Phase-3 schema backwards-compat: legacy `assetClass=null` rows treated as crypto_spot with one-time deprecation WARN | `b79-0n-rtb-schema-legacy.test.ts` | ~50 |
+| T8b → T12 | **Post-Phase-3 rehydrate HARD-FAIL** (per Langston C-3): rehydrate-on-boot encountering any `asset_class=null` row throws `[B79.0n.RTB][NULL_ASSET_CLASS_POST_BACKFILL]` — gated by Phase-3 CHECK constraint presence flag (test sets the flag to simulate post-Phase-3 state) | `b79-0n-rtb-schema-postcheck.test.ts` | ~30 |
 | T9 | PromotionEvent additive field doesn't break consumers (mock subscribers) | `b79-0n-rtb-promotion-event.test.ts` | ~50 |
 | T10 | rtb_queue_refresher import resolution (post-retirement) fails-compile if any test still references it | local tsc/import-graph | ~10 |
 | T11 | Cold-boot: per-class queues start empty + bucket service starts; no error on empty class | `b79-0n-rtb-cold-boot.test.ts` | ~40 |
@@ -328,7 +329,7 @@ Body cites Phase 4 conditional execution decision criteria + Phase 4 SQL command
 | H | `rtb-refresh-service.ts` LOCKED-module modifications (per-class bucket alloc OR tagging — pending §3.9 + §3.10 Step 2 decision) | `server/services/rtb-refresh-service.ts` | ~80-150 | MEDIUM |
 | I | `PromotionEvent` interface extension + emitter + matcher | `server/lib/event-bus.ts` + `server/core/rtb/ready_to_buy_service.ts` | ~30 | LOW |
 | J | `rtb_queue_refresher.ts` retirement: delete file + update server/index.ts comment | `server/core/rtb/rtb_queue_refresher.ts` (DELETE) + `server/index.ts` (~5 LOC change) | ~10 | LOW |
-| K | Caller-site annotations on 4 HEAVY production files | paper-execution-engine, signal-orchestrator, trading-bootstrap, event-bus | ~10 (comment-only) | LOW |
+| K | Caller-site updates (no inline tags per Langston C-6) on 4 HEAVY production files where per-class plumbing required | paper-execution-engine, signal-orchestrator, trading-bootstrap, event-bus | 0-5 LOC (only non-obvious function-top one-liners) | LOW |
 | L | Boot pre-warm logging: enumerate 4 active classes + cadence values + ack the LOCKED-module init | `server/index.ts` | ~15 | LOW |
 | M | 10 new unit tests per §4 | `server/tests/unit/b79-0n-rtb-*.test.ts` | ~600 | LOW |
 | N | Local `npx tsc --noEmit` + `npx vitest run` verification per CLAUDE.md §7.1 | local | — | — |
@@ -348,16 +349,16 @@ Body cites Phase 4 conditional execution decision criteria + Phase 4 SQL command
 - NOT changing centralClock cadence (1Hz tick rate unchanged)
 - NOT changing ranking-weights.ts or score-weights.config.ts (class-invariant)
 - NOT modifying rtb-refresh-service.ts ALGORITHMIC LOGIC or ACT THRESHOLDS (outside authorized override per §0.3)
-- NOT migrating the SET NOT NULL column constraint (deferred to RTB.b after 24h+ soak with no nulls per OBJ-1 Phase 4)
+- NOT unconditionally deferring Phase 4 SET NOT NULL — it runs in-batch at Step 9-10 contingent on §6.4 48h gate (zero null count over the window). Only deferred to RTB.b IF soak surfaces nulls. Default is in-batch.
 - NOT modifying `tcl_watchdog.ts` beyond the necessary class-aware queue reads (TCL stays global)
 
 ---
 
 ## §9. Open questions for Langston (Step 2 pre-audit decisions)
 
-**Q1 — Bucket allocation choice on rtb-refresh-service.ts (§3.9):** Option A nested per-class buckets OR Option B global with tagging. CC lean Option B. Decision at Step 2 with code-level review.
+**Q1 — Bucket allocation choice on rtb-refresh-service.ts (§3.9):** Option A nested per-class buckets OR Option B global with tagging. **No pre-evidence lean.** Decision at Step 2 with code-level review per §9.1 C-1 deliverable (worst-case starvation scenario walk).
 
-**Q2 — ACT scope on rtb-refresh-service.ts (§3.10):** per-class ACT vs shared global ACT. CC lean shared global. Decision at Step 2.
+**Q2 — ACT scope on rtb-refresh-service.ts (§3.10):** per-class ACT vs shared global ACT. **No pre-evidence lean.** Decision at Step 2 with code-level review per §9.1 C-2 deliverable (ACT tuner code walk).
 
 **Q3 — Schema backfill source (§3.11):** `metadata->>'assetClass'` jsonb extraction vs `resolveAssetClass(symbol, 'kraken')` per row. DB probe at Step 2 determines feasibility.
 
@@ -403,4 +404,6 @@ These items are LOCKED IN as Step 2 deliverables before Step 3 can begin:
 
 Plus **new §9.1 Step 2 pre-audit deliverables** locking in C-1 (bucket-allocation starvation walk), C-2 (ACT tuner code walk), C-3 (sequencing confirmation), C-7 (PromotionEvent consumer classification), C-8 (FSM class-invariance verification), C-9 (T4 spec sharpening), C-12 (VTS-shadow observability surface).
 
-Awaiting Langston ACK on v2.1 → Step 2 deeper code-level pre-audit per Kyle directive 2026-05-27.
+**v2.2 (2026-05-27, midday):** Langston v2.1 ACK with two required paper-trail cleanups + two nits, all four applied. (1) §8 line contradicting C-4 updated to "NOT unconditionally deferring Phase 4 — runs in-batch contingent on §6.4 zero null gate." (2) §4 test plan added T-12 (split prior T8 into T8a pre-Phase-3 WARN + T8b/T12 post-Phase-3 HARD-FAIL) closing the gap §10 changelog promised. (3) OBJ-3 + §9 Q1/Q2 CC-lean references removed (decisions now deferred to Step 2 with no anchor). (4) §7 Chunk K LOC dropped from ~10 comment-only to 0-5 LOC reflecting C-6 inline-tag removal. Scope is now internally consistent across §3.9/§3.10 (no leans), OBJ-3 (no leans), §9 Q1/Q2 (no leans), §8 (matches C-4 contingent-in-batch), §4 (T12 testable), §7 Chunk K (matches C-6 no-tag).
+
+Langston pre-cleared Step 2 after v2.2 cleanups land → proceeding to Step 2 deeper code-level pre-audit per Kyle directive 2026-05-27 on §9.1 deliverables (C-1 starvation walk, C-2 ACT walk, C-3 sequencing, C-7 PromotionEvent consumers, C-8 FSM class-invariance, C-9 T4 spec, C-12 VTS-shadow surface).
