@@ -195,3 +195,29 @@ No new alerts to file at close beyond `c82c256c`.
 ---
 
 **Batch B-NEW-35 CLOSED.** All eight scope objectives green. Three layers of dedup protection in place at the database, the application, and the in-memory buffer. Scanner functional at sub-second cycles. Snapshot pre-warm functional. Independent verification by Langston complete. Governance updates landed in this completion turn per CLAUDE.md §3.
+
+---
+
+## §10 — 7-day soak verification result (added 2026-05-27)
+
+Alert `c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf` fired at the scheduled `2026-05-27T07:00:00Z` trigger. CC probed all three `_ohlc_1m_2026_05` partitioned tables at the 7-day soak point.
+
+**Probe command (working psql credential path documented for future post-deploy soak verifications):**
+
+```bash
+ssh root@188.245.193.8 'su - deploy -c "set -a; source /home/deploy/dawntrader/.env; set +a; psql \$DATABASE_URL -tAc \"SELECT '\''crypto_spot'\'' tbl, COUNT(*) dups FROM (SELECT symbol, interval_begin, COUNT(*) c FROM crypto_spot_ohlc_1m_2026_05 GROUP BY 1,2 HAVING COUNT(*) > 1) d UNION ALL SELECT '\''xstock_spot'\'', COUNT(*) FROM (SELECT symbol, interval_begin, COUNT(*) c FROM xstock_spot_ohlc_1m_2026_05 GROUP BY 1,2 HAVING COUNT(*) > 1) d UNION ALL SELECT '\''xstock_perp'\'', COUNT(*) FROM (SELECT symbol, interval_begin, COUNT(*) c FROM xstock_perp_ohlc_1m_2026_05 GROUP BY 1,2 HAVING COUNT(*) > 1) d;\""'
+```
+
+**Soak result:**
+
+| Table | Duplicate `(symbol, interval_begin)` rows | Status |
+|---|---|---|
+| `crypto_spot_ohlc_1m_2026_05` | **0** | ✅ |
+| `xstock_spot_ohlc_1m_2026_05` | **0** | ✅ |
+| `xstock_perp_ohlc_1m_2026_05` | **0** | ✅ |
+
+**Result:** All three layers of dedup protection (UNIQUE constraint + `onConflictDoUpdate` + in-buffer Map dedup) held for 7 continuous days post-deploy. Zero duplicate landings across the entire window. The structural fix is verified stable at the 7-day mark.
+
+**Alert acknowledged** via `npm run system-alerts -- ack c82c256c-66e3-4ce4-a6c9-c8ef4041bdbf --by cc-session-2026-05-27`.
+
+**Standing follow-up rule:** the same psql probe command is the verification pattern for future deduplication soak alerts. CC MEMORY operational invariant: post-deploy dedup verification uses the documented `set -a; source /home/deploy/dawntrader/.env; set +a; psql $DATABASE_URL ...` pattern.

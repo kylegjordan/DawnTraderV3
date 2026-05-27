@@ -93,13 +93,13 @@ Per umbrella v4: **RTB is sub-batch #11**, the next required completion after TE
 - The per-cycle ordering computation in `getTopSignal()` must operate on a per-class projection, returning N candidates per asset-class rather than a single global top-N
 - The `getRtbSignals({ mode, ... })` storage layer call must accept an optional `assetClass` filter; current calls remain backwards-compatible when assetClass is undefined
 
-**OBJ-2.** Per-class refresh cadence via `module_constants`. New row family `rtb.refresh_interval_ms` with per-class values:
+**OBJ-2.** Per-class refresh cadence via `module_constants`. **Kyle directive 2026-05-27: lock all 4 active classes at 30000ms** matching the current crypto cadence. No empirical basis today for a different xstock cadence; uniform 30s is the safe default. The module_constants infrastructure stays per-class anyway so any future Phase-E calibration evidence can change the xstock value via DB-only update (no code change required). New row family `rtb.refresh_interval_ms` with per-class values:
 - `crypto_spot` = 30000 (current behavior — no change)
-- `xstock_spot` = **OPEN Q for Kyle at Step 1 ACK** (do NOT invent a number per Langston Q3.1)
-- `xstock_perp` = inherit xstock_spot OR specified separately (open Q)
-- `crypto_perp` = 30000 default (assumed crypto-cadence; open to Kyle override)
+- `xstock_spot` = 30000 (Kyle directive 2026-05-27)
+- `xstock_perp` = 30000 (Kyle directive 2026-05-27)
+- `crypto_perp` = 30000 (Kyle directive 2026-05-27)
 
-Stagger window scales with refresh interval (e.g., 30s cadence → 30s stagger window; if xstock = 60s cadence, stagger = 60s window).
+Stagger window = refresh cadence (30s → 30s stagger).
 
 **OBJ-3.** Per-class state-transition quality bar (Langston Q3.2). Default-uniform across classes (active → reconfirmed uses same metric-quality threshold as crypto today). Scope explicitly addresses this rather than implicitly inheriting:
 - v1 ships with class-invariant transition thresholds (uniform)
@@ -121,21 +121,11 @@ Stagger window scales with refresh interval (e.g., 30s cadence → 30s stagger w
 
 ## §3. Architectural decisions + open questions
 
-### 3.1 — Open Q for Kyle at Step 1 ACK: xstock refresh cadence values
+### 3.1 — LOCKED by Kyle directive 2026-05-27: uniform 30s cadence across all 4 active classes
 
-**The question.** Crypto-spot currently refreshes every 30 seconds per signal. What's the right refresh cadence for xstock_spot signals?
+**Decision.** All 4 active asset classes use the same 30s refresh cadence as crypto today. Kyle directive 2026-05-27 verbatim: "for X stocks, yes, model it the same way as crypto is currently set up... unless as a part of your scope, it appears that it should be on some other cadence, which I doubt that's gonna happen, then just put it on the same cadence as currently set." This batch ships uniform 30s; Phase E xstock-calibration evidence may revisit the value via DB-only `module_constants` update (no code change).
 
-**Context for Kyle's decision.** The refresh cadence trades off freshness against compute load. Each refresh re-fetches price + cost metrics + recomputes FinalScore. Crypto pairs are highly liquid + volatile (30s gives good freshness without overloading the metric-fetch path). xStocks are slower-moving (ARCA-hours, lower intra-cycle volatility). Plausible options:
-- **Match crypto (30s):** simpler, more frequent freshness, higher load per signal
-- **Slower (60s or 120s):** acknowledges xstock cadence; reduces load; risks staler scores at promotion
-- **Match the xstock-spot scanner's tick cadence (30s today via central-clock):** keeps RTB freshness aligned with upstream cadence
-
-CC has no empirical basis to pick. **Open Q for Kyle's call.** Per Langston Q3.1: do NOT invent a number; surface as open question.
-
-Same Q applies to:
-- xstock_perp refresh cadence (open; may differ from xstock_spot given perp 24/5 nature)
-- crypto_perp refresh cadence (default crypto 30s assumed; open to Kyle override)
-- Stagger window (default = same as refresh cadence; open to override)
+Stagger window stays equal to cadence (30s). All math is class-invariant at v1.
 
 ### 3.2 — Locked Langston nudge: nested-map data shape (Q3.5)
 
@@ -256,7 +246,7 @@ v1 ships class-invariant transition thresholds. Per-class differentiation deferr
 
 ## §9. Open questions for Langston (Step 1 ACK gate)
 
-**Q1 — xstock refresh cadence (Kyle architectural call).** What ms value should `rtb.refresh_interval_ms` carry for xstock_spot, xstock_perp, and crypto_perp? CC has no empirical basis to pick; surfacing per Langston's pre-scope Q3.1 directive to NOT invent a number. Default lean: inherit crypto's 30000 unless Kyle specifies different.
+**Q1 — xstock refresh cadence — LOCKED by Kyle directive 2026-05-27.** All 4 active classes carry `rtb.refresh_interval_ms = 30000`. Closed.
 
 **Q2 — Nested-map vs assetClass-field data shape — locked toward nested-map.** Confirm this is the right shape per Langston Q3.5 lean.
 
