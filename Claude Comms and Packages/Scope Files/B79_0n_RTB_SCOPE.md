@@ -228,7 +228,7 @@ v1 ships class-invariant transition thresholds. Per-class differentiation deferr
 
 | Chunk | What | Files | LOC est | Risk |
 |---|---|---|---|---|
-| A | Migration: 4 module_constants rows for `rtb.refresh_interval_ms` per active class (crypto_spot=30000, xstock_spot=Kyle-Q-value, xstock_perp=Kyle-Q-value, crypto_perp=30000) | `drizzle/migrations/2026-05-27-b79-0n-rtb-per-class-cadence.sql` | ~30 | LOW |
+| A | Migration: 4 module_constants rows for `rtb.refresh_interval_ms` per active class — uniform 30000 per Kyle directive 2026-05-27 (crypto_spot=30000, xstock_spot=30000, xstock_perp=30000, crypto_perp=30000) | `drizzle/migrations/2026-05-27-b79-0n-rtb-per-class-cadence.sql` | ~30 | LOW |
 | B | In-memory data-shape extension: `Map<TradingMode, Map<AssetClass, ...>>` nested-map at queue access sites; private helper `getPerClassBucket(mode, assetClass)` for read/write | `server/core/rtb/ready_to_buy_service.ts` | ~150 | MEDIUM |
 | C | Per-class refresh cycle: `startRefreshCycle(mode)` extended to per-class iteration; per-class cadence reads from `module_constants` | `server/core/rtb/ready_to_buy_service.ts` | ~100 | MEDIUM |
 | D | `getTopSignal(mode, assetClass?)` signature extended; default-undefined preserves backwards-compatible global-top-N behavior; per-class call returns per-class top-N | `server/core/rtb/ready_to_buy_service.ts` | ~60 | LOW |
