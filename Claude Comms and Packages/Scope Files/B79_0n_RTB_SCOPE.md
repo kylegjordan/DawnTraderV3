@@ -70,9 +70,12 @@ Per file header + module_constants probe: **30 seconds per-signal rolling refres
 
 ```bash
 rg "readyToBuy|ready_to_buy|getRtbSignals|rtbService" server/ --type ts -l
+rg "PromotionEvent" server/ --type ts                  # Rev-3 add: R-8 mitigation consumer grep
 ```
 
-(To be re-run at Step 2 pre-audit + at end-of-Step-3 as a completeness check. Pre-audit will populate the full table.)
+(Both to be re-run at Step 2 pre-audit + at end-of-Step-3 as a completeness check. Pre-audit will populate the full table including the PromotionEvent consumer list per Langston Step 1 ACK Rev-3 — additive `assetClass` field on the event interface must surface a clean consumer list before Chunk F ships.)
+
+**Note on `MIN_QUEUE_CONFIDENCE` (§0.2 upstream consumers):** This is the SQE-side admission floor (upstream of RTB queue), NOT an RTB state-transition threshold. Per Langston Step 1 ACK structural note, this stays OUT of OBJ-3 scope. The Step 2 pre-audit must not rope it in.
 
 ---
 
@@ -88,7 +91,7 @@ Per umbrella v4: **RTB is sub-batch #11**, the next required completion after TE
 
 ## §2. Numbered objectives
 
-**OBJ-1.** Extend the queue data structure to per-class nesting per Langston Q3.5 lean. Change `Map<TradingMode, ...>` access pattern to `Map<TradingMode, Map<AssetClass, ...>>` (or equivalent). For the durable `rtb_signals` DB row, the existing `assetClass` field — already present per B79.0n.STORAGE — is the partitioning key. The in-memory data shapes that this batch must update:
+**OBJ-1.** Extend the queue data structure to per-class nesting per §3.2 nested-map lock. Change `Map<TradingMode, ...>` access pattern to `Map<TradingMode, Map<AssetClass, ...>>`. For the durable `rtb_signals` DB row, the existing `assetClass` field — already present per B79.0n.STORAGE — is the partitioning key. The in-memory data shapes that this batch must update:
 - `signalRefreshStates: Map<string, SignalRefreshState>` (signal-ID-keyed; ALREADY safe across classes — no change needed because signalId is unique regardless of class; document this finding in §2 of the change list)
 - The per-cycle ordering computation in `getTopSignal()` must operate on a per-class projection, returning N candidates per asset-class rather than a single global top-N
 - The `getRtbSignals({ mode, ... })` storage layer call must accept an optional `assetClass` filter; current calls remain backwards-compatible when assetClass is undefined
@@ -115,7 +118,16 @@ Stagger window = refresh cadence (30s → 30s stagger).
 
 **OBJ-8.** Test coverage: 6-8 new unit tests covering (a) per-class queue isolation (signals from crypto don't appear in xstock ordering), (b) per-class refresh cadence honored (xstock signal refreshed at its own cadence, not crypto's), (c) state-transition uniformity (transitions still work the same across classes given default-uniform bar), (d) TCL barrier still serializes correctly across classes (no race condition with two classes promoting simultaneously), (e) `getQueueDepth` accessor accuracy, (f) cold-boot semantic (empty queue stays empty until SQE feeds), (g) reserved-future class throws, (h) FSM integrity across class-routing (state transitions don't cross classes).
 
-**OBJ-9.** Governance: update SIM §4.3 RTB entry with per-class data shape; update System Manual RTB chapter with new `getQueueDepth` accessor; add §4.20 to ASSET_CLASS_ONBOARDING_WORKFLOW documenting the FSM-don't-split pattern + per-class-cadence-via-module_constants pattern as reusable shapes for future asset-class onboarding work.
+**OBJ-9.** Governance — ALL 8 Tier 1 + Tier 2 docs ACTUALLY edited per Kyle PATTERN-DETECT directive (matching TELEMETRY close pattern):
+- `BATCH_CATALOG.md` — add B79.0n.RTB row (Tier 1)
+- `PHASE_HISTORY.md` — add closure entry (Tier 1)
+- `SYSTEM_IMPACT_MAP.md` §4.3 — update RTB entry with per-class data shape
+- `SYSTEM_MANUAL.md` — add subsection to RTB chapter documenting `getQueueDepth` accessor + per-class FSM
+- `ASSET_CLASS_ONBOARDING_WORKFLOW.md` — add §4.20 documenting (a) FSM-don't-split pattern + (b) per-class-cadence-via-module_constants pattern as reusable shapes for future asset-class onboarding work
+- `MULTI_ASSET_VTS_EXPANSION_PLAN.md` — 2026-05-XX update entry recording RTB close + slot #12 disposition + POOL (#13) unblock
+- `CHANGES_AND_FIXES.md` — CLOSURE-2026-05-XX entry citing the 9 chunks + key structural findings
+- `RUNNING_ISSUES.md` — add any RTB.b follow-up + Tier-3 findings surfaced during implementation
+- (`MEMORY.md` 3-way sync at Step 11 close per CLAUDE.md §3.1 + §2 step 10.b — truth + in-repo mirror + Langston Helsinki)
 
 ---
 
@@ -193,7 +205,7 @@ v1 ships class-invariant transition thresholds. Per-class differentiation deferr
 - DB probe: `SELECT asset_class, COUNT(*) FROM rtb_signals WHERE status='queued' GROUP BY asset_class` → returns 1 row per active class with crypto_spot dominant (today)
 
 ### 6.2 Step 7 first-pass (CC, post-deploy)
-- 1 `[B79.0n.RTB][BOOT]` log line at PM2 restart confirming per-class refresh cycles started for all 4 active classes
+- 1 `[B79.0n.RTB][BOOT]` log line at PM2 restart **enumerating the 4 active classes + their loaded `rtb.refresh_interval_ms` values** (HARD-FAIL R-3 visibility per Langston Step 1 ACK structural note — visible evidence the boot read all 4 module_constants rows, not just that it didn't throw)
 - `getQueueDepth()` returns 4 active-class rows × 2 mode rows = 8 cells
 - Crypto VTS path continues writing to crypto_spot queue (verified via existing telemetry write log lines)
 - xstock queue depth stays at 0 (deferred to WIRE-IN #16 per scope §8 NOT-IN-SCOPE)
@@ -260,4 +272,20 @@ v1 ships class-invariant transition thresholds. Per-class differentiation deferr
 
 **Q7 — Anything else** from Langston's pre-scope memo Q3.1-Q3.5 follow-ups not captured.
 
-Awaiting ACK before Step 2 pre-audit drafting.
+---
+
+## §10. v1.1 — Langston Step 1 ACK Rev-1/2/3 + Kyle cadence lock (2026-05-27)
+
+**Rev-1 (xstock cadence open-Q) — RESOLVED by Kyle directive 2026-05-27.** All 4 active classes locked at 30000ms uniform. §3.1 + §9 Q1 updated to "LOCKED" framing. The "default lean: inherit crypto's" wording Langston flagged is gone — Kyle's call superseded the open-Q.
+
+**Rev-2 (OBJ-1 "(or equivalent)" wording) — APPLIED.** Dropped per Langston ACK; OBJ-1 now references §3.2 nested-map lock directly.
+
+**Rev-3 (PromotionEvent consumer grep) — APPLIED.** §0.4 now lists `rg "PromotionEvent" server/ --type ts` as a Step 2 pre-audit deliverable per Langston ACK Rev-3.
+
+**Governance set fix (OBJ-9) — APPLIED.** OBJ-9 now enumerates all 8 Tier 1 + Tier 2 docs per Kyle PATTERN-DETECT directive matching the TELEMETRY close pattern.
+
+**Structural notes (non-blocking) — APPLIED.**
+- §0.4 explicitly excludes `MIN_QUEUE_CONFIDENCE` from OBJ-3 transition-threshold scope (it's SQE-side admission floor)
+- §6.2 boot log line now requires explicit 4-class enumeration + cadence values for HARD-FAIL R-3 visibility
+
+Awaiting Langston ACK on v1.1 before Step 2 pre-audit drafting.
