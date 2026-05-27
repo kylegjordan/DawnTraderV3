@@ -1233,39 +1233,74 @@ class ReadyToBuyService {
    * Get all queued signals for a mode
    * Directive 8.8.4-A3.R8: Include both 'active' and 'reconfirmed' statuses
    */
-  async getQueuedSignals(mode: TradingMode): Promise<RtbSignal[]> {
+  async getQueuedSignals(mode: TradingMode, assetClass?: AssetClass): Promise<RtbSignal[]> {
+    // B79.0n.RTB (2026-05-27): optional assetClass filter for per-class
+    // queue reads. Default-undefined preserves backwards-compat global-read.
+    // Storage layer uses rtb_signals_mode_asset_class_status_idx for hot path.
+    const baseFilter = assetClass ? { mode, assetClass } : { mode };
+
     // Get active signals (newly inserted, pending first refresh)
     const activeSignals = await storage.getRtbSignals({
-      mode,
+      ...baseFilter,
       status: 'active',
       orderBy: 'finalScore',
       orderDir: 'desc',
     });
-    
+
     // Get reconfirmed signals (passed at least one refresh)
     const reconfirmedSignals = await storage.getRtbSignals({
-      mode,
+      ...baseFilter,
       status: 'reconfirmed',
       orderBy: 'finalScore',
       orderDir: 'desc',
     });
-    
+
     // Also include legacy 'queued' status for backward compatibility
     const queuedSignals = await storage.getRtbSignals({
-      mode,
+      ...baseFilter,
       status: 'queued',
       orderBy: 'finalScore',
       orderDir: 'desc',
     });
-    
+
     const allSignals = [...activeSignals, ...reconfirmedSignals, ...queuedSignals];
     allSignals.sort((a, b) => {
       const aFinalScore = parseFloat(a.finalScore || '0');
       const bFinalScore = parseFloat(b.finalScore || '0');
       return bFinalScore - aFinalScore;
     });
-    
+
     return allSignals;
+  }
+
+  /**
+   * B79.0n.RTB (2026-05-27): per-class × per-mode queue depth accessor.
+   *
+   * Returns `Record<AssetClass, Record<TradingMode, number>>` over all 4
+   * active asset classes. Serves the 48h verify-gate signal: pre-WIRE-IN
+   * #16, xstock queue depth must stay at 0 because xstock signals don't
+   * currently reach RTB via the orchestrator path (M70 writer threading
+   * deferred). Any non-zero xstock depth signals a routing leak.
+   *
+   * Used by:
+   *   - /api/diagnostics/rtb-queue-depth (future OBSERVABILITY #18 endpoint)
+   *   - +48h verify-gate alert probe per scope §6.4
+   *   - Step 7 first-pass verification snapshot
+   */
+  async getQueueDepth(): Promise<Record<AssetClass, Record<TradingMode, number>>> {
+    const activeClasses: AssetClass[] = ['crypto_spot', 'crypto_perp', 'xstock_spot', 'xstock_perp'];
+    const modes: TradingMode[] = ['paper', 'live'];
+    const out = {} as Record<AssetClass, Record<TradingMode, number>>;
+
+    for (const cls of activeClasses) {
+      out[cls] = {} as Record<TradingMode, number>;
+      for (const mode of modes) {
+        const signals = await this.getQueuedSignals(mode, cls);
+        out[cls][mode] = signals.length;
+      }
+    }
+
+    return out;
   }
 
   /**
@@ -1508,8 +1543,12 @@ class ReadyToBuyService {
    * Returns top N signals sorted by FinalScore descending
    * R9.3-C: expiresAt filter removed - lifecycle governed by SQE only
    */
-  async getRankedSignals(mode: TradingMode, limit: number = 15): Promise<RtbSignal[]> {
-    const signals = await this.getQueuedSignals(mode);
+  async getRankedSignals(mode: TradingMode, limit: number = 15, assetClass?: AssetClass): Promise<RtbSignal[]> {
+    // B79.0n.RTB (2026-05-27): optional assetClass filter for per-class
+    // ranked reads. Default-undefined preserves backwards-compat (global
+    // top-N across all classes; current behavior). Per-class call returns
+    // top-N within that class only.
+    const signals = await this.getQueuedSignals(mode, assetClass);
 
     if (signals.length === 0) {
       return [];
@@ -1661,6 +1700,11 @@ class ReadyToBuyService {
       // R9.3-C: expiresAt omitted - field is now optional
       blockReason: 'SQE_QUALIFIED', // Mark as SQE-qualified, not capacity-blocked
       metadata: enrichedMetadata as any,
+      // B79.0n.RTB (2026-05-27, Phase 1 dual-write): populate first-class
+      // asset_class column alongside metadata.assetClass. Defaults to
+      // crypto_spot if SQEInput didn't carry it (legacy path; B79.0n.STORAGE
+      // threaded assetClass into SQE inputs but pre-batch rows lack it).
+      assetClass: input.assetClass || 'crypto_spot',
     };
 
     // Directive 8.8.4-A3.R8: Log trace event for new signal insertion

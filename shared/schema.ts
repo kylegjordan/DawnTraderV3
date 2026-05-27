@@ -1871,12 +1871,19 @@ export const rtbSignals = pgTable("rtb_signals", {
   blockReason: varchar("block_reason", { length: 50 }), // Original capacity block: MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.
   promotedTradeId: varchar("promoted_trade_id"), // Trade ID if promoted to execution
   metadata: jsonb("metadata"), // Original signal data for re-evaluation
+  // B79.0n.RTB (2026-05-27, Phase 1): per-class queue partitioning key.
+  // NULL allowed only during Phase 1+2 backfill window. Post-Phase-3 CHECK
+  // constraint enforces NOT NULL; Phase 4 column-level SET NOT NULL is
+  // contingent on §6.4 zero-null verify-gate per Langston C-4.
+  assetClass: varchar("asset_class", { length: 32 }),
 }, (table) => ({
   modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
   symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),
   finalScoreIdx: index("rtb_signals_final_score_idx").on(table.finalScore), // Directive 11.0F: FinalScore is ONLY ranking metric
   queuedAtIdx: index("rtb_signals_queued_at_idx").on(table.queuedAt),
   expiresAtIdx: index("rtb_signals_expires_at_idx").on(table.expiresAt),
+  // B79.0n.RTB Phase 3: per-class queue hot-read index
+  modeAssetClassStatusIdx: index("rtb_signals_mode_asset_class_status_idx").on(table.mode, table.assetClass, table.status),
 }));
 
 export type RtbSignal = typeof rtbSignals.$inferSelect;

@@ -268,6 +268,28 @@ app.use((req, res, next) => {
   rtbRefreshService.start();
   console.log('[A4.R10R-4][INIT_OK] RTB Refresh Service started (clock-synchronized)');
   console.log(`[A4.R10R-4][INIT_OK] Adaptive Concurrency Tuner active (pool=${getAdaptivePoolSize()}, range=3-10)`);
+
+  // B79.0n.RTB (2026-05-27, Langston C-10 + R-3 HARD-FAIL visibility):
+  // explicitly enumerate the 4 active classes + per-class refresh cadence
+  // values loaded from module_constants. HARD-FAIL boot if any row missing
+  // (the existing wildcard resolver throws on missing keys per
+  // getCachedNumberRequired semantics).
+  try {
+    const { getCachedNumberRequired } = await import('./services/module-constants-service.js');
+    const rtbActiveClasses = ['crypto_spot', 'crypto_perp', 'xstock_spot', 'xstock_perp'] as const;
+    const cadenceLog: string[] = [];
+    for (const cls of rtbActiveClasses) {
+      const cadenceMs = getCachedNumberRequired('rtb_config', 'refresh_interval_ms', {
+        exchange: '*', assetClass: cls, strategy: '*', regime: '*',
+      });
+      cadenceLog.push(`${cls}=${cadenceMs}ms`);
+    }
+    console.log(`[B79.0n.RTB][BOOT] 4-class refresh cadence loaded: ${cadenceLog.join(' ')}`);
+  } catch (rtbCadenceErr) {
+    console.error('[B79.0n.RTB][BOOT_FAIL] per-class rtb_config.refresh_interval_ms rows missing:', rtbCadenceErr);
+    console.error('[B79.0n.RTB][BOOT_FAIL] Cannot accept traffic without all 4 active asset-class cadence rows. Exiting.');
+    process.exit(1);
+  }
   
   /**
    * 8.8.4-L1: Initialize Data Aggregator for learning data capture
@@ -1326,11 +1348,13 @@ app.use((req, res, next) => {
 
     // Directive 12.2.3 Batch 7B-hotfix: LearningCycleService init removed (100% Bob-dependent, file deleted)
 
-    // Phase 8.8.4-C.6: RTB Queue Refresher DEPRECATED
-    // The old rtbQueueRefresher is now replaced by ReadyToBuyService.startRefreshCycle()
-    // which is wired into the PaperExecutionEngine lifecycle (start/stop/reset)
-    // See: server/services/paper-execution-engine.ts lines 189-191, 237-239, 431-433
-    console.log('[8.8.4-C.6] RTB refresh now handled by ReadyToBuyService (engine lifecycle)');
+    // B79.0n.RTB (2026-05-27): rtb_queue_refresher.ts RETIRED per Kyle directive
+    // 2026-05-27 — verified zero production callers across server/ + client/ +
+    // shared/ before delete. File was Phase 8.8.4-C.6 cron-based 30s refresh
+    // already superseded by ReadyToBuyService.startRefreshCycle() (Central-
+    // Clock-synchronized) wired into PaperExecutionEngine lifecycle. Original
+    // deprecation comment + boot path were never wired post-supersession.
+    console.log('[B79.0n.RTB] rtb_queue_refresher.ts retired (legacy file deleted; ReadyToBuyService.startRefreshCycle is canonical via PaperExecutionEngine lifecycle)');
 
     // Phase 8.9: Start Autonomy Layer (hourly self-checks, daily optimization)
     try {

@@ -22,15 +22,30 @@ import { priceCache } from './price-cache';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
 import { centralClock, type ClockTick } from './central-clock.js';
 import type { TradingMode } from './guardrail-policy';
-import { 
-  ACT_CONFIG, 
-  getAdaptivePoolSize, 
-  setAdaptivePoolSize 
+import {
+  ACT_CONFIG,
+  getAdaptivePoolSize,
+  setAdaptivePoolSize
 } from './adaptive-pool-config';
 import { poolBus } from './pool-broadcast';
 import { dataAggregator } from './data-aggregator.js';
 import { computeStrategyWeights } from '../utils/strategyWeights.js';
 import { computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
+// B79.0n.RTB (2026-05-27): per-class nested buckets per Langston C-1 Option A.
+// LOCKED-module override authorized by B79.0n umbrella v4 row #11.
+// Authorized: per-class bucket allocation + per-class pool sizing + per-class
+// ACT calibration + schema-extension reads. NOT authorized (would need
+// separate directive): algorithmic redesign of bucket assignment, cadence
+// threshold changes, ACT scaler logic rewrites.
+// Per Langston C-2: shared global ACT pool UNCHANGED — per-class isolation
+// comes from the bucket structure, not from splitting the ACT scaler.
+import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+
+// B79.0n.RTB: active asset classes that get their own bucket set. Reserved-
+// future classes (equity_spot/equity_futures/commodity_futures/fx_spot)
+// don't bucket here; the factory at asset-class-instances.ts throws
+// [CLASS_NOT_WIRED] for them.
+const RTB_ACTIVE_CLASSES: readonly AssetClass[] = ['crypto_spot', 'crypto_perp', 'xstock_spot', 'xstock_perp'];
 
 // Re-export for server/index.ts compatibility
 export { getAdaptivePoolSize } from './adaptive-pool-config';
@@ -160,12 +175,24 @@ class RTBRefreshService {
   private readonly MACRO_CYCLE_INTERVAL = 120;
   private readonly TOTAL_BUCKETS = this.MACRO_CYCLE_INTERVAL / this.MICRO_CYCLE_INTERVAL;
   
-  private signalBuckets: Map<number, Set<string>> = new Map();
-  private lastBucketAssignment: Map<string, number> = new Map();
+  // B79.0n.RTB (2026-05-27): nested per-class buckets per Langston C-1
+  // Option A. Each active asset class gets its own 8-bucket set; each class
+  // runs an independent 120s macro-cycle. Prevents the cross-class
+  // starvation scenario (crypto FX5 peak + xstock session-open warmup)
+  // where Option B global+tagging would let ACT scale down under shared CPU
+  // pressure and starve the lower-load class.
+  private signalBuckets: Map<AssetClass, Map<number, Set<string>>> = new Map();
+  private lastBucketAssignment: Map<string, { assetClass: AssetClass; bucketIndex: number }> = new Map();
 
   constructor() {
-    for (let i = 0; i < this.TOTAL_BUCKETS; i++) {
-      this.signalBuckets.set(i, new Set());
+    // B79.0n.RTB: init 8 buckets PER ACTIVE ASSET CLASS (4 × 8 = 32 buckets
+    // total). Each class has independent bucket cycle.
+    for (const cls of RTB_ACTIVE_CLASSES) {
+      const perClassBuckets = new Map<number, Set<string>>();
+      for (let i = 0; i < this.TOTAL_BUCKETS; i++) {
+        perClassBuckets.set(i, new Set());
+      }
+      this.signalBuckets.set(cls, perClassBuckets);
     }
   }
 
@@ -216,15 +243,27 @@ class RTBRefreshService {
 
     try {
       await this.assignSignalsToBuckets();
-      
-      const bucket = this.signalBuckets.get(bucketIndex) || new Set();
-      const bucketSize = bucket.size;
-      
-      console.log(`[A4.R10R-3][RTBRefresh][CYCLE_START] bucket=${bucketIndex} size=${bucketSize} poolSize=${getAdaptivePoolSize()}`);
+
+      // B79.0n.RTB (2026-05-27): iterate per-class buckets at the same
+      // bucketIndex. Each class's bucket-N refreshes independently as
+      // part of its own 120s macro-cycle. Shared global ACT pool (C-2)
+      // responds to the aggregate cycle metrics across all 4 classes.
+      let totalBucketSize = 0;
+      const perClassSizes: Record<string, number> = {};
+      for (const cls of RTB_ACTIVE_CLASSES) {
+        const perClassBuckets = this.signalBuckets.get(cls);
+        const bucket = perClassBuckets?.get(bucketIndex) || new Set<string>();
+        perClassSizes[cls] = bucket.size;
+        totalBucketSize += bucket.size;
+      }
+
+      console.log(`[A4.R10R-3][RTBRefresh][CYCLE_START] bucket=${bucketIndex} size=${totalBucketSize} (${Object.entries(perClassSizes).map(([c,n]) => `${c}=${n}`).join(' ')}) poolSize=${getAdaptivePoolSize()}`);
 
       for (const mode of ['paper', 'live'] as TradingMode[]) {
         await this.refreshModeSignals(mode, bucketIndex);
       }
+      // Preserve legacy local var name `bucketSize` for downstream log lines.
+      const bucketSize = totalBucketSize;
 
       const duration = Date.now() - start;
       const cpuLoad = calculateCpuLoad(startCpuUsage, duration);
@@ -272,28 +311,50 @@ class RTBRefreshService {
   }
 
   private async assignSignalsToBuckets(): Promise<void> {
+    // B79.0n.RTB (2026-05-27): per-class bucket assignment per Langston C-1
+    // Option A. Each signal is routed to its asset_class's nested bucket set.
+    // Asset class is read from the signal row (B79.0n.STORAGE populated this
+    // for new signals + Phase 2 backfill populated it for legacy). Fallback
+    // to resolveAssetClass(symbol, 'kraken') for any null asset_class rows
+    // pre-Phase-3 (Phase 3 CHECK constraint enforces NOT NULL post-backfill).
     const currentSignalIds = new Set<string>();
-    
+
     for (const mode of ['paper', 'live'] as TradingMode[]) {
       const signals = await readyToBuyService.getQueuedSignals(mode);
       if (!signals) continue;
-      
+
       for (const signal of signals) {
         const signalKey = `${mode}:${signal.symbol}:${signal.strategy}`;
         currentSignalIds.add(signalKey);
-        
+
         if (!this.lastBucketAssignment.has(signalKey)) {
+          // Resolve assetClass: prefer first-class column, fallback to
+          // resolveAssetClass(symbol, exchange='kraken') for null rows
+          // pre-Phase-3 backfill completion.
+          let assetClass = signal.assetClass as AssetClass | null;
+          if (!assetClass) {
+            try {
+              assetClass = resolveAssetClass(signal.symbol, 'kraken');
+            } catch {
+              assetClass = 'crypto_spot';
+            }
+          }
+          if (!RTB_ACTIVE_CLASSES.includes(assetClass as AssetClass)) {
+            console.warn(`[B79.0n.RTB][BUCKET_ASSIGN] signalKey=${signalKey} resolved to non-active assetClass=${assetClass}; defaulting to crypto_spot`);
+            assetClass = 'crypto_spot';
+          }
+
           const hash = this.hashString(signalKey);
           const bucketIndex = hash % this.TOTAL_BUCKETS;
-          this.lastBucketAssignment.set(signalKey, bucketIndex);
-          this.signalBuckets.get(bucketIndex)?.add(signalKey);
+          this.lastBucketAssignment.set(signalKey, { assetClass: assetClass as AssetClass, bucketIndex });
+          this.signalBuckets.get(assetClass as AssetClass)?.get(bucketIndex)?.add(signalKey);
         }
       }
     }
-    
-    for (const [signalKey, bucketIndex] of this.lastBucketAssignment.entries()) {
+
+    for (const [signalKey, assignment] of this.lastBucketAssignment.entries()) {
       if (!currentSignalIds.has(signalKey)) {
-        this.signalBuckets.get(bucketIndex)?.delete(signalKey);
+        this.signalBuckets.get(assignment.assetClass)?.get(assignment.bucketIndex)?.delete(signalKey);
         this.lastBucketAssignment.delete(signalKey);
       }
     }
@@ -322,10 +383,20 @@ class RTBRefreshService {
       return;
     }
 
-    const bucket = this.signalBuckets.get(bucketIndex) || new Set();
+    // B79.0n.RTB (2026-05-27): aggregate per-class buckets at the same index.
+    // Per-class nested structure: signalBuckets.get(class).get(bucketIndex).
+    // Refresh-mode iterates all active classes' buckets at this index.
+    const bucketKeysAtIndex = new Set<string>();
+    for (const cls of RTB_ACTIVE_CLASSES) {
+      const perClassBuckets = this.signalBuckets.get(cls);
+      const bucket = perClassBuckets?.get(bucketIndex);
+      if (bucket) {
+        for (const k of bucket) bucketKeysAtIndex.add(k);
+      }
+    }
     const bucketSignals = signals.filter(s => {
       const signalKey = `${mode}:${s.symbol}:${s.strategy}`;
-      return bucket.has(signalKey);
+      return bucketKeysAtIndex.has(signalKey);
     });
 
     if (bucketSignals.length === 0) {
@@ -354,9 +425,11 @@ class RTBRefreshService {
 
     if (validPrices.size > 0) {
       const rankStart = Date.now();
-      
-      // R3: Pass bucket signal keys to refreshAndRank for optimized processing
-      await readyToBuyService.refreshAndRank(mode, bucket);
+
+      // R3: Pass bucket signal keys to refreshAndRank for optimized processing.
+      // B79.0n.RTB (2026-05-27): pass aggregated per-class bucket keys at
+      // this index (computed above as `bucketKeysAtIndex` Set<string>).
+      await readyToBuyService.refreshAndRank(mode, bucketKeysAtIndex);
       
       const rankDuration = Date.now() - rankStart;
       
@@ -376,13 +449,24 @@ class RTBRefreshService {
     return this.isRunning;
   }
 
-  getBucketStats(): { bucketIndex: number; size: number }[] {
-    const stats: { bucketIndex: number; size: number }[] = [];
+  getBucketStats(): { bucketIndex: number; size: number; perClass: Record<string, number> }[] {
+    // B79.0n.RTB (2026-05-27, Chunk M test-surfaced fix): per-class nested
+    // bucket structure means sizes must be summed across all asset-class
+    // bucket sets at the same bucketIndex. Original code called
+    // signalBuckets.get(i) with i as a number, but signalBuckets is now keyed
+    // by AssetClass (string) — the lookup always returned undefined and size
+    // always read as 0. Bug surfaced by Chunk M T7 LOCKED-module test.
+    const stats: { bucketIndex: number; size: number; perClass: Record<string, number> }[] = [];
     for (let i = 0; i < this.TOTAL_BUCKETS; i++) {
-      stats.push({
-        bucketIndex: i,
-        size: this.signalBuckets.get(i)?.size || 0
-      });
+      let totalSize = 0;
+      const perClass: Record<string, number> = {};
+      for (const cls of RTB_ACTIVE_CLASSES) {
+        const perClassBuckets = this.signalBuckets.get(cls);
+        const bucketSize = perClassBuckets?.get(i)?.size || 0;
+        perClass[cls] = bucketSize;
+        totalSize += bucketSize;
+      }
+      stats.push({ bucketIndex: i, size: totalSize, perClass });
     }
     return stats;
   }

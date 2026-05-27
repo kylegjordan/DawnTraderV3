@@ -176,6 +176,16 @@ class TCLWatchdog {
    * Check if signal threshold is reached and activate TCL if needed
    * Directive A3.R9.3-D: Simplified TCL - only checks capacity and threshold
    * Barrier removed per R9.3-A (per-signal refresh model)
+   *
+   * B79.0n.RTB (2026-05-27, Langston NEW-Q1 + NEW-Q2 documentation):
+   *   - TCL stays GLOBAL: the threshold counts signals across all asset
+   *     classes (sum over per-class queues = same number as today's global
+   *     queue depth). NEW-Q1 preserves current global-count semantics.
+   *   - Per-class promotion ordering inside the TCL barrier is by LOCK
+   *     ACQUISITION ORDER (first-call-wins, deterministic per JavaScript
+   *     event-loop ordering). No explicit class priority. If priority is
+   *     needed later, introduce `module_constants.rtb_priority.<asset_class>`
+   *     in a follow-up batch with workload justification.
    */
   async checkSignalThresholdLive(mode: TradingMode, _rtbRefreshComplete?: boolean): Promise<void> {
     const state = this.getState(mode);

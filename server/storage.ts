@@ -644,14 +644,16 @@ export interface IStorage {
   // Phase 8.8.4-B: RTB Signals Queue methods
   insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
   upsertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
-  getRtbSignals(filters: { 
-    mode: 'live' | 'paper'; 
-    status?: string; 
-    symbol?: string; 
-    strategy?: string; 
-    orderBy?: string; 
-    orderDir?: string; 
-    limit?: number 
+  getRtbSignals(filters: {
+    mode: 'live' | 'paper';
+    status?: string;
+    symbol?: string;
+    strategy?: string;
+    /** B79.0n.RTB (2026-05-27): per-class queue filter. Optional. */
+    assetClass?: string;
+    orderBy?: string;
+    orderDir?: string;
+    limit?: number
   }): Promise<RtbSignal[]>;
   getRtbSignalById(id: string): Promise<RtbSignal | undefined>;
   updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal>;
@@ -4037,6 +4039,11 @@ export class DatabaseStorage implements IStorage {
           queuedAt: new Date(),
           expiresAt: data.expiresAt,
           metadata: data.metadata,
+          // B79.0n.RTB (2026-05-27, Phase 1): dual-write asset_class column
+          // alongside metadata so per-class queue reads can filter by the
+          // indexed column. assetClass passed through from upstream callers
+          // (signal-orchestrator queueSQESignal threading).
+          assetClass: data.assetClass,
         },
       })
       .returning();
@@ -4045,19 +4052,21 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getRtbSignals(filters: { 
-    mode: 'live' | 'paper'; 
-    status?: string; 
-    symbol?: string; 
-    strategy?: string; 
-    orderBy?: string; 
-    orderDir?: string; 
-    limit?: number 
+  async getRtbSignals(filters: {
+    mode: 'live' | 'paper';
+    status?: string;
+    symbol?: string;
+    strategy?: string;
+    /** B79.0n.RTB (2026-05-27): per-class queue filter. Optional; undefined preserves backwards-compat global-read behavior. */
+    assetClass?: string;
+    orderBy?: string;
+    orderDir?: string;
+    limit?: number
   }): Promise<RtbSignal[]> {
-    const { mode, status, symbol, strategy, orderBy = 'queuedAt', orderDir = 'desc', limit } = filters;
-    
+    const { mode, status, symbol, strategy, assetClass, orderBy = 'queuedAt', orderDir = 'desc', limit } = filters;
+
     const conditions = [eq(rtbSignals.mode, mode)];
-    
+
     if (status) {
       conditions.push(eq(rtbSignals.status, status as any));
     }
@@ -4066,6 +4075,11 @@ export class DatabaseStorage implements IStorage {
     }
     if (strategy) {
       conditions.push(eq(rtbSignals.strategy, strategy as any));
+    }
+    if (assetClass) {
+      // B79.0n.RTB: per-class queue filter — uses the
+      // rtb_signals_mode_asset_class_status_idx index for hot reads.
+      conditions.push(eq(rtbSignals.assetClass, assetClass));
     }
     
     let query = db

@@ -37,6 +37,17 @@ export interface PromotionEvent {
   signalId: string;
   tradeId: string;
   timestamp: string;
+  /**
+   * B79.0n.RTB (2026-05-27, R-8 mitigation): asset class of the promoted
+   * signal. Optional in v1 per Langston Step 2 ACK C-7 — additive field is
+   * safe for all 3 current consumers (ready_to_buy_service:369 destructure,
+   * c13-validation-service collection, c14-validation-service collection);
+   * none use exhaustive switch or `keyof PromotionEvent` enumeration.
+   *
+   * Same-symbol-across-classes is structurally possible now. Consumers that
+   * need to disambiguate read this field; consumers that don't are unaffected.
+   */
+  assetClass?: string;
 }
 
 export interface SlotOpenedEvent {
