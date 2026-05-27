@@ -24,8 +24,13 @@ import type { RegimeStability } from '../../config/strategy-governance.js';
 // HF9 Item B: Governance gate imports (migrated from paper-execution-engine)
 import { isStrategyEligible } from '../governance/strategy-eligibility.js';
 import { getStrategyDependency } from '../../config/strategy-governance.js';
-// Phase 14.5: Pattern pool elevated quality floor
-import { PATTERN_POOL_GUARDRAILS } from '../../asset_classes/crypto_spot/pattern-pool-filters.js';
+// B79.0n.ORCHESTRATOR (2026-05-27): per-asset-class pattern pool guardrails
+// dispatcher. Replaces direct PATTERN_POOL_GUARDRAILS import — xstock pattern
+// signals now route through XSTOCK_PATTERN_POOL_GUARDRAILS (DB-resolved 0.45
+// floor) instead of crypto's 0.45 literal. Same value today (placeholder-clone)
+// but per-class plumbing operational for future xstock calibration via
+// module_constants.pattern_pool_gates.xstock_spot.pattern_final_score_min UPDATE.
+import { getPatternPoolGuardrailsForAssetClass } from '../../asset_classes/pattern-pool-dispatch.js';
 // B72 (2026-05-05): SQE default thresholds migrated to module='sqe_config'.
 // Three-layer precedence preserved (Langston cc-inbox #906 + #910):
 //   1. screener_filters row (mode-specific runtime authority — DB-overridable per paper/live)
@@ -281,8 +286,12 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   const thresholds = await getSQEThresholdsFromConfig(input.mode, input.assetClass);
   
   // Phase 14.5: Pattern pool signals use elevated quality floor
+  // B79.0n.ORCHESTRATOR (2026-05-27): per-class dispatcher resolves the
+  // pattern pool floor. Crypto returns 0.45 literal; xstock returns 0.45
+  // DB-resolved (same value today, plumbing live for future xstock divergence).
+  // input.assetClass is REQUIRED on SQEInput per B79.0n.STORAGE — no fallback.
   const effectiveMinFinalScore = input.sourcePool === 'pattern'
-    ? PATTERN_POOL_GUARDRAILS.FINAL_SCORE_FLOOR  // 0.45 for pattern pool
+    ? getPatternPoolGuardrailsForAssetClass(input.assetClass).FINAL_SCORE_FLOOR
     : thresholds.finalScoreMin;                    // 0.35 for quant (default)
 
   if (finalScore < effectiveMinFinalScore) {

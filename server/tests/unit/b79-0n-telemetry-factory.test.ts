@@ -34,7 +34,8 @@ import {
   _testResetAllAssetClassInstances,
 } from '../../services/asset-class-instances.js';
 import { TelemetryAggregatorService } from '../../services/telemetry-aggregator.js';
-import { AdaptiveRatioManager } from '../../services/adaptive-ratio-manager.js';
+// B79.0n.ORCHESTRATOR (2026-05-27): AdaptiveRatioManager import removed per POOL
+// skip — the 3 factory ARM constructions deleted; triads no longer expose `.ratioManager`.
 import { AdaptiveScanManager, PairFailureTracker } from '../../services/adaptive-scan-manager.js';
 import { ASSET_CLASSES, type AssetClass } from '../../../shared/asset-classes.js';
 
@@ -52,7 +53,7 @@ describe('B79.0n.TELEMETRY — Factory dispatch (T1)', () => {
     const triad = getAssetClassInstances(ASSET_CLASSES.XSTOCK_SPOT);
     expect(triad).not.toBeNull();
     expect(triad!.telemetry).toBeInstanceOf(TelemetryAggregatorService);
-    expect(triad!.ratioManager).toBeInstanceOf(AdaptiveRatioManager);
+    // B79.0n.ORCHESTRATOR (2026-05-27): .ratioManager assertion removed per POOL skip.
     expect(triad!.failureTracker).toBeInstanceOf(PairFailureTracker);
     expect(triad!.scanManager).toBeInstanceOf(AdaptiveScanManager);
     expect(triad!.inMemoryOnly).toBe(true);
@@ -62,7 +63,7 @@ describe('B79.0n.TELEMETRY — Factory dispatch (T1)', () => {
     const triad = getAssetClassInstances(ASSET_CLASSES.XSTOCK_PERP);
     expect(triad).not.toBeNull();
     expect(triad!.telemetry).toBeInstanceOf(TelemetryAggregatorService);
-    expect(triad!.ratioManager).toBeInstanceOf(AdaptiveRatioManager);
+    // B79.0n.ORCHESTRATOR (2026-05-27): .ratioManager assertion removed per POOL skip.
     expect(triad!.failureTracker).toBeInstanceOf(PairFailureTracker);
     expect(triad!.scanManager).toBeInstanceOf(AdaptiveScanManager);
     expect(triad!.inMemoryOnly).toBe(true);
@@ -72,7 +73,7 @@ describe('B79.0n.TELEMETRY — Factory dispatch (T1)', () => {
     const triad = getAssetClassInstances(ASSET_CLASSES.CRYPTO_PERP);
     expect(triad).not.toBeNull();
     expect(triad!.telemetry).toBeInstanceOf(TelemetryAggregatorService);
-    expect(triad!.ratioManager).toBeInstanceOf(AdaptiveRatioManager);
+    // B79.0n.ORCHESTRATOR (2026-05-27): .ratioManager assertion removed per POOL skip.
     expect(triad!.failureTracker).toBeInstanceOf(PairFailureTracker);
     expect(triad!.scanManager).toBeInstanceOf(AdaptiveScanManager);
     expect(triad!.inMemoryOnly).toBe(true);

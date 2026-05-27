@@ -98,7 +98,13 @@ import { getMarketContextEngine } from './market-context-engine.js';
 // Phase 15b B61: DBS telemetry emitter (observational, feature-flagged, no behavior change)
 import { emitConsumerTelemetry } from './phase15b-dbs-telemetry.js';
 // Phase 14.5: Pattern pool configuration
-import { PATTERN_POOL_STRATEGIES, PATTERN_POOL_GUARDRAILS, DEFAULT_ASSET_CLASS } from '../asset_classes/crypto_spot/pattern-pool-filters.js';
+// B79.0n.ORCHESTRATOR (2026-05-27): dead-import cleanup. Pre-batch this line
+// imported PATTERN_POOL_STRATEGIES + PATTERN_POOL_GUARDRAILS + DEFAULT_ASSET_CLASS.
+// Step 1.a probe confirmed PATTERN_POOL_STRATEGIES + PATTERN_POOL_GUARDRAILS are
+// NOT referenced anywhere in this file's body. DEFAULT_ASSET_CLASS IS still
+// referenced at lines 670 and 1397 (fallback for the crypto-only path per the
+// docstring at lines 1377-1379). Cleaned to import only the live symbol.
+import { DEFAULT_ASSET_CLASS } from '../asset_classes/crypto_spot/pattern-pool-filters.js';
 import { computeRankingScore, normalizeNetReturn, CONTEXT_BONUS } from '../config/ranking-weights.js';
 // Batch 19F: Hybrid confluence buffer for pattern+quant signal matching
 import { hybridConfluenceBuffer } from './hybrid-confluence-buffer.js';
@@ -439,6 +445,10 @@ export class SignalOrchestrator {
       // B-NEW-43 chunk 3: thread the signal's source pool so Phase 14.5
       // pattern-pool reduced sizing applies (was an undeclared ref in TS2304).
       sourcePool: rawSignal.metadata?.sourcePool,
+      // B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class dispatch key.
+      // Deterministic from symbol (resolveAssetClass) per Langston Step 2
+      // Probe 8 ACK — single source of truth, no silent crypto_spot fallback.
+      assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
     });
 
     // Phase 8.8.3-C5-2: Guardrail Input Verification - log balance used for trade sizing

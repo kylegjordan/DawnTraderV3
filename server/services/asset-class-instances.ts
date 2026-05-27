@@ -83,13 +83,20 @@
  */
 
 import { TelemetryAggregatorService, peekTelemetryInstance } from './telemetry-aggregator.js';
-import { AdaptiveRatioManager } from './adaptive-ratio-manager.js';
+// B79.0n.ORCHESTRATOR (2026-05-27): POOL skip cleanup. AdaptiveRatioManager
+// import removed — the 3 dead factory ARM constructions (xstock_spot at line
+// 144 pre-batch, xstock_perp at 167, crypto_perp at 183) deleted per umbrella
+// v4 POOL skip directive. Crypto's module-level singleton at adaptive-ratio-
+// manager.ts:307 remains untouched as the live ARM for crypto. xstock and
+// perp classes do not need ARM today: xstock universe (489 pairs) fits within
+// scanner cycle budget; perp classes are post-launch / theoretical.
 import { AdaptiveScanManager, PairFailureTracker } from './adaptive-scan-manager.js';
 import { ASSET_CLASSES, ASSET_CLASS_REGISTRY, type AssetClass } from '../../shared/asset-classes.js';
 
 export interface AssetClassInstances {
   telemetry: TelemetryAggregatorService;
-  ratioManager: AdaptiveRatioManager;
+  // B79.0n.ORCHESTRATOR (2026-05-27): `ratioManager` field deleted per POOL
+  // skip — no factory consumer reads it; only test files referenced it.
   failureTracker: PairFailureTracker;
   scanManager: AdaptiveScanManager;
   /** Set true for non-crypto_spot triads — persist disabled (Variant C). */
@@ -138,16 +145,13 @@ function bootstrapXstockSpotInstances(): AssetClassInstances {
   // an isolated in-memory instance with no disk side-effects (Variant C).
   const telemetry = new TelemetryAggregatorService();
   const failureTracker = new PairFailureTracker();
-  // B79.0a (2026-05-08): ARM constructor takes injected telemetry — the
-  // xstock ARM consumes its own per-class TelemetryAggregator instance so
-  // pool-performance reads NEVER bleed into the global crypto telemetry.
-  const ratioManager = new AdaptiveRatioManager({}, telemetry);
+  // B79.0n.ORCHESTRATOR (2026-05-27): ARM construction deleted per POOL skip.
   // AdaptiveScanManager already accepts injected telemetry + failureTracker.
   const scanManager = new AdaptiveScanManager(telemetry, failureTracker);
 
   console.log('[B79.0n.TELEMETRY][BOOT] xstock_spot AssetClassInstances bootstrapped (in-memory only; Variant C)');
 
-  return { telemetry, ratioManager, failureTracker, scanManager, inMemoryOnly: true };
+  return { telemetry, failureTracker, scanManager, inMemoryOnly: true };
 }
 
 /**
@@ -164,12 +168,12 @@ function bootstrapXstockSpotInstances(): AssetClassInstances {
 function bootstrapXstockPerpInstances(): AssetClassInstances {
   const telemetry = new TelemetryAggregatorService();
   const failureTracker = new PairFailureTracker();
-  const ratioManager = new AdaptiveRatioManager({}, telemetry);
+  // B79.0n.ORCHESTRATOR (2026-05-27): ARM construction deleted per POOL skip.
   const scanManager = new AdaptiveScanManager(telemetry, failureTracker);
 
   console.log('[B79.0n.TELEMETRY][BOOT] xstock_perp AssetClassInstances bootstrapped (in-memory only; Variant C; M70 writer deferred to WIRE-IN #16)');
 
-  return { telemetry, ratioManager, failureTracker, scanManager, inMemoryOnly: true };
+  return { telemetry, failureTracker, scanManager, inMemoryOnly: true };
 }
 
 /**
@@ -180,12 +184,12 @@ function bootstrapXstockPerpInstances(): AssetClassInstances {
 function bootstrapCryptoPerpInstances(): AssetClassInstances {
   const telemetry = new TelemetryAggregatorService();
   const failureTracker = new PairFailureTracker();
-  const ratioManager = new AdaptiveRatioManager({}, telemetry);
+  // B79.0n.ORCHESTRATOR (2026-05-27): ARM construction deleted per POOL skip.
   const scanManager = new AdaptiveScanManager(telemetry, failureTracker);
 
   console.log('[B79.0n.TELEMETRY][BOOT] crypto_perp AssetClassInstances bootstrapped (in-memory only; Variant C; M70 writer deferred to WIRE-IN #16)');
 
-  return { telemetry, ratioManager, failureTracker, scanManager, inMemoryOnly: true };
+  return { telemetry, failureTracker, scanManager, inMemoryOnly: true };
 }
 
 /**

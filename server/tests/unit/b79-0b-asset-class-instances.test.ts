@@ -44,7 +44,8 @@ describe('B79.0b — asset-class-instances factory', () => {
     const second = getXstockSpotInstances();
     expect(second).toBe(first); // same reference, not just deep-equal
     expect(second.telemetry).toBe(first.telemetry);
-    expect(second.ratioManager).toBe(first.ratioManager);
+    // B79.0n.ORCHESTRATOR (2026-05-27): `.ratioManager` reference removed per
+    // POOL skip — field deleted from AssetClassInstances interface.
     expect(second.failureTracker).toBe(first.failureTracker);
     expect(second.scanManager).toBe(first.scanManager);
   });
@@ -69,7 +70,9 @@ describe('B79.0b — asset-class-instances factory', () => {
     const triad = getAssetClassInstances('xstock_spot');
     expect(triad).not.toBeNull();
     expect(triad?.telemetry).toBeDefined();
-    expect(triad?.ratioManager).toBeDefined();
+    // B79.0n.ORCHESTRATOR (2026-05-27): `.ratioManager` reference removed per POOL skip.
+    expect(triad?.failureTracker).toBeDefined();
+    expect(triad?.scanManager).toBeDefined();
   });
 
   it('getAssetClassInstances on reserved-future class throws (B79.0n.TELEMETRY: was "unsupported" until 2026-05-26)', () => {
@@ -93,11 +96,12 @@ describe('B79.0b — asset-class-instances factory', () => {
     const xstockPerpTriad = getAssetClassInstances('xstock_perp' as any);
     expect(cryptoPerpTriad).not.toBeNull();
     expect(cryptoPerpTriad?.telemetry).toBeDefined();
-    expect(cryptoPerpTriad?.ratioManager).toBeDefined();
+    // B79.0n.ORCHESTRATOR (2026-05-27): `.ratioManager` references removed per POOL skip.
+    expect(cryptoPerpTriad?.failureTracker).toBeDefined();
     expect(cryptoPerpTriad?.inMemoryOnly).toBe(true);
     expect(xstockPerpTriad).not.toBeNull();
     expect(xstockPerpTriad?.telemetry).toBeDefined();
-    expect(xstockPerpTriad?.ratioManager).toBeDefined();
+    expect(xstockPerpTriad?.failureTracker).toBeDefined();
     expect(xstockPerpTriad?.inMemoryOnly).toBe(true);
     // Cross-class distinct instances:
     expect(cryptoPerpTriad?.telemetry).not.toBe(xstockPerpTriad?.telemetry);

@@ -38,11 +38,12 @@ describe('B79.0a — AdaptiveRatioManager constructor injection', () => {
     expect(() => new AdaptiveRatioManager({ minSamples: 5 })).not.toThrow();
   });
 
-  it('config + injected telemetry constructor accepts both args', () => {
-    const customTelemetry = new TelemetryAggregatorService();
-    const arm = new AdaptiveRatioManager({}, customTelemetry);
-    expect(arm).toBeDefined();
-  });
+  // B79.0n.ORCHESTRATOR (2026-05-27): test for `new AdaptiveRatioManager({}, customTelemetry)`
+  // removed per POOL skip — no production caller injects telemetry into ARM. The
+  // constructor signature still accepts the optional arg for back-compat (light
+  // dead code), but no factory path exercises it. Crypto ARM at the module-level
+  // singleton (`adaptive-ratio-manager.ts:307`) uses default-arg + global singleton
+  // fallback (still tested at lines 34-38 above).
 
   it('global singleton is a TelemetryAggregatorService instance', () => {
     const global = getTelemetryAggregator();

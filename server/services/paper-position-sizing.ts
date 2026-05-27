@@ -25,8 +25,13 @@
 import type { GuardrailsV2 } from '@shared/schema';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { getScalingFactor } from './risk-concentration.js';
-// Phase 14.5: Pattern pool position sizing guardrails
-import { PATTERN_POOL_GUARDRAILS } from '../asset_classes/crypto_spot/pattern-pool-filters.js';
+// B79.0n.ORCHESTRATOR (2026-05-27): per-asset-class pattern pool guardrails
+// dispatcher. Replaces the prior class-bound `PATTERN_POOL_GUARDRAILS` import
+// from `crypto_spot/pattern-pool-filters.js`. xstock pattern signals now
+// correctly read XSTOCK_PATTERN_POOL_GUARDRAILS (DB-resolved 0.50 cap vs
+// crypto's literal 0.15) via the dispatcher.
+import { getPatternPoolGuardrailsForAssetClass } from '../asset_classes/pattern-pool-dispatch.js';
+import type { AssetClass } from '../../shared/asset-classes.js';
 // B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='paper_sizing'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 
@@ -61,6 +66,15 @@ export interface PaperPositionSizingParams {
    * `signal` reference (TS2304); now passed explicitly by callers.
    */
   sourcePool?: string;
+  /**
+   * B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class pattern pool guardrails
+   * dispatcher key. Resolved deterministically by callers via
+   * `resolveAssetClass(symbol, 'kraken')` per Langston Step 2 no-silent-fallback
+   * disposition. No default — explicit class required. xstock pattern signals
+   * route to XSTOCK_PATTERN_POOL_GUARDRAILS (0.50 cap, DB-resolved); crypto
+   * signals route to PATTERN_POOL_GUARDRAILS (0.15 cap, literal).
+   */
+  assetClass: AssetClass;
 }
 
 export interface PaperPositionSizingResult {
@@ -142,10 +156,15 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
   const signalSourcePool = params.sourcePool || 'quant';
   let effectiveMaxPositionPct = safeMaxPositionPct;
   if (signalSourcePool === 'pattern') {
-    const patternMaxPct = PATTERN_POOL_GUARDRAILS.MAX_POSITION_PCT * 100; // 15
+    // B79.0n.ORCHESTRATOR (2026-05-27): resolve per-class pattern pool cap via
+    // dispatcher. Crypto returns 0.15 literal (unchanged); xstock returns
+    // 0.50 DB-resolved (real behavioral correction — pre-batch was crypto's
+    // 0.15 due to class-bound import; post-batch routes correctly).
+    const guardrails = getPatternPoolGuardrailsForAssetClass(params.assetClass);
+    const patternMaxPct = guardrails.MAX_POSITION_PCT * 100;
     if (effectiveMaxPositionPct > patternMaxPct) {
       effectiveMaxPositionPct = patternMaxPct;
-      console.log(`[14.5][SIZING] Pattern pool signal — capping position at ${patternMaxPct}% (vs ${safeMaxPositionPct}% quant)`);
+      console.log(`[14.5][SIZING][B79.0n.ORCHESTRATOR] Pattern pool signal — capping position at ${patternMaxPct}% (vs ${safeMaxPositionPct}% quant) assetClass=${params.assetClass}`);
     }
   }
   

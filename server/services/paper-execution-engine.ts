@@ -2536,6 +2536,11 @@ export class PaperExecutionEngine {
             // B-NEW-43 chunk 3: thread the signal's source pool so Phase 14.5
             // pattern-pool reduced sizing applies (was an undeclared ref in TS2304).
             sourcePool: (signal as any)?.metadata?.sourcePool,
+            // B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class dispatch key.
+            // Deterministic from symbol (resolveAssetClass) — no silent fallback
+            // to crypto_spot per Langston Step 2 Probe 8 ACK. Throws on B69-
+            // unregistered symbols (correct fail-fast behavior at sizing boundary).
+            assetClass: resolveAssetClass(signal.symbol, 'kraken'),
           });
           
           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
