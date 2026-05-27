@@ -30,6 +30,11 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 
+// Load DATABASE_URL from .env — `npm run` does not auto-load .env, so the
+// script does it itself (matches the pattern in scripts/db-migrate.ts).
+// Without this the server/db.ts import throws "DATABASE_URL must be set".
+import 'dotenv/config';
+
 import { db } from '../server/db.js';
 import { rtbSignals } from '@shared/schema';
 import { sql, eq, and, isNull } from 'drizzle-orm';
