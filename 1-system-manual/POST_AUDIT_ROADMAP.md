@@ -32,6 +32,62 @@
 
 ---
 
+### 2026-05-27 update — Phase 19 / Phase 25 SPLIT locked (Kyle directive 2026-05-27 evening)
+
+**Decision (Kyle directive after EXECUTION close 2026-05-27 evening):** the work previously bundled under Phase 19 splits into TWO phases on outcome-dependency:
+
+- **Phase 19 = "Functional from scan to closed trade"** — active-trading-path restoration, structural plumbing, safety mechanisms, the act of running paper-active, structural bug fixes found during that run, calibrations that DON'T require trade outcomes to make a decision-grade verdict (thresholds, regime classifiers without confidence, strategy selection, strategy gates, archive-replay priors).
+- **Phase 25 = "Calibration with evidence"** — anything that needs paper-active wins/losses to verify (confidence modifiers, SQE thresholds, sustainability gate value-scope, ladder net contribution, AMR build/skip decision, factor calibrations).
+
+**Notes (Kyle directive 2026-05-27):**
+- **Batch ordering within each phase is decided at the start of that phase**, not pre-locked here. The table below catalogs WHICH phase each item lives in, not the sequence.
+- **Some items overlap across the existing roadmap sections and `RUNNING_ISSUES` entries.** Phase 19 and Phase 25 cleanup at start-of-phase will collapse duplicates and resolve any remaining ambiguous placements before sequencing begins.
+- **B80 crypto_perp (formerly labeled "Phase 25") was deferred to POST-LAUNCH on 2026-05-21** — that label is now retired. New canonical naming: B80 crypto_perp is "post-launch / Phase 26 placeholder, no SLA." The "Phase 25" number is now repurposed as the calibration-with-evidence phase per this split.
+
+**Locked Phase 19 items:**
+
+| # | Item | Plain-language purpose |
+|---|---|---|
+| 19-1 | B79.0n.WIRE-IN (umbrella v4 #14) | xStock active-trading wire-in. Connects xstock_spot signals end-to-end through the engine so paper trades can actually open and close on xstock symbols. Activates the canary log + outcomeFeedback EMA store + diagnostic counter math we deferred in EXECUTION. |
+| 19-2 | B79.0n.OBSERVABILITY T2 + active-trading flip (umbrella v4 #16) | The actual flip-the-switch on paper-active for all 4 active classes + observability dashboards/alerts. After this, the system is running. |
+| 19-3 | §19.0.5 Full data-capture coverage for paper-active path | Active-path SQE/RTB/TCL reject hooks + FX5 pre-filter capture. HARD precondition before paper-active turns on. |
+| 19-4 | §19.0.B Daily loss-budget service + kill-switch auto-trip | Aggregator + auto-trip on rolling 24h paper P&L vs portfolio. Safety mechanism. |
+| 19-5 | §19.x Boot Readiness Coordinator | Unify the patchwork boot sequence. Triggered if Phase 19 surfaces boot-related cascading failures. |
+| 19-6 | #137 active-trading-path restoration intake list | TypeScript baseline file's `phase_tag.startsWith("Phase 19")` entries — concrete code fixes from B-NEW-43 needed for active-trading to function correctly. |
+| 19-7 | #92 wire xstockSpotScanner through signal-orchestration | Pre-existing wiring gap. Required for xstock_spot to produce signals on the active path. |
+| 19-8 | B79.5 xStock real-time WebSocket pricing adapter | `wss://ws-equities.kraken.com` live-pricing adapter. Without it xstock active-trading runs on stale REST polling. |
+| 19-9 | B79.x failure-mode taxonomy — entry-side gap | LULD halts / circuit breakers / dividends / splits / earnings entry-side scanner consult. Exit-side landed via B-NEW-42; entry-side is required before live trading. |
+| 19-10 | #139 vts-runner throwing `resolveAssetClass` call sites | 10+ pre-existing throwing call sites surfaced during PATTERN-DETECT. Functional fix needed before paper-active across multiple classes. |
+| 19-11 | §19.1 Paper Trading Run | The act of actually running paper-active for an extended observation window. Generates the data Phase 25 consumes. |
+| 19-12 | §19.2 Audit & Debug | Fix structural bugs surfaced during the paper run. |
+| 19-13 | §19.3 Performance Validation | Latency, throughput, queue depth, cadence holds under real paper-active flow. |
+| 19-14 | §19.3.5 Trailing-exit live verification (B65.3 folded in) | Verify ATR TEC + ladder + break-even-stop behavior under real fills. |
+| 19-15 | #97 xStock asset-specific characteristics inventory | Earnings calendar / market cap / P/E / IV / analyst ratings feeds. Plumbing for data sources active trading will consult. |
+| 19-16 | B79.6 sector-aware portfolio-cluster prevention | Equities cluster by sector. Without this, multiple correlated xstock positions can land simultaneously. |
+| 19-17 | **NEW — Active Trading Simulations (Kyle directive 2026-05-27)** | VTS-like layer that opens a simulated trade for every signal that enters RTB (and optionally for signals rejected by SQE, marked `SQE_PASSED` vs `SQE_REJECTED`). Captures additional data per unit of calendar time when slot caps limit how many real paper trades open. Lets us measure what the trades-we-didn't-take would have done + measure SQE filter quality (is SQE removing winners or losers?). Strict data partition so calibration doesn't pool simulated vs real. Reuses VTS infrastructure where possible. |
+| 19-18 | **NEW — Live mode active-trading build approach (Kyle directive 2026-05-27)** | Discussion + design item at start of Phase 19: is live mode a copy-paste of paper mode with a switch-button toggle (current design plan), or is there a better way to build it? Decision lands before Phase 21 live mode activation. |
+
+**Locked Phase 25 items (calibration with evidence):**
+
+| # | Item | Plain-language purpose |
+|---|---|---|
+| 25-1 | B79.0n.ML-CALIBRATION T2 (umbrella v4 #15) | Tier 2 ML calibration — confidence-chain calibration against active-paper outcomes. Explicitly needs live evidence. |
+| 25-2 | §19.0.A Regime classifier confidence-chain calibration | B-NEW-33/36/37/39 workstream — confidence-modifier calibration re-run against paper-active outcomes (the apples-to-apples population). |
+| 25-3 | §19.0.3 TFS sustainability gate value-scope decision | Recalibrate / re-target / deprecate the b68_5 sustainability gate against paper-active data. |
+| 25-4 | §19.4 SQE Recalibration (B66 conditional) | Rebuild SQE thresholds with sibling-strategy WR controls + post-B62-only data + active-paper outcomes. |
+| 25-5 | §19.4.5 Observational Decision Gate | Pre-launch reordering decision based on 1-2 weeks of clean active-paper outcomes. Hostile-window recurrence, ladder net contribution, low-volume moonbag exclusion, etc. |
+| 25-6 | §19.5 Adaptive Market Response (AMR) | Extend rules-based mode overlay to full adaptive market response. Build/skip decision driven by Phase 25 observation per the concept doc's own decision pathway (`ADAPTIVE_MARKET_RESPONSE_CONCEPT.md` §5). CC recommendation 2026-05-27: defer to Phase 25, do NOT build pre-Phase-19 (the concept itself is outcome-dependent — current single-sensor calibration reads "stable" almost always; rebuilding on VTS data inherits the population-mismatch problem that paused §19.0.A; pre-Phase-19 AMR confounds engine debug work). |
+| 25-7 | #94 B79.3 xStock equity-equivalent macro confidence modifiers | xStock equivalents to B68.x macro modifiers (DXY / SPY / VIX-flavor signals). Confidence modifier work per Kyle 2026-05-27 voice — needs outcomes. |
+| 25-8 | #153 xStock `pattern_max_position_pct` 0.50 placeholder validation | The 0.50 cap inherited from xstock_spot module is a placeholder. Calibrate the actual right value against xStock outcome data. |
+| 25-9 | xStock `pair_correlation` per-pair WR data accumulation (B68.3 calibration) | Per-pair correlation modifier needs paper-active WR data to set the right modifier coefficient. From `XSTOCK_CALIBRATION_PLAN.md`. |
+| 25-10 | Crypto confidence-modifier calibration | Kyle 2026-05-27 voice flagged crypto also needs confidence-modifier calibration, not just xStock. Same family as 25-2 / 25-7, applied to crypto's existing modifier stack. |
+
+**Cross-references to existing sections:** Phase 19 sub-section content at §19.0.5 / §19.0.B / §19.x / §19.1 / §19.2 / §19.3 / §19.3.5 below remains accurate but its placement under "Phase 19" stays unchanged (these are Phase 19 items per the table above). Phase 25 sub-section content at §19.0.A / §19.0.3 / §19.4 / §19.4.5 / §19.5 below also remains accurate but its phase tag moves from "Phase 19" to "Phase 25" per the table above. Cleanup pass at start of Phase 25 will renumber the section anchors if helpful.
+
+**XSTOCK_CALIBRATION_PLAN.md cross-walk:** Phases A / B / C / D / B.6 priors / F-NOW from `XSTOCK_CALIBRATION_PLAN.md` are calibrations that DON'T need outcomes — they sit in Phase 19 (or can run pre-Phase-19 as standalone calibration batches per Kyle directive 2026-05-27, where the next batch after EXECUTION close is exactly this work). Phases E / F-LATER from the same doc DO need outcomes and sit in Phase 25.
+
+---
+
 ### 2026-05-23 update — Phase 19 runs BEFORE Phase 16 (B-NEW-43 Phase 1 close)
 
 **Decision (Kyle approved 2026-05-23 on joint CC + Langston advisory):** Phase 19 (active-trading-path restoration walkthrough) runs BEFORE Phase 16 (DB/legacy cleanup). The restoration walkthrough creates ground truth on what is dead vs. dormant; cleanup then acts on that ground truth instead of guessing. Infra-clean parts of Phase 16 (DB schema rationalization / column drops independent of active-trading code surface) can still front-run safely. Surfaced during B-NEW-43 Phase 1 chunk 6 audit; locked at Phase 1 close (2026-05-23, baseline frozen at 488 errors / 68 files). Source-of-truth lists: Phase 19 intake = RUNNING_ISSUES #137 + baseline-file `files[]` with `phase_tag.startsWith("Phase 19")`; Phase 16 legacy register = RUNNING_ISSUES #136.
