@@ -116,11 +116,12 @@ This batch covers:
 
 ## §2. Numbered objectives
 
-**OBJ-1.** **Schema migration on `rtb_signals` table (two-phase per B-NEW-35 promote-then-retire pattern):**
-- Phase 1: `ALTER TABLE rtb_signals ADD COLUMN asset_class VARCHAR` (nullable) + deploy code that writes both `metadata->>'assetClass'` AND new column
-- Phase 2 (background, parallel): backfill new column from existing `metadata->>'assetClass'` jsonb extraction OR `resolveAssetClass(symbol, 'kraken')` per row (whichever exists)
-- Phase 3: `ALTER TABLE rtb_signals ADD CONSTRAINT rtb_signals_asset_class_not_null CHECK (asset_class IS NOT NULL)` (NOT NULL via CHECK first; convert to column constraint after soak) + `CREATE INDEX rtb_signals_mode_asset_class_status_idx ON rtb_signals (mode, asset_class, status)`
-- Phase 4 (follow-up batch RTB.b if needed): `ALTER COLUMN asset_class SET NOT NULL` after 24h+ soak with no nulls
+**OBJ-1.** **Schema migration on `rtb_signals` table (4-phase per B-NEW-35 promote-then-retire pattern; per Langston C-4 + C-5):**
+- **Deploy-order invariant (Langston C-5):** every phase migration MUST be applied BEFORE the PM2 restart that activates dependent code. Step 6 deploy script: `git pull → npm run db:migrate → npm run build → pm2 restart`. Reverse order would cause dual-write writes to fail.
+- **Phase 1:** `ALTER TABLE rtb_signals ADD COLUMN asset_class VARCHAR` (nullable) + deploy code that writes both `metadata->>'assetClass'` AND new column at every INSERT site (dual-write). Phase 2 backfill MUST start IMMEDIATELY post-Phase-1-deploy (per Langston C-3: null-window bounded to in-flight deploy rows only).
+- **Phase 2 (background, post-Phase-1-deploy):** backfill new column from existing `metadata->>'assetClass'` jsonb extraction OR `resolveAssetClass(symbol, 'kraken')` per row (decision at Step 2 per §3.11 + Langston Q3 — DB probe samples 10 rows of metadata jsonb to determine feasibility). Idempotent via `WHERE asset_class IS NULL` filter.
+- **Phase 3:** `ALTER TABLE rtb_signals ADD CONSTRAINT rtb_signals_asset_class_not_null CHECK (asset_class IS NOT NULL)` (CHECK first; column-constraint conversion is Phase 4) + `CREATE INDEX rtb_signals_mode_asset_class_status_idx ON rtb_signals (mode, asset_class, status)`. Post-Phase-3 rehydrate-on-boot must HARD-FAIL on any `asset_class IS NULL` row encountered (per Langston C-3 — no permissive WARN fallback after Phase 3).
+- **Phase 4 (in-batch contingent on §6.4 48h gate green per Langston C-4):** `ALTER COLUMN asset_class SET NOT NULL` runs at Step 9-10 IF AND ONLY IF the 48h gate verifies `SELECT COUNT(*) FROM rtb_signals WHERE asset_class IS NULL = 0` over the full window. Only defer to RTB.b follow-up batch if soak surfaces nulls. Default is to run Phase 4 in-batch.
 
 **OBJ-2.** **`ready_to_buy_service.ts` per-class queue partitioning.** Nested-map shape per pre-scope §3.2 lock:
 - `signalRefreshStates` keyed by signalId (already class-safe; document this in §2 finding of completion report — no change needed)
@@ -142,11 +143,13 @@ This batch covers:
 
 **OBJ-6.** **New observability accessor.** `getQueueDepth(): Record<AssetClass, Record<TradingMode, number>>` exported from `ready_to_buy_service.ts`. Returns per-class × per-mode queue depths. Serves 48h verify-gate signal — pre-WIRE-IN #16, xstock queue depth must stay 0 because xstock signals don't reach RTB via orchestrator yet. Any non-zero xstock depth = mis-routing leak; investigate.
 
-**OBJ-7.** **Caller-site annotations.** 4 HEAVY production files get `// [B79.0n.RTB]` inline classification at each call site:
-- `paper-execution-engine.ts` (12 sites) — actively uses RTB; comment classifies which calls remain class-agnostic vs class-aware
-- `signal-orchestrator.ts` (2 sites) — `queueSQESignal()` writes, need to pass assetClass
-- `trading-bootstrap.ts` — lifecycle management
-- `event-bus.ts` — PromotionEvent extended with `assetClass` field per R-8
+**OBJ-7.** **Caller-site updates (no inline tags per Langston C-6).** 4 HEAVY production files updated for per-class plumbing where needed:
+- `paper-execution-engine.ts` (12 sites) — pass `assetClass` to per-class queue reads where the call site has a per-class consumer
+- `signal-orchestrator.ts` (2 sites) — `queueSQESignal()` writes thread `assetClass`
+- `trading-bootstrap.ts` — per-class lifecycle wiring (start per-class refresh cycles for all 4 active classes)
+- `event-bus.ts` — `PromotionEvent` extended with `assetClass` field per OBJ-8 + R-8
+
+**No inline `// [B79.0n.RTB]` tags** per Langston C-6 — paper trail is git history + completion report governance list, not comment annotations. Only add a one-line block comment at the top of a function IF the call-site has a non-obvious class-aware vs class-agnostic distinction that needs explanation.
 
 **OBJ-8.** **`PromotionEvent` interface extension** (R-8 mitigation). Add `assetClass: AssetClass` to event payload. Update emitter + matcher (line 369 of `ready_to_buy_service.ts`). Step 2 pre-audit runs `rg "PromotionEvent" server/ --type ts` to enumerate downstream consumers + verify additive field is safe.
 
@@ -193,16 +196,18 @@ Verification done. Zero production callers. Phase 16 cleanup executed in-band.
 ### 3.8 — LOCKED: schema migration part of this batch (Kyle 2026-05-27)
 Two-phase phasing per B-NEW-35 promote-then-retire pattern. Phase 1 = add nullable + dual-write; Phase 2 = backfill; Phase 3 = CHECK constraint + index; Phase 4 (RTB.b if needed) = SET NOT NULL.
 
-### 3.9 — OPEN Q (Langston Step 2 pre-audit decision): bucket allocation choice on rtb-refresh-service
-- Option A: nested per-class buckets `Map<AssetClass, Map<0..7, Set<signalId>>>` — 32 total buckets across 4 classes
-- Option B: global 8 buckets with assetClass tagging at signal level — preserves bucket-count + ACT semantics
-- CC lean: Option B (simpler; ACT semantics preserved; per-class isolation via tagging)
-- Decision at Step 2 with code-level review of bucket assignment algorithm
+### 3.9 — OPEN Q (Langston Step 2 pre-audit deliverable per C-1): bucket allocation choice on rtb-refresh-service
+**CC-lean defaults removed per Langston C-1.** Step 2 must produce code-level evidence before decision:
+- Option A: nested per-class buckets `Map<AssetClass, Map<0..7, Set<signalId>>>` — 32 total buckets across 4 classes; per-class isolation guarantees
+- Option B: global 8 buckets with assetClass tagging at signal level — preserves bucket-count + ACT semantics; risk that under high concurrent load one class monopolizes ACT slots and starves others' refresh cycles (the exact pathology per-class is supposed to prevent)
+- **Step 2 deliverable:** read `rtb-refresh-service.ts:1-391` end-to-end + walk the bucket-assignment algorithm + construct a concrete worst-case starvation scenario (crypto_spot at peak FX5 cycle with xstock_spot at session-open warmup) + show whether Option B preserves per-class refresh latency floors. Decision flips to Option A if Option B can't show isolation.
+- Langston structural lean: Option A (per-class isolation guarantees). Final decision at Step 2 with code evidence.
 
-### 3.10 — OPEN Q (Langston Step 2 pre-audit decision): ACT scope on rtb-refresh-service
+### 3.10 — OPEN Q (Langston Step 2 pre-audit deliverable per C-2): ACT scope on rtb-refresh-service
+**CC-lean defaults removed per Langston C-2.** Step 2 must produce code-level evidence before decision:
 - Per-class ACT pool (each class has its own scaler) vs shared global ACT with per-class accounting
-- CC lean: shared global ACT (ACT measures CPU + duration, not per-class load characteristics today)
-- Decision at Step 2 with code-level review of ACT tuner logic
+- Shared global ACT is fine for CPU/duration accounting but doesn't guarantee per-class fairness. With crypto_spot the only loaded class today the issue is invisible; WIRE-IN #16 flips xstock live and load-dependency becomes real.
+- **Step 2 deliverable:** walk the ACT tuner code (`rtb-refresh-service.ts` ACT pool 3-10 scaler logic; functions `adaptPoolSize`, `recordCpuSample`, etc) + decide whether shared-pool semantics actually preserve per-class refresh SLOs. Lean shared-global IF Step 2 shows ACT is purely CPU/duration-bound and no per-class load anisotropy. Lean per-class IF evidence shared pool can be monopolized.
 
 ### 3.11 — OPEN Q (Langston Step 2 pre-audit decision): schema backfill source
 - Backfill from `metadata->>'assetClass'` jsonb extraction (if key exists in legacy rows) OR resolve via `resolveAssetClass(symbol, 'kraken')` per row
@@ -265,6 +270,8 @@ Two-phase phasing per B-NEW-35 promote-then-retire pattern. Phase 1 = add nullab
 - Local `npx tsc --noEmit` zero new errors in touched files
 - Local `npx vitest run b79-0n-rtb` all PASS (10 new files)
 - Local `npx vitest run server/tests/{unit,integration}` PASS unchanged
+- **Deploy-order invariant (Langston C-5):** Step 6 deploy command sequence is `git pull → npm run db:migrate → npm run build → pm2 restart`. Migration MUST apply BEFORE PM2 restart so dual-write code finds the new column at boot. Reverse order causes dual-write writes to fail.
+- **Module-constants precondition (Langston C-10):** 4 `rtb.refresh_interval_ms` rows must exist (one per active class: crypto_spot=30000, crypto_perp=30000, xstock_spot=30000, xstock_perp=30000) before PM2 restart. Either Chunk A includes the seed-write or §6.1 verifies the rows exist pre-deploy. R-3 HARD-FAIL boot trips on first deploy if any row missing.
 - DB probe: `SELECT asset_class, COUNT(*) FROM rtb_signals WHERE status='queued' GROUP BY asset_class` → returns 1 row (crypto_spot dominant today) PRE-MIGRATION (no asset_class column yet); POST-MIGRATION returns the new column populated
 
 ### 6.2 Step 7 first-pass (CC, post-deploy)
@@ -288,8 +295,22 @@ Two-phase phasing per B-NEW-35 promote-then-retire pattern. Phase 1 = add nullab
 - crypto_spot queue depth increments normally
 - No `[B79.0n.RTB][CLASS_NOT_WIRED]` throws (would indicate reserved-future class being called incorrectly)
 - DB query at +48h: `asset_class IS NULL` count = 0 (post-backfill verified clean)
+- **Phase 4 conditional execution (per OBJ-1 + Langston C-4):** if all above conditions green AT +48h, run `ALTER COLUMN asset_class SET NOT NULL` as part of Step 9-10 close. Defer to RTB.b ONLY if soak surfaces non-zero null count.
 
-**Schedule alert at Step 10:** `npm run system-alerts -- add` triggers at `<deploy_ts + 48h>`.
+**Schedule alert at Step 10 (embedded commands per Langston C-11):** `npm run system-alerts -- add` triggers at `<deploy_ts + 48h>`. Alert body MUST embed the exact probe commands (mirroring SCORING+TEC pattern):
+
+```bash
+# C-11 embedded probes:
+ssh root@188.245.193.8 'su - deploy -c "set -a; source /home/deploy/dawntrader/.env; set +a; psql \$DATABASE_URL -tAc \"SELECT asset_class, COUNT(*) FROM rtb_signals WHERE status='\''queued'\'' GROUP BY asset_class;\""'
+
+ssh root@188.245.193.8 'su - deploy -c "set -a; source /home/deploy/dawntrader/.env; set +a; psql \$DATABASE_URL -tAc \"SELECT COUNT(*) FROM rtb_signals WHERE asset_class IS NULL;\""'
+
+ssh root@188.245.193.8 "su - deploy -c 'pm2 logs dawntrader --lines 10000 --nostream 2>&1 | grep -cE \"\\[B79.0n.RTB\\]\\[CLASS_NOT_WIRED\\]\"'"
+
+ssh root@188.245.193.8 "su - deploy -c 'pm2 logs dawntrader --lines 10000 --nostream 2>&1 | grep -E \"\\[B79.0n.RTB\\]\\[BOOT\\]\" | tail -5'"
+```
+
+Body cites Phase 4 conditional execution decision criteria + Phase 4 SQL command if conditions met.
 
 ---
 
@@ -350,22 +371,36 @@ Two-phase phasing per B-NEW-35 promote-then-retire pattern. Phase 1 = add nullab
 
 ---
 
+## §9.1. Step 2 pre-audit deliverables (Langston ACK conditions C-1, C-2, C-3 seq, C-7, C-8, C-9, C-12)
+
+These items are LOCKED IN as Step 2 deliverables before Step 3 can begin:
+
+- **C-1 starvation-scenario walk (§3.9):** read `rtb-refresh-service.ts:1-391` end-to-end + walk the bucket-assignment algorithm + construct worst-case starvation scenario (crypto_spot at peak FX5 cycle + xstock_spot at session-open warmup) + show whether Option B preserves per-class refresh latency floors. Decision (A vs B) falls out of this analysis.
+- **C-2 ACT tuner code walk (§3.10):** walk `rtb-refresh-service.ts` ACT pool 3-10 scaler logic (`adaptPoolSize`, `recordCpuSample`, etc) + decide whether shared-pool semantics preserve per-class refresh SLOs. Lean shared-global IF purely CPU/duration-bound; lean per-class IF evidence shared pool can be monopolized.
+- **C-3 sequencing confirmation:** explicit confirmation that Phase 2 backfill starts immediately after Phase 1 deploy, bounding null-window to in-flight deploy only. Step 6 deploy script + migration runner order verified.
+- **C-7 PromotionEvent consumer classification:** `rg "PromotionEvent" server/ --type ts` + for each consumer, classify (a) destructure / spread / structural-match pattern, (b) whether any uses exhaustive switch on event payload. If exhaustive switches exist, additive `assetClass` field must be optional in v1 OR all consumers update same-batch.
+- **C-8 FSM-threshold class-invariance verification:** grep + module_constants probe confirming current FSM transition thresholds (confidence floor, decayPenalty rate λ, etc in `ready_to_buy_service.ts`) are actually class-invariant in production today. If any are per-class via module_constants, §3.4 lock is wrong and we'd regress observability if we don't preserve per-class variation.
+- **C-9 T4 spec sharpening:** T4 test specifies that under TCL barrier hold, two same-tick promotions from different classes serialize (one waits, one proceeds) AND per-class queue mutations are atomic per-class (no interleaving across classes inside the barrier). Deterministic ordering, no fuzz.
+- **C-12 VTS-shadow observability surface:** check whether VTS shadow currently observes RTB queue state and whether the per-class extension surfaces correctly in VTS telemetry. Tie-in for sub-batch-18 conversation. Not a blocker for this batch but log in Step 2 findings.
+
+---
+
 ## §10. v2 changelog
 
 **v1 (2026-05-27 morning, commit 1aaa88348):** Initial rushed scope assuming 1-file 1,809-line surface. Missed rtb-refresh-service.ts (LOCKED 391 LOC), rtb_queue_refresher.ts (deprecated 144 LOC), tcl_watchdog.ts (311 LOC downstream), and the rtb_signals.asset_class schema gap. Superseded.
 
 **v1.1 (2026-05-27 morning, commit 1aaa88348 → ccbf2a328 + 1aaa88348):** Kyle cadence lock + Langston Rev-1/2/3 + governance set expansion + structural notes. Still based on incomplete architectural surface.
 
-**v2 (2026-05-27, this version):** Comprehensive rewrite using `B79_0n_RTB_ARCHITECTURAL_SYNTHESIS.md` (commit 42f242615) as foundation. Adds:
-- All 4 RTB component files (2,655 LOC actual surface)
-- Schema migration via 4-phase pattern (R-9 HIGH)
-- LOCKED-module override citation + boundary (R-10 MEDIUM)
-- Bucket-allocation decision deferred to Step 2 (R-11 MEDIUM, §3.9)
-- ACT scope decision deferred to Step 2 (§3.10)
-- rtb_queue_refresher verify-then-retire (R-12 LOW, Kyle 2026-05-27)
-- 25 caller files enumerated
-- Boot sequence dependencies documented
-- 14 chunks (up from 9)
-- 10 new tests (up from 7-8)
+**v2 (2026-05-27, mid-morning):** Comprehensive rewrite using `B79_0n_RTB_ARCHITECTURAL_SYNTHESIS.md` (commit 42f242615) as foundation. Adds: all 4 RTB component files (2,655 LOC); 4-phase schema migration (R-9 HIGH); LOCKED-module override citation + boundary (R-10 MEDIUM); bucket-allocation + ACT decisions deferred to Step 2 (§3.9, §3.10); rtb_queue_refresher verify-then-retire (R-12 LOW, Kyle 2026-05-27); 25 caller files enumerated; boot sequence dependencies; 14 chunks (up from 9); 10 new tests (up from 7-8).
 
-Awaiting Langston ACK on v2.
+**v2.1 (2026-05-27, late morning):** Langston v2 ACK-with-conditions applied. Six scope-tightenings (C-3, C-4, C-5, C-6, C-10, C-11) folded:
+- **C-3 (rehydrate null handling):** Post-Phase-3 HARD-FAIL on rehydrate null; permissive WARN fallback removed; T-12 test added; Phase 2 backfill must start immediately post-Phase-1-deploy (bounds null-window to in-flight rows only).
+- **C-4 (Phase 4 in-batch contingent):** Phase 4 SET NOT NULL runs at Step 9-10 in-batch IF §6.4 48h gate green AND zero null count. Only defer to RTB.b if soak surfaces nulls. Default is in-batch.
+- **C-5 (deploy-order sequencing explicit):** Step 6 command sequence is `git pull → npm run db:migrate → npm run build → pm2 restart`. Migration applied BEFORE PM2 restart. Written into OBJ-1 + §6.1.
+- **C-6 (inline tags dropped):** OBJ-7 no longer specifies `// [B79.0n.RTB]` inline annotations on HEAVY caller files. Paper trail via git history + completion report. One-line function-top comment only if non-obvious distinction.
+- **C-10 (seed migration writes 4 rows):** Module-constants precondition added to §6.1 — 4 `rtb.refresh_interval_ms` rows (one per active class, all 30000) must exist pre-deploy or R-3 HARD-FAIL boot trips.
+- **C-11 (alert body embedded commands):** §6.4 48h verify-gate alert body now embeds 4 exact verification commands (psql per-class GROUP BY + psql null-count + pm2 grep CLASS_NOT_WIRED + pm2 grep BOOT enumeration).
+
+Plus **new §9.1 Step 2 pre-audit deliverables** locking in C-1 (bucket-allocation starvation walk), C-2 (ACT tuner code walk), C-3 (sequencing confirmation), C-7 (PromotionEvent consumer classification), C-8 (FSM class-invariance verification), C-9 (T4 spec sharpening), C-12 (VTS-shadow observability surface).
+
+Awaiting Langston ACK on v2.1 → Step 2 deeper code-level pre-audit per Kyle directive 2026-05-27.
