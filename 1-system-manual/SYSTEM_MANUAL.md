@@ -5065,6 +5065,65 @@ B79.0n.RTB (sub-batch 11 of 18 in the B79.0n umbrella v4 arc) extends every prev
 - SIM "Recent additions (B79.0n.RTB — Phase 24 — 2026-05-27)" mirrors the component-level enumeration with blast-radius analysis.
 - ASSET_CLASS_ONBOARDING_WORKFLOW §4.20 (4-phase migration pattern) + §4.21 (LOCKED-module override pattern) codify the reusable shapes.
 
+### 19.7 — B79.0n.EXECUTION: TradeClosedEvent additive assetClass + SSOT cleanup + diagnostic v2 (2026-05-27)
+
+B79.0n.EXECUTION (sub-batch 13 of 16 in B79.0n umbrella v4 arc) is the last per-class plumbing sub-batch before WIRE-IN (#14, Phase 19a). Three surgical changes land: (1) the TRADE_CLOSED event payload gains an optional `assetClass?: string` field for downstream disambiguation; (2) the outcomeFeedback hook at the trade-close path switches from re-resolve to read-from-record SSOT discipline; (3) the orchestrator-per-class-state diagnostic endpoint restructures to a nested-by-layer payload with an inline knownGaps registry.
+
+**TradeClosedEvent additive field (CHUNK A).** `server/lib/event-bus.ts:24-51` extends the `TradeClosedEvent` interface with `assetClass?: string` mirroring the `PromotionEvent.assetClass` C-7 doctrine from B79.0n.RTB (now codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.23 as the "additive event-payload field pattern"). The emit site at `paper-execution-engine.ts:1545` populates from `position.assetClass` — read from the canonical SSOT (write at L2147 `createPaperSimOpenPosition` per B79.TEC Finding 2), NOT re-resolved from symbol. A canary log line `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED] mode= class= symbol= tradeId=` fires on every close per Langston Step 2 B2 mitigation — gives operators a runtime witness that `assetClass` populates correctly per class once xstock active trading lights up at WIRE-IN. All 3 listeners (paper-execution-engine self-handler at L184-188 mode-filter only, c13-validation-service at L103-107 collection only, c14-validation-service at L123-127 collection only) verified safe via Step 1.b A2 grep — zero JSON.stringify/structured-clone/telemetry-emit production hits on `TradeClosedEvent` shape. Same C-7 doctrine: consumers that need to disambiguate read this field, consumers that don't are unaffected.
+
+**Position-record SSOT cleanup (CHUNK B).** `paper-execution-engine.ts:1376` (outcomeFeedback hook) switches from `safeResolveAssetClass(position.symbol, 'kraken')` re-resolve to `position.assetClass ?? safeResolveAssetClass(position.symbol, 'kraken')` belt-and-suspenders fallback. Per Langston Step 2 B2 reframe: the fallback is **defensive, NOT load-bearing** — line 922 B79.TEC NO_FALLBACK hard-fails on a position missing `assetClass` BEFORE flow ever reaches L1376. The `??` short-circuits to record-read on the happy path; the `safeResolveAssetClass` branch only ever fires if a future caller path bypasses L922 invariants. Zero runtime cost on the happy path. The `if (_assetClass !== null)` guard preserves no-throw skip semantics for null returns.
+
+**Diagnostic endpoint v2 nested-by-layer (CHUNK C).** `/api/diagnostics/orchestrator-per-class-state` URL retained per Langston Q3 ACK (continuity over misleading-URL cost; zero callers verified across client/server/scripts via Step 1.b A6 thorough grep — only definition site at `server/routes.ts`). Payload restructured to nested-by-layer with inline `_meta` registry:
+
+```jsonc
+{
+  "ts": "...",
+  "batch": "B79.0n.ORCHESTRATOR+EXECUTION",
+  "orchestrator": { /* crypto_spot, xstock_spot guardrails; perp CLASS_NOT_WIRED */ },
+  "execution": {
+    "crypto_spot": { "openPositions": 0, "recentCloses24h": 0, "feePercent": 0.26, "slippagePercent": 0.05 },
+    "xstock_spot": { "openPositions": 0, "recentCloses24h": 0, "feePercent": 0.26, "slippagePercent": 0.05 },
+    "crypto_perp": { "status": "CLASS_NOT_WIRED" },
+    "xstock_perp": { "status": "CLASS_NOT_WIRED" }
+  },
+  "_meta": {
+    "schemaVersion": 2,
+    "coverage": ["orchestrator", "execution"],
+    "lastReviewed": "2026-05-27",
+    "knownGaps": [
+      "fee/slippage dispatch is class-member wildcard (paper-execution-engine.ts:126-127); per-class dispatch deferred to Phase 25/26 calibration",
+      "sizing-core risk-pct/max-position-pct mode-keyed not class-keyed (paper-position-sizing.ts:141-180); deferred to Phase 25/26",
+      "narrative-feed TRADE_OPENED/TRADE_CLOSED payload lacks assetClass; dormant — re-review at narrative-feed activation or annual audit"
+    ]
+  }
+}
+```
+
+Execution-layer compute reads `storage.getPaperSimOpenPositions('paper')` + `storage.getPaperSimTrades('paper', { closedOnly: true, limit: 500 })` then JS-filters for 24h cutoff. Fee/slippage values surface the current wildcard from `exchange-defaults.ts` (same `DEFAULT_TAKER_FEE` + `DEFAULT_SLIPPAGE` the engine uses at lines 126-127). Try/catch graceful-degrade: if storage compute throws, the execution-layer block falls back to `CLASS_NOT_WIRED` for all classes rather than 500-erroring the whole endpoint — the orchestrator-layer 500 path is preserved for orchestrator-layer failures.
+
+**Reusable doctrine — `_meta.knownGaps` deferred-gap registry (§6.0 + §4.24).** Closing a deferred gap MUST remove the entry from the payload AND bump `_meta.lastReviewed`. ANY per-class-state batch touching this endpoint must bump `lastReviewed` even if `knownGaps` is unchanged (Langston B5 #1 always-bump rule). Without this discipline, the timestamp drifts silently and operators reading the endpoint think the doctrine is stale when it isn't. Line-number references in `knownGaps` strings drift as code changes — when a gap entry lives more than 1-2 batches, refactor to anchor-by-function-name on the next touch (RUNNING_ISSUES #157 follow-up). Codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.24.
+
+**Step 1.b probe outcomes (informational, drove scope):** (Q4-A) TRADE_OPENED has no production emit path — `TradeOpenedEvent` doesn't exist in eventBus, narrative-feed defines `TradeOpenedPayload` but `appendNarrativeEvent` called only from test fixtures — NO WORK NEEDED. (Q4-B) Position-record SSOT audit found 1 drift site at L1376 (CHUNK B) plus 1 already-correct fallback at L1219 plus 1 strict read at L922 (B79.TEC NO_FALLBACK). (Q4-C) Fee/slippage class-member wildcard at lines 126-127 — defer to Phase 25/26 calibration per same logic as sizing-core defer (needs evidence not placeholders); documented inline in `_meta.knownGaps`. (Q4-D) Trading-engine + micro-execution-service dormancy holds — last touched in B-NEW-43 memory sync commit only.
+
+**Implementation sequence per Langston Step 2 B5 #3:** B → A → C → E. B (SSOT cleanup) validates position-record discipline BEFORE A (interface + emit) propagates the value downstream. C (payload restructure) and E (tests) follow.
+
+**Verification gates met:**
+- AC-G1 (`npx tsc --noEmit`): 494/494 baseline-unchanged
+- AC-G2 (`npx vitest run`): 12/12 new file + 19/19 ORCHESTRATOR regression
+- AC-G3 (`node scripts/check-tsc-baseline.mjs`): OK — no regressions above baseline
+- AC-G4 (CI run `26527276989`): all 4 jobs GREEN at 2m17s
+
+**Step 4 Langston code review ACK CLEAN** on all 5 C-asks. **Step 8 Langston second-pass ACK GREEN** at all 5 probes — endpoint shape + HTTP 200 + PM2 stable + DB matches endpoint exactly (0/0/0) + code spot-check. Langston C4 4-surface checklist: surfaces 3 (counter shape) + 4 (perp CLASS_NOT_WIRED regression) verified today; surfaces 1 (canary log on close) + 2 (outcomeFeedback EMA store key) deferred to WIRE-IN per same structural gap as RTB + ORCHESTRATOR Step 7 closures.
+
+**Active-trading impact today ZERO.** Crypto regression: NONE by construction (additive optional field + defensive fallback + URL retained). Real behavioral observability lands at WIRE-IN when active trading flips on.
+
+**Cross-references:**
+- ASSET_CLASS_ONBOARDING_WORKFLOW §4.23 codifies the additive event-payload field pattern with `TradeClosedEvent.assetClass?: string` as canonical reference implementation (alongside `PromotionEvent.assetClass?: string` from B79.0n.RTB).
+- ASSET_CLASS_ONBOARDING_WORKFLOW §4.24 codifies the deferred-gap registry closure rule with `/api/diagnostics/orchestrator-per-class-state` v2 `_meta.knownGaps` as canonical reference implementation.
+- SIM "Recent additions (B79.0n.EXECUTION — Phase 24 — 2026-05-27)" mirrors the component-level enumeration with blast-radius analysis (CRITICAL = paper-execution-engine; MEDIUM = event-bus; LOW = routes.ts; NONE = c13/c14/narrative-feed/session-lifecycle-controller/trading-engine/micro-execution-service).
+
+---
+
 ### 19.5 — B79.0n.ORCHESTRATOR: Per-class consumer-site swap pattern (2026-05-27)
 
 B79.0n.ORCHESTRATOR (sub-batch 12 of 16 in B79.0n umbrella v4 arc, renumbered from #13 after POOL skip) closes the last 3 production consumer sites that still imported pattern-pool guardrails directly from `crypto_spot/pattern-pool-filters.js` — `paper-position-sizing.ts`, `signal_quality_evaluator.ts`, and the `/pattern-pool` diagnostic route in `routes.ts`. Each previously read crypto's literal `PATTERN_POOL_GUARDRAILS` regardless of the asset class of the signal being processed; xstock pattern signals therefore got crypto's 15% position cap (vs xstock's DB-resolved 50%) and crypto's 0.45 final-score floor (same value today as xstock, but the routing was class-bound and would have remained wrong if values diverged).

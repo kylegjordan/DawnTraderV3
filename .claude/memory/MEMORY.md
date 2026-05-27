@@ -15,33 +15,34 @@
 
 ---
 
-## CURRENT STATE (2026-05-27 — B79.0n.ORCHESTRATOR (#12) FULLY CLOSED; 10 of 16 umbrella sub-batches done; EXECUTION (#13) is next)
+## CURRENT STATE (2026-05-27 — B79.0n.EXECUTION (#13) FULLY CLOSED; 13 of 16 umbrella sub-batches done; WIRE-IN (#14) is next)
 
-### 🟢 B79.0n.ORCHESTRATOR (#12) — FULLY CLOSED 2026-05-27
+### 🟢 B79.0n.EXECUTION (#13) — FULLY CLOSED 2026-05-27
 
-**Renumbered from #13 after POOL (#12) SKIPPED 2026-05-27.** Sub-batch count 17→16.
+**LAST per-class plumbing sub-batch before WIRE-IN (#14, Phase 19a).** Per Kyle directive 16:18Z (proceed autonomously with Langston while he was away).
 
-**Closing commit:** `5e08568` (PM2 #325 at 13:17:34Z) — single-pass deploy, no hotfixes. CI run `26513242197` all-4-green.
+**Closing commit:** `f283c2c` (PM2 #326 at 17:30:13Z; rebased on `aead11a` ORCHESTRATOR governance) — single-pass deploy, no hotfixes. CI run `26527276989` all-4-green at 2m17s.
 
-**Step 8 Langston ACK GREEN** — all 5 independent probes passed (endpoint shape + HTTP 200 + PM2 stable + DB rows reconcile + code spot-check exhaustive switch).
+**Step 8 Langston ACK GREEN** — all 5 independent probes passed (endpoint shape + HTTP 200 + PM2 stable + DB matches endpoint exactly 0/0/0 + code spot-check skipped per Step 4 embedded diffs).
 
-**Completion report:** `Claude Comms and Packages/Batch Completion/B79_0n_ORCHESTRATOR_COMPLETION_REPORT.md`.
+**Completion report:** `Claude Comms and Packages/Batch Completion/B79_0n_EXECUTION_COMPLETION_REPORT.md`.
 
-**What landed:** Per-class consumer-site swap pattern + POOL skip cleanup. New `server/asset_classes/pattern-pool-dispatch.ts` domain-specific dispatcher (mirrors B79.0n.MCE getFrictionForAssetClass pattern). 3 production consumer swaps (paper-position-sizing.ts:145 + signal_quality_evaluator.ts:285 + routes.ts:12645 diagnostic) + 1 dead-import cleanup (signal-orchestrator.ts:101). POOL cleanup: 3 dead ARM constructions + interface field + import deleted; crypto module-level singleton untouched. 3 POOL test file dispositions (1 delete + 3 minor refactors). New `/api/diagnostics/orchestrator-per-class-state` endpoint. 27 new tests (11 unit dispatcher + 7 unit consumer-swaps + 8 integration cascade with key-aware DB mock). 11 scope objectives all YES.
+**What landed:** TradeClosedEvent additive `assetClass?: string` field (event-bus.ts mirroring PromotionEvent C-7 doctrine from RTB) + emit-site at paper-execution-engine.ts:1545 populates from position.assetClass canonical SSOT + canary log per Langston B2 mitigation. Position-record SSOT cleanup at paper-execution-engine.ts:1376 outcomeFeedback hook (belt-and-suspenders fallback per Langston B2 reframe — defensive NOT load-bearing, L922 NO_FALLBACK is the real guard). Diagnostic endpoint URL retained per Langston Q3 ACK (zero callers verified), payload v2 nested-by-layer with orchestrator + execution + _meta + 3-entry knownGaps registry inline. 12 new source-file regression-lock tests. 4 files / +253/-15 LOC net.
 
-**Files:** 14 changed = 8 prod + 6 test. +677/-131 LOC net. Local tsc baseline 494=494 unchanged. 342/342 tests pass.
+**Files:** 3 production (event-bus.ts +16 / paper-execution-engine.ts +30/-3 / routes.ts +84/-15) + 1 new test (b79-0n-execution-audit.test.ts 138 LOC). Local tsc baseline 494=494 unchanged. 12/12 + 19/19 ORCHESTRATOR regression pass.
 
-**Real behavioral correction observable:** xstock_spot pattern signals now route to 0.50 MAX_POSITION_PCT (DB-resolved) instead of crypto-bound 0.15 — visible via `GET /api/diagnostics/orchestrator-per-class-state`. Takes effect at WIRE-IN (#14) when active trading flips. Phase 19 calibration validates xstock's 0.50 placeholder per RUNNING_ISSUES #153 HARD pre-condition gate.
+**Real behavioral observability at WIRE-IN:** canary log + outcomeFeedback EMA store key + counter math all become observable when active trading flips on. Today endpoint shows 0/0 counters by design (paper_sim_trades empty).
 
-**Active-trading impact today:** ZERO. Crypto regression NONE by construction.
+**Active-trading impact today:** ZERO. Crypto regression: NONE by construction.
 
-**Governance ALL 8 docs ACTUALLY edited:** BATCH_CATALOG row #12 / PHASE_HISTORY 15c continuation / SIM "Recent additions (B79.0n.ORCHESTRATOR)" / SYSTEM_MANUAL §19.5 NEW / MULTI_ASSET_VTS_EXPANSION_PLAN closure / CHANGES_AND_FIXES CLOSURE-2026-05-27-pm / RUNNING_ISSUES #153-#156 (4 new entries) / ASSET_CLASS_ONBOARDING_WORKFLOW §4.22 NEW (per-class consumer-site swap pattern).
+**Governance ALL 8 docs ACTUALLY edited:** BATCH_CATALOG row #13 / PHASE_HISTORY 15c continuation / SIM "Recent additions (B79.0n.EXECUTION)" / SYSTEM_MANUAL §19.7 NEW / MULTI_ASSET_VTS_EXPANSION_PLAN closure / CHANGES_AND_FIXES CLOSURE-2026-05-27 evening / RUNNING_ISSUES #157-#159 (3 new entries) / ASSET_CLASS_ONBOARDING_WORKFLOW §4.23 + §4.24 NEW (additive event-payload field pattern + deferred-gap registry closure rule).
 
 ### 🟢 VERIFY-GATE WATCHLIST
 
-**2 active scheduled alerts (Thursday):**
+**3 active scheduled alerts:**
 - `cbe84d5b-73a6-4ed7-9009-447b37ecec04` — B79.0n.SCORING + TEC +48h at 2026-05-28 02:47 UTC
 - `1f34cf84-a37c-425c-a1c4-54924b053061` — B79.0n.TELEMETRY +48h at 2026-05-28 18:01:48Z
+- `b83b1e4b-4870-43d9-9ba0-a45a7d3949be` — B-NEW-40 14-day soak at 2026-05-31 12:46Z
 
 ### .b follow-ups + new entries (RUNNING_ISSUES)
 
@@ -50,35 +51,38 @@
 - #147 TELEMETRY.b per-class disk persistence — no SLA
 - #148 MarketDataHealthCheck EACCES — Tier-3 polish
 - #149-#152 RTB .b follow-ups
-- **#153 (NEW)** xstock pattern_max_position_pct=0.50 (3.3× crypto) — HARD pre-condition gate for WIRE-IN (#14) active-trading flip; Phase 19 calibration validates placeholder
-- **#154 (NEW)** ARM constructor optional `telemetry` arg light dead code — flag for next ARM-touching batch
-- **#155 (NEW)** perp `reason` field truncation in orchestrator diagnostic endpoint — cosmetic
-- **#156 (NEW)** Per-class consumer-site swap pattern audit candidate — Phase 16 grep of remaining `crypto_spot/` imports
+- #153 xstock pattern_max_position_pct=0.50 (3.3× crypto) — HARD pre-condition gate for WIRE-IN (#14)
+- #154 ARM constructor optional `telemetry` arg light dead code
+- #155 perp `reason` field truncation in diagnostic endpoint (BOTH orchestrator + execution layers now — cosmetic)
+- #156 Per-class consumer-site swap pattern Phase 16 audit candidate
+- **#157 (NEW)** `_meta.knownGaps` line-number drift — Langston Step 4 C5 #1 follow-up
+- **#158 (NEW)** `getPaperSimTrades` JS-filter 24h cutoff inefficient at WIRE-IN volume — Langston C5 #2
+- **#159 (NEW)** `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED]` canary log volume gating post-WIRE-IN 30d burn-in — Langston C5 #3
 
 ---
 
-## REMAINING UMBRELLA V4 SUB-BATCHES (4 of 16 left)
+## REMAINING UMBRELLA V4 SUB-BATCHES (3 of 16 left)
 
 | # | Name | Status | Dependencies |
 |---|---|---|---|
-| 13 | EXECUTION (was #15) | 🟡 NEXT | ORCHESTRATOR ✅ |
-| 14 | WIRE-IN (was #16) | pending | EXECUTION |
-| 15 | ML-CALIBRATION T2 (was #17) | pending | WIRE-IN |
-| 16 | OBSERVABILITY T2 + active-trading flip (was #18) | pending | all above |
+| 14 | WIRE-IN (Phase 19a) | 🟡 NEXT | EXECUTION ✅ |
+| 15 | ML-CALIBRATION T2 | pending | WIRE-IN |
+| 16 | OBSERVABILITY T2 + active-trading flip | pending | all above |
 
-**EXECUTION (#13) per umbrella v4:** paper-execution-engine entry-side hooks + dynamic sizing core + pre-execution validator per-class. Different file surfaces from ORCHESTRATOR (paper-position-sizing.ts shared only at the sizing-core logic which ORCHESTRATOR didn't touch). Langston Step 1 §12 ACK confirmed keep separate from ORCHESTRATOR.
+**WIRE-IN (#14) per umbrella v4:** activate runtime witnesses for Langston C4 surfaces 1+2 (canary log on close + outcomeFeedback EMA store key after close). xstock active-trading flip with the per-class plumbing from all prior batches. Phase 19/25 split decision pending Kyle's return per his 16:18Z directive.
 
 ---
 
 ## CLOSED THIS SESSION (2026-05-27)
 
 ### B79.0n.RTB (#11) — CLOSED 2026-05-27 morning
-
 Closing commit `6fd6bcac6`. Per-class queue partitioning + cadence seed.
 
 ### B79.0n.ORCHESTRATOR (#12) — CLOSED 2026-05-27 afternoon
-
 Closing commit `5e08568`. Per-class consumer-site swap pattern + POOL skip cleanup.
+
+### B79.0n.EXECUTION (#13) — CLOSED 2026-05-27 evening
+Closing commit `f283c2c`. TradeClosedEvent additive assetClass + SSOT cleanup + diagnostic v2 nested-by-layer.
 
 ---
 
@@ -97,14 +101,15 @@ Closing commit `5e08568`. Per-class consumer-site swap pattern + POOL skip clean
 - **Autonomy with Langston:** iterate to consensus per §6.7. Escalate to Kyle only on deadlock / architectural decisions / risk boundaries.
 - **All-8-docs ACTUALLY edited at Step 10** per Kyle PATTERN-DETECT directive.
 - **Phase 24 standing rule:** completion reports MUST include "Asset-class onboarding workflow learnings" 4-section block (a/b/c/d).
-- **Per-step MEMORY truth-file update discipline** — update MEMORY after every workflow step.
 - **4-phase migration pattern** (§4.20): for ADD COLUMN on hot-written tables. `import 'dotenv/config'` mandatory on standalone CLI scripts.
 - **LOCKED-module override pattern** (§4.21): umbrella-row-authorized + scope-bounded + Langston-Step4-confirmed-no-drift + governance-documents-what-stayed-untouched.
-- **Per-class consumer-site swap pattern** (§4.22): when per-class modules already exist with compatible shapes, use cheap dispatcher swap. Decision tree distinguishes from §4.20 (DB migration) + full F-1 resolver-with-EXISTS-gate (deferred to OBSERVABILITY #16).
-- **No-silent-fallback at REQUIRED-assetClass boundaries:** use `resolveAssetClass(symbol, 'kraken')` deterministically, NOT metadata-fallback-to-crypto_spot. Throws on B69-unregistered = correct fail-fast.
+- **Per-class consumer-site swap pattern** (§4.22): when per-class modules already exist with compatible shapes, use cheap dispatcher swap.
+- **Additive event-payload field pattern** (§4.23, NEW): when an event needs asset-class disambiguation, use `assetClass?: string` optional field — verify zero strict-shape consumers via grep first. Applied 2x: PromotionEvent C-7 (RTB) + TradeClosedEvent C-A (EXECUTION).
+- **Deferred-gap registry closure rule** (§4.24, NEW): closing a `_meta.knownGaps` entry MUST remove from payload + bump lastReviewed. ANY per-class-state batch must bump lastReviewed even if knownGaps unchanged.
+- **No-silent-fallback at REQUIRED-assetClass boundaries:** use `resolveAssetClass(symbol, 'kraken')` deterministically.
 
 ---
 
 ## ACTIVE TASKS
 
-#135 ORCHESTRATOR Steps 5-11 — in_progress (governance + completion + 3-way sync pending commit/push).
+#136 B79.0n.EXECUTION (#13) FULLY CLOSED — completion report + governance done; final commit/push + 3-way MEMORY sync + Kyle DM close summary IN-FLIGHT.

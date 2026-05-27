@@ -781,6 +781,32 @@ After RTB close, 6 sub-batches remain in the umbrella v4 roadmap (POOL → ORCHE
 
 ---
 
+## Update 2026-05-27 — B79.0n.EXECUTION closed (sub-batch 13 of umbrella v4, last per-class plumbing before WIRE-IN)
+
+**Sub-batch 13 — B79.0n.EXECUTION CLOSED 2026-05-27** (deploy commit `f283c2c`, PM2 #326 at 17:30:13Z; CI all-4-green at run `26527276989` 2m17s). Sub-batch 13 of 16 in B79.0n umbrella v4 arc — **LAST per-class plumbing sub-batch before WIRE-IN (#14, Phase 19a)** per Kyle directive 2026-05-27 (proceed autonomously with Langston while he was away). **TradeClosedEvent additive assetClass + position-record SSOT cleanup + diagnostic endpoint v2 nested-by-layer payload.**
+
+CHUNK A landed the additive optional `assetClass?: string` field on `TradeClosedEvent` (server/lib/event-bus.ts) mirroring `PromotionEvent.assetClass` C-7 doctrine from B79.0n.RTB — all 3 listeners verified safe (paper-execution-engine self-handler, c13-validation-service, c14-validation-service). Emit site at `paper-execution-engine.ts:1545` populates `assetClass: position.assetClass` (canonical SSOT read from L2147 entry write per B79.TEC Finding 2, NOT re-resolved from symbol) + new canary log `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED]` per Langston Step 2 B2 mitigation for runtime observability once xstock active trading lights up.
+
+CHUNK B landed position-record SSOT cleanup at `paper-execution-engine.ts:1376` (outcomeFeedback hook). Switched `safeResolveAssetClass(position.symbol, 'kraken')` re-resolve to `position.assetClass ?? safeResolveAssetClass(...)` belt-and-suspenders fallback per Langston Step 1.a Q4-B audit + Step 2 B2 reframe (defensive NOT load-bearing — L922 B79.TEC NO_FALLBACK hard-fails before flow reaches L1376 if position.assetClass missing).
+
+CHUNK C restructured `/api/diagnostics/orchestrator-per-class-state` to v2 nested-by-layer payload `{ orchestrator: {...}, execution: {...}, _meta: { schemaVersion: 2, coverage: ['orchestrator','execution'], lastReviewed: '2026-05-27', knownGaps: [...] } }`. URL retained per Langston Q3 ACK (continuity over misleading-URL cost; zero callers verified across client/server/scripts via Step 1.b A6 thorough grep). Execution layer surfaces openPositions per class + recentCloses24h + wildcard feePercent/slippagePercent + CLASS_NOT_WIRED for perp variants. `_meta.knownGaps` inline-surfaces 3 deferred items (fee/slippage dispatch class-member wildcard, sizing-core risk-pct/max-position-pct mode-keyed, narrative-feed assetClass) — operators see deferrals without consulting docs.
+
+CHUNK E landed 12 source-file regression-lock tests in `b79-0n-execution-audit.test.ts` (4 CHUNK A interface+emit+canary + 1 CHUNK B SSOT cleanup with no-throw skip semantics per Langston B3 + 7 CHUNK C nested payload + knownGaps + perp CLASS_NOT_WIRED + exchange-defaults import). All 12 green in 631ms.
+
+Step 1.a CC architectural read narrow-scope hypothesis ACK clean with Langston Q4-A/B/C/D additions: TRADE_OPENED audit (no production emit path → NO WORK); position SSOT 1 drift site (CHUNK B); fee/slippage WILDCARD class-member (deferred to Phase 25/26 same as sizing-core); trading-engine + micro-execution dormancy holds (OUT). Implementation sequence per Langston Step 2 B5 #3: B → A → C → E (B validates SSOT discipline before A propagates downstream).
+
+Step 4 Langston code review ACK CLEAN on all 5 C-asks with 3 non-blocking follow-ups (line-number drift in `_meta.knownGaps` future cleanup; JS-filter on 24h cutoff future SQL-pushdown candidate at WIRE-IN volume; canary log volume gating behind env flag once xstock past 30d burn-in).
+
+Step 7 first-pass + Step 8 second-pass verification ALL GREEN. HTTP 200 in 16ms, diagnostic endpoint v2 payload verified (5 top-level keys, xstock 0.50 cap visible, perp CLASS_NOT_WIRED in BOTH layers, 3 knownGaps surfaced), PM2 #326 stable ~2m uptime, paper_sim_open_positions COUNT=0 + paper_sim_trades total-ever COUNT=0 matches endpoint exactly, zero error-log hits, Langston ACK GREEN at all 5 probes.
+
+Langston C4 4-surface checklist: surfaces 3 (counter shape) + 4 (perp CLASS_NOT_WIRED regression) verified today; surfaces 1 (canary log) + 2 (outcomeFeedback EMA store) deferred to WIRE-IN per same structural gap as RTB + ORCHESTRATOR Step 7 closures (active trading off, paper_sim_trades empty by design pending WIRE-IN #14).
+
+**Active-trading impact today ZERO.** Crypto regression: NONE by construction (additive optional field + defensive fallback + URL retained). New ASSET_CLASS_ONBOARDING_WORKFLOW §4.23 (additive event-payload field pattern) + §4.24 (deferred-gap registry closure rule) codified for future per-class state batches.
+
+**Next sub-batch: B79.0n.WIRE-IN (#14, Phase 19a).** Active trading flip; canary log + outcomeFeedback EMA store key + counter math all become observable on first trade landing. [Completion report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B79_0n_EXECUTION_COMPLETION_REPORT.md).
+
+---
+
 ## Update 2026-05-27 — B79.0n.ORCHESTRATOR closed (sub-batch 12 of umbrella v4)
 
 **Sub-batch 12 — B79.0n.ORCHESTRATOR CLOSED 2026-05-27** (deploy commit `5e08568`, PM2 #325 at 13:17:34Z; CI all-4-green at run `26513242197`). Sub-batch 12 of 16 in B79.0n umbrella v4 arc — renumbered from #13 after POOL skip 2026-05-27. **Per-class consumer-site swap pattern + POOL skip cleanup.**

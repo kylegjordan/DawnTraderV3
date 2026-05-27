@@ -1659,4 +1659,120 @@ See CHANGES_AND_FIXES.md "CLOSURE-2026-05-27 (afternoon) — B79.0n.ORCHESTRATOR
 
 ---
 
+## §4.23 — Additive event-payload field pattern (C-7 + C-A doctrine, B79.0n.EXECUTION 2026-05-27)
+
+When an existing inter-service event needs to carry asset-class information for future disambiguation, the canonical pattern is **additive optional field** — NOT required field, NOT new event variant. Applied 2x so far: `PromotionEvent.assetClass?: string` from B79.0n.RTB C-7, and `TradeClosedEvent.assetClass?: string` from B79.0n.EXECUTION CHUNK A.
+
+**When this pattern applies:**
+- The event already exists and has listeners
+- A new asset-class dimension needs to be disambiguated (post-B79.0n.RTB, same symbol can trade across classes — xstock_perp AAPLx perp + xstock_spot AAPLx spot)
+- Existing listeners DO NOT use `keyof EventInterface` enumeration, exhaustive-switch on shape, JSON.stringify/structured-clone with strict shape, or telemetry-emit with required-field schema
+
+**When it does NOT apply:**
+- Listeners do shape-strict serialization (additive field would break the schema contract)
+- Listeners do exhaustive-switch on `keyof EventInterface` (additive field would fail TS compilation)
+- The field is required for correctness on the consumer side (then it's a required-field interface change, not additive)
+
+**Pre-cutover verification (mandatory):**
+1. **Enumerate all listeners** — grep for `eventBus.on<EventName>` or `eventBus.off<EventName>` across the codebase
+2. **Inspect each handler** — verify it only reads specific fields (not `keyof` enumeration, not destructure with required shape)
+3. **Grep for serialization** — `JSON.stringify(<eventVariable>)`, `structuredClone(<eventVariable>)`, telemetry-emit-event paths
+4. **Confirm zero hits on strict-shape consumers** — if any found, additive doesn't apply; use new event variant instead
+
+**Implementation pattern:**
+```typescript
+export interface EventName {
+  // ... existing fields ...
+
+  /**
+   * <BATCH_ID> (<DATE>, <CHUNK_REF>): asset class of the <event subject>.
+   * Optional in v1 per <Langston ACK ref> + same C-7/C-A doctrine —
+   * additive field is safe for all <N> current listeners
+   * (<listener_1> at L<line> <usage>, <listener_2> at L<line> <usage>, ...);
+   * none use exhaustive switch or `keyof EventName` enumeration.
+   *
+   * Populated from <source> at the emit site (<emit_file>:L<line> — read from
+   * the canonical SSOT, not re-resolved from <derivative>). Same-symbol-across-classes
+   * is structurally possible post-B79.0n.RTB; consumers that need to disambiguate
+   * read this field; consumers that don't are unaffected.
+   */
+  assetClass?: string;
+}
+```
+
+**Emit-site read-from-record pattern:**
+```typescript
+const _eventAssetClass = (<sourceRecord> as any).assetClass as string | undefined;
+// Optional canary log for runtime observability:
+console.log(
+  `[<BATCH_ID>][EMIT_<EVENT>] mode=${mode} class=${_eventAssetClass ?? 'undefined'} <other_keys>`
+);
+eventBus.emit<EventName>({
+  // ... existing fields ...
+  assetClass: _eventAssetClass,
+});
+```
+
+**Cast site discipline (Langston Step 4 C1):**
+- Two annotated `(record as any).assetClass` cast sites are acceptable for an additive-field rollout
+- If a 3rd or 4th cast site appears, extract a `readRecordAssetClass(r): string | undefined` helper to centralize the cast
+- The structural alternative (extending the source-record type with required `assetClass`) is generally a larger surface change — every reader of the type, every fixture, every test helper
+
+**Canonical references:**
+- `PromotionEvent.assetClass?: string` at `server/lib/event-bus.ts:33-51` (B79.0n.RTB C-7, 2026-05-27)
+- `TradeClosedEvent.assetClass?: string` at `server/lib/event-bus.ts:24-51` (B79.0n.EXECUTION CHUNK A, 2026-05-27)
+- 3-listener empirical for TradeClosedEvent: `paper-execution-engine.ts:184-188` (self-handler, mode-filter only), `c13-validation-service.ts:103-107` (collection), `c14-validation-service.ts:123-127` (collection) — all confirmed safe via grep + handler inspection at Step 1.b + locked in CHUNK E source-file regression tests
+
+---
+
+## §4.24 — Deferred-gap registry closure rule (B79.0n.EXECUTION 2026-05-27)
+
+When a diagnostic endpoint surfaces deferred per-class implementation gaps inline via `_meta.knownGaps` array (operator-visible without consulting docs), closure of those gaps requires explicit governance discipline to prevent registry drift.
+
+**The registry pattern (canonical reference: `/api/diagnostics/orchestrator-per-class-state` v2 schema from B79.0n.EXECUTION):**
+```jsonc
+{
+  // ... layer state ...
+  "_meta": {
+    "schemaVersion": 2,
+    "coverage": ["orchestrator", "execution"],
+    "lastReviewed": "<YYYY-MM-DD>",
+    "knownGaps": [
+      "<gap description> (<file>:<line range>); <defer to phase or trigger condition>",
+      // ...
+    ]
+  }
+}
+```
+
+**Closure rule (mandatory):**
+1. **Remove the entry from the `knownGaps` array** — the gap closure batch MUST delete the matching string literal from the payload
+2. **Bump `_meta.lastReviewed`** — set to the current `<YYYY-MM-DD>` so operators see the registry is fresh
+3. **Cross-reference in the closure batch's CHANGES_AND_FIXES.md entry** — explicitly note "removes `<gap description>` from `_meta.knownGaps` registry" so the closure is auditable
+
+**Always-bump rule (Langston Step 4 C5 #1):**
+- ANY batch that touches per-class state at the orchestrator-or-execution layer MUST bump `_meta.lastReviewed`, even if `knownGaps` contents are unchanged
+- Without this rule, the timestamp drifts silently and operators reading the endpoint think the doctrine is stale when it isn't
+- Touching the endpoint payload constitutes a "review" event regardless of whether gaps were closed
+
+**Anchor-by-name preference (RUNNING_ISSUES #157 follow-up):**
+- Line-number references in `knownGaps` strings (`paper-execution-engine.ts:126-127`) drift as code changes
+- Prefer anchor-by-function-name (`getDefaultExchangeFees`, `computeRiskPercent`) when the function name is canonical
+- If a gap entry exists for more than 1-2 batches, refactor to anchor-by-name on the next batch that touches the endpoint
+
+**Why surface deferrals inline rather than just in docs:**
+- Operators reading a diagnostic in real-time see what's promised vs deferred without context-switching to governance docs
+- Closure auditability — if a gap is referenced in `_meta.knownGaps` and then disappears, that's the closure signature
+- Self-describing payload — the endpoint becomes the SSOT for "what's wired vs not wired"
+
+**Anti-pattern (don't do this):**
+- Surface a `knownGaps` entry in v1, then in v2 silently change the gap description without removing the entry — drift accumulates and operators stop trusting the registry
+- Drop the `lastReviewed` timestamp under the assumption that `knownGaps` array changes are sufficient evidence of freshness — operators need both signals
+
+**Canonical reference:**
+- `/api/diagnostics/orchestrator-per-class-state` v2 payload from B79.0n.EXECUTION CHUNK C (2026-05-27)
+- Initial `knownGaps` registry (3 entries) — fee/slippage dispatch class-member wildcard + sizing-core mode-keyed + narrative-feed assetClass dormant. Both fee/slippage + sizing-core closures land at Phase 25/26 calibration; narrative-feed closure has no current target (annual dormancy audit trigger).
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
