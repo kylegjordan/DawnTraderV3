@@ -39,14 +39,32 @@ Per Langston Q5.1 pre-A1 gate: tfsMomentumScale=0.010 + tfsVolatilityScale=0.012
 - `server/tests/unit/b-xstock-calib-b1-sibling-features.test.ts` — 19 tests, all pass.
 - Local tsc baseline 494=494, vitest 19/19 GREEN.
 
-### 🟡 PHASE 6 IN PROGRESS — B.1 Step 4 dispatched to Langston
+### 🟢 PHASE 6 DONE — Langston Step 4 ACK clean conditional, touchups applied
 
-Change list at `Claude Comms and Packages/Change Lists/B_1_STEP4_CHANGE_LIST.md` with embedded diffs of 4 new files. SCP'd to `/home/langston/inbox/b-xstock-calib/`. Dispatched via SSH+claude-cli (background task `bxs4nfla7`). Awaiting Langston Q1-Q5 review reply.
+Langston's Q1-Q5 review verdict: ACK clean conditional on 3 touchups, all applied:
+- Q3: `isRebalanceDay` docstring caveat (heuristic proxy, not exact Russell/S&P)
+- Q5(a): Distribution analysis §2.1 correction (TFS max 0.7915 not 0.71; that was p95)
+- Q5(c): Replay harness header gains run-command + reusable-diagnostic disposition
+- Q4: Concentration check added (max per-symbol = 23 bars / 0.87%, well under 5%)
 
-**Code summary for review:**
-- 4 new files in C:\dev mirror (time-of-day.ts, calendar.ts, sibling-features.test.ts, replay harness)
-- ZERO changes to regime-thresholds.ts, market-regime.ts, module_constants, screener_filters
-- Validation/observation batch — no production behavior change
+Langston independently re-ran the CSV → numbers match exactly. Concurs no threshold adjustments. Concurs design-intent framing on TFS compression. Both touchups verified locally: vitest 19/19 PASS, tsc baseline 494=494.
+
+### 🟢 B-XSTOCK-CALIB B.1 CLOSED 2026-05-28 — autonomous overnight run complete
+
+CI run `26548662643` all-4-green at 2m24s. Deploy `9d0a10271` PM2 #328 at 01:25Z. HTTP 200/7.8ms response. Langston Step 8 ACK-CLEAN with 4 independent verifications: (1) PM2 stable post-deploy + healthy event-loop/HTTP p95; (2) `module_constants` regime_classifier xstock_spot rows resolve (untouched, MAX(updated_at)=2026-05-25 17:56:21Z); (3) regime distribution on live cycles classifying across all 5 regimes (Phase14/MCE log @ 01:27-01:28Z); (4) leaf helper files at expected paths with correct content.
+
+Step 10 governance docs updated: BATCH_CATALOG (new B-XSTOCK-CALIB sub-table with B.1 row) + PHASE_HISTORY (closure note) + SIM §5.1 (validated note + analysis link) + XSTOCK_CALIBRATION_PLAN §5 (progress log row) + RUNNING_ISSUES #160 (momentumFactor saturation Phase 25 handoff). Completion report at `Claude Comms and Packages/Batch Completion/B_1_COMPLETION_REPORT.md`.
+
+Final commit chain on remote `migration/aws-supabase`:
+- `eb0576d23` — B-NEW-45 close + B.1 Step 2 pre-audit governance
+- `1c434d747` — CLAUDE.md §1 strengthened plain-language rule
+- `45fe66109` — B.1a distribution analysis + Step 4 change list + replay CSV
+- `9d0a10271` — B.1 sibling-feature helpers + archive-replay harness (CI green)
+- [final commit pending] — Step 10 governance + completion report + memory sync
+
+### ⏳ NEXT batch: B.2 IMF family threshold calibration
+
+Scope correction PENDING Kyle authorization. Per filter-path investigation (Phase 1 of autonomous run): screener_filters has 14 distinct filter_paths per asset_class (7 vts_* + 7 active_*). xStock-side gap: missing `vts_strong_trend` in live mode + 2 blank-filter_path rows. mode-column (paper/live) is artifact — values byte-identical between modes. Umbrella scope v1.1 needs commit + Langston ACK before B.2 work starts.
 
 ### KEY DOCS / COMMITS
 - **B.1 pre-audit:** `Claude Comms and Packages/Scope Files/B_1_PRE_AUDIT.md` (Langston Step 2 ACK clean; revised: Read A confirmed don't pre-decide — run replay first per Kyle 2026-05-28; Option A keep TS-constants per Langston Q1 pushback)

@@ -263,6 +263,8 @@ Updates as phases ship. Append rows; do NOT rewrite history.
 |---|---|---|---|
 | 2026-05-15 | Plan LOCKED | done | Langston round-2 ACK; v2 final committed `9cc9ac7d5`. Promoted to system-manual `1bd...` (this commit). |
 | 2026-05-15 | **B-NEW-34 — bar-interval switch to 60-min + freshness-gate removal + filter floor 60→24 + ORB disabled** | done | Commits `756b64e49` → `a7545d595` → `88e34bd67` → `1ee3ceb27`. PM2 #287. Staging verified live: 64 pairs/cycle (vs 26 pre-deploy), 675ms cycle duration, no SCAN_TIMEOUT. Pre-flight C calibration debt (~12 indicator/threshold concerns) absorbed into Phase B. B-NEW-35 spawned for B74 source dedup. 240-min warm-fetch suspended until B-NEW-35 lands. |
+| 2026-05-28 | **A.3 verification gate closed** (B-XSTOCK-CALIB pre-kickoff) | done | Memo `1-system-manual/_audit/A3_DBS_VERIFICATION_GATE_MEMO.md`; commit `7f06d47b8`. Read B confirmed (top-5 ex-INDEX_PROXY = 22.53%); 2 B.7 carry-forwards (sector-under-coverage-floor + per-sector top-N). |
+| 2026-05-28 | **B.1 regime threshold + TFS confidence-formula** | done (validate-and-document; no threshold adjustments) | Archive replay 2,658 bars / 260 symbols. Distribution within design envelope. Per-branch confidence quartiles confirm multiplicative formula behavior. Deploy `9d0a10271` PM2 #328 at 01:25Z; CI run `26548662643` all-4-green. 4 new files (2 leaf helpers + 19 tests + replay harness). [Analysis doc](../Claude%20Comms%20and%20Packages/Cross-Session%20Briefs/B_1A_DISTRIBUTION_ANALYSIS.md). [Completion report](../Claude%20Comms%20and%20Packages/Batch%20Completion/B_1_COMPLETION_REPORT.md). |
 | _(append rows here as each phase ships)_ | | | |
 
 **Plan rev 2 entry (2026-05-15) — bar-interval change ripples + cohort reset:**

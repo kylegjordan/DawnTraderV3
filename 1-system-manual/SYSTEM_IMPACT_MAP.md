@@ -261,7 +261,13 @@
 
 ## Layer 5: Regime Classification
 
-### 5.1 calculatePairRegime() — CANONICAL (ACTIVE, redesigned B62)
+### 5.1 calculatePairRegime() — CANONICAL (ACTIVE, redesigned B62; xstock_spot validated B-XSTOCK-CALIB B.1 2026-05-28)
+<!-- B-XSTOCK-CALIB B.1 (2026-05-28): archive-replay against 2,658 xStock bars / 260 symbols confirmed
+     regime distribution within design envelope (HVU 25.0% / IE 11.6% / RBS 8.8% / ST 36.5% / TFS 18.2%).
+     TFS confidence p95=0.70 compression near floor is multiplicative-formula design intent. No
+     threshold adjustments to `regime-thresholds.ts` or `module_constants.regime_classifier.xstock_spot.*`.
+     See `Claude Comms and Packages/Cross-Session Briefs/B_1A_DISTRIBUTION_ANALYSIS.md`. -->
+
 - **File**: `server/core/metrics/market-regime.ts`
 - **What**: Canonical pair-level regime classification. **B62 Design B:** `calculatePairRegime()` now accepts `dbsScore` parameter as primary classification input. DBS-integrated classifier eliminates drift contamination (RBS 70% → 0%). 5 regimes (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION). Uses DBS score + volatility + momentum + DX. DX thresholds recalibrated for crypto in HF7 (25 to 45/50/55/60).
 - **Upstream**: OHLC price data (60-min candles from both VTS and orchestrator — aligned in HF8), **DBS score (from directional-bias.ts via MCE — B62, new upstream feeder)**
