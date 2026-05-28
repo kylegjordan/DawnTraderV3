@@ -176,10 +176,30 @@ async function pushToTelegram(alert: SystemAlert): Promise<void> {
 }
 
 /**
- * Invoke Langston via SSH+claude-cli so a Langston session runs and performs
- * the §10.5 per-turn alert-surfacing on his side. Fire-and-forget — we don't
- * wait for the SSH call to complete (Langston may take minutes; we don't
- * want to block the dispatcher).
+ * Single-quote a string for safe inclusion in a remote `sudo -u langston bash`
+ * argv. Wraps in single quotes and escapes embedded single quotes via the
+ * '\'' idiom. Alert fields (title/body) are operator/CC-authored, but quoting
+ * defensively keeps a stray quote from breaking the remote command.
+ */
+function shellSingleQuote(s: string): string {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Invoke Langston for an active alert. Delegates to the Helsinki-side wrapper
+ * `langston-alert-handler.sh` (B-NEW-46), which runs a fresh Langston
+ * claude-cli session, logs the response, AND relays it to Telegram topic 21
+ * via @LangstonDTBot so Kyle sees a visible confirmation — closing the gap
+ * where Langston's alert handling was a silent server-side acknowledgment
+ * (Kyle directive 2026-05-28).
+ *
+ * The SSH call launches the wrapper detached (setsid) ON Helsinki and returns
+ * immediately, so the dispatcher does NOT block on Langston's multi-minute
+ * session. Because the SSH itself is now fast, we AWAIT it and capture the
+ * exit code (B-NEW-46 Part C / Langston B-NEW-45 Q4.a) — an SSH-level failure
+ * (can't reach Helsinki) is the one failure the wrapper-side relay can't cover,
+ * so it's logged here. All other failure modes (session error / timeout /
+ * empty) are relayed to Telegram by the wrapper itself (its 5a invariant).
  *
  * Skipped in dev / non-staging envs (LANGSTON_INVOKE=0 disables explicitly).
  */
@@ -190,34 +210,46 @@ async function invokeLangstonForAlert(alert: SystemAlert): Promise<void> {
   }
   if (alert.severity === 'info') return;
 
-  const { spawn } = await import('node:child_process');
-  // Short prompt so the SSH+claude-cli call stays inside the file-first
-  // protocol (CLAUDE.md §6.5.0). The alert body itself is small enough that
-  // inline is fine (under ~3KB for soak-verification alerts).
-  const prompt =
-    `SYSTEM ALERT promoted to active. Please review on your side per CLAUDE.md §10.5 and surface to Kyle in your next reply if action is needed. ` +
-    `Alert ID: ${alert.id}. ` +
-    `Title: ${alert.title}. ` +
-    `Severity: ${alert.severity}. ` +
-    `Category: ${alert.category}. ` +
-    `Body: ${alert.body.slice(0, 1500)}`;
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const execFileAsync = promisify(execFile);
 
-  // SSH to Hetzner Helsinki where Langston runs.
+  // Positional args to the wrapper: id severity category title body.
+  // Body capped at 2000 chars (the wrapper embeds it in the claude-cli prompt).
+  const args = [alert.id, alert.severity, alert.category, alert.title, alert.body.slice(0, 2000)];
+  const quotedArgs = args.map(shellSingleQuote).join(' ');
+
+  // Launch the wrapper detached on Helsinki via setsid (survives SSH close);
+  // SSH returns once the background job is launched, not when it finishes.
+  //
+  // NO `bash -c '...'` wrapper: ssh already runs the remote command through
+  // the login shell, so the redirects + `&` are interpreted there. Wrapping in
+  // `bash -c '...'` would open an outer single-quote region that structurally
+  // collides with shellSingleQuote's inner `'<arg>'` quoting — the args would
+  // leak as outer-shell word boundaries (title truncated at first space, body
+  // dropped). Langston B-NEW-46 Step 4 blocker; verified via remote-shell repro
+  // that the un-wrapped form delivers all 5 args with spaces intact.
   const remoteCmd =
-    `sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=$(cat /etc/langston/oauth.env | cut -d= -f2-) && ` +
-    `export HOME=/home/langston && cd /home/langston && ` +
-    `FRESH_UUID=$(python3 -c "import uuid; print(uuid.uuid4())") && ` +
-    `timeout 600 /usr/bin/claude -p --session-id $FRESH_UUID --model claude-opus-4-7 --permission-mode bypassPermissions ` +
-    `${JSON.stringify(prompt)} ` +
-    `>> /var/log/langston-alert-invokes.log 2>&1'`;
+    `sudo -u langston setsid /usr/local/bin/langston-alert-handler.sh ${quotedArgs} ` +
+    `>> /var/log/langston-alert-invokes.log 2>&1 < /dev/null &`;
 
-  const child = spawn(
-    'ssh',
-    ['-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10', 'root@204.168.141.77', remoteCmd],
-    { stdio: 'ignore', detached: true },
-  );
-  child.unref();
-  console.log(`[fire-due] Langston invoke spawned for alert ${alert.id} (fire-and-forget)`);
+  try {
+    await execFileAsync(
+      'ssh',
+      ['-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10', 'root@204.168.141.77', remoteCmd],
+      { timeout: 20000 },
+    );
+    console.log(`[fire-due] Langston invoke launched on Helsinki for alert ${alert.id} (handler relays response to Telegram)`);
+  } catch (err) {
+    // Part C: SSH-level failure — the wrapper never ran, so its 5a relay can't
+    // fire. This console.error line is the only signal that the invoke didn't
+    // reach Langston; the dispatcher systemd unit captures stderr via
+    // StandardError=append:/var/log/dawntrader/system-alerts-dispatcher.log.
+    console.error(
+      `[fire-due] Langston invoke SSH FAILED for alert ${alert.id} (could not reach Helsinki): ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 // ─── Subcommand implementations ────────────────────────────────────────────
