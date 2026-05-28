@@ -8,6 +8,19 @@
 
 ---
 
+## ⚠️ v1.2 RESEARCH UPDATE (2026-05-28 — Kyle-directed web research + Kraken cross-check; supersedes the price-dislocation premise below)
+
+**Two premise-changing findings (objectives will be revised pending Kyle's nod):**
+
+1. **PRICES ARE CORRECT — no dislocation exists.** Per Kraken docs, xStocks are 1:1 with the underlying and priced to its execution price. The "MU ~$910 dislocation" was a CC error: Micron genuinely trades ~$905 on 2026-05-28 (crossed $1T market cap, +19% on AI-memory demand, UBS PT $1,625). NVDA/TSLA/AAPL/QQQ all match real current prices. → **O2 (price-dislocation root-cause) is dropped; replaced by a quick spot-confirm that stored price ≈ underlying.** Kyle's instinct ("Kraken doesn't send typos") was right.
+2. **VOLUME IS INFLATED ~700× — now proven against Kraken's own data.** Kraken's public TSLAx page shows **~$926K** 24h USD volume (matches Kyle's ~$600K screenshot order-of-magnitude); our system computes **~$665M** for the same token. Real xStock token volumes are HUNDREDS OF THOUSANDS of dollars. The `volume` field is in base-currency (tokens) per Kraken docs, and our `tokens × price = USD` is unit-correct in principle — but the stored token count is itself ~700× the real volume, so the defect is in how we read/accumulate Kraken's `volume` field. **Root-causing + fixing the ~700× inflation is now the batch's core objective (O1/O5 reframed).**
+
+**Revised direction:** (1) root-cause + fix the ~700× volume inflation → real token liquidity; (2) drop price-dislocation, spot-confirm only; (3) **keep `max_price` OFF (Kyle directive** — don't cap legitimately high-priced names); (4) recalibrate `min_volume` (currently $1M, meaningless vs real ~$100K-$1M volumes) to the true scale once volume is fixed; (5) tradeable-universe count derived from corrected volume. Still a GATE before B.2.
+
+*The §0-§4 below are the v1.1 text (Langston-ACK'd); they will be rewritten to this revised direction after Kyle confirms.*
+
+---
+
 ## §0 — Why this sub-batch exists (VERIFIED findings, not assumptions)
 
 This scope's §0 was drafted AFTER reading the actual ingestion code and querying the live staging archive — NOT from memory. Two prior internal assumptions were **wrong** and are corrected here.
