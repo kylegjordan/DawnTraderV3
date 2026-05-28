@@ -19,5 +19,6 @@ if [[ ! -f "$SRC" ]]; then
 fi
 
 echo "Deploying $SRC -> $HELSINKI:$DEST"
-scp "$SRC" "$HELSINKI:$DEST"
-ssh "$HELSINKI" "chmod 750 '$DEST' && chown root:root '$DEST' && bash -n '$DEST' && echo 'deployed + syntax-OK: '\$(ls -la '$DEST')"
+# Strip any CR (Windows CRLF line endings) on the way over so the remote bash
+# doesn't choke on `\r` — the source may be edited on a Windows mirror.
+tr -d '\r' < "$SRC" | ssh "$HELSINKI" "cat > '$DEST' && chmod 750 '$DEST' && chown root:root '$DEST' && bash -n '$DEST' && echo 'deployed + syntax-OK: '\$(ls -la '$DEST')"

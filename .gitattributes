@@ -2,3 +2,4 @@
 # DAWNTRADER — Git Attributes
 # No LFS tracking — large runtime data is excluded via .gitignore
 # ============================================================
+infra/helsinki/*.sh text eol=lf
