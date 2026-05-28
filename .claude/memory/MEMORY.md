@@ -53,6 +53,19 @@ Scope v1.1 at `Scope Files/B_XSTOCK_GLOBAL_FILTER_SCOPE.md` (commit `e5b7133`). 
 - **Order-book DEPTH (bid_qty/ask_qty) is ABSENT from filters** — only bid/ask *spread* used (B-NEW-14). We DO capture bidQty/askQty in ticker_snap but no filter reads it → using depth = NEW plumbing (scanner enrichment → global/IMF).
 - **Architecture = mirror-of-crypto, DB-keyed:** xStock filters forked into dedicated modules (global-filter.ts, imf-evaluator.ts) but architecturally identical to crypto; IMF metric fns SHARED (imf-metrics.ts, asset-class-agnostic); ALL thresholds in `screener_filters` keyed by asset_class. → Changes needed = (a) re-source liquidity INPUTS at both stages, (b) add depth plumbing, (c) maybe xStock-specific LQ (crypto LQ = log10 of USD vol assumes deep mkt). Threshold *structure* unchanged (just data). LQ formula divergence is the main candidate for real code fork.
 
+### DOWNSTREAM BLAST RADIUS (agent-mapped + spot-verified 2026-05-28) — bad volume goes WAY past filters
+- Beyond global+IMF filters, volume/liquidity is consumed by: **MCE** (volume24h param → indicators + archive), **Directional Bias Store** (global DBS = VOLUME-WEIGHTED median → feeds regime classifier), **Volume-Regime modulator B68.2** (multiplicative confidence-chain factor [0.92-1.05] computed from per-bar OHLC volume), **~8 strategies** (volume gates + confidence bonuses incl. ORB). So inflated volume distorts regime detection + every signal's confidence, not just the liquidity gate. NOT consumed by: SQE, position-sizing, exits/TEC, cost-model (verify in Step 2 pre-audit before implementing).
+- **GAP (Kyle stuck-trade concern):** position sizing is purely risk-based (NO liquidity cap / participation rate) and exits are purely price-based (NO thin-market input). So liquidity currently plays NO role in how an xStock is sized or closed. For an illiquid asset that's a gap to fix (liquidity-aware sizing + exit).
+
+### TRADE REPORT (Kyle ask 2026-05-28) — xStock closed VTS virtual trades = `exit_strategy_alternates` (1,140 trades × 12 exit variants)
+- Baseline (`current_trailing_baseline`) exit-reason mix: TRAIL_hit 66.8% (+0.31%), SL_hit 19.6% (−1.39%), INSUFFICIENT_DATA 9.2%, BE_stop 2.2%, **TP_target_hit 1.7%**, **TIMEOUT 0.5% (6 trades, avg ~7 DAYS stuck)**. Target hits very rare; timeouts rare but when they happen = ~7-day stuck (the stuck-trade signal).
+- **Liquidity-correlation NOT possible from stored data:** `feature_snapshots.liquidity_score` is EMPTY/unpopulated; no per-trade LQ persisted; AND exit replays assume the trade can always fill at the bar price (NO liquidity modeled) → simulated closes OVERSTATE exitability, so real thin-market stuck risk is NOT captured. Net: can't show liquidity caused bad closes because liquidity isn't wired into sizing/exits at all.
+
+### OTHER ACTIVE ASKS (Kyle 2026-05-28)
+1. **Scope rewrite v2 (IN PROGRESS):** fold in root cause + multi-venue/order-book liquidity + 2-stage filter impact + full downstream blast radius + required changes (re-source liquidity inputs, add depth plumbing, maybe xStock LQ, liquidity-aware sizing/exit) → then calibrate thresholds.
+2. **Langston independent investigation (TODO):** dispatch him to investigate the volume/liquidity question on his own.
+3. **LLM research prompt (DONE):** `Scope Files/XSTOCK_VOLUME_RESEARCH_PROMPT.md` — Kyle to share with other LLMs (the "Kraken owns Backed yet own-venue volume is small" puzzle).
+
 ### ⏳ LATER — B.2 IMF family threshold calibration
 Umbrella scope v1.1 PENDING: screener_filters has 14 distinct filter_paths per asset_class (7 vts_* + 7 active_*); the VTS/active split lives ONLY here (regime classifier + per-strategy gates are SHARED across paths). xStock-side gaps: missing `vts_strong_trend` in live + 2 blank-filter_path rows. mode-column (paper/live) is byte-identical-value artifact — write same value to both. Needs commit + Langston ACK before B.2 work.
 
