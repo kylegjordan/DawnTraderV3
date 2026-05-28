@@ -3,7 +3,7 @@
 **Provisional ID:** B.1.5 (data-quality GATE — sequenced BEFORE B.2 IMF calibration; see §4 Q1 for numbering/sequencing confirmation)
 **Umbrella:** B-XSTOCK-CALIB (`1-system-manual/XSTOCK_CALIBRATION_PLAN.md`)
 **Type:** Investigation + data-quality remediation + global-filter recalibration. Mix of analysis (replay/SQL) and config/code change.
-**Status:** DRAFT v1 — Step 1, awaiting Langston ACK, then Kyle sign-off BEFORE implementation.
+**Status:** v1.1 — Step 1 Langston ACK = **CLEAN-CONDITIONAL** (3 conditions folded below); awaiting Kyle sign-off BEFORE implementation.
 **Authorized by:** Kyle DM 2026-05-28 10:47Z — "proceed with … scoping out the volume/price quality sub-batch." Origin: Kyle screenshot review of xStock 24h volume + stale/dislocated pricing; questions (a) is the volume representative or an artifact, (b) how many of ~485 symbols are worth trading, (c) what's wrong with the dislocated prices, (d) run a standalone global-filter batch or fold into IMF.
 
 ---
@@ -43,20 +43,24 @@ B.1 (regime), B.2 (IMF), B.4 (friction), B.5 (spread) all calibrate thresholds a
 
 ## §1 — Scope (numbered objectives + verification criteria)
 
+**O1.0 — (Langston condition #1) Reconcile the Kyle-screenshot discrepancy FIRST.** Kyle's screenshot showed ~$600K max 24h volume; our query computes ~$2.8B max from `volume_24h × last`. That is ~4 orders of magnitude apart. Before any external comparison, reconcile WHAT Kyle was looking at — a different column (per-bar volume? rolling N-minute?), different units, or different aggregation — so O1 doesn't validate against the wrong number.
+*Verify:* a written reconciliation identifying the exact metric/column Kyle's screenshot showed vs. the `volume_24h × last` figure.
+
 **O1 — Determine what `volume_24h` actually measures (token vs. underlying vs. reference).**
 Compare stored `xstock_spot_ticker_snap.volume_24h` for a representative sample (top/median/bottom by magnitude, ~20-30 symbols) against Kraken's own published xStock-token 24h volume (Kraken REST/market-data for the equities venue) AND against the underlying equity's volume (a reference source). Classify the field: (a) token on-exchange volume, (b) underlying passthrough, (c) something else.
 *Verify:* a written determination per sample symbol with both reference numbers, and a single classification conclusion with confidence. If the field is NOT usable as a tradeable-liquidity proxy, O4/O5 change accordingly.
 
 **O2 — Characterize price dislocations and root-cause them.**
 For every symbol whose stored price diverges materially from a reference underlying price (threshold TBD in pre-audit, e.g. >50% or >3×), record symbol, stored price, reference price, ratio, and bid/ask. Determine root cause: feed corruption, stale/last-print on illiquid book, unit/parse error, symbol-mapping error, or genuine. MU and SNDK are confirmed starting cases.
-*Verify:* a dislocation table (symbol, stored, reference, ratio, root-cause hypothesis) + a root-cause conclusion for at least the MU/SNDK class.
+**O2.a — (Langston condition #2) Absent-symbol handling as a finding, not a footnote.** SNDK (Kyle-flagged) did not appear in the last-6h ticker snaps. If a flagged symbol is absent from recent ticker data entirely, that's a data-pipeline gap layered on top of the price problem — characterize WHY (subscription gap, symbol-mapping miss, delisted upstream, stale-only) rather than skipping it.
+*Verify:* a dislocation table (symbol, stored, reference, ratio, root-cause hypothesis) + a root-cause conclusion for at least the MU/SNDK class + an explicit characterization for any flagged-but-absent symbol.
 
 **O3 — Determine the representativeness of the 24h volume figure (snapshot vs. rolling).**
 Per CLAUDE.md rule #13 (rolling windows over snapshots): compare the single-snapshot `volume_24h` against a multi-day rolling distribution rebuilt from `xstock_spot_ohlc_1m` (sum of bar volumes over rolling 24h windows across multiple days). Quantify how much a one-moment snapshot drifts from the rolling figure.
 *Verify:* per-symbol snapshot-vs-rolling delta distribution; an explicit "is the snapshot decision-grade" finding.
 
 **O4 — Quantify the tradeable universe (how many of ~485 symbols are worth trading).**
-Using the O1/O3 corrected liquidity measure (NOT the raw suspect field if O1 disqualifies it), produce the count of symbols clearing candidate liquidity floors AND sane-price filters, over a multi-week window (not a single snapshot). Multi-week consistency: which symbols are *consistently* liquid vs. intermittently.
+Using the O1/O3 corrected liquidity measure (NOT the raw suspect field if O1 disqualifies it), produce the count of symbols clearing candidate liquidity floors AND sane-price filters, over a multi-week window (not a single snapshot). Multi-week consistency: which symbols are *consistently* liquid vs. intermittently. **O3's rolling-distribution output FEEDS this count directly (Langston Q6) — they are sequenced, not computed twice.**
 *Verify:* a table of candidate floors → surviving-symbol counts, plus a consistency classification (always / usually / rarely liquid).
 
 **O5 — Recalibrate the global filter for xStock reality.**
@@ -93,15 +97,17 @@ The volume/price/liquidity/dislocation analysis (O1-O4) is delivered as a commit
 
 ---
 
-## §4 — Open questions for Langston (Step 1 ACK)
+## §4 — Decisions (resolved with Langston, Step 1)
 
-- **Q1 — Numbering + sequencing.** Provisional ID B.1.5 as a data-quality GATE before B.2. Agree it should block B.2, or run parallel with a re-run acceptance? Better label than B.1.5?
-- **Q2 — Filter-path target.** The global filter resolves `filter_path='active_quant'` only. But min_volume/max_price live on all 14 paths. Should O5 recalibrate only `active_quant` (the global-filter path), or all paths that carry min_volume/max_price/min_price? My lean: recalibrate the global-filter path (`active_quant`) here; leave per-family min_volume to B.2. Agree?
-- **Q3 — Reference-source choice for O1/O2.** Yahoo (intraday, free) vs. Finnhub (already integrated for sector) vs. FRED (slow macro only). My lean: Finnhub `/quote` for the sample since it's already wired + keyed. Concern?
-- **Q4 — Dislocation threshold.** What ratio defines "dislocated" for O2 (>3×? >50%?)? And should the re-enabled max_price be a per-symbol dynamic ceiling (vs. reference) or a single static universe ceiling? Static is simpler and matches the existing gate shape; dynamic is more correct but heavier.
-- **Q5 — O6 scope.** Should universe-level liquidity pruning be *designed-and-implemented* here, or *designed-and-deferred* (decision + mechanism spec only, implementation in a follow-up)? My lean: design + decision here, implement only if low-risk.
-- **Q6 — Anything in this scope you'd cut or add before I draft the Step 2 pre-audit?**
+- **Q1 — Numbering + sequencing → GATE, B.1.5 confirmed.** This blocks B.2; NOT parallel-with-re-run (running B.2 against the suspect `volume_24h` field would fit thresholds to corrupt inputs and force a re-do). B.1.5 numbering accepted (data-quality slot under the B.1 family).
+- **Q2 — Filter-path target → `active_quant` only.** O5 recalibrates the global-filter path (`active_quant`) here; per-family min_volume stays with B.2. Touching all 14 paths is scope creep with cross-asset blast radius.
+- **Q3 — Reference source → Finnhub for price, with a caveat.** Use Finnhub (already wired + keyed) for the underlying-price reference. BUT verify in pre-audit that Finnhub's free tier returns underlying-equity 24h *volume* (not just last/quote); if it requires a rate-limited candle endpoint, fall back to Yahoo for the volume side. Document the fallback in the pre-audit.
+- **Q4 — Dislocation handling → two-tier + static ceiling.** Soft-flag at >2× (investigate + log to diagnostics), hard-reject at >3× (re-enabled `max_price` ceiling). Two tiers avoid false-positiving names that legitimately moved 50-80% on news while still catching SNDK at ~$1555. The re-enabled `max_price` is a single static universe-wide value for THIS batch; a per-symbol dynamic ceiling is architecturally correct but a follow-on (separate batch needing reference-feed infra, correctly out-of-scope here).
+- **Q5 — O6 universe pruning → design + decide here; implement only if safe.** Implement in-batch ONLY if (a) low-risk, (b) fully reversible (re-listable), and (c) no impact on existing trade IDs / VTS records / passive paper history. If any fails, deliver the design + decision and defer implementation to its own batch.
+- **Q6 — Cuts/adds.** No cuts. Adds = Langston conditions #1 (O1.0 reconciliation) + #2 (O2.a absent-symbol) + the O3→O4 sequencing note, all folded above.
+
+**Langston Step 1 verdict: CLEAN-CONDITIONAL — proceed to Step 2 pre-audit with the three conditions folded in.** Pending: Kyle sign-off before any implementation.
 
 ---
 
-*End B.1.5 (B_XSTOCK_GLOBAL_FILTER) scope v1 draft.*
+*End B.1.5 (B_XSTOCK_GLOBAL_FILTER) scope v1.1 — Langston ACK folded; awaiting Kyle sign-off.*
