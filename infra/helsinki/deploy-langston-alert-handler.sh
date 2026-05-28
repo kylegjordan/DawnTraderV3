@@ -21,4 +21,8 @@ fi
 echo "Deploying $SRC -> $HELSINKI:$DEST"
 # Strip any CR (Windows CRLF line endings) on the way over so the remote bash
 # doesn't choke on `\r` — the source may be edited on a Windows mirror.
-tr -d '\r' < "$SRC" | ssh "$HELSINKI" "cat > '$DEST' && chmod 750 '$DEST' && chown root:root '$DEST' && bash -n '$DEST' && echo 'deployed + syntax-OK: '\$(ls -la '$DEST')"
+# Owner root, group langston, mode 750: the dispatcher runs this via
+# `sudo -u langston`, so langston must be able to execute it. root:root + 750
+# would put langston in "others" (no x) → setsid Permission denied. root:langston
+# + 750 lets langston execute via the group bit while keeping it non-world.
+tr -d '\r' < "$SRC" | ssh "$HELSINKI" "cat > '$DEST' && chown root:langston '$DEST' && chmod 750 '$DEST' && bash -n '$DEST' && echo 'deployed + syntax-OK: '\$(ls -la '$DEST')"
