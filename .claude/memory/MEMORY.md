@@ -31,8 +31,9 @@ Governance close `17c50f4`. Both observability counters (TEC pick-fallback, SQE 
 ### 🟢 CLOSED — B-NEW-46 (Langston's alert response posts back to Telegram)
 HEAD `9970a68`. When a scheduled alert reaches Langston, his plain-language response now auto-posts to topic 21 ("Langston here, re: [alert], here's the action") — was: silence. Failure-case posts an explicit "couldn't reach Langston" notice. Verified end-to-end TWICE (direct wrapper + cron-fired, both relay HTTP=200, alerts 60cdfb05 + 1a17cc0c). Langston Step 8 ACK-CLEAN. New: `infra/helsinki/langston-alert-handler.sh` + deploy script; dispatcher `invokeLangstonForAlert()` modified. 3 blockers caught+fixed (quote-nesting pre-push, CRLF at deploy, file-perm at Step 7). Completion report `Batch Completion/B_NEW_46_COMPLETION_REPORT.md`. Follow-up B-NEW-46.b (weekly synth health-check alert) deferred.
 
-### ⏳ AWAITING KYLE SIGN-OFF — B.1.5 Volume/price-quality + global-filter scope
-Scope v1.1 at `Scope Files/B_XSTOCK_GLOBAL_FILTER_SCOPE.md` (commit `e5b7133`). Langston Step 1 = **CLEAN-CONDITIONAL** (3 conditions folded). Kyle sign-off requested via DM msg 95 (2026-05-28) — NOTHING implemented until he approves; then Step 2 pre-audit.
+### ⏳ AWAITING KYLE SIGN-OFF — B.1.5 xStock Liquidity/Volume Data-Integrity + Cross-Asset Isolation
+Scope **v3** at `Scope Files/B_XSTOCK_GLOBAL_FILTER_SCOPE.md` (commit `db33383`+ v3 edits). Langston Step 1 re-review = **CLEAN-CONDITIONAL**, all 6 conditions folded: (1) O0 empirical exec-model test (book-channel + tiny live order + Kraken ticket); (2) R3 xStock LQ as SEPARATE `xstock_spot/imf-liquidity.ts` module not shared-branch; (3) R4 min-viable depth-cap-sizing + thin-market exit IN-batch; (4) pattern-detector volume-use closure mandated in pre-audit; (5) RTB stored volume24h stop/annotate; (6) O6 script committed under scripts/. NOTHING implemented until Kyle approves; then Step 2 pre-audit (per-component SIM/Manual deep read + crypto-vs-xStock difference register + isolation proof plan).
+**Cross-asset isolation pillar (Kyle mandate):** every liquidity/volume change must be asset_class-gated (or per-class module) + regression-lock test proving crypto path byte-identical — follows SIM §9.13 precedent (MCE cache key `${symbol}:${assetClass}`, SQE `${mode}:${assetClass}`, mce-cache-isolation + sqe-routing tests).
 
 **RESEARCH-CONFIRMED FINDINGS (2026-05-28 — Kyle directed web research + Kraken-data cross-check; scope premise CHANGED):**
 - **PRICES ARE CORRECT — no dislocation.** Kraken does NOT send typos (Kyle's instinct right). MU/USD $927 is REAL: Micron genuinely ~$905 on 2026-05-28 (hit $1T market cap, +19% on AI-memory boom, UBS target $1,625). My prior "MU 9x dislocation" was MY error (anchored on Micron's 2024 ~$120 price). NVDA $211 / TSLA $438 / AAPL $310 / QQQ $729 all match real current. xStocks are 1:1 with underlying, priced to underlying execution (Kraken docs). → DROP price-dislocation objective (O2); just spot-confirm.
@@ -61,10 +62,13 @@ Scope v1.1 at `Scope Files/B_XSTOCK_GLOBAL_FILTER_SCOPE.md` (commit `e5b7133`). 
 - Baseline (`current_trailing_baseline`) exit-reason mix: TRAIL_hit 66.8% (+0.31%), SL_hit 19.6% (−1.39%), INSUFFICIENT_DATA 9.2%, BE_stop 2.2%, **TP_target_hit 1.7%**, **TIMEOUT 0.5% (6 trades, avg ~7 DAYS stuck)**. Target hits very rare; timeouts rare but when they happen = ~7-day stuck (the stuck-trade signal).
 - **Liquidity-correlation NOT possible from stored data:** `feature_snapshots.liquidity_score` is EMPTY/unpopulated; no per-trade LQ persisted; AND exit replays assume the trade can always fill at the bar price (NO liquidity modeled) → simulated closes OVERSTATE exitability, so real thin-market stuck risk is NOT captured. Net: can't show liquidity caused bad closes because liquidity isn't wired into sizing/exits at all.
 
-### OTHER ACTIVE ASKS (Kyle 2026-05-28)
-1. **Scope rewrite v2 (IN PROGRESS):** fold in root cause + multi-venue/order-book liquidity + 2-stage filter impact + full downstream blast radius + required changes (re-source liquidity inputs, add depth plumbing, maybe xStock LQ, liquidity-aware sizing/exit) → then calibrate thresholds.
-2. **Langston independent investigation (TODO):** dispatch him to investigate the volume/liquidity question on his own.
-3. **LLM research prompt (DONE):** `Scope Files/XSTOCK_VOLUME_RESEARCH_PROMPT.md` — Kyle to share with other LLMs (the "Kraken owns Backed yet own-venue volume is small" puzzle).
+### OTHER ASKS (Kyle 2026-05-28) — ALL DONE
+1. **Scope rewrite → v3 DONE** (Langston-reviewed CLEAN-CONDITIONAL, 6 conditions folded). Awaiting Kyle sign-off.
+2. **Langston independent investigation DONE:** confirms volume=underlying (magnitude + bare-symbol + documented SPV toggle); leans addOrder=CLOB but MM-willingness-bounded (depth IS the gate but a live moving target, no static LQ safe); gave O0 empirical settlement plan.
+3. **LLM research prompt DONE + 4 LLMs answered** (`Scope Files/XSTOCK_VOLUME_RESEARCH_PROMPT.md`; responses in `Claude Comms and Packages/X-Stocks Volume Feed Research - Multi LLM.md`). CONSENSUS: ws-equities volume=underlying, gate on live order-book depth not volume, 3 numbers = different denominators, Kraken-slice-small expected. KEY DIVERGENCE: CLOB (Gemini/prior-CC) vs RFQ (Opus) execution — UNRESOLVED → O0. Opus unique catches: documented SPV/underlying toggle; Bybit delisted (others stale); bare-symbol tell. Our catch: Gemini's "use /0/public/Ticker" provably wrong (xStock pairs not on main REST).
+4. **Trade report DONE** (see TRADE REPORT block above).
+5. **Telemetry +48h gate PASSED+ACKED** (see watchlist).
+**NEXT:** Kyle sign-off on v3 → Step 2 pre-audit (O0 exec-model test first).
 
 ### ⏳ LATER — B.2 IMF family threshold calibration
 Umbrella scope v1.1 PENDING: screener_filters has 14 distinct filter_paths per asset_class (7 vts_* + 7 active_*); the VTS/active split lives ONLY here (regime classifier + per-strategy gates are SHARED across paths). xStock-side gaps: missing `vts_strong_trend` in live + 2 blank-filter_path rows. mode-column (paper/live) is byte-identical-value artifact — write same value to both. Needs commit + Langston ACK before B.2 work.
@@ -75,7 +79,7 @@ Umbrella scope v1.1 PENDING: screener_filters has 14 distinct filter_paths per a
 - **MCE close:** `aa0564107` (PM2 #311 2026-05-22)
 
 ### 🟢 VERIFY-GATE WATCHLIST (process if any promote)
-- `1f34cf84` — B79.0n.TELEMETRY +48h at 2026-05-28 18:01:48Z (xstock_perp/crypto_perp/xstock_spot recordCount=0 IS the gate signal)
+- `1f34cf84` — B79.0n.TELEMETRY +48h ✅ PASSED + ACKED 2026-05-28 (cc-session): 0 xStock/perp telemetry records (dormant-3 recordCount=0 = healthy), crypto_spot recording normally. No cross-class mis-routing.
 - `b83b1e4b` — B-NEW-40 14-day soak at 2026-05-31 12:46Z
 
 ---

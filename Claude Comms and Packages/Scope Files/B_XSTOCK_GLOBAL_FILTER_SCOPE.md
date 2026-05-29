@@ -2,7 +2,9 @@
 
 **Provisional ID:** B.1.5 (data-integrity GATE — sequenced BEFORE B.2 IMF calibration)
 **Umbrella:** B-XSTOCK-CALIB (`1-system-manual/XSTOCK_CALIBRATION_PLAN.md`)
-**Status:** v2 (full rewrite — supersedes v1.1 + the v1.2 banner). Step 1 re-review by Langston, then Kyle sign-off BEFORE implementation.
+**Status:** v3 — Langston Step 1 re-review = **CLEAN-CONDITIONAL**, all 6 conditions folded (see below). Awaiting Kyle sign-off BEFORE implementation.
+
+**Langston's 6 conditions (folded into v3):** (1) O0 gets a concrete empirical method (live `book`-channel capture + tiny live-order ping + parallel Kraken support ticket); (2) R3 = a SEPARATE `xstock_spot/imf-liquidity.ts` module, NOT a branch in shared `imf-metrics.ts`; (3) R4 = minimum-viable depth-cap-on-sizing + thin-market exit hook IN-batch, full sophistication deferred; (4) §1 row 7 (pattern detector volume use) closure mandated in pre-audit before Step 2 sign-off; (5) §1 row 8 (RTB stored `volume24h`) — stop storing or annotate as underlying-reference; (6) O6 script committed under `scripts/` as a reusable audit asset. Langston independently confirmed volume=underlying (3 lines: magnitude, bare-symbol convention, documented SPV toggle) and leans our `addOrder` path is a CLOB whose depth is MM-willingness-bounded (behaves RFQ-like off-hours/long-tail) — so depth IS the right gate but is a live moving target; no static precomputed liquidity score is safe.
 **Authorized by:** Kyle 2026-05-28 (DM 10:47Z to scope; subsequent directives to confirm root-cause, map all downstream liquidity consumers, run the trade report, prove cross-asset isolation, and consult SIM + System Manual).
 
 ---
@@ -40,6 +42,9 @@
 
 **Headline:** bad volume is NOT just a filter problem — it propagates into the IMF liquidity factor, the market-wide directional bias (volume-weighted → regime classification), the per-signal confidence multiplier, and strategy volume-gates. Sizing + exits use NO liquidity at all = the gap behind the stuck-trade risk.
 
+**Row-7 mandate (Langston condition 4):** the pattern detector / `pattern-filter.ts` volume usage is "TBD" — pre-audit MUST close it with a code-level read BEFORE Step 2 sign-off; if it reads volume and we don't fix it, we miss a consumer.
+**Row-8 mandate (Langston condition 5):** RTB stores `volume24h` (archival, unused) — it's a data-quality landmine for anyone later wiring RTB scoring against it. Either STOP storing it or schema-annotate it as "underlying-equity reference, NOT token liquidity." Lean stop-storing.
+
 ---
 
 ## §2 — Required changes vs the crypto build (clearly documented + surfaced)
@@ -48,8 +53,8 @@ The filter *structure* is identical crypto/xStock and does NOT change. What chan
 
 - **R1 — Re-source the liquidity input at the two filter stages.** Stop using the ws-equities `volume` field for `volume24hUSD` (global filter) and stop trusting OHLC-bar volume for the IMF LQ factor on xStock. Replace with a verified token-liquidity measure (order-book depth and/or an authoritative Kraken-specific token volume — pending §0 execution-model resolution).
 - **R2 — New plumbing: order-book depth.** Thread `bid_qty`/`ask_qty` (and, if the venue is a real CLOB, the `book` ladder) from the ticker snap into the scanner enrichment → global filter and/or IMF. This input does not exist in any filter today.
-- **R3 — Possibly an xStock-specific LQ.** Crypto's `calculateLogLiquidity` = `log10(avg USD volume)` assumes a deep market. xStock may need a depth-based or participation-rate liquidity score. **If so, it must be a per-asset-class branch or a separate xStock function — NOT an edit to the shared `imf-metrics.ts` function (see §3).**
-- **R4 — Liquidity-aware sizing + exit (the stuck-trade fix).** Add a participation-rate / depth cap to position sizing and a thin-market consideration to exits, for xStock. (Design here; implementation may phase — Langston Q.)
+- **R3 — xStock-specific LQ in a SEPARATE module (Langston condition 2).** Crypto's `calculateLogLiquidity` = `log10(avg USD volume)` assumes a deep market; xStock LQ will be depth/quote-based (a different math object). Implement as a NEW `server/asset_classes/xstock_spot/imf-liquidity.ts` module — NOT a branch in shared `imf-metrics.ts`. Rationale: trivially satisfies §3 rule #1 (no edits to shared compute), avoids the shared file accreting `if (assetClass===...)` tangles, and follows the existing fork precedent (`global-filter.ts`, `pattern-filter.ts`).
+- **R4 — Liquidity-aware sizing + exit, minimum-viable IN-batch (Langston condition 3).** Design now + ship minimum-viable: (a) participation-rate cap on sizing (size ≤ X% of current `ask_qty` at trade time), (b) thin-market exit hook (if `bid_qty` drops below Y at an evaluation tick, accept a worse fill rather than wait). Deferring R4 entirely creates phantom-readiness (all gates green but active trading still can't safely flip — the stuck-trade risk is exactly why xStock active trading is off). DEFER to a later batch: depth-walking, MM-quote prediction, hours-aware models, regime-conditional caps. R2 (depth plumbing) is the prerequisite; once it ships, these hooks are cheap incremental adds in the same batch.
 - **R5 — Recalibrate thresholds AFTER the input is real.** `min_volume` (currently $1M, meaningless vs real ~$100K-$10M) and any new depth thresholds, set in `screener_filters`/`module_constants` keyed by `asset_class`. Threshold tuning is data, not code.
 
 Each R-item's exact crypto-vs-xStock delta will be enumerated in a **"crypto-vs-xStock difference register"** table in the Step 2 pre-audit (one row per touched component: what crypto does, what xStock will do, why, and the isolation mechanism).
@@ -70,13 +75,13 @@ Each R-item's exact crypto-vs-xStock delta will be enumerated in a **"crypto-vs-
 
 ## §4 — Objectives + verification criteria
 
-- **O0 — Resolve the execution model** (CLOB vs RFQ) via live `book`-channel capture on ws-equities + Kraken docs/support. *Verify:* written determination of what bounds our fills, with evidence. Gates O5 design.
+- **O0 — Resolve the execution model** (CLOB vs RFQ). **Concrete method (Langston condition 1):** (a) subscribe to the `book` channel on ws-equities for TSLAx + 2-3 long-tail names — multi-level ladder w/ quantities ⇒ CLOB; best-bid/ask only ⇒ RFQ; (b) send a tiny live test `addOrder` (smallest valid qty) in TradFi hours AND off-hours — observe fill latency, partial-vs-all-or-nothing, and whether fill price matches the pre-trade quote (RFQ tell) or walks book levels (CLOB tell); (c) post-fill, check the fee invoice (maker/taker billing ⇒ CLOB; single quoted spread ⇒ RFQ); (d) file a parallel Kraken support ticket as paper trail — but do NOT gate the scope on support latency ((a)+(b) settle it in ~1 day). *Verify:* written determination of what bounds our fills, with evidence. Gates O5 design.
 - **O1 — Re-source liquidity inputs** (R1) so both filter stages read a verified token-liquidity measure. *Verify:* replay/live cycle shows liquidity values now match the authoritative scale (CoinGecko/Kraken token, not billions).
 - **O2 — Order-book depth plumbing** (R2). *Verify:* depth visible in Filter Diagnostics; gate fires on thin depth.
 - **O3 — Full blast-radius remediation:** for each §1 consumer that reads bad volume, either fix the input or document why unaffected. *Verify:* per-component sign-off table.
 - **O4 — Liquidity-aware sizing + exit design** (R4). *Verify:* design doc + decision (implement-now vs phase).
 - **O5 — Threshold recalibration** (R5) once inputs are real. *Verify:* before/after `screener_filters`; intended universe admitted, thin/illiquid rejected.
-- **O6 — Tradeable-universe count** from corrected liquidity + multi-week consistency (reusable indexed script). *Verify:* floors→surviving-count table + consistency classification.
+- **O6 — Tradeable-universe count** from corrected liquidity + multi-week consistency. **Delivered as a committed, re-runnable audit asset under `scripts/` (Langston condition 6)** — not a one-off. *Verify:* floors→surviving-count table + consistency classification, reproducible from a documented invocation.
 - **O7 — CROSS-ASSET ISOLATION PROOF** (§3). *Verify:* regression-lock tests green; crypto path proven unchanged; isolation table in completion report.
 - **O8 — Governance:** SIM + System Manual updated for every changed component (per §10 workflow).
 
