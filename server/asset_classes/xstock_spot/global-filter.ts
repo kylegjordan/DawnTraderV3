@@ -59,6 +59,12 @@ export async function evaluateXstockGlobalFilter(
   // (back-compat with tests + cold-start when snap has not yet captured
   // bid/ask for a brand-new symbol).
   bidAskSpreadPct: number = -1,
+  // B.1.5: rolling-median top-of-book depth-USD. ask-side = entry liquidity,
+  // bid-side = exit liquidity. Sentinel < 0 = depth data unavailable this cycle
+  // → min_depth gate skipped (graceful, §R-fold-1b). Default -1 keeps existing
+  // callers/tests compiling until the scanner threads real depth.
+  askDepthUsd: number = -1,
+  bidDepthUsd: number = -1,
 ): Promise<GlobalFilterResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -66,6 +72,7 @@ export async function evaluateXstockGlobalFilter(
     failed_min_price: 0,
     failed_max_price: 0,
     failed_min_volume: 0,
+    failed_min_depth: 0,
     failed_history: 0,
     failed_max_bid_ask_spread: 0,
     failed_config_missing: 0,
@@ -118,6 +125,23 @@ export async function evaluateXstockGlobalFilter(
   if (minVolume > 0 && volume24hUSD > 0 && volume24hUSD < minVolume) {
     counters.failed_min_volume = 1;
     return { passed: false, failureReason: 'min_volume', counters };
+  }
+
+  // min_depth_usd (B.1.5) — the real xStock liquidity screen; replaces the
+  // broken underlying-equity-volume min_volume gate (which is left inert via
+  // config.minVolume=0 seeded in Chunk G). Gate on the two-way market =
+  // MIN(askDepthUsd, bidDepthUsd): a name must be deep enough on BOTH sides to
+  // enter AND exit. Graceful: threshold 0/absent (pre-migration) OR depth
+  // unavailable (sentinel < 0) → skip (non-binding). Config key `minDepthUsd`.
+  const minDepthUsd = parseFloat(config.minDepthUsd ?? '0');
+  const twoWayDepthUsd = (askDepthUsd >= 0 && bidDepthUsd >= 0) ? Math.min(askDepthUsd, bidDepthUsd) : -1;
+  if (minDepthUsd > 0 && twoWayDepthUsd >= 0 && twoWayDepthUsd < minDepthUsd) {
+    counters.failed_min_depth = 1;
+    return {
+      passed: false,
+      failureReason: `min_depth_${twoWayDepthUsd.toFixed(0)}_lt_${minDepthUsd.toFixed(0)}`,
+      counters,
+    };
   }
 
   // min_history — proxy via OHLC bar count.

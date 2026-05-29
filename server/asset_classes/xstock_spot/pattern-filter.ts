@@ -44,7 +44,8 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-import { calculateLogLiquidity, calculateVolNoise } from '../../core/metrics/imf-metrics.js';
+import { calculateVolNoise } from '../../core/metrics/imf-metrics.js';
+import { calculateXstockDepthLQ } from './imf-liquidity.js';
 import { storage } from '../../storage.js';
 import type { OHLCData } from '../../types/market-regime.types';
 import { getConstant } from '../../services/module-constants-service.js';
@@ -115,6 +116,12 @@ export async function evaluateXstockPatternFilter(
   // B-NEW-14 (2026-05-14): bid/ask spread % from latest snap row.
   // Sentinel -1 = "skip check" (back-compat with tests + cold-start).
   bidAskSpreadPct: number = -1,
+  // B.1.5: rolling-median top-of-book depth-USD (ask-side = entry liquidity →
+  // drives the depth-LQ; bid-side = exit liquidity). Sentinel < 0 = depth data
+  // unavailable this cycle → LQ non-binding + min_depth gate skipped (graceful,
+  // §R-fold-1b). Default -1 keeps existing callers/tests compiling.
+  askDepthUsd: number = -1,
+  bidDepthUsd: number = -1,
 ): Promise<PatternFilterResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -125,6 +132,7 @@ export async function evaluateXstockPatternFilter(
     failed_min_price: 0,
     failed_max_price: 0,
     failed_min_volume: 0,
+    failed_min_depth: 0,
     failed_min_history: 0,
     failed_max_bid_ask_spread: 0,
     failed_lq: 0,
@@ -194,13 +202,33 @@ export async function evaluateXstockPatternFilter(
     };
   }
 
-  // min_volume — caller passes 0 when volume isn't available; Layer-1 pass-through.
+  // min_volume — DEPRECATED for xStock (ran on underlying-equity volume = broken
+  // signal; B.1.5). Left inert (config.minVolume seeded 0 in Chunk G migration);
+  // the real liquidity screen is min_depth below. Kept for back-compat / tests.
   const minVolume = parseFloat(config.minVolume ?? '0');
   if (minVolume > 0 && volume24hUSD > 0 && volume24hUSD < minVolume) {
     counters.failed_min_volume = 1;
     return {
       passed: false,
       failureReason: 'pattern_min_volume',
+      counters,
+      perMetric,
+      metrics: { LQ: 0, VolNoise: 0, DI: null },
+    };
+  }
+
+  // min_depth_usd (B.1.5) — the real xStock liquidity screen. Gate on the
+  // two-way market = MIN(askDepthUsd, bidDepthUsd): a name needs BOTH sides
+  // present and deep enough to enter AND exit. Graceful: threshold 0/absent
+  // (pre-migration) OR depth unavailable (sentinel < 0) → skip (non-binding).
+  // Config key `minDepthUsd` seeded per-class in Chunk G.
+  const minDepthUsd = parseFloat(config.minDepthUsd ?? '0');
+  const twoWayDepthUsd = (askDepthUsd >= 0 && bidDepthUsd >= 0) ? Math.min(askDepthUsd, bidDepthUsd) : -1;
+  if (minDepthUsd > 0 && twoWayDepthUsd >= 0 && twoWayDepthUsd < minDepthUsd) {
+    counters.failed_min_depth = 1;
+    return {
+      passed: false,
+      failureReason: `pattern_min_depth_${twoWayDepthUsd.toFixed(0)}_lt_${minDepthUsd.toFixed(0)}`,
       counters,
       perMetric,
       metrics: { LQ: 0, VolNoise: 0, DI: null },
@@ -255,7 +283,10 @@ export async function evaluateXstockPatternFilter(
   const diMin = parseFloat(config.diMin ?? '0');
   const diMax = parseFloat(config.diMax ?? '100');
 
-  const LQ = ohlc.length >= 10 ? calculateLogLiquidity(ohlc) : 0;
+  // B.1.5: depth-based LQ (ask-side), replacing shared volume-LQ. lqComputable
+  // = false when depth data unavailable this cycle → LQ gate skipped (non-binding).
+  const lqComputable = askDepthUsd >= 0;
+  const LQ = lqComputable ? calculateXstockDepthLQ(askDepthUsd) : 0;
   const VolNoise = ohlc.length >= 10 ? calculateVolNoise(ohlc) : 0.5;
   const DI = computeDirectionalIntegrity(ohlc);
 
@@ -266,7 +297,7 @@ export async function evaluateXstockPatternFilter(
   perMetric.total = 1;
   const metrics = { LQ, VolNoise, DI };
 
-  if (LQ < lqMin) {
+  if (lqComputable && LQ < lqMin) {
     counters.failed_lq = 1;
     perMetric.failedLQ = 1;
     return {

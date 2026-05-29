@@ -431,6 +431,13 @@ export const screenerFilters = pgTable("screener_filters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   mode: tradingModeEnum("mode").notNull(),
   minVolume: decimal("min_volume", { precision: 15, scale: 2 }).default("1000000.00"),
+  // B.1.5 (2026-05-30): Minimum two-sided top-of-book depth (USD) required
+  // for filter admission, used by xstock_spot global-filter + pattern-filter.
+  // Gate fires on MIN(askDepthUsd, bidDepthUsd) from the scanner's rolling-
+  // median ~20-min window. NULL → gate skipped (graceful default). xstock_spot
+  // rows seeded with starter values per migration 2026-05-30-b-1-5; crypto_spot
+  // rows left NULL (crypto uses volume-based LQ which is not broken).
+  minDepthUsd: decimal("min_depth_usd", { precision: 20, scale: 2 }),
   minPrice: decimal("min_price", { precision: 10, scale: 8 }).default("0.01"),
   maxPrice: decimal("max_price", { precision: 10, scale: 2 }).default("10000.00"),
   minMarketCap: decimal("min_market_cap", { precision: 15, scale: 2 }).default("100000000.00"),

@@ -281,6 +281,13 @@ export async function evaluateXstockPairForVTS(
   // (insufficient OHLC / ATR=0 / sector missing), MCE synthesizes neutral as
   // before — preserves current behavior for thin pairs.
   propagatedDbs?: { score: number; category: string; slope: number },
+  // B.1.5: rolling-median top-of-book depth-USD (ask-side = entry liquidity,
+  // drives the depth-LQ + min_depth gate; bid-side = exit liquidity, for the
+  // two-way min_depth gate). Sentinel -1 = depth unavailable this cycle → depth
+  // gate + depth-LQ skip gracefully (§R-fold-1b). Default -1 keeps existing
+  // callers/tests compiling.
+  askDepthUsd: number = -1,
+  bidDepthUsd: number = -1,
 ): Promise<void> {
   counters.pairsEntered++;
 
@@ -300,10 +307,10 @@ export async function evaluateXstockPairForVTS(
     // global short-circuit the pattern path.
     // B-NEW-14 (2026-05-14): bidAskSpreadPct threaded into BOTH filters —
     // each filter compares it against its own pool's threshold.
-    const globalResult = await evaluateXstockGlobalFilter(symbol, ohlc, lastPrice, volume24h, mode, configs?.globalQuant, bidAskSpreadPct);
+    const globalResult = await evaluateXstockGlobalFilter(symbol, ohlc, lastPrice, volume24h, mode, configs?.globalQuant, bidAskSpreadPct, askDepthUsd, bidDepthUsd);
     mergeCounters(counters.globalFilterCounters, globalResult.counters);
 
-    const patternResult = await evaluateXstockPatternFilter(symbol, ohlc, lastPrice, volume24h, mode, configs?.pattern, bidAskSpreadPct);
+    const patternResult = await evaluateXstockPatternFilter(symbol, ohlc, lastPrice, volume24h, mode, configs?.pattern, bidAskSpreadPct, askDepthUsd, bidDepthUsd);
     mergeCounters(counters.patternFilterCounters, patternResult.counters);
     counters.patternPerMetric.failedLQ += patternResult.perMetric.failedLQ;
     counters.patternPerMetric.failedVN += patternResult.perMetric.failedVN;
@@ -346,7 +353,7 @@ export async function evaluateXstockPairForVTS(
     // ── 3a. Family IMF (5 quant lanes) — only if quant global passed ──
     let passedFamilies: string[] = [];
     if (globalResult.passed) {
-      const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode, configs?.families);
+      const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode, configs?.families, askDepthUsd);
       mergeCounters(counters.imfFilterCounters, imfResult.counters);
       counters.imfPerMetric.failedLQ += imfResult.perMetric.failedLQ;
       counters.imfPerMetric.failedVN += imfResult.perMetric.failedVN;

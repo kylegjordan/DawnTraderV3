@@ -25,7 +25,8 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-import { calculateIMFMetrics, calculateLogLiquidity, calculateVolNoise, calculateCorrelation } from '../../core/metrics/imf-metrics.js';
+import { calculateIMFMetrics, calculateVolNoise, calculateCorrelation } from '../../core/metrics/imf-metrics.js';
+import { calculateXstockDepthLQ } from './imf-liquidity.js';
 import { storage } from '../../storage.js';
 import type { OHLCData } from '../../types/market-regime.types';
 
@@ -85,6 +86,15 @@ export async function evaluateXstockFamilyIMF(
   ohlc: OHLCData[],
   mode: 'paper' | 'live',
   preloadedFamilies?: Map<string, any>,
+  // B.1.5: ask-side top-of-book depth-USD (rolling-median, from scanner). The
+  // xStock LQ is now DEPTH-based (replaces the shared volume-LQ which saturates
+  // at ~100 for xStock because the OHLC `volume` is the underlying equity's, not
+  // the token's — see B_1_5_PRE_AUDIT §2 Row-2). Sentinel < 0 = depth data
+  // unavailable this cycle → LQ is NON-BINDING (graceful skip, §R-fold-1b); the
+  // pair is gated on VN/Corr/DI only and the min_depth admission gate (global-
+  // filter) handles the liquidity screen. Default -1 keeps existing callers /
+  // tests compiling until the scanner threads real depth.
+  askDepthUsd: number = -1,
 ): Promise<FamilyIMFResult> {
   const counters: Record<string, number> = {
     evaluated: 1,
@@ -101,7 +111,10 @@ export async function evaluateXstockFamilyIMF(
 
   // Pre-compute metrics ONCE per pair — the LQ/VN/Correlation/DI values don't
   // depend on the family path; only the thresholds do.
-  const LQ = ohlc.length >= 10 ? calculateLogLiquidity(ohlc) : 0;
+  // B.1.5: depth-based LQ (ask-side). lqComputable=false when depth data is
+  // unavailable this cycle → LQ gate is skipped (non-binding) below.
+  const lqComputable = askDepthUsd >= 0;
+  const LQ = lqComputable ? calculateXstockDepthLQ(askDepthUsd) : 0;
   const VolNoise = ohlc.length >= 10 ? calculateVolNoise(ohlc) : 0.5;
   const Correlation = ohlc.length >= 10 ? calculateCorrelation(ohlc) : 0.5;
   const DI = computeDirectionalIntegrity(ohlc);
@@ -141,7 +154,7 @@ export async function evaluateXstockFamilyIMF(
     // Per-metric attribution — order matters for counter accounting; we
     // attribute to the FIRST failing metric so each fail counts once.
     let failed = false;
-    if (LQ < lqMin) {
+    if (lqComputable && LQ < lqMin) {
       perMetric.failedLQ++;
       perFamily[filterPath].failedLQ++;
       counters[`${filterPath}_failed_lq`] = (counters[`${filterPath}_failed_lq`] ?? 0) + 1;

@@ -1702,7 +1702,13 @@ class ReadyToBuyService {
       finalScore: (input.finalScore).toString(),
       ngc: input.ngc.toString(),
       currentPrice: input.currentPrice?.toString(), // Directive 8.8.4-C.14.A
-      volume24h: input.volume24h?.toString(), // Directive 8.8.4-C.14.A
+      // B.1.5 (2026-05-30, pre-audit §5.2 Row-8): for xstock_spot the input's
+      // `volume24h` is the UNDERLYING equity's share volume, not the token's —
+      // a landmine for any future RTB-vs-volume admission/ranking wiring.
+      // Skip-write null for xstock so the column is explicitly empty rather
+      // than carrying a misleading value. Crypto path unchanged.
+      volume24h: input.assetClass === 'xstock_spot' ? null : input.volume24h?.toString(), // Directive 8.8.4-C.14.A
+
       status: 'active', // Directive 8.8.4-A3.R8: Use 'active' for new signals pending first refresh
       queuedAt: now,
       // R9.3-C: expiresAt omitted - field is now optional

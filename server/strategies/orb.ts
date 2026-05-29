@@ -244,7 +244,19 @@ export function detectORB(
   if (!upBreak && !downBreak) return null;
 
   // ── Volume confirmation ─────────────────────────────────────────────────
-  const currentVolume = indicators.volume ?? 0;
+  // B.1.5 (2026-05-30): re-source `currentVolume` from the LAST OHLC BAR's
+  // volume (per-bar unit, same stream as `orVolume`) rather than
+  // `indicators.volume` (which carries the MCE 24h field — for xStock that's
+  // the UNDERLYING equity's share volume, ~700× the token's; for crypto the
+  // 24h is the token's real volume but still a denominator mismatch vs a per-
+  // minute average). This restores unit coherence so the `volumeMultiple`
+  // ratio is meaningful. Fix scope: ORB is xstock_spot-only via the gate at
+  // line 157, so this change cannot bleed to crypto. Threshold recalibration
+  // (`ORB_VOL_MULT_MIN`) is a separate Phase 25 / B.3 calibration concern.
+  // NOTE: ORB is currently disabled (`strategy_gates.enabled=false` per
+  // B-NEW-34); this fix is forward-looking for when it's re-enabled.
+  // Pre-audit §2 Row-6 + Langston Q3 option (b).
+  const currentVolume = priceData.length > 0 ? Number(priceData[priceData.length - 1].volume ?? 0) : 0;
   // Estimate the "normal" 1m volume across the open-range window for a relative multiple.
   const orMinutes = Math.max(1, ORB_OPEN_RANGE_MINUTES);
   const avgOrBarVol = orVolume / orMinutes;

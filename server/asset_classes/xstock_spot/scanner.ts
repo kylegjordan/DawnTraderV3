@@ -482,6 +482,13 @@ class XstockSpotScannerService {
       // still get evaluated; they just pass the sentinel -1 ("skip check"
       // per the global-filter contract). Wider 30-minute window than the
       // prior 5-minute gate because we're enriching, not gating.
+      // B.1.5 (2026-05-30) safety invariant: `symbolList` is sourced ONLY from
+      // `XSTOCK_SPOT_SYMBOLS` (typed const set, see import at line 43) via the
+      // rotation logic above — NEVER from external/HTTP input. The doubled-
+      // single-quote escape below + `'...'` wrap is defense-in-depth (Langston
+      // Step-4 verification 2026-05-30). If `symbolList` ever sources from a
+      // non-const input, switch to `sql.join(symbols.map(s => sql\`${s}\`), sql\`, \`)`
+      // (drizzle param-binding) before changing the source.
       const symbolListSql = symbolList.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
       const tickerResult = await db.execute<TickerSnapRow>(sql`
         SELECT DISTINCT ON (symbol)
@@ -512,6 +519,47 @@ class XstockSpotScannerService {
           bidAskSpreadPct,
           volume24hShares: parseFloat(row.volume24h ?? '0'),
         });
+      }
+
+      // ════════════════════════════════════════════════════════════════════
+      // B.1.5: rolling-median top-of-book DEPTH-USD per symbol (~20-min window).
+      // This is the verified token-liquidity signal that replaces the broken
+      // ws-equities `volume` field (= underlying-equity share volume) for the
+      // xStock liquidity filter. Rolling MEDIAN (not the instantaneous latest
+      // snapshot) per CLAUDE.md rule #13 — smooths momentary market-maker quote
+      // pulls so the depth gate doesn't flip on a single jittery tick.
+      // Two-sided: ask-side = entry liquidity (drives depth-LQ + min_depth),
+      // bid-side = exit liquidity (two-way min_depth gate). Symbols with no
+      // recent two-sided quotes are simply absent from the map → eval passes
+      // sentinel -1 → filters skip the depth gate gracefully (never crash, never
+      // cascade — graceful three-state design, B_1_5_PRE_AUDIT §R-fold-1b).
+      // ════════════════════════════════════════════════════════════════════
+      const depthBySymbol = new Map<string, { askDepthUsd: number; bidDepthUsd: number }>();
+      try {
+        const depthResult = await db.execute<{ symbol: string; ask_depth_usd: string | null; bid_depth_usd: string | null }>(sql`
+          SELECT symbol::text AS symbol,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY ask * ask_qty) AS ask_depth_usd,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY bid * bid_qty) AS bid_depth_usd
+          FROM xstock_spot_ticker_snap
+          WHERE captured_at > NOW() - INTERVAL '20 minutes'
+            AND symbol IN (${sql.raw(symbolListSql)})
+            AND bid > 0 AND ask > 0 AND bid_qty > 0 AND ask_qty > 0
+          GROUP BY symbol
+        `);
+        const depthRawRows = (depthResult as any).rows ?? (depthResult as unknown as any[]);
+        for (const r of (Array.isArray(depthRawRows) ? depthRawRows : [])) {
+          const ask = r.ask_depth_usd != null ? parseFloat(r.ask_depth_usd) : NaN;
+          const bid = r.bid_depth_usd != null ? parseFloat(r.bid_depth_usd) : NaN;
+          depthBySymbol.set(r.symbol, {
+            askDepthUsd: Number.isFinite(ask) && ask > 0 ? ask : -1,
+            bidDepthUsd: Number.isFinite(bid) && bid > 0 ? bid : -1,
+          });
+        }
+      } catch (depthErr) {
+        // Graceful: a depth-query failure leaves the map empty → every pair uses
+        // sentinel -1 → depth gates skip this cycle. NEVER throws (cannot take
+        // down the scanner, other asset classes, or the system).
+        console.warn(`[B.1.5][DEPTH_QUERY_FAIL] ${depthErr instanceof Error ? depthErr.message : depthErr}`);
       }
 
       // Telemetry — pairs with sufficient OHLC history are "ready for eval"
@@ -616,8 +664,20 @@ class XstockSpotScannerService {
             ? volume24hShares * latestPrice
             : 0;
 
+          // B.1.5 (2026-05-30): weight by the real two-sided top-of-book depth-USD
+          // rather than the inflated 24h "volume" field (which is the underlying
+          // equity's share volume, not the token's, and distorts the volume-
+          // weighted Global DBS median toward high-priced underlying names).
+          // Falls back to 0 when depth is absent for this symbol → the pair is
+          // effectively unweighted in the median (graceful: don't include pairs
+          // we have no fresh liquidity signal for in the directional bias).
+          // Pre-audit §2 Row-4.
+          const depthInfo = depthBySymbol.get(symbol);
+          const dbsWeight = (depthInfo && depthInfo.askDepthUsd > 0 && depthInfo.bidDepthUsd > 0)
+            ? Math.min(depthInfo.askDepthUsd, depthInfo.bidDepthUsd)
+            : 0;
           xstockDirectionalBiasStore.updatePair(
-            symbol, dbsResult.score, dbsResult.sentinelZero, volume24hUSD, sector,
+            symbol, dbsResult.score, dbsResult.sentinelZero, dbsWeight, sector,
           );
           dbsBySymbol.set(symbol, { score: dbsResult.score, category: dbsResult.category, slope });
         }
@@ -662,9 +722,15 @@ class XstockSpotScannerService {
           // (insufficient OHLC / ATR=0 / sector missing), MCE non-crypto branch
           // synthesizes neutral as before (graceful degrade).
           const propagatedDbs = dbsBySymbol.get(symbol);
+          // B.1.5: rolling-median depth-USD (sentinel -1 when no recent two-sided
+          // quotes → filters skip the depth gate gracefully).
+          const depth = depthBySymbol.get(symbol);
+          const askDepthUsd = depth?.askDepthUsd ?? -1;
+          const bidDepthUsd = depth?.bidDepthUsd ?? -1;
           await evaluateXstockPairForVTS(
             symbol, ohlc, price, volume24hUSD, 'paper',
             cycleCounters, cycleConfigs, bidAskSpreadPct, propagatedDbs,
+            askDepthUsd, bidDepthUsd,
           );
         }
 
