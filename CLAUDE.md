@@ -199,6 +199,18 @@ MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200
 
 19. **CI per-batch confirmation rule (Kyle directive 2026-05-23, B-NEW-43 Phase 3).** Every batch close MUST verify all 4 GitHub Actions jobs are GREEN on the head commit of `migration/aws-supabase` BEFORE marking complete. The 4 jobs: TypeScript Check (baseline gate), Test Suite, Build, Docker Build. Verification: `gh run list --branch migration/aws-supabase --limit 1` → confirm `completed success`. If `in_progress` or `queued`, wait via `gh run watch <run-id> --exit-status`. If RED, batch NOT complete — surface to Kyle + iterate. Completion reports MUST cite run ID + green status. See history doc §5.19.
 
+20. **TRADING-MODE TAXONOMY — two orthogonal axes; DO NOT CONFUSE (Kyle directive 2026-05-29; had to be explained twice).** The system has TWO independent dimensions, not one:
+
+    **Axis 1 — mode:** `paper` or `live`.
+    **Axis 2 — active trading:** ON or OFF.
+
+    - **Active trading ON (paper OR live)** = the FULL real trading pipeline runs: scanner → regime → strategy selection → the **signal orchestrator emits ONE best signal per cycle** (NOT a signal for every strategy in a regime family) → SQE → Ready-to-Buy → TEC → execution engine. In **paper mode** the execution routes through **Kraken's paper order system**; in **live mode** through Kraken live. Same pipeline; only the order destination differs.
+    - **Active trading OFF → VTS / passive learning** = a SEPARATE system that deliberately generates MANY virtual signals/trades (across strategies + regimes) to maximize learning data; simulated internally; **telemetry-only writes**. VTS is NOT the trading pipeline and did NOT replace paper trading — it was built (~Phase 8) so the system could keep ingesting live data and turning it into simulated trades while the build continued, without active trading on.
+
+    **Current state:** the system has been in **VTS/passive learning since the end of Phase 8** (the last active-paper run) — which is why the Kraken trading key sat idle ~6 months. The active-paper trading system **EXISTS in the codebase**; it is NOT "missing" or "unwired." But it has been dormant while extensive change accreted around it — new pair/signal processing, asset-class awareness, and multiple asset classes (crypto + xStock), much of it incomplete, untested, or error-laden. So when active-paper is turned back on it will very likely BREAK under that accumulated change. **Phase 19 is specifically the work to turn Paper Mode Active Trading back ON and get it working again** — debug/repair/test the existing active-paper pipeline against everything that changed during the VTS-building period. Do NOT describe it as "not wired," and do NOT assume its current fill behavior — verify in code; getting it working is Phase 19's job.
+
+    **Trap:** several VTS / passive-learning files have "paper" in their names (`paper-execution-engine.ts`, `paper_sim_*` tables, etc.), which makes it easy to mistake VTS internals for the active-paper path. When reasoning about "paper mode," ALWAYS confirm whether the question is about **active trading ON in paper mode** (full pipeline → Kraken paper order system) vs **VTS/passive** (internal sim, telemetry-only) — verify in code, do not infer from a filename or from these governance docs (some doc wording on this is imprecise — trust the code).
+
 ---
 
 ## 6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)
