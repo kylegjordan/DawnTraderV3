@@ -22,7 +22,9 @@
  */
 
 import 'dotenv/config';
-import { Pool } from 'pg';
+// `pg` is a CommonJS module; ES-modules-mode tsx needs default-import + destructure.
+import pg from 'pg';
+const { Pool } = pg;
 
 interface SummaryRow {
   total_symbols: string;
