@@ -116,8 +116,18 @@ describe('B79.0m.b2 — Pattern Filter', () => {
   });
 
   it('(d) LQ below lq_min → pattern_lq_*_lt_*', async () => {
-    metrics.LQ = 30; // < 43
-    const result = await evaluateXstockPatternFilter('AAPL/USD', makeOhlc(100), 200, 0, 'paper');
+    // B.1.5 (2026-05-30): xStock LQ is now depth-based — `calculateXstockDepthLQ
+    // (askDepthUsd)` returns log10(askDepthUsd + 1) × 10. Pass askDepthUsd=999
+    // so LQ = log10(1000) × 10 = 30.0 (< the seeded lqMin of 43.00 → reject as
+    // pattern_lq_30.00_lt_43.00). The shared `imf-metrics.calculateLogLiquidity`
+    // mocked above no longer feeds the pattern lane (it's still imported for
+    // back-compat / VN / Corr), so the prior `metrics.LQ = 30` line is now a
+    // no-op and removed. Note: when askDepthUsd is the sentinel -1 (depth data
+    // unavailable), the LQ gate is non-binding by design (graceful skip per
+    // pre-audit §R-fold-1b); this test exercises the bind path.
+    const result = await evaluateXstockPatternFilter(
+      'AAPL/USD', makeOhlc(100), 200, 0, 'paper', undefined, -1, /* askDepthUsd */ 999, /* bidDepthUsd */ 999,
+    );
     expect(result.passed).toBe(false);
     expect(result.failureReason).toMatch(/^pattern_lq_30\.00_lt_43\.00$/);
     expect(result.perMetric.failedLQ).toBe(1);

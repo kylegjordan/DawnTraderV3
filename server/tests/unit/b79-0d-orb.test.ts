@@ -63,9 +63,17 @@ function makeCandle(minuteOffset: number, high: number, low: number, volume: num
 }
 
 // Build 30-min open-range OHLC: high=100, low=99, vol=1000/min ⇒ totalOR vol=30000.
+//
+// B.1.5 (2026-05-30): the LAST bar represents the breakout candle and gets a
+// higher volume (2000). orb.ts now sources `currentVolume` from the last OHLC
+// bar (per pre-audit Q3 option (b); was: `indicators.volume` 24h field), so
+// `volumeMultiple = lastBarVolume / avgOrBarVol = 2000 / 1000 = 2.0` ≥ the
+// ORB_VOL_MULT_MIN threshold of 1.5 — the breakout-confirmation behavior the
+// tests below assert. Total orVolume = 29 × 1000 + 2000 = 31000.
 function makeOpenRangeBars(): PriceData[] {
   const bars: PriceData[] = [];
-  for (let i = 0; i < 30; i++) bars.push(makeCandle(i, 100, 99, 1000));
+  for (let i = 0; i < 29; i++) bars.push(makeCandle(i, 100, 99, 1000));
+  bars.push(makeCandle(29, 100, 99, 2000));
   return bars;
 }
 
@@ -143,8 +151,15 @@ describe('B79.0d — ORB detect', () => {
   });
 
   it('(d2) breakout above range but volume below 1.5× returns null', () => {
+    // B.1.5 (2026-05-30): orb.ts now reads `currentVolume` from the LAST OHLC
+    // bar; the default `makeOpenRangeBars()` sets that bar to vol=2000 to
+    // exercise the pass-path in (b)/(c)/(c2). This test verifies the
+    // low-volume REJECT path, so override the last bar back to vol=1000
+    // (= avgOrBarVol → volumeMultiple = 1.0 < 1.5 threshold → null).
+    const lowVolBars = makeOpenRangeBars();
+    lowVolBars[lowVolBars.length - 1] = makeCandle(29, 100, 99, 1000);
     const indicators = { ...baseIndicators, currentPrice: 100.5, volume: 1000 }; // exactly avg, volMult=1.0
-    const result = detectORB('AMZN/USD', makeOpenRangeBars(), indicators, {
+    const result = detectORB('AMZN/USD', lowVolBars, indicators, {
       assetClass: 'xstock_spot', symbol: 'AMZN/USD', now: NOW_AFTER_RANGE,
     });
     expect(result).toBeNull();
