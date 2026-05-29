@@ -1,126 +1,108 @@
-# B-XSTOCK-CALIB Sub-Batch — xStock Volume/Price Data-Quality + Global-Filter Calibration
+# B-XSTOCK-CALIB Sub-Batch — xStock Liquidity/Volume Data-Integrity + Cross-Asset Isolation
 
-**Provisional ID:** B.1.5 (data-quality GATE — sequenced BEFORE B.2 IMF calibration; see §4 Q1 for numbering/sequencing confirmation)
+**Provisional ID:** B.1.5 (data-integrity GATE — sequenced BEFORE B.2 IMF calibration)
 **Umbrella:** B-XSTOCK-CALIB (`1-system-manual/XSTOCK_CALIBRATION_PLAN.md`)
-**Type:** Investigation + data-quality remediation + global-filter recalibration. Mix of analysis (replay/SQL) and config/code change.
-**Status:** v1.1 — Step 1 Langston ACK = **CLEAN-CONDITIONAL** (3 conditions folded below); awaiting Kyle sign-off BEFORE implementation.
-**Authorized by:** Kyle DM 2026-05-28 10:47Z — "proceed with … scoping out the volume/price quality sub-batch." Origin: Kyle screenshot review of xStock 24h volume + stale/dislocated pricing; questions (a) is the volume representative or an artifact, (b) how many of ~485 symbols are worth trading, (c) what's wrong with the dislocated prices, (d) run a standalone global-filter batch or fold into IMF.
+**Status:** v2 (full rewrite — supersedes v1.1 + the v1.2 banner). Step 1 re-review by Langston, then Kyle sign-off BEFORE implementation.
+**Authorized by:** Kyle 2026-05-28 (DM 10:47Z to scope; subsequent directives to confirm root-cause, map all downstream liquidity consumers, run the trade report, prove cross-asset isolation, and consult SIM + System Manual).
 
 ---
 
-## ⚠️ v1.2 RESEARCH UPDATE (2026-05-28 — Kyle-directed web research + Kraken cross-check; supersedes the price-dislocation premise below)
+## §0 — What we now know (verified: code reads + live data + raw Kraken feed + 4-LLM cross-check)
 
-**Two premise-changing findings (objectives will be revised pending Kyle's nod):**
+**Root cause (CONFIRMED, multiple independent sources).** The 24h-volume figure our system uses for xStock liquidity is the **underlying equity's** volume, not the tradeable token's. The Kraken `ws-equities` ticker `volume` field for `TSLA/USD` reads ~13.2M climbing toward `prev_day_volume` ~44.8M — which is real Tesla *share* volume. Our scanner does `volume24hUSD = volume_24h × price`, yielding billions (underlying turnover), not token liquidity. Confirmed by: raw-WS capture (`_kraken_probe.cjs`), live archive queries, and 4 external LLMs (Opus 4.8 located the documented Kraken "underlying-equity vs SPV-token" representation toggle on the Own-Trades channel — the documented mechanism).
 
-1. **PRICES ARE CORRECT — no dislocation exists.** Per Kraken docs, xStocks are 1:1 with the underlying and priced to its execution price. The "MU ~$910 dislocation" was a CC error: Micron genuinely trades ~$905 on 2026-05-28 (crossed $1T market cap, +19% on AI-memory demand, UBS PT $1,625). NVDA/TSLA/AAPL/QQQ all match real current prices. → **O2 (price-dislocation root-cause) is dropped; replaced by a quick spot-confirm that stored price ≈ underlying.** Kyle's instinct ("Kraken doesn't send typos") was right.
-2. **VOLUME IS INFLATED ~700× — now proven against Kraken's own data.** Kraken's public TSLAx page shows **~$926K** 24h USD volume (matches Kyle's ~$600K screenshot order-of-magnitude); our system computes **~$665M** for the same token. Real xStock token volumes are HUNDREDS OF THOUSANDS of dollars. The `volume` field is in base-currency (tokens) per Kraken docs, and our `tokens × price = USD` is unit-correct in principle — but the stored token count is itself ~700× the real volume, so the defect is in how we read/accumulate Kraken's `volume` field. **Root-causing + fixing the ~700× inflation is now the batch's core objective (O1/O5 reframed).**
+**Prices are CORRECT (no dislocation).** xStocks are 1:1 with the underlying and priced to it. MU $927 is real (Micron ~$905, $1T mcap 2026-05-28). → DROP the price-dislocation objective; spot-confirm only. **`max_price` stays DISABLED** (Kyle directive — don't cap legitimately high-priced names, same logic as BTC).
 
-**Revised direction:** (1) root-cause + fix the ~700× volume inflation → real token liquidity; (2) drop price-dislocation, spot-confirm only; (3) **keep `max_price` OFF (Kyle directive** — don't cap legitimately high-priced names); (4) recalibrate `min_volume` (currently $1M, meaningless vs real ~$100K-$1M volumes) to the true scale once volume is fixed; (5) tradeable-universe count derived from corrected volume. Still a GATE before B.2.
+**True tradeable liquidity is small (authoritative).** CoinGecko `xstocks-ecosystem` cross-venue 24h volume: GOOGLx ~$23M, AAPLx ~$11.3M, TSLAx ~$10.3M, NVDAx ~$8.75M … GLDx ~$306K. Kraken's own consumer-page slice is smaller (TSLAx ~$926K page figure). These three numbers (feed-field = underlying; CoinGecko = cross-venue token; Kraken page = single-venue token) are **different denominators** — never compare as equal (4-LLM consensus).
 
-*The §0-§4 below are the v1.1 text (Langston-ACK'd); they will be rewritten to this revised direction after Kyle confirms.*
+**Multi-venue + execution model (Kyle's key question).** xStocks trade across Kraken + Solana/Ethereum DEXs (+ formerly Bybit, now delisted — Opus catch). Our code's only order path is `addOrder → makePrivateRequest('AddOrder')`; xStock pairs are NOT on Kraken's main REST (`TSLAxUSD` → "Unknown asset pair") — they live on the separate equities system. **OPEN, UNRESOLVED divergence among the 4 LLMs:** is our execution a visible-depth order book (Gemini, prior-CC: thin book = stuck risk) or an RFQ/atomic-swap where market-makers quote size on demand (Opus: depth doesn't bind)? This decides whether thin depth = stuck. **MUST be settled empirically** (read the live `book` channel on ws-equities + confirm the order venue) before liquidity-gate design is finalized.
 
----
-
-## §0 — Why this sub-batch exists (VERIFIED findings, not assumptions)
-
-This scope's §0 was drafted AFTER reading the actual ingestion code and querying the live staging archive — NOT from memory. Two prior internal assumptions were **wrong** and are corrected here.
-
-### 0.1 What the data feed actually is (verified)
-The xStock price + volume feed is a single WebSocket to Kraken's dedicated equities endpoint (`wss://ws-equities.kraken.com`), in `server/services/passive-archive/equity-spot-archiver.ts`. It subscribes to `ohlc(interval=1)` + `ticker` and stores:
-- OHLC bars → `xstock_spot_ohlc_1m` (price comes from bar `close`).
-- Ticker snaps → `xstock_spot_ticker_snap`, including `volume_24h` (the raw Kraken ticker `volume` field, line 102) and `last`/`bid`/`ask`.
-
-The scanner (`server/asset_classes/xstock_spot/scanner.ts:609-660`) computes the dollar-volume liquidity figure as **`volume24hUSD = volume_24h (shares) × latest price`**.
-
-### 0.2 CORRECTION #1 — "volume comes from the underlying equity" was unverified
-A prior internal note (and an earlier scoping hypothesis) asserted the 24h volume was the underlying NASDAQ/NYSE equity's volume (billions/day) rather than the Kraken-tradeable token's volume. **That was never verified.** The code reads Kraken's `volume` field — but **what Kraken populates that field with (the token's on-exchange volume vs. a passthrough/reference of the underlying-equity volume) is still unknown and is the central open question of this sub-batch.** The empirical numbers (§0.4) make the "real on-Kraken token volume" reading look implausible, but the answer must come from comparing stored values against Kraken's own published xStock volumes, not from a guess in either direction.
-
-### 0.3 CORRECTION #2 — paper-mode and live-mode filter values are NOT identical
-A prior note said the `mode` (paper/live) column in `screener_filters` is a "byte-identical write-twice artifact." **The live DB contradicts this** — paper and live diverge for many filter paths (examples below). Any recalibration must treat paper and live as independently-set, not assume mirroring.
-
-### 0.4 What the live staging data shows (queried 2026-05-28, last 6h of ticker snaps, 485 symbols)
-- **Volume magnitudes are implausibly large for a thin token venue.** Max computed 24h USD volume ≈ **$2.8 BILLION** (MU/USD); NVDA/USD ≈ $628M; QQQ/USD ≈ $843M; TSLA/USD ≈ $547M; median ≈ $310K. 173 symbols compute to >$1M; 301 >$100K; only 4 symbols zero/null volume. Genuine Kraken xStock-token daily volume is nowhere near hundreds-of-millions-to-billions — so the `volume_24h` field is very likely NOT the on-Kraken token volume. (Note: this is in tension with Kyle's screenshot showing ~$600K max — that discrepancy itself needs reconciling; Kyle may have been viewing a different metric/column/symbol-detail than this 24h figure.)
-- **Price dislocations are REAL and symbol-specific.** MU/USD = $910.71 (Kyle flagged ~$916) while NVDA/USD ($210), TSLA/USD ($434), QQQ/USD ($726) all look plausible for 2026. So it is NOT a uniform scaling bug — specific symbols are off while others are correct. SNDK was flagged by Kyle (~$1555) but did not appear in the last-6h snap window (worth confirming whether it's stale/absent). **Caveat:** "dislocated" must be proven by comparison to a reference underlying price — this scope does NOT pre-judge that MU is wrong (memory/AI names can move a lot); it flags it for reference-comparison.
-
-### 0.5 Why the current global filter can't protect against this
-The global filter (`server/asset_classes/xstock_spot/global-filter.ts`, `filter_path='active_quant'`) has the right gates but mis-calibrated values:
-- **min_volume = $1,000,000** (paper AND live, active_quant). Because min_volume only fails when volume is *known AND below* the floor, and the volume field is the suspect billions-scale number, this floor is effectively meaningless / backwards relative to true liquidity.
-- **max_price = 0.00 (DISABLED)** on active_quant → the price-dislocation sanity ceiling is OFF; MU's $910 sails through. (Other filter paths DO set max_price, e.g. 10000 or 99999999.99.)
-- **min_price = 5.00** on active_quant (higher than other paths' 0.01-2.00).
-- min_volume passes through entirely when volume = 0 (intentional cold-start tolerance), which also masks missing-data symbols.
-
-### 0.6 Why this must be a GATE before the rest of Phase B
-B.1 (regime), B.2 (IMF), B.4 (friction), B.5 (spread) all calibrate thresholds against this same volume/price data. **If the volume field is semantically wrong and some prices are dislocated, every downstream calibration is fitting to corrupt inputs.** Establishing data integrity first is a precondition, not a parallel nicety. This is the "data-quality gate" rationale for sequencing this before B.2.
+**Convergent actionable conclusion (all 4 LLMs + our analysis):** stop using ANY 24h-volume field for liquidity; gate on **live order-book depth / executable quote per symbol at trade time**. We already receive top-of-book `bid_qty`/`ask_qty` (TSLA ~40/120 tokens ≈ $18K-$53K) but no filter reads it today.
 
 ---
 
-## §1 — Scope (numbered objectives + verification criteria)
+## §1 — Full blast radius: every consumer of liquidity/volume (agent-mapped + spot-verified; pre-audit re-verifies each at code level)
 
-**O1.0 — (Langston condition #1) Reconcile the Kyle-screenshot discrepancy FIRST.** Kyle's screenshot showed ~$600K max 24h volume; our query computes ~$2.8B max from `volume_24h × last`. That is ~4 orders of magnitude apart. Before any external comparison, reconcile WHAT Kyle was looking at — a different column (per-bar volume? rolling N-minute?), different units, or different aggregation — so O1 doesn't validate against the wrong number.
-*Verify:* a written reconciliation identifying the exact metric/column Kyle's screenshot showed vs. the `volume_24h × last` figure.
+| # | Component | Consumes vol/liq? | Source today | Shared or forked | Impact of bad volume |
+|---|---|---|---|---|---|
+| 1 | **Global filter** (`xstock_spot/global-filter.ts`) | YES — `min_volume` gate | `volume24hUSD` (underlying×price) | FORKED (xstock module) | Liquidity pre-screen wrong |
+| 2 | **IMF evaluator / LQ factor** (`imf-evaluator.ts` → `imf-metrics.ts:calculateLogLiquidity`) | YES — LQ from per-bar OHLC `volume` | OHLC bar volume (also inflated) | **LQ fn SHARED w/ crypto** | Liquidity factor wrong at IMF stage |
+| 3 | **MCE** (`market-context-engine.ts`) | YES — `volume24h` param → `indicators.volume` + archive | scanner volume24h | SHARED (per-class cache key `${symbol}:${assetClass}`) | Feeds indicators + DBS |
+| 4 | **Directional Bias Store** (global DBS) | YES — global DBS = **volume-weighted median** | MCE `updatePair(…, volume)` | Per-class INSTANCE (`xstockDirectionalBiasStore`) | Distorts market-wide bias → regime classifier |
+| 5 | **Volume-Regime modulator (B68.2)** (`volume-regime.ts`) | YES — per-bar OHLC volume → multiplicative confidence factor [0.92-1.05] | ohlcCache volume | SHARED (config DB-keyed by class) | Skews EVERY signal's confidence |
+| 6 | **Strategies** (ORB + several: volume gates / confidence bonuses) | YES — `indicators.volume` | MCE indicators | SHARED detect fns (thresholds DB-keyed) | Volume gates/bonuses mis-fire |
+| 7 | **Pattern detector / pattern-filter** | TBD — re-verify volume use in pre-audit | — | FORKED (xstock pattern-filter.ts) | TBD |
+| 8 | **RTB scoring** (`ready_to_buy_service.ts`) | STORES `volume24h` only (archival; not used for admission) | signal input | SHARED | None today (but stored value is wrong) |
+| 9 | **SQE** (`signal_quality_evaluator.ts`) | NO (FinalScore + RegimeWeight only) | — | SHARED (thresholds cache-keyed `${mode}:${assetClass}`) | None |
+| 10 | **Position sizing** (`dynamic-sizing-engine.ts`, `paper-position-sizing.ts`) | NO — risk-based only | — | SHARED | **GAP**: no liquidity-aware sizing |
+| 11 | **Exits / TEC** (`trailing-exit-controller.ts`) | NO — price-based only | — | SHARED + per-class config | **GAP**: no thin-market exit |
+| 12 | **Cost model / friction** (`cost-model.ts`, friction) | NO (spread only; slippage model reads depth but diagnostic-only) | — | per-class friction modules | None today |
 
-**O1 — Determine what `volume_24h` actually measures (token vs. underlying vs. reference).**
-Compare stored `xstock_spot_ticker_snap.volume_24h` for a representative sample (top/median/bottom by magnitude, ~20-30 symbols) against Kraken's own published xStock-token 24h volume (Kraken REST/market-data for the equities venue) AND against the underlying equity's volume (a reference source). Classify the field: (a) token on-exchange volume, (b) underlying passthrough, (c) something else.
-*Verify:* a written determination per sample symbol with both reference numbers, and a single classification conclusion with confidence. If the field is NOT usable as a tradeable-liquidity proxy, O4/O5 change accordingly.
-
-**O2 — Characterize price dislocations and root-cause them.**
-For every symbol whose stored price diverges materially from a reference underlying price (threshold TBD in pre-audit, e.g. >50% or >3×), record symbol, stored price, reference price, ratio, and bid/ask. Determine root cause: feed corruption, stale/last-print on illiquid book, unit/parse error, symbol-mapping error, or genuine. MU and SNDK are confirmed starting cases.
-**O2.a — (Langston condition #2) Absent-symbol handling as a finding, not a footnote.** SNDK (Kyle-flagged) did not appear in the last-6h ticker snaps. If a flagged symbol is absent from recent ticker data entirely, that's a data-pipeline gap layered on top of the price problem — characterize WHY (subscription gap, symbol-mapping miss, delisted upstream, stale-only) rather than skipping it.
-*Verify:* a dislocation table (symbol, stored, reference, ratio, root-cause hypothesis) + a root-cause conclusion for at least the MU/SNDK class + an explicit characterization for any flagged-but-absent symbol.
-
-**O3 — Determine the representativeness of the 24h volume figure (snapshot vs. rolling).**
-Per CLAUDE.md rule #13 (rolling windows over snapshots): compare the single-snapshot `volume_24h` against a multi-day rolling distribution rebuilt from `xstock_spot_ohlc_1m` (sum of bar volumes over rolling 24h windows across multiple days). Quantify how much a one-moment snapshot drifts from the rolling figure.
-*Verify:* per-symbol snapshot-vs-rolling delta distribution; an explicit "is the snapshot decision-grade" finding.
-
-**O4 — Quantify the tradeable universe (how many of ~485 symbols are worth trading).**
-Using the O1/O3 corrected liquidity measure (NOT the raw suspect field if O1 disqualifies it), produce the count of symbols clearing candidate liquidity floors AND sane-price filters, over a multi-week window (not a single snapshot). Multi-week consistency: which symbols are *consistently* liquid vs. intermittently. **O3's rolling-distribution output FEEDS this count directly (Langston Q6) — they are sequenced, not computed twice.**
-*Verify:* a table of candidate floors → surviving-symbol counts, plus a consistency classification (always / usually / rarely liquid).
-
-**O5 — Recalibrate the global filter for xStock reality.**
-Set evidence-based values for the global-filter gates on the relevant filter path(s): `min_volume` (or replacement liquidity measure), `max_price` (re-enable the dislocation ceiling), `min_price`, in `screener_filters`. Respect `adjustment-registry.ts` bounds (min_volume $50K-$1M, min_price 0.001-1.0, etc.) OR propose bound changes with justification if reality falls outside them. Apply to BOTH paper and live deliberately (not assumed-mirrored — Correction #2).
-*Verify:* before/after `screener_filters` rows; a replay or live-cycle showing the recalibrated filter admits the intended liquid universe and rejects dislocated/illiquid symbols, visible in Filter Diagnostics counters.
-
-**O6 — Decide universe-membership liquidity pruning (vs. scanner-stage filtering only).**
-Today the universe (`xstock_spot_universe`) delists only on a 30-day time-staleness rule — there is NO liquidity-based pruning; illiquid-on-Kraken symbols enter the scanner and fail per-pair gates each cycle. Decide whether to add a liquidity-based soft-exclusion at universe level (cheaper, cleaner pools) or keep it purely at scanner global-filter stage. Design only if adopted; implementation may defer.
-*Verify:* a documented decision with rationale; if adopted, the mechanism + threshold + cadence specified.
-
-**O7 — Build the analysis as a reusable, indexed diagnostic script.**
-The volume/price/liquidity/dislocation analysis (O1-O4) is delivered as a committed, re-runnable script (mirroring the B.1a replay-harness disposition) so the multi-week consistency check and future re-validation are repeatable, not one-shot.
-*Verify:* committed script with run-command header; produces the O1-O4 outputs from a documented invocation.
+**Headline:** bad volume is NOT just a filter problem — it propagates into the IMF liquidity factor, the market-wide directional bias (volume-weighted → regime classification), the per-signal confidence multiplier, and strategy volume-gates. Sizing + exits use NO liquidity at all = the gap behind the stuck-trade risk.
 
 ---
 
-## §2 — Out of scope
+## §2 — Required changes vs the crypto build (clearly documented + surfaced)
 
-- IMF family threshold calibration (LQ/VN/DI/Correlation) — that's B.2, runs AFTER this gate.
-- Regime threshold / confidence-formula re-tuning — B.1 (done) / Phase 25.
-- Friction (spread/slippage) + max_bid_ask_spread calibration — B.4/B.5 coupled unit.
-- Building a new offline reference-equity *price/volume feed* as production infrastructure. O1/O2 may use a reference source for the *analysis*, but standing up a live equity-reference feed is Phase C/E territory (B-PHASE-E-PRE-1). If O1 concludes the live token feed itself is unusable for trading, that escalates to Kyle as a finding — it does not expand this batch into building a replacement feed.
-- Any active-trading flip. xStock remains in passive-learning/observation.
+The filter *structure* is identical crypto/xStock and does NOT change. What changes for xStock (because its volume source is different and its liquidity is thin/multi-venue):
 
----
+- **R1 — Re-source the liquidity input at the two filter stages.** Stop using the ws-equities `volume` field for `volume24hUSD` (global filter) and stop trusting OHLC-bar volume for the IMF LQ factor on xStock. Replace with a verified token-liquidity measure (order-book depth and/or an authoritative Kraken-specific token volume — pending §0 execution-model resolution).
+- **R2 — New plumbing: order-book depth.** Thread `bid_qty`/`ask_qty` (and, if the venue is a real CLOB, the `book` ladder) from the ticker snap into the scanner enrichment → global filter and/or IMF. This input does not exist in any filter today.
+- **R3 — Possibly an xStock-specific LQ.** Crypto's `calculateLogLiquidity` = `log10(avg USD volume)` assumes a deep market. xStock may need a depth-based or participation-rate liquidity score. **If so, it must be a per-asset-class branch or a separate xStock function — NOT an edit to the shared `imf-metrics.ts` function (see §3).**
+- **R4 — Liquidity-aware sizing + exit (the stuck-trade fix).** Add a participation-rate / depth cap to position sizing and a thin-market consideration to exits, for xStock. (Design here; implementation may phase — Langston Q.)
+- **R5 — Recalibrate thresholds AFTER the input is real.** `min_volume` (currently $1M, meaningless vs real ~$100K-$10M) and any new depth thresholds, set in `screener_filters`/`module_constants` keyed by `asset_class`. Threshold tuning is data, not code.
 
-## §3 — Risks
-
-- **R1 — Reference data availability.** O1/O2 need a trustworthy underlying-equity reference. Free sources (Yahoo, FRED, Finnhub already used for sector) have rate limits / coverage gaps. Mitigation: sample-based (20-30 symbols), not full-universe live calls.
-- **R2 — The volume field may be unusable.** If O1 finds `volume_24h` is underlying-passthrough (or corrupt), the liquidity gate needs a different basis (e.g. rolling bar-volume from OHLC, or bid/ask depth). That's a larger design change — flag to Kyle before O5 implementation rather than forcing a number into a broken field.
-- **R3 — Dislocation root cause may be upstream (Kraken).** If MU/SNDK are Kraken feed errors we cannot fix at source, the only defense is the max_price ceiling + spread gate + a dislocation-detection guard — defensive, not curative. Set expectations accordingly.
-- **R4 — Sequencing pressure.** Designating this a gate before B.2 delays B.2. If Kyle wants B.2 to proceed in parallel, we accept that B.2 may re-run if this batch changes the universe/data basis.
-- **R5 — Paper/live divergence (Correction #2).** Recalibrating must not blindly copy one mode to the other; each is set deliberately. Risk of regressing crypto or other paths if a migration is written too broadly — scope changes to `xstock_spot` + specific filter_path(s) only.
+Each R-item's exact crypto-vs-xStock delta will be enumerated in a **"crypto-vs-xStock difference register"** table in the Step 2 pre-audit (one row per touched component: what crypto does, what xStock will do, why, and the isolation mechanism).
 
 ---
 
-## §4 — Decisions (resolved with Langston, Step 1)
+## §3 — CROSS-ASSET ISOLATION (mandatory pillar — Kyle directive 2026-05-28)
 
-- **Q1 — Numbering + sequencing → GATE, B.1.5 confirmed.** This blocks B.2; NOT parallel-with-re-run (running B.2 against the suspect `volume_24h` field would fit thresholds to corrupt inputs and force a re-do). B.1.5 numbering accepted (data-quality slot under the B.1 family).
-- **Q2 — Filter-path target → `active_quant` only.** O5 recalibrates the global-filter path (`active_quant`) here; per-family min_volume stays with B.2. Touching all 14 paths is scope creep with cross-asset blast radius.
-- **Q3 — Reference source → Finnhub for price, with a caveat.** Use Finnhub (already wired + keyed) for the underlying-price reference. BUT verify in pre-audit that Finnhub's free tier returns underlying-equity 24h *volume* (not just last/quote); if it requires a rate-limited candle endpoint, fall back to Yahoo for the volume side. Document the fallback in the pre-audit.
-- **Q4 — Dislocation handling → two-tier + static ceiling.** Soft-flag at >2× (investigate + log to diagnostics), hard-reject at >3× (re-enabled `max_price` ceiling). Two tiers avoid false-positiving names that legitimately moved 50-80% on news while still catching SNDK at ~$1555. The re-enabled `max_price` is a single static universe-wide value for THIS batch; a per-symbol dynamic ceiling is architecturally correct but a follow-on (separate batch needing reference-feed infra, correctly out-of-scope here).
-- **Q5 — O6 universe pruning → design + decide here; implement only if safe.** Implement in-batch ONLY if (a) low-risk, (b) fully reversible (re-listable), and (c) no impact on existing trade IDs / VTS records / passive paper history. If any fails, deliver the design + decision and defer implementation to its own batch.
-- **Q6 — Cuts/adds.** No cuts. Adds = Langston conditions #1 (O1.0 reconciliation) + #2 (O2.a absent-symbol) + the O3→O4 sequencing note, all folded above.
+**Requirement:** every change must be PROVEN not to bleed between xStock and crypto in either direction, for every component in §1. This follows the system's existing, SIM-documented isolation pattern (SIM §9.13 Asset-Class Registry; MCE cache key `${symbol}:${assetClass}`; SQE thresholds `${mode}:${assetClass}`), which already ships **regression-lock tests** (`b79-0n-mce-cache-isolation.test.ts`, `b79-0n-storage-sqe-asset-class-routing.test.ts`).
 
-**Langston Step 1 verdict: CLEAN-CONDITIONAL — proceed to Step 2 pre-audit with the three conditions folded in.** Pending: Kyle sign-off before any implementation.
+**Rules:**
+1. **No edits to shared compute functions that change crypto's result.** Any liquidity/volume logic change in shared code (`imf-metrics.ts`, `market-context-engine.ts`, `volume-regime.ts`, strategy detect fns, sizing, exits) MUST be gated on `assetClass` (or moved to a per-class module), leaving the crypto path byte-identical.
+2. **All new thresholds/knobs keyed by `asset_class`** in `screener_filters` / `module_constants` — no global mutation.
+3. **Regression-lock tests are MANDATORY**, mirroring the existing isolation tests: for each touched shared component, a test that exercises the crypto path before/after and asserts identical output, plus a test that an xStock change does not alter crypto (and vice versa).
+4. **Proof artifact:** the completion report must include an "isolation proof" section enumerating, per component, the asset_class gate + the regression-lock test that protects crypto.
 
 ---
 
-*End B.1.5 (B_XSTOCK_GLOBAL_FILTER) scope v1.1 — Langston ACK folded; awaiting Kyle sign-off.*
+## §4 — Objectives + verification criteria
+
+- **O0 — Resolve the execution model** (CLOB vs RFQ) via live `book`-channel capture on ws-equities + Kraken docs/support. *Verify:* written determination of what bounds our fills, with evidence. Gates O5 design.
+- **O1 — Re-source liquidity inputs** (R1) so both filter stages read a verified token-liquidity measure. *Verify:* replay/live cycle shows liquidity values now match the authoritative scale (CoinGecko/Kraken token, not billions).
+- **O2 — Order-book depth plumbing** (R2). *Verify:* depth visible in Filter Diagnostics; gate fires on thin depth.
+- **O3 — Full blast-radius remediation:** for each §1 consumer that reads bad volume, either fix the input or document why unaffected. *Verify:* per-component sign-off table.
+- **O4 — Liquidity-aware sizing + exit design** (R4). *Verify:* design doc + decision (implement-now vs phase).
+- **O5 — Threshold recalibration** (R5) once inputs are real. *Verify:* before/after `screener_filters`; intended universe admitted, thin/illiquid rejected.
+- **O6 — Tradeable-universe count** from corrected liquidity + multi-week consistency (reusable indexed script). *Verify:* floors→surviving-count table + consistency classification.
+- **O7 — CROSS-ASSET ISOLATION PROOF** (§3). *Verify:* regression-lock tests green; crypto path proven unchanged; isolation table in completion report.
+- **O8 — Governance:** SIM + System Manual updated for every changed component (per §10 workflow).
+
+---
+
+## §5 — Out of scope
+- IMF family threshold calibration (B.2, after this gate). Per-strategy gates (B.3). Friction/spread (B.4/B.5).
+- Building a standing live cross-venue/DEX liquidity feed (Phase C/E). Active-trading flip.
+
+## §6 — Risks
+- **R-exec:** if O0 finds RFQ (depth doesn't bind), the whole liquidity-gate premise shifts — escalate to Kyle before O1/O5.
+- **R-bleed:** shared-function edits are the bleed risk; mitigated by §3 rules + regression-lock tests.
+- **R-data:** authoritative Kraken-specific token volume may not be exposed; fall back to order-book depth as the primary signal.
+- **R-seq:** GATE delays B.2; accepted (tuning against bad data is worse).
+
+## §7 — Decisions / open questions for Langston
+- Q1: Confirm GATE-before-B.2 still holds given expanded scope.
+- Q2: O0 method — is the live `book` channel sufficient to settle CLOB-vs-RFQ, or do we need Kraken support confirmation before designing?
+- Q3: R3 — xStock-specific LQ as a per-class branch in `imf-metrics.ts` vs a separate `xstock_spot` liquidity module? (Isolation favors separate module.)
+- Q4: R4 liquidity-aware sizing/exit — implement in-batch or design-and-defer (given active xStock trading is off)?
+- Q5: Independent investigation — your own read of the volume/liquidity question + the execution model (see dispatch).
+- Q6: Anything to cut/add before Step 2 pre-audit.
+
+## §8 — SIM + System Manual consultation (this scope) + MANDATE for Step 2 pre-audit
+- **Consulted for this scope:** SIM §3.1-3.4 (scanning/IMF), §4.1-4.2 (orchestrator/SQE), §9.13 (asset-class registry + isolation precedent), §5.1 (regime); System Manual Ch3 (scanning/filtering), §8 (IMF metrics). Confirmed: filters forked per-class; IMF metric fns + MCE + volume-regime + strategies shared (asset_class-parameterized); DBS per-class instance; isolation enforced via asset_class cache/DB keys + regression-lock tests.
+- **MANDATE (Step 2 pre-audit):** per-component deep SIM + System Manual read for every §1 consumer (upstream/downstream/shared-state/blast-radius), producing the crypto-vs-xStock difference register (§2) + the isolation proof plan (§3). Any SIM/Manual silence on a touched component = governance gap to flag.
+
+---
+*End B.1.5 scope v2 — awaiting Langston re-review + Kyle sign-off.*
