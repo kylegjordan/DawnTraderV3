@@ -192,16 +192,64 @@ export function registerFormulaAuditJob() {
 
   console.log(`[FormulaAuditJob] ⏰ Scheduling daily audit: ${SCHEDULE} (UTC)`);
 
-  cron.schedule(SCHEDULE, async () => {
+  // B-NEW-49 (2026-05-31): STORE the cron handle (was fire-and-forget) so
+  // cron-registry can introspect getNextRun() for the smoke test.
+  const _task = cron.schedule(SCHEDULE, async () => {
+    // B-NEW-49: fire-evidence write to scheduled_tasks_audit (in addition
+    // to /tmp/audit_report_YYYYMMDD.txt operator-readable summary).
+    const firedAt = new Date();
+    const startMs = firedAt.getTime();
+    let status: 'success' | 'error' = 'success';
+    let errorMessage: string | undefined;
     try {
       await runFormulaAudit('scheduled');
     } catch (error: any) {
-      console.error('[FormulaAuditJob] ❌ Scheduled audit failed:', error.message);
+      status = 'error';
+      errorMessage = error?.message ?? String(error);
+      console.error('[FormulaAuditJob] ❌ Scheduled audit failed:', errorMessage);
       console.error(error.stack);
+    } finally {
+      // Dynamic-import to avoid top-of-module pull-in chain; failure-safe.
+      try {
+        const { scheduledJobsAudit } = await import('../services/scheduled-jobs-audit.js');
+        await scheduledJobsAudit.writeFireRow({
+          jobName: 'formula_audit_cron',
+          scheduledFor: firedAt,
+          firedAt,
+          status,
+          errorMessage,
+          meta: { trigger_source: 'cron', duration_ms: Date.now() - startMs },
+        });
+      } catch (auditErr) {
+        console.error(
+          '[FormulaAuditJob][B-NEW-49][AUDIT_WRITE_FAIL]',
+          auditErr instanceof Error ? auditErr.message : auditErr,
+        );
+      }
     }
   }, {
     timezone: 'Etc/UTC'
   });
 
   console.log('[FormulaAuditJob] ✅ Job registered successfully (timezone: UTC)');
+
+  // B-NEW-49: register with cron-registry + emit arm-logger evidence.
+  (async () => {
+    const { cronRegistry } = await import('../services/cron-registry.js');
+    const { logCronArm } = await import('../services/cron-arm-logger.js');
+    cronRegistry.register({
+      name: 'formula_audit_cron',
+      task: _task,
+      expression: SCHEDULE,
+      timezone: 'Etc/UTC',
+      intervalSeconds: 86400,  // daily
+      enabled: true,
+    });
+    logCronArm(cronRegistry.get('formula_audit_cron')!);
+  })().catch((err) => {
+    console.error(
+      '[FormulaAuditJob][B-NEW-49][REGISTRY_FAIL]',
+      err instanceof Error ? err.message : err,
+    );
+  });
 }

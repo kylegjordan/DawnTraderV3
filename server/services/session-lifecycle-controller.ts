@@ -47,6 +47,9 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
 import { addAlert } from './system-alerts.js';
+import { cronRegistry } from './cron-registry.js';
+import { logCronArm } from './cron-arm-logger.js';
+import { scheduledJobsAudit } from './scheduled-jobs-audit.js';
 
 // Sample symbol used purely to satisfy the predicate's backward-compatible
 // signature. Post-B-NEW-36 sub-batch (c) the predicate is symbol-independent,
@@ -264,6 +267,29 @@ class SessionLifecycleController {
       },
       { timezone: TIMEZONE_ET, name: 'b-new-36-weekend-restart', noOverlap: true },
     );
+
+    // B-NEW-49 (2026-05-31): register with cron-registry + log arming
+    // evidence so the smoke-test + fire-evidence verifier can monitor.
+    // Weekly cadence (1 fire per week) = 604800 seconds.
+    cronRegistry.register({
+      name: 'weekend_shutdown',
+      task: this.friShutdownTask,
+      expression: CRON_FRI_8PM_ET,
+      timezone: TIMEZONE_ET,
+      intervalSeconds: 604800,
+      enabled: true,
+    });
+    logCronArm(cronRegistry.get('weekend_shutdown')!);
+
+    cronRegistry.register({
+      name: 'weekend_restart',
+      task: this.sunRestartTask,
+      expression: CRON_SUN_8PM_ET,
+      timezone: TIMEZONE_ET,
+      intervalSeconds: 604800,
+      enabled: true,
+    });
+    logCronArm(cronRegistry.get('weekend_restart')!);
   }
 
   /**

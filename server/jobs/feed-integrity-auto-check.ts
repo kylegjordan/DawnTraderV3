@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { getFeedIntegrityMonitor } from '../services/feed-integrity-monitor';
 import { AlertsService } from '../services/alerts-service';
 import { storage } from '../storage';
@@ -12,7 +12,7 @@ import type { FeedHealthReport } from '../services/feed-integrity-monitor';
  * Features: Deduplication, alert cooldown, auto-resolution on recovery
  */
 
-let job: cron.ScheduledTask | null = null;
+let job: ScheduledTask | null = null;
 let isEnabled = false;
 
 /**
@@ -256,23 +256,69 @@ export function initFeedIntegrityAutoCheck() {
     async () => {
       // Add jitter (0-30 seconds) to avoid thundering herd
       const jitter = Math.floor(Math.random() * 30 * 1000);
-      
+
       console.log(`[FeedIntegrity] Waiting ${jitter}ms jitter before check...`);
       await new Promise(resolve => setTimeout(resolve, jitter));
-      
+
+      // B-NEW-49 (2026-05-31): record fire-evidence AFTER jitter, BEFORE the
+      // check itself so we capture cron-fired-but-check-threw separately.
+      const firedAt = new Date();
+      const startMs = firedAt.getTime();
+      let status: 'success' | 'error' = 'success';
+      let errorMessage: string | undefined;
       try {
         await runFeedIntegrityCheck('auto');
       } catch (error) {
+        status = 'error';
+        errorMessage = error instanceof Error ? error.message : String(error);
         console.error('[FeedIntegrity] Scheduled check failed:', error);
+      } finally {
+        try {
+          const { scheduledJobsAudit } = await import('../services/scheduled-jobs-audit.js');
+          await scheduledJobsAudit.writeFireRow({
+            jobName: 'feed_integrity_cron',
+            scheduledFor: firedAt,
+            firedAt,
+            status,
+            errorMessage,
+            meta: { trigger_source: 'cron', duration_ms: Date.now() - startMs, jitter_ms: jitter },
+          });
+        } catch (auditErr) {
+          console.error(
+            '[FeedIntegrity][B-NEW-49][AUDIT_WRITE_FAIL]',
+            auditErr instanceof Error ? auditErr.message : auditErr,
+          );
+        }
       }
     },
     {
       timezone: 'UTC',
     }
   );
-  
+
   isEnabled = true;
   console.log('[FeedIntegrity] ✅ Auto-check enabled');
+
+  // B-NEW-49 (2026-05-31): register with cron-registry + emit arm-logger
+  // evidence. 5-min cadence default; respect env override for intervalSeconds.
+  (async () => {
+    const { cronRegistry } = await import('../services/cron-registry.js');
+    const { logCronArm } = await import('../services/cron-arm-logger.js');
+    cronRegistry.register({
+      name: 'feed_integrity_cron',
+      task: job!,
+      expression: cronSchedule,
+      timezone: 'UTC',
+      intervalSeconds: 300,  // 5 min default; env override is rare
+      enabled: true,
+    });
+    logCronArm(cronRegistry.get('feed_integrity_cron')!);
+  })().catch((err) => {
+    console.error(
+      '[FeedIntegrity][B-NEW-49][REGISTRY_FAIL]',
+      err instanceof Error ? err.message : err,
+    );
+  });
   
   // PHASE 27.F.21: Listen for engine state changes to clear alerts when trading stops
   clusterBus.on('engine_state_changed', async (data: any) => {

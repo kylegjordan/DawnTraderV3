@@ -1374,6 +1374,22 @@ app.use((req, res, next) => {
       console.error('[AwarenessScheduler] ⚠️ Startup failed:', error);
     }
 
+    // B-NEW-49 (2026-05-31): cron-arm smoke test + fire-evidence verifier.
+    // Smoke test must run AFTER all schedule registrations complete (all 5
+    // cron-registry entries must be present). Verifier kicks off via
+    // setInterval and runs every 15 min (independent of node-cron).
+    try {
+      const { scheduleSmokeTestRuns } = await import('./services/cron-arm-smoke-test.js');
+      scheduleSmokeTestRuns();  // boot + boot+5min via setTimeout
+
+      const { startCronFireEvidenceVerifier } = await import('./services/cron-fire-evidence-verifier.js');
+      startCronFireEvidenceVerifier();  // 15-min setInterval loop
+
+      console.log('[B-NEW-49] ✅ Cron observability layer started (smoke test + verifier)');
+    } catch (error) {
+      console.error('[B-NEW-49] ⚠️ Cron observability startup failed:', error);
+    }
+
     // Phase 41F-C: Start Unified Engine Health Monitor (5s heartbeat, auto-recovery)
     try {
       const { healthMonitor } = await import('./services/health-monitor.js');
