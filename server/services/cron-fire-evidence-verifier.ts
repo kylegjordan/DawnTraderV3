@@ -42,6 +42,14 @@ const processStartMs = Date.now();
 /**
  * Query last fire-row from scheduled_tasks_audit for each registered job.
  * Returns one row per job name. Job names with no fire-row return null.
+ *
+ * RUNNING_ISSUES #167 fix (2026-05-31): previously used
+ * `WHERE task_name = ANY(${jobNames}::text[])` which Drizzle's sql template
+ * does not escape correctly for Postgres text[] casts — query silently
+ * returned zero rows, causing false-positive "no_fires_ever_past_boot_grace"
+ * alerts on healthy schedules. Replaced with unfiltered GROUP BY + JS-side
+ * filter against the registered job set. Table has ~10-20 distinct task_name
+ * values (B-NEW-36 + B-NEW-49 + boot_state_reconciliation), perf negligible.
  */
 async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | null>> {
   const result = new Map<string, Date | null>();
@@ -50,18 +58,23 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
 
   if (jobNames.length === 0) return result;
 
+  const wantedNames = new Set(jobNames);
+
   try {
     const rows = await db.execute(sql`
       SELECT task_name, MAX(fired_at) AS last_fired_at
       FROM scheduled_tasks_audit
-      WHERE task_name = ANY(${jobNames}::text[])
       GROUP BY task_name
     `);
     // Drizzle's execute returns { rows: T[] } for postgres-js / pg, but the
     // result shape varies; normalize both shapes.
     const list: any[] = (rows as any).rows ?? (Array.isArray(rows) ? rows : []);
     for (const row of list) {
-      if (row.task_name && row.last_fired_at) {
+      if (
+        row.task_name &&
+        row.last_fired_at &&
+        wantedNames.has(row.task_name)
+      ) {
         result.set(row.task_name, new Date(row.last_fired_at));
       }
     }

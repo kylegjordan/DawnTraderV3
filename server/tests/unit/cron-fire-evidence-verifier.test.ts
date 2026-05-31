@@ -101,6 +101,22 @@ describe('B-NEW-49 cron-fire-evidence verifier', () => {
     expect(report.stale).toEqual([]);
   });
 
+  it('RUNNING_ISSUES #167 regression-lock — query returns rows for OTHER task_names too, JS-filter must keep only registered jobs', async () => {
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('healthy_registered', 300));
+    // Mock DB returns rows for a registered job AND for unregistered noise
+    // (mirroring real scheduled_tasks_audit shape that has B-NEW-36 +
+    // boot_state_reconciliation + other historical task_names).
+    mockedLastFires.set('healthy_registered', new Date(Date.now() - 60 * 1000));  // healthy
+    mockedLastFires.set('boot_state_reconciliation', new Date(Date.now() - 999 * 60 * 1000));  // NOT registered = ignored
+    mockedLastFires.set('weekend_shutdown', new Date(Date.now() - 999 * 60 * 1000));  // NOT registered = ignored
+    const report = await runVerification();
+    // Should be ok (only `healthy_registered` was registered + it's healthy)
+    expect(report.ok).toBe(true);
+    expect(report.stale).toEqual([]);
+    expect(alertCalls).toHaveLength(0);
+  });
+
   it('does not throw if DB query fails (failure-safe)', async () => {
     // Override the mock to throw for this test
     const dbModule = await import('../../db.js');
