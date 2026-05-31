@@ -15,7 +15,26 @@
 
 ---
 
-## CURRENT STATE (2026-05-31 07:21 UTC — B.1.5 REDEPLOYED + B-NEW-36 poll-reconcile DEPLOYED + Sun resume safety net ARMED + LIVE-VERIFIED)
+## CURRENT STATE (2026-05-31 22:15 UTC — B-NEW-49 DEPLOYED + observability layer LIVE-VERIFIED + #164 CLOSED + 2 new RUNNING_ISSUES opened)
+
+**Where we are TODAY (continued from 07:21 entry below):** Three batches landed today in sequence.
+1. **B.1.5 redeploy unblocker `efeef6d`** (06:38 UTC) — bridge JSON producer-consumer fix. ✅ CLOSED + governance.
+2. **B-NEW-36 poll-reconcile `5f20c71`** (07:06 UTC) — Sun resume safety net armed via 30s poll on centralClock. ✅ CLOSED + governance. Heartbeat live-verified.
+3. **B-NEW-49 `00945dd`** (21:57 UTC) — node-cron observability layer covering all 5 OTHER cron schedules (not just B-NEW-36's 2). Closes RUNNING_ISSUES #164. ✅ CLOSED + governance. Live-verified: 7/7 schedules registered, fire-evidence rows confirmed for 2 schedules within first 5 min, smoke test correctly caught a real node-cron bug on first deploy (alert written, dispatcher will surface).
+
+**Real bug surfaced on first B-NEW-49 deploy (= proof the smoke test works):** node-cron 4.2.1 `task.getNextRun()` for `weekend_shutdown` (Friday 8PM ET in America/New_York) returns 2027-01-02 instead of 2026-06-06 (~215 days off). `weekend_restart` (Sunday) returns correct date. Logged as RUNNING_ISSUES #165. B-NEW-36 poll-reconcile makes weekend boundary robust regardless. Investigate after Sun resume verification.
+
+**Adjacent finding via B-NEW-40 soak verify (run during B-NEW-49 governance close):** TEC stale-cache fence still firing — 3,716 `TEC_STALE_FAIL_CLOSED` events in 14-day window post-deploy. Likely dead-but-ESTABLISHED DB sockets bypassing keepalive. Logged as RUNNING_ISSUES #166. Alert `b83b1e4b` stays ACTIVE per script verdict ("manual review required"). Active-trading impact ZERO today; relevant before Phase 19. Investigate as separate batch.
+
+**Sun resume readiness (Mon 1 June 00:00 UTC = Sun 31 May 8PM ET, ~2h from now):** triple-protected:
+- (a) Primary: `weekend_restart` cron fires at boundary (next_fire armed correctly per smoke test = 2026-06-01T00:00:00.000Z)
+- (b) Safety net: poll-reconcile on centralClock detects drift within 30s if cron fails
+- (c) Tertiary: if process restarts before boundary, boot-reconciliation handles it
+- (d) NEW from B-NEW-49: fire-evidence verifier at 22:12 UTC will confirm or alert; if cron fires + writes audit row, healthy. If cron fires but no audit row, partial failure surfaced.
+
+**Active trading still OFF** throughout all 3 batches. Zero capital risk.
+
+**Kyle comms: DESKTOP ONLY** (no Telegram unless 3-way Langston).
 
 **Where we are TODAY:** Two batches landed in sequence on Sat 31 May:
 1. **B.1.5 redeploy unblocker `efeef6d`** — fixed `sync-canonical-bridge.ts` producer-consumer drift (was emitting flat-shape JSON; consumer `getClassMap` reads byAssetClass-nested). New `ASSET_CLASS_OVERRIDES` const + 9 unit tests locking the contract. CI green, deployed to staging 06:38 UTC, verified Mapper resolving correctly per-class (defensive_hedge crypto-HVU, orb xstock-IE etc). Langston Step-4 ACK clean.
