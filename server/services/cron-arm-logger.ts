@@ -15,15 +15,25 @@
  * distinguish "registration succeeded but firing stopped" from "registration
  * itself never armed." This logger closes that ambiguity.
  *
- * Public API verification (Langston Step-1 ACK note 2): `task.getNextRun()`
- * is a public method on node-cron 4.x ScheduledTask interface, exposed in
- * `node_modules/node-cron/dist/cjs/tasks/scheduled-task.d.ts`. Not internal.
- * Returns `Date | null` (null if the schedule will never fire — e.g.,
- * stopped or invalid expression).
+ * B-NEW-50 (RUNNING_ISSUES #165): the authoritative `next_fire` now comes from
+ * `computeNextFire()` (cron-parser), NOT node-cron's `task.getNextRun()` — the
+ * latter is BROKEN for day-of-week schedules >= ~2 days out (returns a future
+ * Jan-1st instead of the imminent date). We STILL emit node-cron's raw value as
+ * a labelled `raw_nodecron_next=… [UNTRUSTED ncv=…]` diagnostic so a future
+ * upstream fix is detectable via a trivial grep — but it NEVER drives the
+ * warning tags. See cron-next-fire.ts for the full root-cause writeup.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
 import type { RegisteredCronJob } from './cron-registry.js';
+import { computeNextFire } from './cron-next-fire.js';
+
+/**
+ * Installed node-cron version, surfaced in the `[UNTRUSTED ncv=…]` tag so a
+ * future bump auto-self-documents the RI #165 drift-watch grep.
+ * UPDATE THIS when bumping node-cron in package.json.
+ */
+const NODE_CRON_VERSION = '4.2.1';
 
 /**
  * Log the canonical `[CRON-REGISTRATION]` line for a registered cron job.
@@ -32,21 +42,24 @@ import type { RegisteredCronJob } from './cron-registry.js';
  * Side effects: console.log only. Never throws.
  */
 export function logCronArm(job: RegisteredCronJob): void {
-  let nextFire: Date | null = null;
-  let nextFireIso: string;
-  let warningTag = '';
+  // Authoritative next-fire (cron-parser) — drives warning tags + next_fire field.
+  const nextFire: Date | null = computeNextFire(job.expression, job.timezone);
 
+  // Raw node-cron value — DIAGNOSTIC ONLY (RI #165 drift detector). Never alerts.
+  let rawNextIso: string;
   try {
-    nextFire = job.task.getNextRun();
+    const raw = job.task.getNextRun();
+    rawNextIso = raw ? raw.toISOString() : 'null';
   } catch (err) {
-    // node-cron 4.x getNextRun() should not throw, but be defensive.
     console.error(
-      `[CRON-REGISTRATION] job=${job.name} getNextRun() threw: ` +
+      `[CRON-REGISTRATION] job=${job.name} raw getNextRun() threw: ` +
       (err instanceof Error ? err.message : err),
     );
-    nextFire = null;
+    rawNextIso = 'threw';
   }
 
+  let nextFireIso: string;
+  let warningTag = '';
   if (nextFire === null) {
     nextFireIso = 'null';
     warningTag = ' [WARNING_NULL_NEXT_RUN]';
@@ -60,6 +73,7 @@ export function logCronArm(job: RegisteredCronJob): void {
   console.log(
     `[CRON-REGISTRATION] job=${job.name} expr=${job.expression} ` +
     `tz=${job.timezone} interval_seconds=${job.intervalSeconds} ` +
-    `next_fire=${nextFireIso} enabled=${job.enabled}${warningTag}`,
+    `next_fire=${nextFireIso} enabled=${job.enabled} ` +
+    `raw_nodecron_next=${rawNextIso} [UNTRUSTED ncv=${NODE_CRON_VERSION}]${warningTag}`,
   );
 }

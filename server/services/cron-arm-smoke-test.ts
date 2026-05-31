@@ -32,6 +32,7 @@
 
 import { cronRegistry } from './cron-registry.js';
 import { addAlert } from './system-alerts.js';
+import { computeNextFire } from './cron-next-fire.js';
 
 export type SmokeStatus = 'OK' | 'PAST_DUE' | 'TOO_FAR_FUTURE' | 'NULL_NEXT_RUN' | 'DISABLED';
 
@@ -63,16 +64,11 @@ export async function runSmokeTest(label: string = 'boot'): Promise<SmokeReport>
       continue;
     }
 
-    let nextFire: Date | null = null;
-    try {
-      nextFire = job.task.getNextRun();
-    } catch (err) {
-      console.error(
-        `[CRON-ARM-SMOKE] job=${job.name} getNextRun() threw: ` +
-        (err instanceof Error ? err.message : err),
-      );
-      nextFire = null;
-    }
+    // Authoritative next-fire via cron-parser. RI #165: node-cron's
+    // task.getNextRun() is broken for day-of-week schedules (returns a future
+    // Jan-1st), which produced false TOO_FAR_FUTURE alerts on the weekend
+    // timers. computeNextFire is failure-safe (returns null on parse error).
+    const nextFire: Date | null = computeNextFire(job.expression, job.timezone);
 
     let status: SmokeStatus;
     let expectedBy: Date | null = null;
