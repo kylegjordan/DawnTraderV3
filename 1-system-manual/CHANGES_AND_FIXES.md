@@ -3472,3 +3472,57 @@ familyMismatchDenominatorTotal: 5408
 2. **Ship the non-arming-read companion (`peek*`) AT THE SAME TIME as the construction API.** Verify-gate signals are usually wired in the same batch that introduces the construction surface — a stats accessor that accidentally arms persist-timer machinery defeats the verify-gate's read-only contract. Codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.19.
 3. **`[CLASS_NOT_WIRED]` is distinct from `[CLASS_INVALID]`.** The marker on reserved-future enum values tells the reader "this is a valid future class; onboarding work is required to wire it" rather than "this is a bug." Helps Phase 24 onboarding sequencing know what's left vs what's broken.
 4. **Pre-existing infrastructure bugs surface during error-log review.** Step 7 verification surfaced a pre-existing `MarketDataHealthCheck` EACCES on `/home/runner` path (looks like a CI runner path bleed) — unrelated to TELEMETRY but worth tracking. RUNNING_ISSUES #144 entry filed as a future Tier-3 cleanup. Routine error-log inspection during Step 7 is structural debt-finding.
+
+
+---
+
+## BUG-2026-05-31-A — `sync-canonical-bridge.ts` producer-consumer drift (B.1.5 redeploy blocker)
+
+**Surfaced:** 2026-05-29 23:09 UTC, when B.1.5 staging deploy (`aa3c2dd`) crashed scanner at boot. Process online, HTTP 502.
+
+**Symptom:** `Error: [11.4H.6G][Mapper] No canonical regime-strategy map for asset class 'crypto_spot'. Check bridge/canonical/mapping-regime-strategy.json byAssetClass section.` thrown during esbuild bundle module-init at `market-indicators.ts` → `getExpandedRegimeDescriptionFromCanonical` → `getFavoredStrategiesForRegime` → `getClassMap`. xStock scanner never booted; site 502; rolled back.
+
+**Root cause:** Producer-consumer contract drift LATENT since B79.0n.STRATEGY (`af99bd5`, 2026-05-24).
+- **Source TS const** `CANONICAL_REGIME_STRATEGY_MAP` at `server/config/canonical-regime-strategy-map.ts:149` is typed `Record<CanonicalRegimeType, RegimeStrategyMapping>` — flat per-regime, NOT byAssetClass-nested.
+- **Hand-authored JSON** `bridge/canonical/mapping-regime-strategy.json` was edited during B79.0n.STRATEGY to byAssetClass shape (v3.0.0) with per-class deltas (`defensive_hedge` crypto-only HVU; `orb` xstock-only IE+TFS-additive; `strong_bull_trend` globally excluded).
+- **Runtime consumer** `getClassMap` at `server/core/strategy-mapper.ts:43` reads `typedCanonicalMap.byAssetClass?.[assetClass]` — strictly nested.
+- **Sync utility** `server/scripts/sync-canonical-bridge.ts` `generateBridgeJSON()` was NOT updated — still reads the flat in-source const and emits a flat-per-regime JSON, OVERWRITING the hand-authored byAssetClass file when run.
+
+**Why it stayed latent:** The sync script is a manual `npx ts-node` invocation, not part of `npm run build` or `pm2 restart`. Nobody re-ran it between af99bd5 and B.1.5, so the hand-authored byAssetClass JSON on staging stayed correct. The B.1.5 deploy doesn't run the sync either. The crash mode triggered by the B.1.5 deploy is the boot-time module-init read of the JSON. Hypothesis: esbuild ESM module-init ordering shifted when B.1.5 added/changed module-level imports in the eval-cycle/scanner/filter chain, causing `market-indicators.ts` to initialize earlier in the topological order — into a window where the JSON read returned a partial/empty value (atomic-write race during deploy suspected; precise trigger unconfirmed).
+
+**Fix:** Redeploy unblocker `efeef6d` (2026-05-31). Rewrote `generateBridgeJSON()` to derive both per-class subtrees from new `ASSET_CLASS_OVERRIDES` const encoding the hand-authored deltas (exclude+add lists per class). Output proven byte-identical to hand-authored staging JSON across 40 assertions (2 classes × 5 regimes × 4 fields). New `server/tests/unit/sync-canonical-bridge.test.ts` (9 tests) locks the producer-consumer contract in CI so this drift class can't recur silently. Markdown bridge generators left flat (docs-only; only consumer is a shape-only structure test).
+
+**Out-of-scope deeper structural fix (logged for follow-up):** Restructure the source TS const `CANONICAL_REGIME_STRATEGY_MAP` to byAssetClass nesting + update all ~56 in-tree consumers to dereference per-class. Eliminates the dual-shape ambiguity entirely. Out of scope here (urgency = unblock deploy). Logged as RUNNING_ISSUES #163.
+
+**Lessons:**
+1. **Pre-audit gap (Kyle 2026-05-31 critique):** Pre-audit Step 2 did not include "verify the producer-consumer contract for every shared canonical artifact the batch touches indirectly." The new code didn't modify the canonical map, but module-init ordering shifts can promote latent contract drift to a deploy-time crash. **New onboarding rule:** add a `CANONICAL_ARTIFACT_PRODUCER_CONSUMER_AUDIT` line to the Step 2 pre-audit template — for every JSON / generated file the batch's code paths read at runtime, verify that the producer (sync script / build step / hand-author) and the consumer (runtime reader) agree on shape. Cheap check that would have caught this in pre-audit. Codified in ASSET_CLASS_ONBOARDING_WORKFLOW.
+2. **CI unit test as contract lock.** A 9-test unit suite asserting `generateBridgeJSON()` output shape against `getClassMap` consumer expectations is the right enforcement surface. Build-step regeneration would add a runtime dependency in the bundle pipeline; unit test catches it without that risk.
+3. **Hand-authored canonical files masking generator drift.** If a generator silently emits wrong-shape output but nobody runs it, the bug stays latent until the next invocation. Either fold the generator into CI (regenerate-and-compare) or lock the contract via test. Latter is lighter.
+
+---
+
+## BUG-2026-05-31-B — node-cron silent fire failure (B-NEW-36 weekend-shutdown timer)
+
+**Surfaced:** 2026-05-31 06:30 UTC during weekend-shutdown audit. `scheduled_tasks_audit` table shows ZERO `weekend_shutdown` rows for Sat 30 May 00:00 UTC boundary (= Fri 29 May 8 PM ET, the most recent Friday close). Boot-reconciliation at Sat 31 May 05:06 UTC subsequently caught up (insideWeekendWindow=true detected, 244 trades suspended, scanner paused). System ended up in correct state via the safety-net path, but the primary cron path silently failed to fire.
+
+**Symptom:** No `[B-NEW-36][WEEKEND_SHUTDOWN_START]` log line at Sat 30 May 00:00 UTC. No exception. No `[B-NEW-36][WEEKEND_SHUTDOWN_FAIL]` log line. No audit-row write attempt. node-cron's `schedule()` callback was simply not invoked.
+
+**Verified NOT the cause:**
+- Process was UP and healthy at Sat 30 May 00:00 UTC (PM2 history + log evidence). Continuous uptime from Thu 28 May 11:03 UTC through Sat 31 May 05:06 UTC (~66 hours), the fire window was ~37h into that uptime.
+- Central-clock-based periodic ticks fired every 60s without gaps at the exact fire window: `[B78.1][WS_TICK_RATE]` + `[A3.R9.0.C][METRICS]` at 00:00:10, 00:01:10, 00:02:10, etc. — event loop was alive.
+- No async exception logged before, during, or after the fire window.
+- DST transition is not in play (last DST event 2026-03-08; mid-EDT throughout).
+
+**Possible (unverified) causes:** node-cron 4.x async-handler edge case + `noOverlap:true` interaction; scheduled-task handle GC; registration-time race; cross-process state contamination on PM2 restart cascade. Precise trigger remains UNCONFIRMED.
+
+**Fix:** B-NEW-36 poll-reconcile (`5f20c71`, 2026-05-31). Added `reconcileWindowState()` to `xstockSpotScanner.clockTickHandler` running every 30 ticks (= 30s) regardless of `isPaused`. Compares `isXstockMarketOpenUTC()` vs `scanner.isPaused`; on drift, invokes new `runShutdownFromPoll`/`runRestartFromPoll` entries on `sessionLifecycleController` (sharing the existing shutdown/restart core, refactored). Atomic `inFlight` mutex + post-mutex state recheck handle cron-vs-poll race. Poll path skips prewarm (catch-up semantics) and writes a system-alert (severity=warning, category=breakage) so future cron regressions surface to §10.5 per-turn checks rather than silently relying on poll forever. `[B-NEW-36][POLL_RECONCILE_CHECK]` 10-min heartbeat provides positive proof-of-life. Audit-row meta gains `trigger_source` field with values cron / poll / boot for query distinction.
+
+**Why "fixed" without root cause:** The poll-reconcile does NOT depend on understanding why cron failed because it doesn't touch cron. It rides on the central-clock path that has positive evidence of firing reliably at the exact moment cron missed. If cron silently fails again Sunday, the poll catches up within 30s AND writes a system-alert telling us cron regressed (forensic trail next time). If cron is healthy, poll observes state-matches and no-ops.
+
+**Blast-radius concern (Kyle 2026-05-31 pushback): UNRESOLVED.** There are 5 OTHER node-cron schedules in `/server` with no equivalent safety net: `server/jobs/formula-auto-audit.ts`, `server/jobs/feed-integrity-auto-check.ts`, `server/services/awareness-scheduler.ts` (×2: hourly + 6-hourly), `server/services/xstock-universe-cron.ts`. Any could have already silently failed without detection. Audit batch logged as RUNNING_ISSUES #164 — must (a) check each for evidence of prior silent failures via output artifacts, (b) instrument each to log on every successful invocation, (c) decide policy (poll-reconcile parity vs pin node-cron version + open upstream bug vs replace library).
+
+**Lessons:**
+1. **In-process timers carry silent-failure risk.** node-cron has no persistent state and no observability on missed fires. Mitigation patterns: (a) poll-based reconcile riding a different tick source, (b) audit-table write on every fire so missing rows are detectable, (c) external scheduler (systemd timer / cron + HTTP) for boundaries where silence is catastrophic.
+2. **Robust ≠ understood.** Fix can be correct against an unknown root cause IF the new path uses an independent mechanism with positive evidence of reliability. State the trust argument explicitly in the completion report so future readers know why the fix is robust despite the unknown.
+3. **Honest scoping under time pressure.** Sun resume in ~41h meant we couldn't wait for root cause. The right move was to ship the structural safety net + log the root-cause investigation as a follow-up batch, not to claim the underlying issue is understood.
+4. **Audit-table write is the canonical evidence trail.** Whenever a scheduled task fires, write a row regardless of outcome (success / error). Absent row = missed fire. This pattern caught BUG-2026-05-31-B because `scheduled_tasks_audit` is the canonical source of truth, not log greps.

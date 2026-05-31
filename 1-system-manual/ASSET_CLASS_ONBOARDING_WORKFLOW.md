@@ -1775,4 +1775,55 @@ When a diagnostic endpoint surfaces deferred per-class implementation gaps inlin
 
 ---
 
+## §4.25 — Producer-consumer contract audit for canonical artifacts (2026-05-31)
+
+**Origin:** B.1.5 redeploy unblocker (BUG-2026-05-31-A). The runtime canonical JSON `bridge/canonical/mapping-regime-strategy.json` had been hand-authored to a new shape during B79.0n.STRATEGY (`af99bd5`, 2026-05-24) without updating the upstream generator `server/scripts/sync-canonical-bridge.ts`. The deploy didn't break for 7 days because nobody re-ran the generator. The B.1.5 deploy then crashed at boot — most likely because esbuild ESM module-init ordering shifted, promoting the consumer (`market-indicators.ts` → `getClassMap`) into a partial-JSON read window. Pre-audit Step 2 did not catch this because the batch's code didn't touch the canonical map or its generator; the contract drift was invisible to a per-component blast-radius walk.
+
+**Rule (new Step 2 pre-audit line — MANDATORY):** for every JSON / generated artifact the batch's code paths read at runtime (whether the batch itself modifies the producer or consumer), verify the producer and consumer agree on shape. Concretely:
+
+1. **Identify every canonical artifact** the batch's affected code reads at runtime. Typical sources: `bridge/canonical/*.json`, `bridge/canonical/*.md`, generated configs in `dist/`, schema-generated TypeScript types.
+2. **For each artifact**, locate the producer (sync script / build step / hand-author) and the consumer (runtime read site).
+3. **Verify shape agreement** by either: (a) reading the consumer's parse logic + the producer's emit logic + diffing manually; (b) running the producer in dry-run mode + diffing output against on-disk artifact; (c) confirming a CI contract test exists that asserts producer-output passes consumer-parse.
+4. **If no CI contract test exists**, the pre-audit must NOT mark the artifact as "verified" — flag as a governance gap to be closed in the batch.
+
+**Why this matters:** module-init ordering shifts in bundlers (esbuild, Vite, webpack tree-shaking) can promote latent contract drift to deploy-time crashes without any code change to the drift surface itself. The blast radius is invisible at the per-component level — only a "canonical artifact registry" pre-audit step catches it.
+
+**Pattern (CI contract test):** B.1.5 redeploy unblocker added `server/tests/unit/sync-canonical-bridge.test.ts` (9 tests) asserting `generateBridgeJSON()` output is byAssetClass-shaped + passes `getClassMap`-equivalent reads + carries the per-class deltas (defensive_hedge, orb, strong_bull_trend). This is the template for canonical-artifact contract locks. Reusable shape:
+
+```ts
+import { generateArtifact } from '../../scripts/generator.ts';
+import { consumerReader } from '../../core/consumer.ts';
+test('producer output satisfies consumer contract', () => {
+  const generated = generateArtifact();
+  const parsed = JSON.parse(generated);
+  // Assert top-level shape, then exercise consumer's read path
+  for (const inputCase of EXPECTED_INPUTS) {
+    expect(() => consumerReader(parsed, inputCase)).not.toThrow();
+  }
+});
+```
+
+**Anti-pattern:** hand-author the canonical JSON to a new shape and assume the generator will be updated "later" — that "later" never comes until a deploy crash forces it.
+
+---
+
+## §4.26 — Scheduled-task verification via audit-table rows (2026-05-31)
+
+**Origin:** B-NEW-36 poll-reconcile (BUG-2026-05-31-B). Fri 29 May 8PM ET node-cron fire silently failed (no callback invocation, no exception, no log line). The failure was only detected when manually querying `scheduled_tasks_audit` and finding zero `weekend_shutdown` rows for the boundary timestamp. Without that audit table, the failure would have stayed invisible until the next manual check.
+
+**Rule (canonical for ANY in-process scheduled task):** every scheduled-task implementation MUST write an audit row on every fire (success OR error path), so absent rows = missed fires. Specifically:
+
+1. **Every cron/setInterval/setTimeout-based task** that performs side-effects (DB writes, scanner state changes, external API calls) MUST write a row to `scheduled_tasks_audit` or an equivalent audit table at fire time.
+2. **The audit row's `meta` field MUST include** a `trigger_source` discriminator (`'cron' | 'poll' | 'boot' | 'manual'`) so future analysis can distinguish primary-path fires from safety-net catch-ups.
+3. **A separate poll-based "did we fire?" verifier SHOULD exist** for any task whose silent failure has high blast radius. Pattern: ride an independent tick mechanism (centralClock, app-level setInterval, external systemd timer) that detects state drift and catches up. See `xstockSpotScanner.clockTickHandler.reconcileWindowState` for the canonical implementation.
+4. **System-alerts (severity=warning, category=breakage) SHOULD fire** when the safety net catches a missed primary fire, so the regression surfaces via §10.5 per-turn checks rather than being silently absorbed.
+
+**Why this matters:** in-process timers (node-cron, setInterval, setTimeout) can silently fail to invoke their callbacks with no exception and no log line. Root cause is often library bugs, event-loop edge cases, or async-handler quirks that are hard to reproduce. The audit-table-as-evidence pattern makes silent failures detectable; the poll-based catch-up makes them recoverable; the system-alert makes them visible.
+
+**Blast-radius pattern:** when one timer is found to have silently failed, audit the OTHER timers using the same library/pattern. Don't assume only the observed instance is affected. RUNNING_ISSUES #164 tracks the 5-other-node-cron-schedules audit triggered by BUG-2026-05-31-B.
+
+**Anti-pattern (don't do this):** rely on log-grep as the canonical evidence trail for scheduled-task fires. Logs are easily lost / rotated / overwritten; audit tables are queryable + indexable + persistent.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*

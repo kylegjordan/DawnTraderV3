@@ -573,12 +573,26 @@
 - **Downstream**: Frontend (Filter Insights widget)
 - **Blast Radius**: **LOW** — diagnostic/display only
 
-### 9.10 Canonical Bridge Sync (Batch 59)
+### 9.10 Canonical Bridge Sync (Batch 59, updated B.1.5 redeploy unblocker 2026-05-31)
 - **File**: `server/scripts/sync-canonical-bridge.ts` + `server/services/autonomy-scheduler.ts` (daily task)
-- **What**: Regenerates canonical bridge JSON and Markdown files from TypeScript source. **B59**: Added daily auto-sync scheduler task. Fixed ESM compatibility (`require.main === module` → typeof guard). Fixed hard-coded `updatedAt` timestamp — now uses fresh date on every sync.
-- **Upstream**: `canonical-regime-strategy-map.ts` (TypeScript source of truth)
-- **Downstream**: Mapping Drift UI tab (reads bridge JSON metadata), regime-strategy documentation
-- **Blast Radius**: **LOW** — documentation/metadata sync only
+- **What**: Regenerates canonical bridge JSON and Markdown files from TypeScript source. **B59**: Added daily auto-sync scheduler task. Fixed ESM compatibility (`require.main === module` → typeof guard). Fixed hard-coded `updatedAt` timestamp — now uses fresh date on every sync. **B.1.5 redeploy unblocker 2026-05-31 (BUG-2026-05-31-A):** rewrote `generateBridgeJSON()` to derive both per-class subtrees from new `ASSET_CLASS_OVERRIDES` const encoding the hand-authored deltas. Output now matches `getClassMap` (`server/core/strategy-mapper.ts:43`) byAssetClass consumer contract — previously emitted flat-shape JSON that silently drifted from the consumer since B79.0n.STRATEGY `af99bd5` (2026-05-24). New `server/tests/unit/sync-canonical-bridge.test.ts` (9 tests) locks the producer-consumer contract in CI.
+- **Upstream**: `canonical-regime-strategy-map.ts` (TypeScript source of truth, still flat-per-regime; per-class deltas encoded in sync script's `ASSET_CLASS_OVERRIDES`)
+- **Downstream**: `bridge/canonical/mapping-regime-strategy.json` (consumer = `getClassMap` byAssetClass-nested read at boot), Mapping Drift UI tab (reads bridge JSON metadata), regime-strategy documentation
+- **Blast Radius**: **HIGH** if generator drifts from consumer (boot-time module-init crash; observed BUG-2026-05-31-A); **LOW** otherwise. Unit-test contract lock mitigates drift recurrence.
+- **Producer-consumer contract** (NEW invariant 2026-05-31): `generateBridgeJSON()` output MUST satisfy `getClassMap(assetClass)` for both `crypto_spot` AND `xstock_spot`. Asserted by `sync-canonical-bridge.test.ts` in CI.
+
+### 9.10.b B-NEW-36 Weekend-Lifecycle Controller + Poll-Reconcile Safety Net (B-NEW-36 2026-05-20, poll-reconcile 2026-05-31)
+- **Files**: `server/services/session-lifecycle-controller.ts` (cron handlers + shared core + poll entries) + `server/asset_classes/xstock_spot/scanner.ts` (centralClock-tick reconcile hook)
+- **What**: xStock weekend window (Fri 8PM ET → Sun 8PM ET) shutdown/restart automation. Three independent fire paths converge on the same shared core (`runWeekendShutdownCore` / `runWeekendRestartCore`) which performs: (a) trade-state mutation via `markAllXstockWeekendSuspended` / `unmarkAllXstockWeekendSuspended`, (b) scanner pause/resume via `xstockSpotScanner.pause()` / `.resume()`, (c) audit-row write to `scheduled_tasks_audit` with `meta.trigger_source: 'cron' | 'poll' | 'boot'`.
+- **Fire paths:**
+  1. **node-cron** (registered at `init()`): Fri 20:00 ET (`0 20 * * 5`) → `runWeekendShutdown`; Sun 20:00 ET (`0 20 * * 0`) → `runWeekendRestart`. Both wrap shared core with `inFlight` mutex + run prewarm. **Known fragility:** node-cron can silently fail to invoke its callback without exception (BUG-2026-05-31-B). Mitigated by poll-reconcile path below.
+  2. **Boot reconciliation** (called from `server/index.ts` after scanner.start + rehydrate): on every process boot, compute `insideWeekendWindow` via `isXstockMarketOpenUTC()` predicate and reconcile trade-state + scanner-pause state to match. Closes the "PM2 restart mid-weekend → scanner resumes against closed market" mode AND the "long restart gap straddling Sun-restart → trades stuck suspended" mode.
+  3. **Poll-reconcile** (NEW 2026-05-31): `xstockSpotScanner.clockTickHandler` invokes `reconcileWindowState()` every 30 ticks (= 30s) regardless of `isPaused`. Compares `isXstockMarketOpenUTC()` vs `scanner.isPaused`; on drift, invokes `runShutdownFromPoll`/`runRestartFromPoll` entries on `sessionLifecycleController` which share the same core (skip prewarm; write system-alert with severity=warning + category=breakage so cron regressions surface via §10.5). `[B-NEW-36][POLL_RECONCILE_CHECK]` heartbeat log every 10 min provides positive proof-of-life when state matches.
+- **SSOT**: `scanner.isPaused` is the canonical signal. All three paths pair pause/resume with trade-state mutation via the shared core, so independent drift between scanner state and trade table is closed.
+- **Mutex**: `inFlight` boolean on `sessionLifecycleController`, atomic check+set (no awaits between guard and assignment), cleared in `finally` block. Test `b-new-36-poll-reconciliation.test.ts` #8 asserts unlock-on-throw invariant.
+- **Upstream**: centralClock (poll path), node-cron 4.x (cron path), `isXstockMarketOpenUTC()` predicate from `xstock_spot/market-hours.ts`
+- **Downstream**: `xstock_spot_ticker_snap` consumers (paused/resumed via scanner), `vts_open_trades` xStock rows (state flipped to/from `weekend_suspended`), `scheduled_tasks_audit` (every fire writes a row), `system-alerts.jsonl` (poll-fire writes a missed-cron alert)
+- **Blast Radius**: **HIGH for xStock VTS path** (controls whether xStock signals fire + whether 244+ open trades are suspended); **ZERO for crypto** (crypto scanner + trades untouched); **ZERO for active trading** (Phase 19 unchanged)
 
 ### 9.11 Adjustment Registry (Batch 58b, updated B59)
 - **File**: `server/config/adjustment-registry.ts`
