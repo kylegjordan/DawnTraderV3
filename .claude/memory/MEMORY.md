@@ -15,7 +15,43 @@
 
 ---
 
-## CURRENT STATE (2026-05-31 22:15 UTC — B-NEW-49 DEPLOYED + observability layer LIVE-VERIFIED + #164 CLOSED + 2 new RUNNING_ISSUES opened)
+## CURRENT STATE (2026-05-31 22:32 UTC — 3 batches + 1 hotfix landed today; B-NEW-47 storage queued NEXT pending Kyle compaction)
+
+**Where we are — IMMEDIATE NEXT ACTIONS (post-compaction):**
+
+1. **B-NEW-47 (storage sweep activation)** — Kyle directive 2026-05-31. Implements RUNNING_ISSUES #161 (Supabase storage growth dominated by xstock_spot_ticker_snap ≈29GB/96M rows/mo, ~50GB/mo accrual rate, 200GB hard ceiling at risk). Concrete in-batch decisions: (a) install B75 hot→warm sweep cron on staging (`scripts/b75-retention-sweep.ts`, line `15 2 * * *` per file header — never installed); (b) provision Backblaze B2 creds → take `b75-cold-rotator.ts` out of dry-run + schedule it; (c) shorten xStock ticker hot window 30→14 days per Kyle directive, BUT first verify in-batch whether 30 is safe given 200GB ceiling math (54GB ≪ 200GB so likely fine to keep 30 — Kyle authorized either way pending math); (d) confirm what B70 sweep currently does to renamed xstock tables (drop vs archive). Largest single lever = `xstock_spot_ticker_snap`. Active trading impact zero. Read RUNNING_ISSUES #161 for full pre-existing audit details.
+
+2. **Wait for Sun-resume verification** — Mon 1 Jun 00:00 UTC (~1.5h from MEMORY write time). At resume: `weekend_restart` cron fires (next_fire confirmed 2026-06-01T00:00:00.000Z, correctly armed) OR poll-reconcile catches up within 30s OR boot-reconcile on next restart. Either path resumes 244 `weekend_suspended` xStock trades → open + scanner cycles resume. ScheduleWakeup was armed but may have been interrupted by Kyle's recent messages — re-arm if needed.
+
+**SEQUENCED FOLLOW-UPS (after B-NEW-47):**
+- B-NEW-48 (per-class regime, RUNNING_ISSUES #162 conditional on consumer-impact audit at scoping)
+- #165 (node-cron `getNextRun()` Fri-NY-tz bug investigation; small repro batch)
+- #166 (TEC stale-cache fence) — Kyle directive 2026-05-31: defer to AFTER all Phase 24 xStocks calibration work completes. NOT before Phase 19 active-paper restart matters, so timing is OK.
+- B-XSTOCK-CALIB B.2 + remaining xStock calibration
+
+**TODAY'S 3 BATCHES + 1 HOTFIX (all CLOSED + governance committed):**
+1. **B.1.5 redeploy unblocker `efeef6d`** (06:38 UTC) — bridge JSON producer-consumer fix, governance commit `3612603`.
+2. **B-NEW-36 poll-reconcile `5f20c71`** (07:06 UTC) — Sun-resume safety net via 30s poll on centralClock, heartbeat verified live, governance commit `3612603`.
+3. **B-NEW-49 `00945dd`** (21:57 UTC) — node-cron observability layer covering all 5 OTHER schedules. Closes #164. Governance commit `08d3165`. Mode-A smoke test caught real node-cron bug on first deploy.
+4. **B-NEW-49 hotfix `17cfb42`** (22:26 UTC) — Closes RUNNING_ISSUES #167 (verifier false-positive from Drizzle ANY-array escaping). Replaced WHERE-filter with unfiltered GROUP BY + JS-filter against cronRegistry. 25/25 tests + regression-lock. PM2 #335. First post-hotfix verifier run at 22:41:36 UTC validates the fix.
+
+**ACTIVE/UNACKED ALERTS (intentional, keep visible):**
+- `0f366c74-3c3e-4a1...` — weekend_shutdown TOO_FAR_FUTURE (next_fire=2027-01-02 instead of 2026-06-06). REAL bug, intentional alert from smoke-test. Stays unacked per Langston's instruction until #165 investigation closes it.
+- `b83b1e4b...` — B-NEW-40 14-day soak verification FAIL (3,716 TEC_STALE_FAIL_CLOSED events). RUNNING_ISSUES #166. Deferred per Kyle to after all Phase 24 xStocks calibration work.
+
+**Kyle comms: DESKTOP ONLY** unless 3-way Langston discussion. Plain language every message (CLAUDE.md §1). Two-paragraph default.
+
+---
+
+## POST-COMPACTION PROMPT FOR KYLE
+
+Use this 2-sentence prompt after compaction:
+
+> Continue B-NEW-47 (storage sweep activation per RUNNING_ISSUES #161) as the next sub-batch through the full 11-step workflow autonomously with Langston, after first verifying the Sunday-resume fired correctly at Mon 1 Jun 00:00 UTC. Read CLAUDE.md + MEMORY.md first, then proceed without further input.
+
+---
+
+## (Older state preserved below for context but superseded by block above)
 
 **Where we are TODAY (continued from 07:21 entry below):** Three batches landed today in sequence.
 1. **B.1.5 redeploy unblocker `efeef6d`** (06:38 UTC) — bridge JSON producer-consumer fix. ✅ CLOSED + governance.

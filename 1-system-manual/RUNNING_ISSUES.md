@@ -449,3 +449,20 @@ Surfaced by B-NEW-40 14-day soak verification script (alert `b83b1e4b`, fired Sa
 **Alert state:** ACTIVE, unacknowledged. Stays active until investigated (per script's own instruction).
 
 **Sequencing:** investigate as separate batch — different surface entirely from B-NEW-49 (DB connection layer, not cron). Likely next after B-NEW-49 ships and Sunday-resume verification completes. Could be folded with #165 if both are short — but #166 needs Langston attention given prior context on B-NEW-40 design.
+
+
+### #167 CLOSED 2026-05-31 — B-NEW-49 cron-fire-evidence verifier false-positive (DB query ANY-array escaping)
+**RESOLVED via hotfix `17cfb42`** (CI run `26726206443` all-4-green 2m18s; deployed PM2 #335 at 22:26:36 UTC). Replaced `WHERE task_name = ANY(${jobNames}::text[])` Drizzle template with unfiltered `SELECT task_name, MAX(fired_at) FROM scheduled_tasks_audit GROUP BY task_name` + JS-side filter against `cronRegistry.getAll()`. Added regression-lock test (`cron-fire-evidence-verifier.test.ts` test #5) that mocks DB returning rows for BOTH registered AND unregistered task_names + asserts verifier ignores the unregistered ones. 25/25 tests green; tsc baseline 493/494 unchanged. Boot 22:26:36 UTC clean. First post-hotfix verifier run at 22:41:36 UTC will validate no false-positive recurs. Original entry below preserved for context.
+
+### #167 (original OPEN entry — superseded by CLOSED above)
+Surfaced at first verifier run after B-NEW-49 deploy (22:12:48 UTC). The verifier alerted on `feed_integrity_cron` with reason=`no_fires_ever_past_boot_grace` (lastFire was null in the query result), but the DB actually had 4 successful `feed_integrity_cron` rows in `scheduled_tasks_audit` at 22:00, 22:05, 22:10, 22:15 UTC. Alert `c6e35132-ca39-4817-be5d-897bc4923e20` ack'd as false-positive.
+
+**Root cause:** `cron-fire-evidence-verifier.ts:queryLastFires` uses `WHERE task_name = ANY(${jobNames}::text[])` in a Drizzle SQL template. Drizzle's parameter escaping for a JS array against a Postgres text[] cast does not produce the expected ANY-match — query silently returns zero rows.
+
+**Fix (small hotfix):** swap the SQL to either (a) drop the WHERE filter entirely and filter in JS (`SELECT task_name, MAX(fired_at) FROM scheduled_tasks_audit GROUP BY task_name` then JS-filter against `cronRegistry.getAll()`), OR (b) use Drizzle's `inArray(scheduledTasksAudit.taskName, jobNames)` operator. Lean is (a) — N=~10 task_names in the table, JS filter trivial, no Drizzle import gymnastics.
+
+**Test coverage gap:** the existing `cron-fire-evidence-verifier.test.ts` mock returns rows correctly because it bypasses the real SQL escape path. Add a real-DB integration test OR fix the unit-test mock to simulate Drizzle's actual array-param behavior.
+
+**Sequencing:** small hotfix (~30 min). Should land BEFORE B-NEW-47 storage so the safety net is trustworthy before more deploys. First post-compaction action.
+
+**Operational impact:** verifier produces false positives every 15 min for healthy schedules. Each false positive writes an alert that the dispatcher pushes to Telegram + invokes Langston via SSH. Langston already responded to one false alert + recommended restart (per his protocol — he didn't know it was a query bug). Until fixed, EVERY 15 min the verifier will re-alert on ALL 7 schedules + spam the alert queue. The MODE-A smoke test is unaffected (uses `task.getNextRun()` not DB query) — the real weekend_shutdown bug it caught is still legitimate.
