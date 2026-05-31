@@ -60,26 +60,141 @@ function logEvent(message: string): void {
   console.log(logEntry.trim());
 }
 
-function generateBridgeJSON(): string {
+// B.1.5 redeploy unblocker (2026-05-31): byAssetClass overrides
+// ──────────────────────────────────────────────────────────────────────────────
+// Encodes the per-asset-class deltas vs. the flat in-source CANONICAL_REGIME_STRATEGY_MAP.
+// Hand-authored into bridge/canonical/mapping-regime-strategy.json during B79.0n.STRATEGY
+// (af99bd5, 2026-05-24); this script previously emitted the flat shape, silently
+// drifting away from the consumer contract enforced by getClassMap
+// (server/core/strategy-mapper.ts:43 → typedCanonicalMap.byAssetClass?.[assetClass]).
+//
+// Each per-class subtree is derived as:
+//   subtreeStrategies(regime) = (source[regime].strategies - excludeStrategies[class][regime])
+//                               + addStrategies[class][regime]
+//
+// Exclusion rationale:
+//   • strong_bull_trend: globally excluded from canonical favored list — routed
+//     via separate quant-strong-trend sourcePool (B63), not the canonical regime path.
+//   • defensive_hedge: crypto-only (BTC-correlation hedging, not applicable to xStocks).
+//   • orb: xstock-only (intraday opening-range breakout, equity-hours microstructure).
+//
+// Addition rationale:
+//   • orb in xstock_spot TFS: hand-authored extension (B79.0n.STRATEGY) — ORB
+//     fires on stable-trend breakouts not just impulse regimes for xStocks.
+//
+// favoredSignalTypes is derived from the resulting per-class strategy list
+// (distinct set of signalType values, using STRATEGY_KEY_TO_SIGNAL_TYPE lookup
+// for ADDED strategies whose source mapping is in a different regime).
+//
+// minConfidence + riskMultiplier are taken directly from the source regime mapping
+// (same across asset classes per current hand-authored JSON).
+//
+// To change per-class strategy membership: edit ASSET_CLASS_OVERRIDES below,
+// re-run `npx ts-node server/scripts/sync-canonical-bridge.ts`, then verify
+// the JSON via the sync-canonical-bridge.test.ts unit test.
+// ──────────────────────────────────────────────────────────────────────────────
+
+const ASSET_CLASSES = ['crypto_spot', 'xstock_spot'] as const;
+type AssetClassKey = typeof ASSET_CLASSES[number];
+
+interface PerClassOverride {
+  excludeStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
+  addStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
+}
+
+const ASSET_CLASS_OVERRIDES: Record<AssetClassKey, PerClassOverride> = {
+  crypto_spot: {
+    excludeStrategies: {
+      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
+      HIGH_VOLATILITY_UNSTABLE: [],
+      RANGE_BOUND_STABLE: [],
+      IMPULSE_EXPANSION: ['strong_bull_trend', 'orb'],
+      STRUCTURAL_TRANSITION: ['orb'],
+    },
+    addStrategies: {},
+  },
+  xstock_spot: {
+    excludeStrategies: {
+      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
+      HIGH_VOLATILITY_UNSTABLE: ['defensive_hedge'],
+      RANGE_BOUND_STABLE: [],
+      IMPULSE_EXPANSION: ['strong_bull_trend'],
+      STRUCTURAL_TRANSITION: ['orb'],
+    },
+    addStrategies: {
+      TREND_FRIENDLY_STABLE: ['orb'],
+    },
+  },
+};
+
+/** Build strategyKey → signalType lookup once from the source map. */
+function buildStrategyToSignalType(): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const s of mapping.strategies) {
+      map.set(s.strategyKey, s.signalType);
+    }
+  }
+  return map;
+}
+
+function deriveClassSubtree(
+  assetClass: AssetClassKey,
+  strategyToSignalType: Map<string, string>
+): Record<string, any> {
+  const overrides = ASSET_CLASS_OVERRIDES[assetClass];
+  const subtree: Record<string, any> = {};
+  for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+    const regimeKey = regime as CanonicalRegimeType;
+    const excludes = new Set(overrides.excludeStrategies[regimeKey] ?? []);
+    const adds = overrides.addStrategies[regimeKey] ?? [];
+    const sourceKeys = mapping.strategies
+      .filter(s => !excludes.has(s.strategyKey))
+      .map(s => s.strategyKey);
+    const favoredStrategies = [...sourceKeys, ...adds.filter(k => !sourceKeys.includes(k))];
+    const favoredSignalTypes = [
+      ...new Set(
+        favoredStrategies
+          .map(k => strategyToSignalType.get(k))
+          .filter((v): v is string => typeof v === 'string')
+      ),
+    ];
+    subtree[regime] = {
+      favoredStrategies,
+      favoredSignalTypes,
+      riskMultiplier: mapping.riskMultiplier,
+      minConfidence: mapping.minConfidence,
+    };
+  }
+  return subtree;
+}
+
+export function generateBridgeJSON(): string {
+  const strategyToSignalType = buildStrategyToSignalType();
+  const byAssetClass: Record<string, Record<string, any>> = {};
+  for (const assetClass of ASSET_CLASSES) {
+    byAssetClass[assetClass] = deriveClassSubtree(assetClass, strategyToSignalType);
+  }
   const bridge: Record<string, any> = {
     _schema: CANONICAL_SCHEMA_VERSION,
     _metadata: {
       ...CANONICAL_SCHEMA_METADATA,
       updatedAt: new Date().toISOString(),  // B59: Override hard-coded updatedAt with fresh timestamp
       generatedAt: new Date().toISOString(),
-      generator: 'sync-canonical-bridge.ts'
-    }
+      generator: 'sync-canonical-bridge.ts',
+      _changelog: {
+        'v3.0.0': 'B79.0n.STRATEGY 2026-05-24: per-asset-class shape via byAssetClass nesting. ' +
+                  'Crypto subtree byte-identical to v2.0.0 flat shape values. xStock subtree = ' +
+                  'crypto minus defensive_hedge (BTC-decorrelation only) + add orb to TFS+IE ' +
+                  '(xStock-specific opening-range microstructure). ' +
+                  'B.1.5 redeploy unblocker 2026-05-31: generateBridgeJSON now derives both ' +
+                  'subtrees from ASSET_CLASS_OVERRIDES — output shape matches getClassMap ' +
+                  '(server/core/strategy-mapper.ts:43) consumer contract.',
+      },
+    },
+    byAssetClass,
   };
-  
-  for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
-    bridge[regime] = {
-      favoredStrategies: mapping.strategies.map(s => s.strategyKey),
-      favoredSignalTypes: [...new Set(mapping.strategies.map(s => s.signalType))],
-      riskMultiplier: mapping.riskMultiplier,
-      minConfidence: mapping.minConfidence
-    };
-  }
-  
+
   return JSON.stringify(sortObjectKeys(bridge), null, 2);
 }
 
