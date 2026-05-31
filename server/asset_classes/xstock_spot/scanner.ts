@@ -70,6 +70,17 @@ function computeATRFromOHLC(ohlcData: OHLCData[], period: number = 14): number {
 // 30 seconds — same as FX5 scanner. Aligned with central-clock budget.
 const SCAN_INTERVAL_SECONDS = 30;
 
+// B-NEW-36 poll-reconcile (2026-05-31): how often (in centralClock ticks =
+// seconds) the clockTickHandler re-checks weekend window state vs scanner
+// pause state. 30s cadence piggy-backs the existing scan cadence — zero
+// added load when state matches, 30s max recovery latency on a node-cron
+// silent failure. Recovery latency vs the 48-hour weekend window is negligible.
+const WINDOW_RECONCILE_INTERVAL_TICKS = 30;
+
+// Sample symbol for the window-state predicate (predicate is symbol-independent
+// post-B-NEW-36 sub-batch (c); kept for backward-compatible signature).
+const SAMPLE_SYMBOL_FOR_WINDOW_CHECK = 'AAPL/USD';
+
 // Hostile-sim sleep duration (Langston Q5 lock — gated by NODE_ENV check).
 // 28s — exceeds the 25s `[B79.0a][BACKPRESSURE_OBSERVED]` threshold so the
 // telemetry signal trips, but stays under the 30s `SCAN_INTERVAL_SECONDS`
@@ -221,6 +232,34 @@ class XstockSpotScannerService {
 
     this.clockTickHandler = async (tick: ClockTick) => {
       this.diag.lastTickAt = tick.timestamp;
+
+      // B-NEW-36 poll-reconcile (2026-05-31): every WINDOW_RECONCILE_INTERVAL_TICKS
+      // seconds, re-check the weekend window state vs scanner pause state. If
+      // they disagree (cron silently failed to fire at the boundary), trigger
+      // the catch-up via sessionLifecycleController's poll entry points. Runs
+      // REGARDLESS of isPaused — must execute on Sun 8PM ET boundary when
+      // scanner is paused but should be running. Cheap (~microseconds for
+      // matched state); on drift, full reconcile via shared shutdown/restart
+      // core. See B_NEW_36_WEEKEND_CRON_FAILURE_DESIGN.md §4.
+      if (tick.tickNumber > 0 && tick.tickNumber % WINDOW_RECONCILE_INTERVAL_TICKS === 0) {
+        // Low-frequency heartbeat (every 600 ticks = 10 min) so post-deploy
+        // verification has positive evidence the reconcile hook is alive even
+        // when state matches (Langston Step-4 review minor). Cheap (~144/day).
+        if (tick.tickNumber % 600 === 0) {
+          const insideWindow = !isXstockMarketOpenUTC(SAMPLE_SYMBOL_FOR_WINDOW_CHECK, new Date(tick.timestamp));
+          console.log(
+            `[B-NEW-36][POLL_RECONCILE_CHECK] tick=${tick.tickNumber} ` +
+            `insideWindow=${insideWindow} isPaused=${this.isPaused}`,
+          );
+        }
+        await this.reconcileWindowState(new Date(tick.timestamp)).catch((err) => {
+          console.error(
+            `[B-NEW-36][POLL_RECONCILE_FAIL] tick=${tick.tickNumber}: ` +
+            (err instanceof Error ? err.message : String(err)),
+          );
+        });
+      }
+
       // B-NEW-36 (2026-05-20): graceful drain semantics for pause(). When
       // paused, observe the flag and no-op without unsubscribing — the
       // session-lifecycle controller toggles this around the Fri 8PM ET →
@@ -340,6 +379,48 @@ class XstockSpotScannerService {
   /** B-NEW-36 (2026-05-20) — public read-only access to the paused state. */
   getIsPaused(): boolean {
     return this.isPaused;
+  }
+
+  /**
+   * B-NEW-36 poll-reconcile (2026-05-31): periodic window-state vs scanner-state
+   * drift check. Called from clockTickHandler every WINDOW_RECONCILE_INTERVAL_TICKS
+   * seconds. Defense-in-depth against node-cron silent failures (per evidence
+   * Fri 29 May 8PM ET fire was missed — scheduled_tasks_audit had no
+   * weekend_shutdown row for that boundary).
+   *
+   * SSOT note: scanner.isPaused is the canonical signal. The cron + boot-reconcile
+   * + poll-reconcile paths ALWAYS pair the pause/resume call with the trade-state
+   * mutation (markAllXstockWeekendSuspended / unmarkAllXstockWeekendSuspended)
+   * via session-lifecycle-controller's shared shutdown/restart core. Independent
+   * state drift between scanner.isPaused and the trade table is closed: if a
+   * partial-failure path were ever introduced, the poll would still detect the
+   * scanner-side drift and trigger the full reconcile (which re-runs the trade
+   * mutation, idempotently).
+   *
+   * Public for unit-test access; in production only the clockTickHandler calls it.
+   */
+  async reconcileWindowState(now: Date): Promise<void> {
+    const insideWindow = !isXstockMarketOpenUTC(SAMPLE_SYMBOL_FOR_WINDOW_CHECK, now);
+    const isPaused = this.isPaused;
+
+    if (insideWindow && !isPaused) {
+      // State drift: weekend window is OPEN (i.e. market is CLOSED), but
+      // scanner is still running. Most likely the Fri 8PM ET cron failed.
+      console.warn(
+        `[B-NEW-36][POLL_RECONCILE_DRIFT] window=closed scanner=running → triggering shutdown (likely Fri cron miss)`,
+      );
+      const { sessionLifecycleController } = await import('../../services/session-lifecycle-controller.js');
+      await sessionLifecycleController.runShutdownFromPoll(now);
+    } else if (!insideWindow && isPaused) {
+      // State drift: weekend window is CLOSED (i.e. market is OPEN), but
+      // scanner is still paused. Most likely the Sun 8PM ET cron failed.
+      console.warn(
+        `[B-NEW-36][POLL_RECONCILE_DRIFT] window=open scanner=paused → triggering restart (likely Sun cron miss)`,
+      );
+      const { sessionLifecycleController } = await import('../../services/session-lifecycle-controller.js');
+      await sessionLifecycleController.runRestartFromPoll(now);
+    }
+    // else state matches; no action needed (common case, every 30s, ~microseconds)
   }
 
   /**

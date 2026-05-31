@@ -46,12 +46,18 @@ import * as cron from 'node-cron';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
+import { addAlert } from './system-alerts.js';
 
 // Sample symbol used purely to satisfy the predicate's backward-compatible
 // signature. Post-B-NEW-36 sub-batch (c) the predicate is symbol-independent,
 // so this value is irrelevant — any registered xStock would return the same
 // answer.
 const SAMPLE_SYMBOL_FOR_HOURS_CHECK = 'AAPL/USD';
+
+// B-NEW-36 poll-reconcile (2026-05-31): trigger-source label written into
+// scheduled_tasks_audit.meta and used to distinguish cron-path vs poll-path
+// vs boot-path in dashboards / queries.
+export type TriggerSource = 'cron' | 'poll' | 'boot';
 
 // Cron expressions (interpreted in America/New_York timezone — node-cron 4.x
 // uses Intl, same DST-awareness as our market-hours predicate).
@@ -72,6 +78,12 @@ interface AuditMeta {
   prewarmSymbolErrors?: number;
   prewarmTotalUpserts?: number;
   notes?: string;
+  // B-NEW-36 poll-reconcile (2026-05-31): trigger_source distinguishes
+  // node-cron-invoked vs poll-tick-invoked vs boot-init-invoked fires in audit
+  // queries. 'cron' = normal scheduled fire at exactly the boundary timestamp.
+  // 'poll' = the cron silently failed and the 30s reconcile tick caught up.
+  // 'boot' = process restart inside the window; init() reconciled state.
+  trigger_source?: TriggerSource;
 }
 
 async function writeAuditRow(
@@ -134,6 +146,17 @@ class SessionLifecycleController {
   private friShutdownTask: cron.ScheduledTask | null = null;
   private sunRestartTask: cron.ScheduledTask | null = null;
   private initialized = false;
+  // B-NEW-36 poll-reconcile (2026-05-31): mutex preventing concurrent
+  // cron + poll execution at the same window boundary (cron fires at HH:00:00,
+  // poll arrives ~HH:00:30 — second arrival no-ops via this flag). MUST be
+  // cleared in a finally block — leaking inFlight permanently disables the
+  // safety net.
+  private inFlight = false;
+
+  // Exposed for tests only — read-only probe of mutex state.
+  _getInFlightForTest(): boolean { return this.inFlight; }
+  // Exposed for tests only — clears mutex if a test left it set.
+  _resetInFlightForTest(): void { this.inFlight = false; }
 
   /**
    * Boot-time entry point. Called from server/index.ts AFTER
@@ -244,85 +267,213 @@ class SessionLifecycleController {
   }
 
   /**
-   * Fri 8 PM ET fire path. Pre-warm → suspend trades → pause scanner → audit.
-   * Pre-warm failure does NOT block the rest of the hook (circuit-breaker).
+   * Fri 8 PM ET cron fire path. Wraps the shared shutdown core with mutex
+   * (cron-vs-poll race protection per B-NEW-36 poll-reconcile 2026-05-31)
+   * and runs prewarm. Pre-warm failure does NOT block the rest of the hook.
    */
   private async runWeekendShutdown(scheduledFor: Date): Promise<void> {
+    if (this.inFlight) {
+      console.log('[B-NEW-36][WEEKEND_SHUTDOWN_SKIP] inFlight=true (poll or prior cron holding mutex)');
+      return;
+    }
+    this.inFlight = true;
+    try {
+      await this.runWeekendShutdownCore({
+        scheduledFor,
+        triggerSource: 'cron',
+        runPrewarm: true,
+      });
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  /**
+   * Sun 8 PM ET cron fire path. Mutex + prewarm + shared restart core.
+   */
+  private async runWeekendRestart(scheduledFor: Date): Promise<void> {
+    if (this.inFlight) {
+      console.log('[B-NEW-36][WEEKEND_RESTART_SKIP] inFlight=true');
+      return;
+    }
+    this.inFlight = true;
+    try {
+      await this.runWeekendRestartCore({
+        scheduledFor,
+        triggerSource: 'cron',
+        runPrewarm: true,
+      });
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  /**
+   * B-NEW-36 poll-reconcile (2026-05-31): poll-triggered shutdown entry,
+   * called by xstockSpotScanner.clockTickHandler when the periodic reconcile
+   * check detects window state drift (insideWindow=true but scanner is not
+   * paused — usually because the Fri 8PM ET cron silently failed).
+   *
+   * Differences from cron path:
+   *   - Pre-warm SKIPPED (catch-up semantics; we're already late).
+   *   - Audit-row meta.trigger_source='poll' for query-side distinction.
+   *   - Writes a system-alert (severity=warning, category=breakage) so we
+   *     notice the cron regression rather than silently relying on poll
+   *     forever (Langston Q6 + structural revision #3).
+   *
+   * Mutex semantics: if cron holds inFlight, poll skips (cron will handle
+   * normally). If poll holds inFlight, a near-simultaneous cron also skips.
+   * Re-checks scanner state after acquiring mutex to handle the race where
+   * cron just finished between detection and entry.
+   */
+  async runShutdownFromPoll(now: Date): Promise<void> {
+    // ATOMIC mutex acquire — check+set in a single synchronous step (no awaits
+    // in between, so two concurrent invocations cannot both pass the gate).
+    if (this.inFlight) {
+      console.log('[B-NEW-36][POLL_SHUTDOWN_SKIP] inFlight=true (cron or prior poll holding mutex)');
+      return;
+    }
+    this.inFlight = true;
+    try {
+      // Post-mutex state recheck — cron may have fired between drift-detection
+      // and entry. If scanner is already paused, the cron handled it; we no-op
+      // WITHOUT writing audit/alert (no spurious duplicate).
+      const { xstockSpotScanner } = await import('../asset_classes/xstock_spot/scanner.js');
+      if (xstockSpotScanner.getIsPaused()) {
+        console.log('[B-NEW-36][POLL_SHUTDOWN_NOOP] scanner already paused (cron likely fired between detection and entry)');
+        return;
+      }
+      console.warn('[B-NEW-36][POLL_SHUTDOWN_FIRE] poll-path catching up missed cron');
+      console.log('[B-NEW-36][POLL_SKIP_PREWARM] reason=catchup');
+      await this.runWeekendShutdownCore({
+        scheduledFor: now,
+        triggerSource: 'poll',
+        runPrewarm: false,
+      });
+      await this.writeMissedCronAlert('shutdown', now);
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  /**
+   * B-NEW-36 poll-reconcile (2026-05-31): poll-triggered restart entry,
+   * mirror of runShutdownFromPoll for the Sun 8PM ET boundary.
+   */
+  async runRestartFromPoll(now: Date): Promise<void> {
+    if (this.inFlight) {
+      console.log('[B-NEW-36][POLL_RESTART_SKIP] inFlight=true (cron or prior poll holding mutex)');
+      return;
+    }
+    this.inFlight = true;
+    try {
+      const { xstockSpotScanner } = await import('../asset_classes/xstock_spot/scanner.js');
+      if (!xstockSpotScanner.getIsPaused()) {
+        console.log('[B-NEW-36][POLL_RESTART_NOOP] scanner already running (cron likely fired between detection and entry)');
+        return;
+      }
+      console.warn('[B-NEW-36][POLL_RESTART_FIRE] poll-path catching up missed cron');
+      console.log('[B-NEW-36][POLL_SKIP_PREWARM] reason=catchup');
+      await this.runWeekendRestartCore({
+        scheduledFor: now,
+        triggerSource: 'poll',
+        runPrewarm: false,
+      });
+      await this.writeMissedCronAlert('restart', now);
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  /**
+   * Shared shutdown core. Used by both cron-path and poll-path entries.
+   * Prewarm is OPTIONAL (cron runs it, poll skips it for catch-up semantics).
+   * trigger_source is recorded in audit-row meta for query distinction.
+   */
+  private async runWeekendShutdownCore(opts: {
+    scheduledFor: Date;
+    triggerSource: TriggerSource;
+    runPrewarm: boolean;
+  }): Promise<void> {
     const firedAt = new Date();
-    const meta: AuditMeta = { insideWeekendWindow: true };
+    const meta: AuditMeta = { insideWeekendWindow: true, trigger_source: opts.triggerSource };
     let overallStatus: AuditStatus = 'success';
     let errorMessage: string | undefined;
 
-    console.log(`[B-NEW-36][WEEKEND_SHUTDOWN_START] firedAt=${firedAt.toISOString()}`);
+    console.log(`[B-NEW-36][WEEKEND_SHUTDOWN_START] firedAt=${firedAt.toISOString()} trigger=${opts.triggerSource}`);
 
-    // Pre-warm (circuit-breaker).
-    const prewarm = await runPrewarmWithCircuitBreaker({ lookbackDays: 14, tag: 'SHUTDOWN' });
-    meta.prewarmStatus = prewarm.status;
-    meta.prewarmSymbolErrors = prewarm.symbolErrors;
-    meta.prewarmTotalUpserts = prewarm.totalUpserts;
-    if (prewarm.errorMessage) meta.prewarmError = prewarm.errorMessage;
-    if (prewarm.status === 'error') {
-      overallStatus = 'error';
-      errorMessage = `prewarm failed: ${prewarm.errorMessage}`;
+    if (opts.runPrewarm) {
+      const prewarm = await runPrewarmWithCircuitBreaker({ lookbackDays: 14, tag: 'SHUTDOWN' });
+      meta.prewarmStatus = prewarm.status;
+      meta.prewarmSymbolErrors = prewarm.symbolErrors;
+      meta.prewarmTotalUpserts = prewarm.totalUpserts;
+      if (prewarm.errorMessage) meta.prewarmError = prewarm.errorMessage;
+      if (prewarm.status === 'error') {
+        overallStatus = 'error';
+        errorMessage = `prewarm failed: ${prewarm.errorMessage}`;
+      }
+    } else {
+      meta.prewarmStatus = 'skipped';
     }
 
     try {
-      // Suspend all open xstock_spot trades (DB + in-memory Map mirror).
       const { getOpenVirtualTradesMap } = await import('./vts-runner.js');
       const { markAllXstockWeekendSuspended } = await import('./vts-trade-persistence.js');
       const suspended = await markAllXstockWeekendSuspended(getOpenVirtualTradesMap());
       meta.tradesAffected = suspended.updated;
 
-      // Pause the scanner.
       const { xstockSpotScanner } = await import('../asset_classes/xstock_spot/scanner.js');
       xstockSpotScanner.pause();
       meta.scannerAction = 'paused';
 
       console.log(
         `[B-NEW-36][WEEKEND_SHUTDOWN_DONE] suspended=${suspended.updated} ` +
-        `prewarm=${prewarm.status} scanner=paused`,
+        `prewarm=${meta.prewarmStatus} scanner=paused trigger=${opts.triggerSource}`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[B-NEW-36][WEEKEND_SHUTDOWN_FAIL] ${msg}`);
       overallStatus = 'error';
-      errorMessage = errorMessage
-        ? `${errorMessage}; lifecycle: ${msg}`
-        : `lifecycle: ${msg}`;
+      errorMessage = errorMessage ? `${errorMessage}; lifecycle: ${msg}` : `lifecycle: ${msg}`;
     }
 
-    await writeAuditRow('weekend_shutdown', scheduledFor, firedAt, overallStatus, meta, errorMessage);
+    await writeAuditRow('weekend_shutdown', opts.scheduledFor, firedAt, overallStatus, meta, errorMessage);
   }
 
   /**
-   * Sun 8 PM ET fire path. Pre-warm → resume scanner → restore trades → audit.
+   * Shared restart core. Mirror of runWeekendShutdownCore.
    */
-  private async runWeekendRestart(scheduledFor: Date): Promise<void> {
+  private async runWeekendRestartCore(opts: {
+    scheduledFor: Date;
+    triggerSource: TriggerSource;
+    runPrewarm: boolean;
+  }): Promise<void> {
     const firedAt = new Date();
-    const meta: AuditMeta = { insideWeekendWindow: false };
+    const meta: AuditMeta = { insideWeekendWindow: false, trigger_source: opts.triggerSource };
     let overallStatus: AuditStatus = 'success';
     let errorMessage: string | undefined;
 
-    console.log(`[B-NEW-36][WEEKEND_RESTART_START] firedAt=${firedAt.toISOString()}`);
+    console.log(`[B-NEW-36][WEEKEND_RESTART_START] firedAt=${firedAt.toISOString()} trigger=${opts.triggerSource}`);
 
-    // Pre-warm (circuit-breaker).
-    const prewarm = await runPrewarmWithCircuitBreaker({ lookbackDays: 14, tag: 'RESTART' });
-    meta.prewarmStatus = prewarm.status;
-    meta.prewarmSymbolErrors = prewarm.symbolErrors;
-    meta.prewarmTotalUpserts = prewarm.totalUpserts;
-    if (prewarm.errorMessage) meta.prewarmError = prewarm.errorMessage;
-    if (prewarm.status === 'error') {
-      overallStatus = 'error';
-      errorMessage = `prewarm failed: ${prewarm.errorMessage}`;
+    if (opts.runPrewarm) {
+      const prewarm = await runPrewarmWithCircuitBreaker({ lookbackDays: 14, tag: 'RESTART' });
+      meta.prewarmStatus = prewarm.status;
+      meta.prewarmSymbolErrors = prewarm.symbolErrors;
+      meta.prewarmTotalUpserts = prewarm.totalUpserts;
+      if (prewarm.errorMessage) meta.prewarmError = prewarm.errorMessage;
+      if (prewarm.status === 'error') {
+        overallStatus = 'error';
+        errorMessage = `prewarm failed: ${prewarm.errorMessage}`;
+      }
+    } else {
+      meta.prewarmStatus = 'skipped';
     }
 
     try {
-      // Resume scanner first so it picks up the next centralClock tick.
       const { xstockSpotScanner } = await import('../asset_classes/xstock_spot/scanner.js');
       xstockSpotScanner.resume();
       meta.scannerAction = 'resumed';
 
-      // Restore weekend-suspended trades to 'open'.
       const { getOpenVirtualTradesMap } = await import('./vts-runner.js');
       const { unmarkAllXstockWeekendSuspended } = await import('./vts-trade-persistence.js');
       const restored = await unmarkAllXstockWeekendSuspended(getOpenVirtualTradesMap());
@@ -330,18 +481,51 @@ class SessionLifecycleController {
 
       console.log(
         `[B-NEW-36][WEEKEND_RESTART_DONE] restored=${restored.updated} ` +
-        `prewarm=${prewarm.status} scanner=resumed`,
+        `prewarm=${meta.prewarmStatus} scanner=resumed trigger=${opts.triggerSource}`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[B-NEW-36][WEEKEND_RESTART_FAIL] ${msg}`);
       overallStatus = 'error';
-      errorMessage = errorMessage
-        ? `${errorMessage}; lifecycle: ${msg}`
-        : `lifecycle: ${msg}`;
+      errorMessage = errorMessage ? `${errorMessage}; lifecycle: ${msg}` : `lifecycle: ${msg}`;
     }
 
-    await writeAuditRow('weekend_restart', scheduledFor, firedAt, overallStatus, meta, errorMessage);
+    await writeAuditRow('weekend_restart', opts.scheduledFor, firedAt, overallStatus, meta, errorMessage);
+  }
+
+  /**
+   * Surface a system-alert when poll-path fires (i.e. cron silently missed
+   * its fire window). Per Langston review of B-NEW-36 poll-reconcile design:
+   * "otherwise we silently rely on poll forever and never notice when cron
+   * regresses." Severity=warning + category=breakage so the §10.5 per-turn
+   * check surfaces it.
+   */
+  private async writeMissedCronAlert(kind: 'shutdown' | 'restart', firedAt: Date): Promise<void> {
+    try {
+      await addAlert({
+        triggers_at: firedAt,
+        category: 'breakage',
+        severity: 'warning',
+        title: `B-NEW-36 weekend cron silently missed ${kind} fire — poll-path caught up`,
+        body:
+          `The Fri 8PM ET → Sun 8PM ET weekend ${kind} timer (node-cron, registered in ` +
+          `session-lifecycle-controller.ts) did not invoke its callback at the expected ` +
+          `boundary. The poll-based reconciliation tick (xstockSpotScanner.clockTickHandler, ` +
+          `every 30s) detected window-vs-scanner state drift and triggered the catch-up at ` +
+          `${firedAt.toISOString()}. xStock VTS state is now correct, but the cron regression ` +
+          `needs investigation — see scheduled_tasks_audit table for the missing cron row + ` +
+          `poll-triggered row with meta.trigger_source='poll'.`,
+        metadata: {
+          batch: 'B-NEW-36-poll-reconcile',
+          kind,
+          fired_at_iso: firedAt.toISOString(),
+        },
+      });
+      console.warn(`[B-NEW-36][MISSED_CRON_ALERT] alert written for ${kind} catch-up`);
+    } catch (err) {
+      console.error(`[B-NEW-36][ALERT_WRITE_FAIL] ${kind}: ${err instanceof Error ? err.message : err}`);
+      // Don't rethrow — alert-write failure must not block the reconcile.
+    }
   }
 
   /**
