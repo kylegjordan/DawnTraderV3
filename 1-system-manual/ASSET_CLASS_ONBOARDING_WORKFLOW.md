@@ -610,6 +610,18 @@ B79.0n.CONFIDENCE-CHAIN worked example (deploy `b6e45a8`, 2026-05-25). See `Clau
 
 ---
 
+### Step 4.15 — Shared-aggregator consumer enumeration before adding a scoped filter (B-XSTOCK-CALIB F-NOW lesson, 2026-06-01)
+
+**The trap.** When a batch adds a scoped column-read or filter to a SHARED aggregator/endpoint (one that serves both a live exploratory UI panel AND a future evaluation path), an unconditional scoped filter silently changes the live UI — because both consumers share the surface. F-NOW added a pre-calibration exclusion to `exit-strategy-ablation-aggregator.ts` "for Phase-25 scoring," but that aggregator also feeds the live xStocks-tab "Exit Strategy Ablation" panel (`/api/xstocks/exit-strategy-ablation` → `client/.../xstocks-tab.tsx:316` → `ExitStrategyAblationSection`, a crypto component reused by B79.0i.b). Because every existing xStock trade is pre-calibration, the unconditional filter would have emptied that live panel. The v1 pre-audit missed it (grep-and-cite of the impact map; no System-Manual read; no UI-consumer trace).
+
+**The discipline (applies to every asset-class-scoped filter on a shared surface):**
+1. **Enumerate EVERY consumer of the aggregator/endpoint** — including UI panels, and including BOTH the `/api/analytics/*` (all-asset) and `/api/xstocks/*` (scoped) sibling routes. A shared aggregator is **presumed to feed a live UI** until proven otherwise.
+2. **State the post-change behavior of each consumer** before writing code. If a scoped filter would change a live exploratory view, that is a Kyle decision, not an implementation detail.
+3. **Default to OPT-IN.** Make the filter a parameter (default-off, applied only by the evaluation caller), never unconditional on the shared aggregator. The capability ships; the application is gated at the real consumer (NO-PATCHES split). For F-NOW: `buildCalibrationClause(assetClass, excludePreCalibration)` — live endpoints pass default false → byte-identical; the Phase-25 caller passes true.
+4. **The audit is code-level.** Step 1.a + Step 2 require a deep read of SIM **and** System Manual + a trace of the touched surface's consumers, not a grep-and-cite. This is the second time an xStock-scoped change rode a shared crypto component (first: B79.0i.b reusing `ExitStrategyAblationSection`) — shared-surface enumeration is now a standing onboarding check.
+
+---
+
 ### Section D.1 — Concrete code-extension templates (Phase 24 reference)
 
 Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.
