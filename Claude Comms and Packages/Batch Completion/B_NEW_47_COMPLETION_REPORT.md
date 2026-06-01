@@ -2,7 +2,9 @@
 
 **Batch ID:** B-NEW-47 · **CLOSED:** 2026-06-01 · **Active trading:** OFF throughout (zero capital risk; force-sweep ran against the write-sealed May partition while June is the live one).
 **Commit:** `e984aef` (code + migration) + governance commit (this turn). **Migration:** `2026-06-01-b-new-47-slice-threshold.sql`.
-**CI:** run `26730239909` — all-4-green (Build, TypeScript Check, Test Suite, Docker Build). **Langston:** Step-2 + Step-4 APPROVED-W-REVISIONS (all folded) + clear-to-push CONFIRMED.
+**CI:** run `26730239909` — all-4-green (Build, TypeScript Check, Test Suite, Docker Build). **Langston:** Step-2 + Step-4 APPROVED-W-REVISIONS (all folded) + clear-to-push CONFIRMED + **Step-8 independent verification CONFIRMED** (via `ssh staging`): June partition `xstock_spot_ticker_snap_2026_06` present + intact (sealed month survived); the dangerous knob `xstock_spot_ticker_snap.hot_retention_days` restored to **30** (`updated_by=b-new-47-restore` at 06:53:03Z, after the threshold write — correct order, NOT stuck at 0.05); `slice_threshold_hot_bytes=3221225472`; `cold_rotator_dry_run=true`.
+
+**Step-8 record clarifications (Langston's 2 minor items):** (1) Root crontab entry `15 2 * * * … b75-retention-sweep.ts` confirmed root-side by CC (Langston is `deploy`, not root, so couldn't read it). (2) The sweep's `examined=4 dropped=4` = the 31 GB May spot-ticker (sliced) + **3 April ticker partitions** (xstock_spot/xstock_perp/crypto_spot, 16/13/3.6 MB, whole path) — those 3 were already past the normal 30-day retention (April >30 days old on June 1) and would be swept by any normal run; the temporary 0.05 only touched `xstock_spot_ticker_snap` to add its May partition. No collateral from the 0.05 override.
 
 ---
 
