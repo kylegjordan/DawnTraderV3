@@ -2,6 +2,16 @@
 
 ---
 
+## CLOSURE-2026-06-01 (later) — B-NEW-47: B75 tiered-storage sweep activation — streaming I/O + adaptive per-day slicing (RUNNING_ISSUES #161)
+
+**Problem.** The B75 hot→warm archive sweep was built but its cron was never installed, so the 6 B74 ticker/OHLC tables grew unbounded (`xstock_spot_ticker_snap_2026_05` = 31 GB / 96 M rows; DB 57 GB / 200 GB ceiling; ~50 GB/mo). Naively scheduling it would OOM: the sweep `fs.readFileSync`'d the whole monthly partition into one Buffer before upload, and a single object exceeds the Supabase 5 GB project upload cap.
+
+**Fix (NO-PATCHES, fix-then-activate).** (1) **Streaming both directions** — new `uploadWarmFile` (TUS, 6 MiB chunks via `fs.read` at offset, peak mem ~6 MiB) + `downloadWarmFile` (pipe response→file, checksum the on-disk bytes). Buffer methods kept + comment-marked for small ctx-bridge payloads. (2) **Adaptive per-day slicing** — partitions ≥ DB-governed `slice_threshold_hot_bytes` (3 GiB) export as N `YYYY-MM-DD` warm objects (≈150–500 MB each), each with its own manifest row; below threshold stays one `YYYY-MM` object. (3) **DROP gate** — the hot partition is DROPped only after EVERY distinct date present has a download-verified manifest row; drop + state-flip run in one transaction (no dropped-but-stuck-`verified` window). (4) **Resume invariant guard** (`deriveModeFromLabels`) re-derives whole-vs-sliced from existing rows so a month never mixes month + day labels. (5) **Failure→system-alert** (`critical` on checksum mismatch, `warning` on transient); hot partition never dropped on failure. New pure module `sweep-slicing.ts` + 16 tests. Migration seeds `slice_threshold_hot_bytes`.
+
+**Verification.** tsc 493 baseline (0 new). 16 new tests pass; full-suite failures proven pre-existing (git-stash at clean HEAD). CI all-4-green (`26730239909`). Deploy `e984aef` + `db:migrate`, HTTP 200. **Attended force-sweep of the 31 GB May spot-ticker: 30 day-slices, 0 failures, DB 57 GB → 26 GB (31.3 GB freed, 6.2 GB archived ≈5× compression).** Cron installed ROOT crontab `15 2 * * *`. Sunday-resume + scanner verified healthy alongside. Langston Step-2 + Step-4 APPROVED-W-REVISIONS (atomic drop tx, sliced-row size accounting, REPEATABLE-READ comment — all folded). Spawned RUNNING_ISSUES #169–#172. Cold rotator stays dry-run; retention kept 30; Kyle declined monthly→daily re-partitioning.
+
+---
+
 ## CLOSURE-2026-06-01 — B-NEW-50: node-cron next-fire readout fix (RUNNING_ISSUES #165) + BUG-2026-06-01-A ESM-bundle hotfix
 
 **Risk class:** RESOLVED (observability-only; firing path untouched; active trading OFF). Commit `6372a2d` + hotfix `63bc69d`; staging-verified; Langston Step-1/4/8 CONFIRMED.

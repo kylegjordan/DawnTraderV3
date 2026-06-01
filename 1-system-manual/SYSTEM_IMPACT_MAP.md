@@ -1709,9 +1709,10 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 | 1 | data_archive_manifest table (single source of truth, state machine `pending → uploaded → verified → active → migrating → migrated`, UNIQUE on `(source_table, partition_label, tier)`) | `drizzle/migrations/2026-05-06-b75-data-lifecycle.sql` | ✅ LIVE |
 | 2 | data_lifecycle module_constants (18 rows: per-table hot retention + warm retention + bucket config + sweep tunables + format) | `module_constants.module_name='data_lifecycle'` | ✅ Seeded |
 | 3 | database_monitor module (3 rows: `plan_cap_mb=204800` against 200 GB Supabase Pro cap, `warning_threshold_pct=0.65`, `critical_threshold_pct=0.80`) | `module_constants.module_name='database_monitor'` | ✅ Seeded |
-| 4 | Storage client (Supabase Storage warm via fetch + REST; Backblaze B2 cold via native bearer-auth API; 23h auth-token cache; B2_BUCKET_ID env override; 500 MB single-call upload guard; SHA-256 + SHA-1 helpers) | `server/services/data-archive/storage-client.ts` | ✅ LIVE |
-| 5 | Partition exporter (REPEATABLE READ snapshot + LIMIT/OFFSET batched export → /tmp gzip → SHA-256 of file) | `server/services/data-archive/partition-exporter.ts` | ✅ LIVE |
-| 6 | B74 export-then-drop sweep (cron 02:15 UTC, full fence: insert pending → snapshot+export → upload → re-read+verify checksum → min/max_ts verify → manifest verified → DROP partition → manifest active) | `server/scripts/b75-retention-sweep.ts` | ✅ LIVE |
+| 4 | Storage client (Supabase Storage warm via fetch + REST; Backblaze B2 cold via native bearer-auth API; 23h auth-token cache; B2_BUCKET_ID env override; 40 MB single-call threshold → TUS resumable, 5 GB HARD_CAP; **B-NEW-47 STREAMING `uploadWarmFile`/`downloadWarmFile` (file-path, 6 MiB chunks, never buffers whole object)**; SHA-256 + SHA-1 helpers) | `server/services/data-archive/storage-client.ts` | ✅ LIVE |
+| 5 | Partition exporter (REPEATABLE READ READ ONLY snapshot + **keyset-paginated** streaming export → /tmp gzip → streamed SHA-256 of file) | `server/services/data-archive/partition-exporter.ts` | ✅ LIVE |
+| 5b | **B-NEW-47 slicing helpers** (pure: `decideSliceMode`/`enumerateUtcDays`/`dayLabel`/`deriveModeFromLabels` — whole-vs-sliced + resume invariant guard) | `server/services/data-archive/sweep-slicing.ts` | ✅ LIVE |
+| 6 | B74 export-then-drop sweep — **CODE live since B75 but the CRON WAS NEVER INSTALLED until B-NEW-47** (RI #161). B-NEW-47 adds: adaptive per-day slicing (partitions ≥ `slice_threshold_hot_bytes` exported as N `YYYY-MM-DD` warm objects), streamed I/O both directions, DROP-only-after-every-distinct-date-verified gate, atomic drop+state-flip tx, failure→system-alert. Cron installed in ROOT crontab `15 2 * * *`. | `server/scripts/b75-retention-sweep.ts` | ✅ LIVE (cron installed B-NEW-47) |
 | 7 | context_bridge_log export-then-TTL+VACUUM (cron 02:30 UTC, month-grouped export + DELETE rounded to month-start → tail VACUUM no-FULL) | `server/scripts/context-bridge-log-ttl.ts` | ✅ LIVE |
 | 8 | Rehydrate CLI (`--table X --from D1 --to D2 --out PATH [--restore-cold]`; tstzrange overlap query; SHA-256 verify on download; warm + cold paths) | `server/scripts/b75-rehydrate.ts` | ✅ LIVE |
 | 9 | Cold rotator (cron 03:00 UTC monthly 1st, full Phase-2 wiring: download warm → upload cold → verify by re-download checksum match → INSERT cold manifest row → UPDATE warm to migrated → deleteWarm; dry-run when `cold_rotator_dry_run=true` OR cold creds missing) | `server/scripts/b75-cold-rotator.ts` | ✅ LIVE |
@@ -1723,10 +1724,10 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 
 ### B75 hot-path / cron impact
 
-- **Cron entries** (Hetzner staging, `/etc/cron.d/dawntrader`):
-  - `15 2 * * *` — `b75-retention-sweep.ts` (B74 6 tables export-then-drop)
-  - `30 2 * * *` — `context-bridge-log-ttl.ts` (export-then-TTL+VACUUM)
-  - `0 3 1 * *` — `b75-cold-rotator.ts` (monthly warm→cold)
+- **Cron entries** — CORRECTION (B-NEW-47, 2026-06-01): the schedule below was the *intended* design but, prior to B-NEW-47, the ONLY archive cron actually installed (in ROOT's crontab, not `/etc/cron.d/dawntrader`) was `b70-retention-sweep` (`0 2 * * *`) + `b70-create-monthly-partitions`. `b75-retention-sweep`, `context-bridge-log-ttl`, and `b75-cold-rotator` were NEVER scheduled. **B-NEW-47 installs `b75-retention-sweep` in ROOT crontab `15 2 * * *`.** `context-bridge-log-ttl` + `b75-cold-rotator` remain UNSCHEDULED (cold stays dry-run for 365 d; ctx-bridge is a separate small-table sweep — RI #169).
+  - `15 2 * * *` — `b75-retention-sweep.ts` (B74 6 tables, adaptive slicing) — **installed B-NEW-47**
+  - `30 2 * * *` — `context-bridge-log-ttl.ts` — NOT installed (deferred)
+  - `0 3 1 * *` — `b75-cold-rotator.ts` — NOT installed (dry-run, nothing rotates for 365 d)
 - **Hot-path side-effects:** ZERO new hot-path consumers. Sweeps run as off-hours batch crons; DELETE/DROP doesn't block concurrent INSERT writers; VACUUM is plain (no-FULL) so no exclusive locks. `database-monitor.ts` runs once at startup + every 24h (existing cadence).
 
 ### B75 forward-couples
@@ -1737,8 +1738,9 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 
 ### B75 known limitations / deferred to B75.x
 
-- **Keyset pagination** — partition-exporter currently uses LIMIT/OFFSET. Acceptable for first sweeps but becomes O(N²) for B74 ticker partitions ~10M rows expected late June. B75.x follow-up: replace with `(timestamp, id)` keyset cursor.
-- **Multipart/TUS upload** — single-call upload guard at 500 MB. Service-role REST tested up to ~99 MB single-call without issue. If we ever hit a real Supabase hard limit, B75.x adds TUS resumable.
+- ~~**Keyset pagination**~~ — RESOLVED (partition-exporter uses a keyset timestamp cursor; the LIMIT/OFFSET O(N²) concern is gone).
+- ~~**Multipart/TUS upload**~~ — RESOLVED (TUS resumable + B-NEW-47 streaming `uploadWarmFile`; 40 MB single-call threshold, 5 GB cap, per-day slicing for partitions above `slice_threshold_hot_bytes` so no single object approaches the Supabase 5 GB project cap).
+- **B-NEW-47 day-grain limit** (RI #170) — no sub-day fallback: a single day-slice whose compressed size exceeds the 5 GB cap would stall that partition (alerts nightly). Not reachable at current ~300–500 MB/day; documented boundary.
 - **Phase 2 cold rotator UNFAILED RECOVERY** — if upload completes but warm-delete fails, next run sees cold row exists + skips correctly. But if upload completes + warm-row UPDATE to migrated completes + warm-delete fails, next run still skips (NOT EXISTS … tier='cold' filter). **Manual cleanup needed** in that edge case (delete warm bucket object). Logged for future automation.
 
 ### B75 cron timing (full schedule on Hetzner staging)
