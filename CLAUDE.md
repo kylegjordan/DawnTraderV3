@@ -381,22 +381,23 @@ ssh root@188.245.193.8 "su - deploy -c 'pm2 list'"
 ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d "{\"username\":\"testuser123\",\"password\":\"SecurePass123!\"}" | python3 -c "import json,sys; print(json.load(sys.stdin)[\"accessToken\"])") && curl -s -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/vts/filter-diagnostics'
 ```
 
-### 7.1 Local verification environment — the B-NEW-43 mirror clone (2026-05-22)
+### 7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle directive 2026-06-01 — NEVER delete, NEVER edit out, NEVER reverse)
 
-**Mirror:** `C:\dev\DawnTraderV3` — a `--depth 1 --single-branch --branch migration/aws-supabase` shallow clone on local NTFS. `npm install` completes in ~26s; `npx tsc --noEmit` runs to completion. See history doc §7.1 for the GDrive FUSE incompatibility origin (npm's many-small-files write pattern triggers `EBADF` on FUSE; `node_modules` is permanently incomplete there).
+**THE FLOW IS ONE DIRECTION ONLY:**
 
-**Commands** (from `C:\dev\DawnTraderV3`):
-- `npx tsc --noEmit` — local typecheck (~1-2 min vs 3-4 min CI round-trip)
-- `npx vitest run` — local test suite
-- `git pull origin migration/aws-supabase` — refresh before work session
+> **Google Drive folder  →  `C:\dev` test bench (tests only)  →  [tests green]  →  push to GitHub FROM the Google Drive folder  →  GitHub  →  staging deploy.**
 
-**Sync protocol — ONE-DIRECTION-EDIT discipline (HARD RULE, split-brain prevention):**
-- **Code edits land in the `C:\dev` mirror ONLY.** Push to GitHub from the mirror.
-- **The GDrive clone (`G:\My Drive\...`) is refreshed via `git pull` only** — never edited for code. Stays canonical for governance-doc authoring + Langston's FUSE-mount visibility.
-- **No bidirectional sync** (rsync etc.) — that's the classic split-brain footgun. Git is the single sync channel: mirror → push → GDrive clone pulls.
-- Governance docs (scope / pre-audit / completion reports, `1-system-manual/`, `MEMORY.md`) may still be authored in the GDrive clone — they don't need `tsc`. **Code** (`server/`, `client/`, `shared/`, `drizzle/`, test files) is **mirror-only**.
+- **The Google Drive folder `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3` is the SOURCE OF TRUTH.** ALL development — code AND governance — ORIGINATES here. This is where you edit, author, commit, and push. Langston sees it via his FUSE mount.
+- **`C:\dev\DawnTraderV3` is ONLY a throwaway test bench.** Its sole reason to exist: run `npx tsc --noEmit` + `npx vitest run`, which CANNOT run inside the Google Drive folder (Google Drive's FUSE mount triggers `EBADF` on npm's many-small-files `node_modules` write pattern; `node_modules` is permanently incomplete there). **To test: copy the changed files from the Google Drive folder into `C:\dev`, run the checks there.** NEVER author or originate edits in `C:\dev`. NEVER push to GitHub from `C:\dev`.
+- **Push to GitHub ONLY from the Google Drive folder, AFTER the test bench is green.**
+- **🚫 NEVER pull GitHub → Google Drive. NEVER write/commit in the test bench (or in GitHub) and pull it down into the Google Drive folder. EVER.** The ONLY pull that is allowed is GitHub → `C:\dev` test bench (to refresh the bench for testing). GitHub NEVER flows back into the Google Drive folder.
+- **GitHub → staging** is unchanged (staging `git pull`s from GitHub on deploy).
 
-**Standing fixture.** The mirror remains the local typecheck/test environment for every future batch. Keep refreshed via `git pull`.
+**`C:\dev` test bench facts:** `--depth 1 --single-branch --branch migration/aws-supabase` shallow clone on local NTFS; `npm install` ~26s. Refresh the bench for testing via `git pull origin migration/aws-supabase` (GitHub → bench is allowed). Commands: `npx tsc --noEmit` (typecheck), `npx vitest run` (tests). See history doc §7.1 for the FUSE-incompatibility origin.
+
+**🔒 Batch-close sync gate (HARD — every batch, no exceptions):** before any batch is marked complete, confirm Google Drive ↔ GitHub ↔ staging are all in sync. From the **Google Drive folder**: `git status` clean (only intentional local config such as `.claude/settings.local.json`) AND `git rev-list --count HEAD..origin/migration/aws-supabase` = **0**. If it is not 0, the batch is NOT done. (Staging is in sync when its deploy pulled the same commit GitHub holds.)
+
+**Why this is SET IN STONE:** on 2026-06-01 the direction was found INVERTED in practice — recent work had been edited + committed + pushed from the `C:\dev` test bench, leaving the Google Drive source-of-truth folder **42 commits stale** and one governance item (`POST_AUDIT_ROADMAP` row 25-11, a Kyle 2026-05-29 directive) stranded on GitHub, never reaching Google Drive. This violated the canonical "Google Drive, GitHub, and staging always synced at batch close" rule. It was recovered + resynced. This section exists so it NEVER recurs and must NEVER be deleted or edited out of this document.
 
 ---
 
