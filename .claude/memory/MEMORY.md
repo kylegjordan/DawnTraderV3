@@ -31,6 +31,7 @@
 
 **SEQUENCED FOLLOW-UPS:**
 - **★ Langston CLI update (Kyle directive 2026-06-01) — IMMEDIATELY AFTER B-NEW-47 + B-NEW-50 close.** Langston now on **base `claude-opus-4-8`** (works). The `claude-opus-4-8[1m]` 1M-context variant throws a thinking-block API error during TOOL-USING tasks on his CLI **2.1.131** (Hetzner 204.168.141.77). FIX: update his Claude Code CLI to latest → then re-switch model string `claude-opus-4-8`→`claude-opus-4-8[1m]` in 3 files (`/usr/local/bin/langston-bridge.py:362`, `langston-alert-handler.sh:82`, `langston-call:38`), restart `langston-bridge.service`, re-verify a tool-using round-trip. Backups at `*.pre-4.8-backup-20260601`. CLAUDE.md §6/§8 say "Opus 4.7" → update to 4.8 in governance.
+- **★ Ops/comms SKILLS (Kyle 2026-06-01, do AFTER the Langston CLI update; own small batch).** Build 1-2 Claude-Code skills that bundle TESTED scripts — executable layer only; CLAUDE.md stays the policy layer, skill points back, does NOT copy (drift rule §7). (1) **langston-dispatch**: file-first SSH+claude-cli dispatch with correct quoting (parens/apostrophes/model `[1m]` brackets broke `bash -c` ~4× on 2026-06-01) + reply capture + chunked Telegram relay run Hetzner-side (Git-bash↔Windows `/tmp` path mismatch breaks local python). (2) **staging-ops**: psql-vs-staging (DATABASE_URL from `.env`), deploy seq, find-live-logs (`/var/log/dawntrader/out.log` NOT `~/.pm2/logs`; 36GB → `tail -c` not front-grep), §10.5 alerts check+ack. Both also usable by Langston for Step-8. Do NOT skill governance/domain/11-step (auto-loads; duplication+drift). Rationale: skills earn keep only by bundling a tested script for repeated error-prone procedures, not by restating docs.
 - B-NEW-48 (per-class regime, RUNNING_ISSUES #162 conditional on consumer-impact audit at scoping)
 - #166 (TEC stale-cache fence) — Kyle directive 2026-05-31: defer to AFTER all Phase 24 xStocks calibration work completes.
 - B-XSTOCK-CALIB B.2 + remaining xStock calibration
@@ -51,9 +52,9 @@
 
 ## POST-COMPACTION PROMPT FOR KYLE
 
-Use this 2-sentence prompt after compaction:
+Use this prompt after compaction:
 
-> Fix RUNNING_ISSUES #165 (node-cron 4.2.1 Friday-NY-tz `getNextRun()` bug — write isolated repro, characterize scope, decide pin vs replace vs shim) as the first sub-batch through the full 11-step workflow autonomously with Langston, then run B-NEW-47 (storage sweep activation per RUNNING_ISSUES #161) as the second sub-batch the same way. Read CLAUDE.md + MEMORY.md first, verify Sunday-resume fired correctly at Mon 1 Jun 00:00 UTC before starting #165, then proceed without further input.
+> Implement B-NEW-47 (storage tiered-sweep activation, RUNNING_ISSUES #161) — design is LOCKED + Langston-concurred in `Claude Comms and Packages/Scope Files/B_NEW_47_SCOPE.md` §8: adaptive per-day slicing (5GB Supabase cap forces it), streaming upload AND download (sweep verify re-downloads → OOM without it), invariants (month = one `YYYY-MM` OR N `YYYY-MM-DD` slices never both; DROP-gate = every DISTINCT date(ts) present has a download-verified manifest row), failure→system-alert this batch, install b75 cron in ROOT crontab, cold-rotator stays dry-run, retention=30. cron-parser etc. NOTE: default-import any CJS dep + validate against Node ESM loader before deploy (BUG-2026-06-01-A lesson; RUNNING_ISSUES #168 / ASSET_CLASS_ONBOARDING §4.27). Proceed Step 2→3→...→close autonomously with Langston. THEN do the queued Langston CLI→Opus-4.8-1M update (sequenced follow-ups). Read CLAUDE.md + MEMORY.md first.
 
 ---
 
