@@ -117,3 +117,4 @@
 2026-05-30-b-1-5-xstock-depth-liquidity.sql
 2026-06-01-b-new-47-slice-threshold.sql
 2026-06-01-f-now-calibration-state.sql
+2026-06-02-b-calscore-ledger.sql

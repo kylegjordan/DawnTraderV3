@@ -18,6 +18,7 @@ import BenchmarkList from "@/components/analytics/benchmark-list";
 // writer-side asset-class drop. Post-B82: endpoint < 5s + populated. When still empty (legitimately
 // no data yet for an asset class), show clear "No <DisplayName> data yet — accumulating" message.
 import { ASSET_CLASS_REGISTRY, type AssetClass } from "@shared/asset-classes";
+import { fmtCalibrationResult } from "@shared/calscore-format";
 import GovernanceSection from "@/components/analytics/governance-section";
 import { apiFetch } from "@/lib/api";
 
@@ -2277,6 +2278,110 @@ export function ExitStrategyAblationSection({
   );
 }
 
+interface CalibrationScoreboardRow {
+  id: string;
+  sub_batch: string;
+  planned_sub_batch: string | null;
+  asset_class: string;
+  setting_key: string;
+  scope: string;
+  metric_label: string;
+  current_value: string | null;
+  current_result_num: string | number | null;
+  current_result_den: string | number | null;
+  planned_value: string | null;
+  planned_result_num: string | number | null;
+  planned_result_den: string | number | null;
+  status: string;
+  decision_grade: boolean;
+  notes: string | null;
+}
+
+// B-CALSCORE: read-only Calibration Scoreboard. One row per calibrated setting —
+// current value + result vs planned value + result, every result a rate WITH its
+// raw counts (num/den is SSOT; pct derived via fmtCalibrationResult — Number()-
+// coerced for pg string returns). No win/loss (Phase 25). Additive; mirrors the
+// ExitStrategyAblationSection layout, deliberately no selectors (static ledger).
+export function CalibrationScoreboardSection({
+  endpointBase = '/api/analytics/calibration-scoreboard',
+  assetClass = 'xstock_spot',
+}: { endpointBase?: string; assetClass?: string }) {
+  const { data: resp, isLoading, error } = useQuery<{ ok: boolean; data: { rows: CalibrationScoreboardRow[]; count: number } }>({
+    queryKey: [endpointBase, assetClass],
+    queryFn: () => apiFetch(`${endpointBase}?asset_class=${assetClass}`),
+    refetchInterval: 60_000,
+  });
+  const rows = resp?.data?.rows ?? [];
+
+  const statusColor = (s: string) =>
+    s === 'applied' ? 'bg-emerald-500/20 text-emerald-700'
+    : s === 'proposed' ? 'bg-blue-500/20 text-blue-700'
+    : s === 'provisional' ? 'bg-amber-500/20 text-amber-700'
+    : 'bg-muted text-muted-foreground';
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between flex-wrap gap-2">
+          <span className="flex items-center gap-2">
+            <Gauge className="w-5 h-5" /> Calibration Scoreboard
+            <span className="text-xs font-normal text-muted-foreground">(B-CALSCORE · {assetClass})</span>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <div className="text-sm text-muted-foreground">Loading...</div>}
+        {error && <div className="text-sm text-red-500">Error: {String((error as Error).message)}</div>}
+        {!isLoading && !error && rows.length === 0 && (
+          <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-md" data-testid="calscore-empty-state">
+            No calibration rows for <span className="font-mono">{assetClass}</span> yet. Each calibration sub-batch seeds its settings here as it runs.
+          </div>
+        )}
+        {rows.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              One row per calibrated setting: its current value + result, and the planned value + result a calibration sub-batch will fill. Every result shows the rate with its raw counts. No win/loss (that arrives in Phase 25).
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs" data-testid="calscore-table">
+                <thead className="bg-muted/50">
+                  <tr className="text-left">
+                    <th className="px-2 py-2">Setting</th>
+                    <th className="px-2 py-2">Scope</th>
+                    <th className="px-2 py-2">Metric</th>
+                    <th className="px-2 py-2 text-right">Current value</th>
+                    <th className="px-2 py-2 text-right">Current result</th>
+                    <th className="px-2 py-2 text-right">Planned value</th>
+                    <th className="px-2 py-2 text-right">Planned result</th>
+                    <th className="px-2 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-t border-border align-top" title={r.notes ?? ''} data-testid={`calscore-row-${r.setting_key}-${r.scope}`}>
+                      <td className="px-2 py-2 font-mono">{r.setting_key}</td>
+                      <td className="px-2 py-2 font-mono text-[11px] text-muted-foreground">{r.scope}</td>
+                      <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[260px]">{r.metric_label}</td>
+                      <td className="px-2 py-2 text-right font-mono">{r.current_value ?? '—'}</td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtCalibrationResult(r.current_result_num, r.current_result_den)}</td>
+                      <td className="px-2 py-2 text-right font-mono">
+                        {r.planned_value ?? '—'}
+                        {r.planned_sub_batch ? <span className="ml-1 text-[10px] text-muted-foreground">({r.planned_sub_batch})</span> : null}
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono">{fmtCalibrationResult(r.planned_result_num, r.planned_result_den)}</td>
+                      <td className="px-2 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor(r.status)}`}>{r.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function MappingDriftSection() {
   const [syncing, setSyncing] = useState(false);
 
@@ -3214,7 +3319,7 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-8 max-w-6xl">
+          <TabsList className="grid w-full grid-cols-9 max-w-6xl">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
@@ -3234,6 +3339,10 @@ export default function AnalyticsPage() {
             <TabsTrigger value="drift" className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
               Drift Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="calscore" className="flex items-center gap-2">
+              <Gauge className="w-4 h-4" />
+              Calibration
             </TabsTrigger>
             <TabsTrigger value="top-batch" className="flex items-center gap-2">
               <List className="w-4 h-4" />
@@ -3276,6 +3385,10 @@ export default function AnalyticsPage() {
               <PassiveArchiveSection />
               <DataArchiveSection />
             </div>
+          </TabsContent>
+
+          <TabsContent value="calscore" className="mt-6">
+            <CalibrationScoreboardSection assetClass="xstock_spot" />
           </TabsContent>
           
           <TabsContent value="top-batch" className="mt-6">

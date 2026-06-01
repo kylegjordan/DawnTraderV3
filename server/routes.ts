@@ -7874,6 +7874,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/analytics/calibration-scoreboard - B-CALSCORE: read-only ledger
+  // backing the Analytics "Calibration" tab. One row per calibrated setting:
+  // current value + raw num/den (planned side filled by later calibration sub-
+  // batches). The pct is DERIVED in the client formatter from num/den — num/den
+  // is SSOT, no stored pct (Langston Step-1 C1.3). Direct db.execute read,
+  // mirroring the exit-strategy-ablation pattern. Additive, read-only.
+  apiRouter.get('/analytics/calibration-scoreboard', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const assetClass = (req.query.asset_class as string) || 'xstock_spot';
+      const result: any = await db.execute(sql`
+        SELECT id, sub_batch, planned_sub_batch, asset_class, setting_key, scope, metric_label,
+               current_value, current_result_num, current_result_den,
+               planned_value, planned_result_num, planned_result_den,
+               status, decision_grade, notes, updated_at
+        FROM calibration_ledger
+        WHERE asset_class = ${assetClass}
+        ORDER BY sub_batch, setting_key, scope
+      `);
+      const rows = result.rows ?? result;
+      res.json({ ok: true, data: { rows, count: rows.length, assetClass } });
+    } catch (error: any) {
+      console.error('[B-CALSCORE][calibration-scoreboard] failed:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // GET /api/xstocks/factor-calibration - B79.0i.b: B67.0 factor calibration
   // scoped to xstock_spot via the shared computeFactorCalibration aggregator
   // with assetClass parameter. Returns the SAME FactorCalibrationResponse
