@@ -29,6 +29,13 @@
 -- GENUINE DELTA — runs on staging AND a fresh CI Postgres built from
 -- initial-schema.sql. Idempotent (IF NOT EXISTS + IS NULL) → safe to re-run.
 -- See Claude Comms and Packages/Scope Files/B_XSTOCK_CALIB_F_NOW_SCOPE.md.
+--
+-- CROSS-REF (Langston A3-1): the tag literal 'pre_calibration_xstock_2026_05'
+-- below is duplicated in TS as `PRE_CALIBRATION_XSTOCK_TAG` in
+-- server/services/exit-strategy-ablation-aggregator.ts — a .sql file cannot
+-- import the const, so this DEFAULT + backfill are the only places the literal
+-- is written by hand. If the tag ever changes, change BOTH this file and that
+-- const together.
 -- ═════════════════════════════════════════════════════════════════════════════
 
 BEGIN;

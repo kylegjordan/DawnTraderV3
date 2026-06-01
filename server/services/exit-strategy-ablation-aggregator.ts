@@ -57,22 +57,40 @@ const WINDOW_INTERVALS: Record<AblationWindow, string> = {
 };
 
 /**
- * B-XSTOCK-CALIB F-NOW (2026-06-01): pre-calibration exclusion clause. When the
- * xStocks tab scopes to xstock_spot, exclude the pre-calibration cohort so Phase
- * 25 closed-outcome evaluation doesn't mix un-calibrated noise with calibrated
- * signal. Only fires for xstock_spot — the /api/analytics view (assetClass=null)
- * and the crypto path are byte-identical to pre-F-NOW. `IS DISTINCT FROM` keeps
- * NULL (untagged / post-calibration) rows INCLUDED. Exported for unit test.
+ * B-XSTOCK-CALIB F-NOW (2026-06-01): the single TS source of truth for the
+ * pre-calibration cohort tag. The migration (`2026-06-01-f-now-calibration-
+ * state.sql`) hardcodes the SAME literal in its DEFAULT + backfill — a `.sql`
+ * file can't import this const, so that one duplication is unavoidable; the
+ * migration carries a cross-ref comment. Everywhere in TS references THIS const
+ * (Langston A3-1 fold — removes drift risk on the exact mechanism F-NOW provides).
+ */
+export const PRE_CALIBRATION_XSTOCK_TAG = 'pre_calibration_xstock_2026_05';
+
+/**
+ * B-XSTOCK-CALIB F-NOW (2026-06-01): pre-calibration exclusion clause.
+ *
+ * OPT-IN (Kyle decision 2026-06-01): the live xStocks "Exit Strategy Ablation"
+ * panel must keep showing ALL trades, so the exclusion fires ONLY when a caller
+ * explicitly passes `excludePreCalibration=true` AND scopes to xstock_spot. The
+ * two live endpoints (/api/xstocks + /api/analytics) do NOT pass it → default
+ * false → both panels byte-identical to pre-F-NOW. The Phase-25 scoring path is
+ * the intended `true` caller (does not exist yet → this clause is INERT until
+ * Phase 25; see completion report §scaffolding).
+ *
+ * `IS DISTINCT FROM` keeps NULL (untagged / post-calibration) rows INCLUDED.
  *
  * NOTE (Langston Q1/Q4 fold): every calibration_state read MUST be asset-class-
  * scoped. crypto rows carry the literal default (mixed NULL pre-deploy /
- * 'pre_calibration_xstock_2026_05' post-deploy) and are MEANINGLESS noise — a
- * future UNSCOPED `IS DISTINCT FROM 'pre_calibration_xstock_2026_05'` would
- * silently fail-CLOSED and drop crypto. Keep this gate asset-class-scoped.
+ * tagged post-deploy) and are MEANINGLESS noise — a future UNSCOPED
+ * `IS DISTINCT FROM` would silently fail-CLOSED and drop crypto. Keep the gate
+ * asset-class-scoped. Exported for unit test.
  */
-export function buildCalibrationClause(assetClass: string | null) {
-  return assetClass === 'xstock_spot'
-    ? sql`AND calibration_state IS DISTINCT FROM 'pre_calibration_xstock_2026_05'`
+export function buildCalibrationClause(
+  assetClass: string | null,
+  excludePreCalibration: boolean,
+) {
+  return (excludePreCalibration && assetClass === 'xstock_spot')
+    ? sql`AND calibration_state IS DISTINCT FROM ${PRE_CALIBRATION_XSTOCK_TAG}`
     : sql``;
 }
 
@@ -80,6 +98,9 @@ export async function computeExitStrategyAblation(
   window: AblationWindow,
   regimeFilter: string | null = null,
   assetClass: string | null = null, // B79.0i.b: optional asset_class filter for xstock_spot tab. When null, behavior byte-identical to pre-B79.0i.b (no WHERE filter on asset_class — all rows including legacy unscoped).
+  // B-XSTOCK-CALIB F-NOW (2026-06-01): opt-in pre-calibration exclusion. Default
+  // false → live panels unchanged. Phase-25 scoring passes excludePreCalibration:true.
+  opts: { excludePreCalibration?: boolean } = {},
 ): Promise<ExitStrategyAblationResponse> {
   const interval = WINDOW_INTERVALS[window];
   const windowEnd = new Date();
@@ -92,7 +113,7 @@ export async function computeExitStrategyAblation(
   const assetClassClause = assetClass
     ? sql`AND asset_class = ${assetClass}`
     : sql``;
-  const calibrationClause = buildCalibrationClause(assetClass);
+  const calibrationClause = buildCalibrationClause(assetClass, opts.excludePreCalibration ?? false);
 
   // Per-variant aggregation
   const variantRows = await db.execute(sql`

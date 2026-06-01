@@ -44,20 +44,24 @@ function render(frag: ReturnType<typeof buildCalibrationClause>): string {
   return dialect.sqlToQuery(sql`SELECT 1 FROM t WHERE 1=1 ${frag}`).sql;
 }
 
-describe('[F-NOW] buildCalibrationClause — pre-cal exclusion gated on xstock_spot', () => {
-  it('emits the IS DISTINCT FROM exclusion when scoped to xstock_spot', () => {
-    const out = render(buildCalibrationClause('xstock_spot'));
-    expect(out).toContain("calibration_state IS DISTINCT FROM 'pre_calibration_xstock_2026_05'");
+describe('[F-NOW] buildCalibrationClause — OPT-IN exclusion (Kyle 2026-06-01: live panels unchanged)', () => {
+  it('emits the exclusion ONLY when excludePreCalibration=true AND xstock_spot', () => {
+    const q = dialect.sqlToQuery(sql`SELECT 1 FROM t WHERE 1=1 ${buildCalibrationClause('xstock_spot', true)}`);
+    expect(q.sql).toContain('calibration_state IS DISTINCT FROM');
+    // The tag is a bound param (references PRE_CALIBRATION_XSTOCK_TAG, no inline literal drift).
+    expect(q.params).toContain('pre_calibration_xstock_2026_05');
   });
 
-  it('emits NO calibration clause when assetClass is null (analytics view)', () => {
-    const out = render(buildCalibrationClause(null));
-    expect(out).not.toContain('calibration_state');
+  it('emits NOTHING for xstock_spot when excludePreCalibration=false (the LIVE panel default)', () => {
+    expect(render(buildCalibrationClause('xstock_spot', false))).not.toContain('calibration_state');
   });
 
-  it('emits NO calibration clause for crypto_spot (crypto byte-identical)', () => {
-    const out = render(buildCalibrationClause('crypto_spot'));
-    expect(out).not.toContain('calibration_state');
+  it('emits NOTHING for null (analytics view) even with excludePreCalibration=true', () => {
+    expect(render(buildCalibrationClause(null, true))).not.toContain('calibration_state');
+  });
+
+  it('emits NOTHING for crypto_spot even with excludePreCalibration=true (crypto byte-identical)', () => {
+    expect(render(buildCalibrationClause('crypto_spot', true))).not.toContain('calibration_state');
   });
 });
 
