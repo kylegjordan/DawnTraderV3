@@ -19,7 +19,15 @@
  * (only works if B2 credentials are configured — see storage-client.ts).
  * Without the flag, cold-only entries are warned about and skipped.
  *
- * Reference: BATCH_75_SCOPE.md §C.9
+ * B-NEW-47: warm downloads STREAM to file (`downloadWarmFile`) — the old
+ * buffered `downloadWarm` + `writeFileSync` OOM'd on multi-GB objects. Also,
+ * a single month may now be N per-day slices (`<table>_YYYY-MM-DD.jsonl.gz`)
+ * instead of one `<table>_YYYY-MM.jsonl.gz` — the manifest tstzrange query
+ * returns every in-window slice, so reassembly is automatic (one output file
+ * per slice). Any consumer that globbed the single monthly filename must glob
+ * `<table>_*.jsonl.gz` instead.
+ *
+ * Reference: BATCH_75_SCOPE.md §C.9 + B_NEW_47_SCOPE.md §8
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -161,17 +169,17 @@ async function main(): Promise<void> {
     const warm = warmByLabel.get(label);
     if (warm) {
       const { bucket, path: objPath } = parseSupabaseUri(warm.storage_uri);
-      const data = await storage.downloadWarm(bucket, objPath);
       const localPath = path.join(args.out, `${args.table}_${label}.jsonl.gz`);
-      fs.writeFileSync(localPath, data.data);
-      const localChecksum = sha256Hex(data.data);
-      const checksumOk = localChecksum === warm.checksum;
+      // B-NEW-47: stream to file (no whole-object Buffer); checksum computed
+      // from the on-disk bytes (second read-pass inside downloadWarmFile).
+      const dl = await storage.downloadWarmFile(bucket, objPath, localPath);
+      const checksumOk = dl.checksum === warm.checksum;
       console.log(
-        `[B75 rehydrate] ${label} (warm): rows=${warm.row_count} bytes=${data.bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${localPath}`,
+        `[B75 rehydrate] ${label} (warm): rows=${warm.row_count} bytes=${dl.bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${localPath}`,
       );
       downloaded++;
       totalRows += warm.row_count;
-      totalBytes += data.bytes;
+      totalBytes += dl.bytes;
       continue;
     }
     const cold = coldByLabel.get(label)!;

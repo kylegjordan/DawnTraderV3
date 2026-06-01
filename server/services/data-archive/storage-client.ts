@@ -29,7 +29,9 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Env + module-level config (read-once at construction)
@@ -90,6 +92,11 @@ export class StorageClient {
   }
 
   /**
+   * SMALL-PAYLOAD / BUFFER PATH. Buffers the whole object in memory — safe only
+   * for small payloads (context-bridge-log monthly archives, tests). LARGE
+   * archives MUST use `uploadWarmFile` (B-NEW-47 streaming) to avoid OOM on the
+   * 3.7 GB-RAM box. Do not route multi-GB objects here.
+   *
    * Upload a buffer to Supabase Storage warm bucket. Returns SHA-256 of the
    * payload for the caller to record in the manifest.
    *
@@ -247,6 +254,168 @@ export class StorageClient {
   }
 
   /**
+   * B-NEW-47 — STREAMING upload from a file PATH (never buffers the whole
+   * object). This is the memory-safe path for large archives (the buffered
+   * `uploadWarm` above OOM-kills on a 3.7 GB-RAM box for multi-GB objects).
+   *
+   * Small files (≤ SINGLE_CALL_THRESHOLD) still do a single POST after a bounded
+   * read; larger files route to `uploadWarmTusFile` which `fs.read`s 6 MiB
+   * chunks at offset — peak memory ~6 MiB regardless of object size.
+   *
+   * @param opts.size      known file size (saves a stat); validated ≤ HARD_CAP
+   * @param opts.checksum  pre-computed SHA-256 (e.g. exporter's streamed
+   *                       checksum) — avoids a redundant read-pass. If omitted,
+   *                       computed by streaming the file.
+   */
+  async uploadWarmFile(
+    bucket: string,
+    path: string,
+    localPath: string,
+    opts: { size?: number; checksum?: string; contentType?: string } = {},
+  ): Promise<UploadResult> {
+    const contentType = opts.contentType ?? 'application/gzip';
+    const size = opts.size ?? fs.statSync(localPath).size;
+    const HARD_CAP = 5 * 1024 * 1024 * 1024; // 5 GB ceiling (Supabase project cap)
+    if (size > HARD_CAP) {
+      throw new Error(
+        `[B75 storage-client] warm upload file exceeds 5 GB hard cap: ${size} bytes (${localPath})`,
+      );
+    }
+    const checksum = opts.checksum ?? (await sha256HexStream(fs.createReadStream(localPath)));
+    const SINGLE_CALL_THRESHOLD = 40 * 1024 * 1024; // 40 MB
+    if (size > SINGLE_CALL_THRESHOLD) {
+      return await this.uploadWarmTusFile(bucket, path, localPath, size, contentType, checksum);
+    }
+    // Small file: a single bounded read (< 40 MB) + POST.
+    const data = fs.readFileSync(localPath);
+    const url = `${this.projectUrl}/storage/v1/object/${bucket}/${encodePath(path)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        apikey: this.serviceKey,
+        Authorization: `Bearer ${this.serviceKey}`,
+        'Content-Type': contentType,
+        'x-upsert': 'true',
+      },
+      body: data,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(
+        `[B75 storage-client] warm upload (file, small) failed: ${res.status} ${res.statusText} — ${body}`,
+      );
+    }
+    return { bytes: size, checksum, uri: `supabase://${bucket}/${path}` };
+  }
+
+  /**
+   * B-NEW-47 — TUS resumable upload reading 6 MiB chunks from a file descriptor
+   * at offset. Same TUS protocol as `uploadWarmTus` but the chunk source is
+   * `fs.read(fd, buf, …, offset)` instead of `Buffer.subarray` on a fully-loaded
+   * Buffer — so peak memory is one CHUNK_SIZE buffer, not the whole object.
+   */
+  private async uploadWarmTusFile(
+    bucket: string,
+    path: string,
+    localPath: string,
+    size: number,
+    contentType: string,
+    checksum: string,
+  ): Promise<UploadResult> {
+    const CHUNK_SIZE = 6 * 1024 * 1024; // 6 MiB per Supabase recommendation
+    const tusUrl = `${this.projectUrl}/storage/v1/upload/resumable`;
+
+    const meta = [
+      `bucketName ${Buffer.from(bucket).toString('base64')}`,
+      `objectName ${Buffer.from(path).toString('base64')}`,
+      `contentType ${Buffer.from(contentType).toString('base64')}`,
+      `cacheControl ${Buffer.from('no-cache').toString('base64')}`,
+    ].join(',');
+    const createRes = await fetch(tusUrl, {
+      method: 'POST',
+      headers: {
+        apikey: this.serviceKey,
+        Authorization: `Bearer ${this.serviceKey}`,
+        'Tus-Resumable': '1.0.0',
+        'Upload-Length': String(size),
+        'Upload-Metadata': meta,
+        'x-upsert': 'true',
+      },
+    });
+    if (createRes.status !== 201) {
+      const body = await createRes.text().catch(() => '');
+      throw new Error(
+        `[B75 storage-client] TUS(file) create failed: ${createRes.status} ${createRes.statusText} — ${body}`,
+      );
+    }
+    let location = createRes.headers.get('location') || createRes.headers.get('Location');
+    if (!location) {
+      throw new Error('[B75 storage-client] TUS(file) create returned no Location header');
+    }
+    if (location.startsWith('/')) location = `${this.projectUrl}${location}`;
+    else if (!location.startsWith('http')) location = `${this.projectUrl}/${location}`;
+
+    const fd = fs.openSync(localPath, 'r');
+    const buf = Buffer.allocUnsafe(CHUNK_SIZE);
+    try {
+      let offset = 0;
+      while (offset < size) {
+        const want = Math.min(CHUNK_SIZE, size - offset);
+        // fs.readSync may return short reads — loop to fill `want` bytes.
+        let filled = 0;
+        while (filled < want) {
+          const n = fs.readSync(fd, buf, filled, want - filled, offset + filled);
+          if (n === 0) break;
+          filled += n;
+        }
+        if (filled !== want) {
+          throw new Error(
+            `[B75 storage-client] TUS(file) short read at offset=${offset}: wanted=${want} got=${filled}`,
+          );
+        }
+        // subarray shares memory with buf; safe because we await the PATCH fully
+        // (undici copies the body before resolving) before the next read overwrites buf.
+        const chunk = buf.subarray(0, want);
+        const patchRes = await fetch(location, {
+          method: 'PATCH',
+          headers: {
+            apikey: this.serviceKey,
+            Authorization: `Bearer ${this.serviceKey}`,
+            'Tus-Resumable': '1.0.0',
+            'Upload-Offset': String(offset),
+            'Content-Type': 'application/offset+octet-stream',
+            'Content-Length': String(want),
+          },
+          body: chunk,
+        });
+        if (patchRes.status !== 204) {
+          const body = await patchRes.text().catch(() => '');
+          throw new Error(
+            `[B75 storage-client] TUS(file) PATCH failed at offset=${offset} chunk=${want}: ${patchRes.status} ${patchRes.statusText} — ${body}`,
+          );
+        }
+        const serverOffset = Number(
+          patchRes.headers.get('upload-offset') || patchRes.headers.get('Upload-Offset') || '0',
+        );
+        if (serverOffset !== offset + want) {
+          throw new Error(
+            `[B75 storage-client] TUS(file) PATCH offset drift: expected=${offset + want} server-reported=${serverOffset}`,
+          );
+        }
+        offset += want;
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    return { bytes: size, checksum, uri: `supabase://${bucket}/${path}` };
+  }
+
+  /**
+   * SMALL-PAYLOAD / BUFFER PATH. Buffers the whole object in memory — safe only
+   * for small payloads. LARGE archives MUST use `downloadWarmFile` (B-NEW-47
+   * streaming) to avoid OOM. Do not route multi-GB objects here.
+   *
    * Download a warm-tier object back to a Buffer. Used for post-upload
    * verification (B75 export-then-drop fence step 7) and by b75-rehydrate.ts.
    */
@@ -271,6 +440,46 @@ export class StorageClient {
       checksum: sha256Hex(data),
       data,
     };
+  }
+
+  /**
+   * B-NEW-47 — STREAMING download to a file PATH (never buffers the whole
+   * object). Pipes the response body web-stream → file write-stream with
+   * backpressure, then computes the SHA-256 by a second streamed read-pass of
+   * the file on disk (Q-B: simplest, no tee race; the extra cost is one
+   * sequential disk read, not memory). Used by the sweep's verify step AND by
+   * b75-rehydrate.ts — both previously OOM'd buffering multi-GB objects.
+   *
+   * @returns bytes written + SHA-256 hex of the downloaded file.
+   */
+  async downloadWarmFile(
+    bucket: string,
+    path: string,
+    localPath: string,
+  ): Promise<{ bytes: number; checksum: string }> {
+    const url = `${this.projectUrl}/storage/v1/object/${bucket}/${encodePath(path)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        apikey: this.serviceKey,
+        Authorization: `Bearer ${this.serviceKey}`,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(
+        `[B75 storage-client] warm download (file) failed: ${res.status} ${res.statusText} — ${body}`,
+      );
+    }
+    if (!res.body) {
+      throw new Error('[B75 storage-client] warm download (file): response has no body stream');
+    }
+    // res.body is a WHATWG ReadableStream; adapt to a Node Readable for pipeline
+    // backpressure into the write-stream.
+    await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(localPath));
+    const checksum = await sha256HexStream(fs.createReadStream(localPath));
+    const bytes = fs.statSync(localPath).size;
+    return { bytes, checksum };
   }
 
   /**

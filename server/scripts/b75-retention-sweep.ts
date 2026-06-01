@@ -1,33 +1,62 @@
 /**
  * ═════════════════════════════════════════════════════════════════════════════
- * B75 — Retention Sweep (B74 passive-archive tables)
+ * B75 — Retention Sweep (B74 passive-archive tables) — B-NEW-47 streaming+slicing
  * ═════════════════════════════════════════════════════════════════════════════
  *
  * Daily 02:15 UTC. For each B74 partitioned table, identifies whole monthly
- * partitions older than the per-table hot retention, exports each to JSONL.gz
- * in the warm bucket, verifies, registers in the manifest, then DROPs the
- * partition. State machine ensures crash recovery and idempotency.
+ * partitions older than the per-table hot retention and archives them to the
+ * warm bucket (export → upload → download-verify → DROP), crash-safe via the
+ * data_archive_manifest state machine.
  *
- * Cron line (add to /etc/cron.d/dawntrader on staging):
- *   15 2 * * * deploy cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-retention-sweep.ts >> /var/log/dawntrader/b75-retention.log 2>&1
+ * B-NEW-47 (RUNNING_ISSUES #161): the original loaded each whole partition into
+ * a Buffer before upload (OOM on the 3.7 GB-RAM box for the 31 GB May ticker
+ * partition) and a single object can exceed the Supabase 5 GB project cap. Fixed
+ * with ADAPTIVE PER-DAY SLICING + STREAMED I/O:
+ *   - hotBytes >= slice_threshold_hot_bytes (DB-governed) → export the partition
+ *     in per-DAY slices, each a separate `YYYY-MM-DD` warm object + manifest row.
+ *   - below threshold → one `YYYY-MM` object as before.
+ *   - all uploads stream from a file path (uploadWarmFile); all verifies stream
+ *     a download to a temp file (downloadWarmFile) — peak memory ~6 MiB.
+ *   - DROP the monthly DB partition ONLY after EVERY distinct date present in the
+ *     partition has a download-verified manifest row.
  *
- * State machine (data_archive_manifest.state):
- *   pending → uploaded → verified → active
+ * WRITE-SEALED INVARIANT (Langston Step-2 fold-in #1): a partition is eligible
+ * only when `rangeStart < cutoffMonthStart` — i.e. its whole month is in the
+ * past and live writers target a LATER month. The per-slice snapshots, the
+ * stable-hotBytes resume guard, and the distinct-dates DROP gate are all correct
+ * ONLY because an eligible partition is write-sealed (no concurrent mutation).
  *
- * Crash recovery: on restart, manifest rows in {pending, uploaded, verified}
- * resume from last good state. No double-export.
+ * Cron line (root crontab on staging — installed in B-NEW-47 Step 6):
+ *   15 2 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-retention-sweep.ts" >> /var/log/dawntrader/b75-retention.log 2>&1
  *
- * Reference: BATCH_75_SCOPE.md §C.1 + BATCH_75_PRE_AUDIT.md §B.2 + §E
+ * State machine (data_archive_manifest.state): pending → uploaded → verified → active
+ * Crash recovery: verified/active slices are SKIPPED on resume (no re-export).
+ *
+ * Reference: BATCH_75_SCOPE.md §C.1 + B_NEW_47_SCOPE.md §8 + B_NEW_47_PRE_AUDIT.md
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
 import 'dotenv/config';
 import fs from 'node:fs';
 import pg from 'pg';
-import { exportPartition, sha256OfFile } from '../services/data-archive/partition-exporter.js';
-import { getStorageClient, sha256Hex } from '../services/data-archive/storage-client.js';
+import { exportPartition } from '../services/data-archive/partition-exporter.js';
+import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
+import {
+  decideSliceMode,
+  enumerateUtcDays,
+  dayLabel,
+  deriveModeFromLabels,
+} from '../services/data-archive/sweep-slicing.js';
+import { addAlert } from '../services/system-alerts.js';
 
 const { Client } = pg;
+
+/** 5 GB Supabase project upload cap (mirrors storage-client HARD_CAP). A single
+ *  object — whole month OR one day-slice — exceeding this fails fast. There is
+ *  no sub-day fallback (Langston fold-in #3): a single day over the cap stalls
+ *  that partition and alerts nightly. Not reachable at current volumes
+ *  (~300–500 MB/day) — documented boundary in RUNNING_ISSUES. */
+const HARD_CAP_BYTES = 5 * 1024 * 1024 * 1024;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Table inventory — one row per B74 archive table
@@ -56,6 +85,7 @@ interface SweepConfig {
   warmBucket: string;
   warmPrefix: string;
   retentionByTable: Map<string, number>;
+  sliceThresholdHotBytes: number;
 }
 
 async function loadConfig(client: pg.Client): Promise<SweepConfig> {
@@ -90,6 +120,8 @@ async function loadConfig(client: pg.Client): Promise<SweepConfig> {
     warmBucket: reqStr('warm_bucket'),
     warmPrefix: reqStr('warm_prefix'),
     retentionByTable,
+    // B-NEW-47: DB-governed, fail-hard-if-empty (Langston Step-2 Q-A).
+    sliceThresholdHotBytes: reqNum('slice_threshold_hot_bytes'),
   };
 }
 
@@ -110,7 +142,6 @@ async function listOldPartitions(
   parent: string,
   cutoffMonthStart: Date,
 ): Promise<PartitionRow[]> {
-  // Pull child partition names + bounds. Bounds parse via FOR VALUES range expression.
   const r = await client.query(
     `SELECT child.relname AS child_name,
             pg_get_expr(child.relpartbound, child.oid) AS bound_expr
@@ -129,7 +160,7 @@ async function listOldPartitions(
     const month = Number(m[2]);
     const rangeStart = new Date(Date.UTC(year, month - 1, 1));
     const rangeEnd = new Date(Date.UTC(year, month, 1));
-    if (rangeStart >= cutoffMonthStart) continue; // not old enough
+    if (rangeStart >= cutoffMonthStart) continue; // not old enough / not write-sealed
     out.push({
       parent,
       child: row.child_name,
@@ -167,6 +198,22 @@ async function getManifestRow(
     [sourceTable, partitionLabel, tier],
   );
   return r.rows[0] ?? null;
+}
+
+/** All warm-tier labels already in the manifest for (parent, month) — the month
+ *  label itself plus any of its day-slices. Drives the resume invariant guard. */
+async function listMonthLabels(
+  client: pg.Client,
+  sourceTable: string,
+  monthLabel: string,
+): Promise<string[]> {
+  const r = await client.query(
+    `SELECT partition_label FROM data_archive_manifest
+      WHERE source_table = $1 AND tier = 'warm'
+        AND (partition_label = $2 OR partition_label LIKE $3)`,
+    [sourceTable, monthLabel, `${monthLabel}-%`],
+  );
+  return r.rows.map((row) => row.partition_label as string);
 }
 
 async function upsertManifestPending(
@@ -240,28 +287,81 @@ async function updateManifestActive(client: pg.Client, id: string): Promise<void
   );
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Per-partition processing
-// ───────────────────────────────────────────────────────────────────────────
-
-interface PartitionStats {
-  rowCount: number;
-  bytesHot: number;
+/** Bulk-mark every verified slice of a month active after the DROP gate passes. */
+async function markLabelsActive(
+  client: pg.Client,
+  sourceTable: string,
+  labels: string[],
+): Promise<void> {
+  if (labels.length === 0) return;
+  await client.query(
+    `UPDATE data_archive_manifest
+       SET state = 'active', hot_partition_dropped_at = NOW()
+     WHERE source_table = $1 AND tier = 'warm'
+       AND partition_label = ANY($2::text[])
+       AND state = 'verified'`,
+    [sourceTable, labels],
+  );
 }
 
-async function partitionStats(client: pg.Client, partitionTable: string): Promise<PartitionStats> {
-  const r = await client.query(
-    `SELECT pg_total_relation_size($1::regclass) AS bytes_hot`,
-    [partitionTable],
-  );
-  return {
-    rowCount: 0, // filled by exporter
-    bytesHot: Number(r.rows[0].bytes_hot ?? 0),
-  };
+// ───────────────────────────────────────────────────────────────────────────
+// Partition introspection
+// ───────────────────────────────────────────────────────────────────────────
+
+async function partitionHotBytes(client: pg.Client, partitionTable: string): Promise<number> {
+  const r = await client.query(`SELECT pg_total_relation_size($1::regclass) AS bytes_hot`, [
+    partitionTable,
+  ]);
+  return Number(r.rows[0].bytes_hot ?? 0);
+}
+
+/** Distinct dates PRESENT in [rangeStart, rangeEnd) via per-day index EXISTS
+ *  probes (PK leads with the timestamp column) — NOT a `SELECT DISTINCT date()`
+ *  seq scan. ~28–31 cheap probes per partition. */
+async function listPresentDates(
+  client: pg.Client,
+  target: string,
+  tsCol: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+): Promise<Date[]> {
+  const present: Date[] = [];
+  for (const day of enumerateUtcDays(rangeStart, rangeEnd)) {
+    const dayEnd = new Date(day.getTime() + 86_400_000);
+    const r = await client.query(
+      `SELECT 1 FROM ${quoteIdent(target)}
+        WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2
+        LIMIT 1`,
+      [day, dayEnd],
+    );
+    if (r.rows.length > 0) present.push(day);
+  }
+  return present;
 }
 
 async function dropPartition(client: pg.Client, partitionTable: string): Promise<void> {
   await client.query(`DROP TABLE IF EXISTS ${quoteIdent(partitionTable)}`);
+}
+
+/** Atomically DROP the hot partition AND flip its manifest row(s) to active in a
+ *  single transaction (Langston Step-4 rev A). Postgres DDL is transactional, so
+ *  a crash can never leave the partition dropped while the manifest is stuck at
+ *  'verified' (which listOldPartitions would never revisit). markFn performs the
+ *  state flip on the SAME client inside the tx. */
+async function dropAndMarkActive(
+  ctlClient: pg.Client,
+  partitionTable: string,
+  markFn: () => Promise<void>,
+): Promise<void> {
+  await ctlClient.query('BEGIN');
+  try {
+    await dropPartition(ctlClient, partitionTable);
+    await markFn();
+    await ctlClient.query('COMMIT');
+  } catch (err) {
+    await ctlClient.query('ROLLBACK').catch(() => {});
+    throw err;
+  }
 }
 
 function quoteIdent(name: string): string {
@@ -271,13 +371,150 @@ function quoteIdent(name: string): string {
   return `"${name}"`;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Archive one object (whole month OR one day-slice) — streamed, verify-on-disk
+// ───────────────────────────────────────────────────────────────────────────
+
+interface ArchiveOutcome {
+  manifestId: string;
+  rowCount: number;
+  bytesCompressed: number;
+  reused: boolean; // true = already verified/active on entry (resume skip)
+}
+
+class ChecksumMismatchError extends Error {
+  readonly isChecksumMismatch = true;
+}
+
+async function archiveOneObject(
+  storage: StorageClient,
+  exportClient: pg.Client,
+  ctlClient: pg.Client,
+  cfg: SweepConfig,
+  spec: B74TableSpec,
+  label: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+  partitionTableName: string,
+  originalSizeBytes: number,
+): Promise<ArchiveOutcome> {
+  const objPath = `${cfg.warmPrefix}/${spec.parent}/${label}.jsonl.gz`;
+  const storageUri = `supabase://${cfg.warmBucket}/${objPath}`;
+
+  // Resume skip (fold-in #2): already uploaded+verified (or fully active) → no re-export.
+  const existing = await getManifestRow(ctlClient, spec.parent, label, 'warm');
+  if (existing && (existing.state === 'verified' || existing.state === 'active') && existing.checksum) {
+    return { manifestId: existing.id, rowCount: 0, bytesCompressed: 0, reused: true };
+  }
+
+  const manifestId = await upsertManifestPending(
+    ctlClient,
+    spec.parent,
+    label,
+    storageUri,
+    rangeStart,
+    rangeEnd,
+  );
+
+  const exportRes = await exportPartition(exportClient, {
+    sourceTable: spec.parent,
+    partitionLabel: label,
+    rangeStart,
+    rangeEnd,
+    timestampColumn: spec.timestampColumn,
+    partitionTableName,
+    compressionLevel: 6,
+  });
+
+  let verifyPath: string | null = null;
+  try {
+    const fileSize = fs.statSync(exportRes.localPath).size;
+    if (fileSize > HARD_CAP_BYTES) {
+      // Fail fast BEFORE streaming a doomed upload (fold-in #3 — no sub-day fallback).
+      throw new Error(
+        `[B75 sweep] object ${label} compressed size ${fileSize}B exceeds HARD_CAP ${HARD_CAP_BYTES}B; ` +
+          `no sub-day fallback — partition stalls (see RUNNING_ISSUES day-grain limit)`,
+      );
+    }
+
+    const upload = await storage.uploadWarmFile(cfg.warmBucket, objPath, exportRes.localPath, {
+      size: fileSize,
+      checksum: exportRes.checksum,
+    });
+
+    // Streamed download-verify to a temp file (Q-B: second read-pass checksum
+    // validates bytes-as-landed-on-disk).
+    verifyPath = `${exportRes.localPath}.verify`;
+    const dl = await storage.downloadWarmFile(cfg.warmBucket, objPath, verifyPath);
+    if (dl.checksum !== exportRes.checksum || upload.checksum !== exportRes.checksum) {
+      throw new ChecksumMismatchError(
+        `[B75 sweep] CHECKSUM MISMATCH ${spec.parent}/${label}: ` +
+          `local=${exportRes.checksum} upload=${upload.checksum} readback=${dl.checksum}`,
+      );
+    }
+
+    await updateManifestUploaded(
+      ctlClient,
+      manifestId,
+      exportRes.rowCount,
+      exportRes.bytesCompressed,
+      exportRes.minTs,
+      exportRes.maxTs,
+      exportRes.checksum,
+      originalSizeBytes,
+    );
+
+    // ts-bounds verify within [rangeStart, rangeEnd)
+    if (exportRes.rowCount > 0) {
+      if (exportRes.minTs < rangeStart) {
+        throw new Error(
+          `[B75 sweep] ${label} min_ts (${exportRes.minTs.toISOString()}) < rangeStart (${rangeStart.toISOString()})`,
+        );
+      }
+      if (exportRes.maxTs >= rangeEnd) {
+        throw new Error(
+          `[B75 sweep] ${label} max_ts (${exportRes.maxTs.toISOString()}) >= rangeEnd (${rangeEnd.toISOString()})`,
+        );
+      }
+    }
+
+    await updateManifestVerified(ctlClient, manifestId);
+    return {
+      manifestId,
+      rowCount: exportRes.rowCount,
+      bytesCompressed: exportRes.bytesCompressed,
+      reused: false,
+    };
+  } finally {
+    try {
+      fs.unlinkSync(exportRes.localPath);
+    } catch {
+      // ignore
+    }
+    if (verifyPath) {
+      try {
+        fs.unlinkSync(verifyPath);
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Per-partition processing
+// ───────────────────────────────────────────────────────────────────────────
+
 interface ProcessResult {
-  status: 'dropped' | 'verified-only' | 'skipped' | 'failed';
+  status: 'dropped' | 'skipped' | 'failed';
+  mode: 'whole' | 'sliced' | 'n/a';
   bytesHot: number;
   bytesWarm: number;
   rowCount: number;
+  slices: number;
   durationMs: number;
   reason?: string;
+  isChecksumMismatch?: boolean;
 }
 
 async function processPartition(
@@ -287,138 +524,176 @@ async function processPartition(
 ): Promise<ProcessResult> {
   const start = Date.now();
 
-  // Fresh client for this partition's snapshot work — keeps the long REPEATABLE
-  // READ transaction isolated from manifest UPDATEs (which run on a different client).
+  // Fresh clients per partition: exportClient runs each export's REPEATABLE READ
+  // READ ONLY snapshot (opened + committed INSIDE exportPartition, once per
+  // object — not one long snapshot across the partition); ctlClient runs
+  // manifest/DDL on a separate connection.
   const exportClient = new Client({ connectionString: process.env.DATABASE_URL });
   const ctlClient = new Client({ connectionString: process.env.DATABASE_URL });
   await exportClient.connect();
   await ctlClient.connect();
 
+  let mode: 'whole' | 'sliced' = 'whole';
+  let bytesHot = 0;
+
   try {
-    // Idempotency check: if already 'active' (= hot dropped), skip
-    const existing = await getManifestRow(ctlClient, spec.parent, partition.partitionLabel, 'warm');
-    if (existing && existing.state === 'active') {
+    bytesHot = await partitionHotBytes(ctlClient, partition.child);
+
+    // Decide whole-vs-sliced. The resume invariant guard OVERRIDES the live
+    // threshold so a half-swept month never mixes month + day labels.
+    const existingLabels = await listMonthLabels(ctlClient, spec.parent, partition.partitionLabel);
+    const resumeMode = deriveModeFromLabels(partition.partitionLabel, existingLabels);
+    mode = resumeMode ?? decideSliceMode(bytesHot, cfg.sliceThresholdHotBytes);
+
+    const storage = getStorageClient();
+
+    if (mode === 'whole') {
+      // ─── WHOLE PATH ───────────────────────────────────────────────────────
+      const existing = await getManifestRow(ctlClient, spec.parent, partition.partitionLabel, 'warm');
+      if (existing && existing.state === 'active') {
+        return {
+          status: 'skipped',
+          mode,
+          bytesHot: 0,
+          bytesWarm: 0,
+          rowCount: 0,
+          slices: 0,
+          durationMs: Date.now() - start,
+          reason: 'already-active',
+        };
+      }
+      const outcome = await archiveOneObject(
+        storage,
+        exportClient,
+        ctlClient,
+        cfg,
+        spec,
+        partition.partitionLabel,
+        partition.rangeStart,
+        partition.rangeEnd,
+        partition.child,
+        bytesHot,
+      );
+      await dropAndMarkActive(ctlClient, partition.child, () =>
+        updateManifestActive(ctlClient, outcome.manifestId),
+      );
       return {
-        status: 'skipped',
-        bytesHot: 0,
-        bytesWarm: 0,
-        rowCount: 0,
+        status: 'dropped',
+        mode,
+        bytesHot,
+        bytesWarm: outcome.bytesCompressed,
+        rowCount: outcome.rowCount,
+        slices: 1,
         durationMs: Date.now() - start,
-        reason: 'already-active',
       };
     }
 
-    const stats = await partitionStats(ctlClient, partition.child);
-    const storageUri = `supabase://${cfg.warmBucket}/${cfg.warmPrefix}/${spec.parent}/${partition.partitionLabel}.jsonl.gz`;
-    const manifestId = await upsertManifestPending(
+    // ─── SLICED PATH ─────────────────────────────────────────────────────────
+    // Enumerate distinct dates present (cheap per-day index probes), archive each
+    // day as its own object, then DROP only after EVERY present date is verified.
+    const presentDates = await listPresentDates(
       ctlClient,
-      spec.parent,
-      partition.partitionLabel,
-      storageUri,
+      partition.child,
+      spec.timestampColumn,
       partition.rangeStart,
       partition.rangeEnd,
     );
+    const presentLabels = presentDates.map(dayLabel);
 
-    let exportRes: Awaited<ReturnType<typeof exportPartition>> | null = null;
-
-    // Skip export if already uploaded+verified from a prior crashed run
-    if (existing && existing.state === 'verified' && existing.checksum) {
-      // Resume at DROP step
-    } else {
-      // Step 2-5: snapshot + export
-      exportRes = await exportPartition(exportClient, {
-        sourceTable: spec.parent,
-        partitionLabel: partition.partitionLabel,
-        rangeStart: partition.rangeStart,
-        rangeEnd: partition.rangeEnd,
-        timestampColumn: spec.timestampColumn,
-        partitionTableName: partition.child,
-      });
-
-      // Step 6: upload to warm bucket
-      const data = fs.readFileSync(exportRes.localPath);
-      const storage = getStorageClient();
-      const upload = await storage.uploadWarm(
-        cfg.warmBucket,
-        `${cfg.warmPrefix}/${spec.parent}/${partition.partitionLabel}.jsonl.gz`,
-        data,
-      );
-
-      // Step 7: re-read from bucket, recompute checksum
-      const readBack = await storage.downloadWarm(
-        cfg.warmBucket,
-        `${cfg.warmPrefix}/${spec.parent}/${partition.partitionLabel}.jsonl.gz`,
-      );
-      const localChecksum = exportRes.checksum;
-      if (readBack.checksum !== localChecksum || upload.checksum !== localChecksum) {
-        throw new Error(
-          `[B75 sweep] checksum mismatch on re-read: ` +
-            `local=${localChecksum} uploaded=${upload.checksum} readback=${readBack.checksum}`,
-        );
-      }
-
-      await updateManifestUploaded(
+    let bytesWarm = 0;
+    let rowCount = 0;
+    for (const day of presentDates) {
+      const dEnd = new Date(day.getTime() + 86_400_000);
+      const outcome = await archiveOneObject(
+        storage,
+        exportClient,
         ctlClient,
-        manifestId,
-        exportRes.rowCount,
-        exportRes.bytesCompressed,
-        exportRes.minTs,
-        exportRes.maxTs,
-        localChecksum,
-        stats.bytesHot,
+        cfg,
+        spec,
+        dayLabel(day),
+        day,
+        dEnd,
+        partition.child,
+        0, // per-slice original_partition_size_bytes = 0 (Langston rev B): the
+           // whole-partition bytesHot would sum to N× the real size across slices.
       );
-
-      // Step 8: verify min_ts >= rangeStart, max_ts < rangeEnd, row count > 0 OR partition empty
-      if (exportRes.rowCount > 0) {
-        if (exportRes.minTs < partition.rangeStart) {
-          throw new Error(
-            `[B75 sweep] export min_ts (${exportRes.minTs.toISOString()}) < partition rangeStart (${partition.rangeStart.toISOString()})`,
-          );
-        }
-        if (exportRes.maxTs >= partition.rangeEnd) {
-          throw new Error(
-            `[B75 sweep] export max_ts (${exportRes.maxTs.toISOString()}) >= partition rangeEnd (${partition.rangeEnd.toISOString()})`,
-          );
-        }
-      }
-
-      await updateManifestVerified(ctlClient, manifestId);
-
-      // Cleanup local temp file (warm bucket is now the canonical copy)
-      try {
-        fs.unlinkSync(exportRes.localPath);
-      } catch {
-        // ignore
-      }
+      bytesWarm += outcome.bytesCompressed;
+      rowCount += outcome.rowCount;
     }
 
-    // Step 10: DROP partition
-    await dropPartition(ctlClient, partition.child);
-    await updateManifestActive(ctlClient, manifestId);
+    // DROP gate (fold-in #1): every distinct present date must have a manifest
+    // row in {verified, active}. Keys off dates PRESENT, not the calendar month.
+    const stateRows = await ctlClient.query(
+      `SELECT partition_label, state FROM data_archive_manifest
+        WHERE source_table = $1 AND tier = 'warm' AND partition_label = ANY($2::text[])`,
+      [spec.parent, presentLabels],
+    );
+    const verifiedSet = new Set(
+      stateRows.rows
+        .filter((r) => r.state === 'verified' || r.state === 'active')
+        .map((r) => r.partition_label as string),
+    );
+    const missing = presentLabels.filter((l) => !verifiedSet.has(l));
+    if (missing.length > 0) {
+      throw new Error(
+        `[B75 sweep] DROP gate BLOCKED ${spec.parent}/${partition.partitionLabel}: ` +
+          `${missing.length}/${presentLabels.length} slice(s) not verified: ${missing.slice(0, 6).join(',')}`,
+      );
+    }
+
+    await dropAndMarkActive(ctlClient, partition.child, () =>
+      markLabelsActive(ctlClient, spec.parent, presentLabels),
+    );
 
     return {
       status: 'dropped',
-      bytesHot: stats.bytesHot,
-      bytesWarm: exportRes?.bytesCompressed ?? 0,
-      rowCount: exportRes?.rowCount ?? 0,
+      mode,
+      bytesHot,
+      bytesWarm,
+      rowCount,
+      slices: presentLabels.length,
       durationMs: Date.now() - start,
     };
   } catch (err) {
+    const isChecksumMismatch = err instanceof ChecksumMismatchError;
     return {
       status: 'failed',
-      bytesHot: 0,
+      mode,
+      bytesHot,
       bytesWarm: 0,
       rowCount: 0,
+      slices: 0,
       durationMs: Date.now() - start,
       reason: err instanceof Error ? err.message : String(err),
+      isChecksumMismatch,
     };
   } finally {
-    await exportClient.end().catch(() => {
-      // ignore
+    await exportClient.end().catch(() => {});
+    await ctlClient.end().catch(() => {});
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Failure → system-alert (chunk E). Never let alert-writing mask the sweep error.
+// ───────────────────────────────────────────────────────────────────────────
+
+async function raiseSweepAlert(
+  title: string,
+  body: string,
+  severity: 'warning' | 'critical',
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(), // immediate; dispatcher promotes scheduled→active next tick
+      category: 'breakage',
+      severity,
+      title,
+      body,
+      metadata: { batch: 'B-NEW-47', source: 'b75-retention-sweep', ...metadata },
     });
-    await ctlClient.end().catch(() => {
-      // ignore
-    });
+  } catch (alertErr) {
+    console.error('[B75 sweep] failed to raise system-alert:', alertErr);
   }
 }
 
@@ -452,7 +727,9 @@ async function main(): Promise<void> {
   let bytesFreedTotal = 0;
   let bytesArchivedTotal = 0;
 
-  console.log(`[B75 sweep] started at ${startedAt.toISOString()}`);
+  console.log(
+    `[B75 sweep] started at ${startedAt.toISOString()} slice_threshold_hot_bytes=${cfg.sliceThresholdHotBytes}`,
+  );
 
   for (const spec of B74_TABLES) {
     const retentionDays = cfg.retentionByTable.get(spec.parent)!;
@@ -470,7 +747,9 @@ async function main(): Promise<void> {
 
     if (oldPartitions.length === 0) {
       console.log(
-        `[B75 sweep] ${spec.parent}: no partitions older than ${cutoffMonth.toISOString().slice(0, 10)} (retentionDays=${retentionDays})`,
+        `[B75 sweep] ${spec.parent}: no partitions older than ${cutoffMonth
+          .toISOString()
+          .slice(0, 10)} (retentionDays=${retentionDays})`,
       );
       continue;
     }
@@ -486,19 +765,35 @@ async function main(): Promise<void> {
         bytesFreedTotal += res.bytesHot;
         bytesArchivedTotal += res.bytesWarm;
         console.log(
-          `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: dropped ` +
+          `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: dropped mode=${res.mode} slices=${res.slices} ` +
             `rows=${res.rowCount} bytes_hot=${res.bytesHot} bytes_warm=${res.bytesWarm} ` +
             `compression_ratio=${res.bytesHot && res.bytesWarm ? (res.bytesHot / res.bytesWarm).toFixed(2) : 'n/a'} ` +
             `duration_ms=${res.durationMs}`,
         );
       } else if (res.status === 'skipped') {
-        console.log(
-          `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: skipped (${res.reason})`,
-        );
-      } else if (res.status === 'failed') {
+        console.log(`[B75 sweep] ${spec.parent}/${partition.partitionLabel}: skipped (${res.reason})`);
+      } else {
         partitionsFailed++;
         console.error(
           `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: FAILED — ${res.reason} (duration_ms=${res.durationMs})`,
+        );
+        await raiseSweepAlert(
+          `B75 retention sweep FAILED: ${spec.parent}/${partition.partitionLabel}`,
+          `The nightly storage archive sweep could not move partition ${partition.partitionLabel} of ${spec.parent} ` +
+            `to warm storage. mode=${res.mode}. The hot partition was NOT dropped (data is safe). ` +
+            `Reason: ${res.reason}. ${
+              res.isChecksumMismatch
+                ? 'CHECKSUM MISMATCH = possible data corruption — investigate before retry.'
+                : 'Likely transient; the next nightly run retries from the last verified slice.'
+            }`,
+          res.isChecksumMismatch ? 'critical' : 'warning',
+          {
+            parent: spec.parent,
+            partition_label: partition.partitionLabel,
+            child: partition.child,
+            mode: res.mode,
+            is_checksum_mismatch: Boolean(res.isChecksumMismatch),
+          },
         );
       }
     }
@@ -516,7 +811,14 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error('[B75 sweep] fatal:', err);
+  await raiseSweepAlert(
+    'B75 retention sweep CRASHED',
+    `The nightly storage archive sweep crashed before completing. No partition is left half-dropped ` +
+      `(DROP only happens after verify). Reason: ${err instanceof Error ? err.message : String(err)}`,
+    'critical',
+    { fatal: true },
+  );
   process.exit(1);
 });
