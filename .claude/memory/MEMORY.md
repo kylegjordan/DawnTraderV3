@@ -25,10 +25,14 @@
 
 3. **Wait for Sun-resume verification** — Mon 1 Jun 00:00 UTC. At resume: `weekend_restart` cron fires (next_fire confirmed 2026-06-01T00:00:00.000Z, correctly armed in smoke test) OR poll-reconcile catches up within 30s OR boot-reconcile on next restart. Either path resumes 244 `weekend_suspended` xStock trades → open + scanner cycles resume. Verify before declaring tonight's work done.
 
-**SEQUENCED FOLLOW-UPS (after B-NEW-47):**
+**B-NEW-50 CLOSED 2026-06-01** (#165) — node-cron next-fire readout fix. cron-parser shim (`cron-next-fire.ts` `computeNextFire`); introspection-only bug PROVEN (firing safe; Sun 00:00 UTC resume fired via cron, 244 trades resumed). Commit `6372a2d` + hotfix `63bc69d` (**BUG-2026-06-01-A**: named import of CJS cron-parser crashed prod ESM bundle → default-import; ~3min outage, no trades affected). Staging-verified (smoke 7/7 OK, weekend timers 06-06/06-08), 4 alerts acked, CI green, Langston Step-1/4/8 CONFIRMED. Governance committed. **Spawned RUNNING_ISSUES #168** (CI lacks prod-bundle boot smoke — green CI shipped a boot-crash; add headless-boot CI step).
+
+**B-NEW-47 storage — DESIGN LOCKED, IMPLEMENTATION NEXT (Step 3).** Kyle: fix-then-activate + full workflow autonomous. Langston Step-1 CONCURRED. **Q-2 probe: global Supabase upload cap = 5GB** (10GB→413) → single-object/month blocked → **Option-2 adaptive per-day slicing** (also fixes Q-5 long-snapshot xmin-bloat). Streaming BOTH directions is a HARD prereq (sweep verify re-downloads whole object → OOM on 31GB May partition; 3.7GB RAM box). Invariants (Langston): month is EITHER one `YYYY-MM` object OR N `YYYY-MM-DD` slices never both; DROP-gate keys off DISTINCT date(ts) present (not calendar) + download-verified. B70 sweep runs (root crontab) over a DIFFERENT table set; NO b75 cron = 6 B74 ticker/ohlc tables unbounded (xstock_spot_ticker_snap May=31GB). B2 creds already present; cold stays dry-run (365d). Failure→system-alert THIS batch. Scope: `Scope Files/B_NEW_47_SCOPE.md` §8. Impl chunks A-H.
+
+**SEQUENCED FOLLOW-UPS:**
+- **★ Langston CLI update (Kyle directive 2026-06-01) — IMMEDIATELY AFTER B-NEW-47 + B-NEW-50 close.** Langston now on **base `claude-opus-4-8`** (works). The `claude-opus-4-8[1m]` 1M-context variant throws a thinking-block API error during TOOL-USING tasks on his CLI **2.1.131** (Hetzner 204.168.141.77). FIX: update his Claude Code CLI to latest → then re-switch model string `claude-opus-4-8`→`claude-opus-4-8[1m]` in 3 files (`/usr/local/bin/langston-bridge.py:362`, `langston-alert-handler.sh:82`, `langston-call:38`), restart `langston-bridge.service`, re-verify a tool-using round-trip. Backups at `*.pre-4.8-backup-20260601`. CLAUDE.md §6/§8 say "Opus 4.7" → update to 4.8 in governance.
 - B-NEW-48 (per-class regime, RUNNING_ISSUES #162 conditional on consumer-impact audit at scoping)
-- #165 (node-cron `getNextRun()` Fri-NY-tz bug investigation; small repro batch)
-- #166 (TEC stale-cache fence) — Kyle directive 2026-05-31: defer to AFTER all Phase 24 xStocks calibration work completes. NOT before Phase 19 active-paper restart matters, so timing is OK.
+- #166 (TEC stale-cache fence) — Kyle directive 2026-05-31: defer to AFTER all Phase 24 xStocks calibration work completes.
 - B-XSTOCK-CALIB B.2 + remaining xStock calibration
 
 **TODAY'S 3 BATCHES + 1 HOTFIX (all CLOSED + governance committed):**

@@ -1826,4 +1826,19 @@ test('producer output satisfies consumer contract', () => {
 
 ---
 
+## §4.27 — Production-ESM-bundle verification for NEW external dependency imports (B-NEW-50 / BUG-2026-06-01-A, 2026-06-01)
+
+**Origin:** B-NEW-50 added `cron-parser` and used a NAMED import — `import { parseExpression } from 'cron-parser'`. It passed `tsc`, `vitest`, CI **Build (esbuild)**, AND CI **Docker Build** — all four gates green — then HARD-CRASHED staging at boot: `SyntaxError: Named export 'parseExpression' not found`. `cron-parser` is CommonJS-only; the production bundle is `esbuild --format=esm --packages=external`, and Node's ESM loader cannot statically detect a CJS module's named exports. ~3-min staging outage.
+
+**The trap:** vitest's CJS↔ESM interop synthesizes named exports, and CI Build only *bundles* (never boots), so the failure is invisible to every green gate and only surfaces at deploy. This is generic to **any named import of a CommonJS-only package**, not specific to cron-parser.
+
+**Rule:** when a batch adds a NEW external dependency:
+1. **Default-import CommonJS packages**, then destructure: `import pkg from 'cjs-pkg'; const { fn } = pkg;` — never `import { fn } from 'cjs-pkg'` unless the package ships real ESM named exports.
+2. **Validate against Node's ESM loader before deploy** — a 5-line `.mjs` that imports the package exactly as the code does and calls the function (e.g. `scratch/cronparser-esm-test.mjs`). tsc+vitest+CI-green is necessary but NOT sufficient for ESM-bundle runtime.
+3. Structural backstop (RUNNING_ISSUES #168): a CI step that boots the actual production esbuild bundle headless + requires it to reach "listening" / emit the `[CRON-ARM-SMOKE] aggregate=` boot line before CI is green.
+
+**Anti-pattern:** treating "all 4 CI checks green" as proof the deployable artifact runs. CI builds the artifact; it does not execute it.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*

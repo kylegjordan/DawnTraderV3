@@ -2,6 +2,17 @@
 
 ---
 
+## CLOSURE-2026-06-01 — B-NEW-50: node-cron next-fire readout fix (RUNNING_ISSUES #165) + BUG-2026-06-01-A ESM-bundle hotfix
+
+**Risk class:** RESOLVED (observability-only; firing path untouched; active trading OFF). Commit `6372a2d` + hotfix `63bc69d`; staging-verified; Langston Step-1/4/8 CONFIRMED.
+
+- **#165 root cause (proven):** node-cron 4.2.1 `MatcherWalker.matchNext()` (matcher-walker.js:84-89) advances the weekday-reconcile loop by a whole YEAR per iteration → any day-of-week schedule whose next hit is ≥~2 days out returns the next Jan-1st landing on that weekday (Fri→2027, Tue→2030…), in BOTH NY and UTC. Broader than the original "Friday-NY" framing. **Introspection-only** — firing uses `TimeMatcher.match(now)` + a 24h heartbeat-delay cap (runner.js:178) and is correct + self-correcting (live dow-fire test + the Sun 00:00 UTC `weekend_restart` firing via cron both confirm). The May 29 non-fire was the 30h outage, not this bug.
+- **Fix = cron-parser shim:** new `server/services/cron-next-fire.ts` `computeNextFire()` (failure-safe, single-entry-point) backed by `cron-parser` (promoted to direct dep @4.9.0). `cron-arm-logger.ts` + `cron-arm-smoke-test.ts` classify/log off it; node-cron's raw `getNextRun()` retained ONLY as a labelled `raw_nodecron_next=… [UNTRUSTED ncv=4.2.1]` diagnostic (drift detector). node-cron scheduling/firing untouched. 8 regression-lock tests (5+6-field, NY+UTC, tz-fallback, bad-expr) + arm-logger/smoke-test updated. tsc 493 baseline; 31/31 cron + 19/19 lifecycle tests green.
+
+- **BUG-2026-06-01-A — ESM-bundle named-import crash (deploy hotfix):** the first deploy (`6372a2d`) crash-looped staging at boot: `SyntaxError: Named export 'parseExpression' not found` — `import { parseExpression } from 'cron-parser'` (a CommonJS-only package) is unresolvable as a named ESM import in the production `esbuild --format=esm --packages=external` bundle (Node's ESM loader can't statically detect CJS named exports). It passed tsc + vitest + CI Build + Docker Build (none execute the bundle). Hotfix `63bc69d`: `import cronParser from 'cron-parser'; const { parseExpression } = cronParser;` — validated against Node's ESM loader directly (`scratch/cronparser-esm-test.mjs`). ~3-min staging outage; NO trades affected (Sunday resume had already fired at 00:00 UTC under the prior working code). Structural pipeline gap logged as RUNNING_ISSUES #168 + verification-gap learning in ASSET_CLASS_ONBOARDING_WORKFLOW.
+
+---
+
 ## CLOSURE-2026-05-27 (evening) — B79.0n.EXECUTION: TradeClosedEvent additive assetClass + position-record SSOT cleanup + diagnostic endpoint v2 nested-by-layer payload
 
 **Risk class:** RESOLVED (last per-class plumbing surface before WIRE-IN). 3 surgical changes plus 1 new test file land the additive `assetClass?: string` field on `TradeClosedEvent` (same C-7 doctrine as `PromotionEvent.assetClass` from B79.0n.RTB), one outcomeFeedback hook drift cleanup, and one diagnostic endpoint payload restructure. Sub-batch 13 of 16 in B79.0n umbrella v4 arc — **LAST per-class plumbing sub-batch before WIRE-IN (#14, Phase 19a)** per Kyle directive 2026-05-27.
