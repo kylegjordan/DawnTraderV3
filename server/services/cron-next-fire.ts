@@ -26,7 +26,13 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import { parseExpression } from 'cron-parser';
+// cron-parser is a CommonJS module. A NAMED import (`import { parseExpression }`)
+// typechecks + passes vitest but FAILS at runtime in the production esbuild
+// `--format=esm --packages=external` bundle: Node's ESM loader cannot statically
+// detect CJS named exports → `SyntaxError: Named export 'parseExpression' not found`.
+// Default-import the module object, then read the function off it. (B-NEW-50 hotfix.)
+import cronParser from 'cron-parser';
+const { parseExpression } = cronParser;
 
 /**
  * Compute the next fire time for a cron expression in a given timezone.
