@@ -6,7 +6,8 @@
 
 ## SESSION-START PROTOCOL
 
-1. Read `DawnTraderV3/CLAUDE.md` (esp. §1 plain-language strengthened 2026-05-28; §3.3 Phase-24; §5 #15 NO PATCHES + #19 CI per-batch; §6.5.0.a embedded-diff + no-gdrive; §7.1 mirror; §10.5 alerts).
+1. Read `DawnTraderV3/CLAUDE.md` (esp. §1 plain-language strengthened 2026-05-28; §3.3 Phase-24; §5 #15 NO PATCHES + #19 CI per-batch; §6.5.0.a embedded-diff + no-gdrive; **§7.1 🔒SET-IN-STONE storage workflow**; §10.5 alerts).
+   - **🔒 §7.1 STORAGE WORKFLOW (SET IN STONE, Kyle 2026-06-01):** Google Drive folder = SOURCE OF TRUTH; edit there → copy changed files to `C:\dev` test bench → run `npx tsc --noEmit`/`npx vitest run` → when green, **commit + push to GitHub FROM the Google Drive folder** → GitHub → staging. **NEVER pull GitHub → Google Drive. NEVER push to GitHub from `C:\dev`.** Only allowed pull: GitHub → `C:\dev` bench. Batch-close gate: from Google Drive, `git rev-list --count HEAD..origin = 0` before any batch is done. (MEMORY persistence copy + all governance commit FROM the Google Drive folder, NOT the bench.)
 2. Read this file.
 3. **§10.5 alerts check (every turn):** `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"`.
 4. **Telegram poll:** `ssh root@204.168.141.77 "tail -30 /var/log/cc-bridge-inbox.jsonl"`.
