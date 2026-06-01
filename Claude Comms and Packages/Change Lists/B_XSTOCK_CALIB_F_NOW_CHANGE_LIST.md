@@ -121,3 +121,34 @@ The Q1/Q4 fail-closed warning is captured in the function's doc comment (and goe
 A1. Code-level ACK on the diff (writer null-safety, aggregator gating, migration).
 A2. The naming nit (`_2026_05` in June) — it's Kyle's exact string; I'm keeping it and flagging to Kyle. OK to proceed, or do you want it raised as a blocker?
 A3. Anything else before I push + run CI + deploy.
+
+---
+
+## REVISION (commit `e87bfbce1`) — opt-in exclusion + A3-1 const fold
+
+**Why:** my Step-2 pre-audit missed a downstream impact — the aggregator feeds the LIVE xStocks-tab "Exit Strategy Ablation" panel via `/api/xstocks/exit-strategy-ablation`, so the as-built unconditional exclusion would have emptied that panel (all 1,432 xStock alternates are pre-cal). Kyle reviewed and chose **keep the live panel showing all trades; apply the exclusion only in the future Phase-25 scoring path.**
+
+**Aggregator now (opt-in, default-off):**
+```ts
+export const PRE_CALIBRATION_XSTOCK_TAG = 'pre_calibration_xstock_2026_05'; // A3-1 single TS source
+
+export function buildCalibrationClause(assetClass: string | null, excludePreCalibration: boolean) {
+  return (excludePreCalibration && assetClass === 'xstock_spot')
+    ? sql`AND calibration_state IS DISTINCT FROM ${PRE_CALIBRATION_XSTOCK_TAG}`  // bound param, no inline-literal drift
+    : sql``;
+}
+
+export async function computeExitStrategyAblation(
+  window, regimeFilter = null, assetClass = null,
+  opts: { excludePreCalibration?: boolean } = {},   // NEW
+) { ... const calibrationClause = buildCalibrationClause(assetClass, opts.excludePreCalibration ?? false); ... }
+```
+- **Both live route callers UNCHANGED** (routes.ts:7868 + 8757 still pass 3 args) → `opts={}` → `excludePreCalibration=false` → **no exclusion** → live panels byte-identical to pre-F-NOW.
+- The exclusion is now **INERT until a Phase-25 caller passes `excludePreCalibration:true`** → declared as scaffolding per CLAUDE.md §9.1 in the completion report.
+- Migration carries a cross-ref comment to `PRE_CALIBRATION_XSTOCK_TAG` (the literal must match by hand since `.sql` can't import).
+
+**Unchanged:** stamping (column + NOT NULL DEFAULT), 17,184-row backfill, writer propagation (`resolveCalibrationState` + persistExits) — all still functional now. The whole point (Phase 25 *can* exclude) is delivered; only the *application* of the filter is deferred to its real consumer.
+
+**Verification:** tsc 493 (0 net new), **10/10** tests pass (buildCalibrationClause now covers xstock+true→excludes, xstock+false→live default→no clause, null/crypto+true→no clause; resolveCalibrationState unchanged).
+
+**Re-confirm ask:** this is strictly-safer than what you ACK'd (default-off, live behavior preserved) + your A3-1 fold. OK to push, or any concern with the opt-in shape?
