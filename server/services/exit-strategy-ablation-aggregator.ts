@@ -56,6 +56,26 @@ const WINDOW_INTERVALS: Record<AblationWindow, string> = {
   cohort_latest: '24 hours', // alias — used same as 24h until cohort logic added
 };
 
+/**
+ * B-XSTOCK-CALIB F-NOW (2026-06-01): pre-calibration exclusion clause. When the
+ * xStocks tab scopes to xstock_spot, exclude the pre-calibration cohort so Phase
+ * 25 closed-outcome evaluation doesn't mix un-calibrated noise with calibrated
+ * signal. Only fires for xstock_spot — the /api/analytics view (assetClass=null)
+ * and the crypto path are byte-identical to pre-F-NOW. `IS DISTINCT FROM` keeps
+ * NULL (untagged / post-calibration) rows INCLUDED. Exported for unit test.
+ *
+ * NOTE (Langston Q1/Q4 fold): every calibration_state read MUST be asset-class-
+ * scoped. crypto rows carry the literal default (mixed NULL pre-deploy /
+ * 'pre_calibration_xstock_2026_05' post-deploy) and are MEANINGLESS noise — a
+ * future UNSCOPED `IS DISTINCT FROM 'pre_calibration_xstock_2026_05'` would
+ * silently fail-CLOSED and drop crypto. Keep this gate asset-class-scoped.
+ */
+export function buildCalibrationClause(assetClass: string | null) {
+  return assetClass === 'xstock_spot'
+    ? sql`AND calibration_state IS DISTINCT FROM 'pre_calibration_xstock_2026_05'`
+    : sql``;
+}
+
 export async function computeExitStrategyAblation(
   window: AblationWindow,
   regimeFilter: string | null = null,
@@ -72,6 +92,7 @@ export async function computeExitStrategyAblation(
   const assetClassClause = assetClass
     ? sql`AND asset_class = ${assetClass}`
     : sql``;
+  const calibrationClause = buildCalibrationClause(assetClass);
 
   // Per-variant aggregation
   const variantRows = await db.execute(sql`
@@ -90,6 +111,7 @@ export async function computeExitStrategyAblation(
       AND virtual_pnl_pct IS NOT NULL
       ${regimeClause}
       ${assetClassClause}
+      ${calibrationClause}
     GROUP BY variant_id, variant_name
     ORDER BY variant_id
   `);
@@ -101,6 +123,7 @@ export async function computeExitStrategyAblation(
     WHERE created_at >= ${windowStart}
       ${regimeClause}
       ${assetClassClause}
+      ${calibrationClause}
     GROUP BY variant_id, virtual_exit_reason
   `);
 
@@ -118,6 +141,7 @@ export async function computeExitStrategyAblation(
     WHERE created_at >= ${windowStart}
       ${regimeClause}
       ${assetClassClause}
+      ${calibrationClause}
   `);
   const totalTrades = (tradeCountRow.rows[0] as any)?.n ?? 0;
 

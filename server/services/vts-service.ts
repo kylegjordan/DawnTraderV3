@@ -977,6 +977,11 @@ export class VTSService extends EventEmitter {
           : 'TIMEOUT';
         replayAndPersist({
           tradeId: trade.id,
+          // B-XSTOCK-CALIB F-NOW (2026-06-01): thread the ORIGINAL open id so
+          // persistExits can mirror the parent's calibration_state. `trade.id`
+          // above is rebuilt from symbol+exitTime (:816) and is NOT the open id;
+          // originalSignalId IS (vts-runner.ts:2448 → vts_open_trades.id).
+          vtsOpenTradeId: tradeData.originalSignalId,
           tradeSource: 'vts',
           symbol: tradeData.symbol,
           // B79.0m.b2: thread assetClass so xstock B73 replay reads from

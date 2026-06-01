@@ -42,6 +42,13 @@ import type { AssetClass } from '../../shared/asset-classes.js';
 export interface ReplayContext {
   tradeId: string;
   tradeSource: 'paper' | 'vts';
+  // B-XSTOCK-CALIB F-NOW (2026-06-01): the ORIGINAL open-trade id (=
+  // vts_open_trades.id = originalSignalId). This is NOT `tradeId` — `tradeId`
+  // is rebuilt from symbol + exit-time in vts-service.ts persistRealPriceTrade
+  // (:816), so it never equals the open id. persistExits reads the parent
+  // trade's calibration_state via this id. Undefined for paper-sourced replays
+  // (VTS-only) → calibration_state NULL.
+  vtsOpenTradeId?: string;
   symbol: string;
   // BATCH_82 (2026-05-14): non-nullable, typed AssetClass — REQUIRED.
   // Pre-B82 was `assetClass?: string` with `?? 'crypto_spot'` fallbacks at the
@@ -230,6 +237,36 @@ function computeBarDerivedAtr(preEntryBars: OHLCData[]): number {
 }
 
 /**
+ * B-XSTOCK-CALIB F-NOW (2026-06-01): resolve the parent trade's calibration_state
+ * from vts_open_trades by the ORIGINAL open id (= originalSignalId), NOT the
+ * exit-time-rebuilt trade_id (vts-service.ts:816). Returns null when:
+ *   - vtsOpenTradeId is undefined (paper-sourced replay — VTS-only), OR
+ *   - the parent row is missing/GC'd, OR
+ *   - the lookup throws.
+ * null → the alternates row stays untagged → INCLUDED by the aggregator (only the
+ * pre-calibration cohort is ever excluded). Exported so the resolved value is
+ * directly assertable (Langston Q2 req 3 — prove the value lands, not just SQL).
+ */
+export async function resolveCalibrationState(
+  vtsOpenTradeId: string | undefined,
+): Promise<string | null> {
+  if (!vtsOpenTradeId) return null;
+  try {
+    const cr: any = await db.execute(sql`
+      SELECT calibration_state FROM vts_open_trades WHERE id = ${vtsOpenTradeId} LIMIT 1
+    `);
+    const crRows: any[] = cr.rows ?? cr;
+    return crRows?.[0]?.calibration_state ?? null;
+  } catch (err) {
+    console.warn(
+      `[B73][exit-replay] calibration_state lookup failed for vtsOpenTradeId=${vtsOpenTradeId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+/**
  * Persist 12 variant exits to exit_strategy_alternates.
  * Uses ON CONFLICT DO NOTHING so re-replay (e.g., bug fix) doesn't duplicate.
  */
@@ -254,6 +291,12 @@ async function persistExits(
     metadata: e.metadata,
   }));
 
+  // B-XSTOCK-CALIB F-NOW (2026-06-01): resolve the parent trade's calibration_state
+  // ONCE per close (Langston Q2 micro-opt — not one sub-select per variant row)
+  // and stamp it on all 12 alternates rows. See resolveCalibrationState() above
+  // for the null semantics and the originalSignalId-vs-trade_id linkage.
+  const calibrationState = await resolveCalibrationState(ctx.vtsOpenTradeId);
+
   // Drizzle-style raw SQL — keep it simple given limited ORM mapping for the new table
   for (const r of rows) {
     await db.execute(sql`
@@ -262,13 +305,13 @@ async function persistExits(
          virtual_exit_price, virtual_exit_reason, virtual_exit_time,
          virtual_pnl_pct, virtual_duration_min, baseline_pnl_pct,
          regime, strategy, metadata,
-         exchange, asset_class)
+         exchange, asset_class, calibration_state)
       VALUES
         (${r.trade_id}, ${r.trade_source}, ${r.variant_id}, ${r.variant_name},
          ${r.virtual_exit_price}, ${r.virtual_exit_reason}, ${r.virtual_exit_time},
          ${r.virtual_pnl_pct}, ${r.virtual_duration_min}, ${r.baseline_pnl_pct},
          ${r.regime}, ${r.strategy}, ${JSON.stringify(r.metadata)}::jsonb,
-         'kraken', ${ctx.assetClass})
+         'kraken', ${ctx.assetClass}, ${calibrationState})
       ON CONFLICT (trade_id, variant_id) DO NOTHING
     `);
   }
