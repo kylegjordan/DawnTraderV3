@@ -1,6 +1,8 @@
 # B.2 — xStock Liquidity/Depth Gate Recalibration (lq_min ↔ min_depth coordination) + Volume-Gate Disposition
 
-**Phase:** 24 (xStock calibration arc). **Sub-batch:** B.2 (lead of the remaining Phase-24 calibrations). **Mode:** active trading OFF — VTS/passive only; **archive-replay, NO trade outcomes**. **Asset class:** `xstock_spot` only (crypto untouched). **Predecessors:** B.0 baseline (numbers report) + B-CALSCORE/.b (live scoreboard, 64 rows). **Drafted:** 2026-06-02 (CC). **Step-1 reviewer:** Langston.
+**Phase:** 24 (xStock calibration arc). **Sub-batch:** B.2 (lead of the remaining Phase-24 calibrations). **Mode:** active trading OFF — VTS/passive only; **archive-replay, NO trade outcomes**. **Asset class:** `xstock_spot` only (crypto untouched). **Predecessors:** B.0 baseline (numbers report) + B-CALSCORE/.b (live scoreboard, 64 rows). **Drafted:** 2026-06-02 (CC). **Step-1 reviewer:** Langston — **ACK to proceed to Step 2/3** (conditions A–E + Q-refinements absorbed below).
+
+> 🚨 **B.2 CHANGES NOTHING LIVE (§9.1).** B.2 fills the calibration scoreboard's PLANNED side only (status `proposed`). NO live threshold edit ships. The liquidity-gate ↔ depth-floor disagreement PERSISTS in production until a later point-tighten APPLIES it. B.2 *documents + proposes*; the tighten *applies*. Acceptable because active trading is OFF.
 
 ---
 
@@ -28,6 +30,16 @@ The LQ gate and the min_depth gate read the **same** rolling-median depth data b
 5. **Schedule the point-tighten** (a system alert / follow-on B.2-tighten) for after **≥5 forward RTH sessions** of depth accumulate (or a deliberate cold-rehydrate of May), at which point lq_min flips to a point value and status → `applied`.
 6. **No crypto regression:** all edits confined to the xStock-forked modules + `xstock_spot` screener_filters rows; shared `imf-metrics.ts` volume-LQ and `fx5-scanner.ts` IMF byte-unchanged.
 
+## Langston Step-1 review — ABSORBED (2026-06-02; ACK to proceed to Step 2/3)
+- **A — Target reject band = the decision criterion (REQUIRED before any threshold proposal).** The sweep must recalibrate toward a STATED target, not just produce a table. Directional intent (provisional): the current ~60.44% per-family reject (34,285/56,725) is judged **too aggressive** for a curated ~485-name xStock universe — we want MORE tradeable names in the funnel. The exact target RTH reject band derives from the sweep's ask-depth distribution + Kyle's confirmation of how many tradeable names he wants (domain call — see Open Questions A). Objective-4 range bounds DERIVE from that band; they are not picked.
+- **B — Name a successor for a CORRECT volume gate (REQUIRED; Kyle's "liquidity AND volume").** Depth ≠ volume: a name can have deep books yet near-zero traded flow (stale quotes). Keep-inert for `min_volume` is correct (wrong instrument), but it is only complete WITH a named follow-on for a correct volume gate (right instrument = xStock-TOKEN traded volume). B.2 deliverable: (i) investigate whether the Kraken ws-equities feed exposes token-level traded volume; (ii) if yes → name a Phase-25/B.x follow-on to build a correct volume gate; (iii) if no → document that volume screening is structurally unavailable for xStock and depth is the permanent proxy. No "inert-forever with no successor."
+- **C — Session-awareness decision (explicit).** xStock depth collapses outside US RTH (24/5 market, §5.17). Decide + record: a single 24h lq_min (owning the off-hours behavior) vs session-aware thresholds. The sweep segments RTH vs off-hours to expose the gap; the decision is stated in the completion report.
+- **D — Model-validation tolerance = ±3pp, named up front.** lq_min=43 must reproduce the live ~60.44% per-family reject within **±3 percentage points**. The artifact discloses per-segment SAMPLE SIZE (off-hours may be too sparse to trust with only 2 hot sessions).
+- **E — B.2 changes nothing live (see top banner, §9.1).** Planned-side `proposed` only; the LQ↔min_depth disagreement persists in production until the point-tighten applies it.
+- **Q1 — derived-linkage invariant.** Keep LQ ask-only + min_depth two-way complementary, BUT write the min_depth floor as a DERIVED, quantified sub-threshold of the recalibrated lq_min (e.g. min_depth two-way ≈ 25% of the lq_min-implied ask-depth dollar value) — an invariant, not two independently-floating numbers.
+- **Q2 — schedule the tighten on RTH-SESSION COUNT, not calendar days.** "≥5 forward RTH sessions" ≠ "3–5 days" (weekends have no RTH; from Mon 2026-06-02, five RTH sessions land ~2026-06-09). The point-tighten alert fires on accumulated RTH-session count (verified by distinct-trading-day count in the depth table at fire time), not a fixed calendar date.
+- **Q4 — strong_trend ordering-invariant guard.** Leave lq_min 30/35 as-is, BUT if the proposed main lq_min lower bound ≤ 35, revisit 30/35 in the same breath so the deliberately-permissive lanes don't invert into stricter-than-standard.
+
 ## Data-readiness & the one decision (point-vs-range)
 **Only 2 distinct sessions of depth data exist** (May cold-evicted). Setting a final lq_min point now would be a single-window decision violating rule #13's spirit. **Recommendation (proceed unless redirected):** ship B.2 with a **bounded lq_min range** now (objective 4) + the coordination rule + the volume disposition + the sweep harness, and **tighten to a point in ~3–5 days** as forward sessions accumulate (objective 5). **Forward-accumulate, do NOT rehydrate May from cold** (cold-rotator is dry-run; forward is cleaner). Alternative Kyle may choose: wait and run the full point-target recalibration in one shot once ≥5 sessions exist.
 
@@ -50,8 +62,9 @@ The LQ gate and the min_depth gate read the **same** rolling-median depth data b
 - **ORB volume** — B.3/D-audit.
 - No P&L / win-loss (Phase 25).
 
-## Open questions for Kyle/Langston
-1. Coordination direction: keep LQ ask-only + min_depth two-way complementary (recommended) vs unify the statistic (monotonic)?
-2. Point-vs-range: ship bounded range now + tighten in ~3–5 days (recommended) vs wait for ≥5 sessions?
-3. min_volume: keep-inert + Phase-16 register (recommended) vs formally retire now?
-4. strong_trend lanes (lq_min 30/35): fold into recalibration or leave as-is (barely filter by design)?
+## Open questions — Q1–Q4 RESOLVED with Langston Step-1; A & B are the remaining Kyle calls
+**Resolved with Langston (consensus):** Q1 keep complementary + derived-linkage invariant; Q2 range-now + forward-accumulate, schedule on RTH-session count; Q3 keep-inert + Phase-16 register + named successor; Q4 leave 30/35 with the ordering-invariant guard.
+
+**For Kyle (domain calls — I will bring these WITH the sweep data so they're concrete picks, not abstract):**
+- **(A) Target reject band / how many tradeable names.** Is ~60% per-family liquidity reject too aggressive for the ~485-name xStock universe? My read: yes — we likely want more names tradeable. What reject band do you want (e.g. admit ~70–80%, i.e. reject ~20–30%)? I'll bring the actual ask-depth distribution so it's a concrete number.
+- **(B) Volume-gate intent.** Do you want a CORRECT volume gate eventually (right instrument = token traded volume) once we confirm whether the feed exposes it — or is order-book depth the permanent liquidity screen for xStock? I'll report whether the feed carries token-level volume.
