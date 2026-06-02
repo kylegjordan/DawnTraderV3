@@ -36,6 +36,21 @@ At lq_min=43 the sweep rejects 66.70% (RTH-clock) / 56.50% (off-hours) of observ
 ## ⚠️ HONESTY CAVEAT — no true US-RTH session captured yet
 The window ends 2026-06-02 10:20 UTC, **before Monday's true US RTH (13:30 UTC) begins**. So the "RTH-clock" segment is entirely **Sunday 06-01 13:30–20:00 UTC — US markets CLOSED** (xStocks trade 24/5, but that's not real RTH). **We have ZERO true-RTH depth sessions so far.** The distribution SHAPE and the "43 is too strict" conclusion are robust (visible in every segment), but the precise range and the RTH/off-hours split are provisional until real RTH sessions accumulate forward (per Q2: tighten on RTH-session count, ~from 2026-06-09). This is exactly why B.2 ships a RANGE, not a point.
 
+## Langston range-read (2026-06-02) — ENDORSED 35–40 + 4 guardrails (ABSORBED)
+Langston endorsed the range and ship-now-tighten-later. Four guardrails, all absorbed:
+1. **Sizing-anchored lower bound.** Don't go below ~38 until the point is anchored to the actual Phase-25 position size — below ~38 (~$3–6k) a large fill could move the book. **Provisional center firms to 38–40** until sizing is known.
+2. **Trigger the point-tighten on TRUE-RTH-session count (≥5 real RTH sessions), not a calendar date** — a holiday-thinned week gives fewer real sessions than 06-09 implies.
+3. **Relational strong_trend, not hardcoded.** `strong_trend_lq = max(30, main_lower − 5)` — preserves the deliberately-permissive ordering if the main bound moves; the `max(30,…)` (~$1k) floor stops a strong-trend signal dragging into a genuinely-untradeable book.
+4. **Pre-APPLY checks (gate the tighten, not the B.2 proposal):** (a) asset-class-key verify; (b) load check — admitted names jump 149→360–467 (**2.4–3.1×**) into signal-eval/VTS; check vs CPX22 + 1.3× load gate before APPLY; (c) grep xStock scoring for hardcoded `43`.
+
+## Verification follow-ups (Langston guardrails 4a/4c + min_depth bid-side)
+- **(4c) Hardcoded `43`: CLEAR.** grep of `server/asset_classes/xstock_spot` for `\b43\b` → only a code comment ("see import at line 43"); no threshold hardcode. lq_min is DB-resolved from `screener_filters` (config.lqMin).
+- **(4a) Asset-class-keyed: CONFIRMED.** lq_min lives in `screener_filters` per `(mode, asset_class='xstock_spot', filter_path)`; crypto LQ is a SEPARATE volume-based formula (`imf-metrics.ts`), untouched. The B.2 proposal edits only xstock_spot rows → crypto's gate cannot leak.
+- **min_depth bid-side check (Langston Q1 — books are NOT assumed symmetric, now measured):** per symbol×20-min median depth — ask p50 $16,472 / bid p50 $15,860 (**bid only ~4% thinner**); bid is the binding (thinner) side **63.90%** of the time; two-way-min p50 $12,601. Two-way reject at the current floors: **$2,000 → 9.40%**, **$5,000 → 21.24%**. **Reading:** books are near-symmetric, so the ask-derived ~25% linkage holds; the **$2,000 vts floor is a coherent thin-book catch** (rejects the genuinely-thin 9.4%, sits below the lq_min-38 ask-implied $6.3k). The **$5,000 active floor (21.24%) is the tighter one — flag "revisit at the active-trading flip (sub-batch 18 / Phase 19)," do NOT block B.2** (active dormant).
+
+## Ledger-fill note (denominator — resolve in Step-4 with Langston)
+The lq_min current_result is a per-family LQ-reject (34,285/56,725, 3-week eval window); the depth sweep yields per-(symbol×bucket) pass-rate / names-admitted over the 2-day depth window — a DIFFERENT denominator (Langston D / synthesis open-q). Since the target is a RANGE and the data is pre-true-RTH, **B.2 fills `planned_value`='35–40 (proposed; point at tighten)', `status`='proposed', `planned_sub_batch`='B.2', and leaves `planned_result` em-dash until the point-tighten produces a denominator-matched number** (after true-RTH data). Confirm this with Langston in the Step-4 migration review.
+
 ---
 
 ## Reproducible SQL (run on staging via `psql -f`)
