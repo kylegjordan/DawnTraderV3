@@ -1875,4 +1875,20 @@ The B.0 pre-calibration baseline (a read-only numbers report of every xStock set
 
 ---
 
+## §4.28 — VTS observability-field plumbing: the 5-site chain (B.2.UI, 2026-06-02)
+
+Adding a per-trade observability field that must appear on BOTH the Open AND Closed Simulated Trades tables (e.g. B.2.UI's `entryLiquidityValue`/`entryLiquidityKind` — xStock ask-depth USD vs crypto 24h coin-volume) requires touching **five sites**, and missing any one **silently degrades to "—" with NO tsc error** (the persisted closed-trade record is cast `as any`, so the compiler won't catch a dropped or mistyped field on the write side):
+
+1. **Capture at trade-open** — set the field at each asset-class open site (xStock: the depth already in scope at the `registerOpenVtsTrade` call in `eval-cycle.ts`; crypto: `priceData.volume24h` in the vts-runner inline builder, class-guarded so neither class picks up the other's kind).
+2. **Open read-feed** — add the field to BOTH the `getOpenVirtualTradesForML` return TYPE and its push object (`vts-runner.ts`), or the Open table never sees it.
+3. **Close-copy** — copy the field from the in-memory open trade into the `persistRealPriceTrade({...})` argument (`vts-runner.ts`).
+4. **JSONL persist-write (the load-bearing, easily-missed site)** — `vts-service.persistRealPriceTrade` builds the closed `VirtualTrade` by **explicit field-mapping, not a spread**, and `logTrade()` writes THAT object to the JSONL. Add the field to BOTH the parameter type AND the persisted record (`tradeData.x ?? null`). Without this, site 5 reads nothing.
+5. **Closed read-feed whitelist** — add the field to BOTH the `getClosedVTSTradesFromLogs` return type AND its per-trade mapped object (`export-csv.ts`), with `typeof` guards.
+
+**Detection technique that works here:** because the project carries a large tsc baseline (~493 errors) and the `as any` write hides field errors, the reliable check is a **scoped before/after tsc diff** — `git stash` to origin HEAD, capture errors for the changed files, restore, re-capture, and `comm` the normalized sets. A correctly-plumbed additive shows whole-project count unchanged; a missing site shows exactly one new excess-property error pointing at the gap (this is how B.2.UI's missing site-4 param-type was caught before push). And the final proof is a **live-feed data check, not just tsc**: after deploy, confirm a FRESH post-deploy open carries a non-null value of the correct kind for EACH asset class (pre-deploy trades correctly read "—"; there is no backfill).
+
+**Frontend mirror:** the cell formatter must be asset-aware off `entryLiquidityKind` (not asset_class alone), and the table's empty-state `colSpan` must be bumped per added column.
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
