@@ -113,4 +113,26 @@ B3.1 is large enough to phase; proposed internal structure (each its own Langsto
 
 ---
 
-*Scope v1. Calibration basis = live/forming-bar telemetry (B.3 decision). Foundation: `B_3_REGIME_AUDIT_REPORT.md` + live per-strategy map. Awaiting Langston Step-1 ACK before building B3.1a. Active trading OFF.*
+---
+
+## §8 — Langston Step-1 ACK + LOCKED methodology conditions (2026-06-03)
+
+Langston ACK'd B3.1a to build conditioned on the following (all accepted — they fix real holes in the win-proxy; absorbed as binding methodology, superseding §2/§5 where they differ):
+
+**Win-proxy correctness fixes (must ship in B3.1a):**
+1. **EXCESS return, not raw (THE critical fix).** xStocks share underlying-equity/SPY/sector beta — a raw forward-return test measures market drift, not gate skill (accept + reject buckets both look like winners in an up-window). The discrimination metric is **forward return minus a universe (or sector) base rate over the same window**; report the base rate alongside. De-meaning against the universe is mandatory, not optional; RTH-segmentation does not substitute.
+2. **No look-ahead at bar-0.** `signal_eval_archive` has no decision-price column → reconstruct bar-0 from `captured_at` against **`xstock_spot_ohlc_1m`** (exists) to the decision minute, and **start the forward measurement at bar +1** (not the 60m decision-bar close, which leaks ≤60min). First check whether `features` JSON carries the decision-time quote — use it as bar-0 if present.
+3. **Reached-G bucketing.** detect short-circuits at the first failing gate; the per-gate reason is the terminal one. For gate G, the only clean test is **among candidates that REACHED G: passed-G vs rejected-at-G** — NOT vs final admits (which conflates G with downstream gates). Reconstruct "reached G" from the terminal reason + the known per-strategy gate ORDER (confirm `gate_decision` records the ordered trace, else derive from detect-code order).
+4. **L1 only for PURE-FILTER gates (hard rule).** Rejected candidates have no entry price; entry-timing gates (vwap_pullback, vwap_bounce, breakout, range_trade, abcd_long, inside_bar_reversal, morning_star, pivot_shift — anything upstream of a conditional entry) must use **L2** (reconstruct entry/stop/target, simulate hit-ordering on 1m bars). L1 (decision-bar forward return) is valid only for pure-filter gates (`indicator_filter` on sma_trend_ride/mean_reversion; score/regime gates).
+5. **Path-dependency + session-clipping.** Endpoint return mislabels target-then-revert / stop-then-recover → L2 hit-ordering (1m) for any stop/target geometry. Forward windows **must not span closed xStock sessions** (overnight/weekend gaps); clip to session, holiday-aware.
+6. **Verdict = rolling-window CONSISTENCY (multiple-comparisons guard).** ~10 strategies × gates × horizons = dozens of tests; some separate by chance. A gate is "proven-wrong" only on **consistent failure across rolling windows** (rule #13), not one window's number.
+7. **Use realized VTS outcomes for the admit bucket.** `exit_decision_archive` carries real `entry_price`/`exit_price` for VTS trades that ran — cleaner than the proxy for admits, and mitigates the thin-admit weakness. Cross-check proxy vs realized; divergence is itself a finding.
+8. **Capture-coverage check FIRST.** The 1.8M `no_pattern` (reject_stage `strategy_internal`) rows are DROPPED when `signalEvalPreFilterEnabled` is OFF (`signal-eval-archiver.ts:76-82`). Confirm the kill-switch was ON across the full 7d window before trusting any reject count — a capture gap silently skews every discrimination test.
+
+**Q-answers (locked):** Q1 — fixed horizons (robustness) + strategy nominal hold (primary verdict); measure from bar+1; report as excess. Q2 — **rank-based separation (AUC / Mann-Whitney) as PRIMARY** (no win-threshold, tail-robust) + mean AND median + n per bucket, base-rate-adjusted. Q3 — L2 for the 8 entry-conditional strategies listed; L1 for pure-filter. Q4 — depth-delta (top-of-book only, label honestly; substrate = `xstock_spot_ticker_snap` bid_qty/ask_qty) but **validate depth-delta's OWN discrimination in B3.1a before adopting**; if it fails, REMOVE volume-confirmation (NO-PATCHES) — explicit branch in B3.1b. Q5 — B3.1a read-only first; it MUST also (a) run the depth-delta discrimination test and (b) diagnose the pattern-side failure mode (under-producing patterns vs too-strict pattern-quality thresholds) so B3.1d is scoped right.
+
+**Status:** B3.1a (correctness-audit engine, read-only) cleared to build with the above folded in. Next: Step-2 pre-audit confirms the data surfaces (`xstock_spot_ohlc_1m`, `exit_decision_archive`, `xstock_spot_ticker_snap`, capture-coverage) then build.
+
+---
+
+*Scope v2 (Langston Step-1 conditions absorbed). Calibration basis = live/forming-bar telemetry (B.3 decision). Foundation: `B_3_REGIME_AUDIT_REPORT.md` + live per-strategy map. Active trading OFF.*
