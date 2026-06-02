@@ -51,6 +51,16 @@ Langston endorsed the range and ship-now-tighten-later. Four guardrails, all abs
 ## Ledger-fill note (denominator — resolve in Step-4 with Langston)
 The lq_min current_result is a per-family LQ-reject (34,285/56,725, 3-week eval window); the depth sweep yields per-(symbol×bucket) pass-rate / names-admitted over the 2-day depth window — a DIFFERENT denominator (Langston D / synthesis open-q). Since the target is a RANGE and the data is pre-true-RTH, **B.2 fills `planned_value`='35–40 (proposed; point at tighten)', `status`='proposed', `planned_sub_batch`='B.2', and leaves `planned_result` em-dash until the point-tighten produces a denominator-matched number** (after true-RTH data). Confirm this with Langston in the Step-4 migration review.
 
+## Volume-gate disposition (Langston condition B — RESOLVED via prior verification, NOT re-derived)
+**The 24h `volume` field = the UNDERLYING EQUITY's share volume, NOT the xStock token's — ALREADY VERIFIED** (Kyle 2026-06-02 pointer; multi-LLM + prior-CC-session research in `Claude Comms and Packages/X-Stocks Volume Feed Research - Multi LLM.md`). Decisive evidence on record: at ~$438/token, the ~13–44M `volume` implies **$6–20 billion/day**, which matches real TSLA SHARE volume — impossible for the token (cross-venue ~$10M, on-Kraken ~$926K/day). The ticker's `volume`/`vwap`/`high`/`low`/`prev_day_volume` fields are underlying-referenced; **only `bid`/`ask`/`bid_qty`/`ask_qty` are Kraken's real executable book** (so our depth metric ask×ask_qty reads REAL Kraken depth, not the underlying).
+
+**There is NO "missing volume half" — DEPTH is the correct, permanent liquidity screen for xStocks.** Under Kraken's market-maker-quoted CLOB (MMs hedge into the deep underlying market), the binding execution constraint is **live order-book DEPTH** (bid_qty/ask_qty + the book ladder), not matched volume. The research's explicit conclusion: *"stop asking what's the 24h volume; ask what's the live book depth on the specific name."* This validates the B.1.5 switch to depth-based LQ + the B.2 lq_min recalibration as the correct lever.
+
+**Disposition (resolves Langston B):**
+- `min_volume` stays **retired/inert** for `xstock_spot` (wrong instrument); logged to the **Phase-16 legacy-component register (#136)** — mark-don't-delete (§5#18).
+- The "successor" is **depth itself (LQ + min_depth)** — the documented-correct PERMANENT proxy, not a token-volume gate. Kyle's "liquidity AND volume" is satisfied because for THIS product volume is the wrong question; depth answers both.
+- OPTIONAL future activity sanity-check (a confidence signal, NEVER a gate; Phase-25+ if ever): the per-bar `trades` count already carried in the OHLC feed, or an aggregated public-Trades-channel token volume — answers "is this name actually trading," not "can I fill my size."
+
 ---
 
 ## Reproducible SQL (run on staging via `psql -f`)
