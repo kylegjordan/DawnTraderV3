@@ -119,3 +119,4 @@
 2026-06-01-f-now-calibration-state.sql
 2026-06-02-b-calscore-ledger.sql
 2026-06-02b-calscore-comprehensive.sql
+2026-06-02c-b2-lq-planned.sql
