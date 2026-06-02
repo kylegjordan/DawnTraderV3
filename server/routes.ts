@@ -7884,13 +7884,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const assetClass = (req.query.asset_class as string) || 'xstock_spot';
       const result: any = await db.execute(sql`
-        SELECT id, sub_batch, planned_sub_batch, asset_class, setting_key, scope, metric_label,
+        SELECT id, sub_batch, planned_sub_batch, asset_class, setting_key, scope, category, display_order, metric_label,
                current_value, current_result_num, current_result_den,
                planned_value, planned_result_num, planned_result_den,
                status, decision_grade, notes, updated_at
         FROM calibration_ledger
         WHERE asset_class = ${assetClass}
-        ORDER BY sub_batch, setting_key, scope
+        ORDER BY display_order NULLS LAST, setting_key, scope
       `);
       const rows = result.rows ?? result;
       res.json({ ok: true, data: { rows, count: rows.length, assetClass } });

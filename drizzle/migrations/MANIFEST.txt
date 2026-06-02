@@ -118,3 +118,4 @@
 2026-06-01-b-new-47-slice-threshold.sql
 2026-06-01-f-now-calibration-state.sql
 2026-06-02-b-calscore-ledger.sql
+2026-06-02b-calscore-comprehensive.sql

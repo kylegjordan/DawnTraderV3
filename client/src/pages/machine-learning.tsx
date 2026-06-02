@@ -3531,7 +3531,7 @@ export default function MachineLearningPage() {
             {/* B79.0i.a: xStocks observation tab (last per Langston Q7) */}
             <TabsTrigger value="xstocks" className="flex items-center gap-2" data-testid="tab-xstocks">
               <LineChart className="w-4 h-4" />
-              xStocks
+              xStocks Filter Diagnostics
             </TabsTrigger>
           </TabsList>
 

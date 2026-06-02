@@ -2285,6 +2285,7 @@ interface CalibrationScoreboardRow {
   asset_class: string;
   setting_key: string;
   scope: string;
+  category: string;
   metric_label: string;
   current_value: string | null;
   current_result_num: string | number | null;
@@ -2357,21 +2358,32 @@ export function CalibrationScoreboardSection({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id} className="border-t border-border align-top" title={r.notes ?? ''} data-testid={`calscore-row-${r.setting_key}-${r.scope}`}>
-                      <td className="px-2 py-2 font-mono">{r.setting_key}</td>
-                      <td className="px-2 py-2 font-mono text-[11px] text-muted-foreground">{r.scope}</td>
-                      <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[260px]">{r.metric_label}</td>
-                      <td className="px-2 py-2 text-right font-mono">{r.current_value ?? '—'}</td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtCalibrationResult(r.current_result_num, r.current_result_den)}</td>
-                      <td className="px-2 py-2 text-right font-mono">
-                        {r.planned_value ?? '—'}
-                        {r.planned_sub_batch ? <span className="ml-1 text-[10px] text-muted-foreground">({r.planned_sub_batch})</span> : null}
-                      </td>
-                      <td className="px-2 py-2 text-right font-mono">{fmtCalibrationResult(r.planned_result_num, r.planned_result_den)}</td>
-                      <td className="px-2 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor(r.status)}`}>{r.status}</span></td>
-                    </tr>
-                  ))}
+                  {rows.reduce((acc: any[], r, i) => {
+                    const prevCat = i > 0 ? rows[i - 1].category : null;
+                    if (r.category && r.category !== prevCat) {
+                      acc.push(
+                        <tr key={`cat-${r.category}`} className="bg-muted/70">
+                          <td colSpan={8} className="px-2 py-1.5 font-semibold text-[11px] text-foreground">{r.category}</td>
+                        </tr>
+                      );
+                    }
+                    acc.push(
+                      <tr key={r.id} className="border-t border-border align-top" title={r.notes ?? ''} data-testid={`calscore-row-${r.setting_key}-${r.scope}`}>
+                        <td className="px-2 py-2 font-mono">{r.setting_key}</td>
+                        <td className="px-2 py-2 font-mono text-[11px] text-muted-foreground">{r.scope}</td>
+                        <td className="px-2 py-2 text-[11px] text-muted-foreground max-w-[260px]">{r.metric_label}</td>
+                        <td className="px-2 py-2 text-right font-mono">{r.current_value ?? '—'}</td>
+                        <td className="px-2 py-2 text-right font-mono">{fmtCalibrationResult(r.current_result_num, r.current_result_den)}</td>
+                        <td className="px-2 py-2 text-right font-mono">
+                          {r.planned_value ?? '—'}
+                          {r.planned_sub_batch ? <span className="ml-1 text-[10px] text-muted-foreground">({r.planned_sub_batch})</span> : null}
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono">{fmtCalibrationResult(r.planned_result_num, r.planned_result_den)}</td>
+                        <td className="px-2 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor(r.status)}`}>{r.status}</span></td>
+                      </tr>
+                    );
+                    return acc;
+                  }, [])}
                 </tbody>
               </table>
             </div>
@@ -3319,7 +3331,7 @@ export default function AnalyticsPage() {
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-9 max-w-6xl">
+          <TabsList className="flex flex-wrap h-auto w-full gap-1 max-w-6xl">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Activity className="w-4 h-4" />
               Overview
@@ -3342,7 +3354,7 @@ export default function AnalyticsPage() {
             </TabsTrigger>
             <TabsTrigger value="calscore" className="flex items-center gap-2">
               <Gauge className="w-4 h-4" />
-              Calibration
+              xStock Calibration
             </TabsTrigger>
             <TabsTrigger value="top-batch" className="flex items-center gap-2">
               <List className="w-4 h-4" />
