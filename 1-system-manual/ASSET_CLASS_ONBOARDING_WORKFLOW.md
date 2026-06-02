@@ -1853,4 +1853,24 @@ test('producer output satisfies consumer contract', () => {
 
 ---
 
+## Phase-24 PRE-CALIBRATION BASELINE + carryover learnings (B.0 / B-CALSCORE, 2026-06-02)
+
+The B.0 pre-calibration baseline (a read-only numbers report of every xStock setting before tuning) + the B-CALSCORE Calibration Scoreboard tab surfaced standing learnings that belong in this blueprint. (Doc-organization deferred to post-Phase-24; capturing now per Kyle 2026-06-02 "continue to update the learnings.")
+
+**NEW STANDING STEP — a "Pre-calibration baseline" before Step 7b (Calibration cycle).** Before tuning any threshold/filter/gate for a newly-onboarded class, produce a numbers-first BASELINE: for every setting you're about to change, capture its current value + current result as a **rolling-window rate WITH raw counts** (rule #13 — never a single-cycle snapshot; a single xStock scan flashed spread-reject 16% vs the rolling-24h truth 2.3%), plus the regime mix, strategy mix, and throughput, **overlaid with an operational-event timeline** (outages, holidays, feed go-lives) so distorted windows are excluded before averaging, plus a **"definitely off NOW" list**. Seed it all into a **Calibration Scoreboard** (the `calibration_ledger` table + Analytics "Calibration" tab — num/den is SSOT, pct derived) so the whole calibration arc is auditable and the before/after is visible per setting. Rationale: calibrating without a baseline tightens knobs that were already fine and misses the genuinely broken ones — the baseline IS where the broken ones get found.
+
+**NEW STANDING CHECKLIST ITEM — "carryover audit" (the single biggest Phase-24 onboarding trap).** When a setting/component is cloned from an existing asset class, a NUMERIC carryover is NOT a VALID carryover:
+- **Re-derive every threshold against the NEW class's actual data.** xStock's `lq_min=43` was a crypto-VOLUME-era value; when B.1.5 switched xStock liquidity to order-book DEPTH, the 43 silently became a **~$19,950 ask-depth bar rejecting ~70% of names** — nobody chose $20k; it fell out of a leftover scale.
+- **Verify the carried component's LAYER PLACEMENT.** Correlation was wrongly bundled INTO the xStock IMF family filter; canonical IMF = LQ/VN/DI only (crypto keeps correlation as a SEPARATE confidence modulator).
+- **Verify it's actually WIRED, not a constant/stub.** That same xStock IMF correlation was non-functional — called without a benchmark it returned a constant 0.5, rejecting exactly 0 of 283,625. A carried filter can look configured (a threshold exists) yet do nothing.
+- **Two gates can measure DIFFERENT STATISTICS, not just different levels.** xStock LQ screens ask-only depth; `min_depth_usd` screens min(ask,bid) (shallower side). Coordinating them means reconciling WHAT they measure, not just matching a dollar number — they diverge on asymmetric (thin-ask) books, the names a liquidity gate most needs to catch.
+
+**NEW STANDING STEP — a "data-availability map" before any baseline/calibration capture.** Classify each needed metric: CLEAN (archived + timestamped, queryable over the window) / REPLAY (reconstruct by re-running the production formula over archived raw inputs) / FORWARD-ONLY (short retention → accumulate forward) / STALE (writer stopped; only a fixed past window exists). xStock taught: order-book depth was ~1-day hot retention (FORWARD-ONLY → calibrate the depth number off ≥5 sessions, not 1 day), the DBS component backfill was STALE (05-05→15 only), the upstream scan-funnel reject counts were in-memory-only (REPLAY). Promising numbers before this map = promising numbers you can't get.
+
+**STANDING DISCIPLINES reinforced** (not new, but the baseline made them concrete): read against operational events, never blindly — the 3-week xStock regime average masked a DRIFTING distribution (HIGH_VOLATILITY_UNSTABLE ~5%→23% over 2 weeks); date-segment before declaring anomalies (gate-change dates vs trade dates — "disabled strategy with trades" / "enabled strategy that never fires" were genuine here, but only the date-check proved it); verify the external-feed inventory, do not assume (CoinGecko = symbol DISCOVERY, Finnhub = SECTOR tags; NO sector-ETF price feed wired; SPY/QQQ available for broad-market).
+
+(Full numbers + evidence: `Claude Comms and Packages/Scope Files/B_XSTOCK_CALIB_BASELINE_REPORT.md`. Scoreboard tooling: `B_CALSCORE_COMPLETION_REPORT.md`.)
+
+---
+
 *End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
