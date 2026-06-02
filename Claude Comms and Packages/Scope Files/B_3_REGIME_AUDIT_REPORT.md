@@ -79,4 +79,17 @@ The recompute-vs-live RANGE_BOUND gap is **fully explained and code-confirmed** 
 
 ---
 
-*Raw per-bar output: `scripts/b-xstock-calib-b3-regime-audit-output.csv` on staging (54,897 rows). Run captured 2026-06-02. Residual resolved + Langston-confirmed same day. Active trading OFF.*
+---
+
+## §9 — DECISION (Kyle, 2026-06-02)
+
+> **ACCEPTED.** Kyle's call: **(1) the forming-bar classification is INTENDED** — the system classifies regime on the in-progress/most-current bar by design (correct for a live trading decision); recorded here as a conscious, written decision (NO-PATCHES). **(2) NO classifier change** — the regime classifier, its per-regime score-range thresholds, and the `_XSTOCK` constants stay as-is; **B3.0 is closed/skipped.** **(3) Proceed to strategy-gate calibration (B3.1).**
+
+**Consequences carried into B3.1 (locked):**
+- **Calibration basis = live/forming-bar telemetry** (`signal_eval_archive`, what VTS actually produces), NOT the settled-bar replay. The settled replay served its purpose (proved the classifier sound); it is NOT the gate-calibration data source.
+- **Sim-to-live parity note (for any future backtest):** a settled-bar replay shows ~6.4% RANGE_BOUND vs live ~0.1%. Backtests must classify on the forming bar (or explicitly account for the delta) to match live.
+- **Governance owed at B.3 close:** add the forming-bar regime-classification contract to `SYSTEM_MANUAL.md` (regime section) + `SYSTEM_IMPACT_MAP.md` (`calculatePairRegime` / xstock-ohlc-cache entries) — the canonical "live classifies on the in-progress bucket; no end-of-bucket gating" fact. Tracked, not deferred-and-forgotten.
+
+---
+
+*Raw per-bar output: `scripts/b-xstock-calib-b3-regime-audit-output.csv` on staging (54,897 rows). Run captured 2026-06-02. Residual resolved + Langston-confirmed + Kyle-decided same day. Active trading OFF.*
