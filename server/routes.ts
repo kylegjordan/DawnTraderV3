@@ -7368,6 +7368,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // `ec.patternFilterCounters` + `ec.patternPerMetric` + `ec.patternFanOut`.
       const emptyGlobal = {
         failed_min_volume: 0, failed_spread: 0, failed_daily_range: 0,
+        // B.2.UI (2026-06-02): order-book depth gate (min_depth_usd two-way) —
+        // the real xStock liquidity screen; counter from global-filter.ts.
+        failed_min_depth: 0,
         failed_min_price: 0, failed_max_price: 0, failed_stablecoin: 0,
         failed_quote_currency: 0, failed_history: 0, failed_market_cap: 0,
         failed_guardrail_risk: 0, failed_correlation: 0, already_active: 0,
@@ -7389,6 +7392,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const emptyPatternGlobal = {
         failed_stablecoin: 0, failed_min_price: 0, failed_max_price: 0,
         failed_min_volume: 0, failed_spread: 0, failed_history: 0,
+        // B.2.UI (2026-06-02): order-book depth gate (min_depth_usd two-way) —
+        // counter from pattern-filter.ts.
+        failed_min_depth: 0,
         passed_all_filters: 0,
         // B79.0m.b2 (2026-05-11): pattern path is LIVE. applicable.path
         // defaults true here; the buildPatternGlobalFromCounters helper below
@@ -7419,6 +7425,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return {
           ...emptyGlobal,
           failed_min_volume: gc.failed_min_volume ?? 0,
+          // B.2.UI (2026-06-02): pass through the order-book depth gate count.
+          failed_min_depth: gc.failed_min_depth ?? 0,
           failed_min_price: gc.failed_min_price ?? 0,
           failed_max_price: gc.failed_max_price ?? 0,
           failed_history: gc.failed_history ?? 0,
@@ -7494,6 +7502,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           failed_min_price: pfc.failed_min_price ?? 0,
           failed_max_price: pfc.failed_max_price ?? 0,
           failed_min_volume: pfc.failed_min_volume ?? 0,
+          // B.2.UI (2026-06-02): pass through the order-book depth gate count.
+          failed_min_depth: pfc.failed_min_depth ?? 0,
           failed_history: pfc.failed_min_history ?? 0,
           // B-NEW-14 (2026-05-14): surface pattern-side spread rejections to
           // the panel's Pattern column. Symmetric with the quant lane's

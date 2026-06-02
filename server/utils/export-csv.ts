@@ -137,6 +137,12 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   phaseAgeSeconds: number | null;
   strategyPhaseWeight: number | null;
   regimeConfidenceModulated: number | null;
+  // B.2.UI (2026-06-02): entry-liquidity captured at trade-open for the
+  // "Volume / Order Book" column — xStock = ask-side order-book depth USD
+  // ('depth_usd'); crypto = native 24h coin-unit volume ('volume_qty').
+  // null for trades opened before B.2.UI deployed (no backfill).
+  entryLiquidityValue: number | null;
+  entryLiquidityKind: string | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -280,6 +286,9 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             phaseAgeSeconds: typeof trade.phaseAgeSeconds === 'number' ? trade.phaseAgeSeconds : null,
             strategyPhaseWeight: typeof trade.strategyPhaseWeight === 'number' ? trade.strategyPhaseWeight : null,
             regimeConfidenceModulated: typeof trade.regimeConfidenceModulated === 'number' ? trade.regimeConfidenceModulated : null,
+            // B.2.UI (2026-06-02): entry-liquidity for the "Volume / Order Book" column.
+            entryLiquidityValue: typeof trade.entryLiquidityValue === 'number' ? trade.entryLiquidityValue : null,
+            entryLiquidityKind: typeof trade.entryLiquidityKind === 'string' ? trade.entryLiquidityKind : null,
           });
         }
       } catch (err) {

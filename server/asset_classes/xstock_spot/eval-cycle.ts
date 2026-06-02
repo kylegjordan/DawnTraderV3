@@ -732,6 +732,10 @@ export async function evaluateXstockPairForVTS(
           regimeConfidenceRaw: mceContext.regime.confidence,
           phase: mceContext.regime.phase,
           phaseAgeSeconds: mceContext.regime.phaseAgeSeconds,
+          // B.2.UI (2026-06-02): capture the ask-side order-book depth (USD) the LQ
+          // gate just used at entry. Sentinel -1 (no two-sided quote this cycle) → omit → "—".
+          entryLiquidityValue: askDepthUsd >= 0 ? askDepthUsd : undefined,
+          entryLiquidityKind: 'depth_usd',
         });
         if (tradeId) {
           counters.tradesOpened++;

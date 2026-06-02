@@ -63,6 +63,12 @@ interface OpenTrade {
   phaseAgeSeconds?: number | null;
   strategyPhaseWeight?: number | null;
   regimeConfidenceModulated?: number | null;
+  // B.2.UI (2026-06-02): entry-liquidity captured at trade-open for the
+  // "Volume / Order Book" column. xStock = ask-side order-book depth USD
+  // (kind 'depth_usd'); crypto = native 24h coin-unit volume (kind 'volume_qty').
+  // null/undefined on trades opened before B.2.UI (no backfill → renders "—").
+  entryLiquidityValue?: number | null;
+  entryLiquidityKind?: 'depth_usd' | 'volume_qty' | null;
 }
 
 interface ClosedTrade {
@@ -113,9 +119,15 @@ interface ClosedTrade {
   phaseAgeSeconds?: number | null;
   strategyPhaseWeight?: number | null;
   regimeConfidenceModulated?: number | null;
+  // B.2.UI (2026-06-02): entry-liquidity captured at trade-open for the
+  // "Volume / Order Book" column. xStock = ask-side order-book depth USD
+  // (kind 'depth_usd'); crypto = native 24h coin-unit volume (kind 'volume_qty').
+  // null/undefined on trades opened before B.2.UI (no backfill → renders "—").
+  entryLiquidityValue?: number | null;
+  entryLiquidityKind?: 'depth_usd' | 'volume_qty' | null;
 }
 
-type AdjustmentType = 
+type AdjustmentType =
   | "lifecycle"
   | "model_calibration"
   | "weight_adjustment"
@@ -418,6 +430,17 @@ function formatDuration(minutes: number): string {
   return `${days}d ${remainingHours}h`;
 }
 
+// B.2.UI (2026-06-02): format the asset-aware entry-liquidity cell.
+//   xStock (kind 'depth_usd')  → "$6,309 · OB"  (ask-side order-book depth USD)
+//   crypto (kind 'volume_qty') → "1,234.56 QTY" (native 24h coin-unit volume, no $)
+// Returns "—" when the value wasn't captured (trade opened before B.2.UI, or kind/value missing).
+function formatEntryLiquidity(value?: number | null, kind?: string | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  if (kind === 'depth_usd') return `$${Math.round(value).toLocaleString()} · OB`;
+  if (kind === 'volume_qty') return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} QTY`;
+  return '—';
+}
+
 // Client-side benchmark detection matching server-side benchmark-regex.ts
 const BENCHMARK_BASE_COINS = ['BTC', 'XBT', 'ETH', 'SOL', 'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD'];
 function isBenchmarkSymbol(symbol: string): boolean {
@@ -563,6 +586,10 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
               {/* B65.2: TEC State column — trade mode + latch flags from trailing engine */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Trailing-exit engine state: TARGET = aiming at original target; TRAILING = moonbag (trailing for more upside after target hit). BE = break-even stop locked at 1×ATR gain.">TEC State</th>
+              {/* B.2.UI (2026-06-02): entry-liquidity captured at trade-open.
+                  xStock → ask-side order-book depth USD ("$… · OB");
+                  crypto → native 24h coin-unit volume ("… QTY"). */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Liquidity at trade-open. xStock: ask-side order-book depth in USD ($… · OB). Crypto: native 24h volume in coin units (… QTY). '—' for trades opened before this column existed.">Volume / Order Book</th>
               <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Entry/Current" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
@@ -587,7 +614,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={26} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={27} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
@@ -688,6 +715,14 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                         </Badge>
                       )}
                     </div>
+                  </td>
+                  {/* B.2.UI (2026-06-02): entry-liquidity at trade-open.
+                      xStock → "$… · OB" (ask-side order-book depth USD);
+                      crypto → "… QTY" (native 24h coin-unit volume). */}
+                  <td className="px-3 py-2">
+                    <span className="font-mono text-xs text-muted-foreground whitespace-normal break-words">
+                      {formatEntryLiquidity(trade.entryLiquidityValue, trade.entryLiquidityKind)}
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
@@ -895,6 +930,10 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
               {/* B65.2-HF2c: TEC State column on Closed Simulated Trades for parity with Open table */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Trailing-exit mode the trade ended in. TARGET = closed at static target/stop/timeout; MOONBAG = flipped into trailing mode at target and closed via trailing stop or moonbag-duration cap.">TEC State</th>
+              {/* B.2.UI (2026-06-02): entry-liquidity captured at trade-open.
+                  xStock → ask-side order-book depth USD ("$… · OB");
+                  crypto → native 24h coin-unit volume ("… QTY"). */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Liquidity at trade-open. xStock: ask-side order-book depth in USD ($… · OB). Crypto: native 24h volume in coin units (… QTY). '—' for trades opened before this column existed.">Volume / Order Book</th>
               <SortableHeader label="$ Value / Qty" field="dollarValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Entry/Exit" field="entryPrice" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
@@ -918,7 +957,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={25} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={26} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
@@ -1008,6 +1047,14 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                         ? `🌙 MB×${(trade as any).ladderRungsHit ?? 1}`
                         : 'TARGET'}
                     </Badge>
+                  </td>
+                  {/* B.2.UI (2026-06-02): entry-liquidity at trade-open.
+                      xStock → "$… · OB" (ask-side order-book depth USD);
+                      crypto → "… QTY" (native 24h coin-unit volume). */}
+                  <td className="px-3 py-2">
+                    <span className="font-mono text-xs text-muted-foreground whitespace-normal break-words">
+                      {formatEntryLiquidity(trade.entryLiquidityValue, trade.entryLiquidityKind)}
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
@@ -1884,6 +1931,8 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
   const formatFilterName = (key: string): string => {
     const names: Record<string, string> = {
       failed_min_volume: 'Min Volume',
+      // B.2.UI (2026-06-02): order-book depth gate (xStock min_depth_usd two-way)
+      failed_min_depth: 'Min Depth',
       failed_spread: 'Max Spread',
       failed_daily_range: 'Daily Range',
       failed_min_price: 'Min Price',

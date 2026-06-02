@@ -769,6 +769,12 @@ export class VTSService extends EventEmitter {
     // Default 'crypto_spot' preserves byte-identical pre-batch behavior for
     // any caller that omits the field.
     assetClass?: string;
+    // B.2.UI (2026-06-02): entry-liquidity captured at trade-open for the
+    // "Volume / Order Book" column. xStock = ask-side order-book depth USD
+    // (kind 'depth_usd'); crypto = native 24h coin-unit volume (kind 'volume_qty').
+    // Both optional — omitted callers (and pre-B.2.UI trades) read back as null.
+    entryLiquidityValue?: number;
+    entryLiquidityKind?: 'depth_usd' | 'volume_qty';
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
     const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
@@ -895,6 +901,11 @@ export class VTSService extends EventEmitter {
       phaseAgeSeconds: tradeData.phaseAgeSeconds ?? null,
       strategyPhaseWeight: tradeData.strategyPhaseWeight ?? null,
       regimeConfidenceModulated: tradeData.regimeConfidenceModulated ?? null,
+      // B.2.UI (2026-06-02): entry-liquidity snapshot persisted into the JSONL
+      // so the Closed Simulated Trades "Volume / Order Book" column can read it
+      // back (via getClosedVTSTradesFromLogs whitelist in export-csv.ts).
+      entryLiquidityValue: tradeData.entryLiquidityValue ?? null,
+      entryLiquidityKind: tradeData.entryLiquidityKind ?? null,
     } as any;
 
     // Add to closedTrades for ML calibration access

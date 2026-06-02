@@ -562,6 +562,13 @@ interface OpenVirtualTrade {
   // B61 (2026-04-15): numeric DBS score captured alongside the category string.
   pairDirectionalBiasScore?: number | null;
   globalDirectionalBiasScore?: number | null;
+  // B.2.UI (2026-06-02): entry-liquidity snapshot for the "Volume / Order Book"
+  // column on the ML sim-trade tables. xStock = ask-side order-book depth USD
+  // (LQ gate input, rolling-20m median) → 'depth_usd'; crypto = native 24h volume
+  // in COIN UNITS (NOT USD) → 'volume_qty'. Optional + null-guarded: a missing
+  // value renders "—" and must never break trade-open.
+  entryLiquidityValue?: number;
+  entryLiquidityKind?: 'depth_usd' | 'volume_qty';
   // B65.2 (2026-04-23): volatility snapshot at open, consumed by the
   // trailing-exit engine. ATR drives the break-even trigger and trailing
   // distance math; DI + VolNoise fine-tune the trailing K' multiplier.
@@ -1460,6 +1467,13 @@ async function generatePhase10Signal(
     modeOverlay,          // 11.7S: Overlay values for observability
     regimeStability,      // 11.7S: Regime stability for observability
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C: Multi-strategy identification
+    // B.2.UI (2026-06-02): crypto entry-liquidity = native 24h volume (COIN UNITS, not USD).
+    // Inline path is the crypto VTS open; guard on class + finite>0 so a missing
+    // value renders "—" and never throws on the hot path.
+    entryLiquidityValue: (tradeAssetClass === 'crypto_spot' && typeof priceData?.volume24h === 'number' && priceData.volume24h > 0)
+      ? priceData.volume24h
+      : undefined,
+    entryLiquidityKind: tradeAssetClass === 'crypto_spot' ? 'volume_qty' : undefined,
     // Phase 14: Snapshot 6 context dimensions at trade OPEN
     // [B79.0n.TELEMETRY] currently crypto-only writer — per-class threading
     // deferred to WIRE-IN #16 (M70 invariant: VTS is the only authorized writer).
@@ -2503,6 +2517,9 @@ async function resolveOpenVirtualTrades(): Promise<{
         // Kraken REST via ohlcCache). Missing field silently degrades xstock
         // replay to empty bars per Langston rev1 #5.
         assetClass: trade.assetClass,
+        // B.2.UI (2026-06-02): propagate entry-liquidity snapshot to the closed-trade record.
+        entryLiquidityValue: trade.entryLiquidityValue,
+        entryLiquidityKind: trade.entryLiquidityKind,
       });
       if (result.persisted) persisted++;
       if (result.mlTriggered) mlQueued++;
@@ -2880,6 +2897,9 @@ export interface RegisterOpenVtsTradeInput {
   phase?: 'EARLY' | 'PRIME' | 'LATE';
   phaseAgeSeconds?: number;
   strategyPhaseWeight?: number;
+  // B.2.UI (2026-06-02): entry-liquidity snapshot (xStock ask-depth USD / crypto 24h coin-volume).
+  entryLiquidityValue?: number;
+  entryLiquidityKind?: 'depth_usd' | 'volume_qty';
 }
 
 /**
@@ -2956,6 +2976,9 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     pool: input.pool,
     openedAt,
     executionContext: 'VTS',
+    // B.2.UI: pass-through the caller-captured entry-liquidity snapshot (null-guarded).
+    entryLiquidityValue: input.entryLiquidityValue,
+    entryLiquidityKind: input.entryLiquidityKind,
     sourcePool: input.sourcePool,
     atrAtOpen: input.atrAtOpen,
     diAtOpen: 50,
@@ -4173,6 +4196,9 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
   // B61 (2026-04-15): numeric DBS scores alongside categories
   pairDirectionalBiasScore: number | null;
   globalDirectionalBiasScore: number | null;
+  // B.2.UI (2026-06-02): entry-liquidity for the "Volume / Order Book" column.
+  entryLiquidityValue?: number;
+  entryLiquidityKind?: 'depth_usd' | 'volume_qty';
   // B65.2 (2026-04-23): trailing-engine state surfaced to the Open
   // Simulated Trades UI. tradeMode distinguishes TARGET (still aiming for
   // original target price) from TRAILING_TAKE (hit target, now in moonbag
@@ -4295,6 +4321,9 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       // VTS now handles multi-asset-class trades; the hardcoded literal would
       // misclassify xstock_spot / crypto_perp Open Simulated Trades on the UI.
       assetClass: trade.assetClass,
+      // B.2.UI (2026-06-02): entry-liquidity snapshot for the "Volume / Order Book" column.
+      entryLiquidityValue: trade.entryLiquidityValue,
+      entryLiquidityKind: trade.entryLiquidityKind,
       regime: trade.regime,
       strategy: trade.strategy,
       signalType: trade.signalType,
