@@ -56,4 +56,27 @@ The recompute (faithful completed-bar inputs) and the live pipeline diverge ONLY
 
 ---
 
-*Raw per-bar output: `scripts/b-xstock-calib-b3-regime-audit-output.csv` on staging (54,897 rows). Run captured 2026-06-02. Active trading OFF.*
+---
+
+## §7 — RESIDUAL RESOLVED: the forming-bar mechanism (Langston code-trace 2026-06-02)
+
+The recompute-vs-live RANGE_BOUND gap is **fully explained and code-confirmed** — it is NOT a bug and NOT a threshold issue.
+
+**Mechanism (Langston traced on staging):**
+- `computeDirectionalBias` is a **pure function** (`directional-bias.ts:56`) — identical live vs recompute; no stateful smoothing. So the residual is 100% an input-data difference.
+- The live OHLC cache (`xstock-ohlc-cache.ts`) reads the snapshot then merges a 24h live overlay; of the 60-bar window, the **36 older buckets are immutable pure-snapshot, the 24 recent are write-back-settled** — faithful on every SETTLED bucket. A snapshot-vs-live OHLC delta across all buckets would read ≈0 and mislead.
+- The aggregator emits the **currently-forming bucket with NO end-of-bucket gating** (aggregator line 206-207, verbatim: *"partial-bar emission … the currently-forming bucket is included"*). So the live path classifies, every cycle, on a window whose **newest bar is the in-progress hour** (unsettled close). My recompute used the SETTLED bar. All three DBS components key off the newest close → the live forming-bar |dbs| sits systematically a hair ABOVE the settled-bar |dbs|. On RBS bars where settled |dbs| p95=0.096 vs the 0.10 gate, that lift flips ~all of them out of RBS into ST/TFS.
+- **Why the flicker test (§ intra-bar refutation) did NOT kill this:** a forming bar produces a *stably-elevated* |dbs| (tracks the hour's directional move), not flickering. The 87%-within-hour-stable result refuted sampling JITTER, not the forming-bar BIAS — orthogonal axes.
+- **Empirical capstone (offered, pending):** for borderline RBS bars (settled |dbs| 0.05-0.096), compare live-captured forming-bar |dbs| vs settled-bar recompute |dbs| for the same (symbol, bucket). Predicted: forming > settled, crossing 0.10. Available via existing telemetry / an admitted-row join.
+
+## §8 — A4 verdict + B3.0 + the downstream flag
+
+- **A4 (all five regimes): ACCEPT — no classifier change.** Classifier is sound, NOT funneling (weighting resolved 4/5 regimes), dx is fine (refuted), and RANGE_BOUND near-absence in live is **correct behavior** given the live system classifies on the forming bar. **B3.0 SKIPPED** (no threshold mis-placed; no crypto-fence escalation — the dx escalation candidate is refuted).
+- **Kyle's original question — ANSWERED:** the regime conditions for RANGE_BOUND are genuinely (almost) never met *in live operation* (forming-bar classification) → ACCEPT. Not misconfigured, not funneling, not a mis-set threshold.
+- **🚩 Downstream flag (NO-PATCHES, Langston) — for Kyle + B3.1:**
+  1. **Architectural decision (Kyle owns):** classifying on the in-progress/forming bar — intended contract (most-current price for live decisions) or an artifact of no end-of-bucket gating? Lean (CC+Langston): defensible as intended for live, but must be a WRITTEN decision, not a silent accept.
+  2. **B3.1 calibration basis:** the live + VTS paths both classify on the forming bar, so the settled-bar replay (this audit) is the WRONG basis for tuning strategy gates — B3.1 must calibrate against the **live/forming-bar distribution** (what VTS actually sees), else gates get tuned on a distribution live never produces. The replay was the right tool to PROVE the classifier sound; it is NOT the right tool to calibrate the gates.
+
+---
+
+*Raw per-bar output: `scripts/b-xstock-calib-b3-regime-audit-output.csv` on staging (54,897 rows). Run captured 2026-06-02. Residual resolved + Langston-confirmed same day. Active trading OFF.*
