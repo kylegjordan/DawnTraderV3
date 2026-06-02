@@ -437,7 +437,7 @@ function formatDuration(minutes: number): string {
 function formatEntryLiquidity(value?: number | null, kind?: string | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
   if (kind === 'depth_usd') return `$${Math.round(value).toLocaleString()} · OB`;
-  if (kind === 'volume_qty') return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })} QTY`;
+  if (kind === 'volume_qty') return `${Math.round(value).toLocaleString()} QTY`;
   return '—';
 }
 
