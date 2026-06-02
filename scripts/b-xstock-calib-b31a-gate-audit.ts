@@ -161,20 +161,29 @@ async function main(): Promise<void> {
     console.log(`GATE CORRECTNESS — ${strategy} / ${gate}  (L1 pure-filter)`);
     console.log(`══════════════════════════════════════════════════════════`);
 
-    // Reached-G population: passed = admitted; rejected = terminal reason == gate.
-    const candRes = await client.query<{ symbol: string; captured_at: string; reject_stage: string; reason: string | null }>(
-      `SELECT symbol, captured_at, reject_stage, COALESCE(gate_decision->>'reason', features->>'detailReason') AS reason
+    // Reached-G population (Langston HIGH-1): for a DETECT gate, "passed G" = the
+    // candidate CLEARED the gate and produced a signal — i.e. it was admitted OR
+    // killed by a DOWNSTREAM stage (tcl dedup/cooldown/max-open, sqe, rtb), which
+    // are position-management, NOT signal-quality. "passed=admitted" only would
+    // measure G∩survived-TCL (n collapses ~97%). rejected-at-G = strategy_internal
+    // with terminal reason == gate. Dedupe ≤1 per (symbol, minute) (LOW-5); bound
+    // captured_at ≤ maxMs (LOW-6).
+    const candRes = await client.query<{ symbol: string; captured_at: string; reject_stage: string }>(
+      `SELECT DISTINCT ON (symbol, date_trunc('minute', captured_at))
+              symbol, captured_at, reject_stage
          FROM signal_eval_archive
-        WHERE asset_class='xstock_spot' AND strategy=$1 AND captured_at >= $2
-          AND (reject_stage='admitted' OR (reject_stage='strategy_internal' AND COALESCE(gate_decision->>'reason', features->>'detailReason')=$3))`,
-      [strategy, new Date(startMs).toISOString(), gate],
+        WHERE asset_class='xstock_spot' AND strategy=$1 AND captured_at >= $2 AND captured_at <= $3
+          AND ( reject_stage IN ('admitted','tcl','sqe','rtb')
+                OR (reject_stage='strategy_internal' AND COALESCE(gate_decision->>'reason', features->>'detailReason')=$4) )
+        ORDER BY symbol, date_trunc('minute', captured_at), captured_at DESC`,
+      [strategy, new Date(startMs).toISOString(), new Date(maxMs).toISOString(), gate],
     );
     const cands: Candidate[] = candRes.rows.map((r) => ({
       symbol: r.symbol, tsMs: Math.floor(new Date(r.captured_at).getTime() / MIN) * MIN,
-      passed: r.reject_stage === 'admitted',
+      passed: r.reject_stage !== 'strategy_internal', // all strategy_internal here == rejected-at-gate
     }));
     const nPass = cands.filter((c) => c.passed).length, nRej = cands.length - nPass;
-    console.log(`reached-gate candidates: ${cands.length} (passed=${nPass}, rejected-at-${gate}=${nRej})`);
+    console.log(`reached-gate candidates: ${cands.length} (passed-${gate}=${nPass} [admitted+downstream], rejected-at-${gate}=${nRej})`);
 
     for (const H of HORIZONS_MIN) {
       // overall buckets of EXCESS return
@@ -193,10 +202,13 @@ async function main(): Promise<void> {
         (c.passed ? d.p : d.r).push(ex);
       }
       const auc = aucMannWhitney(exPass, exRej);
-      console.log(`\n  H=${H}min | scored passed=${exPass.length} rejected=${exRej.length}`);
+      const lowN = Math.min(exPass.length, exRej.length) < MIN_BUCKET_N; // MED-3 guard
+      console.log(`\n  H=${H}min | scored passed=${exPass.length} rejected=${exRej.length}${lowN ? '  [LOW-N: not decision-grade]' : ''}`);
       console.log(`    excess mean: passed=${(mean(exPass) * 100).toFixed(3)}%  rejected=${(mean(exRej) * 100).toFixed(3)}%`);
       console.log(`    excess med : passed=${(median(exPass) * 100).toFixed(3)}%  rejected=${(median(exRej) * 100).toFixed(3)}%`);
-      console.log(`    AUC(passed>rejected)=${auc.toFixed(4)}  (0.5=no skill; >0.5=gate keeps the better setups)`);
+      console.log(`    AUC(passed>rejected)=${auc.toFixed(4)}${lowN ? ' [LOW-N]' : ''}  (0.5=no skill; >0.5=gate keeps the better setups)`);
+      // Direct "are the rejections correct?" test — uses the large rejected sample, robust to thin admits:
+      console.log(`    REJECTED-bucket absolute excess: mean=${(mean(exRej) * 100).toFixed(3)}%  (>0 ⇒ rejecting would-be market-beaters = too tight; <0 ⇒ correctly screening laggards)`);
       // rolling-daily consistency
       const dayAucs: string[] = [];
       for (const dk of [...perDay.keys()].sort()) {
@@ -210,7 +222,8 @@ async function main(): Promise<void> {
     // Admit-side realized cross-check
     const rz = realizedByStrat.get(strategy);
     if (rz && rz.rmults.length) {
-      console.log(`\n  realized VTS exits (admit cross-check): n=${rz.rmults.length} | r_multiple mean=${mean(rz.rmults).toFixed(3)} med=${median(rz.rmults).toFixed(3)} | pnl% mean=${mean(rz.pnls).toFixed(3)}`);
+      // MED-4: strategy-level aggregate of ALL VTS exits — NOT joined to this audit's admit set (separate stat).
+      console.log(`\n  realized VTS exits (strategy-level, ALL exits — NOT joined to admit set): n=${rz.rmults.length} | r_multiple mean=${mean(rz.rmults).toFixed(3)} med=${median(rz.rmults).toFixed(3)} | pnl% mean=${mean(rz.pnls).toFixed(3)}`);
     } else {
       console.log(`\n  realized VTS exits: none recorded for ${strategy} in window (admit cross-check unavailable).`);
     }
