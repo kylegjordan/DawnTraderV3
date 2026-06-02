@@ -30,14 +30,32 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { cronRegistry } from './cron-registry.js';
 import { addAlert } from './system-alerts.js';
+import { computePrevFire } from './cron-next-fire.js';
 
 const VERIFIER_INTERVAL_MS = 15 * 60 * 1000;  // 15 minutes
-const FIRE_GRACE_MULTIPLIER = 1.5;  // expected_by = lastFire + intervalSeconds × 1.5
+const FIRE_GRACE_MULTIPLIER = 1.5;  // interval-fallback only: expected_by = lastFire + intervalSeconds × 1.5
+
+// B-NEW-51 (2026-06-02): cadence-aware staleness constants.
+// FIRE_LATENCY_GRACE_MS — the gap we allow between a schedule's occurrence and
+// its fire-evidence row landing in scheduled_tasks_audit. A schedule is judged
+// stale only if its most-recent scheduled occurrence is older than this grace
+// AND no evidence exists at/after (occurrence − grace).
+const FIRE_LATENCY_GRACE_MS = 10 * 60 * 1000;  // 10 minutes
+// BOOT_GRACE_MS — don't judge any job until the process has been up this long,
+// so we never race boot-time evidence writes. Replaces the old interval-derived
+// boot grace (which was meaningless for calendar schedules).
+const BOOT_GRACE_MS = 5 * 60 * 1000;  // 5 minutes
 
 // Track when the process started so we apply boot-grace correctly. Set at
 // module-init time (= server boot). intervalSeconds × FIRE_GRACE_MULTIPLIER
 // grace from process start.
-const processStartMs = Date.now();
+let processStartMs = Date.now();
+
+/** Test-only: override the recorded process-start so boot-grace can be
+ * exercised deterministically. */
+export function _setProcessStartForTest(ms: number): void {
+  processStartMs = ms;
+}
 
 /**
  * Query last fire-row from scheduled_tasks_audit for each registered job.
@@ -95,9 +113,9 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
  *
  * Never throws — verifier-failure is observability, not correctness.
  */
-export async function runVerification(): Promise<{ ok: boolean; stale: string[] }> {
+export async function runVerification(nowMs: number = Date.now()): Promise<{ ok: boolean; stale: string[] }> {
   const jobs = cronRegistry.getAll().filter((j) => j.enabled);
-  const now = Date.now();
+  const now = nowMs;
   const stale: string[] = [];
 
   if (jobs.length === 0) {
@@ -105,45 +123,90 @@ export async function runVerification(): Promise<{ ok: boolean; stale: string[] 
     return { ok: true, stale: [] };
   }
 
+  // B-NEW-51: process-level boot-grace. Don't judge any job until the process
+  // has been up long enough that a just-occurred fire has had time to write its
+  // evidence row. Avoids false-positives in the first minutes after a restart.
+  if (now - processStartMs < BOOT_GRACE_MS) {
+    console.log(
+      `[CRON-FIRE-VERIFIER] in_boot_grace (uptime ` +
+      `${Math.round((now - processStartMs) / 1000)}s < ${BOOT_GRACE_MS / 1000}s); skipping run`,
+    );
+    return { ok: true, stale: [] };
+  }
+
   const lastFires = await queryLastFires(jobs.map((j) => j.name));
 
   for (const job of jobs) {
     const lastFire = lastFires.get(job.name) ?? null;
-    const intervalMs = job.intervalSeconds * 1000;
-    const graceWindowMs = intervalMs * FIRE_GRACE_MULTIPLIER;
 
-    // Boot-grace: skip if process hasn't been up long enough for first fire +
-    // grace. Otherwise we'd alert on every boot for daily schedules.
-    const bootGraceMs = intervalMs + graceWindowMs;
-    const inBootGrace = now - processStartMs < bootGraceMs;
+    // B-NEW-51: cadence-aware expected fire — the most recent scheduled
+    // occurrence STRICTLY before now, per the job's actual cron expression +
+    // timezone (cron-parser .prev(), the trusted introspection path). Replaces
+    // the old `lastFire + intervalSeconds × 1.5` model, which judged a weekly
+    // Friday job as "should have fired by Tuesday".
+    const prevOccurrence = computePrevFire(job.expression, job.timezone, new Date(now));
 
-    if (lastFire === null) {
-      if (inBootGrace) {
-        console.log(
-          `[CRON-FIRE-VERIFIER] job=${job.name} no_fires_yet_in_boot_grace ` +
-          `(grace_remaining_seconds=${Math.round((bootGraceMs - (now - processStartMs)) / 1000)})`,
+    if (prevOccurrence === null) {
+      // Unparseable expression (registry requires a valid one, so this is a
+      // belt-and-suspenders fallback). Retain the legacy interval×1.5 model so
+      // we never go blind on a job we can't calendar-evaluate.
+      const graceWindowMs = job.intervalSeconds * 1000 * FIRE_GRACE_MULTIPLIER;
+      if (lastFire === null) {
+        stale.push(job.name);
+        await emitStaleAlert(
+          job.name, null, new Date(now), 'no_fires_ever_interval_fallback',
+          `cron_stale:${job.name}:no_prev_parse`,
         );
-        continue;
+      } else if (now > lastFire.getTime() + graceWindowMs) {
+        stale.push(job.name);
+        const expectedBy = new Date(lastFire.getTime() + graceWindowMs);
+        console.warn(
+          `[CRON-FIRE-VERIFIER] job=${job.name} STALE (interval-fallback) ` +
+          `last_fire=${lastFire.toISOString()} expected_by=${expectedBy.toISOString()}`,
+        );
+        await emitStaleAlert(
+          job.name, lastFire, expectedBy, 'stale_fire_evidence_interval_fallback',
+          `cron_stale:${job.name}:${expectedBy.toISOString()}`,
+        );
+      } else {
+        console.log(`[CRON-FIRE-VERIFIER] job=${job.name} healthy (interval-fallback)`);
       }
-      // No fires AND past boot-grace → silent failure
-      stale.push(job.name);
-      await emitStaleAlert(job.name, null, new Date(now), 'no_fires_ever_past_boot_grace');
       continue;
     }
 
-    const lastFireMs = lastFire.getTime();
-    const expectedByMs = lastFireMs + graceWindowMs;
-    if (now > expectedByMs) {
-      const stalenessMinutes = Math.round((now - lastFireMs) / 60000);
-      stale.push(job.name);
-      console.warn(
-        `[CRON-FIRE-VERIFIER] job=${job.name} STALE last_fire=${lastFire.toISOString()} ` +
-        `expected_by=${new Date(expectedByMs).toISOString()} staleness_minutes=${stalenessMinutes}`,
+    const prevMs = prevOccurrence.getTime();
+
+    // If the most recent scheduled occurrence is within the fire-latency grace
+    // of now, its evidence row may not be written yet — not stale.
+    if (now - prevMs < FIRE_LATENCY_GRACE_MS) {
+      console.log(
+        `[CRON-FIRE-VERIFIER] job=${job.name} prev_occurrence_within_grace ` +
+        `(${prevOccurrence.toISOString()}); skipping`,
       );
-      await emitStaleAlert(job.name, lastFire, new Date(expectedByMs), 'stale_fire_evidence');
+      continue;
+    }
+
+    // Stale iff there's no fire-evidence at/after the most recent scheduled
+    // occurrence (minus grace for write latency).
+    const staleThresholdMs = prevMs - FIRE_LATENCY_GRACE_MS;
+    const isStale = lastFire === null || lastFire.getTime() < staleThresholdMs;
+
+    if (isStale) {
+      stale.push(job.name);
+      const dedupeKey = `cron_stale:${job.name}:${prevOccurrence.toISOString()}`;
+      console.warn(
+        `[CRON-FIRE-VERIFIER] job=${job.name} STALE last_fire=${lastFire?.toISOString() ?? 'NEVER'} ` +
+        `prev_occurrence=${prevOccurrence.toISOString()} dedupe_key=${dedupeKey}`,
+      );
+      await emitStaleAlert(
+        job.name, lastFire, prevOccurrence,
+        lastFire === null ? 'no_fires_ever' : 'stale_fire_evidence',
+        dedupeKey,
+      );
     } else {
       console.log(
-        `[CRON-FIRE-VERIFIER] job=${job.name} healthy last_fire=${lastFire.toISOString()}`,
+        `[CRON-FIRE-VERIFIER] job=${job.name} healthy last_fire=${lastFire?.toISOString()} ` +
+        `prev_occurrence=${prevOccurrence.toISOString()}`,
       );
     }
   }
@@ -154,31 +217,41 @@ export async function runVerification(): Promise<{ ok: boolean; stale: string[] 
 async function emitStaleAlert(
   jobName: string,
   lastFire: Date | null,
-  expectedBy: Date,
+  /** The most recent expected occurrence (cadence-aware) OR, for the
+   * interval-fallback path, the computed expected-by time. */
+  expectedOccurrence: Date,
   reason: string,
+  /** B-NEW-51: dedup key — collapses the every-15-min re-check into one alert
+   * per missed occurrence. Same key → suppressed by addAlert. */
+  dedupeKey: string,
 ): Promise<void> {
   try {
     await addAlert({
       triggers_at: new Date(),
       category: 'breakage',
       severity: 'warning',
-      title: `B-NEW-49 cron schedule "${jobName}" appears silently stopped (reason=${reason})`,
+      dedupe_key: dedupeKey,
+      title: `B-NEW-49 cron schedule "${jobName}" missed its scheduled fire (reason=${reason})`,
       body:
-        `The cron-fire-evidence verifier detected that schedule "${jobName}" has not written ` +
-        `a fire-evidence row to scheduled_tasks_audit within the expected grace window. ` +
-        `Last fire: ${lastFire?.toISOString() ?? 'NEVER'}. Expected by: ${expectedBy.toISOString()}. ` +
-        `This matches the BUG-2026-05-31-B silent-failure pattern. Investigate via:\n\n` +
-        `  SELECT * FROM scheduled_tasks_audit WHERE task_name = '${jobName}' ` +
-        `ORDER BY fired_at DESC LIMIT 5;\n\n` +
-        `Likely remediation: PM2 restart (BUG-2026-05-31-B was cleared by next process restart). ` +
-        `See SIM §9.10.c for diagnostic workflow.`,
+        `The cron-fire-evidence verifier found NO fire-evidence row in scheduled_tasks_audit ` +
+        `at or after this schedule's most recent expected occurrence.\n` +
+        `Schedule: "${jobName}". Most recent expected occurrence: ${expectedOccurrence.toISOString()}. ` +
+        `Last recorded fire: ${lastFire?.toISOString() ?? 'NEVER'}.\n\n` +
+        `B-NEW-51: this check is now CADENCE-AWARE (compares against the schedule's actual calendar ` +
+        `occurrence via cron-parser, not a fixed interval) and DE-DUPLICATED (one alert per missed ` +
+        `occurrence, not one per 15-min cycle). NOTE: a PM2 restart does NOT fix a calendar/arming miss — ` +
+        `if a missed occurrence has no later occurrence yet, this clears automatically on the next ` +
+        `successful fire. See SIM §9.10.c.\n\n` +
+        `Investigate: SELECT * FROM scheduled_tasks_audit WHERE task_name = '${jobName}' ` +
+        `ORDER BY fired_at DESC LIMIT 5;`,
       metadata: {
         batch: 'B-NEW-49',
         kind: 'fire_evidence_verifier',
         job_name: jobName,
         reason,
         last_fire_iso: lastFire?.toISOString() ?? null,
-        expected_by_iso: expectedBy.toISOString(),
+        expected_occurrence_iso: expectedOccurrence.toISOString(),
+        dedupe_key: dedupeKey,
       },
     });
   } catch (err) {

@@ -66,3 +66,41 @@ export function computeNextFire(
     return null;
   }
 }
+
+/**
+ * B-NEW-51 (2026-06-02): Compute the PREVIOUS (most recent past) fire time for a
+ * cron expression in a given timezone — the calendar-aware counterpart to
+ * `computeNextFire`. Used by the cron-fire-evidence verifier to judge staleness
+ * against a schedule's ACTUAL most-recent occurrence instead of a fixed
+ * `lastFire + intervalSeconds × 1.5` window (which is wrong for any calendar
+ * schedule whose occurrences aren't evenly spaced — e.g. a weekly Friday job
+ * was being judged "should have fired by Tuesday").
+ *
+ * cron-parser's `.prev()` returns the occurrence STRICTLY before `from`.
+ * Same trusted-introspection path as computeNextFire (cron-parser, not
+ * node-cron's broken getNextRun). Failure-safe → null on parse error.
+ *
+ * @param expression  5- or 6-field cron expression.
+ * @param timezone    IANA timezone; undefined/empty → cron-parser default.
+ * @param from        Base instant to compute the previous fire BEFORE. Defaults to now.
+ * @returns The previous fire Date, or `null` if the expression cannot be parsed.
+ */
+export function computePrevFire(
+  expression: string,
+  timezone?: string,
+  from: Date = new Date(),
+): Date | null {
+  try {
+    const options = timezone
+      ? { tz: timezone, currentDate: from }
+      : { currentDate: from };
+    const interval = parseExpression(expression, options);
+    return interval.prev().toDate();
+  } catch (err) {
+    console.error(
+      `[CRON-PREV-FIRE][PARSE_FAIL] expr=${expression} tz=${timezone ?? '(default)'}: ` +
+      (err instanceof Error ? err.message : err),
+    );
+    return null;
+  }
+}

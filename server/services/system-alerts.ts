@@ -34,7 +34,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 
-export const ALERTS_FILE = '/var/log/dawntrader/system-alerts.jsonl';
+// B-NEW-51: env-overridable for unit tests (defaults to the staging path —
+// SYSTEM_ALERTS_FILE is never set in staging/prod, so behavior is unchanged).
+export const ALERTS_FILE = process.env.SYSTEM_ALERTS_FILE || '/var/log/dawntrader/system-alerts.jsonl';
 const LOCK_FILE = `${ALERTS_FILE}.lock`;
 const LOCK_RETRY_MAX = 50;       // 50 × 100ms = 5s max wait
 const LOCK_RETRY_DELAY_MS = 100;
@@ -65,6 +67,14 @@ export interface SystemAlert {
   metadata: Record<string, unknown>;
   /** Schema-reserved for future recurring health checks. Not used yet. */
   recurrence_interval_seconds: number | null;
+  /** B-NEW-51 (2026-06-02): optional de-duplication key. When set, `addAlert`
+   * suppresses creating a NEW alert if a NON-terminal alert (scheduled |
+   * active | acknowledged) with the same key already exists — collapsing a
+   * repeating condition (e.g. a cron job that's stale every 15-min verifier
+   * cycle) into a single alert instead of one per cycle. Absent/undefined on
+   * pre-B-NEW-51 alerts and on callers that don't pass one (no dedup → legacy
+   * behavior). A `resolved` same-key alert does NOT block a fresh one. */
+  dedupe_key?: string | null;
 }
 
 // ─── File-lock primitives (O_EXCL based, no npm deps) ──────────────────────
@@ -193,11 +203,20 @@ export interface AddAlertOptions {
   body: string;
   metadata?: Record<string, unknown>;
   recurrence_interval_seconds?: number | null;
+  /** B-NEW-51: when set, suppress creating a new alert if a non-terminal
+   * (scheduled/active/acknowledged) alert with the same key already exists. */
+  dedupe_key?: string;
 }
 
 /**
  * Insert a new alert. If `triggers_at` is in the past, the dispatcher will
  * promote it to active on its next run. State starts as `scheduled`.
+ *
+ * B-NEW-51 dedup: when `opts.dedupe_key` is provided and a NON-terminal alert
+ * (state !== 'resolved') with the same `dedupe_key` already exists, no new
+ * alert is written and the EXISTING one is returned. This collapses a
+ * repeating condition into a single alert. Callers that omit `dedupe_key` get
+ * the original always-append behavior (backward-compatible).
  */
 export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
   ensureFileExists();
@@ -217,13 +236,27 @@ export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
     body: opts.body,
     metadata: opts.metadata ?? {},
     recurrence_interval_seconds: opts.recurrence_interval_seconds ?? null,
+    dedupe_key: opts.dedupe_key ?? null,
   };
+  let result: SystemAlert = entry;
   await withLock(() => {
     const all = readAllAlerts();
+    if (opts.dedupe_key) {
+      // Dedup: a non-resolved alert with the same key already represents this
+      // condition — return it, write nothing. (`resolved` is terminal and does
+      // NOT block a fresh alert if the condition recurs.)
+      const existing = all.find(
+        (a) => a.dedupe_key === opts.dedupe_key && a.state !== 'resolved',
+      );
+      if (existing) {
+        result = existing;
+        return;
+      }
+    }
     all.push(entry);
     writeAllAlertsAtomic(all);
   });
-  return entry;
+  return result;
 }
 
 /**

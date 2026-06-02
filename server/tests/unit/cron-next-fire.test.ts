@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { computeNextFire } from '../../services/cron-next-fire.js';
+import { computeNextFire, computePrevFire } from '../../services/cron-next-fire.js';
 
 describe('B-NEW-50 cron-next-fire (RUNNING_ISSUES #165 regression-lock)', () => {
   it('weekend_shutdown (Fri 8PM ET) from a Wednesday → imminent 2026 Friday, NOT 2027', () => {
@@ -64,5 +64,39 @@ describe('B-NEW-50 cron-next-fire (RUNNING_ISSUES #165 regression-lock)', () => 
     const from = new Date('2026-06-01T08:02:00Z');
     const next = computeNextFire('*/5 * * * *', 'UTC', from);
     expect(next!.toISOString()).toBe('2026-06-01T08:05:00.000Z');
+  });
+});
+
+describe('B-NEW-51 computePrevFire (cadence-aware staleness)', () => {
+  it('weekly Saturday 00:00 UTC from a Tuesday → the most recent past Saturday', () => {
+    // Tue 2026-06-02 15:00Z → previous `0 0 * * 6` occurrence = Sat 2026-05-30 00:00Z.
+    const prev = computePrevFire('0 0 * * 6', 'UTC', new Date('2026-06-02T15:00:00Z'));
+    expect(prev).not.toBeNull();
+    expect(prev!.toISOString()).toBe('2026-05-30T00:00:00.000Z');
+  });
+
+  it('weekend_shutdown (Fri 8PM ET) from a Tuesday → the most recent past Friday occurrence', () => {
+    // Tue 2026-06-02 15:00Z → previous Fri 8PM ET = Fri 2026-05-29 20:00 EDT = 2026-05-30 00:00Z.
+    const prev = computePrevFire('0 20 * * 5', 'America/New_York', new Date('2026-06-02T15:00:00Z'));
+    expect(prev!.toISOString()).toBe('2026-05-30T00:00:00.000Z');
+    expect(prev!.getUTCFullYear()).toBe(2026);
+  });
+
+  it('every-minute schedule → top of the current minute', () => {
+    const prev = computePrevFire('* * * * *', 'UTC', new Date('2026-06-02T15:00:30Z'));
+    expect(prev!.toISOString()).toBe('2026-06-02T15:00:00.000Z');
+  });
+
+  it('prev() is strictly before `from` (not equal)', () => {
+    // from exactly on an occurrence boundary → returns the PRIOR one, not itself.
+    const prev = computePrevFire('0 0 * * 6', 'UTC', new Date('2026-05-30T00:00:00Z'));
+    expect(prev!.toISOString()).toBe('2026-05-23T00:00:00.000Z');
+  });
+
+  it('returns null (failure-safe) on an unparseable expression', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(computePrevFire('not a cron expression', 'UTC')).toBeNull();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });
