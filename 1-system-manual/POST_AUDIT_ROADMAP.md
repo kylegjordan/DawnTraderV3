@@ -1340,7 +1340,62 @@ Restart paper with adaptive response live. Confirm that mode transitions fire wh
 
 **Expected outcome (if greenlit)**: Pre-launch system that responds to market conditions instead of treating all conditions identically. Reduces losing-streak length and amplifies favorable-streak capture. Tunable without redeploys. Calibrated against months of VTS data before going live.
 
-**Phase 19 expected outcome**: Fully debugged paper trading system with optional SQE recalibration (19.4) and Adaptive Market Response (19.5) layered in based on what paper-mode evidence shows. All components validated. Ready for production hardening.
+### 19.6 External Source Connection & Capacity Diagnostics Dashboard (NEW 2026-06-02, Kyle directive)
+
+**Status (2026-06-02):** Added to Phase 19 as the last operational sub-batch — diagnostics layer that hardens visibility before launch. Kyle directive 2026-06-02. Forward-compatible with the eventual ML/AI conversational layer (M5 in `ML_DESIGN_PRELIMINARY_2026-05-21.md`) — this dashboard's API surface is the same one the conversational overlay reads to answer "is everything healthy."
+
+**Goal:** two new operator-facing diagnostics tabs that continuously monitor external data sources and internal compute capacity, surface health via a green / yellow / orange / red traffic-light system, and route degraded-or-worse states into the system-alerts queue so Langston and Claude Code sessions get notified per §10.5.
+
+#### 19.6.1 External-Source Connection Dashboard
+
+Per-source rows for every external API the system reads — Kraken (spot WS, equities WS, futures WS, REST, AssetPairs), CoinGecko (xStock discovery + crypto macro), Finnhub (sector tags), and any future feed wired in. Within each source, a row per *category* of data being pulled (e.g. Kraken spot: ticker channel, OHLC channel, trades channel, order book channel; CoinGecko: symbol discovery, macro). Each category shows:
+
+| Status | Meaning |
+|---|---|
+| 🟢 Green | Working as expected — fresh data, within sanity baselines, well under API limits |
+| 🟡 Yellow | Working but with intermittent disruptions (sporadic timeouts, brief feed gaps, approaching but under limits) |
+| 🟠 Orange | Shaky — investigation warranted (sustained partial outages, sanity-check anomalies, API limit pressure ≥80%) |
+| 🔴 Red | Off — no data flowing, or data flowing but failing baseline sanity checks |
+
+**Two checks per category, not one:**
+1. **Is data flowing?** Last-update freshness vs an expected cadence per category (e.g. ticker channel <2s, OHLC channel ≤60s, CoinGecko symbol discovery ≤24h).
+2. **Does the data look right?** Per-category sanity baselines — NOT exhaustive per-pair validation. Examples: ticker prices within plausible bounds (not zero, not absurd), OHLC bar counts within an expected range per cycle, symbol discovery returning a stable count (within ±N% of recent baseline), sector tags returning the expected enum set. The "baseline" is defined per category and stored as a small set of expected-range constants; the dashboard flags categories whose live data falls outside the baseline range.
+
+**API-limit pane (per source AND DawnTrader-wide):**
+- Per-source usage vs that source's published rate-limit ceiling, expressed as a percentage with the same traffic-light tier.
+- A DawnTrader-wide total throughput indicator showing aggregate inbound data rate vs the system's measured capacity (queue depths, persistence-pipeline lag, DB write throughput).
+- Orange or red on either pane fires a system-alerts entry.
+
+#### 19.6.2 CPU / Process Capacity Dashboard
+
+A second tab listing every major process the system depends on at any given time and their live state:
+- Scanner workers (FX5 crypto, xStock spot, xStock perp).
+- Archivers (equity-spot, equity-perp, crypto-spot — the B74 chain).
+- VTS runner.
+- Active-trading orchestrator (when Phase 19 reactivates it).
+- TEC / exit-decision service.
+- Session-lifecycle controller.
+- System-alerts dispatcher.
+- DB pool + write batchers.
+- ML sidecar (when it lands per Phase 17/18).
+
+Each row shows: running / not running, current CPU%, memory footprint, queue depth or backlog where applicable, and the same green/yellow/orange/red status against per-process capacity envelopes. Aggregate CPU% and memory% against the host's total capacity are displayed at the top of the tab. Approaching capacity (≥80% sustained) is orange; saturated or process-down is red.
+
+#### 19.6.3 Alert integration
+
+Both dashboards write to `system-alerts.jsonl` (per §10.5) on yellow→orange or orange→red transitions, with severity matching the new tier (warning for orange, critical for red). The standing per-turn alerts-check protocol (CLAUDE.md §10.5) then surfaces them to whichever CC or Langston session is at the keyboard, plus Kyle via Telegram if severity is critical and during-RTH. Yellow alone does NOT fire an alert (would flood); yellow is a dashboard-only visibility state.
+
+#### 19.6.4 Forward role — ML / AI conversational layer API
+
+When the ML conversational layer (M5) lands in Phase 17/18, its "is everything healthy" question reads the SAME API surface this dashboard exposes. So the endpoints built here become a permanent part of the system's introspection layer, not a Phase-19-only artifact. Naming convention: `/api/diagnostics/external-sources/...` and `/api/diagnostics/process-capacity/...` so the surface is discoverable by both the dashboard frontend and any future programmatic consumer.
+
+#### 19.6.5 Scope shape & sequencing
+
+- Position: **last operational sub-batch of Phase 19** per Kyle directive. After SQE recalibration (19.4), the observational decision gate (19.4.5), and any AMR work that lands; before Phase 20 production hardening opens.
+- Estimated scope: two new React tabs + ~6 new API endpoints + per-category baseline-range constants in `module_constants` (so baselines are DB-tunable per CLAUDE.md §5 #15) + per-process capacity envelopes also in `module_constants` + alert-emitter wiring. Roughly 1 week's batch — moderate surface, low risk because it's read-only diagnostics + alert writes.
+- Tier 1 governance: scope file, pre-audit consulting SIM for every monitored process, completion report. No new DB tables required (re-uses `system-alerts.jsonl` queue + `module_constants` for tunable baselines).
+
+**Phase 19 expected outcome**: Fully debugged paper trading system with optional SQE recalibration (19.4), Adaptive Market Response brain (now Phase 25 — see top-of-file 2026-05-23 update), and end-of-phase diagnostics dashboards (19.6) covering external-source health and internal compute capacity wired into the alerts queue. All components validated. Ready for production hardening.
 
 ---
 
