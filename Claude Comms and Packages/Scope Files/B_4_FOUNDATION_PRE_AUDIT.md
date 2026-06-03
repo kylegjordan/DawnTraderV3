@@ -90,6 +90,10 @@ Per `SYSTEM_IMPACT_MAP.md`, the affected components and their documented couplin
 
 ---
 
+## §5b — DEFERRED FOLLOW-UP (documented before implementation, §8 #11 — Langston DBS-fork ruling 2026-06-03)
+
+**Crypto-DBS → module_constants migration (DEFERRED to its own follow-up batch; NOT in B.4).** This foundation batch makes the **xStock** DBS config per-class (resolved from `module_constants directional_bias`, hard-fail). **Crypto DBS keeps `DEFAULT_DBS_CONFIG` (48/12/26) UNCHANGED** — Langston's DBS-fork call (Option B): the crypto DBS callers (`fx5-scanner.ts:1110/1117/1220/1227`, `market-scanner.ts:679/685` — 6 sites) live in physically separate files from the xStock scanner, so there is NO same-function split-brain (the thing that made the regime if-branch dangerous is absent). Routing crypto's DBS through a resolver would touch the 300-pair crypto hot path for ZERO xStock value, with the parity assertion guarding only value-drift not path-blast-radius. **Structural-drift guard kept (free):** the xStock DBSConfig and crypto's `DEFAULT_DBS_CONFIG` share the ONE `DBSConfig` type (`directional-bias.types.ts`), so a future shape change fails tsc on the crypto side — compiler-enforced. **Follow-up to log in RUNNING_ISSUES at Step-10:** crypto-DBS → per-class module_constants resolver (target shape), 6 call sites, crypto parity assertion as acceptance guard, deferred to keep crypto blast radius out of the xStock foundation batch. The crypto `*` DBS seeds in migration `2026-06-03c` (48/12/26) pre-stage this follow-up (inert until crypto reads them).
+
 ## §6 — Open questions — RESOLVED (Langston Step-2, 2026-06-03)
 
 1. **Regime⟵DBS ordering** → CONFIRMED yes (recalibrating thresholds against a 60m-substrate DBS that's about to change is a moving target). §4 ordering correct. ✅
