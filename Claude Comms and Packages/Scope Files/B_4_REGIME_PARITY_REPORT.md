@@ -25,8 +25,9 @@ The recalibration study showed that leaving the OLD 60m thresholds on 15m bars w
 | TREND_FRIENDLY_STABLE | 29.2% | 25.20% | −4.00 |
 | RANGE_BOUND_STABLE | 9.3% | 6.59% | −2.71 |
 
-## §4 — Stability: regime-flip rate
-clean-60m CURRENT 18.94% (19,231/101,545) → clean-15m NEW **9.75%** (29,335/300,907). The recalibrated 15m read is MORE stable per-bar-transition than the 60m — confirming the W1 thesis that the earlier high 15m flip-rate was a bar-count-lookback artifact removed by time-anchoring. (Per-consecutive-bar proxy on a saturated trailing window — reads lower than W1's directional 3-bar proxy ~37%/34%; different measure, directional confirmation only.)
+## §4 — Stability: regime-flip rate — ⚠️ CORRECTED FRAMING (Langston exit-gate review)
+Per-bar: clean-60m CURRENT 18.94% (19,231/101,545); clean-15m NEW 9.75% (29,335/300,907).
+**Do NOT read this as "15m is steadier" — that framing is BACKWARDS on a wall-clock basis (Langston).** A 15m bar is ¼ the wall-clock gap of a 60m bar, so normalize to flips/HOUR: **60m ≈ 18.94%/hr; 15m ≈ 9.75% × 4 = ~39%/hr.** On a per-hour basis the 15m read changes label **roughly TWICE as often**, not half. The lower per-bar number is mostly bar-spacing, not genuine added stability. **This does NOT independently confirm the W1 artifact thesis** (W1 holds on its own directional-3-bar-proxy evidence; §4 is not independent support). It IS a Net-Expectancy concern: more regime flips/hr → more strategy switching → more whipsaw friction = Langston's Q2 responsiveness question (did we buy steadiness or churn?). **ACTIVATION-READINESS ITEM (Langston, must answer before activation closes): produce the wall-clock-normalized flip-rate + a responsiveness check (does the 15m read catch GENUINE transitions promptly vs churn on noise) — not deferred indefinitely.**
 
 ## §5 — The (1)→(2) substrate gap (context, NOT the gate basis)
 Live-60m (1) is much more TFS-heavy (43% vs clean 25%) with near-zero RANGE_BOUND (0.04%) + IMPULSE. Driver: (1) is `signal_eval_archive.regime_label` — per-signal-DECISION events (decision-weighted by scanner activity) on the live SNAPSHOT substrate + the forming-bar mechanism — NOT a uniform per-bar log. (2)/(3) are uniform per-bar on the clean 1m-rebuild. So (1) and (2) are not apples-to-apples; the gate correctly rests on (2)→(3). **The live RANGE_BOUND≈0.04% independently confirms the EV-leakage item (live forming-bar starves the range-strategy family) — tracked SEPARATELY, not a B.4 blocker.** Substrate is CLEAN post-B-NEW-35 (UNIQUE constraint, 0 dup keys, max 1 row/key), so the clean anchor matches the live feed the 15m classifier will read.
@@ -50,9 +51,13 @@ Live-60m (1) is much more TFS-heavy (43% vs clean 25%) with near-zero RANGE_BOUN
 | HVU_DX_STRONG | 45 | 22 |
 | HVU_MOM_NEG_PATH_B | −0.0025 | −0.0021 |
 
+## §6b — LANGSTON EXIT-GATE CALL: ✅ SIGNED OFF (2026-06-04)
+"The basis I set is met… the bar-size change is distribution-neutral once thresholds are recalibrated… §3 is the real discovery: the collapse is removed… Shift understood, shift intended. Substrate clean. That clears the gate." Proceed to VN/DI re-derivation, then activation. **Two ACTIVATION-READINESS conditions (NOT gate blockers):**
+1. **Wall-clock-normalized flip-rate + responsiveness check** (§4 corrected) — before activation closes, report flips/hour clean-60m vs clean-15m + whether the 15m read catches genuine transitions promptly (steadiness vs churn).
+2. **The ≤1.3pp is partly BY-CONSTRUCTION** — percentile-preservation targets marginal-mix preservation by design, so (2)→(3)≈0 is largely engineered; the genuinely DISCOVERED win is the collapse fix (§3). **At activation: capture the LIVE-15m mix + confirm it lands near predicted (3); material divergence = substrate-mismatch signal, NOT deploy success.** (The cross-bar-size marginal+flip comparison is a label-fidelity PROXY — no per-bar confusion matrix is possible across bar sizes.)
+
 ## §7 — Open / next (NOT part of this regime-label gate)
 - **VN/DI re-derivation** (screener_filters, bar-sensitive IMF screens) — still pending, same replay method.
-- **Responsiveness backlog** (Langston Q2): confirm 15m steadiness is not sluggishness (192-bar=48h DBS) — does it still catch real transitions promptly.
-- **Activation** (gated on this sign-off): DBS recompute run + scanner→15m + ORB enable + deploy + §9.3 UI verify.
+- **Activation** (gated on this sign-off): DBS recompute run + scanner→15m + ORB enable + deploy + §9.3 UI verify + the two §6b activation-readiness conditions.
 
 *Engine `scripts/b4-regime-parity.ts`; full output `/tmp/b4_regime_parity.txt`. Active trading OFF — forward proxy; Phase-19 paper-active is the final arbiter.*
