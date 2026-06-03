@@ -80,6 +80,7 @@ export function detectMorningStar(
   });
   const MS_MIN_STRENGTH      = c.min_pattern_strength;
   const MS_VOL_MULT          = c.volume_threshold_multiplier;
+  const MS_VOL_CONFIRM       = (c.volume_confirmation_enabled ?? 1) !== 0; // B3.1b: per-class volume toggle (xstock_spot=off; volume here is a soft confidence factor)
   const MS_TARGET_ATR_MULT   = c.target_exit_atr_multiplier;
   const MS_STRENGTH_WEIGHT   = c.pattern_strength_confidence_weight;
   const MS_HIGH_VOL_BONUS    = c.high_volume_confidence_bonus;
@@ -178,8 +179,10 @@ export function detectMorningStar(
 
   // ── Confidence calculation ───────────────────────────────────────────────
   const baseConfidence = patternSignal.strength * MS_STRENGTH_WEIGHT;
-  // B57: Graduated volume factor
-  const volumeBonus = volumeRatio >= 2.0 ? MS_HIGH_VOL_BONUS
+  // B57: Graduated volume factor. B3.1b: neutralized when volume-confirmation is
+  // disabled for this asset class (xstock_spot — underlying-equity volume, not the token's).
+  const volumeBonus = !MS_VOL_CONFIRM ? 0
+    : volumeRatio >= 2.0 ? MS_HIGH_VOL_BONUS
     : volumeRatio >= 1.2 ? 0.04
     : volumeRatio >= 0.8 ? 0
     : -0.04;

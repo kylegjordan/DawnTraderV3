@@ -159,10 +159,13 @@ export class StrategyEngine {
     }
     
     const avgVolume = totalVolume / lookbackPeriod;
-    const hasVolumeConfirmation = volume >= avgVolume * volumeMultiplier;
-    
-    console.log(`[VWAP Strategy] Volume check: current=${volume.toFixed(0)}, avg=${avgVolume.toFixed(0)}, multiplier=${volumeMultiplier}x, confirmed=${hasVolumeConfirmation}`);
-    
+    // B3.1b: per-class volume-confirmation toggle. xstock_spot=off — the ws-equities
+    // volume is the underlying-equity's, not the token's (no honest signal); crypto=on.
+    const volConfirmEnabled = (c['volume_confirmation_enabled'] ?? 1) !== 0;
+    const hasVolumeConfirmation = !volConfirmEnabled || (volume >= avgVolume * volumeMultiplier);
+
+    console.log(`[VWAP Strategy] Volume check: current=${volume.toFixed(0)}, avg=${avgVolume.toFixed(0)}, multiplier=${volumeMultiplier}x, confirmed=${hasVolumeConfirmation}, volGateEnabled=${volConfirmEnabled}`);
+
     if (priceAboveVWAP && nearVWAP && hasReversalPattern && hasVolumeConfirmation) {
       // Batch 45: ATR-relative entry/stop/target
       const atr = indicators.atr ?? (high24h - low24h) * c['atr_fallback_daily_range_frac']; // Fallback: 10% of daily range
@@ -522,10 +525,12 @@ export class StrategyEngine {
     const breakoutLevel = rangeResult.rangeHigh * (1 + breakoutBuffer);
     const isBreakout = currentPrice > breakoutLevel;
     
-    // Volume confirmation - calculate average from recent bars
+    // Volume confirmation - calculate average from recent bars.
+    // B3.1b: per-class toggle (xstock_spot=off — underlying-equity volume, no honest signal).
     const recentBars = priceHistory.slice(-Math.min(c['volume_avg_lookback'], priceHistory.length));
     const avgVolume = recentBars.reduce((sum, p) => sum + parseFloat(p.volume), 0) / recentBars.length;
-    const hasVolumeSpike = currentVolume >= avgVolume * volumeMultiplier;
+    const volConfirmEnabled = (c['volume_confirmation_enabled'] ?? 1) !== 0;
+    const hasVolumeSpike = !volConfirmEnabled || (currentVolume >= avgVolume * volumeMultiplier);
 
     if (isBreakout && hasVolumeSpike) {
       const entryPrice = breakoutLevel * c['entry_premium_mult']; // Entry slightly above breakout
@@ -798,10 +803,11 @@ export class StrategyEngine {
     const touchedVWAP = recentPrices.some(p => parseFloat(p.low) <= vwap);
     const nowAboveVWAP = currentPrice > vwap;
     
-    // Volume confirmation
+    // Volume confirmation. B3.1b: per-class toggle (xstock_spot=off — underlying-equity volume, no honest signal).
     const avgVolume = recentPrices.reduce((sum, p) => sum + parseFloat(p.volume), 0) / recentPrices.length;
-    const hasVolume = volume >= avgVolume * volumeMultiplier;
-    
+    const volConfirmEnabled = (c['volume_confirmation_enabled'] ?? 1) !== 0;
+    const hasVolume = !volConfirmEnabled || (volume >= avgVolume * volumeMultiplier);
+
     if (isNearVWAP && touchedVWAP && nowAboveVWAP && hasVolume) {
       const entryPrice = currentPrice * c['entry_premium_mult'];
       const stopPrice = vwap * c['stop_below_vwap_mult']; // Slightly below VWAP

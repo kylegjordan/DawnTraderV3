@@ -77,6 +77,7 @@ export function detectPivotShift(
   const PS_RSI_HIGH          = c.rsi_neutral_zone_high;
   const PS_ADX_SLOPE_MIN     = c.min_adx_slope_per_period;
   const PS_VOL_MULT          = c.volume_threshold_multiplier;
+  const PS_VOL_CONFIRM       = (c.volume_confirmation_enabled ?? 1) !== 0; // B3.1b: per-class volume toggle (xstock_spot=off)
   const PS_STOP_ATR_MULT     = c.stop_loss_atr_multiplier;
   const PS_TARGET_ATR_MULT   = c.target_exit_atr_multiplier;
   const PS_PATTERN_WEIGHT    = c.pattern_strength_confidence_weight;
@@ -139,9 +140,11 @@ export function detectPivotShift(
   }
 
   // ── Condition 5: Volume confirmation ─────────────────────────────────────
+  // B3.1b: skip entirely when disabled for this asset class (xstock_spot — the
+  // ws-equities volume is the underlying equity's, not the token's).
   const avgVolume = calculateAvgVolume(ohlc, 20);
   const currentVolume = ohlc[ohlc.length - 1].volume;
-  if (avgVolume === 0 || currentVolume < avgVolume * PS_VOL_MULT) {
+  if (PS_VOL_CONFIRM && (avgVolume === 0 || currentVolume < avgVolume * PS_VOL_MULT)) {
     console.log(
       `${LOG_PREFIX} Volume check failed: currentVol=${currentVolume.toFixed(2)}, ` +
       `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * PS_VOL_MULT).toFixed(2)}. Skipping.`

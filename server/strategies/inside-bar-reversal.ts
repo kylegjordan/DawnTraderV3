@@ -77,6 +77,7 @@ export function detectInsideBarReversal(
   });
   const IB_MAX_COMPRESSION    = c.max_compression_ratio;
   const IB_VOL_MULT           = c.volume_threshold_multiplier;
+  const IB_VOL_CONFIRM        = (c.volume_confirmation_enabled ?? 1) !== 0; // B3.1b: per-class volume toggle (xstock_spot=off)
   const IB_TARGET_ATR_MULT    = c.target_exit_atr_multiplier;
   const IB_COMPRESSION_WEIGHT = c.compression_quality_confidence_weight;
   const IB_STRENGTH_WEIGHT    = c.pattern_strength_confidence_weight;
@@ -139,9 +140,11 @@ export function detectInsideBarReversal(
   const direction: 'BUY' = 'BUY';
 
   // ── Condition 4: Volume confirmation on breakout candle ──────────────────
+  // B3.1b: skip entirely when disabled for this asset class (xstock_spot — the
+  // ws-equities volume is the underlying equity's, not the token's).
   const avgVolume = calculateAvgVolume(ohlc, 20);
   const breakoutVolume = ohlc[ohlc.length - 1].volume;
-  if (avgVolume === 0 || breakoutVolume < avgVolume * IB_VOL_MULT) {
+  if (IB_VOL_CONFIRM && (avgVolume === 0 || breakoutVolume < avgVolume * IB_VOL_MULT)) {
     console.log(
       `${LOG_PREFIX} Volume check failed: breakoutVol=${breakoutVolume.toFixed(2)}, ` +
       `avgVol=${avgVolume.toFixed(2)}, threshold=${(avgVolume * IB_VOL_MULT).toFixed(2)}. Skipping.`
