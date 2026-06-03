@@ -157,6 +157,10 @@ async function main(): Promise<void> {
     let msTriples = 0, msShapes = 0, ibPairs = 0, ibShapes = 0;
     const msEx: number[] = [], msNoEx: number[] = [];   // MS present vs absent forward-excess
     const ibEx: number[] = [], ibNoEx: number[] = [];
+    // generic NON-pattern setups (the trend/pullback strategies' substrate), tested per F:
+    const momEx: number[] = [], momNoEx: number[] = [];     // 3-bar momentum up vs down
+    const trEx: number[] = [], trNoEx: number[] = [];       // uptrend (close > SMA20) vs not
+    const pbEx: number[] = [], pbNoEx: number[] = [];       // pullback-in-uptrend (uptrend AND this bar is a down-bar) vs not
     let regimeBars = 0, regimeFlips = 0;
 
     for (const s of allSymbols) {
@@ -194,6 +198,17 @@ async function main(): Promise<void> {
           if (ms) msShapes++;
           if (ex !== null) (ms ? msEx : msNoEx).push(ex);
         }
+        // generic non-pattern setups (substrate of the trend/pullback/breakout strategies)
+        if (ex !== null) {
+          if (i >= 3) { const momUp = fb[i].c > fb[i - 3].c; (momUp ? momEx : momNoEx).push(ex); }
+          if (i >= 19) {
+            let s = 0; for (let k = i - 19; k <= i; k++) s += fb[k].c; const sma20 = s / 20;
+            const upTrend = fb[i].c > sma20;
+            (upTrend ? trEx : trNoEx).push(ex);
+            const isDownBar = fb[i].c < fb[i].o;
+            (upTrend && isDownBar ? pbEx : pbNoEx).push(ex); // pullback in uptrend
+          }
+        }
       }
     }
 
@@ -215,6 +230,12 @@ async function main(): Promise<void> {
     console.log(
       `       | detail: MS excess present=${(mean(msEx) * 100).toFixed(3)}% absent=${(mean(msNoEx) * 100).toFixed(3)}%  |  ` +
       `IB excess present=${(mean(ibEx) * 100).toFixed(3)}% absent=${(mean(ibNoEx) * 100).toFixed(3)}%`,
+    );
+    // GENERIC non-pattern setup edge per F (the trend/pullback strategies' substrate)
+    console.log(
+      `       | generic edge AUC(2h): momentum-up=${aucMW(momEx, momNoEx).toFixed(3)} [${momEx.length}/${momNoEx.length}]  ` +
+      `uptrend>SMA20=${aucMW(trEx, trNoEx).toFixed(3)} [${trEx.length}/${trNoEx.length}]  ` +
+      `pullback-in-uptrend=${aucMW(pbEx, pbNoEx).toFixed(3)} [${pbEx.length}/${pbNoEx.length}]`,
     );
   }
 
