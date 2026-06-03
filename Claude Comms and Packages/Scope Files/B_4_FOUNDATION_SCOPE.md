@@ -1,4 +1,6 @@
-# B.4 — Bar-Frequency FOUNDATION Sub-Batch — SCOPE v1 (Step 1)
+# B.4 — Bar-Frequency FOUNDATION Sub-Batch — SCOPE v2 (Step 1, Langston review absorbed)
+
+> **Langston Step-1 review (2026-06-03): APPROVED to proceed to Step-2.** The 9-objective cut is the right foundation boundary (nothing splits into its own sub-batch); all four W1 binding conditions carried faithfully. Four refinements absorbed into v2: (1) added an IMF VN/DI bar-sensitivity determination (Objective 10) — the recalibration-list Bucket-2 instruction that wasn't in v1's objectives; (2) DBS is recompute-**PLUS**-epoch-stamp-**PLUS**-retain-60m-`_archive`, not recompute-vs-boundary (Objective 5); (3) load gate sizes TWO distinct capacity questions — steady-state 4× cadence AND the one-time off-peak DBS backfill — plus the 1m-retention storage delta (Objective 8); (4) crypto-isolation is now a Step-4 HARD-FAIL gate with three explicit proofs (§3). Plus three build-ordering constraints (§4).
 
 > **First build of the B.4 umbrella (xStock Strategy-Fit effort).** Switches the xStock evaluation bar size from 60-minute to **15-minute** and performs the PAIRED recalibration that switch forces, so the regime/indicator/DBS semantics keep their intended real-world meaning. This is the FOUNDATION step — it precedes all per-strategy re-tuning (W2), pattern-detection review (Bucket 3), and per-strategy trade construction (W2).
 >
@@ -49,8 +51,9 @@ Almost everything in the system that remembers or measures recent price was set 
 ### Objective 5 — DBS adjustment + backfill recompute + EPOCH-VERSIONING decision [Langston binding condition 2]
 - Re-derive DBS lookback (`computeDirectionalBias` lookbackPeriod=48 bars → re-express to the intended real time per class) and the EMA periods; DBS is ATR-normalized, and ATR shrinks at 15m, so the normalization is re-checked.
 - Recompute the `xstock_dbs_backfill` history (~30k rows, from B-PHASE-A2) on 15-min bars.
-- **Make the epoch-versioning DECISION explicit IN THIS SCOPE (not discovered mid-build):** either (a) full historical recompute at 15m, OR (b) flag a regime-epoch boundary so downstream learning knows the substrate changed — a part-60m / part-15m corpus is split-brain. **CC recommendation: full recompute** (the 1m archive supports it; cleanest for downstream ML; avoids a mixed-substrate training set). Langston to confirm or override.
-- **Verify:** DBS backfill row count reflects a clean 15m recompute (or a documented epoch boundary); no split-brain training corpus; crypto DBS untouched.
+- **Epoch-versioning DECISION (Langston Step-1: recompute-PLUS-stamp, NOT recompute-vs-boundary — the either/or was a false binary). Do ALL THREE:** (a) full historical recompute at 15m (kills the split-brain corpus); (b) epoch-stamp the recomputed rows with a substrate/version tag so downstream learning can distinguish native-15m from recomputed-from-1m-archive; (c) retain the existing 60m DBS table read-only as `_archive` so a buggy 15m recompute can be diffed against the old set. NO PATCHES = preserve the audit trail, not destroy-and-replace.
+- The recompute is a one-time transient batch job — see Objective 8 for its off-peak scheduling (it must NOT contend with live VTS or count against the steady-state load budget).
+- **Verify:** DBS backfill reflects a clean 15m recompute, rows carry the epoch/substrate stamp, the 60m `_archive` table is retained read-only; no split-brain training corpus; crypto DBS untouched.
 
 ### Objective 6 — ORB candle-source + WINDOW + enable [Langston binding condition 4]
 - Fix the candle-source defect: ORB is currently fed 60-min bars (`vts-runner.ts:897`) instead of fine-grained bars — point it at the correct (fine) bar granularity so it can see an opening range at all.
@@ -64,10 +67,13 @@ Almost everything in the system that remembers or measures recent price was set 
 - Confirm the 1-minute archive retention reaches far enough back to rebuild that warmup depth at reopen; extend retention if it doesn't.
 - **Verify:** at a simulated/next Sunday reopen, the longest-lookback windows are fully populated from bar one — no degraded cold-start window where xStocks resume with thin history.
 
-### Objective 8 — Load gate: 4× snapshot cadence vs CPX22 budget [Langston binding condition 3, confirm UPFRONT]
-- 15-min bars are ~4× the snapshot cadence of 60-min. Confirm UPFRONT (in Step-2 pre-audit, before build) that this fits within the B79 1.3× load budget / CPX22 capacity.
-- **If it does not fit, the answer is vertical-scale or computational redistribution — NEVER asset-class shedding (§5 #15).**
-- **Verify:** documented headroom calculation in the pre-audit; post-deploy CPX22 load stays within budget (PM2/host metrics).
+### Objective 8 — Load gate: capacity sized UPFRONT [Langston binding condition 3, with dual-capacity refinement]
+- Confirm UPFRONT (in Step-2 pre-audit, before build) with an explicit documented pass/fail. **Size TWO distinct capacity questions (Langston refinement):**
+  - **(a) Steady-state 4× snapshot cadence** — 15-min bars run ~4× the 60-min snapshot cadence; check this recurring load against the B79 1.3× budget / CPX22 capacity.
+  - **(b) One-time DBS backfill recompute (~30k rows on 15m)** — a transient batch job that must NOT count against the steady-state budget but DOES need a scheduled off-peak window so it doesn't contend with live VTS.
+- **Fold in the Objective-7 1m-retention-extension storage delta** — same upfront capacity question (disk/storage headroom for deeper 1m retention + the new 15m snapshot table).
+- **HARD GATE: build does not proceed on a fail.** A fail means vertical-scale or computational redistribution — NEVER asset-class shedding (§5 #15).
+- **Verify:** documented headroom calc with explicit pass/fail for (a), (b), and the storage delta in the pre-audit; post-deploy CPX22 steady-state load stays within budget (PM2/host metrics); the backfill ran in its off-peak window without VTS contention.
 
 ### Objective 9 — EXIT GATE: regime-label PARITY REPORT [Langston binding condition 1 — THE #1 gate]
 - Produce a side-by-side report diffing the OLD 60-minute regime labels vs the NEW 15-minute regime labels over the same historical window; characterize the distribution shift (per-regime counts WITH raw numbers, per rule #13 rolling windows).
@@ -75,20 +81,35 @@ Almost everything in the system that remembers or measures recent price was set 
 - **All per-strategy re-tuning (W2) is HELD until this parity report is signed off by Langston.**
 - **Verify:** parity report written, reviewed, and signed off; the shift is explained and intentional, not a silent collapse.
 
+### Objective 10 — IMF VN/DI bar-sensitivity determination [Langston Step-1 gap — recalibration-list Bucket 2]
+- The recalibration list (Bucket 2) explicitly assigns to THIS foundation pre-audit: confirm which IMF pieces are bar-sensitive — specifically the B.2 volatility-normalization (VN) and directional (DI) screens, which are bar-based and currently feed signal selection on 60m-calibrated values.
+- **Step-2 pre-audit determines bar-sensitivity, with one of two outcomes:** (a) **recalibrate in this foundation sub-batch** if a VN/DI screen is bar-sensitive enough to mislabel on 15m bars during the foundation window; OR (b) **documented HOLD to W2** with stated rationale (e.g. VTS-only / active-trading-OFF makes the stale screen tolerable until the per-strategy re-tune). Either way it is decided and written, not left to fall through the gap between the recalibration list and the scope.
+- **Verify:** Step-2 pre-audit contains the VN/DI bar-sensitivity finding + the recalibrate-now-or-hold-to-W2 decision with rationale; if recalibrated, the new values are xStock-scoped and crypto VN/DI is untouched.
+
 ---
 
-## §3 — Asset-class scoping (NON-NEGOTIABLE)
+## §3 — Asset-class scoping (NON-NEGOTIABLE) + crypto-isolation HARD-FAIL gate
 
-Every change is `xstock_spot`-scoped and DB-resolved per asset class. **Crypto lookbacks, thresholds, DBS, MCE periods, and bars are never read or written by this sub-batch.** No global/wildcard edits to bar-sensitive constants. Crypto bar-frequency is a SEPARATE exploratory study (running in parallel) and a later roadmap re-validation item — not this sub-batch.
+Every change is `xstock_spot`-scoped and DB-resolved per asset class. **Crypto lookbacks, thresholds, DBS, MCE periods, VN/DI screens, and bars are never read or written by this sub-batch.** No global/wildcard edits to bar-sensitive constants. Time-anchoring is per-class DB-resolved config, NOT a shared-literal rewrite. Crypto bar-frequency is a SEPARATE exploratory study (running in parallel) and a later roadmap re-validation item — not this sub-batch.
+
+**Crypto-isolation is a Step-4 HARD-FAIL gate (Langston Step-1).** The code-review diff must prove all three; any one failing BLOCKS push:
+1. No shared bar-sensitive literal is touched without per-class branching.
+2. Crypto regime lookbacks / thresholds / DBS / MCE periods / VN-DI are bit-identical before vs after.
+3. Crypto bar-cadence-unchanged isolation proof appears in the logs.
 
 ---
 
 ## §4 — Sequencing
 
-1. **This foundation sub-batch (B.4 first build):** Objectives 1–8 → **Objective 9 parity-report sign-off gate.**
+1. **This foundation sub-batch (B.4 first build):** Objectives 1–8 + 10 → **Objective 9 parity-report sign-off gate.**
 2. Pattern-detection review (Bucket 3 / W4).
 3. Per-strategy gates + trade construction (Bucket 4 / W2), then re-enable + re-fit the deferred equity-suitable strategies + the full ORB re-tune (W3).
 - Throughout: asset-class-scoped, measured by the B3.1a evidence engine, candidate-settings-confirmed-at-Phase-19. Active trading OFF.
+
+**Build-ordering constraints WITHIN the foundation sub-batch (Langston Step-1 — sequence, not splits):**
+- **Obj 2 lands before Obj 3's *measurement*.** The threshold recalibration must be measured against the time-anchored regime read, not the shrunk-lookback artifact — otherwise we recalibrate against the very artifact Obj 2 exists to kill.
+- **Obj 9 NEW-side labels are generated on the FULLY recalibrated config (post Obj 2+3+4).** The parity report's "intended" 15m label set is only meaningful after time-anchored lookbacks + recalibrated thresholds + re-derived MCE periods all land — not an intermediate state.
+- **Obj 6 ORB enable-flip is LAST within that objective** — only after the candle-source repoint and the window re-derivation are verified. Flipping enable before the window is re-derived feeds ORB garbage even in VTS.
 
 ---
 
@@ -110,13 +131,16 @@ Every change is `xstock_spot`-scoped and DB-resolved per asset class. **Crypto l
 
 ---
 
-## §7 — Open items for Langston Step-1 review
+## §7 — Step-1 review: RESOLVED (Langston 2026-06-03)
 
-1. Confirm the 9 objectives + the parity-report exit gate as the correct foundation cut (anything that must move earlier/later, or any objective that should be its own sub-batch).
-2. Confirm the DBS epoch-versioning recommendation (full recompute) or specify the epoch-boundary alternative (Objective 5).
-3. Confirm the load-gate headroom check belongs in Step-2 pre-audit and is a true upfront gate (Objective 8).
-4. Confirm time-anchoring is per-class config (not a shared constant rewrite) so crypto cannot be touched (Objective 2).
+1. **Objective cut + parity exit gate** → APPROVED as the correct foundation boundary; nothing splits out. Added Objective 10 (IMF VN/DI bar-sensitivity) — the one gap. ✅
+2. **DBS epoch-versioning** → recompute-PLUS-stamp-PLUS-retain-60m-`_archive` (not recompute-vs-boundary). Objective 5 updated. ✅
+3. **Load gate** → confirmed hard upfront Step-2 gate; size BOTH steady-state cadence AND the one-time off-peak backfill + retention storage delta. Objective 8 updated. ✅
+4. **Per-class time-anchoring** → confirmed non-negotiable; crypto-isolation is now a Step-4 hard-fail gate with three proofs. §3 updated. ✅
+- Plus three within-foundation build-ordering constraints (§4). Langston: "run Step-2 with the IMF sweep + the dual-capacity sizing added… send me the pre-audit when it's ready."
+
+**Next:** proceed to Step-2 pre-audit (deep SIM + System Manual read; code-surface map; the IMF VN/DI sweep; the dual-capacity sizing; the DBS off-peak window).
 
 ---
 
-*Scope v1 (Step 1). Decision basis: `B_4_BAR_FREQUENCY_RESULTS_REPORT.md` + `B_4_15MIN_RECALIBRATION_LIST.md` + the working tracker in `MULTI_ASSET_VTS_EXPANSION_PLAN.md`. Active trading OFF. CALIBRATION LENS axiom 6. NO PATCHES — per-class, DB-resolved, structural.*
+*Scope v2 (Step 1, Langston review absorbed 2026-06-03). Decision basis: `B_4_BAR_FREQUENCY_RESULTS_REPORT.md` + `B_4_15MIN_RECALIBRATION_LIST.md` + the working tracker in `MULTI_ASSET_VTS_EXPANSION_PLAN.md`. Active trading OFF. CALIBRATION LENS axiom 6. NO PATCHES — per-class, DB-resolved, structural.*
