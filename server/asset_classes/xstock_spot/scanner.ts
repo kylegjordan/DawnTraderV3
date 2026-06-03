@@ -45,6 +45,10 @@ import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 // B-PHASE-A2 (2026-05-17): pre-cycle DBS compute imports.
 import { computeDirectionalBias } from '../../core/metrics/directional-bias.js';
+// B.4 foundation (2026-06-03; Langston DBS-fork Option B): xStock DBS config
+// shares the ONE DBSConfig type with crypto's DEFAULT_DBS_CONFIG (tsc structural
+// guard); only the bar-count fields are overridden per-class from module_constants.
+import { DEFAULT_DBS_CONFIG, type DBSConfig } from '../../types/directional-bias.types.js';
 import { xstockDirectionalBiasStore } from '../../core/metrics/directional-bias-store.js';
 import type { OHLCData } from '../../types/market-regime.types.js';
 
@@ -707,12 +711,45 @@ class XstockSpotScannerService {
         // Mirror of fx5-scanner.ts:1098-1118 pattern. Empirical timing per
         // B_PHASE_A2_DBS_PRE_AUDIT.md §11: 0.16% of cycle budget @ 250 pairs.
         // ════════════════════════════════════════════════════════════════════
+        // B.4 foundation (2026-06-03; Langston DBS-fork Option B): resolve the
+        // xStock per-class DBS config + the DBS-normalization ATR period from
+        // module_constants ONCE per cycle (mirrors the min_ohlc_history_bars read
+        // above). 15m re-expressions: lookback 48->192, ema 12/26->48/104, ATR
+        // 14->56 — all preserve the prior wall-clock window. Crypto keeps
+        // DEFAULT_DBS_CONFIG untouched in fx5-scanner (separate file). Hard-fail
+        // on a missing seed (no silent default; Kyle directive).
+        const { getConstant: getDbsConst } = await import('../../services/module-constants-service.js');
+        const DBS_KEY = { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' };
+        const [xsLookback, xsEmaFast, xsEmaSlow, xsAtrPeriod] = await Promise.all([
+          getDbsConst<number>('directional_bias', 'lookback_period', DBS_KEY),
+          getDbsConst<number>('directional_bias', 'ema_fast', DBS_KEY),
+          getDbsConst<number>('directional_bias', 'ema_slow', DBS_KEY),
+          getDbsConst<number>('directional_bias', 'atr_period', DBS_KEY),
+        ]);
+        const dbsMissing: string[] = [];
+        if (typeof xsLookback !== 'number') dbsMissing.push('lookback_period');
+        if (typeof xsEmaFast !== 'number') dbsMissing.push('ema_fast');
+        if (typeof xsEmaSlow !== 'number') dbsMissing.push('ema_slow');
+        if (typeof xsAtrPeriod !== 'number') dbsMissing.push('atr_period');
+        if (dbsMissing.length > 0) {
+          throw new Error(
+            `[B.4] missing xstock_spot module_constants directional_bias {${dbsMissing.join(', ')}}. ` +
+            `Run migration 2026-06-03c (xStock lookback_period=192, ema_fast=48, ema_slow=104, atr_period=56).`,
+          );
+        }
+        const xstockDbsConfig: DBSConfig = {
+          ...DEFAULT_DBS_CONFIG,
+          lookbackPeriod: xsLookback as number,
+          emaPeriods: { fast: xsEmaFast as number, slow: xsEmaSlow as number },
+        };
+        const xstockDbsAtrPeriod = xsAtrPeriod as number;
+
         const dbsCycleStart = Date.now();
         const dbsBySymbol = new Map<string, { score: number; category: string; slope: number }>();
         for (const symbol of symbolList) {
           const ohlc = ohlcBatch.get(symbol) ?? [];
           if (ohlc.length < minOhlcHistoryBars) continue;
-          const atr = computeATRFromOHLC(ohlc, 14);
+          const atr = computeATRFromOHLC(ohlc, xstockDbsAtrPeriod);
           if (atr <= 0) continue;
 
           const registryEntry = XSTOCK_SPOT_REGISTRY.get(symbol);
@@ -724,13 +761,13 @@ class XstockSpotScannerService {
             continue;
           }
 
-          const dbsResult = computeDirectionalBias(ohlc, atr);
+          const dbsResult = computeDirectionalBias(ohlc, atr, xstockDbsConfig);
           let slope = 0;
           const priorOHLC = ohlc.slice(0, -3);
           if (priorOHLC.length >= 20) {
-            const priorAtr = computeATRFromOHLC(priorOHLC, 14);
+            const priorAtr = computeATRFromOHLC(priorOHLC, xstockDbsAtrPeriod);
             if (priorAtr > 0) {
-              const priorDbs = computeDirectionalBias(priorOHLC, priorAtr);
+              const priorDbs = computeDirectionalBias(priorOHLC, priorAtr, xstockDbsConfig);
               slope = dbsResult.score - priorDbs.score;
             }
           }

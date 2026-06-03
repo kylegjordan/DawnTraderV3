@@ -51,9 +51,13 @@ VALUES
   ('directional_bias', 'lookback_period',     '48'::jsonb, '*',           '*', '*', '*', NOW(), 'b4-foundation'),
   ('directional_bias', 'ema_fast',            '12'::jsonb, '*',           '*', '*', '*', NOW(), 'b4-foundation'),
   ('directional_bias', 'ema_slow',            '26'::jsonb, '*',           '*', '*', '*', NOW(), 'b4-foundation'),
+  ('directional_bias', 'atr_period',          '14'::jsonb, '*',           '*', '*', '*', NOW(), 'b4-foundation'),
   ('directional_bias', 'lookback_period',    '192'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'b4-foundation'),
   ('directional_bias', 'ema_fast',            '48'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'b4-foundation'),
-  ('directional_bias', 'ema_slow',           '104'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'b4-foundation')
+  ('directional_bias', 'ema_slow',           '104'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'b4-foundation'),
+  -- DBS-normalization ATR period (scanner.ts computeATRFromOHLC feeding
+  -- computeDirectionalBias) is ALSO bar-count: 14 bars = 14h@60m -> 56 = 14h@15m.
+  ('directional_bias', 'atr_period',          '56'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'b4-foundation')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)
 DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = 'b4-foundation';
 
