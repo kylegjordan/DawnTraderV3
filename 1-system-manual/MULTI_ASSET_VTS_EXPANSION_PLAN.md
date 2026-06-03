@@ -819,4 +819,43 @@ After ORCHESTRATOR close, 4 sub-batches remain in the umbrella v4 roadmap (EXECU
 
 ---
 
+## WORKING LIST — items to reset / recalibrate for the xStock 15-MINUTE BAR switch (Kyle directive 2026-06-03)
+
+> **LIVING TRACKER. Maintained + updated during every governance batch while the xStock calibration is in progress; retired when calibration completes (CLAUDE.md carries a temporary pointer to this list until then).** xStock chose 15-min over the inherited 60-min (B.4 study, `B_4_BAR_FREQUENCY_RESULTS_REPORT.md`; Langston 2-round sign-off). The bar-interval change is a FOUNDATION change — biggest risk = silent regime-classifier meaning-shift (`market-regime.ts:108-119` invariant). Plain-language companion: `B_4_15MIN_RECALIBRATION_LIST.md`. Status keys: ☐ not started · ◐ in progress · ☑ done. All xStock-scoped (crypto untouched).
+
+### A — FOUNDATION (the bar-frequency sub-batch; precedes all strategy work; gated by the regime-label PARITY report)
+| Item | Subsystem | What 15m needs | Status |
+|---|---|---|---|
+| Aggregator interval typing | ohlc-aggregator (`XstockAggregationInterval` `60\|240`→+15, bucketExpr `/900` branch) + call-site literal `scanner.ts:533` | add the 15-min interval + a new `xstock_spot_ohlc_15m_snapshot` table | ☐ |
+| Regime lookbacks | regime classifier — `computeMomentum` 30-bar (`market-regime.ts:120`), `computeADX` 14-bar (`:132`) | re-express per-class as TIME (or interval-scaled bar count) so wall-clock memory holds | ☐ |
+| Regime thresholds | `regime-thresholds.ts` xStock vol/mom (RBS_VOL_MAX_XSTOCK 0.006, IE_VOL_MIN 0.010, TFS_MOM_MIN 0.0015, …) | RECALIBRATE to the 15-min per-bar return scale (per-bar vol/mom ~halve) | ☐ |
+| MCE indicator periods | MCE — SMA-20, ATR-14, RSI, ADX, VWAP, `slice(-24)` "24h" high/low | re-derive per-class so each period spans the intended real time | ☐ |
+| **DBS** | DBS — `computeDirectionalBias` lookbackPeriod **48 bars** + emaPeriods, ATR-normalized (`directional-bias.ts`); `xstock_dbs_backfill` (~30k rows, B-PHASE-A2) | **YES, adjust:** re-derive the 48-bar lookback + ema periods per-class (48 bars = 48h@60m → 12h@15m); RECOMPUTE the backfill at 15m + an explicit epoch-versioning decision (recompute vs flag a regime-epoch boundary; no split-brain ML corpus) | ☐ |
+| Bar caps | aggregator/cache — MAX_BARS_60M 60, NARROW_OVERLAY_HOURS_60M 24, `min_ohlc_history_bars` | re-derive for the 15-min window | ☐ |
+| ORB plumbing | ORB — candle-source defect (`vts-runner.ts:897` feeds 60m bars), `open_range_minutes` window, DB enable flag | repoint candle source + re-derive the opening-range WINDOW in 15m terms + flip enable=true → ORB revives (see ORB note below) | ☐ |
+| Load/storage gate | infra — ~4× 15m snapshot write rate vs B79 1.3× load gate / CPX22 budget | confirm fits UPFRONT; if not, vertical-scale (never asset-class-shed, §5#15) | ☐ |
+| **EXIT GATE** | regime — old-60m vs new-15m label diff | PARITY REPORT: characterize the shift, "understood + intended" = acceptance; per-strategy work HELD until signed off | ☐ |
+
+### B — ALREADY CALIBRATED (at 60m), bar-SENSITIVE → must REVISIT
+| Item | Subsystem | Status |
+|---|---|---|
+| Regime thresholds (B.1) | regime — same as row A.3 (REDO) | ☐ |
+| Strategy indicator-gates (B.3 / B3.1a) — pivot_shift `indicator_filter` (RSI 35–65 + ADX-slope), sma_trend_ride / mean_reversion `indicator_filter` | filters (per-strategy) — bands sit on the 60m distribution; re-check/re-center at 15m | ☐ |
+| IMF filters — VN + DI components (B.2) | IMF — volatility/directional pieces are bar-based → revisit (CONFIRM exact bar-sensitive set in the foundation pre-audit) | ☐ |
+
+### C — bar-INDEPENDENT → STAYS (sanity-check only, no redo)
+- IMF/global liquidity filters — lq_min, min_depth_usd (order-book depth, not bars). [pending lq_min 38 apply on ≥5 RTH, reminder 06-09 — unaffected by 15m]
+- B3.1b volume-confirmation removal (wrong-instrument data at any interval).
+- Friction (B.4/5), TEC priors (B.6), sector (B.7), macro (C) — outcome/cost based, bar-independent.
+
+### D — PATTERN-DETECTION (after foundation, before per-strategy; Kyle sequencing)
+- `pattern-recognizer.ts` shape tolerances (MORNING_STAR body/range ratios, INSIDE_BAR tolerance, etc.) → make per-class + re-derive for 15m; re-measure base rates at 15m (shapes differ by interval). ☐
+
+### E — PER-STRATEGY (W2, after pattern-detection)
+- Each strategy's `filters` (gate bands) + its trade construction (entry trigger, stop/target geometry, CLOCK-anchored hold, indicator periods, pattern tolerances) re-tuned at 15m; re-enable + re-fit the deferred equity-suitable strategies + ORB. ☐
+
+**ORB note (Kyle asked):** ORB revives under 15-min (was disabled in B-NEW-34 only because 60m left no intra-hour opening range). Not a free flag-flip — requires the row-A.7 candle-source + window + enable work, then validation.
+
+---
+
 *End of MULTI_ASSET_VTS_EXPANSION_PLAN.md. Living document — update at every batch boundary. Move to `_archive/` when Phase 19 closes.*

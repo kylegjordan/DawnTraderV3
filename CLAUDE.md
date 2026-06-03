@@ -89,6 +89,7 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
 
 **Tier 2 — When applicable:**
 - `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md` — living plan for B78-B81 stretch (created 2026-05-07). Update BEFORE each batch (sanity-check assumptions) + AFTER (record what landed + deltas vs plan + threshold table populations).
+  - **⏳ TEMPORARY (Kyle directive 2026-06-03 — while xStock calibration is in progress; REMOVE this note when calibration completes):** the bottom of `MULTI_ASSET_VTS_EXPANSION_PLAN.md` carries the **"WORKING LIST — items to reset/recalibrate for the xStock 15-MINUTE BAR switch."** REVIEW + UPDATE that tracker (status ☐/◐/☑, add newly-surfaced items) as part of **every governance batch** during the xStock calibration arc. Stop maintaining it (and delete this note + retire the list) once the calibration is done.
 - `1-system-manual/SYSTEM_MANUAL.md` — architecture + math. Any change to system architecture, strategy logic, regime detection, filter design, signal pipeline, or quantitative math MUST be reflected.
 - `1-system-manual/SYSTEM_IMPACT_MAP.md` — file-level dependency map. Any change adding/removing/modifying a component MUST be reflected. Consulted in Step 2 pre-audit.
 - `1-system-manual/CHANGES_AND_FIXES.md` — bug/risk registry
