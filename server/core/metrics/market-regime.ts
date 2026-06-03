@@ -75,6 +75,13 @@ export const DEFAULT_REGIME_CONFIG: RegimeConfig = {
   tfsMomentumScale: 0.020,
   tfsVolatilityScale: 0.025,
   tfsDbsScale: 0.7,
+  // B.4 foundation (2026-06-03): CRYPTO / default time-anchored regime
+  // lookbacks. 30 bars × 60-min = 30h momentum; 14 bars × 60-min = 14h ADX.
+  // Crypto + every advisory/test caller using DEFAULT_REGIME_CONFIG is
+  // bit-identical to the prior hardcoded literals. The xStock production path
+  // overrides these per-class (120 / 56) at MCE.computeContext.
+  momentumLookback: 30,
+  adxPeriod: 14,
   // B70.3 (2026-05-05) — Path B momentum gate (replaces b68_5DbsSlopeMin).
   // Default 0.002 (0.2% momentum). Production resolves from module_constants.
   b68_5PathBMomentumMin: 0.002,
@@ -105,19 +112,19 @@ export function computeVolatility(ohlcData: OHLCData[]): number {
   return Math.sqrt(variance);
 }
 
-export function computeMomentum(ohlcData: OHLCData[]): number {
+export function computeMomentum(ohlcData: OHLCData[], lookbackBars: number = 30): number {
   // HF7: Extended lookback from 14 to 30 candles for more stable momentum.
   //
-  // B79.0n.MCE bar-interval invariant (2026-05-21): ALL MCE-fed pipelines —
-  // crypto signal-orchestrator, xstock_spot eval-cycle, VTS shadow path, and
-  // the B-PHASE-A2 backfill — consume 60-minute OHLC bars (verified in
-  // B79_0n_MCE_PRE_AUDIT §6). The hardcoded 30-bar lookback therefore produces
-  // an INVARIANT wall-clock window across asset classes: 30 bars × 60-min =
-  // 30 hours, identical for crypto_spot and xstock_spot. No per-asset-class
-  // lookback constant is needed. If a future asset class introduces a non-
-  // 60-min bar interval (1-min ticks, 5-min FX bars), this invariant breaks
-  // and per-class lookback constants must migrate to module_constants.
-  const lookback = Math.min(30, ohlcData.length);
+  // B79.0n.MCE bar-interval invariant (2026-05-21): the lookback was a hardcoded
+  // 30-bar window that assumed 60-minute bars (30 bars × 60-min = 30 hours). The
+  // invariant comment warned this breaks at a non-60-min interval.
+  //
+  // B.4 foundation (2026-06-03): RESOLVED — `lookbackBars` is now a parameter,
+  // resolved per asset class by the caller (`calculatePairRegime` passes
+  // `regimeConfig.momentumLookback`). Crypto/default = 30 (30h@60m, bit-identical
+  // to the old literal); xStock = 120 (30h@15m). Default param value 30 keeps
+  // any legacy direct caller bit-identical.
+  const lookback = Math.min(lookbackBars, ohlcData.length);
   if (lookback < 5) return 0;
 
   const recentSlice = ohlcData.slice(-lookback);
@@ -130,9 +137,10 @@ export function computeMomentum(ohlcData: OHLCData[]): number {
 }
 
 export function computeADX(ohlcData: OHLCData[], period: number = 14): number {
-  // B79.0n.MCE bar-interval invariant: `period=14` × 60-min bars = 14 hours,
-  // identical across crypto_spot and xstock_spot (both consume 60-min OHLC).
-  // See computeMomentum above for the full invariant rationale.
+  // B.4 foundation (2026-06-03): `period` is resolved per asset class by the
+  // caller (`calculatePairRegime` passes `regimeConfig.adxPeriod`). Crypto/
+  // default = 14 (14h@60m, bit-identical to the old literal); xStock = 56
+  // (14h@15m). Default param value 14 keeps legacy direct callers bit-identical.
   if (ohlcData.length < period + 1) return 0;
 
   const trueRanges: number[] = [];
@@ -233,8 +241,13 @@ export function calculatePairRegime(
   assetClass: AssetClass,
 ): RegimeCalculationResult {
   const vol = computeVolatility(ohlcData);
-  const mom = computeMomentum(ohlcData);
-  const dx = computeADX(ohlcData);
+  // B.4 foundation (2026-06-03): per-class TIME-ANCHORED lookbacks threaded from
+  // regimeConfig. Crypto/default resolves to 30 / 14 (bit-identical to the prior
+  // hardcoded literals); xStock resolves to 120 / 56 (same wall-clock window at
+  // 15-min bars). computeVolatility stays whole-array — its window is governed
+  // by the cache bar-cap (MAX_BARS_15M=240 = 60h, matching the 60m 60-bar window).
+  const mom = computeMomentum(ohlcData, regimeConfig.momentumLookback);
+  const dx = computeADX(ohlcData, regimeConfig.adxPeriod);
   const absDbs = Math.abs(dbsScore);
 
   // B79: per-asset-class threshold dispatch. Crypto_spot path math + branch

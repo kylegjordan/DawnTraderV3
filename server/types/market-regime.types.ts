@@ -54,6 +54,21 @@ export interface RegimeConfig {
   tfsVolatilityScale: number;
   tfsDbsScale: number;
   /**
+   * B.4 foundation (2026-06-03) — per-asset-class TIME-ANCHORED regime
+   * lookbacks. The classifier's momentum + ADX windows were hardcoded BAR
+   * counts (30 / 14) that silently assumed a 60-minute bar (30h / 14h
+   * wall-clock). At 15-minute bars those counts span a quarter of the time, so
+   * the lookbacks are re-expressed per class to preserve the intended
+   * wall-clock window. DEFAULT_REGIME_CONFIG carries the CRYPTO values (30 / 14)
+   * — every crypto + advisory caller is bit-identical to the prior hardcoded
+   * literals. Only the xStock production path (MCE.computeContext) overrides
+   * these per-class from module_constants (momentum 120 = 30h@15m, ADX 56 =
+   * 14h@15m), hard-fail on a missing seed (no silent default). See
+   * B_4_FOUNDATION_PRE_AUDIT.md §2 Obj 2.
+   */
+  momentumLookback: number;  // bars; crypto 30, xStock 120 (both ≈30h wall-clock)
+  adxPeriod: number;         // bars; crypto 14, xStock 56  (both ≈14h wall-clock)
+  /**
    * B68.5 — Path B sustainability gate (cheap-tier bundle).
    *
    * The TFS branch fires via two paths:

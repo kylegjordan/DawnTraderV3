@@ -56,10 +56,11 @@ import type { OHLCData } from '../../types/market-regime.types.js';
 
 /**
  * Supported aggregation intervals. Strict union — anything else throws.
+ * 15 = quarter-hour (B.4 foundation 2026-06-03 — the new xStock evaluation bar).
  * 60 = hourly (matches crypto interval=60).
  * 240 = 4-hour (matches B68.1 multi-TF agreement higher-TF + crypto interval=240).
  */
-export type XstockAggregationInterval = 60 | 240;
+export type XstockAggregationInterval = 15 | 60 | 240;
 
 /**
  * Per-Langston R2#5 — cache depth caps. Aggregator returns up to this many
@@ -82,6 +83,12 @@ export type XstockAggregationInterval = 60 | 240;
 // `wall-clock hours ≠ bar-producing hours` for equities.
 const MAX_BARS_60M = 60;  // ≤60 returned per pair regardless of lookback breadth
 const MAX_BARS_240M = 30; // ≤30 returned per pair (matches B68.1 min_higher_tf_samples)
+// B.4 foundation (2026-06-03): 15-min cap sized to the DEEPEST 15m consumer —
+// DBS lookbackPeriod=192 (Langston Step-2 must-fix #1) — plus margin, AND it
+// preserves the 60-hour whole-array volatility window (240 × 15-min = 60h,
+// exactly matching MAX_BARS_60M × 60-min = 60h). 240 ≥ 192 (DBS) ≥ 120 (regime
+// momentum). Bounded ~265 syms × 240 ≈ 64k snapshot rows (negligible disk).
+const MAX_BARS_15M = 240;
 
 // B-NEW-34a (2026-05-18) — lookback wall-clock hours are session-shape-aware.
 // xStocks have a 48-hour weekend close (Fri 20:00 ET → Sun 20:00 ET) plus
@@ -115,6 +122,13 @@ const MAX_BARS_240M = 30; // ≤30 returned per pair (matches B68.1 min_higher_t
 // server/services/xstock-ohlc-cache.ts NARROW_OVERLAY_HOURS_60M.
 const LOOKBACK_HOURS_60M = 120;
 const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is disabled today (scanner.ts:408) so this is dead-code-safe but symmetric.
+// B.4 foundation (2026-06-03): 15-min forensic-caller default lookback. To find
+// MAX_BARS_15M=240 bars (60h of bar-producing time) across xStock weekend
+// closes + non-RTH gaps, the wall-clock window must be wider than 60h — same
+// session-shape logic as the 60M=120h default. 240h (10 days) spans a weekend
+// + 4 prior RTH sessions. Scanner/cache contexts pass lookbackHoursOverride
+// (the cache's NARROW_OVERLAY_HOURS_15M); this default is forensic/backfill only.
+const LOOKBACK_HOURS_15M = 240;
 
 /**
  * Aggregate xstock_spot_ohlc_1m rows into higher-timeframe OHLC bars.
@@ -166,8 +180,16 @@ export async function aggregateXstockOHLC(
   // narrow-overlay path), use that instead. Otherwise fall back to the default
   // session-shape-aware constants. Range guard: override must be a positive
   // finite number; anything else falls back to the default.
-  const maxBars = intervalMinutes === 60 ? MAX_BARS_60M : MAX_BARS_240M;
-  const defaultLookback = intervalMinutes === 60 ? LOOKBACK_HOURS_60M : LOOKBACK_HOURS_240M;
+  // B.4 foundation (2026-06-03): explicit per-interval dispatch (was a 60-vs-240
+  // ternary). 15-min joins the set with its own cap + forensic lookback.
+  const maxBars =
+    intervalMinutes === 15 ? MAX_BARS_15M
+    : intervalMinutes === 60 ? MAX_BARS_60M
+    : MAX_BARS_240M;
+  const defaultLookback =
+    intervalMinutes === 15 ? LOOKBACK_HOURS_15M
+    : intervalMinutes === 60 ? LOOKBACK_HOURS_60M
+    : LOOKBACK_HOURS_240M;
   const lookbackHours =
     Number.isFinite(lookbackHoursOverride) && (lookbackHoursOverride as number) > 0
       ? (lookbackHoursOverride as number)
@@ -189,8 +211,14 @@ export async function aggregateXstockOHLC(
   // Epoch-floor pattern in both branches: returns plain timestamptz, UTC-
   // anchored, no session-TZ surface area, mirror shape between the two
   // intervals so future readers see one pattern not two.
+  // B.4 foundation (2026-06-03): 15-min adds a 900-second epoch-floor bucket
+  //   15-min: epoch / 900   → UTC :00/:15/:30/:45 boundaries (Kraken interval=15)
+  //   60-min: epoch / 3600  → UTC hour boundaries (Kraken interval=60 native)
+  //   240-min: epoch / 14400 → UTC 00/04/08/12/16/20 (Kraken interval=240)
   let bucketExpr: string;
-  if (intervalMinutes === 60) {
+  if (intervalMinutes === 15) {
+    bucketExpr = "to_timestamp(floor(extract(epoch from interval_begin) / 900) * 900)";
+  } else if (intervalMinutes === 60) {
     bucketExpr = "to_timestamp(floor(extract(epoch from interval_begin) / 3600) * 3600)";
   } else {
     bucketExpr = "to_timestamp(floor(extract(epoch from interval_begin) / 14400) * 14400)";
