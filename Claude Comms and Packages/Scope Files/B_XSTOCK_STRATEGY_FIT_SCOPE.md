@@ -1,4 +1,8 @@
-# xStock Strategy-Fit Effort — SCOPE v1 (DRAFT for Kyle + Langston Step-1 review)
+# xStock Strategy-Fit Effort — SCOPE v2 (Langston Step-1 absorbed)
+
+> **Langston Step-1 review (2026-06-03): shape + ordering APPROVED; all 5 answers + 4 gaps absorbed into v2.** (1) single shared bar size to start, measure-all-but-default-to-one, multi-timeframe = separate later work; (2) tuned settings are CANDIDATES gated on Phase-19 paper-active outcomes + prefer broad-plateau over razor's-edge; (3) re-enable a small equity-friendly subset first (ORB first), prove method, then widen; (4) **W1 delivers TWO sign-offs before W2: the bar-size choice AND a bar-size architecture pre-audit**; (5) confirmed ahead of friction/priors/sector. Gaps: W0 lands+settles before W1; W1 also measures regime-read STABILITY per bar size; hold time anchored to the CLOCK not bar count; overnight-gap + open/close-bar handling explicit.
+
+
 
 > **Kyle-approved shape (2026-06-03).** Emerged from the B3.1a gate-correctness audit: the xStock GATES are fine, but the STRATEGIES have no edge on xStocks because their own signal settings were never fitted to xStocks (only ORB has xStock params; the other 10 run inherited crypto-wildcard values). This effort fits the existing strategies to how xStocks actually trade and to the intended few-hours-hold style. **NOT building new strategies from scratch; NOT touching crypto; NOT enabling shorts.**
 >
@@ -25,13 +29,18 @@ The strategies lose on xStocks not because the trading ideas are wrong but becau
 
 ## §2 — Workstreams + ordering
 
-**W0 — Volume-confirmation removal (READY NOW, independent — = the former B3.1b).** Remove the volume-confirmation sub-gate from the xStock strategy paths (wrong underlying-equity data; depth-delta replacement has no signal — `B_3_1_GATE_CORRECTNESS_REPORT.md` §1/§4). xStock-path ONLY; **crypto KEEPS its volume gates** (crypto has real token volume); documented known-gap (revisit when a real token-volume feed exists). Per-class, DB-resolved, both VTS + active paths. Own pre-audit + Langston code review. Can ship before W1.
+**W0 — Volume-confirmation removal (FIRST — ships AND settles before W1; = the former B3.1b).** Remove the volume-confirmation sub-gate from the xStock strategy paths (wrong underlying-equity data; depth-delta replacement has no signal — `B_3_1_GATE_CORRECTNESS_REPORT.md` §1/§4). xStock-path ONLY; **crypto KEEPS its volume gates** (crypto has real token volume); documented known-gap (revisit when a real token-volume feed exists). Per-class, DB-resolved, both VTS + active paths. Own pre-audit + Langston code review. **Langston gap-1: W0 must land AND settle before W1 runs** — it changes which signals get through, i.e. the very population W1 measures; overlapping them aims the study at a moving target.
 
-**W1 — Bar-frequency study (FIRST — everything else tunes to its outcome).** xStocks are evaluated on 60-min bars (1-min aggregated). A few-hours hold spans only 2–4 of those bars — coarse for entry timing, stop shaping, and pattern formation (part of why MORNING_STAR appears only 2.5% of the time, and why ORB can't run at all). Using the 1-min archive, rebuild at 5/15/30/60-min (and consider 1-min) and measure, per frequency: signal availability, pattern base rates, and forward-return edge (the B3.1a engine). Decide single-frequency vs multi-timeframe, per-strategy if warranted. **Output: the chosen bar frequency(ies).** This must come first because every W2/W3/W4 setting is expressed in bar units.
+**W1 — Bar-frequency study + bar-size architecture pre-audit (FIRST after W0 — TWO sign-offs gate W2).** xStocks are evaluated on 60-min bars (1-min aggregated). A few-hours hold spans only 2–4 of those bars — coarse for entry timing, stop shaping, and pattern formation (part of why MORNING_STAR appears only 2.5% of the time, and why ORB can't run at all). Two deliverables, both signed off before W2 starts:
+- **(a) The study (read-only).** Using the 1-min archive, rebuild at 5/15/30/60-min (and consider 1-min) and measure, per frequency: signal availability, pattern base rates, forward-return edge (B3.1a engine), **AND the STABILITY of the market-type (regime) read** (Langston gap-2: finer bars can make the regime flip more often, which changes which strategies are even allowed to fire — that feeds straight back into the tuning, so it's a first-class measurement, not just signal/pattern counts). **Default decision = a SINGLE shared bar size everything runs on** (Langston #1: per-strategy / true multi-timeframe means keeping several parallel price histories in sync across the scanner, regime classifier, and liquidity scoring — too many new moving parts to bolt on during a tuning effort). Measure every strategy at every candidate size so the evidence is in hand, but only split to mixed sizes if the data flatly demands it, and then as its own deliberate later effort.
+- **(b) The bar-size architecture pre-audit** (Langston #4 — his strongest point). Changing the bar size is a foundation change, not a knob: it changes how often the system re-reads the market, how often it re-decides the market type, how it scores liquidity, and how it treats the still-forming current bar (B.3). A short architecture review of everything the chosen size touches, signed off alongside the size choice — so we don't tune all strategies on a size and only then discover it forces a change to regime/liquidity handling and have to redo the tuning.
 
-**W2 — Per-strategy signal re-tuning (the core).** At the chosen frequency, for each of the 10 live strategies, sweep its internal signal parameters — entry trigger, stop/target geometry (ATR multiples / R-multiples), hold horizon, indicator periods + thresholds, pattern tolerances — and keep the values that produce a real, out-of-sample forward-return edge on xStocks. Seed xStock-specific DB rows (the per-class plumbing already exists). Disable per-class any strategy that cannot earn an edge even after fitting (a normal, expected outcome — not every idea fits every market).
+**W2 — Per-strategy signal re-tuning (the core; produces CANDIDATE settings).** At the chosen frequency, for each live strategy, sweep its internal signal parameters — entry trigger, stop/target geometry (ATR / R-multiples), hold horizon, indicator periods + thresholds, pattern tolerances — and keep the values with a real, out-of-sample forward-return edge. Seed xStock-specific DB rows (per-class plumbing exists). Disable per-class any strategy that can't earn an edge even after fitting. **Two binding rules from Langston:**
+- **Hold time anchored to the CLOCK, not a bar count** (gap-3): "hold N bars" silently changes the trade when the bar size changes. Define the intended hold in real time and convert per bar size.
+- **Overnight-gap + open/close-bar handling explicit** (gap-4): stocks close overnight and gap; crypto never did. Stops/targets sitting through the overnight gap, and the bars right at the open and close, need explicit handling the crypto path never had — addressed in both the study and the tuning.
+- **Output is CANDIDATE settings, not final** (Langston #2): ~3–4 weeks is thin for fitting; train/test + walk-forward is right but can still mistake luck for skill on a short window. Prefer a setting that works across a BROAD range over the razor's-edge best value. Final verdict comes from Phase-19 paper-active wins/losses; re-confirm as more history accrues.
 
-**W3 — Re-enable + re-fit the deferred equity-suitable strategies + finish ORB.** Re-evaluate the 9 disabled strategies for xStock fit; re-enable and re-fit the genuinely equity-suitable ones via W2's method. **KEEP the bearish one (`liquidity_trap`) OFF** until shorts are allowed or it's redesigned long (long-only is a standing constraint). Finish wiring ORB at the W1 frequency (it's purpose-built for the equity style and was only parked on the bar-frequency issue).
+**W3 — Re-enable + re-fit a SMALL equity-friendly subset first, then widen (Langston #3).** Do NOT re-enable all 9 at once (nine new misfire sources to debug simultaneously). Start with the obviously-stock-friendly ones built for how stocks open and trend — **ORB first** (it was only parked on the bar-size question, now resolved by W1). Prove the fitting method earns a real edge on that handful, then widen via W2's method. **KEEP the bearish one (`liquidity_trap`) OFF regardless** until shorts are allowed or it's redesigned long (long-only stands).
 
 **W4 — Pattern-detection service made asset-class-aware + re-fit.** The recognizer runs crypto-era tolerances (the code labels them "for crypto"). Make its shape tolerances/ratios per-class (the per-class signature plumbing exists from B79.0n.PATTERN-DETECT) and re-fit the xStock values; crypto keeps its tolerances. Feeds W2/W3 for the pattern strategies.
 
@@ -64,25 +73,27 @@ Every change is `xstock_spot`-scoped. Settings are DB-resolved per asset class (
 
 ---
 
-## §6 — Phasing (proposed; each its own Langston Step-4/8)
+## §6 — Phasing (each its own Langston Step-4/8; strict ordering per Langston Step-1)
 
-- **W0** — volume-confirmation removal (ship first, independent).
-- **W1** — bar-frequency study (read-only analysis → decision).
-- **W2** — per-strategy signal re-tuning (DB seeds, batched by strategy group).
-- **W3** — deferred-strategy re-enable + re-fit + ORB finish.
-- **W4** — pattern-detection per-class + re-fit.
-> Batch-label TBD (Kyle/Langston) — this is larger than a B.x sub-batch. Candidate: its own labeled effort under Phase 24, or a Phase-24-closing workstream. Sequenced BEFORE the remaining downstream polish (B.4/5 friction, B.6 priors, B.7 sector), which would otherwise refine edgeless signals.
-
----
-
-## §7 — Open questions for Langston (Step 1)
-
-1. **Frequency study design:** single chosen frequency for all strategies, or per-strategy frequency, or genuine multi-timeframe (e.g. pattern on 15m, trend on 60m)? Risk/complexity tradeoff for the scanner + regime classifier (which also run on the bar stream).
-2. **Overfitting protocol:** is train/test + walk-forward + plateau-selection sufficient given ~3–4 weeks of live archive, or do we gate final adoption on Phase-19 paper-active outcomes (i.e. W2 produces *candidate* settings, Phase 25 confirms)?
-3. **Scope of W3 re-enable:** re-fit all equity-suitable deferred strategies now, or a conservative subset first?
-4. **Blast radius of the frequency change:** changing the xStock bar interval touches the scanner, regime classifier, DBS, and the forming-bar behavior (B.3) — does W1's decision require its own architecture pre-audit before W2 builds on it?
-5. **Sequencing vs the calibration arc:** confirm this slots ahead of B.4/5/6/7 friction/priors/sector.
+- **W0** — volume-confirmation removal. Ships FIRST and is allowed to SETTLE before W1 (it changes the population W1 measures).
+- **W1** — bar-frequency study + bar-size architecture pre-audit. TWO sign-offs (size choice + architecture review) BEFORE W2.
+- **W2** — per-strategy signal re-tuning (DB seeds, batched by strategy group). Produces CANDIDATE settings; Phase-19 confirms.
+- **W3** — re-enable a small equity-friendly subset (ORB first), prove, then widen + re-fit.
+- **W4** — pattern-detection per-class + re-fit (feeds W2/W3 pattern strategies; can run alongside W2 once frequency is fixed).
+> Batch-label TBD (Kyle/Langston) — larger than a B.x sub-batch; candidate = its own labeled effort under Phase 24, or a Phase-24-closing workstream. Sequenced BEFORE the remaining downstream polish (B.4/5 friction, B.6 priors, B.7 sector) — confirmed by Langston, since polishing selection over edgeless signals is polishing noise.
 
 ---
 
-*Scope v1 DRAFT. Foundation: `B_3_1_GATE_CORRECTNESS_REPORT.md`. Method engine: `scripts/b-xstock-calib-b31a-gate-audit-2.ts`. Active trading OFF — forward-return-proxy evidence; paper-active confirmation is Phase 19/25. Crypto untouched (separate roadmap item). CALIBRATION LENS axiom 6.*
+## §7 — Open questions — RESOLVED by Langston Step-1 (2026-06-03)
+
+1. **Frequency study design** → single shared bar size to start (measure all, default to one); multi-timeframe only if data demands, as its own later effort. ✅
+2. **Overfitting protocol** → train/test + walk-forward + broad-plateau selection for CANDIDATE settings; final adoption gated on Phase-19 paper-active outcomes. ✅
+3. **W3 re-enable scope** → small equity-friendly subset first (ORB first), prove, then widen; bearish stays off. ✅
+4. **Frequency-change blast radius** → YES, W1 includes its own bar-size architecture pre-audit, signed off with the size choice before W2. ✅
+5. **Sequencing** → confirmed ahead of B.4/5/6/7 friction/priors/sector. ✅
+
+**Remaining for Kyle:** batch-label + go-ahead to start W0 (volume removal, ready now) and then W1 (frequency study + architecture pre-audit). "the ARM" placement for the crypto re-validation roadmap item — confirm = AMR (Adaptive Market Response).
+
+---
+
+*Scope v2 (Langston Step-1 absorbed 2026-06-03). Foundation: `B_3_1_GATE_CORRECTNESS_REPORT.md`. Method engine: `scripts/b-xstock-calib-b31a-gate-audit-2.ts`. Active trading OFF — forward-return-proxy evidence; paper-active confirmation is Phase 19/25. Crypto untouched (separate roadmap item). CALIBRATION LENS axiom 6.*
