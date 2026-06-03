@@ -121,3 +121,4 @@
 2026-06-02b-calscore-comprehensive.sql
 2026-06-02c-b2-lq-planned.sql
 2026-06-03-b3-1b-xstock-volume-confirmation-disable.sql
+2026-06-03b-b4-foundation-15m-schema.sql
