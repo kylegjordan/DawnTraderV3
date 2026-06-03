@@ -81,6 +81,41 @@ const NARROW_OVERLAY_HOURS_60M = 24;
 // INSERT with ON CONFLICT DO UPDATE. Trivial DB cost.
 const WRITE_BACK_RECENT_BUCKETS = NARROW_OVERLAY_HOURS_60M;
 
+// B.4 foundation (2026-06-03): the 60-min cache cap, named so the parameterized
+// read/merge helpers below can be passed it explicitly. This is the exact value
+// the 60-min path used as a bare `60` literal pre-B.4 (readSnapshotBars
+// `rn <= 60`, mergeBars `slice(-60)`) — naming it changes no behavior. Mirrors
+// MAX_BARS_60M in ohlc-aggregator.ts (the aggregator's own return-array cap).
+const MAX_BARS_60M = 60;
+
+// B.4 foundation (2026-06-03): 15-min evaluation-bar read path (additive,
+// xStock-only). Mirrors the 60-min snapshot-first shape EXACTLY — only the
+// snapshot table, the cache cap, the live-overlay window, and the write-back
+// depth differ. The 60-min path above is untouched.
+//
+//   NARROW_OVERLAY_HOURS_15M = 6  → the live overlay window. 6h × 4 bars/h = 24
+//     live bars, matching the 60-min branch's 24-bar overlay (24h × 1 bar/h).
+//     Same "snapshot supplies history, live supplies the recent tail" shape;
+//     same bucket-count of fresh live bars where B74's late-arriving 1m
+//     duplicates could still shift values.
+//   MAX_BARS_15M = 240  → the cache cap (most-recent N buckets per symbol). The
+//     new xstock_spot_ohlc_15m_snapshot table holds up to ~240 buckets/symbol =
+//     60h, sized to the deepest 15-min consumer DBS-192 (Langston Step-2
+//     must-fix #1) + margin. Matches MAX_BARS_15M in ohlc-aggregator.ts.
+//   WRITE_BACK_RECENT_BUCKETS_15M = 24  → write-back depth, aligned to the
+//     live-overlay bucket count (same rationale as WRITE_BACK_RECENT_BUCKETS:
+//     write back exactly the fresh-live buckets, no more, no less).
+const NARROW_OVERLAY_HOURS_15M = 6;
+const MAX_BARS_15M = 240;
+const WRITE_BACK_RECENT_BUCKETS_15M = 24;
+
+// B.4 foundation (2026-06-03): snapshot table names, kept as named constants so
+// the parameterized read/write/merge helpers below stay table-agnostic and the
+// 60-min path remains bit-identical (it passes the 60-min table + cap, the 15m
+// path passes the 15m table + cap).
+const SNAPSHOT_TABLE_60M = 'xstock_spot_ohlc_60m_snapshot';
+const SNAPSHOT_TABLE_15M = 'xstock_spot_ohlc_15m_snapshot';
+
 interface SnapshotRow {
   symbol: string;
   bucket_ts: Date;
@@ -168,6 +203,13 @@ class XstockOHLCCache {
    * because that path is currently disabled in scanner.ts (B-NEW-34 hotfix
    * 3, pending B-NEW-35).
    *
+   * B.4 foundation (2026-06-03): a 15-min branch mirrors the 60-min snapshot-
+   * first shape EXACTLY (snapshot read → narrow live overlay → merge → cache
+   * store → write-back), against the xstock_spot_ohlc_15m_snapshot table with
+   * the 15m constants (NARROW_OVERLAY_HOURS_15M, MAX_BARS_15M,
+   * WRITE_BACK_RECENT_BUCKETS_15M). Additive, xStock-only — the 60-min and
+   * 240-min paths are unchanged.
+   *
    * Per Langston R2#4 + B-NEW-34b: this is the call site that bounds per-
    * cycle DB cost at "1 snapshot SQL + 1 narrow live SQL + 1 write-back SQL"
    * regardless of universe size.
@@ -201,7 +243,7 @@ class XstockOHLCCache {
       // 1. Read snapshot rows for all missed symbols. Single SQL across the
       //    miss list — PK-indexed (symbol, bucket_ts), bounded to most-
       //    recent MAX_BARS_60M (60) per symbol via a window function.
-      const snapshotBySymbol = await this.readSnapshotBars(misses);
+      const snapshotBySymbol = await this.readSnapshotBars(misses, SNAPSHOT_TABLE_60M, MAX_BARS_60M);
 
       // 2. Live aggregator with NARROW overlay. Single SQL across all misses.
       const liveBySymbol = await aggregateXstockOHLC(misses, 60, NARROW_OVERLAY_HOURS_60M);
@@ -211,7 +253,7 @@ class XstockOHLCCache {
       for (const symbol of misses) {
         const snap = snapshotBySymbol.get(symbol) ?? [];
         const live = liveBySymbol.get(symbol) ?? [];
-        const merged = this.mergeBars(snap, live);
+        const merged = this.mergeBars(snap, live, MAX_BARS_60M);
         mergedBySymbol.set(symbol, merged);
         this.cache.set(this.getCacheKey(symbol, 60), { bars: merged, fetchedAt: now });
         result.set(symbol, merged);
@@ -221,7 +263,50 @@ class XstockOHLCCache {
       //    snapshot so subsequent cold reads find fresh data. Fire-and-
       //    forget — never blocks the hot path. Errors are logged but do
       //    not propagate (the cache and live result are already returned).
-      void this.writeBackSnapshot(mergedBySymbol).catch((err) => {
+      void this.writeBackSnapshot(mergedBySymbol, SNAPSHOT_TABLE_60M, WRITE_BACK_RECENT_BUCKETS).catch((err) => {
+        console.warn(
+          `[B-NEW-34b][SNAPSHOT_WRITEBACK_ERROR] ${err instanceof Error ? err.message : err}`,
+        );
+      });
+
+      return result;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // B.4 foundation (2026-06-03) — 15-min snapshot-first path
+    // ════════════════════════════════════════════════════════════════════
+    // Mirrors the 60-min branch above EXACTLY in shape — only the snapshot
+    // table (xstock_spot_ohlc_15m_snapshot), the cache cap (MAX_BARS_15M=240),
+    // the live-overlay window (NARROW_OVERLAY_HOURS_15M=6 → 24 live bars), and
+    // the write-back depth (WRITE_BACK_RECENT_BUCKETS_15M=24) differ. xStock-
+    // only, additive: crypto/fx5 never reach this instance, and the 60-min /
+    // 240-min paths are untouched.
+    // ════════════════════════════════════════════════════════════════════
+    if (intervalMinutes === 15) {
+      // 1. Read snapshot rows for all missed symbols. Single SQL across the
+      //    miss list — PK-indexed (symbol, bucket_ts), bounded to most-
+      //    recent MAX_BARS_15M (240) per symbol via a window function.
+      const snapshotBySymbol = await this.readSnapshotBars(misses, SNAPSHOT_TABLE_15M, MAX_BARS_15M);
+
+      // 2. Live aggregator with NARROW overlay. Single SQL across all misses.
+      const liveBySymbol = await aggregateXstockOHLC(misses, 15, NARROW_OVERLAY_HOURS_15M);
+
+      // 3. Merge per symbol.
+      const mergedBySymbol = new Map<string, OHLCData[]>();
+      for (const symbol of misses) {
+        const snap = snapshotBySymbol.get(symbol) ?? [];
+        const live = liveBySymbol.get(symbol) ?? [];
+        const merged = this.mergeBars(snap, live, MAX_BARS_15M);
+        mergedBySymbol.set(symbol, merged);
+        this.cache.set(this.getCacheKey(symbol, 15), { bars: merged, fetchedAt: now });
+        result.set(symbol, merged);
+      }
+
+      // 4. Write-back: UPSERT the most-recent N buckets per symbol back to
+      //    snapshot so subsequent cold reads find fresh data. Fire-and-
+      //    forget — never blocks the hot path. Errors are logged but do
+      //    not propagate (the cache and live result are already returned).
+      void this.writeBackSnapshot(mergedBySymbol, SNAPSHOT_TABLE_15M, WRITE_BACK_RECENT_BUCKETS_15M).catch((err) => {
         console.warn(
           `[B-NEW-34b][SNAPSHOT_WRITEBACK_ERROR] ${err instanceof Error ? err.message : err}`,
         );
@@ -250,15 +335,27 @@ class XstockOHLCCache {
   }
 
   /**
-   * B-NEW-34b — read the pre-aggregated 60-min buckets from snapshot for the
-   * supplied symbol list. Single SQL, PK-indexed. Bounded to most-recent
-   * MAX_BARS_60M (60) buckets per symbol via a window function.
+   * B-NEW-34b — read the pre-aggregated buckets from snapshot for the supplied
+   * symbol list. Single SQL, PK-indexed. Bounded to the most-recent `maxBars`
+   * buckets per symbol via a window function.
+   *
+   * B.4 foundation (2026-06-03): parameterized on `tableName` + `maxBars` so the
+   * 60-min and 15-min snapshot-first paths share one read helper. The 60-min
+   * caller passes (xstock_spot_ohlc_60m_snapshot, MAX_BARS_60M=60) — bit-
+   * identical to the pre-B.4 behavior; the 15-min caller passes
+   * (xstock_spot_ohlc_15m_snapshot, MAX_BARS_15M=240). Both table names are
+   * module-level named constants (not user input), so the sql.raw identifier
+   * injection is safe.
    *
    * Returns a Map keyed by symbol. Symbols absent from the snapshot table
    * (e.g., new ticker added to XSTOCK_SPOT_REGISTRY before its first pre-
    * warm run) get an empty array — the merge with live overlay still works.
    */
-  private async readSnapshotBars(symbols: string[]): Promise<Map<string, OHLCData[]>> {
+  private async readSnapshotBars(
+    symbols: string[],
+    tableName: string,
+    maxBars: number,
+  ): Promise<Map<string, OHLCData[]>> {
     const out = new Map<string, OHLCData[]>();
     for (const s of symbols) out.set(s, []);
     if (symbols.length === 0) return out;
@@ -276,8 +373,10 @@ class XstockOHLCCache {
     const symbolListSql = symbols.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
 
     // Window-function shape: rank rows by bucket_ts DESC per symbol, keep
-    // top 60. Postgres uses the (symbol, bucket_ts DESC) index for the
+    // top `maxBars`. Postgres uses the (symbol, bucket_ts DESC) index for the
     // partitioned ordering — backward index scan, no sort step.
+    // B.4 foundation (2026-06-03): table name + cap are parameters (named-
+    // constant table → sql.raw is safe; maxBars is an integer literal).
     const dbStart = Date.now();
     const result: any = await db.execute(sql`
       WITH ranked AS (
@@ -286,12 +385,12 @@ class XstockOHLCCache {
           bucket_ts,
           open, high, low, close, volume, source_bar_count,
           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY bucket_ts DESC) AS rn
-        FROM xstock_spot_ohlc_60m_snapshot
+        FROM ${sql.raw(tableName)}
         WHERE symbol IN (${sql.raw(symbolListSql)})
       )
       SELECT symbol, bucket_ts, open, high, low, close, volume, source_bar_count
       FROM ranked
-      WHERE rn <= 60
+      WHERE rn <= ${sql.raw(String(maxBars))}
       ORDER BY symbol, bucket_ts ASC
     `);
     const dbMs = Date.now() - dbStart;
@@ -330,17 +429,21 @@ class XstockOHLCCache {
    * B-NEW-34b — merge snapshot bars + live overlay bars per symbol.
    * Live wins on bucket_ts collision (live overlay reflects the freshest
    * 1m source data; snapshot rows may have been written hours/days ago).
-   * Sort ASC by timestamp, cap to 60 (most-recent).
+   * Sort ASC by timestamp, cap to `maxBars` (most-recent).
+   *
+   * B.4 foundation (2026-06-03): `maxBars` is a parameter so the 60-min path
+   * caps at MAX_BARS_60M=60 (bit-identical to pre-B.4) and the 15-min path
+   * caps at MAX_BARS_15M=240.
    */
-  private mergeBars(snap: OHLCData[], live: OHLCData[]): OHLCData[] {
+  private mergeBars(snap: OHLCData[], live: OHLCData[], maxBars: number): OHLCData[] {
     if (snap.length === 0 && live.length === 0) return [];
     const byTs = new Map<number, OHLCData>();
     for (const b of snap) byTs.set(b.timestamp, b);
     // Live overrides — same timestamp wins for live.
     for (const b of live) byTs.set(b.timestamp, b);
     const merged = Array.from(byTs.values()).sort((a, b) => a.timestamp - b.timestamp);
-    if (merged.length > 60) {
-      return merged.slice(merged.length - 60);
+    if (merged.length > maxBars) {
+      return merged.slice(merged.length - maxBars);
     }
     return merged;
   }
@@ -349,9 +452,19 @@ class XstockOHLCCache {
    * B-NEW-34b — UPSERT the most-recent N buckets per symbol back to the
    * snapshot table. Single multi-row INSERT with ON CONFLICT DO UPDATE.
    * Fire-and-forget caller; errors logged but do not propagate.
+   *
+   * B.4 foundation (2026-06-03): parameterized on `tableName` +
+   * `writeBackBuckets` so the 60-min and 15-min paths share one write helper.
+   * The 60-min caller passes (xstock_spot_ohlc_60m_snapshot,
+   * WRITE_BACK_RECENT_BUCKETS=24) — bit-identical to the pre-B.4 behavior; the
+   * 15-min caller passes (xstock_spot_ohlc_15m_snapshot,
+   * WRITE_BACK_RECENT_BUCKETS_15M=24). The table name is a module-level named
+   * constant (not user input), so the sql.raw identifier injection is safe.
    */
   private async writeBackSnapshot(
     mergedBySymbol: Map<string, OHLCData[]>,
+    tableName: string,
+    writeBackBuckets: number,
   ): Promise<void> {
     // Build the VALUES list of (symbol, bucket_ts, open, high, low, close,
     // volume) tuples. source_bar_count is unknown at this point (would
@@ -372,7 +485,7 @@ class XstockOHLCCache {
     const valuesLiteralParts: string[] = [];
     for (const [symbol, bars] of mergedBySymbol) {
       if (bars.length === 0) continue;
-      const tail = bars.slice(Math.max(0, bars.length - WRITE_BACK_RECENT_BUCKETS));
+      const tail = bars.slice(Math.max(0, bars.length - writeBackBuckets));
       for (const b of tail) {
         if (!Number.isFinite(b.open) || !Number.isFinite(b.close)) continue;
         const ts = new Date(b.timestamp).toISOString();
@@ -389,7 +502,7 @@ class XstockOHLCCache {
 
     const dbStart = Date.now();
     await db.execute(sql`
-      INSERT INTO xstock_spot_ohlc_60m_snapshot
+      INSERT INTO ${sql.raw(tableName)}
         (symbol, bucket_ts, open, high, low, close, volume, source_bar_count)
       VALUES ${sql.raw(valuesLiteralParts.join(','))}
       ON CONFLICT (symbol, bucket_ts) DO UPDATE SET
