@@ -44,6 +44,9 @@ import type {
 // extended from `${symbol}` to `${symbol}:${assetClass}` to prevent any
 // cross-asset-class cache pollution at the symbol level.
 import type { AssetClass } from '../../shared/asset-classes.js';
+// B.4 foundation (2026-06-03): value import for the per-class regime-lookback
+// resolution loop (uniform over the active asset classes — no class literals).
+import { getActiveAssetClasses } from '../../shared/asset-classes.js';
 // B79.0n.CONFIDENCE-CHAIN: per-class refresh enumeration. Today the per-class
 // migration seeds only crypto_spot + xstock_spot; perp classes onboard in a
 // future batch alongside their config seed migrations. Hardcoded inline to
@@ -54,6 +57,8 @@ import { REGIMES } from '../config/canonical-regime-strategy-map';
 import {
   calculatePairRegime,
   getRegimeWeight,
+  // B.4 foundation (2026-06-03): crypto regime-lookback seed-parity assertion.
+  DEFAULT_REGIME_CONFIG,
 } from '../core/metrics/market-regime.js';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
@@ -227,13 +232,16 @@ export class MarketContextEngine {
   // Resolved alongside the 5 TFS desat scales in refreshRegimeConfig — same
   // module so it folds into the existing call without a 9th sub-method.
   private b67_5PostCompositionFloor: number | null = null;
-  // B.4 foundation (2026-06-03): xStock-only TIME-ANCHORED regime lookbacks,
-  // resolved per-class from module_constants (regime_classifier, assetClass=
-  // xstock_spot) in refreshRegimeConfig and applied as an override in
-  // computeContext for xStock pairs only. Crypto never reads these — it uses
-  // the shared 30/14 in this.regimeConfig (bit-identical to the prior literals).
-  // null until resolved; a missing seed hard-fails in refreshRegimeConfig.
-  private xstockRegimeLookbacks: { momentumLookback: number; adxPeriod: number } | null = null;
+  // B.4 foundation (2026-06-03; Langston Chunk-B1 review): per-class TIME-
+  // ANCHORED regime lookbacks resolved UNIFORMLY from module_constants into a
+  // class-keyed map (no `if (assetClass===)` branch, no split-brain). Every
+  // active asset class (getActiveAssetClasses) resolves momentum_lookback +
+  // adx_period; crypto resolves the `*` seed (30/14) and is PARITY-ASSERTED
+  // bit-identical to DEFAULT_REGIME_CONFIG at startup; xStock resolves its
+  // override (120/56). A missing seed for any active class hard-fails. null
+  // until refreshRegimeConfig runs.
+  private regimeLookbacksByClass:
+    Map<AssetClass, { momentumLookback: number; adxPeriod: number }> | null = null;
 
   // ─── B67.4 cheap-tier bundle: 3 new config blocks ────────────────────────
   private outcomeFeedbackConfig: OutcomeFeedbackConfig | null = null;
@@ -652,29 +660,47 @@ export class MarketContextEngine {
     // merge it alongside the TFS desat scales + B68.5 path B slope min.
     this.b67_5PostCompositionFloor = postCompFloor as number;
 
-    // B.4 foundation (2026-06-03): resolve xStock TIME-ANCHORED regime lookbacks
-    // per-class (assetClass=xstock_spot). These are the 15-minute re-expressions
-    // of the 30-bar momentum + 14-bar ADX windows (120 = 30h@15m, 56 = 14h@15m).
-    // Hard-fail on a missing seed (Kyle no-silent-fallback). Crypto never reads
-    // these — it uses the shared 30/14 in this.regimeConfig.
-    const XSTOCK_KEY = { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' } as any;
-    const [xsMom, xsAdx] = await Promise.all([
-      getConstant<number>('regime_classifier', 'momentum_lookback', XSTOCK_KEY),
-      getConstant<number>('regime_classifier', 'adx_period', XSTOCK_KEY),
-    ]);
-    const xsMissing: string[] = [];
-    if (xsMom === undefined) xsMissing.push('momentum_lookback');
-    if (xsAdx === undefined) xsMissing.push('adx_period');
-    if (xsMissing.length > 0) {
+    // B.4 foundation (2026-06-03; Langston Chunk-B1 review): resolve per-class
+    // TIME-ANCHORED regime lookbacks UNIFORMLY for every active asset class into
+    // a class-keyed map. No `if (assetClass===)` branch and no split-brain — both
+    // crypto and xStock resolve from the SAME module_constants path (crypto via
+    // the `*` seed, xStock via its override). 15-minute re-expressions: momentum
+    // 30 bars (30h@60m) -> 120 (30h@15m); ADX 14 (14h) -> 56 (14h@15m). Hard-fail
+    // on a missing seed for any active class (Kyle no-silent-fallback).
+    const lookbacksByClass = new Map<AssetClass, { momentumLookback: number; adxPeriod: number }>();
+    for (const ac of getActiveAssetClasses()) {
+      const KEY = { exchange: '*', assetClass: ac, strategy: '*', regime: '*' } as any;
+      const [mom, adx] = await Promise.all([
+        getConstant<number>('regime_classifier', 'momentum_lookback', KEY),
+        getConstant<number>('regime_classifier', 'adx_period', KEY),
+      ]);
+      const miss: string[] = [];
+      if (mom === undefined) miss.push('momentum_lookback');
+      if (adx === undefined) miss.push('adx_period');
+      if (miss.length > 0) {
+        throw new Error(
+          `[B.4] missing module_constants regime_classifier {${miss.join(', ')}} for asset_class='${ac}'. ` +
+          `Run migration 2026-06-03c-b4-foundation-per-class-lookbacks.sql (crypto star-seed=30/14, xstock_spot=120/56).`,
+        );
+      }
+      lookbacksByClass.set(ac, { momentumLookback: mom as number, adxPeriod: adx as number });
+    }
+    // Step-2 #4 seed-parity PROOF: the crypto-resolved config must be bit-identical
+    // to DEFAULT_REGIME_CONFIG. Catches a mis-seeded `*` row or a silent default
+    // before any pair is classified.
+    const cryptoLk = lookbacksByClass.get('crypto_spot');
+    if (
+      cryptoLk &&
+      (cryptoLk.momentumLookback !== DEFAULT_REGIME_CONFIG.momentumLookback ||
+        cryptoLk.adxPeriod !== DEFAULT_REGIME_CONFIG.adxPeriod)
+    ) {
       throw new Error(
-        `[B.4] missing xstock_spot module_constants in regime_classifier module: ${xsMissing.join(', ')}. ` +
-        `Run migration 2026-06-03c-b4-foundation-per-class-lookbacks.sql to seed (xStock momentum_lookback=120, adx_period=56).`,
+        `[B.4] crypto regime-lookback parity FAILED: resolved {mom=${cryptoLk.momentumLookback}, adx=${cryptoLk.adxPeriod}} ` +
+        `!= DEFAULT_REGIME_CONFIG {mom=${DEFAULT_REGIME_CONFIG.momentumLookback}, adx=${DEFAULT_REGIME_CONFIG.adxPeriod}}. ` +
+        `The crypto star-seed must equal the hardcoded defaults (no behavior change for crypto).`,
       );
     }
-    this.xstockRegimeLookbacks = {
-      momentumLookback: xsMom as number,
-      adxPeriod: xsAdx as number,
-    };
+    this.regimeLookbacksByClass = lookbacksByClass;
   }
 
   /** B67.4 — outcome feedback config (6 constants per §D.5). Also runs the
@@ -1216,26 +1242,30 @@ export class MarketContextEngine {
     // missing slope here will correctly REJECT Path B.
     // B79.0m.b: null-safe — non-crypto may have undefined propagatedDbs (synthesized neutral above).
     const dbsSlope = propagatedDbs?.slope ?? 0;
-    // B.4 foundation (2026-06-03): for xStock pairs, override the regime
-    // lookbacks with the per-class 15-minute-anchored values (120 / 56) resolved
-    // in refreshRegimeConfig. Crypto passes this.regimeConfig unchanged (30 / 14
-    // — bit-identical to the prior hardcoded literals). The hard-fail is upstream
-    // (refreshRegimeConfig throws on a missing seed); the guard here surfaces a
-    // cold-start race loudly rather than silently using crypto's 30/14 on xStock.
-    let regimeConfigForPair = this.regimeConfig;
-    if (assetClass === 'xstock_spot') {
-      if (this.xstockRegimeLookbacks === null) {
-        throw new Error(
-          `[B.4] xstock_spot regime lookbacks not initialized for ${symbol}. ` +
-          `MCE.start() must complete refreshRegimeConfig() before computeContext is called for xStock.`,
-        );
-      }
-      regimeConfigForPair = {
-        ...this.regimeConfig,
-        momentumLookback: this.xstockRegimeLookbacks.momentumLookback,
-        adxPeriod: this.xstockRegimeLookbacks.adxPeriod,
-      };
+    // B.4 foundation (2026-06-03; Langston Chunk-B1 review): resolve the pair's
+    // per-class TIME-ANCHORED regime lookbacks via a UNIFORM map lookup keyed on
+    // the actual assetClass — NO `if (assetClass===)` branch, no second config
+    // source. Crypto resolves 30/14 (parity-asserted == DEFAULT), xStock 120/56.
+    // Hard-fail if the class wasn't resolved (a new active class added without a
+    // seed) rather than silently using another class's window.
+    if (this.regimeLookbacksByClass === null) {
+      throw new Error(
+        `[B.4] regime lookbacks not initialized for ${symbol}. ` +
+        `MCE.start() must complete refreshRegimeConfig() before computeContext.`,
+      );
     }
+    const lk = this.regimeLookbacksByClass.get(assetClass);
+    if (lk === undefined) {
+      throw new Error(
+        `[B.4] no regime lookbacks resolved for asset_class='${assetClass}' (${symbol}). ` +
+        `Mark it active in ASSET_CLASS_REGISTRY + seed regime_classifier momentum_lookback/adx_period.`,
+      );
+    }
+    const regimeConfigForPair = {
+      ...this.regimeConfig,
+      momentumLookback: lk.momentumLookback,
+      adxPeriod: lk.adxPeriod,
+    };
     const regimeResult = calculatePairRegime(
       ohlcData,
       directionalBias.score,

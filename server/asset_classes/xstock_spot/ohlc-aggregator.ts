@@ -128,6 +128,11 @@ const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is di
 // session-shape logic as the 60M=120h default. 240h (10 days) spans a weekend
 // + 4 prior RTH sessions. Scanner/cache contexts pass lookbackHoursOverride
 // (the cache's NARROW_OVERLAY_HOURS_15M); this default is forensic/backfill only.
+// ⚠️ READABILITY (Langston Chunk-B1 review): there are now THREE unrelated 240s
+// in this file — XstockAggregationInterval `240` (minutes / 4h bar),
+// MAX_BARS_15M `240` (bars), and LOOKBACK_HOURS_15M `240` (hours). The
+// coincidence is UNINTENTIONAL; they are not linked. Do NOT "fix" one by
+// changing another. (MAX_BARS_15M=240 is bars=60h; this is hours=10 days.)
 const LOOKBACK_HOURS_15M = 240;
 
 /**
