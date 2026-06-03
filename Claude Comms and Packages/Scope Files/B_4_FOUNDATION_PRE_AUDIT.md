@@ -29,7 +29,7 @@ Per `SYSTEM_IMPACT_MAP.md`, the affected components and their documented couplin
 
 ## §2 — Per-objective findings (code-surface confirmed)
 
-**Obj 1 (bar plumbing):** `ohlc-aggregator.ts:62` `XstockAggregationInterval = 60 | 240` → add `| 15`; `:194` bucketExpr 3600→900; `:169` interval dispatch; `:83-84` bar caps; `scanner.ts:533` literal `60`→15 (or parameterize). New `xstock_spot_ohlc_15m_snapshot` mirrors the 60m snapshot schema (migration `2026-05-18-b-new-34b...`). xStock-only.
+**Obj 1 (bar plumbing):** `ohlc-aggregator.ts:62` `XstockAggregationInterval = 60 | 240` → add `| 15`; `:194` bucketExpr 3600→900; `:169` interval dispatch; `:83-84` bar caps. **`MAX_BARS_15M` MUST be sized to the DEEPEST consumer — DBS at 192 bars (Obj 5) — NOT the regime ~120-bar depth (Langston Step-2 must-fix #1): set `MAX_BARS_15M` ≥ 192 + margin ≈ 224.** A 120 cap would silently truncate the DBS recompute to 30h instead of 48h and corrupt the substrate the regime recalibration (Obj 3) is measured against. `scanner.ts:533` literal `60`→15 (or parameterize). New `xstock_spot_ohlc_15m_snapshot` mirrors the 60m snapshot schema (migration `2026-05-18-b-new-34b...`). xStock-only.
 
 **Obj 2 (time-anchored lookbacks — THE core per-class work):** SHARED literals to migrate per-class: `computeMomentum` 30-bar (`market-regime.ts:120`), `computeADX` 14-bar (`:132`), SMA-20 (`signal-orchestrator.ts:1226`, `vts-runner.ts:145`, `routes.ts:6865/6897`), ATR-14/RSI-14 (`strategy-helpers.ts:78`), VWAP `slice(-24)` (`signal-orchestrator.ts:1496`), high/low `slice(-24)` (`strategy-validator.ts:191`). The `market-regime.ts:108-119` invariant comment names the migration: per-class lookback constants → `module_constants`. **Mechanism: DB-resolved per-class config, NOT shared-literal rewrite.** Re-express each as the intended wall-clock window (30 bars×60m = 30h → 120 bars×15m; 14h → 56 bars; 24h → 96 bars; etc.) resolved per asset class so crypto keeps 60m semantics.
 
@@ -37,7 +37,7 @@ Per `SYSTEM_IMPACT_MAP.md`, the affected components and their documented couplin
 
 **Obj 4 (MCE periods):** the indicator periods feeding the MCE/confidence chain that are bar-count → re-derive per-class to the intended wall-clock window. (Overlaps Obj 2's SMA/ATR/RSI literals.)
 
-**Obj 5 (DBS):** `directional-bias.types.ts:83-101` `DEFAULT_DBS_CONFIG` lookbackPeriod=48, EMA 12/26 — **SHARED/global, no per-class override.** Add per-class override (48 bars×60m=48h → 192 bars×15m, ATR-normalized so ATR re-derive follows). **DECISION (Langston): recompute + epoch-stamp + retain 60m `_archive`.** Recompute `xstock_dbs_backfill` (~30k rows) on 15m via the B-PHASE-A2 backfill script; stamp rows with a substrate/version tag; rename/retain the prior 60m table read-only as `_archive`. Off-peak window (see §3).
+**Obj 5 (DBS):** `directional-bias.types.ts:83-101` `DEFAULT_DBS_CONFIG` lookbackPeriod=48, EMA fast=12/slow=26 — **SHARED/global, no per-class override.** Add per-class override for ALL THREE bar-count params (Langston Step-2 must-fix #2 — the EMAs are bar-count too): lookbackPeriod 48 bars×60m=48h → **192 bars** at 15m; EMA fast 12→**48 bars** (12h preserved); EMA slow 26→**104 bars** (26h preserved). ATR-normalized, so ATR re-derive follows. **Leaving EMA at 12/26 on the 15m substrate collapses smoothing to 3h/6.5h → a DIFFERENT signal, not a finer-grained one.** Crypto keeps 48/12/26 by per-class resolution. **DECISION (Langston): recompute + epoch-stamp + retain 60m `_archive`.** Recompute `xstock_dbs_backfill` (~30k rows) on 15m via the B-PHASE-A2 backfill script; stamp rows with a substrate/version tag; rename/retain the prior 60m table read-only as `_archive`. **Live table = 15m rows ONLY; archive = 60m read-only — no mixed-substrate coexistence (Langston #6 → Step-4 proof: no consumer of `xstock_dbs_backfill` reads mixed rows).** Off-peak window: supervised ONE-SHOT in the weekend-close window — NOT coupled to the `weekend_shutdown` cron (Langston #3: that cron has a flaky history — missed 2026-05-30, B-NEW-49/50/51 fixed arm/fire failures — don't hang a one-time migration off it, and don't risk re-fire on later weekends; confirm scanner actually paused first).
 
 **Obj 6 (ORB):** CONFIRMED defect — `orb.ts:101-135 computeOpeningRange(PriceData[])` expects 1-min candles but is fed 60m bars via `signal-orchestrator.ts:1885-1890` (`ohlcAsAny` = `getOHLCData(symbol,60)` at `:1477`). RTH window `14:30-17:00 UTC` fixed (`:64-71`); 30-min opening window `:114`. → repoint to fine bars + re-derive window in 15m terms + enable-flip LAST. (B-NEW-36 already removed ORB's dead 24/7 bypass, SIM:1058 — clean surface.)
 
@@ -56,11 +56,11 @@ Per `SYSTEM_IMPACT_MAP.md`, the affected components and their documented couplin
 
 **Current CPX22 baseline (measured 2026-06-03):** 2 vCPU; load avg 1.46 / 1.16 / 0.65 (1m/5m/15m) → ~58% CPU used over 5 min (~42% headroom), ~73% at the 1-min peak (~27% headroom); memory 3814 MB total, 2440 MB available (~64% free); disk 52 GB / 75 GB used (73%, 20 GB free, 27% free).
 
-**Capacity (a) — steady-state 4× snapshot cadence:** the 4× is the snapshot WRITE grid + aggregation bucket count, NOT a 4× scan cadence — the scanner stays at 75 pairs/cycle, 10-17s, cadence unchanged (SIM:1066), and the snapshot architecture already cut per-cycle DB IO 75-85% (SIM:882). So the steady-state delta is the finer aggregation SQL (4× buckets per rollup query) + fire-and-forget write-back on a 15-min grid. **Preliminary read: memory ample (64% free); CPU the surface to watch (peak headroom 27% is near the 30% line — the finer aggregation adds CPU/DB work that must be projected).** → MUST run the 1.3× synthetic test pre-deploy and confirm CPU + DB-connection headroom ≥30% at projected load.
+**Capacity (a) — steady-state 4× snapshot cadence:** the 4× is the snapshot WRITE grid + aggregation bucket count, NOT a 4× scan cadence — the scanner stays at 75 pairs/cycle, 10-17s, cadence unchanged (SIM:1066), and the snapshot architecture already cut per-cycle DB IO 75-85% (SIM:882). So the steady-state delta is the finer aggregation SQL (4× buckets per rollup query) + fire-and-forget write-back on a 15-min grid. **Judge on SUSTAINED utilization, not the 1m peak (Langston Step-2 #5): the 1m sample (1.46, ~73%) is spiky; the 15m load avg 0.65 = ~33% util = ~67% headroom says the peak is transient, not sustained. Memory ample (64% free). The surface to watch HARDEST is DB CONNECTIONS, not CPU — the finer aggregation is 4× bucket rows per rollup query, and both prewarm and the backfill use per-call `pg.Pool` (SIM).** → MUST run the 1.3× synthetic test pre-deploy and base ship/no-ship on SUSTAINED 5-15m utilization + DB-connection headroom ≥30%; if sustained headroom <30% → tier-upgrade before ship, never ship-anyway (§5 #15).
 
 **Capacity (b) — one-time DBS backfill recompute (~30k rows on 15m):** transient batch (B-PHASE-A2 script, per-call pg.Pool). Does NOT count against steady-state budget but MUST run in a **scheduled off-peak window** (xStock weekend close, Fri 8PM ET → Sun, when the scanner is paused and there is no live VTS contention) so it doesn't contend with live cycles or the connection pool.
 
-**Storage delta (folded in):** new `xstock_spot_ohlc_15m_snapshot` ≈ 265 syms × ~120 buckets ≈ 32k rows (tiny vs the 73%-full disk); 1m retention UNCHANGED (already 365d, no extension). → storage delta negligible; disk's 73% baseline is a pre-existing watch item (the 1m archive bulk — B-NEW-47 cold-storage territory), not caused by this batch.
+**Storage delta (folded in):** new `xstock_spot_ohlc_15m_snapshot` ≈ 265 syms × ~224 buckets (the DBS-192+margin cap, must-fix #1) ≈ 60k rows (still tiny vs the 73%-full disk); 1m retention UNCHANGED (already 365d, no extension). → storage delta negligible; disk's 73% baseline is a pre-existing watch item (the 1m archive bulk — B-NEW-47 cold-storage territory), not caused by this batch.
 
 **Verdict:** memory + storage PASS upfront; CPU + DB-connections require the pre-deploy 1.3× synthetic load test as the hard gate before deploy. If CPU peak headroom <30% at projected load → vertical-scale the Hetzner tier before ship (§5 #15).
 
@@ -82,19 +82,23 @@ Per `SYSTEM_IMPACT_MAP.md`, the affected components and their documented couplin
 
 ## §5 — Crypto-isolation Step-4 hard-fail gate (proofs to produce in the diff)
 
-1. No SHARED bar-sensitive literal (momentum 30, ADX 14, SMA 20, ATR/RSI 14, slice(-24), DBS lookback 48) touched without per-class branching — every one routed through per-class `module_constants` resolution, crypto resolving to its 60m values.
-2. Crypto regime lookbacks / thresholds (`crypto_spot/regime-thresholds.ts`) / DBS config / MCE periods / VN-DI bit-identical before vs after (diff proof).
+1. No SHARED bar-sensitive literal (momentum 30, ADX 14, SMA 20, ATR/RSI 14, slice(-24), DBS lookback 48 + EMA 12/26) touched without per-class branching — every one routed through per-class `module_constants` resolution, crypto resolving to its 60m values.
+2. Crypto regime lookbacks / thresholds (`crypto_spot/regime-thresholds.ts`) / DBS config (incl. EMA) / MCE periods / VN-DI bit-identical before vs after (diff proof).
 3. Crypto bar-cadence-unchanged isolation proof in logs (crypto scan cycle unaffected).
+4. **Seed-parity proof (Langston Step-2 #4):** every crypto `module_constants` lookup for the migrated keys (momentum, ADX, SMA, ATR, RSI, VWAP slice, hi/lo slice, DBS lookback + EMA fast/slow, ORB window) resolves BIT-IDENTICAL to the current hardcoded literal — proven in the diff/migration — with NO silent-default path (ties to §8 #10 / Kyle's no-silent-fallback rule: a missing key must hard-fail, not fall through to a default).
+5. **Mixed-substrate proof (Langston Step-2 #6):** no consumer of `xstock_dbs_backfill` reads mixed 60m+15m rows — live = 15m only, `_archive` = 60m read-only, clean separation.
 
 ---
 
-## §6 — Open questions for Langston Step-2
+## §6 — Open questions — RESOLVED (Langston Step-2, 2026-06-03)
 
-1. **Regime⟵DBS ordering:** confirm DBS recompute (Obj 5) should precede the regime-threshold recalibration measurement (Obj 3) — the SIM coupling (regime consumes DBS) says yes; confirming the build sequence.
-2. **VN/DI fold-in:** confirm folding VN/DI threshold re-derivation into Obj 3's recalibration study (vs a separate study) is the right cut — they read the same 15m bars.
-3. **DBS off-peak window:** confirm the weekend-close window (Fri 8PM ET → Sun) is the right slot for the ~30k-row recompute, and whether to gate the recompute behind the lifecycle controller's existing weekend hook.
-4. **Per-class lookback storage:** confirm `module_constants` (per the invariant comment) is the right home for the time-anchored lookbacks (vs a per-class thresholds file like regime-thresholds.ts). Recommend `module_constants` for runtime-tunability.
-5. **15m snapshot bar-cap:** confirm the re-derived MAX_BARS for 15m (proposal: preserve ~30h regime depth → ~120 bars; cap to the deepest lookback + margin).
+1. **Regime⟵DBS ordering** → CONFIRMED yes (recalibrating thresholds against a 60m-substrate DBS that's about to change is a moving target). §4 ordering correct. ✅
+2. **VN/DI fold-in** → CONFIRMED yes (same 15m bars; current thresholds are crypto-clones never derived for xStock, so deriving on real 15m distribution is strict improvement). Confirm enough post-backfill 15m history for stable distributions (365d 1m retention says yes). ✅
+3. **DBS off-peak window** → window YES, cron-coupling NO. Supervised one-shot in the weekend-close window, scanner-paused confirmed; do NOT hang it off the flaky `weekend_shutdown` cron. ✅ (Obj 5 updated)
+4. **Per-class lookback storage** → `module_constants` YES, PLUS a seed-parity proof in the §5 gate (crypto keys bit-identical to current literals, no silent default). ✅ (§5 proof 4)
+5. **15m snapshot bar-cap** → NOT 120. Size to the deepest consumer (DBS 192) + margin ≈ **224** — a 120 cap would truncate the DBS recompute. ✅ (Obj 1 + §3 updated)
+
+**Langston Step-2 verdict: APPROVE TO PROCEED.** Two must-fixes folded in (bar-cap 224, DBS EMA per-class 48/104); four refinements carried as build constraints / Step-4 proofs (#3 supervised one-shot, #4 seed-parity, #5 sustained-utilization + DB-conn-hardest, #6 mixed-substrate). Step-4 first checks: crypto-isolation proofs (§5) + bar-cap + EMA per-class numbers.
 
 ---
 
