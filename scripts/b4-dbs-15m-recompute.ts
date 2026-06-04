@@ -357,6 +357,18 @@ async function main() {
     process.exit(1);
   }
 
+  if (!process.env.DATABASE_URL) {
+    console.error('[B.4 DBS-15m] DATABASE_URL not set');
+    process.exit(1);
+  }
+  // B.4 (2026-06-04): load the DB-dynamic xStock universe (B79.0n.UNIVERSE-
+  // DISCOVERY, 2026-05-21) so XSTOCK_SPOT_REGISTRY is populated in this standalone
+  // CLI context — app boot does this via xstockUniverseService.initializeFromDB(),
+  // a CLI run does not (it would otherwise build an empty symbol set and abort).
+  const { xstockUniverseService } = await import('../server/asset_classes/xstock_spot/universe-service.js');
+  await xstockUniverseService.initializeFromDB();
+  console.log(`[B.4 DBS-15m] xStock universe loaded: ${XSTOCK_SPOT_REGISTRY.size} symbols`);
+
   const targetSymbols: Array<[string, string]> = symbolsArg
     ? symbolsArg.split(',').map((s) => {
         const entry = XSTOCK_SPOT_REGISTRY.get(s);

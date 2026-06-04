@@ -390,6 +390,15 @@ const isDirectInvocation =
   import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`;
 
 async function main() {
+  // B.4 (2026-06-04): the xStock universe is DB-dynamic (B79.0n.UNIVERSE-DISCOVERY,
+  // 2026-05-21) — XSTOCK_SPOT_REGISTRY is populated by xstockUniverseService at app
+  // boot, which a STANDALONE CLI run does NOT trigger (it returned an empty set).
+  // The in-process runPrewarm caller (lifecycle controller) already has it loaded;
+  // load it here so the CLI path resolves the symbol set too.
+  const { xstockUniverseService } = await import('../server/asset_classes/xstock_spot/universe-service.js');
+  await xstockUniverseService.initializeFromDB();
+  console.log(`[B-NEW-34b] xStock universe loaded: ${XSTOCK_SPOT_REGISTRY.size} symbols`);
+
   const args = process.argv.slice(2);
   const lookbackDaysArg = getFlag(args, 'days');
   const lookbackDays = Number(lookbackDaysArg ?? '14');
