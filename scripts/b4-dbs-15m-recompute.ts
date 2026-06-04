@@ -292,10 +292,10 @@ function recomputeSymbol(
   bars: OHLCData[],
   dbsConfig: DBSConfig,
   atrPeriod: number,
-): { rows: RecomputedRow[]; skippedAtr: number; skippedSentinel: number } {
+): { rows: RecomputedRow[]; skippedAtr: number; sentinelZeroRows: number } {
   const rows: RecomputedRow[] = [];
   let skippedAtr = 0;
-  let skippedSentinel = 0;
+  let sentinelZeroRows = 0;
 
   const lookback = dbsConfig.lookbackPeriod; // 192 (15m-anchored)
 
@@ -307,7 +307,15 @@ function recomputeSymbol(
     if (atr <= 0) { skippedAtr++; continue; }
 
     const result = computeDirectionalBias(window, atr, dbsConfig);
-    if (result.sentinelZero) { skippedSentinel++; continue; }
+    // Langston Step-4 Q1 (2026-06-04): INSERT sentinel-zero bars WITH the flag —
+    // do NOT skip. The sentinel_zero column exists to mark computed-but-degenerate
+    // (flat-price) bars; dropping them erases the absence-vs-degenerate distinction
+    // the column encodes and breaks 60m-archive parity. "Cleaner distribution for
+    // threshold derivation" is recoverable at query time via WHERE NOT
+    // sentinel_zero. Contrast atr<=0 (skipped above): those are UNcomputable
+    // (computeDirectionalBias cannot run) — a genuinely different semantics, so the
+    // skip-atr / insert-sentinel asymmetry is coherent, not sloppy.
+    if (result.sentinelZero) sentinelZeroRows++;
 
     const scoredBar = bars[i];
     const ts = new Date(scoredBar.timestamp);
@@ -332,7 +340,7 @@ function recomputeSymbol(
     });
   }
 
-  return { rows, skippedAtr, skippedSentinel };
+  return { rows, skippedAtr, sentinelZeroRows };
 }
 
 async function main() {
@@ -402,7 +410,7 @@ async function main() {
   let symbolsWithRows = 0;
   let symbolsNoBars = 0;
   let totalSkippedAtr = 0;
-  let totalSkippedSentinel = 0;
+  let totalSentinelZeroRows = 0;
   let processed = 0;
 
   console.log(`[B.4 DBS-15m] building full 15-min series + sliding ${dbsConfig.lookbackPeriod}-bar DBS window per symbol...`);
@@ -413,11 +421,11 @@ async function main() {
       processed++;
       continue;
     }
-    const { rows, skippedAtr, skippedSentinel } = recomputeSymbol(symbol, sector, bars, dbsConfig, atrPeriod);
+    const { rows, skippedAtr, sentinelZeroRows } = recomputeSymbol(symbol, sector, bars, dbsConfig, atrPeriod);
     if (rows.length > 0) symbolsWithRows++;
     recomputed.push(...rows);
     totalSkippedAtr += skippedAtr;
-    totalSkippedSentinel += skippedSentinel;
+    totalSentinelZeroRows += sentinelZeroRows;
     processed++;
     if (processed % 25 === 0) {
       console.log(`[B.4 DBS-15m] progress: ${processed}/${targetSymbols.length} symbols, ${recomputed.length} rows so far`);
@@ -427,7 +435,7 @@ async function main() {
   console.log(
     `[B.4 DBS-15m] recomputed ${recomputed.length} per-bar 15-min DBS rows ` +
     `across ${symbolsWithRows} symbols (${symbolsNoBars} symbols < ${dbsConfig.lookbackPeriod}-bar window; ` +
-    `skipped bars: ${totalSkippedAtr} ATR<=0, ${totalSkippedSentinel} sentinel-zero).`,
+    `${totalSkippedAtr} bars skipped ATR<=0 [uncomputable]; ${totalSentinelZeroRows} sentinel-zero bars INSERTED with flag).`,
   );
 
   const client = await pool.connect();
