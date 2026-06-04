@@ -1,13 +1,20 @@
 #!/usr/bin/env tsx
 /**
  * ═════════════════════════════════════════════════════════════════════════════
- * B-NEW-34b — xStock 60-min OHLC snapshot pre-warm
+ * B-NEW-34b — xStock OHLC snapshot pre-warm (60-min + 15-min)
  * ═════════════════════════════════════════════════════════════════════════════
  *
- * One-off (re-runnable) job that aggregates 60-min OHLC buckets from
+ * One-off (re-runnable) job that aggregates OHLC buckets from
  * xstock_spot_ohlc_1m per symbol with a wide lookback window (default 14
- * days) and UPSERTs the most-recent 60 buckets per symbol into the new
- * xstock_spot_ohlc_60m_snapshot table.
+ * days) and UPSERTs the most-recent N buckets per symbol into the snapshot
+ * tables. As of B.4 foundation (2026-06-04) it warms BOTH substrates per run:
+ *   • 60-min: most-recent 60 buckets  → xstock_spot_ohlc_60m_snapshot
+ *   • 15-min: most-recent 240 buckets → xstock_spot_ohlc_15m_snapshot
+ * (see SNAPSHOT_INTERVALS). Pre-switch the scanner reads 60m, so warming 15m is
+ * inert; post-switch the scanner reads 15m, so warming 15m is essential —
+ * without it the 15m snapshot is cold at Sunday reopen and the deepest 15m
+ * consumer (DBS, 192 bars = 48h) starts degraded. The 60m warm is retained as
+ * the archive/parity substrate. xStock-scoped; crypto untouched.
  *
  * B-NEW-36 (2026-05-20): refactored to expose `runPrewarm(options)` as a
  * named export so the off-hours session-lifecycle controller can invoke
@@ -64,9 +71,36 @@ function hasFlag(args: string[], name: string): boolean {
   return args.indexOf(`--${name}`) >= 0;
 }
 
-// Bucket cap per symbol — matches MAX_BARS_60M in ohlc-aggregator.ts:83.
-// Keeps the snapshot table bounded to ~265 × 60 = 15,900 rows max.
+// Bucket cap per symbol — matches MAX_BARS_60M in ohlc-aggregator.ts.
+// Keeps the 60-min snapshot table bounded to ~265 × 60 = 15,900 rows max.
 const MAX_BARS_60M = 60;
+
+// B.4 foundation (2026-06-04): 15-minute snapshot cap — matches MAX_BARS_15M in
+// ohlc-aggregator.ts (the 15m cache read cap). Sized to the DEEPEST 15m consumer
+// = DBS lookback 192 bars + margin. Keeps the 15-min snapshot bounded to
+// ~265 × 240 = 63,600 rows max. 240 × 15min = 60h of history per symbol.
+const MAX_BARS_15M = 240;
+
+/**
+ * B.4 foundation (2026-06-04): the prewarm now warms BOTH snapshot substrates
+ * so the Sunday-reopen / shutdown hooks fully populate whichever table the live
+ * read path consumes. Pre-switch the scanner reads 60m (warming 15m is inert);
+ * post-switch the scanner reads 15m (warming 15m is essential — without it the
+ * 15m snapshot is cold at reopen and the deepest 15m consumer, DBS at 192 bars
+ * = 48h, would start degraded). The 60m warm is retained (the 60m snapshot is
+ * kept as the archive/parity substrate). xStock-scoped; crypto unaffected.
+ * `table` values are internal constants (NOT user input) — safe to interpolate.
+ */
+interface SnapshotInterval {
+  label: string;
+  bucketSeconds: number;
+  maxBars: number;
+  table: string;
+}
+const SNAPSHOT_INTERVALS: SnapshotInterval[] = [
+  { label: '60m', bucketSeconds: 3600, maxBars: MAX_BARS_60M, table: 'xstock_spot_ohlc_60m_snapshot' },
+  { label: '15m', bucketSeconds: 900, maxBars: MAX_BARS_15M, table: 'xstock_spot_ohlc_15m_snapshot' },
+];
 
 interface BucketRow {
   bucket_ts: Date;
@@ -79,9 +113,10 @@ interface BucketRow {
 }
 
 /**
- * Aggregate a single symbol's 60-min buckets using the same DISTINCT ON
- * dedup + epoch-floor bucketing as the live aggregator's hot path. Returns
- * the most-recent MAX_BARS_60M buckets, ASC by bucket_ts.
+ * Aggregate a single symbol's buckets at the given interval (bucketSeconds)
+ * using the same DISTINCT ON dedup + epoch-floor bucketing as the live
+ * aggregator's hot path. Returns the most-recent `maxBars` buckets, ASC by
+ * bucket_ts. Called once per SNAPSHOT_INTERVALS entry (60m then 15m).
  *
  * Per-symbol single-SQL avoids the scanner-budget timeout because postgres
  * can use the (symbol, interval_begin) PK index for the partition scan +
@@ -93,7 +128,12 @@ async function aggregateOneSymbol(
   pool: pg.Pool,
   symbol: string,
   lookbackDays: number,
+  bucketSeconds: number,
+  maxBars: number,
 ): Promise<BucketRow[]> {
+  // bucketSeconds (3600 for 60m, 900 for 15m) is an internal numeric constant
+  // from SNAPSHOT_INTERVALS — NOT user input — interpolated as a literal so the
+  // epoch-floor divisor matches the aggregator hot path for the chosen interval.
   const result = await pool.query<BucketRow>(
     `
     WITH deduped AS (
@@ -107,7 +147,7 @@ async function aggregateOneSymbol(
     bucketed AS (
       SELECT
         symbol,
-        to_timestamp(floor(extract(epoch from interval_begin) / 3600) * 3600) AS bucket_ts,
+        to_timestamp(floor(extract(epoch from interval_begin) / ${bucketSeconds}) * ${bucketSeconds}) AS bucket_ts,
         interval_begin,
         open, high, low, close, volume
       FROM deduped
@@ -130,7 +170,7 @@ async function aggregateOneSymbol(
     ORDER BY bucket_ts DESC
     LIMIT $3
     `,
-    [symbol, lookbackDays, MAX_BARS_60M],
+    [symbol, lookbackDays, maxBars],
   );
   // Reverse to ASC order for downstream consistency with the aggregator's contract.
   return result.rows.reverse();
@@ -140,6 +180,7 @@ async function upsertSnapshot(
   pool: pg.Pool,
   symbol: string,
   rows: BucketRow[],
+  tableName: string,
 ): Promise<number> {
   if (rows.length === 0) return 0;
 
@@ -165,7 +206,7 @@ async function upsertSnapshot(
   }
   const result = await pool.query(
     `
-    INSERT INTO xstock_spot_ohlc_60m_snapshot
+    INSERT INTO ${tableName}
       (symbol, bucket_ts, open, high, low, close, volume, source_bar_count)
     VALUES ${placeholders.join(',')}
     ON CONFLICT (symbol, bucket_ts) DO UPDATE SET
@@ -212,6 +253,8 @@ export interface RunPrewarmResult {
   symbolErrors: number;
   totalBuckets: number;
   totalUpserts: number;
+  /** B.4 foundation: rows upserted per snapshot interval label ('60m','15m'). */
+  upsertsByInterval?: Record<string, number>;
   dryRun: boolean;
 }
 
@@ -265,40 +308,45 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
   let symbolsEmpty = 0;
   let symbolErrors = 0;
 
+  // B.4 foundation (2026-06-04): per-interval upsert tally for the summary log.
+  const upsertsByInterval: Record<string, number> = {};
+  for (const iv of SNAPSHOT_INTERVALS) upsertsByInterval[iv.label] = 0;
+
   try {
     for (let i = 0; i < targetSymbols.length; i++) {
       const symbol = targetSymbols[i];
-      try {
-        const rows = await aggregateOneSymbol(pool, symbol, lookbackDays);
-        if (rows.length === 0) {
-          symbolsEmpty++;
-          if ((i + 1) % 25 === 0) {
-            console.log(
-              `[B-NEW-34b] progress: ${i + 1}/${targetSymbols.length} processed, ` +
-              `${totalBuckets} buckets, ${totalUpserts} upserted, ${symbolsEmpty} empty`,
-            );
+      // Warm EVERY snapshot substrate for this symbol while its 1m partition is
+      // hot. Per-interval try/catch so a 15m failure never blocks the 60m warm
+      // (or vice-versa). A symbol counts as "with data" if ANY interval yields
+      // buckets; "empty" only when no interval does.
+      let symbolHadData = false;
+      for (const iv of SNAPSHOT_INTERVALS) {
+        try {
+          const rows = await aggregateOneSymbol(pool, symbol, lookbackDays, iv.bucketSeconds, iv.maxBars);
+          if (rows.length === 0) continue;
+          symbolHadData = true;
+          totalBuckets += rows.length;
+          if (!dryRun) {
+            const upserted = await upsertSnapshot(pool, symbol, rows, iv.table);
+            totalUpserts += upserted;
+            upsertsByInterval[iv.label] += upserted;
+          } else {
+            totalUpserts += rows.length;
+            upsertsByInterval[iv.label] += rows.length;
           }
-          continue;
-        }
-        symbolsWithData++;
-        totalBuckets += rows.length;
-        if (!dryRun) {
-          const upserted = await upsertSnapshot(pool, symbol, rows);
-          totalUpserts += upserted;
-        } else {
-          totalUpserts += rows.length;
-        }
-        if ((i + 1) % 25 === 0) {
-          const elapsedSec = ((Date.now() - startMs) / 1000).toFixed(1);
-          console.log(
-            `[B-NEW-34b] progress: ${i + 1}/${targetSymbols.length} processed, ` +
-            `${totalBuckets} buckets, ${totalUpserts} upserted (${elapsedSec}s elapsed)`,
+        } catch (err) {
+          symbolErrors++;
+          console.warn(
+            `[B-NEW-34b] ${symbol} ${iv.label} pre-warm error: ${err instanceof Error ? err.message : err}`,
           );
         }
-      } catch (err) {
-        symbolErrors++;
-        console.warn(
-          `[B-NEW-34b] ${symbol} pre-warm error: ${err instanceof Error ? err.message : err}`,
+      }
+      if (symbolHadData) symbolsWithData++; else symbolsEmpty++;
+      if ((i + 1) % 25 === 0) {
+        const elapsedSec = ((Date.now() - startMs) / 1000).toFixed(1);
+        console.log(
+          `[B-NEW-34b] progress: ${i + 1}/${targetSymbols.length} processed, ` +
+          `${totalBuckets} buckets, ${totalUpserts} upserted (${elapsedSec}s elapsed)`,
         );
       }
     }
@@ -313,6 +361,10 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
   console.log(`  Symbols empty:          ${symbolsEmpty} (no 1-min source bars in window)`);
   console.log(`  Buckets aggregated:     ${totalBuckets}`);
   console.log(`  Rows upserted:          ${totalUpserts}`);
+  console.log(
+    `  Rows upserted/interval: ` +
+    SNAPSHOT_INTERVALS.map((iv) => `${iv.label}=${upsertsByInterval[iv.label]}`).join(' '),
+  );
   console.log(`  Mode:                   ${dryRun ? 'DRY-RUN (no INSERTs)' : 'LIVE'}`);
 
   return {
@@ -323,6 +375,7 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
     symbolErrors,
     totalBuckets,
     totalUpserts,
+    upsertsByInterval,
     dryRun,
   };
 }
