@@ -859,6 +859,10 @@ After ORCHESTRATOR close, 4 sub-batches remain in the umbrella v4 roadmap (EXECU
 
 **ORB note (Kyle asked):** ORB revives under 15-min (was disabled in B-NEW-34 only because 60m left no intra-hour opening range). Not a free flag-flip — requires the row-A.7 candle-source + window + enable work, then validation.
 
+### F — POST-ARC (run ONLY after ALL of A–E land; Kyle directives 2026-06-04)
+- **F.1 — Historical outcome re-evaluation STUDY + report (Kyle 2026-06-04).** Once the 15-minute bar functionality AND all the follow-on calibration (A–E) are deployed, replay the OLD (60-minute-era) simulated trades through the FULLY-calibrated 15-minute setup: re-classify each historical bar's regime under the new thresholds, re-run which strategies would have fired, and re-evaluate whether each past trade's outcome would have been the same or different. **A sanity-check study + report only ("are we on the right track?"), NOT a live change / not a history rewrite.** Extends the parity-replay engine (`scripts/b4-regime-parity.ts`) downstream through strategy selection + trade-outcome simulation. **Strictly gated AFTER A–E complete.** ☐
+- **F.2 — ml-service high-restart investigation (Kyle 2026-06-04).** PM2 `ml-service` shows restart_time ≈184k (~one restart/20s) while the main `dawntrader` process is healthy + isolated. Per Kyle's condition (NOT a current functional issue — main system unaffected, crypto untouched) it is DEFERRED to run **right after all currently-defined plan steps (A–E)**. Diagnose the crash-restart loop root cause + blast radius (does anything depend on it / is it doing real work between restarts?) + fix. Surfaced by Langston at B.4 Step-8 (2026-06-04); a spawn_task chip was created but the canonical sequencing lives HERE — do after A–E, not now. ☐
+
 ---
 
 *End of MULTI_ASSET_VTS_EXPANSION_PLAN.md. Living document — update at every batch boundary. Move to `_archive/` when Phase 19 closes.*
