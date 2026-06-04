@@ -123,3 +123,4 @@
 2026-06-03-b3-1b-xstock-volume-confirmation-disable.sql
 2026-06-03b-b4-foundation-15m-schema.sql
 2026-06-03c-b4-foundation-per-class-lookbacks.sql
+2026-06-04-b4-foundation-vndi-15m-recalib.sql
