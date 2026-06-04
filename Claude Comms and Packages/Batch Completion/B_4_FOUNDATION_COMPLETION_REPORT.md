@@ -62,3 +62,12 @@ Standalone CLI prewarm + DBS-recompute aborted "empty target symbol set" — the
 - **RUNNING_ISSUES #200–#203** carry the deferred follow-ups.
 
 **Verification basis:** backend-verified (HTTP 200, migrations applied + confirmed in live DB, scanner reading 15m, 15m snapshot warm, DBS recompute committed). UI loads healthy (Claude-in-Chrome, PAPER/STOPPED as expected). The Phase-19 paper-active run remains the final real-world arbiter; this is the forward proxy.
+
+## §8 — Langston Step-8 independent second-pass — ✅ CONCUR (2026-06-04)
+Langston re-pulled every load-bearing number off staging himself (read-only): deploy HEAD = activation commit; pm2 #347 pinned (no crash-loop); HTTP 200; regime momentum 120 / ADX 56; DBS lookback 192 / ema 48-104 / atr 56; `xstock_dbs_backfill` = 332,304 rows **100% stamped 15m** (zero mixed-interval contamination); `_60m_archive` = 31,481 (= live-60m population, confirming zero loss); 15m snapshot 117,703 rows (grown past the report's 115k via live accumulation). He confirmed the 2 PARTIALs are visible in `module_constants` (the non-recalibrated scopes still carry bar-count periods 12/26/48) — "the declaration matches the data; nothing is hidden." Crypto isolation 3 proofs satisfied. **Verdict: "Foundation is live and clean. Cleared to close pending soak + the 0bae277e7 reconcile."**
+
+**Two flags (neither blocks close):**
+1. **RECONCILED — deploy-state sync.** Langston's `git cat-file -t 0bae277e7` failed *on staging* because the last deploy pulled the activation commit (`ae2ddc845`) and the later script/governance commits reached GitHub but never re-deployed (the CLI fix reached staging via scp, the recompute ran, but staging's git HEAD didn't advance). The hash IS valid on GitHub. **Resolved by a sync-redeploy** (server runtime unchanged post-activation; advances staging HEAD to current GitHub so `0bae277e7` is on the deployed tree + satisfies the §7.1 close gate).
+2. **ml-service restart_time≈184k** — out-of-scope (not B.4; main process healthy at #347, crypto untouched). Spun off as its own task for a future glance.
+
+**Open (soak, NOT blockers):** (a) live-15m regime mix vs predicted (TFS 25 / ST 31 / HVU 21 / IE 17 / RBS 6.6); (b) wall-clock flip-rate ~39%/hr vs ~19%/hr + responsiveness over a real session. Send the live-mix capture once the afternoon accumulates → Langston closes these.
