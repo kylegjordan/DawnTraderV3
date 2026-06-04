@@ -11602,6 +11602,64 @@ The snapshot table needs a fresh-enough state at scanner cold start. During acti
 
 ---
 
+## xStock bar-frequency switch 60-minute → 15-minute + paired recalibration (B.4 foundation, 2026-06-04)
+
+*Added 2026-06-04 with B.4 foundation close. SUPERSEDES the "canonical xstock_spot scanner bar interval is 60 minutes" lock above — the canonical xStock evaluation bar is now 15 minutes. The 60-minute B-NEW-34 / B-NEW-34b chapters above are preserved as historical record + the still-live 60m snapshot/cache code path (the 60m table is retained for the DBS archive + as the parity baseline).*
+
+### Why 15 minutes (the W1 study consensus)
+
+The W1 bar-frequency study (CC + Langston, 2026-06-03) chose 15-minute bars over 5/30/60 on **structure** (a 2-hour hold spans 8 fifteen-min bars vs only 2 sixty-min bars — the 60-min architecture left too few decision points per hold), **stability** (the higher per-bar flip-rate seen at finer bars is a bar-count-lookback artifact that time-anchoring removes), and **ORB-revival** (ORB needs a sub-hourly opening range — 60-min bars left no intra-hour opening range). Pattern forward-edge was weak at every bar size (<0.55 AUC, not decision-grade), so the decision rested on structure + stability + ORB. The switch is therefore NOT a pure plumbing change — it required full paired recalibration so every threshold expressed in periods or tuned against 60-min evidence keeps its intended wall-clock meaning at 15m.
+
+### The core principle: TIME-ANCHORED, not bar-count-anchored
+
+Any rolling-window threshold expressed in BARS changes meaning when the bar size changes. B.4 converts every bar-sensitive lookback to its wall-clock equivalent, so a window that meant N hours at 60m means the same N hours at 15m (4× the bar count). Per-class `module_constants` (xstock_spot, hard-fail no-default) carry the converted values; crypto keeps the shared in-code defaults:
+
+| Lookback | 60-min value | 15-min value | Wall-clock preserved |
+|---|---|---|---|
+| Regime momentum lookback | 30 bars | 120 bars | ~30 h |
+| Regime ADX period | 14 bars | 56 bars | ~14 h |
+| DBS lookback period | 48 bars | 192 bars | ~48 h |
+| DBS EMA fast | 12 bars | 48 bars | ~12 h |
+| DBS EMA slow | 26 bars | 104 bars | ~26 h |
+| DBS / normalization ATR period | 14 bars | 56 bars | ~14 h |
+
+**Crypto isolation BY CONSTRUCTION.** Crypto reads NONE of the new per-class keys — it continues on the shared `DEFAULT_REGIME_CONFIG` (momentum 30 / ADX 14) and `DEFAULT_DBS_CONFIG` (lookback 48 / EMA 12-26 / ATR 14). The regime lookbacks resolve via uniform class-keyed resolution over `getActiveAssetClasses()` with a **startup PARITY ASSERTION** that throws if crypto's resolved config ever drifts from the DEFAULT (30/14). DBS uses Langston's Option B (xStock-only resolution from `module_constants`; crypto keeps the in-code default — the two are separate scanner functions so there is no same-function split-brain, unlike the regime if-branch which B.4 unified into the class-keyed map). The shared `DBSConfig` type is tsc-enforced across both. Three crypto-isolation proofs gate the batch: uniform resolution landing crypto on DEFAULT configs; the startup parity assertion; the shared tsc-enforced type.
+
+### Bar plumbing
+
+The aggregator (`ohlc-aggregator.ts`) gains a 15-minute target interval alongside 60/240: bucket expression `floor(epoch/900)*900` (N=900 seconds), `MAX_BARS_15M=240` cap, `LOOKBACK_HOURS_15M` default. A NEW `xstock_spot_ohlc_15m_snapshot` table (sibling to the B-NEW-34b 60m snapshot, same schema/PK/index shape, bounded ~63.6k rows = 265 syms × 240 buckets) holds pre-aggregated 15m buckets. The cache (`xstock-ohlc-cache.ts`) gains a 15m branch mirroring the 60m snapshot-first cold-read path, DRY-parameterized so `readSnapshotBars` / `mergeBars` / `writeBackSnapshot` take `(tableName, cap)` — the 60m sites pass their prior literals (bit-identical), the 15m branch uses the new table + cap 240 + 6h overlay + 24-bucket write-back. The forming (in-progress) 15-minute bar is still included in the returned series (same partial-bar contract as 60m + crypto). The activation is the scanner's `getOHLCDataBatch(symbolList, 15)` flip — built inert and flipped LAST, gated on the regime-label parity exit-gate sign-off (flipping before recalibration was the silent regime-collapse this batch guards against).
+
+### Recalibrated regime thresholds + the parity exit gate
+
+The replay-driven recalibration study (485 symbols, 34 days, ~101.8k 60m + ~300.9k 15m bars rebuilt from the clean 1-minute archive) found: volatility roughly HALVES 60m→15m (median 0.0059→0.0036), ADX COLLAPSES (mean 34.8→16.7), momentum + |DBS| are near-invariant. 14 xStock regime thresholds were recalibrated percentile-preserving + via the CALIBRATION-LENS (vol cutoffs ↓~40%, ADX cutoffs ↓~50%, DBS cutoffs ~flat) and written to `server/asset_classes/xstock_spot/regime-thresholds.ts` (60m-old values retained inline as comments). **Uncorrected, the old 60m cutoffs applied to 15m bars would balloon STRUCTURAL_TRANSITION to ~51% — a silent regime collapse.** The **regime-label PARITY report is the EXIT GATE** (`scripts/b4-regime-parity.ts`): a 3-baseline comparison (live-snapshot-60m for cutover context / clean-60m-OLD / clean-15m-NEW), with the gate judged on the clean-60m→clean-15m delta (pure bar-size effect, both substrates clean-1m-rebuilt). Result: max |Δ| = 1.30pp, no collapse — the new-15m mix sits ON TOP of the clean-60m mix (TFS 25 / ST 31 / HVU 21 / IE 17 / RBS 6.6); STRUCTURAL_TRANSITION restored from the would-be 51% to 30.7%. **PASSED + Langston SIGNED OFF.** Two activation-readiness conditions were banked (NOT blockers): (a) the per-bar flip-rate is LOWER at 15m but the WALL-CLOCK flip-rate is HIGHER (15m ≈9.75%/bar × 4 ≈ 39%/hr vs 60m ≈18.94%/hr) — the "15m steadier" framing was per-bar and backwards; a flips-per-hour + responsiveness check is owed before activation closes; (b) the ≤1.3pp result is partly by-construction (percentile-preserving targets the marginal mix), so the LIVE-15m mix must be captured once hours accumulate and confirmed near the predicted clean-15m mix (else substrate mismatch).
+
+### DBS 15-minute substrate + history recompute
+
+The xStock DBS config moves to per-class `module_constants` (lookback 192 / EMA 48-104 / ATR 56, table above). Because the DBS-normalization ATR shrinks at 15m, the ATR period is threaded 14→56 at the two `computeATRFromOHLC` sites and the config to the two `computeDirectionalBias` calls. The `xstock_dbs_backfill` per-bar DBS history table (the substrate calibration replays read for distribution analysis) was RECOMPUTED at 15m by a supervised one-shot (`scripts/b4-dbs-15m-recompute.ts`): the 31,481 existing 60-min rows were archived to a NEW `xstock_dbs_backfill_60m_archive` table, the live table cleared, the FULL 15-minute series rebuilt from `xstock_spot_ohlc_1m`, and the 192-bar DBS window slid to insert 332,176 per-bar 15-minute rows — each stamped `bar_interval_minutes=15`. Single transaction, safety gate (re-count archive ≥ live-60m before any DELETE, rollback-safe); sentinel-zero bars inserted-with-flag (Langston Step-4 Q1); atr≤0 bars skipped (uncomputable). This avoids a split-brain mixed-bar-size ML dataset — the table is uniformly 15m, with the 60m history preserved in the archive for the parity baseline.
+
+### IMF screen (VN/DI) recalibration
+
+VN and DI are both bar-sensitive (full-array computes), so they were recalibrated on the same replay method. Migration `2026-06-04-b4-foundation-vndi-15m-recalib.sql` updated 16 `screener_filters` rows (validated against live). **DI contracts toward 50 at 15m** — di_max 30→40.3 (active_oscillator), 35→42.8 (active_reversal + vts_oscillator), 40→45.2 (vts_reversal). **VN is nearly bar-invariant** (median ratio 0.993) — vn_max 0.85→0.826 on the 4 active families (the only edge drifting looser). LEFT documented (lens-conservative): vn_max 0.95/0.98 (their drift was ~1.25pp tighter — tightening, not loosening) and all di_min + di_max=100 (inert at both bar sizes). Langston signed off.
+
+### ORB plumbing-ready (activation deferred)
+
+15-minute bars UNLOCK ORB (it was disabled in B-NEW-34 only because 60-min bars left no intra-hour opening range). B.4 makes ORB plumbing-ready — it now rides the scanner's 15-minute candle feed and its TIME-based opening-range window maps cleanly onto 15m bars (no foundation code change to ORB itself). But the `enable` flag in the live DB stays FALSE: ORB activation is a SEPARATE strategy-fit decision (validate edge at 15m first), out of foundation scope (RUNNING_ISSUES #203). The B-NEW-34 "ORB incompatible with 60-min architecture" disablement is reversed at the plumbing level only.
+
+### Prewarm depth
+
+`scripts/b-new-34b-prewarm-snapshot.ts` now warms BOTH the 60m (cap 60) and 15m (cap 240) snapshot tables so the weekend / Sunday-reopen prewarm fully populates the longest 15m lookback (DBS 192 bars ≈ 48 h) and xStocks don't reopen with a degraded cold-start window. A latent bug surfaced here: the standalone CLI prewarm + DBS-recompute runs aborted "empty target symbol set" because the xStock universe went DB-dynamic (B79.0n.UNIVERSE-DISCOVERY) and the registry is populated only by `xstockUniverseService.initializeFromDB()` at app boot, which CLI runs skip — both CLI mains now call the initializer before enumerating the universe (commit `0bae277e7`).
+
+### Reference
+
+- Deploy: `ae2ddc845` (+ CLI universe-load follow-up `0bae277e7`); pm2 #347; HTTP 200; CI run `26939587681` all-4-green; bench zero-delta (tsc 493 baseline / vitest 12 pre-existing failures unchanged).
+- Migrations: `2026-06-03b` (15m schema + `bar_interval_minutes` stamp col), `2026-06-03c` (per-class lookbacks), `2026-06-04-b4-foundation-vndi-15m-recalib.sql` (VN/DI).
+- Study / parity engines: `scripts/b4-regime-recalib-study.ts`, `scripts/b4-regime-parity.ts`, `scripts/b4-vndi-recalib-study.ts`, `scripts/b4-dbs-15m-recompute.ts`. Reports: `B_4_REGIME_RECALIB_STUDY_RESULTS.md`, `B_4_REGIME_PARITY_REPORT.md`, `B_4_VNDI_RECALIB_STUDY_RESULTS.md`.
+- Code: `server/asset_classes/xstock_spot/ohlc-aggregator.ts` (15m branch), `server/services/xstock-ohlc-cache.ts` (15m branch + DRY-parameterized snapshot helpers), `server/asset_classes/xstock_spot/scanner.ts` (bar-size flip + per-class DBS resolution), `server/services/market-context-engine.ts` (`refreshRegimeConfig` uniform class-keyed resolution + parity assertion), `server/core/metrics/market-regime.ts` + `.types.ts` (per-class momentum/ADX), `server/asset_classes/xstock_spot/regime-thresholds.ts` (14 recalibrated thresholds).
+- Follow-ups: RUNNING_ISSUES #200 (crypto DBS→module_constants deferred), #201 (live forming-bar EV-leakage), #202 (deploy-hygiene git-tree artifacts), #203 (ORB plumbing-ready, enable=false pending strategy-fit).
+- Active trading OFF throughout (VTS telemetry only). Next: per-strategy / pattern-detection / strategy-fit calibration (W2), per the foundation→pattern→per-strategy sequencing.
+
+---
+
 ## Source-side dedup architecture (B-NEW-35, 2026-05-20)
 
 *Added 2026-05-20 with B-NEW-35 close. Replaces the prior "B74 archive duplicate-row workaround" subsection above as the canonical structural-correctness model for B74's three WebSocket-archived OHLC tables.*

@@ -482,6 +482,12 @@ async function main() {
     // TRANSACTION: archive → verify → clear → insert(stamp). All-or-nothing.
     // ════════════════════════════════════════════════════════════════════════
     await client.query('BEGIN');
+    // Supervised one-shot: disable any server-side statement / idle-in-transaction
+    // timeouts FOR THIS TRANSACTION ONLY (SET LOCAL is rolled back with the tx).
+    // Belt-and-suspenders with the batched insert — the first run died mid-insert
+    // and rolled back cleanly; this removes any timeout as a re-run failure mode.
+    await client.query('SET LOCAL statement_timeout = 0');
+    await client.query('SET LOCAL idle_in_transaction_session_timeout = 0');
 
     // (1) ARCHIVE — create the read-only 60m archive (shape-identical) if absent,
     //     then copy the live 60-min rows into it. ON CONFLICT DO NOTHING makes a
@@ -532,29 +538,43 @@ async function main() {
     //     settles to one row (each 15m bucket maps to one bar; collisions are not
     //     expected); across runs the table was just cleared so nothing conflicts.
     //
-    // § JUDGMENT — insert volume: this is a per-bar history (~tens of thousands of
-    // rows). Inserts run row-by-row INSIDE the single transaction (rollback-safe,
-    // mirrors b-phase-a2's per-row pattern). At ~30k rows this is the dominant
-    // time cost but well within a supervised weekend-close window; it is NOT
-    // batched into multi-row VALUES to keep the rollback-safety + the existing
-    // ON CONFLICT shape simple. If row count grows much larger, batch the INSERT.
+    // § INSERT volume — BATCHED multi-row (2026-06-04). The first activation run
+    // used a row-by-row loop over ~332k rows; that held the single transaction
+    // open long enough to be killed mid-insert (the archive→gate→clear→insert
+    // safety design rolled it ALL back cleanly — zero data loss, live 60m table
+    // intact). Fix per the script's own "batch if row count grows" note: insert
+    // BATCH rows per statement to collapse ~332k round-trips to a few hundred and
+    // keep the transaction short. 11 cols/row × 1000 = 11k bind params, well under
+    // the 65535 pg limit. Same single transaction, same ON CONFLICT (symbol, ts)
+    // DO NOTHING, same rollback-safety.
+    const INSERT_BATCH = 1000;
     let inserted = 0;
-    for (const r of recomputed) {
+    for (let off = 0; off < recomputed.length; off += INSERT_BATCH) {
+      const chunk = recomputed.slice(off, off + INSERT_BATCH);
+      const values: unknown[] = [];
+      const tuples: string[] = [];
+      let p = 1;
+      for (const r of chunk) {
+        tuples.push(
+          `($${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, $${p++})`,
+        );
+        values.push(
+          r.symbol, r.sector, r.ts,
+          r.finalScore, r.slopeComponent, r.returnComponent, r.emaComponent,
+          r.sentinelZero, r.atr, r.volume24hUsd, BAR_INTERVAL_15M,
+        );
+      }
       const res = await client.query(
         `INSERT INTO ${TABLE}
            (symbol, sector, ts, final_score, slope_component, return_component,
             ema_component, sentinel_zero, atr, volume_24h_usd, bar_interval_minutes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         VALUES ${tuples.join(',')}
          ON CONFLICT (symbol, ts) DO NOTHING`,
-        [
-          r.symbol, r.sector, r.ts,
-          r.finalScore, r.slopeComponent, r.returnComponent, r.emaComponent,
-          r.sentinelZero, r.atr, r.volume24hUsd, BAR_INTERVAL_15M,
-        ],
+        values,
       );
       inserted += res.rowCount ?? 0;
     }
-    console.log(`[B.4 DBS-15m] inserted ${inserted} per-bar 15-min DBS rows (stamped bar_interval_minutes=15).`);
+    console.log(`[B.4 DBS-15m] inserted ${inserted} per-bar 15-min DBS rows (stamped bar_interval_minutes=15, batched ${INSERT_BATCH}/stmt).`);
 
     await client.query('COMMIT');
 
