@@ -532,9 +532,19 @@ class XstockSpotScannerService {
       const dbStart = Date.now();
       const { xstockOhlcCache } = await import('../../services/xstock-ohlc-cache.js');
 
-      // Single SQL round-trip for 60-min bars across the rotation batch.
+      // Single SQL round-trip for 15-min bars across the rotation batch.
       // Per Langston R2#4: WHERE symbol = ANY($1), postgres groups in-process.
-      const ohlcBatch = await xstockOhlcCache.getOHLCDataBatch(symbolList, 60);
+      // ── B.4 FOUNDATION ACTIVATION (2026-06-04) — xStock 60-min → 15-min ──────
+      // THE activation flip. Switched from 60 to 15 only AFTER the full
+      // recalibration landed + the regime-label parity exit gate PASSED and was
+      // Langston-signed-off (B_4_REGIME_PARITY_REPORT.md). Flipping before
+      // recalibration would have caused the silent regime collapse this batch
+      // guards (15m cutoffs sit at different percentiles). The 15m read path
+      // (xstock-ohlc-cache 15m branch → xstock_spot_ohlc_15m_snapshot, cap 240)
+      // and the per-class 15m lookbacks/DBS-config/regime+VN-DI thresholds all
+      // resolve from module_constants / screener_filters. Crypto unaffected;
+      // active trading OFF.
+      const ohlcBatch = await xstockOhlcCache.getOHLCDataBatch(symbolList, 15);
 
       // 240-min warm-fetch SUSPENDED in B-NEW-34 hotfix 3 (2026-05-15).
       //
