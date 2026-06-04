@@ -68,7 +68,7 @@ const FAMILY_PATHS = ['vts_trend', 'vts_reversal', 'vts_breakout', 'vts_oscillat
  * directional. Mirrors the conceptual definition used in MCE without
  * adding a dependency on regime config here. Returns null when bars < 20.
  */
-function computeDirectionalIntegrity(ohlc: OHLCData[]): number | null {
+export function computeDirectionalIntegrity(ohlc: OHLCData[]): number | null {
   if (ohlc.length < 20) return null;
   let netDelta = 0;
   let absDelta = 0;
