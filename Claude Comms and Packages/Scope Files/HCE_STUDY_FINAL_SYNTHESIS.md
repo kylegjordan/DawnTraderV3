@@ -27,15 +27,22 @@ Kyle's directive: for every strategy, bullish-only, find the contextual conditio
 
 *(Hard GO/NO-GO gate; pass bar pre-registered before running — see `hce_ohlc_sim.py` header.)*
 
-**RESULT: <PENDING — append on completion>.**
+**RESULT: NO-GO (pooled) — driven entirely by crypto OHLC sparsity; the simulator LOGIC is validated.**
 
-The pure stop/target first-hit simulator (logged geometry: entry, `originalStopPrice`, `takeProfit`; OHLC forward) is validated against admitted clean-exit trades whose realized `netProfit` is known. Pass bar: sign-match ≥85%, sim win-rate within ±5pp of observed (no sign bias), no-hit ≤15%.
+On the admitted clean-exit subset (N=4,804): when the sim has data it reproduces the win/loss **sign on 96.8%** of trades with **median net-error 0.000%** (near-exact) and win-rate bias only **−3.0pp** — the first-hit engine is correct. The pre-registered bar fails on ONE criterion: **no-hit = 19.1% > 15%** (the sim could not find the logged stop/target hit on 19% of trades because of missing 1-min bars). Per-class this is decisive:
+- **xStock — no-hit 1%, sign-match 98.0%, bias −0.6pp → GO-quality** (xStock OHLC is dense/complete).
+- **crypto — no-hit 31%, sign-match 95.7% (when it has data), bias −5.1pp** — crypto's thin-alt 1-min gaps drag the pooled number below the bar.
+- BE/trailing/timeout exits: 88% no-hit, as expected (a pure stop/target sim correctly does NOT fire on trades that exited early *between* the levels) — confirms the sim isn't spuriously hitting.
+
+So the NO-GO is a **data-coverage** failure on crypto, not a logic failure. Pass bar (pre-registered in `hce_ohlc_sim.py` before running): sign ≥85% (got 96.8% ✓), |win-rate bias| ≤5pp (got −3.0 ✓), no-hit ≤15% (got 19.1% ✗).
 
 ## 4. P3 — rejected arm (the causal layer): scoped, validated-tooling-ready, COVERAGE-LIMITED
 
 The admitted null concentrates the study's payoff on the admission boundary — i.e. did the net-EV gate (`net_ev_rejected`, 5,068 signals, May–June) reject trades that would have been profitable? Tooling to answer it (entry price + ATR + managed-exit sim from OHLC at the signal timestamp) is feasible and built. **But the rejected-signal population is OHLC-coverage-limited:** only ~53% of rejected signals have 1-min bars within 30 min of the signal, and covered ones are sparse (e.g. 6 bars / 60 min) — because rejected signals are disproportionately thin-liquidity alts (partly *why* they were rejected), exactly the symbols with poor intraday data. So a faithful rejected-arm reconstruction needs **denser intraday data or order-book history** for the thin symbols; on the current 1-min OHLC it would be a low-fidelity, liquidity-biased estimate.
 
 **Per Langston's guards:** matched May–June window both arms; instrument-mix composition reported (PAXG lesson); metric = admitted-vs-rejected expectancy delta with the P2 reconstruction tolerance carried as an error band (delta inside band → inconclusive, not null); `net_ev_rejected` only; power pre-stated (the coverage limit likely powers only a pooled delta, not strategy×context cells).
+
+**VERDICT — P3 DEFERRED (P2 NO-GO gate).** Per the pre-registered hard gate, P3 ships no causal number. The reconstruction engine is **validated for xStock** (1% no-hit, 98% sign-match) but **blocked on crypto coverage** (31% no-hit on admitted; rejected crypto is worse at ~53% coverage with sparse bars). The crypto rejected arm — the bulk of the 5,068 — cannot be reconstructed faithfully on the current 1-min OHLC. A trustworthy causal test therefore requires one of: (a) **denser intraday data** (trade-tick reconstruction or order-book history) for the thin crypto symbols, or (b) **more xStock rejected accrual** (only 121 xStock `net_ev_rejected` exist today — faithful but underpowered). This is a clean scientific stop, not a failure: the tooling is built and validated; the causal layer awaits adequate data and is scoped as a dedicated follow-on.
 
 ## 5. Conclusion + recommendation
 
