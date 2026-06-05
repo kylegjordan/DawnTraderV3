@@ -1,78 +1,89 @@
 # Hidden-Contextual-Edge Study — Design Plan (Kyle directive 2026-06-04)
 
-> **Status:** DESIGN PLAN for Langston review. Not yet built/run. READ-ONLY analysis effort; no production code change in the study phase. Author: Claude Code. Reviewer: Langston.
+> **Status:** DESIGN PLAN, v2 (rewritten after verified data-foundation sweep + Langston review). READ-ONLY analysis effort; no production code change in the study phase. Author: Claude Code. Reviewer: Langston (v1 reviewed; v2 §2/S1 re-review requested at diff level).
 
 ## 0. Purpose
 
-Pattern conditional-edge work (2026-06-04) proved that a strategy with no edge *on average* can hide a **profitable subset** whose winners share an identifiable context (for patterns: continuation + high-volatility/trending). Kyle's directive: do this **systematically for ALL strategies, not just patterns** — mine our wins and losses for the contextual conditions under which each strategy's winners cluster, so we can gate each strategy to its favorable context and lift **both win-rate and per-trade profit**. Findings feed a tuning decision (separate, later); the *methodology* becomes a repeatable engine an ML process runs periodically to keep hunting (and to catch drift, since these edges may not be permanent).
+Pattern conditional-edge work (2026-06-04) proved a strategy with no edge *on average* can hide a **profitable subset** whose winners share an identifiable context (for patterns: continuation + high-volatility/trending; reversal-in-calm is a reliable loser, cross-confirmed on both asset classes). Kyle's directive: do this **systematically for ALL strategies** — mine our wins and losses for the contextual conditions under which each strategy's winners cluster, so we can gate each strategy to its favorable context and lift **both win-rate and per-trade profit**. Findings feed a tuning decision (separate, later); the *methodology* becomes a repeatable engine an ML process runs periodically (and to catch drift, since these edges may not be permanent).
 
 ## 1. Hard constraints (Kyle)
 
-1. **Bullish-only.** The system cannot short. Every candidate edge/gate must be on the BUY side. (This simplifies "continuation" = buy in an up-regime; "reversal" = buy against a down-regime = the known loser.)
-2. **No fixed-duration cap.** Outcome = the system's actual managed exit (stop / target / trailing), NOT a fixed horizon.
-3. **Net of friction.** Every outcome is realized P&L AFTER round-trip cost (fees + spread + slippage), per asset class.
-4. **Identify, don't tune.** The study only SURFACES candidate gates with evidence. Tuning the system to them is a separate Kyle-approved batch afterward.
-5. **Reusable for periodic ML.** Build as a parameterized, schedulable engine with a defined output (ranked candidate gates + a drift signal), not a one-off script. Frequency TBD.
-6. **Calibration-lens / no data-snooping.** Mining many slices WILL surface spurious "edges." Out-of-sample + temporal-stability validation is mandatory before any finding is trusted.
+1. **Bullish-only.** No shorting. Every candidate edge/gate is on the BUY side (continuation = buy with the trend; reversal = buy against it = the known loser).
+2. **No fixed-duration cap.** Outcome = the system's actual managed exit (stop/target/trailing/BE/time-stop), NOT a fixed horizon. (This is why the B3.1a fixed-horizon tool is the WRONG engine — see §2.)
+3. **Net of friction.** Every outcome is realized P&L AFTER round-trip cost, per asset class. (Largely solved at source — see §2/§3.)
+4. **Identify, don't tune.** The study only SURFACES candidate gates with evidence. Tuning is a separate Kyle-approved batch afterward.
+5. **Reusable for periodic ML.** Parameterized, schedulable engine; output = ranked candidate gates + a drift signal. Frequency TBD.
+6. **No data-snooping.** Mining many slices surfaces spurious "edges." Out-of-sample + temporal-stability validation, FDR control, and a hard per-cell sample floor are mandatory before any finding is trusted.
 
 ## 1a. Calibration-robustness — survive Phase 25 re-tuning (Kyle 2026-06-04)
 
-We are mid-xStock-calibration, and Phase 25 will recalibrate crypto + xStock regime thresholds, gates, and trade construction again. The study must survive that. Distinction: the study finds (i) **real market relationships** ("a buy aligned with a strong high-volatility uptrend travels further") that are properties of the *territory* and are INVARIANT to where we move our threshold lines, vs (ii) findings **pinned to our own labels/gates** ("wins in the ST regime"; "winners among what the current gate admits") that shift when we redraw a boundary or change which trades exist. Design principles:
+Distinction: the study finds (i) **real market relationships** (a buy aligned with a strong high-volatility uptrend travels further) that are properties of the *territory* and INVARIANT to where we move threshold lines, vs (ii) findings **pinned to our labels/gates** ("wins in the ST regime") that shift when we redraw a boundary or change which trades exist. Design principles (Langston-refined):
 
-1. **Anchor findings on RAW market features, not our labels.** Express each candidate edge primarily in terms of the actual underlying values (realized volatility number, DBS magnitude/sign, trend-strength, continuation-vs-reversal) — not only the regime *label* or the *admitted* gate output. Report both forms; treat the raw-feature form as the durable finding and the label/gate form as the as-of-this-calibration view. Calibration changes our MAP, not the TERRITORY; durable edges live in the territory.
-2. **Re-run after every calibration (and periodically).** The label/gate-tied portion is refreshed by re-running the engine under the new settings — this IS the periodic ML scan (S6) and the drift monitor (temporal-stability, S5/S6). Calibration-moves-findings is not a flaw; it is the reason the engine is built re-runnable.
-3. **Findings INFORM calibration, not just the reverse.** Evidence that a strategy only earns its keep in a specific raw context is direct input to where Phase 25 should set that strategy's gates and regime boundaries. Sequence: run now (raw-anchored) → feed Phase 25 → re-run after to confirm label/gate gates under final settings.
-4. **Outcome sensitivity to trade construction.** Replayed outcomes use each strategy's CURRENT stop/target geometry; if Phase 25 re-tunes trade construction, outcomes change → re-run. S1 records the geometry + threshold epoch each run was measured under, so every finding is tagged to its calibration.
+1. **Anchor findings on RAW market features, not labels.** Express each candidate edge primarily in actual underlying values (realized-vol number, DBS magnitude/sign, trend-strength, continuation-vs-reversal), not only the regime label or admitted-gate output. Report both; the raw-feature form is the durable finding, the label/gate form the as-of-this-calibration view.
+2. **Bin raw features in FIXED ABSOLUTE units, never quantiles (Langston).** Quantile bins re-derive their edges from whatever trades exist under the current calibration — smuggling label-dependence back in. Pin bands to absolute values (ATR% in fixed % bands, DBS in raw score units) so the same trade lands in the same bin across calibration epochs.
+3. **Derive continuation-vs-reversal from RAW trend sign, not regime_label (Langston).** Compute from raw DBS sign + a fixed-lookback trend slope, identically across epochs. regime_label is itself a moved boundary; deriving continuation from it makes the flag flip when Phase 25 redraws the line.
+4. **Report the dose-response CURVE, not a knife-edge threshold (Langston).** Express each edge as a monotone response of expectancy across the raw-feature range, not a single best cut-point. A monotone relationship is far more likely to be territory than a threshold coinciding with today's gate; it hands Phase 25 the curve to pick the operating point; and single-threshold "edges" are the easiest thing for the gate-hunt to overfit.
+5. **Re-run after every calibration (and periodically).** The label/gate-tied portion is refreshed by re-running under new settings — this IS the periodic ML scan (S6) + drift monitor (S5/S6).
+6. **Findings INFORM calibration.** Evidence a strategy only earns its keep in a raw context is direct input to where Phase 25 sets that strategy's gates. Sequence: run now (raw-anchored) → feed Phase 25 → re-run after.
+7. **Tag the geometry + threshold epoch** each run was measured under, so every finding is bound to its calibration.
 
-## 2. Data foundation
+## 2. Data foundation (VERIFIED 2026-06-05; do not assume)
 
-- **Context (conditioning variables) — CAPTURED, queryable.** `pair_scan_archive` (monthly partitions, ~2.8M rows/month): per-pair per-MCE-cycle (~60s) flat columns `regime_label, regime_confidence, dbs_score, dbs_category, atr_pct, confidence_modulated` + JSON `features{volatility, adx, momentum, volume24h, sma, vwap, high24h, low24h, phase, phaseAgeSeconds}` + `modulators{macro_modifier_value, dbs_slope}`. `signal_eval_archive` (~10M rows/month) adds per-strategy `regime_label, reject_stage, final_score, confidence_modulated` + gate decisions.
-- **Outcomes — via REPLAY (the established B3.1a method).** No structured closed-trade table is accumulating (`paper_sim_trades`=0; only ~1.2k admitted signals/month, no stored geometry). So outcomes are reconstructed: for each strategy, replay its BUY-signal detection + entry/stop/target construction over history, simulate the managed exit against fine bars (reuse the B3.1a L2 hit-ordering engine), record realized net P&L + win/loss + exit reason + duration. This is how B3.1a/B3.1a-gate-audit already measured outcomes — extend it to all strategies with full context tagging.
-- **Recomputed context where not persisted.** IMF VN / DI / LQ and any fast-moving feature not in the archive are recomputed from bars during replay (formulas exist: `imf-metrics.ts`).
-- **Window:** long enough for stable per-(strategy×regime×asset) cells — target ≥ 60 days where bar history allows; crypto 24/7, xStock 24/5. Sized in Section S1.
+**PRIMARY — VTS daily trade logs.** `/home/deploy/dawntrader/logs/virtual_trades/YYYY-MM-DD.json` (writer `vts-service.ts:459-475 logTrade`), one record per closed VTS trade. **VERIFIED by parsing all files:** 145 files, **22,801 trades**, **2026-01 → 2026-06-05** (the lone 2025-12-29 file is corrupt → usable history starts January). Each record carries realized outcome (`grossProfit`, `netProfit`, `fees`, `frictionCost`), the managed `exitReason`, entry/exit time+price, and rich context (`regime`, `globalRegime`, `pairDirectionalBias[Score]`, `globalDirectionalBias[Score]`, `predictiveConfidence`, `regimeConfidenceRaw/Modulated`, `macroModifierValue`, `phase`, `strategy`, `signalType`, `sourcePool`, `entryLiquidity*`, `positionSize`, ...).
+
+**FIELD-COMPLETENESS IS TIERED (verified):**
+- **Backbone — ALL ~22,801 trades (Jan-Jun):** `netProfit`/`grossProfit`/`fees`, `regime` (pair), `strategy`, `signalType`, `predictiveConfidence`, `exitReason` — 100% present every month.
+- **Full context — ~May onward (~6,000+ trades; partial April):** `globalRegime` (0% Jan-Feb → 28% Mar → 100% Apr+), `pairDirectionalBiasScore` + `globalDirectionalBiasScore` (0% ≤Mar → 64% Apr → ~100% May+), `phase` (May+), explicit `assetClass` (May 60% → Jun 100%; Jan-Apr unlabeled but all crypto by construction → inferable).
+- **Gap — liquidity** (`entryLiquidityValue`): ~0% until June (40%). Recompute from order-book history or accept missing.
+
+**SECONDARY / CROSS-CHECK — `exit_decision_archive`** (Postgres, B70, writer `data-archive/exit-decision-archiver.ts`). Structured subset, **5,428 rows, 2026-05-05→2026-06-05**, managed exits (`exit_reason`, `pnl_pct`, `r_multiple`, `duration_min`) + context (`regime_at_entry/exit`, `dbs_at_entry/exit`, `atr_at_exit`, `state_snapshot`). 90-day hot retention (B70 sweep) — partitions drop after 90d; the JSON logs are the durable long record. Use to validate the JSON loader.
+
+**REJECTED-ARM + CONTEXT-BACKFILL — B73 exit-strategy-replay** (`server/services/exit-strategy-replay.ts`, NOT B3.1a). B3.1a (`b-xstock-calib-b31a-gate-audit.ts`) is a FIXED-HORIZON (60/240-min) forward-return tool that violates constraint #2 — dropped. B73 fetches 1-min OHLC per trade window and simulates true stop/target/trailing/BE/time-stop exits; already asset-class-aware (B82). Its 12-variant output is persisted to **`exit_strategy_alternates`** (~72k rows) = ready-made alternative-exit lens (answers §8 Q2 by JOIN, no new build). Use B73 for: (a) replaying the REJECTED signals (selection-bias control, §6), and (b) recomputing missing older context (DBS/global/phase) at each backbone trade's symbol+entry-time to extend the full-context set toward 22,801.
 
 ## 3. Outcome variable
 
-Per replayed BUY trade: `net_pnl` (= gross move − round-trip friction), `win = net_pnl > 0`, `gross_pnl`, `R-multiple` (net P&L / initial risk), holding duration, exit reason (target/stop/trailing/timeout). Primary slice metrics: **win-rate, expectancy (mean net P&L per trade), profit factor (Σ gross wins / Σ gross losses), and net edge vs friction**, each with a significance estimate (t-stat / bootstrap) and N.
+Per trade (BUY): `netProfit` (net of friction — taken from the stored field; **S1 must verify gross-vs-net provenance + that crypto/xStock friction models are applied identically across the JSON, archive, and B73 arms**), `win = netProfit > 0`, `grossProfit`, `r_multiple`, holding duration, `exitReason`. Slice metrics: **win-rate, expectancy (mean net P&L/trade), profit factor, net edge**, each with a significance estimate (bootstrap CI / FDR-controlled) and N. **AUC / Mann-Whitney is the threshold-free primary statistic** (tail-robust, no win-threshold; matches the B3.1a/Langston-#6 lineage).
 
-## 4. Context feature menu (conditioning variables)
+## 4. Context feature menu
 
-asset_class · strategy · regime_label (TFS/ST/HVU/IE/RBS) · regime_confidence · DBS score · DBS category (7 levels) · DBS slope · continuation-vs-reversal (signal dir vs DBS/trend) · ATR% (volatility) · ADX / trend-strength (ranging↔trending) · momentum · IMF VN · IMF DI · liquidity proxy (LQ / volume / spread) · macro modifier · phase (EARLY/PRIME/LATE) · time-of-day / session position · distance from recent high/low (extension vs pullback) · day-of-week · confidence / final_score · signal_type (QUANT/PATTERN/HYBRID) · pattern_type (where applicable).
+asset_class · strategy · regime (pair) · globalRegime · regime_confidence · DBS score (pair + global) · DBS slope · continuation-vs-reversal (RAW DBS sign + fixed-lookback slope, per §1a.3) · ATR%/realized-vol · trend-strength · momentum · IMF VN/DI/LQ (recomputed) · liquidity (recompute — log gap) · macro modifier · phase · time-of-day/session position · distance from recent high/low · day-of-week · confidence/final_score · signal_type · pattern_type.
 
-## 5. Slicing angles (comprehensive — "look at all of it")
+## 5. Slicing angles (comprehensive)
 
-- **Kyle's primary cuts:** asset_class × regime × strategy (the headline grid), and asset_class × regime (coarser).
-- **Single-dimension scans:** each context feature above vs win-rate/expectancy, per asset_class (and per strategy).
-- **Two-way interactions:** strategy × regime, regime × DBS-category, continuation × volatility, regime × volatility, strategy × continuation, phase × regime, time-of-day × regime.
-- **Best-gate hunt:** enumerate single + 2-way (and selected 3-way) conditions, rank by expectancy/edge with a sample floor; report the top candidate gates per strategy and globally.
-- **Winner-vs-loser profiling:** for each strategy, contrast the top-quintile vs bottom-quintile trades' average context → what separates winners.
-- **Exit-reason analysis:** how do winners exit (target vs trailing) vs losers (stop vs timeout) — informs trade-construction tuning.
+- **Kyle's primary cuts:** asset_class × regime × strategy (headline grid); asset_class × regime (coarse).
+- **Single-dimension scans:** each feature vs win-rate/expectancy, per asset_class (and per strategy).
+- **Two-way interactions:** strategy × regime, regime × DBS, continuation × volatility, regime × volatility, strategy × continuation, phase × regime, session × regime.
+- **Best-gate hunt:** single + 2-way (3-way ONLY when N clears the floor — see §6/S1), ranked by expectancy; top candidate gates per strategy + global.
+- **Winner-vs-loser profiling:** per strategy, top vs bottom expectancy quintile context contrast.
+- **Exit-reason analysis + alt-exit lens:** how winners exit (target/trail) vs losers (stop/time); JOIN `exit_strategy_alternates` to test edge survival under variant exits (secondary lens only).
 
-## 6. Robustness (mandatory — overfitting + drift guard)
+## 6. Robustness (mandatory)
 
-- **Out-of-sample holdout:** split the window (e.g. first 70% train / last 30% test, or k-fold by time); a candidate gate must hold its edge on unseen data to be reported as real.
-- **Temporal stability:** measure each surfaced edge across sub-periods (rolling windows) — does it persist or drift? This is the direct test of Kyle's "these may not stay true forever" concern, and the exact signal the periodic ML scan would monitor.
-- **Multiple-comparisons honesty:** report how many slices were tested and apply a significance correction; flag any edge that's likely noise.
+- **Selection bias — admitted vs rejected (Langston Concern A; THE key methodological point).** The admitted arm (JSON logs / archive) is conditioned on survival through TODAY's gates — its outcomes are not what a NEW gate would admit; mining only admitted trades re-discovers the current gate's own selection. The rejected arm (B73-replayed) is the unbiased population but with MODELED (not observed) fills. **Report both arms separately; NEVER merge into one expectancy without the caveat.** Hold both arms on a common window for any direct comparison.
+- **Out-of-sample holdout + temporal stability.** Time-blocked k-fold (not a single 70/30 — the full-context window is short); a candidate must hold on unseen data AND show temporal monotonicity. This stability test = the drift monitor (S6).
+- **Stats bar (Langston Q4):** Benjamini-Hochberg FDR at q=0.10 (Bonferroni too harsh), bootstrap CIs on expectancy, hard floor **≥50 net trades/cell** (not 30 — friction noise on thin xStock books), AUC primary. A finding is "real" only if it clears FDR AND survives holdout AND shows temporal monotonicity (three independent gates).
+- **No silent truncation:** when a slice is suppressed for low N, SAY so in the output ("3-way gates suppressed — insufficient N"), never report underpowered cells as findings.
 
-## 7. Sections (incremental sub-studies — "we don't have to do it all in one study")
+## 7. Sections (incremental)
 
-- **S1 — Engine + outcome foundation.** Stand up the all-strategy replay-outcome engine (reuse B3.1a), BUY-only, net-of-friction, with full context tagging. Validate fidelity vs known baselines + size the window. *Gate: outcome engine trusted before any mining.*
-- **S2 — Headline grid.** asset_class × regime × strategy: win-rate, expectancy, profit factor per cell. The "where does each strategy already win" map.
-- **S3 — Single-dimension + interaction scans.** All context features + the 2-way interactions; winner-vs-loser profiling per strategy.
-- **S4 — Best-gate hunt + per-strategy favorable-context profiles.** Ranked candidate gates ("only trade strategy X when condition C holds"), each with expectancy, frequency, and net-of-friction.
-- **S5 — Robustness.** Holdout + temporal-stability validation of S4's candidates. Only survivors graduate to "real."
-- **S6 — Productionization design.** Document the engine as a repeatable, parameterized ML routine: inputs (window, strategies, features), output (validated candidate gates + drift report), suggested cadence, and how it would feed a tuning/gating decision. (Methodology doc → `ASSET_CLASS_ONBOARDING_WORKFLOW.md` / a new analytics-runbook; wired to ML later.)
+- **S1 — Loader + outcome foundation + EXIT-CRITERIA.** Build the JSON-log loader (22,801 backbone trades) + exit_decision_archive cross-check; validate fidelity. **S1 cannot complete until two gates pass (Langston):** (a) **friction provenance verified** — confirm `netProfit` is truly net and the same per-asset-class friction model is applied across JSON / archive / B73 arms (if stored P&L were gross, every expectancy is overstated ~1 round-trip and thin-book xStock edges flip sign); (b) **selection-bias handling defined** — admitted vs rejected arms separated per §6. Also: tag the field-completeness tier per trade (backbone vs full-context) and stand up the B73 context-backfill path. No mining before S1 passes.
+- **S2 — Headline grid.** asset_class × regime × strategy: win-rate, expectancy, profit factor. Runs NOW on the ~22,801 backbone (regime+outcome present). Crypto + xStock from the start (read-only; never pooled).
+- **S3 — Single-dim + interaction scans.** All features + 2-way where N clears floor; winner-vs-loser profiling. DBS/global/continuation cuts use the full-context tier (~6k native, extendable via backfill).
+- **S4 — Best-gate hunt + per-strategy favorable-context profiles.** Ranked candidate gates with expectancy/frequency/net edge. **3-way depth GATED on ≥50/cell — suppressed + flagged until accrual; do not run full 3-way on the current sample (Langston Concern D).**
+- **S5 — Robustness.** Holdout + temporal-stability + FDR validation of S4 candidates; only survivors graduate to "real." Gate the "real" verdict on ≥60d accrual where the full-context tier is thin.
+- **S6 — Productionization.** Document the engine as a repeatable ML routine (inputs/outputs/cadence + drift report) → analytics runbook + onboarding-workflow.
 
-## 8. Open questions for Langston
+## 8. Answers to v1 open questions (verified)
 
-1. Outcome source: confirm replay (extend B3.1a engine) vs any closed-trade store I've missed.
-2. Trade-construction fidelity: should replay use each strategy's *current* stop/target geometry, or also test alternative exits (since exit logic is itself a tuning lever)?
-3. Window length + holdout split for adequate per-cell N without staleness.
-4. Significance bar + multiple-comparisons correction to adopt.
-5. Whether to include crypto from the start (touches the no-touch-crypto principle only at the *analysis* level — read-only) or xStock-first.
+1. **Outcome source:** hybrid. PRIMARY = query the VTS JSON logs (22,801, Jan-Jun, net P&L + managed exits + context) + exit_decision_archive cross-check; B73 exit-strategy-replay (NOT B3.1a) for the rejected arm + older-context backfill.
+2. **Trade-construction fidelity:** primary = current geometry (what we'd gate in production); alt-exit sensitivity comes free by JOINing `exit_strategy_alternates` (B73's 12 variants) as a SECONDARY lens — keep secondary so the ranking isn't polluted by exit-geometry variance.
+3. **Window + holdout:** backbone ~5 months (Jan-Jun); full-context tier ~May+ (thin). Run S2/S3 now, tag full-context findings "provisional — pending 60-90d accrual," use time-blocked k-fold, gate S5 "real" on ≥60d. Rejected arm can reach further via replay — but hold admitted/rejected on a common window for comparison.
+4. **Significance:** BH-FDR q=0.10 + bootstrap CIs + ≥50/cell floor + AUC primary; triple-gate (FDR ∧ holdout ∧ monotonicity).
+5. **Crypto from start:** yes, both classes from S2 (read-only; no-touch-crypto governs production, not analysis). Two rules: never pool crypto+xStock expectancy (different friction/microstructure); session-structure cuts (time-of-day/day-of-week/phase) stay within-class (crypto 24/7 vs xStock 24/5).
 
-## 9. Caveats / limitations
+## 9. Caveats / limitations (verified)
 
-- Outcomes are replay-reconstructed (no live closed-trade table) → depends on engine fidelity to the system's real entry + managed-exit logic; validated in S1.
-- Context join is nearest-prior-cycle (~60s granularity) for archived features; fast features recomputed from bars.
-- This is hypothesis-generation; nothing is tuned until findings survive S5 and Kyle approves.
+- **VTS-derived (Langston Concern C):** every trade is `mode=vts` simulated execution. Edges are in VTS's simulated fills, on a VTS-shaped population. Tag all findings "VTS-derived, pending active-paper confirmation"; re-validate at **Phase 19** before anything gates live.
+- **Field-completeness tiering:** DBS/global-regime/phase/clean-asset-class only native from ~May (~6k); older backbone (Jan-Apr) needs context-backfill via B73 recompute to join the deeper cuts.
+- **Liquidity gap:** not logged (≤Jun) — recompute from order-book history or exclude.
+- **Friction provenance UNVERIFIED until S1 gate (a).** Hypothesis-generation only; nothing tuned until S5 survivors + Kyle approval.
