@@ -6833,7 +6833,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           parametersSummary: {
             pullbackThreshold: '2%',
             volumeMultiplier: 1.5,
-            maxHoldingPeriod: 24,
+            // W2.1 (2026-06-06): hold is now an explicit milliseconds value
+            // (86_400_000 = 24h), replacing the ambiguous bar-count "24".
+            maxHoldingMs: 86400000,
             timeframes: ['5m', '15m', '1h']
           }
         },
@@ -6881,7 +6883,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             maxRangeWidth: 3,
             breakoutBuffer: '1%',
             volumeMultiplier: 2,
-            maxHoldingHours: 12
+            // W2.1 (2026-06-06): hold is now an explicit milliseconds value
+            // (43_200_000 = 12h), unifying with vwap_pullback's representation.
+            maxHoldingMs: 43200000
           }
         },
         {

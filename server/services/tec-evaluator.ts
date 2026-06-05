@@ -47,7 +47,8 @@
  *     legacy cleanup will remove that residual write plus any remaining
  *     percentage-trailing references for the ABCD / SMA Trend Ride strategy
  *     detectors if those strategies are themselves being retired.
- *   - Paper's `metadata.maxHoldingPeriod` (position-specific override) stays
+ *   - Paper's `metadata.maxHoldingMs` (position-specific override, milliseconds;
+ *     W2.1 2026-06-06 — was the ambiguous `metadata.maxHoldingPeriod`) stays
  *     inline in paper-execution-engine.ts. VTS's MAX_HOLD_MS (global 7-day
  *     safety valve) is passed in through `maxHoldMs`.
  *   - The TEC state machine's persistence debounce (Directive 9.2.D) is still

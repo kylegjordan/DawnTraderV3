@@ -953,7 +953,7 @@ export class PaperExecutionEngine {
         targetPrice: takeProfit ?? Infinity,
         currentPrice,
         atr: atrAtOpen,
-        holdDurationMs: 0,   // paper handles maxHoldingPeriod inline below
+        holdDurationMs: 0,   // paper handles metadata.maxHoldingMs inline below (W2.1)
         maxHoldMs: Infinity, // disable global timeout branch here
         context: {
           exchange: 'kraken',
@@ -1065,17 +1065,28 @@ export class PaperExecutionEngine {
     // cap above — this is a position-level operator override that typically
     // targets much longer holds, e.g. a "close this swing trade after 7d"
     // rule). Unchanged by B65.2.
-    if (metadata?.maxHoldingPeriod) {
+    //
+    // W2.1 (2026-06-06): the hold is now carried as an explicit MILLISECONDS
+    // value in `metadata.maxHoldingMs`. Previously this read
+    // `metadata.maxHoldingPeriod` and treated it as HOURS, which silently
+    // enforced a bar-count of 24 as 24 HOURS. We now compare elapsed ms to the
+    // hold ms directly (no unit guessing); the reason string still shows
+    // hours-held for readability.
+    const maxHoldingMs =
+      typeof metadata?.maxHoldingMs === 'number' && isFinite(metadata.maxHoldingMs)
+        ? metadata.maxHoldingMs
+        : undefined;
+    if (maxHoldingMs !== undefined) {
       const openTime = new Date(position.openedAt).getTime();
-      const currentTime = Date.now();
-      const hoursHeld = (currentTime - openTime) / (1000 * 60 * 60);
-      const maxHours = parseFloat(metadata.maxHoldingPeriod);
+      const elapsedMs = Date.now() - openTime;
 
-      if (hoursHeld >= maxHours) {
+      if (elapsedMs >= maxHoldingMs) {
+        const hoursHeld = elapsedMs / (1000 * 60 * 60);
+        const maxHours = maxHoldingMs / (1000 * 60 * 60);
         return {
           type: 'max_holding_period',
           price: currentPrice,
-          reason: `Max holding period of ${maxHours}h exceeded (held ${hoursHeld.toFixed(1)}h)`
+          reason: `Max holding period of ${maxHours.toFixed(1)}h exceeded (held ${hoursHeld.toFixed(1)}h)`
         };
       }
     }

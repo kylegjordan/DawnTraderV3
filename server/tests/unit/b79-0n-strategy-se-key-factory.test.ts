@@ -16,7 +16,7 @@ vi.mock('../../services/module-constants-service.js', () => ({
     counter_trend_long_dbs_floor: -0.35,
     pullback_threshold_pct_default: 3.0,
     volume_multiplier_default: 1.5,
-    max_holding_period_bars_default: 24,
+    max_holding_ms: 86400000, // W2.1 (2026-06-06): was max_holding_period_bars_default: 24
     volume_confirm_min_history: 10,
     volume_avg_lookback: 20,
     atr_fallback_daily_range_frac: 0.1,

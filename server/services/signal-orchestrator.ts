@@ -25,7 +25,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { StrategyEngine, StrategySignal } from './strategy-engine';
+import { StrategyEngine, StrategySignal, stampMaxHoldingMs } from './strategy-engine';
 // B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B79.0d: synchronous resolveAssetClass for ORB dispatch guard.
@@ -406,7 +406,14 @@ export class SignalOrchestrator {
     }
     // Ensure normalized symbol is used in signal
     rawSignal.symbol = canonicalSymbol;
-    
+
+    // W2.1 (2026-06-06): central max-holding-ms stamp for the active dispatch
+    // path. Guarantees every active-path signal carries an unambiguous
+    // metadata.maxHoldingMs (milliseconds) before it reaches the paper-execution
+    // enforcer. No-op if the strategy's builder already set it. Forward-prep
+    // only — active trading is OFF; this changes no live behavior today.
+    stampMaxHoldingMs(rawSignal, resolveAssetClass(rawSignal.symbol, 'kraken'));
+
     // Phase 8.8.4-A: Generate unique signal ID for lifecycle tracking
     const signalId = signalLifecycleAudit.generateSignalId(rawSignal.symbol, strategyId);
     

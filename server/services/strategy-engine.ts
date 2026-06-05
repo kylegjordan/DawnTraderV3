@@ -32,6 +32,60 @@ const _SE_KEY = (strategy: string, assetClass: AssetClass) => ({
   exchange: '*', assetClass, strategy, regime: '*',
 });
 
+// W2.1 (2026-06-06): unit-explicit max-holding default. Used as the documented
+// fallback EVERYWHERE the per-strategy hold is resolved but absent from the DB.
+// 24h in milliseconds = 24 * 60 * 60 * 1000. Chosen to preserve status quo (the
+// crypto wildcard rows resolved to 24h via the old 60-min era bar-count of 24).
+export const DEFAULT_MAX_HOLDING_MS = 24 * 60 * 60 * 1000; // 86_400_000
+
+/**
+ * W2.1 (2026-06-06) — SHARED max-holding-ms stamp.
+ *
+ * THE single component both the VTS path (`callStrategyDetect` in vts-runner.ts)
+ * and the active path (`buildSizedSignalForStrategy` in signal-orchestrator.ts)
+ * call after a strategy detect returns a signal. Guarantees every emitted signal
+ * carries an unambiguous, unit-explicit `metadata.maxHoldingMs` (milliseconds).
+ *
+ * If a strategy's own builder already stamped `metadata.maxHoldingMs` (e.g.
+ * vwap_pullback / breakout, which now resolve `max_holding_ms` directly), this is
+ * a no-op for that signal. For every other strategy that does not set a hold, it
+ * resolves the strategy's `max_holding_ms` from module_constants for the cycle's
+ * asset class (most-specific-wins), falling back to DEFAULT_MAX_HOLDING_MS.
+ *
+ * CRITICAL INVARIANT: forward-prep only. VTS enforces holds via the 7-day global
+ * MAX_HOLD_MS valve in tec-evaluator/vts-runner, NOT via metadata.maxHoldingMs;
+ * the only consumer of metadata.maxHoldingMs is the (currently dormant)
+ * active-paper enforcer in paper-execution-engine.ts. Stamping the field changes
+ * no live behavior — it just makes the field present and unit-consistent.
+ */
+export function stampMaxHoldingMs(
+  signal: StrategySignal | null,
+  assetClass: AssetClass,
+): StrategySignal | null {
+  if (!signal) return signal;
+  if (!signal.metadata || typeof signal.metadata !== 'object') {
+    signal.metadata = {};
+  }
+  // Already stamped by the strategy's own builder — leave as-is.
+  if (typeof signal.metadata.maxHoldingMs === 'number' && isFinite(signal.metadata.maxHoldingMs)) {
+    return signal;
+  }
+  let resolved: number | undefined;
+  try {
+    resolved = getCachedConstant<number>(
+      `strategy.${signal.strategy}`,
+      'max_holding_ms',
+      { exchange: '*', assetClass, strategy: signal.strategy, regime: '*' },
+    );
+  } catch {
+    // Cold cache or module not warmed — fall back to the documented default.
+    resolved = undefined;
+  }
+  signal.metadata.maxHoldingMs =
+    typeof resolved === 'number' && isFinite(resolved) ? resolved : DEFAULT_MAX_HOLDING_MS;
+  return signal;
+}
+
 /**
  * Compute ATR (Average True Range) from PriceData array.
  * Added in Batch 18H for crypto-calibrated dynamic thresholds.
@@ -127,9 +181,16 @@ export class StrategyEngine {
     // User-configured settings with defaults (defaults sourced from module_constants).
     const pullbackThreshold = parseFloat(settings.vwapPullbackThreshold || c['pullback_threshold_pct_default'].toString()) / 100;
     const volumeMultiplier = parseFloat(settings.vwapVolumeMultiplier || c['volume_multiplier_default'].toString());
-    const maxHoldingPeriod = settings.vwapMaxHoldingPeriod || c['max_holding_period_bars_default'];
-    
-    console.log(`[VWAP Strategy] Using settings: pullback=${(pullbackThreshold*100).toFixed(1)}%, volumeMultiplier=${volumeMultiplier}x, maxHold=${maxHoldingPeriod} bars`);
+    // W2.1 (2026-06-06): max holding is now resolved as an explicit MILLISECONDS
+    // value from module_constants (`max_holding_ms`), removing the old ambiguous
+    // bar-count key. The legacy per-user override `settings.vwapMaxHoldingPeriod`
+    // was a BAR COUNT set in the 60-min era — convert it via 60 min/bar so its
+    // original wall-clock intent is preserved.
+    const maxHoldingMs = settings.vwapMaxHoldingPeriod
+      ? settings.vwapMaxHoldingPeriod * 60 * 60 * 1000
+      : (c['max_holding_ms'] ?? DEFAULT_MAX_HOLDING_MS);
+
+    console.log(`[VWAP Strategy] Using settings: pullback=${(pullbackThreshold*100).toFixed(1)}%, volumeMultiplier=${volumeMultiplier}x, maxHold=${maxHoldingMs} ms`);
     
     // Rules: Price above VWAP; pullback to VWAP within threshold; volume confirmation; bullish reversal
     const priceAboveVWAP = currentPrice > vwap;
@@ -215,7 +276,7 @@ export class StrategyEngine {
           nearVWAPPercent: Math.abs(currentPrice - vwap) / vwap * 100,
           reversalConfirmed: hasReversalPattern,
           volumeMultiplier,
-          maxHoldingPeriod,
+          maxHoldingMs,
           appliedPullbackThreshold: pullbackThreshold * 100
         }
       };
@@ -497,7 +558,14 @@ export class StrategyEngine {
     const minConsolidationBars = params.minConsolidationBars || c['min_consolidation_bars'];
     const breakoutBuffer = (params.breakoutBuffer || c['breakout_buffer_pct']) / 100;
     const volumeMultiplier = params.volumeMultiplier || c['volume_multiplier'];
-    const maxHoldingHours = params.maxHoldingHours || c['max_holding_hours'];
+    // W2.1 (2026-06-06): hold is now an explicit MILLISECONDS value from
+    // module_constants (`max_holding_ms`), unifying with vwap_pullback (the two
+    // strategies previously used different units — bars vs hours — for the same
+    // concept). The legacy per-call override `params.maxHoldingHours` is still
+    // honored, converted hours → ms.
+    const maxHoldingMs = params.maxHoldingHours
+      ? params.maxHoldingHours * 60 * 60 * 1000
+      : (c['max_holding_ms'] ?? DEFAULT_MAX_HOLDING_MS);
 
     if (priceHistory.length < minConsolidationBars + 5) { setNullReason('insufficient_data'); return null; }
 
@@ -553,7 +621,7 @@ export class StrategyEngine {
           consolidationBars: rangeResult.durationBars,
           breakoutLevel,
           volumeRatio: currentVolume / avgVolume,
-          maxHoldingHours
+          maxHoldingMs
         }
       };
 

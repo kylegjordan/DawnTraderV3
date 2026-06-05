@@ -66,7 +66,7 @@ import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormaliz
 // Phase 13: Market Context Engine for centralized indicator + regime computation
 import { getMarketContextEngine } from './market-context-engine.js';
 // Phase 14 HF6: StrategyEngine for strategy-specific detect functions
-import { StrategyEngine, type StrategySignal } from './strategy-engine.js';
+import { StrategyEngine, type StrategySignal, stampMaxHoldingMs } from './strategy-engine.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
 // Phase 14 HF6: Global friction/DBS getters for trade context dimensions
 import { getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from './market-indicators.js';
@@ -838,6 +838,24 @@ export function callStrategyDetect(
   patternInput: PatternInput | null,
   symbol: string,         // B79.0n.STRATEGY — REQUIRED (was optional)
   assetClass: AssetClass, // B79.0n.STRATEGY — REQUIRED + typed (was optional `string`)
+): StrategySignal | null {
+  // W2.1 (2026-06-06): central max-holding-ms stamp for the VTS dispatch path.
+  // Guarantees every VTS-emitted signal carries an unambiguous
+  // metadata.maxHoldingMs. Forward-prep only — VTS enforces holds via the 7-day
+  // MAX_HOLD_MS valve, not this field (see stampMaxHoldingMs invariant).
+  return stampMaxHoldingMs(
+    callStrategyDetectRaw(strategy, indicators, ohlcData, patternInput, symbol, assetClass),
+    assetClass,
+  );
+}
+
+function callStrategyDetectRaw(
+  strategy: string,
+  indicators: any,
+  ohlcData: any[],
+  patternInput: PatternInput | null,
+  symbol: string,
+  assetClass: AssetClass,
 ): StrategySignal | null {
   switch (strategy) {
     // ── Quant strategies ──

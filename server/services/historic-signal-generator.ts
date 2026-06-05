@@ -335,8 +335,27 @@ export class HistoricSignalGenerator {
       const targetPrice = typeof signal.targetPrice === 'number' ? signal.targetPrice : parseFloat(signal.targetPrice);
       const stopPrice = typeof signal.stopPrice === 'number' ? signal.stopPrice : parseFloat(signal.stopPrice);
 
-      // Look forward up to 24 candles (24 hours for hourly data) to find exit
-      const maxHoldingPeriod = 24;
+      // W2.1 (2026-06-06): CLOCK-ANCHORED hold window. Previously this hardcoded
+      // a 24-candle loop bound, which silently assumed 60-minute bars (24 bars =
+      // 24h). At 15-minute bars 24 bars is only 6h — a 4x divergence from the
+      // 24h the active-paper enforcer holds. We now convert the signal's hold,
+      // carried in milliseconds (`metadata.maxHoldingMs`, documented fallback
+      // 86_400_000 = 24h when absent), into a bar count using the candles' OWN
+      // spacing, so the simulated window matches the intended wall-clock duration
+      // at ANY bar size.
+      const DEFAULT_HOLD_MS = 24 * 60 * 60 * 1000; // 86_400_000 (24h)
+      const holdMs =
+        typeof signal.metadata?.maxHoldingMs === 'number' && isFinite(signal.metadata.maxHoldingMs)
+          ? signal.metadata.maxHoldingMs
+          : DEFAULT_HOLD_MS;
+      // Bar interval in ms from the candles' own time spacing (times are unix
+      // seconds). Fall back to 60-min bars if spacing can't be derived.
+      let barMs = 60 * 60 * 1000;
+      if (triggerIndex + 1 < candles.length) {
+        const deltaSec = candles[triggerIndex + 1].time - candles[triggerIndex].time;
+        if (isFinite(deltaSec) && deltaSec > 0) barMs = deltaSec * 1000;
+      }
+      const maxHoldingPeriod = Math.max(1, Math.ceil(holdMs / barMs));
       let exitPrice: number | null = null;
       let exitTime: Date | null = null;
       let exitReason = 'time_limit';
