@@ -32,6 +32,20 @@
 
 ---
 
+### 2026-06-05 update — Strategic directions folded in + VTS-standalone RESEQUENCED (Kyle directive 2026-06-05)
+
+Following the Hidden-Contextual-Edge (HCE) study + Kyle ↔ CC strategy discussion. Full detail + evidence/sources in **`1-system-manual/STRATEGIC_DIRECTIONS_AND_AI_EDGE.md`** (single home). Anchor finding: no hidden contextual edge inside the trades we already take; the path to profit is **selectivity + sizing + discipline + new data/structure**, not a loophole. Selectivity demonstrably works on xStock (top-decile by expected-edge → net-positive; top 2% +1.17%/52% win); crypto edge-scoring is mis-calibrated at the top (Phase-25 fix). Sequencing decisions:
+
+- **VTS independent standalone (firehose) RESEQUENCED: post-launch → BETWEEN Phase 24 and Phase 19** (reverses the 2026-05-21 "VTS partition deferred to post-launch, possibly never built"). Reason: Phase 19 turning active on loses the continuous learning baseline (queue/active state doesn't persist; VTS stops). Unblock design: **ingest market data ONCE, fan out to N consumers** (VTS/paper/live) → zero extra Kraken API calls (kills the rate-limit blocker behind the original deferral). **Two simulated jobs, not one:** firehose (broad learning, drift, pattern-path negative-control) built pre-19; **shadow = paper mode** (faithful one-best-per-cycle selective pipeline on sim fills) built AS Phase 19.
+- **Execution / friction reduction → Phase 19** (maker/limit orders, depth-aware sizing, high EV bar early).
+- **Adaptive trend-following (volatility-adaptive lookbacks) → candidate to fold into AMR** (evidence: time-series momentum + adaptive lookbacks = strongest crypto edge). NOTE: roadmap has AMR build/skip in Phase 25; Kyle framed AMR as pre-Phase-19 — **reconcile placement.**
+- **Alt-data ranking layer → Phase 25+ data layer:** AI/LLM scoring of news/earnings/events (xStocks) + on-chain flows / smart-money (crypto), feeding signal confidence + ranking. Subjective-news problem is what AI solves (consistent scoring; value learned from realized moves). xStock-first.
+- **Periodic ML edge-scan scheduled job (Kyle directive):** the HCE engine (`scripts/hce/hce_study.py` + `hce_ohlc_sim.py` + `hce_rawfeat.py`) becomes a scheduled weekly/monthly ML routine re-running winner-commonality / selectivity / raw-feature analysis → ranked candidate gates + drift report. ML system roadmap (model work stays post-launch Phase 17/18; this scan is scheduled infra).
+- **POST-LAUNCH / further out:** delta-neutral funding-rate / cash-and-carry yield (needs perps = new asset class; after first launch + bigger portfolio); pure buy-and-hold investment sleeve (after bigger portfolio); cross-sectional ranking (long-only "rank + top longs" possible; market-neutral gated on **short-sale access**, not available via Kraken today — Kyle open if it becomes available, NOT a philosophical no).
+- **Immediate next work = xStock calibration RESUME** (scope `Claude Comms and Packages/Scope Files/XSTOCK_CALIB_RESUME_SCOPE.md`): close the B.4 soak, LOCK "pattern path stays ON for xStock" (free negative-control test of the queue ranking — Kyle 2026-06-05), then per-strategy work using the two HCE leads (working EV-gate selectivity + buy-the-dip / distance-below-high raw feature).
+
+---
+
 ### 2026-06-03 update — Crypto re-validation of strategy-SIGNAL settings (Kyle directive 2026-06-03)
 
 The xStock B3.1a gate-correctness audit surfaced that, while the GATES/filters/regime/friction were calibrated for xStocks, each strategy's own **trade-construction settings** were never xStock-fitted — entry trigger, stop/target geometry, hold horizon, indicator periods/levels, pattern-detection tolerances, and the evaluation **tick/bar frequency** all still run inherited (crypto-wildcard) values; only ORB has xStock-specific params. That motivates the **xStock strategy-fit effort** (pick bar frequency first → re-tune the 10 live strategies' signal params per-class → re-enable + re-tune the deferred equity-suitable strategies + finish ORB → make pattern-detection per-class; all asset-class-scoped, measured by `scripts/b-xstock-calib-b31a-gate-audit-2.ts`).

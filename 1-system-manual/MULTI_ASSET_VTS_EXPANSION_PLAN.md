@@ -9,6 +9,8 @@
 > **Change log:** see §11 at bottom.
 >
 > **Forward reference (added 2026-05-15):** Phase 24 calibration follow-on work continues in **`1-system-manual/XSTOCK_CALIBRATION_PLAN.md`** — that doc is the locked plan for items 3 (regime/filter/strategy calibration), 4 (exit-strategy ablation), and 6 (cross-asset ranking parity prerequisites) from this doc's §4 sequencing table. Two CC sessions converged + Langston two-round design review completed 2026-05-15. **Plan starts where this one leaves off.**
+>
+> **Forward reference (added 2026-06-05, Kyle directive):** strategic directions from the Hidden-Contextual-Edge study + the post-study discussion are captured in **`1-system-manual/STRATEGIC_DIRECTIONS_AND_AI_EDGE.md`** and folded into `POST_AUDIT_ROADMAP.md` (2026-06-05 update). Two items bear directly on this multi-asset plan: (1) **independent standalone VTS (firehose) RESEQUENCED from post-launch to BETWEEN Phase 24 and Phase 19** — design = ingest market data once + fan out to N consumers (VTS/paper/live) so it costs zero extra Kraken API calls; "VTS shadow-mode" splits into a broad **firehose** (built pre-19) and a faithful **shadow = paper mode** (built as Phase 19). (2) **Perpetual-futures asset classes (crypto_perp / xstock_perp) now carry a delta-neutral funding-rate / cash-and-carry YIELD motivation** (long spot + short perp, collect funding) in addition to universe expansion — but remain POST-LAUNCH (onboarding a class is a long process; don't block first launch; bigger portfolio first). The xStock-calibration RESUME scope is `Claude Comms and Packages/Scope Files/XSTOCK_CALIB_RESUME_SCOPE.md`.
 
 ---
 
