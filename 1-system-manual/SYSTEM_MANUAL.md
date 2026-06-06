@@ -12088,6 +12088,8 @@ The B-NEW-34 aggregator DISTINCT ON CTE remains in the codebase as a defensive r
 
 # Off-hours session-lifecycle architecture (B-NEW-36 sub-batch (b), 2026-05-20)
 
+> **⚠️ B-NEW-52 UPDATE (2026-06-06) — the weekend `node-cron` timers described in "Layer 2 → Scheduled timers" below have been RETIRED.** The Fri/Sun fire-once-a-week `node-cron` alarms repeatedly went stale across the app's frequent mid-week restarts (3rd recurrence; last real fire 2026-05-23, 2026-05-30 missed). Per Kyle's directive the fragile alarm was removed entirely and the two already-existing restart-proof reconcilers — **boot reconciliation + the continuous 30-second poll-reconcile** (the Layer-2 boot block + the `scanner.ts handleTick()` reconcile hook) — are now the SINGLE SOURCE OF TRUTH for the weekend shutdown AND restart. The shutdown/restart CORE logic (`runWeekendShutdownCore`/`runWeekendRestartCore`, described in the hooks below) is UNCHANGED — only its trigger moved from cron to poll/boot. The poll path now runs the boundary pre-warm (`runPrewarm:true`) so the prior cron-only pre-warm is preserved at the Sunday reopen. A continuous self-correcting loop is strictly more reliable than a fire-once alarm and cannot be knocked out by a restart. See SIM §9.10.b for the current two-path (poll + boot) fire model.
+
 ## Why this exists
 
 Pre-B-NEW-36, the xStock scanner kept running 30-second `centralClock` cycles with `lastUniverseSize=0` through the 48-hour weekend close window (Fri 8 PM ET → Sun 8 PM ET), and the VTS sim cycle (`resolveOpenVirtualTrades`) kept evaluating open xStock trades against stale weekend price data — driving stale-config TEC `fail-closed` log spam (RUNNING_ISSUES #116) and wasting per-cycle work on a market that wasn't trading. The off-hours session-lifecycle controller solves both by adding explicit shutdown/restart hooks that take the scanner offline + suspend the open xStock VTS trades through the weekend window.
@@ -12121,22 +12123,19 @@ NEW module. Public surface:
 
 Both actions wrapped in try/catch with audit-row writes (`scheduled_tasks_audit task_name='boot_state_reconciliation'`). On error, the controller still registers the scheduled timers — boot reconciliation is best-effort; the scheduled timers are the long-term reliability backstop.
 
-**Scheduled timers** via `node-cron@^4.2.1`:
+**Scheduled timers — RETIRED B-NEW-52 (2026-06-06).** ~~`init()` registered two `node-cron@^4.2.1` timers (`0 20 * * 5` Fri shutdown / `0 20 * * 0` Sun restart, `timezone: 'America/New_York'`).~~ These were removed (`registerTimers()` deleted, the two cron callbacks + `writeMissedCronAlert` + the node-cron/cronRegistry imports deleted, `TriggerSource` narrowed to `'poll' | 'boot'`) because the once-weekly alarm did not survive the app's frequent mid-week restarts (3rd staleness recurrence). The weekend window is now driven entirely by **boot reconciliation + the 30-second poll-reconcile** (`scanner.ts handleTick()` → `reconcileWindowState()` → `runShutdownFromPoll`/`runRestartFromPoll`), which invoke the SAME `runWeekendShutdownCore`/`runWeekendRestartCore` hooks described next. The poll entries were flipped to `runPrewarm:true` so the boundary pre-warm still happens. `meta.trigger_source` in the audit rows is now `poll` or `boot`.
 
-- `cron.schedule('0 20 * * 5', weekendShutdown, { timezone: 'America/New_York', name: 'b-new-36-weekend-shutdown', noOverlap: true })` — fires Fri 8 PM ET wall-clock (timezone-aware, DST-tracked by Intl, same library as `market-hours.ts:getETParts`).
-- `cron.schedule('0 20 * * 0', weekendRestart, { timezone: 'America/New_York', name: 'b-new-36-weekend-restart', noOverlap: true })` — fires Sun 8 PM ET wall-clock.
-
-**Fri 8 PM ET shutdown hook** does, in order:
+**Weekend-shutdown core** (`runWeekendShutdownCore`, now invoked by poll-reconcile or boot — formerly the Fri 8 PM ET cron hook) does, in order:
 1. `runPrewarmWithCircuitBreaker({ lookbackDays: 14, tag: 'SHUTDOWN' })` — refresh `xstock_spot_ohlc_60m_snapshot` so Sun-restart cold reads include the closing-week bars.
 2. `markAllXstockWeekendSuspended(openVirtualTradesMap)` — bulk-suspend open trades.
 3. `xstockSpotScanner.pause()` — scanner stops doing per-cycle work but stays subscribed to centralClock.
 4. Audit row written with status / meta.
 
-**Sun 8 PM ET restart hook** does, in order:
-1. `runPrewarmWithCircuitBreaker(...)` — refresh-on-restart (per Langston Q3 of B-NEW-34b ACK).
+**Weekend-restart core** (`runWeekendRestartCore`, now invoked by poll-reconcile or boot — formerly the Sun 8 PM ET cron hook) does, in order:
+1. `runPrewarmWithCircuitBreaker(...)` — refresh-on-restart (per Langston Q3 of B-NEW-34b ACK). **A prewarm error here is NON-BLOCKING:** it only sets the audit `overallStatus='error'` + `errorMessage`; it does NOT return or throw, so the resume + unsuspend below run unconditionally. A prewarm trip degrades telemetry, not the reopen (verified B-NEW-52 Step-8, `session-lifecycle-controller.ts:429-464`).
 2. `xstockSpotScanner.resume()` — scanner resumes per-cycle work on next centralClock tick.
-3. `unmarkAllXstockWeekendSuspended(...)` — bulk-restore trades to 'open'.
-4. Audit row.
+3. `unmarkAllXstockWeekendSuspended(...)` — bulk-restore trades to 'open' (runs just AFTER resume; the two are independent sequential awaits with no data dependency).
+4. Audit row (`weekend_restart`, `trigger_source` poll|boot).
 
 ### Layer 3 — Pre-warm circuit-breaker (Q6)
 
