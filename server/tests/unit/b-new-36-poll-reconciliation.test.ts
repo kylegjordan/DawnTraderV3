@@ -11,17 +11,26 @@
  * the corresponding shutdown/restart via the session-lifecycle-controller's
  * poll-entry points when drift is detected.
  *
- * Verifies (per Langston design review ACK-W-REVISIONS):
+ * ★ B-NEW-52 (2026-06-06): the fire-once weekend node-cron was RETIRED; this
+ *   reconcile path is now the PRIMARY (single-source-of-truth) driver, not a
+ *   fallback. Two behaviors flipped vs the original B-NEW-36 design:
+ *     - prewarm now RUNS on the reconcile path (folded in from the cron path,
+ *       Langston Q2=b) — it was SKIPPED before.
+ *     - NO "cron silently missed / poll caught up" breakage alert is emitted —
+ *       this is the expected path now, so an alert would be weekly false-alarm
+ *       noise. The normal audit row (trigger_source='poll') is sufficient.
+ *
+ * Verifies:
  *   - window=closed + scanner=running → triggers shutdown
  *   - window=open + scanner=paused → triggers restart
  *   - window=closed + scanner=paused → no-op (states match)
  *   - window=open + scanner=running → no-op (states match)
- *   - cron-fired-first-then-poll race: poll arrives, sees state-matches, no-ops
+ *   - already-handled-then-second-tick race: poll arrives, sees state-matches, no-ops
  *   - inFlight mutex: concurrent invocations skip
  *   - inFlight mutex MUST clear in finally (Langston Q5 non-negotiable)
- *   - poll-fire writes system-alert row (Langston structural revision #3)
- *   - poll-fire writes audit row with meta.trigger_source='poll'
- *   - prewarm SKIPPED on poll path (catch-up semantics, Langston Q4)
+ *   - reconcile-fire does NOT write a breakage alert (B-NEW-52)
+ *   - reconcile-fire writes audit row with meta.trigger_source='poll'
+ *   - prewarm RUNS on the reconcile path (B-NEW-52 Q2=b)
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -143,7 +152,7 @@ async function loadController() {
 }
 
 describe('B-NEW-36 poll-reconcile — drift-detection entry points', () => {
-  it('runShutdownFromPoll: window=closed + scanner=running → pauses scanner, suspends trades, writes alert', async () => {
+  it('runShutdownFromPoll: window=closed + scanner=running → pauses scanner, suspends trades, NO breakage alert', async () => {
     scannerIsPaused = false;
     mockInsideWindow = true;
     const { sessionLifecycleController } = await loadController();
@@ -153,14 +162,11 @@ describe('B-NEW-36 poll-reconcile — drift-detection entry points', () => {
     expect(scannerCalls).toContain('pause');
     expect(suspendCalls).toHaveLength(1);
     expect(restoreCalls).toHaveLength(0);
-    expect(alertCalls).toHaveLength(1);
-    expect(alertCalls[0].category).toBe('breakage');
-    expect(alertCalls[0].severity).toBe('warning');
-    expect(alertCalls[0].title).toMatch(/weekend cron silently missed shutdown/);
-    expect(alertCalls[0].metadata.kind).toBe('shutdown');
+    // B-NEW-52: reconcile is the normal path — no "cron missed" breakage alert.
+    expect(alertCalls).toHaveLength(0);
   });
 
-  it('runRestartFromPoll: window=open + scanner=paused → resumes scanner, restores trades, writes alert', async () => {
+  it('runRestartFromPoll: window=open + scanner=paused → resumes scanner, restores trades, NO breakage alert', async () => {
     scannerIsPaused = true;
     mockInsideWindow = false;
     const { sessionLifecycleController } = await loadController();
@@ -170,13 +176,12 @@ describe('B-NEW-36 poll-reconcile — drift-detection entry points', () => {
     expect(scannerCalls).toContain('resume');
     expect(restoreCalls).toHaveLength(1);
     expect(suspendCalls).toHaveLength(0);
-    expect(alertCalls).toHaveLength(1);
-    expect(alertCalls[0].title).toMatch(/weekend cron silently missed restart/);
-    expect(alertCalls[0].metadata.kind).toBe('restart');
+    // B-NEW-52: reconcile is the normal path — no "cron missed" breakage alert.
+    expect(alertCalls).toHaveLength(0);
   });
 
-  it('runShutdownFromPoll: scanner already paused (race: cron just fired) → NO-OP, no alert', async () => {
-    scannerIsPaused = true;  // simulate cron just finished
+  it('runShutdownFromPoll: scanner already paused (boundary already handled) → NO-OP, no alert', async () => {
+    scannerIsPaused = true;  // boundary already handled this run
     const { sessionLifecycleController } = await loadController();
 
     await sessionLifecycleController.runShutdownFromPoll(new Date());
@@ -186,7 +191,7 @@ describe('B-NEW-36 poll-reconcile — drift-detection entry points', () => {
     expect(alertCalls).toHaveLength(0);
   });
 
-  it('runRestartFromPoll: scanner already running (race: cron just fired) → NO-OP, no alert', async () => {
+  it('runRestartFromPoll: scanner already running (boundary already handled) → NO-OP, no alert', async () => {
     scannerIsPaused = false;
     const { sessionLifecycleController } = await loadController();
 
@@ -197,17 +202,17 @@ describe('B-NEW-36 poll-reconcile — drift-detection entry points', () => {
     expect(alertCalls).toHaveLength(0);
   });
 
-  it('poll path SKIPS prewarm (catch-up semantics, Langston Q4)', async () => {
+  it('reconcile path RUNS prewarm (folded in from retired cron, B-NEW-52 Q2=b)', async () => {
     scannerIsPaused = false;
     mockInsideWindow = true;
     const { sessionLifecycleController } = await loadController();
 
     await sessionLifecycleController.runShutdownFromPoll(new Date());
 
-    expect(prewarmCalls).toHaveLength(0);  // prewarm MUST NOT run on poll path
+    expect(prewarmCalls).toHaveLength(1);  // prewarm MUST run on the reconcile path now
   });
 
-  it('audit row meta.trigger_source = "poll" on poll-triggered shutdown', async () => {
+  it('audit row meta.trigger_source = "poll" + prewarm ran on reconcile-triggered shutdown', async () => {
     scannerIsPaused = false;
     mockInsideWindow = true;
     const { sessionLifecycleController } = await loadController();
@@ -226,7 +231,8 @@ describe('B-NEW-36 poll-reconcile — drift-detection entry points', () => {
     );
     expect(metaParam).toBeDefined();
     expect(metaParam).toContain('"trigger_source":"poll"');
-    expect(metaParam).toContain('"prewarmStatus":"skipped"');
+    // B-NEW-52: prewarm now RUNS on this path → status 'success', not 'skipped'.
+    expect(metaParam).toContain('"prewarmStatus":"success"');
   });
 
   it('inFlight mutex: concurrent runShutdownFromPoll invocations — second skips', async () => {
@@ -273,11 +279,10 @@ describe('B-NEW-36 poll-reconcile — drift-detection entry points', () => {
     expect(suspendCalls).toHaveLength(1);  // second call DID run
   });
 
-  it('cron at HH:00:00 then poll at HH:00:30 — poll arrives second, state matches, no-ops without audit row', async () => {
-    // Simulate cron firing first (test directly invokes runWeekendShutdown via
-    // private path isn't easy; instead, manually transition state to paused
-    // then call poll — same effect as cron-completed-before-poll).
-    scannerIsPaused = true;  // cron-just-finished state
+  it('second reconcile tick after boundary handled — sees state matches, no-ops without audit row', async () => {
+    // Simulate the boundary already handled by a prior tick (state=paused),
+    // then a later reconcile tick arrives — it must no-op cleanly.
+    scannerIsPaused = true;  // boundary-already-handled state
     mockInsideWindow = true;
     const { sessionLifecycleController } = await loadController();
 

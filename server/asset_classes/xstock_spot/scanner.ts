@@ -234,80 +234,7 @@ class XstockSpotScannerService {
       );
     }
 
-    this.clockTickHandler = async (tick: ClockTick) => {
-      this.diag.lastTickAt = tick.timestamp;
-
-      // B-NEW-36 poll-reconcile (2026-05-31): every WINDOW_RECONCILE_INTERVAL_TICKS
-      // seconds, re-check the weekend window state vs scanner pause state. If
-      // they disagree (cron silently failed to fire at the boundary), trigger
-      // the catch-up via sessionLifecycleController's poll entry points. Runs
-      // REGARDLESS of isPaused — must execute on Sun 8PM ET boundary when
-      // scanner is paused but should be running. Cheap (~microseconds for
-      // matched state); on drift, full reconcile via shared shutdown/restart
-      // core. See B_NEW_36_WEEKEND_CRON_FAILURE_DESIGN.md §4.
-      if (tick.tickNumber > 0 && tick.tickNumber % WINDOW_RECONCILE_INTERVAL_TICKS === 0) {
-        // Low-frequency heartbeat (every 600 ticks = 10 min) so post-deploy
-        // verification has positive evidence the reconcile hook is alive even
-        // when state matches (Langston Step-4 review minor). Cheap (~144/day).
-        if (tick.tickNumber % 600 === 0) {
-          const insideWindow = !isXstockMarketOpenUTC(SAMPLE_SYMBOL_FOR_WINDOW_CHECK, new Date(tick.timestamp));
-          console.log(
-            `[B-NEW-36][POLL_RECONCILE_CHECK] tick=${tick.tickNumber} ` +
-            `insideWindow=${insideWindow} isPaused=${this.isPaused}`,
-          );
-        }
-        await this.reconcileWindowState(new Date(tick.timestamp)).catch((err) => {
-          console.error(
-            `[B-NEW-36][POLL_RECONCILE_FAIL] tick=${tick.tickNumber}: ` +
-            (err instanceof Error ? err.message : String(err)),
-          );
-        });
-      }
-
-      // B-NEW-36 (2026-05-20): graceful drain semantics for pause(). When
-      // paused, observe the flag and no-op without unsubscribing — the
-      // session-lifecycle controller toggles this around the Fri 8PM ET →
-      // Sun 8PM ET weekend window. In-flight cycle (if any) finishes
-      // naturally because isScanning is checked separately below.
-      if (this.isPaused) {
-        // Low-frequency log so a stuck-paused scanner is detectable, but
-        // not so chatty it fills logs across a 48-hour weekend.
-        if (tick.tickNumber % 600 === 0) {
-          console.log(`[B-NEW-36][SCAN_PAUSED] tickNumber=${tick.tickNumber} no-op (weekend window)`);
-        }
-        return;
-      }
-      if (!this.isRunning || this.isScanning) {
-        if (this.isScanning) {
-          console.log(`[B79.0a][SKIP] tickNumber=${tick.tickNumber} reason=scan_in_progress`);
-        }
-        return;
-      }
-      // Run every 30 ticks (30 seconds).
-      if (tick.tickNumber > 0 && tick.tickNumber % SCAN_INTERVAL_SECONDS === 0) {
-        // Hard-timeout protection — mirrors crypto fx5-scanner.ts:572 + 604-624.
-        // Without this, a single slow runCycle (e.g. DB pool saturation) wedges
-        // the scanner forever: isScanning stays true, every subsequent 30s tick
-        // SKIPs, no recovery. 25s is intentionally below the 30s interval so
-        // a timed-out cycle releases isScanning before the next scheduled tick.
-        const SCAN_TIMEOUT_MS = 25000;
-        const cycleStartTs = Date.now();
-        const timeoutPromise = new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Scan timeout')), SCAN_TIMEOUT_MS),
-        );
-        await Promise.race([this.runCycle(tick), timeoutPromise]).catch((err) => {
-          console.error(
-            `[B79.0a][SCAN_TIMEOUT] tick=${tick.tickNumber} duration_ms=${Date.now() - cycleStartTs}: ${err?.message ?? err}`,
-          );
-          // runCycle's own finally will eventually reset these as well, but
-          // force-reset here so the next scheduled tick is not blocked while
-          // the background promise drains. Concurrent next-cycle is acceptable
-          // — counters merge cleanly via in-memory accumulator.
-          this.isScanning = false;
-          this.diag.isScanning = false;
-        });
-      }
-    };
+    this.clockTickHandler = (tick: ClockTick) => this.handleTick(tick);
 
     centralClock.subscribe('XstockSpotScanner', this.clockTickHandler);
     if (!centralClock.getIsRunning()) {
@@ -319,6 +246,103 @@ class XstockSpotScannerService {
     this.diag.isRunning = true;
     console.log(`[B79.0a][BOOT] XstockSpotScanner started (interval=${SCAN_INTERVAL_SECONDS}s; universe=${XSTOCK_SPOT_SYMBOLS.size} symbols; hostile_sim=${hostileSimEnabled})`);
   }
+
+  /**
+   * Per-tick handler. Extracted from the inline closure (B-NEW-52, 2026-06-06)
+   * so the reconcile-before-pause-early-out ordering is directly unit-testable
+   * (see _handleTickForTest). Pure refactor — behavior unchanged.
+   *
+   * CRITICAL ORDERING (locked by unit test): the weekend window reconcile runs
+   * FIRST, BEFORE the `if (this.isPaused) return` early-out. This is what lets
+   * the Sunday reopen fire even while the scanner is paused over the weekend —
+   * if the reconcile were below the early-out, a paused scanner would never
+   * detect that it should resume. Do NOT reorder.
+   */
+  private async handleTick(tick: ClockTick): Promise<void> {
+    this.diag.lastTickAt = tick.timestamp;
+
+    // B-NEW-36 poll-reconcile (2026-05-31; promoted to PRIMARY driver by
+    // B-NEW-52 2026-06-06): every WINDOW_RECONCILE_INTERVAL_TICKS seconds,
+    // re-check the weekend window state vs scanner pause state and self-correct
+    // on a boundary crossing via sessionLifecycleController's reconcile entry
+    // points. Runs REGARDLESS of isPaused — MUST execute on the Sun 8PM ET
+    // reopen boundary when the scanner is paused but should be running. Cheap
+    // (~microseconds for matched state); on a boundary crossing, full reconcile
+    // via the shared shutdown/restart core. See
+    // BNEW52_WEEKEND_CRON_RETIREMENT_DESIGN.md.
+    if (tick.tickNumber > 0 && tick.tickNumber % WINDOW_RECONCILE_INTERVAL_TICKS === 0) {
+      // Low-frequency heartbeat (every 600 ticks = 10 min) so post-deploy
+      // verification has positive evidence the reconcile hook is alive even
+      // when state matches (Langston Step-4 review minor). Cheap (~144/day).
+      if (tick.tickNumber % 600 === 0) {
+        const insideWindow = !isXstockMarketOpenUTC(SAMPLE_SYMBOL_FOR_WINDOW_CHECK, new Date(tick.timestamp));
+        console.log(
+          `[B-NEW-36][POLL_RECONCILE_CHECK] tick=${tick.tickNumber} ` +
+          `insideWindow=${insideWindow} isPaused=${this.isPaused}`,
+        );
+      }
+      await this.reconcileWindowState(new Date(tick.timestamp)).catch((err) => {
+        console.error(
+          `[B-NEW-36][POLL_RECONCILE_FAIL] tick=${tick.tickNumber}: ` +
+          (err instanceof Error ? err.message : String(err)),
+        );
+      });
+    }
+
+    // B-NEW-36 (2026-05-20): graceful drain semantics for pause(). When
+    // paused, observe the flag and no-op without unsubscribing — the
+    // session-lifecycle controller toggles this around the Fri 8PM ET →
+    // Sun 8PM ET weekend window. In-flight cycle (if any) finishes
+    // naturally because isScanning is checked separately below.
+    if (this.isPaused) {
+      // Low-frequency log so a stuck-paused scanner is detectable, but
+      // not so chatty it fills logs across a 48-hour weekend.
+      if (tick.tickNumber % 600 === 0) {
+        console.log(`[B-NEW-36][SCAN_PAUSED] tickNumber=${tick.tickNumber} no-op (weekend window)`);
+      }
+      return;
+    }
+    if (!this.isRunning || this.isScanning) {
+      if (this.isScanning) {
+        console.log(`[B79.0a][SKIP] tickNumber=${tick.tickNumber} reason=scan_in_progress`);
+      }
+      return;
+    }
+    // Run every 30 ticks (30 seconds).
+    if (tick.tickNumber > 0 && tick.tickNumber % SCAN_INTERVAL_SECONDS === 0) {
+      // Hard-timeout protection — mirrors crypto fx5-scanner.ts:572 + 604-624.
+      // Without this, a single slow runCycle (e.g. DB pool saturation) wedges
+      // the scanner forever: isScanning stays true, every subsequent 30s tick
+      // SKIPs, no recovery. 25s is intentionally below the 30s interval so
+      // a timed-out cycle releases isScanning before the next scheduled tick.
+      const SCAN_TIMEOUT_MS = 25000;
+      const cycleStartTs = Date.now();
+      const timeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Scan timeout')), SCAN_TIMEOUT_MS),
+      );
+      await Promise.race([this.runCycle(tick), timeoutPromise]).catch((err) => {
+        console.error(
+          `[B79.0a][SCAN_TIMEOUT] tick=${tick.tickNumber} duration_ms=${Date.now() - cycleStartTs}: ${err?.message ?? err}`,
+        );
+        // runCycle's own finally will eventually reset these as well, but
+        // force-reset here so the next scheduled tick is not blocked while
+        // the background promise drains. Concurrent next-cycle is acceptable
+        // — counters merge cleanly via in-memory accumulator.
+        this.isScanning = false;
+        this.diag.isScanning = false;
+      });
+    }
+  }
+
+  // ── Test-only seams (B-NEW-52) — drive the real handler ordering without
+  //    a full start()/centralClock subscription. NOT used in production. ──
+  /** Test-only: force the paused flag (mirrors what pause()/resume() set). */
+  _setIsPausedForTest(v: boolean): void { this.isPaused = v; this.diag.isPaused = v; }
+  /** Test-only: mark the scanner running so handleTick takes the live path. */
+  _setIsRunningForTest(v: boolean): void { this.isRunning = v; this.diag.isRunning = v; }
+  /** Test-only: invoke the REAL per-tick handler (reconcile-before-pause
+   * ordering included). */
+  async _handleTickForTest(tick: ClockTick): Promise<void> { await this.handleTick(tick); }
 
   stop(): void {
     if (!this.isRunning) return;
@@ -388,12 +412,22 @@ class XstockSpotScannerService {
   /**
    * B-NEW-36 poll-reconcile (2026-05-31): periodic window-state vs scanner-state
    * drift check. Called from clockTickHandler every WINDOW_RECONCILE_INTERVAL_TICKS
-   * seconds. Defense-in-depth against node-cron silent failures (per evidence
-   * Fri 29 May 8PM ET fire was missed — scheduled_tasks_audit had no
-   * weekend_shutdown row for that boundary).
+   * seconds.
    *
-   * SSOT note: scanner.isPaused is the canonical signal. The cron + boot-reconcile
-   * + poll-reconcile paths ALWAYS pair the pause/resume call with the trade-state
+   * B-NEW-52 (2026-06-06): this is now the PRIMARY (single-source-of-truth)
+   * driver of the weekend shutdown/restart, not a defense-in-depth backstop.
+   * The fire-once weekend node-cron was retired because it kept going stale
+   * across mid-week restarts (3rd recurrence). A continuous self-correcting
+   * reconcile cannot be knocked out by a restart. Crossing the Fri-close
+   * boundary (window goes closed while scanner running) drives the shutdown;
+   * crossing the Sun-reopen boundary (window goes open while scanner paused)
+   * drives the restart. CRITICAL: this method is invoked from the tick handler
+   * ABOVE the `if (this.isPaused) return` early-out, so the Sunday reopen fires
+   * even while the scanner is paused over the weekend (ordering locked by a
+   * unit test).
+   *
+   * SSOT note: scanner.isPaused is the canonical signal. The poll-reconcile +
+   * boot-reconcile paths ALWAYS pair the pause/resume call with the trade-state
    * mutation (markAllXstockWeekendSuspended / unmarkAllXstockWeekendSuspended)
    * via session-lifecycle-controller's shared shutdown/restart core. Independent
    * state drift between scanner.isPaused and the trade table is closed: if a
@@ -408,18 +442,18 @@ class XstockSpotScannerService {
     const isPaused = this.isPaused;
 
     if (insideWindow && !isPaused) {
-      // State drift: weekend window is OPEN (i.e. market is CLOSED), but
-      // scanner is still running. Most likely the Fri 8PM ET cron failed.
-      console.warn(
-        `[B-NEW-36][POLL_RECONCILE_DRIFT] window=closed scanner=running → triggering shutdown (likely Fri cron miss)`,
+      // Boundary crossing: weekend window is now OPEN (i.e. market is CLOSED)
+      // but the scanner is still running → shut down.
+      console.log(
+        `[B-NEW-52][POLL_RECONCILE_BOUNDARY] window=closed scanner=running → triggering shutdown`,
       );
       const { sessionLifecycleController } = await import('../../services/session-lifecycle-controller.js');
       await sessionLifecycleController.runShutdownFromPoll(now);
     } else if (!insideWindow && isPaused) {
-      // State drift: weekend window is CLOSED (i.e. market is OPEN), but
-      // scanner is still paused. Most likely the Sun 8PM ET cron failed.
-      console.warn(
-        `[B-NEW-36][POLL_RECONCILE_DRIFT] window=open scanner=paused → triggering restart (likely Sun cron miss)`,
+      // Boundary crossing: weekend window is now CLOSED (i.e. market is OPEN)
+      // but the scanner is still paused → restart.
+      console.log(
+        `[B-NEW-52][POLL_RECONCILE_BOUNDARY] window=open scanner=paused → triggering restart`,
       );
       const { sessionLifecycleController } = await import('../../services/session-lifecycle-controller.js');
       await sessionLifecycleController.runRestartFromPoll(now);

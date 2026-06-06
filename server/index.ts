@@ -826,13 +826,15 @@ app.use((req, res, next) => {
   }
 
   // ─── B-NEW-36: Off-hours session-lifecycle controller ───
-  // Registers two scheduled timers (Fri 8PM ET shutdown / Sun 8PM ET restart)
-  // AND performs boot-time affirmative state reconciliation per Langston
+  // B-NEW-52 (2026-06-06): the fire-once weekend node-cron was RETIRED. init()
+  // now performs ONLY boot-time affirmative state reconciliation per Langston
   // Q7+Q7.1: if NOW falls inside the weekend close window, pause the scanner
   // and bulk-suspend all open xstock_spot trades so the sim cycle doesn't
-  // churn against stale weekend data. Soft-fail: a controller init failure
-  // does not block boot (the scheduled timers below still register so
-  // subsequent fires recover state).
+  // churn against stale weekend data. The continuous 30s poll-reconcile
+  // (xstockSpotScanner.clockTickHandler → reconcileWindowState) is the
+  // single source of truth for crossing the Fri-close / Sun-reopen boundaries.
+  // Soft-fail: a controller init failure does not block boot (the poll-reconcile
+  // still self-corrects any drift on subsequent ticks).
   try {
     const { sessionLifecycleController } = await import('./services/session-lifecycle-controller.js');
     await sessionLifecycleController.init();

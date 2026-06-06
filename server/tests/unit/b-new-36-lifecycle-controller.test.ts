@@ -1,19 +1,22 @@
 /**
  * B-NEW-36 sub-batch (b) — Off-hours session-lifecycle controller tests.
+ *   ★ B-NEW-52 (2026-06-06): the fire-once weekend node-cron was RETIRED. The
+ *     30s poll-reconcile is the single driver. Tests that asserted the weekend
+ *     CRONS were registered / fired have been replaced with the reconcile-path
+ *     equivalents (see b-new-36-poll-reconciliation.test.ts for the full
+ *     poll-path suite). This file now covers boot reconciliation + that init()
+ *     registers NO scheduled timers.
  *
  * Verifies:
  *   - Boot-time inside-window detection drives scanner.pause() + bulk-suspend.
  *   - Boot-time outside-window detection drives scanner.resume() (if paused)
  *     + bulk-unsuspend.
- *   - Pre-warm failure does NOT abort the rest of the hook (circuit-breaker).
- *   - Audit row written on every fire (success path AND error path).
- *   - Scheduled timers are registered with the correct cron expressions
- *     and ET timezone.
- *   - Tear-down stops both scheduled tasks.
+ *   - init() registers NO node-cron timers (B-NEW-52 retirement).
+ *   - Audit row written on boot reconciliation.
+ *   - Tear-down is idempotent (no scheduled tasks to stop).
  *
  * Mocks: db, scanner, vts-runner Map accessor, prewarm, market-hours predicate,
- * and node-cron itself (so we can simulate timer fires deterministically
- * without real wall-clock waits).
+ * and node-cron itself (so we can assert it is NOT called).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -199,7 +202,7 @@ describe('B-NEW-36 — session-lifecycle-controller boot-time reconciliation', (
     mod.sessionLifecycleController.shutdown();
   });
 
-  it('init is idempotent — second call returns without re-registering', async () => {
+  it('init is idempotent — second call returns without re-running', async () => {
     mockInsideWindow = false;
     const mod = await loadController();
     await mod.sessionLifecycleController.init();
@@ -210,81 +213,44 @@ describe('B-NEW-36 — session-lifecycle-controller boot-time reconciliation', (
   });
 });
 
-describe('B-NEW-36 — scheduled timer registration', () => {
-  it('registers Fri 8PM ET shutdown + Sun 8PM ET restart with America/New_York timezone', async () => {
+describe('B-NEW-52 — weekend node-cron retirement', () => {
+  it('init() registers NO node-cron timers (weekend crons retired)', async () => {
     mockInsideWindow = false;
     const mod = await loadController();
     await mod.sessionLifecycleController.init();
 
-    expect(cronRegistrations).toHaveLength(2);
-
-    const fri = cronRegistrations.find((r) => r.expression === '0 20 * * 5');
-    const sun = cronRegistrations.find((r) => r.expression === '0 20 * * 0');
-    expect(fri).toBeTruthy();
-    expect(sun).toBeTruthy();
-    expect(fri?.options.timezone).toBe('America/New_York');
-    expect(sun?.options.timezone).toBe('America/New_York');
-    expect(fri?.options.noOverlap).toBe(true);
-    expect(sun?.options.noOverlap).toBe(true);
+    // The fire-once weekend crons are gone; the 30s poll-reconcile is the
+    // single driver. init() must not call cron.schedule at all.
+    expect(cronRegistrations).toHaveLength(0);
 
     mod.sessionLifecycleController.shutdown();
   });
 
-  it('Fri-shutdown fire suspends trades + pauses scanner + writes audit row', async () => {
-    mockInsideWindow = false;
-    const mod = await loadController();
-    await mod.sessionLifecycleController.init();
-    // Reset capture after boot reconciliation so we observe ONLY the fire.
-    suspendCalls.length = 0;
-    scannerCalls.length = 0;
-    dbCalls.length = 0;
-
-    const fri = cronRegistrations.find((r) => r.expression === '0 20 * * 5')!;
-    await fri.fn({ triggeredAt: new Date('2026-05-22T00:00:00Z') });
-
-    expect(suspendCalls).toHaveLength(1);
-    expect(scannerCalls).toContain('pause');
-    const audit = dbCalls.find((c) => c.sql.includes('INSERT INTO scheduled_tasks_audit'));
-    expect(audit?.params).toContain('weekend_shutdown');
-    expect(audit?.params).toContain('success');
-
-    mod.sessionLifecycleController.shutdown();
-  });
-
-  it('Sun-restart fire resumes scanner + restores trades + writes audit row', async () => {
+  it('init() registers NO timers even inside the weekend window', async () => {
     mockInsideWindow = true;
-    scannerIsPaused = true;
     const mod = await loadController();
     await mod.sessionLifecycleController.init();
-    restoreCalls.length = 0;
-    scannerCalls.length = 0;
-    dbCalls.length = 0;
 
-    const sun = cronRegistrations.find((r) => r.expression === '0 20 * * 0')!;
-    await sun.fn({ triggeredAt: new Date('2026-05-25T00:00:00Z') });
-
-    expect(scannerCalls).toContain('resume');
-    expect(restoreCalls).toHaveLength(1);
-    const audit = dbCalls.find((c) => c.sql.includes('INSERT INTO scheduled_tasks_audit'));
-    expect(audit?.params).toContain('weekend_restart');
-    expect(audit?.params).toContain('success');
+    expect(cronRegistrations).toHaveLength(0);
+    // Boot reconciliation still paused the scanner inside the window.
+    expect(scannerCalls).toContain('pause');
 
     mod.sessionLifecycleController.shutdown();
   });
 });
 
-describe('B-NEW-36 — pre-warm circuit-breaker', () => {
-  it('pre-warm failure during Fri-shutdown still suspends trades + pauses scanner', async () => {
-    mockInsideWindow = false;
+describe('B-NEW-36 / B-NEW-52 — pre-warm circuit-breaker (now on the poll path)', () => {
+  it('pre-warm failure during poll-shutdown still suspends trades + pauses scanner', async () => {
+    // Scanner running, window now closed → reconcile shutdown boundary.
+    scannerIsPaused = false;
+    mockInsideWindow = true;
     const mod = await loadController();
-    await mod.sessionLifecycleController.init();
     suspendCalls.length = 0;
     scannerCalls.length = 0;
     dbCalls.length = 0;
 
     prewarmShouldThrow = true;
-    const fri = cronRegistrations.find((r) => r.expression === '0 20 * * 5')!;
-    await fri.fn({ triggeredAt: new Date('2026-05-22T00:00:00Z') });
+    await mod.sessionLifecycleController.runShutdownFromPoll(new Date('2026-05-22T00:00:00Z'));
 
     // Lifecycle work proceeded despite pre-warm failure.
     expect(suspendCalls).toHaveLength(1);
@@ -302,18 +268,17 @@ describe('B-NEW-36 — pre-warm circuit-breaker', () => {
     mod.sessionLifecycleController.shutdown();
   });
 
-  it('pre-warm failure during Sun-restart still resumes scanner + restores trades', async () => {
-    mockInsideWindow = true;
+  it('pre-warm failure during poll-restart still resumes scanner + restores trades', async () => {
+    // Scanner paused, window now open → reconcile restart boundary.
     scannerIsPaused = true;
+    mockInsideWindow = false;
     const mod = await loadController();
-    await mod.sessionLifecycleController.init();
     restoreCalls.length = 0;
     scannerCalls.length = 0;
     dbCalls.length = 0;
 
     prewarmShouldThrow = true;
-    const sun = cronRegistrations.find((r) => r.expression === '0 20 * * 0')!;
-    await sun.fn({ triggeredAt: new Date('2026-05-25T00:00:00Z') });
+    await mod.sessionLifecycleController.runRestartFromPoll(new Date('2026-05-25T00:00:00Z'));
 
     expect(scannerCalls).toContain('resume');
     expect(restoreCalls).toHaveLength(1);
@@ -323,17 +288,39 @@ describe('B-NEW-36 — pre-warm circuit-breaker', () => {
 
     mod.sessionLifecycleController.shutdown();
   });
+
+  it('poll-shutdown RUNS pre-warm (folded in from retired cron, B-NEW-52 Q2=b)', async () => {
+    scannerIsPaused = false;
+    mockInsideWindow = true;
+    const mod = await loadController();
+    dbCalls.length = 0;
+
+    await mod.sessionLifecycleController.runShutdownFromPoll(new Date('2026-05-22T00:00:00Z'));
+
+    const audit = dbCalls.find((c) =>
+      c.sql.includes('INSERT INTO scheduled_tasks_audit') &&
+      c.params.some((p: any) => p === 'weekend_shutdown'),
+    );
+    const metaParam = audit?.params.find(
+      (p: any) => typeof p === 'string' && p.includes('prewarmStatus'),
+    );
+    // prewarm ran (success) → NOT 'skipped'.
+    expect(metaParam).toContain('"prewarmStatus":"success"');
+    expect(metaParam).not.toContain('"prewarmStatus":"skipped"');
+
+    mod.sessionLifecycleController.shutdown();
+  });
 });
 
-describe('B-NEW-36 — shutdown', () => {
-  it('shutdown() stops both scheduled tasks and is idempotent', async () => {
+describe('B-NEW-52 — shutdown (no scheduled tasks)', () => {
+  it('shutdown() is idempotent and there are no scheduled tasks to stop', async () => {
     mockInsideWindow = false;
     const mod = await loadController();
     await mod.sessionLifecycleController.init();
 
-    mod.sessionLifecycleController.shutdown();
-    expect(cronRegistrations.every((r) => r.stopped)).toBe(true);
-
+    // No crons were registered, so nothing to stop.
+    expect(cronRegistrations).toHaveLength(0);
+    expect(() => mod.sessionLifecycleController.shutdown()).not.toThrow();
     // Idempotent — second call doesn't throw.
     expect(() => mod.sessionLifecycleController.shutdown()).not.toThrow();
   });

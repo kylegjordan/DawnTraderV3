@@ -1,14 +1,16 @@
 /**
  * ═════════════════════════════════════════════════════════════════════════════
  * B-NEW-36 sub-batch (b) — Off-hours session-lifecycle controller
+ *   ★ B-NEW-52 (2026-06-06): fire-once weekend node-cron RETIRED. The
+ *     continuous reconcile (boot + 30s poll) is now the SINGLE SOURCE OF TRUTH.
  * ═════════════════════════════════════════════════════════════════════════════
  *
- * Schedules two timers around the unified xStock weekend close window
- * (empirically verified Fri 8PM ET → Sun 8PM ET; B-NEW-36 sub-batch (c)
- * §0.5 Findings):
+ * Manages the unified xStock weekend close window (empirically verified
+ * Fri 8PM ET → Sun 8PM ET; B-NEW-36 sub-batch (c) §0.5 Findings):
  *
- *   - Fri 20:00 ET → `weekend_shutdown`:
- *       1. Run pre-warm so the snapshot table captures closing-week bars.
+ *   - Entering the weekend window (market closed) → `weekend_shutdown`:
+ *       1. Run pre-warm so the snapshot table captures closing-week bars
+ *          (so DBS isn't cold at the Sunday reopen).
  *       2. Bulk-mark all open xstock_spot trades as `weekend_suspended`
  *          (DB + in-memory Map mirror).
  *       3. Pause the xstockSpotScanner so it no-ops every centralClock tick
@@ -16,11 +18,24 @@
  *          universe-0-cycle-every-30s pattern).
  *       4. Write an audit row to scheduled_tasks_audit.
  *
- *   - Sun 20:00 ET → `weekend_restart`:
+ *   - Leaving the weekend window (market open) → `weekend_restart`:
  *       1. Run pre-warm again (refresh-on-restart per Langston Q3 B-NEW-34b).
  *       2. Resume the xstockSpotScanner.
  *       3. Bulk-restore all weekend_suspended xstock_spot trades to `open`.
  *       4. Audit row.
+ *
+ * ★ B-NEW-52 — why the weekend node-cron was retired (Kyle directive 2026-06-06):
+ *   `weekend_shutdown`/`weekend_restart` were fire-once-a-week in-process
+ *   node-cron alarms. The app is deployed/restarted multiple times a week, and
+ *   the once-weekly alarm repeatedly failed to fire at its next Fri/Sun 20:00 ET
+ *   occurrence after a mid-week restart (3rd recurrence: stale since 2026-05-23,
+ *   despite B-NEW-49 monitoring; #161/#162/#163). A continuous self-correcting
+ *   reconcile loop is strictly more reliable than a fire-once alarm and cannot
+ *   be knocked out by a restart, so the alarm was removed entirely (the
+ *   NO-PATCHES answer — remove the fragile dependency, don't chase its exact
+ *   internal failure for a 4th time). The two reconcile paths below are now the
+ *   ONLY drivers; they always existed and ran the SAME shared shutdown/restart
+ *   core the cron did (full action, not just scanner-pause).
  *
  * Boot-time affirmative state reconciliation (per Langston Q7 + Q7.1):
  *   On every server start, init() computes whether NOW is inside the
@@ -32,24 +47,29 @@
  *       stay weekend_suspended past the boundary, falling out of the sim
  *       cycle until the next Sun fire (could be days).
  *
+ * 30-second poll reconciliation (B-NEW-36 poll-reconcile 2026-05-31; promoted
+ *   to PRIMARY by B-NEW-52):
+ *   xstockSpotScanner.clockTickHandler calls reconcileWindowState() every 30s
+ *   (above the isPaused early-out, so the Sunday reopen fires even while paused).
+ *   On window-vs-scanner drift it calls runShutdownFromPoll / runRestartFromPoll,
+ *   which invoke the same shared core. The core fires once per boundary
+ *   (idempotent: pause()/markSuspended are no-ops when already in state, +
+ *   inFlight mutex), so running every 30s is safe.
+ *
  * Pre-warm circuit-breaker (per Langston Q6):
  *   Pre-warm failure does NOT crash the server AND does NOT block the rest
  *   of the hook. Failure → audit row status='error' with error_message;
  *   STILL ATTEMPT scanner pause/resume + trade state updates.
  *
  * Reference: Claude Comms and Packages/Scope Files/B_NEW_36_SCOPE.md §2;
- *            Claude Comms and Packages/Scope Files/B_NEW_36_PRE_AUDIT.md §3.10 + §4
+ *            Claude Comms and Packages/Scope Files/B_NEW_36_PRE_AUDIT.md §3.10 + §4;
+ *            Claude Comms and Packages/Langston Design Asks/BNEW52_WEEKEND_CRON_RETIREMENT_DESIGN.md
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
-import * as cron from 'node-cron';
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
-import { addAlert } from './system-alerts.js';
-import { cronRegistry } from './cron-registry.js';
-import { logCronArm } from './cron-arm-logger.js';
-import { scheduledJobsAudit } from './scheduled-jobs-audit.js';
 
 // Sample symbol used purely to satisfy the predicate's backward-compatible
 // signature. Post-B-NEW-36 sub-batch (c) the predicate is symbol-independent,
@@ -58,16 +78,14 @@ import { scheduledJobsAudit } from './scheduled-jobs-audit.js';
 const SAMPLE_SYMBOL_FOR_HOURS_CHECK = 'AAPL/USD';
 
 // B-NEW-36 poll-reconcile (2026-05-31): trigger-source label written into
-// scheduled_tasks_audit.meta and used to distinguish cron-path vs poll-path
-// vs boot-path in dashboards / queries.
-export type TriggerSource = 'cron' | 'poll' | 'boot';
-
-// Cron expressions (interpreted in America/New_York timezone — node-cron 4.x
-// uses Intl, same DST-awareness as our market-hours predicate).
-// Format: `minute hour day-of-month month day-of-week`.
-const CRON_FRI_8PM_ET = '0 20 * * 5';   // 20:00 every Friday
-const CRON_SUN_8PM_ET = '0 20 * * 0';   // 20:00 every Sunday
-const TIMEZONE_ET = 'America/New_York';
+// scheduled_tasks_audit.meta and used to distinguish reconcile-path vs
+// boot-path in dashboards / queries.
+//   B-NEW-52 (2026-06-06): the fire-once weekend node-cron was retired, so the
+//   'cron' source no longer occurs for this controller. 'poll' is now the
+//   NORMAL (primary) driver — the 30s reconcile loop — NOT a fallback for a
+//   missed cron. (The shared scheduled-jobs-audit writer still declares 'cron'
+//   for backward-compatibility with historical rows + other schedules.)
+export type TriggerSource = 'poll' | 'boot';
 
 type AuditStatus = 'pending' | 'success' | 'error';
 type TaskName = 'weekend_shutdown' | 'weekend_restart' | 'boot_state_reconciliation';
@@ -146,8 +164,6 @@ async function runPrewarmWithCircuitBreaker(opts: { lookbackDays: number; tag: s
 }
 
 class SessionLifecycleController {
-  private friShutdownTask: cron.ScheduledTask | null = null;
-  private sunRestartTask: cron.ScheduledTask | null = null;
   private initialized = false;
   // B-NEW-36 poll-reconcile (2026-05-31): mutex preventing concurrent
   // cron + poll execution at the same window boundary (cron fires at HH:00:00,
@@ -173,7 +189,11 @@ class SessionLifecycleController {
    *      the computed window state (closes Q7.1 silent-stuck trade mode).
    *   3. Pause the scanner if inside-window (closes Q7 crash-mid-weekend mode).
    *   4. Write a boot_state_reconciliation audit row.
-   *   5. Register the two scheduled timers.
+   *
+   * B-NEW-52 (2026-06-06): no longer registers any scheduled timer. The 30s
+   * poll-reconcile (xstockSpotScanner.clockTickHandler → reconcileWindowState)
+   * is the continuous self-correcting driver; this boot reconciliation covers
+   * the restart-instant; together they are the single source of truth.
    *
    * Idempotent: a second init() call returns immediately.
    */
@@ -238,183 +258,108 @@ class SessionLifecycleController {
       console.error(`[B-NEW-36][LIFECYCLE_INIT_FAIL] ${msg}`);
       meta.notes = 'boot reconciliation failed — see error_message';
       await writeAuditRow('boot_state_reconciliation', bootAt, bootAt, 'error', meta, msg);
-      // Don't rethrow — boot reconciliation is best-effort. The scheduled
-      // timers below still need to register so subsequent fires recover.
+      // Don't rethrow — boot reconciliation is best-effort. The 30s
+      // poll-reconcile will still self-correct any drift on subsequent ticks.
     }
 
-    // ── Step 3: Register the two scheduled timers. ──
-    this.registerTimers();
     this.initialized = true;
     console.log(
-      `[B-NEW-36][LIFECYCLE_INIT_DONE] timers registered — ` +
-      `fri=${CRON_FRI_8PM_ET} sun=${CRON_SUN_8PM_ET} tz=${TIMEZONE_ET}`,
+      `[B-NEW-52][LIFECYCLE_INIT_DONE] boot reconciliation complete — ` +
+      `weekend lifecycle now driven by the continuous 30s poll-reconcile ` +
+      `(no scheduled timers registered)`,
     );
   }
 
-  private registerTimers(): void {
-    this.friShutdownTask = cron.schedule(
-      CRON_FRI_8PM_ET,
-      async (ctx) => {
-        await this.runWeekendShutdown(ctx.triggeredAt);
-      },
-      { timezone: TIMEZONE_ET, name: 'b-new-36-weekend-shutdown', noOverlap: true },
-    );
-
-    this.sunRestartTask = cron.schedule(
-      CRON_SUN_8PM_ET,
-      async (ctx) => {
-        await this.runWeekendRestart(ctx.triggeredAt);
-      },
-      { timezone: TIMEZONE_ET, name: 'b-new-36-weekend-restart', noOverlap: true },
-    );
-
-    // B-NEW-49 (2026-05-31): register with cron-registry + log arming
-    // evidence so the smoke-test + fire-evidence verifier can monitor.
-    // Weekly cadence (1 fire per week) = 604800 seconds.
-    cronRegistry.register({
-      name: 'weekend_shutdown',
-      task: this.friShutdownTask,
-      expression: CRON_FRI_8PM_ET,
-      timezone: TIMEZONE_ET,
-      intervalSeconds: 604800,
-      enabled: true,
-    });
-    logCronArm(cronRegistry.get('weekend_shutdown')!);
-
-    cronRegistry.register({
-      name: 'weekend_restart',
-      task: this.sunRestartTask,
-      expression: CRON_SUN_8PM_ET,
-      timezone: TIMEZONE_ET,
-      intervalSeconds: 604800,
-      enabled: true,
-    });
-    logCronArm(cronRegistry.get('weekend_restart')!);
-  }
-
   /**
-   * Fri 8 PM ET cron fire path. Wraps the shared shutdown core with mutex
-   * (cron-vs-poll race protection per B-NEW-36 poll-reconcile 2026-05-31)
-   * and runs prewarm. Pre-warm failure does NOT block the rest of the hook.
-   */
-  private async runWeekendShutdown(scheduledFor: Date): Promise<void> {
-    if (this.inFlight) {
-      console.log('[B-NEW-36][WEEKEND_SHUTDOWN_SKIP] inFlight=true (poll or prior cron holding mutex)');
-      return;
-    }
-    this.inFlight = true;
-    try {
-      await this.runWeekendShutdownCore({
-        scheduledFor,
-        triggerSource: 'cron',
-        runPrewarm: true,
-      });
-    } finally {
-      this.inFlight = false;
-    }
-  }
-
-  /**
-   * Sun 8 PM ET cron fire path. Mutex + prewarm + shared restart core.
-   */
-  private async runWeekendRestart(scheduledFor: Date): Promise<void> {
-    if (this.inFlight) {
-      console.log('[B-NEW-36][WEEKEND_RESTART_SKIP] inFlight=true');
-      return;
-    }
-    this.inFlight = true;
-    try {
-      await this.runWeekendRestartCore({
-        scheduledFor,
-        triggerSource: 'cron',
-        runPrewarm: true,
-      });
-    } finally {
-      this.inFlight = false;
-    }
-  }
-
-  /**
-   * B-NEW-36 poll-reconcile (2026-05-31): poll-triggered shutdown entry,
+   * B-NEW-36 poll-reconcile (2026-05-31): the 30s reconcile shutdown entry,
    * called by xstockSpotScanner.clockTickHandler when the periodic reconcile
    * check detects window state drift (insideWindow=true but scanner is not
-   * paused — usually because the Fri 8PM ET cron silently failed).
+   * paused — i.e. we have crossed the Fri 8PM ET boundary into the closed
+   * window and need to shut down).
    *
-   * Differences from cron path:
-   *   - Pre-warm SKIPPED (catch-up semantics; we're already late).
-   *   - Audit-row meta.trigger_source='poll' for query-side distinction.
-   *   - Writes a system-alert (severity=warning, category=breakage) so we
-   *     notice the cron regression rather than silently relying on poll
-   *     forever (Langston Q6 + structural revision #3).
+   * B-NEW-52 (2026-06-06): this is now the PRIMARY (normal) driver, not a
+   * fallback for a missed cron. The fire-once weekend node-cron was retired.
+   *   - Pre-warm RUNS here (folded in from the old cron path, Langston Q2=(b))
+   *     so the OHLC 60m+15m snapshot pre-warm still happens at the boundary —
+   *     needed so DBS isn't cold at the Sunday reopen. The core fires once per
+   *     boundary (idempotent + scanner-state gate below), so pre-warm runs once
+   *     per Friday close, not every 30s.
+   *   - Audit-row meta.trigger_source='poll' (the normal value; NOT an error
+   *     signal). No "cron silently missed" breakage alert is emitted — this is
+   *     the expected path, so an alert would be weekly false-alarm noise.
    *
-   * Mutex semantics: if cron holds inFlight, poll skips (cron will handle
-   * normally). If poll holds inFlight, a near-simultaneous cron also skips.
-   * Re-checks scanner state after acquiring mutex to handle the race where
-   * cron just finished between detection and entry.
+   * Mutex semantics: inFlight prevents concurrent reconcile invocations from
+   * double-firing the core. Re-checks scanner state after acquiring the mutex
+   * so a tick that overlaps an in-progress run no-ops.
    */
   async runShutdownFromPoll(now: Date): Promise<void> {
     // ATOMIC mutex acquire — check+set in a single synchronous step (no awaits
     // in between, so two concurrent invocations cannot both pass the gate).
     if (this.inFlight) {
-      console.log('[B-NEW-36][POLL_SHUTDOWN_SKIP] inFlight=true (cron or prior poll holding mutex)');
+      console.log('[B-NEW-36][POLL_SHUTDOWN_SKIP] inFlight=true (prior reconcile holding mutex)');
       return;
     }
     this.inFlight = true;
     try {
-      // Post-mutex state recheck — cron may have fired between drift-detection
-      // and entry. If scanner is already paused, the cron handled it; we no-op
-      // WITHOUT writing audit/alert (no spurious duplicate).
+      // Post-mutex state recheck — a prior reconcile tick may have shut down
+      // between drift-detection and entry. If scanner is already paused, the
+      // boundary was handled; we no-op WITHOUT writing audit (no spurious
+      // duplicate row).
       const { xstockSpotScanner } = await import('../asset_classes/xstock_spot/scanner.js');
       if (xstockSpotScanner.getIsPaused()) {
-        console.log('[B-NEW-36][POLL_SHUTDOWN_NOOP] scanner already paused (cron likely fired between detection and entry)');
+        console.log('[B-NEW-36][POLL_SHUTDOWN_NOOP] scanner already paused (boundary already handled this run)');
         return;
       }
-      console.warn('[B-NEW-36][POLL_SHUTDOWN_FIRE] poll-path catching up missed cron');
-      console.log('[B-NEW-36][POLL_SKIP_PREWARM] reason=catchup');
+      console.log('[B-NEW-52][POLL_SHUTDOWN_FIRE] reconcile crossing Fri-close boundary — shutting down');
       await this.runWeekendShutdownCore({
         scheduledFor: now,
         triggerSource: 'poll',
-        runPrewarm: false,
+        runPrewarm: true,
       });
-      await this.writeMissedCronAlert('shutdown', now);
     } finally {
       this.inFlight = false;
     }
   }
 
   /**
-   * B-NEW-36 poll-reconcile (2026-05-31): poll-triggered restart entry,
-   * mirror of runShutdownFromPoll for the Sun 8PM ET boundary.
+   * B-NEW-36 poll-reconcile (2026-05-31): the 30s reconcile restart entry,
+   * mirror of runShutdownFromPoll for the Sun 8PM ET reopen boundary.
+   *
+   * B-NEW-52 (2026-06-06): PRIMARY driver. Pre-warm RUNS here (refresh-on-
+   * restart). No breakage alert — this is the normal path. The reconcile loop
+   * runs ABOVE the scanner's isPaused early-out, so this fires even though the
+   * scanner is paused over the weekend (that ordering is locked by a unit test).
    */
   async runRestartFromPoll(now: Date): Promise<void> {
     if (this.inFlight) {
-      console.log('[B-NEW-36][POLL_RESTART_SKIP] inFlight=true (cron or prior poll holding mutex)');
+      console.log('[B-NEW-36][POLL_RESTART_SKIP] inFlight=true (prior reconcile holding mutex)');
       return;
     }
     this.inFlight = true;
     try {
       const { xstockSpotScanner } = await import('../asset_classes/xstock_spot/scanner.js');
       if (!xstockSpotScanner.getIsPaused()) {
-        console.log('[B-NEW-36][POLL_RESTART_NOOP] scanner already running (cron likely fired between detection and entry)');
+        console.log('[B-NEW-36][POLL_RESTART_NOOP] scanner already running (boundary already handled this run)');
         return;
       }
-      console.warn('[B-NEW-36][POLL_RESTART_FIRE] poll-path catching up missed cron');
-      console.log('[B-NEW-36][POLL_SKIP_PREWARM] reason=catchup');
+      console.log('[B-NEW-52][POLL_RESTART_FIRE] reconcile crossing Sun-reopen boundary — restarting');
       await this.runWeekendRestartCore({
         scheduledFor: now,
         triggerSource: 'poll',
-        runPrewarm: false,
+        runPrewarm: true,
       });
-      await this.writeMissedCronAlert('restart', now);
     } finally {
       this.inFlight = false;
     }
   }
 
   /**
-   * Shared shutdown core. Used by both cron-path and poll-path entries.
-   * Prewarm is OPTIONAL (cron runs it, poll skips it for catch-up semantics).
-   * trigger_source is recorded in audit-row meta for query distinction.
+   * Shared shutdown core. Used by both the 30s poll-reconcile entry and the
+   * boot reconciliation. Prewarm is OPTIONAL (the reconcile boundary fire runs
+   * it; a caller may pass false to skip). trigger_source is recorded in
+   * audit-row meta for query distinction.
+   *   B-NEW-52 (2026-06-06): the fire-once weekend node-cron path was retired;
+   *   the poll-reconcile is the sole boundary driver and passes runPrewarm:true.
    */
   private async runWeekendShutdownCore(opts: {
     scheduledFor: Date;
@@ -520,55 +465,14 @@ class SessionLifecycleController {
   }
 
   /**
-   * Surface a system-alert when poll-path fires (i.e. cron silently missed
-   * its fire window). Per Langston review of B-NEW-36 poll-reconcile design:
-   * "otherwise we silently rely on poll forever and never notice when cron
-   * regresses." Severity=warning + category=breakage so the §10.5 per-turn
-   * check surfaces it.
-   */
-  private async writeMissedCronAlert(kind: 'shutdown' | 'restart', firedAt: Date): Promise<void> {
-    try {
-      await addAlert({
-        triggers_at: firedAt,
-        category: 'breakage',
-        severity: 'warning',
-        title: `B-NEW-36 weekend cron silently missed ${kind} fire — poll-path caught up`,
-        body:
-          `The Fri 8PM ET → Sun 8PM ET weekend ${kind} timer (node-cron, registered in ` +
-          `session-lifecycle-controller.ts) did not invoke its callback at the expected ` +
-          `boundary. The poll-based reconciliation tick (xstockSpotScanner.clockTickHandler, ` +
-          `every 30s) detected window-vs-scanner state drift and triggered the catch-up at ` +
-          `${firedAt.toISOString()}. xStock VTS state is now correct, but the cron regression ` +
-          `needs investigation — see scheduled_tasks_audit table for the missing cron row + ` +
-          `poll-triggered row with meta.trigger_source='poll'.`,
-        metadata: {
-          batch: 'B-NEW-36-poll-reconcile',
-          kind,
-          fired_at_iso: firedAt.toISOString(),
-        },
-      });
-      console.warn(`[B-NEW-36][MISSED_CRON_ALERT] alert written for ${kind} catch-up`);
-    } catch (err) {
-      console.error(`[B-NEW-36][ALERT_WRITE_FAIL] ${kind}: ${err instanceof Error ? err.message : err}`);
-      // Don't rethrow — alert-write failure must not block the reconcile.
-    }
-  }
-
-  /**
-   * Tear-down for shutdown / tests. Stops both scheduled tasks and clears
-   * the registration. Idempotent.
+   * Tear-down for shutdown / tests. Clears the initialized flag so a
+   * subsequent init() re-runs boot reconciliation. Idempotent.
+   *   B-NEW-52 (2026-06-06): no scheduled timers to stop anymore (the weekend
+   *   node-cron was retired); the only state to reset is `initialized`.
    */
   shutdown(): void {
-    if (this.friShutdownTask) {
-      try { this.friShutdownTask.stop(); } catch { /* ignore */ }
-      this.friShutdownTask = null;
-    }
-    if (this.sunRestartTask) {
-      try { this.sunRestartTask.stop(); } catch { /* ignore */ }
-      this.sunRestartTask = null;
-    }
     this.initialized = false;
-    console.log('[B-NEW-36][LIFECYCLE_SHUTDOWN] scheduled tasks stopped');
+    console.log('[B-NEW-52][LIFECYCLE_SHUTDOWN] controller reset (no scheduled tasks to stop)');
   }
 }
 
