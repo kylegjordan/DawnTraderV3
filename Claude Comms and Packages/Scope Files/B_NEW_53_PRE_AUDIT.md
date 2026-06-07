@@ -178,3 +178,16 @@ All anchor inputs reduce to: **VWAP value, SMA value, high24h/low24h, ATR, detec
 5. **One batch vs storage-first split** — Langston Q5 locked ONE batch with storage settled here. This doc settles it → proceed as one batch.
 
 **On your Step-2 gate I proceed to Step-3 (migration + writer threading + version store + kill switch + the two scheduled alerts), chunked, local tsc+vitest in the C:\\dev bench before push.**
+
+---
+
+## 8. STEP-2 GATE DECISION (Langston, 2026-06-07) — APPROVED to Step-3 with C1–C3
+
+**Verdict:** APPROVED to proceed to Step-3. Carried locks Q2 (static-constants proof), Q3 (forming-bar by-value), Q4 (resolved levels = RI-a checksum), constant-set scope (strategy-detect-only), and one-batch — all accepted as resolved. Three binding conditions:
+
+- **C1 — coverage% ≠ parity%.** The base-row enqueue and the provenance enqueue are **independent 50k drop-oldest buffers**, so under burst they can desync in either direction (base row lands with provenance dropped, or vice-versa). `archive_id` is therefore **not guaranteed to resolve, and not every base row gets provenance.** The Obj-4 harness (`b5-w20b-entry-replay.ts`) + the parity report MUST **LEFT-JOIN** and report **provenance-coverage %** (fraction of eval rows that got provenance) as a number **distinct from parity %** (of rows that have provenance, % ≥99 Tier-1). No downstream may collapse the two or assume 100% coverage.
+- **C2 — amortize the id-sourcing.** Reject the natural-composite link (`(captured_at,symbol,strategy,source)` is not unique within a cycle — that non-uniqueness is the whole reason `id` exists). Keep app-side `nextval('signal_eval_archive_id_seq')` (option i), BUT amortize it so it does NOT put a synchronous DB round-trip back on the scan/decision hot path: set the sequence to **CACHE** (gaps are fine for a telemetry id) and/or app-side per-cycle block allocation; the id must still draw from `signal_eval_archive_id_seq` so mixed-mode writers (VTS app-supplying; dormant orchestrator/paper on the default) can't collide. **Step-3 verification (before push): confirm B-PHASE-A2 `CYCLE_DBS_TIMING` is unaffected** — the proof no hot-path coupling was reintroduced.
+- **C3 — launch posture.** xStock-only at launch + crypto OFF: confirmed. Post-accrual parity re-run (not a deploy-time gate): confirmed — nail the accrual condition concretely (e.g. "≥N xStock provenance rows with `forming_bar_ts + interval < now` across ≥M distinct strategies") and have the alert's report carry the C1 coverage%-vs-parity% split. **Retention OVERRIDDEN to 90 days** (not the 60-day lean): removes the B75-cold-tier dependency + the manual "run-study-or-offload-before-expiry" race from the critical path. ~4.4 GB xStock-only at 90d; ~7.5 GB combined if crypto later — trivial.
+
+**Step-4 focus (Langston):** the base-row write-path change (amortized id-sourcing) + that the provenance enqueue sits **inside** the existing `archiveSignalEval` try/catch (best-effort, never blocks the decision or the base archive row).
+
