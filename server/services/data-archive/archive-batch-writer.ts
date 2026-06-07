@@ -50,6 +50,14 @@ export type ArchiveRow = Record<string, unknown>;
 interface TableBuffer {
   rows: ArchiveRow[];
   columns: string[];
+  /**
+   * B-NEW-53: columns that emit the SQL keyword `DEFAULT` (column default, e.g.
+   * a sequence) when their value is `undefined` for a given row, instead of
+   * NULL. Lets the same buffer hold rows that app-supply an id and rows that
+   * defer to the DB DEFAULT — without ever losing a base row. `null` still
+   * means NULL (explicit); only `undefined` triggers DEFAULT.
+   */
+  defaultOnUndefined: Set<string>;
   overflowDrops: number;
   totalFlushed: number;
   lastFlushAt: number | null;
@@ -97,12 +105,22 @@ function totalBufferedRows(): number {
   return total;
 }
 
-/** Register a table's column list once at startup. Idempotent. */
-export function registerArchiveTable(tableName: string, columns: string[]): void {
+/**
+ * Register a table's column list once at startup. Idempotent.
+ * @param defaultOnUndefined B-NEW-53: columns that emit SQL `DEFAULT` (not NULL)
+ *   when their value is `undefined` — e.g. an `id` column backed by a sequence,
+ *   so rows that don't app-supply an id still insert cleanly via the DB default.
+ */
+export function registerArchiveTable(
+  tableName: string,
+  columns: string[],
+  defaultOnUndefined: string[] = [],
+): void {
   if (buffers.has(tableName)) return;
   buffers.set(tableName, {
     rows: [],
     columns: [...columns],
+    defaultOnUndefined: new Set(defaultOnUndefined),
     overflowDrops: 0,
     totalFlushed: 0,
     lastFlushAt: null,
@@ -144,12 +162,17 @@ async function insertChunk(
   tableName: string,
   columns: string[],
   rows: ArchiveRow[],
+  defaultOnUndefined: Set<string>,
 ): Promise<void> {
   if (rows.length === 0) return;
 
   const rowFragments = rows.map((row) => {
     const cellFragments = columns.map((col) => {
       const raw = row[col];
+      // B-NEW-53: a default-on-undefined column (e.g. `id`) emits the SQL
+      // keyword DEFAULT when the row didn't supply a value, so the DB sequence
+      // fills it. Explicit `null` still means NULL.
+      if (raw === undefined && defaultOnUndefined.has(col)) return sql`DEFAULT`;
       if (raw === undefined || raw === null) return sql`NULL`;
       if (JSONB_COLUMN_NAMES.has(col)) {
         const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
@@ -174,7 +197,7 @@ async function flushTable(tableName: string, buf: TableBuffer): Promise<void> {
     try {
       for (let i = 0; i < drained.length; i += CHUNK_SIZE) {
         const slice = drained.slice(i, i + CHUNK_SIZE);
-        await insertChunk(tableName, buf.columns, slice);
+        await insertChunk(tableName, buf.columns, slice, buf.defaultOnUndefined);
       }
       buf.totalFlushed += drained.length;
       buf.lastFlushAt = Date.now();

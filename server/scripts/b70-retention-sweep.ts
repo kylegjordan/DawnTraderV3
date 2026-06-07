@@ -28,6 +28,7 @@ const PARTITIONED_TABLES = [
   'signal_eval_archive',
   'exit_decision_archive',
   'macro_feed_archive',
+  'signal_eval_provenance', // B-NEW-53 — 90d retention co-aligns with the archive
 ] as const;
 
 interface RetentionConfig {

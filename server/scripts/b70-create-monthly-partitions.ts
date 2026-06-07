@@ -27,6 +27,7 @@ const PARTITIONED_TABLES = [
   'signal_eval_archive',
   'exit_decision_archive',
   'macro_feed_archive',
+  'signal_eval_provenance', // B-NEW-53
 ] as const;
 
 const FORWARD_MONTHS = 12;

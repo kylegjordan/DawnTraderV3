@@ -29,6 +29,7 @@ import { ensureMacroArchiverRegistered } from '../services/data-archive/macro-fe
 import { ensurePairScanArchiverRegistered } from '../services/data-archive/pair-scan-archiver.js';
 import { ensureSignalEvalArchiverRegistered } from '../services/data-archive/signal-eval-archiver.js';
 import { ensureExitDecisionArchiverRegistered } from '../services/data-archive/exit-decision-archiver.js';
+import { primeArchiveIdAllocator } from '../services/data-archive/archive-id-allocator.js';
 
 let started = false;
 
@@ -45,8 +46,12 @@ export async function bootstrapDataArchive(): Promise<void> {
     // 3: register all 4 partitioned archive tables
     ensureMacroArchiverRegistered();
     ensurePairScanArchiverRegistered();
-    ensureSignalEvalArchiverRegistered();
+    ensureSignalEvalArchiverRegistered(); // B-NEW-53: also registers signal_eval_provenance
     ensureExitDecisionArchiverRegistered();
+
+    // B-NEW-53: prime the archive-id block allocator so the first xStock
+    // decisions get a provenance link id without a hot-path DB round-trip.
+    primeArchiveIdAllocator();
 
     // 5: start the flush timer
     startArchiveBatchWriter();

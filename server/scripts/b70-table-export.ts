@@ -46,6 +46,7 @@ const TABLES = [
   'signal_eval_archive',
   'exit_decision_archive',
   'macro_feed_archive',
+  'signal_eval_provenance', // B-NEW-53 (cold-tier offload target for Phase-25 study)
 ] as const;
 
 async function isExportEnabled(client: pg.Client): Promise<boolean> {

@@ -125,3 +125,4 @@
 2026-06-03c-b4-foundation-per-class-lookbacks.sql
 2026-06-04-b4-foundation-vndi-15m-recalib.sql
 2026-06-06-b5-w21-max-holding-ms.sql
+2026-06-07-b-new-53-decision-provenance.sql

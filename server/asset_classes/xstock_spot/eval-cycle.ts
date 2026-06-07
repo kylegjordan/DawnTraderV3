@@ -518,6 +518,38 @@ export async function evaluateXstockPairForVTS(
           console.warn(`[B79.0m.b2][EVAL_DETECT_FAIL] ${symbol}/${strategyKey} lane=${lane.sourcePool}: ${detectErr instanceof Error ? detectErr.message : detectErr}`);
           continue;
         }
+
+        // B-NEW-53: snapshot the forming (in-progress) bar BY VALUE right at the
+        // detect site — the exact bucket the engine just evaluated. Scalars, not
+        // a live array reference (Langston Step-2 Q3/C: a reference is safe today
+        // but by-value removes the mutation-risk class entirely). The settled
+        // bars are REFERENCED (not duplicated) from xstock_spot_ohlc_15m_snapshot.
+        // The interval is derived from bar spacing so it stays faithful if the
+        // cadence ever changes. Captured here so even strategy-null decisions get it.
+        const _provBase = (() => {
+          const _n = Array.isArray(ohlc) ? ohlc.length : 0;
+          if (_n === 0) return undefined;
+          const _fb: any = ohlc[_n - 1];
+          const _settled: any = _n >= 2 ? ohlc[_n - 2] : undefined;
+          const _intervalSec =
+            _settled && _fb && Number(_fb.timestamp) > Number(_settled.timestamp)
+              ? Math.round((Number(_fb.timestamp) - Number(_settled.timestamp)) / 1000)
+              : 900;
+          return {
+            formingBar: {
+              open: Number(_fb.open),
+              high: Number(_fb.high),
+              low: Number(_fb.low),
+              close: Number(_fb.close),
+              volume: Number(_fb.volume),
+              timestamp: Number(_fb.timestamp),
+            },
+            settledBucketTs: _settled ? Number(_settled.timestamp) : undefined,
+            settledBarCount: Math.max(0, _n - 1),
+            barIntervalSec: _intervalSec,
+          };
+        })();
+
         if (!strategySignal) {
           counters.strategyNulls++;
           if (lane.kind === 'pattern') counters.patternStrategyNulls++;
@@ -545,6 +577,8 @@ export async function evaluateXstockPairForVTS(
               rejectStage: 'strategy_internal',
               gateDecision: { gate: 'strategy_detect', accepted: false, reason },
               features: { sourcePool: lane.sourcePool, detailReason: reason },
+              // B-NEW-53: forming bar only — detect returned null, no stop/target yet.
+              provenance: _provBase,
             });
             counters.signalsArchived++;
           } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }
@@ -643,6 +677,10 @@ export async function evaluateXstockPairForVTS(
                 netEvFloor: VTS_NET_EV_FLOOR,
               },
               features: { sourcePool: lane.sourcePool },
+              // B-NEW-53: forming bar + the resolved stop/target LEVELS (RI-a checksum).
+              provenance: _provBase
+                ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
+                : undefined,
             });
             counters.signalsArchived++;
           } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }
@@ -674,6 +712,10 @@ export async function evaluateXstockPairForVTS(
                 reason: gateCheck.reason,
               },
               features: { sourcePool: lane.sourcePool },
+              // B-NEW-53: forming bar + resolved stop/target LEVELS (RI-a checksum).
+              provenance: _provBase
+                ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
+                : undefined,
             });
             counters.signalsArchived++;
           } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }
@@ -696,6 +738,10 @@ export async function evaluateXstockPairForVTS(
               predictiveConfidence,
               regimeWeight,
             },
+            // B-NEW-53: forming bar + resolved stop/target LEVELS (RI-a checksum).
+            provenance: _provBase
+              ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
+              : undefined,
           });
           counters.signalsArchived++;
         } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }

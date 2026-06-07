@@ -21,7 +21,14 @@ interface ArchiveConfigSnapshot {
   retentionSweepBatchSize: number;
   retentionSweepPauseMs: number;
   archiveWriterQueueMax: number;
+  // B-NEW-53: per-asset-class decision-provenance capture flag, resolved
+  // most-specific-wins. Default false (fail-closed) for any class not present.
+  provenanceCaptureByClass: Record<string, boolean>;
 }
+
+// B-NEW-53: the asset classes whose provenance flag we resolve each refresh.
+// Only the live spot classes archive signal-evals today; perp classes are dormant.
+const PROVENANCE_RESOLVE_CLASSES = ['xstock_spot', 'crypto_spot'];
 
 const DEFAULT: ArchiveConfigSnapshot = {
   pairScanEnabled: true,
@@ -34,6 +41,7 @@ const DEFAULT: ArchiveConfigSnapshot = {
   retentionSweepBatchSize: 10_000,
   retentionSweepPauseMs: 100,
   archiveWriterQueueMax: 50_000,
+  provenanceCaptureByClass: {}, // empty → all classes default false (fail-closed)
 };
 
 let cached: ArchiveConfigSnapshot = { ...DEFAULT };
@@ -57,6 +65,20 @@ export async function refreshArchiveConfig(): Promise<void> {
       strategy: '*',
       regime: '*',
     });
+    // B-NEW-53: resolve the per-asset-class provenance flag (most-specific-wins).
+    const provenanceCaptureByClass: Record<string, boolean> = {};
+    for (const ac of PROVENANCE_RESOLVE_CLASSES) {
+      const classRows = await getModuleConstants('data_archive', {
+        exchange: '*',
+        assetClass: ac,
+        strategy: '*',
+        regime: '*',
+      });
+      provenanceCaptureByClass[ac] = asBool(
+        classRows['b_new_53_provenance_capture_enabled'],
+        false, // fail-closed
+      );
+    }
     cached = {
       pairScanEnabled: asBool(rows['b70_pair_scan_capture_enabled'], DEFAULT.pairScanEnabled),
       signalEvalEnabled: asBool(rows['b70_signal_eval_capture_enabled'], DEFAULT.signalEvalEnabled),
@@ -86,6 +108,7 @@ export async function refreshArchiveConfig(): Promise<void> {
         rows['b70_archive_writer_queue_max'],
         DEFAULT.archiveWriterQueueMax,
       ),
+      provenanceCaptureByClass,
     };
   } catch (err) {
     console.warn(
@@ -97,6 +120,14 @@ export async function refreshArchiveConfig(): Promise<void> {
 
 export function getArchiveConfig(): ArchiveConfigSnapshot {
   return cached;
+}
+
+/**
+ * B-NEW-53: is decision-provenance capture enabled for this asset class?
+ * Fail-closed — any class not explicitly resolved true returns false.
+ */
+export function provenanceCaptureEnabled(assetClass: string): boolean {
+  return cached.provenanceCaptureByClass[assetClass] === true;
 }
 
 export async function startArchiveConfigRefresh(): Promise<void> {
