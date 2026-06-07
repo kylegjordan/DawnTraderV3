@@ -856,8 +856,12 @@ After ORCHESTRATOR close, 4 sub-batches remain in the umbrella v4 roadmap (EXECU
 ### D — PATTERN-DETECTION (after foundation, before per-strategy; Kyle sequencing)
 - `pattern-recognizer.ts` shape tolerances (MORNING_STAR body/range ratios, INSIDE_BAR tolerance, etc.) → make per-class + re-derive for 15m; re-measure base rates at 15m (shapes differ by interval). ☐
 
-### E — PER-STRATEGY (W2, after pattern-detection)
-- Each strategy's `filters` (gate bands) + its trade construction (entry trigger, stop/target geometry, CLOCK-anchored hold, indicator periods, pattern tolerances) re-tuned at 15m; re-enable + re-fit the deferred equity-suitable strategies + ORB. ☐
+### E — PER-STRATEGY (W2, after pattern-detection) — ◐ PARTIALLY RESOLVED; entry-trigger DATA-BLOCKED (2026-06-06)
+- Each strategy's `filters` (gate bands) + its trade construction (entry trigger, stop/target geometry, CLOCK-anchored hold, indicator periods, pattern tolerances) re-tuned at 15m; re-enable + re-fit the deferred equity-suitable strategies + ORB. ◐
+- **W2.1 hold-time (ms unification): ☑ CLOSED** (commit `8bec43a9b`) — bar-count/hours hold keys → `max_holding_ms`; correctness fix, no re-tune.
+- **W2.0a stop/target GEOMETRY sweep: ☑ CLOSED** — re-tuning geometry yields ≈no generalizing edge (Mode-A OHLC parity failed → Mode-B on recorded `originalStopPrice`, 98.3% walk-fidelity). Verdict = **keep-baseline / INCONCLUSIVE-by-default**; only `vwap_bounce` (N=103) a thin pre-register candidate. Confirms HCE: lever = selectivity, not post-entry geometry.
+- **W2.0b ENTRY-TRIGGER / admission sweep: ◐ INCONCLUSIVE-by-backward-data → DATA-BLOCKED.** Detect-replay harness (`scripts/b5-w20b-entry-replay.ts`) cannot clear the ≥99% parity gate on historical data (vwap_pullback maxed 80%); the exact decision-time inputs (esp. the forming bar) were never persisted. **Blocked on the general decision-provenance forward-instrument (RUNNING_ISSUES #206 / Phase-19);** then the entry-trigger sweep re-runs exact on forward-accrued data. Full writeup `B_5_W20b_CONCLUSION.md`.
+- **W2.2 per-strategy re-fit + W3 ORB re-enable:** downstream of W2.0b's entry evidence → the entry-trigger dimension is data-blocked with W2.0b; the geometry dimension is keep-baseline (W2.0a). ORB still needs its DST-aware anchor + 15m-bar-unit fixes + holiday calendar (#203) when un-blocked. ☐
 
 **ORB note (Kyle asked):** ORB revives under 15-min (was disabled in B-NEW-34 only because 60m left no intra-hour opening range). Not a free flag-flip — requires the row-A.7 candle-source + window + enable work, then validation.
 

@@ -2,6 +2,12 @@
 
 ---
 
+## NOTE-2026-06-06 (B.5 W2.0b) — entry-trigger detect-replay INCONCLUSIVE-by-backward-data; forward decision-provenance instrument specced
+
+B.5 W2.0b built a read-only detect-replay harness (`scripts/b5-w20b-entry-replay.ts`) to sweep xStock entry-trigger thresholds behind a hard parity gate (replay must reproduce the live fire/no-fire decision ≥99% first). The harness runs correctly but **cannot clear the gate on historical data** — vwap_pullback Tier-1 parity maxed at 80% (1m-rebuild 62% → live 15m-snapshot settled bars 80%; currentPrice/ticker ruled out; constants confound closed). Root cause: the engine's exact decision-time inputs (esp. the in-progress **forming bar**, built from a live tick overlay) were **never persisted** — the same wall W2.0a Mode-A and the RI-a stop-anchor gap hit. Per Langston's pre-committed stop, we logged INCONCLUSIVE rather than chase the un-persisted forming bar (patch trap). **Forward fix (general, Langston-directed): a one-time decision-provenance capture on `signal_eval_archive` (exact ohlcData settled+forming + resolved constants per decision) → every future calibration study becomes exact-replayable.** Logged RUNNING_ISSUES #206 (Phase-19, bundle with RI-a). Consequence: xStock entry-trigger calibration is DATA-BLOCKED until it accrues; geometry was already keep-baseline (W2.0a) → per-strategy calibration largely data-blocked. Writeup: `Claude Comms and Packages/Scope Files/B_5_W20b_CONCLUSION.md`. Nothing deployed; active trading OFF.
+
+---
+
 ## NOTE-2026-06-04 (B.4 foundation — IN-FLIGHT; fold into closure at Step-11) — xStock 15m recalibration recorded residuals
 
 **Two recorded decisions from the xStock 60m→15m foundation recalibration (Langston conditions, 2026-06-04). Active trading OFF; xStock-scoped; crypto untouched.**
