@@ -101,7 +101,7 @@ export interface SignalEvalProvenanceInput {
     low: number;
     close: number;
     volume: number;
-    timestamp: number; // forming bucket epoch (ms)
+    timestamp?: number; // forming bucket epoch (ms); omitted/null if the bar carried no usable time
   };
   /** Reference to the settled bar-set already persisted in *_ohlc_15m_snapshot. */
   settledBucketTs?: Date | number;
@@ -130,9 +130,16 @@ export function buildBarProvenance(
   if (n === 0) return undefined;
   const fb: any = bars![n - 1];
   const settled: any = n >= 2 ? bars![n - 2] : undefined;
+  // Guard non-finite timestamps: a bar may carry a NaN/undefined time (some feeds
+  // populate OHLCV but not the time field). NEVER emit NaN — `forming_bar_ts` and
+  // `settled_bucket_ts` are bigint/timestamptz and reject NaN, which would drop the
+  // whole row at flush. Non-finite → null/undefined; the OHLCV + constants + levels
+  // still persist. Interval falls back to 900 when it can't be derived.
+  const fbTs = Number(fb.timestamp);
+  const settledTs = settled ? Number(settled.timestamp) : NaN;
   const intervalSec =
-    settled && fb && Number(fb.timestamp) > Number(settled.timestamp)
-      ? Math.round((Number(fb.timestamp) - Number(settled.timestamp)) / 1000)
+    Number.isFinite(fbTs) && Number.isFinite(settledTs) && fbTs > settledTs
+      ? Math.round((fbTs - settledTs) / 1000)
       : 900;
   return {
     formingBar: {
@@ -141,9 +148,9 @@ export function buildBarProvenance(
       low: Number(fb.low),
       close: Number(fb.close),
       volume: Number(fb.volume),
-      timestamp: Number(fb.timestamp),
+      timestamp: Number.isFinite(fbTs) ? fbTs : undefined,
     },
-    settledBucketTs: settled ? Number(settled.timestamp) : undefined,
+    settledBucketTs: Number.isFinite(settledTs) ? settledTs : undefined,
     settledBarCount: Math.max(0, n - 1),
     barIntervalSec: intervalSec,
     resolvedStopPrice: stopPrice,

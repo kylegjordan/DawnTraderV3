@@ -135,6 +135,17 @@ describe('B-NEW-53 — buildBarProvenance (shared forming-bar snapshot)', () => 
     expect(p.resolvedStopPrice).toBe(1.23);
     expect(p.resolvedTargetPrice).toBe(4.56);
   });
+
+  it('never emits NaN for a non-finite timestamp (bigint flush guard)', () => {
+    // A bar with no usable time field → forming_bar_ts must be undefined (→ NULL),
+    // settledBucketTs undefined, interval falls back to 900 — OHLCV still captured.
+    const bad = { open: 1, high: 2, low: 0.5, close: 1.5, volume: 100, timestamp: NaN };
+    const p = buildBarProvenance([bad as any, bad as any])!;
+    expect(p.formingBar!.timestamp).toBeUndefined();
+    expect(p.formingBar!.close).toBe(1.5);
+    expect(p.settledBucketTs).toBeUndefined();
+    expect(p.barIntervalSec).toBe(900);
+  });
 });
 
 describe('B-NEW-53 — batch-writer DEFAULT-on-undefined column', () => {

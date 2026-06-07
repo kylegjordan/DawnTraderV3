@@ -794,7 +794,14 @@ async function fetchOHLCForPair(symbol: string): Promise<OHLCData[]> {
       close: parseFloat(candle.close || candle[4]),
       vwap: parseFloat(candle.vwap || candle[5] || 0) || undefined, // Batch 50: Kraken OHLC index [5]
       volume: parseFloat(candle.volume || candle[6] || 0),
-      timestamp: candle.timestamp || candle[0] * 1000
+      // B-NEW-53 fix: the cache candle (OHLCCandle) carries `time` in SECONDS, not
+      // `timestamp` — so the old `candle.timestamp || candle[0]*1000` produced NaN
+      // for crypto (object form, no `.timestamp`/`[0]`). Source it from `.time`.
+      timestamp:
+        candle.timestamp != null ? candle.timestamp
+        : candle.time != null ? candle.time * 1000
+        : candle[0] != null ? candle[0] * 1000
+        : NaN,
     }));
     
     // Directive 11.4H.6A Task 3: Cache OHLC data for IMF passive learning calculations
