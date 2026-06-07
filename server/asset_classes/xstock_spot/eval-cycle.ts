@@ -64,6 +64,7 @@ import { getPredictiveConfidence } from '../../core/utils/score-calculator.js';
 import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
 import { getCachedCostMetrics } from '../../core/math/cost-model.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver.js'; // B-NEW-53 shared forming-bar snapshot
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 import type { OHLCData } from '../../types/market-regime.types';
@@ -520,35 +521,10 @@ export async function evaluateXstockPairForVTS(
         }
 
         // B-NEW-53: snapshot the forming (in-progress) bar BY VALUE right at the
-        // detect site — the exact bucket the engine just evaluated. Scalars, not
-        // a live array reference (Langston Step-2 Q3/C: a reference is safe today
-        // but by-value removes the mutation-risk class entirely). The settled
-        // bars are REFERENCED (not duplicated) from xstock_spot_ohlc_15m_snapshot.
-        // The interval is derived from bar spacing so it stays faithful if the
-        // cadence ever changes. Captured here so even strategy-null decisions get it.
-        const _provBase = (() => {
-          const _n = Array.isArray(ohlc) ? ohlc.length : 0;
-          if (_n === 0) return undefined;
-          const _fb: any = ohlc[_n - 1];
-          const _settled: any = _n >= 2 ? ohlc[_n - 2] : undefined;
-          const _intervalSec =
-            _settled && _fb && Number(_fb.timestamp) > Number(_settled.timestamp)
-              ? Math.round((Number(_fb.timestamp) - Number(_settled.timestamp)) / 1000)
-              : 900;
-          return {
-            formingBar: {
-              open: Number(_fb.open),
-              high: Number(_fb.high),
-              low: Number(_fb.low),
-              close: Number(_fb.close),
-              volume: Number(_fb.volume),
-              timestamp: Number(_fb.timestamp),
-            },
-            settledBucketTs: _settled ? Number(_settled.timestamp) : undefined,
-            settledBarCount: Math.max(0, _n - 1),
-            barIntervalSec: _intervalSec,
-          };
-        })();
+        // detect site, via the shared helper (single source of truth — the crypto
+        // hooks in vts-runner.ts use the same fn). Captured here so even strategy-
+        // null decisions get it; hooks add the resolved stop/target where known.
+        const _provBase = buildBarProvenance(ohlc);
 
         if (!strategySignal) {
           counters.strategyNulls++;

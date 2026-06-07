@@ -1922,7 +1922,7 @@ async function generatePhase10Signal(
   // block above (lines ~1447-1724) — NOT accessible here. Use the
   // openTrade record's persisted value instead (set at line 1722).
   try {
-    const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+    const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
     const { resolveAssetClass } = await import('../../shared/asset-classes.js');
     const persistedTrade = openVirtualTrades.get(tradeId);
     const chainModulatedConfidence =
@@ -1935,6 +1935,13 @@ async function generatePhase10Signal(
       strategy,
       regimeLabel: regime ?? undefined,
       rejectStage: 'admitted',
+      // B-NEW-53: decision-provenance (crypto path). Forming bar BY VALUE from the
+      // ohlcData fed to detection + the DETECT-OUTPUT stop/target levels (RI-a
+      // checksum) — the `stopLoss`/`takeProfit` locals (= strategySignal.stop/
+      // targetPrice, pre mode-overlay), which is what a detect-replay re-derives.
+      // (NOT tradeRecord.* — the Phase10TradeRecord literal never sets those.)
+      // Capture is gated per-asset-class at write time (crypto enabled 2026-06-07).
+      provenance: buildBarProvenance(ohlcData, stopLoss, takeProfit),
       finalScore: typeof finalScore === 'number' ? finalScore : undefined,
       confidenceModulated:
         typeof chainModulatedConfidence === 'number' ? chainModulatedConfidence : undefined,
@@ -3572,7 +3579,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           //   conditions_not_met  → 'strategy_internal'
           //   anything else null  → 'strategy_internal'
           try {
-            const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+            const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
             const { resolveAssetClass } = await import('../../shared/asset-classes.js');
             const stageMap: Record<string, 'sqe' | 'tcl' | 'strategy_internal'> = {
               net_ev_rejected: 'sqe',
@@ -3599,6 +3606,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
                 sourcePool: pair.sourcePool,
                 detailReason,
               },
+              // B-NEW-53: forming bar only — detect returned null, no stop/target yet.
+              provenance: buildBarProvenance(ohlcData),
             });
           } catch (b70Err) {
             // Silent on hot path
@@ -3667,7 +3676,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         if (signal && signal.netEV !== undefined && signal.netEV < VTS_NET_EV_FLOOR) {
           // B70.1 Step 3.6b: caller-side Net-EV reject → reject_stage='sqe'
           try {
-            const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+            const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
             const { resolveAssetClass } = await import('../../shared/asset-classes.js');
             archiveSignalEval({
               symbol: pair.symbol,
@@ -3686,6 +3695,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
                 netEvFloor: VTS_NET_EV_FLOOR,
               },
               features: { sourcePool: pair.sourcePool },
+              // B-NEW-53: forming bar only — this is the rare caller-side net-EV
+              // edge case (signal built but not checked inside generatePhase10Signal);
+              // the detect-output stop/target locals aren't in scope here, and the
+              // signal's mode-ADJUSTED levels would mismatch a detect-replay, so we
+              // capture the forming bar (the irreducible part) and skip the checksum.
+              provenance: buildBarProvenance(ohlcData),
             });
           } catch (b70Err) {
             // Silent on hot path

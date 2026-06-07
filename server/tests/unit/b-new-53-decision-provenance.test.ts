@@ -42,6 +42,7 @@ import {
   getArchiveStats,
   _resetForTests,
 } from '../../services/data-archive/archive-batch-writer';
+import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver';
 
 describe('B-NEW-53 — archive-id-allocator', () => {
   it('hands out ids FIFO and returns undefined when the buffer is empty', () => {
@@ -104,6 +105,36 @@ describe('B-NEW-53 — resolveConstantsProvenance', () => {
   // (_err) { return null }` in resolveConstantsProvenance — verified by code +
   // tsc. Not unit-tested here: a vi.fn().mockImplementation(throw) is surfaced
   // by vitest even when the SUT catches it, which would be a false failure.
+});
+
+describe('B-NEW-53 — buildBarProvenance (shared forming-bar snapshot)', () => {
+  const mk = (ts: number, o = 1, h = 2, l = 0.5, c = 1.5, v = 100) => ({
+    open: o, high: h, low: l, close: c, volume: v, timestamp: ts,
+  });
+
+  it('returns undefined for an empty / missing bar array', () => {
+    expect(buildBarProvenance([])).toBeUndefined();
+    expect(buildBarProvenance(undefined)).toBeUndefined();
+  });
+
+  it('captures the forming (last) bar by value + settledBarCount = n-1', () => {
+    const bars = [mk(0), mk(900_000), mk(1_800_000, 9, 9, 9, 9, 9)];
+    const p = buildBarProvenance(bars)!;
+    expect(p.formingBar).toEqual({ open: 9, high: 9, low: 9, close: 9, volume: 9, timestamp: 1_800_000 });
+    expect(p.settledBarCount).toBe(2);
+    expect(p.settledBucketTs).toBe(900_000); // the last SETTLED bar (n-2)
+  });
+
+  it('derives the interval from bar spacing (15m → 900, 60m → 3600)', () => {
+    expect(buildBarProvenance([mk(0), mk(900_000)])!.barIntervalSec).toBe(900);
+    expect(buildBarProvenance([mk(0), mk(3_600_000)])!.barIntervalSec).toBe(3600);
+  });
+
+  it('passes through the resolved stop/target levels (RI-a checksum)', () => {
+    const p = buildBarProvenance([mk(0), mk(900_000)], 1.23, 4.56)!;
+    expect(p.resolvedStopPrice).toBe(1.23);
+    expect(p.resolvedTargetPrice).toBe(4.56);
+  });
 });
 
 describe('B-NEW-53 — batch-writer DEFAULT-on-undefined column', () => {

@@ -112,6 +112,45 @@ export interface SignalEvalProvenanceInput {
   resolvedTargetPrice?: number;
 }
 
+/**
+ * B-NEW-53: build a provenance input by snapshotting the in-progress (forming)
+ * bar of `bars` BY VALUE — the last element — plus a settled-bar-set reference.
+ * Shared by every archive hook (xStock `eval-cycle.ts`, crypto `vts-runner.ts`)
+ * so the forming-bar snapshot logic lives in exactly one place. The bar interval
+ * is derived from the spacing of the last two bars (15m → 900, 60m → 3600), so
+ * it stays faithful across asset classes and any future cadence change. Returns
+ * undefined for an empty bar array. Pass the resolved stop/target when known.
+ */
+export function buildBarProvenance(
+  bars: ReadonlyArray<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number }> | undefined,
+  stopPrice?: number,
+  targetPrice?: number,
+): SignalEvalProvenanceInput | undefined {
+  const n = Array.isArray(bars) ? bars.length : 0;
+  if (n === 0) return undefined;
+  const fb: any = bars![n - 1];
+  const settled: any = n >= 2 ? bars![n - 2] : undefined;
+  const intervalSec =
+    settled && fb && Number(fb.timestamp) > Number(settled.timestamp)
+      ? Math.round((Number(fb.timestamp) - Number(settled.timestamp)) / 1000)
+      : 900;
+  return {
+    formingBar: {
+      open: Number(fb.open),
+      high: Number(fb.high),
+      low: Number(fb.low),
+      close: Number(fb.close),
+      volume: Number(fb.volume),
+      timestamp: Number(fb.timestamp),
+    },
+    settledBucketTs: settled ? Number(settled.timestamp) : undefined,
+    settledBarCount: Math.max(0, n - 1),
+    barIntervalSec: intervalSec,
+    resolvedStopPrice: stopPrice,
+    resolvedTargetPrice: targetPrice,
+  };
+}
+
 export interface SignalEvalArchiveInput {
   capturedAt?: Date | number;
   symbol: string;
