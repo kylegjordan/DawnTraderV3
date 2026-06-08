@@ -1,6 +1,6 @@
 # B-NEW-54 SCOPE — ML helper process-management unification
 
-> **Between Phase-24→19 plan, ITEM 3.** Status: **DRAFT (Step 1 — awaiting Langston agreement).** Active trading is OFF throughout. Author: CC, 2026-06-08. Source: `PHASE_24_TO_19_READINESS_CHECKLIST.md` §4 + `MULTI_ASSET_VTS_EXPANSION_PLAN.md` working-list item F.2.
+> **Between Phase-24→19 plan, ITEM 3.** Status: **✅ Step 1 AGREED (Langston, 2026-06-08 — verified on staging read-only, all O1–O7 + Q-A..Q-D agreed with refinements; see §8).** Active trading is OFF throughout. Author: CC, 2026-06-08. Source: `PHASE_24_TO_19_READINESS_CHECKLIST.md` §4 + `MULTI_ASSET_VTS_EXPANSION_PLAN.md` working-list item F.2.
 
 ---
 
@@ -103,4 +103,31 @@ Listed here so the scope is honest about what's not yet verified:
 SIM §7.4 + §boot_orchestrator; SYSTEM_MANUAL ML section; CHANGES_AND_FIXES; BATCH_CATALOG; PHASE_HISTORY; MULTI_ASSET_VTS_EXPANSION_PLAN (F.2 → done); PHASE_24_TO_19_READINESS_CHECKLIST (§4 item 3 → done); MEMORY (truth + mirror + Langston). CLAUDE.md §7 deploy block (managed-helper note).
 
 ---
-*Step 1 deliverable. On Langston agreement → Step 2 code-level pre-audit (with the §4 staging-reality checks) → implementation.*
+
+## 8. STEP-1 AGREEMENT + REFINEMENTS (Langston, 2026-06-08 — accepted by CC, consensus)
+
+Langston verified the headline on staging (read-only) before signing off. **All seven objectives agreed; all four design questions answered.** His staging verification + sharpened findings (CC agrees with all):
+
+**Staging-verified facts (read-only):**
+- Name mismatch + no guardrails **confirmed**: live `ml-service` has `max_restarts=None / min_uptime=None / max_memory_restart=None`. `dawntrader-ml` is **not** in `~/.pm2/dump.pm2` (count 0); `ml-service` **is** (count 5) → the config app has never run; the orphan is what resurrects today.
+- **Single PID confirmed** (`ml_service.py` PID 216183) under a parent **bash wrapper** (`exec_interpreter=none`). No live double-spawn. §1.4 latent-not-active confirmed.
+- Health READY on :5001 **but `calibration.loaded:false, strategyCount:0`** — likely expected in active-OFF/VTS state; **Step-2 one-line check** so we don't blame the cutover for a pre-existing no-calibration condition.
+
+**TWO findings promoted to NAMED STEP-2 BLOCKERS (scope understated these):**
+- **B1 — there is no "proven-good venv" to point at.** In-repo `/home/deploy/dawntrader/ml_venv` exists but **`bin/python3` is GONE** — the live process launched via `bash -c 'cd … && source ml_venv/bin/activate && python3 …'`, so its launch interpreter no longer exists on disk; the process survives only in memory (~49d) and is **un-restartable from its own launch path**, possibly silently running under system `python3`. `/opt/ml-venv` exists (flask+numpy+sklearn) but **`import psutil` FAILS** (ml_service.py needs psutil) → not cutover-ready either. **Step-2 MUST run `readlink /proc/216183/exe` + dump the live process `sys.path`** to establish the live env empirically.
+- **B2 — PM2 is watching a bash wrapper, not a python interpreter.** A clean rename alone would NOT give normal guardrail behaviour; the managed app must be defined to launch the venv python directly (`script`/`interpreter` = venv python + `services/ml_service.py`), not a detached `source … && … &` shell.
+
+**Verify-criterion tightenings (folded into O1/O4):**
+- **O1 +** process runs as a **managed python interpreter, not a shell wrapper**.
+- **O4 +** cutover must delete the orphan **and** re-`pm2 save`, then verify `grep ml-service dump.pm2 → 0` AND `dawntrader-ml` present (else a box reboot re-orphans).
+
+**Design-question resolutions (CONSENSUS):**
+- **Q-A name → `dawntrader-ml`** (config is SSOT, already carries guardrails).
+- **Q-B venv → REFRAMED (supersedes the original Q-B (i)/(ii)):** reject in-repo `ml_venv` outright (in-tree + broken). Make **`/opt/ml-venv` the canonical out-of-tree target, completed/rebuilt from a pinned `requirements.txt`** (psutil at minimum missing) — a known, version-pinned, reproducible env, NOT "whatever happens to be installed." Gate cutover on `/opt/ml-venv` passing the **full import probe (flask/numpy/sklearn/psutil) + clean `/health`**. *(Step-2: check whether a requirements file already exists in-repo for the ML service; pin from the live process's actual imports if not.)*
+- **Q-C dual-spawn → C1, PM2 sole owner**, `ML_SERVICE_AUTO_START=false` in the node env, in-process spawn demoted to local-dev convenience. The "no self-heal" con is covered by the now-attached guardrails (PM2 IS the self-healer; on cap-exhaust it goes `errored` loudly — visible failure beats silent double-spawn). **Step-2 dependency:** verify the boot_orchestrator DEGRADED-ML recovery path (L123-130, L298-313) actually recovers once PM2 brings the helper back.
+- **Q-D crash test → confirm guardrails attached via `pm2 show` + ONE controlled safe restart** (clean-recovery proof). No real runaway loop on the shared staging box (would risk starving the main app + the live VTS stream). If Kyle wants empirical loop proof, the venue is a throwaway local PM2 instance with a deliberately-crashing dummy — not staging.
+
+**O6 sequencing flag (one-way cutover):** because the live process is un-restartable from its own path, the cutover is effectively one-way (hard stop-old → start-new) with **no restart-in-place safety net**. Therefore: **fully validate `dawntrader-ml` under the completed `/opt/ml-venv` offline (import probe + a health probe on a scratch port if feasible) BEFORE deleting the orphan.** Can't dual-run on :5001, so the runbook is: complete+probe the venv offline → stop orphan → start managed on :5001 → health-confirm → re-save. **Step-2 must produce an explicit cutover runbook.**
+
+---
+*Step 1 ✅ AGREED. Proceeding to Step 2 code-level pre-audit (B1/B2 named blockers + the §4 staging-reality checks + cutover runbook) → implementation.*
