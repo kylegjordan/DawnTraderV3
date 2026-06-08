@@ -22,7 +22,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { loadFullCalibration, type FullCalibration, type CalibrationCoefficients } from '../utils/calibration';
 import { contextBridge } from './context-bridge';
-import { getRetrainingFreezeController } from './retraining-freeze-controller.js';
 
 export interface DriftSnapshot {
   timestamp: string;
@@ -279,65 +278,14 @@ export class DriftDetectorService extends EventEmitter {
   }
 
   private async triggerRecalibration(strategy: string) {
-    if (this.recalibrationInProgress.has(strategy)) {
-      console.log(`[L11][DRIFT] Recalibration already in progress for ${strategy}`);
-      return;
-    }
-
-    const freezeController = getRetrainingFreezeController();
-    if (!freezeController.isRetrainingAllowed()) {
-      console.log(`[L11][DRIFT] Recalibration blocked by freeze controller for ${strategy}`);
-      this.emit('recalibration_frozen', { strategy, reason: 'Retraining freeze active' });
-      return;
-    }
-    
-    this.recalibrationInProgress.add(strategy);
-    
-    const status = this.strategyStatus.get(strategy);
-    if (status) {
-      status.status = 'recalibrating';
-      status.recalibrationPending = true;
-      this.strategyStatus.set(strategy, status);
-    }
-    
-    try {
-      const response = await fetch(`http://localhost:5001/drift/retrain/${strategy}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`[L11][RECAL_DONE] ${strategy} recalibration complete:`, result);
-        this.emit('recalibration_complete', { strategy, result });
-        
-        const completeStatus = { 
-          ...status!, 
-          status: 'stable' as const,
-          recalibrationPending: false,
-          score: 0
-        };
-        await this.logDriftEvent(strategy, completeStatus, 'recalibration_complete');
-        this.broadcastDriftEvent('complete', strategy, completeStatus);
-      } else {
-        console.error(`[L11][RECAL_FAIL] ${strategy} recalibration failed: ${response.status}`);
-        this.emit('recalibration_failed', { strategy, error: response.statusText });
-      }
-    } catch (error) {
-      console.error(`[L11][RECAL_FAIL] ${strategy} recalibration error:`, error);
-      this.emit('recalibration_failed', { strategy, error });
-    } finally {
-      this.recalibrationInProgress.delete(strategy);
-      
-      const updatedStatus = this.strategyStatus.get(strategy);
-      if (updatedStatus) {
-        updatedStatus.recalibrationPending = false;
-        if (updatedStatus.status === 'recalibrating') {
-          updatedStatus.status = 'stable';
-        }
-        this.strategyStatus.set(strategy, updatedStatus);
-      }
-    }
+    // B-NEW-54 (2026-06-08): the Python ML predictive microservice was RETIRED.
+    // This used to POST to localhost:5001/drift/retrain to retrain the (discarded)
+    // promotion/profit models; that target no longer exists. Short-circuit to a
+    // logged no-op BEFORE touching recalibrationInProgress so the drift status can
+    // never latch on "recalibrating"/recalibrationPending. Drift is still detected,
+    // logged and broadcast; only the retrain ACTION is now a no-op.
+    console.log(`[L11][DRIFT] Recalibration skipped — ML predictive helper retired (B-NEW-54): ${strategy}`);
+    this.emit('recalibration_skipped', { strategy, reason: 'ML predictive helper retired (B-NEW-54)' });
   }
 
   private async logDriftEvent(

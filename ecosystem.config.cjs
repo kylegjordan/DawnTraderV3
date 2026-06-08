@@ -40,26 +40,8 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '30s',
     },
-    {
-      name: 'dawntrader-ml',
-      script: '/opt/ml-venv/bin/python3',
-      args: 'services/ml_service.py',
-      instances: 1,
-      exec_mode: 'fork',
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '512M',
-      env: {
-        ML_SERVICE_PORT: 5001,
-      },
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      error_file: '/var/log/dawntrader/ml-error.log',
-      out_file: '/var/log/dawntrader/ml-out.log',
-      merge_logs: true,
-      kill_timeout: 5000,
-      restart_delay: 3000,
-      max_restarts: 5,
-      min_uptime: '10s',
-    },
+    // B-NEW-54 (2026-06-08): the `dawntrader-ml` Python ML microservice app was
+    // REMOVED — the predictive helper was retired (decorative; predictions were
+    // logged-and-discarded). See the B-NEW-54 removal completion report.
   ],
 };

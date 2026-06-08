@@ -52,7 +52,6 @@ import { readyToBuyService, type SQESignalInput } from '../core/rtb/ready_to_buy
 import { activeFilterPool } from './active-filter-pool.js';
 import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
 import { dataAggregator } from './data-aggregator.js';
-import { predictPromotion, predictProfit, blendConfidence, type PredictionInput } from './ml-service-client.js';
 import { getWeightSync as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
 import { getExposureMultiplierSync, computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
 import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-kernel.js';
@@ -545,29 +544,9 @@ export class SignalOrchestrator {
       dbsApplied: false,
     });
 
-    // Directive 11.0E: ML-enhanced predictions (non-blocking fire-and-forget)
-    const mlInput: PredictionInput = {
-      symbol: rawSignal.symbol,
-      strategy: strategyId,
-      confidence: extendedMetrics.confidence,
-      riskRatio: extendedMetrics.riskScore,
-      profitTarget: extendedMetrics.profitRate,
-      signalAge: 0,
-      entry: rawSignal.entryPrice,
-      exit: rawSignal.targetPrice,
-      stop: rawSignal.stopPrice,
-    };
-    
-    // Fire-and-forget ML predictions - results logged for learning, don't block pipeline
-    Promise.all([
-      predictPromotion(mlInput),
-      predictProfit(mlInput)
-    ]).then(([promotionResult, profitResult]) => {
-      if (promotionResult.success && profitResult.success) {
-        const blendedConfidence = blendConfidence(extendedMetrics.confidence, promotionResult.probability, 0.6);
-        console.log(`[L3][MODEL_INFER] ${rawSignal.symbol}/${strategyId}: promotion=${promotionResult.probability.toFixed(4)}, profit=${profitResult.predicted_profit.toFixed(4)}, blendedConfidence=${blendedConfidence.toFixed(4)}`);
-      }
-    }).catch(() => {});
+    // B-NEW-54 (2026-06-08): the fire-and-forget ML promotion/profit prediction
+    // block was removed here. The Python ML microservice was retired; its blended
+    // confidence was computed and logged but never consumed by the pipeline.
 
     // Directive 11.0E: Trace raw metrics before SQE evaluation (FinalScore-native)
     diagnosticTrace.traceOrchestrator(

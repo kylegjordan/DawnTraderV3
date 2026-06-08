@@ -8,7 +8,6 @@
 import { Router } from 'express';
 import { healthMonitor } from '../services/health-monitor.js';
 import { systemHealth } from '../services/system-health.js';
-import { getMLServiceStatus } from '../services/ml-service-client.js';
 import { loadFullCalibration } from '../utils/calibration.js';
 import { computeStrategyWeights, type StrategyWeightsBundle } from '../utils/strategyWeights.js';
 import { computeExposureBias, getOverbiasedStrategies, type ExposureBiasBundle } from '../utils/strategyBias.js';
@@ -210,9 +209,7 @@ healthRouter.get('/', async (req, res) => {
   try {
     const metrics = systemHealth.getMetrics();
     const status = systemHealth.getStatus();
-    
-    const mlStatus = await getMLServiceStatus();
-    
+
     interface StrategyHealth {
       name: string;
       alpha: number;
@@ -350,12 +347,6 @@ healthRouter.get('/', async (req, res) => {
         heapUsed: metrics.heapUsed,
         heapTotal: metrics.heapTotal,
         rss: metrics.rss,
-      },
-      mlService: {
-        status: mlStatus.status,
-        cpu: mlStatus.cpuPercent,
-        memoryMB: mlStatus.memoryMB,
-        modelVersions: mlStatus.modelVersions,
       },
       vts: vtsHealth,
       strategyWeights: strategyWeightsData,

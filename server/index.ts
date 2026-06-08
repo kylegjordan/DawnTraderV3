@@ -211,13 +211,13 @@ app.use((req, res, next) => {
   }
 
   /**
-   * 8.8.4-L3: Initialize Boot Orchestrator FIRST
-   * Manages Python ML microservice lifecycle and health checks
+   * Initialize Boot Orchestrator (VTS runner bootstrap).
+   * B-NEW-54 (2026-06-08): the Python ML microservice was retired; the
+   * orchestrator now boots the VTS runner only.
    */
   const { bootOrchestrator } = await import('./core/boot_orchestrator.js');
   await bootOrchestrator.initialize();
-  console.log('[8.8.4-L3][INIT_OK] Boot Orchestrator initialized (ML Service: ' + 
-    (bootOrchestrator.isMLReady() ? 'READY' : 'DEGRADED') + ')');
+  console.log('[BOOT_ORCHESTRATOR][INIT_OK] Boot Orchestrator initialized (VTS runner)');
 
   /**
    * Directive 11.4H.6G Task 4: Canonical Drift Detection
