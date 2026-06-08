@@ -698,33 +698,17 @@ export async function evaluateXstockPairForVTS(
           continue;
         }
 
-        // Net EV passes — archive admitted + open VTS trade.
-        try {
-          archiveSignalEval({
-            ...archiveCommon,
-            rejectStage: 'admitted',
-            gateDecision: {
-              gate: 'net_ev_floor',
-              accepted: true,
-              netEv: kernelResult.netEV,
-            },
-            features: {
-              sourcePool: lane.sourcePool,
-              hybridScore,
-              predictiveConfidence,
-              regimeWeight,
-            },
-            // B-NEW-53: forming bar + resolved stop/target LEVELS (RI-a checksum).
-            provenance: _provBase
-              ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
-              : undefined,
-          });
-          counters.signalsArchived++;
-        } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }
-
+        // Net EV passes — open the VTS trade. B-NEW-53.2 (#208): build the
+        // open-trade record FIRST (hoisted above the admitted archive) so the
+        // at-entry-context features block can read the SAME values the trade opens
+        // with — pure reads, no re-derivation — then archive admitted, then register
+        // the identical object. Hoist is side-effect-free: `dollarValue` is a literal,
+        // `quantity` is pure arithmetic over the `const entryPrice`, and nothing
+        // between here and the register call mutates an input. Archive-before-register
+        // ordering preserved (admitted-archival stays decoupled from open success).
         const dollarValue = 150;
         const quantity = entryPrice > 0 ? dollarValue / entryPrice : 0;
-        const tradeId = await registerOpenVtsTrade({
+        const xOpenTrade = {
           symbol,
           assetClass: ASSET_CLASS,
           entryPrice,
@@ -744,7 +728,7 @@ export async function evaluateXstockPairForVTS(
           predictiveConfidence,
           regimeWeight,
           decayPenalty,
-          pool: 'rotational',
+          pool: 'rotational' as const,
           sourcePool: lane.sourcePool,
           atrAtOpen: mceContext.indicators.atr,
           pairDirectionalBias: mceContext.directionalBias?.category,
@@ -757,8 +741,82 @@ export async function evaluateXstockPairForVTS(
           // B.2.UI (2026-06-02): capture the ask-side order-book depth (USD) the LQ
           // gate just used at entry. Sentinel -1 (no two-sided quote this cycle) → omit → "—".
           entryLiquidityValue: askDepthUsd >= 0 ? askDepthUsd : undefined,
-          entryLiquidityKind: 'depth_usd',
-        });
+          entryLiquidityKind: 'depth_usd' as const,
+        };
+        try {
+          archiveSignalEval({
+            ...archiveCommon,
+            rejectStage: 'admitted',
+            gateDecision: {
+              gate: 'net_ev_floor',
+              accepted: true,
+              netEv: kernelResult.netEV,
+            },
+            // B-NEW-53.2 (#208): at-entry economics + context, mirroring the crypto
+            // B70.2 admitted-features key SET so a Phase-25 cross-class query reads ONE
+            // schema. Pure reads from the hoisted xOpenTrade record + in-scope locals;
+            // `?? null` preserves each JSONB key. null where xStock genuinely lacks the
+            // value: pairIdHash = crypto-only cohort A/B marker (B67.3); strategyPhaseWeight
+            // = eval-cycle applies no phase-preference; the global-market-structure fields
+            // are crypto concepts resolved INSIDE registerOpenVtsTrade post-hook (B-NEW-22),
+            // not part of the xStock decision.
+            // ⚠️ UNITS: `expectedEdge` here is the xStock kernel's PRICE-SPACE net-EV
+            // (scales with asset price) — the literal value the admit gate compared to
+            // VTS_NET_EV_FLOOR — and is NOT comparable to crypto's scale-free score-space
+            // `expectedEdge`. NEVER pool/compare cross-class (the HCE engine partitions by
+            // asset_class in code: hce_study.py loops per `ac`). `netRewardToRisk` is the
+            // kernel's native scale-free metric for within-class Phase-25 selectivity.
+            features: {
+              // Signal economics
+              entryPrice: xOpenTrade.entryPrice,
+              target: xOpenTrade.takeProfit,
+              stopLoss: xOpenTrade.stopLoss,
+              positionSize: xOpenTrade.positionSize,
+              quantity: xOpenTrade.quantity,
+              // Signal classification
+              signalType: xOpenTrade.signalType,
+              patternType: xOpenTrade.patternType ?? null,
+              pool: xOpenTrade.pool,
+              sourcePool: lane.sourcePool,
+              filterTier: null, // xStock uses lanes, not the crypto IMF filter-tier
+              // Scoring
+              hybridScore,
+              predictiveConfidence,
+              regimeWeight,
+              expectedEdge: kernelResult.netEV, // price-space (see UNITS note above)
+              netRewardToRisk: kernelResult.netRewardToRisk, // kernel-native scale-free
+              decayPenalty,
+              // Regime + bias (global-market fields are crypto-only, resolved post-hook)
+              globalRegime: null,
+              pairFriction: null,
+              globalFriction: null,
+              pairDirectionalBias: xOpenTrade.pairDirectionalBias ?? null,
+              globalDirectionalBias: null,
+              pairDirectionalBiasScore: xOpenTrade.pairDirectionalBiasScore ?? null,
+              globalDirectionalBiasScore: null,
+              // Phase
+              regimeConfidenceRaw: xOpenTrade.regimeConfidenceRaw ?? null,
+              macroModifierValue: xOpenTrade.macroModifierValue ?? null,
+              phase: xOpenTrade.phase ?? null,
+              phaseAgeSeconds: xOpenTrade.phaseAgeSeconds ?? null,
+              strategyPhaseWeight: null, // no phase-preference modulation on xStock
+              // Cohort marker + ATR
+              pairIdHash: null, // crypto-only cohort A/B marker (B67.3)
+              atrAtOpen: xOpenTrade.atrAtOpen ?? null,
+            },
+            modulators: {
+              chain_modulated_confidence: null, // xStock applies no B67 confidence chain
+              regimeConfidenceModulated: xOpenTrade.regimeConfidenceModulated ?? null,
+            },
+            // B-NEW-53: forming bar + resolved stop/target LEVELS (RI-a checksum).
+            provenance: _provBase
+              ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
+              : undefined,
+          });
+          counters.signalsArchived++;
+        } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }
+
+        const tradeId = await registerOpenVtsTrade(xOpenTrade);
         if (tradeId) {
           counters.tradesOpened++;
           // B-NEW-9 per-lane trade counts (2026-05-12): panel "Trades Opened"
