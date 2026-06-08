@@ -122,9 +122,9 @@ MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200
 
 ### 3.3 Asset-class onboarding learning-capture rule (Kyle directive 2026-05-20 — Phase 24 standing rule)
 
-**Time-bounded:** 2026-05-20 through end of Phase 24 (B79.0n umbrella + xStock active-trading wire-in). After Phase 24 closes with finalized `ASSET_CLASS_ONBOARDING_WORKFLOW.md`, converts to "ad-hoc update when substantive learnings surface."
+**✅ CONVERTED TO AD-HOC 2026-06-08.** The time-bounded mandatory-per-batch phase ran 2026-05-20 → 2026-06-08. Its closure condition ("after Phase 24 closes with finalized `ASSET_CLASS_ONBOARDING_WORKFLOW.md`") is now met: the onboarding workflow was rebuilt + finalized 2026-06-08 (item 1), and Phase 24 was governance-closed the same day (item 2 — single umbrella report at `Claude Comms and Packages/Batch Completion/PHASE_24_UMBRELLA_COMPLETION_REPORT.md`, which carried the last mandatory §3.3 learnings section). The rule is now **ad-hoc.**
 
-**The rule:** every Phase 24 batch's `BATCH_N_COMPLETION_REPORT.md` MUST include a section titled **"Asset-class onboarding workflow learnings"** with four parts: (a) what worked well, (b) what surprised us, (c) recurring structural patterns, (d) concrete edits proposed to `ASSET_CLASS_ONBOARDING_WORKFLOW.md` (applied as part of the same governance turn). Empty section is fine if nothing substantive emerged — explicitly state "No new onboarding learnings this batch." Don't add filler. See history doc §3.3 for the full rationale + closure batch sequencing.
+**The rule (ad-hoc form):** when a substantive asset-class-onboarding learning surfaces in ANY batch (not just Phase-24), capture it — fold it into `ASSET_CLASS_ONBOARDING_WORKFLOW.md` (the single source-of-truth playbook: Part 1 the step sequence, Part 2 the `R-*` reference library, Part 3 the worked example) in the same governance turn, and note it in that batch's completion report. There is no longer a mandatory per-batch "Asset-class onboarding workflow learnings" section; add the learning only when one genuinely emerged. The four lenses still frame a good capture when you do: (a) what worked well, (b) what surprised us, (c) recurring structural patterns, (d) the concrete doc edit applied. See history doc §3.3 for the original rationale + closure sequencing.
 
 ---
 
