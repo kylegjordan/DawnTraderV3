@@ -15,6 +15,7 @@
 1. ✅ **Finalize the asset-class onboarding workflow** (the doc for adding new asset classes) — DONE 2026-06-08 (research-driven rebuild, Langston-reviewed). → §2
 2. ✅ **Final Phase-24 governance close** — DONE 2026-06-08 (Langston approve-with-revisions → all 8 revisions applied; the `85ea78e` blocker fixed). Single umbrella report + RUNNING_ISSUES/PHASE_HISTORY/roadmap reconciliations + CLAUDE.md §3.3 flip to ad-hoc. → §3
 3. **ml-service restart fix** (the small process-management fix). → §4
+3.5. **★ RUNNING_ISSUES → roadmap-homing audit (Kyle directive 2026-06-08; do AFTER item 3).** Walk the ENTIRE `RUNNING_ISSUES.md` open list (every entry that is still OPEN / IN-PROGRESS / DEFERRED, not RESOLVED) and confirm each one has an explicit HOME somewhere in `POST_AUDIT_ROADMAP.md` (a phase / sub-phase / roadmap item) OR in this between-plan. For any open issue with NO roadmap home, place it (assign it to the correct phase) or flag it to Kyle for a placement decision. Output: a reconciled list — every open issue → its roadmap home (or an explicit "needs-a-home" escalation). Langston second-pass on the placements. → §4.a
 4. **VTS standalone always-on Simulation service** — runs whether or not active trading is on. **Includes a required storage-architecture design + decision** (see §5a) before build. → §5
 4.5. **Tiered fee-model accuracy fix** (Kraken July 2026 cross-platform tier change) — the friction model currently hard-codes ONE fee level for all trades; the new Kraken structure makes the real fee tier-dependent, and at our current size we'd be in the most-expensive tier (Tier 1 = 0.80% taker; real friction ≈ 2.5× what we model). Independent of AMR — can run anywhere in this window — but **MUST land before the Phase 19 paper-audit** so the audit observes a realistic friction estimate. → §5b
 5. **AMR (Adaptive Market Response) body build.** → §6
@@ -49,6 +50,13 @@
 - The live process is named `ml-service` (hand-registered in B54) but `ecosystem.config.cjs` defines the ML app as `dawntrader-ml` with guardrails `max_restarts: 5` / `min_uptime: 10s` / `restart_delay: 3000`. **Because the names don't match, those guardrails are NOT attached to the running process** — if it ever churns again, nothing caps it.
 - `server/core/boot_orchestrator.ts` ALSO auto-spawns `services/ml_service.py` (a second, independent spawn path) → latent double-management hazard.
 - Fix: unify the process under one managed name with the guardrails attached, resolve the dual-spawn path, optionally reset the cosmetic counter. Worth doing pre-19 since active trading leans on the ML helper.
+
+## 4.a. ITEM 3.5 — RUNNING_ISSUES → roadmap-homing audit (Kyle directive 2026-06-08)
+**Do AFTER item 3 lands.** A one-time governance reconciliation Kyle asked for explicitly so nothing open falls through the cracks before Phase 19.
+- **The task:** walk the ENTIRE `RUNNING_ISSUES.md` and, for every entry that is NOT RESOLVED (OPEN / IN-PROGRESS / DEFERRED / NEAR-TERM / tracker), confirm it has an explicit HOME — a phase, sub-phase, or roadmap item in `POST_AUDIT_ROADMAP.md`, or a slot in this between-Phase-24→19 plan, or an existing dedicated batch.
+- **For any open issue with NO home:** assign it to the correct phase in the roadmap (place it), OR — if the right home is genuinely ambiguous / a Kyle decision — flag it to Kyle with a recommended placement.
+- **Output:** a reconciled mapping (every open issue → its roadmap home), with any "needs-a-home" items escalated to Kyle. Langston second-pass on the placements before close.
+- **Why it matters:** RUNNING_ISSUES has grown to ~200 entries across many phases; an open item with no roadmap home is an item that silently never gets done. This closes that gap before active trading turns on.
 
 ## 5. ITEM 4 — VTS standalone always-on Simulation service
 **Decision (Kyle 2026-06-08):** build VTS as a **standalone Simulation service that is ALWAYS running, regardless of whether trading is active.** This **overrides** the earlier MEMORY note ("standalone-VTS firehose = separate lane, do NOT pull in") and the older 2026-05-21 "VTS partition deferred to post-launch, possibly never built" framing — it is now confirmed **part of the between-Phase-24-and-Phase-19 work.**
