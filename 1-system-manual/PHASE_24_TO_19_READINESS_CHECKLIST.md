@@ -22,6 +22,17 @@
 
 **Phase 19 kicks off only after items 1–5 (incl. 4.5) are complete.** (Phase 19's own pre-flight list is in §10 for awareness — NOT part of this between-phase sequence.)
 
+### ★★ CANONICAL EXECUTION ORDER AFTER PHASE 19 (Kyle decision 2026-06-08) — phase NUMBERS are NOT the order
+**Kyle directive 2026-06-08 (overrides the CC+Langston "parallel two-track" recommendation):** run it **STRICTLY SEQUENTIAL, not in parallel** — correctness over speed. Doing the productionize/cleanup work (16/20) while calibration (25) is still changing strategies/thresholds/trade-construction = "hitting a moving target." Settle the trade quality FIRST, then productionize the now-stable system, then go live.
+
+**The order:**
+1. **Phase 19 — Paper Mode Audit & Debug.** Fix + run paper-active trading (the full pipeline → Kraken paper order system; active trading ON in PAPER mode). Debug end-to-end + the minimum bootstrap tuning so signals are sane.
+2. **Phase 25 — Calibration with Evidence.** Calibrate EVERYTHING against the live Kraken paper-simulation results — which show the same wins/losses/profit we'd see in real live trading (only the order destination differs: Kraken paper vs Kraken live). **Go-live gate (Kyle): calibrate in paper until we are COMFORTABLE with what we are seeing (wins / losses / profit) — THEN proceed.** Not "launch and prove it live." (= the "fuller calibration first" gate.)
+3. **Phase 16 — Database & Legacy Cleanup** + **Phase 20 — Production Hardening.** Only AFTER the trade logic is settled/stable: clean up legacy tables + dead code (16), then production-harden (20: security, tests, DB rebaseline + retention tiers). Done on a stable target, not a moving one. *(Practical nuance flagged to Kyle: keeping the test suite GREEN during Phase 19 is a Phase-19 debugging-enabler, not "starting cleanup early" — pending Kyle's call on whether even that waits.)*
+4. **Phase 21 — Live Mode Activation.** Turn on real live trading on Kraken.
+
+**Numbering ≠ execution order (roadmap cleanup owed, do in item 3.5):** Phase 25 (calibration) runs right after 19; Phase 22 (Publication) is numbered 22 but runs AFTER live (post-21); Phase 26 (crypto_perp perpetual-futures onboarding) is a POST-LAUNCH placeholder with no SLA (the old "Phase 25" label before that number was reused for calibration). The roadmap still presents these in misleading numeric order — the item-3.5 reconciliation fixes the roadmap to state this execution order explicitly.
+
 ---
 
 ## 2. ITEM 1 — Finalize the asset-class onboarding workflow
