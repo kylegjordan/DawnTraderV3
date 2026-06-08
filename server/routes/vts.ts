@@ -493,26 +493,23 @@ router.post('/retrain/:strategy', requireAuth, async (req: Request, res: Respons
   try {
     const { strategy } = req.params;
     
-    console.log(`[L11][VTS][RETRAIN_STRATEGY] Starting recalibration for ${strategy}`);
-    
+    // B-NEW-54 (2026-06-08): the Python ML predictive microservice was retired, so
+    // there is no model to retrain. The drift detector still detects + logs drift;
+    // forceRecalibration is now an explicit logged no-op. This endpoint reports the
+    // retirement honestly and returns the current calibration for reference.
+    // Tracked for the ML-revival phase in the Phase-16 legacy register.
     const driftDetector = getDriftDetector();
-    const success = await driftDetector.forceRecalibration(strategy);
-    
-    if (!success) {
-      return res.status(409).json({ 
-        error: 'Recalibration already in progress',
-        strategy 
-      });
-    }
-    
+    await driftDetector.forceRecalibration(strategy); // logs recalibration_skipped (no-op)
+
     const fullCalibration = await loadFullCalibration();
     const strategyCalibration = fullCalibration.strategies[strategy] || fullCalibration.global;
-    
+
     res.json({
-      success: true,
+      success: false,
+      retired: true,
       strategy,
       calibration: strategyCalibration,
-      message: `Recalibration triggered for ${strategy}`,
+      message: `Strategy recalibration retired: the ML predictive helper was removed (B-NEW-54). Drift is still detected and logged, but model retraining is no longer performed.`,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
