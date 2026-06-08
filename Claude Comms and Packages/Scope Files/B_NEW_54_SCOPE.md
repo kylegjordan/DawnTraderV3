@@ -1,4 +1,6 @@
-# B-NEW-54 SCOPE — ML helper process-management unification
+> **★ SUPERSEDED 2026-06-08 — DIRECTION CHANGED FIX → REMOVE.** Kyle decided to RETIRE this helper rather than fix it (it is decorative — its predictions are logged-and-discarded; the real ML is future Phase 17/18; the roadmap lists teardown of these placeholder predictive-learning services). The live scope is now **`B_NEW_54_REMOVAL_SCOPE.md`**. This document + `B_NEW_54_PRE_AUDIT.md` are retained for their evidence (which justifies the removal). Do NOT implement the unification below.
+
+# B-NEW-54 SCOPE — ML helper process-management unification (SUPERSEDED — see removal scope)
 
 > **Between Phase-24→19 plan, ITEM 3.** Status: **✅ Step 1 AGREED (Langston, 2026-06-08 — verified on staging read-only, all O1–O7 + Q-A..Q-D agreed with refinements; see §8).** Active trading is OFF throughout. Author: CC, 2026-06-08. Source: `PHASE_24_TO_19_READINESS_CHECKLIST.md` §4 + `MULTI_ASSET_VTS_EXPANSION_PLAN.md` working-list item F.2.
 
