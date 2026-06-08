@@ -546,6 +546,12 @@ interface OpenVirtualTrade {
   predictiveConfidence: number;
   regimeWeight: number;
   decayPenalty: number;
+  // B-NEW-53.1 (2026-06-08, #207): declared to match the literal (≈L1486) + the
+  // persisted DB row. Consumed by the B70.2 admitted-features archive, which had
+  // been reading it off the lean Phase10TradeRecord (which never carried it) →
+  // archived undefined on every crypto admitted row since 2026-05-05. Optional →
+  // backward-compatible with every other OpenVirtualTrade construction site.
+  expectedEdge?: number;
   pool: 'ideal' | 'rotational';
   openedAt: number;
   strategyMode?: StrategyMode;         // 11.7S: Mode for observability
@@ -1956,12 +1962,20 @@ async function generatePhase10Signal(
       // Mirrors the open-trades CSV export columns so admitted rows carry
       // every field needed to reconstruct the trade decision.
       features: {
+        // B-NEW-53.1 (2026-06-08, #207): the at-entry economics + phase + cohort
+        // + ATR fields are read from the SSOT open-trade record (`persistedTrade`,
+        // already fetched above as openVirtualTrades.get(tradeId)), NOT the lean
+        // `Phase10TradeRecord` `tradeRecord` — which never declares/carries them,
+        // so they archived `undefined` on every crypto admitted row since
+        // 2026-05-05. `?? null` so a cold-start Map miss degrades the row instead
+        // of substituting a stale value. The scoring/classification/bias fields
+        // below stay on `tradeRecord` (they ARE declared + set there, populate fine).
         // Signal economics
-        entryPrice: tradeRecord.entryPrice,
-        target: tradeRecord.takeProfit,
-        stopLoss: tradeRecord.stopLoss,
+        entryPrice: persistedTrade?.entryPrice ?? null,
+        target: persistedTrade?.takeProfit ?? null,
+        stopLoss: persistedTrade?.stopLoss ?? null,
         positionSize: tradeRecord.positionSize,
-        quantity: tradeRecord.quantity,
+        quantity: persistedTrade?.quantity ?? null,
         // Signal classification
         signalType: tradeRecord.signalType,
         patternType: tradeRecord.patternType,
@@ -1972,7 +1986,7 @@ async function generatePhase10Signal(
         hybridScore: tradeRecord.hybridScore,
         predictiveConfidence,
         regimeWeight,
-        expectedEdge: tradeRecord.expectedEdge,
+        expectedEdge: persistedTrade?.expectedEdge ?? null,
         decayPenalty: tradeRecord.decayPenalty,
         // Regime + bias
         globalRegime: tradeRecord.globalRegime,
@@ -1983,18 +1997,18 @@ async function generatePhase10Signal(
         pairDirectionalBiasScore: tradeRecord.pairDirectionalBiasScore,
         globalDirectionalBiasScore: tradeRecord.globalDirectionalBiasScore,
         // Phase
-        regimeConfidenceRaw: tradeRecord.regimeConfidenceRaw,
-        macroModifierValue: tradeRecord.macroModifierValue,
-        phase: tradeRecord.phase,
-        phaseAgeSeconds: tradeRecord.phaseAgeSeconds,
-        strategyPhaseWeight: tradeRecord.strategyPhaseWeight,
+        regimeConfidenceRaw: persistedTrade?.regimeConfidenceRaw ?? null,
+        macroModifierValue: persistedTrade?.macroModifierValue ?? null,
+        phase: persistedTrade?.phase ?? null,
+        phaseAgeSeconds: persistedTrade?.phaseAgeSeconds ?? null,
+        strategyPhaseWeight: persistedTrade?.strategyPhaseWeight ?? null,
         // Cohort marker + ATR
-        pairIdHash: tradeRecord.pairIdHash,
-        atrAtOpen: tradeRecord.atrAtOpen,
+        pairIdHash: persistedTrade?.pairIdHash ?? null,
+        atrAtOpen: persistedTrade?.atrAtOpen ?? null,
       },
       modulators: {
         chain_modulated_confidence: chainModulatedConfidence,
-        regimeConfidenceModulated: tradeRecord.regimeConfidenceModulated,
+        regimeConfidenceModulated: persistedTrade?.regimeConfidenceModulated ?? null,
       },
       gateDecision: {
         gate: 'admitted',
