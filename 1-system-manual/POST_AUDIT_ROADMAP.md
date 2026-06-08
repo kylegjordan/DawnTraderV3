@@ -2,6 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer & Lead Architect)
 > **Created**: 2026-02-17
+> **Revised**: 2026-06-08 (currency reconciliation during the Phase-24 governance-close audit — see the updated "Where We Are" note below + the `### 2026-06-05 update` section. The canonical CURRENT ordering lives in `PHASE_24_TO_19_READINESS_CHECKLIST.md`.)
 > **Revised**: 2026-04-14 (v7 — Phase 15b restructured: B60 Smart Thermostat DEFERRED to post-live. New Phase 15b = Regime/DBS/Strategy/Filter Restructure (B61-B65). Locked via three-way consensus 2026-04-14.)
 > **Revised**: 2026-04-12 (v6 — Phase 11 Finalization governance + code complete (B58). Adjustment Framework + Authority Baseline deployed. CI TS issue #39 flagged.)
 > **Purpose**: Complete roadmap from current state through live mode trading and publication. Uses formal DawnTrader phase numbering.
@@ -10,9 +11,11 @@
 
 ---
 
-## Where We Are (as of 2026-04-14, Phase 15b Locked)
+## Where We Are
 
-**Last completed batch**: Batch 59 (Phase 15a — Predictive Learning UI Audit & Data Path Fixes)
+> **★ CURRENT (2026-06-08):** **Phase 24 (xstock_spot onboarding) is GOVERNANCE-CLOSED.** The system is executing the **between-Phase-24→19 plan** (canonical ordering: `PHASE_24_TO_19_READINESS_CHECKLIST.md`): items 1 (onboarding-workflow rebuild) + 2 (Phase-24 governance close) DONE; now on item 3 (ml-service fix), then 4 (VTS standalone always-on simulation service), 4.5 (Kraken tiered-fee-model fix), 5 (AMR body) → then **Phase 19** (turn paper-active trading back on + debug). Active trading OFF throughout. The phase-status snapshot below is the historical Phase-11→15 record; the post-15 detail lives in the `### 2026-06-05 update` section + the locked Phase tables further down.
+
+**Last completed batch** (historical snapshot, as of 2026-04-14): Batch 59 (Phase 15a — Predictive Learning UI Audit & Data Path Fixes). *(Since then: Phase 15b/15c → Phase 16 / 18 / 24; the current batch series is the B79.0n / B-XSTOCK-CALIB / B-NEW-\* era — see `BATCH_CATALOG.md` + `PHASE_HISTORY.md` for the live record.)*
 **Phase 11 status**: COMPLETE — Governance + code deployed (B58). Phase 11 CLOSED.
 **Phase 12 status**: COMPLETE
 **Phase 13 status**: COMPLETE — MCE installed, L12-L20 cluster fully removed.

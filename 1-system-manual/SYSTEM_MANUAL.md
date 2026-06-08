@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Consolidated**: 2026-02-17
-> **Last Updated**: 2026-05-07 (B76 — Chain-Final Calibration Framework Refactor; B77 — `isBreakEvenTriggered` no-op fix). See "Calibration Aggregator Framework (post-B76)" appendix below.
+> **Last Updated**: 2026-06-08 (Phase-24 governance close — date reconciled during the currency audit. Architecture/math through B76/B77 is current; the only new first-class schema component since is the `signal_eval_provenance` table (B-NEW-53 decision-provenance capture) — documented in Chapter 11 §1.5 below, with full component detail in `SYSTEM_IMPACT_MAP.md` ~line 1576. B-NEW-52 (weekend-cron retirement) and B-NEW-53.1/53.2 (admitted-`features` capture fixes) are operational/telemetry-only and carry no System-Manual architecture/math change — they live in CHANGES_AND_FIXES + SIM.)
 > **Source**: Systematic 11-phase repository audit
 > **Companion Documents**: CHANGES_AND_FIXES.md, LEGACY_DEPRECATION_PLAN.md, POST_AUDIT_ROADMAP.md, ADJUSTMENT_FRAMEWORK.md (parameter governance), AUTHORITY_BASELINE.md (V1.0 snapshot)
 > **Status**: Complete (all 11 phases consolidated)
@@ -9999,6 +9999,20 @@ const db = drizzle({ client: pool, schema });
 - **Single-tenant**: One user, one database instance. `user_id` columns removed from 5 operational tables (Phase 2C migration)
 - **Mode isolation**: `trading_mode` enum (`live` | `paper`) separates data at the row level. Most trading tables have a `mode` column with unique indexes enforcing one-row-per-mode for config tables
 - **globalContextId**: Present in several tables with default `"default"` — remnant of an earlier multi-context architecture, now vestigial
+
+---
+
+## 1.5 Recent schema additions — decision-provenance (B-NEW-53, 2026-06-07)
+
+**`signal_eval_provenance`** — a new append-only telemetry table added by B-NEW-53 (decision-provenance capture; deploy `b1dbb2c43` xStock + `0350cbc69`/`c2573cb93` crypto-enable). It is the forward fix for the backward-replay wall that three Phase-24 calibration studies hit (W2.0a / RI-a / W2.0b): the engine's exact decision-time inputs were never persisted, so no backward replay reproduced a live decision to ≥99%.
+
+- **Shape:** a **1:1 sibling of `signal_eval_archive`** (keyed on `captured_at, archive_id`; partitioned; ~90-day retention, same as the archive). One provenance row per archived signal evaluation.
+- **What it captures (the irreducible decision inputs):** the in-progress **forming bar BY VALUE** (the bar the decision was made on, which is never otherwise persisted), a **reference to the settled bar-set** (symbol + as-of bucket — the settled bars are already in `*_ohlc_*_snapshot`, so this is a hash-and-reference, not 240 bars/row), the **resolved stop/target** levels, and a **constants hash** of the `module_constants` values used. RI-a's stop-anchor-persistence gap is unified into this same write (one provenance row satisfies both the detect-input gap and the stop-anchor gap).
+- **Written at:** the four `eval-cycle` hooks (via `decision-provenance.ts` + an archive-id allocator).
+- **Consumed by:** the Phase-25 decision-replay / entry-trigger studies (roadmap 25-12/13/14/15). A `7362f63f` §10.5 proof-of-capture alert (2026-07-05) re-surfaces the entry-trigger sweep once enough rows accrue.
+- **Runtime-proven:** xStock 36,531/36,531 archive↔provenance rows = 100% coverage (real `forming_bar_ts`, 9 constants hashes); crypto 100% live after the `OHLCCandle.time-is-SECONDS` NaN hotfix (`c2573cb93`).
+
+Full component-level dependency detail (the table, `decision-provenance.ts`, the archive-id allocator, all four hooks, and the admitted-`features` B-NEW-53.1/53.2 fixes) is in `SYSTEM_IMPACT_MAP.md` near line 1576.
 
 ---
 

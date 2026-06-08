@@ -2,7 +2,7 @@
 
 > **Author**: Claude Code (System Cartographer)
 > **Created**: 2026-02-19
-> **Last Updated**: 2026-04-19 (B62 CLOSED with verified 72h metrics — RBS drift 0.00% across 23,983 samples, TFS+IE 46.19%, 174k MCE samples + 359 trades. All §5.1 / §5.1b / §5.2.5 / §7.1 B62 changes verified operational.)
+> **Last Updated**: 2026-06-08 (Phase-24 governance close. The header date was stale at 2026-04-19/B62 — the BODY has Recent-Additions sections current through 2026-06-08: the B.4 15-minute foundation, the B79.0n REQUIRED-assetClass umbrella, B-NEW-52 weekend-cron retirement, and the B70.2 / B-NEW-53 / 53.1 / 53.2 decision-provenance + admitted-features documentation at the entries near line 886 and lines 1576–1605. Date reconciled during the Phase-24 governance-close currency audit.)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
 
