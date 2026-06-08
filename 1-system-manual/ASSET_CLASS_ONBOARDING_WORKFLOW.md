@@ -1,1918 +1,694 @@
 # Asset Class Onboarding Workflow
 
-**Tier 2 governance document.** Mandatory pre-read before any new asset class enters DawnTrader. Created in B79 (Phase 24) with `xstock_spot` as the canonical worked example.
+**Tier 2 governance document. Mandatory pre-read before any new asset class enters DawnTrader.**
 
-**Living doc.** Every asset class onboarded adds a new Section H entry + iterates the template based on what was learned. By the time a fifth asset class lands, the doc is battle-tested.
+Created in B79 (Phase 24) with `xstock_spot` as the canonical worked example. **Rebuilt + FINALIZED 2026-06-08** (Phase-24→19 plan, item 1; Langston-reviewed, approve-with-revisions → all revisions applied → R-reference graph verified clean in both directions) into a single source-of-truth playbook: every Phase-24 sub-batch learning was mined, de-duplicated, and folded into one ordered sequence. The trial-and-error narrative of *how* each learning was discovered still lives in the per-batch completion reports under `Claude Comms and Packages/Batch Completion/`; this doc carries the distilled *what-to-do / what-to-watch-for*.
 
-**Phase 24 status (2026-05-10):** xstock_spot fully onboarded across 9 sub-batches. The doc was updated with **only the genuinely new standing rules** — Section L (ticker-collision check, the most important Phase 24 addition) + a tightened H.1.x. Trial-and-error history of how we got there lives in the per-batch completion reports, NOT here.
-
----
-
-## Procedural checklist — execution order for onboarding a new asset class
-
-**This is the executable blueprint.** Follow it sequentially. Each numbered step references the detailed reference Section (A through L below) for HOW. The 11-step canonical batch workflow from CLAUDE.md §2 wraps this — every numbered onboarding step is itself a Step 1-11 batch.
-
-| # | Step | Reference | Output / artifact |
-|---|---|---|---|
-| 0 | **Trigger** — Kyle directive to onboard new asset class | — | Memo or directive recorded in `MEMORY.md` + `MULTI_ASSET_VTS_EXPANSION_PLAN.md` §12 update log |
-| 1 | **Ticker-collision check** — live exchange API intersection BEFORE architecture decisions | Section L | `<NEW_CLASS>_<EXISTING>_COLLISIONS` constant + provenance comment + regression-lock tests |
-| 2 | **Operational profile** — fill the Section A.0 table for the new asset class | Section A.0 | Filled table (trading hours, settlement, custody, exchange endpoints, symbol forms, universe, tick/lot). Decide: is this asset class monolithic OR per-symbol-heterogeneous (Phase 24 H.1.x rule 3)? |
-| 3 | **Discovery + inventory** — pair universe, ticker source, live-pricing path, per-pair characteristics, asset-specific (sector, fundamentals, IV) | Section A | A-checklist filled |
-| 4 | **Architecture decisions** — scanner shared vs dedicated; family-filter path; RTB pool; live-pricing adapter; telemetry isolation; pattern pool; quant family paths | Section B + Phase 24 H.1.x rule 4 | B-decisions table populated. If signal distributions differ from existing classes, build separate-instance triad via `getAssetClassInstances` factory. |
-| 5 | **Schema + module_constants** — verify or add `asset_class` column on every relevant table; insert seed rows for the new class; tag `tunable_status` correctly | Section C + Phase 24 H.1.x rule 2 | Drizzle migration SQL + module_constants seed SQL. Every behavioral knob has explicit per-class row (HARD-FAIL gate enforced at boot). |
-| 6 | **Code surface** — populate `server/asset_classes/<class>/{regime-thresholds,friction,pattern-pool-filters,market-hours,index}.ts`; extend `resolveAssetClass`; wire dispatch in `calculatePairRegime`, `cost-model`, `signal_quality_evaluator`, `MULTI_FAMILY_ELIGIBILITY`, telemetry boundaries, TEC stop-eval | Section D | All files added/modified. Section D.1 below has concrete extension templates from xstock_spot. |
-| 7 | **18-stage walkthrough** — for each pipeline stage answer: which variables/thresholds/gates apply, are they class-scoped or shared, where do values come from, Layer-1 baseline value, tagged `pending_layer_3` if no domain-knowledge answer | Section E | Row-per-stage table populated for the new class (mirrors Section H.1.E pattern) |
-| 7b | **Calibration cycle** — 3 mandatory sub-cycles: regime classifier (Sub-cycle 1), filter thresholds (Sub-cycle 2), strategy gate testing (Sub-cycle 3). Each has an observation window + tuning step + exit criteria. **Initial Layer-1 seed values are domain-knowledge starters, not production-tuned — empirical calibration is required.** Tracked in the asset class's diagnostics tracker. | Section "Step 6b — Calibration cycle" below | Pass/fail per sub-cycle + threshold-change migration log |
-| 8 | **Layer 1 / Layer 2 / Layer 3 protocol** — domain-knowledge baseline → cross-asset shadow-classify sanity → live shadow-mode VTS observation. Both ablation frameworks (B67.0 calibration + B73 exit-strategy) wired in parallel, each with asset-class-scoped emission | Section F + Section F.0 | Layer 1 values seeded; Section F.X observation period sized per evidence accumulation rate |
-| 9 | **Verification + forward-watch** — behavioral verify checklist; no-touch fence SQL on existing classes; 24h + 7d forward-watch metrics; strategy-gap monitoring (5 triggers) | Section G | Verify checklist + post-deploy SQL artifacts |
-| 10 | **Dedicated observation UI tab** — new asset class gets its own tab; both ablation panels side-by-side per Kyle directive | Section I.0 #6 | UI tab live with filter diagnostics + 2 ablation panels |
-| 11 | **Worked example** — populate Section H.N with the new class's worked example; populate Section H.N.x post-mortem at T+7d post-go-live with **only genuinely new standing rules** (per Phase 24 lesson) | Section H | Section H.N entry. Trial-and-error history lives in per-batch completion reports, NOT here. |
-
-**Decision Framework rules (Section I + Section I.0 universal rules)** apply throughout — re-check on every architectural choice.
+> **Governance note:** the CLAUDE.md §3.3 Phase-24 learning-capture rule (mandatory "Asset-class onboarding workflow learnings" section in every Phase-24 completion report) stays ACTIVE through the final Phase-24 governance close, then converts to "ad-hoc update when a substantive learning surfaces" per its own "after Phase 24 closes" wording.
 
 ---
 
-## Onboarding Step Sequence Refinements — Phase 24 retrospective (Kyle directive 2026-05-11, captured before forgetting)
+## Part 0 — How to use this playbook
 
-Phase 24 (xstock_spot) is the canonical worked example, BUT the path it took had unnecessary detours that the next asset class (B80 crypto_perp, etc.) must avoid. This section captures the corrected sequence + the audit discipline that should have run on day 1.
+**The lens.** Read this as: *"I am a future Claude Code session onboarding a NEW asset class. What do I do, step by step, and what must I watch for because of what bit us in `xstock_spot`?"* Every step carries its watch-fors inline — "when you do X, watch for Y, because Z happened to us."
 
-### Corrected order of operations
+**The bar.** By the time you finish Part 1, you should be **90–95% prepared** for the real work — you know the order, the traps, and where the detailed template lives for each step. The remaining 5–10% is the new class's genuinely-novel substrate (a different exchange API, a funding-rate dimension, an options-greeks input) that no prior class exercised.
 
-Execute in this exact order. Skipping any one of these causes the same surfacing-failure pattern B79.0a → B79.0d → B79.0m.a produced (scaffolding without functionality, told user it worked when it didn't).
+**The structure — one step-order, no competing lists.**
+- **Part 1 is THE sequence.** It is the single, ordered, numbered step-list (`Step 0.1` … `Step 9.x`, grouped by onboarding lifecycle phase). There is no second step-order anywhere in this doc. Earlier revisions had two competing ones (a "procedural checklist 0–11" table and a "corrected order of operations") plus a colliding `4.15` number — all removed in the 2026-06-08 rebuild.
+- **Part 2 is the reference library.** Detailed code templates and patterns, each with a semantic ID (`R-STORAGE`, `R-MCE`, …). Steps in Part 1 point to these by ID for the *HOW*. A pointer to `R-STORAGE` is **not** an empty pointer — the full template is present in this same doc. Where a learning is short, it is written inline in the step itself; where it is a long code template reused by several steps, it lives once in Part 2 and is referenced by ID.
+- **Part 3 is the worked example** (`xstock_spot`) — a concrete, filled-in instance of the whole sequence, including the actual code-surface inventory and the 18-stage walkthrough table.
+- **Part 4 holds the empty slots** for future classes (`crypto_perp`, etc.) — intentionally blank until each ships.
 
-#### Step 1 — Threshold/range/gate authorship (DB rows BEFORE wiring)
+**Relationship to the 11-step batch workflow.** This onboarding sequence is the *domain content*; the CLAUDE.md §2 eleven-step batch workflow is the *process wrapper*. Every onboarding step in Part 1 is itself shipped as one or more Step-1-through-11 batches (scope → pre-audit → implement → Langston review → CI → deploy → verify → Langston second-pass → iterate → governance → completion report). When a Part-1 step says "seed the rows," that still means a full batch with a scope file, a Langston-reviewed diff, green CI, and a completion report.
 
-For every behavioral knob, BEFORE any wiring code, decide and seed the DB row:
-- **Regime classifier ranges** (`module_constants.regime_classifier` + `regime_phase` + `volume_regime` + `regime_age` + `path_b_sustainability` + `multi_tf_agreement` + `pair_correlation` + `outcome_feedback`) — author asset-class-explicit rows for any threshold expressed in absolute volatility/momentum/return-magnitude units. KEEP wildcard for math primitives (`directional_integrity`, `dbs_calculation`) — these are scale-free. Document inline justification for each wildcard-keep.
-- **Strategy selection criteria** (`module_constants.strategy_gates.<assetClass>.<strategy>.enabled` rows) — explicit row for EVERY strategy, both enabled and disabled. No code constants. Default-open only for asset classes with zero rows; allowlist mode requires full coverage.
-- **Per-strategy thresholds** (`module_constants.strategy.<name>` rows) — author asset-class-explicit row for any threshold using ATR multipliers, absolute % moves, or distance-in-units. Wildcard-keep for scale-free pattern geometry. Document inline.
-- **SQE thresholds** (`module_constants.sqe_config.<assetClass>.*` rows) — `min_final_score`, `min_regime_weight`, `adx_min`, `di_min_quant`, `di_min_pattern`, `momentum_min`. Asset-class-explicit by default.
-- **Global filter row** (`screener_filters` with asset-class scope) — `min_volume`, `min_price`, `max_price`, `max_bid_ask_spread`, `min_market_cap`, `exclude_stablecoins`, etc. Per-mode (paper + live) rows.
-- **Family-IMF rows** (`screener_filters` with `filter_path IN ('vts_trend','vts_reversal','vts_breakout','vts_oscillator','vts_strong_trend','active_*')` + asset-class scope) — 5 family paths × 2 modes = 10 rows. LQ_MIN, VN_MAX, DI_MIN, DI_MAX per family.
-- **MCE config** (`module_constants.mce_config.<assetClass>.*`) — `macro_modifier` (placeholder 1.0 if no asset-class-specific feed yet; track future-batch in RUNNING_ISSUES).
-- **TEC / trailing config** (`module_constants.trailing_exit.<assetClass>.*`) — `break_even_enabled`, `target_lock_r`, `trail_distance_atr_multiplier`, moonbag knobs, BE-trigger threshold. Asset-class-explicit by default; do NOT inherit crypto's Variant K (BE off) blindly — equity exit behavior may want BE protection ON even when crypto has it OFF.
-- **Pattern pool gates** (`module_constants.pattern_pool_gates.<assetClass>.*`) — `final_score_floor`, `max_position_pct`.
-- **Data freshness window** (`module_constants.market_data.<assetClass>.data_freshness_window_ms`).
-
-**Critical:** the unique index on every `module_constants`-adjacent table must include `asset_class` as a key column. If the table has `(mode, filter_path)` unique without asset_class (like `screener_filters` pre-B79.0m.a), seed rows for the new asset class will silently fail on `ON CONFLICT DO NOTHING`. **Audit `pg_indexes WHERE tablename='<x>'` in Step 2 pre-audit and add a hotfix migration if needed.**
-
-#### Composite asset-class indexes on aggregator-read tables (BATCH_82 standing rule)
-
-In addition to unique-index seeding above: every aggregator-read table with an `asset_class` column AND time-based filtering (e.g. `regime_factor_alternates`, `exit_strategy_alternates`, `signal_eval_archive`) MUST have a composite `(asset_class, <time-column> DESC)` index. Without it, the aggregator's `WHERE asset_class = $X AND <time> >= ...` query does a full-window scan with a post-bitmap-scan `Filter` on asset_class — 32+ seconds on 24k-row tables. With the index, sub-millisecond.
-
-**Naming convention:** `idx_<table>_asset_<timecolumn>`. Example: `idx_exit_strategy_alternates_asset_created`, `idx_regime_factor_alternates_asset_evaluated`.
-
-**Partial-index discipline:** if the aggregator's query includes `AND <some_predicate> IS NOT NULL` (e.g. `replay_completed_at IS NOT NULL`), the index should be partial with the same predicate. Smaller index, faster query — but the partial predicate must intersect with actual query WHERE; verify via `EXPLAIN ANALYZE` at deploy time that `Index Cond` (not `Filter`) carries the asset_class predicate.
-
-**Drizzle txn-mode gotcha:** `CREATE INDEX CONCURRENTLY` CANNOT run inside a transaction block. Drizzle's default migration runner wraps each file in BEGIN/COMMIT, breaking `CONCURRENTLY`. Recommended path: raw SQL script at `server/migrations/manual/B<NN>_<description>.sql` applied via `psql` outside the Drizzle runner. Idempotent with `IF NOT EXISTS` guard. Rollback SQL co-located at `server/migrations/manual/B<NN>_<description>_rollback.sql`. Reference: `server/migrations/manual/B82_asset_class_indexes.sql`.
-
-**Pre-launch check:** for each aggregator-read table, run the aggregator's representative query under `EXPLAIN ANALYZE` BEFORE the new asset class starts emitting. If `Filter:` (not `Index Cond:`) appears on the asset_class predicate, build the index in the same batch that wires the new class. The 38-133s endpoint timings in B-NEW-28 came from skipping this check.
-
-#### Step 2 — Scanner + filter ownership decision
-
-Decide explicitly: does the new asset class get its own scanner + own filter path, or share with an existing class?
-
-**Phase 24 verdict for xstock_spot:** DEDICATED scanner + DEDICATED filter pipeline. Reasoning: telemetry isolation, market-hours-aware scanning, dollar-volume distributions materially different from crypto. Same answer expected for B80 crypto_perp (funding-window cycles, leverage-tier differences).
-
-If dedicated:
-- New `<asset_class>/scanner.ts` owns the cycle (subscription to centralClock, NOT a parallel setInterval — per B79 rev 5 §C)
-- New `<asset_class>/global-filter.ts` runs asset-class-specific global filter on fresh pairs
-- New `<asset_class>/imf-evaluator.ts` runs the 4 quant family-IMF paths + the pattern path
-- Each step emits its own diagnostic counters (no co-mingling with crypto's fx5-scanner counters)
-
-If shared (rare — only for asset classes with truly identical signal distributions):
-- Extend `fx5-scanner.ts` to accept assetClass param at every internal boundary
-- Add asset-class-aware family-row lookup (already in place via `getScreenerFilters({mode, filterPath, assetClass})` post-B79.0m.a)
-
-#### Step 2b — Crypto-parity scanner defenses (MANDATORY for every dedicated scanner)
-
-> Distilled from xstock_spot trial-and-error 2026-05-12. Every new dedicated scanner must implement these from day one. Missing any of them produces the exact "scanner wedges, UI shows zeros forever, every cycle times out" failure mode the xstock pipeline hit.
-
-1. **Cycle-scoped config cache** — Load every `screener_filters` row (1 global + 1 pattern + 5 family = 7 rows for a standard quant+pattern setup) ONCE at the top of `runCycle`. Pass through to filter functions as a config bundle. **Do NOT call `storage.getScreenerFilters` inside the per-pair eval loop** — it's the N+1 query that saturates the connection pool. Reference: `fx5-scanner.ts:737-815` for the crypto pattern; `server/asset_classes/xstock_spot/eval-cycle.ts:loadXstockFilterConfigs` for the xstock implementation.
-
-2. **`SCAN_TIMEOUT_MS` + `Promise.race`** — Wrap `runCycle(tick)` in `Promise.race([cyclePromise, timeoutPromise])` where the timeout is **strictly less than the scan interval** (e.g. 25s timeout for 30s interval). On timeout, force-reset `isScanning = false` in the `.catch` so the next scheduled tick can start fresh. Reference: `fx5-scanner.ts:572 + 604-624` (crypto); `scanner.ts` xstock implementation. **Without this, one slow cycle wedges the scanner forever** — every subsequent 30s tick SKIPs because isScanning stays true, no recovery path.
-
-3. **Pair-batch rotation when universe > budget** — If the asset class universe size × per-pair eval cost exceeds the `SCAN_TIMEOUT_MS` budget, implement round-robin rotation. Each cycle scans a fixed batch (e.g. 75 pairs); a `rotationCursor` advances through the universe over multiple cycles for a full sweep. **Always pin index benchmarks every cycle** (5 names max) so portfolio-level signals never wait for rotation. Reference: xstock scanner.ts `CYCLE_BATCH_SIZE = 75`, `PINNED_BENCHMARKS`, `rotationCursor`. Trade-off: each non-pinned pair evaluated every N cycles instead of every cycle — accept in VTS observation phase; revisit when active trading turns on.
-
-4. **Pinned-benchmark sanity check** — Whatever symbols you pin must actually exist in the asset class universe. xstock initially pinned 5 (SPY/QQQ/IWM/DIA/GLD) but IWM and DIA aren't tokenized — silently filtered out by `symbolList.includes()`. **In Step 2 pre-audit, verify each pinned symbol against the asset class's `<class>-universe.json`**.
-
-5. **Constant-name canonicalization** — Before writing ANY `getCachedNumberRequired('<module>', '<constant_name>', ...)` call site, grep the existing codebase + DB for the canonical constant_name. xstock spent hours debugging massive log spam from `directional_integrity.di_to_pwin_scaling_factor` (a typo) when every other site used `di_pwin_factor`. **Pre-audit must grep `getCachedNumberRequired` across the new asset class's code path** and cross-check against `SELECT DISTINCT constant_name FROM module_constants WHERE module_name = '...'`.
-
-6. **Bid/ask spread filter source pattern** — When adding spread filtering, DO NOT add `bid`/`ask` columns to the main ticker_snap SELECT used for the freshness gate. xstock tried that and the query plan blew up 130× (141ms → 18.5s) because the new columns required heap reads on a heavily-written partitioned table. The right pattern: a **separate small batched query** for bid/ask keyed by symbol, executed AFTER the freshness gate so it runs on the survivor set only. **Currently unimplemented; tracker `B-NEW-14`.**
-
-7. **OHLC fetch — pre-warm batched at cycle start, or per-symbol cache with TTL** — Two valid patterns:
-   - **Pre-warm batched** (xstock pattern, recommended when source is own DB): single `SELECT ... WHERE symbol = ANY([survivors])` query at top of cycle, populate a Map, eval reads from Map. Single DB roundtrip per cycle.
-   - **Per-symbol TTL cache** (crypto pattern, required when source is rate-limited external API): `OHLCCache` class with Map + TTL, miss-path fetches upstream. TTL calibrated to candle interval (5min for 60min candles; 25s for 1min candles — must be < candle close interval to avoid stale-bar serving).
-   - **NEVER do per-pair sequential reads inside the eval loop without one of these layers**. That's the xstock pre-2026-05-12 anti-pattern.
-
-8. **NO silent fallbacks** — Pre-warm batched queries, config bundle loads, etc. MUST hard-fail loud (log + alert) on error. **Do NOT fall back to per-symbol queries on batch failure** — that re-introduces the N+1 pattern the batched query was designed to kill. Add a test that breaks if a fallback path appears. Reference: NO PATCHES doctrine (CLAUDE.md §5 #15).
-
-9. **Symbol normalization consistency** — Verify the symbol key format is byte-identical across: archiver writes → ticker_snap rows → OHLC table rows → cache keys → eval loop comparisons → strategy detect calls. Mismatches here are silent killers (cache always misses; eval skips symbols nobody notices). Pre-audit step: log a single symbol's hex bytes at each boundary and confirm equality.
-
-10. **Connection pool sizing for worst case** — The Supabase / Postgres pool must handle the cycle's worst-case concurrent query count. With pre-warm + per-pair OHLC + config bundle reads + concurrent ticker writers, peak demand can spike. Pre-audit step: count the queries per cycle, multiply by concurrent asset-class scanners running, verify pool size > peak. xstock saw `ticker-batch-writer: pool slot timeout (5s)` for hours under N+1 + heavy ticker writes.
-
-11. **Central clock subscription, NOT setInterval** — Always subscribe to the shared `centralClock` and gate execution on `tick.tickNumber % SCAN_INTERVAL_SECONDS === 0`. Same boundary as every other scanner (crypto + xstock both fire at tick 30, 60, 90, ...). Do NOT spin up an independent `setInterval` — they drift and create non-deterministic load patterns.
-
-12. **`isScanning` early-return** — Set `this.isScanning = true` BEFORE `runCycle()` starts, reset in a `finally` block. Every tick handler should `if (this.isScanning) return;` to prevent re-entry. The `SCAN_TIMEOUT_MS` (defense #2) provides the escape valve when something takes longer than expected.
-
-#### Step 3 — Post-filter survivor handoff (shared eval surface, NOT a carve-out)
-
-After filtering, surviving pairs flow into the SHARED post-filter eval functions. These already exist as DB-driven modular units (Phase 18 + B78 + B79.0m.a):
-
-| Function | What it does | Asset-class driven by |
-|---|---|---|
-| `computeMarketContext` (MCE) | Regime, indicators, DBS (where applicable) | Asset-class-aware module_constants lookups |
-| `callStrategyDetect` / strategy-engine `detect*` methods | Per-strategy detection logic | `module_constants.strategy.<name>` thresholds, DB-driven |
-| `evaluateSignalQuality` (SQE) | Eligibility gates, finalScore, regimeWeight | `module_constants.sqe_config.<assetClass>` + `strategy_gates.<assetClass>.<strategy>.enabled` |
-| `insertOpenTrade` + `signal_eval_archive` INSERT | Persist outcomes with `asset_class='<class>'` tag | Caller threads assetClass into row |
-| `resolveTECConfig(assetClass)` | TEC trailing/BE config per asset class | `module_constants.trailing_exit.<assetClass>` |
-
-The new asset class's scanner calls these functions IN A LOOP for each surviving pair, passing `assetClass='<class>'`. No extraction from `runPhase10SimulationCycle` required — that monolith stays crypto-only.
-
-#### Step 4 — Hidden crypto-assumptions audit on shared functions (MANDATORY before wiring)
-
-For each shared function in the post-filter chain, audit:
-
-**Q1.** Are there hardcoded crypto assumptions inside that need asset-class gating?
-- BTC OHLC reference (defensive_hedge, multi-TF correlation) — gate by `assetClass === 'crypto_spot'`
-- BTC dominance / mcap momentum / funding rate (B67.1 macro) — these read from `macro_modifier` DB row which is per-asset-class; xstock should resolve to its placeholder 1.0 (or actual equity macro feed when B79.3 ships)
-- Hardcoded symbol filters / quote-currency assumptions — grep for string literals `'/USD'`, `'BTC/'`, `'/USDT'`
-- Stablecoin gate — applies to crypto, N/A for xstock
-
-**Q2.** Are there things UNIQUE to crypto that should NOT run for the new asset class?
-- DBS computation (`directional-bias-store`) — runs for crypto on every cycle; xstock has no DBS today. The post-filter chain must accept `dbs=null` and treat as neutral multiplier=1.0. Grep every strategy detect function: does each handle `dbs === null`?
-- Pattern detector tuned-for-crypto-microstructure parameters — verify pattern shapes are scale-free (they are; the geometry doesn't care about absolute price level)
-- 24/7 trading assumptions — replaced with `is<AssetClass>MarketOpen` predicate gate (xstock has `isXstockMarketOpenUTC`; the eval cycle should NOT process pairs when market closed)
-
-**Q3.** Are there things UNIQUE to the new asset class that need NEW functionality?
-- Market-hours gate (xstock: ARCA RTH + Phase-1 extended-hours rules per B79.0L)
-- Sector classification (xstock: equity sector for portfolio-cluster prevention — B79.6 future, but stub in registry now)
-- Fundamentals / earnings / IV (xstock: deferred to a future batch, but flag if any current strategy assumes presence)
-- Asset-class-specific friction model (B69 + B79: `server/asset_classes/<class>/friction.ts`)
-- Macro-feed input source (B79.3 for xstock: VIX + SPY trend; B79.0m placeholder 1.0)
-- Funding-rate handling (B80 crypto_perp: funding windows + position-flip-on-funding-cost)
-
-**Q4.** Setup-hash, log-tag, metric-tag, and other shared global state:
-- Setup-hash key (`lastSetupHash` Map in vts-runner) — must include assetClass in the key composition to prevent cross-asset collisions
-- Every log line emitted from shared functions — must include `asset_class` field/tag so crypto and the new asset class telemetry don't conflate
-- Every metric — same
-- Counter accumulators (`vtsEvalCounters`) — must be partitioned by asset class OR explicitly not-applicable per asset class
-
-**Q5.** Exit path cleanliness:
-- Trailing-exit-controller (TEC) — `resolveTECConfig(assetClass)` already exists; verify config rows seeded for the new class
-- Exit-evaluation cycle — when an xstock trade exists in `vts_open_trades`, the exit loop must pull OHLC from the asset-class-correct table (`xstock_spot_ohlc_1m` not `crypto_spot_ohlc_1m`)
-- Close-time persist — `markOpenTradeClosed` is asset-class-agnostic (good); JSON ledger write is asset-class-agnostic (good)
-- B73 ablation replay + B70 archive — async, scoped via asset_class column, no per-class code needed
-
-#### Step 5 — Diagnostic UI separation (NO co-mingling)
-
-Each asset class gets its own observation tab in Machine Learning. Filter Diagnostics counters from one asset class MUST NEVER appear in another asset class's tab.
-
-- Endpoint isolation: `/api/<assetClass>/filter-diagnostics` returns ONLY that asset class's counters
-- Existing crypto Filter Diagnostics tab continues to read `/api/vts/filter-diagnostics` which is crypto-only by-construction (fx5-scanner only scans crypto)
-- Step 2 pre-audit must explicitly grep for cross-asset-class data leaks (e.g. an aggregator that doesn't filter by `asset_class` could leak xstock rows into crypto's Drift Dashboard if signal_eval_archive started accumulating xstock rows; this is exactly the B78 "drift-dashboard-aggregator gets `AND asset_class='crypto_spot'` filter" pattern — verify the same pattern applies to every diagnostic aggregator)
-
-#### Step 6 — TEC + trailing + BE settings (asset-class-explicit, do NOT inherit crypto)
-
-Each new asset class explicitly decides TEC behavior. Defaults that differ per asset class:
-- `break_even_enabled` — crypto Variant K = OFF; equity microstructure may want ON (test in shadow mode)
-- `trail_distance_atr_multiplier` — different per asset class typically
-- `target_lock_r` — different per asset class typically
-- Moonbag knobs — pure trade-mode policy, may transfer cross-class
-
-Seed asset-class-explicit `trailing_exit.<assetClass>.*` rows during Step 1; verify `resolveTECConfig(assetClass)` returns the right rows in Step 2 PIA.
-
-#### Step 6b — Calibration cycle (MANDATORY post-deploy, before declaring asset class production-ready)
-
-> Distilled from crypto + xstock onboarding experience (Kyle directive 2026-05-13). Initial Layer-1 seed values are domain-knowledge starters, not production-tuned. Empirical calibration is required before the asset class is treated as functional. Skipping this step is the root cause of "we shipped the asset class but no trades flow / wrong trades flow" — exactly what xstock surfaced.
-
-Three calibration sub-cycles MUST run, each with its own observation window + tuning step:
-
-**Sub-cycle 1 — Regime classifier calibration**
-- Observation: monitor the asset class's regime distribution across its universe over 24-72h of live data.
-- Expected anti-pattern: pairs heavily concentrated in 1-2 regimes (e.g. crypto initially over-classified to RANGE_BOUND_STABLE; xstock will likely over-classify to TREND_FRIENDLY_STABLE / STRUCTURAL_TRANSITION during RTH).
-- Tuning surface: `module_constants.regime_classifier.<assetClass>.*` thresholds (momentum / volatility / ADX / trend-strength bands). These were authored in Step 1 — Sub-cycle 1 verifies they produce reasonable distributions.
-- Reference: crypto saw a big shift from range_bound concentration to predominantly strong_trend after Layer-3 retune. Expect similar redistributions for any new asset class.
-- Exit criterion: regime distribution roughly matches the expected market behavior for the asset class (no regime > 70% of population unless deliberate).
-
-**Sub-cycle 2 — Filter threshold reality check**
-- Observation: examine the xStocks-style Filter Diagnostics panel for the new asset class over 24h.
-- Verify every applicable filter is binding meaningfully (rejecting at least some pairs) OR is set to permissive-by-design (e.g. `max_price` for fractional-ownership assets).
-- Expected anti-pattern: most filters at 0% rejection (too permissive, like xstock's $1 min_price for $200 TSLAx pairs) OR one filter rejecting >70% (too tight, like xstock's DI gate on reversal/oscillator families).
-- Tuning surface: `screener_filters.<assetClass>.<filter_path>` rows (min_price, min_volume, max_bid_ask_spread, LQ/VN/DI bands per family).
-- Exit criterion: each filter row's failure % is defensible — either zero (intentionally permissive) or measurable rejections that the operator can explain.
-
-**Sub-cycle 3 — Strategy gate testing**
-- Observation: over a multi-day window, monitor the By Strategy panel for the new asset class.
-- Verify every DB-enabled strategy fires at least once. Dormant strategies are acceptable ONLY if their gating reason is documented (regime never hit during observation window, market-hours gate excludes them, etc.).
-- Expected anti-pattern: IMPULSE_EXPANSION-mapped strategies stay at 0 even when IE regime hits other strategies (xstock surface — ORB fires under IE, but sma_trend_ride / breakout / vwap_bounce stay dormant, suggests a separate IE-routing audit).
-- Tuning surface: `strategy_gates.<assetClass>.<strategy>.enabled` rows + per-strategy thresholds in `module_constants.strategy.<name>.*` + family eligibility map.
-- Exit criterion: each enabled strategy has either (a) fired ≥ 1 signal in the observation window, OR (b) a documented gating explanation (regime never hit, market-hours, family eligibility).
-
-**Calibration tracker discipline:** each sub-cycle produces a deltas log in the asset class's diagnostics tracker (e.g. `XSTOCKS_DIAGNOSTICS_TAB_FIXES.md` for xstock). Every threshold change must be a DB UPDATE migration with `last_updated_by='<batch>-calibration-N'` so the audit trail survives across operator handoffs.
-
-**Pre-flight check — before declaring the asset class production-ready:**
-- All 3 sub-cycles run + passed exit criteria → asset class can move to Phase 19 active-trading consideration
-- Any sub-cycle still failing → asset class stays in passive-learning VTS mode; document the open calibration items in the asset class's diagnostics tracker
-
-#### Step 7 — Active-trading path wire-in (signal orchestrator + paper execution)
-
-Separate batch (B79.0n pattern). Wires the post-filter survivors into `signal-orchestrator` for the active-trading dispatch path with asset-class-aware execution. Can be designed and shipped while active trading is OFF (verifiable up to the Phase 19 gate); full end-to-end testing waits for Phase 19.
-
-### The pre-audit discipline
-
-Step 4 above (hidden-assumptions audit) is the discipline B79 lacked. Every shared function in the post-filter chain needs grep-and-verify on Q1-Q5 BEFORE wiring code lands. Function-by-function. Document the answers in `BATCH_N_PRE_AUDIT.md` §"Shared function audit".
-
-This is the difference between "told the user it worked when it didn't" (B79.0a → B79.0d) and "verifiable, defensible, complete" (post-B79.0m.a).
+**External pointers in this doc are resolved, never bare.** Every "see `<file>`" names the specific file AND states what you will find there. If a referenced thing is short enough to state, it is stated here inline instead.
 
 ---
 
-### Step 4.5 — Writer-side asset-class threading audit (BATCH_82 standing rule, 2026-05-14)
+## Standing invariants (bind every phase — Kyle directives, do not violate)
 
-Distilled from the 5-incident crypto-first / asset-class-lost run (B-NEW-20/22/25/26/28) culminating in BATCH_82. **Every persistence site that writes the `asset_class` column must accept the value as a typed parameter from the caller. NO hardcoded literals. NO `?? 'crypto_spot'` fallbacks. The structural fix is type-system enforcement, not silent fallback.**
+These are the cross-cutting rules. They are not a step you do once; they constrain every step below.
 
-#### What to check at pre-audit (every asset-class onboarding, no exceptions)
+1. **NO PATCHES.** Every fix and feature is long-term, sustainable, stable, scalable. No duct tape, no "good enough for now." A surfaced bug triggers root-cause → design → document-before-implement → Langston review → proper batch. Cold-start warmup is acceptable (1–5 min deterministic startup beats instant-on with a stale-cache race). (CLAUDE.md §5 #15.)
+2. **Per-asset-class configuration is the default for every behavioral knob.** Regime thresholds, SQE gates, strategy gates, friction, TEC/BE/trailing, confidence floors, freshness windows — all DB-resolved with `asset_class` as a first-class scoping dimension. A wildcard `*` row is acceptable ONLY when the value is genuinely identical across all classes; the moment any class needs a different value, the wildcard is replaced with explicit per-class rows. **No silent fallbacks** — if a DB-governed row is missing, HARD-FAIL at boot, never run on a hardcoded default.
+3. **Backpressure is never asset-class shedding.** Resource ceilings trigger vertical-scale (Hetzner/Supabase tier) or a computational-distribution refactor — never drop-cycles or throttle a live class. The pre-deploy load test is a sizing decision-gate.
+4. **Both ablation frameworks run during VTS observation** — factor-calibration (B67.0) AND exit-strategy (B73), in parallel, each asset-class-scoped, each feeding Layer-3 evidence. Replacing an existing class's ablation is never the answer; parallel observation is. The Layer-1/2/3 discipline and the **Layer-3 promotion gate** these frameworks feed — tertile-monotonic WR + ≥7pp HIGH-LOW gap + p<0.05 + n≥150/bucket, the threshold the HCE "selectivity is the lever" finding is judged against — are in `R-LAYERS`.
+5. **Each new class gets its OWN dedicated observation UI tab** — a full mirror of the incumbent's rich panels, not a thin one. Never stack a new class's panels under an existing tab. (See `R-UITAB`.)
+6. **Terminology:** "**VTS Observation**", never "shadow-mode" (Kyle directive). Use the system's canonical terms — *regime* (not "market condition"), *xStock* (not "stock"), IMF / DBS / LQ / VN / DI / MCE as-is.
+7. **The incumbent class is byte-identical-protected.** Every onboarding change must leave the existing class's behavior provably unchanged — the no-touch fence (see `Step 8.1`). Value-identical promotions (in-code default → DB row at the SAME value) are inside the fence.
+8. **Governance is updated the same session as the decision.** Verbal "we'll document it later" is rejected — the project is too large and runs over too many phases for unwritten commitments to survive. Update RUNNING_ISSUES + the relevant governance docs before/with implementation, not after deploy.
+9. **Langston review is a non-negotiable gate** at scope, pre-audit, code-diff (before push), and second-pass verification. Use the file-first + embedded-diff dispatch protocol (CLAUDE.md §6.5.0.a): no-gdrive instruction at the TOP, load-bearing diff inline, `bypassPermissions`. The independent Step-2 pre-audit and Step-4 review have historically caught the highest-value bugs (TEC silent-no-op, await-before-Map.set, close-cascade re-run).
+10. **Ticker-collision re-audit is quarterly and standing** (see `Step 0.2` + `R-COLLISION`). A symbol becomes a collision the moment either side lists a new pair.
 
-Run the following grep across `server/services/` AND `server/scripts/` AND `server/tests/`:
+---
 
-```bash
-grep -rn "asset_class" server/services/ server/scripts/ server/tests/ shared/
+## Part 1 — THE unified onboarding sequence
+
+Execute strictly in phase order (0 → 9). Within a phase, the steps are ordered but several can ship in one batch when their surfaces overlap. Each step states WHAT, embeds its watch-fors, and points to the Part-2 reference (`R-*`) for the detailed HOW.
+
+### Phase 0 — Pre-flight (before any code)
+
+**Step 0.1 — Fill the operational profile.** Populate the 10-field operational profile (`R-PROFILE`): trading hours, settlement, geography/regulatory, fees, custody, WS endpoint, REST endpoint, symbol form on each endpoint, universe size/dynamism, tick/lot/fractional. Then answer the **monolithic-vs-heterogeneous** question explicitly: are all symbols in this class operationally identical, or does the exchange treat some differently (24/7 names inside a 24/5 class, halt-able names, pre/post-market windows)? *Watch for:* if non-monolithic, every market-state predicate (`isMarketOpen`, freshness gate, TEC stop-freeze) must take a **REQUIRED symbol argument from Day 1** — an optional-with-silent-default signature is a silent-bug class (Langston). [B79, A.0]
+
+**Step 0.2 — Ticker-collision check FIRST — the #1 Phase-24 learning.** Before any architecture decision, intersect the new class's symbol set against the exchange's LIVE pair list (e.g. Kraken `AssetPairs`). Store the result as a `<CLASS>_<EXISTING>_COLLISIONS` constant with a provenance comment (endpoint, date, quarterly re-audit cadence). Full recipe in `R-COLLISION`. *Watch for:* skipping this produced a live mis-display bug — `SUI/USD` (Sui Network crypto) rendered as an xStock because Sun Communities equity `SUI` collided. xstock_spot hit **9 USD collisions** (BDX/CVX/DASH/EDU/MET/OPEN/PEP/SUI/T) + 8 EUR pre-locked. [B79.0f]
+
+**Step 0.3 — Exchange list-all-instruments check.** Determine whether the exchange exposes a public list-all REST endpoint for this class. Crypto auto-discovers (Kraken REST `AssetPairs`, ~1544 pairs); xStock does NOT (Kraken public REST does not index xStocks — WS-equities only), which forced a whole dynamic-discovery build; crypto-perp HAS one (Kraken Futures `/derivatives/api/v3/instruments`). *Decision rule:* **if there is no list-all endpoint, scope dynamic discovery as a FIRST-TIER batch, not a follow-up** — a hardcoded registry is a compounding structural cost (every new instrument becomes manual maintenance with zero operator visibility). Build pattern in `R-DISCOVERY`. [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 0.4 — Log non-existent API names as you probe.** While confirming endpoints/channels/symbol forms, any name that turns out NOT to exist on the exchange goes into `KNOWN_NONEXISTENT_NAMES` in `server/services/utils/symbol-canonicalizer.ts` (exchange, type, failing name, context, correct alternative, date, reason) — CLAUDE.md §5 #14. *Watch for:* xStock has no public REST — `AssetPairs` returns 0 xStock pairs, `OHLC?pair=AAPLxUSD` returns `EGeneral:Invalid arguments`, `api-equities.kraken.com` does not resolve. REST-polling is a DEAD PATH for xStock; the feed is WS-only. [B79.0c, B79.0k]
+
+### Phase 1 — Discovery + universe
+
+**Step 1.1 — Build the three-service discovery chain with strict role separation.** Prime-mover (cheap public by-issuer catalog: "what instruments exist in this family?") → ground-truth (exchange accept/reject probe, binary: "does the exchange actually stream/trade this right now?") → enrichment (per-symbol metadata only — sector/GICS/flags — never decides existence). xStock: CoinGecko `xstocks-ecosystem` (126) → Kraken WS subscription probe (479 accept / 2 reject) → Finnhub `/stock/profile2` sector. Detailed shape + per-leg rules in `R-DISCOVERY`. *Watch for:* never conflate "discovered" with "tradeable" — the prime-mover list being larger or smaller than the final tradeable universe is BY DESIGN. [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 1.2 — Keep universe-discovery and per-symbol metadata as separate layers.** The exchange gives the symbol LIST; metadata (GICS sector, ADR/crypto-adjacent flags, fundamentals) needs an external source. Do not couple them. [HYGIENE]
+
+**Step 1.3 — Wire the 5-layer boot fallback chain** (live discovery → DB snapshot `initializeFromDB()` → file cache → hand-curated ~20-symbol bootstrap → fail-fast `process.exit(1)`). Each layer covers a distinct failure mode. Full schema (3-table) + lifecycle in `R-DISCOVERY`. [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 1.4 — Add the overrides table and apply it LAST.** `<class>_universe_overrides` with explicit `override_*` columns, applied after source-chain fields are set, so curator decisions (delisted, sector fix) survive every re-discovery. [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 1.5 — Anchor the stale→delisted lifecycle on `last_seen_at` (actual data arrival), NOT on subscription-accept.** Some symbols accept a WS subscribe but never stream (delisted underlying / suspended). xStock: >7d no-data → stale (log-only); >30d → auto `is_delisted=true`. This is the only reliable "the feed says yes but no data flows" detector. [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 1.6 — Add the `discovery_runs` forensic audit table** (one row per cycle: run_id, `triggered_by` CHECK in cron_daily/manual/boot, counts, `source_chain_status` JSONB, error_log). Ship the daily node-cron `0 6 * * *`, the manual `POST /api/internal/universe-discovery/refresh`, and a health endpoint. *Watch for:* every node-cron schedule needs the audit-row + poll-reconcile safety net of `R-SCHEDTASK` — node-cron can silently fail to fire with no exception and no log line. [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 1.7 — Treat classification heuristics as fragile.** `string.includes()` has substring-collision ORDERING bugs (`MRNA` classified XLK-not-XLV because `includes('technology')` matched `Biotechnology` first). Order SPECIFIC before general; give every heuristic parameterized regression-lock tests on empirically-probed boundary + collision pairs; gate UNCATEGORIZED ≤20%; use VARCHAR+CHECK (not a PG ENUM) for the sector column so you avoid the `ALTER TYPE` same-transaction restriction. [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 1.8 — Give every WS/REST discovery call an explicit timeout + deterministic partial-response abort.** A Kraken WS open-handshake can hang on stuck DNS/TLS. On timeout, write a `partial=true` audit row and do NO DB writes (the fallback chain covers). [B79.0n.UNIVERSE-DISCOVERY]
+
+**Step 1.9 — Consolidate parallel registries to ONE SSOT with type-REQUIRED fields.** Two parallel files DRIFT — xStock's universe-symbols + display-names were collapsed into one `XSTOCK_SPOT_REGISTRY` with `name` REQUIRED so a missing display-name is a COMPILE error (derived Sets stay back-compat). If you must keep two, assert both sizes match as a hard invariant. [Diagnostics-Tab, HYGIENE]
+
+**Step 1.10 — Size the tiers at pre-audit and shock-test universe growth.** Budget ≈ N symbols × 4.6 KB/sec WS during active hours (~86 KB/symbol/hr). The measured xStock 260→489 (+88%) jump: OHLC/24h work 1.86×, WS-subs 1.87×, bias-store memory ~2×, scanner cycle UNCHANGED (cursor-rotated 75-cap batches). Run a +50-symbol shock test and assert cycle/mem/write-rate stay within ±10%. *Watch for:* a static-subscribe-at-boot OHLC WS adapter will NOT pick up dynamically-discovered symbols — it needs a refresh hook, or you document a "PM2 restart to pick up new symbols" gap. [B79.0n.UNIVERSE-DISCOVERY]
+
+### Phase 2 — Schema + config
+
+**Step 2.1 — Add `asset_class` as a first-class column on every shared-state table; no price cap if the incumbent has none.** ("We don't cap BTC, we don't cap AAPLx.") Symbol allow-list in canonical `BASE/USD` form. Tables to audit for the column: `screener_filters`, `paper_sim_trades`, `paper_sim_open_positions`, `signal_eval_archive`, `regime_factor_alternates`, `exit_strategy_alternates`, `vts_open_trades`. [B79]
+
+**Step 2.2 — When you add `asset_class`, UPDATE THE UNIQUE INDEX too (recurring half-job).** `screener_filters` had `UNIQUE(mode, filter_path)`; new-class seeds collided on identical `(paper, vts_trend)` tuples and `ON CONFLICT DO NOTHING` silently skipped them all (`INSERT 0 0`). Fix: drop → `UNIQUE(mode, asset_class, filter_path)` + update the storage upsert's WHERE clause. *Watch for:* `\d <table>` shows column shape but NOT the constraint — pre-audit MUST also paste `pg_indexes WHERE tablename='<x>'`. Audit EVERY table that gains `asset_class` for stale unique indexes AND for the storage upsert WHERE clause (the upsert was `(mode, filterPath)`-only → after a dual-class seed it matched BOTH rows → unique-violation / cross-class corruption). [B79.0m.a, B79.0n.STORAGE]
+
+**Step 2.3 — Add composite `(asset_class, <time-col> DESC)` indexes on aggregator-read tables.** Every aggregator-read table with `asset_class` + time filtering (`regime_factor_alternates`, `exit_strategy_alternates`, `signal_eval_archive`) needs `idx_<table>_asset_<timecol>` or the aggregator's `WHERE asset_class=$X AND <time> >= …` does a full-window scan with a post-bitmap `Filter` on asset_class — 32+ s on 24k-row tables; sub-ms with the index. If the query has `AND <pred> IS NOT NULL`, make the index partial with the same predicate. **Verify with `EXPLAIN ANALYZE` that `Index Cond` (not `Filter`) carries the asset_class predicate BEFORE the new class starts emitting** — the 38–133 s endpoint timings in B-NEW-28 came from skipping this. `CREATE INDEX CONCURRENTLY` cannot run inside a Drizzle BEGIN/COMMIT — use a raw `psql` script under `server/migrations/manual/` with an `IF NOT EXISTS` guard + co-located rollback. [BATCH_82]
+
+**Step 2.4 — Seed `module_constants` rows per-class for EVERY behavioral knob, and DELETE the code constants.** Regime, SQE, MCE, strategy_gates, pattern_pool_gates, trailing_exit, market_data freshness. DB is the SSOT — `XSTOCK_SPOT_ENABLED_STRATEGIES` was deleted; gating reads `strategy_gates.<class>.<strat>.enabled` (19 rows = 10 allow + 9 block). Add the module to the boot PREFETCH list with a HARD-FAIL on rowCount=0. A code+DB dual SSOT violates the no-silent-fallback invariant. [B79.0m.a, B79]
+
+**Step 2.5 — Use the SAME `constant_name` across classes; `asset_class` is the ONLY differentiator.** xStock `pattern_pool_gates` was seeded with different field names than crypto (`final_score_floor` vs `pattern_final_score_min`) → required a forward-converge migration. Before seeding, grep the incumbent's `constant_name`s and match them exactly; add a naming-convergence regression test. Convergence recipe in `R-PATTERN` (naming-convergence sub-pattern). [B79.0n.PATTERN-DETECT]
+
+**Step 2.6 — Clone Layer-1 thresholds from the incumbent, tagged with provenance — but treat the numbers as DEBT, not truth.** Tag cloned rows `last_updated_by='cloned-from-crypto'`. Scale the class-specific primitives (e.g. TFS vol/mom scales HALVED for an equity ATR baseline); keep the scale-free agnostic primitives (DI, DBS, regime_age, volume_regime) on the wildcard `*` with an inline justification comment. These cloned values are explicit calibration debt resolved in Phase 7 — see `Step 7.2` carryover audit. [B79.0m.a]
+
+**Step 2.7 — Understand Layer-1 vs Layer-2 scope before scoping the work.** Layer-1 (primary, UI-overridable, per-class-scoped rows) is the primary onboarding seed work; Layer-2 (`module_constants` fallback, often wildcard) usually DEFERS to a later batch with explicit promote-to-active triggers. Half-routed (L1 per-class + L2 wildcard) is acceptable. The API-side reads (`getCachedNumberRequired` / `getCachedNumbersForModule`, hard-fail-on-missing) were already wired in B72 — so per-class work SHRINKS to seed rows + REQUIRED-typing. Enumerate "what B72 already did vs what remains" from CODE/DB, not from stale BATCH_CATALOG planning rows. [STORAGE, MCE]
+
+**Step 2.8 — Retire a wildcard only via an EXISTS-gated, no-orphan-window migration.** Add crypto row → add new-class row → DELETE the wildcard `(*,*,*,*)` ONLY `WHERE EXISTS` both, all in one `BEGIN/COMMIT` + `ON CONFLICT DO NOTHING` + exact-`constant_name` scoping + a sibling `*-rollback.sql`. Ship the resolver-key tightening and the seed migration in the SAME commit. For a high-blast lever, use the **promote-then-retire two-step** (`R-WILDCARD`): batch 1 seeds per-class rows + an observable fallback counter while PRESERVING the wildcard; batch 2 (after a 48h verify-gate with the counter at zero) does the EXISTS-gated DELETE. The 48h gap verifies RESOLVER correctness, not just DELETE safety. [B79.0n.MCE, B79.0n.SCORING]
+
+**Step 2.9 — Make the keep-vs-retire decision per lever.** Genuinely cross-class (math constants, governance caps) → KEEP wildcard + justification comment. Asset-class-meaningful → retire to per-class. The fix for a buggy wildcard is always at the DATA layer, never the resolver — wildcard support is a correct feature. [MCE]
+
+**Step 2.10 — Keep DB flags NUMERIC (1/0), never string.** The resolver drops non-numeric values → a string flag silently re-enables the thing it was meant to disable (e.g. `volume_confirmation_enabled`). [B3.1b]
+
+**Step 2.11 — No silent fallbacks for DB-governed settings, with one nuance.** A try/catch returning a hardcoded default (`sector_coverage_floor=7`) is WRONG — an operator deleting a seeded row must HALT, not silently run on a default. Use strict `getCachedNumberRequired`. The nuance: when you ADD a new signal to a hot path, PRESERVE a genuinely-graceful degrade (insufficient archive / ATR=0 / missing-sector → neutral multiplier), which is different from silently defaulting a governance knob. [B-PHASE-A2]
+
+### Phase 3 — Code surface (the REQUIRED-`assetClass` master pattern)
+
+This is the single most reused discipline in the whole onboarding. The detailed per-surface templates are in `R-STORAGE` (storage/data-access), `R-MCE` (compute/math + fail-hard switch + wildcard-retirement), `R-PATTERN` (pattern-recognition + naming-convergence + capture-and-reuse), and `R-CHAIN` (confidence-modulator chain). The steps below are the order and the watch-fors.
+
+**Step 3.1 — Capture-the-compiler: promote `assetClass?: string = 'crypto_spot'` → REQUIRED `assetClass: AssetClass` at every surface API.** TS then compile-fails every caller — 100% coverage by construction, which beats grep. Apply at storage, compute/math, strategy-detect (`_SE_KEY` factory + `callStrategyDetect` + the 19 detect methods), pattern primitives, and the modulator chain (16 sites). **Treat ANY `assetClass?:` optional-with-default as a DEFECT to convert.** Lock each surface with a `@ts-expect-error` type test so a regression shows up as an "unused directive" error. *Real bug this caught:* SQE was evaluating xStock against crypto's `finalScoreMin`. [STORAGE/MCE/STRATEGY/PATTERN-DETECT/CONFIDENCE-CHAIN]
+
+**Step 3.2 — Enumerate callers by compile, not grep — grep is a ~20% undercount AND has false positives.** Probe: edit ONE signature to add the REQUIRED param → `npx tsc --noEmit` → capture the errors → REVERT before commit. Measured undercounts: STORAGE 32→38; STRATEGY "2 files"→7-file/66-call. Grep false-positive example: `assetClass:'*'` matched `directional-bias-store.ts:59`, which was already a per-class variable (not a wildcard literal) — always open the file before scoping work to a grep hit. Categorize each hit: crypto-intentional (`'crypto_spot' as const`) / asset-class-aware (context-routed) / diagnostic (helper-routed) / already-correct — the categorization itself is a maintenance asset. [STRATEGY, STORAGE, MCE]
+
+**Step 3.3 — Centralize the dispatcher; share the methods; vary only the DATA — never fork LOGIC.** Threading happens AT the dispatcher (`callStrategyDetect`, `storage.getScreenerFilters`, `mce.computeContext`). Per-class code under `server/asset_classes/<class>/` is ONLY pure helpers (lane-eligibility, market-hours, regime-thresholds, friction) and is bound by LOCATION, not by an optional param — an `assetClass?:` on a file that is already asset-class-bound by its folder is a silent-fallback magnet. [STRATEGY, MCE, UNIVERSE-DISCOVERY]
+
+**Step 3.4 — Use a per-class factory dispatch + `assertNever` exhaustive switch for any component going multi-class.** Arm one instance per active class; throw `[CLASS_NOT_WIRED]` (DISTINCT from `[CLASS_INVALID]`) for reserved-future classes; terminate with `assertNever(assetClass)` so the file compile-fails when the `AssetClass` union grows; give the function an explicit return type. Full template in `R-INSTANCE` (telemetry triad) and `R-DISPATCH` (domain dispatcher). [TELEMETRY, ORCHESTRATOR, MCE, STRATEGY]
+
+**Step 3.5 — Co-locate domain dispatchers; do NOT build a central SSOT dispatch file.** `getFrictionForAssetClass` lives in `cost-model.ts`; `getPatternPoolGuardrailsForAssetClass` in `pattern-pool-dispatch.ts`. A central `dispatch.ts` forces every domain to import from every other domain. The consumer-site swap pattern for authoring one such domain dispatcher (when the per-class module already exists) is `R-DISPATCH`. [ORCHESTRATOR, MCE]
+
+**Step 3.6 — Capture-and-reuse the resolution once at function/loop entry, with `safeResolveAssetClass` + skip-on-null.** Resolve ONCE into `_assetClass`, reuse downstream, and skip cleanly on null instead of throwing. This eliminates throw-amplification on unregistered symbols and dedupes the per-call `[COLLISION_RESOLVE]` WARNs. Template + rationale in `R-PATTERN` (capture-and-reuse). [PATTERN-DETECT origin, CONFIDENCE-CHAIN 16 sites]
+
+**Step 3.7 — No silent fallback at a REQUIRED-`assetClass` boundary.** Use deterministic `resolveAssetClass(symbol,'kraken')`, NOT `metadata.assetClass || 'crypto_spot'` — a disagreement between the two is a real bug you WANT surfaced at the boundary, not silently reconciled. Where a fallback must remain, add an inline WARN so un-threaded callers are observable. Distinguish belt-and-suspenders (defensive, backs an existing invariant — OK) from load-bearing (the only net — a smell). [ORCHESTRATOR, RTB, EXECUTION]
+
+**Step 3.8 — Extend the cache key to `${primaryId}:${assetClass}`.** STORAGE keyed `${mode}`, MCE keyed `${symbol}`, SCORING's `getPredictiveConfidence` was cross-contaminating `${regime}:${strategy}`. Memory cost is O(k), k = number of (id, class) combos. Ship a cache-isolation regression test. *Watch for:* a subsystem can own MULTIPLE cache layers (MCE has 3: per-symbol context, module-constants rowset, 9-group config refresh) — extend the RIGHT one and document the inventory so the next onboarding does not conflate them. [STORAGE, MCE, SCORING]
+
+**Step 3.9 — Preserve a wildcard under a per-class refactor; diverge ONLY with EXISTS-gated explicit-row evidence first.** `_RTB_GK` was kept at 8 sites rather than prematurely seeded per-class. Prevents "we're in here, let's also seed per-class" divergence with no evidence. [RTB, ORCHESTRATOR]
+
+**Step 3.10 — Replace local `export type AssetClass = 'crypto_spot'` re-declarations with the shared import.** A local literal re-declaration silently NARROWS the union (`pattern-pool-filters.ts:76`) — use `export type { AssetClass } from '@shared/asset-classes'`. Note TS1016: a REQUIRED param cannot follow an optional one → re-order to required-but-nullable. [PATTERN-DETECT, MCE]
+
+**Step 3.11 — Extend `resolveAssetClass` itself for the new class.** Branch order matters: exchange-first → display-form → collision-gate → membership → fall-through to existing patterns. Full template in `R-RESOLVE`. The persistence-at-open table (`vts_open_trades`) is already class-agnostic — future classes inherit it with no new persistence code (see `Step 4.8`). [Section D.1 origin]
+
+### Phase 4 — Scanner + pipeline wire-in
+
+**Step 4.1 — Two-batch split: dormant scaffold FIRST, live activation SECOND.** Keeps "no signals → no contamination of the incumbent's pooled aggregates until calibrated." The arc was B79 scaffold → B79.0a live scanner; B79.0m.a inert thresholds → B79.0m.b2 functional pipeline. Day-1 verification is a boot-log line + a no-touch fence SQL only. If a sub-batch ships scaffold without making the capability functional, declare it in BOLD at the top of the completion report (CLAUDE.md §9.1). [B79, B79.0a, B79.0m]
+
+**Step 4.2 — Subscribe the new scanner to `centralClock`, import ONLY the new class's instances.** Never `setInterval` (drifts, non-deterministic load). Import `getXstockSpotInstances`-style accessors, never the global `getTelemetryAggregator()` on the new path (grep-verify). Constructor-inject telemetry into ARM with a back-compat fallback `(config?, telemetry?)`. [B79.0a]
+
+**Step 4.3 — Implement all 12 crypto-parity scanner defenses from day one** (`R-SCANNER`). Missing any one produces the exact "scanner wedges, UI shows zeros forever, every cycle times out" failure xStock hit: (1) cycle-scoped config cache, (2) `SCAN_TIMEOUT_MS`+`Promise.race`, (3) pair-batch rotation, (4) pinned-benchmark sanity, (5) constant-name canonicalization, (6) bid/ask spread filter source, (7) OHLC pre-warm batched/TTL, (8) NO silent fallbacks, (9) symbol-normalization consistency, (10) connection-pool sizing, (11) central-clock not setInterval, (12) `isScanning` early-return. [Step 2b origin]
+
+**Step 4.4 — Add a per-class freshness window, empirically derived, stored in `module_constants`.** xStock `data_freshness_window_ms=90000` from the p99 inter-tick gap of low-liquidity names; class-aware `isPairDataFresh(symbol, assetClass, lastTickMs, now)` with a closed-market belt-and-suspenders. *Watch for:* do not claim you converted every freshness caller — the incumbent admission-path callers were deliberately left for a later batch; say so. [B79.0a]
+
+**Step 4.5 — Market-hours: DST-aware tz math, never UTC-day/hour arithmetic.** Use `Intl.DateTimeFormat('America/New_York')` — old UTC-day code reopened at Sun 22:00 UTC = 6 PM EDT, 2 h early. The market-hours checklist also covers: a REQUIRED symbol arg on every predicate (an optional arg is a silent-bug class — Langston); the symbol-normalizer regex needs a MANDATORY disambiguating suffix (a greedy `[A-Z]+x?` consumed the disambiguating `x` so `TSLAxUSD`→`TSLAx/USD` fell through); `/USD` vs `/USDC` membership; empty-universe `IN ()` short-circuit before the DB read; DST-boundary tests. **xStock is 24/5 (Fri-20:00-ET → Sun-20:00-ET unified close), NOT 24/7 and NOT US RTH; US holidays PAUSE the cadence** (CLAUDE.md §5 #17). The scanner runs a RESTRICTED universe when the regular session is closed (it does not skip the cycle); surface `lastUniverseSize` on diagnostics. [B79.0c, B79.0L, B-NEW-36]
+
+**Step 4.6 — Probe the upstream feed empirically BEFORE declaring "live."** A 60-s WS probe returned 201 messages but ZERO ticker/OHLC — the feed is silent on weekends for ALL names. Distinguish "correctly-closed market" from "broken feed." A combined investigation batch whose output is a DECISION MATRIX (not code) is legitimate. Escalate any recurring paid-feed cost to Kyle. [B79.0c, B79.0k]
+
+**Step 4.7 — Make the collision resolver context-sensitive: no unconditional membership fast-path that wins regardless of context.** A collision ticker arriving on the plain exchange path WITHOUT the disambiguating suffix returns the INCUMBENT class + a `[COLLISION_RESOLVE]` WARN; the display-form (`SUIx/USD`) resolves to the new class. WARN-and-prefer-incumbent, never throw. If the collision bug ever shipped, backfill historical mis-tags (audit script first with the UPDATE commented out; xStock flipped 4862 rows) and log it in CHANGES_AND_FIXES. Recipe in `R-COLLISION`. [B79.0f]
+
+**Step 4.8 — Persist `asset_class` at trade-OPEN into a dedicated table, and never re-resolve downstream.** `vts_open_trades` holds the row; downstream reads it, making the collision-display bug structurally impossible. CRITICAL ordering: `await` the INSERT BEFORE the in-memory `Map.set` (no fire-and-forget — that creates a Map-has/DB-doesn't window); trade-open returns null cleanly on persist failure. On rehydrate, RE-RESOLVE via the safe resolver (to defeat legacy bad values) and update BOTH DB and Map. At close: `Map.delete(id)` FIRST (sync gate against re-running the non-idempotent close cascade), THEN `await markOpenTradeClosed` in a try/catch with NO re-throw (soft-delete `closed` boolean, not a forced full-tx — a forced tx with no shared surface turns a recoverable ghost-row into an unrecoverable double-write). `CREATE INDEX CONCURRENTLY` cannot run in BEGIN/COMMIT. [B79.0f, B79.0g, B79.0g-tx]
+
+**Step 4.9 — Hunt the "crypto-first / asset-class-lost" bug class — it recurred 5+ times in 24–48 h.** Any serialization/dispatch/registry site predating asset-class-awareness DROPS the dimension: an exit-cycle missing a `db` import silently swallowed `db is not defined` every minute → xStock `currentPrice=null`, open 20+ h (B-NEW-20); open-context fields empty (B-NEW-22); price dispatch read the crypto-only cache (B-NEW-25); `assetClass` never written to closed-trade JSON + readback `|| 'crypto_spot'` MISLABELED every closure (B-NEW-26/27); a writer-side `'crypto_spot'` literal mis-tagged every emit (BATCH_82). **Structural fix: centralize resolution at the ENTRY point (default-resolve context fields INSIDE `registerOpenVtsTrade`) + make `assetClass` type-REQUIRED so a dropped dimension is a COMPILE error.** The writer/reader enumeration audit is `R-WRITER`. [Diagnostics-Tab, B79.TEC]
+
+**Step 4.10 — Mirror the incumbent's pipeline architecture EXACTLY; differences live in DB rows + substrate-forced params, never in code shape.** Same filter paths, TRUE family fan-out (`for lane { for strategy }` → N+1 lanes/pair), parallel pattern global+IMF gate (survivors tagged `sourcePool='pattern'`), post-detect math, exit TEC. *Watch for:* `sourcePool` lives in `features` JSONB (`features->>'sourcePool'`), not a top-level column. The B73 replay must branch on assetClass to read the RIGHT OHLC table (it was silently fetching crypto REST OHLC, empty for xStock). Enforce LONG-only explicitly (an ORB down-break returned SELL → null on `sell_disabled_long_only`). Add the family-map entry (`orb:'breakout'`) or the family-gate is bypassed. Extract lane-eligibility into its own file for testability. [B79.0m.b2, Diagnostics-Tab]
+
+### Phase 5 — Telemetry / observability
+
+**Step 5.1 — Build a per-class instance triad via factory, NOT param-plumbing.** Each class gets its own `TelemetryAggregator` + `ARM` + `PairFailureTracker` + `AdaptiveScanManager` from `getAssetClassInstances(class)`. Keep the new class's instance IN-MEMORY only on Day 1 (Variant C default) to avoid contaminating the incumbent's pooled aggregates. Full factory + `assertNever` template in `R-INSTANCE`. The Layer-1/2/3 observation framing these instances emit into — and why Variant C (in-memory-only) is the Day-1 default — is in `R-LAYERS`. *Watch for:* the persist-timer hazard may already be structurally impossible (gated inside the singleton accessor) — check before adding a flag. [B79, TELEMETRY]
+
+**Step 5.2 — Ship the `peek<X>` non-arming-read companion WITH the construction API, same batch.** A verify-gate stats accessor must NOT accidentally ARM persistence (timers/disk). The `peek*` prefix returns whatever module-level instance is held (may be null), with no construction side-effect; a caller that needs to arm uses a distinctly-named `getOrCreate*`. Template in `R-INSTANCE` (Shape 2). [TELEMETRY]
+
+**Step 5.3 — Lazy-init every per-symbol map/counter/bucket** (`bucket.get(symbol) ?? createBucket(symbol)`), NEVER a boot-time `SYMBOLS.forEach()` alloc. A symbol discovered AFTER boot won't have a bucket → writes silently no-op or throw. [UNIVERSE-DISCOVERY]
+
+**Step 5.4 — Stand up a FULL mirror observation UI tab (standing invariant #5), not a thin one.** REUSE the incumbent's rich components via an optional `endpointBase` prop (byte-identical for legacy callers) + an explicit REQUIRED `assetClass` prop; parameterize shared backend aggregators with an OPTIONAL `assetClass` (append `AND asset_class=$X` ONLY when provided; default = byte-identical legacy behavior) + a SQL-string-equivalence test; cache-key isolation via `{asset_class}` in `queryKey`. The full 6-step recipe is `R-UITAB`. *Watch for:* factor-calibration is JSONB (`(real_decision->>'confidence')::numeric`) — run `\d` first. The G3 Claude-in-Chrome walkthrough is NON-waivable (CLAUDE.md §9.3). Terminology: "VTS Observation," never "shadow-mode." [B79.0i.a/b]
+
+**Step 5.5 — Know that a VTS observability field has a 5-SITE plumbing chain; missing any one silently degrades to "—" with NO tsc error** (the persisted closed-trade record is cast `as any`). The sites: capture-at-open / open read-feed type+push / close-copy (field-MAPPING not spread) / JSONL persist-write / closed read-feed whitelist. Full chain + detection technique in `R-5SITE`. Verify via the LIVE feed; detect via a scoped before/after tsc diff. [B.2.UI]
+
+### Phase 6 — Strategy activation
+
+**Step 6.1 — Activating a strategy has SIX wire-in points; missing ANY one silently nulls it.** (1) real `detectX()`; (2) register in `strategy-engine.ts` dispatch (import + enum + wrapper); (3) register the `signal-orchestrator.ts` dispatch block + asset-class guard; (4) add to `canonical-regime-strategy-map.ts` for the right regimes; (5) SQE whitelist entry; (6) seed Layer-1 thresholds + flip the DB gate. Template in `R-STRATEGY6`. [B79.0d]
+
+**Step 6.2 — THE highest-cost gap of the whole arc: a new strategy needs BOTH dispatch sites — `strategy-engine.ts` direct AND `vts-runner.ts:callStrategyDetect` switch — plus a VTS-path integration test through `callStrategyDetect`.** B79.0d updated only the strategy-engine path; because active trading is OFF, the ONLY path that runs is VTS → ORB was silently 100%-nulled and flooded `[HF6][VTS] Unknown strategy: orb` for THREE batches until someone grepped for "orb." The unit tests passed because they tested the wrapper in isolation. **Always add the VTS-path integration test.** [B79.0d→B79.0j]
+
+**Step 6.3 — Skip the incumbent via triple-defense** (detect early-return + dispatch guard + SQE whitelist); the DB gate flip (`strategy_gates.<class>.<strat>.enabled=false`) is the rollback. A new PG enum value (`strategyTypeEnum` 'orb') needs a SEPARATE migration ordered FIRST in MANIFEST (`ALTER TYPE ADD VALUE` cannot co-tx). Name constants for what they ARE (`risk_reward_ratio` was a misnomer → `target_range_multiple`). The B73 ablation auto-includes new strategies (it is strategy-agnostic) — don't claim you "registered" it there. [B79.0d, B79.0j, STRATEGY]
+
+**Step 6.4 — Classify every lever F-1 vs F-2 BEFORE scoping seeds.** F-1 = class-invariant-by-construction (the DOMINANT outcome — STRATEGY had 222 wildcard levers ALL F-1, zero seeds); F-2 = per-class-behavior-required. CONFIDENCE-CHAIN was 4 F-2 / 5 F-1, which cut the refactor surface ~50%. Do not over-scope per-class seeds. [STRATEGY, CONFIDENCE-CHAIN]
+
+**Step 6.5 — Use idempotent seed semantics — the seed-target may have DRIFTED between scope-draft and deploy.** `ON CONFLICT DO NOTHING` preserves actual state; scope enabled-counts are predictions (ORB was disabled by B-NEW-34 between the STRATEGY scope and its deploy). [STRATEGY]
+
+**Step 6.6 — Make a per-class NO-OP/disabled lever DB-seeded AND function-enforced AND metadata-stamped — all three.** xStock's b67_1 macro NO-OP = `modifier_min=max=1.0` + `assetClassNoOpActive=true` + a short-circuit + a stamped row; b68_3 pair-correlation = `compute_correlation_enabled=false` + `SPY/USD` reference. Verify reference-symbol tickers against the DB (`SPY/USD`, not `SPYx/USD`). Use an atomic Map-replace for per-class config refresh (`ReadonlyMap` so in-place mutation is a TS error). Full chain-plumbing pattern in `R-CHAIN`. [CONFIDENCE-CHAIN]
+
+### Phase 7 — Calibration (the "numeric carryover ≠ valid carryover" arc)
+
+**Step 7.1 — Build a PRE-CALIBRATION BASELINE first — it is itself a major step.** Before tuning, capture, for EVERY tunable: current value + current result as a **rolling-window rate WITH raw counts** (never a single-cycle snapshot — a single xStock scan flashed spread-reject 16% vs the rolling-24h truth 2.3%; CLAUDE.md #13), plus regime mix, strategy mix, throughput, overlaid with an **operational-event timeline** (outages, holidays, feed go-lives) so distorted windows are excluded, plus a "definitely off NOW" list. Seed it ALL into a **Calibration Scoreboard** (`calibration_ledger` table + the Analytics "Calibration" tab; num/den is SSOT, pct derived in a pure tested formatter). The scoreboard must enumerate the ENTIRE surface — **64 settings across 8 categories** (Regime, IMF, Global gates, Strategy gates, Friction, TEC priors, Sector, Macro), grouped — not just the pre-flagged knobs (cherry-picked reads as hiding whole groups). Full method in `R-BASELINE`. [B-CALSCORE, B.0]
+
+**Step 7.2 — Run the CARRYOVER AUDIT — "the single biggest Phase-24 onboarding trap": a numeric carryover is NOT a valid carryover.** Every cloned setting/gate/strategy/component needs: (a) re-derivation against the NEW class's actual data; (b) a layer-placement check (is it where canonical architecture says?); (c) a wired-not-stub check (does it actually FIRE?). Proven by: `lq_min=43` (a crypto VOLUME-era value) silently became a ~$19,950 ask-DEPTH bar rejecting ~70% of names when liquidity switched to order-book depth; a correlation gate that was BOTH mis-placed (bundled INTO the xStock IMF family filter; canonical IMF = LQ/VN/DI only) AND dead (no benchmark → constant 0.5 → 0 rejections of 283,625); wrong-volume-data confirmation gates; trend+breakout IMF thresholds IDENTICAL because cloned from one crypto baseline (they should differ); crypto-tuned strategies LOSING on the 24/5 equity tape. *Watch for:* two gates can measure different STATISTICS, not just different levels (xStock LQ screens ask-only depth; `min_depth_usd` screens min(ask,bid)) — coordinating them means reconciling WHAT they measure. Checklist in `R-BASELINE` (carryover sub-section). [B-CALSCORE, B.1.5, B3.1b, Diagnostics-Tab]
+
+**Step 7.3 — Put the liquidity gate on a metric the class actually HAS.** Switch the carried-over 24h-volume gate to live order-book DEPTH (`calculateXstockDepthLQ`); use a rolling-MEDIAN over a 20-min window, not an instantaneous snapshot; use the 3-state graceful pattern (`lqComputable` + sentinel `-1` skip + try/catch = "no opinion this cycle," not a cascading rejection). Protect the crypto path with golden-value regression-lock tests. [B.1.5]
+
+**Step 7.4 — Remove a broken gate rather than keep it as duct tape (NO PATCHES).** xStock volume-confirmation used underlying-EQUITY volume (not token volume); the depth-delta replacement carried no signal → REMOVE on the xStock path via a per-class NUMERIC flag (crypto keeps it), and document the honest gap (no token-volume feed; RUNNING_ISSUES #199). Verify a backend-only gate via a runtime LOG that PROVES the running process resolved + applied the flag (`volume<threshold` but `confirmed=true` because `volGateEnabled=false`). [B3.1b]
+
+**Step 7.5 — Treat BAR-FREQUENCY as a first-class onboarding decision — MEASURE it, accept "no change," and treat a switch as a multi-week FOUNDATION effort.** A cloned class inherits the incumbent's interval (xStock inherited crypto's 60-min); that interval may not fit. Run a bar-frequency study (`scripts/b4-bar-frequency-study.ts`): per candidate interval measure pattern/setup availability, forward-EXCESS-return edge (de-meaned vs the cross-sectional universe), regime-read STABILITY (flip-rate), and bars-per-intended-hold. xStock chose 15-min over 60-min on structure + stability + ORB-revival (edge was weak at every interval — the choice is rarely made on edge). The CRYPTO study said NO change (trend setups were marginally BETTER at COARSER bars — opposite of "switch finer"; never generalize one class's answer). The full blast-radius + the realized recalibration method (replay-driven, percentile-preserving, regime-label parity exit gate) is `R-BARFREQ`. *Key watch-outs:* changing the interval silently shortens every bar-COUNT lookback's wall-clock window; VN is bar-invariant but DI CONTRACTS toward 50 (so IMF needs a DIFFERENT recalibration shape than regime); the EXIT GATE is a regime-label PARITY report (max mix |Δ| ≤ ~1.3pp) judged clean-old → clean-new; deploy is an ATOMIC ACTIVATION at restart (you cannot let old code read new-interval thresholds); a parked equity-native strategy (ORB) can be UNLOCKED by a finer interval, but "unlocked" ≠ "activated" (plumb it ready, leave `enable=false` until edge-validated — RUNNING_ISSUES #203). [B.4, crypto study]
+
+**Step 7.6 — Run the MANDATORY 3-sub-cycle calibration cycle before "production-ready."** (1) Regime-classifier calibration (replay archived bars through the production classifier; validate-and-document if in-envelope; tuning needs out-of-envelope signal OR trade-outcome evidence = a LATER phase; query the INTERSECTION of joined sources first — overlap is narrower than modeled). (2) Filter-threshold reality check. (3) Strategy-gate testing (every DB-enabled strategy fires ≥1, or its dormancy has a documented gating reason). Exit criteria + the per-sub-cycle anti-patterns are in `R-CALCYCLE`. **Calibration moves forward ONLY after the diagnostics UI shows TRUSTWORTHY numbers** — you cannot calibrate against a panel you don't trust. *Watch for:* filter generosity ≠ signal generosity (lenient gates admit pairs; strategies still null on absent geometry — 99.8% detect-nulls were calibration territory, not a bug; give EVERY silent-skip a counter + null reason before concluding); a multiplicative confidence formula compresses toward its floor BY DESIGN (not a bug — but a factor capped at mom≥1% while p95 mom=6% IS a real Phase-25 input). Once the 3 sub-cycles pass, the class moves to Layer-3 live VTS observation, whose promotion gate + per-class observation-period sizing are in `R-LAYERS`. [B.1, Diagnostics-Tab]
+
+**Step 7.7 — Extend DBS to the new class: math byte-identical first.** Equity-style classes aggregate the market-wide directional signal RESPECTING SECTOR boundaries (index proxies SPY/QQQ get per-pair scores but are EXCLUDED from the aggregate). The two-singleton store takes a constructor-option DISCRIMINATOR `{mode, assetClassForKnobs}`, NOT a partition-key. High-judgment data (the 265-entry GICS map) needs a companion reference doc + an independent spot-check pause BEFORE commit (TS catches MISSING entries, not WRONG ones — make the field REQUIRED). Cold-start: the scanner short-circuits during the weekend (universe=0) → schedule a system-alert ~5 min post-open as the live gate; backfill offline via idempotent `ON CONFLICT DO NOTHING`. [B-PHASE-A2]
+
+**Step 7.8 — Capture data for future calibration with discipline.** Tag every trade with `calibration_state` (pre/post), a DB fast-default back-stamp, and forward-propagation through the close-writer. *Watch for:* "the obvious key isn't the join key" — the replay writer's `tradeId` is RECONSTRUCTED (symbol+exit-time) ≠ the open id (which survives as `originalSignalId`); a `WHERE id=tradeId` sub-select matches ZERO rows. (This was the trigger for the B-NEW-53 decision-provenance capture — when a backward-replay can't reach ≥99% parity because the forming bar / stop-anchor was never persisted, the fix is FORWARD capture, not chasing the replay.) [F-NOW, B-NEW-53]
+
+**Step 7.9 — A scoped filter on a SHARED aggregator silently changes the live UI.** One aggregator can feed a live UI panel AND a future eval path; an unconditional scoped filter EMPTIES the live panel (every existing xStock trade was pre-calibration → an unconditional pre-calibration exclusion would have emptied the live xStocks ablation panel). **Make it OPT-IN (default-off, applied only by the eval caller); enumerate EVERY consumer of a shared surface — including BOTH the `/api/analytics/*` and `/api/xstocks/*` siblings — and state each one's post-change behavior BEFORE writing code; presume a shared aggregator feeds a live UI until proven otherwise.** Recipe in `R-SHARED`. [F-NOW, B.2.UI]
+
+**Step 7.10 — Don't build gates/code that can't FIRE (NO PATCHES).** A depth-cap that can't bind (per-trade <1% of median depth) or a filter with no caller is dead code — build the mechanism, gate it at its real future consumer, and declare the inert state in BOLD (CLAUDE.md §9.1). [B.1.5, F-NOW]
+
+### Phase 8 — Verification + forward-watch
+
+**Step 8.1 — Run the no-touch fence on the incumbent class on EVERY sub-batch — the universal safety gate.** Verify the incumbent's `regime_factor_alternates` emission/factor stays within ±10% (≥80% floor) of the pre-deploy baseline. Pattern:
+```sql
+SELECT factor_name, COUNT(*) FROM regime_factor_alternates
+WHERE asset_class = 'crypto_spot' AND evaluated_at > NOW() - INTERVAL '1 hour'
+GROUP BY factor_name;
 ```
+Value-identical promotions (in-code default → DB row at the SAME value) are WITHIN the fence. [every batch]
 
-For every site that returns matches, verify:
+**Step 8.2 — Hostile-sim the failure paths before deploy.** Boot-fail: delete a required row → confirm the crash loop NAMES the missing row + the fix migration; restore → clean boot. Backpressure: drive cycles to ~28 s under the 30 s tick → confirm BOTH cycles keep emitting AND `[BACKPRESSURE_OBSERVED]` fires. Staging runs `NODE_ENV=production` → use the double-flag escape (`BACKPRESSURE_TEST_MODE=1` + `HOSTILE_SIM_OVERRIDE=1`). Backpressure is NEVER asset-class shedding (standing invariant #3) — the load test is a SHIP-vs-scale sizing gate run BEFORE deploy. [B79.TEC, B79.0a]
 
-1. **Schema (`shared/schema.ts`)** — column exists with NOT NULL constraint.
-2. **Writer site (INSERT or UPDATE on the column)** — does the value come from a typed parameter, or is it a hardcoded literal / `??` fallback? If the latter, this is a future incident waiting to fire. Refactor to type-system-enforced caller-resolves: parameter is REQUIRED (no default), TypeScript compile fails if any caller forgets.
-3. **Reader site (SELECT where the column is in WHERE / GROUP BY / aggregation)** — does the function accept `assetClass` parameter, or is it implicitly crypto-only? If implicit, every panel + aggregate breaks silently when the new asset class arrives — they'll either return crypto-only data with the wrong label OR throw on the new class.
-4. **Downstream consumer (ML pipeline, weekly digest, training-export script, etc.)** — does any consumer have an implicit `WHERE asset_class = 'crypto_spot'` filter that would silently exclude the new asset class? If so, the writer fix correctly tags new rows but the reader silently skips them.
+**Step 8.3 — Grep the PM2 ERROR log for accumulated noise on any batch touching a shared utility/detector/boot path.** 64,494 `setNullReason is not defined` errors sat silent for months inside catch-blocks (stderr-only). Add a boot-time round-trip smoke test (set→get→assert-literal→reset, `process.exit(1)` on failure) + an import-hygiene test for heavily-imported shared helpers. **Step-7 first-pass verification MUST include a PM2-log spot-check, not just HTTP 200** (the CONFIDENCE-CHAIN esbuild `Dynamic require of "path"` bug hid inside a try/catch). [HYGIENE, CONFIDENCE-CHAIN]
 
-Document the inventory in `BATCH_N_PRE_AUDIT.md` §"Writer/reader asset-class enumeration". For BATCH_82 the inventory was 2 writers (factor-ablation-emitter, exit-strategy-replay-service) + 2 readers (drift-dashboard-aggregator, exit-strategy-ablation-aggregator) + 1 indirect consumer (replay-ablation.ts script — already asset-class-agnostic). No ML pipeline / digest / export reads either table — clean downstream.
+**Step 8.4 — Use the right verification surface for the change type, and verify per-class knobs against the LIVE DB, not code comments.** UI changes → live Claude-in-Chrome (CLAUDE.md §9.3); backend-only → a runtime-LOG proof; per-class behavioral knobs → the live DB (BE-protect/trailing were deliberately TRUE for xStock; comments saying "starts false" were aspirational). Re-measure before accepting a perf-cost claim (a `max_bid_ask_spread` revert was driven by a 130× claim that was a measurement artifact — a fresh test showed 40–43 ms either way). Endpoint query shape matters at universe scale (a freshness endpoint went 13,794 ms → 88 ms via `unnest+LATERAL`; a `COUNT(DISTINCT date_trunc(...))` over millions hit a 60 s timeout → in-memory reads in 0.94 s). [Diagnostics-Tab, B79.0m.b2]
 
-#### Standing recipe — type-enforced caller-resolves
+**Step 8.5 — For a market-hours class, verify cold-start via a scheduled system-alert.** You cannot live-verify during a weekend close → schedule an alert ~5 min post-open as the gate; verify offline meanwhile. A dormant-runtime caveat is acceptable when emission depends on system-state CC can't manufacture (no active trading, empty `paper_sim_trades`): build-parity = the deploy gate, runtime = the steady-state gate, and you defer runtime witnesses to wire-in with a scheduled alert. The per-class observation-period sizing that this cold-start window opens — how many days/samples accrue before the Layer-3 gate can be judged (≥150 samples/regime/bucket, ≥ one full weekly cycle, the 24/5≈80hr vs 24/7=168hr wall-clock math) — is in `R-LAYERS`. [B-PHASE-A2, SCORING, TEC, TELEMETRY, EXECUTION]
 
-```ts
-// BAD — silent fallback to crypto_spot
-function emitWriter(..., assetClass: string = 'crypto_spot') { ... }
-function emitWriter(...) { ...
-  const row = { asset_class: ctx.assetClass ?? 'crypto_spot' };  // ← silent fallback
-}
+**Step 8.6 — Add a per-class diagnostic endpoint as the Step-8 verify-gate target.** `/api/diagnostics/<batch>-per-class-state` (no-auth public, ~40 LOC, mechanical `curl`), returning the dispatcher's output for all active classes. v1→v2 keeps the URL when callers are zero; carry an inline `_meta.knownGaps` registry + always-bump `_meta.lastReviewed`; anchor gap entries by function-NAME, not line numbers. Registry-closure discipline in `R-GAPREG`. [ORCHESTRATOR, EXECUTION]
 
-// GOOD — type-system-enforced caller-resolves
-function emitWriter(..., assetClass: AssetClass) { ... }  // REQUIRED, no default
-function emitWriter(ctx: { assetClass: AssetClass }) { ... }  // non-nullable on the type
-```
+### Phase 9 — Cross-cutting engineering disciplines (apply throughout, not a final phase)
 
-For READER-side aggregators, the pattern is different — they may legitimately want to default to a baseline asset class for backward-compat. Use an optional parameter with a sentinel that means "all classes" rather than a hardcoded primary-class default:
+These are not sequential steps — they apply to every batch in every phase above. They live here so the sequence above stays readable.
 
-```ts
-// GOOD — explicit "all" semantic
-function computeAggregate(window: Window, assetClass: AssetClass | null = null) {
-  // When assetClass is null, no WHERE filter on asset_class — returns all classes
-  // When assetClass is provided, adds AND asset_class = $X
-}
-```
+**Step 9.1 — The production ESM bundle is a verification surface CI does NOT cover.** Two failure modes, both pass tsc + vitest + CI Build + Docker and THEN crash-loop at boot: (a) module-init ORDERING — a new import shifts esbuild's topological order so a consumer reads a hand-authored canonical JSON while it is still partial (B.1.5 `No canonical regime-strategy map for 'crypto_spot'` even though nothing touched the map); (b) a NAMED import of a CJS-only dep (`import { parseExpression } from 'cron-parser'`) is unresolvable under `--format=esm` (B-NEW-50, ~3-min outage). **Default-import CJS deps + destructure; validate against Node's ESM loader with a 5-line `.mjs` before deploy; add a production-bundle boot smoke; never inline `require()` in esbuild-shipped code.** Full rule in `R-ESM`. [B.1.5, B-NEW-50, CONFIDENCE-CHAIN]
 
-#### Why this matters
+**Step 9.2 — Audit the producer-consumer contract for every canonical artifact the batch's code reads at runtime** (`bridge/canonical/*.json`, generated configs, schema-gen types) — even when the batch doesn't touch the producer or consumer. A hand-edited canonical JSON masks generator drift; a bundler module-init shift then promotes the latent drift to a deploy crash. Verify producer + consumer agree on shape, or add a CI contract test (the lighter, durable option). Template in `R-CONTRACT`. [B.1.5]
 
-Every silent fallback to `'crypto_spot'` is a future incident. The xStocks expansion produced 5 of them in 4 days because writer sites were crypto-first by default. Each incident took live observation + Kyle screenshot + diagnostic session to surface. **Pre-launch enumeration via this audit collapses the 5 reactive incidents into one proactive grep.**
+**Step 9.3 — Migration mechanics (the recurring foot-guns).** Never `INSERT INTO _migrations` from a file (the runner auto-inserts; the column is `name`). Validate assembled SQL with `psql -f <mig> -1` against an empty schema (duplicate statements fail in tx order). Use `const result: any = await db.execute(...)`, not `db.execute<T>()` (TS2344). Register EVERY migration in `drizzle/migrations/MANIFEST.txt` in the SAME commit (CI-only catch; rollback companions stay OUT; `git add -f` past the `*.sql` gitignore). Put `import 'dotenv/config'` at the top of every standalone CLI that imports `server/db.ts` (this bit THREE separate batches). `CREATE INDEX CONCURRENTLY` cannot run in BEGIN/COMMIT. Close drizzle schema-TS drift the moment a hotfix bypasses drizzle-kit. The 4-phase production-safe ADD-COLUMN pattern (for a column added to a hot-written table) is `R-ADDCOL`. [UNIVERSE-DISCOVERY, STRATEGY, RTB, CONFIDENCE-CHAIN, B79.0m.a]
+
+**Step 9.4 — Verify the deployed SHA — commit+push ≠ deployed.** CI-green does not propagate to staging; after the Step-6 `git pull`, verify staging HEAD == the intended commit; if a follow-up lands between Step 6 and Step 8, re-deploy + re-verify; cite the actual SHA CHAIN in the completion report. The CI initial-schema pg_dump can diverge from accumulated staging — include idempotent `ON CONFLICT DO NOTHING` backfill blocks so CI's fresh-DB baseline matches staging (and count ALL per-class rows in the verification assertion, not just `updated_by`-stamped, so the backfill block doesn't trip it on staging). [SCORING, TEC]
+
+**Step 9.5 — A table/namespace rename cascades far wider than the parent tables.** `equity_*`→`xstock_*` touched 172 objects (4 parents + 52 partition children + 4+108 indexes + 4 `module_constants` retention-key STRINGS that embed the old name and break the retention sweep). Drizzle parents don't auto-rename children. `ALTER RENAME` is metadata-only sub-second; choose fail-loud over a compat view; make the rollback symmetric (Langston caught an omitted reverse-sweep). [B79.0e]
+
+**Step 9.6 — Run the dead-code "awakens / lingers" check + a consumer-grep before any file deletion.** A REQUIRED-assetClass refactor leaves orphan code + orphan DB rows + orphan prefetch entries (MCE's dead `cost-metrics` chain — the file was NOT deletable because of 6+ live consumers; back "delete whole file" with a grep). Light dead code → flag to RUNNING_ISSUES #136 (Phase-16 legacy register), don't fix mid-batch. BUT a placeholder-clone DB value that becomes a live param (xStock `pattern_max_position_pct=0.50` = 3.3× crypto) is a HARD pre-condition gate for the active-trading flip (#153), not deferrable. [MCE, PATTERN-DETECT, ORCHESTRATOR]
+
+**Step 9.7 — Test discipline.** Use key-aware DB mocks (differentiate returns by `_KEY.assetClass`) to catch the DANGEROUS "wrong-value-threaded-correctly" class that presence-assertions miss. Run the local tsc+vitest gate BEFORE the Step-4 change-list (fix in Step 3, not Step 9). Source-file regex regression-lock tests (`readFileSync`) give fast coverage without DB fixtures (weaker than functional — pair with integration). Prefer RANGE-based drift guards (`>=MIN && <=MAX`) over exact-equality (a `size===265` test broke on every universe change). Use the captured-queue mock when you need both call-capture AND per-call return control (`mockImplementationOnce` bypasses a default-mock's `.push` capture). [ORCHESTRATOR, RTB, HYGIENE, B79.0b, B79.0g-tx]
+
+**Step 9.8 — Process patterns.** Combine adjacent sub-batches when surface overlap is total (RTB #11+#12); skip a sub-batch that builds unused infra (POOL — a 489-pair universe has no M:N selection problem); use the LOCKED-module override protocol (`R-LOCKED`) for any touch of a fenced module; land EVERYTHING that ships in the reviewed HEAD before Step 5 (no "CC will handle X pre-deploy" footnotes); a Step-6 trivial hotfix rebases on the reviewed HEAD (non-trivial → abort + new Step-4); pick implementation order B→A→C (SSOT cleanup before the emit site); do the Step-1.a architectural read (SIM + System Manual, not grep/memory) UPFRONT — the after-Kyle-pushback read consistently found undercounts (RTB 1→4 files, 7→25 callers). [RTB, ORCHESTRATOR, EXECUTION]
+
+**Step 9.9 — Comms/governance honesty.** The §6 governance-files-changed list must reflect what was ACTUALLY committed (Kyle caught PATTERN-DETECT claiming 5 unedited files). Use the §9.1 SCAFFOLDING-VS-FUNCTIONAL bold banner + the §9.2 PREVIOUSLY/NOW/REASON block for any changed number. State red-on-red CI baselines explicitly. The file-first + embedded-diff + verification-anchor Langston dispatch (no-gdrive at the TOP, `bypassPermissions`) returns clean ACKs vs the 30–49-min FUSE hangs; the independent Step-2 pre-audit + Step-4 review caught the highest-value bugs — treat review as non-negotiable (standing invariant #9). [PATTERN-DETECT, B79.0m.a, all]
+
+**Step 9.10 — Every in-process scheduled task needs an audit row + a poll-reconcile safety net + a system-alert on catch-up.** node-cron / setInterval / setTimeout can silently fail to invoke a callback with no exception and no log line (a Fri 8PM-ET weekend-shutdown cron did exactly this). Write an audit row on every fire (success OR error) with a `trigger_source` discriminator; ride an independent tick (centralClock / boot-reconcile) that detects state drift and catches up; fire a `severity=warning, category=breakage` system-alert when the net catches a missed fire so it surfaces via the §10.5 per-turn check. When one timer is found to have failed, audit every OTHER timer using the same library. Full rule in `R-SCHEDTASK`. [B-NEW-36, B-NEW-49]
 
 ---
 
-### Step 4.6 — Block-scope identifier renaming (BATCH_82 + B83 lesson, 2026-05-14)
+## Part 2 — Reference library (the HOW for Part-1 steps)
 
-Distilled from the B83 hotfix (24hr silent pipeline stall, 85-trade backlog). **NOT asset-class-specific** — applies to every refactor — but worth flagging here because asset-class onboarding refactors are exactly when this anti-pattern fires.
+Each entry has a semantic ID (no numbers, so no collisions). Part-1 steps point here by ID. These are the durable templates; the per-batch completion reports named at the end of each entry carry the commit-level detail.
 
-**The bug:** TypeScript does NOT enforce block-scope-only identifier visibility for for-loop iteration variables. If you rename a for-loop variable AND there's an outer-scope identifier with the same OLD name, TypeScript silently resolves references to the OLD name against the outer scope. At runtime, JS throws `ReferenceError` — but only when the for-loop body actually executes.
+### R-PROFILE — Operational profile table (used by Step 0.1)
 
-**The recipe:** when renaming an identifier referenced inside a for-loop body, the variable used inside MUST match the loop's destructure pattern explicitly. Don't rely on TypeScript scope inference. Add the rename to the inventory file at `Claude Comms and Packages/Change Lists/rename-inventory-<batch>.md` (5-step protocol in SIM "Rename invariants" section): pre-rename grep → per-row decision → post-rename verification grep.
+Populate BEFORE anything else; downstream architecture keys off these facts.
 
-For asset-class onboarding specifically: when you rename a for-loop variable in `vts-runner.ts` / `signal-orchestrator.ts` / any shared-engine file, audit the entire loop body for references to the OLD name before committing. Block-scope is unforgiving.
+| Field | What to capture |
+|---|---|
+| Trading hours | 24/7? 24/5? Session-bound (RTH only)? Weekend gap? Pre/post-market? |
+| Settlement | Centralized book? On-chain? Custodial broker? T+0 / T+1 / T+2? |
+| Geography / regulatory | Restricted jurisdictions? KYC? Sanctioned-country considerations? |
+| Fees (maker/taker) | Volume tiers? Stablecoin discounts? |
+| Custody | Self-custody? Exchange-custody only? On-chain wallet for withdrawal? |
+| Exchange WS endpoint | Path + protocol version + heartbeat cadence + reconnect semantics |
+| Exchange REST endpoint | Path + auth model + rate limits (or "none for this class") |
+| Symbol form on each endpoint | Canonical / display / WS-feed forms — are they identical? |
+| Universe size + dynamism | Static? Growing? Frequent listings/delistings? |
+| Tick / lot / fractional | Price + quantity precision. Minimum order size. |
+| **Monolithic?** | Are all symbols operationally identical, or are some treated differently (24/7 inside a 24/5 class, halt-able, pre/post-market)? If non-monolithic, market-state predicates take a REQUIRED symbol arg from Day 1. |
 
----
+`xstock_spot` filled instance: see Part 3, H.1.A.
 
-### Step 4.7 — Scan-cycle read-side data-completeness audit (B-NEW-14 lesson, 2026-05-14)
+### R-RESOLVE — `resolveAssetClass` extension template (used by Step 3.11, Step 4.7)
 
-Distilled from B-NEW-14 (xstock_spot `max_bid_ask_spread` gate sitting inert for ~3 days while the threshold was alive in the DB).
-
-**The pattern, plainly:** the snapshot table that the scan reads from is populated by an upstream background job that captures EVERY field the exchange returns — bid, ask, last, volume, high, low, etc. The scan's read query, however, typically only asks for the subset of columns the FIRST iteration of the scanner needed. If a threshold gets added to the DB later (or was always intended but stubbed) and its source column wasn't in the original SELECT, the gate silently no-ops while the threshold misleads anyone reading the DB into thinking the gate is live.
-
-**Mandatory check at onboarding (rev-N pre-audit):** before declaring the global / pattern filter complete, run the following inventory:
-
-1. List every column in the snap table (or live ticker payload for non-archive asset classes).
-2. List every filter threshold defined in `screener_filters` for the new asset class (every `min_*` / `max_*` / `excludes_*` column with a non-null, non-zero value).
-3. For each threshold, identify which column from #1 the filter would need to read to evaluate it.
-4. Verify the scan-cycle read query (or the live ticker call) actually SELECTs every such column.
-5. If any column is missing, ADD it to the SELECT BEFORE shipping the filter. Cost: usually zero (DB query plan unchanged for additional output projections on indexed reads — empirically tested 2026-05-14 on `xstock_spot_ticker_snap` snap: 40-43ms whether bid/ask is included or not on 25-75 symbol IN-clauses).
-
-**The standing rule:** "every threshold that lives in the database must have its corresponding data column read by the scan-cycle SELECT (or by whatever the equivalent data fetch is for that asset class). A threshold in DB without a matching column read is a silent no-op gate — strictly forbidden."
-
-**Why this is non-negotiable:** the failure mode is silent. The diagnostic panel keeps reporting "zero rejections" on a row whose threshold was set with intent. Nobody knows the gate isn't working unless they go re-read the source. B-NEW-14 sat in this state for ~3 days; the same trap will fire on the next asset class if this step is skipped.
-
-**Mirror semantically across feed sources.** For asset classes that read from a live exchange ticker call (e.g. crypto via Kraken REST/WS), the same rule applies — the ticker call response shape must include every column whose threshold lives in DB, or the scanner must augment with a separate call. The pattern is feed-source-agnostic: same data shape, different transport.
-
----
-
-### Step 4.8 — Dynamic universe discovery (B79.0n.UNIVERSE-DISCOVERY canonical pattern, 2026-05-21)
-
-**Standing rule:** if the exchange has NO public list-all endpoint for instruments in this asset class, scope dynamic discovery as a **first-tier batch in the onboarding sequence (not a follow-up)**. Hardcoded registries are a structural cost that compounds — every new instrument the exchange adds is a manual maintenance task, and operators have zero visibility into newly-supported names without an out-of-band audit. The xstock_spot worked example (B79.0n.UNIVERSE-DISCOVERY) is the canonical pattern.
-
-**The three-service discovery chain (canonical shape):**
-
-| Role | Function | Example (xstock_spot) | Generalization (next asset class) |
-|------|----------|------------------------|------------------------------------|
-| **Prime mover** | Cheap, public, by-issuer catalog. Answers: "what instruments exist in this product family?" | CoinGecko `xstocks-ecosystem` category (no API key, 126 candidates) | For crypto-perp: Kraken Futures REST `/derivatives/api/v3/instruments`. For the next class: identify the publisher's free public catalog endpoint. |
-| **Ground truth** | Exchange's accept/reject mechanism. Answers: "does the exchange actually stream/trade this pair right now?" Binary result. | Kraken WebSocket subscription probe at `wss://ws-equities.kraken.com` (chunked 100/batch + 500ms inter-chunk sleep + 15s collection window + 10s WS-open timeout) | For crypto-perp: Kraken Futures WS channel-subscribe. For the next class: identify the exchange's accept-or-reject mechanism (REST `info` call, WS subscribe attempt, etc.). |
-| **Enrichment** | Per-symbol metadata (sector, GICS, ADR flag, fundamentals) for grouping/filtering. Does NOT decide whether a symbol exists. | Finnhub `/stock/profile2` (~75 substring patterns across 11 GICS SPDR sectors + 3 special buckets + UNCATEGORIZED) | For crypto-perp: CoinGecko derivatives endpoint OR exchange-specific (funding rate, mark price, position-limit metadata). For the next class: identify the metadata source. |
-
-**The 5-layer fallback chain at boot:**
-
-1. **Live discovery** — runs at the daily cron tick + on-demand POST endpoint
-2. **DB snapshot** — `initializeFromDB()` at boot reads the most recent successful `discovery_runs` cohort
-3. **File cache** — `${HOME}/.dawntrader-cache/<class>-universe-cache.json` (HOME-relative, NOT `/var/lib/...` per RUNNING_ISSUES #126 + Langston Step 8 preference Option 2)
-4. **Bootstrap set** — small hand-curated mega-cap fallback at `server/asset_classes/<class>/universe-bootstrap.ts` (~20 symbols)
-5. **Fail-fast** — `process.exit(1)` if all prior layers fail at boot
-
-**DB schema (canonical 3-table pattern):**
-
-- `<class>_universe` — PK on symbol; sector with CHECK constraint (NOT PostgreSQL ENUM — sidesteps `ALTER TYPE` same-transaction restriction); `is_delisted BOOLEAN DEFAULT false`; `last_seen_at`, `first_seen_at`; metadata flags (`crypto_adjacent`, `is_adr`, etc.); `source_chain JSONB`
-- `<class>_universe_overrides` — PK on symbol referencing the universe table; explicit `override_*` columns (NULL = no override); `reason TEXT`, `created_at`, `created_by`. `runDiscovery()` applies non-null override values AFTER source-chain fields are set, so curator decisions survive every re-discovery
-- `discovery_runs` — BIGSERIAL `run_id`; `triggered_by` CHECK in ('cron_daily','manual_endpoint','boot_smoke'); duration_ms; symbols_discovered/stale/delisted; `source_chain_status JSONB`; `error_log TEXT`. Indexed by `started_at` for forensic queries
-
-**Lifecycle (canonical pattern):**
-- Re-discovery un-delists: `ON CONFLICT (symbol) DO UPDATE SET ... is_delisted = false`
-- Stale gate: >7 days since `last_seen_at` → log `[STALE_SYMBOL]` (no DB write, log-only signal)
-- Delisted gate: >30 days since `last_seen_at` → `UPDATE is_delisted = true` (removed from active universe)
-- **Anchor the lifecycle on `last_seen_at` (data arrival), NOT on WS-accept.** Exchange WS subscription accept is necessary but not sufficient for active data — some symbols accept subscribes but never stream (delisted underlying / suspended / instrument inactive). This is the only reliable way to detect "the WS feed says yes but no data flows."
-
-**Per-leg mandatory rules:**
-
-- **Every external WS or REST call MUST have an explicit timeout AND a deterministic partial-response abort path.** WS-open timeout guard (10s recommended) prevents DNS / TLS handshake / TCP-RST-without-close-event from hanging the discovery cycle indefinitely. Collection-window timeout (15s recommended) handles silent stalls during message accumulation. On either timeout firing, the cycle writes a `partial=true` audit row and aborts — Layer 2 fallback covers.
-- **Every classification heuristic MUST have parameterized regression-lock tests covering empirically-probed boundary cases + a measurement gate post-cycle + a documented expansion-trigger criterion.** Substring-collision bugs in industry-classification heuristics are inevitable; biotech-vs-technology was the obvious one; gas-vs-utility is the next likely one. Empirically-probe the live API at scope time, then lock the probe results as regression tests.
-- **Use `const result: any = await db.execute(sql\`...\`)` pattern, NOT `db.execute<T>()` generic.** Drizzle's generic requires `T extends Record<string, unknown>`. Custom row interfaces that satisfy field-by-field but not the broader constraint will TS2344. Codebase-canonical pattern: cast `result.rows` to your row type at the call site.
-- **Never explicitly INSERT into `_migrations` from a migration file** — the runner auto-inserts. Column name is `name`, not `filename`.
-- **Any tool that assembles migration SQL from multiple source files MUST validate by `psql -f <migration> -1` against an empty schema before committing.** Single-transaction validation catches duplicate statements that succeed individually but fail in transaction order.
-- **Components live under `server/asset_classes/<class>/` should be asset-class-bound by location, NOT by an optional `assetClass?:` parameter.** Optional params are silent-fallback magnets. The location is the binding.
-
-**Test-assert range pattern:** convert exact-equality test asserts to range form (`size >= MIN && size <= MAX`) so universe growth doesn't break tests. Example from B79.0n: `expect(snapshot.size).toBeGreaterThanOrEqual(MIN_EXPECTED); expect(snapshot.size).toBeLessThanOrEqual(MAX_EXPECTED);` where MIN/MAX have headroom for natural growth (e.g., 200 / 800 for an asset class with 480 current symbols + 12-month expected growth budget).
-
-**API trigger surface:** every dynamic-discovery batch ships TWO routes:
-- `POST /api/internal/universe-discovery/refresh` (or class-scoped equivalent) — on-demand trigger; returns the full audit row from the run
-- `GET /api/internal/universe-discovery/health` — counters self-check; useful for ops monitoring + Step 7 verification gates
-
-**Cron cadence:** daily refresh at 06:00 UTC via node-cron `0 6 * * *`. Wrap the invocation in try/catch — a single failed cycle should NOT crash the process; failures should be visible in `discovery_runs.error_log` + via PM2 logs.
-
-**Worked example for B79 xstock_spot:** see `Claude Comms and Packages/Batch Completion/B79_0n_UNIVERSE_DISCOVERY_COMPLETION_REPORT.md` for the full implementation walkthrough including code paths, source-chain timing breakdown, and 10-section retrospective.
-
----
-
-### Step 4.9 — REQUIRED-assetClass storage API pattern (B79.0n.STORAGE canonical pattern, 2026-05-21)
-
-**Standing rule:** for any storage API surface (or any module-level method) that returns asset-class-scoped configuration, the `assetClass` parameter MUST be a typed REQUIRED parameter (`assetClass: AssetClass`) — NEVER an optional with silent default. The B79.0n.STORAGE worked example (`storage.getScreenerFilters`) is the canonical pattern.
-
-#### The pattern
-
-```ts
-// BAD — silent fallback to crypto_spot
-getScreenerFilters(params: {
-  mode: 'live' | 'paper';
-  filterPath?: string;
-  assetClass?: string;  // ← optional + defaulted to 'crypto_spot' = silent footgun
-}): Promise<ScreenerFilters | null>;
-
-// GOOD — type-level enforcement of caller-resolves
-getScreenerFilters(params: {
-  mode: 'live' | 'paper';
-  assetClass: AssetClass;  // ← REQUIRED, no default; TS compile-error if omitted
-  filterPath?: string;
-}): Promise<ScreenerFilters | null>;
-```
-
-The pattern composes with three additional elements:
-
-**1. Dedicated `getCanonicalScreenerConfig({mode, filterPath?})` helper** for UI/diagnostic display where the intent is genuinely "show the canonical crypto baseline":
-
-```ts
-async getCanonicalScreenerConfig(params: { mode: 'live' | 'paper'; filterPath?: string }): Promise<ScreenerFilters | null> {
-  // Returns the canonical crypto_spot baseline for UI display and diagnostic reference.
-  // NEVER use this for runtime signal/screener/SQE routing — use getScreenerFilters({mode, assetClass, ...})
-  // with the explicit asset class derived from the signal/cycle context. The whole point of REQUIRED-assetClass
-  // is preventing the silent-fallback footgun this helper could become if misused.
-  return this.getScreenerFilters({ ...params, assetClass: 'crypto_spot' });
-}
-```
-
-**Use a banner-style "NEVER use this for runtime routing" docstring.** The deliberate uppercase + "NEVER" caught 3 misclassified sites at Langston's Step 4 code review (unified-filter-gateway x2 + paper-sim-service x1 were initially routed through the helper but were actually runtime crypto-trading paths; reclassified to (a) crypto-intentional explicit before deploy).
-
-**2. Cache key extension** for any caller-side cache that previously keyed by mode alone:
-
-```ts
-// BEFORE: cache.set(mode, value)
-// AFTER:  cache.set(`${mode}:${assetClass}`, value)
-```
-
-Memory cost is `O(k)` where k = number of (mode, asset_class) combinations (4 max today: paper+live × crypto+xstock). Cache-isolation regression test at `b79-0n-storage-sqe-asset-class-routing.test.ts` warms `paper:crypto_spot`, reads `paper:xstock_spot`, asserts distinct storage calls — copy this test shape for any future cache-key dimension addition.
-
-**3. `@ts-expect-error` regression-lock test** in a dedicated unit-test file:
-
-```ts
-it('TYPE LOCK — calling getScreenerFilters without assetClass MUST be a compile error', () => {
-  function callerMissingAssetClass(storage: IStorage) {
-    // @ts-expect-error — assetClass is REQUIRED per B79.0n.STORAGE
-    return storage.getScreenerFilters({ mode: 'paper' });
-  }
-  expect(typeof callerMissingAssetClass).toBe('function');
-});
-```
-
-If a future refactor accidentally re-introduces the optional parameter shape, the `@ts-expect-error` directive becomes "Unused" (because the omission no longer errors) and TypeScript rejects the file. CI breaks. This is the canonical pattern for any type-system-enforced contract.
-
-#### Why this pattern is load-bearing
-
-**Pre-audit grep undercounts by ~20%.** B79.0n.STORAGE's initial grep identified 32 silent-fallback sites; the actual compile-driven audit found 38 (6 additional surfaced because the regex pattern matched only certain call shapes while TypeScript's reference graph captures every caller). **Rule:** treat pre-audit grep counts as **lower bounds**. TypeScript at implementation time will surface the rest.
-
-**Same-batch migrations + WHERE clauses must be co-audited.** B79.0n.STORAGE shipped a seed migration that created 2 rows per `(mode, filter_path)` (crypto + xStock). The `upsertScreenerFilters` UPDATE WHERE clause was `(mode, filterPath)`-only — would match BOTH rows and silently cross-corrupt fields. Langston caught this at Step 4. **Rule:** when a batch ships both a schema/data change AND code that operates on that schema, the pre-audit must explicitly cross-reference WHERE/JOIN clauses against the new row population shape.
-
-**Layer 1 vs Layer 2 distinction in DB-backed config.** Per the broader 3-layer precedence chain (Layer 1 = primary table; Layer 2 = module_constants fallback; Layer 3 = static const catastrophic fallback), B79.0n.STORAGE refactors Layer 1; per-class Layer 2 rows are typically deferred to a separate batch with explicit promote-to-active triggers (Phase 19 calibration, third asset class onboarding, or the next sub-batch in the arc begins regardless).
-
-#### Dispatch infrastructure rule (CLAUDE.md §6.5.0.a reaffirmed)
-
-For Langston code reviews involving diff verification: **every dispatch MUST include the no-gdrive instruction at the TOP, AND embed load-bearing diff content inline.** B79.0n.STORAGE's Step 4 RE-ACK v1 dispatch hung 10+ min on `git -C /mnt/gdrive ... grep` FUSE I/O — D-state stuck processes can't be kill -9'd. v2 dispatch with embedded-diff inline + explicit `DO NOT git-grep against /mnt/gdrive — use ssh deploy@188.245.193.8` instruction at the top completed cleanly. **Even when Langston has been told before, the prompt structure drives behavior.** Codify in every dispatch.
-
-#### Where this pattern came from
-
-B79.0n.STORAGE worked example (deploy `ab3153ce5`, 2026-05-21). See `Claude Comms and Packages/Batch Completion/B79_0n_STORAGE_COMPLETION_REPORT.md` §10 for the full set of onboarding learnings + concrete code references.
-
----
-
-### Step 4.10 — REQUIRED-assetClass on compute-side / math surface APIs + fail-hard exhaustive switch + wildcard-retirement migration (B79.0n.MCE canonical pattern, 2026-05-22)
-
-**Standing rule:** Step 4.9 covered the *storage / data-access* layer. B79.0n.MCE extends the same REQUIRED-assetClass discipline to the *compute / math* layer — regime classification (`calculatePairRegime`), the Market Context Engine (`computeContext`), and the cost model (`getFrictionForAssetClass` + friends). The pattern is the same (typed REQUIRED parameter, no silent default), with three compute-layer-specific additions.
-
-#### Addition 1 — Fail-hard exhaustive switch for asset-class enum branching
-
-When a function branches on `assetClass` to select a per-class artifact (a friction model, a threshold set), use a TypeScript-exhaustive `switch` with a `never`-typed default — NOT a warn-once-fallback:
-
-```ts
-// BAD — warn-once-fallback silently degrades to crypto behavior
-function getFrictionForAssetClass(assetClass: string = 'crypto_spot'): FrictionModel {
-  switch (assetClass) {
-    case 'crypto_spot': return CRYPTO_SPOT_FRICTION;
-    case 'xstock_spot': return XSTOCK_SPOT_FRICTION;
-    default:
-      if (!_warned) { console.warn('unknown assetClass; falling back to crypto'); _warned = true; }
-      return CRYPTO_SPOT_FRICTION;   // ← silent wrong answer
-  }
-}
-
-// GOOD — REQUIRED param + fail-hard on unwired classes + compile-time exhaustiveness
-function getFrictionForAssetClass(assetClass: AssetClass): FrictionModel {
-  switch (assetClass) {
-    case 'crypto_spot': return CRYPTO_SPOT_FRICTION;
-    case 'xstock_spot': return XSTOCK_SPOT_FRICTION;
-    case 'crypto_perp':
-    case 'xstock_perp':
-      throw new Error(`[batch][cost-model] assetClass='${assetClass}' has no friction model wired — file as RUNNING_ISSUES + add to scope before consuming`);
-    default: {
-      const _exhaustive: never = assetClass;   // ← compile-fails if AssetClass gains a value
-      throw new Error(`[batch][cost-model] unreachable assetClass=${String(_exhaustive)}`);
-    }
-  }
-}
-```
-
-Two things this buys: (a) the `const _exhaustive: never` line is a compile-time tripwire — if a future asset class is added to the `AssetClass` union without a `case`, the file fails to compile; (b) the explicit `throw` on a not-yet-wired class is a *forcing function* — when perpetual-futures onboarding begins, the throw makes the missing friction-model work immediately visible instead of letting a wrong value flow silently. This is the canonical recipe; the warn-once-fallback is the anti-pattern.
-
-#### Addition 2 — Cache-key extension at compute-side singletons
-
-Same shape as Step 4.9's storage-side cache-key extension, applied to a compute singleton. The Market Context Engine's per-symbol context cache key went `${symbol}` → `${symbol}:${assetClass}`. Generalize: **any compute-side cache whose key is a primary identifier (symbol, mode, pair) gains the `assetClass` dimension as `${primaryId}:${assetClass}`.** Memory cost is `O(k)` (k = number of asset classes, bounded ≤ ~10). Note that a single subsystem can own *multiple* cache layers with different keys — be explicit about which one is being extended (the MCE owns three: per-symbol context, module-constants rowset, 9-group config refresh; B79.0n.MCE extended only the first). Document the cache-layer inventory so the next onboarding does not conflate them.
-
-#### Addition 3 — Wildcard-retirement migration for `module_constants` levers (Layer-2 per-class promotion)
-
-When a `module_constants` lever is seeded at global wildcard `(*, *, *, *)` scope but is consumed by an asset-class-aware caller, the wildcard row itself is a silent-fallback footgun — every asset class resolves to the same shared row. The resolver's wildcard support is correct as a *feature*; the *data shape* (one wildcard serving classes that need independent values) is the bug. **Fix at the data layer, not the resolver.** Canonical migration shape (B79.0n.MCE worked example, `dbs_calculation.min_sample_count`):
-
-1. Add an explicit `crypto_spot` row cloning the wildcard value byte-for-byte (crypto-by-construction-NONE invariant).
-2. Add an explicit `xstock_spot` row (placeholder-cloned at seed; per-class calibration replaces it later).
-3. Retire the wildcard via an **`EXISTS`-gated `DELETE`** that fires only after both class rows are confirmed present — **no orphan window** where the wildcard is gone but the class rows do not yet exist.
-
-Implementation rules: wrap in a single `BEGIN/COMMIT`; inserts use `ON CONFLICT ... DO NOTHING` + the `EXISTS`-gated DELETE for idempotency; scope every WHERE clause to the exact `constant_name` so a sibling constant under the same module (e.g. B-PHASE-A2's `dbs_calculation.sector_coverage_floor`) cannot be collaterally retired; ship a manual-only `*-rollback.sql` companion; and ship the resolver-key-tightening code change and the migration **in the same commit** (tightening-first hard-fails until rows exist; seeding-first leaves the wildcard live for an interim). Net row delta for a single-constant single-variant retirement is **+1**.
-
-#### Why this pattern is load-bearing
-
-**Type-enforced REQUIRED-assetClass catches silent-fallback bugs at compile time.** B79.0n.MCE made `assetClass` REQUIRED on five surface APIs; the TypeScript compiler then enumerated every caller (`getCachedCostMetrics` alone had 9 production callers all passing only `symbol` — an active footgun that would have routed every xStock signal through crypto friction once active-trading enabled). The compiler is a more reliable audit tool than a grep — same lesson as Step 4.9, reaffirmed.
-
-**`grep` false-positive on `assetClass: <var>`.** A grep for the wildcard literal `assetClass: '*'` to find silent-fallback resolver sites produces *false positives* — a site already written as `assetClass: someVariable` (correctly per-class) reads, at a glance, like a candidate. B79.0n.MCE pre-audit v1 flagged `directional-bias-store.ts:59` for resolver-key tightening on exactly this basis; a direct code read showed the parameter was already per-class-resolved (B-PHASE-A2 had shipped it 4 days earlier). **Rule:** never flag a resolver-key site from a grep hit alone — open the file and confirm whether the `assetClass` field is a literal `'*'` or a passed variable before scoping work to it.
-
-**Dead inline code chains awaken latent bugs / hygiene debt.** B79.0n.MCE pre-audit v2 found that `cost-metrics.ts`'s `getDefaultAvgReturn → updateCostData → getTransactionCostFactor` chain had zero production callers — an orphan from an earlier directive era that B72 had nonetheless migrated a `module_constants` row for. The dead chain was deleted (Q-VI option a); the now-orphaned `cost_model.default_avg_return` row + a stale `b72-warmup.ts` prefetch entry were filed as RUNNING_ISSUES cleanups. **Rule:** every onboarding pre-audit must include a "dead code awakens / dead code lingers" check — when a REQUIRED-assetClass refactor touches a subsystem, grep the subsystem for functions with zero production callers; they are either deleted in-batch (small + contained) or filed as tracked cleanup. Do not leave orphan code + orphan DB rows undocumented.
-
-#### Where this pattern came from
-
-B79.0n.MCE worked example (deploy `aa0564107`, 2026-05-22). See `Claude Comms and Packages/Batch Completion/B79_0n_MCE_COMPLETION_REPORT.md` §10 for the full set of onboarding learnings + concrete code references; see `SYSTEM_MANUAL.md` Configuration Surface appendix for the wildcard-retirement migration pattern + the MCE three-cache-layer model.
-
----
-
-### Step 4.11 — Pattern recognition primitives REQUIRED-`assetClass` discipline (B79.0n.PATTERN-DETECT canonical pattern, 2026-05-24)
-
-**Standing rule:** the same REQUIRED-`assetClass` discipline that Step 4.9 (storage) + Step 4.10 (compute) established now extends to the **pattern recognition layer** — the candlestick-detection routines that sit upstream of strategy detect methods.
-
-Every entry point into the pattern recognition subsystem gains REQUIRED `assetClass: AssetClass` at the TypeScript signature:
-
-- The top-level fan-out function (`scanPatterns(candles, symbol, assetClass)` in DawnTrader's case).
-- Every internal detect function (`detectPinbar` / `detectEngulfing` / etc.) gains the parameter, threaded through from the fan-out function.
-- The pattern-to-trade-signal converter (`patternToTradeSignal(pattern, currentPrice, atr, assetClass)`).
-- Any class-method wrapper around these (the singleton `PatternRecognizerService`).
-- The context-aware strategy picker (`selectContextAwareStrategy(regime, pattern, hash, assetClass)`).
-
-**Body branching is NOT introduced by the plumbing batch.** All hardcoded thresholds inside the detect functions (PINBAR wick ratio, INSIDE_BAR tolerance, MORNING_STAR body/range, ABCD Fib bounds, ATR multipliers) stay byte-identical for the original asset class. Per-class numeric tuning is a **Layer-3 batch** that lands once the new asset class has shadow-mode evidence — typically 4–12 weeks of cycle data showing where the original-class threshold is or isn't fit-for-purpose. PATTERN-DETECT plumbs the parameter through; the per-class branching decision is evidence-gated.
-
-**F-1 invariance lock-down:** the pattern *taxonomy* map (`PATTERN_TO_CANONICAL` / `normalizePatternToCanonical`) and the canonical pattern types enum (`CANONICAL_PATTERN_TYPES`) are **class-invariant by construction** — a PINBAR is a PINBAR regardless of asset class. These surfaces MUST NOT gain `assetClass` parameters. A dedicated F-1 invariance regression test (e.g. `b79-0n-pattern-detect-f1-invariance.test.ts`) locks the exact-shape assertion so a future drift attempt fails CI.
-
-**Where this pattern came from**
-
-B79.0n.PATTERN-DETECT worked example (deploy `c0479b2`, 2026-05-24). See `Claude Comms and Packages/Batch Completion/B79_0n_PATTERN_DETECT_COMPLETION_REPORT.md` §1 + §7 for the full set of onboarding learnings; see `SYSTEM_IMPACT_MAP.md` "Recent Additions (B79.0n.PATTERN-DETECT)" section for component-level deltas; see `SYSTEM_MANUAL.md` §4 (Pattern Strategies) for the post-batch signature spec.
-
----
-
-### Step 4.12 — Pattern-pool gates naming convergence (B79.0n.PATTERN-DETECT canonical pattern, 2026-05-24)
-
-**Standing rule:** every per-class `module_constants` row uses the SAME `constant_name` across asset classes; the resolver-key's `asset_class` field is the per-class differentiator. Different short-names for the same semantic lever across asset classes is a real bug, not a convention choice.
-
-**Recognising the bug:** if you see rows like `module_constants.pattern_pool_gates.crypto_spot.pattern_final_score_min` AND `module_constants.pattern_pool_gates.xstock_spot.final_score_floor` (same semantic value, different name), that's per-class scoping that drifted onto the `constant_name` column when it should have stayed on the `asset_class` column. F-2 lever drift. Fix in a forward-converge migration:
-
-1. Run an idempotent UPDATE that renames the divergent constant_name to match the canonical name from the original asset class.
-2. WHERE clause is fully-scoped (module_name + exchange + asset_class + strategy + regime + constant_name = legacy_name). UPDATE 0 rows is the no-op shape when re-run.
-3. ON CONFLICT DO NOTHING (or equivalent) on any subsequent INSERT of new sibling rows.
-4. Update the consumer file (`<class>/pattern-pool-filters.ts` or equivalent) to use the converged name in its `getCachedNumberRequired(...)` calls.
-5. Pre-batch grep BEFORE the rename migration: confirm zero current production consumers read via the legacy name as a string literal (catches DB-readers; the schema layer's getter file is already going to be updated as part of the rewrite).
-6. Test: dedicated test file mocks the resolver and asserts the getter calls the correct key string.
-
-**Recognising the design pressure:** the bug class arises when an asset class is onboarded asymmetrically. xStock's pattern-pool gates were seeded in May 2026 (B79_inherit_crypto era) with abbreviated short-names, while crypto's already-existing rows used a `pattern_*` prefix convention. The asymmetry persisted because no consumer read the xStock rows from the DB — they were forward-loaded scaffolding. The grep-before-rename step is what made the convergence safe to ship.
-
-**Where this pattern came from**
-
-B79.0n.PATTERN-DETECT worked example. Migration `2026-05-24b-b79-0n-pattern-detect-naming-converge.sql`; pre-audit §-0 grep cross-check that confirmed zero current production consumers; completion report §2 for the H/USD throw narrative + the Step 9 iteration that addressed it.
-
----
-
-### Step 4.13 — Capture-and-reuse asset-class resolution at function/loop entry (B79.0n.PATTERN-DETECT canonical pattern, 2026-05-24)
-
-**Standing rule:** when a function or loop iteration needs the asset class at multiple downstream consumers, resolve it ONCE at the function/loop entry, store in a local variable (e.g. `_assetClass`), and reuse across every downstream call. Do NOT re-call the resolver at each consumer site.
-
-```ts
-async function generateSignal(symbol: string, ...) {
-  // Capture once at entry. Use safeResolveAssetClass — null → skip.
-  const _assetClass = safeResolveAssetClass(symbol, 'kraken');
-  if (_assetClass === null) {
-    return null;  // graceful skip; no throw
-  }
-  // Now reuse _assetClass at every downstream call:
-  const mceContext = mce.computeContext(symbol, ohlc, ..., _assetClass);
-  const patterns = scanPatterns(candles, symbol, _assetClass);
-  const selection = selectContextAwareStrategy(regime, pattern, hash, _assetClass);
-  // ... etc
-}
-```
-
-**Why this matters:**
-
-1. **Resolver throws on unregistered symbols.** The original `resolveAssetClass(symbol, exchange)` throws when the symbol doesn't match any registered pattern. Multiple call sites in the same function body multiply the throw exposure — each new resolver call is a new fail-hard point for unregistered symbols. Use `safeResolveAssetClass` (returns null + logs WARN) at the capture site, and the caller decides skip vs default.
-2. **Collision-symbol WARN amplification.** When `resolveAssetClass` succeeds with a known-collision symbol (a ticker that exists in two asset classes' raw namespaces), it logs a per-call WARN. N call sites = N WARNs per function invocation. Capture-and-reuse deduplicates the WARN to 1 per function-entry.
-3. **Forward-loading.** When a future Layer-3 batch wants to wire per-class branching, the existing capture-and-reuse local variable is the single point to inject the branch — no need to refactor multiple consumer sites.
-
-**Recognising the bug:** if you find a function body with 3+ identical `resolveAssetClass(symbol, exchange)` calls, that's the smell. Refactor to capture-and-reuse before adding any new call site.
-
-**Where this pattern came from**
-
-B79.0n.PATTERN-DETECT Step 9 iteration (commit `c0479b2`, 2026-05-24). Langston Step 8 second-pass flagged a pre-existing H/USD fail-hard throw at the original `vts-runner.ts:913` MCE call; investigation showed PATTERN-DETECT's 4 new `resolveAssetClass` call sites would have throw-amplified on the same symbols if the pre-existing throw hadn't shadowed them. The capture-and-reuse refactor consolidated 6 throwing sites (2 pre-existing + 4 new) to 2 capture calls and eliminated H/USD-style throws at all six. The remaining ~10 pre-existing throwing `resolveAssetClass` sites elsewhere in vts-runner.ts were out of scope and filed as RUNNING_ISSUES #139 (Phase 19 cleanup batch).
-
----
-
-### Step 4.14 — Confidence-modulator chain per-class plumbing (B79.0n.CONFIDENCE-CHAIN canonical pattern, 2026-05-25)
-
-**Standing rule:** every modulator in the confidence chain (b67_x macro / phase / TFS-desat / outcome-feedback + b68_x multi-tf / volume / pair-correlation / regime-age / path-B) MUST resolve its configuration per asset class. The pre-CONFIDENCE-CHAIN behavior — single global `asset_class='*'` wildcard row — silently routes xstock signals through crypto-tuned config (or worse, crypto-native inputs like BTC dominance). When onboarding a new asset class, the modulator chain is the largest single per-class threading surface (~50 caller sites, 9 modulator modules, 16 chain-composition push sites, 2 trade-close hooks). The work decomposes into four canonical sub-patterns:
-
-**Sub-pattern A: per-class DB seed.** For each modulator module (`module_constants` table), seed rows with `asset_class = <new-class>`. For modulators where the new class needs a behavioral no-op (e.g., crypto-native macro inputs are meaningless for an equity-style class), introduce an explicit per-class flag constant (e.g., `b67_1_asset_class_no_op_active`) that the modulator function checks at the top of its compute logic. Seed the global wildcard row with `flag=false` + the new class row with `flag=true`. The flag-based short-circuit is the F-2 disposition pattern; F-1 modulators just clone crypto config values.
-
-**Sub-pattern B: modulator function signatures REQUIRED-assetClass.** Every `compute<Modulator>` + `build<Modulator>Alternate` pure function gains `assetClass: AssetClass` as the last parameter. The function uses it for either (a) short-circuit logic when the per-class config has the no-op flag set, OR (b) metadata stamping into the alternate row's `metadata.asset_class` field for dashboard / replay filterability. F-1 modulators thread the parameter for chain-uniformity even when math is class-invariant — keeps the API surface uniform + supports future per-class tuning.
-
-**Sub-pattern C: market-context-engine per-class refresh + accessor.** For modulators with behavioral divergence (F-2), refactor the MCE refresh method to enumerate `ASSET_CLASSES` + build a per-class `Map<AssetClass, Config>` + atomically swap the reference via single assignment (the R-11 atomic Map-replace pattern). Cache field type is `ReadonlyMap<AssetClass, Config>` so accidental in-place mutation is a TypeScript error. New `get<Modulator>ConfigForClass(assetClass)` accessor returns null on cold-start or missing-class. Legacy `getCurrent<Modulator>Config()` accessor stays returning the crypto_spot entry for back-compat. F-1 modulators can keep their existing global single-config cache — no per-class map needed.
-
-**Sub-pattern D: chain-composition consumer threading.** At every `alternateInputs.push({...})` site in signal-orchestrator + vts-runner (~8 per file × 2 files = 16 sites), thread the captured `_pairAssetClass` (or `_assetClass` in vts-runner) into the discriminated-union arm's `assetClass: AssetClass` field. The `FactorAlternateInput` type's TS exhaustiveness check enforces — missing field = compile error. Same threading at trade-close hook sites (paper-execution-engine + vts-service) where `outcomeFeedbackStore.updateEma` writes per-class EMA data.
-
-**Trade-close hook special case (R-10 risk class):** the close-hook ablation rebuild reads the macro context + phase weights via `mce.getCurrentMacroContext()` / `mce.getCurrentPhaseWeights()` (legacy global accessors) — these return crypto_spot for back-compat. The close-hook ALSO writes to `outcomeFeedbackStore.updateEma(assetClass, regime, strategy, ...)` where the assetClass MUST be resolved from `position.symbol` / `tradeData.symbol` via `safeResolveAssetClass + skip-on-null`. If this resolution is missed, crypto outcomes write to crypto key (correct) but xstock outcomes write to GLOBAL crypto key (wrong) — silent data corruption that wouldn't surface in compile or runtime errors. Use the **safeResolveAssetClass + skip-on-null** pattern at the trade-close hook, NOT the strict `resolveAssetClass` throw — close-hooks are non-critical-path; skipping the EMA update on unresolvable symbol is correct.
-
-**Outcome-feedback store key shape:** the `OutcomeFeedbackStore` Map key shape changes from `<regime>_<strategy>` to `<assetClass>_<regime>_<strategy>`. The disk-load migration re-keys legacy entries under the originating class's prefix (`crypto_spot_` for the canonical case where pre-batch was crypto-only). Persistent-state path moves out of `/tmp/` (purged on restart) into `/home/deploy/dawntrader/data/`. **HARD-FAIL on corrupt new-path data** — no silent fallback to legacy `/tmp/` when canonical state file is unparseable. Operator investigates the corrupt file rather than silently re-keying stale legacy data over corrupt new-path data.
-
-**Pre-class enumeration source:** the canonical `ASSET_CLASSES` const from `shared/asset-classes.ts`. The MCE refresh loop iterates only over asset classes seeded by the current batch's migration — today that's `['crypto_spot', 'xstock_spot']` inline. When perp classes onboard with their own seed migration, the inline tuple expands (or extracts to a single exported const per Langston's DRY suggestion).
-
-**Where this pattern came from**
-
-B79.0n.CONFIDENCE-CHAIN worked example (deploy `b6e45a8`, 2026-05-25). See `Claude Comms and Packages/Batch Completion/B79_0n_CONFIDENCE_CHAIN_COMPLETION_REPORT.md` for the full set of onboarding learnings; see `SYSTEM_IMPACT_MAP.md` "Recent Additions (B79.0n.CONFIDENCE-CHAIN)" for component-level deltas; see `SYSTEM_MANUAL.md` B79.0n.CONFIDENCE-CHAIN per-class addendum for the per-modulator F-1 / F-2 disposition matrix. Langston Step 1+2+4+8 all FINAL ACK with 1 non-blocking DRY suggestion (extract enumeration tuple) + 1 deploy-runbook observation (apply migration BEFORE pm2 restart to eliminate fail-hard WARN spam during deploy window).
-
----
-
-### Step 4.15 — Shared-aggregator consumer enumeration before adding a scoped filter (B-XSTOCK-CALIB F-NOW lesson, 2026-06-01)
-
-**The trap.** When a batch adds a scoped column-read or filter to a SHARED aggregator/endpoint (one that serves both a live exploratory UI panel AND a future evaluation path), an unconditional scoped filter silently changes the live UI — because both consumers share the surface. F-NOW added a pre-calibration exclusion to `exit-strategy-ablation-aggregator.ts` "for Phase-25 scoring," but that aggregator also feeds the live xStocks-tab "Exit Strategy Ablation" panel (`/api/xstocks/exit-strategy-ablation` → `client/.../xstocks-tab.tsx:316` → `ExitStrategyAblationSection`, a crypto component reused by B79.0i.b). Because every existing xStock trade is pre-calibration, the unconditional filter would have emptied that live panel. The v1 pre-audit missed it (grep-and-cite of the impact map; no System-Manual read; no UI-consumer trace).
-
-**The discipline (applies to every asset-class-scoped filter on a shared surface):**
-1. **Enumerate EVERY consumer of the aggregator/endpoint** — including UI panels, and including BOTH the `/api/analytics/*` (all-asset) and `/api/xstocks/*` (scoped) sibling routes. A shared aggregator is **presumed to feed a live UI** until proven otherwise.
-2. **State the post-change behavior of each consumer** before writing code. If a scoped filter would change a live exploratory view, that is a Kyle decision, not an implementation detail.
-3. **Default to OPT-IN.** Make the filter a parameter (default-off, applied only by the evaluation caller), never unconditional on the shared aggregator. The capability ships; the application is gated at the real consumer (NO-PATCHES split). For F-NOW: `buildCalibrationClause(assetClass, excludePreCalibration)` — live endpoints pass default false → byte-identical; the Phase-25 caller passes true.
-4. **The audit is code-level.** Step 1.a + Step 2 require a deep read of SIM **and** System Manual + a trace of the touched surface's consumers, not a grep-and-cite. This is the second time an xStock-scoped change rode a shared crypto component (first: B79.0i.b reusing `ExitStrategyAblationSection`) — shared-surface enumeration is now a standing onboarding check.
-
----
-
-### Section D.1 — Concrete code-extension templates (Phase 24 reference)
-
-Reference only — actual implementation is per-asset-class. Use xstock_spot's code as the worked example for each pattern.
-
-**Extending `resolveAssetClass` for a new class:**
 ```ts
 // shared/asset-classes.ts
 // Branch order matters: exchange-first → display-form → collision-gate → membership → patterns
 if (exchange === '<new-exchange-tag>') return ASSET_CLASSES.<NEW_CLASS>;
 if (<NEW_CLASS>_DISPLAY.test(symbol)) return ASSET_CLASSES.<NEW_CLASS>;
 if (<NEW_CLASS>_<EXISTING>_COLLISIONS.has(symbol)) {
-  console.warn(`[<batch>][COLLISION_RESOLVE] ...`);
-  return ASSET_CLASSES.<EXISTING>;
+  console.warn(`[<batch>][COLLISION_RESOLVE] ${symbol} on plain exchange path → incumbent`);
+  return ASSET_CLASSES.<EXISTING>;          // collision without disambiguation → incumbent
 }
 if (<NEW_CLASS>_SYMBOLS.has(symbol)) return ASSET_CLASSES.<NEW_CLASS>;
-// Fall through to existing class patterns
+// fall through to existing class patterns
 ```
+Use `safeResolveAssetClass(symbol, exchange)` (returns null + WARN) at capture sites that may hit unregistered symbols; the strict `resolveAssetClass` throws.
 
-**Registering a strategy for a new class** (when applicable — this is strategy-onboarding, not asset-class-onboarding):
-- See `server/strategies/orb.ts` (B79.0d) as the template. 6 surfaces touched: (1) detect logic in `server/strategies/<name>.ts`, (2) import + 'name' in `StrategySignal.strategy` enum + thin wrapper in `server/services/strategy-engine.ts`, (3) dispatch block in `server/services/signal-orchestrator.ts` (gated on `activeStrategies.has + assetClass match`), (4) `CANONICAL_REGIME_STRATEGY_MAP` regime entries, (5) `STRATEGY_DISPLAY_NAMES` map, (6) module_constants seed SQL with `strategy.<name>` thresholds + `strategy_gates.*.<class>.<name>.enabled`.
+### R-COLLISION — Ticker-collision recipe (used by Step 0.2, Step 4.7)
 
-**Ticker-collision discovery template** — see Section L "Step 1 — discover the collision set" pseudocode block.
+Mandatory pre-implementation gate when the new class shares an exchange with an existing one. A single base-symbol can exist in BOTH universes with identical canonical form (`SUI/USD` = Sun Communities equity AND Sui Network crypto on Kraken); without a gate, any downstream consumer that re-resolves from canonical form misclassifies every signal on the collision tickers.
 
-**Per-class config seed migration template** — see `drizzle/migrations/2026-05-03-b69-asset-class.sql` for the column-add-then-default-set pattern + B79's `module_constants` xstock_spot seeds via insert-with-asset-class-scope.
+1. **Discover the collision set at scope time** — live API intersection:
+   ```python
+   existing_class_bases = {<every base the existing class trades on this exchange>}
+   new_class_bases      = {<every base the new class trades on this exchange>}
+   collisions = sorted(existing_class_bases & new_class_bases)
+   ```
+   Store in `shared/asset-classes.ts` as `<NEW>_<EXISTING>_COLLISIONS` with a provenance comment: endpoint queried (e.g. `https://api.kraken.com/0/public/AssetPairs`), date run, re-audit cadence (default quarterly).
+2. **Gate the resolver** — the new class's membership fast-path is gated on collision-set NON-membership (see `R-RESOLVE`). Collision tickers reach the new class only via a different `exchange` value or an explicit disambiguating display form.
+3. **WARN on collision-without-disambiguation** — `[<batch>][COLLISION_RESOLVE]` once per occurrence, so any future loss of the disambiguating suffix in transit is observable.
+4. **Regression-lock tests** — one per collision ticker, pinning the resolved class; fail if a future commit drops the gate.
+5. **Backfill historical mis-tags IF the bug ever shipped** — read-only audit script over every `asset_class` table, UPDATE statements commented out, per-table counts paper-trailed in CHANGES_AND_FIXES (xStock flipped 4862 rows).
 
-**Persistence-at-trade-open** — already in place via `vts_open_trades` table + `vts-trade-persistence.ts` service (B79.0g). Future asset classes inherit automatically — `assetClass` column is class-agnostic; INSERT/DELETE/REHYDRATE paths work for any value. No new code needed per class for persistence.
+**Standing rule:** quarterly re-audit — re-run the intersection when the provenance date is >90 days old (a symbol becomes a collision the moment either side lists a new pair). Worked origin: `B79_0f_COMPLETION_REPORT.md` (the SUI/USD bug).
 
-**Scope:** asset-class onboarding, not exchange onboarding. Exchange differences (API, symbol normalization, fee schedule) are mostly mechanical. Asset-class differences (regime classification, strategy applicability, friction model, market hours, telemetry partitioning) ripple deep into the system. Exchange-onboarding is a separate, simpler doc — flagged here as future work.
+### R-DISCOVERY — Dynamic universe discovery (used by Step 0.3, Steps 1.1–1.10)
+
+Three-service chain (role separation is the whole point):
+
+| Role | Answers | xstock_spot | Generalization |
+|---|---|---|---|
+| **Prime mover** | "what instruments exist in this family?" (cheap, public, by-issuer) | CoinGecko `xstocks-ecosystem` (126, no key) | crypto-perp: Kraken Futures REST `/derivatives/api/v3/instruments` |
+| **Ground truth** | "does the exchange stream/trade this right now?" (binary) | Kraken WS subscribe probe `wss://ws-equities.kraken.com` (chunk 100 + 500 ms sleep + 15 s window + 10 s open-timeout) | the exchange's accept/reject mechanism (REST `info`, WS subscribe) |
+| **Enrichment** | per-symbol metadata (does NOT decide existence) | Finnhub `/stock/profile2` sector (~75 substring patterns / 11 GICS sectors + 3 special + UNCATEGORIZED) | funding/mark-price metadata, etc. |
+
+5-layer boot fallback: live discovery → DB snapshot `initializeFromDB()` → file cache (`${HOME}/.dawntrader-cache/<class>-universe-cache.json`, HOME-relative per RUNNING_ISSUES #126) → ~20-symbol hand-curated bootstrap (`server/asset_classes/<class>/universe-bootstrap.ts`) → `process.exit(1)`.
+
+3-table schema: `<class>_universe` (PK symbol; sector VARCHAR+CHECK not ENUM; `is_delisted BOOLEAN`; `last_seen_at`/`first_seen_at`; flags; `source_chain JSONB`) + `<class>_universe_overrides` (PK symbol; `override_*` cols; applied AFTER source-chain so curator decisions survive) + `discovery_runs` (BIGSERIAL run_id; `triggered_by` CHECK cron_daily/manual_endpoint/boot_smoke; counts; `source_chain_status JSONB`; `error_log`; indexed by `started_at`).
+
+Lifecycle: re-discovery un-delists (`ON CONFLICT (symbol) DO UPDATE SET … is_delisted=false`); >7d since `last_seen_at` → `[STALE_SYMBOL]` log; >30d → `is_delisted=true`. **Anchor on `last_seen_at` (data arrival), not WS-accept.**
+
+Per-leg mandatory rules: explicit timeout + deterministic partial-response abort on every WS/REST call (WS-open 10 s + collection 15 s; on fire → `partial=true` audit row, NO DB writes); parameterized regression-lock tests on every classification heuristic (specific-before-general ordering; biotech-vs-technology was the obvious collision, gas-vs-utility the next likely) + a post-cycle UNCATEGORIZED-≤20% gate; `const result: any = await db.execute(...)` (not `db.execute<T>()` — TS2344); components under `server/asset_classes/<class>/` bound by LOCATION not an optional param; range-form test asserts (`size >= MIN && size <= MAX` with growth headroom). Two API routes (`POST …/refresh`, `GET …/health`) + daily node-cron `0 6 * * *` in try/catch + the `R-SCHEDTASK` audit-row safety net. Worked origin: `B79_0n_UNIVERSE_DISCOVERY_COMPLETION_REPORT.md` (full code paths + 10-section retrospective).
+
+### R-STORAGE — REQUIRED-`assetClass` on storage/data-access APIs (used by Steps 3.1, 3.2, 3.8)
+
+```ts
+// BAD — optional + defaulted = silent footgun
+getScreenerFilters(p: { mode: 'live'|'paper'; filterPath?: string; assetClass?: string }): Promise<ScreenerFilters|null>;
+// GOOD — REQUIRED, TS compile-error if omitted
+getScreenerFilters(p: { mode: 'live'|'paper'; assetClass: AssetClass; filterPath?: string }): Promise<ScreenerFilters|null>;
+```
+Composes with three elements:
+1. A **dedicated canonical-baseline helper** for UI/diagnostic display where the intent is genuinely "show the crypto baseline": `getCanonicalScreenerConfig({mode, filterPath?})` → calls `getScreenerFilters({..., assetClass:'crypto_spot'})` with a banner-style **"NEVER use this for runtime routing"** docstring. The uppercase NEVER caught 3 misclassified runtime sites at Langston's Step-4 review.
+2. **Cache-key extension** `cache.set(`${mode}:${assetClass}`, value)` (O(k)), with a cache-isolation regression test (warm `paper:crypto_spot`, read `paper:xstock_spot`, assert distinct storage calls).
+3. **`@ts-expect-error` regression-lock test** so re-introducing the optional shape turns the directive "unused" and breaks CI.
+
+Why load-bearing: pre-audit grep undercounts ~20% (32→38 sites — treat grep as a LOWER bound; the compiler finds the rest); same-batch migrations + WHERE clauses must be co-audited (a seed creating 2 rows per `(mode, filter_path)` against a `(mode, filterPath)`-only UPDATE WHERE silently cross-corrupts). Worked origin: `B79_0n_STORAGE_COMPLETION_REPORT.md` §10 (deploy `ab3153ce5`).
+
+### R-MCE — REQUIRED-`assetClass` on compute/math + fail-hard switch + wildcard-retirement (used by Steps 3.1, 3.4, 2.8)
+
+**Fail-hard exhaustive switch** (not a warn-once-fallback):
+```ts
+function getFrictionForAssetClass(assetClass: AssetClass): FrictionModel {
+  switch (assetClass) {
+    case 'crypto_spot': return CRYPTO_SPOT_FRICTION;
+    case 'xstock_spot': return XSTOCK_SPOT_FRICTION;
+    case 'crypto_perp':
+    case 'xstock_perp':
+      throw new Error(`[cost-model] assetClass='${assetClass}' has no friction model wired — file RUNNING_ISSUES + add to scope`);
+    default: {
+      const _exhaustive: never = assetClass;   // compile-fails if AssetClass gains a value
+      throw new Error(`[cost-model] unreachable assetClass=${String(_exhaustive)}`);
+    }
+  }
+}
+```
+Buys: a compile-time tripwire (`never`) when the union grows + a forcing-function throw when an unwired class is consumed.
+
+**Cache-key extension at compute singletons** `${symbol}` → `${symbol}:${assetClass}` — but a subsystem can own MULTIPLE cache layers (MCE owns 3: per-symbol context, module-constants rowset, 9-group config refresh) — extend the RIGHT one and document the inventory.
+
+**Wildcard-retirement migration** (a wildcard `(*,*,*,*)` row consumed by an asset-class-aware caller is a silent-fallback footgun; fix at the DATA layer, never the resolver): (1) add explicit `crypto_spot` row cloning the wildcard byte-for-byte; (2) add explicit new-class row; (3) retire via an **EXISTS-gated DELETE** that fires only after both class rows exist (no orphan window). Wrap in one `BEGIN/COMMIT`; `ON CONFLICT DO NOTHING`; scope every WHERE to the exact `constant_name` (so a sibling constant under the same module isn't collaterally retired); ship a manual-only `*-rollback.sql`; ship resolver-tightening + migration in the SAME commit. For a high-blast lever use the two-step `R-WILDCARD`. Net row delta for a single-constant retirement is +1.
+
+Watch: grep false-positives on `assetClass: <var>` (already-correct per-class sites read like candidates — open the file); dead inline chains awaken latent bugs (the orphan `cost-metrics` chain + its stale `module_constants` row + stale prefetch entry). Worked origin: `B79_0n_MCE_COMPLETION_REPORT.md` §10 (deploy `aa0564107`); SYSTEM_MANUAL Configuration Surface appendix (wildcard-retirement + the MCE 3-cache model).
+
+### R-PATTERN — Pattern-recognition REQUIRED-`assetClass` + naming-convergence + capture-and-reuse (used by Steps 2.5, 3.1, 3.6)
+
+**REQUIRED-`assetClass` plumbing:** every entry point gains `assetClass: AssetClass` — the fan-out (`scanPatterns(candles, symbol, assetClass)`), every internal detect (`detectPinbar`/`detectEngulfing`/…), the converter (`patternToTradeSignal(..., assetClass)`), the singleton wrapper, the picker (`selectContextAwareStrategy(..., assetClass)`). **Body branching is NOT introduced by the plumbing batch** — all hardcoded thresholds stay byte-identical; per-class numeric tuning is a later evidence-gated batch. **F-1 invariance lock-down:** the taxonomy map (`PATTERN_TO_CANONICAL`) + the canonical types enum MUST NOT gain `assetClass` (a PINBAR is a PINBAR) — lock with an F-1 invariance regression test. Note: replace any local `export type AssetClass='crypto_spot'` with the shared import (it silently narrows the union); TS1016 means re-order a required-after-optional param to required-but-nullable.
+
+**Naming-convergence** (Step 2.5): if you see `pattern_pool_gates.crypto_spot.pattern_final_score_min` AND `pattern_pool_gates.xstock_spot.final_score_floor` (same semantic, different name), that's F-2 drift onto the `constant_name` column. Forward-converge: idempotent UPDATE renaming the divergent name to the canonical one (WHERE fully scoped: module+exchange+asset_class+strategy+regime+constant_name); update the consumer's `getCachedNumberRequired(...)` keys; grep-before-rename to confirm zero current DB-string-literal readers; a test asserting the getter calls the converged key.
+
+**Capture-and-reuse** (Step 3.6): resolve ONCE at function/loop entry into `_assetClass = safeResolveAssetClass(symbol,'kraken')`, skip-on-null, reuse downstream:
+```ts
+const _assetClass = safeResolveAssetClass(symbol, 'kraken');
+if (_assetClass === null) return null;       // graceful skip; no throw
+const mceContext = mce.computeContext(symbol, ohlc, ..., _assetClass);
+const patterns   = scanPatterns(candles, symbol, _assetClass);
+```
+Why: the strict resolver throws on unregistered symbols (N call sites = N throw points) and WARNs once per call on collision symbols (N sites = N WARNs); capture-and-reuse collapses both to 1 per function-entry and gives the future per-class branch a single injection point. The smell: 3+ identical `resolveAssetClass(symbol, exchange)` calls in one body. Worked origin: `B79_0n_PATTERN_DETECT_COMPLETION_REPORT.md` (deploy `c0479b2`); the Step-9 H/USD throw narrative consolidated 6 throwing sites → 2 capture calls (remaining ~10 elsewhere in vts-runner filed as RUNNING_ISSUES #139).
+
+### R-CHAIN — Confidence-modulator chain per-class plumbing (used by Steps 6.6, 3.1)
+
+The largest single per-class threading surface (~50 caller sites, 9 modulator modules, 16 chain-composition push sites, 2 trade-close hooks). Four sub-patterns:
+- **A — per-class DB seed.** Each modulator module gets `asset_class=<new-class>` rows. For a behavioral no-op (crypto-native inputs meaningless for an equity-style class), add an explicit flag (`b67_1_asset_class_no_op_active`) checked at the top of the compute; seed wildcard `flag=false` + new-class `flag=true`. (F-1 modulators just clone crypto values.)
+- **B — function signatures REQUIRED-`assetClass`.** Every `compute<Modulator>` + `build<Modulator>Alternate` gains `assetClass: AssetClass` (used for short-circuit OR metadata-stamping into `metadata.asset_class`). F-1 modulators thread it for uniformity even when math is class-invariant.
+- **C — MCE per-class refresh + accessor.** For F-2 modulators, refresh enumerates `ASSET_CLASSES` → builds a per-class `Map<AssetClass, Config>` → atomic single-assignment swap; field type `ReadonlyMap` so in-place mutation is a TS error; new `get<Modulator>ConfigForClass(assetClass)` returns null on cold-start/missing; legacy `getCurrent<Modulator>Config()` stays returning crypto_spot for back-compat.
+- **D — chain-composition consumer threading.** At every `alternateInputs.push({...})` site (~8/file × 2 files), thread the captured `_pairAssetClass` into the discriminated-union arm's `assetClass: AssetClass` field; the `FactorAlternateInput` exhaustiveness check enforces it.
+
+**Trade-close hook special case (silent-corruption risk):** the close-hook writes `outcomeFeedbackStore.updateEma(assetClass, regime, strategy, ...)` where `assetClass` MUST resolve from `position.symbol` via **safeResolveAssetClass + skip-on-null** (NOT the strict throw — close-hooks are non-critical-path). Miss it and crypto outcomes write correctly but xStock outcomes write to the GLOBAL crypto key — silent corruption with no compile or runtime error. The `OutcomeFeedbackStore` key shape changes `<regime>_<strategy>` → `<assetClass>_<regime>_<strategy>`; the persistent-state path moves out of `/tmp/` (purged on restart) into `/home/deploy/dawntrader/data/` with **HARD-FAIL on corrupt new-path data** (no silent fallback to legacy `/tmp/`). Worked origin: `B79_0n_CONFIDENCE_CHAIN_COMPLETION_REPORT.md` (deploy `b6e45a8`); SYSTEM_MANUAL per-modulator F-1/F-2 disposition matrix.
+
+### R-WRITER — Writer/reader asset-class threading audit (used by Step 4.9)
+
+Run at pre-audit on every onboarding: `grep -rn "asset_class" server/services/ server/scripts/ server/tests/ shared/`. For every hit verify:
+1. **Schema** — column exists NOT NULL.
+2. **Writer (INSERT/UPDATE)** — value comes from a typed REQUIRED parameter, NOT a hardcoded literal or `?? 'crypto_spot'`. Refactor to caller-resolves so TS compile-fails any caller that forgets.
+3. **Reader (SELECT in WHERE/GROUP BY)** — function accepts `assetClass`, or is implicitly crypto-only (every panel/aggregate then breaks silently when the new class arrives).
+4. **Downstream consumer (ML pipeline, digest, export)** — any implicit `WHERE asset_class='crypto_spot'` that would silently exclude the new class?
+
+Writer recipe: `function emitWriter(..., assetClass: AssetClass)` (REQUIRED, no default). Reader recipe (legitimately wants an "all" default): `function computeAggregate(window, assetClass: AssetClass | null = null)` — null = no filter = all classes; never a hardcoded primary-class default. Document the inventory in `BATCH_N_PRE_AUDIT.md` §"Writer/reader asset-class enumeration." This collapses the 5 reactive crypto-first incidents (B-NEW-20/22/25/26/28) into one proactive grep. Related: when renaming a for-loop variable inside a shared-engine file, TS does NOT enforce block-scope visibility — a same-named outer identifier silently resolves and throws `ReferenceError` only when the loop body runs; audit the loop body before committing (the B83 24-h silent pipeline stall).
+
+### R-SCANNER — 12 crypto-parity scanner defenses (used by Step 4.3)
+
+Every dedicated scanner implements all 12 from day one (missing any → "scanner wedges, UI shows zeros, every cycle times out"):
+1. **Cycle-scoped config cache** — load all 7 `screener_filters` rows (1 global + 1 pattern + 5 family) ONCE at the top of `runCycle`; pass as a bundle. NEVER `storage.getScreenerFilters` inside the per-pair loop (the N+1 that saturates the pool). Ref `fx5-scanner.ts:737-815`; xstock `eval-cycle.ts:loadXstockFilterConfigs`.
+2. **`SCAN_TIMEOUT_MS` + `Promise.race`** — timeout strictly < scan interval (25 s for a 30 s tick); on timeout force-reset `isScanning=false` in `.catch`. Without it, one slow cycle wedges the scanner forever.
+3. **Pair-batch rotation when universe > budget** — fixed batch (75), `rotationCursor` advances over cycles; ALWAYS pin index benchmarks every cycle.
+4. **Pinned-benchmark sanity** — verify each pinned symbol exists in the universe (xStock pinned IWM/DIA which aren't tokenized → silently filtered out).
+5. **Constant-name canonicalization** — grep code + DB for the canonical `constant_name` before writing any `getCachedNumberRequired` call (a `di_to_pwin_scaling_factor` typo vs `di_pwin_factor` cost hours of log spam).
+6. **Bid/ask spread filter source** — separate small batched query keyed by symbol AFTER the freshness gate (adding bid/ask to the main snap SELECT blew the query plan 130×); see `R-SCANREAD`.
+7. **OHLC pre-warm batched OR per-symbol TTL** — pre-warm `SELECT … WHERE symbol=ANY([survivors])` (own DB) or `OHLCCache` Map+TTL (rate-limited external; TTL < candle close interval). Never per-pair sequential reads inside the loop.
+8. **NO silent fallbacks** — batched query failure hard-fails loud; never fall back to per-symbol (re-introduces N+1). Add a test that breaks if a fallback path appears.
+9. **Symbol-normalization consistency** — byte-identical key format across archiver writes → snap rows → OHLC rows → cache keys → eval comparisons → detect calls (log a symbol's hex bytes at each boundary to confirm).
+10. **Connection-pool sizing for worst case** — count queries per cycle × concurrent scanners; verify pool size > peak (xStock saw `pool slot timeout (5s)` under N+1 + heavy ticker writes).
+11. **Central-clock subscription, gate on `tick.tickNumber % SCAN_INTERVAL === 0`** — never an independent `setInterval`.
+12. **`isScanning` early-return** — set true before `runCycle`, reset in `finally`; every tick handler `if (this.isScanning) return;`.
+
+### R-SCANREAD — Scan-cycle read-side data-completeness audit (used by Step 4.3 #6, Step 4.5)
+
+The snap table is populated by a background job capturing EVERY field the exchange returns; the scan's read query only SELECTs the subset the first scanner iteration needed. A later-added threshold whose source column isn't in the SELECT silently no-ops while the DB row misleads anyone reading it. Mandatory check: (1) list every column in the snap table; (2) list every `screener_filters` threshold for the class with a non-null/non-zero value; (3) map each threshold to the column it needs; (4) verify the scan SELECT reads every such column; (5) add any missing column BEFORE shipping the filter (cost ≈ zero — empirically 40–43 ms whether bid/ask is included or not on 25–75-symbol IN-clauses). Standing rule: "every DB threshold must have its source column read by the scan SELECT; a threshold without a matching column read is a silent no-op gate — forbidden." Mirror semantically for live-ticker feed sources. Origin: B-NEW-14 (`max_bid_ask_spread` inert ~3 days).
+
+### R-INSTANCE — Per-class instance factory + non-arming peek + Variant C (used by Steps 3.4, 5.1, 5.2)
+
+**Shape 1 — factory dispatch with `assertNever`** (`server/services/asset-class-instances.ts`):
+```ts
+import { assertNever } from '@shared/assert-never';
+let _xstockSpotInstance: TelemetryAggregatorService | null = null;   // module-level lazy cache per active class
+export function getTelemetryAggregatorInstance(assetClass: AssetClass): TelemetryAggregatorService | null {
+  switch (assetClass) {
+    case 'crypto_spot': return null;                       // no-touch fence → caller falls back to the global singleton
+    case 'xstock_spot':
+      if (!_xstockSpotInstance) _xstockSpotInstance = bootstrapXstockSpotTelemetry();
+      return _xstockSpotInstance;
+    case 'crypto_perp': case 'xstock_perp':
+    case 'forex_spot':  case 'forex_perp': case 'equity_spot': case 'equity_perp':
+      throw new Error(`[CLASS_NOT_WIRED] assetClass=${assetClass}`);   // valid-future enum, onboarding work required
+    default: return assertNever(assetClass);               // compile-fails if a class is added without a case
+  }
+}
+```
+Rules: the switch is ALWAYS terminated by `assertNever` even when every arm returns/throws; reserved-future classes get explicit `[CLASS_NOT_WIRED]` (distinct from `[CLASS_INVALID]`); the canonical class (18mo+ live disk-persist state at the global singleton) flows through the **no-touch fence** (factory returns null, callers fall back) so its asymmetric mature state is never disrupted.
+
+**Shape 2 — non-arming `peek*` companion** (ship in the SAME batch as the construction API):
+```ts
+export function peekTelemetryInstance(assetClass: AssetClass): TelemetryAggregatorService | null {
+  switch (assetClass) {
+    case 'crypto_spot': return peekGlobalTelemetrySingleton();
+    case 'xstock_spot': return _xstockSpotInstance;        // module-level state, NO construction
+    default: return null;
+  }
+}
+```
+The `peek*` prefix = "non-arming, may be null." A caller that needs to arm uses a distinctly-named `getOrCreate*`. Conflating the two under one name is how verify-gate stats accessors accidentally arm persist-timers/disk.
+
+**Variant C (in-memory-only) is the right default.** New per-class instances are in-memory only by construction; the persist-timer code path is structurally gated inside the global-singleton accessor only, so direct `new XxxService()` at the factory does not invoke it — safe by structure, not policy. The persist-by-class follow-up lands when the first non-canonical class flips to active trading. Origin: `B79_0n_TELEMETRY` (deploy `02bad33a6`); SYSTEM_MANUAL §10.9.
+
+### R-DISPATCH — Per-class consumer-site swap dispatcher (used by Steps 3.4–3.5, ORCHESTRATOR-class work)
+
+Use when the per-class module ALREADY exists with a compatible shape (cheap, mechanical). If it doesn't exist or the divergence needs evidence-gated promotion, use the full F-1 resolver-with-EXISTS-gate at the calibration/observability phase instead — don't compress F-1 work into this.
+
+Decision tree: per-class module exists + shapes match → this pattern; exists + shapes diverge → harmonize via `R-PATTERN` naming-convergence first; doesn't exist → `R-ADDCOL` (if DB-backed) or build the module first.
+
+Steps: (1) `grep -rn "from .*asset_classes/crypto_spot/<module>" server/` and categorize each hit (true class-bound = swap target / already-dispatcher = skip / dead-import = delete / type-only re-export = skip / legacy shim = Phase-16 removal candidate). (2) Author a DOMAIN-specific dispatcher at `server/asset_classes/<domain>-dispatch.ts` (NOT central) with the exhaustive-switch + `[CLASS_NOT_WIRED]` activation-breadcrumb throws + `_exhaustive: never` + explicit return type. (3) Swap each true consumer (replace import, replace `<EXPORT>.<KEY>` → `getXForAssetClass(assetClass).<KEY>`, thread `assetClass` as REQUIRED via deterministic `resolveAssetClass` not metadata-fallback). (4) Tests: dispatcher unit (active return / perp + reserved throw / shape contract) + consumer-swap source-string locks + an **integration test with a key-aware DB mock** that drives DIFFERENT values per class to catch wrong-value-threaded-correctly. (5) If >1 consumer, add the per-class diagnostic endpoint (`R-GAPREG`). Origin: `B79_0n_ORCHESTRATOR` (deploy `5e08568`, `pattern-pool-dispatch.ts`; xStock pattern signals corrected from crypto-bound 0.15 → DB-resolved 0.50 MAX_POSITION_PCT).
+
+### R-STRATEGY6 — Six strategy-activation wire-in points (used by Steps 6.1–6.3)
+
+(This is strategy-onboarding, which can happen during OR after asset-class onboarding.) Template = `server/strategies/orb.ts` (B79.0d):
+1. **detect logic** — `server/strategies/<name>.ts`.
+2. **strategy-engine dispatch** — import + `'name'` in the `StrategySignal.strategy` enum + a thin wrapper in `server/services/strategy-engine.ts`.
+3. **VTS dispatch** — `vts-runner.ts:callStrategyDetect` switch arm. **THIS IS THE MOST-MISSED ONE** — with active trading OFF, the VTS path is the ONLY path that runs; skip it and the strategy is silently 100%-nulled (the ORB 3-batch miss). Add a VTS-path integration test through `callStrategyDetect`, not just a wrapper-in-isolation unit test.
+4. **signal-orchestrator dispatch** — block gated on `activeStrategies.has + assetClass match`.
+5. **canonical map** — `CANONICAL_REGIME_STRATEGY_MAP` regime entries + the family-map entry (`orb:'breakout'`) or the family-gate is bypassed + `STRATEGY_DISPLAY_NAMES`.
+6. **SQE whitelist + seed** — `module_constants` `strategy.<name>` thresholds + `strategy_gates.*.<class>.<name>.enabled`.
+
+New PG enum value (`strategyTypeEnum 'orb'`) = a SEPARATE migration ordered FIRST in MANIFEST (`ALTER TYPE ADD VALUE` can't co-tx). Skip the incumbent via triple-defense (detect early-return + dispatch guard + SQE whitelist); the DB gate flip is the rollback. Name constants for what they ARE (`risk_reward_ratio` → `target_range_multiple`). Origin: `B79_0d` + the `B79_0j` VTS-path fix.
+
+### R-ADDCOL — 4-phase production-safe ADD-COLUMN migration (used by Step 9.3)
+
+For an `asset_class VARCHAR(32)` column on a hot-written table (a naive `ADD COLUMN NOT NULL DEFAULT` locks the table during a full rewrite AND fails incoming inserts between apply and the new-code restart):
+- **Phase 1** — `ADD COLUMN … NULL` (transactional, idempotent) + seed any `module_constants` rows the boot HARD-FAIL gate expects (`ON CONFLICT DO NOTHING`) + a `DO $$` block that `RAISE EXCEPTION` if the seed count ≠ expected (fails-loud at apply, not at boot). Writer code then dual-writes the column + the legacy metadata jsonb during the deploy window.
+- **Phase 2** — idempotent dual-path backfill script: `import 'dotenv/config'` at the TOP (a standalone CLI doesn't auto-load `.env` — this bit B79.0n.RTB); path 1 = jsonb `metadata->>'assetClass'`, path 2 = `resolveAssetClass(symbol,'kraken')` in try/catch; `WHERE asset_class IS NULL` makes it re-runnable.
+- **Phase 3** — precondition `DO $$` (RAISE if any null remain) + `CHECK (asset_class IS NOT NULL)` constraint + `CREATE INDEX IF NOT EXISTS` (composite hot-read key), all transactional.
+- **Phase 4** — deferred `SET NOT NULL`, ships as a 1-row DB-only migration after a 48h zero-null soak gate (the CHECK already enforces writes; Phase 4 is for ORM type-level enforcement). File it as a RUNNING_ISSUES entry.
+
+Empty-table special case: Phase 3 trivially passes with 0 nulls and the backfill is a NO-OP — but it still exercises the script path; schedule a first-non-empty verification gate because the dual-path code is un-exercised until first rows. MANIFEST + `git add -f` (the `*.sql` gitignore). Origin: `B79_0n_RTB` (deploy `6fd6bcac6`).
+
+### R-LOCKED — LOCKED-module override (used by Step 9.8)
+
+For a per-class touch of a fenced/LOCKED module, prevent drift into "algorithmic redesign while we're in here": (1) Kyle-authorized scope expansion via an umbrella-row directive; (2) an explicit IN-scope / OUT-of-scope §-block in the scope doc BEFORE implementation (if a drift is observed mid-implementation, STOP and re-scope or defer); (3) Langston's Step-4 review explicitly confirms the diff matches the IN-scope enumeration (lines outside = flagged drift); (4) the completion report + SIM/System Manual document what was LOCKED, what override was authorized, the override scope, and what stayed untouched. Origin: `B79_0n_RTB` `rtb-refresh-service.ts` (846-LOC module untouched since B65.1; per-class bucket allocation authorized, the ACT pool / cadence / `refreshModeSignals` algorithm all preserved); RUNNING_ISSUES #152.
+
+### R-GAPREG — Per-class diagnostic endpoint + deferred-gap registry (used by Steps 8.6, R-DISPATCH)
+
+A per-class diagnostic endpoint (`/api/diagnostics/<batch>-per-class-state`, no-auth public, ~40 LOC) is the Step-8 verify-gate target. Carry an inline `_meta.knownGaps` array so operators see what's promised-vs-deferred without consulting docs:
+```jsonc
+{ "_meta": { "schemaVersion": 2, "coverage": ["orchestrator","execution"], "lastReviewed": "<YYYY-MM-DD>",
+  "knownGaps": ["<gap> (<function-name>); <defer-to phase or trigger>"] } }
+```
+Closure rule: a gap-closure batch MUST delete the matching string AND bump `lastReviewed` AND cross-reference the removal in its CHANGES_AND_FIXES entry. Always-bump rule: ANY batch touching per-class state at this layer bumps `lastReviewed` even if `knownGaps` is unchanged (touching = a review event). Anchor gaps by function-NAME, not line numbers (which drift). Origin: `B79_0n_EXECUTION` v2 schema.
+
+### R-CONTRACT — Producer-consumer canonical-artifact contract audit (used by Step 9.2)
+
+For every JSON / generated artifact the batch's code reads at runtime (`bridge/canonical/*.json`, generated configs, schema-gen types) — even when the batch touches neither producer nor consumer — verify shape agreement: (a) read the consumer's parse + the producer's emit and diff; OR (b) run the producer dry-run and diff against the on-disk artifact; OR (c) confirm a CI contract test exists. If no CI contract test exists, do NOT mark "verified" — flag a governance gap. Why: a hand-edited canonical JSON masks generator drift; a bundler module-init shift then promotes the latent drift to a deploy crash with no code change to the drift surface (B.1.5: the canonical regime-strategy JSON was hand-authored to a new shape in B79.0n.STRATEGY without updating `sync-canonical-bridge.ts`; it crashed 7 days later when B.1.5's import reordered esbuild's module init). CI contract-test template: assert `generateArtifact()` output passes the consumer's read path for every expected input. Origin: B.1.5 redeploy unblocker (`sync-canonical-bridge.test.ts`, 9 tests).
+
+### R-SCHEDTASK — Scheduled-task audit-row + poll-reconcile (used by Steps 1.6, 9.10)
+
+Every in-process scheduled task (node-cron/setInterval/setTimeout) with side-effects: (1) writes a `scheduled_tasks_audit` row on EVERY fire (success OR error) — absent rows = missed fires; (2) the row's `meta` carries a `trigger_source` discriminator (`'cron'|'poll'|'boot'|'manual'`); (3) a separate poll-based "did we fire?" verifier rides an independent tick (centralClock / boot-reconcile) and catches up on detected state drift (canonical: `xstockSpotScanner.clockTickHandler.reconcileWindowState`); (4) a `severity=warning, category=breakage` system-alert fires when the net catches a missed primary fire, surfacing via the §10.5 per-turn check. Why: in-process timers can silently fail to invoke a callback with no exception and no log line. When one timer is found failed, audit every OTHER timer on the same library (RUNNING_ISSUES #164). Never rely on log-grep as the canonical evidence trail. Origin: B-NEW-36 (Fri 8PM-ET weekend-shutdown cron silently failed) + B-NEW-49.
+
+### R-ESM — Production-ESM-bundle verification for a NEW external dependency (used by Step 9.1)
+
+The production bundle is `esbuild --format=esm --packages=external`; a NAMED import of a CommonJS-only package (`import { parseExpression } from 'cron-parser'`) passes tsc + vitest + CI Build + CI Docker (vitest synthesizes CJS↔ESM named exports; CI only bundles, never boots) then HARD-CRASHES at boot (`SyntaxError: Named export … not found`). Rule: (1) default-import CJS packages then destructure (`import pkg from 'cjs-pkg'; const { fn } = pkg;`) unless the package ships real ESM named exports; (2) validate against Node's ESM loader with a 5-line `.mjs` that imports/calls exactly as the code does, BEFORE deploy; (3) never inline `require()` in esbuild-shipped code (the CONFIDENCE-CHAIN `Dynamic require of "path"` hid in a try/catch). Structural backstop (RUNNING_ISSUES #168): a CI step that boots the actual production bundle headless and requires it to reach "listening" before green. Also covers the module-init ORDERING crash (a new import shifts esbuild topo order so a consumer reads a still-partial canonical JSON — pair with `R-CONTRACT`). Origin: B-NEW-50 (~3-min outage) + B.1.5 + CONFIDENCE-CHAIN.
+
+### R-5SITE — VTS observability-field 5-site plumbing chain (used by Step 5.5)
+
+Adding a per-trade observability field that must appear on BOTH the Open AND Closed Simulated Trades tables touches five sites; missing any one silently degrades to "—" with NO tsc error (the persisted closed record is cast `as any`):
+1. **Capture at trade-open** — set the field at each asset-class open site (class-guarded so neither class picks up the other's kind).
+2. **Open read-feed** — add it to BOTH the `getOpenVirtualTradesForML` return TYPE and its push object (`vts-runner.ts`).
+3. **Close-copy** — copy from the in-memory open trade into the `persistRealPriceTrade({...})` argument.
+4. **JSONL persist-write (the load-bearing, easily-missed site)** — `vts-service.persistRealPriceTrade` builds the closed record by EXPLICIT field-mapping (not a spread); add the field to BOTH the param type AND the persisted record (`tradeData.x ?? null`). Without this, site 5 reads nothing.
+5. **Closed read-feed whitelist** — add to BOTH the `getClosedVTSTradesFromLogs` return type AND its mapped object (`export-csv.ts`), with `typeof` guards.
+
+Detection: a **scoped before/after tsc diff** (`git stash` to HEAD, capture errors for the changed files, restore, re-capture, `comm` the normalized sets) — a missing site shows exactly one new excess-property error; the whole-project count is otherwise unchanged. Final proof is a LIVE-feed check (a fresh post-deploy open carries a non-null value of the correct kind per asset class; pre-deploy trades correctly read "—" — there is no backfill). Frontend: the cell formatter is asset-aware off the field's KIND (not asset_class alone), and the empty-state `colSpan` bumps per added column. Origin: B.2.UI (`entryLiquidityValue`/`entryLiquidityKind`).
+
+### R-SHARED — Shared-aggregator consumer enumeration before a scoped filter (used by Step 7.9)
+
+When a batch adds a scoped column-read/filter to a SHARED aggregator/endpoint that serves both a live UI panel AND a future eval path, an unconditional scoped filter silently changes the live UI. Discipline: (1) enumerate EVERY consumer including UI panels and BOTH the `/api/analytics/*` (all-asset) and `/api/<class>/*` (scoped) sibling routes — presume a shared aggregator feeds a live UI until proven otherwise; (2) state each consumer's post-change behavior BEFORE writing code (a live-view change is a Kyle decision); (3) default to OPT-IN — a `buildCalibrationClause(assetClass, excludePreCalibration)` parameter, default-off, applied only by the eval caller, so live endpoints stay byte-identical; (4) the audit is code-level (deep SIM + System Manual read + a consumer trace, not a grep-and-cite). This is the second time an xStock-scoped change rode a shared crypto component (first: B79.0i.b reusing `ExitStrategyAblationSection`). Origin: F-NOW (`exit-strategy-ablation-aggregator.ts`).
+
+### R-WILDCARD — Promote-then-retire two-step + all-keys HARD-FAIL (used by Step 2.8)
+
+For a high-blast wildcard retirement, split into two batches with a 48h verify-gate: **Batch X** (promotion + observability) seeds per-class rows for every ACTIVE class + adds an observable fallback counter (`getSQEStaticMirrorFallbackStats()` / `getTECPickFallbackStats()`) that increments when the resolver's safety-net path fires, while the wildcard REMAINS. Wait 48h (one weekend transition + one full UTC day) with the counter at zero. **Batch X.b** (retirement) ships the EXISTS-gated wildcard DELETE only if the counter stayed zero; any non-zero firing means investigate root cause (cache-key bug, asset-class string mismatch, dropped param) BEFORE retiring — the 48h gap buys RESOLVER correctness, not just DELETE safety. All-keys HARD-FAIL coverage: every key in the surface gets explicit per-class rows for every active class; a boot-time primer iterates `getActiveAssetClasses()` and HARD-FAILs on any missing row; NO `pick(key, DEFAULT)` runtime fallback (DEFAULTS const is a TYPE template only); the companion evaluator READS from the per-class cache, never re-resolves async. Origin: `B79_0n_SCORING` + `B79_0n_TEC`.
+
+### R-BASELINE — Pre-calibration baseline + carryover audit + data-availability map (used by Steps 7.1, 7.2)
+
+**Data-availability map FIRST** (before promising any number): classify each needed metric — CLEAN (archived + timestamped, queryable over the window) / REPLAY (reconstruct by re-running the production formula over archived raw inputs) / FORWARD-ONLY (short retention → accumulate forward) / STALE (writer stopped; only a fixed past window exists). xStock taught: order-book depth was ~1-day hot retention (FORWARD-ONLY → calibrate the depth number off ≥5 sessions, not 1 day); the DBS backfill was STALE (05-05→15 only); scan-funnel reject counts were in-memory-only (REPLAY). Promising numbers before this map = promising numbers you can't get.
+
+**Pre-calibration baseline** (a read-only numbers report before any tuning): for every setting you're about to change, capture current value + current result as a **rolling-window rate WITH raw counts** (never a single-cycle snapshot — a single xStock scan flashed spread-reject 16% vs the rolling-24h truth 2.3%; CLAUDE.md #13), plus regime mix / strategy mix / throughput, overlaid with an **operational-event timeline** (outages, holidays, feed go-lives) so distorted windows are excluded before averaging, plus a "definitely off NOW" list. Seed it all into a **Calibration Scoreboard** (`calibration_ledger` table + Analytics "Calibration" tab; num/den is SSOT, pct derived in a pure tested formatter). The scoreboard enumerates the ENTIRE surface — **64 settings / 8 categories** (Regime, IMF filters, Global gates, Strategy gates, Friction, TEC priors, Sector, Macro), grouped — not just the pre-flagged knobs (a cloned class's strategy gates are NOT set up exactly as crypto's, so every range gets re-derived, not only the obviously-broken ones; EXCLUDE only later-phase categories like Phase-25 correlation benchmark + P&L/win-loss).
+
+**Carryover audit** ("the single biggest Phase-24 onboarding trap" — a numeric carryover is NOT a valid carryover): for every cloned setting/component verify (a) **re-derive** the threshold against the NEW class's actual data; (b) **layer-placement** check (correlation was wrongly bundled INTO the xStock IMF; canonical IMF = LQ/VN/DI only); (c) **wired-not-stub** check (that same correlation returned a constant 0.5, rejecting 0 of 283,625). And remember two gates can measure DIFFERENT STATISTICS not just levels (LQ ask-only vs `min_depth_usd` min(ask,bid) — they diverge on thin-ask books, the names a liquidity gate most needs to catch). Reinforced disciplines: read against operational events (a 3-week regime average masked HVU drifting ~5%→23%); date-segment before declaring anomalies (gate-change dates vs trade dates); verify the external-feed inventory (CoinGecko = symbol DISCOVERY, Finnhub = SECTOR tags, NO sector-ETF price feed wired). Full numbers: `B_XSTOCK_CALIB_BASELINE_REPORT.md`; tooling: `B_CALSCORE_COMPLETION_REPORT.md`.
+
+### R-CALCYCLE — Mandatory 3-sub-cycle calibration (used by Step 7.6)
+
+Initial Layer-1 seeds are domain-knowledge STARTERS, not production-tuned. Three sub-cycles run post-deploy before the class is "production-ready," each with an observation window + tuning step + exit criterion:
+- **Sub-cycle 1 — Regime-classifier.** Monitor the class's regime distribution across the universe 24–72 h. Anti-pattern: heavy concentration in 1–2 regimes. Tuning surface: `regime_classifier.<class>.*`. Exit: no regime > 70% of population unless deliberate.
+- **Sub-cycle 2 — Filter-threshold reality check.** Examine the class's Filter Diagnostics panel over 24 h. Anti-pattern: most filters at 0% rejection (too permissive — xStock's $1 min_price for $200 TSLAx) OR one filter > 70% (too tight). Exit: each filter's failure % is defensible (zero-by-design OR explainable rejections).
+- **Sub-cycle 3 — Strategy-gate testing.** Monitor the By-Strategy panel over a multi-day window. Anti-pattern: IE-mapped strategies stay 0 even when IE hits other strategies (an IE-routing audit). Exit: each enabled strategy fired ≥1 OR has a documented gating reason (regime never hit / market-hours / family eligibility).
+
+Calibration moves forward ONLY after the diagnostics UI shows TRUSTWORTHY numbers. Each sub-cycle produces a deltas log; every threshold change is a DB UPDATE with `last_updated_by='<batch>-calibration-N'`. Watch: filter generosity ≠ signal generosity (lenient gates admit pairs; strategies still null on absent geometry — give every silent-skip a counter + null reason); a multiplicative confidence formula compresses toward its floor by design.
+
+### R-BARFREQ — Bar/tick-frequency foundation change (used by Step 7.5)
+
+Bar frequency is a first-class onboarding decision — evaluate it explicitly, don't inherit it. Run a study (`scripts/b4-bar-frequency-study.ts`): per candidate interval measure pattern/setup availability, forward-EXCESS-return edge (de-meaned vs the cross-sectional universe), regime-read STABILITY (flip-rate), bars-per-intended-hold. Decide a single shared interval. The choice is rarely made on edge (xStock chose 15-min on structure + stability + ORB-revival; edge was weak at every interval). The crypto study said NO change (trend setups were marginally BETTER at coarser bars — never generalize one class's answer).
+
+**Changing the interval is a FOUNDATION change, not a flag.** Blast radius: (1) bar plumbing (aggregator interval branch, a new per-interval snapshot table, the scanner OHLC-fetch flip); (2) ALL time-anchored lookbacks → `module_constants`, because they're bar-COUNT and a finer bar silently SHORTENS the wall-clock window (regime mom 30→120, ADX 14→56, DBS 48→192, EMA 12/26→48/104, ATR 14→56); (3) all 14 regime thresholds recalibrated percentile-preserving; (4) DBS recompute + epoch-stamp + archive-old (re-count archive ≥ live BEFORE any destructive DELETE; sentinel-zero flagged; skip atr≤0); (5) IMF recalibration — **VN is bar-INVARIANT but DI CONTRACTS toward 50 (di_max 30→40.3), so IMF needs a DIFFERENT recalibration shape than regime**; (6) weekend prewarm warms BOTH intervals. The realized method: ONE unified replay engine rebuilds the full bar series at the new interval from the clean 1-minute archive → per-bar regime labels (old vs new = the parity report) + per-bar DBS history + the distribution that derives the new thresholds (chosen **percentile-preserving** + sanity-checked through a CALIBRATION-LENS weighting the clusters/CDF-steepness that matter).
+
+**EXIT GATE = a regime-label PARITY report** judged on the **clean-old → clean-new** comparison (both substrates rebuilt from clean 1-minute data, so the delta is pure bar-size). B.4 result: max mix |Δ| 1.30pp, no collapse, signed off. Watch-outs: percentile-preserving makes the parity delta partly by-construction → also capture the LIVE-new mix once hours accumulate and confirm it lands near the predicted clean-new mix (a substrate-mismatch detector); wall-clock flip-rate intuition is BACKWARDS (15-min flips ~2× MORE per hour); deploy is an ATOMIC ACTIVATION at restart (land schema + inert code first → recompute history offline supervised → in ONE deploy/restart flip the activation switch so new bars + new thresholds go live together — you cannot let old code read new-interval thresholds); a parked equity-native strategy (ORB) can be UNLOCKED by a finer interval but "unlocked" ≠ "activated" (plumb ready, leave `enable=false` until edge-validated — #203); a DB-dynamic universe means a standalone CLI must call `initializeFromDB()` before enumerating symbols (boot does it, the CLI does not — `0bae277e7`). Engines: `scripts/b4-regime-recalib-study.ts`, `b4-regime-parity.ts`, `b4-vndi-recalib-study.ts`, `b4-dbs-15m-recompute.ts`; reference list `B_4_15MIN_RECALIBRATION_LIST.md`. Bar-SENSITIVE (redo) = regime thresholds/lookbacks, MCE indicator periods, DBS, candlestick shapes/tolerances, indicator-based gate bands; bar-INDEPENDENT (sanity-check only) = order-book/depth liquidity, friction, TEC priors, sector, macro.
+
+### R-UITAB — Dedicated observation UI tab recipe (used by Step 5.4)
+
+Every new class gets its own FULL-mirror tab (standing invariant #5). The recipe rests on two patterns: cross-asset UI component reuse via `export` + `endpointBase` prop, and shared-aggregator parameterization via an optional `assetClass`.
+1. **Parameterize shared backend aggregators** — add an optional `assetClass` (default preserving legacy behavior) to `computeExitStrategyAblation` / `computeFactorCalibration` / etc.; SQL appends `AND asset_class=$X` ONLY when provided. Crypto regression invariant: the existing `/api/analytics/*` returns byte-identical without changes (curl-diff post-deploy).
+2. **Export the rich UI sections** (`FilterDiagnosticsPanel`, `ExitStrategyAblationSection`, `FactorCalibrationSection`) with BOTH an `endpointBase` prop AND an explicit REQUIRED `assetClass: AssetClass` prop (so the component reads the display name from `ASSET_CLASS_REGISTRY[assetClass].displayName` — never URL-string-parsing, which rots as classes come online). The REQUIRED prop blocks the build if any caller (including crypto-side) omits it.
+3. **Build sibling endpoints under `/api/<class>/`** that call the parameterized aggregator with the class fixed; build a NEW `/api/<class>/filter-diagnostics` returning the full `FilterDiagnosticsData` shape (honest signaling — funnel-rejection rows the scanner doesn't yet emit stay zero; don't fake them).
+4. **Build the tab component** `client/src/components/machine-learning/<class>-tab.tsx`, reusing the exported sections, with cache-key isolation (`queryKey` carries `{asset_class}`); header reads "VTS Observation," NEVER "shadow-mode."
+5. **Wire the tab into the Machine Learning Tabs group**, positioned LAST.
+6. **Verify via Claude-in-Chrome G3 walkthrough** (NON-waivable): navigate, click the tab, screenshot all 5+ sections, DevTools Network shows no 4xx/5xx on scoped XHR, Console clean, the existing crypto tab is visually unchanged, and a curl of `/api/analytics/<shared-endpoint>` shows an unchanged shape.
+
+Watch: schema-shape — factor-calibration is JSONB (`(real_decision->>'confidence')::numeric`), run `\d` first; reuse the crypto components' honest built-in empty-state messages, don't replace them with lighter custom ones. Origin: B79.0i.b (3 iterations under Kyle pushback before the right design); BATCH_82 (the explicit-prop refinement).
+
+### R-LAYERS — Layer 1/2/3 + the two ablation frameworks + observation sizing (used by Steps 5.1, 7.6, 8.5)
+
+Three-layer calibration discipline: **Layer 1** = domain-knowledge baseline (TS constants → DB rows, tagged `tunable_status='active'` if confident or `'pending_layer_3'` if not); **Layer 2** = cross-asset shadow-classify sanity check (run the new class's pairs through the existing classifier with shared math, verify branch routing makes sense); **Layer 3** = live VTS observation, which promotes `pending_layer_3` → `active` on tertile-monotonic WR + ≥7pp HIGH-LOW gap + p<0.05 + n≥150/bucket.
+
+**Two ablation frameworks run in parallel during Layer 3** (standing invariant #4): (1) **factor-calibration (B67.0)** — per-factor counterfactuals on each chain modulator, stored in `regime_factor_alternates` (asset_class-scoped), drives the confidence-modifier chain decisions; (2) **exit-strategy (B73)** — 12 variants (BE A–F + Trail G–J + Combined K–L) per closed trade, stored in `exit_strategy_alternates`, drives per-class TEC config (should BE / trailing / target_lock_r / moonbag be ON for THIS class? crypto's B73 showed Variant K (BE-off) wins; equity microstructure may differ). For each new class: confirm both hooks emit when `assetClass==='<new>'` + extend the aggregator paths so the class has its own results panel (`R-UITAB`).
+
+**Observation-period sizing is per-class** (no universal "X days"): equities trade 24/5 (~80 hr/wk) vs crypto 24/7 (168 hr/wk), so equivalent sample volume takes longer wall-clock. Declare it at scope-lock from sample-rate-per-day evidence; minimum ≥150 samples/regime/factor-bucket; wall-clock minimum ≥ one full weekly cycle (Mon/Fri intraday variation); maximum: don't observe past the point where regime conditions have shifted enough that early data is no longer comparable. Exit-side metrics calibrated in Layer 3 for a different-volatility class: time-to-target by regime, MAE-before-profit, MFE-at-exit, ATR-vs-%-stop, partial-take P&L impact, hold-time by regime — these feed position-management trigger calibration (BE-stop arming, trailing activation, partial-take fractions). Cold-start verification of a market-hours class goes through a scheduled system-alert ~5 min post-open (`Step 8.5`).
 
 ---
 
-## Plain-language front-matter (per Langston rev 3 §G)
+## Part 3 — Worked example: `xstock_spot` (B79, Phase 24)
 
-For each asset class, lead with non-jargon: **what is this asset class, what's special about it, and why does DawnTrader treat it differently from the asset classes we already support?**
+The concrete, filled-in instance of the whole sequence. xStock onboarding ran across ~30 sub-batches; this is the distilled result.
 
-This section answers Kyle's stated need: "explain it without code." Every Section H worked example begins with this front-matter block, then drills into the technical decisions.
+### H.1 Plain-language front-matter
 
----
+xStocks are tokenized 1:1-backed equities listed on Kraken's Pro venue at `wss://ws-equities.kraken.com`. Each token (e.g. AAPLx) is fully collateralized by an actual share of the underlying stock (AAPL) held by Backed Finance, a regulated Liechtenstein issuer; they settle on Solana (T+0 atomic), trade fractionally with a $1 minimum, and run on US market hours (24/5 — closed Sat/Sun + US holidays + early-close days). Why DawnTrader treats them as a separate class: **hours** (24/5 not 24/7 — the scanner early-returns on weekends, the lifecycle controller freezes stops when the market is closed); **volatility** (crypto 2–8% ATR% vs equities 0.5–2% — regime thresholds halved as the Layer-1 baseline); **microstructure** (equities have a U-shaped intraday volume curve vs crypto's flat 24/7); **macro inputs** (VIX / S&P trend / sector rotation, not BTC dominance / funding); **failure modes** (LULD halts, circuit breakers, dividends, splits, earnings); **sector correlation** (equities cluster by sector harder than crypto); **tokenization-vs-underlying** (AAPLx may or may not track AAPL).
 
-## Section A.0 — Asset Class Definition + Operational Profile
-
-For every new asset class, populate this table BEFORE anything else. The table sets the operational facts that downstream architectural decisions key off.
-
-| Field | Definition |
-|---|---|
-| Trading hours | 24/7? 24/5? Session-bound (RTH only)? Weekend gap? Pre/post-market? |
-| Settlement | Centralized exchange book? On-chain? Custodial broker? T+0 / T+1 / T+2? |
-| Geography / regulatory | Restricted jurisdictions? KYC requirements? Sanctioned-country considerations? |
-| Fees (maker / taker) | Volume tier brackets? Stablecoin discounts? Payment-in-kind options? |
-| Custody model | Self-custody available? Exchange-custody only? On-chain wallet required? |
-| Exchange WS endpoint | Path + protocol version + heartbeat cadence + reconnect semantics |
-| Exchange REST endpoint | Path + auth model + rate limits |
-| Symbol form on each endpoint | Canonical form? Display form? WS feed form? Are these all the same? |
-| Universe size + dynamism | Static? Growing? Shrinking? Frequent listings/delistings? |
-| Tick size / lot size / fractional | Decimal precision in price + quantity. Minimum order size. |
-
-### Section A.0 — xstock_spot worked example (B79)
+### H.1.A — Operational profile (filled `R-PROFILE`)
 
 | Field | xstock_spot value |
 |---|---|
-| Trading hours | 24/5. Closed Sat-Sun + US market holidays. |
-| Settlement | Solana on-chain (1:1 backed equity tokens, Backed Finance). T+0 spot trade. |
-| Geography / regulatory | Available on Kraken Pro non-US. UAE-resident user → permitted. |
-| Fees | Same as Kraken Spot fee table. Taker 0.26%, Maker 0.16% at base tier. |
-| Custody model | Kraken-custody on-platform. On-chain Solana wallet required for withdrawal (Phase 19 active-trading concern). |
-| Exchange WS endpoint | `wss://ws-equities.kraken.com` (separate from `wss://ws.kraken.com/v2`) |
-| Exchange REST endpoint | Equity Spot REST returns NO xStocks tickers; data via WS only or via the B74 archiver's per-pair candle endpoint. |
-| Symbol form | Canonical = `<TICKER>/USD` (e.g. `AAPL/USD`). WS feed = same. Display = `<TICKER>x/USD` (e.g. `AAPLx/USD`). resolveAssetClass dispatches via XSTOCK_SPOT_SYMBOLS allow-list. |
-| Universe size | 275 symbols today; growing toward 500 by EOY. Static config in `server/config/xstocks-universe.json`; manual update + commit. |
-| Tick / lot / fractional | $1 minimum (fractional). Tick size verified via WS depth feed (pre-audit). |
+| Trading hours | 24/5. Closed Sat–Sun + US market holidays. Unified close Fri-20:00-ET → Sun-20:00-ET. |
+| Settlement | Solana on-chain (1:1-backed, Backed Finance). T+0 spot. |
+| Geography/regulatory | Kraken Pro non-US. UAE-resident user → permitted. |
+| Fees | Kraken Spot fee table — taker 0.26% / maker 0.16% at base tier. |
+| Custody | Kraken-custody on-platform; on-chain Solana wallet for withdrawal (a Phase-19 active-trading concern). |
+| Exchange WS endpoint | `wss://ws-equities.kraken.com` (separate from `wss://ws.kraken.com/v2`). |
+| Exchange REST endpoint | **NONE for xStock** — public REST returns no xStock tickers; data is WS-only (REST-polling is a dead path — `Step 0.4`). |
+| Symbol form | Canonical `<TICKER>/USD`; WS feed same; display `<TICKER>x/USD`. Dispatched via the universe allow-list. |
+| Universe size + dynamism | ~489 symbols, DB-dynamic since B79.0n.UNIVERSE-DISCOVERY (daily discovery cron). |
+| Tick / lot / fractional | $1 minimum, fractional. |
+| **Monolithic?** | Mostly monolithic (all on the same 24/5 calendar), but market-hours predicates still take a REQUIRED symbol arg (a half-day-calendar dimension exists). |
 
----
+### H.1.B — Architecture decisions (filled)
 
-## Section A — Discovery + Inventory
-
-Use Section A.0 + this checklist to confirm the asset class is operationally well-understood before architecture decisions.
-
-- [ ] Operational facts captured (Section A.0)
-- [ ] Pair universe source identified
-- [ ] Universe-refresh cadence decided
-- [ ] Ticker / OHLC source(s) identified
-- [ ] Live-pricing infrastructure path decided (extend existing vs build dedicated)
-- [ ] Per-pair characteristics inventory completed (compare to BATCH_79_SCOPE.md §4)
-- [ ] Asset-specific characteristics inventoried (sector, fundamentals, IV, etc.)
-
-### Section A — xstock_spot worked example
-
-- Pair universe: `xstocks-universe.json` static config; manual PR adds new symbols.
-- Ticker: WS-only (`ws-equities.kraken.com`); 24h volume aggregated from `equity_spot_ohlc_1m` table populated by B74 archiver.
-- Live-pricing: B79 uses 1m archive lookup (no real-time WS subscriber). Real-time WS adapter deferred to **B79.5** (Phase 19 active-trading prerequisite).
-- Asset-specific characteristics:
-  - **Sector classification** — required for Stage 12.5 portfolio-cluster prevention. Source: `yfinance.Ticker(symbol).info['sector']`. Refresh: annual cron. Stored as `sector` field in `xstocks-universe.json`.
-  - Earnings calendar — DEFERRED to B79.x.
-  - Market-cap classification, P/E, IV, analyst ratings — DEFERRED.
-
----
-
-## Section B — Architecture Decisions
-
-For every new asset class, decide:
-
-| Decision | Options | Decision criteria |
+| Decision | xstock_spot choice | Rationale |
 |---|---|---|
-| Scanner | Shared FX5 vs Dedicated | Telemetry isolation requirement. If signal distributions are materially different (equity vs crypto microstructure), dedicated. |
-| Family filter path | Shared vs Separate | Family taxonomy (TFS/RBS/IE/HVU/ST) is regime-based, not asset-class-based; usually share. Per-family IMF thresholds asset-class-scoped. |
-| RTB pool | Shared vs Separate | Day 1 share with biased ranking; B81's `expectedNetReturnR` primitive provides cross-asset parity. |
-| Live-pricing | Extend existing vs Dedicated adapter | If endpoint differs (different WS host), dedicated adapter. |
-| Telemetry isolation | By instance vs By assetClass param | The B79 fix establishes assetClass param plumbing as the cross-cutting standard. |
-| Pattern pool | Shared vs Separate vs Disabled | Default: separate per asset class with asset-class-specific guardrails. |
-| Quant family paths | Shared vs Separate per asset class | rev 7 §-2.5 SSOT: separate. Family-path keys asset-class-prefixed. |
+| Scanner | DEDICATED | Telemetry isolation + market-hours-aware loop + independent benchmarks + materially different dollar-volume distributions. |
+| Family filter path | SHARED taxonomy (TFS/RBS/IE/HVU/ST), per-family IMF thresholds asset-class-scoped | Family taxonomy is regime-based, not class-based. |
+| RTB pool | SHARED (per-class bucket allocation added in B79.0n.RTB) | Cross-asset parity via the `expectedNetReturnR` primitive. |
+| Live-pricing | WS-equities feed; 15-min bar evaluation | xStock evaluates on 15-min bars (B.4); REST is a dead path. |
+| Telemetry isolation | Per-class instance triad via factory (`R-INSTANCE`) | Signal/null distributions differ from crypto. |
+| Pattern pool | SEPARATE xstock_spot pattern pool with class-specific guardrails | |
+| Quant family paths | SEPARATE per-class SSOT keys | |
+| Bar frequency | 15-min (changed from inherited 60-min, B.4 — `R-BARFREQ`) | Longer holds + ORB revival; edge weak at every interval so chosen on structure/stability. |
+| Liquidity gate | Order-book DEPTH median (not 24h volume) | xStock per-bar volume = underlying equity, ~4 orders off — wrong data. |
 
-### Section B — xstock_spot decisions (rev 7 consensus)
+### H.1.C — Schema (filled)
 
-- Scanner: **DEDICATED** xstock scanner. (rev 5 §C: telemetry isolation + market-hours-aware loop + independent benchmarks.)
-- Family filter path: **SHARED** taxonomy (TFS/RBS/IE/HVU/ST applies to equities), but per-family IMF thresholds asset-class-scoped per rev 7 §-2.5.
-- RTB pool: **SHARED Day 1**, biased ranking acknowledged; cross-asset parity via B81 `expectedNetReturnR`.
-- Live-pricing: **DEFERRED to B79.5**. B79 uses 1m archive lookup.
-- Telemetry isolation: **assetClass param** at every boundary, default `'crypto_spot'` (backward-compatible). PairFailureTracker partitioned by-instance via dedicated AdaptiveScanManager.
-- Pattern pool: **SEPARATE xstock_spot pattern pool**. 3 file-based strategies enabled Day 1: `inside_bar_reversal`, `morning_star`, `pivot_shift`.
-- Quant family paths: **SEPARATE per asset class** with `xstock_spot.tfs` / `xstock_spot.rbs` / etc. SSOT keys.
+`screener_filters` gained `asset_class` + `tunable_status`; xStock row has NO max_price cap. xStock `module_constants` seeds (asset-class-scoped keys): `regime.*` per `regime-thresholds.ts`; `sqe_config.*` (`confidence_threshold`, `di_min_quant`, `adx_min`, `momentum_min`, `di_min_pattern`); `macro_modifier=1.0` placeholder (b67_1 NO-OP); `strategy_gates.xstock_spot.<strat>.enabled` (10 allow + 9 block); `pattern_pool_gates.xstock_spot.*` (naming-converged with crypto); `trailing_exit.xstock_spot.*`; `market_data.xstock_spot.data_freshness_window_ms=90000`. The 15-min foundation (B.4) added per-class time-anchored lookbacks + recalibrated all 14 regime thresholds + rebuilt DBS (332k 15-min rows). The dynamic-universe schema added `xstock_universe` / `xstock_universe_overrides` / `discovery_runs`. The `equity_*`→`xstock_*` rename (B79.0e) cascaded across 172 objects.
 
----
+### H.1.D — Code surface (resolved — actual file inventory)
 
-## Section C — Schema + Configuration Surface
+**Per-class module under `server/asset_classes/xstock_spot/`** (location-bound, no optional `assetClass?:` param):
 
-Every new asset class touches these schema concerns:
-
-- `module_constants` — verify scope dimension supports asset_class scoping.
-- `screener_filters` — has asset_class column? If yes, insert row. If no, schema migration first.
-- `paper_sim_trades` — asset_class column present?
-- `paper_sim_open_positions` — asset_class column present?
-- `signal_eval_archive` — asset_class column present?
-- `regime_factor_alternates` — asset_class column present?
-- `tunable_status` column — does the row tag values as `pending_layer_3` for unknown thresholds?
-
-### Section C — xstock_spot worked example
-
-- screener_filters: B79 schema migration adds `asset_class` (text NOT NULL DEFAULT 'crypto_spot') + `tunable_status` (text DEFAULT 'active') columns. Backfill all existing rows to `asset_class='crypto_spot'`. Insert xstock_spot row with NO max_price cap (per Kyle).
-- module_constants: scope-based lookup verified (B78 work). `xstock_spot.*` keys added per family-path SSOT discipline (rev 7 §-2.5).
-- paper_sim_trades / signal_eval_archive / regime_factor_alternates / paper_sim_open_positions: B70+ era expected to have asset_class. PIA Step §2 audits + adds if missing.
-
----
-
-## Section D — Code Surface
-
-For every new asset class, build:
-
-- `server/asset_classes/<class>/regime-thresholds.ts` — branch-condition constants, leaf module
-- `server/asset_classes/<class>/friction.ts` — fee/spread/slippage model
-- `server/asset_classes/<class>/pattern-pool-filters.ts` — guardrails for pattern path
-- `server/asset_classes/<class>/market-hours.ts` — ONLY if session-bound
-- `server/asset_classes/<class>/index.ts` — re-exports public surface
-
-And wire into:
-
-- `calculatePairRegime` — asset-class dispatch in `market-regime.ts`
-- `cost-model.ts` — asset-class friction lookup
-- `market-scanner.ts` (if dedicated scanner; instantiate factory)
-- `signal_quality_evaluator.ts` — asset-class gates (confidence_threshold, di/adx/momentum mins)
-- `resolveAssetClass` (in `shared/asset-classes.ts`) — symbol-to-class dispatch
-- `MULTI_FAMILY_ELIGIBILITY` (in `canonical-regime-strategy-map.ts`) — strategy-asset-class scoping
-- Telemetry / ratio / aggregator boundaries — `assetClass` param plumbed
-- TEC stop-evaluation — `if (!isMarketOpenForAssetClass) return SKIP`
-
----
-
-## Section E — 18-Stage Walkthrough Checklist
-
-For every new asset class, walk all 18 stages. At each, answer:
-
-- What variables / thresholds / gates apply?
-- Are they asset-class-scoped or shared?
-- Where do values come from (DB rows, TS constants, derived)?
-- Layer 1 (domain-knowledge baseline) value?
-- Tagged `pending_layer_3` if no domain knowledge available?
-
-The 18 stages (B79 scope §1) are: Connection / Discovery / Adaptive Batch / DBS / Global Filter / Pattern Pool (PARALLEL) / Family-IMF / Regime / MCE / Strategy Detect / SQE / Cost / Ranking / Portfolio Risk / Trade Entry / Lifecycle / Position Mgmt / Trade Close / Calibration.
-
-A row-per-stage table per asset class lives in Section H worked examples.
-
----
-
-## Section F — Layer 1 / Layer 2 / Layer 3 protocol
-
-Three-layer calibration discipline per `MULTI_ASSET_VTS_EXPANSION_PLAN.md` §6.2:
-
-| Layer | Source | Duration | Output |
-|---|---|---|---|
-| **Layer 1** | Domain-knowledge baseline. Engineer judgment + literature. | 1-2 hrs in scope. | TS constants + DB rows tagged `tunable_status='active'` if confident OR `'pending_layer_3'` if not. |
-| **Layer 2** | Cross-asset shadow-classify sanity check. Compare to crypto baseline. | 2-3 hrs in scope. | Confirms or revises Layer 1 values. |
-| **Layer 3** | Live shadow-mode VTS observation. | per-asset-class (see §F.X). | Tertile-monotonic WR, ≥7pp HIGH-LOW gap, p<0.05, n≥150/bucket. Promotes `pending_layer_3` to `active`. |
-
-### Section F.0 — Two parallel ablation frameworks run during Layer 3 (locked Kyle directive 2026-05-08)
-
-Every new asset class onboarding runs **two parallel ablation frameworks** during shadow-mode observation. Both deliver Layer 3 evidence; both must be wired before live-loop activation:
-
-1. **Factor-calibration ablation (B67.0 framework).** Per-factor counterfactuals on each chain modulator (b67_1 macro modifier, b67_2 phase, b67_4 outcome feedback, b68_1 multi-TF, b68_2 volume regime, b68_3 pair correlation, b68_4 regime age, b68_5 Path B sustainability). Stored in `regime_factor_alternates` (asset_class-scoped per B69). Drives the confidence-modifier chain calibration decisions per asset class (post-composition floor, individual factor enable/disable, lift-vs-control evaluation).
-2. **Exit-strategy ablation (B73 framework).** 12 variants (BE A-F + Trail G-J + Combined K-L) per closed trade. Stored in `exit_strategy_alternates` (asset_class-scoped). Drives the **per-asset-class TEC configuration decisions** — specifically: should `break_even_enabled`, `trailing_exit` engagement, `target_lock_r`, `moonbag_*` constants be ON or OFF for THIS asset class? Crypto's B73 ablation showed Variant K (BE-disabled) wins; equity microstructure may differ.
-
-Both frameworks are extensible: B67.0 hook in factor-ablation-emitter is asset-class-agnostic; B73 hook in `vts-service.persistRealPriceTrade` is asset-class-agnostic. **What's required for each new asset class:** confirm both hooks emit when `assetClass === '<new_class>'` + extend the aggregator paths (drift-dashboard for B67.0, exit-strategy-ablation for B73) so each asset class has its own results panel.
-
-**Replacement is not the answer — parallel observation is.** B79.4 extends B73 to xstock_spot alongside crypto's existing B73 (both run side by side, separate aggregator scope filters by asset_class). Same pattern for B80 + future asset classes.
-
-### Section F.X — Observation Period Sizing (per-asset-class flexibility)
-
-Standard for crypto_spot: 14 days for B67/B68 calibration windows + 2 weeks for B73 exit ablation. **Other asset classes may differ** — equities trade 24/5 (~80 hr/wk) vs crypto 24/7 (168 hr/wk), so equivalent sample volume takes longer wall-clock. Each new asset class declares its observation period sizing during scope-lock, populated as PIA evidence on sample-rate-per-day accumulates in the first 24-48h post-live-wire.
-
-**Decision criteria for the observation period length per asset class:**
-- Target sample count per regime per factor bucket: ≥150 (per Langston cc-inbox #856 calibration check threshold)
-- Wall-clock minimum: enough days to span at least one full weekly cycle (captures Mon/Fri intraday-pattern variation)
-- Wall-clock maximum: don't observe past the point where regime conditions have shifted enough that early data is no longer comparable to current behavior
-
-xstock_spot's specific observation period sizing populates as a Section H.1 entry once Layer 1 sample-rate evidence is in.
-
-### Exit observation metrics (per Langston rev 5, scope §-2 row 7)
-
-For asset classes with different volatility profiles than crypto (B79: equities are LESS volatile), Layer 3 explicitly calibrates exit-side constants. 6 metrics:
-
-1. Time-to-target by regime
-2. MAE-before-profit
-3. MFE-at-exit
-4. ATR-vs-%-stop comparative performance
-5. Partial-take impact on net P&L
-6. Hold-time by regime
-
-These feed into Stage 14a position-management trigger calibration (BE-stop arming, trailing-stop activation, partial-take fractions).
-
----
-
-## Section G — Verification + Forward-Watch
-
-For every new asset class onboarding, define:
-
-- **Behavioral verify checklist** — run on staging post-deploy, before claiming Step 7+8 complete
-- **No-touch fence SQL** — query that confirms existing asset classes' factor-emission cadence is unchanged. Pattern from B78:
-  ```sql
-  SELECT factor_name, COUNT(*) FROM regime_factor_alternates
-  WHERE asset_class = 'crypto_spot' AND evaluated_at > NOW() - INTERVAL '1 hour'
-  GROUP BY factor_name;
-  ```
-  Acceptance: counts within ±10% of pre-deploy baseline.
-- **24h forward-watch dashboard** — what metrics get checked at +24h post-go-live
-- **7d forward-watch dashboard** — what metrics get checked at +7d
-- **Strategy-gap monitoring discipline** (per Langston rev 5, scope §2.X.9) — explicit gap-watching criteria during shadow-mode. 5 concrete triggers:
-  1. Fire-rate by regime <50% of crypto baseline
-  2. ≥80% concentration in ≤2 strategies
-  3. Win-rate clustering 40-50% (no edge)
-  4. Identifiable temporal windows where no strategy fires
-  5. Named pattern recurrence in unfilled signal opportunities
-
-Each trigger has a documented next-action (typically: open a sub-batch to add the missing strategy).
-
----
-
-## Section H — Worked Examples
-
-### Section H.1 — xstock_spot (B79, Phase 24)
-
-#### H.1 Plain-language front-matter
-
-xStocks are tokenized 1:1 backed equities listed on Kraken's Pro venue at `wss://ws-equities.kraken.com`. Each xStock token (e.g. AAPLx) is fully collateralized by an actual share of the underlying NYSE/NASDAQ stock (AAPL) held by Backed Finance, a regulated Liechtenstein issuer. They settle on the Solana blockchain (T+0 atomic), trade fractionally with a $1 minimum, and operate on US market hours (24/5 — closed Sat/Sun + US holidays + early-close days).
-
-Why DawnTrader treats them as a separate asset class:
-
-- **Hours.** Crypto is 24/7; equities are 24/5. The scanner must early-return on weekends; the trade lifecycle controller must freeze stops when the market is closed (a stop can't fire when there's no price action).
-- **Volatility profile.** Crypto pairs run 2-8% ATR%; equities run 0.5-2%. Regime classifier thresholds halved as Layer 1 baseline.
-- **Microstructure.** Crypto has flat 24/7 volume; equities have a U-shape (open-bell + close-auction peaks, lunch lull). Volume-normalized indicators behave differently.
-- **Macro inputs.** BTC dominance and crypto funding rates are irrelevant; equities respond to VIX, S&P trend, sector rotation. Macro modifier defaults to 1.0 in B79; equity-equivalent macro inputs deferred to **B79.3**.
-- **Failure modes.** Crypto rarely halts; equities have LULD halts, circuit breakers, dividends, splits, scheduled earnings windows. New taxonomy table per scope §1.X.
-- **Sector correlation.** Equities cluster by sector (5 tech stocks all move together) much harder than crypto's symbol-similarity grouping. Portfolio-cluster prevention needs sector-aware logic in **B79.6**.
-- **Tokenization vs underlying.** AAPLx may or may not trade like AAPL. The Q-D pre-implementation probe (yfinance comparison, 4-window correlation, 3-tier decision tree) determines downstream design intuitions before coefficient calibration is trusted.
-
-This worked example walks the full Section A through G for xstock_spot.
-
-#### H.1.A.0 Operational Profile
-
-(See Section A.0 above.)
-
-#### H.1.B Architecture Decisions
-
-(See Section B above.)
-
-#### H.1.C Schema
-
-- `screener_filters` migration: `asset_class` + `tunable_status` columns; xstock_spot row with no max_price cap.
-- xstock_spot module_constants seed rows:
-  - `xstock_spot.regime.*` per regime-thresholds.ts (asset-class-prefixed keys per rev 7 §-2.5)
-  - `xstock_spot.sqe.confidence_threshold = 70` (vs crypto 60; conservative Day 1 Layer 1)
-  - `xstock_spot.sqe.di_min_quant = 18`, `adx_min = 18`, `momentum_min = 0.002`, `di_min_pattern = 10`
-  - `xstock_spot.macro_modifier = 1.0` (placeholder pending B79.3)
-  - `xstock_spot.orb_enabled = false` (Q-D-gated)
-
-#### H.1.D Code Surface
-
-Files added / modified — see BATCH_79 commit hashes (linked in BATCH_CATALOG entry).
-
-#### H.1.E 18-Stage Walkthrough
-
-Per scope §1 / scope §2.X. Cross-references stages 0-16 + cross-cutting failure mode taxonomy.
-
-#### H.1.F Layer 1 / 2 / 3 Status
-
-- Layer 1: complete in B79 (regime thresholds, SQE thresholds, friction values).
-- Layer 2: cross-asset shadow-classify spot-check (xstock pairs into existing classifier with shared math; verify branch routing makes sense).
-- Layer 3: live shadow-mode VTS observation 48-72h+. Drives sub-batches B79.1+ (coefficient tuning, equity-specific strategy additions, exit-side calibration).
-
-#### H.1.G Forward-Watch
-
-- 24h post-deploy: confirm shadow-mode VTS emission for xstock_spot pairs, factor-ablation counts populating in `regime_factor_alternates`, no-touch fence SQL on crypto_spot still green.
-- 7d post-deploy: strategy-gap monitoring (5 triggers from Section G); resource-watch metrics from scope §11.5.
-
-#### H.1.x Standing rules added by Phase 24
-
-Pared to genuine standing rules — things that MUST be done every time a new asset class is onboarded. Trial-and-error history lives in completion reports (`BATCH_79_*_COMPLETION_REPORT.md`); only resolved patterns are codified here.
-
-**1. Ticker-collision check at scope time (NEW SECTION L below — most important Phase 24 learning).** Mandatory pre-implementation gate when the new asset class shares an exchange with an existing class.
-
-**2. Per-class behavioral config with HARD-FAIL boot (extends §I.0 #3).** Trading-policy DB rows must be explicit per asset class. The Phase 24 enforcement mechanism: `primeXConfig()` boot-time warmup throws if any registered class lacks an explicit row. Wildcard `*` row is acceptable ONLY when truly identical across all classes; the moment any class diverges, the wildcard is replaced with explicit per-class rows. No silent fallbacks. Applies to ANY behavioral knob (TEC config, regime thresholds, SQE thresholds, friction, confidence floors).
-
-**3. Per-symbol predicates when class is non-monolithic (extends Section A.0).** Add a row to the operational-profile table: "Are all symbols in this class operationally identical, or does the exchange treat some differently (24/7 names within a 24/5 class, halt-able names, pre/post-market windows)?" If non-monolithic: every market-state predicate (`isMarketOpen`, freshness gate, TEC stop-freeze) requires symbol as first arg from Day 1. Optional-with-silent-fallback signatures create a silent-bug class.
-
-**4. Telemetry partitioning when signal distributions differ (extends §B).** If null-rates, fire-rates, or filter-pass-rates are NOT equivalent to existing classes, build a separate-instance triad (Telemetry + RatioManager + FailureTracker + ScanManager) via `getAssetClassInstances(class)` factory pattern. Crypto path returns existing globals (back-compat); new class lazy-instantiates fresh triad. Do NOT param-plumb `assetClass` through every callsite (silent-corruption risk).
-
-Everything else from B79.0a–0g (state-vs-config rehydrate boundary, N3+N4 cleanup, scaffold-vs-live separation, persistence-at-trade-open architecture, strategy 6-step pattern, namespace-reservation, comms-infra protocols) is either (a) infrastructure now baked into the system that future asset classes inherit automatically, (b) general engineering hygiene not asset-class-specific, or (c) process/tooling unrelated to onboarding. Trial-and-error history of HOW we got there lives in the per-batch completion reports.
-
-### Section H.2 — crypto_perp (B80, Phase 25)
-
-To be populated when B80 ships.
-
-### Section H.3 — (future asset classes)
-
----
-
-## Section I — Onboarding Decision Framework
-
-If/then rules surfaced from xstock_spot worked example. Apply on every new asset class:
-
-### Section I.0 — Universal rules (Kyle directives 2026-05-08, applied to ALL onboardings)
-
-1. **NO PATCHES.** Every fix and feature must be a long-term, sustainable, stable, scalable solution. No duct tape. No "good enough for now." Surfaced bugs trigger root-cause investigation + design-then-implement, not patches. Cold-start warmup is acceptable (1-5 minute deterministic startup beats instant-on with stale-cache races). Every architecture decision discussed gets documented BEFORE implementation in the relevant governance doc the same session it's discussed. Verbal "we'll do that later" without paper-trail is rejected.
-2. **Backpressure is never asset-class shedding.** Resource ceilings trigger vertical-scale (Hetzner / Supabase tier upgrade) or computational-distribution refactor — never drop-cycles or throttle-on-a-live-asset-class. Pre-deploy load test is a sizing decision-gate, not a squeeze-it-in gate.
-3. **Per-asset-class configuration is the default for behavioral knobs.** Trading-policy decisions (BE enable, trailing exits, regime thresholds, confidence floors, friction values) MUST be DB-resolved with `asset_class` as a first-class scoping dimension. Wildcard `*` is acceptable as a starting placeholder ONLY when the value is genuinely identical across all classes; the moment any class needs a different value, the wildcard is replaced with explicit per-class rows. No silent fallbacks.
-4. **Both ablation frameworks run during shadow-mode.** Factor-calibration ablation (B67.0) AND exit-strategy ablation (B73) — parallel, both required, each contributes Layer 3 evidence to per-asset-class trading-policy decisions. Replacement of an existing asset class's ablation is never the answer — parallel observation is.
-5. **Per-asset-class observation period.** No universal "X days" rule — each new asset class declares its observation period during scope-lock based on sample-rate-per-day evidence. Minimum bound: ≥150 samples per regime per bucket. Wall-clock minimum: at least one full weekly cycle.
-6. **Each new asset class gets its OWN dedicated observation UI tab** (Kyle directive 2026-05-08). Do NOT stack new ablation panels under existing tabs — those tabs grow unwieldy as multiple asset classes accumulate. Crypto_spot's Drift Dashboard tab stays as-is for crypto observation. xstock_spot observation panels live on a new dedicated tab (B79.4 deliverable). crypto_perp observation panels live on a new dedicated tab when B80 ships. Future asset classes follow the same pattern. This applies to BOTH ablation panels (factor-calibration AND exit-strategy) — they live side-by-side on the same per-asset-class tab.
-7. **Update RUNNING_ISSUES + governance docs SAME SESSION as discussion** (Kyle directive 2026-05-08). Verbal commitments without paper-trail are rejected. Every architectural decision and every scope addition gets documented BEFORE implementation in the relevant governance doc the same session it's discussed. The project is too large + runs over too many phases for verbal commitments to survive.
-8. **Comms with Langston follow file-first protocol for any large content** (CLAUDE.md §6.5.0; Kyle directive 2026-05-08). Design asks, scope drafts, multi-question reviews go in `Claude Comms and Packages/Langston Design Asks/<batch>_<topic>_<rev>.md`; Telegram + watchdog prompt is the SHORT (under 1KB) pointer to the file. Never shorten content to fit a prompt — putting it on disk is the proper solution.
-
-
-| If | Then |
+| File | Responsibility |
 |---|---|
-| Session-bound (not 24/7) | Build `market-hours.ts` + holiday calendar; mandatory scanner early-return + TEC stop-freeze gates. |
-| Macro factors non-trivial | Ship macro_modifier=1.0 default; defer equity-equivalent macro inputs to a sub-batch with explicit Layer 3 evidence trigger. |
-| Unique microstructure (vs existing classes) | Strategy-gap analysis required pre-ship. Document gap-watching triggers. |
-| Session timing introduces systematic gaps (overnight, weekend) | BE-stop trigger reviewed not inherited. Trailing-stop activation thresholds re-derived in Layer 3. |
-| Sector / cluster correlation > intra-class crypto correlation | Portfolio-cluster sector-aware. Sector classification source identified + scripted. |
-| New failure modes (halts, circuit breakers, dividends, earnings) | Failure-mode taxonomy table populated before ship. Detection + handling for the most-likely modes implemented or deferred-with-tracking-issue. |
-| Settlement model differs (on-chain, custody, T+1) | Phase 19 active-trading prerequisites flagged. Friction model accounts for any settlement-side cost. |
-| Universe is dynamic | Refresh protocol decided + automated where possible. Static config for stable, automated for rapid-change. |
-| Real-time pricing on a different WS endpoint | Live-pricing adapter onboarded as a separate sub-batch. B79 ships archive-lookup-only as Day 1 path. |
+| `scanner.ts` | The dedicated scanner — centralClock subscription, `CYCLE_BATCH_SIZE=75` rotation, `PINNED_BENCHMARKS`, `SCAN_TIMEOUT_MS`+`Promise.race`, `isScanning` early-return, restricted-universe-when-closed, `reconcileWindowState` (the `R-SCHEDTASK` poll-reconcile). |
+| `eval-cycle.ts` | The per-cycle pipeline — `loadXstockFilterConfigs` (cycle-scoped config cache), per-pair detect loop, `signal_eval_archive` write (incl. the B-NEW-53.2 at-entry block), `registerOpenVtsTrade`. |
+| `global-filter.ts` | Asset-class global filter on fresh pairs. |
+| `imf-evaluator.ts` | The 4 quant family-IMF paths + the pattern path. |
+| `imf-liquidity.ts` | Order-book DEPTH LQ (`calculateXstockDepthLQ`, rolling 20-min median, 3-state graceful). |
+| `pattern-filter.ts` / `pattern-pool-filters.ts` | Pattern-path filter + pattern-pool guardrails (`max_position_pct=0.50`). |
+| `regime-thresholds.ts` | Regime branch-condition constants (15-min-recalibrated). |
+| `friction.ts` | Fee/spread/slippage model (`XSTOCK_SPOT_FRICTION`, dispatched via `getFrictionForAssetClass`). |
+| `market-hours.ts` + `calendar.ts` + `time-of-day.ts` | DST-aware `isXstockMarketOpen` (REQUIRED symbol arg) + US holiday/half-day calendar + intraday helpers. |
+| `ohlc-aggregator.ts` | 15-min bar aggregation + per-interval snapshot. |
+| `lane-eligibility.ts` | Extracted lane-eligibility (testability). |
+| `universe-service.ts` + `universe-bootstrap.ts` + `sp500-backstop.ts` | Dynamic discovery service (`initializeFromDB`) + ~20-symbol mega-cap bootstrap + S&P-500 backstop. |
+| `index.ts` | Public-surface re-exports. |
+
+**Shared wire-ins (dispatch threads `assetClass` at the dispatcher, never forks logic):** `shared/asset-classes.ts` (`resolveAssetClass` + `XSTOCK_SPOT_*` membership + `XSTOCK_SPOT_KRAKEN_COLLISIONS`); `server/asset_classes/pattern-pool-dispatch.ts` (`getPatternPoolGuardrailsForAssetClass`); `cost-model.ts` (`getFrictionForAssetClass`); `market-regime.ts` (`calculatePairRegime` REQUIRED-assetClass); `mce.computeContext`; `signal_quality_evaluator.ts`; `canonical-regime-strategy-map.ts` (byAssetClass nested); `asset-class-instances.ts` (the telemetry triad factory); `strategy-engine.ts` + `vts-runner.ts:callStrategyDetect` + `signal-orchestrator.ts` (the strategy dispatch sites). Per-sub-batch commit hashes are in each `B79_0*_COMPLETION_REPORT.md` (and the BATCH_CATALOG rows); the durable patterns each file embodies are in Part 2.
+
+### H.1.E — 18-stage pipeline walkthrough (resolved — actual per-stage table)
+
+For each pipeline stage: what applies for xStock, whether it is class-scoped or shared, and where the values come from.
+
+| # | Stage | xStock specifics | Scope | Value source |
+|---|---|---|---|---|
+| 1 | Connection | WS-equities feed; no REST | class | `scanner.ts` / WS adapter |
+| 2 | Discovery | 3-service chain (CoinGecko→WS-probe→Finnhub); daily cron | class | `universe-service.ts` + `discovery_runs` |
+| 3 | Adaptive batch | 75-pair rotation + pinned benchmarks; restricted universe when closed | class | `scanner.ts` |
+| 4 | DBS | Sector-respecting market-wide directional aggregate; index proxies excluded; 15-min epoch | class (math byte-identical) | `directional-bias-store` + `xstock_dbs_backfill` |
+| 5 | Global filter | DEPTH-median LQ (not volume); NO max_price cap; volume-confirmation REMOVED (wrong data) | class | `global-filter.ts` + `screener_filters.xstock_spot` |
+| 6 | Pattern pool (parallel) | Separate xStock pattern pool; F-1 taxonomy invariant; guardrail `max_position_pct=0.50` | class data, shared logic | `pattern-pool-filters.ts` + `module_constants.pattern_pool_gates.xstock_spot` |
+| 7 | Family-IMF | LQ/VN/DI per family, asset-class-scoped; trend≠breakout thresholds (carryover-audited); DI recalibrated at 15-min (contracts toward 50) | class | `imf-evaluator.ts` + `screener_filters` family rows |
+| 8 | Regime | All 14 thresholds 15-min-recalibrated, percentile-preserving; parity exit-gate ≤1.3pp | class | `regime-thresholds.ts` + `module_constants.regime_classifier.xstock_spot` |
+| 9 | MCE | Time-anchored lookbacks (bar-count → wall-clock per 15-min); per-class context cache key `${symbol}:${assetClass}` | class data, shared engine | `mce.computeContext(..., assetClass)` |
+| 10 | Strategy detect | 10 enabled / 9 blocked; ORB plumbed-ready but `enable=false` (#203); shared detect methods, per-class DB thresholds | class data, shared logic | `callStrategyDetect` switch + `module_constants.strategy.*` |
+| 11 | SQE | Per-class `sqe_config.xstock_spot` gates; whitelist scoped per class | class | `signal_quality_evaluator.ts` |
+| 12 | Cost | `XSTOCK_SPOT_FRICTION` via fail-hard dispatch | class | `getFrictionForAssetClass` |
+| 13 | Ranking | Shared RTB pool with per-class bucket allocation | shared + per-class buckets | `rtb-refresh-service.ts` |
+| 14 | Portfolio risk | Sector-cluster prevention (sector-aware — future B79.6); `pattern_max_position_pct=0.50` is a HARD active-trading pre-gate (#153) | class | `module_constants` + sector map |
+| 15 | Trade entry | `registerOpenVtsTrade` persists `asset_class` at OPEN into `vts_open_trades`; at-entry economics block archived (B-NEW-53.2) | class | `eval-cycle.ts` |
+| 16 | Lifecycle | TEC stop-freeze when market closed; exit loop reads the asset-class-correct OHLC table | class | `vts_open_trades` + TEC |
+| 17 | Position mgmt | BE-protect/trailing deliberately TRUE for xStock (verify live DB, not comments) | class | `trailing_exit.xstock_spot` |
+| 18 | Trade close | `markOpenTradeClosed` (Map.delete first, then await, no re-throw); close-hook resolves assetClass via safeResolve+skip-on-null | class-tagged, shared mechanism | `vts-service` + outcome-feedback store |
+| — | Calibration (cross-cutting) | Pre-calibration baseline + carryover audit + the 3-sub-cycle cycle; W2/W3 data-blocked → Phase 25 | class | Calibration Scoreboard (`calibration_ledger`) |
+
+### H.1.F — Layer 1/2/3 status
+
+Layer 1 complete (regime/SQE/friction seeds + 15-min recalibration). Layer 2 cross-asset shadow-classify spot-check done. Layer 3 live VTS observation ongoing — the HCE study (22,810 VTS trades) closed 2026-06-05 with the headline that the lever is SELECTIVITY, not gates or post-entry geometry; per-strategy re-fit (W2) + ORB re-enable (W3) are data-blocked on captured decision-provenance → Phase 25 (25-12/13/14/15).
+
+### H.1.G — Forward-watch
+
+24 h post-deploy: xStock VTS emission confirmed, factor-ablation counts populating in `regime_factor_alternates`, the no-touch fence on crypto still green. 7 d: strategy-gap monitoring (the 5 triggers — fire-rate by regime <50% of crypto baseline, ≥80% concentration in ≤2 strategies, win-rate clustering 40–50%, identifiable no-fire windows, named-pattern recurrence in unfilled opportunities). Cold-start each Monday verified via a scheduled ~5-min-post-open system-alert.
+
+### H.1.x — Phase-24 standing rules → promoted
+
+The four Phase-24 standing rules (ticker-collision at scope time; per-class config HARD-FAIL boot; per-symbol predicates when non-monolithic; telemetry partitioning via factory) are now the **Standing invariants** at the top of this doc + `Step 0.2` / `Step 0.1` / `Step 5.1`. The trial-and-error narrative lives in the `BATCH_79_*` completion reports.
 
 ---
 
-## Section J — Reusability for B80 + future
+## Part 4 — Future asset-class slots
 
-When B80 (crypto_perp) implementer starts:
+Each new class fills its own H.N block here at T+7d post-go-live with ONLY the genuinely-new standing rules (keep the doc lean), and adds any new patterns to Part 2. These slots are intentionally empty until each class ships — they are placeholders for content that does not exist yet, NOT unresolved pointers.
 
-1. Open this doc.
-2. **Run Section L (ticker-collision check) FIRST** — at scope time, before any architecture decisions. Live `/AssetPairs` intersection of crypto_perp universe against crypto_spot AND xstock_spot universes. Document collision set with provenance.
-3. Walk Section A through G for crypto_perp. At Section A.0, answer the monolithic-vs-per-symbol question (H.1.x rule 3) — perp may need per-symbol predicates if the exchange treats funding-window timing as per-pair.
-4. Confirm telemetry partitioning (H.1.x rule 4) by comparing crypto_perp signal/null distributions against crypto_spot baseline. If non-equivalent, build the separate-instance triad.
-5. Confirm per-class behavioral config (H.1.x rule 2) — every TEC / regime / SQE / friction knob gets an explicit `crypto_perp` row. HARD-FAIL boot.
-6. Identify perp-specific deltas:
-   - Funding rate (per-pair signal, NEW input to macro modifier composition)
-   - Leverage + liquidation
-   - Perpetual settlement
-   - Funding-time clustering (8-hour funding windows)
-7. Update Section H.2 with crypto_perp as worked example. Add Section H.2.x post-mortem at T+7d post-go-live with **only the genuinely new standing rules** — keep this doc lean.
+### H.2 — `crypto_perp` (B80, Phase 25) — NOT YET STARTED
 
-**Compounding value:** every new asset class strengthens the workflow. By the time we add FX (Phase later), the doc is battle-tested against equity, perp, and existing crypto-spot baselines.
+When the crypto_perp implementer begins: walk Part 1 in order. Pre-flight (`Step 0.2`) runs the ticker-collision intersection of the perp universe against BOTH crypto_spot AND xstock_spot. The exchange HAS a list-all endpoint (Kraken Futures `/derivatives/api/v3/instruments`) so dynamic discovery is lighter than xStock's. Perp-specific deltas to expect: funding rate (a per-pair signal, a NEW input to macro-modifier composition), leverage + liquidation, perpetual settlement, 8-hour funding-window clustering (this is the likely "non-monolithic" trigger — `Step 0.1` — if funding timing is per-pair). Confirm telemetry partitioning (`R-INSTANCE`) by comparing perp signal/null distributions against crypto_spot. The reserved-future enum value `crypto_perp` already exists in the `AssetClass` union (it throws `[CLASS_NOT_WIRED]` at every factory/dispatcher today — those throws are the activation breadcrumbs).
+
+### H.3 — further classes (forex, options, …) — NOT YET STARTED
+
+By the time a fourth class lands, this doc is battle-tested against equity, perp, and the crypto-spot baseline. A separate, simpler **exchange-onboarding** doc (adding Binance / Coinbase / Bybit — API auth, symbol normalization, fee schedule, WS protocol differences are mostly mechanical) is to be authored when the second exchange is added; it is out of scope here.
 
 ---
 
-## Section L — Ticker-collision check (NEW, Phase 24 standing rule)
-
-**This is a mandatory pre-implementation gate** when the new asset class shares an exchange with an existing class. Phase 24 surfaced this the hard way — see `BATCH_79_0f_COMPLETION_REPORT.md` for the historical SUI/USD bug.
-
-### The problem in one sentence
-
-A single base-symbol exists in BOTH the new asset class's universe AND an existing asset class's universe on the same exchange, producing identical canonical form (e.g. `SUI/USD` is both Sun Communities equity and Sui Network crypto on Kraken). Without an explicit gate, downstream consumers that re-resolve from canonical form silently misclassify every signal on the collision tickers.
-
-### What you must do (every onboarding, no exceptions)
-
-**Step 1 — discover the collision set at scope time.** Live API intersection:
-
-```python
-# Pseudocode — adapt to actual exchange API
-existing_class_bases = {<every base symbol the existing class trades on this exchange>}
-new_class_bases     = {<every base symbol the new class trades on this exchange>}
-collisions = sorted(existing_class_bases & new_class_bases)
-```
-
-The output is the collision set. Document it in `shared/asset-classes.ts` as a `<NEW_CLASS>_<EXISTING_CLASS>_COLLISIONS` constant **with a provenance comment block** citing:
-- Exchange API endpoint queried (e.g. `https://api.kraken.com/0/public/AssetPairs`)
-- Date the query was run
-- Re-audit cadence (default: quarterly)
-
-**Step 2 — gate the resolver.** In `resolveAssetClass(symbol, exchange)`, the new asset class's membership-set fast-path is GATED on collision-set non-membership. Tickers in the collision set fall through to the existing class on the regular exchange path; the new class is reached only via (a) a different `exchange` value (e.g. `kraken-equities` vs `kraken`) or (b) an explicit display form that disambiguates (e.g. the lowercase `x` suffix in `SUIx/USD`).
-
-**Step 3 — emit a WARN log on collision-without-disambiguation.** When a collision ticker hits the regular exchange path without a disambiguating form, log `[<batch>][COLLISION_RESOLVE]` once per occurrence so any future drift in the data-ingestion invariant (e.g. an upstream caller losing the `x` suffix in transit) is observable in production.
-
-**Step 4 — write regression-lock tests.** One test per collision ticker pinning the resolved class. Tests must FAIL if a future commit accidentally drops the gate.
-
-**Step 5 — backfill historical mis-tagged rows IF the collision-bug ever existed in production.** Audit script (read-only, SELECT-only) over every table with an `asset_class` column. Backfill UPDATE statements commented-out in the same script — manual uncomment after counts are reviewed. Per-table row counts paper-trailed in `CHANGES_AND_FIXES.md`.
-
-### Why this gate is non-negotiable
-
-The data-ingestion path (which WS endpoint or REST domain the data arrived from) IS the authoritative signal — `kraken-equities` routes to xstock_spot, `kraken` to crypto_spot. After a symbol is canonicalized post-ingestion, it can be ambiguous between asset classes. Downstream consumers MUST read `asset_class` from the persisted row; never re-resolve from canonical form. The collision gate ensures that even if a downstream consumer DOES re-resolve, the resolution is correct.
-
-### Standing rule
-
-Quarterly re-audit of the collision set. Exchanges add tokens regularly; new collisions emerge. The provenance comment on the constant carries the last-verified date — re-run the intersection query when that date is older than 90 days.
-
----
-
-## Section K — Future: Exchange-onboarding workflow
-
-Out of scope for this doc. Exchange-onboarding (when adding Binance, Coinbase, Bybit, etc.) is mostly mechanical: API auth, symbol normalization, fee schedule, WS protocol differences. To be authored as a separate doc when the second exchange is added.
-
----
-
-## Section M — Stand up the dedicated observation tab
-
-> **Added 2026-05-10 post-B79.0i.b.** The xstock_spot tab in `Machine Learning > xStocks` is the worked example. B80 (crypto_perp) implementer follows this recipe to stand up the equivalent for perp.
-
-### Why this section exists
-
-Phase 24 standing rule #10: **every new asset class gets a dedicated observation UI tab.** B79.0i landed three iterations under Kyle pushbacks before reaching the right design — this section captures the durable recipe so B80 doesn't repeat the iteration cost. The recipe rests on two architectural patterns established in B79.0i.b (now Phase 24 standing rules #6 + #7 in SYSTEM_MANUAL appendix):
-- **#6** Cross-asset-class UI component reuse via export+endpointBase prop
-- **#7** Shared aggregator parameterization via optional asset_class
-
-### Step 1 — Parameterize the shared backend aggregators
-
-For each shared aggregator function the new asset class needs (e.g., `computeExitStrategyAblation`, `computeFactorCalibration`, `computeAblationComparison`), add an optional `assetClass` parameter with a default value preserving the legacy behavior.
-
-```typescript
-// BEFORE
-export async function computeFoo(window: Window): Promise<FooResponse> {
-  // ... SQL with hardcoded "AND asset_class = 'crypto_spot'" ...
-}
-
-// AFTER
-export async function computeFoo(
-  window: Window,
-  assetClass: string = 'crypto_spot', // OR null if the legacy default was no filter
-): Promise<FooResponse> {
-  // ... SQL with parameterized "AND asset_class = ${assetClass}" (or conditional clause when default is null) ...
-}
-```
-
-**Crypto regression invariant:** verify post-deploy that the existing `/api/analytics/<endpoint>` returns byte-identical response when called without changes. Run a curl-diff on the response shape if the aggregator returns mixed-asset rows; check row count unchanged if filtered.
-
-### Step 2 — Export the rich UI sections (refined BATCH_82 — explicit assetClass prop)
-
-The xStocks tab proved 3 components are worth reusing:
-- `FilterDiagnosticsPanel` from `machine-learning.tsx` (the full Filter Diagnostics tab content)
-- `ExitStrategyAblationSection` from `analytics.tsx` (B73 exit ablation tables)
-- `FactorCalibrationSection` from `analytics.tsx` (B67 calibration tables)
-
-Convert each from internal-only to `export function` with **both an `endpointBase` prop AND an explicit `assetClass: AssetClass` REQUIRED prop** (BATCH_82 refinement, per Langston design review Q3 2026-05-14):
-
-```typescript
-// BEFORE (pre-B82 — endpointBase only, asset class implicit in URL)
-export function FactorCalibrationSection({
-  endpointBase = '/api/analytics/factor-calibration',
-}: { endpointBase?: string } = {}) {
-  // ... no way to get the human-readable asset-class label without URL-string-parsing ...
-}
-
-// AFTER (post-B82 — explicit assetClass prop, type-safe)
-import { ASSET_CLASS_REGISTRY, type AssetClass } from "@shared/asset-classes";
-
-export function FactorCalibrationSection({
-  endpointBase = '/api/analytics/factor-calibration',
-  assetClass,
-}: { endpointBase?: string; assetClass: AssetClass }) {
-  const displayName = ASSET_CLASS_REGISTRY[assetClass].displayName; // "xStock Spot", "Crypto Spot"
-  // ... rendering can now reference displayName for empty-state copy, badges, etc. ...
-}
-```
-
-**Why explicit prop, not URL-string-parsing:** the parent component already knows which asset class it's rendering (that's how it chose the endpointBase). Encoding that knowledge twice — once in the URL, once derived back from the URL — is brittle. URL conventions will rot as new asset classes come online; explicit type-safe prop scales linearly for N asset classes.
-
-For shapes that don't have built-in endpoints, also export the response-data type so the asset-class tab can typecheck its endpoint.
-
-### Step 3 — Build sibling endpoints under `/api/<asset_class>/`
-
-For each shared aggregator the asset-class tab needs, add a sibling route handler that calls the parameterized aggregator with the asset class fixed:
-
-```typescript
-apiRouter.get('/<asset_class>/exit-strategy-ablation', authenticateToken, async (req, res) => {
-  const { computeExitStrategyAblation } = await import('./services/exit-strategy-ablation-aggregator.js');
-  const win = (req.query.window as string) || 'rolling_7d';
-  const regimeFilter = (req.query.regime as string) || null;
-  const data = await computeExitStrategyAblation(win, regimeFilter, '<asset_class>');
-  res.json({ ok: true, data });
-});
-
-apiRouter.get('/<asset_class>/factor-calibration', authenticateToken, async (req, res) => {
-  const { computeFactorCalibration } = await import('./services/drift-dashboard-aggregator.js');
-  const win = (req.query.window as string) || 'rolling_7d';
-  const data = await computeFactorCalibration(win, '<asset_class>');
-  res.json({ ok: true, data });
-});
-```
-
-For the FilterDiagnosticsPanel feed, build a NEW endpoint `/api/<asset_class>/filter-diagnostics` that returns the full `FilterDiagnosticsData` shape populated from the asset-class-specific scanner + `signal_eval_archive` aggregations + ticker_snap counts. Honest signaling: where the scanner doesn't yet emit funnel-rejection counters, those fields stay zero (don't fake them).
-
-### Step 4 — Build the new tab component
-
-`client/src/components/machine-learning/<asset_class>-tab.tsx`:
-
-```typescript
-import { FilterDiagnosticsPanel, type FilterDiagnosticsData } from "@/pages/machine-learning";
-import { FactorCalibrationSection, ExitStrategyAblationSection } from "@/pages/analytics";
-
-export function <AssetClass>Tab() {
-  const { data: filterData, isLoading: filterLoading } = useQuery({
-    queryKey: ['/api/<asset_class>/filter-diagnostics', { asset_class: '<asset_class>' }], // cache-key isolation
-    queryFn: () => apiFetch('/api/<asset_class>/filter-diagnostics'),
-    refetchInterval: 15000,
-  });
-
-  // ... freshness query, scanner query, etc. ...
-
-  return (
-    <div className="space-y-4" data-testid="<asset_class>-tab">
-      <h2>...{asset_class}... — VTS Observation</h2> {/* NEVER "shadow-mode" — Kyle directive */}
-
-      <ScannerCycleHeader data={filterData} />
-      <FreshnessPanel data={freshnessData} />
-
-      {/* REUSED FilterDiagnosticsPanel scoped via endpoint */}
-      <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} />
-
-      {/* REUSED ablation sections via endpointBase + explicit assetClass prop (BATCH_82) */}
-      <ExitStrategyAblationSection endpointBase="/api/<asset_class>/exit-strategy-ablation" assetClass="<asset_class>" />
-      <FactorCalibrationSection endpointBase="/api/<asset_class>/factor-calibration" assetClass="<asset_class>" />
-    </div>
-  );
-}
-```
-
-**BATCH_82 note:** crypto-side callers in `analytics.tsx` Drift tab also pass `assetClass="crypto_spot"` explicitly. The prop is REQUIRED on both section components — TypeScript blocks the build if any caller omits it (closes the silent-URL-derive anti-pattern).
-
-### Step 5 — Wire the tab into Machine Learning Tabs group
-
-In `client/src/pages/machine-learning.tsx`, add the new TabsTrigger + TabsContent block. **Position LAST** in the tabs group:
-
-```typescript
-import { <AssetClass>Tab } from "@/components/machine-learning/<asset_class>-tab";
-
-<TabsTrigger value="<asset_class>" className="flex items-center gap-2" data-testid="tab-<asset_class>">
-  <SomeIcon className="w-4 h-4" />
-  <Asset Class Display Name>
-</TabsTrigger>
-
-<TabsContent value="<asset_class>">
-  <<AssetClass>Tab />
-</TabsContent>
-```
-
-### Step 6 — Verify via Claude-in-Chrome G3 walkthrough
-
-Mandatory per Kyle directive 2026-05-10:
-1. Navigate to staging Machine Learning page
-2. Click the new asset-class tab
-3. Screenshot all 5+ sections
-4. Browser DevTools Network tab — verify NO 4xx/5xx on asset-class-scoped XHR calls
-5. Console — verify NO app errors (browser-extension noise OK)
-6. Click back to existing Filter Diagnostics tab — verify visually identical to pre-deploy
-7. Curl `/api/analytics/<shared-endpoint>` — verify response shape unchanged from pre-deploy
-
-### Standing rules
-
-- **Terminology: "VTS Observation", NEVER "shadow-mode".** Per Kyle directive 2026-05-10 evening: "stop referring to VTS and passive learning as shadow mode. That is not terminology we are using."
-- **Honest signaling:** when an asset-class scanner is observability-only and not wired through orchestration yet, FilterDiagnosticsPanel funnel-rejection rows show zero. Do NOT fake counters. File the gap as a RUNNING_ISSUES entry pinning the future B<N>.x batch.
-- **Crypto regression invariant:** every shared-aggregator parameterization must preserve byte-identical default behavior. Verify with curl-diff post-deploy.
-- **Cache-key isolation:** every `useQuery` against a shared endpoint must include `{ asset_class: '<asset_class>' }` in its `queryKey` array.
-
-### Caveats from B79.0i
-
-- **Schema check before query writing.** B79.0i.b initially errored on `factor-calibration` trying to read flat `real_confidence`/`alt_confidence` columns that don't exist. Schema uses jsonb `real_decision`/`alternate_decision` columns with `->>'confidence'` extraction. Always run `psql \d <table>` on staging before writing aggregator SQL — don't assume column shape from naming convention. Rev2 sidesteps this by using the shared aggregator (already correct).
-- **Empty-state messages matter.** The reused crypto components have built-in empty-state messages explaining what populates them. They're honest, useful, accurate even pre-data-accumulation. Don't replace them with custom lighter ones.
-
----
-
-## §4.15 — Promote-then-retire two-step pattern for module_constants wildcard retirement (B79.0n.SCORING 2026-05-26)
-
-When promoting a wildcard module_constants row to per-class rows AND retiring the wildcard, sequence as TWO BATCHES with a 48h verify-gate between:
-
-1. **Batch X (promotion + observability):** Migration 1 seeds per-class rows for every ACTIVE asset class. Code adds an observable fallback counter (e.g., `getSQEStaticMirrorFallbackStats()`, `getTECPickFallbackStats()`) that increments when the resolver's safety-net path fires. Wildcard rows REMAIN as resolver-correctness safety net.
-2. **Wait 48h post-deploy.** Observe counter stays at zero across at least one weekend transition AND one full UTC day cycle.
-3. **Batch X.b (retirement):** If counter remained zero — ship Migration 2 (EXISTS-gated wildcard `DELETE` for all keys) + any deferred F-1 resolver hooks. Single-batch atomic close.
-4. **If counter has fired any non-zero amount:** investigate root cause (cache-key bug, asset-class string mismatch, dropped param in cascade) BEFORE retiring wildcard. The 48h gap buys RESOLVER correctness verification — not just DELETE safety.
-
-**Source:** B79.0n.SCORING Langston D-5 disposition; mirrored on TEC side. Prior arc: B79.TEC / B79.TEC.b shipped this shape first; B79.0a tried to promote-then-retire but the .b retirement was never authored (scheduling drift — see RUNNING_ISSUES note).
-
-## §4.16 — All-keys HARD-FAIL coverage for module-constants per-class surfaces (B79.0n.TEC 2026-05-26)
-
-When extending HARD-FAIL coverage to ALL keys (not just a kill-switch canary):
-
-1. Every key in the surface MUST have explicit per-class rows for every active asset class.
-2. Boot-time primer iterates `getActiveAssetClasses()` SSOT and HARD-FAILs on any missing per-class row.
-3. NO `pick(key, DEFAULT)` runtime fallback path — DEFAULTS const is TYPE TEMPLATE only.
-4. Companion evaluator/orchestrator (e.g., `tec-evaluator.ts`) READS from the per-class cache, NEVER re-resolves async via `getModuleConstants`.
-5. Tests: type-lock + HARD-FAIL coverage test (one per key) + spy-asserted-zero-DB-calls steady-state test on the evaluator.
-
-**Anti-pattern caught in B79.0n.TEC:** strict HARD-FAIL extension broke 7 test fixtures using per-class `break_even_enabled` + wildcard for other 10 keys. Two paths: (A) atomic fixture refactor + strict throw, OR (B) soft-fallback counter + defer strict throw to follow-up batch with verify-gate. B79.0n.TEC took path B (Langston ACK Option A); B79.0n.TEC.b restores strict throw within 7d of verify-gate close.
-
-## §4.17 — Step 6 deploy-SHA verification (B79.0n.TEC 2026-05-26)
-
-After Step 6 deploy:
-
-1. **Verify staging HEAD matches intended deploy SHA.** Don't assume the latest commit on `migration/aws-supabase` is what's running.
-2. **If a follow-up commit lands between Step 6 and Step 8** (e.g., R-5 hotfix adding observability tags): re-deploy with `git pull + npm run build + pm2 restart` + re-run Step 7 first-pass BEFORE dispatching Step 8.
-3. **Cite the actual deployed SHA chain in completion report**, not the latest commit.
-
-**Source:** B79.0n.SCORING R-5 follow-up commit `29bfda74f` was committed/pushed AFTER Step 6 deploy but never `git pull`ed to staging; Langston Step 8 SHA cross-check caught it. Re-deployed at 03:56:27Z restart.
-
-## §4.18 — CI initial-schema pg_dump may diverge from staging (B79.0n.TEC 2026-05-26)
-
-When extending per-class rows that depend on prior migrations, include idempotent `ON CONFLICT DO NOTHING` backfill blocks so CI's fresh-DB baseline matches staging's accumulated state:
-
-1. CI's `initial-schema.sql` is a pg_dump of staging at a specific moment. It does NOT replay the full migration chain; pre-skip-marker migrations are ledger-only on CI.
-2. Rows existing on staging from prior batches (e.g., B79.0m.b seeded crypto_spot + xstock_spot hot keys) may NOT be in the pg_dump baseline.
-3. Migration 1 should include an A.2 idempotent backfill block for any rows the boot-time primer requires that may be absent on CI. `ON CONFLICT DO NOTHING` means staging skips; CI seeds.
-4. Verification assertion should count ALL per-class rows (not just `updated_by` stamped) so the A.2 block doesn't artificially trip the assertion on staging.
-
-**Source:** B79.0n.TEC Migration 1 v1 assumed crypto_spot + xstock_spot had explicit rows for 4 TEC hot keys (true on staging from B79.0m.b; absent from CI's pg_dump). primeTECConfig HARD-FAILed at boot in `b65-tec-parity.test` + `b80-tec-per-trade-keying.test`. Hotfix `e7aa96c7a` added the A.2 backfill block.
-
----
-
-## §4.19 — Per-class-instance pattern + non-arming-read companion (B79.0n.TELEMETRY 2026-05-26)
-
-**When a class owns persistent state (timers, disk paths, side-effecting setIntervals), the per-class instance pattern is the canonical onboarding approach.** Two paired discipline shapes:
-
-### Shape 1 — Per-class factory dispatch with `assertNever` exhaustive switch
-
-Pattern source: `server/services/asset-class-instances.ts` (B79.0n.TELEMETRY canonical implementation).
-
-```typescript
-import { assertNever } from '@shared/assert-never';
-import type { AssetClass } from '@shared/asset-classes';
-
-// Module-level lazy caches (one per active class).
-let _cryptoPerpInstance: TelemetryAggregatorService | null = null;
-let _xstockPerpInstance: TelemetryAggregatorService | null = null;
-let _xstockSpotInstance: TelemetryAggregatorService | null = null;
-// NOTE: crypto_spot intentionally NOT cached here — flows through
-// the global singleton via the no-touch fence pattern.
-
-export function getTelemetryAggregatorInstance(
-  assetClass: AssetClass
-): TelemetryAggregatorService | null {
-  switch (assetClass) {
-    case 'crypto_spot':
-      return null;  // No-touch fence — caller falls back to global singleton.
-    case 'crypto_perp':
-      if (!_cryptoPerpInstance) {
-        _cryptoPerpInstance = bootstrapCryptoPerpTelemetry();
-      }
-      return _cryptoPerpInstance;
-    case 'xstock_perp':
-      if (!_xstockPerpInstance) {
-        _xstockPerpInstance = bootstrapXstockPerpTelemetry();
-      }
-      return _xstockPerpInstance;
-    case 'xstock_spot':
-      if (!_xstockSpotInstance) {
-        _xstockSpotInstance = bootstrapXstockSpotTelemetry();
-      }
-      return _xstockSpotInstance;
-    case 'forex_spot':
-    case 'forex_perp':
-    case 'equity_spot':
-    case 'equity_perp':
-      throw new Error(`[CLASS_NOT_WIRED] assetClass=${assetClass}`);
-    default:
-      return assertNever(assetClass);  // TS compile-fails if class added without case.
-  }
-}
-```
-
-**Discipline rules:**
-- The switch is **always** terminated by `assertNever(assetClass)`, even when every arm above already returns or throws. The exhaustiveness check is the compile-time guarantee that no class is silently fall-through-defaulted.
-- The 4 reserved-future classes (`forex_spot`, `forex_perp`, `equity_spot`, `equity_perp`) get **explicit `[CLASS_NOT_WIRED]` throws** — distinct from `[CLASS_INVALID]`. The marker tells the reader at the throw site "this asset class is a valid future enum value; onboarding work is required to wire it" rather than "this is a bug."
-- The canonical class (`crypto_spot` in this example, where 18mo+ live disk-persist state lives at the global singleton) flows through the **no-touch fence pattern** — factory returns `null`, callers fall back. This protects the asymmetric mature state from accidental disruption during onboarding work.
-
-### Shape 2 — Non-arming-read companion (the `peek*` pattern)
-
-When the factory's construction code path arms persistent infrastructure (`setInterval`, disk-path attach, side-effecting cache materialization), the **factory function itself is unsafe to call from a read-only stats accessor**. Ship a **non-arming-read companion** at the same time as the construction API:
-
-```typescript
-// Returns the module-level instance reference WITHOUT triggering construction.
-// Safe to call from a read accessor; cannot accidentally arm persist-timer / etc.
-export function peekTelemetryInstance(
-  assetClass: AssetClass
-): TelemetryAggregatorService | null {
-  switch (assetClass) {
-    case 'crypto_spot':  return peekGlobalTelemetrySingleton();
-    case 'crypto_perp':  return _cryptoPerpInstance;     // module-level state, no construction
-    case 'xstock_perp':  return _xstockPerpInstance;
-    case 'xstock_spot':  return _xstockSpotInstance;
-    // reserved-future: return null (no instance was ever constructed)
-    default:             return null;
-  }
-}
-
-// Read accessor that powers verify-gate signals — uses peek*, NOT factory.
-export function getTelemetryInstanceStats() {
-  return {
-    crypto_spot: peekTelemetryInstance('crypto_spot')?.getInstanceStats() ?? null,
-    crypto_perp: peekTelemetryInstance('crypto_perp')?.getInstanceStats() ?? blankStats(),
-    xstock_spot: peekTelemetryInstance('xstock_spot')?.getInstanceStats() ?? blankStats(),
-    xstock_perp: peekTelemetryInstance('xstock_perp')?.getInstanceStats() ?? blankStats(),
-  };
-}
-```
-
-**Discipline rules:**
-- The `peek*` prefix signals "non-arming, returns whatever module-level state is currently held, may be `null` if the instance was never constructed."
-- A caller that needs to arm-then-read should use a **distinctly-named API** (e.g., `getOrCreateTelemetryInstance()`). Conflating the two shapes under one function name is how verify-gate stats accessors accidentally arm persistence machinery.
-- The `peek*` companion is shipped **as part of the same batch** as the construction API — not as a follow-up. Verify-gate signals are usually wired into the same batch that introduces the construction surface.
-
-### Variant C (in-memory-only) is the right default
-
-Until empirical evidence requires persistence, **new per-class instances should be in-memory only by construction**. The persist-timer arming code path should be structurally gated inside the global-singleton accessor only — direct `new XxxService()` construction at the factory site should not invoke it. This makes Variant C **safe by structure, not by policy** (no flag-check, no opt-out path).
-
-The persist-by-asset-class follow-up batch (e.g., `TELEMETRY.b`) lands when the first non-canonical class flips to active trading and cross-restart state preservation becomes a real requirement. **No SLA today** is the correct disposition — opens-on-demand, not blocking.
-
-### Worked example reference
-
-B79.0n.TELEMETRY (sub-batch 10 of B79.0n umbrella v4 arc, deploy `02bad33a6` 2026-05-26) is the **canonical reference implementation** for both shapes:
-- Factory dispatch at `server/services/asset-class-instances.ts` (4-of-4 active-class coverage + `assertNever` + `[CLASS_NOT_WIRED]` throws).
-- Non-arming-read companion at `server/services/telemetry-aggregator.ts` (`peekTelemetryInstance()` + `getInstanceStats()` + `getTelemetryInstanceStats()` accessor).
-- Variant C in-memory-only invariant preserved across crypto_perp + xstock_perp + xstock_spot.
-- crypto_spot asymmetry (18mo+ live disk-persist state at global singleton) preserved untouched via the no-touch fence pattern.
-
-See SYSTEM_MANUAL.md §10.9 + SYSTEM_IMPACT_MAP.md "Recent additions (B79.0n.TELEMETRY — Phase 24 — 2026-05-26)" for full component-level enumeration.
-
----
-
-## §4.20 — 4-phase production-safe ADD-COLUMN migration pattern (B79.0n.RTB 2026-05-27)
-
-**Lesson learned:** when adding an `asset_class VARCHAR(32)` column to a table that's hot-written by live production code, the naive single-migration approach (`ADD COLUMN ... NOT NULL DEFAULT '<value>'`) fails for two reasons. First, it rewrites every existing row in one transaction — locking the table for as long as the rewrite takes, which on a million-row table can be minutes. Second, it doesn't give the writer code a chance to populate the new column on incoming rows BEFORE the constraint takes effect — incoming inserts between Phase 1 and PM2 restart with new code will fail the NOT NULL check.
-
-**The 4-phase pattern (canonical reference: B79.0n.RTB's `rtb_signals.asset_class` migration):**
-
-### Phase 1 — `ADD COLUMN nullable + seed cadence rows` (transactional, idempotent)
-```sql
-BEGIN;
-ALTER TABLE <table_name>
-  ADD COLUMN IF NOT EXISTS asset_class VARCHAR(32) NULL;
-
--- Seed any module_constants rows that boot code expects to read (HARD-FAIL gate
--- at boot expects them — pre-seeding closes the window between migration apply
--- and PM2 restart).
-INSERT INTO module_constants ...
-ON CONFLICT (...) DO NOTHING;
-
--- Verify seed count (fails-loud at apply time, not at boot time):
-DO $$
-DECLARE row_count INTEGER;
-BEGIN
-  SELECT COUNT(*) INTO row_count FROM module_constants WHERE ...;
-  IF row_count != <expected> THEN
-    RAISE EXCEPTION 'Phase 1 verification FAILED: expected % rows, found %', <expected>, row_count;
-  END IF;
-END $$;
-COMMIT;
-```
-
-After Phase 1, the column exists with all-NULL values. Existing readers are unaffected; new writes will leave it NULL unless writer code is updated. Writer code update (Chunk E in B79.0n.RTB) populates the column on every new insert AND continues writing the metadata jsonb form (dual-write for backwards compatibility during the deploy window).
-
-### Phase 2 — Backfill script (idempotent, dual-path)
-```typescript
-// scripts/<batch>-backfill-<column>.ts
-import 'dotenv/config';  // CRITICAL: standalone CLI invocation doesn't auto-load .env
-import { db } from '../server/db.js';
-import { sql } from 'drizzle-orm';
-// ...
-
-const nullRows = await db.execute(sql`
-  SELECT id, symbol, metadata->>'assetClass' AS metadata_class
-  FROM <table>
-  WHERE asset_class IS NULL
-  ORDER BY <timestamp_col> ASC
-`);
-
-for (const row of nullRows) {
-  // Path 1: try jsonb metadata extraction first
-  let resolved = row.metadata_class && VALID_CLASSES.has(row.metadata_class)
-    ? row.metadata_class
-    : null;
-
-  // Path 2: fall back to symbol-based resolution
-  if (!resolved) {
-    try {
-      resolved = resolveAssetClass(row.symbol, 'kraken');
-    } catch {
-      // Either path may fail for genuinely-unresolvable rows; Phase 3 CHECK
-      // will catch any residual nulls.
-    }
-  }
-
-  if (resolved) {
-    await db.execute(sql`UPDATE <table> SET asset_class = ${resolved} WHERE id = ${row.id}`);
-  }
-}
-```
-
-**Critical: `import 'dotenv/config'` at the top.** `npm run <script>` doesn't auto-load `.env`. Without this line, `server/db.ts` throws `DATABASE_URL must be set` immediately on import. B79.0n.RTB Step 6 deploy surfaced this — hotfix `6fd6bca` added the one-line import. Pattern: match `scripts/db-migrate.ts` which has `import 'dotenv/config'` at line 37 from B-NEW-43.
-
-**Idempotent via `WHERE asset_class IS NULL`** — re-running picks up only un-backfilled rows. Safe to run multiple times.
-
-### Phase 3 — CHECK constraint + index (transactional, idempotent, fails-loud on precondition)
-```sql
-BEGIN;
-
--- Precondition: zero nulls must remain after Phase 2 backfill completion.
-DO $$
-DECLARE null_count INTEGER;
-BEGIN
-  SELECT COUNT(*) INTO null_count FROM <table> WHERE asset_class IS NULL;
-  IF null_count > 0 THEN
-    RAISE EXCEPTION 'Phase 3 PRECONDITION FAILED: % rows still have asset_class IS NULL. Run Phase 2 backfill before applying Phase 3.', null_count;
-  END IF;
-END $$;
-
--- CHECK constraint enforces NOT NULL at the row level (Phase 4 column-level
--- SET NOT NULL is contingent on §6.4 48h zero-null gate).
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.table_constraints
-    WHERE table_name = '<table>' AND constraint_name = '<table>_asset_class_not_null_chk'
-  ) THEN
-    ALTER TABLE <table>
-      ADD CONSTRAINT <table>_asset_class_not_null_chk
-      CHECK (asset_class IS NOT NULL);
-  END IF;
-END $$;
-
--- Index for hot per-class read paths.
-CREATE INDEX IF NOT EXISTS <table>_mode_asset_class_status_idx
-  ON <table> (mode, asset_class, status);
-
-COMMIT;
-```
-
-### Phase 4 — `SET NOT NULL` (deferred, contingent on 48h zero-null gate)
-```sql
--- Phase 4 is NOT in the same batch. It ships only after monitoring confirms
--- zero nulls during a 48h soak window post-Phase-3.
-ALTER TABLE <table> ALTER COLUMN asset_class SET NOT NULL;
-```
-
-Phase 4 is filed as a RUNNING_ISSUES entry (B79.0n.RTB filed #150) and ships as a 1-row DB-only migration once the gate clears. The CHECK constraint already enforces NOT NULL for writes; Phase 4 is for ORM/Drizzle type-level enforcement (NOT NULL vs nullable VARCHAR in schema introspection).
-
-**Special case — empty source table.** When the table being modified is empty pre-migration (B79.0n.RTB's `rtb_signals` was 0 rows), Phase 3 precondition trivially passes with 0 nulls. The 4-phase pattern still applies — the backfill script becomes a NO-OP but exercises the script path AND captures the production CLI invocation pattern for future non-empty cases.
-
-**MANIFEST.txt drift.** Adding migration files requires explicit entries in `drizzle/migrations/MANIFEST.txt` AND using `git add -f` (the `.gitignore` rule `*.sql` ignores migrations otherwise). B79.0n.RTB Step 3 first CI push failed because the two new migrations weren't in MANIFEST.txt; hotfix `298cb2e` added the entries. Same pattern from SCORING+TEC iteration — pattern codified in §4.16. ALWAYS append new migration files to MANIFEST.txt as part of the same commit.
-
-### Worked example reference
-
-B79.0n.RTB (sub-batch 11 of B79.0n umbrella v4 arc, deploy `6fd6bcac6` 2026-05-27) is the **canonical reference implementation** for the 4-phase pattern:
-- Phase 1: `drizzle/migrations/2026-05-27-b79-0n-rtb-phase1.sql` + rollback companion.
-- Phase 2: `scripts/b79-0n-rtb-backfill-asset-class.ts` with `import 'dotenv/config'` at top + dual-path resolution + `WHERE asset_class IS NULL` idempotency.
-- Phase 3: `drizzle/migrations/2026-05-27-b79-0n-rtb-phase3.sql` with precondition DO block + CHECK constraint + composite index.
-- Phase 4: deferred to RUNNING_ISSUES #150 — ships after 48h zero-null gate post-WIRE-IN (#16) when scanner pipeline starts emitting signals.
-
-See CHANGES_AND_FIXES.md "CLOSURE-2026-05-27" + SYSTEM_MANUAL.md §19.4 + SYSTEM_IMPACT_MAP.md "Recent additions (B79.0n.RTB — Phase 24 — 2026-05-27)" for full component-level enumeration.
-
----
-
-## §4.21 — LOCKED-module override pattern: per-class scope without algorithmic redesign (B79.0n.RTB 2026-05-27)
-
-**Lesson learned:** when a per-class plumbing batch needs to touch a module that's been explicitly LOCKED (e.g., LOCKED-module fence comment at file top, or "do not touch this except for X" directive in CLAUDE.md / umbrella plan), the touch must be Kyle-authorized AND scope-bounded. Without the authorization + scope boundary, "per-class touch" can drift into "algorithmic redesign while we're in here" — which is the exact failure mode the LOCK was meant to prevent.
-
-**The LOCKED-module override pattern (canonical reference: B79.0n.RTB's `rtb-refresh-service.ts` `signalBuckets` refactor):**
-
-### Step 1 — Kyle-authorized scope expansion via umbrella row directive
-The umbrella plan (e.g., `MULTI_ASSET_VTS_EXPANSION_PLAN.md` or sub-batch row in BATCH_CATALOG.md) explicitly authorizes the LOCKED-module touch. For B79.0n.RTB: umbrella v4 row #11 authorizes "per-class bucket allocation + per-class pool sizing + per-class ACT calibration" — narrow, surgical, well-defined.
-
-### Step 2 — Explicit IN-scope / OUT-of-scope enumeration before Step 3
-The scope document MUST contain an explicit table or §-block listing what's IN and what's OUT of the override:
-
-> **LOCKED-module override scope (B79.0n.RTB):**
-> - **IN scope:** per-class bucket allocation (`signalBuckets` topology refactor + `lastBucketAssignment` field shape + `RTB_ACTIVE_CLASSES` const + non-active-class warn path); `getBucketStats()` aggregation fix (necessary collateral from topology change).
-> - **OUT of scope:** algorithmic redesign of `refreshModeSignals` logic, ACT pool sizing changes, cadence value changes (except the per-class seed which is a separate concern not a redesign), `signal-key-hash` modulus / shard-count changes, any new bucket-rebalancing logic.
-
-If a scope drift is observed mid-implementation (e.g., "while I'm in here, I might as well fix this other bug"), STOP and either (a) re-scope explicitly with Kyle, OR (b) defer the drift to a follow-up batch.
-
-### Step 3 — Langston Step 4 review confirms no algorithmic-redesign drift
-Langston's Step 4 code review must explicitly confirm that the diff matches the IN-scope enumeration. Diffs that touch lines outside the LOCKED-module override scope are flagged as drift — either re-scope or revert.
-
-For B79.0n.RTB: Langston Step 4 review CLEAN-WITH-R1 confirmed the diff stayed in scope (algorithm/cadence/ACT scaler all untouched), with the only revision being R1 (package.json script in HEAD).
-
-### Step 4 — Document the LOCKED-module override in governance
-The completion report + SIM/System Manual updates must explicitly call out:
-1. Which module was LOCKED before.
-2. What override was authorized.
-3. What the override scope was.
-4. What stayed untouched (i.e., what the LOCK still protects).
-
-For B79.0n.RTB: `rtb-refresh-service.ts` was LOCKED pre-batch; umbrella v4 row #11 authorized per-class bucket allocation override; shared global ACT pool (3-10 default 5) + cadence behavior (still 30000ms uniform via the seed pattern) + refreshModeSignals algorithm all untouched. SYSTEM_MANUAL.md §19.4 + CHANGES_AND_FIXES.md "CLOSURE-2026-05-27" + SIM "Recent additions (B79.0n.RTB)" all document this.
-
-### Worked example reference
-
-B79.0n.RTB (sub-batch 11 of B79.0n umbrella v4 arc, deploy `6fd6bcac6` 2026-05-27) is the **canonical reference implementation**:
-- LOCKED-before: `server/services/rtb-refresh-service.ts` was an existing 846-LOC module that no batch had touched since B65.1; treated as architectural fixture.
-- Override authorized: umbrella v4 row #11 authorized per-class bucket allocation per Langston C-1 Option A.
-- IN-scope diff: `signalBuckets` nested topology, `RTB_ACTIVE_CLASSES` const, `assignSignalsToBuckets` per-class resolution, `refreshModeSignals` bucketKeysAtIndex aggregation, `getBucketStats()` fix.
-- OUT-of-scope (preserved): shared global ACT pool, refreshModeSignals algorithm, cadence behavior (still 30000ms via per-class seed pattern, not via code-level changes), signal-key-hash modulus, bucket count (still 10).
-- Langston Step 4 review: CLEAN-WITH-R1 (R1 unrelated to LOCKED-module scope; landed in fix-up `a4ac36c`).
-- Step 8 verification: confirmed via psql + log probes that runtime behavior matches IN-scope intent (per-class buckets present in topology, ACT pool unchanged at 3-10 default 5).
-
-See RUNNING_ISSUES.md #152 for the boundary documentation entry.
-
----
-
-## §4.22 — Per-class consumer-site swap pattern with-existing-module-shape (B79.0n.ORCHESTRATOR 2026-05-27)
-
-**Lesson learned:** asset-class divergence work splits cleanly into two patterns with very different scopes. The cheap one — when per-class modules already exist with compatible shapes — is mechanical: replace direct imports of the crypto module at the consumer sites with calls to a small domain-specific dispatcher. The expensive one — full F-1 resolver-with-EXISTS-gated divergence — requires shadow-data observability scaffolding to drive when per-class values are allowed to differ from crypto baseline. Use the cheap pattern when the per-class module already exists; defer the expensive pattern to OBSERVABILITY (#16) where the evidence-gathering infrastructure lives.
-
-**Decision tree:**
-
-```
-Does the per-class module (e.g., xstock_spot/pattern-pool-filters.ts) already exist?
-├── YES + shapes match crypto's interface
-│      → §4.22 consumer-site swap pattern (this section). Cheap, mechanical.
-├── YES + shapes diverge
-│      → Shape-harmonize per the module-shape-convergence pattern at §4.18 first,
-│        THEN apply §4.22.
-└── NO
-       → Either §4.20 4-phase migration (if backed by DB rows) OR build the module
-         from scratch at the per-class onboarding batch. Don't apply §4.22 yet —
-         per-class module must exist first.
-```
-
-**The §4.22 pattern (canonical reference: B79.0n.ORCHESTRATOR's `pattern-pool-dispatch.ts`):**
-
-### Step 1 — Identify the swap surface
-
-`grep -rn "from .*asset_classes/crypto_spot/<module>" server/` to enumerate consumer sites. Categorize each hit:
-
-1. **True class-bound consumer** — reads `<EXPORT>` from crypto module, uses it as if it were class-invariant. SWAP target.
-2. **Already-dispatcher** — imports both crypto + xstock variants, dispatches by `assetClass` parameter (e.g., `cost-model.ts` for `CRYPTO_SPOT_FRICTION` + `XSTOCK_SPOT_FRICTION`). NOT a swap target — already correct.
-3. **Dead import** — imports the symbol but doesn't reference it in file body. Cleanup target (delete the import) but not a swap.
-4. **Type-only re-export** — imports `type X` for re-exporting. NOT a swap target (types are class-agnostic).
-5. **Re-export shim** (legacy back-compat) — file like `pattern-filter-profile.ts` that does `export * from '...crypto_spot/...'`. NOT a swap target — Phase 16 removal candidate per existing RUNNING_ISSUES.
-
-The Step 1.a probe for B79.0n.ORCHESTRATOR initially identified 6 candidate sites; refined analysis showed 2 were already-dispatchers (cost-model + market-regime), 1 was dead-import (signal-orchestrator.ts:101), 1 was type-only re-export (active-filter-pool.ts), 1 was shim (pattern-filter-profile.ts), leaving 3 real consumer sites (paper-position-sizing + SQE + routes diagnostic) + 1 dead-import cleanup.
-
-### Step 2 — Author the dispatcher
-
-Domain-specific file at `server/asset_classes/<domain>-dispatch.ts` (NOT a central `dispatch.ts` SSOT — central files create all-classes-import-from-every-domain coupling). Mirrors B79.0n.MCE's `getFrictionForAssetClass` at `server/core/math/cost-model.ts:67-89` pattern.
-
-```typescript
-import type { AssetClass } from '../../shared/asset-classes.js';
-import { <CRYPTO_EXPORT> } from './crypto_spot/<module>.js';
-import { <XSTOCK_EXPORT> } from './xstock_spot/<module>.js';
-
-export interface <DispatcherReturnType> {
-  readonly <KEY_1>: <type>;
-  readonly <KEY_2>: <type>;
-}
-
-export function get<Domain>ForAssetClass(
-  assetClass: AssetClass,
-): <DispatcherReturnType> {
-  switch (assetClass) {
-    case 'crypto_spot':  return <CRYPTO_EXPORT>;
-    case 'xstock_spot':  return <XSTOCK_EXPORT>;
-    case 'crypto_perp':
-    case 'xstock_perp':
-    case 'equity_spot':
-    case 'equity_futures':
-    case 'commodity_futures':
-    case 'fx_spot':
-      throw new Error(
-        `[B79.0n.<BATCH>][CLASS_NOT_WIRED] assetClass='${assetClass}' has no <domain> wired. ` +
-        `If activating: (1) create server/asset_classes/${assetClass}/<module>.ts; ` +
-        `(2) seed module_constants <module_namespace> rows; (3) add a case here. ` +
-        `See ASSET_CLASS_ONBOARDING_WORKFLOW.md §4.22.`,
-      );
-    default: {
-      const _exhaustive: never = assetClass;
-      throw new Error(`[B79.0n.<BATCH>][dispatch] unreachable assetClass=${String(_exhaustive)}`);
-    }
-  }
-}
-```
-
-**Discipline rules (Langston Step 1 §6 ACK for B79.0n.ORCHESTRATOR):**
-1. Exhaustive switch — every AssetClass union member explicitly handled (including ALL 8 — both active 4 and reserved-future 4; the `_exhaustive: never` is a safety net not a substitute)
-2. `_exhaustive: never` in default — compile-time exhaustiveness lock that errors at `tsc` if a new AssetClass is added
-3. `[CLASS_NOT_WIRED]` throws for non-active classes with activation breadcrumbs in the error message (file path to create + DB seed instruction + switch-case addition + this §4.22 reference)
-4. Return type explicitly typed (not inferred) — locks the shape contract
-
-### Step 3 — Swap consumer sites
-
-At each true class-bound consumer site identified in Step 1:
-
-- **Replace import:** `import { <EXPORT> } from '<crypto_path>'` → `import { get<Domain>ForAssetClass } from '<dispatcher_path>'`
-- **Replace usage:** `<EXPORT>.<KEY>` → `get<Domain>ForAssetClass(<assetClass>).<KEY>`
-- **Thread `assetClass`:** if the consumer doesn't already have `assetClass` in scope, add it as a REQUIRED parameter (B79.0n.STORAGE pattern) AND update all caller sites to pass it via `resolveAssetClass(symbol, 'kraken')` deterministically — NOT via metadata-fallback (Langston Step 2 Probe 8 no-silent-fallback discipline). If metadata.assetClass and resolveAssetClass disagree for a symbol, that's a real bug we want surfaced at the consumer boundary, not silently reconciled.
-
-### Step 4 — Tests
-
-Three categories:
-- **Unit tests on the dispatcher** — active classes return correct value; perp classes throw `[CLASS_NOT_WIRED]`; reserved-future classes throw `[CLASS_NOT_WIRED]`; return-type shape contract (key presence + types).
-- **Unit tests on the consumer sites** — source-file string assertions that the swap landed (imports point at dispatcher; old direct imports absent). Cheap regression locks.
-- **Integration test on the cascade** — key-aware DB mock (different values per class) drives the full path and asserts xstock vs crypto get DIFFERENT values where the DB rows differ. Catches the wrong-value-threaded-correctly bug class (Langston Q1 refinement) — i.e., a consumer that has `assetClass` in scope but accidentally hardcodes a class somewhere mid-cascade.
-
-### Step 5 — Add a per-class diagnostic endpoint
-
-If the swap is non-trivial (>1 consumer), add `GET /api/diagnostics/<batch>-per-class-state` returning the dispatcher's output for all 4 active classes. No-auth public per B79.0a pattern. Step 8 verify-gate target for the deploy.
-
-### When NOT to use §4.22 — use F-1 resolver-with-EXISTS-gate (deferred to OBSERVABILITY #16) instead
-
-If the per-class module doesn't exist yet OR if the divergence needs evidence-gated promotion (e.g., wildcard-to-per-class for cost values that haven't been calibrated yet), §4.22 doesn't apply. The full F-1 resolver pattern (see RUNNING_ISSUES #142 SCORING.b disposition) requires shadow-data observability + EXISTS-gated DB migration to safely diverge xstock from crypto baseline. That work lives at OBSERVABILITY (#16) + active-trading flip where the evidence-gathering infrastructure is built. Don't try to compress F-1 resolver work into §4.22 — they're different sized problems.
-
-### Worked example reference
-
-B79.0n.ORCHESTRATOR (sub-batch 12 of B79.0n umbrella v4 arc, deploy `5e08568` 2026-05-27) is the **canonical reference implementation**:
-- Dispatcher at `server/asset_classes/pattern-pool-dispatch.ts` (~80 LOC)
-- 3 production consumer-site swaps (`paper-position-sizing.ts:145` + `signal_quality_evaluator.ts:285` + `routes.ts:12645` diagnostic)
-- 1 dead-import cleanup (`signal-orchestrator.ts:101`)
-- 27 new tests (11 unit dispatcher + 7 unit consumer-swaps + 8 integration cascade with key-aware DB mock)
-- 1 new diagnostic endpoint `/api/diagnostics/orchestrator-per-class-state`
-- Real behavioral correction visible at deploy: xstock pattern signals route to 0.50 MAX_POSITION_PCT (DB-resolved) instead of crypto-bound 0.15
-- Total scope: 2-3 days; net production LOC +148/-67 + test +338/-54 + 1 file delete (95 LOC)
-
-See CHANGES_AND_FIXES.md "CLOSURE-2026-05-27 (afternoon) — B79.0n.ORCHESTRATOR" + SYSTEM_MANUAL.md §19.5 + SYSTEM_IMPACT_MAP.md "Recent additions (B79.0n.ORCHESTRATOR — Phase 24 — 2026-05-27)" for full component-level enumeration.
-
----
-
-## §4.23 — Additive event-payload field pattern (C-7 + C-A doctrine, B79.0n.EXECUTION 2026-05-27)
-
-When an existing inter-service event needs to carry asset-class information for future disambiguation, the canonical pattern is **additive optional field** — NOT required field, NOT new event variant. Applied 2x so far: `PromotionEvent.assetClass?: string` from B79.0n.RTB C-7, and `TradeClosedEvent.assetClass?: string` from B79.0n.EXECUTION CHUNK A.
-
-**When this pattern applies:**
-- The event already exists and has listeners
-- A new asset-class dimension needs to be disambiguated (post-B79.0n.RTB, same symbol can trade across classes — xstock_perp AAPLx perp + xstock_spot AAPLx spot)
-- Existing listeners DO NOT use `keyof EventInterface` enumeration, exhaustive-switch on shape, JSON.stringify/structured-clone with strict shape, or telemetry-emit with required-field schema
-
-**When it does NOT apply:**
-- Listeners do shape-strict serialization (additive field would break the schema contract)
-- Listeners do exhaustive-switch on `keyof EventInterface` (additive field would fail TS compilation)
-- The field is required for correctness on the consumer side (then it's a required-field interface change, not additive)
-
-**Pre-cutover verification (mandatory):**
-1. **Enumerate all listeners** — grep for `eventBus.on<EventName>` or `eventBus.off<EventName>` across the codebase
-2. **Inspect each handler** — verify it only reads specific fields (not `keyof` enumeration, not destructure with required shape)
-3. **Grep for serialization** — `JSON.stringify(<eventVariable>)`, `structuredClone(<eventVariable>)`, telemetry-emit-event paths
-4. **Confirm zero hits on strict-shape consumers** — if any found, additive doesn't apply; use new event variant instead
-
-**Implementation pattern:**
-```typescript
-export interface EventName {
-  // ... existing fields ...
-
-  /**
-   * <BATCH_ID> (<DATE>, <CHUNK_REF>): asset class of the <event subject>.
-   * Optional in v1 per <Langston ACK ref> + same C-7/C-A doctrine —
-   * additive field is safe for all <N> current listeners
-   * (<listener_1> at L<line> <usage>, <listener_2> at L<line> <usage>, ...);
-   * none use exhaustive switch or `keyof EventName` enumeration.
-   *
-   * Populated from <source> at the emit site (<emit_file>:L<line> — read from
-   * the canonical SSOT, not re-resolved from <derivative>). Same-symbol-across-classes
-   * is structurally possible post-B79.0n.RTB; consumers that need to disambiguate
-   * read this field; consumers that don't are unaffected.
-   */
-  assetClass?: string;
-}
-```
-
-**Emit-site read-from-record pattern:**
-```typescript
-const _eventAssetClass = (<sourceRecord> as any).assetClass as string | undefined;
-// Optional canary log for runtime observability:
-console.log(
-  `[<BATCH_ID>][EMIT_<EVENT>] mode=${mode} class=${_eventAssetClass ?? 'undefined'} <other_keys>`
-);
-eventBus.emit<EventName>({
-  // ... existing fields ...
-  assetClass: _eventAssetClass,
-});
-```
-
-**Cast site discipline (Langston Step 4 C1):**
-- Two annotated `(record as any).assetClass` cast sites are acceptable for an additive-field rollout
-- If a 3rd or 4th cast site appears, extract a `readRecordAssetClass(r): string | undefined` helper to centralize the cast
-- The structural alternative (extending the source-record type with required `assetClass`) is generally a larger surface change — every reader of the type, every fixture, every test helper
-
-**Canonical references:**
-- `PromotionEvent.assetClass?: string` at `server/lib/event-bus.ts:33-51` (B79.0n.RTB C-7, 2026-05-27)
-- `TradeClosedEvent.assetClass?: string` at `server/lib/event-bus.ts:24-51` (B79.0n.EXECUTION CHUNK A, 2026-05-27)
-- 3-listener empirical for TradeClosedEvent: `paper-execution-engine.ts:184-188` (self-handler, mode-filter only), `c13-validation-service.ts:103-107` (collection), `c14-validation-service.ts:123-127` (collection) — all confirmed safe via grep + handler inspection at Step 1.b + locked in CHUNK E source-file regression tests
-
----
-
-## §4.24 — Deferred-gap registry closure rule (B79.0n.EXECUTION 2026-05-27)
-
-When a diagnostic endpoint surfaces deferred per-class implementation gaps inline via `_meta.knownGaps` array (operator-visible without consulting docs), closure of those gaps requires explicit governance discipline to prevent registry drift.
-
-**The registry pattern (canonical reference: `/api/diagnostics/orchestrator-per-class-state` v2 schema from B79.0n.EXECUTION):**
-```jsonc
-{
-  // ... layer state ...
-  "_meta": {
-    "schemaVersion": 2,
-    "coverage": ["orchestrator", "execution"],
-    "lastReviewed": "<YYYY-MM-DD>",
-    "knownGaps": [
-      "<gap description> (<file>:<line range>); <defer to phase or trigger condition>",
-      // ...
-    ]
-  }
-}
-```
-
-**Closure rule (mandatory):**
-1. **Remove the entry from the `knownGaps` array** — the gap closure batch MUST delete the matching string literal from the payload
-2. **Bump `_meta.lastReviewed`** — set to the current `<YYYY-MM-DD>` so operators see the registry is fresh
-3. **Cross-reference in the closure batch's CHANGES_AND_FIXES.md entry** — explicitly note "removes `<gap description>` from `_meta.knownGaps` registry" so the closure is auditable
-
-**Always-bump rule (Langston Step 4 C5 #1):**
-- ANY batch that touches per-class state at the orchestrator-or-execution layer MUST bump `_meta.lastReviewed`, even if `knownGaps` contents are unchanged
-- Without this rule, the timestamp drifts silently and operators reading the endpoint think the doctrine is stale when it isn't
-- Touching the endpoint payload constitutes a "review" event regardless of whether gaps were closed
-
-**Anchor-by-name preference (RUNNING_ISSUES #157 follow-up):**
-- Line-number references in `knownGaps` strings (`paper-execution-engine.ts:126-127`) drift as code changes
-- Prefer anchor-by-function-name (`getDefaultExchangeFees`, `computeRiskPercent`) when the function name is canonical
-- If a gap entry exists for more than 1-2 batches, refactor to anchor-by-name on the next batch that touches the endpoint
-
-**Why surface deferrals inline rather than just in docs:**
-- Operators reading a diagnostic in real-time see what's promised vs deferred without context-switching to governance docs
-- Closure auditability — if a gap is referenced in `_meta.knownGaps` and then disappears, that's the closure signature
-- Self-describing payload — the endpoint becomes the SSOT for "what's wired vs not wired"
-
-**Anti-pattern (don't do this):**
-- Surface a `knownGaps` entry in v1, then in v2 silently change the gap description without removing the entry — drift accumulates and operators stop trusting the registry
-- Drop the `lastReviewed` timestamp under the assumption that `knownGaps` array changes are sufficient evidence of freshness — operators need both signals
-
-**Canonical reference:**
-- `/api/diagnostics/orchestrator-per-class-state` v2 payload from B79.0n.EXECUTION CHUNK C (2026-05-27)
-- Initial `knownGaps` registry (3 entries) — fee/slippage dispatch class-member wildcard + sizing-core mode-keyed + narrative-feed assetClass dormant. Both fee/slippage + sizing-core closures land at Phase 25/26 calibration; narrative-feed closure has no current target (annual dormancy audit trigger).
-
----
-
-## §4.25 — Producer-consumer contract audit for canonical artifacts (2026-05-31)
-
-**Origin:** B.1.5 redeploy unblocker (BUG-2026-05-31-A). The runtime canonical JSON `bridge/canonical/mapping-regime-strategy.json` had been hand-authored to a new shape during B79.0n.STRATEGY (`af99bd5`, 2026-05-24) without updating the upstream generator `server/scripts/sync-canonical-bridge.ts`. The deploy didn't break for 7 days because nobody re-ran the generator. The B.1.5 deploy then crashed at boot — most likely because esbuild ESM module-init ordering shifted, promoting the consumer (`market-indicators.ts` → `getClassMap`) into a partial-JSON read window. Pre-audit Step 2 did not catch this because the batch's code didn't touch the canonical map or its generator; the contract drift was invisible to a per-component blast-radius walk.
-
-**Rule (new Step 2 pre-audit line — MANDATORY):** for every JSON / generated artifact the batch's code paths read at runtime (whether the batch itself modifies the producer or consumer), verify the producer and consumer agree on shape. Concretely:
-
-1. **Identify every canonical artifact** the batch's affected code reads at runtime. Typical sources: `bridge/canonical/*.json`, `bridge/canonical/*.md`, generated configs in `dist/`, schema-generated TypeScript types.
-2. **For each artifact**, locate the producer (sync script / build step / hand-author) and the consumer (runtime read site).
-3. **Verify shape agreement** by either: (a) reading the consumer's parse logic + the producer's emit logic + diffing manually; (b) running the producer in dry-run mode + diffing output against on-disk artifact; (c) confirming a CI contract test exists that asserts producer-output passes consumer-parse.
-4. **If no CI contract test exists**, the pre-audit must NOT mark the artifact as "verified" — flag as a governance gap to be closed in the batch.
-
-**Why this matters:** module-init ordering shifts in bundlers (esbuild, Vite, webpack tree-shaking) can promote latent contract drift to deploy-time crashes without any code change to the drift surface itself. The blast radius is invisible at the per-component level — only a "canonical artifact registry" pre-audit step catches it.
-
-**Pattern (CI contract test):** B.1.5 redeploy unblocker added `server/tests/unit/sync-canonical-bridge.test.ts` (9 tests) asserting `generateBridgeJSON()` output is byAssetClass-shaped + passes `getClassMap`-equivalent reads + carries the per-class deltas (defensive_hedge, orb, strong_bull_trend). This is the template for canonical-artifact contract locks. Reusable shape:
-
-```ts
-import { generateArtifact } from '../../scripts/generator.ts';
-import { consumerReader } from '../../core/consumer.ts';
-test('producer output satisfies consumer contract', () => {
-  const generated = generateArtifact();
-  const parsed = JSON.parse(generated);
-  // Assert top-level shape, then exercise consumer's read path
-  for (const inputCase of EXPECTED_INPUTS) {
-    expect(() => consumerReader(parsed, inputCase)).not.toThrow();
-  }
-});
-```
-
-**Anti-pattern:** hand-author the canonical JSON to a new shape and assume the generator will be updated "later" — that "later" never comes until a deploy crash forces it.
-
----
-
-## §4.26 — Scheduled-task verification via audit-table rows (2026-05-31)
-
-**Origin:** B-NEW-36 poll-reconcile (BUG-2026-05-31-B). Fri 29 May 8PM ET node-cron fire silently failed (no callback invocation, no exception, no log line). The failure was only detected when manually querying `scheduled_tasks_audit` and finding zero `weekend_shutdown` rows for the boundary timestamp. Without that audit table, the failure would have stayed invisible until the next manual check.
-
-**Rule (canonical for ANY in-process scheduled task):** every scheduled-task implementation MUST write an audit row on every fire (success OR error path), so absent rows = missed fires. Specifically:
-
-1. **Every cron/setInterval/setTimeout-based task** that performs side-effects (DB writes, scanner state changes, external API calls) MUST write a row to `scheduled_tasks_audit` or an equivalent audit table at fire time.
-2. **The audit row's `meta` field MUST include** a `trigger_source` discriminator (`'cron' | 'poll' | 'boot' | 'manual'`) so future analysis can distinguish primary-path fires from safety-net catch-ups.
-3. **A separate poll-based "did we fire?" verifier SHOULD exist** for any task whose silent failure has high blast radius. Pattern: ride an independent tick mechanism (centralClock, app-level setInterval, external systemd timer) that detects state drift and catches up. See `xstockSpotScanner.clockTickHandler.reconcileWindowState` for the canonical implementation.
-4. **System-alerts (severity=warning, category=breakage) SHOULD fire** when the safety net catches a missed primary fire, so the regression surfaces via §10.5 per-turn checks rather than being silently absorbed.
-
-**Why this matters:** in-process timers (node-cron, setInterval, setTimeout) can silently fail to invoke their callbacks with no exception and no log line. Root cause is often library bugs, event-loop edge cases, or async-handler quirks that are hard to reproduce. The audit-table-as-evidence pattern makes silent failures detectable; the poll-based catch-up makes them recoverable; the system-alert makes them visible.
-
-**Blast-radius pattern:** when one timer is found to have silently failed, audit the OTHER timers using the same library/pattern. Don't assume only the observed instance is affected. RUNNING_ISSUES #164 tracks the 5-other-node-cron-schedules audit triggered by BUG-2026-05-31-B.
-
-**Anti-pattern (don't do this):** rely on log-grep as the canonical evidence trail for scheduled-task fires. Logs are easily lost / rotated / overwritten; audit tables are queryable + indexable + persistent.
-
----
-
-## §4.27 — Production-ESM-bundle verification for NEW external dependency imports (B-NEW-50 / BUG-2026-06-01-A, 2026-06-01)
-
-**Origin:** B-NEW-50 added `cron-parser` and used a NAMED import — `import { parseExpression } from 'cron-parser'`. It passed `tsc`, `vitest`, CI **Build (esbuild)**, AND CI **Docker Build** — all four gates green — then HARD-CRASHED staging at boot: `SyntaxError: Named export 'parseExpression' not found`. `cron-parser` is CommonJS-only; the production bundle is `esbuild --format=esm --packages=external`, and Node's ESM loader cannot statically detect a CJS module's named exports. ~3-min staging outage.
-
-**The trap:** vitest's CJS↔ESM interop synthesizes named exports, and CI Build only *bundles* (never boots), so the failure is invisible to every green gate and only surfaces at deploy. This is generic to **any named import of a CommonJS-only package**, not specific to cron-parser.
-
-**Rule:** when a batch adds a NEW external dependency:
-1. **Default-import CommonJS packages**, then destructure: `import pkg from 'cjs-pkg'; const { fn } = pkg;` — never `import { fn } from 'cjs-pkg'` unless the package ships real ESM named exports.
-2. **Validate against Node's ESM loader before deploy** — a 5-line `.mjs` that imports the package exactly as the code does and calls the function (e.g. `scratch/cronparser-esm-test.mjs`). tsc+vitest+CI-green is necessary but NOT sufficient for ESM-bundle runtime.
-3. Structural backstop (RUNNING_ISSUES #168): a CI step that boots the actual production esbuild bundle headless + requires it to reach "listening" / emit the `[CRON-ARM-SMOKE] aggregate=` boot line before CI is green.
-
-**Anti-pattern:** treating "all 4 CI checks green" as proof the deployable artifact runs. CI builds the artifact; it does not execute it.
-
----
-
-## Phase-24 PRE-CALIBRATION BASELINE + carryover learnings (B.0 / B-CALSCORE, 2026-06-02)
-
-The B.0 pre-calibration baseline (a read-only numbers report of every xStock setting before tuning) + the B-CALSCORE Calibration Scoreboard tab surfaced standing learnings that belong in this blueprint. (Doc-organization deferred to post-Phase-24; capturing now per Kyle 2026-06-02 "continue to update the learnings.")
-
-**NEW STANDING STEP — a "Pre-calibration baseline" before Step 7b (Calibration cycle).** Before tuning any threshold/filter/gate for a newly-onboarded class, produce a numbers-first BASELINE: for every setting you're about to change, capture its current value + current result as a **rolling-window rate WITH raw counts** (rule #13 — never a single-cycle snapshot; a single xStock scan flashed spread-reject 16% vs the rolling-24h truth 2.3%), plus the regime mix, strategy mix, and throughput, **overlaid with an operational-event timeline** (outages, holidays, feed go-lives) so distorted windows are excluded before averaging, plus a **"definitely off NOW" list**. Seed it all into a **Calibration Scoreboard** (the `calibration_ledger` table + Analytics "Calibration" tab — num/den is SSOT, pct derived) so the whole calibration arc is auditable and the before/after is visible per setting. Rationale: calibrating without a baseline tightens knobs that were already fine and misses the genuinely broken ones — the baseline IS where the broken ones get found.
-
-**NEW STANDING RULE — the Calibration Scoreboard enumerates the ENTIRE calibration surface, not just the "definitely off" settings (Kyle 2026-06-02; expanded B-CALSCORE → B-CALSCORE.b).** The first scoreboard seeded only the ~10 settings flagged as insufficient, which read as cherry-picked and hid whole groups (the regime classification ranges, every per-strategy gate) whose ranges ALSO need review even where they aren't obviously broken. B-CALSCORE.b re-seeded to the FULL surface — **64 settings across 8 categories** (regime / IMF filters / global gates / strategy gates / friction / TEC priors / sector / macro), grouped by category. Two reasons this is now standing: (1) a calibration board's job is to show every knob in context so "looks fine" is an explicit, auditable conclusion rather than a silent omission; (2) a cloned class's strategy gates will NOT be set up exactly as crypto's, so every range gets re-derived, not only the obviously-broken ones. Rule: seed every setting in the calibration arc, grouped, current-side filled; EXCLUDE only later-phase categories (here Phase-25: correlation benchmark, P&L/win-loss).
-
-**NEW STANDING CHECKLIST ITEM — "carryover audit" (the single biggest Phase-24 onboarding trap).** When a setting/component is cloned from an existing asset class, a NUMERIC carryover is NOT a VALID carryover:
-- **Re-derive every threshold against the NEW class's actual data.** xStock's `lq_min=43` was a crypto-VOLUME-era value; when B.1.5 switched xStock liquidity to order-book DEPTH, the 43 silently became a **~$19,950 ask-depth bar rejecting ~70% of names** — nobody chose $20k; it fell out of a leftover scale.
-- **Verify the carried component's LAYER PLACEMENT.** Correlation was wrongly bundled INTO the xStock IMF family filter; canonical IMF = LQ/VN/DI only (crypto keeps correlation as a SEPARATE confidence modulator).
-- **Verify it's actually WIRED, not a constant/stub.** That same xStock IMF correlation was non-functional — called without a benchmark it returned a constant 0.5, rejecting exactly 0 of 283,625. A carried filter can look configured (a threshold exists) yet do nothing.
-- **Two gates can measure DIFFERENT STATISTICS, not just different levels.** xStock LQ screens ask-only depth; `min_depth_usd` screens min(ask,bid) (shallower side). Coordinating them means reconciling WHAT they measure, not just matching a dollar number — they diverge on asymmetric (thin-ask) books, the names a liquidity gate most needs to catch.
-
-**NEW STANDING STEP — a "data-availability map" before any baseline/calibration capture.** Classify each needed metric: CLEAN (archived + timestamped, queryable over the window) / REPLAY (reconstruct by re-running the production formula over archived raw inputs) / FORWARD-ONLY (short retention → accumulate forward) / STALE (writer stopped; only a fixed past window exists). xStock taught: order-book depth was ~1-day hot retention (FORWARD-ONLY → calibrate the depth number off ≥5 sessions, not 1 day), the DBS component backfill was STALE (05-05→15 only), the upstream scan-funnel reject counts were in-memory-only (REPLAY). Promising numbers before this map = promising numbers you can't get.
-
-**STANDING DISCIPLINES reinforced** (not new, but the baseline made them concrete): read against operational events, never blindly — the 3-week xStock regime average masked a DRIFTING distribution (HIGH_VOLATILITY_UNSTABLE ~5%→23% over 2 weeks); date-segment before declaring anomalies (gate-change dates vs trade dates — "disabled strategy with trades" / "enabled strategy that never fires" were genuine here, but only the date-check proved it); verify the external-feed inventory, do not assume (CoinGecko = symbol DISCOVERY, Finnhub = SECTOR tags; NO sector-ETF price feed wired; SPY/QQQ available for broad-market).
-
-(Full numbers + evidence: `Claude Comms and Packages/Scope Files/B_XSTOCK_CALIB_BASELINE_REPORT.md`. Scoreboard tooling: `B_CALSCORE_COMPLETION_REPORT.md`.)
-
----
-
-## §4.28 — VTS observability-field plumbing: the 5-site chain (B.2.UI, 2026-06-02)
-
-Adding a per-trade observability field that must appear on BOTH the Open AND Closed Simulated Trades tables (e.g. B.2.UI's `entryLiquidityValue`/`entryLiquidityKind` — xStock ask-depth USD vs crypto 24h coin-volume) requires touching **five sites**, and missing any one **silently degrades to "—" with NO tsc error** (the persisted closed-trade record is cast `as any`, so the compiler won't catch a dropped or mistyped field on the write side):
-
-1. **Capture at trade-open** — set the field at each asset-class open site (xStock: the depth already in scope at the `registerOpenVtsTrade` call in `eval-cycle.ts`; crypto: `priceData.volume24h` in the vts-runner inline builder, class-guarded so neither class picks up the other's kind).
-2. **Open read-feed** — add the field to BOTH the `getOpenVirtualTradesForML` return TYPE and its push object (`vts-runner.ts`), or the Open table never sees it.
-3. **Close-copy** — copy the field from the in-memory open trade into the `persistRealPriceTrade({...})` argument (`vts-runner.ts`).
-4. **JSONL persist-write (the load-bearing, easily-missed site)** — `vts-service.persistRealPriceTrade` builds the closed `VirtualTrade` by **explicit field-mapping, not a spread**, and `logTrade()` writes THAT object to the JSONL. Add the field to BOTH the parameter type AND the persisted record (`tradeData.x ?? null`). Without this, site 5 reads nothing.
-5. **Closed read-feed whitelist** — add the field to BOTH the `getClosedVTSTradesFromLogs` return type AND its per-trade mapped object (`export-csv.ts`), with `typeof` guards.
-
-**Detection technique that works here:** because the project carries a large tsc baseline (~493 errors) and the `as any` write hides field errors, the reliable check is a **scoped before/after tsc diff** — `git stash` to origin HEAD, capture errors for the changed files, restore, re-capture, and `comm` the normalized sets. A correctly-plumbed additive shows whole-project count unchanged; a missing site shows exactly one new excess-property error pointing at the gap (this is how B.2.UI's missing site-4 param-type was caught before push). And the final proof is a **live-feed data check, not just tsc**: after deploy, confirm a FRESH post-deploy open carries a non-null value of the correct kind for EACH asset class (pre-deploy trades correctly read "—"; there is no backfill).
-
-**Frontend mirror:** the cell formatter must be asset-aware off `entryLiquidityKind` (not asset_class alone), and the table's empty-state `colSpan` must be bumped per added column.
-
----
-
-## §4.29 — Bar/tick frequency is a first-class onboarding decision + the per-class calibration mandate (B.4 / xStock strategy-fit, 2026-06-03; foundation-landing learnings added 2026-06-04)
-
-**Origin:** the xStock strategy-fit effort. B3.1a found the xStock strategies have no edge not because gates are wrong but because their SIGNAL settings were never fitted to xStocks; and the B.4 bar-frequency study found the inherited 60-min bar interval is too coarse for the intended few-hours-hold style. Kyle 2026-06-03: "All of these decisions from calibrating every category and every setting to analyzing the best bar capture frequency are learnings that should go into the onboarding workflow." Captured now per the §3.3 standing rule. Points 1-5 captured at the study/decision stage (2026-06-03); points 6-8 added 2026-06-04 from the actual B.4 foundation LANDING (deploy `ae2ddc845`).
-
-1. **EVALUATE THE BAR/TICK FREQUENCY EXPLICITLY — do not inherit it.** A cloned class inherits the bar interval from the existing classes (xStock inherited crypto's 60-min). That interval may not fit the new class's instruments or intended holding period. Run a bar-frequency study: rebuild bars at candidate intervals from the 1-min archive, and per interval measure (a) pattern/setup availability, (b) forward-EXCESS-return edge (de-meaned vs the cross-sectional universe), (c) regime-read STABILITY (flip-rate), (d) bars-per-intended-hold. Decide a single shared interval by default. Engine reference: `scripts/b4-bar-frequency-study.ts`. xStock chose **15-min** over the inherited 60-min — on structure + stability + ORB-revival, since edge was weak at every interval (the choice is rarely made on edge; edge is built later by re-tuning).
-
-2. **CHANGING THE BAR INTERVAL IS A FOUNDATION CHANGE, NOT A FLAG.** The regime classifier, the MCE indicators (EMA/ATR/SMA/RSI/ADX/VWAP/"24h" windows), and DBS all use bar-COUNT lookbacks that implicitly assume a fixed interval, and the regime thresholds are calibrated to per-bar volatility AT that interval. Cut the interval and the same numbers silently mean a different amount of wall-clock time / a different volatility scale — regime mix collapses, wrong strategies selected, NO error thrown. There is an explicit invariant comment at `server/core/metrics/market-regime.ts:108-119` warning this exact break. Required work: per-class TIME-ANCHORED lookbacks; regime-threshold RECALIBRATION at the new per-bar scale; indicator-period re-derivation (per-class); DBS backfill recompute (+ an explicit epoch-versioning decision so training data isn't split-brain); aggregator interval typing + a new per-interval snapshot table; ORB opening-range WINDOW re-derivation (not just candle-source repoint). **EXIT GATE = a regime-label PARITY report** (diff old-interval vs new-interval labels over the same window; "shift understood AND intended" = acceptance); per-strategy work is HELD until parity is signed off.
-
-3. **CALIBRATE THE STRATEGY-SIGNAL LAYER + PATTERN-DETECTION PER-CLASS — not just gates/filters.** The Phase-24 arc calibrated the SELECTION/SCORING/RISK layer (regime, IMF, liquidity, strategy GATES, friction, priors, sector). It did NOT calibrate each strategy's own TRADE CONSTRUCTION (entry trigger, stop/target geometry, hold horizon, indicator periods/levels, pattern tolerances) or the pattern-detection service — those ran the crypto wildcard `*` values for the new class (only ORB had xStock params). And these were likely never empirically calibrated for crypto either (inherited from strategy design pre-data). Onboarding MUST include a strategy-signal + pattern-detection calibration pass, asset-class-scoped, measured by the forward-return engine, with hold anchored to the CLOCK not bar-count and overnight-gap handling for equity classes. Sequencing: **foundation (interval + regime/indicator/DBS recalibration) → pattern-detection review → per-strategy gates → per-strategy trade construction.**
-
-4. **Bar-frequency-SENSITIVITY classification (when recalibrating after an interval change):** bar-SENSITIVE (redo) = regime thresholds + lookbacks, MCE indicator periods, DBS, candlestick pattern shapes/tolerances, indicator-based strategy-gate bands (RSI/ADX). bar-INDEPENDENT (keep, sanity-check only) = order-book/depth liquidity screens, the wrong-instrument volume removal, friction, TEC priors, sector, macro. Reference list: `Claude Comms and Packages/Scope Files/B_4_15MIN_RECALIBRATION_LIST.md`.
-
-5. **A disabled equity-native strategy can be UNLOCKED by the interval choice.** ORB (opening-range breakout) was disabled (B-NEW-34) only because 60-min bars left no intra-hour data for an opening range; a sub-hourly interval revives it. But re-enabling is part of the foundation/transition (flip DB flag + fix candle-source + re-derive the opening-range window), not a free flag flip. Check, on any interval change, whether a parked strategy becomes viable. **LANDING NUANCE (B.4):** "unlocked" ≠ "activated" — B.4 made ORB plumbing-ready at 15m (candle source + window map) but LEFT `enable`=false, because edge-validation at the new interval is a separate strategy-fit decision (RUNNING_ISSUES #203). Unlocking the plumbing and validating the strategy are two distinct gates; do the first in foundation, the second in the per-strategy pass.
-
-6. **THE RECALIBRATION METHOD THAT WORKED = replay-driven, percentile-preserving, with a regime-label parity exit gate (the realized standard pattern).** B.4's foundation recalibration ran as ONE unified replay engine: rebuild the full bar series at the new interval from the clean 1-minute archive → produce per-bar regime labels (old-interval vs new-interval = the parity report) + per-bar DBS history (populates the backfill table) + the distribution characterization that derives the new thresholds. Threshold values were chosen **percentile-preserving** (keep each cutoff at the same percentile of the new-interval distribution as it held at the old) and sanity-checked through a CALIBRATION-LENS that weights the clusters/CDF-steepness that actually matter. The exit gate is judged on the **clean-old → clean-new** comparison (both substrates rebuilt from clean 1-minute data, so the delta is pure bar-size, not a feed artifact) — show the live-old mix only for cutover context, do NOT gate on it. B.4 result: max regime-mix |Δ| 1.30pp, no collapse, signed off. Engines: `scripts/b4-regime-recalib-study.ts`, `scripts/b4-regime-parity.ts`, `scripts/b4-vndi-recalib-study.ts`, `scripts/b4-dbs-15m-recompute.ts`. **Watch-out:** percentile-preserving makes the parity delta partly by-construction (it targets the marginal mix), so the small delta is a passing condition, not independent proof the new substrate is right — capture the LIVE-new mix once hours accumulate and confirm it lands near the predicted clean-new mix (a substrate-mismatch detector). Also: VN and DI are BOTH bar-sensitive (full-array computes) — DI contracts toward 50 at a finer interval while VN is nearly bar-invariant; recalibrate both on the same replay, don't assume one is safe.
-
-7. **A FOUNDATION DEPLOY THAT CHANGES LIVE CONFIG IS ATOMIC ACTIVATION AT RESTART — there is no "inert deploy" of the migration against the OLD running code.** Build all the new code paths inert (the new interval branch, the new snapshot table, the recalibrated thresholds in DB) and flip the single activation switch (the scanner's bar-size request) LAST, gated on the parity sign-off. But understand that the moment the migration applies AND the new code restarts, the change is live — you cannot deploy the new thresholds "to sit quietly" beside the old 60-min code, because the old code would read the new-interval thresholds against old-interval bars (or vice-versa) and silently misclassify. The safe shape is: land schema + inert code first (no behavior change because nothing calls the new branch), recompute the history offline (supervised, with a re-count safety gate before any destructive DELETE — B.4 re-counted the archive ≥ live before clearing), then in ONE deploy/restart flip the activation switch so the new bars and new thresholds go live together. Treat the restart as the atomic activation point.
-
-8. **DB-DYNAMIC UNIVERSE: standalone CLI/script runs must explicitly load the universe registry — app boot does it, CLI does not.** Once a class's universe is DB-dynamic (xStock since B79.0n.UNIVERSE-DISCOVERY), the in-memory registry is populated by a boot-time initializer (`xstockUniverseService.initializeFromDB()`), NOT by a static file import. Any offline script that enumerates the universe (prewarm, backfill, recompute, load-test) runs OUTSIDE app boot and will find the registry EMPTY — failing with a confusing "empty target symbol set" rather than an obvious "registry not loaded." Every such script's `main()` must call the initializer before enumerating symbols. Add this to the script-authoring checklist for any DB-dynamic class. (B.4 hit this on both the prewarm and DBS-recompute CLIs; fixed in commit `0bae277e7`.)
-
-9. **OPERATIONAL HYGIENE for on-staging study/recompute runs.** The foundation recalibration runs heavy scripts directly on the staging checkout (the data lives there). Those runs leave the staging git working tree dirty — modified tracked files + untracked outputs — which blocks the next deploy's `git pull` until manually cleared. Plan for it: run study scripts from a scratch directory or clean the tree before deploy, and gitignore runtime-generated directories (logs/audit/diagnostics) that are otherwise tracked and accrue churn. (Tracked as RUNNING_ISSUES #202 for B.4.)
-
----
-
-*End ASSET_CLASS_ONBOARDING_WORKFLOW.md.*
+*End of ASSET_CLASS_ONBOARDING_WORKFLOW.md. The single onboarding sequence is Part 1; the HOW-detail is Part 2; the worked example is Part 3; future slots are Part 4. Trial-and-error history lives in the per-batch completion reports under `Claude Comms and Packages/Batch Completion/`.*

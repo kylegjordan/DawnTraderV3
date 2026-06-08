@@ -12,7 +12,7 @@
 ---
 
 ## 1. ★ THE ORDERED SEQUENCE (Kyle directive 2026-06-08) — DO STRICTLY IN THIS ORDER
-1. **Finalize the asset-class onboarding workflow** (the doc for adding new asset classes). → §2
+1. ✅ **Finalize the asset-class onboarding workflow** (the doc for adding new asset classes) — DONE 2026-06-08 (research-driven rebuild, Langston-reviewed). → §2
 2. **Final Phase-24 governance close** — close all Phase-24 sub-batch completion reports + generate ONE final umbrella completion report for all of Phase 24. → §3
 3. **ml-service restart fix** (the small process-management fix). → §4
 4. **VTS standalone always-on Simulation service** — runs whether or not active trading is on. **Includes a required storage-architecture design + decision** (see §5a) before build. → §5
@@ -23,8 +23,13 @@
 ---
 
 ## 2. ITEM 1 — Finalize the asset-class onboarding workflow
-**File:** `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` (~1,919 lines). **Status: living doc, NOT finalized.**
-**What "finalize" means (from the audit):**
+**File:** `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md`. **Status: ✅ DONE 2026-06-08 — research-driven REBUILD + FINALIZED + Langston-reviewed.**
+
+**What landed:** Kyle reframed "finalize" (2026-06-08) as a full research-driven REBUILD (not a light consolidation), to one single source-of-truth playbook with NO competing step-orders, NO numbering collisions, NO empty/dangling pointers. Passes 1+2 (research) = the consolidated artifact `Claude Comms and Packages/Scope Files/ONBOARDING_WORKFLOW_REBUILD_RESEARCH.md` (~90 learnings by onboarding lifecycle). Pass 3 (rewrite) = the doc dropped 1,919 → 692 lines into: Part 0 how-to + Standing invariants + **Part 1 the SINGLE sequence (Phases 0–9, 83 steps, watch-fors embedded)** + Part 2 reference library (28 `R-*` code-template entries) + Part 3 xstock_spot worked example (the former H.1.D code-surface + H.1.E 18-stage stubs FILLED) + Part 4 empty future slots. The old two-competing-step-orders, the `4.15` collision, the misplaced Section D.1, and the chronological §4.x tail are all gone. Langston Step-2 review = approve-with-revisions; both revisions applied (wired the orphaned `R-LAYERS` into Standing invariant #4 + Steps 5.1/7.6/8.5; corrected the `R-DISPATCH` header); R-reference graph verified clean in BOTH directions (28 defs / 28 refs, 0 orphans, 0 danglers, 0 dup step numbers).
+
+**Deferred to ITEM 2 (its rule-correct home):** the CLAUDE.md §3.3 learning-capture flip — §3.3 says "after Phase 24 closes," so it stays active through the final Phase-24 governance close (item 2) so the umbrella Phase-24 report carries its onboarding-learnings section, then converts to ad-hoc.
+
+**Original "what finalize means" (superseded by the rebuild above):**
 - The doc is functionally complete + battle-tested (Sections A–L + the xstock_spot worked example are fully populated; 12 "Step 4.x" learning blocks + 4 H.1.x standing rules all have real content).
 - BUT a stream of recent learnings (§4.22, §4.24, §4.27, §4.28, §4.29 + the Phase-24 pre-calibration baseline block) were **appended chronologically and never consolidated** into the clean A–L structure (this was explicitly "deferred to post-Phase-24, capturing now per Kyle 2026-06-02").
 - Sections **H.2 (crypto_perp) and H.3 (future classes) are intentional empty forward-slots** — leave them empty.
