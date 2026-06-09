@@ -28,3 +28,8 @@ Langston plan-ACK (3 decisions + amendments) → Step-4 **APPROVE** (1 required 
 `ADJUSTMENT_FRAMEWORK.md` (CALIBRATION EPOCHS section — **Langston Step-8 conditional item 1**) · `SYSTEM_IMPACT_MAP.md` (step-2 Recent Additions: 'shared' value-set + store/epoch/buffer entries + future-mis-stamp note — **conditional item 2**) · `RUNNING_ISSUES.md` (#210 → RESOLVED) · `BATCH_CATALOG.md` (step-2 row) · `PHASE_HISTORY.md` (step-2 block) · this report · MEMORY 3-way.
 
 **Next: step-2b** (would_admit capture at VTS archive hooks — SQE-threshold replay, `would_admit_v0` + stamped threshold if basis differs) **→ step 3** (switch cleave / independent controls).
+
+---
+
+## STEP-2b ADDENDUM (would_admit_v0 bridge) — CLOSED 2026-06-10
+Deploy `e5b91332f`; CI run `27241756486` all-4-green. Langston Step-4 **APPROVE conditional on R1** — R1 (10s failure cooldown in the threshold cache; no per-row retry hammering of a degraded config path) + N1 (`no_final_score` basis so EVERY post-deploy VTS row carries a basis) both folded; final hunk notified per his no-re-review condition. **Live verification (first ~90s post-warmup):** every post-deploy VTS signal-eval row stamped — `no_final_score` 1,194 (reject-stage rows, expected majority) · full verdict `final_score_vs_paper_finalScoreMin` 6 (would_admit_v0=true, threshold carried) · `thresholds_not_warm` 2 (the designed honest-null cold window) · zero unstamped post-deploy rows. The B.3 bridge (tier-2a comparison precondition; the tier-2b pooling prerequisite #1) is accruing forward data. Design: ONE stamp site (the archiver convergence point); v0 basis explicit per #211. Files: `would-admit-cache.ts` (NEW) + `signal-eval-archiver.ts`.
