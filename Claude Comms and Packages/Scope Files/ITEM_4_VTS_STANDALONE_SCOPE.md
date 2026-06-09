@@ -2,7 +2,21 @@
 
 > Between-Phase-24→19 plan **item 4** (Kyle directive 2026-06-08; readiness-checklist §5 + §5a). **Design-before-build (NO-PATCHES §5#15):** §5a requires a storage-architecture design + decision FIRST, before the standalone-VTS build. This scope covers BOTH, structured as Phase A (storage-architecture design/decision) → Phase B (standalone-VTS firehose build, gated on the Phase-A decisions + Kyle approval).
 >
-> **Status:** DRAFT for Langston Step-1 iteration. **No code, no build — scope only.** Active trading OFF throughout. Author: Claude Code, 2026-06-09. Architectural read done at code + SIM + System Manual level (sources cited inline).
+> **Status:** v2 — **Langston Step-1 consensus reached 2026-06-09** (agreed directionally with all six decisions; refinements adopted below). **No code, no build — scope only; awaiting Kyle approval.** Active trading OFF throughout. Author: Claude Code, 2026-06-09. Architectural read done at code + SIM + System Manual level (sources cited inline; Langston independently re-verified F2 against the live call sites).
+
+---
+
+## 0.5 LANGSTON STEP-1 CONSENSUS — ADOPTED REFINEMENTS (2026-06-09)
+Langston re-verified F2 at code level (the 3 archivers read `getCurrentMode()` *inside themselves*; firehose write sites `vts-runner.ts:1943/2607/3616/3706` + `xstock_spot/eval-cycle.ts:546/633` and active site `signal-orchestrator.ts:1036` call the SAME archiver fns → contamination confirmed). He agreed with all six recommendations; these refinements are now part of the scope:
+
+- **R-A (reframe, D1):** producer identity ALREADY exists in the rows via the **`source` column** (firehose=`'vts-runner'`, active=`'signal-orchestrator'`, scan=`'mce-cycle'`). So D1 is **"fix the mode derivation + canonicalize `source`," NOT "build a partition."** Two viable impls — decide in Phase A: (i) **override-don't-replace** — add an optional `mode` param to the 3 archivers; firehose callers pass `mode:'vts'`; active callers KEEP the `getCurrentMode()` default (it is correct for them); or (ii) **`source → mode` map inside the archiver** (zero caller edits). **Either way, canonicalize the fragmented firehose `source` vocabulary first** (`'vts-runner'`/`'vts'`/`'VTS'`/`'simulation'` all appear).
+- **R-B (D2 lock):** **in-process-decoupled for item 4; separate PM2 process DEFERRED to Phase 19 entry** (a separate process only pays off once ingest-once-fan-out exists — else it needs its own Kraken connection = the duplicate-API-budget cost F6 wants to kill, paid while active is OFF for no benefit). **Honesty flag:** in-process decoupling insulates the firehose from *component* restarts (orchestrator/TEC bounce) but NOT a full `pm2 restart`/redeploy — see the amended criterion #3.
+- **R-C (D3):** thin in-process fan-out **seam** now; real single-ingest staged to Phase-19-adjacent (it's what makes separate-process viable).
+- **R-D (D4 — the genuinely-open fork):** **`pair_scan` shared-substrate question.** The MCE scan runs ONCE per cycle (`source:'mce-cycle'`) and feeds BOTH firehose and active — you cannot tag one scan row with one consumer's mode without mislabeling the other. **Decide explicitly in Phase A:** is `pair_scan` producer-agnostic substrate (tag once, like OHLC) or does each consumer get its own scan row? (Scope leaned OHLC-agnostic but never extended the reasoning to `pair_scan`.) ALSO: `macro-feed-archiver.ts` + `decision-provenance.ts` set no mode yet their tables have `mode NOT NULL` — **verify in Step 2 they aren't riding a silent DB default.**
+- **R-E (D5):** model the firehose at its **real fan-out multiple** (many signals across strategies×regimes), not a flat 3× of today — firehose row-rates dominate; project per-producer rates + the **cold-tier (B2) growth curve** (cold never deletes; hot headroom is fine at ~5% of 200 GB).
+- **R-F (D6 sequencing):** fold B70 into the tiered lifecycle, but **ship D1 (the small, correctness-critical Phase-19 blocker) FIRST; the D6 tiering migration follows as a separate deploy step** in the same scope — don't gate the mode-stamp fix behind the bigger data migration.
+- **R-G (Q5):** **Phase A (the storage-architecture design doc) is its OWN sub-batch with its OWN Kyle sign-off**, then Phase B build (itself sequenced D1-then-D6). NO-PATCHES wants the architecture pinned before the build.
+- **R-H (note, don't block):** `getCurrentMode()`'s cache is 5s-lazy — at the paper-on transition there's a ≤5s window where active rows could still read `'vts'`. The per-producer firehose stamp eliminates this for the firehose; a forced `refreshMode()` on the mode-transition event closes it for the active side. Note in Phase A.
 
 ---
 
@@ -51,7 +65,7 @@ Build the VTS (passive-learning) simulator as an **always-on standalone service 
 ## 4. VERIFICATION CRITERIA (outcomes-based)
 1. With paper-active simulated ON (test harness, not live), firehose archive rows still tag `mode='vts'` (NOT `'paper_sim'`) — the partition holds under concurrency.
 2. A calibration-style query can select exactly one producer's rows with zero cross-producer pooling.
-3. The firehose keeps producing cycles across a simulated active-trading restart (no gap in the data stream).
+3. The firehose keeps producing cycles across a **component-level** active-trading restart (orchestrator / TEC / paper-engine bounce) with no gap in the data stream. **(Scope clarification per Langston R-B: item 4 targets COMPONENT-restart insulation via in-process decoupling; FULL-app-restart insulation requires the separate PM2 process, which is deferred to Phase 19 entry. This criterion is explicitly component-restart, not full-app-restart.)**
 4. B70 tables (if D6 = fold-in) export to warm/cold instead of dropping at 90 days; `data_archive_manifest` shows the rows moved, not deleted.
 5. Volume projection documented; `database_monitor` stays green under the 3-producer model.
 
@@ -62,5 +76,5 @@ Build the VTS (passive-learning) simulator as an **always-on standalone service 
 - Q4 (D6): fold B70 into the tiered lifecycle in this item, or keep it a separate follow-on — does bundling it raise the blast radius too far for one batch?
 - Q5: is Phase A (design doc) best delivered as its own sub-batch with its own Kyle sign-off, then Phase B as the build — or one combined scope?
 
-## 6. GOVERNANCE / WORKFLOW
-Step 1 (this scope) → Langston Step-1 iterate-to-consensus → **Kyle approval of the scope (HARD GATE — Kyle directive: do not proceed past scope without approval)** → Step 2 pre-audit (deep SIM per-component) → Phase A design doc → Kyle approval → Phase B build → review/CI/deploy/verify/govern/close. Tier-2 docs in play: SIM (§B70/§B74/§B75/§7.1), System Manual (data pipeline + VTS), MULTI_ASSET_VTS_EXPANSION_PLAN (firehose working-list), data_lifecycle registry.
+## 6. GOVERNANCE / WORKFLOW (two-gate, per Langston R-G)
+Step 1 (this scope) → Langston Step-1 iterate-to-consensus ✅ → **Kyle approval of THIS scope (HARD GATE #1 — Kyle directive: do not proceed past scope without approval)** → **Phase A = its own sub-batch:** Step 2 pre-audit (deep SIM per-component; resolves the R-D `pair_scan` fork + verifies the macro/provenance mode-population) → storage-architecture **design doc** (locks D1-impl choice, pair_scan disposition, tier/retention policy, volume+cold-curve projection) → **Kyle approval of the design doc (HARD GATE #2)** → **Phase B build:** D1 mode-stamp fix (ships FIRST) → D6 B70 tiering fold-in (separate deploy step) → standalone-VTS lifecycle decoupling → review/CI/deploy/verify/govern/close. Tier-2 docs in play: SIM (§B70/§B74/§B75/§7.1), System Manual (data pipeline + VTS), MULTI_ASSET_VTS_EXPANSION_PLAN (firehose working-list), data_lifecycle registry.
