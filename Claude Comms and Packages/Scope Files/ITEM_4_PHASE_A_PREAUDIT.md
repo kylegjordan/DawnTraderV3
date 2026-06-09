@@ -46,6 +46,17 @@
 **Gaps list (paper):** exactly two — stage 6 (D9, learning store keyless on source) + stage 7 (D1, three archivers' write-time global lookup). **Both are terminal-write fixes, not pipeline rewires.** Off-pipeline `getCurrentMode()` users found by the sweep (`drift-dashboard-aggregator.ts` display; `routes.ts` request handlers) fall to the (a)/(c) dispositions — the union list completes when Langston's VTS trace lands.
 **Pair-scan nuance:** `pair-scan-archiver` (stage-7 family) writes the **producer-agnostic** scan tier — under the A.1 storage rule its rows arguably shouldn't carry a producer mode at all (they're shared substrate); decide in the design: `mode→'shared'`/null vs keep-stamp. Flagged for the Gate-2 doc.
 
+### A1.T3 — LIVE control-plane-only trace (no pipeline run pre-Phase-21 — Kyle §1.6 #1)
+Live places real orders or nothing; it is NOT run in item 4, so its trace is the **control plane only** (all sites code-verified in the joint dig / DR1-DR3):
+| # | Control point | Where | Today | Disposition |
+|---|---|---|---|---|
+| 1 | Per-mode active flag | `trading-state-sync.ts:257-258/:403-404` `isEngineActiveLive` (separate system-context row) | already per-mode | ✅ keep — becomes live's independent switch state |
+| 2 | Start handler | `routes.ts:3633-3651` starts ONE engine by `mode` param | mode-explicit but single-switch UX | 🔧 cleave: independent live control; **assert `globalLiveEngine.start()` is NEVER invoked in item 4** |
+| 3 | Global collapse | `run-mode-controller.ts:62-63` `getCurrentMode()` live>paper precedence | THE mislabeler (D1 feeder) | 🔧 retire from producer paths (survives only as (c) any-active display) |
+| 4 | Kill switch | `guardrail-policy.ts` `tripKillSwitch('live')` — per-mode rows, daily-loss 10% | already live-scoped | ✅ keep as-is (LIVE-ONLY per Kyle) |
+| 5 | Second engine registry | `global.tradingEngines` Map (`live-trading-service.ts:160` + `routes.ts:5402/5421` + 6 services) | TWO live-engine models coexist | ⏸ quarantine-flag; reconcile Phase 16/21 (carved out) |
+**Live pipeline trace proper = Phase 21** (when the engine is actually built/run, repeat the T1-style trace on it).
+
 ## A2 — Remaining pre-audit tasks (to complete before the design doc)
 - **A2.1** Live engine internals (`TradingEngine`): confirm the stale/divergent flow + exactly what a "thin live scaffold that consumes compute + writes telemetry but routes zero orders" requires (Q1).
 - **A2.2** Dead-construct disposition: `globalPaperEngine` (live importers at `routes.ts:103/4683` via CommandRouter — quarantine, defer delete to Phase 16) + `global.tradingEngines` stub + `paper-48hr-simulation.ts` (confirm zero importers).
