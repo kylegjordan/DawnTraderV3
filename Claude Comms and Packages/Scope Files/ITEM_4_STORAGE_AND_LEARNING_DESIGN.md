@@ -80,10 +80,13 @@ Every learning observation carries three context labels beyond the existing `(as
 The consumer (the confidence modulator, and any future calibration consumer) **never does a blind union**. Each read declares a purpose:
 | Purpose | Reads | Why |
 |---|---|---|
-| **Broad prior / exploration** (does this tuple have edge at all?) | VTS (`source=vts`, all) | Largest N, unconditional, pre-selection. |
-| **Realized-policy validation** (is our real selection making money?) | Paper (`source=paper`, post-selection) | The accurate deployed-policy distribution. |
+| **Broad signal performance** (how do ALL signals in a regime family trade?) | VTS (`source=vts`, all) | Largest N, unconditional, pre-selection — every candidate fires. |
+| **★ Regime-classification correctness** (are we putting pairs in the *right* regime?) | VTS (`source=vts`, across regime families) | The firehose runs every signal in every regime family, so it is the natural data to validate the regime label + pair→regime assignment. **Ties directly to item 4.7 (per-asset-class regime).** |
+| **Realized-policy validation** (once pairs + signals are filtered, how well does the system actually perform on wins/losses?) | Paper (`source=paper`, post-selection) | The accurate deployed-policy distribution — "the part trying to perform at its best." |
 | **Selection-quality / SQE tuning** (is the filter admitting the right ones?) | VTS `would_admit=true` slice vs paper-admitted vs VTS-all | The B.3 bridge — apples-to-apples across the gate. |
 | **Modulating live signal confidence** (the closed loop today) | **the Gate-2 decision — see B.6** | — |
+
+**★ Kyle's learning-purpose framing (2026-06-09) — authoritative, drives the table above:** *VTS learning = "how do all signals from a regime family trade, and are we selecting/classifying pairs into the right regime?"* (broad signal behavior + regime-classification correctness). *Paper learning = "once we've filtered the pairs and evaluated/filtered the signals, how well is all that being done, judged on wins and losses — the part where the system is trying to perform at its best."* This is exactly the pre-selection (VTS) vs post-selection (paper) split the substrate partitions on; the regime-classification-correctness purpose is the one this framing adds explicitly.
 
 ## B.6 ★ THE GATE-2 DECISION FOR KYLE (D9, plain-language at §5)
 The one genuine choice: **when the learning loop modulates the confidence of a NEW signal, whose realized outcomes should steer it?** Three shapes:
