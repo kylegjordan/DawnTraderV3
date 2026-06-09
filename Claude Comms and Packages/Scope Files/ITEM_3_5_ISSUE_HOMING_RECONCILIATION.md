@@ -23,9 +23,12 @@ Every open issue must land in one of: a between-plan item (4 / 4.5 / 5), Phase 1
 - **Non-resolved entries audited:** ~90 (after excluding entries already RESOLVED/CLOSED in their own text but caught by status-token scan).
 - **Already homed (status/roadmap already names a valid phase):** ~70. The Phase-19 and Phase-25 locked tables alone home ~18 directly (see §2).
 - **Placed by this audit (had a vague/stale/missing home):** ~14 (see §3).
-- **Escalated to Kyle (genuine decision):** 3 clusters (see §4).
-- **Recommend CLOSE as stale/superseded (no longer real open work):** 9 (see §5).
-- **Roadmap reorder (part B):** add a canonical-execution-order block + fix 4 stale labels (see §6). No physical re-sort of 1760 lines; the order is stated explicitly so "numbering ≠ order" stops being a trap.
+- **Escalated to Kyle (genuine decision):** 4 (see §4) — per-class regime / B-NEW-48 (4.1), #142 bundling (4.2), #12e dormant strategies (4.3), **#111 TFS sustainability gate Phase-19-vs-25 reconciliation (4.4, added per Langston review)**.
+- **Recommend CLOSE as stale/superseded (no longer real open work):** **11** (see §5) — 7 clean closes + 4 verify-THEN-close.
+- **Roadmap reorder (part B):** add a canonical-execution-order block (VERBATIM mirror of readiness-checklist §1) + fix 4 stale labels (see §6). No physical re-sort of 1760 lines; the order is stated explicitly so "numbering ≠ order" stops being a trap.
+
+> **★ Langston second-pass applied (2026-06-09).** Langston reviewed v1 and AGREED §6 as-is, §4.2/§4.3, and §5 substance — with two real catches + a tally fix now folded in: (a) **#111** was silently re-homed Phase-19→25 and labelled "stale" in v1; it was a locked 3-way Kyle/CC/Langston decision (2026-05-17), so v2 escalates it (§4.4) instead of overriding. (b) **#162** already has a sequencing lock — Kyle directive 2026-05-30 "B-NEW-48, after B-NEW-47, conditional on a consumer-impact check"; B-NEW-47 shipped, so #162's home is **B-NEW-48** (not floating), #163 pairs under it; v2 §4.1 reframed. (c) §5 count fixed 9→11; the 4 verify-first entries flagged mandatory. (d) §2 dedupe: #107/#172/#132 double-listed (compatible homes, dedupe before tally); #130 dangling "RTB #11" internal ID reconciled to its Phase-19 home.
+> **★ Kyle decision (2026-06-09):** per-class regime → **"decide during calibration."** Reconciles with the B-NEW-48 lock: B-NEW-48's go/no-go is folded into Phase 25 (decide the principle there; do the #163 code restructure in cleanup only if yes). Keeps it off the pre-live critical path.
 
 ---
 
@@ -63,7 +66,7 @@ Legend: ✓ = home already stated in entry/roadmap; ▲ = placed by this audit; 
 |---|---|---|---|
 | 94 | xStock equity-equivalent macro confidence modifiers | Phase 25 (25-7) | ✓ |
 | 153 | xstock pattern_max_position_pct 0.50 validation | Phase 25 (25-8) | ✓ |
-| 111 | TFS sustainability gate value-scope decision | Phase 25 (25-3) — **status tag "Phase 19 prereq" is STALE, reconcile** | ▲ |
+| 111 | TFS sustainability gate value-scope decision | **ESCALATED §4.4** — recommend Phase 25 (25-3) but it was a locked 2026-05-17 Phase-19 decision; Kyle confirms the move | ⚑ |
 | 205 | HCE rejected-arm causal test | Phase 25 (25-15) | ✓ |
 | 206 | decision-provenance accrual (capture DONE) | Phase 25 (25-12 study; #206 accrual alert) | ✓ |
 | 203 | ORB enable=FALSE pending own study | Phase 25 (25-14); ORB *plumbing* may run pre-19 | ✓ |
@@ -134,6 +137,8 @@ Legend: ✓ = home already stated in entry/roadmap; ▲ = placed by this audit; 
 |---|---|---|---|
 | 142 | SCORING.b wildcard retirement (gate passed, bundling TBD) | Phase 16 cleanup OR fold into a Phase-19 SQE touch — **recommend Phase 16** | ⚑ |
 
+> **Dedupe before the final tally (Langston catch):** three entries appear in two compatible homes — **#107** (Phase 16 + Phase 20.4 security), **#172** (Phase 16 + storage cluster), **#132** (Phase 16 + Phase 16.7/20.3). Homes are compatible (not wrong) but the summary count must dedupe them to one primary home each: #107→Phase 20.4, #172→storage/Phase 20.2, #132→Phase 16.7. Also **#130**'s own text says "RTB batch (#11) scope" — reconcile that dangling internal batch-ID to its Phase-19 home so it doesn't read as two homes.
+
 ---
 
 ## 3. ITEMS PLACED BY THIS AUDIT (had vague/stale/missing home) — ▲ rows above
@@ -143,17 +148,19 @@ The substantive placements: #166, #130, #138, #150, #158, #159, #122, #173, #99b
 
 ## 4. ESCALATED TO KYLE — genuine decisions (recommended placement in brackets)
 
-**4.1 — Per-asset-class REGIME (architecture) — #162 + #163.** Today REGIME is computed globally (one regime for the whole system), while DBS and friction are already per-asset-class. #162 flags that as an architectural inconsistency; #163 is the concrete code restructure (the canonical regime→strategy map to a per-asset-class shape) that a per-class regime would require. Making regime per-asset-class is a real design change with calibration blast-radius, not a cleanup. **Recommend:** decide the *principle* in Phase 25 (does per-class regime change xStock vs crypto calibration enough to matter?), and if yes, do the code restructure (#163) in Phase 16/20.5 architecture cleanup. **Kyle's call:** is per-class regime in-scope pre-live, or a post-live enhancement?
+**4.1 — Per-asset-class REGIME — #162 + #163. [REFRAMED per Langston catch + RESOLVED by Kyle 2026-06-09]** Today REGIME is computed globally (one regime for the whole system) while DBS and friction are already per-asset-class. **#162 is NOT homeless** — it already carries a sequencing lock (Kyle directive 2026-05-30: "scheduled as B-NEW-48, sequenced AFTER B-NEW-47, conditional on a consumer-impact check at B-NEW-48 scoping"). B-NEW-47 shipped (#161 closed 2026-06-01), so #162's home is **B-NEW-48**; **#163** (the canonical regime→strategy map per-class restructure) pairs UNDER B-NEW-48 as the code the per-class-regime decision would entail. **Kyle decision 2026-06-09: "decide during calibration."** Resolution: **B-NEW-48's go/no-go folds into Phase 25** — decide the principle there (does splitting regime change xStock-vs-crypto tuning enough to matter?); run the #163 restructure in cleanup (Phase 16 / 20.5) only if yes. Off the pre-live critical path. No further Kyle input needed; recorded.
 
-**4.2 — #142 SCORING.b wildcard retirement (bundling TBD).** Gate passed, cleared to ship, but never bundled. **Recommend:** fold into the Phase-16 cleanup pass (it's a dead-wildcard removal, same family as #73). Confirm or assign elsewhere.
+**4.2 — #142 SCORING.b wildcard retirement (bundling TBD). [Langston AGREE]** Gate passed, cleared to ship, never bundled. **Resolution:** fold into the Phase-16 cleanup pass (dead-wildcard removal, same family as #73). Langston concurred.
 
-**4.3 — #12e regime-gated strategies dormant.** Deferred 2026-04-09 with no schedule. Either (a) it's genuinely a Phase-25 strategy-calibration question (do these strategies ever earn their keep?), or (b) accepted-dormant and closeable. **Recommend:** fold into Phase 25 strategy calibration; close the standalone tracker. Confirm.
+**4.3 — #12e regime-gated strategies dormant. [Langston AGREE]** Deferred 2026-04-09 with no schedule. **Resolution:** fold into Phase 25 strategy calibration ("do these strategies ever earn their keep?"); close the standalone tracker. Langston concurred.
+
+**4.4 — #111 TFS sustainability gate — Phase-19-vs-Phase-25 reconciliation. [ADDED per Langston catch — KYLE DECISION NEEDED]** v1 silently re-homed #111 from its "Phase 19 prerequisite" tag to Phase 25 (25-3) and called the tag "stale." Langston correctly flagged that #111 was a **locked 3-way Kyle/CC/Langston decision (2026-05-17)** — "table-until-Phase-19, TEC routing as candidate near-term hook, with a Phase-19 decision tree when calibration work opens" — so it must not be unilaterally reclassified. The tension is real: the issue tracker says Phase 19, but the roadmap's locked Phase-25 table lists the same item at **25-3** ("recalibrate / re-target / deprecate the sustainability gate **against paper-active data**"). Since the decision needs paper-active win/loss outcomes to make, my read is it belongs in Phase 25 — **but Kyle was party to the original Phase-19 call, so this is his to confirm.** **Recommended:** move #111 to Phase 25 (25-3); keep the Phase-19 entry as a pointer. **Kyle's call:** confirm move to calibration (Phase 25), or keep it tabled in Phase 19 per the 2026-05-17 lock?
 
 ---
 
 ## 5. RECOMMEND CLOSE — stale / superseded (no longer real open work)
 
-These are flagged OPEN but their underlying work expired, shipped, or was superseded — they were never flipped. Recommend closing (with the cited reason) rather than carrying them into a phase:
+These are flagged OPEN but their underlying work expired, shipped, or was superseded — they were never flipped. Recommend closing (with the cited reason) rather than carrying them into a phase. **Count: 11 — 7 clean closes (43*, 49*, 50*, 53*, 74, 78, 135-ORIG) + 4 verify-THEN-close (87, 128, 55, 81). The 4 verify-first steps are MANDATORY, not skipped (Langston). *The four window-trackers (43/49/50/53) close the OBSERVATION WINDOW only — their residual calibration analysis must land in Phase 25 (25-2 / 25-9), not evaporate.**
 
 | # | Why close |
 |---|---|
@@ -177,7 +184,7 @@ These are flagged OPEN but their underlying work expired, shipped, or was supers
 
 The roadmap presents phases in numeric order (16 → 17 → 18 → 17.5 → 19.0 → 19 → 20 → 21 → 22 → 21.4 → 21.5), which misleads because the real execution order differs. **Proposed edits (4):**
 
-1. **Add a "★ CANONICAL EXECUTION ORDER" block at the top of "Where We Are"** stating the §0 order explicitly (between-plan items 4/4.5/5 → 19 → 25 → 16+20 → 21 → post-live 22/21.4/21.5/26/17-18), with the standing note "phase NUMBERS are not the run order." This is the single authoritative ordering statement; the readiness-checklist §1 already holds it — mirror it into the roadmap so the roadmap stops contradicting itself.
+1. **Add a "★ CANONICAL EXECUTION ORDER" block at the top of "Where We Are"** stating the §0 order explicitly (between-plan items 4/4.5/5 → 19 → 25 → 16+20 → 21 → post-live 22/21.4/21.5/26/17-18), with the standing note "phase NUMBERS are not the run order." **GUARDRAIL (Langston): this block MUST be a VERBATIM mirror of `PHASE_24_TO_19_READINESS_CHECKLIST.md` §1 "CANONICAL EXECUTION ORDER AFTER PHASE 19," not a paraphrase** — a paraphrase creates a *third* divergent ordering statement and reintroduces the exact contradiction this fixes. Copy the checklist's wording literally; the readiness checklist remains the source, the roadmap block points back to it.
 
 2. **Fix the Phase 19.0 stale label.** "Phase 19.0: VTS Partition + Exchange-Data Adapter — DEFERRED TO POST-LAUNCH (2026-05-21)" is now stale: the VTS standalone always-on sim is between-plan **item 4** (pre-19, Kyle 2026-06-08). Update the header to point at item 4 + the §5a storage-architecture design; keep the exchange-data-adapter piece as post-launch if still deferred.
 
