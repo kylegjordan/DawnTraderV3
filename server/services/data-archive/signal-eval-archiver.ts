@@ -22,6 +22,7 @@ import { enqueueArchiveRow, registerArchiveTable } from './archive-batch-writer.
 import { getArchiveConfig, provenanceCaptureEnabled } from './archive-config.js';
 import type { RunMode } from '../run-mode-controller.js'; // ITEM-4 step 2: carried tag — getCurrentMode() write-time lookup DELETED (D1)
 import { takeArchiveId } from './archive-id-allocator.js';
+import { getPaperFinalScoreMinSync } from './would-admit-cache.js'; // ITEM-4 step-2b: the B.3 bridge
 import { resolveConstantsProvenance, recordConstantsVersion } from './decision-provenance.js';
 
 const TABLE = 'signal_eval_archive';
@@ -223,7 +224,34 @@ export function archiveSignalEval(input: SignalEvalArchiveInput): void {
     reject_stage: input.rejectStage,
     final_score: input.finalScore ?? null,
     confidence_modulated: input.confidenceModulated ?? null,
-    features: { schema_version: 1, ...(input.features ?? {}) },
+    // ITEM-4 step-2b (2026-06-10) — the B.3 would_admit bridge, v0:
+    // VTS rows get tagged with the single-check verdict "vts finalScore >=
+    // PAPER-mode SQE finalScoreMin (this asset class)". Basis + threshold are
+    // stamped so consumers know exactly what v0 means (see would-admit-cache
+    // header + #211 — VTS finalScore is a different implementation than the
+    // orchestrator's). null + 'thresholds_not_warm' while the TTL cache fills.
+    features: {
+      schema_version: 1,
+      ...(input.features ?? {}),
+      ...(input.mode === 'vts'
+        ? (() => {
+            // N1 (Langston): EVERY post-deploy VTS row carries a basis —
+            // rows without a finite finalScore are distinguishable from
+            // pre-deploy rows in Phase-25 slicing.
+            if (!Number.isFinite(input.finalScore)) {
+              return { would_admit_v0: null, would_admit_basis: 'no_final_score' };
+            }
+            const thr = getPaperFinalScoreMinSync(input.assetClass);
+            return thr === null
+              ? { would_admit_v0: null, would_admit_basis: 'thresholds_not_warm' }
+              : {
+                  would_admit_v0: (input.finalScore as number) >= thr,
+                  would_admit_basis: 'final_score_vs_paper_finalScoreMin',
+                  would_admit_threshold: thr,
+                };
+          })()
+        : {}),
+    },
     modulators: { schema_version: 1, ...(input.modulators ?? {}) },
     gate_decision: { schema_version: 1, ...(input.gateDecision ?? {}) },
   });
