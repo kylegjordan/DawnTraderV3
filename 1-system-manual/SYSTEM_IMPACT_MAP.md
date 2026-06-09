@@ -2815,3 +2815,18 @@ export function getPatternPoolGuardrailsForAssetClass(
 
 ### Mode-tag architecture (Kyle stamp-at-entry, step-1 first installment)
 - `vts-runner.ts` stamps `sourceMode:'vts'` on every pair at the possession boundary (post-`getIdealPoolPairs()`). Target end-state: the tag rides the payload through selection→queue→storage; every mode-sensitive consumer reads the CARRIED tag, never `getCurrentMode()`. Paper path already carries mode (`SQESignalInput.mode` → `RtbSignal.mode` → TCL maps → engine ctor) — the B79.0n threading. Remaining re-points (step 2): 3 B70 archivers (drop write-time `getCurrentMode()`), 5 hardcoded VTS literals, `outcomeFeedbackStore` source-partitioned key, D1b buffer namespace.
+
+## Recent Additions (ITEM 4 Phase B step 2 — D1/D1b/D9 contamination fixes + labeled learning substrate, 2026-06-10)
+
+### B70 archive `mode` column — VALUE-SET ADDITION: `'shared'`
+- The B70 vocabulary was `'vts' | 'paper_sim' | 'live'` (column TEXT NOT NULL, no constraint). **`pair_scan_archive` rows now stamp the literal `'shared'`** — the scan tier is the producer-agnostic substrate (sole writer = the MCE scan cycle, computed once for ALL producers; zero mode-filtered readers existed). Stamping a single producer's mode on shared rows becomes a lie under concurrency. `signal_eval_archive` + `exit_decision_archive` now take REQUIRED `mode` from the CALLER's carried tag (`getCurrentMode()` write-time lookup DELETED from all three archivers).
+- **⚠️ Future-mis-stamp note (Langston step-2 review):** the four hardcoded `'vts'` stamps in `xstock_spot/eval-cycle.ts` are correct today because `evaluateXstockPairForVTS` is only invoked from the VTS xstock path. If a future batch routes ACTIVE xStock trading through that eval, the literal becomes a mis-stamp — that batch MUST thread a mode param instead.
+
+### `server/core/metrics/outcome-feedback-store.ts` — D9 labeled multi-source substrate (re-architected)
+- Key: `<source>_<assetClass>_<regime>_<strategy>`; `source` REQUIRED first param on updateEma/peek, type `LearningSource = RunMode` (ONE system-wide vocabulary — no store-vs-archive mapping seam). SOURCE-MATCHED reads (Gate-2 decision): every consumer reads its OWN partition. Welford triplet (w_count/w_mean/w_m2) + `epoch` maintained ALONGSIDE the retained EMA (zero factor-behavior change). 2-stage disk re-key: all pre-step-2 entries → `vts_` partition (verified on staging: 30/30). Writers: vts-service ('vts'), paper-execution-engine (own mode). Readers: vts-runner ('vts'), signal-orchestrator (own mode).
+
+### `server/core/metrics/calibration-epoch.ts` (NEW) + `module_constants` module `calibration_epoch`
+- `getCalibrationEpoch(source)` — sync read of the warmed B72 cache; fail-hard on missing row. Boot assertion in `b72-warmup.ts` requires ALL THREE per-source rows (partial seed = deploy-time failure, not silent mid-close outage). Governance rules in ADJUSTMENT_FRAMEWORK "CALIBRATION EPOCHS".
+
+### `server/services/hybrid-confluence-buffer.ts` — D1b FIXED
+- Key now `sourceMode_symbol_patternType`; `BufferedPatternSignal.sourceMode` REQUIRED; `findCompatiblePatterns(symbol, sourceMode)` filters per-source. The three cross-producer contamination vectors (active-path boost from VTS patterns, decay-clock cross-refresh, active→VTS training leak) are dead. RUNNING_ISSUES #210 gate satisfied by this step.

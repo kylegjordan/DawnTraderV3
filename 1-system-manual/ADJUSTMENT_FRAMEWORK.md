@@ -536,3 +536,16 @@ Per Langston pre-audit rev1 #4: cataloguing the new per-asset-class behavioral k
 **Adjustment audit trail:** any future tune must go through the standard `module_constants` UPDATE pattern with `updated_by` set to a recognizable batch ID; the audit trail is the row-version history in module_constants.
 
 — Added 2026-05-17 with B-NEW-42b close.
+
+---
+
+## CALIBRATION EPOCHS — per-source learning-lineage governance (ITEM-4 Phase B step 2, 2026-06-10; Langston-amended v0)
+
+Every learning SOURCE (`vts` / `paper_sim` / `live`) carries an integer **calibration epoch** (`module_constants`, module `calibration_epoch`, one constant per source; seeded at 1 by `2026-06-10-item4-step2-calibration-epoch.sql`). Learning aggregates stamp the writer's current epoch; on mismatch the Welford stream RESETS so pre- and post-calibration outcomes never silently blend (the trap that data-blocked the W2.x studies).
+
+**RULES (mandatory):**
+1. **BUMP-SCOPE:** a calibration-affecting change scoped to ONE source bumps THAT source's epoch only. A SHARED-substrate change (MCE indicator math, SQE thresholds, regime-map edits, strategy detect/scoring constants used by all producers) bumps ALL sources.
+2. **ENFORCEMENT:** every calibration-batch completion report MUST contain either the epoch bump (old → new, which sources, why) or an explicit **"no calibration impact"** line. Checked at Step 4 + Step 8 — omission is a review failure, not an oversight.
+3. **MECHANICS:** bumps go through the canonical module_constants write path (the B72 family) — never a direct DB poke. Boot asserts all 3 rows exist (b72-warmup hard-fail).
+4. **KNOWN LIMITATION (accepted, documented):** on a bump, the Welford stream resets honestly but the legacy EMA continues carrying cross-epoch signal until a future estimator swap (Gate-2 B.7 #2 deliberately retained the EMA as the live factor input — do NOT "fix" this as a bug; it is a recorded design trade).
+5. Auto-bump detection = future enhancement; v0 is manual-but-mandatory.
