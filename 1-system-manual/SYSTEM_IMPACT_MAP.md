@@ -449,25 +449,21 @@
 - **File**: `server/services/ml-calibration.ts` (~232 lines)
 - **What**: Phase-10 ML training loop. Analyzes VTS outcomes, generates learning recommendations.
 - **Upstream**: VTS Service (trade data, 10-HYBRID trigger)
-- **Downstream**: Python ML microservice, calibration coefficient persistence (`logs/vts_calibration.json`)
+- **Downstream**: predictive-adjustments log (`logPredictiveAdjustment`). **NOTE (B-NEW-54, 2026-06-08):** despite the name, this is pure TypeScript — it does NOT call the (now-retired) Python ML microservice. It is a decorative predictive-learning piece (observational only) → logged to the Phase-16 legacy register (RUNNING_ISSUES #136) as a teardown candidate.
 - **Execution**: **Triggered** — every 10 HYBRID trades
-- **Blast Radius**: **MEDIUM** — affects learning parameter adjustments
+- **Blast Radius**: **LOW** — observational; recommendations are logged, not applied
 
-### 7.4 Python ML Microservice
-- **File**: `services/ml_service.py` (~73KB), client: `server/services/ml-service-client.ts` (~245 lines)
-- **What**: Parameter optimization, learning rate adjustments, performance prediction.
-- **Upstream**: ML Calibration Service (HTTP calls to localhost:5001)
-- **Downstream**: Drift Detector, strategy parameter tuning
-- **Execution**: **Separate Python process** — HTTP API on localhost:5001
-- **Blast Radius**: **MEDIUM** — isolated microservice with defined API
+### 7.4 Python ML Microservice — ❌ RETIRED (B-NEW-54, 2026-06-08)
+- **Status**: **REMOVED.** `services/ml_service.py` + `server/services/ml-service-client.ts` + `services/requirements.txt` deleted; boot-orchestrator spawn/health stripped; PM2 `dawntrader-ml` app removed; staging process killed + venvs/models cleaned. Was a decorative Phase-8-era predictive helper — its promotion/profit predictions were fetched fire-and-forget in the signal orchestrator, logged, and discarded (no decision consumer). The real ML is a fresh Phase 17/18 design, not a revival. See `B_NEW_54_REMOVAL_*` + the completion report.
+- **Former role**: promotion-probability + profit-forecast predictions via HTTP on localhost:5001.
 
 ### 7.5 Drift Detector
 - **File**: `server/services/drift-detector.ts` (~400-457 lines)
-- **What**: Monitors calibration parameter drift (α, β, σ) per strategy. 10-snapshot rolling window. Auto-recalibrates when thresholds exceeded.
+- **What**: Monitors calibration parameter drift (α, β, σ) per strategy. 10-snapshot rolling window. **B-NEW-54: `triggerRecalibration` is now a logged no-op** (it used to POST to the retired ML microservice's `/drift/retrain`); drift is still detected/logged/broadcast, but the retrain ACTION is retired.
 - **Upstream**: VTS trade outcomes, parameter history
-- **Downstream**: ML microservice (recalibration trigger)
+- **Downstream**: (none — the ML retrain target was removed B-NEW-54). Still feeds the drift dashboard (`vts.ts`) + health route.
 - **Execution**: **15-minute interval**
-- **Blast Radius**: **MEDIUM** — affects when recalibration occurs
+- **Blast Radius**: **LOW** — observational (drift dashboard); recalibration action is a no-op
 
 ### 7.6 Telemetry Aggregator
 - **File**: `server/services/telemetry-aggregator.ts` (~200+ lines)
@@ -523,10 +519,10 @@
 ## Layer 9: Infrastructure & Monitoring
 
 ### 9.1 Boot Orchestrator
-- **File**: `server/core/boot_orchestrator.ts` (~348 lines)
-- **What**: Manages Python ML microservice lifecycle. Auto-spawn, health polling, graceful shutdown. Initializes VTS Runner.
-- **Execution**: During server startup, then **30-second health monitoring**
-- **Blast Radius**: **HIGH** — controls service initialization order
+- **File**: `server/core/boot_orchestrator.ts` (~140 lines)
+- **What**: Initializes the VTS Runner during startup (pattern-history warmup → `initVTSRunner` → autonomous-sim auto-start in passive mode) + manages graceful shutdown (`stopVTSRunner`). **B-NEW-54 (2026-06-08): the Python ML microservice lifecycle (spawn / health-polling / metrics) was REMOVED** — the helper was retired; the orchestrator boots VTS only. Degraded-mode-first (VTS init errors logged, never hard-stop boot).
+- **Execution**: During server startup
+- **Blast Radius**: **HIGH** — controls VTS service initialization order
 
 ### 9.2 Startup Sequence (server/index.ts)
 - **File**: `server/index.ts` (~1,260 lines, monolithic)
@@ -752,7 +748,7 @@
 | **Hetzner Staging Server** | 188.245.193.8, Ubuntu 24.04, Node 20, PM2, nginx, deploy user, Python 3 venv for ML | Primary runtime environment. Replaces Replit. |
 | **Supabase PostgreSQL** | db.vqqyisaudwenrdhnmjwt.supabase.co:5432, Frankfurt region | Database host. Replaces Neon serverless. Standard `pg` driver via `server/db.ts`. |
 | **nginx** | Reverse proxy on port 80, upstream to localhost:5000. WebSocket upgrade for `/ws`. Rate limiting on `/api/`. | SSL-ready (certbot). Config at `/etc/nginx/sites-available/dawntrader`. |
-| **PM2** | Process manager for `dist/index.js` as `dawntrader` process under `deploy` user. | Logs at `/home/deploy/.pm2/logs/`. Ecosystem config at `ecosystem.config.cjs`. |
+| **PM2** | Process manager for `dist/index.js` as the **single** `dawntrader` process under `deploy` user. | Logs at `/home/deploy/.pm2/logs/`. Ecosystem config at `ecosystem.config.cjs`. **B-NEW-54 (2026-06-08): the second `ml-service`/`dawntrader-ml` Python process was retired** — PM2 now manages one app; `dump.pm2` carries only `dawntrader`. |
 | **GitHub Actions CI** | `.github/workflows/ci.yml` — typecheck, build, Docker build on push to migration branch. | Deploy-staging workflow is a template (not active until secrets configured). |
 | **Docker** | `Dockerfile` (multi-stage: Node 20 + Python 3 for ML). `.dockerignore`. `docker-compose.yml`. | Available for containerized deployments but PM2 is primary on staging. |
 | **Langston Server** | 204.168.141.77 (Hetzner, Helsinki). OpenClaw gateway, Telegram bot, cc-inbox, Google Drive mount. | Separate from staging. NOT moved during migration. |

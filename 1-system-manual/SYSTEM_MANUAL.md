@@ -5656,11 +5656,11 @@ Standard OLS (Ordinary Least Squares) regression with:
 
 ---
 
-## 6. ML Service Client — Python Microservice Bridge
+## 6. ML Service Client — Python Microservice Bridge — ❌ RETIRED (B-NEW-54, 2026-06-08)
 
-**File**: `server/services/ml-service-client.ts` (~245 lines)
-**Directive**: 8.8.4-L3
-**Status**: Active (but depends on external Python service availability)
+**File**: `server/services/ml-service-client.ts` — **DELETED.**
+**Directive**: 8.8.4-L3 (Phase-8-era)
+**Status**: **RETIRED.** The Python ML predictive microservice (`services/ml_service.py`) + this client were removed in B-NEW-54. The helper was decorative — its promotion/profit predictions were fetched fire-and-forget in the signal orchestrator, logged, and discarded (no decision consumed them). The real ML is a fresh Phase 17/18 design ("ML Adaptive Intelligence Layer"), not a revival. The chapter below is retained for historical reference. See SIM §7.4 + the B-NEW-54 completion report.
 
 ### Purpose
 
