@@ -12,7 +12,9 @@
  * - Per-pair regime calculation (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, etc.)
  * - Regime → Strategy mapping with signalType selection
  * - 100-pair Ideal Pool integration
- * - Automatic stop when tradingActive=true
+ * - ITEM-4 O1 (2026-06-09): standalone always-on — runs INDEPENDENT of
+ *   tradingActive (the automatic-stop coupling was removed; lifecycle is
+ *   VTS's own start/stop only, with re-entrancy/overlap/containment guards)
  * - Generates virtual trades for Telemetry + Predictive Learning
  * 
  * Legacy Features (Preserved):
@@ -163,6 +165,11 @@ let isInitialized = false;
 let calibration: CalibrationCoefficients | null = null;
 let autonomousLoopInterval: NodeJS.Timeout | null = null;
 let isAutonomousRunning = false;
+// ITEM-4 O1 lifecycle guard (2026-06-09): prevents overlapping simulation
+// cycles now that the loop runs concurrently with active trading. Skip count
+// is the O6 throughput-study in-process starvation signal.
+let vtsCycleInFlight = false;
+let vtsCycleOverlapSkips = 0;
 let sessionStartTime: number | null = null;
 let cycleCount = 0;
 let patternRecognitionWarmedUp = false;
@@ -3103,30 +3110,26 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   // Directive 11.6: First resolve any open trades before creating new ones
   await resolveOpenVirtualTrades();
-  
-  const config = await getSystemConfig();
-  if (config.tradingActive) {
-    console.log('[11.0E.1][VTS] Skipping cycle - tradingActive=true');
-    return {
-      cycleId: cycleCount,
-      pairsEvaluated: 0,
-      tradesSimulated: 0,
-      avgFinalScore: 0,
-      regimeDistribution: {} as Record<MarketRegimeType, number>,
-      signalTypeDistribution: {},
-      strategiesExecuted: [],
-      cycleDurationMs: Date.now() - cycleStart,
-      timestamp: Date.now()
-    };
-  }
-  
+
+  // ITEM-4 O1 (2026-06-09): the tradingActive cycle-skip guard is REMOVED.
+  // VTS is a standalone always-on producer — it runs regardless of paper/live
+  // active-trading state (Kyle Gate-2 design, ITEM_4_GATE2_DESIGN_PACKET.md §3 O1).
+  // Lifecycle is governed ONLY by VTS's own start/stop (isAutonomousRunning).
+
   // Batch 19F Phase 2: getIdealPoolPairs() now returns ALL pairs from FX5 scan batch
   // with sourcePool tags (quant/pattern) already set. This is the SOLE pair source for VTS.
   // The FX5 scan batch includes duplicated entries for pairs that pass BOTH filter paths
   // (each entry tagged with the respective sourcePool), matching active trading path parity.
   // CRITICAL FIX: Previous code called activeFilterPool.getPatternPool('paper') which returns
   // EMPTY during passive learning — active filter pool only populates when trading is ACTIVE.
-  const allPairs = await getIdealPoolPairs();
+  //
+  // ITEM-4 ENTRY-STAMP (2026-06-09, Kyle stamp-at-entry architecture): this is the
+  // POSSESSION BOUNDARY — where VTS takes the shared FX5 compute output as its own
+  // working set. Every pair is stamped sourceMode='vts' HERE and the tag rides the
+  // payload through the pipeline. Downstream stages read the carried tag — never a
+  // global "current mode" lookup. (Consumer re-points = Phase B step 2 / D1+D9;
+  // threading pattern identical to the proven asset_class dimension, B79.0n.)
+  const allPairs = (await getIdealPoolPairs()).map(p => ({ ...p, sourceMode: 'vts' as const }));
 
   // Split pairs by sourcePool for logging and strategy routing
   const quantPairs = allPairs.filter(p => isQuantPool(p.sourcePool));
@@ -3906,11 +3909,9 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
     return { success: true, message: 'Autonomous simulation already running' };
   }
   
-  const config = await getSystemConfig();
-  if (config.tradingActive) {
-    return { success: false, message: 'Cannot start autonomous simulation while trading is active' };
-  }
-  
+  // ITEM-4 O1 (2026-06-09): the tradingActive start-refusal guard is REMOVED.
+  // VTS starts regardless of paper/live state (standalone always-on producer).
+
   await loadVTSConfig();
   
   if (!isInitialized) {
@@ -3937,14 +3938,33 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
   isAutonomousRunning = true;
 
   autonomousLoopInterval = setInterval(async () => {
-    const sysConfig = await getSystemConfig();
-    if (sysConfig.tradingActive) {
-      console.log('[11.0E.1][VTS] Trading activated - stopping autonomous simulation');
-      stopAutonomousSimulation();
+    // ITEM-4 O1 (2026-06-09): the tradingActive self-teardown is REMOVED — VTS
+    // never stops because paper/live turned on. LIFECYCLE GUARD instead:
+    // (a) re-entrancy — a tick that fires after stopAutonomousSimulation()
+    //     mid-flight is a no-op (interval cleared, belt-and-suspenders);
+    // (b) overlap — if the previous cycle is still running (long cycle vs the
+    //     interval, or event-loop pressure under concurrent producers), skip
+    //     this tick rather than stacking cycles. Skips are logged — a growing
+    //     skip count is exactly the O6 throughput-study starvation signal.
+    if (!isAutonomousRunning) return;
+    if (vtsCycleInFlight) {
+      vtsCycleOverlapSkips++;
+      console.warn(`[ITEM4][VTS] Cycle overlap — previous cycle still running; tick skipped (total skips: ${vtsCycleOverlapSkips})`);
       return;
     }
-
-    await runPhase10SimulationCycle();
+    vtsCycleInFlight = true;
+    try {
+      await runPhase10SimulationCycle();
+    } catch (err) {
+      // ITEM-4 O1 containment (Langston Step-4 required revision): an uncaught
+      // cycle throw must NOT escape the async interval callback — post-O1 the
+      // VTS shares the process with live trading paths, and an unhandled
+      // rejection would crash the process with open positions (Node >=15
+      // default). Contained + logged; the next tick proceeds normally.
+      console.error('[ITEM4][VTS] Cycle error (contained):', err);
+    } finally {
+      vtsCycleInFlight = false;
+    }
   }, vtsConfig.simulationIntervalSec * 1000);
 
   return { success: true, message: `Phase-10 autonomous simulation started (${vtsConfig.pairsPerCycle} pairs every ${vtsConfig.simulationIntervalSec}s)` };
