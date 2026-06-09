@@ -2,7 +2,25 @@
 
 > Kyle directive 2026-06-09: the small "VTS standalone" scope is wrong — all three systems (VTS / paper / live) share helpers and a mode-switch, and must be untangled. Kyle asked: investigate the full shared surface + the switch + throughput, think hard about **timing (do it now vs. a better place)**, and produce findings + a recommendation he reads BEFORE it goes to Langston.
 >
-> **Status:** CC findings + recommendation, 2026-06-09. Code-level investigation (files cited). **Not yet sent to Langston** (per Kyle's process: Kyle reads first). No build.
+> **Status:** CC findings + recommendation, 2026-06-09. Code-level investigation (files cited). No build.
+
+---
+
+## 0. ★ CORRECTED FINDINGS + CONVERGED RECOMMENDATION (CC + Langston code-verified joint dig, 2026-06-09)
+**Kyle directed a joint dig with Langston. Result: Kyle's mental model is CORRECT on all four pillars; my §2/§5 first-read below was WRONG on two load-bearing points. This section supersedes them.**
+
+**Kyle's model — VERIFIED correct (Langston, code-level):**
+1. **VTS genuinely STOPS when active trading turns on** — it is NOT merely relabeled. The kill is in `vts-runner.ts` (`:3108` skip-cycle, `:3941-3945` the loop calls `stopAutonomousSimulation()` and tears down the interval, `:3909` refuses to start) — all gated on `tradingActive` (= `!passiveLearning` = `!isEngineActive`). `startPaperSimulation` flips `setEngineActive(true)` → VTS interval torn down. **(My draft marked this ◑ "likely relabeled" — WRONG; my grep missed it because the gate var is `tradingActive`, not `isEngineActive`. This is the whole reason item 4 exists: you cannot turn on active-paper today without going dark on VTS learning.)**
+2. **Live ≠ a clone of paper.** PAPER runs on `PaperExecutionEngine` (flow: orchestrator → SQE → RTB queue → TCL → execution). LIVE runs on a DIFFERENT, older class `TradingEngine` (`globalLiveEngine`, `routes.ts:99/3651`) on the **pre-RTB-queue direct `processSignal` flow that paper explicitly abandoned**. Plus two DEAD constructs: `globalPaperEngine` (TradingEngine 'paper', `.start()` never called — vestigial) and `global.tradingEngines` (a literal stub object — dead placeholder). **(My draft said "live is literally a 2nd instance of the same class" — WRONG. Lighting up live is a REBUILD, not a copy-paste from paper.)**
+3. **One shared UI scaffolding** — single `TradingModeContext` (binary mode, localStorage), `invalidateQueries()` on switch, same components re-fetch mode-scoped data; no per-mode pages; VTS has no trading page (telemetry-only). **Exactly Kyle's model.**
+4. **Legacy is SEPARABLE (better than my draft implied):** `PaperExecutionEngine`'s real constructor is `constructor(mode)` (mode-only; the 1 `userId` ref is ignored/audit-only). The genuinely-legacy `paper-48hr-simulation.ts` has ZERO importers (dead). So the to-be-deleted legacy is dead entrypoints, not load-bearing wiring.
+
+**CONVERGED RECOMMENDATION (CC + Langston agree; Langston drew the boundary tighter — adopted):**
+- **DO NOW (item 4 — bounded, testable with ZERO real trades):** (a) **decouple VTS's always-on loop from the `tradingActive` kill** (the `vts-runner.ts:3108/3909/3941` guards + the `passiveLearning`/`isEngineActive` derivation) so the firehose keeps learning while active-paper runs — THIS is the real item-4 ask; (b) **D1 mode-stamp per-producer** + (c) **D9 single-writer learning** so active-paper doesn't silently corrupt the firehose's data/learning. Small, bounded, no live involvement.
+- **DEFER — do NOT do now (carve OUT of item 4):** the **live `TradingEngine` reconciliation** (RTB-queue parity with paper, deleting the vestigial `globalPaperEngine` + the `tradingEngines` stub, building live properly). This is **Phase-16 legacy cleanup (kill the dead constructs) + Phase-21 live-bringup (build live for real)**. **Building a "live stub" NOW buys nothing** — live stays dormant through Phase 19 regardless, and it's a rebuild not a clone, so a stub now is throwaway work.
+- **NET:** item 4 is NOT "untangle all three systems now." It is **"free VTS from the active-trading kill + stop the two contamination points."** The big/scary part (the divergent stale live engine) is real but belongs LATER, where it naturally lands. This keeps the now-work small and de-risks Phase 19 (debug paper-active alone, not paper-active + a concurrency/live rebuild). The throughput/three-on-under-load question is still untouched → deep pre-audit.
+
+**Original first-read findings (§2/§5 below) retained for the record — but the two ❌ corrections above override them.**
 
 ---
 
