@@ -845,9 +845,12 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 - `server/tests/integration/b72-dbs-routing-guards-consistency.test.ts` — DBS routing guards mutual consistency.
 - `server/tests/unit/b70-run-mode-controller.test.ts` — Run mode controller.
 
+**★ TIMING (Kyle 2026-06-08, reaffirmed 2026-06-09):** the test-suite cleanup now runs at the **START of Phase 19** as a debugging-enabler (green tests are needed to debug paper-active confidently), NOT in Phase 16. The full roadmap reorder to the canonical post-19 order is between-plan item 3.5.
+
 **Approach:**
 - Triage each failing test: (a) legitimate regression to fix, (b) outdated test that needs updating, (c) test exercising intentionally-changed behavior that needs rewriting.
 - Restore CI to clean green baseline so future batches can rely on the regression-gate signal.
+- **★ B79.0n.TEC.b folded in here (Kyle 2026-06-09 — RUNNING_ISSUES #141).** The gate-cleared TEC strict-throw restoration (flip soft `pick`→strict `requireKey` in `refreshTECConfigForClass`) exposes ~15-20 stale TEC test mocks that omit the newest key `rung_floor_slippage_buffer_multiplier` (the retired soft-fallback had silently filled it). Complete those mocks AS PART of this cleanup, then ship the strict-throw flip + a strict-throw test. Production is unaffected (all 11 keys resolve live; soft fallback never triggers). The attempted code change (2026-06-09) was reverted un-shipped.
 - Likely sequenced AFTER xstock UI diagnostic-tab fixes close + AFTER BATCH_80 governance closes.
 
 **Out of scope:** if any failing test reveals a live-system bug, file as a separate dedicated batch — don't bundle into Test Suite Recovery.
