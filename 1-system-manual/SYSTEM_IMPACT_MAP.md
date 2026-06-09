@@ -436,6 +436,7 @@
 - **Batch 46**: Governance state persistence loaded via import (`governance-persistence.ts`).
 - **Batch 57**: Pattern-strategy mismatch fixed — per-strategy pattern routing matches VTS behavior to signal-orchestrator fix. Pool-split null reason tracking added (quant pool vs pattern pool breakdown in null reason counters). adaptive-flow.ts THREE_SOLDIERS/MORNING_STAR canonicalization bug fixed.
 - **B62**: Benchmark exclusion filter removed (VTS benchmarks unblocked). Half-wire at L877 (`biasModifier` computed and discarded) removed — dead code path deleted.
+- **★ ITEM 4 Phase B step 1 (2026-06-09) — STANDALONE ALWAYS-ON**: the 3 `tradingActive` kill-guards REMOVED (cycle-skip / start-refusal / interval self-teardown) — **VTS lifecycle is now its OWN start/stop only; it runs THROUGH paper/live start-stop** (Gate-2 packet §3 O1; verified 14/14 beats at exact 60s incl. during an active paper session). Lifecycle guard added: re-entrancy no-op + overlap skip-tick (`vtsCycleOverlapSkips` counter = the O6 throughput-study starvation signal) + crash-containment catch (a cycle throw can no longer crash the shared process). **Entry-stamp**: every pair `sourceMode:'vts'` spread-stamped at the possession boundary (post-`getIdealPoolPairs()`); downstream consumer re-points = step 2 (D1/D9). **⚠️ #210 HARD GATE until step 2 deploys: no active-trading turn-on** — D1 (archivers' write-time `getCurrentMode()`), D1b (`hybrid-confluence-buffer` shared mutable cross-producer, no source dim — see its entry), D9 (`outcomeFeedbackStore` no source dim) are open contamination paths under concurrency.
 - **Tests**: `vts-modernization.test.ts`, `vts-signal-generation.test.ts`
 
 ### 7.2 VTS Service
@@ -2802,3 +2803,15 @@ export function getPatternPoolGuardrailsForAssetClass(
 - Scope + Pre-audit + Change-list: `Claude Comms and Packages/Scope Files/B79_0n_ORCHESTRATOR_SCOPE.md` + `B79_0n_ORCHESTRATOR_PRE_AUDIT.md` + `Change Lists/B79_0n_ORCHESTRATOR_STEP3_CHANGE_LIST.md`
 - Architectural synthesis (Step 1.a) + 2-round iteration + Step 8 verify: `Claude Comms and Packages/Langston Design Asks/B79_0n_ORCHESTRATOR_ARCHITECTURAL_SYNTHESIS.md` + `B79_0n_ORCHESTRATOR_STEP1A_REPLY_v1.md` + `B79_0n_ORCHESTRATOR_PREAUDIT_REPLY_v1.md` + `B79_0n_ORCHESTRATOR_STEP8_VERIFY.md`
 - RUNNING_ISSUES: see new R-6 (xstock 0.50 vs crypto 0.15 cap behavioral correction — Phase 19 calibration validates xstock placeholder value when WIRE-IN #14 flips active trading).
+
+## Recent Additions (ITEM 4 Phase B step 1 — VTS standalone decouple + entry-stamp, 2026-06-09)
+
+### `server/services/hybrid-confluence-buffer.ts` — ★ CROSS-PRODUCER SHARED MUTABLE STATE (D1b, flagged item-4 step-1 review)
+- **What**: singleton pattern-confluence buffer (`:86`), key `symbol_patternType` — **NO source/mode dimension**.
+- **Writers+Readers (BOTH paths)**: vts-runner `addPatternSignal:3778` / `findCompatiblePatterns:3790` / `sweep:3849`; signal-orchestrator `addPatternSignal:1409` / `findCompatiblePatterns:1290` / `sweep:1332`.
+- **Contamination modes once producers run concurrently** (post step-1 VTS-decouple): VTS-buffered patterns boost ACTIVE-path hybrid formation; same-key re-detections refresh each other's decay clocks (`getDecayFactor` inflation); active patterns leak into VTS training hybrids. The removed O1 guards were the only single-writer guarantee.
+- **Fix (step 2, D1b)**: namespace the key by carried `sourceMode` (or filter at `findCompatiblePatterns`). **#210 HARD GATE: step 2 before any active-trading turn-on.**
+- **Blast radius**: MEDIUM-HIGH (hybrid signal formation both paths; training-data independence).
+
+### Mode-tag architecture (Kyle stamp-at-entry, step-1 first installment)
+- `vts-runner.ts` stamps `sourceMode:'vts'` on every pair at the possession boundary (post-`getIdealPoolPairs()`). Target end-state: the tag rides the payload through selection→queue→storage; every mode-sensitive consumer reads the CARRIED tag, never `getCurrentMode()`. Paper path already carries mode (`SQESignalInput.mode` → `RtbSignal.mode` → TCL maps → engine ctor) — the B79.0n threading. Remaining re-points (step 2): 3 B70 archivers (drop write-time `getCurrentMode()`), 5 hardcoded VTS literals, `outcomeFeedbackStore` source-partitioned key, D1b buffer namespace.

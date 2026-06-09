@@ -5414,6 +5414,8 @@ The **Walter-Era Learning** system (ContinuousLearningEngine, LearningCoordinato
 
 ### Purpose
 
+> **★ ITEM 4 Phase B step 1 (2026-06-09) — ARCHITECTURAL CHANGE: VTS is a STANDALONE ALWAYS-ON producer.** The historical coupling "VTS runs only while active trading is OFF" is REMOVED: the three `tradingActive` kill-guards (cycle-skip, start-refusal, interval self-teardown) are gone, and VTS's lifecycle is governed ONLY by its own start/stop. VTS runs continuously THROUGH paper/live engine start-stops (verified: exact 60s cadence through an active paper session). The interval tick carries a lifecycle guard — re-entrancy no-op, overlap skip-tick (`vtsCycleOverlapSkips`, the throughput-study starvation signal), and a crash-containment catch (a cycle throw cannot crash the now-shared process). Each pair is stamped `sourceMode:'vts'` at the possession boundary (the Kyle stamp-at-entry mode-tag architecture; downstream consumer re-points land in step 2). Any "Passive Learning mode" phrasing below describes the historical single-producer era — VTS no longer requires active trading to be off. **Until item-4 step 2 deploys, RUNNING_ISSUES #210 HARD-GATES any active-trading turn-on** (D1/D1b/D9 contamination paths open under concurrency).
+
 The VTS Runner is the autonomous virtual trading simulator. During Passive Learning mode, it runs a **60-second simulation loop** that:
 1. Fetches up to 300 pairs from the FX5 Scanner batch (Batch 18 — was 100)
 2. Calculates per-pair market regimes from OHLC data
