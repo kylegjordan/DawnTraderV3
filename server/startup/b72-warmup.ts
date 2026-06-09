@@ -92,6 +92,8 @@ const PREFETCH_MODULES = [
   'strategy.dhma',
   // ITEM-4 step 2 (2026-06-10): per-source calibration epochs (D9 anti-mixing stamp).
   'calibration_epoch',
+  // ITEM-4 step 3 (2026-06-10): the live-engine Phase-21 gate (read fail-closed at the route).
+  'live_engine_gate',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

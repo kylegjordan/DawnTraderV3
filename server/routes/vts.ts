@@ -540,7 +540,8 @@ router.get('/drift/history/:strategy', requireAuth, async (req: Request, res: Re
  * M5B: Start autonomous VTS simulation
  * POST /api/vts/run-passive
  * 
- * Starts the autonomous simulation loop when tradingActive=false.
+ * Starts the autonomous simulation loop. ITEM-4 step 1 (2026-06-09): VTS is
+ * standalone always-on - start/stop is independent of tradingActive.
  * VTS will generate signals from pricing service cache every 60 seconds.
  */
 router.post('/run-passive', requireAuth, async (req: AuthenticatedRequest, res: Response) => {

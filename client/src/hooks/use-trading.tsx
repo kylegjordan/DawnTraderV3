@@ -163,6 +163,26 @@ export function useTrading() {
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+    },
+    onError: (error: unknown) => {
+      // ITEM-4 step 3 (2026-06-10): the live-engine Phase-21 gate returns a
+      // machine-readable 409 (LIVE_ENGINE_PHASE21_GATED). Surface it as a
+      // clear, honest message — live mode ALWAYS places real orders; its
+      // engine build is Phase 21 — instead of a generic failure toast.
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('LIVE_ENGINE_PHASE21_GATED') || msg.includes('Phase-21-gated')) {
+        toast({
+          title: 'Live trading is not available yet',
+          description: 'Live mode always places real orders. The live engine is gated until Phase 21 — use paper mode to run the full pipeline without real trades.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: 'Failed to start trading',
+        description: msg,
+        variant: 'destructive',
+      });
     }
   });
 

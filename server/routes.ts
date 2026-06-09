@@ -3645,6 +3645,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           console.log('[ENGINE_ACTIVE][DEBUG] Engine reached ACTIVE state');
           return result;
         } else {
+          // ITEM-4 Phase B step 3 (2026-06-10) — THE LIVE-ENGINE PHASE-21 GATE.
+          // Live mode ALWAYS places real orders (Kyle Gate-2 correction #1);
+          // its real engine build is Phase 21. Until live_engine_enabled=true
+          // (module_constants, module 'live_engine_gate'), this route REFUSES
+          // with a machine-readable 409 BEFORE any engine reference. NO state
+          // flip on refusal (a half-on live flag with no engine = lying state).
+          // FAIL-CLOSED (Langston condition 1): a missing row or failed read
+          // is treated as DISABLED — never default-open on a DB-governed gate.
+          let liveEngineEnabled = false;
+          try {
+            const { getCachedNumbersForModule } = await import('./services/module-constants-service.js');
+            const gate = getCachedNumbersForModule('live_engine_gate', {
+              exchange: '*', assetClass: '*', strategy: '*', regime: '*',
+            });
+            // NON-NUMERIC jsonb values are INVISIBLE to the numeric resolver
+            // (skipped -> undefined -> gated). The gate requires STRICTLY 1 —
+            // do NOT 'simplify' to a truthy check (that re-opens the boolean trap).
+            liveEngineEnabled = gate.live_engine_enabled === 1;
+          } catch (gateErr) {
+            console.warn('[ITEM4][LIVE_GATE] constant read failed — failing CLOSED:', gateErr instanceof Error ? gateErr.message : gateErr);
+            liveEngineEnabled = false;
+          }
+          if (!liveEngineEnabled) {
+            console.log('[ITEM4][LIVE_GATE] live start REFUSED (Phase-21 gate; no engine touched, no state flip)');
+            return res.status(409).json({
+              error: 'Live engine is Phase-21-gated',
+              code: 'LIVE_ENGINE_PHASE21_GATED',
+              message: 'Live mode always places real orders. The live engine build is Phase 21; flip live_engine_enabled (module_constants) at Phase-21 go-live.',
+            });
+          }
           console.log('[ENGINE_INIT][DEBUG] Entering INIT state (global live engine)');
           console.log('[ENGINE_STARTING_LIVE][Phase-27.F.15.B.3] Using global live engine...');
           // Phase 27.F.15.B.3: Use global live engine (shared by all users)

@@ -1030,9 +1030,9 @@ export class SignalOrchestrator {
     );
 
     // B70 Step 3.6: signal-eval archive — admitted row alongside active-signal
-    // ablation emit. Live trading is currently dormant; this hook fires
-    // automatically when active trading turns on (Phase 21). Mode tag is read
-    // from getCurrentMode() at write time. Fire-and-forget, try/catch wrapped.
+    // ablation emit. ITEM-4 step 2 (2026-06-10): the mode tag is this
+    // instance's OWN carried mode (tradingModeToRunMode(this.mode)) — the
+    // write-time getCurrentMode() lookup is gone. Fire-and-forget, try/catch.
     try {
       const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
       const { resolveAssetClass } = await import('../../shared/asset-classes.js');
