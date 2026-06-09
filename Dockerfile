@@ -2,6 +2,10 @@
 # Stage 1: Install dependencies
 # Stage 2: Build frontend + backend
 # Stage 3: Production runtime
+#
+# B-NEW-54 (2026-06-08): the Python ML predictive microservice was RETIRED. The
+# runtime stage no longer installs python3 / the ML venv, copies services/, or
+# exposes port 5001 — the app is Node-only now.
 
 # --------------------------------------------------
 # Stage 1: Dependencies
@@ -37,26 +41,12 @@ RUN npm run build
 # --------------------------------------------------
 FROM node:20-slim AS runtime
 
-# Install Python 3 + pip for ML microservice
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create Python virtual environment and install ML dependencies
-RUN python3 -m venv /opt/ml-venv
-RUN /opt/ml-venv/bin/pip install --no-cache-dir flask numpy scikit-learn
-
 WORKDIR /app
 
 # Copy built application from build stage
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
-
-# Copy ML service (Python microservice on port 5001)
-COPY --from=build /app/services ./services
 
 # Copy shared schema (needed by Drizzle ORM at runtime)
 COPY --from=build /app/shared ./shared
@@ -70,11 +60,9 @@ COPY --from=build /app/server/version.json ./server/version.json
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=5000
-ENV ML_SERVICE_HOST=http://localhost:5001
-ENV PATH="/opt/ml-venv/bin:$PATH"
 
-# Expose ports: app (5000) + ML service (5001)
-EXPOSE 5000 5001
+# Expose app port
+EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
