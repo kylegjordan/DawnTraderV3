@@ -544,6 +544,7 @@ export async function evaluateXstockPairForVTS(
           try {
             const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
             archiveSignalEval({
+              mode: 'vts', // ITEM-4 step 2 (D1): xstock eval-cycle is VTS-side — carried stamp
               symbol,
               exchange: 'kraken',
               assetClass: ASSET_CLASS,
@@ -643,6 +644,7 @@ export async function evaluateXstockPairForVTS(
           counters.byStrategy[strategyKey].rejected++;
           try {
             archiveSignalEval({
+              mode: 'vts', // ITEM-4 step 2 (D1): xstock eval-cycle is VTS-side — carried stamp
               ...archiveCommon,
               rejectStage: 'sqe',
               gateDecision: {
@@ -680,6 +682,7 @@ export async function evaluateXstockPairForVTS(
           counters.nullReasonAggregate[gateCheck.reason] = (counters.nullReasonAggregate[gateCheck.reason] ?? 0) + 1;
           try {
             archiveSignalEval({
+              mode: 'vts', // ITEM-4 step 2 (D1): xstock eval-cycle is VTS-side — carried stamp
               ...archiveCommon,
               rejectStage: 'tcl',
               gateDecision: {
@@ -745,6 +748,7 @@ export async function evaluateXstockPairForVTS(
         };
         try {
           archiveSignalEval({
+              mode: 'vts', // ITEM-4 step 2 (D1): xstock eval-cycle is VTS-side — carried stamp
             ...archiveCommon,
             rejectStage: 'admitted',
             gateDecision: {

@@ -942,13 +942,18 @@ export class VTSService extends EventEmitter {
         const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
         const _assetClass = safeResolveAssetClass(tradeData.symbol, 'kraken');
         if (_assetClass !== null) {
+          // ITEM-4 step 2 (D9): VTS writes its OWN partition — source='vts'
+          // (the carried entry-stamp), per-source calibration epoch stamped.
+          const { getCalibrationEpoch } = await import('../core/metrics/calibration-epoch.js');
           outcomeFeedbackStore.updateEma(
+            'vts',
             _assetClass,
             tradeData.regime,
             tradeData.strategy,
             netPnlPct,
             cfg.alpha,
             Date.now(),
+            getCalibrationEpoch('vts'),
           );
         }
       }

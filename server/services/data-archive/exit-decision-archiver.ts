@@ -14,7 +14,7 @@
 
 import { enqueueArchiveRow, registerArchiveTable } from './archive-batch-writer.js';
 import { getArchiveConfig } from './archive-config.js';
-import { getCurrentMode } from '../run-mode-controller.js';
+import type { RunMode } from '../run-mode-controller.js'; // ITEM-4 step 2: carried tag (D1)
 
 const TABLE = 'exit_decision_archive';
 const COLUMNS = [
@@ -63,6 +63,8 @@ export type ExitReason =
   | 'other';
 
 export interface ExitDecisionArchiveInput {
+  /** ITEM-4 step 2 (D1): REQUIRED — the producer's carried mode tag. */
+  mode: RunMode;
   capturedAt?: Date | number;
   tradeId: string;
   symbol: string;
@@ -103,7 +105,7 @@ export function archiveExitDecision(input: ExitDecisionArchiveInput): void {
     symbol: input.symbol,
     exchange: input.exchange,
     asset_class: input.assetClass,
-    mode: getCurrentMode(),
+    mode: input.mode, // ITEM-4 step 2 (D1): the CALLER's carried tag
     source: input.source,
     strategy: input.strategy ?? null,
     exit_reason: input.exitReason,

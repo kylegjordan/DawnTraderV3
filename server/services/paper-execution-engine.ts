@@ -48,6 +48,7 @@
  */
 
 import { storage } from '../storage';
+import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site mode map
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 // B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
 // moved to module='paper_execution'.
@@ -1234,6 +1235,7 @@ export class PaperExecutionEngine {
             Math.abs(avgPrice - parseFloat(String(position.stopLoss)))
           : undefined;
       archiveExitDecision({
+        mode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1): this engine's OWN mode
         tradeId: positionId,
         symbol: position.symbol,
         exchange,
@@ -1394,13 +1396,20 @@ export class PaperExecutionEngine {
           const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
           const _assetClass = (position as any).assetClass ?? safeResolveAssetClass(position.symbol, 'kraken');
           if (_assetClass !== null) {
+            // ITEM-4 step 2 (D9): this per-mode engine writes ITS OWN partition
+            // (carried mode → RunMode via the single mapping site) — a paper_sim
+            // close can never blend into the vts-trained aggregate (#210/D9 fix).
+            const { getCalibrationEpoch } = await import('../core/metrics/calibration-epoch.js');
+            const _learnSource = tradingModeToRunMode(this.mode);
             outcomeFeedbackStore.updateEma(
+              _learnSource,
               _assetClass,
               regimeAtOpen,
               strategyName,
               netPnlPercent,
               cfg.alpha,
               Date.now(),
+              getCalibrationEpoch(_learnSource),
             );
           }
         }

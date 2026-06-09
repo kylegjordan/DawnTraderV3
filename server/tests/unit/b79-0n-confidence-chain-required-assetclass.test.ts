@@ -77,7 +77,7 @@ describe('B79.0n.CONFIDENCE-CHAIN type-lock — REQUIRED-assetClass on modulator
   it('outcomeFeedbackStore.peek rejects call without assetClass', () => {
     // @ts-expect-error — assetClass is REQUIRED (B79.0n.CONFIDENCE-CHAIN per-class key)
     const _bad = () => outcomeFeedbackStore.peek('TFS', 'breakout');
-    const ok = outcomeFeedbackStore.peek('crypto_spot', 'TFS', 'breakout');
+    const ok = outcomeFeedbackStore.peek('vts', 'crypto_spot', 'TFS', 'breakout');
     expect(ok === undefined || ok.sample_count >= 0).toBe(true);
   });
 
@@ -85,7 +85,7 @@ describe('B79.0n.CONFIDENCE-CHAIN type-lock — REQUIRED-assetClass on modulator
     // @ts-expect-error — assetClass is REQUIRED (B79.0n.CONFIDENCE-CHAIN per-class key)
     const _bad = () => outcomeFeedbackStore.updateEma('TFS', 'breakout', 0.5, 0.1, Date.now());
     // Happy path: explicit assetClass.
-    outcomeFeedbackStore.updateEma('crypto_spot', 'TFS', 'breakout', 0.5, 0.1, Date.now());
+    outcomeFeedbackStore.updateEma('vts', 'crypto_spot', 'TFS', 'breakout', 0.5, 0.1, Date.now(), 1);
     expect(true).toBe(true);
   });
 

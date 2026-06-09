@@ -43,6 +43,7 @@ import { telemetryTrace } from './telemetry-trace.js';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { sizePaperPositionForSignal, type StrategyType } from './paper-position-sizing.js';
+import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site TradingMode->RunMode map
 import { getPortfolioBalanceV2 } from './guardrail-settings.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
@@ -806,7 +807,9 @@ export class SignalOrchestrator {
       // ── B67.4 outcome feedback ────────────────────────────────────────
       if (outcomeFeedbackConfig !== null) {
         // B79.0n.CONFIDENCE-CHAIN: per-class store key isolation.
-        const entry = outcomeFeedbackStore.peek(_pairAssetClass, regimeLabel, strategyKey);
+        // ITEM-4 step 2 (D9): SOURCE-MATCHED read — this per-mode engine
+        // instance reads ITS OWN partition (Gate-2 decision; no pooling).
+        const entry = outcomeFeedbackStore.peek(tradingModeToRunMode(this.mode), _pairAssetClass, regimeLabel, strategyKey);
         const outcome = computeOutcomeFeedbackFactor(entry, outcomeFeedbackConfig, _pairAssetClass);
         modulatedConfChain *= outcome.factor;
         alternateInputs.push({
@@ -1034,6 +1037,7 @@ export class SignalOrchestrator {
       const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
       const { resolveAssetClass } = await import('../../shared/asset-classes.js');
       archiveSignalEval({
+        mode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1): this instance's OWN mode — not the global
         symbol: rawSignal.symbol,
         exchange: 'kraken',
         assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
@@ -1287,7 +1291,7 @@ export class SignalOrchestrator {
             }
 
             // Batch 19F: Check hybrid confluence buffer for compatible pattern signal
-            const compatiblePatterns = hybridConfluenceBuffer.findCompatiblePatterns(signal.symbol);
+            const compatiblePatterns = hybridConfluenceBuffer.findCompatiblePatterns(signal.symbol, tradingModeToRunMode(this.mode));
             if (compatiblePatterns.length > 0) {
               for (const patternSig of compatiblePatterns) {
                 const hybridStrategy = findHybridMatch(signal.strategy, patternSig.patternType);
@@ -1407,6 +1411,7 @@ export class SignalOrchestrator {
 
               // Batch 19F: Store pattern signal in hybrid confluence buffer
               hybridConfluenceBuffer.addPatternSignal({
+        sourceMode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1b): own namespace
                 symbol: sizedSignal.symbol,
                 patternType: (patternSig as any).pattern || 'UNKNOWN',
                 strategy: sizedSignal.strategy,

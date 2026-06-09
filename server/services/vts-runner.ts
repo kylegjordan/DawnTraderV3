@@ -1730,7 +1730,8 @@ async function generatePhase10Signal(
     // ── B67.4 outcome feedback (cheap-tier bundle) ────────────────────
     if (_outcomeFeedbackConfig !== null) {
       // B79.0n.CONFIDENCE-CHAIN: per-class store key isolation.
-      const entry = outcomeFeedbackStore.peek(_assetClass, _regimeLabel, strategy);
+      // ITEM-4 step 2 (D9): SOURCE-MATCHED read — VTS reads the vts partition.
+      const entry = outcomeFeedbackStore.peek('vts', _assetClass, _regimeLabel, strategy);
       const outcome = computeOutcomeFeedbackFactor(entry, _outcomeFeedbackConfig, _assetClass);
       _modulatedConfChain *= outcome.factor;
       _alternateInputs.push({
@@ -1948,6 +1949,7 @@ async function generatePhase10Signal(
     const chainModulatedConfidence =
       persistedTrade?.regimeConfidenceModulated ?? predictiveConfidence ?? undefined;
     archiveSignalEval({
+      mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
       symbol,
       exchange: 'kraken',
       assetClass: resolveAssetClass(symbol, 'kraken'),
@@ -2607,6 +2609,7 @@ async function resolveOpenVirtualTrades(): Promise<{
           ? (exitPrice - trade.entryPrice) / Math.abs(trade.entryPrice - trade.stopLoss)
           : undefined;
       archiveExitDecision({
+        mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
         tradeId: trade.id,
         symbol: trade.symbol,
         exchange: 'kraken',
@@ -3613,6 +3616,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             const mappedStage =
               stageMap[detailReason] ?? (isPostSignalRejection ? 'sqe' : 'strategy_internal');
             archiveSignalEval({
+      mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
               symbol: pair.symbol,
               exchange: 'kraken',
               assetClass: resolveAssetClass(pair.symbol, 'kraken'),
@@ -3703,6 +3707,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
             const { resolveAssetClass } = await import('../../shared/asset-classes.js');
             archiveSignalEval({
+      mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
               symbol: pair.symbol,
               exchange: 'kraken',
               assetClass: resolveAssetClass(pair.symbol, 'kraken'),
@@ -3779,6 +3784,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         // (a) If PATTERN signal: add to buffer for potential hybrid match with future quant signals
         if (tradeRecord.signalType === 'PATTERN' && tradeRecord.patternType) {
           hybridConfluenceBuffer.addPatternSignal({
+            sourceMode: 'vts', // ITEM-4 step 2 (D1b): own namespace
             symbol: pair.symbol,
             patternType: tradeRecord.patternType,
             strategy: tradeRecord.strategy,
@@ -3790,7 +3796,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         // (b) If QUANT signal: check buffer for compatible pattern signals → create hybrid
         if (tradeRecord.signalType === 'QUANT') {
-          const compatiblePatterns = hybridConfluenceBuffer.findCompatiblePatterns(pair.symbol);
+          const compatiblePatterns = hybridConfluenceBuffer.findCompatiblePatterns(pair.symbol, 'vts');
           for (const patternSig of compatiblePatterns) {
             // Check if this quant strategy + pattern type maps to a known hybrid strategy
             const hybridStrategy = findVTSHybridMatch(tradeRecord.strategy, patternSig.patternType);
@@ -3920,6 +3926,7 @@ export async function startAutonomousSimulation(): Promise<{ success: boolean; m
   
   sessionStartTime = Date.now();
   phase10SessionStartTime = Date.now();
+  vtsCycleOverlapSkips = 0; // ITEM-4 step 2: clean per-session O6 numbers
   vtsService.resetSessionMetrics();
 
   console.log(`[11.0E.1][VTS] Starting Phase-10 autonomous simulation (interval: ${vtsConfig.simulationIntervalSec}s, pairs: ${vtsConfig.pairsPerCycle})`);
@@ -3990,9 +3997,12 @@ export function getAutonomousSessionInfo(): {
   config: VTSConfig;
   cycleCount: number;
   tradesThisSession: number;
+  cycleOverlapSkips: number;
 } {
   return {
     isRunning: isAutonomousRunning,
+    // ITEM-4 step 2 (chunk 7): O6 starvation signal exposed for the throughput study
+    cycleOverlapSkips: vtsCycleOverlapSkips,
     sessionStartTime,
     sessionDurationMs: sessionStartTime ? Date.now() - sessionStartTime : 0,
     config: vtsConfig,

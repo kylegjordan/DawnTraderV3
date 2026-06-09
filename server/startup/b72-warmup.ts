@@ -90,6 +90,8 @@ const PREFETCH_MODULES = [
   'strategy.vwap_bounce',
   'strategy.liquidity_trap',  // operationally disabled but params still tunable
   'strategy.dhma',
+  // ITEM-4 step 2 (2026-06-10): per-source calibration epochs (D9 anti-mixing stamp).
+  'calibration_epoch',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
@@ -111,5 +113,29 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
       );
     }
   }
+
+  // ITEM-4 step 2 (Langston Step-4 required addition): the calibration_epoch
+  // module needs more than the generic zero-row gate — a PARTIAL seed (e.g. 2
+  // of 3 sources) would pass non-zero yet still throw mid-trade-close at the
+  // first read of the missing source, inside try/catch-wrapped close paths
+  // (= silent learning outage). Assert ALL THREE per-source rows at boot so
+  // "migration didn't apply" is a deterministic deploy-time failure.
+  {
+    const { getCachedNumbersForModule } = await import('../services/module-constants-service.js');
+    const epochs = getCachedNumbersForModule('calibration_epoch', {
+      exchange: '*', assetClass: '*', strategy: '*', regime: '*',
+    });
+    for (const source of ['vts', 'paper_sim', 'live'] as const) {
+      if (!Number.isFinite(epochs[source]) || epochs[source] < 1) {
+        throw new Error(
+          `[ITEM4][warmup] calibration_epoch row for source='${source}' missing or invalid — ` +
+          `migration drizzle/migrations/2026-06-10-item4-step2-calibration-epoch.sql ` +
+          `has not been (fully) applied. Apply migration before starting server.`,
+        );
+      }
+    }
+    console.log(`[ITEM4][warmup] calibration_epoch verified: vts=${epochs.vts} paper_sim=${epochs.paper_sim} live=${epochs.live}`);
+  }
+
   started = true;
 }

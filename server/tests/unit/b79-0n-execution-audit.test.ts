@@ -80,7 +80,9 @@ describe('B79.0n.EXECUTION — audit + regression-lock tests', () => {
       );
       // No-throw skip semantics: if _assetClass null, the updateEma is skipped
       // (entire block wrapped in `if (_assetClass !== null)`).
-      expect(PAPER_EXEC_SRC).toMatch(/if \(_assetClass !== null\) \{[\s\S]*?outcomeFeedbackStore\.updateEma\(\s*_assetClass/);
+      // ITEM-4 step 2 (D9): updateEma now takes the REQUIRED source partition
+      // first (_learnSource = this engine's carried mode) — assetClass follows.
+      expect(PAPER_EXEC_SRC).toMatch(/if \(_assetClass !== null\) \{[\s\S]*?outcomeFeedbackStore\.updateEma\(\s*_learnSource,\s*_assetClass/);
       // Comment annotates belt-and-suspenders doctrine per Langston Step 2 B2 reframe.
       expect(PAPER_EXEC_SRC).toMatch(/BELT-AND-SUSPENDERS, NOT load-bearing/);
       expect(PAPER_EXEC_SRC).toMatch(/L922 B79\.TEC NO_FALLBACK hard-fails/);

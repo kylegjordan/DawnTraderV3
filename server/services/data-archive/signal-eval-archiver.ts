@@ -20,7 +20,7 @@
 
 import { enqueueArchiveRow, registerArchiveTable } from './archive-batch-writer.js';
 import { getArchiveConfig, provenanceCaptureEnabled } from './archive-config.js';
-import { getCurrentMode } from '../run-mode-controller.js';
+import type { RunMode } from '../run-mode-controller.js'; // ITEM-4 step 2: carried tag — getCurrentMode() write-time lookup DELETED (D1)
 import { takeArchiveId } from './archive-id-allocator.js';
 import { resolveConstantsProvenance, recordConstantsVersion } from './decision-provenance.js';
 
@@ -159,6 +159,8 @@ export function buildBarProvenance(
 }
 
 export interface SignalEvalArchiveInput {
+  /** ITEM-4 step 2 (D1): REQUIRED — the producer's carried mode tag ('vts' | 'paper_sim' | 'live'). */
+  mode: RunMode;
   capturedAt?: Date | number;
   symbol: string;
   exchange: string;
@@ -214,7 +216,7 @@ export function archiveSignalEval(input: SignalEvalArchiveInput): void {
     symbol: input.symbol,
     exchange: input.exchange,
     asset_class: input.assetClass,
-    mode: getCurrentMode(),
+    mode: input.mode, // ITEM-4 step 2 (D1): the CALLER's carried tag — never a global lookup
     source: input.source,
     strategy: input.strategy,
     regime_label: input.regimeLabel ?? null,

@@ -23,6 +23,18 @@ import { tradingStateSync } from './trading-state-sync.js';
 
 export type RunMode = 'vts' | 'paper_sim' | 'live';
 
+/**
+ * ITEM-4 step 2 (2026-06-10): the ONE place the 2-mode TradingMode vocabulary
+ * ('paper' | 'live') maps onto the 3-mode RunMode vocabulary — used by
+ * carried-tag consumers (archivers, learning store) when a per-mode engine
+ * instance states who it is. Per Langston step-2 amendment: exactly one
+ * mapping site, never per-call-site. NOT a read of global state — the caller
+ * supplies its OWN mode.
+ */
+export function tradingModeToRunMode(mode: 'paper' | 'live'): RunMode {
+  return mode === 'paper' ? 'paper_sim' : 'live';
+}
+
 const REFRESH_INTERVAL_MS = 5000;
 let cachedMode: RunMode = 'vts'; // Safe default — VTS is what's active today
 let lastRefresh = 0;

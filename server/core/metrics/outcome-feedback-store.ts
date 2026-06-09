@@ -45,6 +45,16 @@ import type { RegimeDecision } from '../../services/factor-ablation-emitter.js';
 // stamping + future per-class store key shape (full implementation in Chunk 5).
 import type { AssetClass } from '../../../shared/asset-classes.js';
 
+/**
+ * ITEM-4 step 2 (2026-06-10) — D9 labeled multi-source learning substrate.
+ * The producer SOURCE of every learning observation. Single system-wide
+ * vocabulary = RunMode ('vts' | 'paper_sim' | 'live') — deliberately NOT a
+ * second 'paper' spelling (one vocabulary everywhere; see RUNNING_ISSUES #211
+ * for why same-axis-different-names is a landmine). REQUIRED at every write
+ * and read — no default; a defaulted source is how a pooled read sneaks back.
+ */
+export type LearningSource = 'vts' | 'paper_sim' | 'live';
+
 /** Per-tuple stored entry. Reset implicitly via `expiry` sweep on disk-load. */
 export interface OutcomeFeedbackEntry {
   /** Alpha-weighted moving average of net P&L percent (e.g., 1.5 = +1.5%). */
@@ -53,6 +63,18 @@ export interface OutcomeFeedbackEntry {
   sample_count: number;
   /** Epoch ms of the most recent updateEma call. Used for stale-eviction. */
   last_update: number;
+  /**
+   * ITEM-4 step 2 — Welford triplet (count, mean, M2), maintained ALONGSIDE
+   * the EMA (Gate-2 converged design B.7 #2: the EMA stays the live factor
+   * input — zero behavior change; Welford makes future estimators + honest
+   * calibration-epoch resets well-posed). variance = w_m2 / (w_count - 1).
+   * Missing on legacy disk entries → initialized to zero on load.
+   */
+  w_count: number;
+  w_mean: number;
+  w_m2: number;
+  /** Calibration epoch the Welford stream was accrued under (0 = pre-step-2 legacy). */
+  epoch: number;
 }
 
 /** Resolved config — supplied by MCE, mirrors `RegimeConfig` pattern. */
@@ -100,28 +122,48 @@ class OutcomeFeedbackStore {
   }
 
   /**
-   * B79.0n.CONFIDENCE-CHAIN: key shape is now `<assetClass>_<regime>_<strategy>`.
-   * Pre-CONFIDENCE-CHAIN shape was `<regime>_<strategy>` — disk-load migration
-   * re-keys legacy entries with `crypto_spot_` prefix on first boot.
+   * ITEM-4 step 2 (2026-06-10): key shape is now
+   * `<source>_<assetClass>_<regime>_<strategy>` — the D9 labeled-multi-source
+   * partition (Gate-2 design B.4/B.7: ONE physical store, strictly disjoint
+   * per-source partitions; source REQUIRED, never defaulted, never pooled).
+   * History: B79.0n made it `<assetClass>_<regime>_<strategy>`; pre-B79.0n was
+   * `<regime>_<strategy>`. Disk-load migration re-keys all pre-step-2 entries
+   * under the `vts_` prefix — every observation written before step 2 was VTS
+   * by construction (active trading off since Phase 8).
    */
-  private key(assetClass: string, regime: string, strategy: string): string {
-    return `${assetClass}_${regime}_${strategy}`;
+  private key(source: LearningSource, assetClass: string, regime: string, strategy: string): string {
+    return `${source}_${assetClass}_${regime}_${strategy}`;
   }
 
   /**
-   * Detect the legacy 2-token key shape (`<regime>_<strategy>`) vs the new
-   * 3-token shape (`<assetClass>_<regime>_<strategy>`). Legacy keys have
-   * exactly 1 underscore; new keys have at least 2. Used during the
-   * crypto_spot-prefix re-key migration.
-   *
-   * Edge case: regime + strategy names containing underscores (e.g.,
-   * `range_trade`) — both shapes have ≥1 underscore. We disambiguate by
-   * checking whether the FIRST token is a known asset class.
+   * Key-shape detection for the disk-load migrations. Source-shape keys start
+   * with a known LearningSource prefix; B79.0n-shape keys start with a known
+   * asset-class prefix; anything else is the ancient 2-token shape.
    */
-  private isNewShapeKey(tupleKey: string): boolean {
+  private isSourceShapeKey(tupleKey: string): boolean {
+    const SOURCE_PREFIXES = ['vts_', 'paper_sim_', 'live_'];
+    return SOURCE_PREFIXES.some(p => tupleKey.startsWith(p));
+  }
+
+  private isAssetClassShapeKey(tupleKey: string): boolean {
     // Known asset class prefixes — extend as ASSET_CLASSES grows.
     const KNOWN_PREFIXES = ['crypto_spot_', 'crypto_perp_', 'xstock_spot_', 'xstock_perp_'];
     return KNOWN_PREFIXES.some(p => tupleKey.startsWith(p));
+  }
+
+  /**
+   * Normalize a loaded entry: legacy disk data predates the Welford fields —
+   * initialize them to zero (the Welford stream starts accruing from step-2
+   * deploy; the EMA carries the historical signal).
+   */
+  private normalizeEntry(entry: OutcomeFeedbackEntry): OutcomeFeedbackEntry {
+    return {
+      ...entry,
+      w_count: Number.isFinite(entry.w_count) ? entry.w_count : 0,
+      w_mean: Number.isFinite(entry.w_mean) ? entry.w_mean : 0,
+      w_m2: Number.isFinite(entry.w_m2) ? entry.w_m2 : 0,
+      epoch: Number.isFinite(entry.epoch) ? entry.epoch : 0,
+    };
   }
 
   private loadFromDisk(): void {
@@ -133,6 +175,7 @@ class OutcomeFeedbackStore {
         const data = JSON.parse(raw) as Record<string, OutcomeFeedbackEntry>;
         let loaded = 0;
         let expired = 0;
+        let rekeyed = 0;
         for (const [tupleKey, entry] of Object.entries(data)) {
           if (
             entry &&
@@ -144,13 +187,27 @@ class OutcomeFeedbackStore {
               expired++;
               continue;
             }
-            this.entries.set(tupleKey, entry);
+            // ITEM-4 step 2 migration: pre-step-2 keys lack the source prefix.
+            // ALL pre-step-2 observations are VTS by construction (active
+            // trading off since Phase 8) → re-key under `vts_`. B79.0n-shape
+            // keys (`<assetClass>_...`) get the prefix directly; anything even
+            // older ALSO re-keys to vts_ + crypto_spot_ (pre-B79.0n data was
+            // crypto-only — same rationale as the B79.0n migration).
+            let newKey = tupleKey;
+            if (!this.isSourceShapeKey(tupleKey)) {
+              newKey = this.isAssetClassShapeKey(tupleKey)
+                ? `vts_${tupleKey}`
+                : `vts_crypto_spot_${tupleKey}`;
+              rekeyed++;
+            }
+            this.entries.set(newKey, this.normalizeEntry(entry));
             loaded++;
           }
         }
         console.log(
-          `[B67.4][outcomeFeedbackStore] Loaded ${loaded} tuples from NEW path ${PERSIST_FILE_NEW} (expired ${expired})`,
+          `[B67.4][outcomeFeedbackStore] Loaded ${loaded} tuples from NEW path ${PERSIST_FILE_NEW} (expired ${expired}, re-keyed ${rekeyed} under vts_ source prefix)`,
         );
+        if (rekeyed > 0) this.saveToDisk();
         return;
       } catch (err) {
         // HARD-FAIL on corrupt new-path data (Langston Step 2 clarification 1).
@@ -185,13 +242,15 @@ class OutcomeFeedbackStore {
               expired++;
               continue;
             }
-            // If the legacy entry already has a new-shape key (rare — only
-            // happens if a prior partial-migration left mixed entries), load
-            // it as-is. Otherwise re-key under crypto_spot prefix.
-            const newKey = this.isNewShapeKey(tupleKey)
+            // ITEM-4 step 2: the LEGACY /tmp/ path predates BOTH the
+            // asset-class prefix AND the source prefix — re-key fully under
+            // vts_crypto_spot_ (pre-B79.0n data was crypto-only VTS).
+            const newKey = this.isSourceShapeKey(tupleKey)
               ? tupleKey
-              : `crypto_spot_${tupleKey}`;
-            this.entries.set(newKey, entry);
+              : this.isAssetClassShapeKey(tupleKey)
+                ? `vts_${tupleKey}`
+                : `vts_crypto_spot_${tupleKey}`;
+            this.entries.set(newKey, this.normalizeEntry(entry));
             if (newKey !== tupleKey) rekeyed++;
             loaded++;
           }
@@ -251,26 +310,35 @@ class OutcomeFeedbackStore {
    * Persists synchronously on every update (≤ 90 entries, ≤ 100B each → trivial).
    */
   updateEma(
+    // ITEM-4 step 2 (D9): REQUIRED source — first param, no default. The
+    // writer states WHO it is (its carried mode tag); partitions are strictly
+    // disjoint — a paper_sim close can never touch the vts-trained aggregate.
+    source: LearningSource,
     assetClass: AssetClass,
     regime: string,
     strategy: string,
     netPnlPct: number,
     alpha: number,
     now: number,
+    // ITEM-4 step 2 (calibration epoch v0): the writer's CURRENT per-source
+    // epoch (resolve via getCalibrationEpoch(source)). Epoch mismatch with the
+    // stored entry → the Welford stream RESETS (honest per-lineage stats);
+    // the EMA continues (documented limitation, Gate-2 B.7 #2).
+    epoch: number,
   ): void {
     if (!Number.isFinite(netPnlPct)) {
       console.warn(
-        `[B67.4][outcomeFeedbackStore] non-finite netPnlPct dropped: asset_class=${assetClass} regime=${regime} strategy=${strategy} value=${netPnlPct}`,
+        `[B67.4][outcomeFeedbackStore] non-finite netPnlPct dropped: source=${source} asset_class=${assetClass} regime=${regime} strategy=${strategy} value=${netPnlPct}`,
       );
       return;
     }
     if (!Number.isFinite(alpha) || alpha <= 0 || alpha > 1) {
       console.warn(
-        `[B67.4][outcomeFeedbackStore] invalid alpha dropped: asset_class=${assetClass} regime=${regime} strategy=${strategy} value=${alpha}`,
+        `[B67.4][outcomeFeedbackStore] invalid alpha dropped: source=${source} asset_class=${assetClass} regime=${regime} strategy=${strategy} value=${alpha}`,
       );
       return;
     }
-    const k = this.key(assetClass, regime, strategy);
+    const k = this.key(source, assetClass, regime, strategy);
     const existing = this.entries.get(k);
     let nextEma: number;
     let nextCount: number;
@@ -282,15 +350,39 @@ class OutcomeFeedbackStore {
       nextEma = alpha * netPnlPct + (1 - alpha) * existing.ema_pnl_pct;
       nextCount = existing.sample_count + 1;
     }
+    // Welford update (count, mean, M2) — reset on epoch mismatch. Legacy
+    // entries carry epoch 0 → first post-deploy update resets Welford once
+    // (harmless: the Welford stream is brand-new anyway).
+    let wCount: number, wMean: number, wM2: number;
+    const storedEpoch = existing?.epoch ?? 0;
+    if (!existing || storedEpoch !== epoch) {
+      wCount = 1;
+      wMean = netPnlPct;
+      wM2 = 0;
+      if (existing && storedEpoch !== 0) {
+        console.log(
+          `[ITEM4][outcomeFeedbackStore] epoch ${storedEpoch}→${epoch} for ${k}: Welford reset (EMA continues — documented limitation)`,
+        );
+      }
+    } else {
+      wCount = (existing.w_count ?? 0) + 1;
+      const delta = netPnlPct - (existing.w_mean ?? 0);
+      wMean = (existing.w_mean ?? 0) + delta / wCount;
+      wM2 = (existing.w_m2 ?? 0) + delta * (netPnlPct - wMean);
+    }
     this.entries.set(k, {
       ema_pnl_pct: nextEma,
       sample_count: nextCount,
       last_update: now,
+      w_count: wCount,
+      w_mean: wMean,
+      w_m2: wM2,
+      epoch,
     });
     this.saveToDisk();
     console.log(
-      `[B67.4][feedback] asset_class=${assetClass} regime=${regime} strategy=${strategy} ` +
-        `ema_pnl_pct=${nextEma.toFixed(3)} sample_count=${nextCount}`,
+      `[B67.4][feedback] source=${source} asset_class=${assetClass} regime=${regime} strategy=${strategy} ` +
+        `ema_pnl_pct=${nextEma.toFixed(3)} sample_count=${nextCount} w_count=${wCount} epoch=${epoch}`,
     );
   }
 
@@ -298,9 +390,11 @@ class OutcomeFeedbackStore {
    * Read accessor — returns the entry for a tuple, or undefined if untracked.
    * Caller must NOT mutate the returned object.
    * B79.0n.CONFIDENCE-CHAIN: REQUIRED-assetClass for per-class isolation.
+   * ITEM-4 step 2: REQUIRED-source — SOURCE-MATCHED reads (Gate-2 decision):
+   * each consumer reads its OWN partition; no cross-source pooling, ever.
    */
-  peek(assetClass: AssetClass, regime: string, strategy: string): OutcomeFeedbackEntry | undefined {
-    return this.entries.get(this.key(assetClass, regime, strategy));
+  peek(source: LearningSource, assetClass: AssetClass, regime: string, strategy: string): OutcomeFeedbackEntry | undefined {
+    return this.entries.get(this.key(source, assetClass, regime, strategy));
   }
 
   /** Number of tracked tuples. Diagnostic. */

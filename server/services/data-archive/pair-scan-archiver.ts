@@ -17,13 +17,17 @@
  * with bounded queue + drop-on-overflow.
  *
  * Mode/source semantics:
- *  - mode = `getCurrentMode()` (system-state at write time)
+ *  - mode = 'shared' (ITEM-4 step 2: producer-agnostic substrate, computed once for all)
  *  - source = 'mce-cycle' (hook origin)
  */
 
 import { enqueueArchiveRow, registerArchiveTable } from './archive-batch-writer.js';
 import { getArchiveConfig } from './archive-config.js';
-import { getCurrentMode } from '../run-mode-controller.js';
+// ITEM-4 step 2 (D1, Langston-confirmed decision 2): pair_scan is the SHARED
+// producer-agnostic substrate (sole caller = the MCE scan cycle; zero mode-
+// filtered readers). Stamping getCurrentMode() on shared rows becomes a lie
+// the moment two producers run -> rows now stamp the literal 'shared'.
+// Value-set addition documented in SIM + the B70 migration comment vocabulary.
 
 const TABLE = 'pair_scan_archive';
 const COLUMNS = [
@@ -86,7 +90,7 @@ export function archivePairScan(input: PairScanArchiveInput): void {
     symbol: input.symbol,
     exchange: input.exchange,
     asset_class: input.assetClass,
-    mode: getCurrentMode(),
+    mode: 'shared', // ITEM-4 step 2: shared substrate — computed once for ALL producers
     source: 'mce-cycle',
     regime_label: input.regimeLabel ?? null,
     regime_confidence: input.regimeConfidence ?? null,
