@@ -3,6 +3,8 @@
 > Between-plan item 4, **Phase A** (design-before-build; Gate-1 scope approved by Kyle 2026-06-09). Produces: this deep pre-audit + the storage-architecture design doc + the throughput-study methodology → **Gate 2 (Kyle approves the design)** → Phase B build. Architecture basis: `ITEM_4_ARCHITECTURE_INVESTIGATION.md` (CC + Langston joint dig). No build.
 >
 > **Status:** IN PROGRESS, 2026-06-09. Active trading OFF.
+>
+> **★ KYLE CORRECTIONS 2026-06-09 (scope §1.6) — OVERRIDE two A2-RESOLVED findings below:** (1) **DR1's "live thin-scaffold / `scaffoldNoOp` flag" is DROPPED** — there is NO no-op live scaffold; live always places real orders and gets an independent switch only (un-run until Phase 21). The DR1 seam analysis stays useful *as the proof that live's execution is cleanly separable* (so the switch can be cleaved without touching the engine), but we do NOT build the no-op path. (2) **DR3's open question "does standalone VTS need its own kill switch" = NO** — kill switch is LIVE-ONLY (existing loss-% auto-trip); VTS + paper get start/stop only. (3) **D9 is reframed** from "same-brain-or-separate" to **labeled multi-source** — resolved in `ITEM_4_STORAGE_AND_LEARNING_DESIGN.md` Part B.
 
 ## A1 — Scalar "current-mode" reader census (Langston Step-1 addition #1 — the split-brain risk)
 **Finding: ~107 single-current-mode read sites across `server/`.** Once paper + live can both be ON, "the mode" is ambiguous at each one. The underlying state is ALREADY per-mode (`isEngineActivePaper`/`isEngineActiveLive` separate rows) — so this is an audit-and-disposition job, not a rebuild — but every site below needs a per-call-site decision ("when both on, which mode does THIS read mean?").
@@ -34,5 +36,5 @@
 
 ## A3 — Owed at Gate 2 (the three Phase-A deliverables)
 1. This pre-audit (complete A2).
-2. Storage-architecture design doc — incl. the **D9 learning-distribution decision for Kyle** (does paper-fill outcomes train the same learning brain as VTS virtual outcomes, or kept separate?).
-3. Throughput-study methodology (per O6 / Langston Q4).
+2. ✅ **DONE (CC first-cut, in joint review with Langston):** Storage + labeled-learning design doc = `ITEM_4_STORAGE_AND_LEARNING_DESIGN.md`. The D9 decision is **reframed** (Kyle 2026-06-09) from "same brain or separate" to **labeled multi-source**: BOTH VTS + paper write a single physical store, partitioned by `source` + `selection_stage` + `calibration_epoch`; the only Gate-2 choice left for Kyle is the *read policy* for live-confidence modulation (source-matched default vs. an empirical-Bayes shrinkage blend).
+3. ✅ **DONE (corrected):** Throughput-study methodology (`ITEM_4_THROUGHPUT_STUDY_METHODOLOGY.md`) — measures VTS+paper, projects live (no scaffold).
