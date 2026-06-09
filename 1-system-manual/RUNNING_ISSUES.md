@@ -1,11 +1,33 @@
 # DawnTrader V3 — Running Issues List
 
-> **Last Updated:** 2026-06-08 (Phase-24 governance close — reconciled the resolved-but-still-"OPEN" trackers #54 / #77 / #79 / #82 / #85 to RESOLVED, and closed #145 by backfilling the PHASE_HISTORY sub-batch 5/6/7 gap). Prior touch 2026-04-14 (Phase 15b transition).
+> **Last Updated:** 2026-06-09 (item-3.5 homing audit — see the "★ ITEM 3.5 HOMING-AUDIT RESOLUTIONS" section below + `ITEM_3_5_ISSUE_HOMING_RECONCILIATION.md`: every open entry now has a roadmap home; 4 re-homed (#111→Ph25, #162/#163→item-4.7/B-NEW-48, #138→Ph19); 11 stale entries CLOSED). Prior touch 2026-06-08 (Phase-24 governance close — reconciled #54/#77/#79/#82/#85 to RESOLVED, closed #145 via PHASE_HISTORY 5/6/7 backfill). Earlier 2026-04-14 (Phase 15b transition).
 > **Status Key:** OPEN = not started, IN PROGRESS = work begun but not finalized, RESOLVED = done, DEFERRED = intentionally postponed
 >
 > **Location note:** This file was relocated from `Reports/RUNNING_ISSUES.md` to `1-system-manual/RUNNING_ISSUES.md` on 2026-04-14 as part of the folder reorganization. The old `Reports/` folder was renamed to `Archived Reports - Pre-Phase 12 Governance Implementation/`. `RUNNING_ISSUES.md` is an active tracker, not archival, so it now lives alongside `CHANGES_AND_FIXES.md` in `1-system-manual/`.
 >
 > **Status note (2026-06-08):** the original "active open issue #39" line from the Phase-15b era is long retired (CI has been all-4-green since B56). This tracker has since grown to ~200 numbered entries across many phases. As of the Phase-24 governance close, the Phase-24 (xstock_spot onboarding) trackers are reconciled. The principal *open / deferred* items carried forward are: **#80 / #86 / #94** (xStock B73-ablation extension, continuous Q-D friction probe, equity-equivalent macro modifiers — Phase-19/active-trading-era work), **#83 / #147** (Boot Readiness Coordinator, per-class telemetry disk persistence — both DEFERRED with explicit trigger conditions), and the Phase-25 calibration-study set (25-12/13/14/15). The newest follow-ups are **#209** (ratchet `.tsc-baseline.json`, regenerate on Linux) and the B-NEW-22 per-`ac`-global backlog. Per-issue status is authoritative in each entry below; this is a navigational summary, not an exhaustive count.
+
+---
+
+## ★ ITEM 3.5 HOMING-AUDIT RESOLUTIONS (2026-06-09) — authoritative for the changes below
+
+> The between-Phase-24→19 plan **item 3.5** walked every non-resolved entry in this file (~90) and confirmed each has an explicit roadmap home. **The full issue→home mapping lives in `Claude Comms and Packages/Scope Files/ITEM_3_5_ISSUE_HOMING_RECONCILIATION.md` (Langston second-pass applied).** That artifact is the SSOT for where each open issue gets done; the per-entry status cells further down remain valid but the reconciliation doc is the navigational map. Below are the entries whose STATE changed as a result of this audit.
+
+**Re-homed (4):**
+- **#111** (TFS sustainability gate value-scope) — was "DEFERRED — Phase 19 prerequisite"; **MOVED to Phase 25 (roadmap 25-3)** per Kyle 2026-06-09 (it needs paper-active win/loss outcomes to decide). The Phase-19 tag is now a pointer.
+- **#162** (global REGIME not per-class) + **#163** (CANONICAL_REGIME_STRATEGY_MAP byAssetClass restructure) — home = **between-plan item 4.7 = B-NEW-48** (Kyle 2026-06-09: build per-class regime PRE-19, just before the AMR body; #163 is the code that batch carries). The original "consumer-impact check at B-NEW-48 scoping" condition stands.
+- **#138** (Hybrid first-confluence label verification) — was "Phase 24 watch"; **re-homed to Phase 19** (it only fires on the first confluence event under active trading; Phase 24 is dissolved).
+
+**CLOSED by item-3.5 cleanup (11 stale/superseded — never flipped, now resolved):**
+- **#43 / #49 / #50 / #53** — B67.4 / B68.2 / B68.3 / B68.1 14-day observation WINDOWS (ended 2026-05-15→17). Windows are over; the residual calibration analysis is carried in Phase 25 (25-2 / 25-9). Window-trackers CLOSED.
+- **#74 / #78** — B78 / B79 24-48h forward-watch (2026-05-07). Both subsystems stable-deployed for a month. CLOSED.
+- **#135-ORIG** — superseded by #135 (RESOLVED 2026-05-23). CLOSED.
+- **#87** (B79.0a SQE wildcard DELETE +48h gate, due 2026-05-10) — staging verified 2026-06-09: SQE config is per-class (crypto_spot/xstock_spot 6 rows each), no regression in the month since; gate held. CLOSED.
+- **#128** (UNIVERSE-DISCOVERY cron self-fire one-shot watch) — discovery system operational for weeks (registry actively maintained). CLOSED.
+- **#55** (B69.1/.2/.3 + B73.3 verification asks, 2026-05-04) — the 4 fixes are in the long-running deployed bundle; the nightly replay-ablation cron has consumed Factor Calibration + Exit-Strategy-Ablation for ~35 days. CLOSED.
+- **#81** (load-test policy, FIRST USE B79.0a) — first execution complete per entry text; policy stays documented. CLOSED.
+
+**Escalations resolved (Kyle 2026-06-09):** per-class regime → item 4.7 (above); #111 → Phase 25 (above); #142 (SCORING.b wildcard retirement) → Phase 16 cleanup; #12e (regime-gated strategies dormant) → Phase 25 strategy calibration (tracker closeable there).
 
 ---
 
@@ -322,13 +344,15 @@
 
 ---
 
-## Summary Counts (updated 2026-05-07 post-B78.2 close)
-- **RESOLVED:** 50 (added 2026-05-07: **#75 B78.1 cycle break, #76 B78.2 v1-format ping fix**)
-- **DEFERRED:** 12
-- **SCHEDULED:** 0
-- **CRITICAL:** 0
-- **IN PROGRESS:** 1 (#42 — narration leak)
-- **OPEN:** 8 (#39 CI TS legacy; #43 B67.4 calibration; #46 passive archive partition index; #49 B68.2 calibration; #50 B68.3 calibration; #53 B68.1 calibration; #55 B69.x/B73.3 verification; **#73 B78 shim cleanup in B81; #74 B78 24-48h cadence forward-watch**) — #105 RESOLVED 2026-05-13 (BATCH_80)
+## Summary Counts (regenerated 2026-06-09 — item-3.5 homing audit)
+
+> The old 2026-05-07 tally counted only the early table region (8 OPEN) and never absorbed the ~40 prose-style entries (#100→#209) appended since. The item-3.5 audit re-counted the whole file. **For the authoritative open-issue → roadmap-home inventory, see `Claude Comms and Packages/Scope Files/ITEM_3_5_ISSUE_HOMING_RECONCILIATION.md`.**
+
+- **Non-resolved entries audited:** ~90 — **every one now has an explicit roadmap home** (Phase 19 / 25 / 16 / 20 / 21 / a between-plan item / post-live / operational-infra).
+- **Closed by item 3.5 (stale/superseded):** 11 (see "★ ITEM 3.5 HOMING-AUDIT RESOLUTIONS" near the top — #43/#49/#50/#53/#74/#78/#135-ORIG/#87/#128/#55/#81).
+- **Re-homed by item 3.5:** 4 (#111→Phase 25; #162+#163→between-plan item 4.7 / B-NEW-48; #138→Phase 19).
+- **Distribution of the open remainder (approximate):** Phase 19 ~20 · Phase 25 ~20 · Phase 16 (legacy/dead-code register #136) ~25 · Phase 20 / storage-tiering (item-4 §5a) ~12 · post-live (perp/ML) ~4 · operational-infra (Langston bridge) ~2 · IN PROGRESS 1 (#42 narration leak).
+- Per-entry status cells below remain authoritative for each individual issue; this is a navigational summary, not an exhaustive line-by-line recount.
 
 ---
 
