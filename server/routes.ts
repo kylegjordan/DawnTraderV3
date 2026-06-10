@@ -720,7 +720,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Directive 11.4H.4A-Fix2: Get global dominant regime for UI consistency
       // This ensures Top Scanned Pairs tab shows the SAME regime as Overview tab
-      const dominantRegime = telemetry.getDominantRegime();
+      // B-4.7: per-class votes (the mixed-class vote was deleted).
+      const dominantRegimeCrypto = telemetry.getDominantRegimeForClass('crypto_spot');
+      const dominantRegimeXstock = telemetry.getDominantRegimeForClass('xstock_spot');
+      const dominantRegime = dominantRegimeCrypto; // top-level back-compat = crypto
       
       // Directive 11.4C.3-C: Enforce canonical signalType mapping before transmission
       // Directive 11.4H.2: Add friction and benchmark data to response
@@ -742,14 +745,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
       
       // Directive 11.4H.4A-Fix2: Return global regime with pairs for UI consistency
+      const toPayload = (d: typeof dominantRegime) => d ? {
+        regime: d.regime,
+        regimeScore: d.avgRegimeScore,
+        pairCount: d.pairCount,
+        percentage: d.percentage
+      } : null;
       res.json({
         pairs,
-        globalRegime: dominantRegime ? {
-          regime: dominantRegime.regime,
-          regimeScore: dominantRegime.avgRegimeScore,
-          pairCount: dominantRegime.pairCount,
-          percentage: dominantRegime.percentage
-        } : null
+        globalRegime: toPayload(dominantRegime), // back-compat: crypto
+        // B-4.7: per-class global regimes (null = class idle/warming).
+        globalRegimeByClass: {
+          crypto_spot: toPayload(dominantRegimeCrypto),
+          xstock_spot: toPayload(dominantRegimeXstock),
+        },
       });
     } catch (error: any) {
       console.error('[11.4C-R2][M66] Error fetching ranked pairs:', error);
@@ -8662,7 +8671,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/market-indicators', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { getMarketIndicators } = await import('./services/market-indicators.js');
-      const indicators = getMarketIndicators();
+      // B-4.7: per-class — top-level stays the crypto bundle (back-compat for
+      // the Analytics Overview panel); perClass carries both.
+      const indicators = getMarketIndicators('crypto_spot');
+      const indicatorsXstock = getMarketIndicators('xstock_spot');
       
       // Directive 11.4H.6E Task 3: Diagnostic logging for authorized requests
       console.log(`[11.4H.6E][MarketIndicators] Authorized request processed for ${req.user?.id ?? 'anonymous'}`);
@@ -8694,6 +8706,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           // forward from a prior cycle and the store is currently degraded.
           globalDBSIsStale: indicators.globalDBSIsStale ?? false,
           globalDBSSnapshotAgeSeconds: indicators.globalDBSSnapshotAgeSeconds ?? null,
+          // B-4.7: explicit vote-status marker for the (crypto) top-level bundle.
+          voteStatus: indicators.voteStatus,
+        },
+        // B-4.7: both per-class bundles (xStock regime is no longer hidden
+        // behind a crypto-dominated mixed vote). null friction = no same-class
+        // sample; voteStatus IDLE_OR_WARMING = class idle (weekend/holiday) or
+        // warming (cold start).
+        perClass: {
+          crypto_spot: { marketRegime: indicators.marketRegime, voteStatus: indicators.voteStatus, regimeScore: indicators.regimeScore, regimePercentage: indicators.regimePercentage, globalFrictionScore: indicators.globalFrictionScore, frictionStatus: indicators.frictionDescription.status },
+          xstock_spot: { marketRegime: indicatorsXstock.marketRegime, voteStatus: indicatorsXstock.voteStatus, regimeScore: indicatorsXstock.regimeScore, regimePercentage: indicatorsXstock.regimePercentage, globalFrictionScore: indicatorsXstock.globalFrictionScore, frictionStatus: indicatorsXstock.frictionDescription.status },
         },
         timestamp: indicators.timestamp.toISOString(),
       });

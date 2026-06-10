@@ -30,6 +30,9 @@ import {
 import { computeMarketFriction, describeFriction, type FrictionStatus } from '../core/metrics/cost-metrics.js';
 import { getMarketContextEngine } from './market-context-engine.js';
 import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
+// B-4.7 (#162): per-asset-class indicator bundles.
+import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { xstockDirectionalBiasStore } from '../core/metrics/directional-bias-store.js';
 // B63 Item 16: static import of the persistent-store singleton so we can read snapshot
 // staleness flags without awaiting a dynamic import inside a sync function.
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
@@ -60,6 +63,17 @@ export interface ExpandedRegimeDescription {
 }
 
 export interface MarketIndicators {
+  /** B-4.7 (#162): which asset class this bundle describes. */
+  assetClass: AssetClass;
+  /**
+   * B-4.7: LIVE = the per-class dominant-regime vote produced a result;
+   * IDLE_OR_WARMING = fewer than the minimum same-class pairs are cached
+   * (cold start, or the xStock cohort idle at the weekend boundary / US
+   * market holidays — xStocks trade 24/5). When IDLE_OR_WARMING,
+   * `marketRegime` is the LAST KNOWN value for the class (explicitly marked
+   * by this flag — never a silent stale-hold) and `regimePercentage` is 0.
+   */
+  voteStatus: 'LIVE' | 'IDLE_OR_WARMING';
   marketRegime: MarketRegime;
   regimeDescription: string;
   regimeTitle: string;
@@ -67,7 +81,8 @@ export interface MarketIndicators {
   regimePercentage: number;
   favoredSignalTypes: string[];
   favoredStrategies: string[];
-  globalFrictionScore: number;
+  /** B-4.7: null when no same-class friction sample exists (no cross-class fallback). */
+  globalFrictionScore: number | null;
   frictionSampleSize: number;
   frictionDescription: FrictionStatus;
   frictionNarrative: string;
@@ -152,11 +167,34 @@ for (const regime of Object.keys(REGIME_NARRATIVES) as CanonicalRegimeType[]) {
   };
 }
 
-let cachedGlobalRegime: MarketRegime = 'RANGE_BOUND_STABLE';
-let cachedGlobalFriction: number = 25;
-let cachedGlobalDBSCategory: string = 'NEUTRAL'; // HF6: Cached global DBS category for VTS trade context
-let cachedGlobalDBSScore: number | null = null; // B61 (2026-04-15): numeric global DBS score, for trade metadata and audit
-let lastUpdate: Date = new Date();
+/**
+ * B-4.7 (#162): ALL module state is per-asset-class. The pre-B-4.7 singletons
+ * mixed both classes (crypto-dominated ~2:1) — deleted, no silent global remains.
+ */
+interface ClassIndicatorState {
+  cachedGlobalRegime: MarketRegime;
+  cachedGlobalFriction: number | null;
+  cachedGlobalDBSCategory: string;
+  cachedGlobalDBSScore: number | null;
+  lastFrictionSampleSize: number;
+  lastUpdate: Date;
+}
+const classState = new Map<AssetClass, ClassIndicatorState>();
+function stateFor(assetClass: AssetClass): ClassIndicatorState {
+  let s = classState.get(assetClass);
+  if (!s) {
+    s = {
+      cachedGlobalRegime: 'RANGE_BOUND_STABLE',
+      cachedGlobalFriction: null,
+      cachedGlobalDBSCategory: 'NEUTRAL',
+      cachedGlobalDBSScore: null,
+      lastFrictionSampleSize: 0,
+      lastUpdate: new Date(),
+    };
+    classState.set(assetClass, s);
+  }
+  return s;
+}
 
 const TOP_100_FALLBACK_PAIRS = [
   'BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD',
@@ -164,32 +202,38 @@ const TOP_100_FALLBACK_PAIRS = [
   'ATOM/USD', 'UNI/USD', 'LTC/USD', 'BCH/USD', 'XLM/USD',
 ];
 
-export function updateGlobalRegime(regime: MarketRegime): void {
-  cachedGlobalRegime = regime;
-  lastUpdate = new Date();
-  console.log(`[11.4A][MarketIndicators] Global regime updated: ${regime}`);
+export function updateGlobalRegime(assetClass: AssetClass, regime: MarketRegime): void {
+  const s = stateFor(assetClass);
+  s.cachedGlobalRegime = regime;
+  s.lastUpdate = new Date();
+  console.log(`[11.4A][MarketIndicators] Global regime updated (${assetClass}): ${regime}`);
 }
 
 export interface FrictionResult {
-  score: number;
+  /** B-4.7: null = no same-class sample (class idle/warming — never a cross-class substitute). */
+  score: number | null;
   sampleSize: number;
   symbolCount: number;
 }
 
-let lastFrictionSampleSize = 0;
-
-export function computeGlobalFriction(): number {
-  const result = computeGlobalFrictionWithDetails();
+export function computeGlobalFriction(assetClass: AssetClass): number | null {
+  const result = computeGlobalFrictionWithDetails(assetClass);
   return result.score;
 }
 
-export function computeGlobalFrictionWithDetails(): FrictionResult {
+export function computeGlobalFrictionWithDetails(assetClass: AssetClass): FrictionResult {
   try {
-    // Use paper mode for global friction calculation (default mode)
-    const pool = activeFilterPool.getActivePool('paper');
-    const symbolsToSample = pool.length >= 50
+    // Use paper mode for global friction calculation (default mode).
+    // B-4.7: sample ONLY same-class pool members. The crypto lane keeps its
+    // static fallback list when the pool is thin (the list is crypto by
+    // construction); the xStock lane has NO fallback — a thin/idle xStock
+    // pool yields score=null (Langston pre-audit diff-A item (a): a
+    // crypto-flavored fallback would re-create the C1 contamination).
+    const pool = activeFilterPool.getActivePool('paper')
+      .filter(p => resolveAssetClass(p.symbol, 'kraken') === assetClass);
+    const symbolsToSample = pool.length >= 10
       ? pool.slice(0, 100).map(p => p.symbol)
-      : TOP_100_FALLBACK_PAIRS;
+      : (assetClass === 'crypto_spot' ? TOP_100_FALLBACK_PAIRS : pool.map(p => p.symbol));
 
     let totalFriction = 0;
     let count = 0;
@@ -214,16 +258,18 @@ export function computeGlobalFrictionWithDetails(): FrictionResult {
       }
     }
 
+    const s = stateFor(assetClass);
     if (count === 0) {
-      console.log(`[GlobalFriction][Audit] Sample size: 0 (no metrics available)`);
-      lastFrictionSampleSize = 0;
-      return { score: 25, sampleSize: 0, symbolCount: symbolsToSample.length };
+      console.log(`[GlobalFriction][Audit] (${assetClass}) Sample size: 0 (no same-class metrics) -> score=null`);
+      s.lastFrictionSampleSize = 0;
+      // B-4.7: NO synthetic 25 default — null is the honest no-sample value.
+      return { score: null, sampleSize: 0, symbolCount: symbolsToSample.length };
     }
 
     const avgFriction = Math.round(totalFriction / count);
-    cachedGlobalFriction = avgFriction;
-    lastFrictionSampleSize = count;
-    lastUpdate = new Date();
+    s.cachedGlobalFriction = avgFriction;
+    s.lastFrictionSampleSize = count;
+    s.lastUpdate = new Date();
 
     // Directive 11.4H.3 Task 1: Global Friction Audit Logging
     const spreads = auditData.map(d => d.spread);
@@ -245,57 +291,63 @@ export function computeGlobalFrictionWithDetails(): FrictionResult {
     return { score: avgFriction, sampleSize: count, symbolCount: symbolsToSample.length };
   } catch (err) {
     console.warn('[11.4A][MarketIndicators] Error computing global friction:', err);
-    return { score: cachedGlobalFriction, sampleSize: lastFrictionSampleSize, symbolCount: 0 };
+    const s = stateFor(assetClass);
+    return { score: s.cachedGlobalFriction, sampleSize: s.lastFrictionSampleSize, symbolCount: 0 };
   }
 }
 
-export function getFrictionSampleSize(): number {
-  return lastFrictionSampleSize;
+export function getFrictionSampleSize(assetClass: AssetClass): number {
+  return stateFor(assetClass).lastFrictionSampleSize;
 }
 
-export function getMarketIndicators(): MarketIndicators {
-  // [B79.0n.TELEMETRY] global-singleton-by-design — `/api/market-indicators`
-  // is a crypto-only reader for the Analytics → Overview tab; per-class
-  // extension belongs in OBSERVABILITY #18 (Q3 deferral).
+export function getMarketIndicators(assetClass: AssetClass): MarketIndicators {
+  // B-4.7 (#162): per-asset-class — REQUIRED assetClass (supersedes the
+  // B79.0n.TELEMETRY "crypto-only reader / OBSERVABILITY #18" deferral; this
+  // batch IS that extension for the regime+friction+DBS surface).
   // Directive 11.4H.4A-Fix: Get dominant regime from live telemetry instead of stale cache
   const telemetry = getTelemetryAggregator();
-  // Phase 14.5: Mode-aware regime sourcing
-  // Active trading mode: MCE-derived (broader upstream population ~100-300 pairs)
-  // Passive/VTS mode: VTS-telemetry-derived (existing, valid when VTS is the live population)
+  const s = stateFor(assetClass);
+  // Phase 14.5: Mode-aware regime sourcing, now per class —
+  // MCE-preferred when it has >=5 SAME-CLASS pairs; else the per-class VTS
+  // telemetry vote. Both return null below the same-class minimum (CLASS_IDLE
+  // semantics, B_4_7_PRE_AUDIT §5 — weekend boundary / US holidays / cold start).
   let dominantRegime: { regime: any; avgRegimeScore?: number; avgScore?: number; pairCount: number; percentage: number } | null = null;
   try {
     const mce = getMarketContextEngine();
-    const mceRegime = mce.getDominantRegime();
-    if (mceRegime && mceRegime.pairCount >= 5) {
-      // MCE has sufficient data — use it (active mode or warm cache)
+    const mceRegime = mce.getDominantRegimeForClass(assetClass);
+    if (mceRegime) {
       dominantRegime = { regime: mceRegime.regime, avgRegimeScore: mceRegime.avgScore, pairCount: mceRegime.pairCount, percentage: mceRegime.percentage };
     } else {
-      // Fall back to VTS telemetry (passive mode or cold MCE cache)
-      dominantRegime = telemetry.getDominantRegime();
+      dominantRegime = telemetry.getDominantRegimeForClass(assetClass);
     }
   } catch {
-    dominantRegime = telemetry.getDominantRegime();
+    dominantRegime = telemetry.getDominantRegimeForClass(assetClass);
   }
 
-  // Phase 14: Use normalizeRegime() instead of lossy mapToBaseRegime()
-  // This correctly maps any regime name (old canonical, ghost, or new canonical) to current canonical
+  // B-4.7: voteStatus is the EXPLICIT idle/warming marker — when the vote is
+  // null, marketRegime carries the last known per-class value but consumers
+  // (UI, transitions) see IDLE_OR_WARMING; no silent stale-hold.
+  const voteStatus: 'LIVE' | 'IDLE_OR_WARMING' = dominantRegime ? 'LIVE' : 'IDLE_OR_WARMING';
   const effectiveRegime: MarketRegime = dominantRegime
     ? normalizeRegime(dominantRegime.regime)
-    : cachedGlobalRegime;
+    : s.cachedGlobalRegime;
   const effectiveRegimeScore = dominantRegime?.avgRegimeScore ?? 50;
   const effectivePercentage = dominantRegime?.percentage ?? 0;
 
-  // Update cache for consistency
+  // Update per-class cache for consistency
   if (dominantRegime) {
-    cachedGlobalRegime = effectiveRegime;
-    lastUpdate = new Date();
+    s.cachedGlobalRegime = effectiveRegime;
+    s.lastUpdate = new Date();
   }
 
   const regimeKey = effectiveRegime as string;
   const expandedRegime = getCachedRegimeDescriptions()[regimeKey]
     ?? getCachedRegimeDescriptions()['RANGE_BOUND_STABLE'];
-  const frictionResult = computeGlobalFrictionWithDetails();
-  const frictionStatus = describeFriction(frictionResult.score);
+  const frictionResult = computeGlobalFrictionWithDetails(assetClass);
+  // B-4.7: null score -> an explicit no-sample status, never a synthetic band.
+  const frictionStatus: FrictionStatus = frictionResult.score !== null
+    ? describeFriction(frictionResult.score)
+    : { value: -1, status: 'NO_SAMPLE', color: 'yellow', emoji: '\u23f8\ufe0f', narrative: `No same-class friction sample for ${assetClass} (class idle or warming).` };
 
   // Directive 11.4H.6A Task 1: Use strategy mapper for dynamic regime-based strategies/signals
   // B79.0n.STRATEGY (2026-05-24): global market-indicators view is crypto-centric (single
@@ -304,10 +356,10 @@ export function getMarketIndicators(): MarketIndicators {
   // this function provides the global summary for the UI. Threading 'crypto_spot' here
   // preserves byte-identical pre-batch behavior. Phase 17 UI consolidation may add a
   // per-asset-class global regime view.
-  const favoredStrategies = getFavoredStrategiesForRegime(regimeKey, 'crypto_spot');
-  const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey, 'crypto_spot');
+  const favoredStrategies = getFavoredStrategiesForRegime(regimeKey, assetClass);
+  const favoredSignalTypes = getFavoredSignalTypesForRegime(regimeKey, assetClass);
 
-  console.log(`[Phase14][MarketIndicators] regime=${effectiveRegime} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
+  console.log(`[Phase14][MarketIndicators] class=${assetClass} regime=${effectiveRegime} vote=${voteStatus} score=${effectiveRegimeScore} percentage=${effectivePercentage}%`);
   // Directive 11.4H.6G: Canonical logging for regime-strategy mapping
   console.log(`[11.4H.6G][Canonical] Regime=${effectiveRegime} | Strategies=${favoredStrategies.join(", ")} | Signals=${favoredSignalTypes.join(", ")}`);
 
@@ -316,6 +368,17 @@ export function getMarketIndicators(): MarketIndicators {
   let globalDBSIsStale = false;
   let globalDBSSnapshotAgeSeconds: number | null = null;
   try {
+    if (assetClass === 'xstock_spot') {
+      // B-4.7: the xStock class reads ITS OWN store (B-PHASE-A2) — never the
+      // crypto computeGlobalBias path.
+      const snap = xstockDirectionalBiasStore.getLatestSnapshot();
+      globalDBS = snap?.value ?? null;
+      globalDBSIsStale = snap?.isStale ?? false;
+      globalDBSSnapshotAgeSeconds = snap ? Math.max(0, Math.round((Date.now() - snap.snapshotTime) / 1000)) : null;
+      if (globalDBS && globalDBS.pairCount > 0) {
+        console.log(`[B62][MarketIndicators] Global DBS (xstock_spot): score=${globalDBS.score.toFixed(3)} category=${globalDBS.category} pairs=${globalDBS.pairCount}`);
+      }
+    } else {
     const mce = getMarketContextEngine();
     // B62 A.3 fix #1: Extract real 24h volumes from MCE cached contexts
     const volumes = mce.getCachedVolumes();
@@ -331,6 +394,7 @@ export function getMarketIndicators(): MarketIndicators {
       globalDBSIsStale = snapshot.isStale;
       globalDBSSnapshotAgeSeconds = Math.max(0, Math.round((Date.now() - snapshot.snapshotTime) / 1000));
     }
+    }
   } catch (err) {
     console.warn('[B62][MarketIndicators] Global DBS unavailable:', err);
   }
@@ -338,15 +402,19 @@ export function getMarketIndicators(): MarketIndicators {
   // HF6: Cache DBS category for VTS trade context getter
   // B61 (2026-04-15): also cache the numeric score
   if (globalDBS) {
-    cachedGlobalDBSCategory = globalDBS.category;
-    cachedGlobalDBSScore = globalDBS.score;
+    s.cachedGlobalDBSCategory = globalDBS.category;
+    s.cachedGlobalDBSScore = globalDBS.score;
   }
 
   // Directive 11.4H.5 Task 3: Check for market event transitions
-  checkRegimeTransition(effectiveRegime);
-  checkFrictionTransition(frictionStatus.status);
+  // B-4.7: transitions tracked PER CLASS; IDLE_OR_WARMING suppresses
+  // transition events (the first LIVE vote after idle re-seeds silently).
+  checkRegimeTransition(assetClass, effectiveRegime, voteStatus);
+  checkFrictionTransition(assetClass, frictionStatus.status, voteStatus);
 
   return {
+    assetClass,
+    voteStatus,
     marketRegime: effectiveRegime,
     regimeTitle: expandedRegime.title,
     regimeDescription: expandedRegime.description,
@@ -361,7 +429,7 @@ export function getMarketIndicators(): MarketIndicators {
     globalDBS,
     globalDBSIsStale,
     globalDBSSnapshotAgeSeconds,
-    timestamp: lastUpdate,
+    timestamp: s.lastUpdate,
   };
 }
 
@@ -375,20 +443,21 @@ export function getRegimeInfo(regime: MarketRegime): RegimeInfo {
   return REGIME_DESCRIPTIONS_COMPAT[regime] || REGIME_DESCRIPTIONS_COMPAT['RANGE_BOUND_STABLE'];
 }
 
-export function getCurrentRegime(): MarketRegime {
-  return cachedGlobalRegime;
+export function getCurrentRegime(assetClass: AssetClass): MarketRegime {
+  return stateFor(assetClass).cachedGlobalRegime;
 }
 
-export function getGlobalFriction(): number {
-  return cachedGlobalFriction;
+/** B-4.7: null until a same-class friction sample has been computed. */
+export function getGlobalFriction(assetClass: AssetClass): number | null {
+  return stateFor(assetClass).cachedGlobalFriction;
 }
 
 /**
  * HF6: Get last computed global DBS category for VTS trade context.
  * Updated each cycle by getMarketIndicators().
  */
-export function getLastGlobalDBSCategory(): string {
-  return cachedGlobalDBSCategory;
+export function getLastGlobalDBSCategory(assetClass: AssetClass): string {
+  return stateFor(assetClass).cachedGlobalDBSCategory;
 }
 
 /**
@@ -397,6 +466,6 @@ export function getLastGlobalDBSCategory(): string {
  * computed yet this session (cachedGlobalDBSCategory will still be 'NEUTRAL' in
  * that case, and consumers should treat a null score as "unknown", not "zero").
  */
-export function getLastGlobalDBSScore(): number | null {
-  return cachedGlobalDBSScore;
+export function getLastGlobalDBSScore(assetClass: AssetClass): number | null {
+  return stateFor(assetClass).cachedGlobalDBSScore;
 }

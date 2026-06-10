@@ -1516,22 +1516,23 @@ async function generatePhase10Signal(
       : undefined,
     entryLiquidityKind: tradeAssetClass === 'crypto_spot' ? 'volume_qty' : undefined,
     // Phase 14: Snapshot 6 context dimensions at trade OPEN
-    // [B79.0n.TELEMETRY] currently crypto-only writer — per-class threading
-    // deferred to WIRE-IN #16 (M70 invariant: VTS is the only authorized writer).
+    // B-4.7: per-class (supersedes the WIRE-IN #16 deferral). The pre-B-4.7
+    // `?? regime` fallback was SILENT per-pair-regime substitution — removed;
+    // a null vote (class idle/warming) stamps NULL, the honest at-open value.
     globalRegime: (() => {
-      try { const ta = getTelemetryAggregator(); return ta.getDominantRegime?.()?.regime ?? regime; } catch { return regime; }
+      try { const ta = getTelemetryAggregator(); return ta.getDominantRegimeForClass?.(tradeAssetClass)?.regime ?? undefined; } catch { return undefined; }
     })(),
     pairFriction: (() => {
       // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
       const cm = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     })(),
-    globalFriction: getGlobalFriction(), // HF6: Read cached global friction from market-indicators
+    globalFriction: getGlobalFriction(tradeAssetClass) ?? undefined, // B-4.7: per-class (undefined until same-class sample)
     pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
-    globalDirectionalBias: getLastGlobalDBSCategory(), // HF6: Read cached global DBS from market-indicators
+    globalDirectionalBias: getLastGlobalDBSCategory(tradeAssetClass), // B-4.7: per-class
     // B61 (2026-04-15): capture numeric scores alongside the category strings
     pairDirectionalBiasScore: mceContext.directionalBias?.score ?? null,
-    globalDirectionalBiasScore: getLastGlobalDBSScore(),
+    globalDirectionalBiasScore: getLastGlobalDBSScore(tradeAssetClass) ?? undefined,
     filterTier,  // HF9: IMF filter tier from FX5 scanner
     sourcePool: sourcePool,  // Batch 37: Propagate as-is, no fallback
     // B65.2: snapshot volatility inputs at open for the trailing engine.
@@ -2479,10 +2480,11 @@ async function resolveOpenVirtualTrades(): Promise<{
     phase10SessionTrades.push(closedTradeRecord);
     
     // Update telemetry with actual outcome
-    // [B79.0n.TELEMETRY] currently crypto-only writer — per-class threading
-    // deferred to WIRE-IN #16 (M70 invariant: VTS is the only authorized writer).
+    // B-4.7: per-class threading landed (supersedes the WIRE-IN #16 deferral);
+    // M70 invariant unchanged — VTS is the only authorized writer.
     const telemetry = getTelemetryAggregator();
     telemetry.recordPairTelemetry(trade.symbol, {
+      assetClass: trade.assetClass, // B-4.7: stamped at write
       finalScore: trade.finalScore,
       hybridScore: trade.hybridScore,
       regimeWeight: trade.regimeWeight,
@@ -2982,16 +2984,10 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
   // ~1414-1426. Without these, the open-trades CSV/UI showed empty
   // globalRegime/pairFriction/globalFriction/globalDirectionalBias/
   // globalDirectionalBiasScore columns for every xstock trade.
-  // [B79.0n.TELEMETRY] currently crypto-only reader — getDominantRegime
-  // on the global singleton; per-class extension deferred to WIRE-IN #16.
-  const resolvedGlobalRegime: MarketRegimeType = input.globalRegime ?? (() => {
-    try {
-      const ta = getTelemetryAggregator();
-      return ta.getDominantRegime?.()?.regime ?? input.regime;
-    } catch {
-      return input.regime;
-    }
-  })();
+  // B-4.7 (Langston pre-audit item (b)): globalRegime is an AT-OPEN snapshot —
+  // the close-time re-resolution (which also read the deleted mixed-class
+  // vote) was removed; null-at-open is PRESERVED as the honest value.
+  const resolvedGlobalRegime: MarketRegimeType | undefined = input.globalRegime ?? undefined;
   const resolvedPairFriction = input.pairFriction ?? (() => {
     try {
       // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
@@ -3001,15 +2997,13 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
       return undefined;
     }
   })();
-  const resolvedGlobalFriction = input.globalFriction ?? (() => {
-    try { return getGlobalFriction(); } catch { return undefined; }
-  })();
-  const resolvedGlobalDirectionalBias = input.globalDirectionalBias ?? (() => {
-    try { return getLastGlobalDBSCategory(); } catch { return undefined; }
-  })();
-  const resolvedGlobalDirectionalBiasScore = input.globalDirectionalBiasScore ?? (() => {
-    try { return getLastGlobalDBSScore() ?? null; } catch { return null; }
-  })();
+  // B-4.7 (Langston pre-audit item (b)): these are AT-OPEN snapshots — the
+  // close-time re-resolution fallbacks were removed (re-resolving at close
+  // mixes timestamps AND, pre-B-4.7, mixed classes). A null/undefined at-open
+  // value is PRESERVED as the honest absence.
+  const resolvedGlobalFriction = input.globalFriction ?? undefined;
+  const resolvedGlobalDirectionalBias = input.globalDirectionalBias ?? undefined;
+  const resolvedGlobalDirectionalBiasScore = input.globalDirectionalBiasScore ?? undefined;
 
   const openTrade: OpenVirtualTrade = {
     id: tradeId,
@@ -3766,10 +3760,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         vtsEvalCounters.signalsGenerated++;
         if (pair.sourcePool === 'pattern') { vtsEvalCounters.patternSignalsGenerated = (vtsEvalCounters.patternSignalsGenerated ?? 0) + 1; } else { vtsEvalCounters.quantSignalsGenerated = (vtsEvalCounters.quantSignalsGenerated ?? 0) + 1; }
 
-        // [B79.0n.TELEMETRY] currently crypto-only writer — per-class
-        // threading deferred to WIRE-IN #16 (M70: VTS-only writer).
+        // B-4.7: per-class threading landed (supersedes the WIRE-IN #16
+        // deferral); M70 invariant unchanged — VTS-only writer.
         const telemetry = getTelemetryAggregator();
         telemetry.recordPairTelemetry(pair.symbol, {
+          assetClass: tradeRecord.assetClass, // B-4.7: stamped at write
           finalScore: tradeRecord.finalScore,
           hybridScore: tradeRecord.hybridScore,
           regimeWeight: tradeRecord.regimeWeight,
@@ -4442,7 +4437,10 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
         trade.finalScore,
         normalizeNetReturn(trade.expectedEdge ?? 0),
         trade.frictionCost ?? 0,
-        0, // contextBonus — not available on open trade, use 0
+        0, // contextBonus — DECLARED-NEVER-WIRED (B-4.7 C2 finding): the
+           // CONTEXT_BONUS pair-vs-global regime agreement rules exist in
+           // ranking-weights.ts but nothing computes them; wire-or-remove is
+           // homed to AMR scoping (RUNNING_ISSUES #217).
         trade.signalType ?? 'QUANT'
       ),
       finalScore: trade.finalScore,

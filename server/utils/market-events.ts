@@ -48,8 +48,14 @@ const EVENTS_FILE = path.join(EVENTS_DIR, 'events.json');
 let events: MarketEvent[] = [];
 let eventIdCounter = 0;
 
-let lastRegime: MarketRegime | null = null;
-let lastFrictionBand: string | null = null;
+// B-4.7 (#162): transition state is PER ASSET CLASS. IDLE_OR_WARMING votes
+// suppress transition events; the first LIVE vote after idle RE-SEEDS the
+// tracker silently (no false "regime flip" on the Sunday reopen / post-holiday
+// resume — xStocks trade 24/5, so idle windows are weekend-boundary/holiday).
+import type { AssetClass } from '../../shared/asset-classes.js';
+const lastRegimeByClass = new Map<AssetClass, MarketRegime | null>();
+const lastFrictionBandByClass = new Map<AssetClass, string | null>();
+const classWasIdle = new Map<AssetClass, boolean>();
 
 const REGIME_DISPLAY_NAMES: Record<string, string> = {
   // Phase 14 canonical regime names
@@ -117,15 +123,9 @@ function loadEventsFromFile(): void {
         eventIdCounter = parseInt(match[1], 10);
       }
       
-      const lastRegimeEvent = events.find(e => e.type === 'REGIME_TRANSITION' && e.newValue);
-      if (lastRegimeEvent && lastRegimeEvent.newValue) {
-        lastRegime = lastRegimeEvent.newValue as MarketRegime;
-      }
-      
-      const lastFrictionEvent = events.find(e => e.type === 'FRICTION_TRANSITION' && e.newValue);
-      if (lastFrictionEvent && lastFrictionEvent.newValue) {
-        lastFrictionBand = lastFrictionEvent.newValue;
-      }
+      // B-4.7: startup tracker rehydration RETIRED — pre-B-4.7 events carry no
+      // class label, and the per-class trackers re-seed silently on the first
+      // LIVE vote anyway (no spurious transition either way).
     }
     
     console.log(`[11.4H.5][MarketEvent] Loaded ${events.length} events from disk (7-day retention)`);
@@ -216,11 +216,26 @@ export function logMarketEvent(event: Omit<MarketEvent, 'id' | 'timestamp'>): vo
   console.log(`[11.4H.5][MarketEvent] ${event.type}: ${event.message}`);
 }
 
-export function checkRegimeTransition(newRegime: MarketRegime): void {
+export function checkRegimeTransition(assetClass: AssetClass, newRegime: MarketRegime, voteStatus: 'LIVE' | 'IDLE_OR_WARMING'): void {
+  if (voteStatus === 'IDLE_OR_WARMING') {
+    if (!classWasIdle.get(assetClass)) {
+      classWasIdle.set(assetClass, true);
+      console.log(`[B-4.7][MarketEvents] ${assetClass} regime vote idle/warming — transitions suspended`);
+    }
+    return;
+  }
+  if (classWasIdle.get(assetClass)) {
+    // First LIVE vote after idle: re-seed without an event.
+    classWasIdle.set(assetClass, false);
+    lastRegimeByClass.set(assetClass, newRegime);
+    console.log(`[B-4.7][MarketEvents] ${assetClass} regime vote resumed at ${newRegime} — tracker re-seeded, no transition event`);
+    return;
+  }
+  const lastRegime = lastRegimeByClass.get(assetClass) ?? null;
   if (lastRegime !== null && lastRegime !== newRegime) {
     logMarketEvent({
       type: 'REGIME_TRANSITION',
-      message: `Global regime changed from ${REGIME_DISPLAY_NAMES[lastRegime] || lastRegime} to ${REGIME_DISPLAY_NAMES[newRegime] || newRegime}`,
+      message: `[${assetClass}] Global regime changed from ${REGIME_DISPLAY_NAMES[lastRegime] || lastRegime} to ${REGIME_DISPLAY_NAMES[newRegime] || newRegime}`,
       explanation: explainRegimeChange(lastRegime, newRegime),
       previousValue: lastRegime,
       newValue: newRegime,
@@ -234,23 +249,30 @@ export function checkRegimeTransition(newRegime: MarketRegime): void {
       severity: 'info',
     });
   }
-  lastRegime = newRegime;
+  lastRegimeByClass.set(assetClass, newRegime);
 }
 
-export function checkFrictionTransition(newFrictionBand: string): void {
+export function checkFrictionTransition(assetClass: AssetClass, newFrictionBand: string, voteStatus: 'LIVE' | 'IDLE_OR_WARMING'): void {
+  // B-4.7: idle classes (and the NO_SAMPLE friction status) don't emit
+  // friction transitions; tracker re-seeds on resume via the same idle flag
+  // maintained by checkRegimeTransition (called first in getMarketIndicators).
+  if (voteStatus === 'IDLE_OR_WARMING' || newFrictionBand === 'NO_SAMPLE') {
+    return;
+  }
+  const lastFrictionBand = lastFrictionBandByClass.get(assetClass) ?? null;
   if (lastFrictionBand !== null && lastFrictionBand !== newFrictionBand) {
     const isWorsening = FRICTION_BAND_ORDER.indexOf(newFrictionBand) > FRICTION_BAND_ORDER.indexOf(lastFrictionBand);
     
     logMarketEvent({
       type: 'FRICTION_TRANSITION',
-      message: `Global friction moved from ${lastFrictionBand} to ${newFrictionBand}`,
+      message: `[${assetClass}] Global friction moved from ${lastFrictionBand} to ${newFrictionBand}`,
       explanation: explainFrictionChange(lastFrictionBand, newFrictionBand),
       previousValue: lastFrictionBand,
       newValue: newFrictionBand,
       severity: isWorsening ? 'warning' : 'info',
     });
   }
-  lastFrictionBand = newFrictionBand;
+  lastFrictionBandByClass.set(assetClass, newFrictionBand);
 }
 
 export function getMarketEvents(limit: number = 50): MarketEvent[] {
@@ -259,14 +281,18 @@ export function getMarketEvents(limit: number = 50): MarketEvent[] {
 
 export function clearMarketEvents(): void {
   events.length = 0;
-  lastRegime = null;
-  lastFrictionBand = null;
+  lastRegimeByClass.clear();
+  lastFrictionBandByClass.clear();
+  classWasIdle.clear();
   saveEventsToFile();
   console.log('[11.4H.5][MarketEvent] Events cleared');
 }
 
-export function getLastKnownState(): { regime: MarketRegime | null; frictionBand: string | null } {
-  return { regime: lastRegime, frictionBand: lastFrictionBand };
+export function getLastKnownState(assetClass: AssetClass): { regime: MarketRegime | null; frictionBand: string | null } {
+  return {
+    regime: lastRegimeByClass.get(assetClass) ?? null,
+    frictionBand: lastFrictionBandByClass.get(assetClass) ?? null,
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -293,19 +319,19 @@ export async function initializeMarketState(): Promise<void> {
   try {
     // Dynamic import to avoid circular dependencies
     const { getMarketIndicators } = await import('../services/market-indicators.js');
-    const indicators = getMarketIndicators();
-    
-    // Initialize lastRegime and lastFrictionBand without triggering events
-    // We set these directly rather than calling checkRegimeTransition/checkFrictionTransition
-    // to avoid logging a "transition" on startup
-    if (lastRegime === null) {
-      lastRegime = indicators.marketRegime;
-      console.log(`[11.4H.5][Init] Initialized lastRegime: ${lastRegime}`);
-    }
-    
-    if (lastFrictionBand === null && indicators.frictionDescription?.status) {
-      lastFrictionBand = indicators.frictionDescription.status;
-      console.log(`[11.4H.5][Init] Initialized lastFrictionBand: ${lastFrictionBand}`);
+    // B-4.7: initialize BOTH classes; an IDLE_OR_WARMING class stays unseeded
+    // (its tracker re-seeds silently on the first LIVE vote).
+    for (const cls of ['crypto_spot', 'xstock_spot'] as const) {
+      const indicators = getMarketIndicators(cls);
+      if (indicators.voteStatus === 'LIVE' && (lastRegimeByClass.get(cls) ?? null) === null) {
+        lastRegimeByClass.set(cls, indicators.marketRegime);
+        console.log(`[11.4H.5][Init] Initialized lastRegime (${cls}): ${indicators.marketRegime}`);
+      }
+      if (indicators.voteStatus === 'LIVE' && (lastFrictionBandByClass.get(cls) ?? null) === null
+          && indicators.frictionDescription?.status && indicators.frictionDescription.status !== 'NO_SAMPLE') {
+        lastFrictionBandByClass.set(cls, indicators.frictionDescription.status);
+        console.log(`[11.4H.5][Init] Initialized lastFrictionBand (${cls}): ${indicators.frictionDescription.status}`);
+      }
     }
     
     // Ensure events file exists
@@ -315,7 +341,7 @@ export async function initializeMarketState(): Promise<void> {
       console.log(`[11.4H.5][Init] Created empty events file: ${EVENTS_FILE}`);
     }
     
-    console.log(`[11.4H.5][Init] ✅ Market state initialized - regime=${lastRegime}, friction=${lastFrictionBand}`);
+    console.log(`[11.4H.5][Init] ✅ Market state initialized (per-class): crypto=${lastRegimeByClass.get('crypto_spot') ?? 'unseeded'}, xstock=${lastRegimeByClass.get('xstock_spot') ?? 'unseeded'}`);
   } catch (error: any) {
     console.error('[11.4H.5][Init] Error initializing market state:', error.message);
   }
@@ -329,13 +355,14 @@ async function checkMarketTransitionsInternal(): Promise<void> {
   try {
     const { getMarketIndicators } = await import('../services/market-indicators.js');
     
-    // This call will trigger checkRegimeTransition and checkFrictionTransition
-    // which compare against lastRegime/lastFrictionBand and log if changed
-    const indicators = getMarketIndicators();
-    
-    // Log only on significant tick intervals for debugging
-    if (ticksSinceLastCheck === 0) {
-      console.log(`[11.4H.5][Scheduler] Checked: regime=${indicators.marketRegime}, friction=${indicators.frictionDescription?.status || 'unknown'}`);
+    // B-4.7: per-class — each call triggers checkRegimeTransition /
+    // checkFrictionTransition for ITS class (idle classes are suppressed there).
+    for (const cls of ['crypto_spot', 'xstock_spot'] as const) {
+      const indicators = getMarketIndicators(cls);
+      // Log only on significant tick intervals for debugging
+      if (ticksSinceLastCheck === 0) {
+        console.log(`[11.4H.5][Scheduler] Checked (${cls}): regime=${indicators.marketRegime} vote=${indicators.voteStatus}, friction=${indicators.frictionDescription?.status || 'unknown'}`);
+      }
     }
   } catch (error: any) {
     console.error('[11.4H.5][Scheduler] Error checking transitions:', error.message);

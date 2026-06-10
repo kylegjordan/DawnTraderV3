@@ -84,7 +84,11 @@ export function getMarketContextFields(
   slippage: number = 0.0005,
   fee: number = 0.0026
 ): MarketContextFields {
-  const regime = getCurrentRegime() as MarketRegimeType;
+  // B-4.7 / Phase-16 register (RUNNING_ISSUES #218): getMarketContextFields
+  // has ZERO callers (dead since the cost-model consolidation) and carried a
+  // hardcoded Tier-6 fee default — DO NOT wire without per-class + fee_model
+  // rework. Explicit crypto_spot keeps the dead path compiling only.
+  const regime = getCurrentRegime('crypto_spot') as MarketRegimeType;
   const regimeInfo = getExpandedRegimeDescription(regime);
   const frictionScore = computeMarketFriction(spread, slippage, fee);
   const frictionStatus = describeFriction(frictionScore);

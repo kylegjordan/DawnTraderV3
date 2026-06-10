@@ -154,6 +154,13 @@ interface CacheEntry {
   expiresAt: number;
 }
 
+/**
+ * B-4.7: minimum unexpired same-class entries before the per-class dominant-
+ * regime vote produces a result (matches the pre-existing >=5 MCE-preferred
+ * threshold in market-indicators). Below this: null -> CLASS_IDLE semantics.
+ */
+const MIN_CLASS_VOTE_PAIRS = 5;
+
 // ─── MCE Class ───────────────────────────────────────────────────────────────
 
 /**
@@ -1721,13 +1728,28 @@ export class MarketContextEngine {
    * Aggregates per-pair regimes across all cached symbols using majority vote.
    * Returns null if cache is empty or all entries expired.
    */
-  getDominantRegime(): { regime: string; avgScore: number; pairCount: number; percentage: number } | null {
+  /**
+   * B-4.7 (#162): per-asset-class dominant regime. The pre-B-4.7
+   * getDominantRegime() majority-voted across the WHOLE cache — both classes
+   * mixed, crypto-dominated (~2:1 cohort sizes) — and was DELETED in this
+   * batch (no silent cross-class vote remains; a deliberate cross-class
+   * aggregate, if ever wanted, must be designed, not inherited).
+   *
+   * Cache keys are `${symbol}:${assetClass}` (B79.0n.MCE) — the class filter
+   * is a key-suffix match. Returns NULL when fewer than MIN_CLASS_VOTE_PAIRS
+   * unexpired entries of the class exist (cold start, or the xStock cohort
+   * idle at the weekend boundary / US market holidays — xStocks trade 24/5).
+   * Consumers handle null EXPLICITLY (CLASS_IDLE semantics, B_4_7_PRE_AUDIT §5).
+   */
+  getDominantRegimeForClass(assetClass: AssetClass): { regime: string; avgScore: number; pairCount: number; percentage: number } | null {
     const now = Date.now();
+    const suffix = `:${assetClass}`;
     const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
     let totalPairs = 0;
 
-    for (const [, entry] of this.cache.entries()) {
-      if (now >= entry.expiresAt) continue; // Skip expired
+    for (const [key, entry] of this.cache.entries()) {
+      if (!key.endsWith(suffix)) continue;     // B-4.7: class filter
+      if (now >= entry.expiresAt) continue;    // Skip expired
 
       const regime = entry.context.regime?.regime;
       if (!regime) continue;
@@ -1740,7 +1762,7 @@ export class MarketContextEngine {
       totalPairs++;
     }
 
-    if (totalPairs === 0) return null;
+    if (totalPairs < MIN_CLASS_VOTE_PAIRS) return null;
 
     const sorted = Object.entries(regimeCounts).sort((a, b) => b[1].count - a[1].count);
     if (sorted.length === 0) return null;
@@ -1752,6 +1774,21 @@ export class MarketContextEngine {
       pairCount: totalPairs,
       percentage: Math.round((stats.count / totalPairs) * 100),
     };
+  }
+
+  /**
+   * TEST-ONLY (B-4.7): seed a context entry directly into the cache so the
+   * per-class vote is unit-testable without the full computeContext pipeline.
+   * Throws outside the vitest environment.
+   */
+  _seedCacheForTests(symbol: string, assetClass: AssetClass, regime: string, regimeScore: number, ttlMs: number = 60_000): void {
+    if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+      throw new Error('_seedCacheForTests is test-only');
+    }
+    this.cache.set(`${symbol}:${assetClass}`, {
+      context: { regime: { regime }, raw: { regimeScore } } as unknown as MarketContext,
+      expiresAt: Date.now() + ttlMs,
+    });
   }
 
 }

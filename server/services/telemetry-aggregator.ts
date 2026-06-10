@@ -24,6 +24,8 @@ import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-
 // risk_sizing modules). Authoritative per-trade resolution (which honors
 // strategy/regime overrides) happens inside trailing-exit-controller.ts itself.
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
+// B-4.7 (#162): per-class telemetry records + per-class dominant-regime vote.
+import type { AssetClass } from '../../shared/asset-classes.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
 import { 
   loadRecentTelemetry, 
@@ -61,6 +63,13 @@ export type TelemetrySource = 'simulation' | 'live';
 
 export interface PairTelemetry {
   symbol: string;
+  /**
+   * B-4.7 (#162): stamped AT WRITE by the VTS lanes (M70 single-writer).
+   * Optional only because records rehydrated from pre-B-4.7 disk persists
+   * lack it — such records are EXCLUDED from per-class votes and age out
+   * within the recency window. New writes always carry it.
+   */
+  assetClass?: AssetClass;
   finalScore: number;
   hybridScore: number;
   regimeWeight: number;
@@ -182,6 +191,8 @@ export class TelemetryAggregatorService {
   recordPairTelemetry(
     symbol: string,
     data: {
+      // B-4.7: REQUIRED — the per-class dominant-regime vote filters on it.
+      assetClass: AssetClass;
       finalScore: number;
       hybridScore?: number;
       regimeWeight?: number;
@@ -241,6 +252,7 @@ export class TelemetryAggregatorService {
 
     const entry: PairTelemetry = {
       symbol,
+      assetClass: data.assetClass, // B-4.7: stamped at write (M70 single-writer)
       finalScore: data.finalScore,
       hybridScore: data.hybridScore ?? 0,
       regimeWeight: data.regimeWeight ?? 0,
@@ -1251,7 +1263,15 @@ export class TelemetryAggregatorService {
    * Returns the most common regime among active pairs with average regime score
    * This replaces the stale static cache in market-indicators.ts
    */
-  getDominantRegime(): { regime: MarketRegime; avgRegimeScore: number; pairCount: number; percentage: number } | null {
+  /**
+   * B-4.7 (#162): per-asset-class dominant regime over VTS telemetry. The
+   * mixed-class getDominantRegime() was DELETED in this batch (see the MCE
+   * counterpart for rationale). Records without an assetClass stamp
+   * (pre-B-4.7 disk rehydrates) are excluded and age out naturally.
+   * Returns null below MIN_CLASS_VOTE_PAIRS — CLASS_IDLE semantics.
+   */
+  getDominantRegimeForClass(assetClass: AssetClass): { regime: MarketRegime; avgRegimeScore: number; pairCount: number; percentage: number } | null {
+    const MIN_CLASS_VOTE_PAIRS = 5;
     const now = Date.now();
     const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
     let totalPairs = 0;
@@ -1261,6 +1281,7 @@ export class TelemetryAggregatorService {
       if (recent.length === 0) continue;
       
       const latest = recent[recent.length - 1];
+      if (latest.assetClass !== assetClass) continue; // B-4.7: class filter (unstamped excluded)
       const regime = latest.pairRegime ?? this.currentRegime;
       
       if (!regimeCounts[regime]) {
@@ -1271,7 +1292,7 @@ export class TelemetryAggregatorService {
       totalPairs++;
     }
     
-    if (totalPairs === 0) {
+    if (totalPairs < MIN_CLASS_VOTE_PAIRS) {
       return null;
     }
     
