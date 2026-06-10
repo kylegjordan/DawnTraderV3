@@ -1,0 +1,40 @@
+# B-4.5 — Step-2 PRE-AUDIT (tiered fee-model fix) — code-level
+
+> Scope `B_4_5_FEE_MODEL_SCOPE.md` (Langston ACK + additions A1/A2). SIM + System Manual consulted: SysManual Ch1 §5 (Cost Model SSOT) + §7 (Slippage & Fee Model) are the supersession targets at governance; SIM cost-model/friction/cost-cache entries traced for the consumer map below. All claims below from direct reads.
+
+## 0. MAKER-vs-TAKER — the Kyle question, settled with code evidence
+**Searched the calibration-arc governance (B.1/B.1.5/B.5 docs, LLM-decisions, roadmap, briefs): NO recorded "switch to maker" decision exists.** The only maker mentions are incidental (stop-distance guard rationale). Code reality: `slippage-fee-model.ts` SUPPORTS maker pricing (`calculateFees(…, isMaker)`) but its **single live caller** (`pre-execution-validator.ts:127`) passes `isMaker=false` explicitly — and `feeRateMaker` has **zero other live consumers**. The engine takes liquidity; the model prices taker. **Decision rule (proposed, for Kyle + Langston):** the fee model must price what the execution engine ACTUALLY DOES, never what is cheaper — pricing maker without earning maker fills is the same optimistic-model bug class this batch kills. A maker-entry policy (post-only limit entries: halves the entry fee 0.80→0.40 but adds fill risk + adverse selection — limit orders fill preferentially when price moves against you) is an EXECUTION-POLICY change that belongs to Phase 19, where paper fill rates can be MEASURED; when/if it ships, the model flips the ENTRY leg to maker (stops remain taker by nature). **This batch therefore: models taker-both-sides; stores BOTH rates per class in the DB so the future flip is a toggle, not a redesign; adds the maker-entry evaluation as a Phase-19 roadmap item at governance (paper-trails Kyle's friction-reduction intent).**
+
+## 1. A1 RESOLVED — the clamp semantics (direct-traced; the trap is REAL but differently shaped)
+- **The ONLY enforced clamp in the live path** is `cost-cache.ts setCostMetrics` (:72-76): per-component `Math.min(component, MAX_COST_BOUND)` with the **GLOBAL** `MAX_COST_BOUND = 0.01` (`exchange-defaults.ts:18`). Writers: market-scanner live-spread writes + `getOrSetCostMetrics` default seeding — the **crypto lane**. Tier-1 taker 0.008 passes 0.01 with **zero headroom** (any DB-set value >1% would silently clamp).
+- **The per-class `friction.maxCostBound` (crypto 0.01 / xStock 0.005) is DECLARED BUT NEVER ENFORCED** — zero application sites outside the friction modules and the type. The xStock 0.005 "trap" cannot fire today because nothing applies it — it is a **dead parameter with a self-contradicting contract** (xstock comment says "total round-trip cap"; `types.ts` says "per-component clamp") — a §9 buried-detail finding in its own right.
+- **Fix in this batch (NO-PATCHES):** (a) global `MAX_COST_BOUND` re-derived **0.01 → 0.02** (sanity ceiling = 2.5× the new taker fee; still catches fat-fingered DB values); (b) per-class `maxCostBound` values aligned to 0.02 with the comment corrected to the type's per-component semantic — kept as the declared contract for the B81 per-pair-overrides future, with a SIM note that enforcement remains cost-cache-only today; (c) the xStock "round-trip cap" comment dies.
+
+## 2. A2 + the consumer map (compile-driven, all 12 importers classified)
+**Retired-symbol set:** `DEFAULT_TAKER_FEE`, `DEFAULT_MAKER_FEE`, `DEFAULT_COST_BUNDLE` (embeds the fee), `computeDefaultTotalCost()` (embeds the fee). Staying (not fee): `DEFAULT_SLIPPAGE`, `DEFAULT_SPREAD`, `MAX_COST_BOUND` (value re-derived per §1).
+| Importer | Pulls | Classification |
+|---|---|---|
+| `core/cache/cost-cache.ts` | TAKER_FEE + COST_BUNDLE + bound | **Re-point** — default fee seed + bundle seeding become DB-resolved |
+| `core/math/cost-model.ts` | MAX_COST_BOUND (+ re-export :263) | Bound only — touched for §1(a); fee flows arrive via friction merge (§3) |
+| `asset_classes/crypto_spot/friction.ts` | TAKER+MAKER+others | **Re-point** — fee fields become DB-resolved (§3) |
+| `asset_classes/xstock_spot/friction.ts` | (hardcoded literals) | **Literals die** — DB-resolved (§3) |
+| `config/adaptive-thresholds.ts` | TAKER_FEE (aliased) | **Re-point** — fee-derived thresholds must track the resolved fee (verify exact use at build) |
+| `core/calculations/expectancy.ts` | fee alias + SLIPPAGE | **Re-point** (fee consumer in the EV math) |
+| `routes.ts` | TAKER_FEE + SLIPPAGE | **Re-point** (display/diagnostic surface — resolved value, honest UI) |
+| `services/paper-execution-engine.ts` | TAKER_FEE + SLIPPAGE | **Re-point** (paper realism pricing) |
+| `services/slippage-fee-model.ts` | TAKER+MAKER | **Re-point** (both rates; maker stays plumbed, unconsumed — §0) |
+| `core/metrics/cost-metrics.ts` | SPREAD only | Not a fee consumer — untouched |
+| `config/schema-version.ts` | (verify at build) | Likely version metadata — classify in the diff |
+| 2 test files (`cost_cache`, `b79-0n-execution-audit`) | fixtures | Updated to Tier-1 fixtures |
+
+## 3. O1 resolution design — ONE merge site, fail-hard
+`getFrictionForAssetClass` (`cost-model.ts:~103`) is already the single dispatch point returning the static per-class friction objects. Design: **that function merges DB-resolved fee fields over the static non-fee fields at call time** — `feeRateTaker`/`feeRateMaker` from the warmed B72 cache (`getCachedNumberRequired('fee_model', assetClass, 'spot_taker_fee' | 'spot_maker_fee')`, **fail-hard**, prefetched + boot-asserted), spread/slippage/bound remain static module values (out of scope). Static module fee fields become explicit `NaN` tombstones with a comment (any path that bypasses the merge poisons visibly rather than silently using stale values). Q2 settled: **decimal storage** (0.008/0.004 — matches the type contract's documented decimal convention and the friction modules' existing values).
+
+## 4. Blast radius
+- **EV gate tightens everywhere** (round-trip ~0.72%→~1.80% crypto, ~0.79%→~1.87% xStock): VTS admits drop, would_admit verdicts tighten — INTENDED realism; epoch bump all-3 sources at deploy (scope O3); 24h admit-rate comparison at the 4.6-B soak touchpoint (Langston non-blocking, adopted).
+- Downstream calibrations (B.1 finalScore floors, B.2 lq_min) are NOT fee-derived — no recalibration debt; Phase-25 calibrates post-fix.
+- No schema change beyond module_constants rows; no UI; cost telemetry surfaces the resolved values (verification hook).
+- Boot ordering: fee reads occur only at scan/eval time (post-warmup) — b72 prefetch covers; boot assertion = deploy-time failure on missing rows, not silent mid-cycle.
+
+## 5. Verification plan (unchanged from scope O5 + additions)
+Boot assertion both rows · cost telemetry 0.80/0.40 + round-trip ~1.80% both classes · zero live reads of retired symbols (grep+tsc) · admit-shift counters (1h + the 24h soak-touchpoint comparison) · VTS cadence unaffected · epoch-bump statement in the completion report.
