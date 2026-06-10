@@ -1,6 +1,7 @@
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { storage } from '../storage';
 import { activeFilterPool } from './active-filter-pool.js';
+import { recordSyncSpan, recordSyncSpanMs, syncSpanStart } from './scan-stall-instrument.js';
 import { getAdaptiveScanManager, type AdaptiveScanBatch } from './adaptive-scan-manager.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { setCostMetrics } from '../core/cache/cost-cache.js';
@@ -662,10 +663,15 @@ export async function collectAdaptiveBatch(
     const B63_OHLC_FETCH_CONCURRENCY = 10; // Kraken-friendly burst size
     for (let i = 0; i < batch.length; i += B63_OHLC_FETCH_CONCURRENCY) {
       const chunk = batch.slice(i, i + B63_OHLC_FETCH_CONCURRENCY);
+      // B-4.6-B chunk A (measurement only): per-pair ATR/DBS sync spans + the
+      // batch sum (= the batch's worst-case atomic span when all 10 OHLC
+      // fetches resolve warm and the callbacks' sync tails drain back-to-back).
+      let _chunkSyncMs = 0;
       await Promise.all(chunk.map(async (pair) => {
         try {
           const { ohlc } = await ohlcCache.getOHLCData(pair.symbol, 60);
           if (!ohlc || ohlc.length < 20) return;
+          const _ss46b = syncSpanStart();
           const ohlcFull: OHLCData[] = ohlc.map((c: any) => ({
             open: parseFloat(c.open),
             high: parseFloat(c.high),
@@ -675,7 +681,7 @@ export async function collectAdaptiveBatch(
             timestamp: typeof c.time === 'number' ? c.time : (c.time ? Date.parse(c.time) : 0),
           }));
           const atr = computeATR14(ohlcFull);
-          if (atr <= 0) return;
+          if (atr <= 0) { _chunkSyncMs += recordSyncSpan('crypto_prefetch_pair', _ss46b); return; }
           const dbsResult = computeDirectionalBias(ohlcFull, atr);
           let slope = 0;
           const priorOHLC = ohlcFull.slice(0, -3);
@@ -687,10 +693,12 @@ export async function collectAdaptiveBatch(
             }
           }
           dbsCache.set(pair.symbol, { score: dbsResult.score, category: dbsResult.category, slope, atr });
+          _chunkSyncMs += recordSyncSpan('crypto_prefetch_pair', _ss46b);
         } catch {
           // OHLC unavailable — pair will fall back to standard filters (no DBS-aware routing)
         }
       }));
+      if (_chunkSyncMs > 0) recordSyncSpanMs('crypto_prefetch_batch', _chunkSyncMs);
     }
     const strongCount = Array.from(dbsCache.values()).filter(d => d.score >= B63_STRONG_DBS_THRESHOLD).length;
     console.log(`[B63.3][AdaptiveScan] Pre-DBS pass: ${dbsCache.size}/${batch.length} pairs with OHLC, ${strongCount} strong-DBS (>=0.35) candidates (${Date.now() - preFetchStart}ms, batched ${B63_OHLC_FETCH_CONCURRENCY} concurrent)`);

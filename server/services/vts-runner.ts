@@ -31,6 +31,7 @@
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
 import { resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { recordSyncSpan, syncSpanStart } from './scan-stall-instrument.js';
 // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
@@ -3324,6 +3325,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       // (3 separate throws/WARNs per pair iteration). Uses safeResolveAssetClass —
       // null → skip pair cleanly. Converts the fail-hard throw on B69-unregistered
       // symbols (e.g. H/USD — Langston Step 8 flag) into a clean per-pair skip.
+      // B-4.6-B chunk A (measurement only): the contiguous per-pair sync span
+      // (assetClass resolve + computeContext + scanPatterns x2 + regime/family
+      // mapping) ending before the per-strategy loop. Early-continue paths are
+      // not recorded (trivial spans; documented undercount).
+      const _ss46b = syncSpanStart();
       const _pairAssetClass = safeResolveAssetClass(pair.symbol, 'kraken');
       if (_pairAssetClass === null) {
         // WARN already logged by safeResolveAssetClass. Skip this pair cleanly.
@@ -3479,6 +3485,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
 
+      recordSyncSpan('vts_eval', _ss46b);
       for (const stratDef of effectiveStrategies) {
         // B70.3 (2026-05-05): exclude universally-disabled strategies BEFORE
         // they reach detect(). Per Kyle directive 2026-05-05: liquidity_trap

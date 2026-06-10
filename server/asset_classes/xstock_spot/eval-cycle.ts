@@ -38,6 +38,7 @@
  */
 
 import { getMarketContextEngine } from '../../services/market-context-engine.js';
+import { recordSyncSpan, syncSpanStart } from '../../services/scan-stall-instrument.js';
 import {
   getStrategiesForRegime,
   isStrategyEnabledForAssetClass,
@@ -383,6 +384,12 @@ export async function evaluateXstockPairForVTS(
       }
     }
 
+    // B-4.6-B chunk A (measurement only): the contiguous pre-fan-out sync block
+    // (lane composition + scanPatterns + regime-strategy set). The fan-out's
+    // per-strategy sync chunks are bounded by per-strategy conditional awaits
+    // and are read via the ELD histogram; if this segment reads cold while ELD
+    // stays hot, the fan-out gets its own wrap in an instrumentation iteration.
+    const _ss46b = syncSpanStart();
     // ── 3c. Lane composition (fan-out) ──
     const lanes: EvalLane[] = [];
     for (const fp of passedFamilies) {
@@ -424,6 +431,7 @@ export async function evaluateXstockPairForVTS(
       return;
     }
 
+    recordSyncSpan('xstock_eval', _ss46b);
     // ── 6. Lane × strategy fan-out (mirrors crypto fx5-scanner.ts:1607-1643) ──
     // B79.0m.b2-followup (Kyle 2026-05-12): per-lane pair-pool eval counts.
     // Counts unique pair-into-lane events so the "Pair-Pool Evaluations"
