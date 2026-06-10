@@ -200,7 +200,7 @@ Only 4 columns actually vary between filter paths:
 - `di_max` — 30-40 (oscillator/reversal upper bound) to 100 (all others)
 - `min_volume` — 150,000 (VTS pattern) to 500,000 (active quant/trend)
 
-All other screener_filters columns are uniform across paths (lq_min=43, corr_max=0.92, final_score_min=0.35, etc.).
+All other screener_filters columns are uniform across paths within an asset class (corr_max=0.92, final_score_min=0.35, etc.). lq_min is per-ASSET-CLASS since B.2-apply 2026-06-10: crypto_spot 43; xstock_spot 38 main paths with strong_trend lanes bound by the relational contract below (§5.2 lq_min spec).
 
 ---
 
@@ -297,17 +297,19 @@ For every Tier 1 and Tier 2 parameter, the framework defines 7 fields:
 | Reversion | If signal quality degrades >15% | Same | Same | Same | Same | Same |
 | Audit | DB change log | Same | Same | Same | Same | Same |
 
-#### lq_min (Log-Liquidity Minimum) — Currently Uniform
+#### lq_min (Log-Liquidity Minimum) — Per-Asset-Class (B.2-apply 2026-06-10)
 
-| Field | All Paths |
-|-------|-----------|
-| Current | 43 |
-| Bounds | [30, 55] |
-| Step size | 3 max per adjustment |
-| Cadence | 14 days minimum (high-impact parameter) |
-| Evidence | 2,000+ evals, 14-day window |
-| Reversion | If pair pool drops below sustainable scanning volume |
-| Audit | DB change log |
+| Field | crypto_spot (all paths) | xstock_spot main (22 paths) | xstock_spot strong_trend (2 lanes) |
+|-------|------------------------|-----------------------------|-------------------------------------|
+| Current | 43 | 38 (B.2 apply, 2026-06-10) | 33 = relational contract (below) |
+| Bounds | [30, 55] | [38, 55] until Phase-25 position-size anchor (Langston guardrail) | follows main |
+| Step size | 3 max per adjustment (autonomous rail) | calibration-batch changes are supervised (Kyle GO), not step-bounded | n/a — derived |
+| Cadence | 14 days minimum | per calibration batch | moves WITH main |
+| Evidence | 2,000+ evals, 14-day window | ≥5 true-RTH sessions of depth replay (B.2 recheck standard) | inherits main's evidence |
+| Reversion | If pair pool drops below sustainable scanning volume | same | same |
+| Audit | DB change log | calibration_ledger + migration | calibration_ledger + migration |
+
+**★ STRONG_TREND RELATIONAL CONTRACT (B.2-apply, Langston Step-4 governance ask, 2026-06-10):** the two xstock_spot strong_trend lanes (`vts_strong_trend`, `active_strong_trend`) carry `lq_min = max(30, main − 5)` — deliberately LOOSER than the main floor (strong_trend's tighter DI/regime gating earns a thinner-book allowance), floor 30, ordering strong_trend < main always preserved. **Any future move of the xstock main lq_min MUST re-derive the strong_trend lanes from this formula in the same migration** — they are no longer independently tunable values (the pre-B.2 30/35 were crypto-clone artifacts that drifted). Evidence basis for 38: five-true-RTH-session depth replay 2026-06-03→10 (485 names; 38 admits 433/485 majority-of-buckets vs 43's 128/485; implied $6,309 floor = RTH p10 = the thin-book lens boundary, ADJUSTMENT_FRAMEWORK §1.1 axiom 6 — reject rate is an output, not a target).
 
 #### min_volume — Differentiating
 

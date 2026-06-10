@@ -857,7 +857,7 @@ Item 4 (separate VTS/paper/live + labeled learning substrate) CLOSED — see `IT
 | IMF filters — VN + DI components (B.2) | IMF — volatility/directional pieces are bar-based → revisit | ☑ DONE in B.4 foundation: confirmed BOTH bar-sensitive; 16 `screener_filters` rows recalibrated (di_max 30/35/40→40.3/42.8/45.2 contracting toward 50; vn_max 0.85→0.826 on 4 active families; VN near bar-invariant). Migration `2026-06-04-b4-foundation-vndi-15m-recalib.sql`; Langston signed off |
 
 ### C — bar-INDEPENDENT → STAYS (sanity-check only, no redo)
-- IMF/global liquidity filters — lq_min, min_depth_usd (order-book depth, not bars). [pending lq_min 38 apply on ≥5 RTH, reminder 06-09 — unaffected by 15m]
+- IMF/global liquidity filters — lq_min ☑ APPLIED 2026-06-10 (43→38 main 22 paths + strong_trend relational max(30,main−5)=33; five-session recheck 433/485 names vs 128/485; Langston Step-4 APPROVE + Kyle GO; relational contract recorded in ADJUSTMENT_FRAMEWORK §5.2). min_depth_usd still open (order-book depth, not bars — $5,000 active gate flagged 'revisit at Phase-19 active flip').
 - B3.1b volume-confirmation removal (wrong-instrument data at any interval).
 - Friction (B.4/5), TEC priors (B.6), sector (B.7), macro (C) — outcome/cost based, bar-independent.
 
