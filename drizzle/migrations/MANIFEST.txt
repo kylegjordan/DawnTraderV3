@@ -129,3 +129,4 @@
 2026-06-07b-b-new-53-crypto-provenance-enable.sql
 2026-06-10-item4-step2-calibration-epoch.sql
 2026-06-10-item4-step3-live-engine-gate.sql
+2026-06-10b-b2-lq-apply.sql
