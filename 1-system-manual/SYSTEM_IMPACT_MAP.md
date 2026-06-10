@@ -2830,3 +2830,20 @@ export function getPatternPoolGuardrailsForAssetClass(
 
 ### `server/services/hybrid-confluence-buffer.ts` — D1b FIXED
 - Key now `sourceMode_symbol_patternType`; `BufferedPatternSignal.sourceMode` REQUIRED; `findCompatiblePatterns(symbol, sourceMode)` filters per-source. The three cross-producer contamination vectors (active-path boost from VTS patterns, decay-clock cross-refresh, active→VTS training leak) are dead. RUNNING_ISSUES #210 gate satisfied by this step.
+## Recent Additions (ITEM 4 Phase B steps 2b + 3 + 6 and item 4.6-A, 2026-06-10)
+
+### `server/services/data-archive/would-admit-cache.ts` (NEW, step 2b) — paper-SQE threshold cache for the would_admit bridge
+- `getPaperFinalScoreMinSync(assetClass)`: sync read, 60s stale-while-revalidate TTL, 10s failure cooldown (no per-row retry hammering of a degraded config path), never throws into the archive path. Upstream: `getSQEThresholdsFromConfig('paper', ...)`. Downstream (SOLE consumer): `signal-eval-archiver.ts` features build — `mode='vts'` rows get `would_admit_v0` + `would_admit_basis` (`final_score_vs_paper_finalScoreMin` / `thresholds_not_warm` / `no_final_score`) + `would_admit_threshold`. ONE stamp site by design (the archiver convergence point). Blast radius: telemetry-only (features JSONB).
+
+### `server/routes.ts` `/api/trading/start` live branch — the Phase-21 live-engine gate (step 3)
+- Fail-CLOSED read of `module_constants` `live_engine_gate`/`live_engine_enabled` (seeded `'0'::jsonb`, in `b72-warmup.ts` PREFETCH_MODULES); refuses **409 `LIVE_ENGINE_PHASE21_GATED`** unless strictly `=== 1`; gate sits BEFORE any `globalLiveEngine` reference; NO state flip on refusal. **⚠️ jsonb booleans are INVISIBLE to the B72 numeric resolver — the Phase-21 flip sets numeric `1` (roadmap 19-17b); never truthy-simplify the read.** UI: `client/src/hooks/use-trading.tsx` start-mutation onError surfaces the 409 with a Phase-21 message. Locks: `server/tests/unit/item4-step3-switch-cleave.test.ts` (gate presence/ordering/fail-closed/no-flip/strict-===1, stop-per-mode, VTS-handler no-coupling).
+- **If you change X check Y:** changing the B72 constants resolver's type handling → re-verify the gate read (test 1e); changing `/trading/start` flow → the gate MUST stay ahead of any engine reference; building Phase-21 live → flip the constant to numeric 1, do NOT remove the gate.
+
+### `server/services/market-context-engine.ts` — per-pair regime log line behind default-OFF `MCE_PER_PAIR_LOG` (item 4.6-A)
+- The per-(symbol,cycle) `[Phase14][MCE] <symbol>: regime=...` console line (~98/min; the bulk of a 43GB out.log) is emitted only when env `MCE_PER_PAIR_LOG=1` (read once at module load; restart to flip; `=1` reproduces the historical format byte-identically). **With the line OFF, `pair_scan_archive` row count is the SOLE compute-once witness** (exactly one row per (symbol,cycle) — the throughput study verified the 1:1 exactly). Boot/lifecycle MCE lines are NOT gated.
+
+### `server/services/health-monitor.ts` — ⚠️ ENGINE block reads legacy `global.tradingEngines` (#214, found by the step-6 study)
+- `checkEngineHealth` scans the legacy per-user registry → reports `ok:true / isRunning:false` for an actively-trading paper engine, and provides ZERO paper liveness signal. The QUEUE block reads the real operation queues (correct). THREE globals currently answer "is paper running" (`global.tradingEngines` [lying] / `getGlobalSession()` [correct] / `globalPaperPortfolioManager`); fix = consolidate to ONE truth source, targeted Phase-19 prep (#214). Do not add new readers of `global.tradingEngines`.
+
+### Throughput-study architectural resolution (step 6)
+- VTS + paper concurrent **in-process = measured GO** (all 6 gates; `ITEM_4_THROUGHPUT_STUDY_RESULTS.md`). The packet §6 separate-VTS-process option: NOT needed pre-Phase-19; re-evaluate at Phase 21 with 3 real producers. The event-loop lag tail belongs to the 306-pair scan (item 4.6-B — must instrument with `perf_hooks.monitorEventLoopDelay` histograms), not to producer concurrency.

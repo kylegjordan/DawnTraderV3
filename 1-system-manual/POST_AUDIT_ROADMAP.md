@@ -15,9 +15,8 @@
 
 **Phase 24 (xstock_spot onboarding) is governance-closed.** Active trading is OFF. The system is executing the **Interphase 24→19** work program — the ordered set of items between the Phase-24 close and the Phase-19 kickoff. Canonical ordering + live per-item status: **`PHASE_24_TO_19_READINESS_CHECKLIST.md`** (that doc governs if any wording here diverges).
 
-- **Done:** item 1 (onboarding-workflow rebuild) · item 2 (Phase-24 governance close) · item 3 (ml-service retired, B-NEW-54) · item 3.5 (issue-homing audit + roadmap reorder).
-- **In flight:** item 4 — separate VTS / paper / live into independent standalone systems (+ storage-architecture design + throughput study).
-- **Next after item 4:** the item-4 throughput-study remediation + 4.6 (scan-stall structural fix + disk hygiene — hygiene half executes immediately) → 4.5 (Kraken tiered-fee-model fix) → 4.7 (per-asset-class regime) → 5 (AMR body) → **Phase 19 kicks off.**
+- **Done:** item 1 (onboarding-workflow rebuild) · item 2 (Phase-24 governance close) · item 3 (ml-service retired, B-NEW-54) · item 3.5 (issue-homing audit + roadmap reorder) · **item 4 — separate VTS / paper / live into independent standalone systems — CLOSED 2026-06-10** (all 6 throughput-study gates pass; zero cross-contamination proven under live concurrency; live start hard-gated until Phase 21; capacity verdict: keep current Hetzner, in-process GO — umbrella report `ITEM_4_UMBRELLA_COMPLETION_REPORT.md`) · **item 4.6 half A (disk hygiene) — EXECUTED 2026-06-10** (disk 80%→24%).
+- **In flight / next:** 4.6 half B (the structural scan-stall fix, scoped from the throughput-study results, `monitorEventLoopDelay` instrumentation required) → 4.5 (Kraken tiered-fee-model fix) → 4.7 (per-asset-class regime) → 5 (AMR body) → **Phase 19 kicks off.**
 
 **The current trading posture:** the system has been in VTS / passive learning since end of Phase 8. Phase 19 is the work that turns Paper-Mode active trading back ON and debugs it end-to-end. Live trading is Phase 21, gated behind paper calibration comfort (see §2).
 
