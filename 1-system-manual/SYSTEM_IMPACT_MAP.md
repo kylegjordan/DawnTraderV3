@@ -2830,6 +2830,7 @@ export function getPatternPoolGuardrailsForAssetClass(
 
 ### `server/services/hybrid-confluence-buffer.ts` — D1b FIXED
 - Key now `sourceMode_symbol_patternType`; `BufferedPatternSignal.sourceMode` REQUIRED; `findCompatiblePatterns(symbol, sourceMode)` filters per-source. The three cross-producer contamination vectors (active-path boost from VTS patterns, decay-clock cross-refresh, active→VTS training leak) are dead. RUNNING_ISSUES #210 gate satisfied by this step.
+
 ## Recent Additions (ITEM 4 Phase B steps 2b + 3 + 6 and item 4.6-A, 2026-06-10)
 
 ### `server/services/data-archive/would-admit-cache.ts` (NEW, step 2b) — paper-SQE threshold cache for the would_admit bridge
