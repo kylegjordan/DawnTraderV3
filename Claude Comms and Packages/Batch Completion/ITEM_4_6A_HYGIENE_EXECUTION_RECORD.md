@@ -16,7 +16,7 @@
 - No restart was needed; zero downtime.
 
 ## Remaining 4.6 work (owned)
-- **4.6-A code half:** the per-pair debug line (`market-context-engine.ts:1369`, ~98 lines/min ≈ the bulk of the 43GB) behind a **default-OFF switch** — shipped as a reviewed mini-batch (Step-4 diff to Langston before push). Note: once OFF, `pair_scan_archive` row count is the **sole compute-once witness** (stated in the steps-4-6 report per Langston).
+- ✅ **4.6-A code half SHIPPED same day:** the per-pair debug line (`market-context-engine.ts`, ~98 lines/min ≈ the bulk of the 43GB) is behind **default-OFF `MCE_PER_PAIR_LOG`** (env, read once at module load; `=1` reproduces the historical line byte-identically). Langston Step-4 **APPROVE** (no revisions); bench tsc + vitest green (11 pre-existing-only failures, verified same set); CI run `27270926406` all-4-green on `2bb87d6e3`; deployed + **both-halves log verify PASS** (zero per-pair lines post-restart [last old-code line 10:49:02, new engine up 10:49:32, 0 after]; boot/lifecycle MCE lines intact; VTS beats exact through the restart). Once OFF, `pair_scan_archive` row count is the **sole compute-once witness** (stated in the steps-4-6 report per Langston).
 - **4.6-B structural scan fix:** scoped from `ITEM_4_THROUGHPUT_STUDY_RESULTS.md`; MUST carry `perf_hooks.monitorEventLoopDelay` histograms for before/after; lands before items 4.5/4.7.
 
 ## Governance
