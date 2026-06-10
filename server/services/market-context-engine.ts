@@ -167,6 +167,15 @@ interface CacheEntry {
 // Retained for one release as a reference marker in case we need to roll back.
 const GLOBAL_DBS_MIN_COVERAGE_PCT_DEPRECATED = 0.70;
 
+// ITEM 4.6-A (2026-06-10): the per-pair MCE regime line (computeContext tail)
+// ran ~98 lines/min across the pair universe and was the bulk of a 43GB
+// out.log. Default OFF; enable for debugging with MCE_PER_PAIR_LOG=1.
+// With the line off, pair_scan_archive row count is the compute-once
+// witness (exactly one row per (symbol, cycle)) - stated in
+// ITEM_4_PHASE_B_STEPS_4_6_COMPLETION_REPORT.md so audits don't hunt
+// for vanished log lines.
+const MCE_PER_PAIR_LOG = process.env.MCE_PER_PAIR_LOG === '1';
+
 export class MarketContextEngine {
   private cache: Map<string, CacheEntry> = new Map();
   private config: MCEConfig;
@@ -1365,12 +1374,14 @@ export class MarketContextEngine {
       this.peakCacheSize = currentValidCount;
     }
 
-    console.log(
-      `[Phase14][MCE] ${symbol}: regime=${regimeResult.regime} conf=${regimeResult.confidence.toFixed(3)} ` +
-      `vwap=${vwap.toFixed(2)} sma=${sma.toFixed(2)} atr=${atr.toFixed(4)} ` +
-      `vol=${regimeResult.volatility.toFixed(4)} mom=${regimeResult.momentum.toFixed(4)} adx=${regimeResult.adx.toFixed(1)} ` +
-      `dbs=${directionalBias.score.toFixed(3)} bias=${directionalBias.category}`
-    );
+    if (MCE_PER_PAIR_LOG) {
+      console.log(
+        `[Phase14][MCE] ${symbol}: regime=${regimeResult.regime} conf=${regimeResult.confidence.toFixed(3)} ` +
+        `vwap=${vwap.toFixed(2)} sma=${sma.toFixed(2)} atr=${atr.toFixed(4)} ` +
+        `vol=${regimeResult.volatility.toFixed(4)} mom=${regimeResult.momentum.toFixed(4)} adx=${regimeResult.adx.toFixed(1)} ` +
+        `dbs=${directionalBias.score.toFixed(3)} bias=${directionalBias.category}`
+      );
+    }
 
     // B63 Item 16: feed the persistent per-pair DBS store. Store is the source of
     // truth for the end-of-cycle atomic snapshot consumed by all global-DBS readers.
