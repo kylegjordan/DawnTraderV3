@@ -54,7 +54,8 @@ SET status = 'applied',
 WHERE asset_class = 'xstock_spot'
   AND sub_batch = 'B.0'
   AND setting_key = 'lq_min'
-  AND scope = 'imf · 22 paths';
+  AND scope = 'imf · 22 paths'
+  AND status <> 'applied';  -- Langston Step-4 R1: makes re-run a true no-op (notes would otherwise re-append)
 
 -- 4) Scoreboard: strong_trend rows get their planned side + applied in the same step.
 UPDATE calibration_ledger
@@ -66,6 +67,7 @@ SET planned_value = '33',
 WHERE asset_class = 'xstock_spot'
   AND sub_batch = 'B.0'
   AND setting_key = 'lq_min'
-  AND scope IN ('imf · active_strong_trend', 'imf · vts_strong_trend');
+  AND scope IN ('imf · active_strong_trend', 'imf · vts_strong_trend')
+  AND status <> 'applied';  -- Langston Step-4 R1 (same guard)
 
 COMMIT;
