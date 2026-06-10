@@ -4200,8 +4200,13 @@ export const systemContext = pgTable("system_context", {
   // Phase 27.F.14.I: Baseline transition logic for simulation phases
   baselineMode: varchar("baseline_mode", { length: 20 }).default("per_simulation"), // 'per_simulation' | 'cumulative' | 'persistent'
   // Fee configuration for profitability calculations
-  makerFeePct: decimal("maker_fee_pct", { precision: 5, scale: 4 }).default("0.0016"), // Kraken maker fee (0.16%)
-  takerFeePct: decimal("taker_fee_pct", { precision: 5, scale: 4 }).default("0.0026"), // Kraken taker fee (0.26%)
+  // B-4.5 R1: the .default("0.0016")/.default("0.0026") Tier-6 fee defaults are
+  // REMOVED (a third baked-in copy of the retired schedule — auto-stamped rows
+  // silently overrode the DB-governed fee model in pre-execution-validator).
+  // NULL = no operator override; the validator falls through to the resolved
+  // per-class fee_model rates. A deliberately-set value (incl. explicit 0) wins.
+  makerFeePct: decimal("maker_fee_pct", { precision: 5, scale: 4 }), // operator override only — NULL = use fee_model
+  takerFeePct: decimal("taker_fee_pct", { precision: 5, scale: 4 }), // operator override only — NULL = use fee_model
   defaultFeeMode: varchar("default_fee_mode", { length: 10 }).default("taker"), // 'maker' | 'taker'
   minNetProfitThreshold: decimal("min_net_profit_threshold", { precision: 5, scale: 4 }).default("0.0030"), // Min 0.30% after fees
   metadata: jsonb("metadata").default(sql`'{}'`),

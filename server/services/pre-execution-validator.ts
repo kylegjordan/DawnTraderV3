@@ -144,8 +144,7 @@ export class PreExecutionValidator {
       // surface — Phase-16 register candidate); the FALLBACK is now the
       // DB-resolved per-class rate. No hardcoded fee literals remain.
       const _b45Friction = getFrictionForAssetClass(_b45AssetClass);
-      const makerFeePct = systemContext?.makerFeePct ? parseFloat(systemContext.makerFeePct) : _b45Friction.feeRateMaker;
-      const takerFeePct = systemContext?.takerFeePct ? parseFloat(systemContext.takerFeePct) : _b45Friction.feeRateTaker;
+      const { makerFeePct, takerFeePct } = resolveValidatorFeeRates(systemContext, _b45Friction);
       const defaultFeeMode = systemContext?.defaultFeeMode || 'taker';
       const minNetProfitThreshold = parseFloat(systemContext?.minNetProfitThreshold || '0.0030');
 
@@ -348,3 +347,20 @@ export class PreExecutionValidator {
 }
 
 export const preExecutionValidator = new PreExecutionValidator();
+
+/**
+ * B-4.5 R1 (Langston amendment 2): override-wins fee resolution for the
+ * fee-aware validation block — EXPLICIT null check, not truthiness, so a
+ * deliberate operator override of 0 (zero-fee promo tier) wins, while
+ * NULL/absent (no override — the post-residue-fix steady state) falls through
+ * to the DB-governed per-class rates. Pure + exported for the unit lock.
+ */
+export function resolveValidatorFeeRates(
+  systemContext: { makerFeePct?: string | null; takerFeePct?: string | null } | null | undefined,
+  friction: { feeRateMaker: number; feeRateTaker: number },
+): { makerFeePct: number; takerFeePct: number } {
+  return {
+    makerFeePct: systemContext?.makerFeePct != null ? parseFloat(systemContext.makerFeePct) : friction.feeRateMaker,
+    takerFeePct: systemContext?.takerFeePct != null ? parseFloat(systemContext.takerFeePct) : friction.feeRateTaker,
+  };
+}
