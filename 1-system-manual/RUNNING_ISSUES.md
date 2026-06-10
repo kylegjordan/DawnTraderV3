@@ -453,6 +453,8 @@ Originally opened 2026-05-31 from BUG-2026-05-31-B audit. Closed via B-NEW-49 de
 ### #165 CLOSED 2026-06-01 (B-NEW-50) — node-cron 4.2.1 `getNextRun()` wrong for day-of-week schedules ≥~2 days out (introspection-only; firing safe)
 Surfaced by B-NEW-49 boot smoke test on first deploy. `weekend_shutdown` schedule (cron expression `0 20 * * 5`, timezone `America/New_York`) calls `task.getNextRun()` and receives `2027-01-02T00:00:00.000Z` instead of the expected `2026-06-06T00:00:00.000Z` (next Friday 8 PM ET = Sat June 6 00:00 UTC). Off by ~215 days. `weekend_restart` (`0 20 * * 0` same timezone) returns correct date — so the bug is specific to Friday day-of-week (5) interaction with `America/New_York` timezone, not a general timezone issue.
 
+**★ 2026-06-10 root-cause candidate (B-4.6-B pre-audit, Langston-confirmed):** the 2026-06-09 cron misses (13:00 hourly + 18:00 reflection, same PID, self-cleared) carry the **scan-loop microtask-starvation signature** — warm-cache awaits yield only microtasks, so an unbroken warm sweep starves the timer queue and the cron slot ticks past (`B_4_6B_PRE_AUDIT.md` §1). **B-4.6-B chunk B is the durable-fix candidate**; its post-deploy soak checks cron-miss counts as a secondary acceptance signal.
+
 **Important uncertainty:** unknown whether (a) ONLY the `getNextRun()` introspection API is buggy while actual firing happens at the correct time, OR (b) actual firing is ALSO wrong and Fri timer will never fire correctly until node-cron is fixed/replaced. The B-NEW-36 weekend-shutdown miss on Fri 29 May is consistent with hypothesis (b) but not definitive — the May 29 miss could also have been from the BUG-2026-05-31-B silent-failure pattern.
 
 **Investigation plan:**

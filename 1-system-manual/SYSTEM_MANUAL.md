@@ -6443,6 +6443,8 @@ Kyle's assessment of Claude's Phase 6 audit: "Largely accurate. Correct on simul
 
 # Chapter 7: System Lifecycle & Infrastructure
 
+> **★ B-4.6-B (2026-06-10) — EVENT-LOOP STALL MECHANISM + the scan-stall instrument.** The recurring event-loop stalls (p99 spikes, skipped cron slots) are NOT caused by missing `await`s: the scan loops already await per pair, but **an `await` on an already-resolved promise (warm cache hit) yields only to the microtask queue — timers and I/O never run under an unbroken warm-hit chain** (Langston-confirmed from Node semantics; full derivation `B_4_6B_PRE_AUDIT.md`). Diagnosis instrument: `server/services/scan-stall-instrument.ts` (`[4.6B][ELD]` interval-scoped `monitorEventLoopDelay` histogram + `[4.6B][SEG]` per-segment sync spans with max-atomic-span). The fix (chunk B) = elapsed-time `setImmediate`-class yields at pair/batch boundaries ONLY — see the SIM granularity lock before inserting yields anywhere else.
+
 **Version:** 1.1
 **Audit Date:** 2026-02-16
 **Auditor:** Claude Code (System Cartographer & Lead Architect)
