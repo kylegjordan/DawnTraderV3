@@ -16,7 +16,30 @@
  * Per Kyle directive §11 (no silent defaults) + §15 (NO PATCHES).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
+// B-4.5: getFrictionForAssetClass merges DB-governed fees (fail-hard on cold
+// cache). Seed the sync cache in-memory — same shape server boot's
+// prefetchModule('fee_model') produces — so this suite stays database-free.
+import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
+import type { ModuleConstant } from '../../../shared/schema.js';
+
+const _b45FeeRow = (assetClass: string, constantName: string, value: number) => ({
+  moduleName: 'fee_model', exchange: '*', assetClass, strategy: '*', regime: '*',
+  constantName, value,
+} as unknown as ModuleConstant);
+
+function seedFeeModel(): void {
+  _seedModuleCacheForTests('fee_model', [
+    _b45FeeRow('crypto_spot', 'spot_taker_fee', 0.008),
+    _b45FeeRow('crypto_spot', 'spot_maker_fee', 0.004),
+    _b45FeeRow('xstock_spot', 'spot_taker_fee', 0.008),
+    _b45FeeRow('xstock_spot', 'spot_maker_fee', 0.004),
+  ]);
+}
+
+beforeAll(() => {
+  seedFeeModel();
+});
 import { getFrictionForAssetClass } from '../../core/math/cost-model';
 
 describe('[B79.0n.MCE] cost-model fails hard for unwired asset classes', () => {

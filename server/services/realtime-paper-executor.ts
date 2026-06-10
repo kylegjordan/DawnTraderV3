@@ -1,6 +1,8 @@
 import { getMarketDataCoordinator } from './market-data-coordinator';
 import { executionTiming } from './execution-timing';
 import { slippageFeeModel } from './slippage-fee-model';
+// B-4.5: modelTradeRealism is per-class (DB-governed fees).
+import { resolveAssetClass } from '../../shared/asset-classes.js';
 import { rateControl } from './rate-control';
 import { storage } from '../storage';
 import { nanoid } from 'nanoid';
@@ -95,9 +97,10 @@ class RealtimePaperExecutor {
         request.side,
         request.quantity,
         request.intendedPrice,
+        resolveAssetClass(request.symbol, 'kraken'), // B-4.5: per-class DB-governed fees
         orderBook,
         undefined, // Recent prices from tick history
-        false // Assume taker for paper trading
+        false // Assume taker for paper trading (maker flip = Phase 19 eval, direction B)
       );
 
       // Simulate fill delay

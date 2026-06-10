@@ -44,8 +44,11 @@ import { covarianceEngine } from '../../utils/covariance-engine.js';
 // B72 (2026-05-05): ROI_FLEX_MULTIPLIER, ROI_MIN, ROI_MAX, FRICTION_SAFETY_BUFFER
 // migrated to module_constants (expectancy_gates). DEFAULT_FEE, DEFAULT_SLIPPAGE
 // remain canonical-imported (KEEP — sourced from exchange-defaults).
+// B-4.5: DEFAULT_FEE import RETIRED — `fee` is now a REQUIRED parameter on
+// the ROI-gate functions below. A static fee default was the silent
+// crypto-era fallback this batch kills; callers pass the resolved per-class
+// fee (cost-model getFrictionForAssetClass / getCachedCostMetrics).
 import {
-  DEFAULT_FEE,
   DEFAULT_SLIPPAGE,
 } from '../../config/adaptive-thresholds';
 import { REGIMES } from '../../config/canonical-regime-strategy-map';
@@ -241,8 +244,8 @@ export function getDynamicROIThreshold(regime: string, predictiveConfidence: num
  * @param targetPrice - Target/take-profit price
  * @param regime - Current market regime for the pair
  * @param predictiveConfidence - Optional confidence score [0.0, 1.0], defaults to 0.5
- * @param fee - Trading fee per side (defaults to 0.1%)
- * @param estimatedSlippage - Expected slippage (defaults to 0.15%)
+ * @param fee - REQUIRED (B-4.5): resolved per-asset-class fee per side, decimal.
+ * @param estimatedSlippage - Expected slippage (defaults to DEFAULT_SLIPPAGE)
  * @returns true if signal meets required ROI threshold
  */
 export function isSignalProfitable(
@@ -250,7 +253,7 @@ export function isSignalProfitable(
   targetPrice: number, 
   regime: string,
   predictiveConfidence: number = 0.5,
-  fee: number = DEFAULT_FEE,
+  fee: number,
   estimatedSlippage: number = DEFAULT_SLIPPAGE
 ): boolean {
   const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
@@ -274,7 +277,8 @@ export function getROIDetails(
   targetPrice: number, 
   regime: string,
   predictiveConfidence: number = 0.5,
-  fee: number = DEFAULT_FEE,
+  // B-4.5: REQUIRED — resolved per-asset-class fee (no static default).
+  fee: number,
   estimatedSlippage: number = DEFAULT_SLIPPAGE
 ): {
   expectedROI: number;

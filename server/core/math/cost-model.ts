@@ -29,11 +29,14 @@
  */
 
 import {
-  DEFAULT_TAKER_FEE,
   DEFAULT_SLIPPAGE,
   DEFAULT_SPREAD,
   MAX_COST_BOUND,
 } from '../../config/exchange-defaults.js';
+// B-4.5: fees are DB-governed (module_constants `fee_model`, warmed by
+// b72-warmup, fail-hard). The static DEFAULT_TAKER_FEE/DEFAULT_MAKER_FEE
+// constants are RETIRED from live paths.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 
 import {
   getOrSetCostMetrics,
@@ -66,10 +69,16 @@ import type { AssetClass } from '../../../shared/asset-classes.js';
  */
 export function getFrictionForAssetClass(assetClass: AssetClass): AssetClassFrictionModel {
   switch (assetClass) {
+    // B-4.5: THE single fee merge site. Fee rates come from the DB
+    // (module_constants `fee_model`, per asset_class, warmed at boot,
+    // fail-hard on missing rows); spread/slippage/bound remain the static
+    // module values. The merge CONSTRUCTS A NEW OBJECT — the static module
+    // objects are never mutated (their fee fields are NaN tombstones; a
+    // mutation would poison that pattern and create cross-call state).
     case 'crypto_spot':
-      return CRYPTO_SPOT_FRICTION;
+      return { ...CRYPTO_SPOT_FRICTION, ...resolveFeeRates(assetClass) };
     case 'xstock_spot':
-      return XSTOCK_SPOT_FRICTION;
+      return { ...XSTOCK_SPOT_FRICTION, ...resolveFeeRates(assetClass) };
     case 'crypto_perp':
     case 'xstock_perp':
     case 'equity_spot':
@@ -89,6 +98,22 @@ export function getFrictionForAssetClass(assetClass: AssetClass): AssetClassFric
       throw new Error(`[B79.0n.MCE][cost-model] unreachable assetClass=${String(_exhaustive)}`);
     }
   }
+}
+
+/**
+ * B-4.5: resolve the DB-governed fee pair for an asset class from the warmed
+ * module_constants cache. Throws on cold cache or missing row (the b72-warmup
+ * boot assertion makes that a deploy-time failure, not a mid-scan one).
+ * Maker is resolved + carried so the future Phase-19 maker-entry flip is a
+ * value change, not a redesign — it has zero live consumers today (the
+ * engine takes liquidity; the model prices taker both legs — pre-audit §0).
+ */
+function resolveFeeRates(assetClass: AssetClass): { feeRateTaker: number; feeRateMaker: number } {
+  const key = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+  return {
+    feeRateTaker: getCachedNumberRequired('fee_model', 'spot_taker_fee', key),
+    feeRateMaker: getCachedNumberRequired('fee_model', 'spot_maker_fee', key),
+  };
 }
 
 /**
@@ -142,23 +167,12 @@ export function getCachedCostMetrics(symbol: string, assetClass: AssetClass): Co
   return getDefaultCostComponentsForAssetClass(assetClass, symbol);
 }
 
-export function updateCachedCostMetrics(
-  symbol: string,
-  fee: number,
-  slippage: number,
-  spread: number
-): CachedCostMetrics {
-  const clamped = setCostMetrics(symbol, { fee, slippage, spread });
-  const totalRoundTripCost = computeTotalRoundTripCost(clamped.fee, clamped.slippage, clamped.spread);
-  return {
-    symbol,
-    fee: clamped.fee,
-    slippage: clamped.slippage,
-    spread: clamped.spread,
-    totalRoundTripCost,
-    timestamp: Date.now(),
-  };
-}
+// B-4.5: `updateCachedCostMetrics` RETIRED (Langston pre-audit R2). It was an
+// exported fee-WRITING path through the cost-cache clamp with ZERO callers —
+// a buried route by which a DB-governed fee could be silently clamped. The
+// live spread writers (market-scanner / fx5-scanner) call setCostMetrics on
+// the cache directly; fees never flow through the cache (cost-cache seeds are
+// DB-resolved as of this batch).
 
 export function getCostMetricsCache(): Map<string, CachedCostMetrics> {
   const stats = getCacheStats();
@@ -259,5 +273,6 @@ export function computeNetTargetFloor(
   return targetPrice * (1 + buffer);
 }
 
-export const DEFAULT_FEE = DEFAULT_TAKER_FEE;
+// B-4.5: DEFAULT_FEE re-export RETIRED (fees are DB-governed; use
+// getFrictionForAssetClass / getCachedCostMetrics).
 export { DEFAULT_SLIPPAGE, DEFAULT_SPREAD, MAX_COST_BOUND };

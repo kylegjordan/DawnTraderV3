@@ -94,6 +94,10 @@ const PREFETCH_MODULES = [
   'calibration_epoch',
   // ITEM-4 step 3 (2026-06-10): the live-engine Phase-21 gate (read fail-closed at the route).
   'live_engine_gate',
+  // B-4.5 (2026-06-11): DB-governed per-class fees (Kraken cross-platform Tier 1).
+  // Merged over the static friction modules at getFrictionForAssetClass — the
+  // hot scan path reads this cache synchronously every cycle. MUST be warm.
+  'fee_model',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
@@ -137,6 +141,43 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
       }
     }
     console.log(`[ITEM4][warmup] calibration_epoch verified: vts=${epochs.vts} paper_sim=${epochs.paper_sim} live=${epochs.live}`);
+  }
+
+  // B-4.5 (scope objective 1): fee_model needs more than the generic zero-row
+  // gate — a PARTIAL seed (one class present, the other missing) passes
+  // non-zero yet hard-fails mid-scan at the first friction merge for the
+  // missing class. Assert BOTH constants for BOTH spot classes at boot so
+  // "migration didn't apply" is a deterministic deploy-time failure.
+  {
+    const { getCachedNumberRequired } = await import('../services/module-constants-service.js');
+    const fees: Record<string, number> = {};
+    for (const assetClass of ['crypto_spot', 'xstock_spot'] as const) {
+      for (const constant of ['spot_taker_fee', 'spot_maker_fee'] as const) {
+        let v: number;
+        try {
+          v = getCachedNumberRequired('fee_model', constant, {
+            exchange: '*', assetClass, strategy: '*', regime: '*',
+          });
+        } catch (err) {
+          throw new Error(
+            `[B45][warmup] fee_model.${constant} for asset_class='${assetClass}' missing or non-numeric — ` +
+            `migration drizzle/migrations/2026-06-11-b45-fee-model-tier1.sql ` +
+            `has not been (fully) applied. Apply migration before starting server. (${(err as Error).message})`,
+          );
+        }
+        // Sanity rails: a fee outside (0, 5%] is a fat-fingered DB value, not a tier.
+        if (!(v > 0 && v <= 0.05)) {
+          throw new Error(
+            `[B45][warmup] fee_model.${constant} for '${assetClass}' = ${v} is outside the sane (0, 0.05] decimal range — refusing to start.`,
+          );
+        }
+        fees[`${assetClass}.${constant}`] = v;
+      }
+    }
+    console.log(
+      `[B45][warmup] fee_model verified: crypto taker=${fees['crypto_spot.spot_taker_fee']} maker=${fees['crypto_spot.spot_maker_fee']} | ` +
+      `xstock taker=${fees['xstock_spot.spot_taker_fee']} maker=${fees['xstock_spot.spot_maker_fee']}`,
+    );
   }
 
   started = true;

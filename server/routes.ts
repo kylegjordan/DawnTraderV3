@@ -67,7 +67,10 @@ import { clearReadyToBuy } from './utils/clear-routines.js';
 import { verificationTestProtocol } from './services/verification-test-protocol.js';
 import { miniBookIntegrityMonitor } from './services/monitoring/mini-book-integrity-monitor.js';
 import os from 'os';
-import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from './config/exchange-defaults.js';
+import { DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from './config/exchange-defaults.js';
+// B-4.5: display/diagnostic fee surfaces read the resolved per-class rate.
+import { getFrictionForAssetClass } from './core/math/cost-model.js';
+import { resolveAssetClass } from '../shared/asset-classes.js';
 import { validateFilterChange, logAdjustmentEvent } from './config/adjustment-registry.js';
 import { getBaselineVersion } from './config/authority-baseline.js';
 
@@ -11767,7 +11770,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Phase 8.8.3-C2: P/L Breakdown for cost transparency
         // Batch 18J: Canonical fee/slippage from exchange-defaults.ts
         const SLIPPAGE_PCT = CANONICAL_SLIPPAGE * 100; // 0.05% from exchange-defaults
-        const FEE_PCT = DEFAULT_TAKER_FEE * 100; // 0.26% from exchange-defaults
+        const FEE_PCT = getFrictionForAssetClass(resolveAssetClass(pos.symbol, 'kraken')).feeRateTaker * 100; // B-4.5: DB-governed per-class
         
         // Get intended entry price (signal price before slippage)
         const intendedEntryPrice = pos.intendedEntryPrice 
@@ -12097,7 +12100,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 8.8.3-C7-FIX: Calculate exit slippage and fees mirroring engine's closePosition method
       // Batch 18J: Canonical fee/slippage from exchange-defaults.ts
       const SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // 0.05% from exchange-defaults
-      const FEE_PERCENT = DEFAULT_TAKER_FEE * 100; // 0.26% from exchange-defaults
+      const FEE_PERCENT = getFrictionForAssetClass(resolveAssetClass(position.symbol, 'kraken')).feeRateTaker * 100; // B-4.5: DB-governed per-class
       
       // Calculate exit slippage (same formula as paper-execution-engine.ts line 772-780)
       const exitSlippagePerUnit = currentPrice * (SLIPPAGE_PERCENT / 100);
@@ -12781,7 +12784,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { getPatternPoolGuardrailsForAssetClass } = await import('./asset_classes/pattern-pool-dispatch.js');
       const { storage } = await import('./storage');
-      const { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE } = await import('./config/exchange-defaults.js');
+      const { DEFAULT_SLIPPAGE } = await import('./config/exchange-defaults.js');
+      const { getFrictionForAssetClass: _b45Friction } = await import('./core/math/cost-model.js');
 
       const activeClasses = ['crypto_spot', 'crypto_perp', 'xstock_spot', 'xstock_perp'] as const;
       type ClassState = { patternPoolGuardrails: { FINAL_SCORE_FLOOR: number; MAX_POSITION_PCT: number } } | { status: string; reason: string };
@@ -12818,7 +12822,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           const closedAtMs = new Date(t.closedAt).getTime();
           return closedAtMs >= cutoffMs;
         });
-        const wildcardFee = DEFAULT_TAKER_FEE * 100;
+        // B-4.5: feePercent is genuinely per-class now (DB-governed merge).
         const wildcardSlip = DEFAULT_SLIPPAGE * 100;
         for (const cls of activeClasses) {
           if (cls === 'crypto_perp' || cls === 'xstock_perp') {
@@ -12830,7 +12834,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           executionPerClass[cls] = {
             openPositions: open,
             recentCloses24h: closed,
-            feePercent: wildcardFee,
+            feePercent: _b45Friction(cls).feeRateTaker * 100, // B-4.5 per-class
             slippagePercent: wildcardSlip,
           };
         }
@@ -12852,7 +12856,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           coverage: ['orchestrator', 'execution'],
           lastReviewed: '2026-05-27',
           knownGaps: [
-            'fee/slippage dispatch is class-member wildcard (paper-execution-engine.ts:126-127); per-class dispatch deferred to Phase 25/26 calibration',
+            'fees are per-class DB-governed as of B-4.5 (fee_model merge); SLIPPAGE dispatch remains class-member wildcard — per-class slippage deferred to Phase 25/26 calibration',
             'sizing-core risk-pct/max-position-pct mode-keyed not class-keyed (paper-position-sizing.ts:141-180); deferred to Phase 25/26',
             'narrative-feed TRADE_OPENED/TRADE_CLOSED payload lacks assetClass; dormant — re-review at narrative-feed activation or annual audit',
           ],

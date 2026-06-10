@@ -16,6 +16,8 @@ import { diagnosticTrace } from '../diagnostics/trace_service';
 import { dataAggregator } from '../../services/data-aggregator.js';
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator.js';
 import { isSignalProfitable, getMinROIForRegime, getDynamicROIThreshold } from '../calculations/expectancy.js';
+// B-4.5: per-class fee resolution for the ROI gate (DB-governed, fail-hard).
+import { getFrictionForAssetClass } from '../math/cost-model.js';
 import { getPredictiveConfidence } from '../utils/score-calculator.js';
 import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
 // Phase 14.1 HF8 (B3): Confidence floor imports for centralized mode-based qualification
@@ -308,7 +310,9 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   if (input.entryPrice && input.targetPrice && input.regime) {
     // B79.0n.SCORING (2026-05-26): assetClass threaded for per-class cache-key isolation
     const predictiveConf = getPredictiveConfidence(input.assetClass, canonicalSymbol, input.regime, input.strategy);
-    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, predictiveConf)) {
+    // B-4.5: fee is REQUIRED — resolved per-class (DB-governed taker, fail-hard).
+    const _b45Fee = getFrictionForAssetClass(input.assetClass).feeRateTaker;
+    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, predictiveConf, _b45Fee)) {
       const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
       const dynamicROI = getDynamicROIThreshold(input.regime, predictiveConf);
       failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(dynamicROI * 100).toFixed(2)}% for ${input.regime} (conf=${predictiveConf.toFixed(2)})`);
@@ -443,7 +447,8 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   
   // Directive 11.7A Task 3: Regime-Aware ROI Gate (SQE parity with VTS) - Sync version
   if (input.entryPrice && input.targetPrice && input.regime) {
-    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime)) {
+    // B-4.5: fee REQUIRED; `undefined` keeps the predictiveConfidence default (0.5).
+    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, undefined, getFrictionForAssetClass(input.assetClass).feeRateTaker)) {
       const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
       const minROI = getMinROIForRegime(input.regime);
       failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(minROI * 100).toFixed(2)}% for ${input.regime}`);

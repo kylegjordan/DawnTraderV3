@@ -130,3 +130,4 @@
 2026-06-10-item4-step2-calibration-epoch.sql
 2026-06-10-item4-step3-live-engine-gate.sql
 2026-06-10b-b2-lq-apply.sql
+2026-06-11-b45-fee-model-tier1.sql

@@ -89,7 +89,10 @@ import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
 import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
 import { dataAggregator } from './data-aggregator.js';
-import { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from '../config/exchange-defaults';
+import { DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from '../config/exchange-defaults';
+// B-4.5: fees are DB-governed per asset class — resolved per symbol at the
+// fill sites via the single cost-model merge (no static fee field).
+import { getFrictionForAssetClass } from '../core/math/cost-model.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
@@ -125,7 +128,10 @@ export class PaperExecutionEngine {
   
   // Configuration
   private readonly SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // Batch 18J: from exchange-defaults.ts (0.05%)
-  private readonly FEE_PERCENT = DEFAULT_TAKER_FEE * 100; // Batch 18J: from exchange-defaults.ts (0.26%)
+  // B-4.5: FEE_PERCENT static field RETIRED — per-class DB-resolved per symbol.
+  private feePercentFor(symbol: string): number {
+    return getFrictionForAssetClass(resolveAssetClass(symbol, 'kraken')).feeRateTaker * 100;
+  }
   // B72: monitoring interval read at setInterval start from module='paper_execution'.
   private get MONITOR_INTERVAL_MS(): number {
     return getCachedNumberRequired('paper_execution', 'monitoring_interval_ms',
@@ -1132,13 +1138,14 @@ export class PaperExecutionEngine {
     const intendedEntryValue = intendedEntryPrice * quantity;
 
     // Apply exit slippage and fees
+    const _b45FeePct = this.feePercentFor(position.symbol); // B-4.5 per-class
     const exitSlippagePerUnit = exitPrice * (this.SLIPPAGE_PERCENT / 100);
     const actualExitPrice = exitPrice - exitSlippagePerUnit; // Worse price due to slippage
     const exitValue = actualExitPrice * quantity;
-    const exitFee = exitValue * (this.FEE_PERCENT / 100);
+    const exitFee = exitValue * (_b45FeePct / 100);
     
     // Get entry costs from position (persisted at entry time)
-    const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (this.FEE_PERCENT / 100));
+    const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (_b45FeePct / 100));
     const entrySlippage = position.entrySlippage ? parseFloat(position.entrySlippage) : 0;
     const exitSlippage = exitSlippagePerUnit * quantity;
 
@@ -1991,7 +1998,7 @@ export class PaperExecutionEngine {
     const slippage = signal.entryPrice * (this.SLIPPAGE_PERCENT / 100);
     const actualEntryPrice = signal.entryPrice + slippage; // Worse price due to slippage
     const positionValue = actualEntryPrice * quantity;
-    const entryFee = positionValue * (this.FEE_PERCENT / 100);
+    const entryFee = positionValue * (this.feePercentFor(signal.symbol) / 100);
     const totalSlippage = slippage * quantity;
 
     console.log(`  Quantity: ${quantity.toFixed(4)}, Position Value: $${positionValue.toFixed(2)}`);

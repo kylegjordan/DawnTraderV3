@@ -21,12 +21,22 @@
  */
 
 import {
-  DEFAULT_COST_BUNDLE,
   MAX_COST_BOUND,
-  DEFAULT_TAKER_FEE,
   DEFAULT_SLIPPAGE,
   DEFAULT_SPREAD,
 } from '../../config/exchange-defaults.js';
+// B-4.5: the cache's default fee is DB-resolved (module_constants 'fee_model',
+// warmed at boot, fail-hard). DEFAULT_TAKER_FEE + DEFAULT_COST_BUNDLE retired.
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+
+// The symbol cache is structurally crypto-lane only — getCachedCostMetrics
+// (cost-model.ts) consults it solely for crypto_spot; xStock synthesizes from
+// the friction merge. Hence the crypto_spot key here.
+function resolveCryptoTakerFee(): number {
+  return getCachedNumberRequired('fee_model', 'spot_taker_fee', {
+    exchange: '*', assetClass: 'crypto_spot', strategy: '*', regime: '*',
+  });
+}
 
 export interface CostMetrics {
   fee: number;
@@ -70,7 +80,7 @@ export function getCostMetrics(symbol: string): CostMetrics | null {
 
 export function setCostMetrics(symbol: string, data: Partial<CostMetrics>): CostMetrics {
   const clamped: CostMetrics = {
-    fee: Math.min(data.fee ?? DEFAULT_TAKER_FEE, MAX_COST_BOUND),
+    fee: Math.min(data.fee ?? resolveCryptoTakerFee(), MAX_COST_BOUND),
     slippage: Math.min(data.slippage ?? DEFAULT_SLIPPAGE, MAX_COST_BOUND),
     spread: Math.min(data.spread ?? DEFAULT_SPREAD, MAX_COST_BOUND),
   };
@@ -81,7 +91,12 @@ export function setCostMetrics(symbol: string, data: Partial<CostMetrics>): Cost
 export function getOrSetCostMetrics(symbol: string): CostMetrics {
   const cached = getCostMetrics(symbol);
   if (cached) return cached;
-  return setCostMetrics(symbol, DEFAULT_COST_BUNDLE);
+  // B-4.5: DEFAULT_COST_BUNDLE retired (it embedded the static fee).
+  return setCostMetrics(symbol, {
+    fee: resolveCryptoTakerFee(),
+    slippage: DEFAULT_SLIPPAGE,
+    spread: DEFAULT_SPREAD,
+  });
 }
 
 export function getCacheTTLRemaining(symbol: string): number {
@@ -117,7 +132,7 @@ export function getCacheStats(): {
   if (entries.length === 0) {
     return {
       symbolCount: 0,
-      avgFee: DEFAULT_TAKER_FEE,
+      avgFee: resolveCryptoTakerFee(),
       avgSlippage: DEFAULT_SLIPPAGE,
       avgSpread: DEFAULT_SPREAD,
     };

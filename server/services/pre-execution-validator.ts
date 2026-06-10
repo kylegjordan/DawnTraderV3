@@ -5,6 +5,9 @@ import { nanoid } from 'nanoid';
 import { provenanceLogger } from './provenance-logger';
 import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from './trade-safety';
 import { getCachedNumbersForModule, getCachedNumberRequired } from './module-constants-service.js';
+// B-4.5: per-class fee resolution (DB-governed) for the fee-aware validation block.
+import { getFrictionForAssetClass } from '../core/math/cost-model.js';
+import { resolveAssetClass } from '../../shared/asset-classes.js';
 
 // B72.1 (2026-05-05): goal_alignment + strategy_profiles atomic block.
 // Read all weights/thresholds + strategy profile in ONE pass at top of
@@ -124,7 +127,9 @@ export class PreExecutionValidator {
       );
 
       const orderValue = quantity * request.signal.entryPrice;
-      const feeModel = slippageFeeModel.calculateFees(orderValue, false);
+      // B-4.5: calculateFees is per-class (DB-governed Tier-1 rates, fail-hard).
+      const _b45AssetClass = resolveAssetClass(request.signal.symbol, 'kraken');
+      const feeModel = slippageFeeModel.calculateFees(orderValue, false, _b45AssetClass);
 
       const slippagePercent = Math.abs(slippageModel.slippageBps / 100);
       const feesPercent = (feeModel.totalFees / orderValue) * 100;
@@ -132,8 +137,15 @@ export class PreExecutionValidator {
       // Phase 27.F.14.B: Fee-Aware Pre-Trade Validation
       // Get fee configuration from system_context
       const systemContext = await storage.getSystemContext(request.mode);
-      const makerFeePct = parseFloat(systemContext?.makerFeePct || '0.0016');
-      const takerFeePct = parseFloat(systemContext?.takerFeePct || '0.0026');
+      // B-4.5: the '0.0016'/'0.0026' string fallbacks were a SECOND fee source
+      // priced at ~Tier 6 — a buried silent-fallback (surfaced in this batch's
+      // sweep; not an exchange-defaults importer, so the pre-audit grep missed
+      // it). Explicit system_context overrides still win (legacy operator
+      // surface — Phase-16 register candidate); the FALLBACK is now the
+      // DB-resolved per-class rate. No hardcoded fee literals remain.
+      const _b45Friction = getFrictionForAssetClass(_b45AssetClass);
+      const makerFeePct = systemContext?.makerFeePct ? parseFloat(systemContext.makerFeePct) : _b45Friction.feeRateMaker;
+      const takerFeePct = systemContext?.takerFeePct ? parseFloat(systemContext.takerFeePct) : _b45Friction.feeRateTaker;
       const defaultFeeMode = systemContext?.defaultFeeMode || 'taker';
       const minNetProfitThreshold = parseFloat(systemContext?.minNetProfitThreshold || '0.0030');
 

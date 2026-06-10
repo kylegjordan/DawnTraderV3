@@ -256,6 +256,20 @@ export function clearModuleConstantsCache(): void {
   cache.clear();
 }
 
+/**
+ * TEST-ONLY (B-4.5): seed a module's rows directly into the sync cache so
+ * unit suites can exercise fail-hard consumers (e.g. the fee_model merge in
+ * getFrictionForAssetClass) without a database. Produces the same cache shape
+ * prefetchModule does; never expires. Throws outside the vitest environment
+ * so no production path can reach it.
+ */
+export function _seedModuleCacheForTests(moduleName: string, rows: ModuleConstant[]): void {
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    throw new Error('_seedModuleCacheForTests is test-only');
+  }
+  cache.set(moduleName, { rows, expiresAt: Number.MAX_SAFE_INTEGER });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // B72 — Sync-read API for hot-path callers (signal-pipeline strategies, MCE
 // per-pair classifiers, etc.) where converting the whole call chain to async

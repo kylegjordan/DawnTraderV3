@@ -108,7 +108,8 @@ describe('B79.0n.EXECUTION — audit + regression-lock tests', () => {
     });
 
     it('Test 9 — _meta.knownGaps includes fee/slippage + sizing-core + narrative-feed deferrals', () => {
-      expect(ROUTES_SRC).toMatch(/fee\/slippage dispatch is class-member wildcard/);
+      expect(ROUTES_SRC).toMatch(/fees are per-class DB-governed as of B-4.5/); // B-4.5 knownGaps rewording
+      expect(ROUTES_SRC).toMatch(/SLIPPAGE dispatch remains class-member wildcard/);
       expect(ROUTES_SRC).toMatch(/sizing-core risk-pct\/max-position-pct mode-keyed/);
       expect(ROUTES_SRC).toMatch(/narrative-feed TRADE_OPENED\/TRADE_CLOSED payload lacks assetClass/);
     });
@@ -116,7 +117,7 @@ describe('B79.0n.EXECUTION — audit + regression-lock tests', () => {
     it('Test 10 — execution-layer block surfaces feePercent + slippagePercent fields per active class', () => {
       // The endpoint code constructs { openPositions, recentCloses24h, feePercent, slippagePercent }
       // for each non-perp active class (crypto_spot + xstock_spot).
-      expect(ROUTES_SRC).toMatch(/feePercent:\s*wildcardFee/);
+      expect(ROUTES_SRC).toMatch(/feePercent:\s*_b45Friction\(cls\)\.feeRateTaker/); // B-4.5: per-class DB-governed
       expect(ROUTES_SRC).toMatch(/slippagePercent:\s*wildcardSlip/);
       expect(ROUTES_SRC).toMatch(/openPositions:\s*open/);
       expect(ROUTES_SRC).toMatch(/recentCloses24h:\s*closed/);
@@ -129,12 +130,14 @@ describe('B79.0n.EXECUTION — audit + regression-lock tests', () => {
       expect(ROUTES_SRC).toMatch(/if \(cls === ['"]crypto_perp['"] \|\| cls === ['"]xstock_perp['"]\) \{[\s\S]*?status:\s*['"]CLASS_NOT_WIRED['"]/);
     });
 
-    it('Test 12 — endpoint imports DEFAULT_TAKER_FEE + DEFAULT_SLIPPAGE from exchange-defaults', () => {
-      // Confirms feePercent/slippagePercent surfaces are the current wildcard values
-      // sourced from the same module the engine uses (paper-execution-engine.ts:91).
+    it('Test 12 — endpoint fee surface is the per-class DB-governed merge (B-4.5)', () => {
+      // B-4.5: feePercent comes from getFrictionForAssetClass per class (the
+      // fee_model merge); slippage remains the exchange-defaults wildcard.
+      // Regression locks: no static fee constant may reappear in routes.
       expect(ROUTES_SRC).toMatch(/from\s+['"]\.\/config\/exchange-defaults\.js['"]/);
-      expect(ROUTES_SRC).toMatch(/DEFAULT_TAKER_FEE/);
+      expect(ROUTES_SRC).toMatch(/_b45Friction\(cls\)\.feeRateTaker/);
       expect(ROUTES_SRC).toMatch(/DEFAULT_SLIPPAGE/);
+      expect(ROUTES_SRC).not.toMatch(/DEFAULT_TAKER_FEE/);
     });
   });
 });

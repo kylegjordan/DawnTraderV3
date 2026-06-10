@@ -154,11 +154,18 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
   
   describe('Cached Cost Metrics', () => {
     it('should return default costs for unknown symbols', async () => {
-      const { getCachedCostMetrics, DEFAULT_FEE, DEFAULT_SLIPPAGE } = await import('../../core/math/cost-model.js');
+      const { getCachedCostMetrics, DEFAULT_SLIPPAGE } = await import('../../core/math/cost-model.js');
+      // B-4.5: fee is DB-governed (fee_model, Tier-1 taker) — seed in-memory
+      // (same shape boot's prefetch produces; keeps the test database-free).
+      const { _seedModuleCacheForTests } = await import('../../services/module-constants-service.js');
+      _seedModuleCacheForTests('fee_model', [
+        { moduleName: 'fee_model', exchange: '*', assetClass: 'crypto_spot', strategy: '*', regime: '*', constantName: 'spot_taker_fee', value: 0.008 },
+        { moduleName: 'fee_model', exchange: '*', assetClass: 'crypto_spot', strategy: '*', regime: '*', constantName: 'spot_maker_fee', value: 0.004 },
+      ] as never[]);
       
       const metrics = getCachedCostMetrics('UNKNOWN/PAIR', 'crypto_spot'); // B79.0n.MCE: assetClass REQUIRED
 
-      expect(metrics.fee).toBe(DEFAULT_FEE);
+      expect(metrics.fee).toBe(0.008);
       expect(metrics.slippage).toBe(DEFAULT_SLIPPAGE);
     });
     

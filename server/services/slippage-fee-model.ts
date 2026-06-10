@@ -1,8 +1,8 @@
 import { OrderBookSnapshot } from './market-data-ws';
-import {
-  DEFAULT_MAKER_FEE,
-  DEFAULT_TAKER_FEE,
-} from '../config/exchange-defaults.js';
+// B-4.5: fees are DB-governed per asset class (module_constants 'fee_model',
+// warmed at boot, fail-hard). Static DEFAULT_TAKER/MAKER_FEE retired.
+import { getCachedNumberRequired } from './module-constants-service.js';
+import type { AssetClass } from '../../shared/asset-classes.js';
 
 export interface SlippageModel {
   intendedPrice: number;
@@ -27,8 +27,13 @@ export interface TradeRealism {
 }
 
 class SlippageFeeModelingService {
-  private readonly DEFAULT_MAKER_FEE = DEFAULT_MAKER_FEE;
-  private readonly DEFAULT_TAKER_FEE = DEFAULT_TAKER_FEE;
+  // B-4.5: per-class DB-resolved fee (decimal). Throws on cold cache /
+  // missing row — boot warmup makes that a deploy-time failure.
+  private resolveFee(assetClass: AssetClass, constant: 'spot_taker_fee' | 'spot_maker_fee'): number {
+    return getCachedNumberRequired('fee_model', constant, {
+      exchange: '*', assetClass, strategy: '*', regime: '*',
+    });
+  }
   
   // Volatility estimation window
   private priceHistory: Map<string, number[]> = new Map();
@@ -173,12 +178,14 @@ class SlippageFeeModelingService {
    */
   public calculateFees(
     grossAmount: number,
-    isMaker: boolean = false,
+    isMaker: boolean,
+    // B-4.5: REQUIRED — fees resolve per asset class (DB-governed, fail-hard).
+    assetClass: AssetClass,
     makerFeeRate?: number,
     takerFeeRate?: number
   ): FeeModel {
-    const makerFee = makerFeeRate || this.DEFAULT_MAKER_FEE;
-    const takerFee = takerFeeRate || this.DEFAULT_TAKER_FEE;
+    const makerFee = makerFeeRate ?? this.resolveFee(assetClass, 'spot_maker_fee');
+    const takerFee = takerFeeRate ?? this.resolveFee(assetClass, 'spot_taker_fee');
     
     const feeRate = isMaker ? makerFee : takerFee;
     const totalFees = grossAmount * feeRate;
@@ -201,6 +208,8 @@ class SlippageFeeModelingService {
     side: 'buy' | 'sell',
     quantity: number,
     intendedPrice: number,
+    // B-4.5: REQUIRED — threaded by callers (resolveAssetClass on the symbol).
+    assetClass: AssetClass,
     orderBook?: OrderBookSnapshot,
     recentPrices?: number[],
     isMaker: boolean = false
@@ -219,7 +228,7 @@ class SlippageFeeModelingService {
     const grossAmount = quantity * slippage.modeledFillPrice;
 
     // Calculate fees
-    const fees = this.calculateFees(grossAmount, isMaker);
+    const fees = this.calculateFees(grossAmount, isMaker, assetClass);
 
     // Calculate net P&L impact
     const costBasis = quantity * intendedPrice;
@@ -299,10 +308,11 @@ class SlippageFeeModelingService {
   /**
    * Get configuration
    */
-  public getConfig() {
+  // B-4.5: config surface is per-class now (fees are DB-governed).
+  public getConfig(assetClass: AssetClass) {
     return {
-      makerFee: this.DEFAULT_MAKER_FEE,
-      takerFee: this.DEFAULT_TAKER_FEE,
+      makerFee: this.resolveFee(assetClass, 'spot_maker_fee'),
+      takerFee: this.resolveFee(assetClass, 'spot_taker_fee'),
       volatilityWindow: this.VOLATILITY_WINDOW,
     };
   }

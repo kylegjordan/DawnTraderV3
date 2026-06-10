@@ -10,19 +10,43 @@
  * 5. governance_invariants - C1-C5 validation
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+// B-4.5: fees are DB-governed (module_constants 'fee_model'). Seed the sync
+// cache in-memory — same shape server boot's prefetchModule produces — so
+// this suite stays database-free (the DB-backed path is covered by CI
+// db:migrate + the staging boot assertion).
+import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
+import type { ModuleConstant } from '../../../shared/schema.js';
+const B45_TIER1_TAKER = 0.008; // Kraken cross-platform Tier 1 (decimal)
+
+beforeAll(() => {
+  const row = (assetClass: string, constantName: string, value: number) => ({
+    moduleName: 'fee_model', exchange: '*', assetClass, strategy: '*', regime: '*',
+    constantName, value,
+  } as unknown as ModuleConstant);
+  _seedModuleCacheForTests('fee_model', [
+    row('crypto_spot', 'spot_taker_fee', B45_TIER1_TAKER),
+    row('crypto_spot', 'spot_maker_fee', 0.004),
+    row('xstock_spot', 'spot_taker_fee', B45_TIER1_TAKER),
+    row('xstock_spot', 'spot_maker_fee', 0.004),
+  ]);
+});
 
 describe('Directive 11.3B: Cost Engine Consolidation', () => {
   
   describe('Exchange Defaults (Task 1)', () => {
-    it('should export correct default taker fee of 0.26%', async () => {
-      const { DEFAULT_TAKER_FEE } = await import('../../config/exchange-defaults.js');
-      expect(DEFAULT_TAKER_FEE).toBe(0.0026);
+    it('B-4.5 regression lock: static taker fee constant is RETIRED', async () => {
+      const mod = await import('../../config/exchange-defaults.js');
+      // Fees are DB-governed (fee_model); a reappearing static fee constant
+      // is the silent-Tier-6 bug class coming back.
+      expect((mod as Record<string, unknown>).DEFAULT_TAKER_FEE).toBeUndefined();
+      expect((mod as Record<string, unknown>).DEFAULT_COST_BUNDLE).toBeUndefined();
+      expect((mod as Record<string, unknown>).computeDefaultTotalCost).toBeUndefined();
     });
     
-    it('should export correct default maker fee of 0.16%', async () => {
-      const { DEFAULT_MAKER_FEE } = await import('../../config/exchange-defaults.js');
-      expect(DEFAULT_MAKER_FEE).toBe(0.0016);
+    it('B-4.5 regression lock: static maker fee constant is RETIRED', async () => {
+      const mod = await import('../../config/exchange-defaults.js');
+      expect((mod as Record<string, unknown>).DEFAULT_MAKER_FEE).toBeUndefined();
     });
     
     it('should export correct default slippage of 0.05%', async () => {
@@ -35,9 +59,9 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
       expect(DEFAULT_SPREAD).toBe(0.0010);
     });
     
-    it('should export MAX_COST_BOUND of 1%', async () => {
+    it('should export MAX_COST_BOUND of 2% (B-4.5: headroom over Tier-1 taker 0.8%)', async () => {
       const { MAX_COST_BOUND } = await import('../../config/exchange-defaults.js');
-      expect(MAX_COST_BOUND).toBe(0.01);
+      expect(MAX_COST_BOUND).toBe(0.02);
     });
   });
   
@@ -64,7 +88,7 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
       expect(cached!.spread).toBe(0.002);
     });
     
-    it('C3: should clamp values to MAX_COST_BOUND (1%)', async () => {
+    it('C3: should clamp values to MAX_COST_BOUND (2% as of B-4.5)', async () => {
       const { setCostMetrics, getCostMetrics } = await import('../../core/cache/cost-cache.js');
       const { MAX_COST_BOUND } = await import('../../config/exchange-defaults.js');
       
@@ -78,11 +102,12 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
     
     it('should use defaults when getOrSetCostMetrics called for new symbol', async () => {
       const { getOrSetCostMetrics } = await import('../../core/cache/cost-cache.js');
-      const { DEFAULT_TAKER_FEE, DEFAULT_SLIPPAGE, DEFAULT_SPREAD } = await import('../../config/exchange-defaults.js');
+      const { DEFAULT_SLIPPAGE, DEFAULT_SPREAD } = await import('../../config/exchange-defaults.js');
       
       const metrics = getOrSetCostMetrics('SOL/USD');
       
-      expect(metrics.fee).toBe(DEFAULT_TAKER_FEE);
+      // B-4.5: default fee is the DB-resolved Tier-1 taker, not a static const.
+      expect(metrics.fee).toBe(B45_TIER1_TAKER);
       expect(metrics.slippage).toBe(DEFAULT_SLIPPAGE);
       expect(metrics.spread).toBe(DEFAULT_SPREAD);
     });
@@ -140,19 +165,19 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
     
     it('C1: cost-model should use centralized cache', async () => {
       const { getCachedCostMetrics } = await import('../../core/math/cost-model.js');
-      const { DEFAULT_TAKER_FEE } = await import('../../config/exchange-defaults.js');
       
       const metrics = getCachedCostMetrics('ADA/USD', 'crypto_spot'); // B79.0n.MCE: assetClass REQUIRED
 
-      expect(metrics.fee).toBe(DEFAULT_TAKER_FEE);
+      // B-4.5: fee comes from the DB-governed fee_model merge.
+      expect(metrics.fee).toBe(B45_TIER1_TAKER);
     });
     
-    it('C2: default fee should be 0.26% (taker)', async () => {
+    it('C2: default fee should be 0.80% Tier-1 taker (B-4.5)', async () => {
       const { getCachedCostMetrics } = await import('../../core/math/cost-model.js');
       
       const metrics = getCachedCostMetrics('XRP/USD', 'crypto_spot'); // B79.0n.MCE: assetClass REQUIRED
 
-      expect(metrics.fee).toBe(0.0026);
+      expect(metrics.fee).toBe(B45_TIER1_TAKER);
     });
     
     it('should compute correct total round-trip cost', async () => {

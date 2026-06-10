@@ -7,7 +7,25 @@
  * M67: No legacy "pool" references remain in codebase (deprecated patterns only)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+// B-4.5: the ranked-pairs path reaches the DB-governed fee merge
+// (getFrictionForAssetClass, fail-hard on cold cache) — seed the sync cache
+// in-memory with the same shape server boot's prefetchModule produces.
+import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
+import type { ModuleConstant } from '../../../shared/schema.js';
+
+beforeAll(() => {
+  const row = (assetClass: string, constantName: string, value: number) => ({
+    moduleName: 'fee_model', exchange: '*', assetClass, strategy: '*', regime: '*',
+    constantName, value,
+  } as unknown as ModuleConstant);
+  _seedModuleCacheForTests('fee_model', [
+    row('crypto_spot', 'spot_taker_fee', 0.008),
+    row('crypto_spot', 'spot_maker_fee', 0.004),
+    row('xstock_spot', 'spot_taker_fee', 0.008),
+    row('xstock_spot', 'spot_maker_fee', 0.004),
+  ]);
+});
 import { AdaptiveScanManager, PairFailureTracker } from '../../services/adaptive-scan-manager';
 import { TelemetryAggregatorService } from '../../services/telemetry-aggregator';
 
