@@ -343,6 +343,9 @@ This ensures no trade proceeds where costs eat the expected return.
 
 ## 5. Cost Model (Single Source of Truth)
 
+> **★ B-4.5 SUPERSESSION (2026-06-11) — FEES ARE DB-GOVERNED, TIER 1.** Every static fee figure in this section (0.26% taker / 0.16% maker / `DEFAULT_TAKER_FEE` / `DEFAULT_COST_BUNDLE` / 0.72% round-trip) is SUPERSEDED. Fee rates live in `module_constants` module **`fee_model`** (per `asset_class`: `spot_taker_fee` 0.008 / `spot_maker_fee` 0.004 decimal — Kraken July-2026 cross-platform **Tier 1**, the account's verified standing), warmed at boot (`b72-warmup` strict assertion: both constants × both spot classes + (0,0.05] sanity rails — server refuses to start otherwise) and merged at the SINGLE site `cost-model.getFrictionForAssetClass` (new object per call; the static friction modules carry **NaN fee tombstones**). The model prices **TAKER BOTH LEGS** (engine reality; maker stored for the Phase-19 direction-B evaluation — `STRATEGIC_DIRECTIONS_AND_AI_EDGE.md` §1). Round-trip friction: **1.80% crypto_spot / 1.82% xstock_spot**. `MAX_COST_BOUND` 0.01→0.02 (per-component sanity ceiling; headroom over the 0.008 taker). The `system_context.maker_fee_pct/taker_fee_pct` columns are a pure OPERATOR OVERRIDE surface (NULL = use fee_model; explicit value incl. 0 wins — `resolveValidatorFeeRates`); their Tier-6 schema defaults were removed (third-copy residue). Details: `B_4_5_FEE_MODEL_CHANGE_LIST.md` + completion report.
+
+
 **File**: `server/core/math/cost-model.ts`
 **Directive**: 11.3A/B
 **Status**: ACTIVE — LOCKED
@@ -457,6 +460,9 @@ Cached for 30 seconds. Falls back to DEFAULT_SPREAD (0.1%) on failure.
 ---
 
 ## 7. Slippage & Fee Model (Paper Trading Realism)
+
+> **★ B-4.5 SUPERSESSION (2026-06-11) — FEES ARE DB-GOVERNED, TIER 1.** Every static fee figure in this section (0.26% taker / 0.16% maker / `DEFAULT_TAKER_FEE` / `DEFAULT_COST_BUNDLE` / 0.72% round-trip) is SUPERSEDED. Fee rates live in `module_constants` module **`fee_model`** (per `asset_class`: `spot_taker_fee` 0.008 / `spot_maker_fee` 0.004 decimal — Kraken July-2026 cross-platform **Tier 1**, the account's verified standing), warmed at boot (`b72-warmup` strict assertion: both constants × both spot classes + (0,0.05] sanity rails — server refuses to start otherwise) and merged at the SINGLE site `cost-model.getFrictionForAssetClass` (new object per call; the static friction modules carry **NaN fee tombstones**). The model prices **TAKER BOTH LEGS** (engine reality; maker stored for the Phase-19 direction-B evaluation — `STRATEGIC_DIRECTIONS_AND_AI_EDGE.md` §1). Round-trip friction: **1.80% crypto_spot / 1.82% xstock_spot**. `MAX_COST_BOUND` 0.01→0.02 (per-component sanity ceiling; headroom over the 0.008 taker). The `system_context.maker_fee_pct/taker_fee_pct` columns are a pure OPERATOR OVERRIDE surface (NULL = use fee_model; explicit value incl. 0 wins — `resolveValidatorFeeRates`); their Tier-6 schema defaults were removed (third-copy residue). Details: `B_4_5_FEE_MODEL_CHANGE_LIST.md` + completion report.
+
 
 **File**: `server/services/slippage-fee-model.ts`
 **Status**: ACTIVE
@@ -672,7 +678,7 @@ targetLockTriggered = currentPrice ≥ targetPrice
 TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
 ```
 
-This is computed by `computeTotalRoundTripCost()` in `server/core/math/cost-model.ts`. Per-pair cost metrics (fee, slippage, spread) are sourced from `getCachedCostMetrics(symbol)`, which returns real data from the cost cache or conservative defaults from `exchange-defaults.ts` on cache miss (fee=0.26%, slippage=0.05%, spread=0.10% → total=0.72%).
+This is computed by `computeTotalRoundTripCost()` in `server/core/math/cost-model.ts`. Per-pair cost metrics (fee, slippage, spread) are sourced from `getCachedCostMetrics(symbol, assetClass)`. **B-4.5 (2026-06-11):** the fee component is DB-governed (`fee_model`, Tier-1 taker 0.008) — cache-miss defaults are fee=0.80% (DB-resolved, fail-hard), slippage=0.05%, spread=0.10% → total=**1.80%** (xstock synthesizes from the friction merge: spread 0.12% → **1.82%**).
 
 **Previously incorrect model** (deprecated, zero runtime callers as of Directive 12.1.2):
 ```
