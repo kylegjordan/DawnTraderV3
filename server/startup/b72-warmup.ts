@@ -189,5 +189,34 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     );
   }
 
+  // B-5 AMR (Obj-2 boot assertion): explicit per-class rows must exist for
+  // every ACTIVE class x mode across the AMR-governed modules — a partial
+  // seed passes the generic zero-row gate yet hard-fails mid-cycle inside
+  // try/catch-wrapped paths (= silent posture outage). Wildcards are
+  // inactive-class fallbacks ONLY (B79.TEC explicit-row pattern).
+  {
+    const { getCachedNumberRequired } = await import('../services/module-constants-service.js');
+    const ACTIVE_CLASSES = ['crypto_spot', 'xstock_spot'] as const;
+    const MODES = ['normal', 'aggressive', 'defensive', 'survival'] as const;
+    for (const assetClass of ACTIVE_CLASSES) {
+      const key = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+      for (const mode of MODES) {
+        for (const dial of ['position_size_multiplier', 'stop_loss_distance_multiplier', 'take_profit_distance_multiplier', 'entry_cooldown_multiplier', 'slot_cap'] as const) {
+          getCachedNumberRequired('amr_response_dials', mode + '_' + dial, key);
+        }
+        getCachedNumberRequired('governance_modes', mode + '_mode_confidence_floor', key);
+      }
+      for (const rule of ['friction_score_choppy', 'friction_score_stormy', 'dbs_abs_choppy', 'dbs_abs_stormy', 'ev_gap_window_n', 'dwell_min_epochs', 'relax_confirm_epochs', 'favorable_min_score'] as const) {
+        getCachedNumberRequired('amr_weather_rules', rule, key);
+      }
+    }
+    // xstock-only store knobs (chunk 0a sync reads in the scan cycle):
+    const xk = { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' };
+    for (const c of ['freshness_window_seconds', 'min_fresh_names', 'warmup_cycles'] as const) {
+      getCachedNumberRequired('amr_friction_sample', c, xk);
+    }
+    console.log('[B-5][warmup] AMR per-class rows verified (dials/floors/rules x 2 classes x 4 modes + friction-sample knobs)');
+  }
+
   started = true;
 }
