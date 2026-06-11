@@ -175,3 +175,33 @@ Every adjustable value this batch introduces lives in `module_constants` (per-cl
 **Langston ratification riders (folded, 2026-06-11):** Obj-14a — the posture layer consumes **RAW z-scores with its own DB-tunable thresholds** (`amr_weather_rules`), NEVER the b67_1 modifier's output (independent calibration keeps the compounding governable); his lateral-reuse ruling: acceptable at posture because posture drives a control variable no per-signal mechanism can express ("trade less overall") — at ranking the same reuse re-weighted the same decision; shared-sensor staleness (B67.1 partialFeed/age) propagates as null-with-reason into the weather inputs AND the ledger row (Phase-19 can partition dual-layer-degraded cycles); ledger stamps the macro-z values + their resolved rule-score contribution, labeled DISTINCTLY from the same numbers' telemetry-only role at ranking. Obj-14b — **Stooq PRIMARY for VIX + DXY** (keyless, both series, years-stable CSV; 15-min delay adequate), **FRED VIXCLS as the daily sanity anchor** (no true-DXY there); **Yahoo-unofficial and Alpha Vantage free tier VETOED** (scrape-fragility / 25-req-day). ★Feed-clone design pin: the rolling z-baseline window is denominated in **DISTINCT OBSERVATIONS, not poll cycles** — a delayed/daily series re-read at 60s would collapse the rolling variance and explode z-scores on every genuine update (the A8a epoch principle applied at the feed layer). Step-2 addendum owns: Stooq symbol/delay verification, the observation-denominated baseline design, the staleness-propagation wiring spec.
 
 **Sweep conclusion: no other non-functioning AMR feeder exists.** Items 2/4/5 were already being fixed in-batch; items 7/8 are the additions this directive produced. Everything else is verified live.
+
+---
+
+## §13 — Input CORRECTNESS audit + runtime health sentinels (Kyle directive 2026-06-11: flowing ≠ correct; every feed failure alerts)
+
+**PREVIOUSLY STATED: 15 objectives. NOW: 16 (Obj-15a/15b). REASON: Kyle — AMR is throttle instrumentation; corrupt-but-flowing data = false awareness, worse than absence.**
+
+### Obj-15a — One-time correctness AUDIT of the seven live inputs (Step-3/7 deliverable, documented evidence per input)
+Each live input verified END-TO-END — math recomputed independently on real samples, externals cross-checked against independent references:
+| Input | Correctness check |
+|---|---|
+| Per-class regime vote | Recompute the majority vote from a dumped MCE cache sample vs the reported winner/percentage; per-pair regime spot-checks against the classifier on the same OHLC |
+| DBS (both classes) | Recompute the depth-weighted median from a cycle's per-pair scores vs the published snapshot; sector-weight spot-check |
+| Friction (measured spreads) | Cross-check computed bidAskSpreadPct for a symbol sample against RAW Kraken ticker bid/ask at the same timestamps (both classes); depth medians recomputed from snap windows |
+| EV-gap sides | `expectedEdge` recomputed from persisted finalScore × dynamicTarget − frictionCost on a closed-trade sample; `netPnl` recomputed from entry/exit prices + frictionCost vs persisted — any mismatch = a B-NEW-53-class capture bug, found NOW not in Phase 25 |
+| Pair-regime distribution | Histogram recount vs cache contents |
+| B67.1 externals | BTC dominance + funding cross-checked against the source APIs directly AND one independent reference at audit time; z-scores recomputed from the persisted rolling window vs emitted values |
+| Market-hours/lifecycle | Boundary fixtures (Obj-3a) + audit of the last 4 weekend transitions in the lifecycle audit table |
+Evidence lands in the completion report per input (sample sizes + max deviation). Formulas additionally get CI golden-fixture locks (recompute-from-inputs assertions) so future code changes cannot silently drift them.
+
+### Obj-15b — Runtime input-health sentinels + alert wiring (permanent)
+Per-input health registry in the weather aggregator; each cycle each input reports `{fresh, inBounds, varying, crossConsistent}`. Detector classes (ALL thresholds DB-tunable per §11):
+1. **ABSENCE/STALENESS** — input down beyond per-input tolerance → null-with-reason (already designed) **+ system-alert**.
+2. **OUT-OF-BOUNDS** — DB-tunable plausibility rails per input (BTC dominance 20-90%, VIX 5-100, spreads 0..maxCostBound, |z|≤6, vote % 0-100). Violation → reading QUARANTINED (null-with-reason `out_of_bounds`, never consumed) + alert. Catches gross corruption.
+3. **STUCK-VALUE** — a "fresh" input repeating an identical value beyond N distinct-observation epochs where historical variance is nonzero → alert (`stuck_value`). Exactly the frozen-flipRate (#219) failure class — months undetected — made impossible to miss again.
+4. **CROSS-SOURCE DIVERGENCE** — where a second source exists: Stooq-VIX vs FRED-VIXCLS daily beyond tolerance; SPY trend 15m-bars vs 1m-partitions; measured spread vs raw ticker on a rotating sample → alert (`source_divergence`).
+**Alert plumbing:** `addAlert` (B-NEW-40) with per-input+failure-class `dedupe_key` (B-NEW-51 — one alert per incident, not per cycle), severity `warning`; dispatcher pushes to Telegram; §10.5 per-turn pickup. **M4 clarification: input-HEALTH alerts fire in ALL flag states including shadow** — feed health is infrastructure truth, not posture noise; M4 quiet-mode applies to would-be posture transitions only.
+
+### Honest possibility boundary (Kyle asked)
+Machine-detectable: absence, staleness, gross out-of-range corruption, frozen/stuck feeds, divergence wherever a second source or recomputable path exists, formula drift (CI locks + audit-time recompute). **NOT machine-detectable: corruption that stays in-range, varies plausibly, and has no second source.** Mitigations: second sources deliberately wired where they exist (FRED anchor; bar-vs-partition; raw-ticker cross-checks) + the shadow-week would-vs-actual human review. Boundary stated in the SysManual AMR section so nobody later assumes more protection than exists.
