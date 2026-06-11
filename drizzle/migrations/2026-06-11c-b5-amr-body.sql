@@ -30,8 +30,10 @@
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ── 1. Decision ledger ──────────────────────────────────────────────────────
--- ~2,880 rows/day both classes (30s MCE cycle), 90-day retention via the
--- B-NEW-47 sweep (registered in the sweep table list in-code, chunk 5).
+-- ~2,880 rows/day both classes (30s MCE cycle). Retention: IN-SERVICE daily
+-- 90-day DELETE (amr-weather-report.ts maybePruneLedger — Langston-ratified
+-- judgment call 2; the B-NEW-47 partition sweep does NOT apply to this small
+-- non-partitioned table and the ledger is deliberately NOT in its registry).
 CREATE TABLE IF NOT EXISTS amr_decision_ledger (
   id BIGSERIAL PRIMARY KEY,
   cycle_ts TIMESTAMPTZ NOT NULL,
@@ -201,7 +203,6 @@ ON CONFLICT DO NOTHING;
 INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by) VALUES
   ('amr_external_equity', '*', 'xstock_spot', '*', '*', 'poll_seconds',             '300'::jsonb, 'b5-amr'),
   ('amr_external_equity', '*', 'xstock_spot', '*', '*', 'z_baseline_observations',  '720'::jsonb, 'b5-amr'),
-  ('amr_external_equity', '*', 'xstock_spot', '*', '*', 'fred_lag_tolerance_days',  '3'::jsonb,   'b5-amr'),
   ('amr_external_equity', '*', 'xstock_spot', '*', '*', 'min_observations_for_z',   '30'::jsonb,  'b5-amr')
 ON CONFLICT DO NOTHING;
 

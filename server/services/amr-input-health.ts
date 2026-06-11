@@ -215,10 +215,15 @@ export function evaluateInputHealth(
   for (const reading of out) {
     const t = trackFor(assetClass, reading.input);
     if (!reading.fresh) {
+      // A-note (Langston Step-4): an input that has NEVER produced a reading
+      // escalates on epochs-since-(re)seed — a misconfigured feed from day
+      // one is exactly the watch-week-evidence corruption R1 exists for.
       const sinceLast = t.recent.length > 0 ? epoch - t.recent[t.recent.length - 1].epoch : epoch;
-      if (sinceLast >= tolerance && t.recent.length > 0) {
+      if (sinceLast >= tolerance) {
         fireAlert(assetClass, reading.input, 'absent',
-          `no fresh reading for ${sinceLast} distinct-observation epochs (tolerance ${tolerance}).`);
+          t.recent.length > 0
+            ? `no fresh reading for ${sinceLast} distinct-observation epochs (tolerance ${tolerance}).`
+            : `NO reading EVER after ${sinceLast} live epochs (tolerance ${tolerance}) — input never seeded.`);
       }
     } else {
       closeIncident(assetClass, reading.input, 'absent');

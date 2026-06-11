@@ -4739,7 +4739,9 @@ export type InsertCryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferInser
 // One row per (MCE cycle, asset class) when the AMR flag is shadow|active.
 // would_dials / would_blocks carry per-gate+site tags (scope B3); the
 // inputs_schema_version partitions mixed-shape history for the Phase-25 study
-// (Langston M1). 90-day retention via the B-NEW-47 sweep.
+// (Langston M1). Retention: in-service daily 90-day DELETE in
+// amr-weather-report.ts (NOT the B-NEW-47 partition sweep — small
+// non-partitioned table; Langston Step-4 ratified).
 // ════════════════════════════════════════════════════════════════════════════
 export const amrDecisionLedger = pgTable("amr_decision_ledger", {
   id: bigserial("id", { mode: "number" }).primaryKey(),

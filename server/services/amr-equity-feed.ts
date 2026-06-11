@@ -64,6 +64,11 @@ interface RingStats { count: number; mean: number; stdDev: number }
 class ObservationWindow {
   private values: number[] = [];
   constructor(private maxObservations: number) {}
+  /** A1 (Langston Step-4): window size is the DB knob, applied at start. */
+  setMax(n: number): void {
+    this.maxObservations = Math.max(30, Math.floor(n));
+    while (this.values.length > this.maxObservations) this.values.shift();
+  }
   push(v: number): void {
     this.values.push(v);
     if (this.values.length > this.maxObservations) this.values.shift();
@@ -270,6 +275,11 @@ export function startAmrEquityFeed(): void {
   if (pollTimer) return;
   restoreState();
   const pollSeconds = getCachedNumberRequired('amr_external_equity', 'poll_seconds', _EQ_KEY);
+  // A1: the baseline window length is DB-governed (sec 11) — wire it, never
+  // shadow it with a hardcoded cap.
+  const zWindow = getCachedNumberRequired('amr_external_equity', 'z_baseline_observations', _EQ_KEY);
+  vixWindow.setMax(zWindow);
+  dxyWindow.setMax(zWindow);
   void pollOnce();
   pollTimer = setInterval(() => void pollOnce(), pollSeconds * 1000);
   pollTimer.unref?.();

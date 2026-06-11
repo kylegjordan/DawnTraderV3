@@ -60,19 +60,23 @@ class RealtimePaperExecutor {
       // gate ships WIRED so the live path can never bypass AMR by omission.
       // No slot count here (engine-level position registry owns that); the
       // execution_entry slot gate enforces in the paper engine path.
+      // B1 (Langston Step-4): only the module/class RESOLUTION is guarded —
+      // the gate verdict itself is outside any catch (evaluateAmrGates never
+      // throws and is fail-closed internally under active).
+      let _amrGateMod: typeof import('../core/governance/amr-gates.js') | null = null;
+      let _amrClass: ReturnType<typeof import('../../shared/asset-classes.js')['safeResolveAssetClass']> = null;
       try {
         const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
-        const _amrClass = safeResolveAssetClass(request.symbol, 'kraken');
-        if (_amrClass !== null) {
-          const { evaluateAmrGates } = await import('../core/governance/amr-gates.js');
-          const gate = evaluateAmrGates({ assetClass: _amrClass, site: 'execution_entry', strategy: request.strategy });
-          if (!gate.allowed) {
-            throw new Error(`AMR gate block: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
-          }
-        }
+        _amrClass = safeResolveAssetClass(request.symbol, 'kraken');
+        if (_amrClass !== null) _amrGateMod = await import('../core/governance/amr-gates.js');
       } catch (amrErr) {
-        if (amrErr instanceof Error && amrErr.message.startsWith('AMR gate block')) throw amrErr;
-        console.warn(`[B-5][RT-Exec] AMR gate read error (trade continues, shadow-safe): ${amrErr instanceof Error ? amrErr.message : amrErr}`);
+        console.warn(`[B-5][RT-Exec] AMR module resolution error (gate skipped): ${amrErr instanceof Error ? amrErr.message : amrErr}`);
+      }
+      if (_amrGateMod && _amrClass !== null) {
+        const gate = _amrGateMod.evaluateAmrGates({ assetClass: _amrClass, site: 'execution_entry', strategy: request.strategy });
+        if (!gate.allowed) {
+          throw new Error(`AMR gate block: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
+        }
       }
 
       // Check concurrency limits

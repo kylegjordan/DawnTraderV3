@@ -2570,24 +2570,29 @@ export class PaperExecutionEngine {
         // F3 precedence: the kill-switch checks upstream and TCL downstream
         // remain independent ANDs; this is solely the AMR question. Shadow =
         // dry-run onto the ledger; active = real block.
+        // B1 (Langston Step-4): the slot-count fetch is ISOLATED — a storage
+        // hiccup degrades to a count-less gate call (slot gate skips, the
+        // roster/floor/pause gates still run + fail-closed under active),
+        // never to skipping the whole gate.
+        let _sameClassCount: number | undefined;
         try {
-          const { evaluateAmrGates } = await import('../core/governance/amr-gates.js');
           const _gateOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
-          const sameClassCount = _gateOpenPositions.filter(p => safeResolveAssetClass(p.symbol, 'kraken') === _amrClass).length;
-          const gate = evaluateAmrGates({
-            assetClass: _amrClass,
-            site: 'execution_entry',
-            strategy: signal.strategy,
-            sourcePool: (signal as any).sourcePool ?? signal.metadata?.sourcePool,
-            confidence: signalMetadata.regimeConfidence || signal.confidence || 0.5,
-            openPositionCountForClass: sameClassCount,
-          });
-          if (!gate.allowed) {
-            console.log(`[B-5][Paper][AMR_GATE] BLOCK ${signal.symbol}: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
-            return;
-          }
-        } catch (gateErr) {
-          console.warn(`[B-5][Paper] AMR gate error (signal continues, shadow-safe): ${gateErr instanceof Error ? gateErr.message : gateErr}`);
+          _sameClassCount = _gateOpenPositions.filter(p => safeResolveAssetClass(p.symbol, 'kraken') === _amrClass).length;
+        } catch (countErr) {
+          console.warn(`[B-5][Paper] open-position count fetch failed (slot gate skips this signal): ${countErr instanceof Error ? countErr.message : countErr}`);
+        }
+        const { evaluateAmrGates } = await import('../core/governance/amr-gates.js');
+        const gate = evaluateAmrGates({
+          assetClass: _amrClass,
+          site: 'execution_entry',
+          strategy: signal.strategy,
+          sourcePool: (signal as any).sourcePool ?? signal.metadata?.sourcePool,
+          confidence: signalMetadata.regimeConfidence || signal.confidence || 0.5,
+          openPositionCountForClass: _sameClassCount,
+        });
+        if (!gate.allowed) {
+          console.log(`[B-5][Paper][AMR_GATE] BLOCK ${signal.symbol}: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
+          return;
         }
       }
       

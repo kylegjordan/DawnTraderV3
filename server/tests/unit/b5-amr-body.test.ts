@@ -25,9 +25,13 @@ vi.mock('../../services/market-indicators.js', () => ({
     return m;
   },
 }));
+const macroMock = vi.hoisted(() => ({
+  snapshot: { ageSeconds: Infinity } as Record<string, unknown>,
+  baseline: {} as Record<string, unknown>,
+}));
 vi.mock('../../services/external-macro-feed.js', () => ({
-  getLatestMacroSnapshot: () => ({ ageSeconds: Infinity }),
-  getLatestMacroBaseline: () => ({}),
+  getLatestMacroSnapshot: () => macroMock.snapshot,
+  getLatestMacroBaseline: () => macroMock.baseline,
 }));
 vi.mock('../../services/amr-equity-feed.js', () => ({
   getLatestEquitySnapshot: () => ({ ageSeconds: Infinity, fredCrossCheck: 'pending', schemaGuardTripped: false }),
@@ -178,6 +182,8 @@ beforeEach(() => {
   _resetClassModeStatsForTests();
   miMock.current.set('crypto_spot', { ...LIVE_CALM });
   miMock.current.set('xstock_spot', { ...LIVE_CALM });
+  macroMock.snapshot = { ageSeconds: Infinity };
+  macroMock.baseline = {};
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -337,6 +343,29 @@ describe('B-5 Obj-3/3a — weather aggregator (per-class, IDLE, ladder, R2)', ()
     expect(getAmrWeatherReport('xstock_spot')).not.toBeNull();
     seedAll(); // restore
   });
+  it('FAVORABLE -> AGGRESSIVE end-to-end: full 5/5 inputs, dwell + ladder (Langston coverage note)', () => {
+    // all five inputs present + benign: friction 5, |DBS| 0.05, 0 flips,
+    // EV-gap realized BEATS predicted (negative shortfall), macro z ~0.2
+    macroMock.snapshot = { ageSeconds: 10, btcDominance: 56.4, fundingRate: 0.0001, mcapMomentum: 0.01 };
+    macroMock.baseline = {
+      btcDominanceSampleCount: 100, btcDominanceMean: 56.0, btcDominanceStdDev: 2.0,
+      fundingSampleCount: 100, fundingMean: 0.0001, fundingStdDev: 0.0005,
+      mcapMomentumSampleCount: 100, mcapMomentumMean: 0.0, mcapMomentumStdDev: 0.05,
+    };
+    for (let i = 0; i < 5; i++) feedEvGapObservation('crypto_spot', 2.0, 2.5);
+    miMock.current.set('crypto_spot', { ...LIVE_CALM, globalFrictionScore: 5, globalDBS: { score: 0.05, category: 'NEUTRAL', pairCount: 300 } });
+    runAmrWeatherCycle(OPEN_TS); // epoch 1: classification FAVORABLE, seeded NORMAL (B5 reseed floor)
+    const first = getAmrWeatherReport('crypto_spot')!;
+    expect(first.inputs.evGapRatio).toBeLessThan(0);
+    expect(first.classification).toBe('FAVORABLE'); // completeness cap NOT engaged: 5/5 present
+    expect(getCurrentModeForClass('crypto_spot')).toBe('NORMAL');
+    // dwell (3) + confirm (3): one rung NORMAL -> AGGRESSIVE at epoch 6
+    for (let i = 1; i <= 4; i++) runAmrWeatherCycle(OPEN_TS + i * 30_000);
+    expect(getCurrentModeForClass('crypto_spot')).toBe('NORMAL');
+    runAmrWeatherCycle(OPEN_TS + 5 * 30_000);
+    expect(getCurrentModeForClass('crypto_spot')).toBe('AGGRESSIVE'); // earned through evidence
+  });
+
   it('EV-gap below window N reports warming; full window flows into inputs', () => {
     runAmrWeatherCycle(OPEN_TS);
     expect(getAmrWeatherReport('crypto_spot')!.staleness.join()).toContain('ev_gap_warming');

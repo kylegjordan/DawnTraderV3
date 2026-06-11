@@ -142,6 +142,9 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   // ('depth_usd'); crypto = native 24h coin-unit volume ('volume_qty').
   // null for trades opened before B.2.UI deployed (no backfill).
   entryLiquidityValue: number | null;
+  // B-5 AMR: at-open weather stamp (Phase-19 flip read consumes this path).
+  amrClassification: string | null;
+  amrMode: string | null;
   entryLiquidityKind: string | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
@@ -289,6 +292,10 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             // B.2.UI (2026-06-02): entry-liquidity for the "Volume / Order Book" column.
             entryLiquidityValue: typeof trade.entryLiquidityValue === 'number' ? trade.entryLiquidityValue : null,
             entryLiquidityKind: typeof trade.entryLiquidityKind === 'string' ? trade.entryLiquidityKind : null,
+            // B-5 AMR (B3, Langston Step-4): stamp read-back — written by the
+            // VTS close path, consumed by the Phase-19 flip read.
+            amrClassification: typeof trade.amrClassification === 'string' ? trade.amrClassification : null,
+            amrMode: typeof trade.amrMode === 'string' ? trade.amrMode : null,
           });
         }
       } catch (err) {

@@ -333,4 +333,4 @@ setInterval(() => {
   for (const b of classModeStats.values()) b.lastHour = 0;
 }, 60 * 60 * 1000);
 
-console.log('[11.7S][StrategyModes] Module loaded - NORMAL/DEFENSIVE/SURVIVAL modes available');
+console.log('[11.7S][StrategyModes] Module loaded - NORMAL/AGGRESSIVE/DEFENSIVE/SURVIVAL modes available (AGGRESSIVE per-class only, B-5)');

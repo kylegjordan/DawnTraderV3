@@ -356,6 +356,7 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
       assetClass: input.assetClass,
       site: 'sqe_admission',
       strategy: input.strategy,
+      sourcePool: input.sourcePool, // B2 (Langston Step-4): SQE has it — shadow evidence must not be pool-blind
       confidence: input.confidence,
     });
     if (!amr.allowed) {
