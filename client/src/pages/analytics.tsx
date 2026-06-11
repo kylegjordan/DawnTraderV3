@@ -543,14 +543,25 @@ function amrWouldDo(c: AmrClassification, dials: Record<AmrMode, AmrDialSet> | n
   const d = dials?.[AMR_MODE_BY_CLASSIFICATION[c]];
   if (!d) return 'Response dial values unavailable.';
   switch (c) {
-    case 'CALM':
-      return `Trade as standard: full position size, normal stop and target distances, normal re-entry waits, up to ${d.slotCap} open positions.`;
+    case 'CALM': {
+      // NORMAL is seeded 1.0 across the board but stays DB-tunable — if any
+      // dial is retuned off baseline, show the live numbers instead of prose
+      // that would silently go stale (Langston J1 rider).
+      const allBaseline = d.positionSizeMultiplier === 1 && d.stopLossDistanceMultiplier === 1
+        && d.takeProfitDistanceMultiplier === 1 && d.entryCooldownMultiplier === 1;
+      return allBaseline
+        ? `Trade as standard: full position size, normal stop and target distances, normal re-entry waits, up to ${d.slotCap} open positions.`
+        : `Trade at the NORMAL baseline: position size ${fmtAmrX(d.positionSizeMultiplier)}, stops ${fmtAmrX(d.stopLossDistanceMultiplier)}, targets ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entry waits ${fmtAmrX(d.entryCooldownMultiplier)}, up to ${d.slotCap} open positions.`;
+    }
     case 'CHOPPY':
       return `Get defensive: position sizes cut to ${fmtAmrPct(d.positionSizeMultiplier)} of normal, stops widened to ${fmtAmrX(d.stopLossDistanceMultiplier)} (whipsaw protection), profit targets pulled in to ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entry waits ${fmtAmrX(d.entryCooldownMultiplier)} longer, at most ${d.slotCap} open positions.`;
     case 'STORMY':
       return `Survival posture: sizes drop to ${fmtAmrPct(d.positionSizeMultiplier)} of normal, stops widen to ${fmtAmrX(d.stopLossDistanceMultiplier)}, targets tighten to ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entry waits stretch to ${fmtAmrX(d.entryCooldownMultiplier)}, and only ${d.slotCap} positions may be open — expect very few new trades.`;
     case 'FAVORABLE':
-      return `Press the edge: position sizes increase to ${fmtAmrX(d.positionSizeMultiplier)}, profit targets stretch to ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entries speed up (${fmtAmrX(d.entryCooldownMultiplier)} wait), up to ${d.slotCap} open positions. The signal-quality bar does NOT drop — same standards, pressed harder.`;
+      // Stop clause renders only when AGGRESSIVE's stop dial leaves baseline
+      // (seeded 1.0, DB-tunable) — never silently omit a dial Kyle would feel
+      // (Langston note 2).
+      return `Press the edge: position sizes increase to ${fmtAmrX(d.positionSizeMultiplier)}, ${d.stopLossDistanceMultiplier !== 1 ? `stops at ${fmtAmrX(d.stopLossDistanceMultiplier)}, ` : ''}profit targets stretch to ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entries speed up (${fmtAmrX(d.entryCooldownMultiplier)} wait), up to ${d.slotCap} open positions. The signal-quality bar does NOT drop — same standards, pressed harder.`;
   }
 }
 
