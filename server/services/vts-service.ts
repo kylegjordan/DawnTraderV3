@@ -943,7 +943,17 @@ export class VTSService extends EventEmitter {
       const cfg = getMarketContextEngine().getCurrentOutcomeFeedbackConfig();
       const notional = tradeData.positionSize * tradeData.entryPrice;
       if (cfg !== null && notional > 0 && Number.isFinite(tradeData.pnl)) {
-        const netPnlPct = (tradeData.pnl / notional) * 100;
+        // B-5 Obj-15a audit Finding A2 (2026-06-12): tradeData.pnl is the
+        // realized NET FRACTION of entry price — the ONLY caller (vts-runner
+        // close, :2451) computes (exit−entry)/entry − frictionCost and keeps
+        // dollarPnl separate. The old (pnl/notional)*100 assumed DOLLARS and
+        // understated realized percent by ~notional (~100×): it fed the B67.4
+        // outcome EMA wrong since 2026-05-01 and would have permanently
+        // suppressed the B-5 EV-gap FAVORABLE evidence once warmed
+        // (ratio ≈ 1/notional). Percent-of-notional is pnl×100 directly.
+        // vts calibration epochs bumped in the same change so the polluted
+        // Welford streams reset (the store's epoch-mismatch reset).
+        const netPnlPct = tradeData.pnl * 100;
         // B79.0n.CONFIDENCE-CHAIN: per-class store key — resolve via the
         // tradeData.symbol so VTS-side close hooks isolate crypto vs xstock.
         const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');

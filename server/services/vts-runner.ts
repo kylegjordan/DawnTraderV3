@@ -3050,8 +3050,14 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     // B.2.UI: pass-through the caller-captured entry-liquidity snapshot (null-guarded).
     entryLiquidityValue: input.entryLiquidityValue,
     entryLiquidityKind: input.entryLiquidityKind,
-    amrClassification: input.amrClassification,
-    amrMode: input.amrMode,
+    // B-5 Obj-15a Finding-B fix: default-resolve the at-open weather stamp
+    // when the caller omits it — same B-NEW-22 pattern as the 5 context
+    // fields above. The xstock eval-cycle opens through here WITHOUT passing
+    // stamps, so every xstock VTS row persisted amrClassification=null while
+    // the inline crypto path (line ~1528) stamped correctly (audit evidence:
+    // 19 post-deploy entries, the 1 stamped row crypto, all 18 null xstock).
+    amrClassification: input.amrClassification ?? _amrWeatherMod?.getAmrWeatherReport(input.assetClass)?.classification,
+    amrMode: input.amrMode ?? _amrWeatherMod?.getAmrWeatherReport(input.assetClass)?.resolvedMode ?? undefined,
     sourcePool: input.sourcePool,
     atrAtOpen: input.atrAtOpen,
     diAtOpen: 50,

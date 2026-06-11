@@ -133,3 +133,4 @@
 2026-06-11-b45-fee-model-tier1.sql
 2026-06-11b-b45-sysctx-fee-residue.sql
 2026-06-11c-b5-amr-body.sql
+2026-06-12a-b5-evgap-units-epoch.sql  -- B-5 Obj-15a audit fixes: vts epoch bump both classes (netPnlPct units fix pairing) + legacy wildcard aggressive_mode_confidence_floor DELETE
