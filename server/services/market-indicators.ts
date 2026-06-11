@@ -86,6 +86,8 @@ export interface MarketIndicators {
   favoredStrategies: string[];
   /** B-4.7: null when no same-class friction sample exists (no cross-class fallback). */
   globalFrictionScore: number | null;
+  /** B-5 (Obj-13): reason code when globalFrictionScore is null (taxonomy in FrictionResult). */
+  frictionReason: FrictionResult['reason'] | null;
   frictionSampleSize: number;
   frictionDescription: FrictionStatus;
   frictionNarrative: string;
@@ -493,6 +495,7 @@ export function getMarketIndicators(assetClass: AssetClass): MarketIndicators {
     favoredSignalTypes,
     favoredStrategies,
     globalFrictionScore: frictionResult.score,
+    frictionReason: frictionResult.reason ?? null,
     frictionSampleSize: frictionResult.sampleSize,
     frictionDescription: frictionStatus,
     frictionNarrative: frictionStatus.narrative,
