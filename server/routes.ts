@@ -2264,13 +2264,35 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/diagnostics/amr/current', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getAllAmrWeatherReports, getAmrFlagState, getCurrentModeForClass } = await import('./services/amr-weather-report.js');
+      const { getModeOverlayForClass, getSlotCapForMode } = await import('./core/governance/strategy-modes.js');
       const reports = getAllAmrWeatherReports();
       const byClass: Record<string, unknown> = {};
       for (const klass of ['crypto_spot', 'xstock_spot'] as const) {
         let flag: string;
         try { flag = getAmrFlagState(klass); } catch { flag = 'unresolved'; }
         const r = reports.get(klass) ?? null;
-        byClass[klass] = { flag, report: r, mode: getCurrentModeForClass(klass) };
+        // Live DB-governed dial values per mode, so the UI panel's
+        // plain-language behavior descriptions always show the real seeded
+        // numbers (never copy that can drift from a retune). Fail-soft per
+        // class: a dial-read failure blanks dials only, not the weather.
+        let dials: Record<string, unknown> | null = null;
+        try {
+          dials = {};
+          for (const mode of ['NORMAL', 'AGGRESSIVE', 'DEFENSIVE', 'SURVIVAL'] as const) {
+            const o = getModeOverlayForClass(mode, klass);
+            dials[mode] = {
+              positionSizeMultiplier: o.positionSizeMultiplier,
+              stopLossDistanceMultiplier: o.stopLossDistanceMultiplier,
+              takeProfitDistanceMultiplier: o.takeProfitDistanceMultiplier,
+              entryCooldownMultiplier: o.entryCooldownMultiplier,
+              slotCap: getSlotCapForMode(mode, klass),
+            };
+          }
+        } catch (dialErr: any) {
+          console.warn(`[B-5][AMR] diagnostics dial read failed for ${klass}: ${dialErr?.message}`);
+          dials = null;
+        }
+        byClass[klass] = { flag, report: r, mode: getCurrentModeForClass(klass), dials };
       }
       res.json({ ok: true, schema: 'amr/v1.0', byClass, timestamp: new Date().toISOString() });
     } catch (error: any) {

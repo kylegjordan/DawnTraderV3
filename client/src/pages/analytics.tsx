@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download, Filter, Brain, CheckCircle, XCircle, AlertTriangle, Info, HelpCircle, Shield } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, AlertCircle, Gauge, RefreshCw, Clock, DollarSign, Target, Zap, BarChart3, Layers, List, BookOpen, ChevronDown, ChevronUp, Star, GitBranch, Download, Filter, Brain, CheckCircle, XCircle, AlertTriangle, Info, HelpCircle, Shield, Sun, CloudDrizzle, CloudLightning, Sparkles, PauseCircle } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import TopBatch from "@/components/trading/top-batch";
@@ -406,6 +406,354 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
           <span>Updated {formatDistanceToNow(new Date(indicators.timestamp), { addSuffix: true })}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B-5 AMR (Obj-8 UI): per-class Adaptive Market Response weather panel.
+// Reads /api/diagnostics/amr/current. The plain-language behavior
+// descriptions are TEMPLATED from the live DB-governed dials served by the
+// endpoint — never hardcoded numbers that could drift from a retune.
+// ═══════════════════════════════════════════════════════════════════════════
+
+type AmrClassification = 'CALM' | 'CHOPPY' | 'STORMY' | 'FAVORABLE' | 'IDLE';
+type AmrMode = 'NORMAL' | 'AGGRESSIVE' | 'DEFENSIVE' | 'SURVIVAL';
+
+interface AmrDialSet {
+  positionSizeMultiplier: number;
+  stopLossDistanceMultiplier: number;
+  takeProfitDistanceMultiplier: number;
+  entryCooldownMultiplier: number;
+  slotCap: number;
+}
+
+interface AmrHealthReading {
+  input: string;
+  fresh: boolean;
+  inBounds: boolean;
+  varying: boolean | null;
+  crossConsistent: boolean | null;
+  quarantined: boolean;
+  detail?: string;
+}
+
+interface AmrReport {
+  classification: AmrClassification;
+  continuousScore: number | null;
+  cycleTs: number;
+  inputs: {
+    regime: string | null;
+    votePct: number | null;
+    voteStatus: string;
+    frictionScore: number | null;
+    frictionReason: string | null;
+    frictionSampleSize: number;
+    dbsScore: number | null;
+    dbsIsStale: boolean;
+    flipsInWindow: number | null;
+    evGapRatio: number | null;
+    evGapN: number;
+    macroMaxAbsZ: number | null;
+  };
+  health: AmrHealthReading[];
+  triggers: string[];
+  staleness: string[];
+  resolvedMode: AmrMode | null;
+}
+
+interface AmrClassBlock {
+  flag: 'disabled' | 'shadow' | 'active' | 'unresolved';
+  report: AmrReport | null;
+  mode: AmrMode | null;
+  dials: Record<AmrMode, AmrDialSet> | null;
+}
+
+interface AmrCurrentData {
+  ok: boolean;
+  byClass: { crypto_spot?: AmrClassBlock; xstock_spot?: AmrClassBlock };
+  timestamp: string;
+}
+
+const AMR_WEATHER_BADGE: Record<AmrClassification, string> = {
+  CALM: 'bg-green-500/20 text-green-400 border-green-500/30',
+  FAVORABLE: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  CHOPPY: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  STORMY: 'bg-red-500/20 text-red-400 border-red-500/40',
+  IDLE: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+};
+
+const AMR_WEATHER_BAR: Record<AmrClassification, string> = {
+  CALM: 'bg-green-500', FAVORABLE: 'bg-emerald-400', CHOPPY: 'bg-amber-500',
+  STORMY: 'bg-red-500', IDLE: 'bg-gray-500',
+};
+
+const AMR_FLAG_BADGE: Record<string, string> = {
+  shadow: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  active: 'bg-green-500/20 text-green-400 border-green-500/30',
+  disabled: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  unresolved: 'bg-red-500/20 text-red-400 border-red-500/30',
+};
+
+const AMR_FLAG_NOTE: Record<string, string> = {
+  shadow: 'Shadow mode — the weather is computed and recorded every 30 seconds, but nothing is applied to trading yet. The panel shows what the system WOULD be doing.',
+  active: 'Active — posture changes below are applied to trading.',
+  disabled: 'Off — no weather is computed for this asset class.',
+  unresolved: 'Flag state could not be resolved — check the runtime configuration.',
+};
+
+const AMR_MODE_BY_CLASSIFICATION: Record<Exclude<AmrClassification, 'IDLE'>, AmrMode> = {
+  CALM: 'NORMAL', CHOPPY: 'DEFENSIVE', STORMY: 'SURVIVAL', FAVORABLE: 'AGGRESSIVE',
+};
+
+function getAmrWeatherIcon(c: AmrClassification) {
+  switch (c) {
+    case 'CALM': return <Sun className="w-4 h-4 text-green-400" />;
+    case 'CHOPPY': return <CloudDrizzle className="w-4 h-4 text-amber-400" />;
+    case 'STORMY': return <CloudLightning className="w-4 h-4 text-red-400" />;
+    case 'FAVORABLE': return <Sparkles className="w-4 h-4 text-emerald-300" />;
+    case 'IDLE': return <PauseCircle className="w-4 h-4 text-gray-400" />;
+  }
+}
+
+const fmtAmrPct = (x: number) => `${Math.round(x * 100)}%`;
+const fmtAmrX = (x: number) => `${x}x`;
+
+function amrMarketMeaning(c: AmrClassification, label: string, isXstock: boolean): string {
+  switch (c) {
+    case 'CALM':
+      return `Normal ${label} conditions — friction, directional bias, and regime stability all read ordinary. Nothing unusual to react to.`;
+    case 'CHOPPY':
+      return `Conditions are degrading — elevated friction (wider spreads), regime instability, or weakening readings. The ${label} market is harder to trade profitably than usual.`;
+    case 'STORMY':
+      return `Hostile ${label} conditions — high friction, an unstable regime, or stressed readings. Most new entries here would lose after costs.${isXstock ? ' For xStocks this is also the designed overnight read: spreads run far wider outside US market hours.' : ''}`;
+    case 'FAVORABLE':
+      return `Unusually good ${label} conditions, confirmed by the FULL evidence set — favorable is never declared from partial or warming data.`;
+    case 'IDLE':
+      return isXstock
+        ? 'No live readings — the xStock market is closed (weekend boundary) or readings are still warming after a restart.'
+        : 'Readings are still warming — not enough fresh observations to issue a weather call.';
+  }
+}
+
+function amrWouldDo(c: AmrClassification, dials: Record<AmrMode, AmrDialSet> | null): string {
+  if (c === 'IDLE') {
+    return 'No posture decision is made: the system holds, then re-seeds carefully when readings resume — by design it can never wake directly into the aggressive stance.';
+  }
+  const d = dials?.[AMR_MODE_BY_CLASSIFICATION[c]];
+  if (!d) return 'Response dial values unavailable.';
+  switch (c) {
+    case 'CALM':
+      return `Trade as standard: full position size, normal stop and target distances, normal re-entry waits, up to ${d.slotCap} open positions.`;
+    case 'CHOPPY':
+      return `Get defensive: position sizes cut to ${fmtAmrPct(d.positionSizeMultiplier)} of normal, stops widened to ${fmtAmrX(d.stopLossDistanceMultiplier)} (whipsaw protection), profit targets pulled in to ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entry waits ${fmtAmrX(d.entryCooldownMultiplier)} longer, at most ${d.slotCap} open positions.`;
+    case 'STORMY':
+      return `Survival posture: sizes drop to ${fmtAmrPct(d.positionSizeMultiplier)} of normal, stops widen to ${fmtAmrX(d.stopLossDistanceMultiplier)}, targets tighten to ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entry waits stretch to ${fmtAmrX(d.entryCooldownMultiplier)}, and only ${d.slotCap} positions may be open — expect very few new trades.`;
+    case 'FAVORABLE':
+      return `Press the edge: position sizes increase to ${fmtAmrX(d.positionSizeMultiplier)}, profit targets stretch to ${fmtAmrX(d.takeProfitDistanceMultiplier)}, re-entries speed up (${fmtAmrX(d.entryCooldownMultiplier)} wait), up to ${d.slotCap} open positions. The signal-quality bar does NOT drop — same standards, pressed harder.`;
+  }
+}
+
+const AMR_INPUT_LABELS: Record<string, string> = {
+  vote: 'Regime vote',
+  friction: 'Friction',
+  dbs: 'DBS',
+  macro: 'Macro',
+};
+
+function amrHealthChipState(h: AmrHealthReading): { dot: string; note: string } {
+  if (h.quarantined || !h.inBounds) return { dot: 'bg-red-500', note: 'Quarantined — reading outside plausibility rails, never consumed' };
+  if (h.varying === false) return { dot: 'bg-red-500', note: 'Stuck value — feed may be frozen' };
+  if (h.crossConsistent === false) return { dot: 'bg-red-500', note: 'Second source disagrees — divergence alert open' };
+  if (!h.fresh) return { dot: 'bg-amber-500', note: h.detail ? `No fresh reading (${h.detail})` : 'No fresh reading' };
+  if (h.varying === null) return { dot: 'bg-gray-400', note: 'Healthy — variance check still warming' };
+  return { dot: 'bg-green-500', note: 'Healthy' };
+}
+
+function AmrClassCard({ klass, block }: { klass: 'crypto_spot' | 'xstock_spot'; block: AmrClassBlock | undefined }) {
+  const label = klass === 'crypto_spot' ? 'Crypto' : 'xStock';
+  const isXstock = klass === 'xstock_spot';
+  const [legendOpen, setLegendOpen] = useState(false);
+
+  if (!block) {
+    return (
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">{label}</CardTitle></CardHeader>
+        <CardContent><p className="text-sm text-muted-foreground italic">No weather data returned for this class.</p></CardContent>
+      </Card>
+    );
+  }
+
+  const { flag, report, dials } = block;
+  const score = report?.continuousScore ?? null;
+  const mode = report?.resolvedMode ?? block.mode ?? null;
+
+  const rawValues: Record<string, string> = {
+    vote: report?.inputs.votePct !== null && report?.inputs.votePct !== undefined ? `${report.inputs.votePct.toFixed(0)}% (${report.inputs.regime ?? '—'})` : '—',
+    friction: report?.inputs.frictionScore !== null && report?.inputs.frictionScore !== undefined ? `${report.inputs.frictionScore.toFixed(0)} (n=${report.inputs.frictionSampleSize})` : (report?.inputs.frictionReason ?? '—'),
+    dbs: report?.inputs.dbsScore !== null && report?.inputs.dbsScore !== undefined ? report.inputs.dbsScore.toFixed(2) : '—',
+    macro: report?.inputs.macroMaxAbsZ !== null && report?.inputs.macroMaxAbsZ !== undefined ? `|z| ${report.inputs.macroMaxAbsZ.toFixed(2)}` : '—',
+  };
+
+  return (
+    <Card data-testid={`amr-card-${klass}`}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-base flex items-center gap-2">
+            {label} Weather
+            <Badge variant="outline" className={`text-[10px] uppercase ${AMR_FLAG_BADGE[flag] ?? AMR_FLAG_BADGE.unresolved}`}>{flag}</Badge>
+          </CardTitle>
+          {report && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatDistanceToNow(new Date(report.cycleTs), { addSuffix: true })}
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {flag === 'disabled' || !report ? (
+          <p className="text-sm text-muted-foreground italic">
+            {flag === 'disabled' ? AMR_FLAG_NOTE.disabled : 'First weather cycle pending — readings warm up within a minute of startup.'}
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Badge variant="outline" className={`font-semibold text-sm px-2.5 py-1 ${AMR_WEATHER_BADGE[report.classification]}`}>
+                <span className="mr-1.5">{getAmrWeatherIcon(report.classification)}</span>
+                {report.classification}
+              </Badge>
+              {score !== null && (
+                <div className="flex items-center gap-2 flex-1 min-w-[120px]">
+                  <span className="font-mono text-sm">{score.toFixed(3)}</span>
+                  <div className="h-1.5 rounded bg-muted flex-1 overflow-hidden">
+                    <div className={`h-full rounded ${AMR_WEATHER_BAR[report.classification]}`} style={{ width: `${Math.round(score * 100)}%` }} />
+                  </div>
+                </div>
+              )}
+              <span className="text-sm text-muted-foreground">
+                {mode === null
+                  ? 'Holding prior posture'
+                  : flag === 'active' ? <>Running <span className="font-semibold text-foreground">{mode}</span></>
+                  : <>Would run <span className="font-semibold text-foreground">{mode}</span></>}
+              </span>
+            </div>
+
+            <div className="text-sm space-y-1.5">
+              <p>{amrMarketMeaning(report.classification, label, isXstock)}</p>
+              <p className="text-muted-foreground">
+                <span className="font-medium text-foreground">{flag === 'active' ? 'Response: ' : 'Would do: '}</span>
+                {amrWouldDo(report.classification, dials)}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <TooltipProvider>
+                {report.health.map(h => {
+                  const s = amrHealthChipState(h);
+                  return (
+                    <Tooltip key={h.input}>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs cursor-help">
+                          <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                          {AMR_INPUT_LABELS[h.input] ?? h.input}
+                          <span className="font-mono text-muted-foreground">{rawValues[h.input] ?? ''}</span>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs z-50" side="bottom" sideOffset={6}>
+                        <p className="text-xs">{s.note}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </TooltipProvider>
+            </div>
+
+            {report.triggers.length > 0 && (
+              <div className="text-xs space-y-0.5">
+                {report.triggers.map((t, i) => (
+                  <p key={i} className="flex items-center gap-1.5 text-muted-foreground"><Zap className="w-3 h-3 text-cyan-400 shrink-0" />{t}</p>
+                ))}
+              </div>
+            )}
+            {report.staleness.length > 0 && (
+              <div className="text-xs space-y-0.5">
+                {report.staleness.map((s, i) => (
+                  <p key={i} className="flex items-center gap-1.5 text-amber-400"><AlertTriangle className="w-3 h-3 shrink-0" />{s}</p>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        <Collapsible open={legendOpen} onOpenChange={setLegendOpen}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              {legendOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              What each weather reading means for {label}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-2">
+            {(['CALM', 'CHOPPY', 'STORMY', 'FAVORABLE', 'IDLE'] as AmrClassification[]).map(c => (
+              <div key={c} className={`text-xs p-2 rounded border ${report?.classification === c ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="outline" className={`text-[10px] ${AMR_WEATHER_BADGE[c]}`}>{getAmrWeatherIcon(c)}<span className="ml-1">{c}</span></Badge>
+                  <span className="text-muted-foreground">→ {c === 'IDLE' ? 'hold (no decision)' : AMR_MODE_BY_CLASSIFICATION[c]}</span>
+                  {report?.classification === c && <span className="text-[10px] text-primary font-medium ml-auto">CURRENT</span>}
+                </div>
+                <p className="text-muted-foreground">{amrMarketMeaning(c, label, isXstock)}</p>
+                <p className="text-muted-foreground mt-0.5"><span className="font-medium">If active: </span>{amrWouldDo(c, dials)}</p>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+
+        <p className="text-[11px] text-muted-foreground italic border-t pt-2">{AMR_FLAG_NOTE[flag] ?? AMR_FLAG_NOTE.unresolved}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AmrWeatherSection() {
+  const { data, isLoading, error } = useQuery<AmrCurrentData>({
+    queryKey: ['/api/diagnostics/amr/current'],
+    queryFn: async () => apiFetch(`/api/diagnostics/amr/current?t=${Date.now()}`),
+    refetchInterval: 30 * 1000, // matches the 30s weather cycle
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-lg">Adaptive Market Response — Weather Report</CardTitle></CardHeader>
+        <CardContent><p className="text-sm text-muted-foreground">Weather endpoint unreachable — see console for details.</p></CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-testid="amr-weather-section">
+      <div>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Gauge className="w-5 h-5 text-muted-foreground" />
+          Adaptive Market Response — Weather Report
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Per-asset-class market weather, read every 30 seconds from live inputs (regime vote, friction, DBS, stability, expectancy gap, macro).
+        </p>
+      </div>
+      {isLoading || !data ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="animate-pulse bg-muted rounded-lg h-44" />
+          <div className="animate-pulse bg-muted rounded-lg h-44" />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          <AmrClassCard klass="crypto_spot" block={data.byClass.crypto_spot} />
+          <AmrClassCard klass="xstock_spot" block={data.byClass.xstock_spot} />
+        </div>
+      )}
     </div>
   );
 }
@@ -3405,6 +3753,9 @@ export default function AnalyticsPage() {
           </TabsList>
           
           <TabsContent value="overview" className="space-y-6 mt-6">
+            {/* B-5 AMR: per-class weather panel (Kyle 2026-06-11 — visible home
+                for the AMR read; descriptions templated from live DB dials). */}
+            <AmrWeatherSection />
             <MarketOverviewSection indicators={indicatorsData} error={indicatorsError} onRetry={refetchIndicators} />
           </TabsContent>
 
