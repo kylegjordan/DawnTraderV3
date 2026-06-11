@@ -55,7 +55,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
-import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
@@ -1653,6 +1653,32 @@ export class PaperExecutionEngine {
         const finalScore = parseFloat(signal.finalScore || '0');
         console.log(`[11.0E][TCL_PROMOTE] ${signal.symbol}/${signal.strategy} with FinalScore ${finalScore.toFixed(4)}`);
 
+        // B-5 AMR (Obj-6, pre-audit §2 site 2): promotion-time RE-CHECK —
+        // queue residency means admission-time checks can stale; hard-pause
+        // and slot-cap are re-asked per signal here. Under enforce a block
+        // DEFERS the signal (stays in queue); shadow records the would-block.
+        {
+          const _promoClass = safeResolveAssetClass(signal.symbol, 'kraken');
+          if (_promoClass !== null) {
+            try {
+              const { evaluateAmrGates } = await import('../core/governance/amr-gates.js');
+              const sameClassCount = openPositions.filter(p => safeResolveAssetClass(p.symbol, 'kraken') === _promoClass).length;
+              const gate = evaluateAmrGates({
+                assetClass: _promoClass,
+                site: 'rtb_promotion',
+                strategy: signal.strategy,
+                openPositionCountForClass: sameClassCount,
+              });
+              if (!gate.allowed) {
+                console.log(`[B-5][RTB][AMR_GATE] DEFER ${signal.symbol}: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
+                continue;
+              }
+            } catch (gateErr) {
+              console.warn(`[B-5][RTB] AMR gate error (promotion continues): ${gateErr instanceof Error ? gateErr.message : gateErr}`);
+            }
+          }
+        }
+
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
         // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
         await readyToBuyService.promoteSignal(signal.id, 'pending');
@@ -2517,12 +2543,60 @@ export class PaperExecutionEngine {
       // ══════════════════════════════════════════════════════════════════════════════
       // Directive 11.7S — Strategy Mode Modulation
       // ══════════════════════════════════════════════════════════════════════════════
-      const strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
-      const modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
+      // B-5 AMR (Obj-5 consumer swap): under the ACTIVE per-class flag the
+      // class POSTURE replaces the per-signal stability mode. The legacy
+      // stability inputs ride signal-metadata DEFAULTS (0.5/0/0.5) on many
+      // signals (pre-audit §1) — the shadow ledger's would-vs-actual
+      // divergence from this is expected, not a bug. disabled/shadow: the
+      // legacy path below is bit-identical (parity gate A2).
+      let strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
+      let modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
+      const _amrClass = safeResolveAssetClass(signal.symbol, 'kraken');
+      if (_amrClass !== null) {
+        try {
+          const { getActiveModeForClass } = await import('./amr-weather-report.js');
+          const { getModeOverlayForClass } = await import('../core/governance/strategy-modes.js');
+          const amrMode = getActiveModeForClass(_amrClass);
+          if (amrMode !== null) {
+            strategyMode = amrMode;
+            modeOverlay = getModeOverlayForClass(amrMode, _amrClass);
+            console.log(`[B-5][Paper][AMR_ACTIVE] ${signal.symbol}: class posture ${amrMode} (${_amrClass}) replaces stability mode`);
+          }
+        } catch (amrErr) {
+          console.warn(`[B-5][Paper] AMR posture read failed (legacy path): ${amrErr instanceof Error ? amrErr.message : amrErr}`);
+        }
+
+        // B-5 AMR (Obj-6): execution-entry gate — roster/floor/pause/slot-cap.
+        // F3 precedence: the kill-switch checks upstream and TCL downstream
+        // remain independent ANDs; this is solely the AMR question. Shadow =
+        // dry-run onto the ledger; active = real block.
+        try {
+          const { evaluateAmrGates } = await import('../core/governance/amr-gates.js');
+          const _gateOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
+          const sameClassCount = _gateOpenPositions.filter(p => safeResolveAssetClass(p.symbol, 'kraken') === _amrClass).length;
+          const gate = evaluateAmrGates({
+            assetClass: _amrClass,
+            site: 'execution_entry',
+            strategy: signal.strategy,
+            sourcePool: (signal as any).sourcePool ?? signal.metadata?.sourcePool,
+            confidence: signalMetadata.regimeConfidence || signal.confidence || 0.5,
+            openPositionCountForClass: sameClassCount,
+          });
+          if (!gate.allowed) {
+            console.log(`[B-5][Paper][AMR_GATE] BLOCK ${signal.symbol}: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
+            return;
+          }
+        } catch (gateErr) {
+          console.warn(`[B-5][Paper] AMR gate error (signal continues, shadow-safe): ${gateErr instanceof Error ? gateErr.message : gateErr}`);
+        }
+      }
       
       // 11.7S: Check if signal meets confidence floor for current mode
       const signalConfidence = signalMetadata.regimeConfidence || signal.confidence || 0.5;
-      if (!meetsConfidenceFloor(signalConfidence, regimeStability)) {
+      // B-5: floor read off the RESOLVED overlay — identical to the legacy
+      // meetsConfidenceFloor(conf, stability) when AMR is not applied, and the
+      // per-class floor when it is.
+      if (!(signalConfidence >= modeOverlay.confidenceFloor)) {
         console.log(`[11.7S][Paper] SKIP: ${signal.symbol} ${signal.strategy} - confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
         return;
       }
@@ -2615,7 +2689,14 @@ export class PaperExecutionEngine {
       // If we reach here, strategy is eligible for execution with mode overlay applied
 
       // 11.7S: Record mode execution for analytics
-      recordModeExecution(strategyMode);
+      // B-5 (F2): per-class counters when the class resolves; the class-aware
+      // call also bumps the legacy aggregate.
+      if (_amrClass !== null) {
+        const { recordModeExecutionForClass } = await import('../core/governance/strategy-modes.js');
+        recordModeExecutionForClass(strategyMode, _amrClass);
+      } else {
+        recordModeExecution(strategyMode);
+      }
       
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
       await this.executeSimulatedTrade(signal, settings);

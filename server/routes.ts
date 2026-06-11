@@ -2205,9 +2205,42 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         strategyMode: {
           current: currentMode,
           overlay: currentOverlay,
-          overlays: STRATEGY_MODE_OVERLAYS,
+          // B-5: enumerate the legacy trio explicitly - serializing the raw
+          // record would hit the AGGRESSIVE class-less fail-hard getter.
+          overlays: {
+            NORMAL: STRATEGY_MODE_OVERLAYS.NORMAL,
+            DEFENSIVE: STRATEGY_MODE_OVERLAYS.DEFENSIVE,
+            SURVIVAL: STRATEGY_MODE_OVERLAYS.SURVIVAL,
+          },
           stats: modeStats,
         },
+        // B-5 AMR (Obj-8): per-class weather + flag + posture (null until a
+        // shadow/active cycle has run; disabled classes report flag only).
+        amr: await (async () => {
+          try {
+            const { getAllAmrWeatherReports, getAmrFlagState, getCurrentModeForClass } = await import('./services/amr-weather-report.js');
+            const reports = getAllAmrWeatherReports();
+            const byClass: Record<string, unknown> = {};
+            for (const klass of ['crypto_spot', 'xstock_spot'] as const) {
+              let flag: string;
+              try { flag = getAmrFlagState(klass); } catch { flag = 'unresolved'; }
+              const r = reports.get(klass) ?? null;
+              byClass[klass] = {
+                flag,
+                classification: r?.classification ?? null,
+                continuousScore: r?.continuousScore ?? null,
+                mode: getCurrentModeForClass(klass),
+                triggers: r?.triggers ?? [],
+                staleness: r?.staleness ?? [],
+                health: r?.health ?? [],
+                cycleTs: r?.cycleTs ?? null,
+              };
+            }
+            return { byClass };
+          } catch {
+            return { byClass: null };
+          }
+        })(),
         learning: {
           deferredCount: learningState.deferredCount,
           batchPendingCount: learningState.batchPendingCount,
@@ -2222,6 +2255,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
     } catch (error: any) {
       console.error('[Governance] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // B-5 AMR (Obj-8): GET /api/diagnostics/amr/current - per-class weather
+  // report + flag states + current posture (the UI verification surface).
+  apiRouter.get('/diagnostics/amr/current', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getAllAmrWeatherReports, getAmrFlagState, getCurrentModeForClass } = await import('./services/amr-weather-report.js');
+      const reports = getAllAmrWeatherReports();
+      const byClass: Record<string, unknown> = {};
+      for (const klass of ['crypto_spot', 'xstock_spot'] as const) {
+        let flag: string;
+        try { flag = getAmrFlagState(klass); } catch { flag = 'unresolved'; }
+        const r = reports.get(klass) ?? null;
+        byClass[klass] = { flag, report: r, mode: getCurrentModeForClass(klass) };
+      }
+      res.json({ ok: true, schema: 'amr/v1.0', byClass, timestamp: new Date().toISOString() });
+    } catch (error: any) {
+      console.error('[B-5][AMR] diagnostics GET error:', error.message);
       res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
     }
   });

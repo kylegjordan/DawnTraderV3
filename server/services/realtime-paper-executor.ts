@@ -55,6 +55,26 @@ class RealtimePaperExecutor {
     const startTime = Date.now();
 
     try {
+      // B-5 AMR (Obj-6): same gate call as the paper engine — this executor is
+      // the live-mode scaffold (item-4) and stays dormant until Phase 21; the
+      // gate ships WIRED so the live path can never bypass AMR by omission.
+      // No slot count here (engine-level position registry owns that); the
+      // execution_entry slot gate enforces in the paper engine path.
+      try {
+        const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+        const _amrClass = safeResolveAssetClass(request.symbol, 'kraken');
+        if (_amrClass !== null) {
+          const { evaluateAmrGates } = await import('../core/governance/amr-gates.js');
+          const gate = evaluateAmrGates({ assetClass: _amrClass, site: 'execution_entry', strategy: request.strategy });
+          if (!gate.allowed) {
+            throw new Error(`AMR gate block: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
+          }
+        }
+      } catch (amrErr) {
+        if (amrErr instanceof Error && amrErr.message.startsWith('AMR gate block')) throw amrErr;
+        console.warn(`[B-5][RT-Exec] AMR gate read error (trade continues, shadow-safe): ${amrErr instanceof Error ? amrErr.message : amrErr}`);
+      }
+
       // Check concurrency limits
       this.checkConcurrencyLimits(request.symbol);
 

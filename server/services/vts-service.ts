@@ -775,6 +775,9 @@ export class VTSService extends EventEmitter {
     // Both optional — omitted callers (and pre-B.2.UI trades) read back as null.
     entryLiquidityValue?: number;
     entryLiquidityKind?: 'depth_usd' | 'volume_qty';
+    // B-5 AMR: at-open weather stamp (pass-through to the persisted record).
+    amrClassification?: string;
+    amrMode?: string;
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
     const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
@@ -906,6 +909,10 @@ export class VTSService extends EventEmitter {
       // back (via getClosedVTSTradesFromLogs whitelist in export-csv.ts).
       entryLiquidityValue: tradeData.entryLiquidityValue ?? null,
       entryLiquidityKind: tradeData.entryLiquidityKind ?? null,
+      // B-5 AMR: weather stamp at OPEN persisted on the closed record (shadow
+      // evidence for the Phase-19 flip read; dials were never touched).
+      amrClassification: tradeData.amrClassification ?? null,
+      amrMode: tradeData.amrMode ?? null,
     } as any;
 
     // Add to closedTrades for ML calibration access

@@ -37,6 +37,44 @@ initExternalMacroFeed().catch((err) => {
 });
 console.log('[B67.1][SCHEDULER] External macro feed initialized');
 
+// ════════════════════════════════════════════════════════════════════════════
+// B-5 AMR (2026-06-11): weather-cycle driver + equity feed + cost-cache
+// observability. Deferred-retry start: these read the warmed module_constants
+// cache, and this module can load before b72-warmup completes — retry every
+// 30s (max 10) instead of racing the warmup.
+// ════════════════════════════════════════════════════════════════════════════
+{
+  let amrStartTries = 0;
+  const startAmr = async () => {
+    amrStartTries++;
+    try {
+      const { startAmrEquityFeed } = await import('./amr-equity-feed.js');
+      const { runAmrWeatherCycle } = await import('./amr-weather-report.js');
+      const { startObservabilityLoop } = await import('../core/cache/cost-cache.js');
+      startAmrEquityFeed();
+      // B-5 dead-code fix (fix-not-delete): startObservabilityLoop was designed
+      // in 11.3B and never wired — its 60s [CostEngine] line is the crypto
+      // scanned-universe spread telemetry the AMR friction provenance reads.
+      startObservabilityLoop();
+      const cycle = setInterval(() => {
+        try { runAmrWeatherCycle(); } catch (err) {
+          console.warn('[B-5][SCHEDULER] AMR weather cycle error:', err instanceof Error ? err.message : err);
+        }
+      }, 30_000);
+      cycle.unref?.();
+      console.log('[B-5][SCHEDULER] AMR weather cycle started (30s) + equity feed + cost-cache observability');
+    } catch (err) {
+      if (amrStartTries < 10) {
+        console.log(`[B-5][SCHEDULER] AMR start deferred (warmup not ready, try ${amrStartTries}/10): ${err instanceof Error ? err.message : err}`);
+        setTimeout(() => void startAmr(), 30_000).unref?.();
+      } else {
+        console.error('[B-5][SCHEDULER] AMR start FAILED after 10 tries — flag stays inert:', err);
+      }
+    }
+  };
+  void startAmr();
+}
+
 /**
  * Phase 8.9: Autonomy Layer Scheduler
  * Registers autonomous self-check and optimization tasks

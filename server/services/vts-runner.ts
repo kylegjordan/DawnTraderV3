@@ -178,6 +178,11 @@ let patternRecognitionWarmedUp = false;
 // Batch 21: VTS evaluation diagnostics — imported from shared types
 import type { VTSEvalSnapshot, NullReasonBreakdown } from '../types/virtual-trade.interface.js';
 import { setNullReason, resetNullReason, getNullReason } from '../utils/null-reason-tracker.js';
+// B-5 AMR (scope delta 6): VTS dials stay PINNED to the legacy stability path
+// forever - the AMR contribution to VTS is the at-open weather/mode STAMP
+// only. Lazy ref (not static import) to keep the module graph cycle-free.
+let _amrWeatherMod: typeof import('./amr-weather-report.js') | null = null;
+void import('./amr-weather-report.js').then(m => { _amrWeatherMod = m; }).catch(() => { /* stamp stays null */ });
 
 const VTS_EVAL_ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 let vtsEvalHistory: VTSEvalSnapshot[] = [];
@@ -583,6 +588,9 @@ interface OpenVirtualTrade {
   // value renders "—" and must never break trade-open.
   entryLiquidityValue?: number;
   entryLiquidityKind?: 'depth_usd' | 'volume_qty';
+  // B-5 AMR: weather stamp at trade OPEN (shadow visibility; dials unaffected).
+  amrClassification?: string;
+  amrMode?: string;
   // B65.2 (2026-04-23): volatility snapshot at open, consumed by the
   // trailing-exit engine. ATR drives the break-even trigger and trailing
   // distance math; DI + VolNoise fine-tune the trailing K' multiplier.
@@ -1515,6 +1523,10 @@ async function generatePhase10Signal(
       ? priceData.volume24h
       : undefined,
     entryLiquidityKind: tradeAssetClass === 'crypto_spot' ? 'volume_qty' : undefined,
+    // B-5 AMR: at-open weather/mode stamp (null-guarded; never throws on the
+    // hot path; absent when the class flag is disabled or no cycle has run).
+    amrClassification: _amrWeatherMod?.getAmrWeatherReport(tradeAssetClass)?.classification,
+    amrMode: _amrWeatherMod?.getAmrWeatherReport(tradeAssetClass)?.resolvedMode ?? undefined,
     // Phase 14: Snapshot 6 context dimensions at trade OPEN
     // B-4.7: per-class (supersedes the WIRE-IN #16 deferral). The pre-B-4.7
     // `?? regime` fallback was SILENT per-pair-regime substitution — removed;
@@ -2580,6 +2592,9 @@ async function resolveOpenVirtualTrades(): Promise<{
         // B.2.UI (2026-06-02): propagate entry-liquidity snapshot to the closed-trade record.
         entryLiquidityValue: trade.entryLiquidityValue,
         entryLiquidityKind: trade.entryLiquidityKind,
+        // B-5 AMR: propagate the at-open weather stamp to the closed record.
+        amrClassification: trade.amrClassification,
+        amrMode: trade.amrMode,
       });
       if (result.persisted) persisted++;
       if (result.mlTriggered) mlQueued++;
@@ -2961,6 +2976,9 @@ export interface RegisterOpenVtsTradeInput {
   // B.2.UI (2026-06-02): entry-liquidity snapshot (xStock ask-depth USD / crypto 24h coin-volume).
   entryLiquidityValue?: number;
   entryLiquidityKind?: 'depth_usd' | 'volume_qty';
+  // B-5 AMR: at-open weather stamp.
+  amrClassification?: string;
+  amrMode?: string;
 }
 
 /**
@@ -3032,6 +3050,8 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     // B.2.UI: pass-through the caller-captured entry-liquidity snapshot (null-guarded).
     entryLiquidityValue: input.entryLiquidityValue,
     entryLiquidityKind: input.entryLiquidityKind,
+    amrClassification: input.amrClassification,
+    amrMode: input.amrMode,
     sourcePool: input.sourcePool,
     atrAtOpen: input.atrAtOpen,
     diAtOpen: 50,

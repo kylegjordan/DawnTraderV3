@@ -343,6 +343,27 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     }
   }
 
+  // B-5 AMR (Obj-5, F1): per-class AMR admission gates — UNCONDITIONAL (no
+  // skip option) and SELF-SOURCING (the gate resolves flag/mode itself; the
+  // RTB refresh path re-runs SQE with partial inputs, so caller-injected
+  // context would silently skip gating there). disabled → no-op; shadow →
+  // dry-run onto the decision ledger; active → real blocks. Pause precedence
+  // (F3) holds because killSwitch checks upstream and TCL checks downstream
+  // remain independent ANDs around this one.
+  {
+    const { evaluateAmrGates } = await import('../governance/amr-gates.js');
+    const amr = evaluateAmrGates({
+      assetClass: input.assetClass,
+      site: 'sqe_admission',
+      strategy: input.strategy,
+      confidence: input.confidence,
+    });
+    if (!amr.allowed) {
+      for (const b of amr.blocks) failures.push(`AMR ${b.gate}: ${b.reason}`);
+      console.log(`[B-5][SQE][AMR_GATE] BLOCK ${canonicalSymbol}: ${amr.blocks.map(b => b.gate).join(',')} (mode=${amr.mode})`);
+    }
+  }
+
   // HF9 Item B: Governance gate (migrated from paper-execution-engine Directive 11.7R-E)
   // Checks strategy eligibility based on regime stability and dependency level.
   // VTS signals pass skipGovernanceGate=true (VTS has its own inline governance checks).

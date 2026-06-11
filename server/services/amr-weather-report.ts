@@ -504,6 +504,24 @@ function drainWouldBlocks(assetClass: AssetClass): unknown[] | null {
   return arr;
 }
 
+// ─── Ledger retention: in-service 90-day prune (small non-partitioned table;
+// the B-NEW-47 partition sweep machinery does not apply) ─────────────────────
+let lastPruneAt = 0;
+function maybePruneLedger(now: number): void {
+  if (now - lastPruneAt < 86_400_000) return;
+  lastPruneAt = now;
+  void (async () => {
+    try {
+      const { db } = await import('../db.js');
+      const { sql } = await import('drizzle-orm');
+      await db.execute(sql`DELETE FROM amr_decision_ledger WHERE cycle_ts < NOW() - INTERVAL '90 days'`);
+      console.log('[B-5][AMR][LEDGER] 90-day retention prune ran');
+    } catch (err) {
+      console.warn(`[B-5][AMR][LEDGER] prune failed (retried tomorrow): ${err instanceof Error ? err.message : err}`);
+    }
+  })();
+}
+
 // ─── The cycle entrypoint (wired from the MCE cycle, chunk 5) ───────────────
 let lastReports = new Map<AssetClass, AmrWeatherReport>();
 
@@ -530,6 +548,7 @@ export function runAmrWeatherCycle(now: number = Date.now()): Map<AssetClass, Am
     }
   }
   lastReports = out;
+  maybePruneLedger(now);
   return out;
 }
 
