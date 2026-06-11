@@ -114,7 +114,10 @@ VTS-data threshold calibration (Phase 19 shadow ledger + Phase 25 study) · M2 b
 
 CI all-4-green per push; two Step-4 diffs (A: aggregator+flag+ledger, B: consumer gating); §9.3 Claude-in-Chrome UI pass; Langston Step-8 with ledger evidence.
 
-## §8 — Estimate
+## §8 — Estimate & epoch statement (AMENDED per Langston pull-in ruling 2026-06-11)
+**Epoch:** the original "no epoch bump while in shadow" claim is RETRACTED — **Obj-12 is a live behavioral write independent of the AMR flag state** (xstock frictionCost static→measured changes the admit population). Ruling: **vts calibration epoch bumps for `xstock_spot` ONLY at the Obj-12 deploy; crypto untouched** (Pull-in B changes a weather SAMPLING source, not per-trade economics — recorded explicitly so the Phase-25 study doesn't over-partition). The Phase-19 flag-flip remains a separate, second epoch decision point. **Binding riders:** EV-gap rolling window filters to current-epoch rows for xstock (no seeding from static-friction-admitted trades); cost-metrics payload stamps spread-source `measured | static_fallback` (per-symbol mixed during store warmup — sub-partitionable); the 24h admit-rate read reports measured-coverage % and the before/after comparison starts AFTER coverage stabilizes, not at deploy-ts. **Pull-in B conditions:** capture the new scanned-universe friction distribution (p50/p95 per class) BEFORE seeding STORMY/CHOPPY triggers (the pool read was selection-biased low — thresholds mean something different against the new source); Step-2 addendum enumerates EVERY consumer of the B-4.7 pool-based friction path and flips ALL of them (no dual-source split-brain; SIM records the supersession); the threshold-provenance note states the B.5/W2-W3 seeds predate Obj-12 — the shadow ledger re-validates them.
+
+## §8.1 — Original estimate
 ~2-2.5 weeks · ~14-18 files · 1 migration (`amr_response_dials` + `amr_weather_rules` + `governance_modes` per-class rows + ledger table, ~50-70 rows) · no epoch bump while in shadow (zero behavioral writes); the Phase-19 flag-to-active flip is the epoch decision point (pre-declared in the completion report).
 
 ---
