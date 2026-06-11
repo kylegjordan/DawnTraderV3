@@ -2,6 +2,18 @@
 
 ---
 
+## FIX-2026-06-12-A — B-5 Obj-15a correctness audit: EV-gap/outcome-EMA units bug + xstock AMR stamp gap + legacy wildcard AGGRESSIVE row
+
+**Class:** learning-data correctness (2 capture bugs + 1 silent-fallback governance row). **Found:** B-5 Obj-15a correctness audit (Kyle-ordered, pre-pinned pass bars) + Langston Step-8. **Fixed:** 2026-06-12, commit `31d402735`, deploy `03bbe2ce8`, CI green (`27380747228`/`27380875222`), migration `2026-06-12a-b5-evgap-units-epoch.sql`.
+
+1. **(A2 — the big one) Realized-percent UNITS bug in the VTS close hook.** `vts-service.ts` computed `netPnlPct = (pnl/notional)×100`, assuming `pnl` in dollars — but the only caller (vts-runner close, :2451) passes the realized NET FRACTION of entry price (it keeps `dollarPnl` separate). Realized percent was understated ~notional (~100×). Consumers: the B67.4 per-(regime,strategy) outcome EMA accrued the wrong realized side **since 2026-05-01**, and the B-5 EV-gap input would have been permanently suppressed once warmed (realized/predicted ratio ≈ 1/notional → FAVORABLE never reachable). Fix: `netPnlPct = pnl × 100` + vts calibration-epoch bump BOTH classes (crypto class row materialized at 4, xstock 4→5) so the outcome store's epoch-mismatch Welford reset partitions polluted streams. EMA wash-out at alpha=0.10: polluted influence <10% in ~22 obs/key — no state reset needed (Langston flag, checked). Live proof (Langston Step-8): ASTS/USD target-hit logged +9.65% and the store recorded w_mean=9.6542 (old code: ~0.0965); epoch tuples reset to w_count=1.
+2. **(B) xStock at-open AMR stamp never persisted.** The inline crypto VTS open stamps `amrClassification/amrMode` (vts-runner:1528) but the xstock lane opens via `registerOpenVtsTrade`, which only took the stamps from caller input — never passed. Audit evidence: 19 post-deploy entries, the 1 stamped row crypto, all 18 nulls xstock. Fix: default-resolve in the register function (the same B-NEW-22 `??` pattern used by its 5 neighboring context fields). Live proof: fresh xstock open CLSK/USD stamped CALM/NORMAL; pre-restart ARM/USD unstamped (clean control).
+3. **(Side-probe b) Legacy wildcard `governance_modes */aggressive_mode_confidence_floor` (0.80, b72-era 2026-05-05) DELETED.** Inert for the two live classes (b5-amr class rows at 0.60 win via most-specific-wins) but would have silently served any FUTURE class pre-seeding — §5.15 silent-fallback violation + B-5 contract violation (class-less AGGRESSIVE access throws). Post-delete probe: zero wildcard rows.
+
+**Audit verdict that found these:** all core recompute legs PASS at zero deviation vs the §7 R4 pre-pinned bars (vote EXACT both classes; DBS weighted-median 1e-6 over 433/416 entries; friction EXACT over 496/360 samples; 488 trades' expectedEdge formula EXACT; VIX z 1e-6 over 77 obs; the 114 expectedEdge==netProfit rows proven benign sim-fill-at-target tautology, 0 unexplained). Permanent one-pass audit-dump surface shipped (`/api/diagnostics/amr/audit-dump`, AUD-1) for repeatable audits. NEW from the surface: #222 (crypto DBS equity-symbol contamination at 52.6% weight — pre-existing, root-cause follow-up), #223 (negative-spread writer root cause), #224 (restart-transient CALM, Phase-19 design item).
+
+---
+
 ## FIX-2026-06-11-A — B-4.5: model priced ~Kraken-Tier-6 fees at a Tier-1 account (3 baked-in copies)
 
 **Class:** systematically optimistic EV model (admission realism). **Found:** Kraken July-2026 cross-platform tier analysis (2026-06-08 brief) + B-4.5 sweep. **Fixed:** 2026-06-11, deploys `cad335cf0` + `86cff45c4` (R1), CI green both.

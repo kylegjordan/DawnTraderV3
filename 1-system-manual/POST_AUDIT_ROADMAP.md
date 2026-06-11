@@ -915,3 +915,8 @@ These items are deferred and not currently sequenced. Listed for reference:
 ---
 
 *Reorganized 2026-06-10. Prior structure (v7-era, 1,777 lines) preserved verbatim at `1-system-manual/_archive/POST_AUDIT_ROADMAP_HISTORY.md`.*
+
+**B-5 close deposits (2026-06-12) — Phase-19 items from the AMR ship + audit:**
+1. **AMR activation decision + flip checklist (Phase 19):** flip amr_runtime.mode shadow->active per class ONLY after the shadow-week would-vs-actual review. Checklist items banked from live evidence: (a) #224 restart-transient — decide IDLE-hold during sentinel warm-up vs the current thin-input CALM (~90s full-size window per restart under active); (b) session-boundary classification flap rate from the shadow-week ledger — decide whether classification-level hysteresis is needed (the dwell ladder already damps MODE one-rung, proven 19:40-20:20Z 2026-06-11); (c) #222 crypto DBS equity-contamination root-cause MUST be resolved before active (the dbs input reads the contaminated aggregate); (d) EV-gap window warm (30 obs/class post-units-fix).
+2. **#217/#221 evidence unlock (Phase 19):** rankingShadow + ceilingSaturationRate populate ONLY from the RTB/getTopSignal selection path — zero rows in passive operation (Langston Step-8, semantics confirmed). The CONTEXT_BONUS wire-in evaluation and the cross-class rankingScore leveling calibration both START when Phase 19 turns selection on; do not count on shadow-week rankingShadow data.
+
