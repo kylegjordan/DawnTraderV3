@@ -476,6 +476,8 @@ async function writeLedgerRow(report: AmrWeatherReport, wouldBlocks: unknown[] |
         triggers: report.triggers,
         staleness: report.staleness,
         health: report.health,
+        // #217 shadow evidence (latest selection since the prior cycle).
+        rankingShadow: pendingRankingShadow.get(report.assetClass) ?? null,
       },
       continuousScore: report.continuousScore,
       resolvedMode: report.resolvedMode,
@@ -486,6 +488,14 @@ async function writeLedgerRow(report: AmrWeatherReport, wouldBlocks: unknown[] |
   } catch (err) {
     console.warn(`[B-5][AMR][LEDGER] write failed (cycle continues): ${err instanceof Error ? err.message : err}`);
   }
+}
+
+/** B-5 Obj-10 (#217): latest CONTEXT_BONUS shadow stamp per class — rides
+ *  the next ledger row's weather json (rank1Changed + ceiling-saturation-rate
+ *  are the Phase-19/#221 decision numbers). */
+const pendingRankingShadow = new Map<AssetClass, unknown>();
+export function recordRankingShadow(assetClass: AssetClass, stamp: unknown): void {
+  pendingRankingShadow.set(assetClass, stamp);
 }
 
 /** Gate dry-run results attach to the LATEST ledger row's would_blocks via a

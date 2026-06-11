@@ -136,6 +136,8 @@ CROSS JOIN (VALUES
   ('ev_gap_choppy_ratio',    '0.5'),
   ('ev_gap_stormy_ratio',    '1.0'),
   ('favorable_min_score',    '0.7'),
+  ('score_stormy_max',        '0.25'),
+  ('score_choppy_max',        '0.45'),
   ('dwell_min_epochs',       '10'),
   ('relax_confirm_epochs',   '10'),
   ('weight_friction',        '0.30'),
@@ -239,4 +241,28 @@ INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regi
 SELECT 'calibration_epoch', '*', 'xstock_spot', '*', '*', 'vts', to_jsonb((mc.value)::text::numeric + 1), 'b5-amr'
 FROM module_constants mc
 WHERE mc.module_name = 'calibration_epoch' AND mc.asset_class = '*' AND mc.constant_name = 'vts'
+ON CONFLICT DO NOTHING;
+
+-- ── 10. Obj-10 (#217 wire-at-shadow): ranking_context_bonus ─────────────────
+-- The DOCUMENTED ranking-weights.ts values promoted to DB rows (never applied
+-- to live composition until the Phase-19 flip; the shadow ledger validates).
+-- bull_compatible_regimes: DB-tunable mapping over the canonical regime enum
+-- (Step-2 ruling) — EXTREME_NOISE/STRUCTURAL_TRANSITION map to neither side
+-- (omitted = null = no term, the honest unavailable state).
+INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
+SELECT 'ranking_context_bonus', '*', klass, '*', '*', cname, val::jsonb, 'b5-amr'
+FROM (VALUES ('crypto_spot'), ('xstock_spot')) AS classes(klass)
+CROSS JOIN (VALUES
+  ('regime_agreement_bonus',     '0.06'),
+  ('regime_disagreement_penalty','-0.04'),
+  ('confirmation_bonus',         '0.03'),
+  ('confirmation_penalty',       '-0.02'),
+  ('bull_compatible_regimes',    '{"BULL_STABLE": true, "BULL_VOLATILE": true, "TREND_FRIENDLY_STABLE": true, "IMPULSE_EXPANSION": true, "HIGH_VOL_IMPULSE": true, "BEAR_STABLE": false, "BEAR_VOLATILE": false, "LOW_VOL_CHOP": false, "RANGE_BOUND_STABLE": false, "HIGH_VOLATILITY_UNSTABLE": false}')
+) AS rules(cname, val)
+ON CONFLICT DO NOTHING;
+-- SPY trend knobs (xstock only; lookback <= stored window boot-asserted):
+INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by) VALUES
+  ('ranking_context_bonus', '*', 'xstock_spot', '*', '*', 'spy_trend_lookback_bars',   '16'::jsonb,   'b5-amr'),
+  ('ranking_context_bonus', '*', 'xstock_spot', '*', '*', 'spy_bar_staleness_minutes', '45'::jsonb,   'b5-amr'),
+  ('ranking_context_bonus', '*', 'xstock_spot', '*', '*', 'spy_trend_threshold_pct',   '0.15'::jsonb, 'b5-amr')
 ON CONFLICT DO NOTHING;

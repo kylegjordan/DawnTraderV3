@@ -1211,6 +1211,43 @@ class ReadyToBuyService {
       console.log(`[RTB] Top signal: ${bestSignal.symbol} ${bestSignal.strategy} rankingScore=${bestRankingScore.toFixed(4)} age=${ageMinutes}min`);
     }
 
+    // B-5 AMR Obj-10 (#217 wire-at-shadow): compute the CONTEXT_BONUS terms
+    // FOR REAL on this ranked set and stamp the evidence on the AMR ledger.
+    // STRUCTURALLY ABSENT from the selection above — bestSignal is already
+    // chosen; nothing here can change it. Fire-and-forget; never throws into
+    // the selection path. Runs only when the class flag is shadow|active.
+    void (async () => {
+      try {
+        const { safeResolveAssetClass } = await import('../../../shared/asset-classes.js');
+        const { getAmrFlagState, recordRankingShadow } = await import('../../services/amr-weather-report.js');
+        const { computeContextBonusShadow } = await import('../../services/amr-context-bonus-shadow.js');
+        const byClass = new Map<string, typeof signals>();
+        for (const s of signals) {
+          const k = safeResolveAssetClass(s.symbol, 'kraken');
+          if (k === null) continue;
+          const arr = byClass.get(k) ?? [];
+          arr.push(s);
+          byClass.set(k, arr);
+        }
+        for (const [klass, classSignals] of byClass) {
+          let flag: string;
+          try { flag = getAmrFlagState(klass as never); } catch { continue; }
+          if (flag === 'disabled') continue;
+          const stamp = await computeContextBonusShadow(
+            klass as never,
+            classSignals.map(s => ({ symbol: s.symbol, regime: (s as { regime?: string | null }).regime ?? null, finalScore: s.finalScore, metadata: s.metadata as Record<string, unknown> | null })),
+            bestSignal && safeResolveAssetClass(bestSignal.symbol, 'kraken') === klass ? bestSignal.symbol : null,
+          );
+          recordRankingShadow(klass as never, stamp);
+          if (stamp.rank1Changed) {
+            console.log(`[B-5][#217][SHADOW] ${klass}: CONTEXT_BONUS WOULD change rank-1 (satRate=${stamp.ceilingSaturationRate?.toFixed(2) ?? 'n/a'})`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[B-5][#217] shadow compute failed (selection unaffected): ${err instanceof Error ? err.message : err}`);
+      }
+    })();
+
     return bestSignal;
   }
 

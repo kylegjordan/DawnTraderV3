@@ -107,6 +107,7 @@ const PREFETCH_MODULES = [
   'amr_friction_sample',  // xstock measured-spread store knobs (sync in scan cycle)
   'amr_input_health',     // Obj-15b sentinel rails (R1-R5)
   'amr_external_equity',  // Obj-14b equity feed knobs (CBOE/FRED/ECB sources)
+  'ranking_context_bonus',// Obj-10 (#217) shadow terms + bull-compat mapping
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
@@ -216,6 +217,14 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
       getCachedNumberRequired('amr_friction_sample', c, xk);
     }
     console.log('[B-5][warmup] AMR per-class rows verified (dials/floors/rules x 2 classes x 4 modes + friction-sample knobs)');
+
+    // Obj-10 SPY pin 1: lookback must fit INSIDE the stored 15m-bar window
+    // (xstock_spot_ohlc_15m_snapshot holds ~729 bars; a lookback beyond the
+    // window would silently truncate the trend baseline).
+    const spyLookback = getCachedNumberRequired('ranking_context_bonus', 'spy_trend_lookback_bars', xk);
+    if (!(spyLookback >= 2 && spyLookback <= 600)) {
+      throw new Error(`[B-5][warmup] spy_trend_lookback_bars=${spyLookback} outside [2, 600] (stored window ~729 bars) — refusing to start.`);
+    }
   }
 
   started = true;
