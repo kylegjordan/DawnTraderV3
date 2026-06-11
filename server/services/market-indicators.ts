@@ -30,7 +30,7 @@ import { computeMarketFriction, describeFriction, type FrictionStatus } from '..
 import { getMarketContextEngine } from './market-context-engine.js';
 import type { GlobalDirectionalBias } from '../types/directional-bias.types.js';
 // B-4.7 (#162): per-asset-class indicator bundles.
-import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 import { xstockDirectionalBiasStore } from '../core/metrics/directional-bias-store.js';
 // B63 Item 16: static import of the persistent-store singleton so we can read snapshot
 // staleness flags without awaiting a dynamic import inside a sync function.
@@ -252,8 +252,13 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass): Fricti
     if (assetClass === 'xstock_spot') {
       return computeXstockFrictionFromStore();
     }
+    // Step-7 iteration (staging finding): the UNIVERSE contains pairs the
+    // B69 resolver has no pattern for (e.g. single-letter wsnames like
+    // A/EUR) — the THROWING variant killed the whole read on the first one.
+    // safeResolveAssetClass logs-and-nulls per Langston cc-inbox #890 B.2;
+    // unresolvable pairs are simply not class members.
     const symbolsToSample = getAllCachedSymbols()
-      .filter(symbol => resolveAssetClass(symbol, 'kraken') === assetClass)
+      .filter(symbol => safeResolveAssetClass(symbol, 'kraken') === assetClass)
       .slice(0, 500);
 
     let totalFriction = 0;
@@ -264,7 +269,11 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass): Fricti
 
     for (const symbol of symbolsToSample) {
       const metrics = getCacheMetrics(symbol);
-      if (metrics) {
+      // Step-7 iteration: the cache has no LOWER clamp and some writers store
+      // sentinel/negative spreads (observed avgSpread=-0.11% across 673
+      // entries) — a negative spread is not a measurement; skip it rather
+      // than let it deflate the universe friction average.
+      if (metrics && metrics.spread >= 0) {
         const friction = computeMarketFriction(metrics.spread, metrics.slippage, metrics.fee);
         totalFriction += friction;
         count++;
