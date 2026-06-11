@@ -1,80 +1,171 @@
 {
-  "_schema": "regime-mapping/v3.0.0",
   "_metadata": {
-    "updatedAt": "2026-05-24T00:00:00Z",
-    "source": "VTS",
-    "canonical": true,
-    "includesDriftScore": true,
-    "generatedAt": "2026-05-24T00:00:00Z",
-    "generator": "sync-canonical-bridge.ts",
-    "_fields": ["driftScores", "volZ", "trendZ"],
     "_changelog": {
-      "v3.0.0": "B79.0n.STRATEGY 2026-05-24: per-asset-class shape via byAssetClass nesting. Crypto subtree is byte-identical to v2.0.0 flat shape values. xStock subtree = crypto minus defensive_hedge (BTC-decorrelation only, not applicable to xStocks) + add orb to TFS+IE (xStock-specific opening-range microstructure)."
-    }
+      "v3.0.0": "B79.0n.STRATEGY 2026-05-24: per-asset-class shape via byAssetClass nesting. Crypto subtree byte-identical to v2.0.0 flat shape values. xStock subtree = crypto minus defensive_hedge (BTC-decorrelation only) + add orb to TFS+IE (xStock-specific opening-range microstructure). B.1.5 redeploy unblocker 2026-05-31: generateBridgeJSON now derives both subtrees from ASSET_CLASS_OVERRIDES — output shape matches getClassMap (server/core/strategy-mapper.ts:43) consumer contract."
+    },
+    "_fields": [
+      "driftScores",
+      "volZ",
+      "trendZ"
+    ],
+    "canonical": true,
+    "generatedAt": "2026-06-11T01:17:10.255Z",
+    "generator": "sync-canonical-bridge.ts",
+    "includesDriftScore": true,
+    "source": "VTS",
+    "updatedAt": "2026-06-11T01:17:10.255Z"
   },
+  "_schema": "regime-mapping/v3.0.0",
   "byAssetClass": {
     "crypto_spot": {
       "HIGH_VOLATILITY_UNSTABLE": {
-        "favoredStrategies": ["mean_reversion", "reverse_impulse", "defensive_hedge", "inside_bar_reversal"],
-        "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "HYBRID",
+          "PATTERN"
+        ],
+        "favoredStrategies": [
+          "mean_reversion",
+          "reverse_impulse",
+          "defensive_hedge",
+          "inside_bar_reversal"
+        ],
         "minConfidence": 0.75,
         "riskMultiplier": 0.7
       },
-      "TREND_FRIENDLY_STABLE": {
-        "favoredStrategies": ["vwap_pullback", "morning_star", "pivot_shift"],
-        "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
-        "minConfidence": 0.65,
-        "riskMultiplier": 1.2
-      },
       "IMPULSE_EXPANSION": {
-        "favoredStrategies": ["sma_trend_ride", "breakout", "vwap_bounce", "volatility_edge", "dhma"],
-        "favoredSignalTypes": ["QUANT", "HYBRID"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "HYBRID"
+        ],
+        "favoredStrategies": [
+          "sma_trend_ride",
+          "breakout",
+          "vwap_bounce",
+          "volatility_edge",
+          "dhma"
+        ],
         "minConfidence": 0.7,
         "riskMultiplier": 0.8
       },
       "RANGE_BOUND_STABLE": {
-        "favoredStrategies": ["range_trade", "support_bounce", "abcd_long", "adaptive_flow"],
-        "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "PATTERN",
+          "HYBRID"
+        ],
+        "favoredStrategies": [
+          "range_trade",
+          "support_bounce",
+          "abcd_long",
+          "adaptive_flow"
+        ],
         "minConfidence": 0.6,
         "riskMultiplier": 0.9
       },
       "STRUCTURAL_TRANSITION": {
-        "favoredStrategies": ["liquidity_trap", "pivot_shift", "morning_star"],
-        "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "HYBRID",
+          "PATTERN"
+        ],
+        "favoredStrategies": [
+          "liquidity_trap",
+          "pivot_shift",
+          "morning_star"
+        ],
         "minConfidence": 0.55,
         "riskMultiplier": 0.85
+      },
+      "TREND_FRIENDLY_STABLE": {
+        "favoredSignalTypes": [
+          "QUANT",
+          "PATTERN",
+          "HYBRID"
+        ],
+        "favoredStrategies": [
+          "vwap_pullback",
+          "morning_star",
+          "pivot_shift"
+        ],
+        "minConfidence": 0.65,
+        "riskMultiplier": 1.2
       }
     },
     "xstock_spot": {
       "HIGH_VOLATILITY_UNSTABLE": {
-        "favoredStrategies": ["mean_reversion", "reverse_impulse", "inside_bar_reversal"],
-        "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "HYBRID",
+          "PATTERN"
+        ],
+        "favoredStrategies": [
+          "mean_reversion",
+          "reverse_impulse",
+          "inside_bar_reversal"
+        ],
         "minConfidence": 0.75,
         "riskMultiplier": 0.7
       },
-      "TREND_FRIENDLY_STABLE": {
-        "favoredStrategies": ["vwap_pullback", "morning_star", "pivot_shift", "orb"],
-        "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
-        "minConfidence": 0.65,
-        "riskMultiplier": 1.2
-      },
       "IMPULSE_EXPANSION": {
-        "favoredStrategies": ["sma_trend_ride", "breakout", "vwap_bounce", "volatility_edge", "dhma", "orb"],
-        "favoredSignalTypes": ["QUANT", "HYBRID"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "HYBRID"
+        ],
+        "favoredStrategies": [
+          "sma_trend_ride",
+          "breakout",
+          "vwap_bounce",
+          "volatility_edge",
+          "dhma",
+          "orb"
+        ],
         "minConfidence": 0.7,
         "riskMultiplier": 0.8
       },
       "RANGE_BOUND_STABLE": {
-        "favoredStrategies": ["range_trade", "support_bounce", "abcd_long", "adaptive_flow"],
-        "favoredSignalTypes": ["QUANT", "PATTERN", "HYBRID"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "PATTERN",
+          "HYBRID"
+        ],
+        "favoredStrategies": [
+          "range_trade",
+          "support_bounce",
+          "abcd_long",
+          "adaptive_flow"
+        ],
         "minConfidence": 0.6,
         "riskMultiplier": 0.9
       },
       "STRUCTURAL_TRANSITION": {
-        "favoredStrategies": ["liquidity_trap", "pivot_shift", "morning_star"],
-        "favoredSignalTypes": ["QUANT", "HYBRID", "PATTERN"],
+        "favoredSignalTypes": [
+          "QUANT",
+          "HYBRID",
+          "PATTERN"
+        ],
+        "favoredStrategies": [
+          "liquidity_trap",
+          "pivot_shift",
+          "morning_star"
+        ],
         "minConfidence": 0.55,
         "riskMultiplier": 0.85
+      },
+      "TREND_FRIENDLY_STABLE": {
+        "favoredSignalTypes": [
+          "QUANT",
+          "PATTERN",
+          "HYBRID"
+        ],
+        "favoredStrategies": [
+          "vwap_pullback",
+          "morning_star",
+          "pivot_shift",
+          "orb"
+        ],
+        "minConfidence": 0.65,
+        "riskMultiplier": 1.2
       }
     }
   }
