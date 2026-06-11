@@ -105,11 +105,11 @@ describe('Directive 11.4A: Market Friction Computation (M10 Governance)', () => 
 describe('Directive 11.4A: Market Indicators Service (M14, M15 Governance)', () => {
   
   it('should update and retrieve global regime', () => {
-    updateGlobalRegime('TREND_FRIENDLY_STABLE');
-    expect(getCurrentRegime()).toBe('TREND_FRIENDLY_STABLE');
+    updateGlobalRegime('crypto_spot', 'TREND_FRIENDLY_STABLE');
+    expect(getCurrentRegime('crypto_spot')).toBe('TREND_FRIENDLY_STABLE');
     
-    updateGlobalRegime('HIGH_VOLATILITY_UNSTABLE');
-    expect(getCurrentRegime()).toBe('HIGH_VOLATILITY_UNSTABLE');
+    updateGlobalRegime('crypto_spot', 'HIGH_VOLATILITY_UNSTABLE');
+    expect(getCurrentRegime('crypto_spot')).toBe('HIGH_VOLATILITY_UNSTABLE');
   });
   
   it('should provide regime info with description and favored strategies', () => {
@@ -121,8 +121,8 @@ describe('Directive 11.4A: Market Indicators Service (M14, M15 Governance)', () 
   });
   
   it('should return market indicators with all required fields', () => {
-    updateGlobalRegime('RANGE_BOUND_STABLE');
-    const indicators = getMarketIndicators();
+    updateGlobalRegime('crypto_spot', 'RANGE_BOUND_STABLE');
+    const indicators = getMarketIndicators('crypto_spot');
     
     expect(indicators).toHaveProperty('marketRegime');
     expect(indicators).toHaveProperty('regimeDescription');
@@ -320,8 +320,8 @@ describe('Directive 11.4A.1: Expanded Market Friction Narratives (M20 Governance
 describe('Directive 11.4A.1: Market Indicators with Expanded Fields', () => {
   
   it('should return indicators with regimeTitle and frictionNarrative', () => {
-    updateGlobalRegime('TREND_FRIENDLY_STABLE');
-    const indicators = getMarketIndicators();
+    updateGlobalRegime('crypto_spot', 'TREND_FRIENDLY_STABLE');
+    const indicators = getMarketIndicators('crypto_spot');
     
     expect(indicators).toHaveProperty('regimeTitle');
     expect(indicators).toHaveProperty('frictionNarrative');
