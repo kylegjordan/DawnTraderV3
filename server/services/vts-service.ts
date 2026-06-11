@@ -953,7 +953,9 @@ export class VTSService extends EventEmitter {
             netPnlPct,
             cfg.alpha,
             Date.now(),
-            getCalibrationEpoch('vts'),
+            // B-5 (Obj-12): class-scoped epoch — xstock vts rows start a new
+            // lineage at the measured-spread deploy; crypto rides the wildcard.
+            getCalibrationEpoch('vts', _assetClass),
           );
         }
       }

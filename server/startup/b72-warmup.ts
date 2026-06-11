@@ -98,6 +98,15 @@ const PREFETCH_MODULES = [
   // Merged over the static friction modules at getFrictionForAssetClass — the
   // hot scan path reads this cache synchronously every cycle. MUST be warm.
   'fee_model',
+  // B-5 AMR (2026-06-11): the AMR body's DB-governed surface. amr_friction_sample
+  // is read synchronously in the xstock scan cycle (chunk 0a) — MUST be warm;
+  // the rest are read each MCE cycle by the weather aggregator + gates.
+  'amr_runtime',          // 3-state flag per class (disabled|shadow|active)
+  'amr_response_dials',   // per-(mode,class) dials + slot caps + allowances
+  'amr_weather_rules',    // per-class thresholds/dwell/weights (provenance in migration)
+  'amr_friction_sample',  // xstock measured-spread store knobs (sync in scan cycle)
+  'amr_input_health',     // Obj-15b sentinel rails (R1-R5)
+  'amr_external_equity',  // Obj-14b equity feed knobs (CBOE/FRED/ECB sources)
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

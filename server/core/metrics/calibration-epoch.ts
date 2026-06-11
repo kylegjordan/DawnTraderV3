@@ -39,16 +39,27 @@
 import { getCachedNumbersForModule } from '../../services/module-constants-service.js';
 import type { LearningSource } from './outcome-feedback-store.js';
 
-/** Wildcard resolution key — epochs are per-source, not per-(class,strategy,regime). */
+/**
+ * B-5 AMR (Obj-12, 2026-06-11): epochs gained an OPTIONAL asset-class
+ * dimension. The v0 "per-source only" simplification broke on the first
+ * class-scoped calibration change (xstock static->measured spread changes
+ * the xstock admit population while crypto economics are untouched). A
+ * class-scoped row (e.g. calibration_epoch/xstock_spot/vts) supersedes the
+ * wildcard via the service's native most-specific-wins resolution; sources
+ * without class splits keep resolving the wildcard row unchanged.
+ */
 const WILDCARD_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 
 /**
  * Current calibration epoch for a learning source. Throws if the module is
  * not warmed or the source row is missing (fail-hard: the migration seeds
  * all three rows; absence means the migration was not applied).
+ * `assetClass` narrows to a class-scoped epoch row when one exists
+ * (most-specific-wins); omitted = wildcard (pre-B-5 behavior).
  */
-export function getCalibrationEpoch(source: LearningSource): number {
-  const rows = getCachedNumbersForModule('calibration_epoch', WILDCARD_KEY);
+export function getCalibrationEpoch(source: LearningSource, assetClass?: string): number {
+  const key = assetClass ? { ...WILDCARD_KEY, assetClass } : WILDCARD_KEY;
+  const rows = getCachedNumbersForModule('calibration_epoch', key);
   const epoch = rows[source];
   if (!Number.isFinite(epoch) || epoch < 1) {
     throw new Error(

@@ -1416,7 +1416,9 @@ export class PaperExecutionEngine {
               netPnlPercent,
               cfg.alpha,
               Date.now(),
-              getCalibrationEpoch(_learnSource),
+              // B-5 (Obj-12): class-scoped epoch (most-specific-wins; wildcard
+              // when no class row exists for this source).
+              getCalibrationEpoch(_learnSource, _assetClass),
             );
           }
         }

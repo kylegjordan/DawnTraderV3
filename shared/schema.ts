@@ -4733,3 +4733,28 @@ export type EquityPerpTickerSnap = typeof xstockPerpTickerSnap.$inferSelect;
 export type InsertEquityPerpTickerSnap = typeof xstockPerpTickerSnap.$inferInsert;
 export type CryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferSelect;
 export type InsertCryptoSpotTickerSnap = typeof cryptoSpotTickerSnap.$inferInsert;
+
+// ════════════════════════════════════════════════════════════════════════════
+// B-5 AMR (2026-06-11) — per-class decision ledger (shadow + active evidence).
+// One row per (MCE cycle, asset class) when the AMR flag is shadow|active.
+// would_dials / would_blocks carry per-gate+site tags (scope B3); the
+// inputs_schema_version partitions mixed-shape history for the Phase-25 study
+// (Langston M1). 90-day retention via the B-NEW-47 sweep.
+// ════════════════════════════════════════════════════════════════════════════
+export const amrDecisionLedger = pgTable("amr_decision_ledger", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  cycleTs: timestamp("cycle_ts", { withTimezone: true }).notNull(),
+  assetClass: text("asset_class").notNull(),
+  inputsSchemaVersion: integer("inputs_schema_version").notNull(),
+  weather: jsonb("weather").notNull(),
+  continuousScore: doublePrecision("continuous_score"),
+  resolvedMode: text("resolved_mode"),
+  wouldDials: jsonb("would_dials"),
+  wouldBlocks: jsonb("would_blocks"),
+  flagState: text("flag_state").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  classTsIdx: index("amr_decision_ledger_class_ts_idx").on(table.assetClass, table.cycleTs),
+}));
+export type AmrDecisionLedgerRow = typeof amrDecisionLedger.$inferSelect;
+export type InsertAmrDecisionLedgerRow = typeof amrDecisionLedger.$inferInsert;
