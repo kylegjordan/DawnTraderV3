@@ -1744,26 +1744,44 @@ export class MarketContextEngine {
    * Consumers handle null EXPLICITLY (CLASS_IDLE semantics, B_4_7_PRE_AUDIT §5).
    */
   getDominantRegimeForClass(assetClass: AssetClass): { regime: string; avgScore: number; pairCount: number; percentage: number } | null {
+    return this.tallyClassRegimeVote(this.collectClassRegimeEntries(assetClass));
+  }
+
+  /**
+   * B-5 Obj-15a: shared collector — ONE cache pass yielding the exact per-pair
+   * tally inputs. Both the consumer-facing vote above and the audit dump below
+   * derive from this, so a dumped sample and the reported winner can never
+   * come from different iterations.
+   */
+  private collectClassRegimeEntries(assetClass: AssetClass): Array<{ symbol: string; regime: string; regimeScore: number }> {
     const now = Date.now();
     const suffix = `:${assetClass}`;
-    const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
-    let totalPairs = 0;
-
+    const entries: Array<{ symbol: string; regime: string; regimeScore: number }> = [];
     for (const [key, entry] of this.cache.entries()) {
       if (!key.endsWith(suffix)) continue;     // B-4.7: class filter
       if (now >= entry.expiresAt) continue;    // Skip expired
-
       const regime = entry.context.regime?.regime;
       if (!regime) continue;
-
-      if (!regimeCounts[regime]) {
-        regimeCounts[regime] = { count: 0, totalScore: 0 };
-      }
-      regimeCounts[regime].count += 1;
-      regimeCounts[regime].totalScore += entry.context.raw?.regimeScore ?? 50;
-      totalPairs++;
+      entries.push({
+        symbol: key.slice(0, -suffix.length),
+        regime,
+        regimeScore: entry.context.raw?.regimeScore ?? 50,
+      });
     }
+    return entries;
+  }
 
+  /** B-5 Obj-15a: the vote math, isolated so it runs over a collected array. */
+  private tallyClassRegimeVote(entries: Array<{ symbol: string; regime: string; regimeScore: number }>): { regime: string; avgScore: number; pairCount: number; percentage: number } | null {
+    const regimeCounts: Record<string, { count: number; totalScore: number }> = {};
+    for (const e of entries) {
+      if (!regimeCounts[e.regime]) {
+        regimeCounts[e.regime] = { count: 0, totalScore: 0 };
+      }
+      regimeCounts[e.regime].count += 1;
+      regimeCounts[e.regime].totalScore += e.regimeScore;
+    }
+    const totalPairs = entries.length;
     if (totalPairs < MIN_CLASS_VOTE_PAIRS) return null;
 
     const sorted = Object.entries(regimeCounts).sort((a, b) => b[1].count - a[1].count);
@@ -1776,6 +1794,20 @@ export class MarketContextEngine {
       pairCount: totalPairs,
       percentage: Math.round((stats.count / totalPairs) * 100),
     };
+  }
+
+  /**
+   * B-5 Obj-15a audit dump: per-pair tally inputs + the winner computed from
+   * the SAME collected array in the same synchronous pass. The correctness
+   * audit retallies `pairs` with an independent implementation and compares
+   * EXACT against `winner` (pre-audit-v2 §7 R4 row 1).
+   */
+  getRegimeVoteDumpForClass(assetClass: AssetClass): {
+    pairs: Array<{ symbol: string; regime: string; regimeScore: number }>;
+    winner: { regime: string; avgScore: number; pairCount: number; percentage: number } | null;
+  } {
+    const pairs = this.collectClassRegimeEntries(assetClass);
+    return { pairs, winner: this.tallyClassRegimeVote(pairs) };
   }
 
   /**

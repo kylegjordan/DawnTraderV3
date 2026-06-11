@@ -235,7 +235,17 @@ export function computeGlobalFriction(assetClass: AssetClass): number | null {
   return result.score;
 }
 
-export function computeGlobalFrictionWithDetails(assetClass: AssetClass): FrictionResult {
+/**
+ * B-5 Obj-15a: optional per-sample collector threaded through the SAME
+ * sampling pass (never a duplicate loop — drift-proof by construction). The
+ * audit-dump endpoint passes one; the recompute leg averages these samples
+ * independently and compares EXACT against the same-pass score (§7 R4 row 3).
+ */
+export interface FrictionAuditCollector {
+  samples: Array<{ symbol: string; spread: number; slippage: number; fee: number; friction: number }>;
+}
+
+export function computeGlobalFrictionWithDetails(assetClass: AssetClass, auditOut?: FrictionAuditCollector): FrictionResult {
   try {
     // B-5 AMR (Obj-13, supersedes the B-4.7 pool-based read): friction samples
     // the SCANNED UNIVERSE, not the activation-dependent filter pool. The pool
@@ -250,7 +260,7 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass): Fricti
     //     structurally crypto-only; the store is BOTH membership and metrics,
     //     reason-coded per the Obj-0a taxonomy).
     if (assetClass === 'xstock_spot') {
-      return computeXstockFrictionFromStore();
+      return computeXstockFrictionFromStore(auditOut);
     }
     // Step-7 iteration (staging finding): the UNIVERSE contains pairs the
     // B69 resolver has no pattern for (e.g. single-letter wsnames like
@@ -285,6 +295,9 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass): Fricti
           mid: 0, // Mid price not available in cost cache, using spread directly
           friction
         });
+        // B-5 Obj-15a: same-pass sample for the audit dump (incl. the fee/
+        // slippage components the recompute leg needs).
+        auditOut?.samples.push({ symbol, spread: metrics.spread, slippage: metrics.slippage, fee: metrics.fee, friction });
       }
     }
 
@@ -334,7 +347,7 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass): Fricti
  * the (sub-floor) sample count visible as a caution-grade input, never an
  * error.
  */
-function computeXstockFrictionFromStore(): FrictionResult {
+function computeXstockFrictionFromStore(auditOut?: FrictionAuditCollector): FrictionResult {
   const read = getXstockFrictionSample();
   if (read.status.kind !== 'OK') {
     const detail =
@@ -354,9 +367,12 @@ function computeXstockFrictionFromStore(): FrictionResult {
   const defaults = getDefaultCostComponentsForAssetClass('xstock_spot');
   let total = 0;
   let count = 0;
-  for (const s of read.samples.values()) {
-    total += computeMarketFriction(s.bidAskSpreadPct / 100, defaults.slippage, defaults.fee);
+  for (const [sym, s] of read.samples.entries()) {
+    const friction = computeMarketFriction(s.bidAskSpreadPct / 100, defaults.slippage, defaults.fee);
+    total += friction;
     count++;
+    // B-5 Obj-15a: same-pass sample for the audit dump.
+    auditOut?.samples.push({ symbol: sym, spread: s.bidAskSpreadPct / 100, slippage: defaults.slippage, fee: defaults.fee, friction });
   }
   const score = Math.round(total / count);
   const st = stateFor('xstock_spot');

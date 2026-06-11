@@ -2301,6 +2301,35 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B-5 Obj-15a: GET /api/diagnostics/amr/audit-dump - one-pass per-pair
+  // aggregation inputs + the system-computed aggregates from the SAME pass,
+  // per class. The correctness audit recomputes vote tally / weighted median /
+  // friction average with independent implementations and compares against
+  // the pinned §7 R4 bars. Read-only; mutates nothing; permanent diagnostics
+  // surface (repeatable audits per critical-rule-13 rolling-window preference).
+  apiRouter.get('/diagnostics/amr/audit-dump', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getMarketContextEngine } = await import('./services/market-context-engine.js');
+      const { directionalBiasStore, xstockDirectionalBiasStore } = await import('./core/metrics/directional-bias-store.js');
+      const { computeGlobalFrictionWithDetails } = await import('./services/market-indicators.js');
+      const mce = getMarketContextEngine();
+      const byClass: Record<string, unknown> = {};
+      for (const klass of ['crypto_spot', 'xstock_spot'] as const) {
+        const frictionAudit = { samples: [] as Array<{ symbol: string; spread: number; slippage: number; fee: number; friction: number }> };
+        const frictionResult = computeGlobalFrictionWithDetails(klass, frictionAudit);
+        byClass[klass] = {
+          vote: mce.getRegimeVoteDumpForClass(klass),
+          dbs: (klass === 'xstock_spot' ? xstockDirectionalBiasStore : directionalBiasStore).getAuditDump(),
+          friction: { result: frictionResult, samples: frictionAudit.samples },
+        };
+      }
+      res.json({ ok: true, schema: 'amr-audit/v1.0', byClass, timestamp: new Date().toISOString() });
+    } catch (error: any) {
+      console.error('[B-5][AMR] audit-dump GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
   // GET /api/filters-v2?mode=paper|live
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {

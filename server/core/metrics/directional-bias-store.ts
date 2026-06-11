@@ -382,6 +382,40 @@ class DirectionalBiasStore {
     return this.latestSnapshot;
   }
 
+  /**
+   * B-5 Obj-15a audit dump: per-pair aggregation inputs + the aggregate
+   * computed from those SAME inputs in the same synchronous pass (pre-audit-v2
+   * §7 R4 row 2 — the correctness audit recomputes the weighted median with an
+   * independent implementation and compares |Δ| ≤ 1e-6 against `computed`).
+   * READ-ONLY: applies the same eligibility partition as publishSnapshot
+   * (xstock GICS + non-sentinel; crypto all entries) but filters expiry
+   * instead of pruning, publishes nothing, and never touches latestSnapshot.
+   */
+  getAuditDump(): {
+    entries: Array<{ symbol: string; score: number; volume: number; sentinelZero: boolean; sector: string | null; timestamp: number }>;
+    computed: GlobalDirectionalBias | null;
+    latestSnapshot: GlobalDbsSnapshot | null;
+    mode: string;
+  } {
+    const now = Date.now();
+    const entries: Array<{ symbol: string; score: number; volume: number; sentinelZero: boolean; sector: string | null; timestamp: number }> = [];
+    const pairScores = new Map<string, number>();
+    const sentinelFlags = new Map<string, boolean>();
+    const volumes = new Map<string, number>();
+    for (const [sym, entry] of this.store.entries()) {
+      if (now - entry.timestamp > PAIR_HARD_EXPIRY_MS) continue; // expiry filter, no prune
+      if (this.opts.mode === 'xstock' && !(entry.sector && GICS_SECTORS.has(entry.sector) && !entry.sentinelZero)) continue;
+      entries.push({ symbol: sym, score: entry.score, volume: entry.volume, sentinelZero: entry.sentinelZero, sector: entry.sector ?? null, timestamp: entry.timestamp });
+      pairScores.set(sym, entry.score);
+      sentinelFlags.set(sym, entry.sentinelZero);
+      volumes.set(sym, entry.volume);
+    }
+    const computed = entries.length > 0
+      ? computeGlobalDirectionalBias(pairScores, volumes, undefined, sentinelFlags)
+      : null;
+    return { entries, computed, latestSnapshot: this.latestSnapshot, mode: this.opts.mode };
+  }
+
   /** Historical snapshot ring buffer (up to last 24h at 15-min cadence). */
   getHistory(): HistoricalSnapshot[] {
     return this.history.slice(); // defensive copy
