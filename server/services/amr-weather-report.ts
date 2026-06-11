@@ -542,6 +542,15 @@ export function getAllAmrWeatherReports(): Map<AssetClass, AmrWeatherReport> {
 }
 
 /**
+ * Mode under the dwell/ladder discipline REGARDLESS of flag state — the
+ * dry-run gates (shadow) read this so the would-blocks ledger reflects the
+ * mode the AMR would be holding. Never used by enforce paths.
+ */
+export function getCurrentModeForClass(assetClass: AssetClass): StrategyMode | null {
+  return trackerFor(assetClass).currentMode;
+}
+
+/**
  * Consumer-facing posture read (Obj-4): the class's current mode under the
  * dwell/ladder discipline. null when the flag is not `active` (consumers use
  * the legacy per-signal path — parity gate) or no live cycle has run yet.

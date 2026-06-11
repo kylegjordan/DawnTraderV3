@@ -942,6 +942,19 @@ export class VTSService extends EventEmitter {
         const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
         const _assetClass = safeResolveAssetClass(tradeData.symbol, 'kraken');
         if (_assetClass !== null) {
+          // B-5 AMR (F6): per-class EV-gap observation — predicted edge at
+          // entry vs realized net P&L, BOTH percent-of-notional. Sits in the
+          // post-persist region (this function returns {persisted:true} only
+          // past this point), source='vts' by construction of this close
+          // path; the paper-source flip is a separate Phase-19 operator
+          // decision (scope B2). Never throws into the close path.
+          try {
+            const { feedEvGapObservation } = await import('./amr-weather-report.js');
+            const _expectedEdge = tradeData.expectedEdge ?? expectedEdge;
+            feedEvGapObservation(_assetClass, _expectedEdge * 100, netPnlPct);
+          } catch (evErr) {
+            console.warn('[B-5][vts-service] EV-gap feed failed (close continues):', evErr instanceof Error ? evErr.message : evErr);
+          }
           // ITEM-4 step 2 (D9): VTS writes its OWN partition — source='vts'
           // (the carried entry-stamp), per-source calibration epoch stamped.
           const { getCalibrationEpoch } = await import('../core/metrics/calibration-epoch.js');
