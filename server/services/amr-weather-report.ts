@@ -350,21 +350,38 @@ function computeClassReport(assetClass: AssetClass, flagState: AmrFlagState, now
   const mi = getMarketIndicators(assetClass);
   const voteStatus = mi.voteStatus;
   const marketClosed = assetClass === 'xstock_spot' && !isXstockMarketOpenUTC('SPY/USD', new Date(now));
+  // B-5.1 (#224, Langston D3): friction is REQUIRED for a LIVE classification
+  // — it is the primary hostile-condition detector, and classifying from the
+  // remaining inputs during sentinel warm-up produced a thin-input CALM for
+  // ~90s on every restart (ledger-evidenced 2026-06-11; under ACTIVE that was
+  // a full-size posture window during genuinely hostile overnight conditions).
+  // WARMING / NO_SOURCE → IDLE (no decision; same honesty as the vote-idle
+  // branch). LOW_VOLUME_THIN stays LIVE: the market is open and measured —
+  // a thin sample is a caution-grade absent-input, not a warm-up state.
+  const frictionWarming = mi.globalFrictionScore === null
+    && (mi.frictionReason ?? 'NO_SOURCE') !== 'LOW_VOLUME_THIN'
+    && (mi.frictionReason ?? 'NO_SOURCE') !== 'MARKET_CLOSED';
 
-  // ── IDLE (Obj-3a) ──────────────────────────────────────────────────────────
-  if (marketClosed || voteStatus === 'IDLE_OR_WARMING') {
+  // ── IDLE (Obj-3a + B-5.1 friction warm-up) ─────────────────────────────────
+  if (marketClosed || voteStatus === 'IDLE_OR_WARMING' || frictionWarming) {
     t.wasIdle = true;
     const report: AmrWeatherReport = {
       assetClass, cycleTs: now, classification: 'IDLE', continuousScore: null,
       volatilityState: { proxy: 'dbs_abs', value: null },
       inputs: {
         regime: null, votePct: null, voteStatus,
-        frictionScore: null, frictionReason: marketClosed ? 'MARKET_CLOSED' : 'IDLE_OR_WARMING',
+        frictionScore: null,
+        frictionReason: marketClosed ? 'MARKET_CLOSED'
+          : frictionWarming ? (mi.frictionReason ?? 'NO_SOURCE')
+          : 'IDLE_OR_WARMING',
         frictionSampleSize: 0, dbsScore: null, dbsIsStale: false,
         flipsInWindow: null, epochsObserved: t.epochCount,
         evGapRatio: null, evGapN: t.evGap.length, macroMaxAbsZ: null, macroDetail: null,
       },
-      health: [], triggers: [], staleness: [marketClosed ? 'market_closed' : 'vote_idle_or_warming'],
+      health: [], triggers: [],
+      staleness: [marketClosed ? 'market_closed'
+        : voteStatus === 'IDLE_OR_WARMING' ? 'vote_idle_or_warming'
+        : (mi.frictionReason === 'WARMING' ? 'friction_warming' : 'friction_no_source')],
       inputsSchemaVersion: AMR_INPUTS_SCHEMA_VERSION, flagState,
       resolvedMode: null, // no posture decision while IDLE; consumers hold
     };

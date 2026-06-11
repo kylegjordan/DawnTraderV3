@@ -45,7 +45,7 @@ import type { AssetClass } from '../../../shared/asset-classes.js';
 export type AmrGateSite = 'sqe_admission' | 'rtb_promotion' | 'execution_entry';
 
 export interface AmrGateBlock {
-  gate: 'roster_strategy' | 'roster_source_pool' | 'confidence_floor' | 'hard_pause' | 'slot_cap';
+  gate: 'roster_strategy' | 'roster_source_pool' | 'confidence_floor' | 'hard_pause' | 'slot_cap' | 'no_posture';
   site: AmrGateSite;
   reason: string;
   ts: number;
@@ -119,7 +119,26 @@ export function evaluateAmrGates(input: AmrGateInput): AmrGateResult {
     ? getActiveModeForClass(input.assetClass)
     : getCurrentModeForClass(input.assetClass);
   if (mode === null) {
-    // No live weather cycle yet (boot/idle) — no posture, no gating.
+    // B-5.1 (#224, pre-audit Note-3): execution-aware null handling.
+    // Under ENFORCE a null mode (boot / sentinel warm-up / idle) must FAIL
+    // CLOSED — the prior allowed:true/skipped left every ACTIVE restart
+    // ungated until the first weather cycle, and the friction-warm-up IDLE
+    // extension would have WIDENED that window. All gate sites are
+    // entry-side (exits never gated), so fail-closed cannot trap an open
+    // position; posture is in-memory-only, so there is no persisted-
+    // FAVORABLE resume hazard. Under dry_run (shadow) nothing changes:
+    // there is no posture to rehearse — skip as before.
+    if (execution === 'enforce') {
+      return {
+        allowed: false,
+        blocks: [{
+          gate: 'no_posture', site: input.site,
+          reason: `no live weather read for ${input.assetClass} (boot/warm-up/idle) — new entries blocked under active`,
+          ts: Date.now(),
+        }],
+        mode: null, flagState, executed: 'enforce',
+      };
+    }
     return { allowed: true, blocks: [], mode: null, flagState, executed: 'skipped' };
   }
 

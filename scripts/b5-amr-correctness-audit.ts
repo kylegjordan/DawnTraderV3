@@ -283,6 +283,23 @@ async function main() {
     record({ leg: 'probe_wildcard_aggressive_rows', klass: 'db', bar: 'inventory', n: 0, maxDev: 'n/a', pass: null, note: 'probe errored: ' + e.message });
   }
 
+  // ── B-5.1 (#222) permanent class-purity lock: every symbol in the CRYPTO
+  // DBS dump must resolve to crypto_spot. Class-generic by construction —
+  // catches ANY non-crypto leak (equities, future classes), not just known
+  // names. This is the live-level regression lock for the class-gated MCE
+  // store write (pre-audit Note-1: the unit-level computeContext fixture is
+  // not cheap — full MCE init — so the lock rides here + the single-call-site
+  // grep stated in the completion report).
+  try {
+    const { safeResolveAssetClass } = await import('../shared/asset-classes.js');
+    const entries = dump.byClass.crypto_spot.dbs.entries as Array<{ symbol: string }>;
+    const leaks = entries.filter((e) => safeResolveAssetClass(e.symbol, 'kraken') !== 'crypto_spot');
+    if (leaks.length > 0) console.log(`   non-crypto symbols in crypto DBS store: ${leaks.slice(0, 10).map(l => l.symbol).join(', ')}${leaks.length > 10 ? ` (+${leaks.length - 10})` : ''}`);
+    record({ leg: 'probe_dbs_class_purity', klass: 'crypto_spot', bar: 'zero non-crypto symbols', n: entries.length, maxDev: leaks.length, pass: leaks.length === 0 });
+  } catch (e: any) {
+    record({ leg: 'probe_dbs_class_purity', klass: 'crypto_spot', bar: 'zero non-crypto symbols', n: 0, maxDev: 'n/a', pass: null, note: 'probe errored: ' + e.message });
+  }
+
   // ── Side-probe (c): xstock staleness[] identity ──────────────────────────
   const xsStale = current?.byClass?.xstock_spot?.report?.staleness ?? [];
   console.log(`   xstock staleness[] now: ${JSON.stringify(xsStale)}`);

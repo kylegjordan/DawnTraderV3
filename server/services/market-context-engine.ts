@@ -1392,12 +1392,20 @@ export class MarketContextEngine {
 
     // B63 Item 16: feed the persistent per-pair DBS store. Store is the source of
     // truth for the end-of-cycle atomic snapshot consumed by all global-DBS readers.
-    directionalBiasStore.updatePair(
-      symbol,
-      directionalBias.score,
-      directionalBias.sentinelZero,
-      volume24h ?? 0
-    );
+    // B-5.1 (#222): CLASS-GATED — this line predates multi-class MCE and wrote
+    // EVERY pair (xstock included, with equity-tape volumes) into the CRYPTO
+    // store once xstocks began flowing through computeContext (B79.0m.b);
+    // measured 2026-06-12: 24 equity symbols at 52.6% of crypto aggregation
+    // weight. Allowlist (not xstock-denylist) so future classes fail safe —
+    // each class feeds its OWN store (xstock: the B-PHASE-A2 scanner path).
+    if (assetClass === 'crypto_spot') {
+      directionalBiasStore.updatePair(
+        symbol,
+        directionalBias.score,
+        directionalBias.sentinelZero,
+        volume24h ?? 0
+      );
+    }
 
     // Phase 15b B61: observational telemetry (no-op unless DT_PHASE15B_DBS_TELEMETRY=1)
     this.cycleCounter += 1;

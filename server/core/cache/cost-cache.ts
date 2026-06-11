@@ -78,11 +78,42 @@ export function getCostMetrics(symbol: string): CostMetrics | null {
   return null;
 }
 
-export function setCostMetrics(symbol: string, data: Partial<CostMetrics>): CostMetrics {
+// B-5.1 (#223): once-per-symbol-per-5min throttle for crossed-quote rejects —
+// crossed books can persist for seconds and the writers run per-scan.
+const SPREAD_REJECT_LOG_INTERVAL_MS = 5 * 60 * 1000;
+const spreadRejectLoggedAt = new Map<string, number>();
+
+/**
+ * B-5.1 (#223): a NEGATIVE spread is a crossed/stale-book NON-measurement
+ * (root cause: scanners compute (ask−bid)/bid straight from the ticker;
+ * observed avgSpread −0.11% across 673 entries pre-B-5). Field-level drop:
+ *   - existing fresh entry → sibling fields update, spread retains the prior
+ *     good measurement;
+ *   - NO existing entry → the write is REJECTED (returns null, nothing
+ *     cached): default-stamping would inflate the friction sampler's n with
+ *     an invented "measurement"; the readers' cache-miss path is the honest
+ *     state. (Pinned: pre-audit Note-2; whole-write drop on first-write-
+ *     crossed is intended — a crossed book taints the entire quote read.)
+ *   - ZERO spread stays accepted (locked book = legitimate measurement).
+ */
+export function setCostMetrics(symbol: string, data: Partial<CostMetrics>): CostMetrics | null {
+  let spreadIn = data.spread;
+  if (spreadIn !== undefined && spreadIn < 0) {
+    const nowTs = Date.now();
+    if (nowTs - (spreadRejectLoggedAt.get(symbol) ?? 0) > SPREAD_REJECT_LOG_INTERVAL_MS) {
+      console.warn(`[CostCache][B-5.1] crossed-quote spread rejected for ${symbol} (${spreadIn}) — non-measurement, not cached`);
+      spreadRejectLoggedAt.set(symbol, nowTs);
+    }
+    const existing = cache.get(symbol);
+    if (!existing || isExpired(existing)) {
+      return null; // first-write-crossed: nothing to retain, nothing fabricated
+    }
+    spreadIn = existing.v.spread; // prior good measurement retained
+  }
   const clamped: CostMetrics = {
     fee: Math.min(data.fee ?? resolveCryptoTakerFee(), MAX_COST_BOUND),
     slippage: Math.min(data.slippage ?? DEFAULT_SLIPPAGE, MAX_COST_BOUND),
-    spread: Math.min(data.spread ?? DEFAULT_SPREAD, MAX_COST_BOUND),
+    spread: Math.min(spreadIn ?? DEFAULT_SPREAD, MAX_COST_BOUND),
   };
   cache.set(symbol, { v: clamped, t: Date.now() });
   return clamped;
@@ -92,11 +123,13 @@ export function getOrSetCostMetrics(symbol: string): CostMetrics {
   const cached = getCostMetrics(symbol);
   if (cached) return cached;
   // B-4.5: DEFAULT_COST_BUNDLE retired (it embedded the static fee).
+  // B-5.1: spread here is DEFAULT_SPREAD (≥0) — the negative-reject path is
+  // unreachable, so the non-null assertion is sound.
   return setCostMetrics(symbol, {
     fee: resolveCryptoTakerFee(),
     slippage: DEFAULT_SLIPPAGE,
     spread: DEFAULT_SPREAD,
-  });
+  })!;
 }
 
 export function getCacheTTLRemaining(symbol: string): number {

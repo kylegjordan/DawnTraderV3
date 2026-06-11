@@ -67,6 +67,7 @@ import {
   _resetAmrWeatherForTests,
 } from '../../services/amr-weather-report.js';
 import { evaluateAmrGates } from '../../core/governance/amr-gates.js';
+import { setCostMetrics, getCostMetrics } from '../../core/cache/cost-cache.js';
 import { _resetAmrInputHealthForTests } from '../../services/amr-input-health.js';
 import { getCachedCostMetrics } from '../../core/math/cost-model.js';
 
@@ -433,5 +434,80 @@ describe('B-5 Obj-15b — input-health sentinels (R3 arming, stuck-at-zero)', ()
     }
     const friction = getAmrWeatherReport('crypto_spot')!.health.find(h => h.input === 'friction')!;
     expect(friction.varying).toBeNull(); // <K distinct → honestly disarmed
+  });
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+describe('B-5.1 (#224) — friction warm-up IDLE + no_posture gate (pre-audit Note-3)', () => {
+  it('friction WARMING -> IDLE per class (no thin-input CALM)', () => {
+    miMock.current.set('crypto_spot', { ...LIVE_CALM, globalFrictionScore: null, frictionReason: 'WARMING' });
+    miMock.current.set('xstock_spot', { ...LIVE_CALM, globalFrictionScore: null, frictionReason: 'WARMING' });
+    runAmrWeatherCycle(OPEN_TS);
+    for (const k of ['crypto_spot', 'xstock_spot'] as const) {
+      const r = getAmrWeatherReport(k)!;
+      expect(r.classification).toBe('IDLE');
+      expect(r.staleness).toContain('friction_warming');
+      expect(r.resolvedMode).toBeNull();
+    }
+  });
+  it('friction NO_SOURCE -> IDLE with friction_no_source (fail-closed for unsourced classes)', () => {
+    miMock.current.set('crypto_spot', { ...LIVE_CALM, globalFrictionScore: null, frictionReason: 'NO_SOURCE' });
+    runAmrWeatherCycle(OPEN_TS);
+    const r = getAmrWeatherReport('crypto_spot')!;
+    expect(r.classification).toBe('IDLE');
+    expect(r.staleness).toContain('friction_no_source');
+  });
+  it('LOW_VOLUME_THIN stays LIVE (market open + measured: caution-grade absence, not warm-up)', () => {
+    miMock.current.set('xstock_spot', { ...LIVE_CALM, globalFrictionScore: null, frictionReason: 'LOW_VOLUME_THIN' });
+    runAmrWeatherCycle(OPEN_TS);
+    expect(getAmrWeatherReport('xstock_spot')!.classification).not.toBe('IDLE');
+  });
+  it('warm-up exit is safe by construction: IDLE while warming, first LIVE read never AGGRESSIVE', () => {
+    miMock.current.set('crypto_spot', { ...LIVE_CALM, globalFrictionScore: null, frictionReason: 'WARMING' });
+    runAmrWeatherCycle(OPEN_TS);
+    expect(getAmrWeatherReport('crypto_spot')!.classification).toBe('IDLE');
+    miMock.current.set('crypto_spot', { ...LIVE_CALM }); // friction sentinel warmed
+    runAmrWeatherCycle(OPEN_TS + 30_000);
+    const r = getAmrWeatherReport('crypto_spot')!;
+    expect(r.classification).toBe('CALM');
+    expect(r.resolvedMode).not.toBe('AGGRESSIVE'); // post-IDLE min(firstRead, NORMAL)
+  });
+  it('gates: enforce + null mode -> fail-closed no_posture (the ungated ACTIVE-restart window is CLOSED)', () => {
+    seedAll({ crypto: 'active' }); // flag active, NO weather cycle run -> mode null
+    const res = evaluateAmrGates({ assetClass: 'crypto_spot', site: 'sqe_admission' });
+    expect(res.allowed).toBe(false);
+    expect(res.executed).toBe('enforce');
+    expect(res.blocks).toHaveLength(1);
+    expect(res.blocks[0].gate).toBe('no_posture');
+    seedAll(); // restore shadow flags for subsequent tests
+  });
+  it('gates: dry_run (shadow) + null mode -> skipped/allowed (shadow behavior unchanged)', () => {
+    const res = evaluateAmrGates({ assetClass: 'crypto_spot', site: 'sqe_admission' });
+    expect(res.allowed).toBe(true);
+    expect(res.executed).toBe('skipped');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+describe('B-5.1 (#223) — cost-cache crossed-quote spread guard (pre-audit Note-2 matrix)', () => {
+  it('(a) negative spread on EXISTING entry: prior good spread retained, siblings update', () => {
+    setCostMetrics('B51TEST/USD', { spread: 0.002 });
+    const out = setCostMetrics('B51TEST/USD', { spread: -0.001, slippage: 0.0009 });
+    expect(out?.spread).toBe(0.002);
+    expect(out?.slippage).toBe(0.0009);
+  });
+  it('(b) first-write negative: write REJECTED, no entry fabricated', () => {
+    const out = setCostMetrics('B51FRESH/USD', { spread: -0.0011 });
+    expect(out).toBeNull();
+    expect(getCostMetrics('B51FRESH/USD')).toBeNull();
+  });
+  it('(c) zero spread (locked book) accepted', () => {
+    expect(setCostMetrics('B51ZERO/USD', { spread: 0 })?.spread).toBe(0);
+  });
+  it('(d) positive path unchanged (upper clamp applies)', () => {
+    const out = setCostMetrics('B51POS/USD', { spread: 0.5 });
+    expect(out).not.toBeNull();
+    expect(out!.spread).toBeLessThanOrEqual(0.02);
   });
 });
