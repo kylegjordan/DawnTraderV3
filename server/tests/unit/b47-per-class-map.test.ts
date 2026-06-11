@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
+  getFavoredListExcludes,
   getStrategiesForRegime,
   getRegimeRiskMultiplier,
   getRegimeMinConfidence,
@@ -45,9 +46,17 @@ describe('B-4.7 chunk B: per-class canonical map', () => {
     expect(keys('xstock_spot', 'IMPULSE_EXPANSION')).toContain('orb');
   });
 
-  it('strong_bull_trend excluded from TFS in both classes (shared exclude)', () => {
-    expect(keys('crypto_spot', 'TREND_FRIENDLY_STABLE')).not.toContain('strong_bull_trend');
-    expect(keys('xstock_spot', 'TREND_FRIENDLY_STABLE')).not.toContain('strong_bull_trend');
+  it('R1/R2 two-surface lock: strong_bull_trend IS in the eval tree (lane stays alive) but NOT in the bridge favored list', () => {
+    // The eval universe keeps the lane strategy (Langston diff-B R2: the VTS
+    // eval loop iterates the tree — dropping it functionally disabled the
+    // quant-strong_trend lane)...
+    expect(keys('crypto_spot', 'TREND_FRIENDLY_STABLE')).toContain('strong_bull_trend');
+    expect(keys('xstock_spot', 'TREND_FRIENDLY_STABLE')).toContain('strong_bull_trend');
+    expect(keys('crypto_spot', 'IMPULSE_EXPANSION')).toContain('strong_bull_trend');
+    // ...while the favored-list derivation subtracts it (byte-identity with
+    // the pre-B-4.7 bridge JSON, where it was deliberately absent).
+    expect([...getFavoredListExcludes('crypto_spot', 'TREND_FRIENDLY_STABLE')]).toContain('strong_bull_trend');
+    expect([...getFavoredListExcludes('xstock_spot', 'IMPULSE_EXPANSION')]).toContain('strong_bull_trend');
   });
 
   it('regime metrics are class-free: identical across trees, helpers read the base', () => {
@@ -73,5 +82,16 @@ describe('B-4.7 chunk B: per-class canonical map', () => {
     expect(isValidCanonicalCombination('TREND_FRIENDLY_STABLE', first.strategyKey, first.signalType, null).valid).toBe(true);
     // and a combination in NO class tree is rejected:
     expect(isValidCanonicalCombination('TREND_FRIENDLY_STABLE', 'defensive_hedge', 'QUANT', null).valid).toBe(false);
+  });
+
+  it('R1: lane + historical combinations validate (base ∪ trees domain)', () => {
+    // strong_bull_trend in TFS/IE — the live lane strategy (an ESPORTS/USD
+    // strong_bull_trend admit landed 2026-06-08); pre-B-4.7 the flat map
+    // validated these. Never narrower than the old domain.
+    expect(isValidCanonicalCombination('TREND_FRIENDLY_STABLE', 'strong_bull_trend', 'QUANT', null).valid).toBe(true);
+    expect(isValidCanonicalCombination('IMPULSE_EXPANSION', 'strong_bull_trend', 'QUANT', null).valid).toBe(true);
+    // ST+orb — historical rows from the B79.0d window validate via the base.
+    const orbDef = getStrategiesForRegime('xstock_spot', 'TREND_FRIENDLY_STABLE').find(s => s.strategyKey === 'orb')!;
+    expect(isValidCanonicalCombination('STRUCTURAL_TRANSITION', 'orb', orbDef.signalType, orbDef.patternType).valid).toBe(true);
   });
 });

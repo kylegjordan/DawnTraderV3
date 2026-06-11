@@ -17,6 +17,7 @@ import { writeFileSync, mkdirSync, existsSync, renameSync, appendFileSync } from
 import { join, dirname } from 'path';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
+  getFavoredListExcludes,
   ASSET_CLASSES,
   CANONICAL_SCHEMA_VERSION,
   CANONICAL_SCHEMA_METADATA,
@@ -105,8 +106,14 @@ function deriveClassSubtree(assetClass: AssetClassKey): Record<string, any> {
   const classTree = CANONICAL_REGIME_STRATEGY_MAP[assetClass];
   const subtree: Record<string, any> = {};
   for (const [regime, mapping] of Object.entries(classTree)) {
-    const favoredStrategies = mapping.strategies.map(s => s.strategyKey);
-    const favoredSignalTypes = [...new Set(mapping.strategies.map(s => s.signalType))];
+    // B-4.7 diff-B R1/R2: the tree is the EVAL universe; the favored list
+    // additionally subtracts favored-list-only excludes (strong_bull_trend —
+    // lane-routed, not a favored pick). Keeps the JSON byte-identical to the
+    // pre-B-4.7 derivation while the eval tree regains the lane strategy.
+    const favoredExcl = getFavoredListExcludes(assetClass, regime as CanonicalRegimeType);
+    const favored = mapping.strategies.filter(s => !favoredExcl.has(s.strategyKey));
+    const favoredStrategies = favored.map(s => s.strategyKey);
+    const favoredSignalTypes = [...new Set(favored.map(s => s.signalType))];
     subtree[regime] = {
       favoredStrategies,
       favoredSignalTypes,

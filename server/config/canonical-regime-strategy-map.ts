@@ -368,39 +368,72 @@ export const ASSET_CLASSES = ['crypto_spot', 'xstock_spot'] as const;
 export type AssetClassKey = typeof ASSET_CLASSES[number];
 
 interface PerClassOverride {
+  /**
+   * CLASS-INELIGIBILITY excludes: the strategy cannot run for this class at
+   * all in this regime — removed from the MATERIALIZED tree (eval universe,
+   * allowedStrategies, favored lists alike).
+   */
   excludeStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
+  /**
+   * FAVORED-LIST-ONLY excludes (B-4.7 diff-B R1/R2): the strategy IS
+   * evaluable for the class in this regime (stays in the materialized tree —
+   * VTS eval loop, MCE allowedStrategies, validation) but is omitted from the
+   * bridge's favoredStrategies derivation. The one occupant: strong_bull_trend
+   * routes via its own quant-strong_trend lane (sourcePool), so it is not a
+   * "favored" pick for getClassMap consumers — but the eval loop MUST still
+   * iterate it or the lane is functionally disabled (the pre-B-4.7 flat map
+   * carried it; Langston caught the silent drop in diff-B review).
+   */
+  favoredListExcludes: Partial<Record<CanonicalRegimeType, string[]>>;
   addStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
 }
 
-// Moved VERBATIM from sync-canonical-bridge.ts (B.1.5 redeploy unblocker,
-// 2026-05-31) — the per-class membership deltas now live WITH the base map
-// they modify. Addition rationale: orb in xstock_spot TFS = hand-authored
-// extension (B79.0n.STRATEGY) — ORB fires on stable-trend breakouts, not just
-// impulse regimes, for xStocks.
+// Moved from sync-canonical-bridge.ts (B.1.5 redeploy unblocker, 2026-05-31),
+// with the exclude semantics SPLIT in B-4.7 diff-B R1/R2 — the bridge's flat
+// excludeStrategies conflated class-ineligibility (orb-for-crypto,
+// defensive_hedge-for-xstock) with favored-list curation (strong_bull_trend).
+// Addition rationale: orb in xstock_spot TFS = hand-authored extension
+// (B79.0n.STRATEGY) — ORB fires on stable-trend breakouts, not just impulse
+// regimes, for xStocks.
 const ASSET_CLASS_OVERRIDES: Record<AssetClassKey, PerClassOverride> = {
   crypto_spot: {
     excludeStrategies: {
-      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
-      HIGH_VOLATILITY_UNSTABLE: [],
-      RANGE_BOUND_STABLE: [],
-      IMPULSE_EXPANSION: ['strong_bull_trend', 'orb'],
+      // orb is xStock-only microstructure (opening-range) — class-ineligible.
+      IMPULSE_EXPANSION: ['orb'],
       STRUCTURAL_TRANSITION: ['orb'],
+    },
+    favoredListExcludes: {
+      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
+      IMPULSE_EXPANSION: ['strong_bull_trend'],
     },
     addStrategies: {},
   },
   xstock_spot: {
     excludeStrategies: {
-      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
+      // defensive_hedge is BTC-decorrelation — meaningless for xStocks.
       HIGH_VOLATILITY_UNSTABLE: ['defensive_hedge'],
-      RANGE_BOUND_STABLE: [],
-      IMPULSE_EXPANSION: ['strong_bull_trend'],
+      // base ST orb entry documents B79.0d intent only — not live for xStocks
+      // in ST either (B79.0n.STRATEGY kept the TFS+IE placement).
       STRUCTURAL_TRANSITION: ['orb'],
+    },
+    favoredListExcludes: {
+      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
+      IMPULSE_EXPANSION: ['strong_bull_trend'],
     },
     addStrategies: {
       TREND_FRIENDLY_STABLE: ['orb'],
     },
   },
 };
+
+/**
+ * B-4.7 diff-B R1/R2: favored-list-only excludes, resolved per class+regime.
+ * The bridge subtracts these when deriving favoredStrategies; the materialized
+ * tree (eval/validation surface) does NOT.
+ */
+export function getFavoredListExcludes(assetClass: AssetClassKey, regime: CanonicalRegimeType): ReadonlySet<string> {
+  return new Set(ASSET_CLASS_OVERRIDES[assetClass].favoredListExcludes[regime] ?? []);
+}
 
 /** Find a strategy's full definition anywhere in the base (for adds). */
 function findStrategyDefinition(strategyKey: string): StrategyDefinition {
@@ -744,9 +777,14 @@ export function selectContextAwareStrategy(
   patternType: CanonicalPatternType;
   selectionReason: 'exact_match' | 'hybrid_fallback' | 'pattern_fallback' | 'diversity' | 'primary';
 } {
-  // B-4.7 (#163): per-class membership. (AssetClass is wider than the two
-  // materialized classes; unwired classes fail loud like everywhere else.)
-  const mapping = CANONICAL_REGIME_STRATEGY_MAP[assetClass as AssetClassKey]?.[regime];
+  // B-4.7 (#163, diff-B R3): per-class membership — an UNWIRED class throws
+  // (the optional-chain-to-adaptive_flow fallback would silently route every
+  // perp selection to one strategy at B80 onboarding — the split-brain class).
+  const classTree = CANONICAL_REGIME_STRATEGY_MAP[assetClass as AssetClassKey];
+  if (!classTree) {
+    throw new Error(`[B-4.7] selectContextAwareStrategy: asset class '${assetClass}' has no materialized regime-strategy tree — wire it in ASSET_CLASS_OVERRIDES before onboarding.`);
+  }
+  const mapping = classTree[regime];
   if (!mapping || mapping.strategies.length === 0) {
     return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null, selectionReason: 'primary' };
   }
@@ -844,19 +882,23 @@ export function isValidCanonicalCombination(
   const normalizedRegime = normalizeRegime(regime);
   const normalizedStrategy = normalizeStrategy(strategy);
 
-  // B-4.7: canonical-IDENTITY validation is class-free but must cover the
-  // UNION of class memberships, not the authored base — ASSET_CLASS_OVERRIDES
-  // can ADD a strategy to a regime for one class (orb -> xstock TFS), and a
-  // combination legitimate for ANY class must validate. Class ELIGIBILITY is
-  // enforced elsewhere (strategy_gates / getClassMap).
+  // B-4.7 (diff-B R1): canonical-IDENTITY validation domain = BASE ∪ class
+  // trees. The base covers historical combinations (e.g. ST+orb rows from the
+  // B79.0d window) and lane strategies; the trees cover per-class ADDs
+  // (orb -> xstock TFS). Strictly wider than the pre-B-4.7 flat domain —
+  // never narrower. Class ELIGIBILITY is enforced elsewhere (strategy_gates /
+  // getClassMap / the materialized eval tree).
   if (!CANONICAL_REGIME_STRATEGY_MAP_BASE[normalizedRegime]) {
     return { valid: false, reason: `Unknown regime: ${regime}` };
   }
 
-  let stratDef: StrategyDefinition | undefined;
-  for (const assetClass of ASSET_CLASSES) {
-    stratDef = CANONICAL_REGIME_STRATEGY_MAP[assetClass][normalizedRegime]?.strategies.find(s => s.strategyKey === normalizedStrategy);
-    if (stratDef) break;
+  let stratDef: StrategyDefinition | undefined =
+    CANONICAL_REGIME_STRATEGY_MAP_BASE[normalizedRegime].strategies.find(s => s.strategyKey === normalizedStrategy);
+  if (!stratDef) {
+    for (const assetClass of ASSET_CLASSES) {
+      stratDef = CANONICAL_REGIME_STRATEGY_MAP[assetClass][normalizedRegime]?.strategies.find(s => s.strategyKey === normalizedStrategy);
+      if (stratDef) break;
+    }
   }
   if (!stratDef) {
     return { valid: false, reason: `Strategy ${strategy} not valid for regime ${regime} in any asset class` };
