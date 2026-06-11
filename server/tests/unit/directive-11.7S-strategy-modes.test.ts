@@ -245,14 +245,26 @@ describe('Directive 11.7S: Strategy Mode Modulation', () => {
     });
   });
 
-  describe('AGGRESSIVE Mode Intentionally Removed', () => {
-    it('should not have AGGRESSIVE in mode overlays', () => {
-      expect('AGGRESSIVE' in STRATEGY_MODE_OVERLAYS).toBe(false);
+  // B-5 AMR (2026-06-11, Kyle-approved scope Obj-1) REVERSED the original
+  // 11.7S "AGGRESSIVE intentionally removed" decision: AGGRESSIVE exists as a
+  // PER-CLASS-ONLY mode (amr_response_dials), producible solely by the AMR
+  // weather resolver. The class-less legacy record path fails LOUD by design
+  // (serving one class's dials to another would be the bug).
+  describe('AGGRESSIVE Mode (B-5: per-class only, legacy path fail-hard)', () => {
+    it('AGGRESSIVE key exists on the record but class-less access throws', () => {
+      expect('AGGRESSIVE' in STRATEGY_MODE_OVERLAYS).toBe(true);
+      expect(() => STRATEGY_MODE_OVERLAYS.AGGRESSIVE).toThrow(/no class-less overlay/);
     });
 
-    it('should only have NORMAL, DEFENSIVE, SURVIVAL modes', () => {
+    it('legacy trio keys remain alongside AGGRESSIVE', () => {
       const modes = Object.keys(STRATEGY_MODE_OVERLAYS);
-      expect(modes).toEqual(['NORMAL', 'DEFENSIVE', 'SURVIVAL']);
+      expect(modes).toEqual(expect.arrayContaining(['NORMAL', 'DEFENSIVE', 'SURVIVAL', 'AGGRESSIVE']));
+      expect(modes).toHaveLength(4);
+    });
+
+    it('legacy stability mapping NEVER produces AGGRESSIVE (parity)', () => {
+      const produced = Object.values(REGIME_TO_MODE_MAP);
+      expect(produced).not.toContain('AGGRESSIVE');
     });
   });
 

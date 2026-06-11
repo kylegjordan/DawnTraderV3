@@ -127,7 +127,11 @@ describe('Mapping Drift Integrity — Directive 11.7F', () => {
         expect(md.toLowerCase()).toContain('regime');
         expect(md.toLowerCase()).toContain('strategy');
         
-        const tableLines = lines.filter(l => l.includes('|'));
+        // B-5 fix: prose lines containing |DBS| math notation also contain
+        // pipes — a TABLE row has at least 3 pipe characters. The original
+        // first-pipe heuristic latched onto prose after the B-4.7 bridge
+        // regen added |DBS| band notation.
+        const tableLines = lines.filter(l => (l.match(/\|/g) || []).length >= 3);
         if (tableLines.length > 0) {
           const headerCount = tableLines[0].split('|').length;
           expect(headerCount).toBeGreaterThan(3);
