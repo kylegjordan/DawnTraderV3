@@ -21,7 +21,7 @@ import type { CanonicalRegimeType } from '../../config/canonical-regime-strategy
 // B72 (2026-05-05): VTS-specific decay lambda from module='vts_scoring'.
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import {
-  CANONICAL_REGIME_STRATEGY_MAP,
+  getRegimeRiskMultiplier,
 } from '../../config/canonical-regime-strategy-map.js';
 
 /**
@@ -173,8 +173,8 @@ export function computeRealHybridScore(
     case 'volatility_regime_switch': {
       // Hybrid strategies blend multiple signals
       const momComponent = Math.min(1, Math.abs(momentum) / 0.008);
-      const regimeMapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
-      const regimeRisk = regimeMapping?.riskMultiplier ?? 0.5;
+      // B-4.7 (#163): riskMultiplier is a class-free regime metric — helper read.
+      const regimeRisk = getRegimeRiskMultiplier(regime) ?? 0.5;
       const adxNorm = Math.min(1, adx / 40);
       score = momComponent * 0.30 + regimeRisk * 0.30 + adxNorm * 0.25 + 0.15;
       break;
@@ -182,8 +182,7 @@ export function computeRealHybridScore(
 
     default: {
       // Deterministic fallback using regime risk multiplier + indicators
-      const regimeMapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
-      const riskBase = regimeMapping?.riskMultiplier ?? 0.5;
+      const riskBase = getRegimeRiskMultiplier(regime) ?? 0.5;
       const adxNorm = Math.min(1, adx / 40);
       score = riskBase * 0.50 + adxNorm * 0.30 + 0.20;
       break;

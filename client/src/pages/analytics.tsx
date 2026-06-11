@@ -22,8 +22,22 @@ import { fmtCalibrationResult } from "@shared/calscore-format";
 import GovernanceSection from "@/components/analytics/governance-section";
 import { apiFetch } from "@/lib/api";
 
+// B-4.7: per-class regime bundles served alongside the (crypto) top-level data.
+interface PerClassIndicator {
+  marketRegime: string;
+  voteStatus: 'LIVE' | 'IDLE_OR_WARMING';
+  regimeScore: number;
+  regimePercentage: number;
+  globalFrictionScore: number | null;
+  frictionStatus: string;
+}
+
 interface MarketIndicatorsData {
   ok: boolean;
+  perClass?: {
+    crypto_spot: PerClassIndicator;
+    xstock_spot: PerClassIndicator;
+  };
   data: {
     marketRegime: string;
     regimeTitle: string;
@@ -301,11 +315,31 @@ function FrozenHeader({ indicators, isLoading }: { indicators: MarketIndicatorsD
           <div className="flex items-center gap-2">
             {getRegimeIcon(data.marketRegime)}
             <Badge variant="outline" className={`font-semibold ${getRegimeBadgeColor(data.marketRegime)}`}>
+              {indicators.perClass && <span className="text-[10px] mr-1 opacity-70">CRYPTO</span>}
               <span className="font-mono mr-1">{data.regimeScore ?? 50}</span>
               {data.regimeTitle || data.marketRegime.replace(/_/g, ' ')}
             </Badge>
             {data.regimePercentage > 0 && (
               <span className="text-xs text-muted-foreground">({data.regimePercentage}% of pairs)</span>
+            )}
+            {/* B-4.7: xStock regime rides its OWN per-class vote (no longer hidden
+                behind the crypto-dominated mixed vote). IDLE/WARMING = weekend
+                boundary / US holiday / cold start — xStocks trade 24/5. */}
+            {indicators.perClass?.xstock_spot && (
+              <Badge variant="outline" className={`font-semibold ${indicators.perClass.xstock_spot.voteStatus === 'LIVE' ? getRegimeBadgeColor(indicators.perClass.xstock_spot.marketRegime) : 'opacity-60'}`}>
+                <span className="text-[10px] mr-1 opacity-70">XSTOCK</span>
+                {indicators.perClass.xstock_spot.voteStatus === 'LIVE' ? (
+                  <>
+                    <span className="font-mono mr-1">{indicators.perClass.xstock_spot.regimeScore ?? 50}</span>
+                    {indicators.perClass.xstock_spot.marketRegime.replace(/_/g, ' ')}
+                    {indicators.perClass.xstock_spot.regimePercentage > 0 && (
+                      <span className="ml-1 text-[10px] opacity-70">({indicators.perClass.xstock_spot.regimePercentage}%)</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">IDLE / WARMING</span>
+                )}
+              </Badge>
             )}
           </div>
           

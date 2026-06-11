@@ -425,7 +425,7 @@ export async function evaluateXstockPairForVTS(
     const detectedPatterns = scanPatterns(candles, symbol, ASSET_CLASS);
 
     // ── 5. Regime-strategy set (the universe of strategies before per-lane filter) ──
-    const regimeStrategies = getStrategiesForRegime(regime);
+    const regimeStrategies = getStrategiesForRegime(ASSET_CLASS, regime); // B-4.7 (#163): per-class membership
     if (regimeStrategies.length === 0) {
       console.log(`[B79.0m.b2][EVAL] ${symbol} regime=${regime} — no strategies mapped`);
       return;

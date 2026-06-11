@@ -17,9 +17,11 @@ import { writeFileSync, mkdirSync, existsSync, renameSync, appendFileSync } from
 import { join, dirname } from 'path';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
+  ASSET_CLASSES,
   CANONICAL_SCHEMA_VERSION,
   CANONICAL_SCHEMA_METADATA,
   REGIMES,
+  type AssetClassKey,
   type CanonicalRegimeType
 } from '../config/canonical-regime-strategy-map';
 
@@ -94,71 +96,17 @@ function logEvent(message: string): void {
 // the JSON via the sync-canonical-bridge.test.ts unit test.
 // ──────────────────────────────────────────────────────────────────────────────
 
-const ASSET_CLASSES = ['crypto_spot', 'xstock_spot'] as const;
-type AssetClassKey = typeof ASSET_CLASSES[number];
-
-interface PerClassOverride {
-  excludeStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
-  addStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
-}
-
-const ASSET_CLASS_OVERRIDES: Record<AssetClassKey, PerClassOverride> = {
-  crypto_spot: {
-    excludeStrategies: {
-      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
-      HIGH_VOLATILITY_UNSTABLE: [],
-      RANGE_BOUND_STABLE: [],
-      IMPULSE_EXPANSION: ['strong_bull_trend', 'orb'],
-      STRUCTURAL_TRANSITION: ['orb'],
-    },
-    addStrategies: {},
-  },
-  xstock_spot: {
-    excludeStrategies: {
-      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
-      HIGH_VOLATILITY_UNSTABLE: ['defensive_hedge'],
-      RANGE_BOUND_STABLE: [],
-      IMPULSE_EXPANSION: ['strong_bull_trend'],
-      STRUCTURAL_TRANSITION: ['orb'],
-    },
-    addStrategies: {
-      TREND_FRIENDLY_STABLE: ['orb'],
-    },
-  },
-};
-
-/** Build strategyKey → signalType lookup once from the source map. */
-function buildStrategyToSignalType(): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
-    for (const s of mapping.strategies) {
-      map.set(s.strategyKey, s.signalType);
-    }
-  }
-  return map;
-}
-
-function deriveClassSubtree(
-  assetClass: AssetClassKey,
-  strategyToSignalType: Map<string, string>
-): Record<string, any> {
-  const overrides = ASSET_CLASS_OVERRIDES[assetClass];
+// B-4.7 (#163): ASSET_CLASS_OVERRIDES + the local subtree derivation moved
+// INTO server/config/canonical-regime-strategy-map.ts — the bridge now reads
+// the per-class MATERIALIZED trees (single derivation, single home). The
+// emitted JSON is byte-identical to the pre-B-4.7 derivation (locked by
+// sync-canonical-bridge.test.ts + the B-4.7 baseline diff).
+function deriveClassSubtree(assetClass: AssetClassKey): Record<string, any> {
+  const classTree = CANONICAL_REGIME_STRATEGY_MAP[assetClass];
   const subtree: Record<string, any> = {};
-  for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
-    const regimeKey = regime as CanonicalRegimeType;
-    const excludes = new Set(overrides.excludeStrategies[regimeKey] ?? []);
-    const adds = overrides.addStrategies[regimeKey] ?? [];
-    const sourceKeys = mapping.strategies
-      .filter(s => !excludes.has(s.strategyKey))
-      .map(s => s.strategyKey);
-    const favoredStrategies = [...sourceKeys, ...adds.filter(k => !sourceKeys.includes(k))];
-    const favoredSignalTypes = [
-      ...new Set(
-        favoredStrategies
-          .map(k => strategyToSignalType.get(k))
-          .filter((v): v is string => typeof v === 'string')
-      ),
-    ];
+  for (const [regime, mapping] of Object.entries(classTree)) {
+    const favoredStrategies = mapping.strategies.map(s => s.strategyKey);
+    const favoredSignalTypes = [...new Set(mapping.strategies.map(s => s.signalType))];
     subtree[regime] = {
       favoredStrategies,
       favoredSignalTypes,
@@ -170,10 +118,9 @@ function deriveClassSubtree(
 }
 
 export function generateBridgeJSON(): string {
-  const strategyToSignalType = buildStrategyToSignalType();
   const byAssetClass: Record<string, Record<string, any>> = {};
   for (const assetClass of ASSET_CLASSES) {
-    byAssetClass[assetClass] = deriveClassSubtree(assetClass, strategyToSignalType);
+    byAssetClass[assetClass] = deriveClassSubtree(assetClass);
   }
   const bridge: Record<string, any> = {
     _schema: CANONICAL_SCHEMA_VERSION,
@@ -216,26 +163,31 @@ function generateRegimeStrategyMarkdown(): string {
     ''
   ];
   
-  for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
-    lines.push(`## ${regime}`);
+  // B-4.7 (#163): the map is per-class — document each class's tree.
+  for (const assetClass of ASSET_CLASSES) {
+    lines.push(`# Asset class: ${assetClass}`);
     lines.push('');
-    lines.push(`**Metrics**: ${mapping.metrics.description}`);
-    lines.push('');
-    lines.push('| Strategy | Signal Type | Pattern | Secondary Metrics |');
-    lines.push('|----------|-------------|---------|-------------------|');
-    
-    for (const strategy of mapping.strategies) {
-      lines.push(
-        `| ${strategy.strategy} | ${strategy.signalType} | ${strategy.patternType ?? '—'} | ${strategy.secondaryMetrics} |`
-      );
+    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP[assetClass])) {
+      lines.push(`## ${regime}`);
+      lines.push('');
+      lines.push(`**Metrics**: ${mapping.metrics.description}`);
+      lines.push('');
+      lines.push('| Strategy | Signal Type | Pattern | Secondary Metrics |');
+      lines.push('|----------|-------------|---------|-------------------|');
+
+      for (const strategy of mapping.strategies) {
+        lines.push(
+          `| ${strategy.strategy} | ${strategy.signalType} | ${strategy.patternType ?? '—'} | ${strategy.secondaryMetrics} |`
+        );
+      }
+
+      lines.push('');
+      lines.push(`- **Risk Multiplier**: ${mapping.riskMultiplier}`);
+      lines.push(`- **Min Confidence**: ${mapping.minConfidence}`);
+      lines.push('');
+      lines.push('---');
+      lines.push('');
     }
-    
-    lines.push('');
-    lines.push(`- **Risk Multiplier**: ${mapping.riskMultiplier}`);
-    lines.push(`- **Min Confidence**: ${mapping.minConfidence}`);
-    lines.push('');
-    lines.push('---');
-    lines.push('');
   }
   
   return lines.join('\n');
@@ -254,11 +206,18 @@ function generateSignalPatternMarkdown(): string {
     '|--------------|--------------|-------------|--------------|----------------|'
   ];
   
-  for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
-    for (const strategy of mapping.strategies) {
-      lines.push(
-        `| ${strategy.strategyKey} | ${strategy.strategy} | ${strategy.signalType} | ${strategy.patternType ?? '—'} | ${regime} |`
-      );
+  // B-4.7 (#163): identity registry — union across class trees, first-seen
+  // (regime column = first regime the key appears under, matching old output).
+  const seenKeys = new Set<string>();
+  for (const assetClass of ASSET_CLASSES) {
+    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP[assetClass])) {
+      for (const strategy of mapping.strategies) {
+        if (seenKeys.has(strategy.strategyKey)) continue;
+        seenKeys.add(strategy.strategyKey);
+        lines.push(
+          `| ${strategy.strategyKey} | ${strategy.strategy} | ${strategy.signalType} | ${strategy.patternType ?? '—'} | ${regime} |`
+        );
+      }
     }
   }
   

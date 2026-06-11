@@ -38,8 +38,10 @@ const router = Router();
  */
 router.get('/regime-map', (_req, res) => {
   try {
-    const regimeMap = CANONICAL_REGIMES.map((regime: CanonicalRegimeType) => {
-      const mapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
+    // B-4.7 (#163): membership is per-class. Top-level array stays the crypto
+    // tree (back-compat for the current panel); byAssetClass carries both.
+    const buildRegimeMap = (assetClass: 'crypto_spot' | 'xstock_spot') => CANONICAL_REGIMES.map((regime: CanonicalRegimeType) => {
+      const mapping = CANONICAL_REGIME_STRATEGY_MAP[assetClass][regime];
       const narrative = REGIME_NARRATIVES[regime];
 
       return {
@@ -63,7 +65,12 @@ router.get('/regime-map', (_req, res) => {
     res.json({
       schemaVersion: CANONICAL_SCHEMA_VERSION,
       regimeCount: CANONICAL_REGIMES.length,
-      regimes: regimeMap,
+      regimes: buildRegimeMap('crypto_spot'), // back-compat: crypto top-level
+      // B-4.7 (#163): both class trees for per-class UI rendering.
+      regimesByAssetClass: {
+        crypto_spot: buildRegimeMap('crypto_spot'),
+        xstock_spot: buildRegimeMap('xstock_spot'),
+      },
     });
   } catch (err) {
     console.error('[Phase14][RegimeMap] Error serving regime map:', err);

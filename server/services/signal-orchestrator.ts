@@ -2045,8 +2045,11 @@ export class SignalOrchestrator {
    * Directive 12.3.1: Get regime-allowed strategies from CANONICAL_REGIME_STRATEGY_MAP
    * Replaces SYSTEM_GUARDS.STRATEGY_MAP (old 5-regime model with wrong strategy assignments)
    */
-  private getRegimeAllowedStrategies(regime: string): Set<string> {
-    const mapping = REGIME_STRATEGY_MAP[regime as MarketRegimeType];
+  // B-4.7 (#163): ZERO callers (active path reads mceContext.regime.allowedStrategies
+  // since Phase 13) — Phase-16 legacy register candidate (RUNNING_ISSUES #218 family).
+  // Signature made class-aware so the dead path can't silently misread if revived.
+  private getRegimeAllowedStrategies(assetClass: 'crypto_spot' | 'xstock_spot', regime: string): Set<string> {
+    const mapping = REGIME_STRATEGY_MAP[assetClass][regime as MarketRegimeType];
     if (!mapping) {
       console.log(`[12.3.1][REGIME] Unknown regime '${regime}', returning empty strategy set`);
       return new Set();

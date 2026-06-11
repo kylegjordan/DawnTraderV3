@@ -146,7 +146,15 @@ export const REGIME_METRICS: Record<CanonicalRegimeType, RegimeMetrics> = {
   }
 };
 
-export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeStrategyMapping> = {
+/**
+ * B-4.7 (#163): the hand-AUTHORED, class-FREE base map — the single authoring
+ * point for regime->strategy membership. NOT exported: every runtime consumer
+ * reads the per-class materialized tree below (CANONICAL_REGIME_STRATEGY_MAP)
+ * or an identity helper. Per-class membership deltas live in
+ * ASSET_CLASS_OVERRIDES (moved here from sync-canonical-bridge in B-4.7 —
+ * the bridge now READS the materialized trees instead of re-deriving them).
+ */
+const CANONICAL_REGIME_STRATEGY_MAP_BASE: Record<CanonicalRegimeType, RegimeStrategyMapping> = {
   TREND_FRIENDLY_STABLE: {
     metrics: REGIME_METRICS.TREND_FRIENDLY_STABLE,
     strategies: [
@@ -355,6 +363,85 @@ export const CANONICAL_REGIME_STRATEGY_MAP: Record<CanonicalRegimeType, RegimeSt
   }
 };
 
+// ── B-4.7 (#163): per-asset-class materialization ──────────────────────────
+export const ASSET_CLASSES = ['crypto_spot', 'xstock_spot'] as const;
+export type AssetClassKey = typeof ASSET_CLASSES[number];
+
+interface PerClassOverride {
+  excludeStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
+  addStrategies: Partial<Record<CanonicalRegimeType, string[]>>;
+}
+
+// Moved VERBATIM from sync-canonical-bridge.ts (B.1.5 redeploy unblocker,
+// 2026-05-31) — the per-class membership deltas now live WITH the base map
+// they modify. Addition rationale: orb in xstock_spot TFS = hand-authored
+// extension (B79.0n.STRATEGY) — ORB fires on stable-trend breakouts, not just
+// impulse regimes, for xStocks.
+const ASSET_CLASS_OVERRIDES: Record<AssetClassKey, PerClassOverride> = {
+  crypto_spot: {
+    excludeStrategies: {
+      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
+      HIGH_VOLATILITY_UNSTABLE: [],
+      RANGE_BOUND_STABLE: [],
+      IMPULSE_EXPANSION: ['strong_bull_trend', 'orb'],
+      STRUCTURAL_TRANSITION: ['orb'],
+    },
+    addStrategies: {},
+  },
+  xstock_spot: {
+    excludeStrategies: {
+      TREND_FRIENDLY_STABLE: ['strong_bull_trend'],
+      HIGH_VOLATILITY_UNSTABLE: ['defensive_hedge'],
+      RANGE_BOUND_STABLE: [],
+      IMPULSE_EXPANSION: ['strong_bull_trend'],
+      STRUCTURAL_TRANSITION: ['orb'],
+    },
+    addStrategies: {
+      TREND_FRIENDLY_STABLE: ['orb'],
+    },
+  },
+};
+
+/** Find a strategy's full definition anywhere in the base (for adds). */
+function findStrategyDefinition(strategyKey: string): StrategyDefinition {
+  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP_BASE)) {
+    const def = mapping.strategies.find(s => s.strategyKey === strategyKey);
+    if (def) return def;
+  }
+  throw new Error(`[B-4.7 #163] ASSET_CLASS_OVERRIDES adds unknown strategyKey '${strategyKey}' — not present anywhere in the base map.`);
+}
+
+/**
+ * Materialize one class's tree: base order minus excludes, adds appended
+ * (order preserved EXACTLY as the bridge's pre-B-4.7 derivation produced —
+ * the sync-canonical-bridge byte-identical contract depends on it).
+ */
+function materializeClassMap(assetClass: AssetClassKey): Record<CanonicalRegimeType, RegimeStrategyMapping> {
+  const overrides = ASSET_CLASS_OVERRIDES[assetClass];
+  const out = {} as Record<CanonicalRegimeType, RegimeStrategyMapping>;
+  for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP_BASE)) {
+    const regimeKey = regime as CanonicalRegimeType;
+    const excludes = new Set(overrides.excludeStrategies[regimeKey] ?? []);
+    const adds = overrides.addStrategies[regimeKey] ?? [];
+    const kept = mapping.strategies.filter(s => !excludes.has(s.strategyKey));
+    const keptKeys = new Set(kept.map(s => s.strategyKey));
+    const added = adds.filter(k => !keptKeys.has(k)).map(findStrategyDefinition);
+    out[regimeKey] = { ...mapping, strategies: [...kept, ...added] };
+  }
+  return out;
+}
+
+/**
+ * B-4.7 (#163): THE canonical map — byAssetClass-nested, matching the runtime
+ * JSON shape it generates (the dual-shape ambiguity from B79.0n.STRATEGY /
+ * BUG-2026-05-31-A is gone). Same export name as the old flat const so every
+ * un-migrated flat reader is a COMPILE ERROR, not a silent misread.
+ */
+export const CANONICAL_REGIME_STRATEGY_MAP: Record<AssetClassKey, Record<CanonicalRegimeType, RegimeStrategyMapping>> = {
+  crypto_spot: materializeClassMap('crypto_spot'),
+  xstock_spot: materializeClassMap('xstock_spot'),
+};
+
 export const REGIMES = {
   TREND_FRIENDLY_STABLE: 'TREND_FRIENDLY_STABLE' as const,
   HIGH_VOLATILITY_UNSTABLE: 'HIGH_VOLATILITY_UNSTABLE' as const,
@@ -500,7 +587,9 @@ function buildStrategyCache(): void {
   strategyToSignalTypeCache = new Map();
   strategyToPatternTypeCache = new Map();
 
-  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+  // B-4.7: identity lookup — iterates the class-free BASE (strategy identity
+  // is not class-scoped; membership is, and lives in the per-class tree).
+  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP_BASE)) {
     for (const stratDef of mapping.strategies) {
       strategyToSignalTypeCache.set(stratDef.strategyKey, stratDef.signalType);
       strategyToPatternTypeCache.set(stratDef.strategyKey, stratDef.patternType);
@@ -546,16 +635,17 @@ export function getPatternForStrategy(strategy: string): CanonicalPatternType {
   return strategyToPatternTypeCache!.get(normalized) ?? null;
 }
 
-export function getStrategiesForRegime(regime: CanonicalRegimeType): StrategyDefinition[] {
-  return CANONICAL_REGIME_STRATEGY_MAP[regime]?.strategies ?? [];
+// B-4.7 (#163): strategy MEMBERSHIP is class-scoped — REQUIRED assetClass.
+export function getStrategiesForRegime(assetClass: AssetClassKey, regime: CanonicalRegimeType): StrategyDefinition[] {
+  return CANONICAL_REGIME_STRATEGY_MAP[assetClass][regime]?.strategies ?? [];
 }
 
-export function selectRandomStrategy(regime: CanonicalRegimeType): {
+export function selectRandomStrategy(assetClass: AssetClassKey, regime: CanonicalRegimeType): {
   signalType: CanonicalSignalType;
   strategy: string;
   patternType: CanonicalPatternType;
 } {
-  const mapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
+  const mapping = CANONICAL_REGIME_STRATEGY_MAP[assetClass][regime];
   if (!mapping || mapping.strategies.length === 0) {
     return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null };
   }
@@ -572,12 +662,12 @@ export function selectRandomStrategy(regime: CanonicalRegimeType): {
  * Directive 11.4F.1A: Deterministic strategy selection
  * Returns the primary (first) strategy for a regime - stable across calls
  */
-export function selectPrimaryStrategy(regime: CanonicalRegimeType): {
+export function selectPrimaryStrategy(assetClass: AssetClassKey, regime: CanonicalRegimeType): {
   signalType: CanonicalSignalType;
   strategy: string;
   patternType: CanonicalPatternType;
 } {
-  const mapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
+  const mapping = CANONICAL_REGIME_STRATEGY_MAP[assetClass][regime];
   if (!mapping || mapping.strategies.length === 0) {
     return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null };
   }
@@ -590,8 +680,10 @@ export function selectPrimaryStrategy(regime: CanonicalRegimeType): {
   };
 }
 
+// B-4.7: regime metrics are class-FREE by construction (identical across
+// classes — the per-class deltas are strategy membership only).
 export function getRegimeRiskMultiplier(regime: CanonicalRegimeType): number {
-  return CANONICAL_REGIME_STRATEGY_MAP[regime]?.riskMultiplier ?? 1.0;
+  return CANONICAL_REGIME_STRATEGY_MAP_BASE[regime]?.riskMultiplier ?? 1.0;
 }
 
 /**
@@ -629,13 +721,11 @@ export function normalizePatternToCanonical(pattern: string | null): CanonicalPa
  * If a pattern is detected and matches a HYBRID/PATTERN strategy, prefer that strategy.
  * This ensures HYBRID/PATTERN signals appear when pattern recognition detects matches.
  *
- * B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED `assetClass: AssetClass` parameter
- * added per Langston R-2 (A) decision — plumbing-only this batch. Function body
- * unchanged (stays on CANONICAL_REGIME_STRATEGY_MAP[regime] — single-pick semantic
- * preserved by construction for crypto byte-identity). Future SCORING /
- * ORCHESTRATOR batch may refactor the body to route through v3.0.0
- * `getFavoredStrategiesForRegime(regime, assetClass)`; that refactor is OUT
- * of PATTERN-DETECT scope per pre-audit §-10 R-2 (A).
+ * B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED `assetClass` parameter added
+ * (plumbing-only then). B-4.7 (#163): the body now reads the per-class
+ * materialized tree — the deferred refactor landed; for crypto the tree
+ * equals the old flat map minus its excludes, so selection semantics follow
+ * the same per-class membership every other consumer sees.
  *
  * @param regime - Current market regime
  * @param detectedPattern - Pattern detected by pattern recognizer (null if none)
@@ -654,7 +744,9 @@ export function selectContextAwareStrategy(
   patternType: CanonicalPatternType;
   selectionReason: 'exact_match' | 'hybrid_fallback' | 'pattern_fallback' | 'diversity' | 'primary';
 } {
-  const mapping = CANONICAL_REGIME_STRATEGY_MAP[regime];
+  // B-4.7 (#163): per-class membership. (AssetClass is wider than the two
+  // materialized classes; unwired classes fail loud like everywhere else.)
+  const mapping = CANONICAL_REGIME_STRATEGY_MAP[assetClass as AssetClassKey]?.[regime];
   if (!mapping || mapping.strategies.length === 0) {
     return { signalType: 'HYBRID', strategy: 'adaptive_flow', patternType: null, selectionReason: 'primary' };
   }
@@ -740,7 +832,7 @@ export function symbolToHash(symbol: string): number {
 }
 
 export function getRegimeMinConfidence(regime: CanonicalRegimeType): number {
-  return CANONICAL_REGIME_STRATEGY_MAP[regime]?.minConfidence ?? 0.55;
+  return CANONICAL_REGIME_STRATEGY_MAP_BASE[regime]?.minConfidence ?? 0.55;
 }
 
 export function isValidCanonicalCombination(
@@ -752,14 +844,22 @@ export function isValidCanonicalCombination(
   const normalizedRegime = normalizeRegime(regime);
   const normalizedStrategy = normalizeStrategy(strategy);
 
-  const mapping = CANONICAL_REGIME_STRATEGY_MAP[normalizedRegime];
-  if (!mapping) {
+  // B-4.7: canonical-IDENTITY validation is class-free but must cover the
+  // UNION of class memberships, not the authored base — ASSET_CLASS_OVERRIDES
+  // can ADD a strategy to a regime for one class (orb -> xstock TFS), and a
+  // combination legitimate for ANY class must validate. Class ELIGIBILITY is
+  // enforced elsewhere (strategy_gates / getClassMap).
+  if (!CANONICAL_REGIME_STRATEGY_MAP_BASE[normalizedRegime]) {
     return { valid: false, reason: `Unknown regime: ${regime}` };
   }
 
-  const stratDef = mapping.strategies.find(s => s.strategyKey === normalizedStrategy);
+  let stratDef: StrategyDefinition | undefined;
+  for (const assetClass of ASSET_CLASSES) {
+    stratDef = CANONICAL_REGIME_STRATEGY_MAP[assetClass][normalizedRegime]?.strategies.find(s => s.strategyKey === normalizedStrategy);
+    if (stratDef) break;
+  }
   if (!stratDef) {
-    return { valid: false, reason: `Strategy ${strategy} not valid for regime ${regime}` };
+    return { valid: false, reason: `Strategy ${strategy} not valid for regime ${regime} in any asset class` };
   }
 
   if (stratDef.signalType !== signalType) {
@@ -778,7 +878,7 @@ export function isValidCanonicalCombination(
 
 export function getAllCanonicalStrategies(): string[] {
   const strategies = new Set<string>();
-  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP_BASE)) {
     for (const stratDef of mapping.strategies) {
       strategies.add(stratDef.strategyKey);
     }
@@ -788,7 +888,7 @@ export function getAllCanonicalStrategies(): string[] {
 
 export function getAllStrategiesForSignalType(signalType: CanonicalSignalType): string[] {
   const strategies: string[] = [];
-  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+  for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP_BASE)) {
     for (const stratDef of mapping.strategies) {
       if (stratDef.signalType === signalType && !strategies.includes(stratDef.strategyKey)) {
         strategies.push(stratDef.strategyKey);

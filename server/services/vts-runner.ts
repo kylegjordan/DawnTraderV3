@@ -3347,7 +3347,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       // B79.0n.MCE: required assetClass parameter (captured once above, reused here).
       const mceContext = mce.computeContext(pair.symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, pairPropagatedDbs, _pairAssetClass);
       const pairRegime = mceContext.regime.regime as MarketRegimeType;
-      const regimeStrategies = getStrategiesForRegime(pairRegime);
+      const regimeStrategies = getStrategiesForRegime(_pairAssetClass as 'crypto_spot' | 'xstock_spot', pairRegime);
       
       if (regimeStrategies.length === 0) {
         console.warn(`[11.8C][VTS] No strategies mapped for regime ${pairRegime}, skipping ${pair.symbol}`);
@@ -3402,7 +3402,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
           // Find a PATTERN or HYBRID strategy whose patternType matches the canonical pattern
           let matchedStratDef: StrategyDefinition | undefined;
-          for (const regimeMapping of Object.values(REGIME_STRATEGY_MAP)) {
+          // B-4.7 (#163): search THIS pair's class tree — a pattern may only
+          // match strategies the class is actually eligible for.
+          for (const regimeMapping of Object.values(REGIME_STRATEGY_MAP[_pairAssetClass as 'crypto_spot' | 'xstock_spot'])) {
             matchedStratDef = regimeMapping.strategies.find(
               s => s.patternType === canonicalPattern && (s.signalType === 'PATTERN' || s.signalType === 'HYBRID')
             );

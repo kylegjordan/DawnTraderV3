@@ -52,7 +52,6 @@ import { getCostMetrics, getOrSetCostMetrics } from '../core/cache/cost-cache.js
 import { computeMarketFriction } from '../core/metrics/cost-metrics.js';
 import { toCanonical } from './utils/symbol-canonicalizer.js';
 import { computeDriftScore, aggregateDriftStats, type DriftScoreResult } from '../core/analytics/mapping-drift-calculator.js';
-import { CANONICAL_REGIME_STRATEGY_MAP } from '../config/canonical-regime-strategy-map.js';
 
 export type PoolType = 'ideal' | 'rotational';
 
@@ -1455,7 +1454,10 @@ export class TelemetryAggregatorService {
   private inferStrategy(entry: PairTelemetry): string {
     const rawRegime = entry.pairRegime ?? this.currentRegime;
     const regime = normalizeRegime(rawRegime) as CanonicalRegimeType;
-    const { strategy } = selectPrimaryStrategy(regime);
+    // B-4.7 (#163): per-class primary pick — class from the at-write stamp
+    // (crypto fallback covers pre-B-4.7 rehydrated records only; display path).
+    const cls = entry.assetClass === 'xstock_spot' ? 'xstock_spot' : 'crypto_spot';
+    const { strategy } = selectPrimaryStrategy(cls, regime);
     return strategy;
   }
   

@@ -1342,7 +1342,7 @@ export class MarketContextEngine {
 
     // ── Regime context ──
     const weight = getRegimeWeight(regimeResult.regime);
-    const allowedStrategies = this.getAllowedStrategies(regimeResult.regime);
+    const allowedStrategies = this.getAllowedStrategies(assetClass, regimeResult.regime); // B-4.7 (#163): per-class
 
     const regime: RegimeContext = {
       regime: regimeResult.regime,
@@ -1595,8 +1595,10 @@ export class MarketContextEngine {
    * Get allowed strategy keys for a canonical regime.
    * Delegates to CANONICAL_REGIME_STRATEGY_MAP.
    */
-  getAllowedStrategies(regime: CanonicalRegimeType | string): string[] {
-    const mapping = CANONICAL_REGIME_STRATEGY_MAP[regime as CanonicalRegimeType];
+  getAllowedStrategies(assetClass: AssetClass, regime: CanonicalRegimeType | string): string[] {
+    // B-4.7 (#163): per-class membership (AssetClass is wider than the two
+    // materialized classes; unwired classes fail loud like everywhere else).
+    const mapping = CANONICAL_REGIME_STRATEGY_MAP[assetClass as 'crypto_spot' | 'xstock_spot']?.[regime as CanonicalRegimeType];
     if (!mapping) return [];
     return mapping.strategies.map(s => s.strategyKey);
   }
