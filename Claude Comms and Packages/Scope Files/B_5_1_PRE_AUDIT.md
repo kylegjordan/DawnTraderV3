@@ -33,3 +33,22 @@
 - O2: strictly-cleaner cache values; readers unchanged.
 - O3: ledger/panel show more IDLE cycles at boot (honest); shadow dry_run unchanged; ACTIVE-mode behavior changes only in the previously-ungated null window (now blocked) — no ACTIVE consumer exists today (both flags shadow).
 - Governance (Step 10): SIM B-5 section + Manual Ch12 (IDLE-during-warm-up + no_posture gate + friction-source-prerequisite line), ASSET_CLASS_ONBOARDING_WORKFLOW (Note 4: friction source = prerequisite for AMR LIVE classification), RUNNING_ISSUES (#222/#223/#224 → RESOLVED), CHANGES_AND_FIXES entry w/ boundary timestamp, BATCH_CATALOG, PHASE_HISTORY, completion report w/ Note-1 grep statement.
+
+## ADDENDUM (2026-06-12, pre-deploy — Kyle workflow challenge): cost-cache reader enumeration, PROVEN not asserted
+
+The original blast-radius line "O2: readers unchanged, strictly cleaner values" was an ASSERTION. Kyle challenged whether the SIM-grade consumer walk was actually done for the cost cache (an old component, SIM §2.5 — not part of the day-fresh B-5 docs the rest of this batch leaned on). It had not been done explicitly. Done now, before deploy; CI was still running, nothing shipped un-walked.
+
+**The new miss source:** first-write-crossed → no entry created. A miss was ALWAYS possible (5-min TTL expiry, never-scanned symbols), so the question is whether every reader handles it. Every reader, verified at the call site:
+
+| Reader | Site | Miss handling | Verdict |
+|---|---|---|---|
+| market-indicators (friction sampler) | :281 | `if (metrics && metrics.spread >= 0)` — skip symbol | SAFE (B-5 guard) |
+| telemetry-aggregator | :1402-1410 | null → canonical-symbol retry → `getOrSetCostMetrics` defaults fallback (pre-existing semantics for any miss) | SAFE |
+| fx5-scanner (spread audit log) | :1775 | `cachedMetrics?.spread ?? 0.001` — debug logging only | SAFE |
+| tec-costs diagnostics | :43-58 | explicit `if (metrics)` else defaults branch (labeled source) | SAFE |
+| routes diagnostics ×2 | :8508-8523, :8559 | same explicit defaults branch / `getOrSetCostMetrics` | SAFE |
+| cost-model | :179 | `getOrSetCostMetrics` (creates defaults; never-null path — proven unaffected, DEFAULT_SPREAD ≥ 0) | SAFE |
+
+(`cost-model.ts:205 getCostMetricsCache` is cost-model's OWN map, not this cache — not a reader.)
+
+**SIM note:** SIM §2.5 covers the Cost Cache; its consumer list will be refreshed with this table at Step-10 governance. Lesson folded into the batch record: a component outside the current batch's fresh documentation gets the explicit SIM walk, regardless of diff size.
