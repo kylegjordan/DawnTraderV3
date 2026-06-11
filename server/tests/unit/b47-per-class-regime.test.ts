@@ -100,5 +100,30 @@ describe('B-4.7 chunk A: per-class dominant regime', () => {
       // and the OTHER class's tracker is untouched
       expect(me.getLastKnownState('crypto_spot').regime).toBeNull();
     });
+
+    it('R1: friction tracker re-seeds after idle AND after NO_SAMPLE — no event spans the gap', () => {
+      // establish a live band
+      me.checkFrictionTransition('xstock_spot', 'Moderate Liquidity', 'LIVE');
+      expect(me.getLastKnownState('xstock_spot').frictionBand).toBe('Moderate Liquidity');
+
+      // class goes idle (weekend boundary) — tracking suspended
+      me.checkFrictionTransition('xstock_spot', 'NO_SAMPLE', 'IDLE_OR_WARMING');
+      // Sunday reopen at a DIFFERENT band: silent re-seed, NO event
+      me.checkFrictionTransition('xstock_spot', 'Low Liquidity / High Cost', 'LIVE');
+      expect(me.getLastKnownState('xstock_spot').frictionBand).toBe('Low Liquidity / High Cost');
+      expect(me.getMarketEvents().filter(e => e.type === 'FRICTION_TRANSITION')).toHaveLength(0);
+
+      // NO_SAMPLE stretch while the regime vote stays LIVE (cold-start ordering)
+      me.checkFrictionTransition('xstock_spot', 'NO_SAMPLE', 'LIVE');
+      me.checkFrictionTransition('xstock_spot', 'Moderate Liquidity', 'LIVE');
+      expect(me.getLastKnownState('xstock_spot').frictionBand).toBe('Moderate Liquidity');
+      expect(me.getMarketEvents().filter(e => e.type === 'FRICTION_TRANSITION')).toHaveLength(0);
+
+      // genuine change after re-seed: ONE structured-labeled event
+      me.checkFrictionTransition('xstock_spot', 'High Liquidity / Low Cost', 'LIVE');
+      const events = me.getMarketEvents().filter(e => e.type === 'FRICTION_TRANSITION');
+      expect(events).toHaveLength(1);
+      expect(events[0].assetClass).toBe('xstock_spot');
+    });
   });
 });

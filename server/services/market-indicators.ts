@@ -24,7 +24,6 @@
 import {
   type CanonicalRegimeType,
   REGIME_NARRATIVES,
-  REGIME_DISPLAY_NAMES,
   normalizeRegime,
 } from '../config/canonical-regime-strategy-map.js';
 import { computeMarketFriction, describeFriction, type FrictionStatus } from '../core/metrics/cost-metrics.js';

@@ -19,6 +19,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export interface MarketEvent {
+  /** B-4.7: structured class label (also in the message text); absent on pre-B-4.7 persisted events. */
+  assetClass?: AssetClass;
   id: string;
   type: 'REGIME_TRANSITION' | 'FRICTION_TRANSITION' | 'SYSTEM_ALERT';
   message: string;
@@ -56,6 +58,13 @@ import type { AssetClass } from '../../shared/asset-classes.js';
 const lastRegimeByClass = new Map<AssetClass, MarketRegime | null>();
 const lastFrictionBandByClass = new Map<AssetClass, string | null>();
 const classWasIdle = new Map<AssetClass, boolean>();
+// B-4.7 R1 (Langston diff-A): the friction tracker keeps its OWN idle flag —
+// sharing classWasIdle would be read-order-dependent (checkRegimeTransition
+// consumes it first), which left the friction tracker comparing the
+// Friday-close band against the Sunday-reopen band (false transition spanning
+// the idle gap). NO_SAMPLE stretches count as friction-idle too (the
+// regime vote can be LIVE while the cost cache is empty at cold start).
+const frictionWasIdle = new Map<AssetClass, boolean>();
 
 const REGIME_DISPLAY_NAMES: Record<string, string> = {
   // Phase 14 canonical regime names
@@ -234,6 +243,7 @@ export function checkRegimeTransition(assetClass: AssetClass, newRegime: MarketR
   const lastRegime = lastRegimeByClass.get(assetClass) ?? null;
   if (lastRegime !== null && lastRegime !== newRegime) {
     logMarketEvent({
+      assetClass,
       type: 'REGIME_TRANSITION',
       message: `[${assetClass}] Global regime changed from ${REGIME_DISPLAY_NAMES[lastRegime] || lastRegime} to ${REGIME_DISPLAY_NAMES[newRegime] || newRegime}`,
       explanation: explainRegimeChange(lastRegime, newRegime),
@@ -253,10 +263,20 @@ export function checkRegimeTransition(assetClass: AssetClass, newRegime: MarketR
 }
 
 export function checkFrictionTransition(assetClass: AssetClass, newFrictionBand: string, voteStatus: 'LIVE' | 'IDLE_OR_WARMING'): void {
-  // B-4.7: idle classes (and the NO_SAMPLE friction status) don't emit
-  // friction transitions; tracker re-seeds on resume via the same idle flag
-  // maintained by checkRegimeTransition (called first in getMarketIndicators).
+  // B-4.7 R1: idle classes AND NO_SAMPLE stretches suspend friction
+  // transitions; the first VALID band after either re-seeds the tracker
+  // SILENTLY (no event spanning the gap).
   if (voteStatus === 'IDLE_OR_WARMING' || newFrictionBand === 'NO_SAMPLE') {
+    if (!frictionWasIdle.get(assetClass)) {
+      frictionWasIdle.set(assetClass, true);
+      console.log(`[B-4.7][MarketEvents] ${assetClass} friction tracking suspended (${newFrictionBand === 'NO_SAMPLE' ? 'no same-class sample' : 'class idle/warming'})`);
+    }
+    return;
+  }
+  if (frictionWasIdle.get(assetClass)) {
+    frictionWasIdle.set(assetClass, false);
+    lastFrictionBandByClass.set(assetClass, newFrictionBand);
+    console.log(`[B-4.7][MarketEvents] ${assetClass} friction tracking resumed at ${newFrictionBand} — tracker re-seeded, no transition event`);
     return;
   }
   const lastFrictionBand = lastFrictionBandByClass.get(assetClass) ?? null;
@@ -264,6 +284,7 @@ export function checkFrictionTransition(assetClass: AssetClass, newFrictionBand:
     const isWorsening = FRICTION_BAND_ORDER.indexOf(newFrictionBand) > FRICTION_BAND_ORDER.indexOf(lastFrictionBand);
     
     logMarketEvent({
+      assetClass,
       type: 'FRICTION_TRANSITION',
       message: `[${assetClass}] Global friction moved from ${lastFrictionBand} to ${newFrictionBand}`,
       explanation: explainFrictionChange(lastFrictionBand, newFrictionBand),
@@ -284,6 +305,7 @@ export function clearMarketEvents(): void {
   lastRegimeByClass.clear();
   lastFrictionBandByClass.clear();
   classWasIdle.clear();
+  frictionWasIdle.clear();
   saveEventsToFile();
   console.log('[11.4H.5][MarketEvent] Events cleared');
 }
