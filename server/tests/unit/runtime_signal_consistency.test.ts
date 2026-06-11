@@ -22,7 +22,7 @@ describe('Directive 11.4F.1 — Runtime SignalType Consistency', () => {
   
   describe('API-level signalType normalization', () => {
     test('getTypeForStrategy returns canonical type for all CANONICAL_REGIME_STRATEGY_MAP strategies', () => {
-      for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
         for (const stratDef of mapping.strategies) {
           const derived = getTypeForStrategy(stratDef.strategyKey);
           expect(derived).toBe(stratDef.signalType);
@@ -41,7 +41,7 @@ describe('Directive 11.4F.1 — Runtime SignalType Consistency', () => {
     test('All signalTypes are uppercase canonical format', () => {
       const validTypes = ['QUANT', 'PATTERN', 'HYBRID'];
       
-      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
         for (const stratDef of mapping.strategies) {
           expect(validTypes).toContain(stratDef.signalType);
         }
@@ -49,7 +49,7 @@ describe('Directive 11.4F.1 — Runtime SignalType Consistency', () => {
     });
 
     test('No lowercase or mixed-case signalTypes exist', () => {
-      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
         for (const stratDef of mapping.strategies) {
           expect(stratDef.signalType).toBe(stratDef.signalType.toUpperCase());
           expect(stratDef.signalType).not.toMatch(/[a-z]/);
@@ -62,7 +62,7 @@ describe('Directive 11.4F.1 — Runtime SignalType Consistency', () => {
     test('Each strategy maps to exactly one signalType via getTypeForStrategy', () => {
       const strategyToType = new Map<string, string>();
       
-      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
         for (const stratDef of mapping.strategies) {
           const derivedType = getTypeForStrategy(stratDef.strategyKey);
           if (strategyToType.has(stratDef.strategyKey)) {
@@ -75,7 +75,7 @@ describe('Directive 11.4F.1 — Runtime SignalType Consistency', () => {
     });
 
     test('getTypeForStrategy is consistent with CANONICAL_REGIME_STRATEGY_MAP', () => {
-      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
         for (const stratDef of mapping.strategies) {
           expect(getTypeForStrategy(stratDef.strategyKey)).toBe(stratDef.signalType);
         }

@@ -32,7 +32,7 @@ import {
 
 describe('Directive 11.4F.1 — Strategy Naming', () => {
   it('should have all canonical strategies in snake_case format', () => {
-    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
       for (const stratDef of mapping.strategies) {
         expect(stratDef.strategyKey).toMatch(/^[a-z_]+$/);
       }
@@ -40,7 +40,7 @@ describe('Directive 11.4F.1 — Strategy Naming', () => {
   });
 
   it('should have display names for all canonical strategies', () => {
-    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
       for (const stratDef of mapping.strategies) {
         expect(STRATEGY_DISPLAY_NAMES[stratDef.strategyKey]).toBeDefined();
         expect(typeof STRATEGY_DISPLAY_NAMES[stratDef.strategyKey]).toBe('string');
@@ -78,7 +78,7 @@ describe('Directive 11.4F.1 — Strategy Naming', () => {
 
 describe('Directive 11.4F.1 — Hybrid Integrity', () => {
   it('CANONICAL_REGIME_STRATEGY_MAP should have strategies with correct signal types', () => {
-    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
       for (const stratDef of mapping.strategies) {
         expect(['QUANT', 'PATTERN', 'HYBRID']).toContain(stratDef.signalType);
       }
@@ -89,17 +89,17 @@ describe('Directive 11.4F.1 — Hybrid Integrity', () => {
     const regimes: CanonicalRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
-      const result = selectRandomStrategy(regime);
+      const result = selectRandomStrategy('crypto_spot', regime);
       expect(result.signalType).toMatch(/^(QUANT|PATTERN|HYBRID)$/);
       expect(result.strategy).toMatch(/^[a-z_]+$/);
       
-      const validStrategies = getStrategiesForRegime(regime).map(s => s.strategyKey);
+      const validStrategies = getStrategiesForRegime('crypto_spot', regime).map(s => s.strategyKey);
       expect(validStrategies).toContain(result.strategy);
     }
   });
 
   it('HYBRID strategies should have patternType defined', () => {
-    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
       for (const stratDef of mapping.strategies) {
         if (stratDef.signalType === 'HYBRID') {
           expect(stratDef.patternType).not.toBeNull();
@@ -109,7 +109,7 @@ describe('Directive 11.4F.1 — Hybrid Integrity', () => {
   });
 
   it('PATTERN strategies should have patternType defined', () => {
-    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
       for (const stratDef of mapping.strategies) {
         if (stratDef.signalType === 'PATTERN') {
           expect(stratDef.patternType).not.toBeNull();
@@ -119,7 +119,7 @@ describe('Directive 11.4F.1 — Hybrid Integrity', () => {
   });
 
   it('QUANT strategies should have null patternType', () => {
-    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
       for (const stratDef of mapping.strategies) {
         if (stratDef.signalType === 'QUANT') {
           expect(stratDef.patternType).toBeNull();
@@ -163,7 +163,7 @@ describe('Directive 11.4F.1 — Regime Strictness', () => {
   });
 
   it('CANONICAL_REGIME_STRATEGY_MAP should only contain canonical regimes', () => {
-    const mapRegimes = Object.keys(CANONICAL_REGIME_STRATEGY_MAP);
+    const mapRegimes = Object.keys(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot);
     for (const regime of mapRegimes) {
       expect(CANONICAL_REGIMES).toContain(regime);
     }
@@ -185,7 +185,7 @@ describe('Directive 11.4F.1 — Type Consistency', () => {
   });
 
   it('all regime mappings should have valid structure', () => {
-    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+    for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
       expect(mapping).toHaveProperty('strategies');
       expect(mapping).toHaveProperty('metrics');
       expect(mapping).toHaveProperty('riskMultiplier');
@@ -198,7 +198,7 @@ describe('Directive 11.4F.1 — Type Consistency', () => {
 
   it('selectPrimaryStrategy should return valid strategy for all canonical regimes', () => {
     for (const regime of CANONICAL_REGIMES) {
-      const result = getStrategyForRegime(regime as any);
+      const result = getStrategyForRegime('crypto_spot', regime as any);
       expect(result).toBeDefined();
       expect(typeof result.strategy).toBe('string');
       expect(['QUANT', 'PATTERN', 'HYBRID']).toContain(result.signalType);
@@ -207,7 +207,7 @@ describe('Directive 11.4F.1 — Type Consistency', () => {
 
   it('selectPrimaryStrategy should fallback to TRANSITION strategy for unknown regimes', () => {
     const unknownRegime = 'UNKNOWN_REGIME' as any;
-    const result = getStrategyForRegime(unknownRegime);
+    const result = getStrategyForRegime('crypto_spot', unknownRegime);
     expect(result).toBeDefined();
     // Unknown regimes normalize to TRANSITION, first strategy is adaptive_flow
     expect(result.strategy).toBe('adaptive_flow');

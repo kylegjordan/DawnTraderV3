@@ -108,7 +108,7 @@ describe('Regime Strategy Mapping', () => {
     const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
-      const mapping = regimeStrategyMap[regime];
+      const mapping = regimeStrategyMap.crypto_spot[regime];
       
       expect(mapping).toBeDefined();
       expect(mapping.strategies).toBeInstanceOf(Array);
@@ -122,13 +122,13 @@ describe('Regime Strategy Mapping', () => {
     const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
-      const { signalType, strategy } = selectRandomStrategy(regime);
+      const { signalType, strategy } = selectRandomStrategy('crypto_spot', regime);
       
       expect(['HYBRID', 'PATTERN', 'QUANT']).toContain(signalType);
       expect(typeof strategy).toBe('string');
       expect(strategy.length).toBeGreaterThan(0);
       
-      const mapping = regimeStrategyMap[regime];
+      const mapping = regimeStrategyMap.crypto_spot[regime];
       const strategyKeys = mapping.strategies.map((s: any) => s.strategyKey);
       expect(strategyKeys).toContain(strategy);
     }
@@ -264,7 +264,7 @@ describe('Governance Invariants', () => {
     const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
-      const { signalType, strategy } = selectRandomStrategy(regime);
+      const { signalType, strategy } = selectRandomStrategy('crypto_spot', regime);
       
       expect(regime).toBeDefined();
       expect(signalType).toBeDefined();
@@ -314,7 +314,7 @@ describe('Governance Invariants', () => {
     const regimes: MarketRegimeType[] = ['TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE', 'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION'];
     
     for (const regime of regimes) {
-      expect(() => selectRandomStrategy(regime)).not.toThrow();
+      expect(() => selectRandomStrategy('crypto_spot', regime)).not.toThrow();
     }
   });
 });

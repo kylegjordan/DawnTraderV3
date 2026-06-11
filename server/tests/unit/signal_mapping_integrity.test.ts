@@ -113,22 +113,22 @@ describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
 
   describe('CANONICAL_REGIME_STRATEGY_MAP structure', () => {
     test('All 5 canonical regimes exist', () => {
-      expect(Object.keys(CANONICAL_REGIME_STRATEGY_MAP)).toHaveLength(5);
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('TREND_FRIENDLY_STABLE');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('HIGH_VOLATILITY_UNSTABLE');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('RANGE_BOUND_STABLE');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('IMPULSE_EXPANSION');
-      expect(CANONICAL_REGIME_STRATEGY_MAP).toHaveProperty('STRUCTURAL_TRANSITION');
+      expect(Object.keys(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)).toHaveLength(5);
+      expect(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot).toHaveProperty('TREND_FRIENDLY_STABLE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot).toHaveProperty('HIGH_VOLATILITY_UNSTABLE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot).toHaveProperty('RANGE_BOUND_STABLE');
+      expect(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot).toHaveProperty('IMPULSE_EXPANSION');
+      expect(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot).toHaveProperty('STRUCTURAL_TRANSITION');
     });
 
     test('Each regime has at least one strategy', () => {
-      for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const [regime, mapping] of Object.entries(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
         expect(mapping.strategies.length).toBeGreaterThan(0);
       }
     });
 
     test('Each strategy has signalType, strategyKey, and patternType', () => {
-      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP)) {
+      for (const mapping of Object.values(CANONICAL_REGIME_STRATEGY_MAP.crypto_spot)) {
         for (const stratDef of mapping.strategies) {
           expect(stratDef).toHaveProperty('signalType');
           expect(stratDef).toHaveProperty('strategyKey');
@@ -145,9 +145,9 @@ describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
 
     test('Returns consistent (deterministic) strategy for same regime across calls', () => {
       for (const regime of regimes) {
-        const result1 = selectPrimaryStrategy(regime);
-        const result2 = selectPrimaryStrategy(regime);
-        const result3 = selectPrimaryStrategy(regime);
+        const result1 = selectPrimaryStrategy('crypto_spot', regime);
+        const result2 = selectPrimaryStrategy('crypto_spot', regime);
+        const result3 = selectPrimaryStrategy('crypto_spot', regime);
         
         expect(result1.strategy).toBe(result2.strategy);
         expect(result2.strategy).toBe(result3.strategy);
@@ -156,8 +156,8 @@ describe('Directive 11.4F.1 — Canonical Signal Mapping Integrity', () => {
 
     test('Returns first strategy from regime mapping (primary strategy)', () => {
       for (const regime of regimes) {
-        const result = selectPrimaryStrategy(regime);
-        const expected = CANONICAL_REGIME_STRATEGY_MAP[regime].strategies[0];
+        const result = selectPrimaryStrategy('crypto_spot', regime);
+        const expected = CANONICAL_REGIME_STRATEGY_MAP.crypto_spot[regime].strategies[0];
         
         expect(result.strategy).toBe(expected.strategyKey);
         expect(result.signalType).toBe(expected.signalType);
