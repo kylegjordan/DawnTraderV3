@@ -173,35 +173,39 @@ async function main() {
     if (!VTS_DIR) {
       record({ leg: 'netpnl_expectededge', klass: 'both', bar: 'EXACT', n: 0, maxDev: 'n/a', pass: null, note: 'VTS trade log dir not found at expected paths — resolve VTS_LOGS_DIR and re-run' });
     } else {
+      // Persisted row shape (verified live): top-level netProfit/positionSize/
+      // expectedEdge/frictionCost; entryPrice/takeProfit live in the `signal`
+      // subobject. Pinned-bar recompute: expectedEdge = tpDistance −
+      // frictionCost from persisted signal.entryPrice/signal.takeProfit/
+      // frictionCost (1e-6 on the recombined floats). The Finding-A units
+      // question (target-hit rows show expectedEdge==netProfit exactly) gets
+      // settled empirically here: per-row realized fraction is also recomputed
+      // and the eq pattern attributed.
       const files = fs.readdirSync(VTS_DIR).filter(f => f.endsWith('.json')).sort().slice(-2);
       let n = 0, miss = 0; let maxDev = 0;
+      let eqTautology = 0, eqOther = 0;
       for (const f of files) {
         const rows = JSON.parse(fs.readFileSync(path.join(VTS_DIR, f), 'utf-8'));
         const arr = Array.isArray(rows) ? rows : rows.trades ?? [];
         for (const t of arr) {
-          if (typeof t.pnl !== 'number' || typeof t.positionSize !== 'number' || typeof t.entryPrice !== 'number') continue;
-          const notional = t.positionSize * t.entryPrice;
-          if (!(notional > 0)) continue;
+          const sig = t.signal ?? {};
+          const entry = sig.entryPrice, tp = sig.takeProfit;
+          if (typeof t.expectedEdge !== 'number' || typeof t.frictionCost !== 'number' || typeof entry !== 'number' || typeof tp !== 'number' || !(entry > 0)) continue;
           n++;
-          const netPnlPct = (t.pnl / notional) * 100;
-          // EXACT determinism check: recompute reproduces itself bit-stably and
-          // is finite; where the row also persisted a net pct field, compare.
-          if (!Number.isFinite(netPnlPct)) { miss++; continue; }
-          if (typeof t.netPnlPct === 'number') {
-            const dev = Math.abs(netPnlPct - t.netPnlPct);
-            maxDev = Math.max(maxDev, dev);
-            if (dev !== 0) miss++;
-          }
-          if (typeof t.expectedEdge === 'number' && typeof t.targetPrice === 'number' && typeof t.frictionCost === 'number' && t.entryPrice > 0) {
-            const tpDistance = (t.targetPrice - t.entryPrice) / t.entryPrice;
-            const expected = tpDistance - t.frictionCost;
-            const dev = Math.abs(expected - t.expectedEdge);
-            maxDev = Math.max(maxDev, dev);
-            if (dev > EPS) miss++; // float path on the two persisted components
+          const tpDistance = (tp - entry) / entry;
+          const expected = tpDistance - t.frictionCost;
+          const dev = Math.abs(expected - t.expectedEdge);
+          maxDev = Math.max(maxDev, dev);
+          if (dev > EPS) miss++;
+          // Finding-A attribution: realized fraction at the recorded exit.
+          if (typeof t.exitPrice === 'number' && typeof t.netProfit === 'number' && t.expectedEdge === t.netProfit) {
+            const realizedFrac = (t.exitPrice - entry) / entry - t.frictionCost;
+            if (Math.abs(realizedFrac - t.netProfit) <= 1e-9) eqTautology++; else eqOther++;
           }
         }
       }
-      record({ leg: 'netpnl_expectededge', klass: 'both', bar: 'EXACT (1e-6 on recombined floats)', n, maxDev, pass: n > 0 ? miss === 0 : null, note: n === 0 ? 'no scorable closed trades in window' : `${miss} misses across ${files.join(',')}` });
+      console.log(`   Finding-A attribution: ${eqTautology} eq-rows are sim-fill-at-target tautology (netProfit IS the realized fraction = tpDistance−friction), ${eqOther} eq-rows unexplained`);
+      record({ leg: 'netpnl_expectededge', klass: 'both', bar: '1e-6 (recombined floats)', n, maxDev, pass: n > 0 ? miss === 0 : null, note: n === 0 ? 'no scorable closed trades in window' : `${miss} misses across ${files.join(',')}; eq-attribution tautology=${eqTautology} unexplained=${eqOther}` });
     }
   } catch (e: any) {
     record({ leg: 'netpnl_expectededge', klass: 'both', bar: 'EXACT', n: 0, maxDev: 'n/a', pass: null, note: 'leg errored: ' + e.message });
