@@ -116,3 +116,27 @@ CI all-4-green per push; two Step-4 diffs (A: aggregator+flag+ledger, B: consume
 
 ## §8 — Estimate
 ~2-2.5 weeks · ~14-18 files · 1 migration (`amr_response_dials` + `amr_weather_rules` + `governance_modes` per-class rows + ledger table, ~50-70 rows) · no epoch bump while in shadow (zero behavioral writes); the Phase-19 flag-to-active flip is the epoch decision point (pre-declared in the completion report).
+
+---
+
+## §9 — DEFINITIVE FINDING DISPOSITIONS (Kyle directive 2026-06-11: no ambiguous "maybe later" — anything whose deferred fix would leave question marks over AMR correctness is FIXED IN THIS BATCH; roadmap adjusted)
+
+**PREVIOUSLY STATED: ~14-18 files, 11 objectives. NOW: ~18-21 files, 13 objectives. REASON: two pull-ins below (Kyle bolted-on-broken rule).**
+
+### FIXED IN THIS BATCH (definitive)
+| Finding | Why deferral would break AMR | Disposition |
+|---|---|---|
+| xStock friction NO_SOURCE (pool crypto-only) | AMR's primary xstock weather input has no data | **Obj-0a (was §3.1):** XstockFrictionSample store captured in the scanner cycle; reason-coded status taxonomy |
+| **★PULL-IN A — xStock cost model on static 12bps spread (was B81)** | AMR's friction weather would read MEASURED spreads while the cost model prices STATIC ones — the system would see a storm the EV gate ignores. Worse: when B81 later wired measured spreads, xstock admit rates and the EV-gap distribution would SHIFT under AMR's already-calibrated thresholds — exactly the bolted-on-broken failure | **NEW Obj-12:** `getCachedCostMetrics('xstock_spot')` reads the per-symbol MEASURED spread from the new store (fallback: static default WITH reason + log). Same store as Obj-0a — one source feeds weather AND pricing. ⚠️ Changes xstock VTS admit economics → **vts calibration-epoch ruling required (Langston)**. Verification: before/after spread-input distribution + 24h admit-rate read. Roadmap: B81's per-pair friction tuning/overrides REMAIN B81; the measured-spread wiring MOVES HERE |
+| **★PULL-IN B — crypto friction source flips at Phase-19 activation (was F8 "flip-read note")** | AMR's crypto friction baseline would be calibrated against the passive-state source (fallback list + cost cache), then silently change character the day the engine activates — the input shifts under the calibrated thresholds | **NEW Obj-13:** crypto friction sampling moves OFF the activation-dependent pool ONTO the scanned-universe cost-cache entries by class (the scanners write spreads continuously in passive AND active states). Stable across activation; measures the MARKET, not our filter survivors (the pool is selection-biased toward low-friction names); symmetric with the xstock store. Supersedes the B-4.7 pool-based read (its xstock half never worked anyway — the gap entry records both) |
+| #217 CONTEXT_BONUS | (decided previously) | REMOVED this batch, own commit (Obj-10) |
+| Stale docs: SysManual "Passive Learning" :5439, 11.7R/S ordering, SQE :230-231 ARCA-bypass comment, SIM §2.5 false xstock cost-cache claim, MISSING realtime-paper-executor SIM entry | Docs are the next batch's pre-audit inputs — wrong docs propagate | **ALL corrected at THIS batch's Step-10 governance** — not deferred |
+| Paper-engine 0.5/0/0.5 metadata-default stability | — | Not a defect to fix: it's the legacy behavior AMR REPLACES. Shadow keeps it bit-identical deliberately (parity); the C2 ledger tag partitions its divergence; its retirement IS the Phase-19 flip decision |
+
+### DEFERRED — with the proof of AMR-independence (definitive, not "maybe")
+| Finding | Why deferral CANNOT affect AMR | Home |
+|---|---|---|
+| #219 dead flipRate feeder (`applyGovernance`, zero callers) | AMR never reads it — the weather aggregator builds its OWN per-class flip tracker from the per-class vote. The dead code is unreachable from every AMR path; deleting it later changes nothing AMR consumes | Phase 16 (dead-code removal) |
+| #218 dead `getMarketContextFields` + fee default param | Zero callers anywhere — unreachable from AMR and everything else | Phase 16 |
+| #220 frozen setNullReason stderr (historical bad-build window) | Stale log noise from a past window; already flushed; no live code path | Phase 16 / opportunistic |
+| B81 remainder: per-pair friction OVERRIDES + filter-as-first-class | Tuning granularity on top of the now-measured inputs — refines values, doesn't change input SOURCES or semantics AMR depends on | B81 (scope shrunk by Pull-in A — roadmap updated) |
