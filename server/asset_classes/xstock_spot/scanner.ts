@@ -40,6 +40,7 @@
 import { centralClock, type ClockTick } from '../../services/central-clock.js';
 import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
+import { recordXstockFrictionCycle, resetXstockFrictionWarmup } from './friction-sample-store.js';
 import { XSTOCK_SPOT_SYMBOLS, XSTOCK_SPOT_REGISTRY } from '../../../shared/asset-classes.js';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
@@ -689,6 +690,17 @@ class XstockSpotScannerService {
         // sentinel -1 → depth gates skip this cycle. NEVER throws (cannot take
         // down the scanner, other asset classes, or the system).
         console.warn(`[B.1.5][DEPTH_QUERY_FAIL] ${depthErr instanceof Error ? depthErr.message : depthErr}`);
+      }
+
+      // B-5 AMR (Obj-0a): capture this cycle's MEASURED spread + depth into
+      // the per-class friction sample store — previously these maps were used
+      // once by the filter gate and discarded, leaving the xstock friction
+      // gauge with no data source (pre-audit v2 §0.1). Read-only over the
+      // same maps the eval fan-out consumes; never throws.
+      try {
+        recordXstockFrictionCycle(tickerEnrichmentBySymbol, depthBySymbol);
+      } catch (fsErr) {
+        console.warn(`[B-5][FRICTION_SAMPLE] capture failed (cycle continues): ${fsErr instanceof Error ? fsErr.message : fsErr}`);
       }
 
       // Telemetry — pairs with sufficient OHLC history are "ready for eval"
