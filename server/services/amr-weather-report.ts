@@ -181,11 +181,11 @@ function readMacro(assetClass: AssetClass): { maxAbsZ: number | null; detail: Re
     const base = getLatestMacroBaseline();
     if (snap.ageSeconds === Infinity) return { maxAbsZ: null, detail: null, stale: 'macro_feed_no_data' };
     const zs: Record<string, number | null> = {
-      btcDominanceZ: (snap.btcDominance !== null && base.btcDominanceSampleCount >= 30 && base.btcDominanceStdDev > 0)
+      btcDominanceZ: (typeof snap.btcDominance === 'number' && base.btcDominanceSampleCount >= 30 && base.btcDominanceStdDev > 0)
         ? (snap.btcDominance - base.btcDominanceMean) / base.btcDominanceStdDev : null,
-      fundingZ: (snap.fundingRate !== null && base.fundingSampleCount >= 30 && base.fundingStdDev > 0)
+      fundingZ: (typeof snap.fundingRate === 'number' && base.fundingSampleCount >= 30 && base.fundingStdDev > 0)
         ? (snap.fundingRate - base.fundingMean) / base.fundingStdDev : null,
-      mcapMomentumZ: (snap.mcapMomentum !== null && base.mcapMomentumSampleCount >= 30 && base.mcapMomentumStdDev > 0)
+      mcapMomentumZ: (typeof snap.mcapMomentum === 'number' && base.mcapMomentumSampleCount >= 30 && base.mcapMomentumStdDev > 0)
         ? (snap.mcapMomentum - base.mcapMomentumMean) / base.mcapMomentumStdDev : null,
     };
     const present = Object.values(zs).filter((z): z is number => z !== null).map(Math.abs);
@@ -268,6 +268,17 @@ function computeContinuousScore(
   const stormyCap = rule(assetClass, 'score_stormy_max');
   for (const p of parts) {
     if (p.hostile) score = Math.min(score, stormyCap * 0.8); // any stormy-grade input forces the STORMY bucket
+  }
+  // INPUT-COMPLETENESS cap (B5 doctrine generalized — surfaced by the unit
+  // suite): with absent inputs the weight renormalization concentrates on the
+  // few present readings and can inflate a thin snapshot into FAVORABLE.
+  // Thin awareness may tighten or hold, never loosen — FAVORABLE (hence
+  // AGGRESSIVE) requires the FULL input set present. In practice this makes
+  // FAVORABLE unreachable until the EV-gap window warms — by design:
+  // AGGRESSIVE earns its way in through evidence (Langston B5).
+  if (parts.length < 5) {
+    score = Math.min(score, rule(assetClass, 'favorable_min_score') - 0.001);
+    triggers.push(`favorable_blocked_missing_inputs(${parts.length}/5)`);
   }
   // R2: degraded awareness never loosens — quarantine caps at neutral.
   if (anyQuarantined) {
