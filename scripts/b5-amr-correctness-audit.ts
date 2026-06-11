@@ -169,7 +169,7 @@ async function main() {
   // expectedEdge stamped at entry. We verify formula-consistency of the
   // persisted fields on today's (+yesterday's) closed trades.
   try {
-    const VTS_DIR = ['logs/vts_trades', 'data/vts_trades', 'logs/vts'].find(d => fs.existsSync(d));
+    const VTS_DIR = ['logs/virtual_trades', 'logs/vts_trades', 'data/vts_trades'].find(d => fs.existsSync(d));
     if (!VTS_DIR) {
       record({ leg: 'netpnl_expectededge', klass: 'both', bar: 'EXACT', n: 0, maxDev: 'n/a', pass: null, note: 'VTS trade log dir not found at expected paths — resolve VTS_LOGS_DIR and re-run' });
     } else {
@@ -213,30 +213,44 @@ async function main() {
     if (!fs.existsSync(statePath)) {
       record({ leg: 'equity_z_scores', klass: 'xstock_spot', bar: '1e-6', n: 0, maxDev: 'n/a', pass: null, note: 'state file absent' });
     } else {
+      // Shape (verified live): { state: { vix, dxy, ... }, vixWindow: number[], dxyWindow: number[] }.
+      // z = (latest − windowMean)/windowStd, POPULATION std (ObservationWindow.stats:
+      // variance/n) — the pinned-bar formula. Compared against the live endpoint's
+      // macroDetail.vixZ/dxyZ; a one-shot re-pull handles the persist-vs-cycle skew
+      // (an observation arriving between the file persist and the endpoint cycle).
       const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+      const seriesDefs: Array<{ name: string; window: number[]; latest: number | null; mdKey: string }> = [
+        { name: 'vix', window: state.vixWindow ?? [], latest: state.state?.vix ?? null, mdKey: 'vixZ' },
+        { name: 'dxy', window: state.dxyWindow ?? [], latest: state.state?.dxy ?? null, mdKey: 'dxyZ' },
+      ];
       let n = 0, fails = 0; let maxDev = 0;
-      for (const series of Object.keys(state.windows ?? state)) {
-        const w = (state.windows ?? state)[series];
-        const obs: number[] = Array.isArray(w?.observations) ? w.observations.map((o: any) => typeof o === 'number' ? o : o.v ?? o.value) : [];
-        if (obs.length < 5) continue;
-        const mean = obs.reduce((a, b) => a + b, 0) / obs.length;
-        const std = Math.sqrt(obs.reduce((a, b) => a + (b - mean) ** 2, 0) / obs.length);
-        const latest = obs[obs.length - 1];
-        const myZ = std > 0 ? (latest - mean) / std : 0;
-        n++;
-        // Compare against the live endpoint's macroDetail for this series if present.
-        const md = current?.byClass?.xstock_spot?.report?.inputs?.macroDetail ?? {};
-        const sysZ = md[series] ?? md[series.toLowerCase()] ?? null;
+      let md = current?.byClass?.xstock_spot?.report?.inputs?.macroDetail ?? {};
+      for (const s of seriesDefs) {
+        if (s.window.length < 5 || s.latest === null) {
+          console.log(`   z[${s.name}]: window n=${s.window.length} — warming, honestly skipped`);
+          continue;
+        }
+        const mean = s.window.reduce((a, b) => a + b, 0) / s.window.length;
+        const std = Math.sqrt(s.window.reduce((a, b) => a + (b - mean) ** 2, 0) / s.window.length);
+        const myZ = std > 0 ? (s.latest - mean) / std : 0;
+        let sysZ = md[s.mdKey];
+        if (typeof sysZ === 'number' && Math.abs(myZ - sysZ) > EPS) {
+          // possible persist/cycle skew — re-pull once and retry
+          const fresh = await authedGet(token, '/api/diagnostics/amr/current');
+          md = fresh?.byClass?.xstock_spot?.report?.inputs?.macroDetail ?? md;
+          sysZ = md[s.mdKey];
+        }
         if (typeof sysZ === 'number') {
+          n++;
           const dev = Math.abs(myZ - sysZ);
           maxDev = Math.max(maxDev, dev);
           if (dev > EPS) fails++;
-          console.log(`   z[${series}]: mine=${myZ.toFixed(6)} system=${sysZ.toFixed(6)} dev=${dev.toExponential(2)} (n=${obs.length})`);
+          console.log(`   z[${s.name}]: mine=${myZ.toFixed(6)} system=${sysZ.toFixed(6)} dev=${dev.toExponential(2)} (window n=${s.window.length})`);
         } else {
-          console.log(`   z[${series}]: mine=${myZ.toFixed(6)} system=ABSENT in macroDetail (n=${obs.length})`);
+          console.log(`   z[${s.name}]: mine=${myZ.toFixed(6)} system=null (below min obs or warming; window n=${s.window.length})`);
         }
       }
-      record({ leg: 'equity_z_scores', klass: 'xstock_spot', bar: '1e-6', n, maxDev, pass: n > 0 ? fails === 0 : null, note: n === 0 ? 'no windows with ≥5 obs yet (warming)' : undefined });
+      record({ leg: 'equity_z_scores', klass: 'xstock_spot', bar: '1e-6', n, maxDev, pass: n > 0 ? fails === 0 : null, note: n === 0 ? 'no live system z yet (baseline min-obs gate or warming)' : undefined });
     }
   } catch (e: any) {
     record({ leg: 'equity_z_scores', klass: 'xstock_spot', bar: '1e-6', n: 0, maxDev: 'n/a', pass: null, note: 'leg errored: ' + e.message });
