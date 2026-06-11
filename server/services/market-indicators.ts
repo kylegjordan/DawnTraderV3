@@ -35,7 +35,11 @@ import { xstockDirectionalBiasStore } from '../core/metrics/directional-bias-sto
 // B63 Item 16: static import of the persistent-store singleton so we can read snapshot
 // staleness flags without awaiting a dynamic import inside a sync function.
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
-import { getCostMetrics as getCacheMetrics, getCacheSize } from '../core/cache/cost-cache.js';
+import { getCostMetrics as getCacheMetrics, getCacheSize, getAllCachedSymbols } from '../core/cache/cost-cache.js';
+// B-5 AMR (Obj-13/F7): xstock friction reads the scanner-fed measured-sample
+// store - the cost cache is structurally crypto-lane only (cost-cache.ts:32).
+import { getXstockFrictionSample } from '../asset_classes/xstock_spot/friction-sample-store.js';
+import { getDefaultCostComponentsForAssetClass } from '../core/math/cost-model.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { checkRegimeTransition, checkFrictionTransition } from '../utils/market-events.js';
@@ -195,11 +199,10 @@ function stateFor(assetClass: AssetClass): ClassIndicatorState {
   return s;
 }
 
-const TOP_100_FALLBACK_PAIRS = [
-  'BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD',
-  'ADA/USD', 'AVAX/USD', 'DOT/USD', 'MATIC/USD', 'LINK/USD',
-  'ATOM/USD', 'UNI/USD', 'LTC/USD', 'BCH/USD', 'XLM/USD',
-];
+// B-5 AMR (Obj-13): TOP_100_FALLBACK_PAIRS removed - it existed to back-stop a
+// THIN POOL, a case that no longer arises now that membership IS the scanned
+// universe (when the cost cache is empty, the fallback pairs had no metrics
+// either, so it never helped the empty-cache case; null is the honest value).
 
 export function updateGlobalRegime(assetClass: AssetClass, regime: MarketRegime): void {
   const s = stateFor(assetClass);
@@ -213,6 +216,16 @@ export interface FrictionResult {
   score: number | null;
   sampleSize: number;
   symbolCount: number;
+  /**
+   * B-5 AMR (Obj-0a taxonomy): why score is null - NEVER ambiguous (Kyle
+   * ruling 2026-06-11: low-volume must read as low-volume, not shutdown).
+   * NO_SOURCE = error-grade (source unwired/empty); MARKET_CLOSED = xstock
+   * weekend window (the only legitimate off state - xStocks trade 24/5);
+   * LOW_VOLUME_THIN = open but too few fresh names; WARMING = post-boot/idle
+   * fill (detail carries n=k/N). Crypto uses NO_SOURCE (empty cache at boot).
+   */
+  reason?: 'NO_SOURCE' | 'MARKET_CLOSED' | 'LOW_VOLUME_THIN' | 'WARMING';
+  reasonDetail?: string;
 }
 
 export function computeGlobalFriction(assetClass: AssetClass): number | null {
@@ -222,17 +235,24 @@ export function computeGlobalFriction(assetClass: AssetClass): number | null {
 
 export function computeGlobalFrictionWithDetails(assetClass: AssetClass): FrictionResult {
   try {
-    // Use paper mode for global friction calculation (default mode).
-    // B-4.7: sample ONLY same-class pool members. The crypto lane keeps its
-    // static fallback list when the pool is thin (the list is crypto by
-    // construction); the xStock lane has NO fallback — a thin/idle xStock
-    // pool yields score=null (Langston pre-audit diff-A item (a): a
-    // crypto-flavored fallback would re-create the C1 contamination).
-    const pool = activeFilterPool.getActivePool('paper')
-      .filter(p => resolveAssetClass(p.symbol, 'kraken') === assetClass);
-    const symbolsToSample = pool.length >= 10
-      ? pool.slice(0, 100).map(p => p.symbol)
-      : (assetClass === 'crypto_spot' ? TOP_100_FALLBACK_PAIRS : pool.map(p => p.symbol));
+    // B-5 AMR (Obj-13, supersedes the B-4.7 pool-based read): friction samples
+    // the SCANNED UNIVERSE, not the activation-dependent filter pool. The pool
+    // is selection-biased toward low-friction survivors and shifts composition
+    // with activation state; the scanners write spreads continuously in
+    // passive AND active states, so the universe read measures the MARKET and
+    // is stable across activation (scope Pull-in B; SIM records the
+    // supersession). Per class:
+    //   crypto_spot - every live cost-cache entry of the class (the scanners'
+    //     write surface; 5-min TTL bounds staleness).
+    //   xstock_spot - the XstockFrictionSample store (the cost cache is
+    //     structurally crypto-only; the store is BOTH membership and metrics,
+    //     reason-coded per the Obj-0a taxonomy).
+    if (assetClass === 'xstock_spot') {
+      return computeXstockFrictionFromStore();
+    }
+    const symbolsToSample = getAllCachedSymbols()
+      .filter(symbol => resolveAssetClass(symbol, 'kraken') === assetClass)
+      .slice(0, 500);
 
     let totalFriction = 0;
     let count = 0;
@@ -262,7 +282,8 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass): Fricti
       console.log(`[GlobalFriction][Audit] (${assetClass}) Sample size: 0 (no same-class metrics) -> score=null`);
       s.lastFrictionSampleSize = 0;
       // B-4.7: NO synthetic 25 default — null is the honest no-sample value.
-      return { score: null, sampleSize: 0, symbolCount: symbolsToSample.length };
+      // B-5: empty universe = source not flowing yet (boot warmup) - NO_SOURCE.
+      return { score: null, sampleSize: 0, symbolCount: symbolsToSample.length, reason: 'NO_SOURCE' };
     }
 
     const avgFriction = Math.round(totalFriction / count);
@@ -293,6 +314,46 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass): Fricti
     const s = stateFor(assetClass);
     return { score: s.cachedGlobalFriction, sampleSize: s.lastFrictionSampleSize, symbolCount: 0 };
   }
+}
+
+/**
+ * B-5 AMR (Obj-13/F7): xstock friction from the scanner-fed measured-sample
+ * store. Maps the store's reason-coded status onto FrictionResult - score is
+ * null with an explicit reason in every non-OK state; LOW_VOLUME_THIN keeps
+ * the (sub-floor) sample count visible as a caution-grade input, never an
+ * error.
+ */
+function computeXstockFrictionFromStore(): FrictionResult {
+  const read = getXstockFrictionSample();
+  if (read.status.kind !== 'OK') {
+    const detail =
+      read.status.kind === 'WARMING' ? `n=${read.status.cyclesSeen}/${read.status.cyclesRequired}` :
+      read.status.kind === 'LOW_VOLUME_THIN' ? `${read.status.sampleCount}/${read.status.minRequired} fresh names` :
+      undefined;
+    return {
+      score: null,
+      sampleSize: read.status.kind === 'LOW_VOLUME_THIN' ? read.status.sampleCount : 0,
+      symbolCount: read.samples.size,
+      reason: read.status.kind,
+      reasonDetail: detail,
+    };
+  }
+  // Same friction formula as crypto: measured spread (store, percent->decimal)
+  // + the class's static slippage + DB-governed fee (B-4.5 merge site).
+  const defaults = getDefaultCostComponentsForAssetClass('xstock_spot');
+  let total = 0;
+  let count = 0;
+  for (const s of read.samples.values()) {
+    total += computeMarketFriction(s.bidAskSpreadPct / 100, defaults.slippage, defaults.fee);
+    count++;
+  }
+  const score = Math.round(total / count);
+  const st = stateFor('xstock_spot');
+  st.cachedGlobalFriction = score;
+  st.lastFrictionSampleSize = count;
+  st.lastUpdate = new Date();
+  console.log(`[GlobalFriction][Audit] (xstock_spot) store-sourced: score=${score} sample=${count} p50Spread=${read.p50SpreadPct?.toFixed(4)}% p95Spread=${read.p95SpreadPct?.toFixed(4)}%`);
+  return { score, sampleSize: count, symbolCount: read.samples.size };
 }
 
 export function getFrictionSampleSize(assetClass: AssetClass): number {
@@ -344,9 +405,19 @@ export function getMarketIndicators(assetClass: AssetClass): MarketIndicators {
     ?? getCachedRegimeDescriptions()['RANGE_BOUND_STABLE'];
   const frictionResult = computeGlobalFrictionWithDetails(assetClass);
   // B-4.7: null score -> an explicit no-sample status, never a synthetic band.
+  // B-5 (Obj-13): reason-specific narrative - LOW_VOLUME_THIN must read as
+  // thin liquidity in an OPEN 24/5 market, never as the class being off
+  // (Kyle ruling 2026-06-11).
   const frictionStatus: FrictionStatus = frictionResult.score !== null
     ? describeFriction(frictionResult.score)
-    : { value: -1, status: 'NO_SAMPLE', color: 'yellow', emoji: '\u23f8\ufe0f', narrative: `No same-class friction sample for ${assetClass} (class idle or warming).` };
+    : {
+        value: -1, status: 'NO_SAMPLE', color: 'yellow', emoji: '\u23f8\ufe0f',
+        narrative:
+          frictionResult.reason === 'MARKET_CLOSED' ? `Market closed for ${assetClass} (weekend window) - friction sampling resumes at open.` :
+          frictionResult.reason === 'LOW_VOLUME_THIN' ? `Thin liquidity for ${assetClass} (${frictionResult.reasonDetail ?? 'below sample floor'}) - market open, sample below decision floor.` :
+          frictionResult.reason === 'WARMING' ? `Friction sample warming for ${assetClass} (${frictionResult.reasonDetail ?? ''}).` :
+          `No same-class friction sample for ${assetClass} (source not flowing).`,
+      };
 
   // Directive 11.4H.6A Task 1: Use strategy mapper for dynamic regime-based strategies/signals
   // B79.0n.STRATEGY (2026-05-24): global market-indicators view is crypto-centric (single

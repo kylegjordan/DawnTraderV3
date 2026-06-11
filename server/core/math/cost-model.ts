@@ -57,6 +57,9 @@ import type { AssetClassFrictionModel } from '../../asset_classes/types.js';
 // `assetClass: string = 'crypto_spot'` silent defaults + warn-once unknown
 // fallback are removed — no silent degradation (CLAUDE.md §11 + §15).
 import type { AssetClass } from '../../../shared/asset-classes.js';
+// B-5 AMR (Obj-12 / Pull-in A): xstock per-symbol MEASURED spread from the
+// scanner-fed friction-sample store (static module spread = fallback only).
+import { getMeasuredSpreadDecimal } from '../../asset_classes/xstock_spot/friction-sample-store.js';
 
 /**
  * B79.0n.MCE: resolve the per-asset-class friction model. `assetClass` is
@@ -138,6 +141,17 @@ export interface CostComponents {
   fee: number;
   slippage: number;
   spread: number;
+  /**
+   * B-5 (Obj-12): provenance of the spread value - 'measured' = live
+   * scanner-cycle bid/ask measurement (xstock friction-sample store);
+   * 'static_fallback' = the per-class module default (store warming, symbol
+   * absent, or measurement stale). Rides every JSON-persisted payload so the
+   * Phase-25 study can sub-partition mixed-source admit windows. Crypto
+   * leaves it unset v1: the symbol cost-cache conflates scanner writes with
+   * getOrSet default seeding, so a truthful per-entry stamp needs the B81
+   * cache asset-class dimension first.
+   */
+  spreadSource?: 'measured' | 'static_fallback';
 }
 
 export interface CachedCostMetrics extends CostComponents {
@@ -163,6 +177,20 @@ export function getCachedCostMetrics(symbol: string, assetClass: AssetClass): Co
   // this dispatch collapses back into a single cache lookup.
   if (assetClass === 'crypto_spot') {
     return getOrSetCostMetrics(symbol);
+  }
+  // B-5 AMR (Obj-12 / Pull-in A): xstock_spot reads the per-symbol MEASURED
+  // spread when the friction-sample store has a fresh valid sample - the
+  // static module spread becomes the explicit fallback. This is a LIVE
+  // behavioral write independent of the AMR flag state (it changes the admit
+  // population), which is why the deploy bumps the xstock_spot vts
+  // calibration epoch (scope Obj-12 ruling; crypto untouched).
+  if (assetClass === 'xstock_spot') {
+    const defaults = getDefaultCostComponentsForAssetClass(assetClass, symbol);
+    const measured = getMeasuredSpreadDecimal(symbol);
+    if (measured !== null) {
+      return { ...defaults, spread: measured, spreadSource: 'measured' };
+    }
+    return { ...defaults, spreadSource: 'static_fallback' };
   }
   return getDefaultCostComponentsForAssetClass(assetClass, symbol);
 }
