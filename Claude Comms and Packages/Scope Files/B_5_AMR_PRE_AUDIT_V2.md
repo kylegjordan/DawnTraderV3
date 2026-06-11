@@ -78,3 +78,20 @@ Every §0-§3 headline survived his independent verification (own greps, own liv
 - **F6 — EV-gap tap precision:** persist failure is caught-and-continue (`vts-runner.ts:2586-2588`) and can ALSO return `{persisted:false}` non-exceptionally (:2584). **Tap sits inside the try, immediately after the await, gated on `result.persisted === true`.**
 - **F7 — §3.1 explicit:** the new xstock store is BOTH membership and METRICS source — measured spread + DB-resolved B-4.5 fee + slippage default feed the friction composite directly, bypassing the crypto-only cost cache entirely.
 - **F8 — scope note:** FX5 populates the pool only when `isEngineActive`; crypto friction today rides the fallback list + market-scanner cost cache. At Phase-19 activation the crypto source flips to the live pool — the crypto friction baseline may shift character at that boundary (flag for the flip-read).
+
+---
+
+## §7 — R4 PASS-BAR PINNING for the Obj-15a correctness audit (pinned 2026-06-11, BEFORE the audit runs at Step 7 — Langston R4: deviations found later cannot be rationalized after the fact)
+
+| Input | Recompute | Pass bar | Miss consequence |
+|---|---|---|---|
+| Per-class regime vote | Majority retally from a dumped MCE cache sample vs reported winner/% | EXACT match (deterministic) | B-NEW-53-class capture bug → batch NO-CLOSE |
+| DBS (both classes) | Depth/volume-weighted median from a cycle's per-pair scores vs published snapshot | |Δ| ≤ 1e-6 (float path, one pass) | NO-CLOSE |
+| Friction (measured spreads) | bidAskSpreadPct recomputed from raw ticker bid/ask at matching timestamps | EXACT on the formula ((a−b)/mid×100); sample-timing tolerance: same snap row | NO-CLOSE |
+| expectedEdge | tpDistance − frictionCost from persisted entry/tp/frictionCost | EXACT (deterministic) | NO-CLOSE |
+| netPnl | (pnl/notional)×100 from persisted pnl, positionSize, entryPrice | EXACT (deterministic) | NO-CLOSE |
+| B67.1 z-scores | (value − windowMean)/windowStd from persisted window | |Δ| ≤ 1e-6 | NO-CLOSE |
+| Externals (BTC dom, funding, VIX, DXY) | Cross-check vs raw source APIs + one independent reference at audit time | Within source-documented tolerance (VIX: vix_divergence_max_points rail; DXY: direction-only vs DTWEXBGS) | Investigate → source ruling |
+| Market-hours/lifecycle | Obj-3a boundary fixtures + last 4 weekend transitions in the lifecycle audit | All 4 transitions correct | NO-CLOSE |
+
+Evidence format per input (completion report): sample size, max deviation, pass/fail vs the bar above. CI golden-fixture locks land in `b5-amr-body.test.ts` extensions where the formula is reachable DB-free.
