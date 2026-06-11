@@ -293,9 +293,20 @@ async function main() {
   try {
     const { safeResolveAssetClass } = await import('../shared/asset-classes.js');
     const entries = dump.byClass.crypto_spot.dbs.entries as Array<{ symbol: string }>;
-    const leaks = entries.filter((e) => safeResolveAssetClass(e.symbol, 'kraken') !== 'crypto_spot');
-    if (leaks.length > 0) console.log(`   non-crypto symbols in crypto DBS store: ${leaks.slice(0, 10).map(l => l.symbol).join(', ')}${leaks.length > 10 ? ` (+${leaks.length - 10})` : ''}`);
-    record({ leg: 'probe_dbs_class_purity', klass: 'crypto_spot', bar: 'zero non-crypto symbols', n: entries.length, maxDev: leaks.length, pass: leaks.length === 0 });
+    if (entries.length === 0) {
+      // Langston R1(b): an empty store must NOT vacuous-PASS — at audit time
+      // the crypto store should hold the scanned universe (~430 pairs);
+      // emptiness is its own anomaly (boot/warm-up), so purity is honestly
+      // NOT EVALUABLE. Re-run once the scanners have cycled.
+      record({ leg: 'probe_dbs_class_purity', klass: 'crypto_spot', bar: 'zero non-crypto symbols', n: 0, maxDev: 'n/a', pass: null, note: 'crypto DBS store EMPTY at audit time (boot/warm-up?) — purity not evaluable; re-run after a scan cycle' });
+    } else {
+      // R1(c): safeResolveAssetClass returns null for unresolvable symbols —
+      // null !== 'crypto_spot', so an unresolvable symbol COUNTS AS A LEAK
+      // and fails the probe (never silently skipped).
+      const leaks = entries.filter((e) => safeResolveAssetClass(e.symbol, 'kraken') !== 'crypto_spot');
+      if (leaks.length > 0) console.log(`   non-crypto symbols in crypto DBS store: ${leaks.slice(0, 10).map(l => l.symbol).join(', ')}${leaks.length > 10 ? ` (+${leaks.length - 10})` : ''}`);
+      record({ leg: 'probe_dbs_class_purity', klass: 'crypto_spot', bar: 'zero non-crypto symbols', n: entries.length, maxDev: leaks.length, pass: leaks.length === 0 });
+    }
   } catch (e: any) {
     record({ leg: 'probe_dbs_class_purity', klass: 'crypto_spot', bar: 'zero non-crypto symbols', n: 0, maxDev: 'n/a', pass: null, note: 'probe errored: ' + e.message });
   }
