@@ -112,13 +112,20 @@ describe('B79.0n.PATTERN-DETECT — REQUIRED-assetClass type-locks', () => {
     });
 
     it('rejects calls that omit assetClass', () => {
-      // @ts-expect-error B79.0n.PATTERN-DETECT — assetClass is REQUIRED, 3-arg call must fail
-      typeCheck(selectContextAwareStrategy('TREND_FRIENDLY_STABLE', 'PINBAR', 42));
+      // B-4.7 diff-B R3: an unwired/omitted class now THROWS at runtime too
+      // (the silent adaptive_flow fallback was the split-brain hazard).
+      expect(() =>
+        // @ts-expect-error B79.0n.PATTERN-DETECT — assetClass is REQUIRED, 3-arg call must fail
+        typeCheck(selectContextAwareStrategy('TREND_FRIENDLY_STABLE', 'PINBAR', 42))
+      ).toThrow(/no materialized regime-strategy tree/);
     });
 
     it('rejects calls with invalid assetClass string', () => {
-      // @ts-expect-error B79.0n.PATTERN-DETECT — assetClass must match AssetClass union
-      typeCheck(selectContextAwareStrategy('TREND_FRIENDLY_STABLE', 'PINBAR', 42, 'wrong'));
+      // B-4.7 diff-B R3: runtime throw on unwired class (see above).
+      expect(() =>
+        // @ts-expect-error B79.0n.PATTERN-DETECT — assetClass must match AssetClass union
+        typeCheck(selectContextAwareStrategy('TREND_FRIENDLY_STABLE', 'PINBAR', 42, 'wrong'))
+      ).toThrow(/no materialized regime-strategy tree/);
     });
   });
 
