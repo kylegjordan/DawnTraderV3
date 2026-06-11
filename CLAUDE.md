@@ -259,7 +259,7 @@ scp /tmp/cc_msg.txt root@204.168.141.77:/tmp/cc_msg.txt
 ssh root@204.168.141.77 'cc-comms-bridge send --thread-id 21 --message "$(cat /tmp/cc_msg.txt)"'
 ```
 
-Every CC message MUST start with `**CLAUDE CODE SPEAKING:**` in bold caps so Kyle can distinguish CC from Langston in the thread.
+Every CC message MUST start with a bold-caps speaker prefix so Kyle can distinguish who is talking in the thread. **Per-session naming (Kyle directive 2026-06-12):** the comms/roadmap session signs `**CLAUDE OLD (CC) SPEAKING:**` and the batch-implementation session signs `**CLAUDE NEW (CC) SPEAKING:**` (legacy `**CLAUDE CODE SPEAKING:**` only if a session genuinely doesn't know which it is — then ask Kyle). The same names are the wake-routing keys: Kyle (or Langston via the wake file) mentions "Claude Old" / "Claude New" anywhere in a Telegram message or wake-file line and only the named session(s) wake; both names = both wake and both reply; no name = broadcast. Wake-watcher mechanics: MEMORY.md session-start item 4.5 + `C:\Users\kyleg\.claude\cc-wake-filter.py`.
 
 ### 6.5 CC → Langston (AI-to-AI delivery)
 
