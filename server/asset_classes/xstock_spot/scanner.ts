@@ -402,6 +402,10 @@ class XstockSpotScannerService {
     }
     this.isPaused = false;
     this.diag.isPaused = false;
+    // B-5 AMR (Obj-0a): post-idle resume restarts the friction-sample warmup
+    // count so the store reports WARMING n=k/N honestly instead of serving
+    // pre-weekend samples as fresh (Langston C1 idle-boundary doctrine).
+    resetXstockFrictionWarmup();
     console.log('[B-NEW-36][SCAN_RESUME] XstockSpotScanner resumed (next clock tick will scan)');
   }
 
