@@ -153,3 +153,23 @@ Kyle's design intent for rankingScore: signals from DIFFERENT asset classes rank
 
 ## §11 — Standing build rule (Kyle 2026-06-11): DB-resolved, never hardcoded
 Every adjustable value this batch introduces lives in `module_constants` (per-class rows where behavior differs by class), NOT in code: all dial values, weather-rule thresholds, dwell/hysteresis/epoch-counting params, MIN-names floors, EV-gap window sizes, the regime→bull-compatible mapping table, BTC/SPY trend lookbacks, context-bonus values, ledger retention. Code carries structure and formulas; numbers come from the DB with boot assertions (B79.TEC pattern) and provenance comments in the migration. The only literals permitted are physical constants and schema shapes.
+
+---
+
+## §12 — COMPLETE AMR INPUT INVENTORY (Kyle directive 2026-06-11: every non-functioning AMR feeder considered for fix-now) + PULL-IN C
+
+**PREVIOUSLY STATED: 13 objectives. NOW: 15 objectives (~20-24 files). REASON: Pull-in C below (Kyle: if it makes AMR more aware, build it now).**
+
+| # | Weather input | Status (verified) | Disposition |
+|---|---|---|---|
+| 1 | Per-class regime vote + voteStatus | **LIVE** (B-4.7, both classes) | consume as-is |
+| 2 | Regime time-in-state + flip rate | dead old feeder (#219) | **rebuilt in-batch** (Obj-3, per-class tracker) |
+| 3 | Per-class DBS value + trend | stores LIVE both classes; trend buffer new | buffer built in-batch (Obj-3) |
+| 4 | Per-class friction + trend | **was broken for xstock (NO_SOURCE)**; crypto selection-biased | **fixed in-batch** (Obj-0a/12/13 — measured spreads both classes, stable sources) |
+| 5 | EV gap (realized vs predicted) | both sides LIVE at the close hook; reader new | built in-batch (Obj-3/§3.2) |
+| 6 | Pair-regime distribution per class | **LIVE** (MCE per-class cache) | consume as-is |
+| 7 | Crypto external macro (BTC dominance, mcap momentum, funding z-scores) | **LIVE since April** (B67.1 feed — runtime-verified today: polling, full baselines, modifier consuming) | **NEW Obj-14a: consumed as crypto WEATHER INPUTS** (the concept doc always planned external signals as weather inputs once landed — B67.1 HAS landed). ⚠️ Overlap documented: these z-scores also feed the b67_1 confidence modifier upstream; weather/posture is a different layer doing a different job (per-signal confidence vs portfolio posture), the compounding is intentional and the shadow ledger measures it — but Langston reviews the overlap explicitly |
+| 8 | xStock external macro (VIX, DXY, SPY momentum) | **NOT BUILT** (decided D-1/calibration-plan Phase C; DB no-op socket exists; was Phase-25-parked) | **★PULL-IN C (NEW Obj-14b, Kyle directive):** built NOW as xstock WEATHER INPUTS. SPY momentum = in-system already (the Obj-10 15m-bar trend work — free). VIX + DXY = NEW external feed service cloned from the proven B67.1 pattern (60s scheduler, rolling z-score baselines, restart-surviving persist, partial-feed/staleness honesty, DB-tunable constants §11). Graceful-degradation asymmetry makes this safe: a flaky source degrades to exactly today's explicit-neutral state with honest markers — worst case = status quo. **Source selection = Step-2 task with Langston** (candidates: Stooq, FRED daily VIX, Yahoo-unofficial, Alpha Vantage free tier; weather is slow-moving so 15-min-delayed or daily VIX is adequate — the B67.1 failure handling absorbs source mediocrity). **Roadmap adjust: Phase-25's equity-macro item SHRINKS to the confidence-modifier flip only** (an evidence-gated calibration decision whose feed will already be live — the D-1 no-op flag flips when Phase 25 calibrates the weights; that flip stays out of B-5 because it changes per-signal confidence with uncalibrated weights, a different system from AMR posture) |
+| 9 | Market-hours/lifecycle (weekend, holidays) | **LIVE** (poll-reconcile + predicate) | consume as-is (IDLE keying) |
+
+**Sweep conclusion: no other non-functioning AMR feeder exists.** Items 2/4/5 were already being fixed in-batch; items 7/8 are the additions this directive produced. Everything else is verified live.
