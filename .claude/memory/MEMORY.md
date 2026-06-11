@@ -10,6 +10,7 @@
 2. Read this file.
 3. **§10.5 alerts (EVERY turn, before responding):** `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"` — surface (a) state=active + acknowledged_at=null + triggers_at≤now, AND (b) ★GAP-FIX 2026-06-11 (Kyle caught b46b invisible): anything fired_at/acknowledged_at within last 24h where acknowledged_by=langston — Langston ACK ≠ resolved; his response lives in Helsinki /var/log/langston-alert-invokes.log; the follow-through WORK is usually CC s.
 4. Telegram poll: `ssh root@204.168.141.77 "tail -30 /var/log/cc-bridge-inbox.jsonl"`.
+4.5. **★ARM WAKE WATCHER (2026-06-11):** persistent Monitor: `ssh -o ServerAliveInterval=60 root@204.168.141.77 'tail -n0 -F /var/log/cc-bridge-inbox.jsonl /var/log/langston-alert-invokes.log /var/log/cc-wake.log' | python3 -u "C:/Users/kyleg/.claude/cc-wake-filter.py"` — wakes CC on Kyle Telegram/voice msgs, Langston alert completions (invoke DONE), any `/var/log/cc-wake.log` line (Langston summon channel, in his MEMORY). Dies with session — re-arm every session + after SSH-drop exit.
 5. Plain language EVERY Kyle msg (Telegram t21 + Desktop BOTH), two-para default, % WITH raw counts. CANONICAL: "regime" not "market condition"; "xStock" not "stocks"; IMF/DBS/LQ/VN/DI/MCE as-is.
 6. Acknowledge readiness in one line.
 
