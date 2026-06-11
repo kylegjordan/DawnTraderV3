@@ -1,0 +1,117 @@
+# B-5 — Adaptive Market Response (AMR) BODY — SCOPE v3
+
+> **Batch:** B-5 = interphase item 5 (roadmap 19-19) — the LAST item of the Phase-24→19 plan; Phase 19 kicks off after it closes. (The v2 draft's "Phase 25" labeling is retired — Phase 25 holds only the BRAIN, the M2 ML posture model, item 25-6.)
+> **Supersedes:** `Cross-Session Briefs/PHASE_25_AMR_SCOPE_DRAFT_V2_2026-06-03.md` (v2, written pre-item-4/pre-B-4.5/pre-B-4.7). §1 documents every v2→v3 delta with the reason.
+> **Scope shape:** AMR **body only** — per-class weather-report aggregator + dial plumbing + AGGRESSIVE mode + new dial types + shadow ledger. Brain = conservative operator-set thresholds (DB-tunable). Brain becomes ML M2 post-launch (M2's output contract — throttle 0→1 + discrete mode — is exactly this batch's `continuousScore` + classification; the brain seam is ONE function).
+> **Ship state:** AMR ships in **SHADOW** (per-class 3-state flag) — computes + logs everything, applies nothing. The roadmap's Langston shadow-boot-gate amendment (first ~5-7 days of Phase 19) is implemented as a first-class flag state, not an afterthought.
+> **Foundation note:** this is the foundation layer for the ML arc (M2 plugs into this socket). Getting the INPUT SHAPES and the SEAM right matters more than the seed threshold values — seeds are deliberately conservative and DB-tunable; shapes are forever.
+
+---
+
+## §1 — v2 → v3 deltas (every change, with reason)
+
+| # | v2 said | v3 says | Why |
+|---|---|---|---|
+| 1 | Objective 0: six pooled aggregators must be converted per-class as a prerequisite block (~3-5 days) | **Block ~60% DELETED — B-4.7 already shipped it, stronger.** Per-class dominant regime: DONE in BOTH sources, and the pooled votes were **deleted outright** — v2's "legacy zero-arg parity overload" must NOT be built; re-adding any pooled form reintroduces the #162 bug class. Per-class DBS read surface: DONE (`getMarketIndicators(assetClass)`, per-class DBS getters). Per-class friction: DONE (class-filtered pool, NO_SAMPLE honest null, crypto-only static fallback). | B-4.7 (2026-06-11) closed #162/#163 |
+| 2 | Cost-cache key migration `${symbol}:${assetClass}` (v2's §6 risk #3, "real collision risk") | **CUT.** Symbols are class-disjoint by construction — `resolveAssetClass` derives the class FROM the symbol (xStocks carry the `x` suffix); no symbol exists in two classes. The per-class friction aggregation already filters the pool by class (B-4.7). The friction-trend buffer (new in this batch) rides on top of the existing per-class compute — no cache rekey, no migration sweep, the v2 risk #3 evaporates. | Symbol-naming invariant + B-4.7 |
+| 3 | "The current overlay applies a single mode to all classes at once" (parity baseline) | **Factually wrong — corrected.** Code-verified current behavior: mode is resolved **per signal** from that signal's own vol-Z + that pair's predictive confidence (`vts-runner.ts:1204`, SQE via `sqeRegimeStability`), and the stability classifier's flip-rate input is **DEAD** (#219 — its only feeder `applyGovernance` has zero production callers, so flipRate reads frozen). Today ≈ noisy per-signal mode that is effectively always NORMAL. All parity gates re-specified against this reality (§4 Obj-4). | Code read 2026-06-11 |
+| 4 | (absent) | **NEW Obj-3a: IDLE weather state + voteStatus consumption.** B-4.7 introduced CLASS_IDLE (`voteStatus: LIVE\|IDLE_OR_WARMING`). The weather report gains a 5th classification `IDLE`: an idle class gets NO posture decisions, mode transitions suppress, and resume RE-SEEDS silently (no false Sunday-reopen mode flip) — mirroring B-4.7's transition-tracker pattern exactly. Memorial-day xStock = IDLE, not stale-CALM or false-STORMY. | B-4.7 idle semantics post-date v2 |
+| 5 | Feature flag on/off (`'all'\|class\|disabled`) | **3-STATE per-class flag: `disabled \| shadow \| active`** + **NEW Obj-8a: the shadow decision ledger** — per cycle per class: weather + raw inputs + resolved mode + would-have-applied dials + would-block/would-resize counts vs what actually happened. The flag-to-active flip at Phase-19 day ~5-7 is then an evidence-based read of the ledger, not a judgment call. Follows the B-NEW-53 decision-provenance doctrine (capture now, study later; every shadow day = evidence accrued). | Roadmap 19-19 shadow amendment, implemented properly |
+| 6 | Obj-9: VTS-runner mirrors the live per-class mode (same resolver swap) | **REVERSED.** Post item-4 separation, VTS is the standalone LEARNING system — letting AMR throttle/resize VTS trades warps the learning substrate with time-varying posture. v3: **VTS pins NORMAL dials** (= today's effective behavior, parity-true) and **STAMPS the per-class weather classification + would-be mode on every VTS row** as telemetry. That stamp is the brain's future counterfactual training signal ("what would AMR have done, what happened"). Active paper/live engines consume AMR for real. | Item-4 labeled-substrate principle |
+| 7 | (absent — concept §8 raised it, v2 never answered) | **NEW Obj-4a: dwell + asymmetric hysteresis.** Tighten IMMEDIATELY (1 cycle to DEFENSIVE/SURVIVAL); relax only after N consecutive cycles of better weather (default 10 cycles ≈ 10 min, DB-tunable per class). Minimum dwell in any mode (default 5 min) except the tighten direction, which is never delayed. Alert-spam guard rides the same mechanism. Without this the system flaps modes on the 60s cycle. | Concept §8 open question, unanswered in v2 |
+| 8 | (absent) | **#217 CONTEXT_BONUS decision (homed to this scoping): REMOVE.** The rankingScore contextBonus term has been literal-zero its entire life (declared-never-wired; SIM §1.5 corrected in B-4.7) — removing the dead config + formula term is behaviorally a no-op and restores formula honesty. If ranking-level regime-agreement is ever wanted, it gets designed against per-class regime WITH calibration evidence — wiring it ad-hoc inside a posture batch would smuggle in an uncalibrated ranking input. Small, contained: `ranking-weights.ts` CONTEXT_BONUS + the formula text + the vts literal-0 comment. | #217; Kyle "wire-or-remove at AMR scoping" |
+| 9 | (absent) | **Strategic-direction C (volatility-adaptive trend lookbacks — Kyle 2026-06-05 "could be an option" to fold in): NOT FOLDED; SOCKET BUILT.** The weather report exposes per-class volatility state (vol-Z percentile + trend) as a first-class output, which is the input a future lookback-modulation batch (or M2) consumes. Folding the lookback change itself into this batch would modify the B.4 just-landed per-class lookback math mid-batch with zero study evidence — it is its own evidence-gated batch. | STRATEGIC_DIRECTIONS §C; B.4 discipline |
+| 10 | Stability classifier gets `assetClass` param (Obj-0 row 3) | **Narrowed:** `computeGlobalStability` is kept UNCHANGED as the flag-off legacy path only. AMR does not parameterize it — the weather aggregator REPLACES it on the flag-on path, and builds its own per-class regime-flip tracker (fresh, per-class, in the aggregator — the proper successor to the dead #219 flipRate feed, which stays Phase-16-homed for removal). No half-refactor of a function the batch is superseding. | NO-PATCHES: don't renovate what you're replacing |
+| 11 | Threshold seeds from concept-era reasoning | **Threshold provenance pinned:** all friction/EV seeds set against POST-B-4.5 cost reality (taker-both-legs round-trip ≈1.80%, MAX_COST_BOUND 0.02) — the v2-era friction baselines predate the fee fix and are ~2.5× too low. AGGRESSIVE dial seeds sanity-checked against the B.5/W2-W3 xStock calibration outputs + B3.1 gate-correctness data before Step-3 (a Step-2 pre-audit task, not a guess). | B-4.5 (2026-06-11) post-dates v2 |
+| 12 | `governance_modes` wildcard → per-class (8 rows) | KEPT, plus: mode-STATS surfaces (`recordModeExecution`/`getModeStats` — currently global) go per-class; the diagnostic endpoint at `routes.ts:2184` updates to the per-class shape. | v2 missed the stats surface |
+| 13 | Strategy-roster allowance per (mode, class) | KEPT, plus composition rule: allow-lists validate AT BOOT against the class's **materialized eval tree** (B-4.7's `CANONICAL_REGIME_STRATEGY_MAP[class]`) — a listed strategy absent from the class tree fails loud (B-4.7 unwired-class pattern). ORB note updated: orb is LIVE in xstock TFS/IE post-B-4.7 — the v2 "if its 15m re-enable hasn't settled" caveat is stale. | B-4.7 two-surface map |
+| 14 | ~3-4 weeks, 18-22 files | **~2-2.5 weeks, ~14-18 files** — the prerequisite block shrank to two items (EV-gap reader + time-in-state tracker) and the cost-cache rekey is cut. Step-4 review runs as TWO diffs (the B-4.7 pattern): diff A = aggregator + flag + ledger (additive, shadow-safe); diff B = consumer gating (SQE/RTB/execution dial application). | Obj-0 shrinkage |
+
+**Unchanged from v2 (deliberately kept):** the per-class weather-report shape (`Map<AssetClass, AmrWeatherReport>` on the DBS-store pattern); AGGRESSIVE mode + conservative per-class dial seeds (crypto 1.25× / xstock 1.35× size, floors per v2 tables — still Langston-confirm); per-(mode,class) slot caps + per-class hard-pause, **entry-only** (Kyle's "throttle entry, not exit" rule); entry-cooldown implementation (still defined-but-unused — verified again 2026-06-11); per-class enumeration via the existing `getActiveAssetClasses()` helper; the 2026-04-22 hostile-day canonical acceptance test (xStock STORMY ≤60 simulated minutes, crypto CALM same window); capital-allocation question deferred to Phase 20; B67 external inputs deferred (class-routed when they land); §19.6 dashboard UI deferred to Phase 19 (endpoint ships here).
+
+---
+
+## §2 — Why this batch exists (corrected motivation)
+
+The system sails at one speed in all weather. The existing 11.7S overlay has three defensive postures but: (a) **no offensive mode** for favorable conditions; (b) its sensor is a **per-signal** stability read whose flip-rate input is frozen at zero (#219) — it classified 2026-04-22's hostile window (239 trades, 18.8% WR, 100% labeled TFS) as business-as-usual; (c) it has **no per-class awareness** — and B-4.7 just proved the classes genuinely diverge (live: xStock STRUCTURAL_TRANSITION while crypto sat in a different state). AMR replaces the sensor with a per-class multi-input weather report, adds the offensive mode + new dial types, and ships the whole thing behind a shadow flag so Phase 19's first week generates the evidence for turning it on. The body is the permanent socket; the M2 ML brain later replaces only the rules inside `resolveStrategyModeFromWeather()`.
+
+---
+
+## §3 — Current-state survey (post-B-4.7 reality)
+
+### §3.1 Per-class inputs AMR consumes AS-IS (no new plumbing)
+| Input | Source (verified 2026-06-11) |
+|---|---|
+| Dominant regime per class + voteStatus | `getMarketIndicators(assetClass)` / `mce.getDominantRegimeForClass(assetClass)` (B-4.7; null = CLASS_IDLE below 5 pairs) |
+| Global DBS per class (value + category + score) | per-class getters in market-indicators (crypto = computeGlobalBias path; xstock = xstockDirectionalBiasStore) |
+| Global friction per class | `computeGlobalFrictionWithDetails(assetClass)` — class-filtered pool, `score: null`/NO_SAMPLE when unsampled, sampleSize on the payload |
+| Pair-regime distribution per class | MCE per-pair cache filtered by `${symbol}:${assetClass}` key suffix (the B-4.7 vote already histograms it — expose the histogram) |
+| Per-class regime thresholds / lookbacks / modulator configs | B.4 + B79.0n.CONFIDENCE-CHAIN per-class maps (context only — AMR doesn't read these directly) |
+
+### §3.2 NEW plumbing this batch builds (the shrunken prerequisite block)
+1. **Per-class EV-gap reader** on telemetry-aggregator: rolling realized-vs-predicted net-expectancy gap over the last N closed trades per class (B-4.7's `PairTelemetry.assetClass` stamp + item-4's source-labeled substrate make the class partition trivial; insufficient-N → null, the DBS stale-snapshot pattern). Source population: VTS closed rows now; the reader takes a source-mode filter so paper rows take over in Phase 19 without rework.
+2. **Per-class regime time-in-state + flip tracker** (in the weather aggregator, not MCE): `{ regime, sinceTs, flipsLastHour }` per class, fed by the per-class vote each cycle, idle-aware (no flip counted across an IDLE gap). This is the proper successor to the dead #219 flipRate — built fresh, per class.
+3. **Per-class friction trend buffer**: rolling buffer of the per-class friction score (last ~20 cycles) → p50/p95 + slope. Rides the existing per-class compute.
+4. **DBS trend buffer**: rolling 6-snapshot per-class buffer → direction + slope.
+
+### §3.3 What stays untouched
+`computeGlobalStability` + per-signal stability threading (the flag-off legacy path — bit-identical); the regime classifier; B.4 lookbacks; strategy detect math; capital allocation; exits (AMR is entry-only); `applyGovernance`/flipRate (dead, Phase-16-homed, #219); VTS dial behavior (pinned NORMAL, §1 delta 6).
+
+---
+
+## §4 — Numbered objectives (verification criteria inline)
+
+**Obj-1 — AGGRESSIVE mode + per-class dial seeds.** `StrategyMode` gains `'AGGRESSIVE'`; overlay rows per class (v2 seed tables carried forward verbatim — Langston confirms values). Verify: `getModeOverlay('AGGRESSIVE','crypto_spot')` ≠ xstock row; defensive trio unchanged on legacy-mapped inputs.
+
+**Obj-2 — Dial promotion to `module_constants` (`amr_response_dials`, per-class rows) + `governance_modes` per-class promotion** (caller-supplied assetClass replaces the wildcard `_GOV_MODES_KEY`; per-class rows seeded, wildcard kept as inactive-class fallback). Boot assertion: explicit per-class rows exist for every active class × mode (B79.TEC `hasExplicitAssetClassRow` pattern); missing → hard-fail. Verify: per-class resolution returns per-class values; no hardcoded dial literal remains for the promoted dials.
+
+**Obj-3 — Per-class weather-report aggregator** (`server/services/amr-weather-report.ts`): publishes `Map<AssetClass, AmrWeatherReport>` each MCE cycle. Inputs per §3.1/§3.2. Output: `classification: 'CALM'|'CHOPPY'|'STORMY'|'FAVORABLE'|'IDLE'`, `continuousScore` (0-1, the M2 throttle contract), `volatilityState` (the direction-C socket: per-class vol-Z percentile + trend), `inputs` snapshot, `triggers[]`, `staleness[]`. Rules DB-tunable per class (`amr_weather_rules`). Verify: 04-22 canonical case (xStock STORMY within 60 simulated minutes; crypto CALM in the same window); calm-period fixture → CALM both; every input null-tolerant.
+  **Obj-3a — IDLE semantics (load-bearing):** voteStatus IDLE_OR_WARMING or vote-null → classification IDLE; no posture decisions while IDLE; resume re-seeds trackers silently (no transition event, no mode flip). Verify: weekend-boundary fixture produces IDLE → first LIVE cycle re-seeds with zero transition events; crypto untouched.
+
+**Obj-4 — Per-class mode resolver + 3-state flag.** `resolveStrategyModeFromWeather(report)` (CALM→NORMAL, FAVORABLE→AGGRESSIVE, CHOPPY→DEFENSIVE, STORMY→SURVIVAL, IDLE→no-decision/hold) — THE brain seam, one function, M2 replaces its internals later. `getActiveModeForClass(assetClass)`. Flag `amr_runtime.mode_per_class`: `disabled | shadow | active`, per class. disabled/shadow → consumers read the legacy per-signal path bit-identically (parity gate, frozen fixture). active → consumers read the class posture. Verify: per-class divergence test (crypto NORMAL + xstock AGGRESSIVE simultaneously under active).
+  **Obj-4a — dwell + asymmetric hysteresis** (§1 delta 7): tighten in 1 cycle; relax after N consecutive cycles; min-dwell; all per-class DB-tunable. Verify: a 1-cycle STORMY blip tightens immediately; a 1-cycle CALM blip during STORMY does NOT relax; alert volume bounded.
+
+**Obj-5 — Strategy-roster + source-pool allowance per (mode, class)** (JSONB in `amr_response_dials`), enforced at SQE admission under `active` only. Boot-validates against the class's materialized eval tree (fail loud). Verify: per v2 cases + boot-failure on a fake strategy key.
+
+**Obj-6 — Per-class slot caps + per-class hard-pause** (entry-only; exits never touched). Gates at SQE/RTB/execution-engine entry points read the signal's class. Seeds: 8/6/4/2 + hard-pause only via STORMY rule. Verify: v2's two cases + cross-class independence.
+
+**Obj-7 — Entry-cooldown implementation** (currently defined-never-applied): tracker keyed `(assetClass, strategy)`; `effective = base(class, strategy) × overlay.entryCooldownMultiplier`. Verify: per-class independence; SURVIVAL doubles; AGGRESSIVE shortens.
+
+**Obj-8 — Diagnostics + alerts:** class-tagged mode-transition log lines + system-alerts (info; warning on →STORMY/SURVIVAL), `/api/diagnostics/amr/current` returning `byClass` + flag states. §9.3 UI verification: endpoint-backed panel data visible.
+  **Obj-8a — Shadow decision ledger** (§1 delta 5): per cycle per class — weather, inputs, resolved mode, would-have dials, would-block/would-resize counts vs actuals. Small table + retention via the B-NEW-47 sweep. Verify: 24h of shadow rows on staging with both classes present; ledger row count ≈ cycles × active classes; a forced synthetic STORMY produces the right would-block ledger deltas.
+
+**Obj-9 — VTS stamping (NOT gating):** vts rows gain per-class weather classification + would-be mode stamps (at-open, preserved at close — the B-4.7 stamp doctrine); VTS dials pinned NORMAL. Verify: stamps present + class-true; VTS admit/size behavior bit-identical to pre-batch (parity).
+
+**Obj-10 — #217 CONTEXT_BONUS removal** (§1 delta 8): dead config + formula term + comments removed; SIM §1.5 updated; lock asserting the term is gone. Behavioral no-op by construction (it was literal zero).
+
+**Obj-11 — Governance** (Tier 1 + Tier 2 per standard list; SysManual gains the "Adaptive Market Response — Body" chapter section; SIM entries for every new module + the consumer-gate wiring; #219 note updated to point at the new flip tracker; MULTI_ASSET + checklist item 5; completion report carries the parity results + the 04-22 test + the SHADOW-ship statement, with the §9.1 scaffolding banner: **🚨 THIS BATCH DOES NOT TURN ADAPTIVE RESPONSES ON. AMR SHIPS IN SHADOW; THE DIALS APPLY NOTHING UNTIL THE PHASE-19 FLAG FLIP.**)
+
+---
+
+## §5 — Out of scope (deferred, with homes)
+VTS-data threshold calibration (Phase 19 shadow ledger + Phase 25 study) · M2 brain (25-6) · mid-trade resize (post-launch) · B67 external inputs (class-routed on landing) · per-class `STRATEGY_GOVERNANCE`/`INFLUENCE_RULES` (Phase 16 review; AMR's roster lists cover the need) · volatility-adaptive lookbacks (direction C — socket only, own batch later) · §19.6 dashboard React tab (Phase 19) · capital partitioning across classes (Phase 20) · `applyGovernance`/flipRate removal (#219, Phase 16).
+
+## §6 — Risks for Langston pushback
+1. Both parity gates (legacy path bit-identical under disabled/shadow; VTS pinned-NORMAL parity) — Step-2 walks every consumer call site.
+2. The IDLE↔posture interaction: when a class resumes from IDLE into a genuinely bad market, the re-seed must not delay a legitimate tighten — proposal: re-seed sets posture from the FIRST live weather read (no dwell requirement on the first post-idle decision).
+3. Shadow-ledger volume: ~1 row/min/class — confirm table + retention sizing on CPX22.
+4. SQE gate ordering: AMR gates (roster/slots/pause) fire FIRST (cheapest reject) — confirm against the post-item-4 control plane.
+5. The EV-gap reader's population (VTS rows now, paper later) — confirm the source-mode filter design keeps Phase-19 continuity.
+6. AGGRESSIVE seed values + the dwell/hysteresis defaults (10-cycle relax / 5-min dwell) — operator judgment, ratify or adjust.
+7. #217 removal vs wiring — ratify the REMOVE position.
+
+## §7 — Verification matrix
+| Obj | Unit | Staging | Parity |
+|---|---|---|---|
+| 1-2 dials/modes | ✓ | — | ✓ (defensive trio unchanged) |
+| 3/3a weather+IDLE | ✓ (04-22 canonical + idle re-seed) | ✓ (per-class endpoint) | — |
+| 4/4a resolver+flag+dwell | ✓ (divergence + hysteresis) | ✓ | ✓ **(disabled/shadow bit-identical — LOAD-BEARING)** |
+| 5-7 gates/cooldown | ✓ | ✓ (synthetic STORMY demo) | — |
+| 8/8a diag+ledger | — | ✓ (24h shadow rows, both classes) | — |
+| 9 VTS stamps | ✓ | ✓ (rows class-true) | ✓ **(VTS behavior bit-identical — LOAD-BEARING)** |
+| 10 #217 | ✓ (term-gone lock) | — | ✓ (no-op by construction) |
+
+CI all-4-green per push; two Step-4 diffs (A: aggregator+flag+ledger, B: consumer gating); §9.3 Claude-in-Chrome UI pass; Langston Step-8 with ledger evidence.
+
+## §8 — Estimate
+~2-2.5 weeks · ~14-18 files · 1 migration (`amr_response_dials` + `amr_weather_rules` + `governance_modes` per-class rows + ledger table, ~50-70 rows) · no epoch bump while in shadow (zero behavioral writes); the Phase-19 flag-to-active flip is the epoch decision point (pre-declared in the completion report).
