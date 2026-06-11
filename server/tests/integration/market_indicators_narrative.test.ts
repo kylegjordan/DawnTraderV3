@@ -131,8 +131,14 @@ describe('Directive 11.4A: Market Indicators Service (M14, M15 Governance)', () 
     expect(indicators).toHaveProperty('frictionDescription');
     expect(indicators).toHaveProperty('timestamp');
     
-    expect(indicators.globalFrictionScore).toBeGreaterThanOrEqual(0);
-    expect(indicators.globalFrictionScore).toBeLessThanOrEqual(100);
+    // B-4.7: null = no same-class friction sample (honest no-sample value,
+    // replaces the old synthetic 25 default); a number stays bounded 0-100.
+    if (indicators.globalFrictionScore !== null) {
+      expect(indicators.globalFrictionScore).toBeGreaterThanOrEqual(0);
+      expect(indicators.globalFrictionScore).toBeLessThanOrEqual(100);
+    } else {
+      expect(indicators.frictionDescription.status).toBe('NO_SAMPLE');
+    }
   });
   
   it('should fallback to LOW_VOL_CHOP for unknown regimes', () => {
