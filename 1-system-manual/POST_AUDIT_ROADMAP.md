@@ -46,6 +46,8 @@
 
 **Phase 19 kicks off only after this block completes.**
 
+**Phase 19 roadmap deposit (Kyle directive 2026-06-11) — per-MODE break-even stops + moonbag trailing exits:** the TEC break-even-stop + moonbag trailing-exit machinery currently exists for the VTS only (and its per-class enables sit DISABLED for both crypto_spot and xstock_spot). With the item-4 three-system separation, paper mode runs independently full-time in Phase 19 — it MUST get its OWN break-even-stop + moonbag-trailing-exit functionality, per-class enable/disable (DB-governed per the §5.15 per-asset-class-config rule, never shared with the VTS switches). Live mode (Phase 21) gets the same: its own independently enable/disable-able BE + moonbag trailing set. Three modes × per-class switches, three independent configs — no cross-mode inheritance. Design note: the B73 exit-strategy ablation replay (12 BE/trailing variants, observation-only) is the calibration evidence source for choosing the paper-mode seed settings.
+
 > *Anchor note:* §19.0.C below is the Kraken fee fix — the anchor number is preserved from its original Phase-19 placement; its home is HERE (Interphase item 4.5).
 
 ### 19.0.C — Tiered fee-model accuracy fix (NEW 2026-06-08, Kyle directive — between-Phase-24-and-19 prerequisite)

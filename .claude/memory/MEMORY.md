@@ -8,7 +8,7 @@
 1. Read `CLAUDE.md` (§1 plain-language + CANONICAL-TERMS; §5 NO-PATCHES; §6.5 Langston comms; §7.1 🔒storage; §9.3 UI-verify; §10.5 alerts).
    - 🔒 **§7.1 STORAGE:** GoogleDrive folder = SOURCE OF TRUTH; edit there → copy changed files to `C:\dev\DawnTraderV3` bench → `node scripts/check-tsc-baseline.mjs` (CI gate) + `npx vitest run` → when green **commit+push to GitHub FROM GoogleDrive**. NEVER push from C:\dev, NEVER pull GitHub→GoogleDrive. Migrations are gitignored `*.sql` → `git add -f` + register in `drizzle/migrations/MANIFEST.txt` (rollback files stay OUT). Sync gate: from GoogleDrive `git rev-list --count HEAD..origin = 0`.
 2. Read this file.
-3. **§10.5 alerts (EVERY turn, before responding):** `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"` — surface any state=active + acknowledged_at=null + triggers_at≤now.
+3. **§10.5 alerts (EVERY turn, before responding):** `ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"` — surface (a) state=active + acknowledged_at=null + triggers_at≤now, AND (b) ★GAP-FIX 2026-06-11 (Kyle caught b46b invisible): anything fired_at/acknowledged_at within last 24h where acknowledged_by=langston — Langston ACK ≠ resolved; his response lives in Helsinki /var/log/langston-alert-invokes.log; the follow-through WORK is usually CC s.
 4. Telegram poll: `ssh root@204.168.141.77 "tail -30 /var/log/cc-bridge-inbox.jsonl"`.
 5. Plain language EVERY Kyle msg (Telegram t21 + Desktop BOTH), two-para default, % WITH raw counts. CANONICAL: "regime" not "market condition"; "xStock" not "stocks"; IMF/DBS/LQ/VN/DI/MCE as-is.
 6. Acknowledge readiness in one line.
