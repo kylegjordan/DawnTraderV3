@@ -34,6 +34,7 @@ beforeAll(async () => {
 describe('B-4.7 chunk A: per-class dominant regime', () => {
   it('MCE vote is class-filtered — different winners per class', () => {
     const mce = getMarketContextEngine();
+    mce._clearCacheForTests(); // singleton is worker-shared — other suites' entries outvote seeds
     for (let i = 0; i < 6; i++) mce._seedCacheForTests(`C${i}/USD`, 'crypto_spot', 'TREND_FRIENDLY_STABLE', 70);
     for (let i = 0; i < 5; i++) mce._seedCacheForTests(`X${i}x/USD`, 'xstock_spot', 'RANGE_BOUND_STABLE', 55);
 
@@ -47,6 +48,7 @@ describe('B-4.7 chunk A: per-class dominant regime', () => {
 
   it('NULL below MIN_CLASS_VOTE_PAIRS — no sub-threshold vote, no cross-class bleed', () => {
     const mce = getMarketContextEngine();
+    mce._clearCacheForTests();
     // 4 fresh entries of a class nobody else seeds in this suite run
     for (let i = 0; i < 4; i++) mce._seedCacheForTests(`THIN${i}x/USD`, 'xstock_spot', 'IMPULSE_EXPANSION', 60, 50);
     // Only the 4 short-TTL entries exist for this assertion window after they expire
@@ -65,6 +67,7 @@ describe('B-4.7 chunk A: per-class dominant regime', () => {
 
   it('telemetry vote filters on the at-write assetClass stamp', () => {
     const ta = getTelemetryAggregator();
+    ta._clearPairTelemetryForTests(); // worker-shared singleton
     for (let i = 0; i < 5; i++) {
       // caller: 'vts' satisfies the M70 single-writer guard.
       ta.recordPairTelemetry(`TC${i}/USD`, {

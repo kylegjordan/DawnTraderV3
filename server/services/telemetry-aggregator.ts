@@ -1264,6 +1264,17 @@ export class TelemetryAggregatorService {
    * This replaces the stale static cache in market-indicators.ts
    */
   /**
+   * TEST-ONLY (B-4.7): clear pair telemetry — same worker-shared-singleton
+   * rationale as MCE._clearCacheForTests. Throws outside vitest.
+   */
+  _clearPairTelemetryForTests(): void {
+    if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+      throw new Error('_clearPairTelemetryForTests is test-only');
+    }
+    this.pairTelemetry.clear();
+  }
+
+  /**
    * B-4.7 (#162): per-asset-class dominant regime over VTS telemetry. The
    * mixed-class getDominantRegime() was DELETED in this batch (see the MCE
    * counterpart for rationale). Records without an assetClass stamp

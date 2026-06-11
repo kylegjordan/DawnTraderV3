@@ -1777,6 +1777,19 @@ export class MarketContextEngine {
   }
 
   /**
+   * TEST-ONLY (B-4.7): clear the context cache — vote tests share the
+   * singleton with other suites in the same vitest worker; without a clear,
+   * entries computed by earlier suites outvote the seeded fixtures (caught
+   * by CI run on 4964dd0cb). Throws outside the vitest environment.
+   */
+  _clearCacheForTests(): void {
+    if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+      throw new Error('_clearCacheForTests is test-only');
+    }
+    this.cache.clear();
+  }
+
+  /**
    * TEST-ONLY (B-4.7): seed a context entry directly into the cache so the
    * per-class vote is unit-testable without the full computeContext pipeline.
    * Throws outside the vitest environment.
