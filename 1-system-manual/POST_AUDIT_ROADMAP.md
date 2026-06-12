@@ -228,15 +228,25 @@ When the ML conversational layer (M5) lands in Phase 17/18, its "is everything h
 #### 19.6.5 Scope shape & sequencing
 
 - Position: **last operational sub-batch of Phase 19** per Kyle directive. After SQE recalibration (19.4), the observational decision gate (19.4.5), and any AMR work that lands; before Phase 20 production hardening opens.
-- Estimated scope: two new React tabs + ~6 new API endpoints + per-category baseline-range constants in `module_constants` (so baselines are DB-tunable per CLAUDE.md §5 #15) + per-process capacity envelopes also in `module_constants` + alert-emitter wiring. Roughly 1 week's batch — moderate surface, low risk because it's read-only diagnostics + alert writes.
+- Estimated scope: two new React tabs + ~6 new API endpoints + per-category baseline-range constants in `module_constants` (so baselines are DB-tunable per CLAUDE.md §5 #15) + per-process capacity envelopes also in `module_constants` + alert-emitter wiring. **Revised for 19.6.6 (2026-06-12): + the internal-health subsystem registry + trade-lifecycle invariant checks + trend-escalation logic — now ~2 weeks total, with the long-tail spilling into Phase 20.**
 - Tier 1 governance: scope file, pre-audit consulting SIM for every monitored process, completion report. No new DB tables required (re-uses `system-alerts.jsonl` queue + `module_constants` for tunable baselines).
-**Phase 19 expected outcome**: Fully debugged paper trading system with optional SQE recalibration (19.4), Adaptive Market Response brain (now Phase 25 — see §3.3 / Decision Log), and end-of-phase diagnostics dashboards (19.6) covering external-source health and internal compute capacity wired into the alerts queue. All components validated. Ready for production hardening.
+#### 19.6.6 Internal subsystem health + EARLY-FAILURE detection (NEW 2026-06-12, Kyle directive — "find failures in progress before they become failures we react to")
+
+Extends §19.6 from external-sources + process-capacity into a **system-WIDE diagnostic layer**. The goal is explicitly *leading indicators*: catch degradation while it's still trending (a feed slowing, a queue backing up, a write path lagging) — BEFORE it becomes an outage that halts the system, force-closes trades prematurely, or loses money through a breakage nobody saw coming.
+
+- **Internal pipeline health rows** alongside the external ones: scanner cycle cadence vs expected; signal-pipeline stage flow (scanner → regime → SQE → RTB → TEC) with per-stage freshness; DB pool health + write-batcher lag; archive/persistence pipeline backlog; scheduled-job fire-evidence (consolidates the B-NEW-49/51 cron verifier into this layer); event-loop stall tripwire (the permanent [4.6B][STALL] watchdog feeds this); disk/memory headroom trends.
+- **Trade-lifecycle invariant checks:** open positions must have live pricing + an active exit path (TEC state present, stop/target sane); any open trade whose data feed goes stale fires BEFORE the exit logic malfunctions. This is the direct "don't lose money to a breakage" guard.
+- **Trend-based escalation = the failure-in-progress detector:** a metric that is yellow AND worsening across N consecutive sweeps escalates to orange (alert) even though it never touched the orange threshold — degradation-rate, not just absolute level. Thresholds + N DB-tunable.
+- **Consolidation mandate:** this layer ABSORBS the broken/parallel health surfaces — the defunct `SystemHealthMonitor`, the 3-registry health/lying-state problem (RUNNING_ISSUES #214), and the runtime-monitoring half of the Boot Readiness Coordinator (Phase 19.x below; its boot-ordering half stays its own item, but its "continuous operation monitoring" deliverable lands HERE so we don't build two registries). One subsystem registry, one alert pipeline, one dashboard family.
+- **Sequencing within the run order:** core internal-health rows + trade-lifecycle invariants + alert wiring land with the §19.6 batch at the end of Phase 19 (they protect the Phase-25 calibration run); the long-tail rows and tuning spill into **Phase 20 production hardening** as its observability workstream — Phase 20 hardens what Phase 19 proves. Phase 16 was considered and rejected as the home: this is new protective infrastructure, not cleanup.
+
+**Phase 19 expected outcome**: Fully debugged paper trading system with optional SQE recalibration (19.4), Adaptive Market Response brain (now Phase 25 — see §3.3 / Decision Log), and end-of-phase diagnostics dashboards (19.6) covering external-source health, internal compute capacity, AND the system-wide internal-health / early-failure-detection layer (19.6.6) wired into the alerts queue. All components validated. Ready for production hardening.
 
 ---
 
 ## Phase 19.x — Boot Readiness Coordinator (added 2026-05-08, Kyle directive)
 
-**Status:** DEFERRED to Phase 19. NOT pre-launch.
+**Status:** DEFERRED to Phase 19. NOT pre-launch. **Scope note (2026-06-12, Kyle 19.6.6 directive):** this item keeps the BOOT-ordering work (dependency-ordered startup, all-green-before-traffic gate); its "continuous operation monitoring" deliverable (#6 below) is RE-HOMED to §19.6.6 so the system has ONE subsystem registry + one alert pipeline, not two.
 
 **Trigger:** B79.TEC scope work (2026-05-08) surfaced that the current boot architecture is a patchwork — 12 separate bootstrap files in `server/startup/`, 8 separate health/monitor files in `server/services/`, the existing `SystemHealthMonitor` itself broken (`startPeriodicChecks is not a function` per PM2 logs), bootstraps run AFTER `server.listen()` so the app accepts traffic before subsystems are ready, and per-component error-handling is inconsistent (B74/B70 catch-and-continue, others throw, others silently degrade).
 
@@ -515,6 +525,9 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 - API versioning (`/api/v1/` namespace) (RISK-056)
 - JWT token migration from localStorage to httpOnly cookies (RISK-063)
 - Endpoint cleanup: remove any remaining unused server endpoints
+
+### 20.4.5 Observability hardening (NEW 2026-06-12 — §19.6.6 long-tail)
+- Extend the §19.6.6 internal-health layer: remaining subsystem rows, threshold tuning from Phase-19/25 observed baselines, alert-fatigue review (escalation N values), runbook links per alert category.
 
 ### 20.5 Architecture Cleanup
 - Decompose monolithic pages (enhanced-system-monitoring 4,528 lines, ai-transparency 2,074 lines)
@@ -898,6 +911,7 @@ These items are deferred and not currently sequenced. Listed for reference:
 ---
 ## §6 — DECISION LOG (newest first; one line per decision; full original update blocks in the archive file)
 
+- **2026-06-12** — §19.6 expanded into system-WIDE diagnostics (new 19.6.6): internal pipeline health + trade-lifecycle invariants + trend-based early-failure escalation feeding the alerts queue; absorbs the broken health monitors (#214) + the Boot Coordinator's runtime-monitoring half; long-tail → new §20.4.5. Home = Phase 19 end (rejected Phase 16: protective infra, not cleanup).
 - **2026-06-10** — Roadmap reorganized to run-order structure (this document); standing rules adopted (one home per topic; edit-in-place + decision log). Kyle + Langston approved.
 - **2026-06-10** — Interphase item 4.6 added (scan-stall + disk hygiene): Langston root-caused the event-loop stalls to the ~306-pair scan pinning the CPU; hygiene half immediate, structural fix scoped from the item-4 throughput study, lands before 4.5/4.7.
 - **2026-06-09** — Interphase item 4.7 added (per-asset-class regime, B-NEW-48) just before AMR; TFS sustainability gate (#111) homed to 25-3; item 3.5 issue-homing audit closed (~90 entries homed, 11 stale closed).
