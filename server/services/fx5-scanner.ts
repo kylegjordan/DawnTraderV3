@@ -21,8 +21,6 @@
  * - REB 2.6: Respects passive learning flag - pool stays empty when passiveLearning=true
  */
 
-import fs from 'fs';
-import path from 'path';
 import { storage } from '../storage.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused import
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -285,118 +283,22 @@ export class Fx5ScannerService {
   private lastScanDiagnostics: ScanDiagnostics | null = null;
   private scanDiagnosticsHistory: ScanDiagnostics[] = [];
 
-  // Batch 44: Diagnostics persistence directory
-  private static readonly DIAG_DIR = path.join(process.cwd(), 'logs', 'fx5_diagnostics');
-
   constructor() {
     // Phase 8.8.7: FilteredPairsService DEPRECATED - removed
     this.krakenService = new KrakenService();
-    // Batch 44: Rehydrate scan diagnostics from disk on startup
-    this.rehydrateDiagnostics();
   }
 
-  // Batch 44: Persist scan diagnostics to disk (called after each scan cycle).
-  // B-4.6-B chunk-B iteration 4 — ROOT-CAUSE FIX of the residual scan stall:
-  // the original implementation JSON.stringify'd the FULL 24h history
-  // (20-30MB by mid-day) and fs.writeFileSync'd it EVERY 30s cycle — a
-  // 200-700ms synchronous event-loop block once per sweep (the [4.6B][STALL]
-  // watchdog bracketed it exactly between the [19H][DIAG] log and
-  // [19F][VTS_PARITY]; it also starved the hourly crons — the 2026-06-09
-  // miss family). Now: append ONE cycle's record (~8KB) per line to a daily
-  // JSONL file, asynchronously — O(1) per cycle, no sync write, no sync
-  // stringify of the window. Same restart-survival guarantee via rehydrate.
-  private lastDiagRetentionDate = '';
-
-  private persistDiagnostics(): void {
-    const scanDiag = this.lastScanDiagnostics;
-    if (!scanDiag) return;
-    try {
-      if (!fs.existsSync(Fx5ScannerService.DIAG_DIR)) {
-        fs.mkdirSync(Fx5ScannerService.DIAG_DIR, { recursive: true });
-      }
-      const date = new Date().toISOString().split('T')[0];
-      const filePath = path.join(Fx5ScannerService.DIAG_DIR, `diagnostics_${date}.jsonl`);
-      fs.promises
-        .appendFile(filePath, JSON.stringify(scanDiag) + '\n')
-        .catch((err) => console.error('[44][DIAG] Failed to append diagnostics:', err));
-      // Retention sweep on date flip (and once after boot): keep ONLY
-      // today's + yesterday's .jsonl — rehydrate never reads further back.
-      // Also clears the legacy full-window .json files (1.6GB had silently
-      // accumulated on staging — nothing ever read or pruned them).
-      if (this.lastDiagRetentionDate !== date) {
-        this.lastDiagRetentionDate = date;
-        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-        const keep = new Set([`diagnostics_${date}.jsonl`, `diagnostics_${yesterday}.jsonl`]);
-        fs.promises
-          .readdir(Fx5ScannerService.DIAG_DIR)
-          .then((files) =>
-            Promise.allSettled(
-              files
-                .filter((f) => !keep.has(f))
-                .map((f) => fs.promises.unlink(path.join(Fx5ScannerService.DIAG_DIR, f))),
-            ),
-          )
-          .then((results) => {
-            const removed = results?.filter((r) => r.status === 'fulfilled').length ?? 0;
-            if (removed > 0) console.log(`[44][DIAG] Retention sweep removed ${removed} stale diagnostics file(s)`);
-          })
-          .catch((err) => console.error('[44][DIAG] Retention sweep failed:', err));
-      }
-    } catch (err) {
-      console.error('[44][DIAG] Failed to persist diagnostics:', err);
-    }
-  }
-
-  // Batch 44: Rehydrate scan diagnostics from disk on startup.
-  // B-4.6-B chunk-B iteration 4: reads the per-cycle JSONL format (one
-  // ScanDiagnostics per line). Legacy full-window .json files are NOT read —
-  // a one-time ≤24h diagnostics-history gap at the format-change deploy
-  // (disclosed in the change list); the window refills within a day and the
-  // retention sweep removes the legacy files.
-  private rehydrateDiagnostics(): void {
-    try {
-      if (!fs.existsSync(Fx5ScannerService.DIAG_DIR)) return;
-      const cutoff = Date.now() - DIAGNOSTICS_ROLLING_WINDOW_MS;
-      // Read today's and yesterday's files to cover the 24h window
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const files = [
-        path.join(Fx5ScannerService.DIAG_DIR, `diagnostics_${yesterday}.jsonl`),
-        path.join(Fx5ScannerService.DIAG_DIR, `diagnostics_${today}.jsonl`),
-      ];
-      let rehydrated: ScanDiagnostics[] = [];
-      for (const filePath of files) {
-        if (!fs.existsSync(filePath)) continue;
-        try {
-          // Boot-time sync read is acceptable (cold-start warmup > instant-on);
-          // ~8KB/line × ≤2880 lines/day — far smaller than the legacy blobs.
-          const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              rehydrated.push(JSON.parse(line));
-            } catch { /* skip corrupted line (e.g. torn final write) */ }
-          }
-        } catch { /* skip unreadable files */ }
-      }
-      // Filter to 24h window and deduplicate by timestamp
-      const seen = new Set<string>();
-      this.scanDiagnosticsHistory = rehydrated
-        .filter(d => new Date(d.timestamp).getTime() > cutoff)
-        .filter(d => {
-          if (seen.has(d.timestamp)) return false;
-          seen.add(d.timestamp);
-          return true;
-        })
-        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-      if (this.scanDiagnosticsHistory.length > 0) {
-        this.lastScanDiagnostics = this.scanDiagnosticsHistory[this.scanDiagnosticsHistory.length - 1];
-        console.log(`[44][DIAG] Rehydrated ${this.scanDiagnosticsHistory.length} scan diagnostics from disk (24h window)`);
-      }
-    } catch (err) {
-      console.error('[44][DIAG] Failed to rehydrate diagnostics:', err);
-    }
-  }
+  // B-4.6-B chunk-B (Kyle ruling 2026-06-12): the Batch 44 disk persistence
+  // of scan diagnostics (persistDiagnostics/rehydrateDiagnostics) was DELETED
+  // as legacy, not optimized. Its sole purpose was cosmetic restart-continuity
+  // of the 24h panel trend; its cost was a 20-30MB JSON.stringify +
+  // writeFileSync EVERY 30s cycle — THE residual event-loop stall (200-700ms
+  // per sweep, the cron-miss source) — plus 1.6GB of accumulated daily files
+  // NOTHING ever read (no script, alert, or trading logic; grep-verified).
+  // Diagnostics are now IN-MEMORY ONLY: the 24h rolling panel numbers reset
+  // at restart and refill over the day; last-scan numbers refill in one
+  // 30s cycle. The one-time 1.6GB logs/fx5_diagnostics cleanup happened at
+  // the deploy of this change.
 
   // REB 2.8.5B: Get scanner start time for countdown calculation
   getStartTime(): number {
@@ -1571,9 +1473,6 @@ export class Fx5ScannerService {
         d => new Date(d.timestamp).getTime() > diagCutoff
       );
       console.log(`[19H][DIAG] Scan diagnostics stored: quant=${scanDiag.quant.survivors} pattern=${scanDiag.pattern.survivors} → ${scanDiag.destination}(${scanDiag.destinationCount})`);
-
-      // Batch 44: Persist diagnostics to disk (survives PM2 restarts)
-      this.persistDiagnostics();
 
       // Directive 8.8.4-L1: Capture FX5 scan data for learning aggregation
       // Directive 9.0.B: Include volume classification stats
