@@ -51,7 +51,7 @@
  * process open (unit tests included).
  */
 
-import { monitorEventLoopDelay, performance } from 'perf_hooks';
+import { monitorEventLoopDelay, performance, PerformanceObserver } from 'perf_hooks';
 
 const LOG_INTERVAL_MS = 60_000;
 
@@ -59,7 +59,17 @@ type SegmentKey =
   | 'crypto_prefetch_pair'
   | 'crypto_prefetch_batch'
   | 'xstock_eval'
-  | 'vts_eval';
+  | 'vts_eval'
+  // B-4.6-B chunk-B iteration 2 (the chunk-A R1 escalation, fired): post-yield
+  // ELD max stayed 283-566ms/interval while ALL FOUR original segments read
+  // cold (<17ms max spans) — the residual block is elsewhere. These two wraps
+  // cover the never-measured market-scanner loops. ⚠ CAVEAT (documented at
+  // chunk A): both loops carry per-pair awaits (passesHistoryFilter) INSIDE
+  // the span, so a COLD pair's span includes genuine I/O suspension — read
+  // the per-interval MAX with that pollution in mind (warm cycles ≈ pure
+  // sync; a polluted max coexists with a healthy ELD).
+  | 'crypto_main_filter_pair'
+  | 'crypto_pattern_pair';
 
 interface SegAgg {
   spans: number;
@@ -73,6 +83,29 @@ const segs = new Map<SegmentKey, SegAgg>();
 const yields = new Map<string, number>();
 const eld = monitorEventLoopDelay({ resolution: 10 });
 let timer: NodeJS.Timeout | null = null;
+
+// B-4.6-B chunk-B iteration 2: GC pause attribution. A major GC of the ~450MB
+// heap can block the loop for hundreds of ms — pre-audit risk 2 named this
+// explicitly ("the 2s freeze may be a different beast, e.g. a GC pause").
+// If max_gc_ms per interval ≈ the ELD max_ms, the residual stall is GC, not
+// scan compute — a DIFFERENT fix family (heap/allocation), its own finding.
+// kind values (perf_hooks constants): 1=Scavenge 2=MinorMC 4=MarkSweepCompact
+// 8=IncrementalMarking 16=ProcessWeakCallbacks.
+let gcCount = 0;
+let gcSumMs = 0;
+let gcMaxMs = 0;
+let gcMaxKind = 0;
+const gcObserver = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    gcCount++;
+    gcSumMs += entry.duration;
+    if (entry.duration > gcMaxMs) {
+      gcMaxMs = entry.duration;
+      gcMaxKind = (entry as { detail?: { kind?: number } }).detail?.kind
+        ?? (entry as unknown as { kind?: number }).kind ?? 0;
+    }
+  }
+});
 
 function nsToMs(v: number): number {
   // histogram values are nanoseconds; 2-decimal ms
@@ -101,15 +134,26 @@ function flush(): void {
     console.log(`[4.6B][YIELD] METRIC lane=${lane} interval_s=60 yields=${n}`);
     yields.set(lane, 0);
   }
+  if (gcCount > 0) {
+    console.log(
+      `[4.6B][GC] METRIC gc interval_s=60 count=${gcCount} sum_ms=${Math.round(gcSumMs)} ` +
+        `max_gc_ms=${Math.round(gcMaxMs * 100) / 100} max_kind=${gcMaxKind}`,
+    );
+    gcCount = 0;
+    gcSumMs = 0;
+    gcMaxMs = 0;
+    gcMaxKind = 0;
+  }
 }
 
 /** Idempotent. Arms the histogram + the 60s interval-scoped METRIC line. */
 export function ensureScanStallInstrument(): void {
   if (timer) return;
   eld.enable();
+  gcObserver.observe({ entryTypes: ['gc'] });
   timer = setInterval(flush, LOG_INTERVAL_MS);
   timer.unref();
-  console.log('[4.6B][ELD] scan-stall instrument armed (monitorEventLoopDelay; 60s interval-scoped histogram + segment sync-spans)');
+  console.log('[4.6B][ELD] scan-stall instrument armed (monitorEventLoopDelay; 60s interval-scoped histogram + segment sync-spans + gc observer)');
 }
 
 /** Monotonic start marker for a sync span. */

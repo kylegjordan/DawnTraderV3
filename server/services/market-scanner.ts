@@ -712,7 +712,14 @@ export async function collectAdaptiveBatch(
     console.log(`[B63.3][AdaptiveScan] Pre-DBS pass: ${dbsCache.size}/${batch.length} pairs with OHLC, ${strongCount} strong-DBS (>=0.35) candidates (${Date.now() - preFetchStart}ms, batched ${B63_OHLC_FETCH_CONCURRENCY} concurrent, yields=${_yield46b.count})`);
   }
 
+  // B-4.6-B chunk-B iteration 2 (chunk-A R1 escalation): whole-iteration spans
+  // for the MAIN FILTER loop — iteration-to-iteration timing, so a span
+  // INCLUDES any await inside the pair's body (passesHistoryFilter on cold
+  // pairs = genuine I/O; documented pollution, read max with that in mind).
+  let _ss46bMF = -1;
   for (const pair of batch) {
+    if (_ss46bMF >= 0) recordSyncSpan('crypto_main_filter_pair', _ss46bMF);
+    _ss46bMF = syncSpanStart();
     // Directive 11.4H.4 Task 5: Check if this is a benchmark pair
     const isBenchmarkPair = benchmarkSet.has(pair.symbol.toUpperCase());
     const ticker = pair.ticker as any;
@@ -850,7 +857,8 @@ export async function collectAdaptiveBatch(
       });
     }
   }
-  
+  if (_ss46bMF >= 0) recordSyncSpan('crypto_main_filter_pair', _ss46bMF);
+
   const elapsedMs = Date.now() - startTime;
   console.log(`[AdaptiveScan][11.4C.1] Cycle complete in ${elapsedMs}ms: evaluated=${batch.length}, survivors=${survivors.length} (ideal=${idealSurvivors}, rotational=${rotationalSurvivors})`);
   
@@ -895,7 +903,13 @@ export async function collectAdaptiveBatch(
     let stableRejects = 0, priceRejects = 0, volumeRejects = 0, spreadRejects = 0, historyRejects = 0, maxPriceRejects = 0;
     console.log(`[DIAG_PATTERN] THRESHOLDS: minVolume=${patternMinVolume}, maxSpread=${patternMaxSpread}%, minHistory=${patternMinHistoryDays}d, minPrice=${patternMinPrice}, maxPrice=${patternMaxPrice}, excludeStablecoins=${patternExcludeStablecoins}`);
 
+    // B-4.6-B chunk-B iteration 2: whole-iteration spans for the 19F PATTERN
+    // loop (same iteration-to-iteration shape + await-pollution caveat as the
+    // main filter wrap above).
+    let _ss46bPT = -1;
     for (const pair of batch) {
+      if (_ss46bPT >= 0) recordSyncSpan('crypto_pattern_pair', _ss46bPT);
+      _ss46bPT = syncSpanStart();
       const ticker = pair.ticker as any;
       const pairInfo = pair.pairInfo;
       const currentPrice = parseFloat(ticker.c[0]);
@@ -970,6 +984,7 @@ export async function collectAdaptiveBatch(
         bidAskSpread,
       });
     }
+    if (_ss46bPT >= 0) recordSyncSpan('crypto_pattern_pair', _ss46bPT);
 
     console.log(`[DIAG_PATTERN] SUMMARY: ${patternResults.length} survived out of ${batch.length} total. Rejections: stablecoin=${stableRejects}, price=${priceRejects}, maxPrice=${maxPriceRejects}, volume=${volumeRejects}, spread=${spreadRejects}, history=${historyRejects}`);
 
