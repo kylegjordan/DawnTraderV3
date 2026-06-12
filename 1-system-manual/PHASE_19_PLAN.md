@@ -1,6 +1,6 @@
 # PHASE_19_PLAN.md — Phase 19: Paper Mode Audit & Debug — RUNNING PLAN
 
-> **🔄 RUNNING GOVERNANCE DOCUMENT (Kyle directive 2026-06-12).** Tier-1 during Phase 19: updated after **EVERY Phase-19 batch AND sub-batch** — sequence position, per-item status, decisions taken. Created 2026-06-12 at phase kickoff (Claude New + Kyle planning session). Langston sequence review: **PENDING** (dispatched 2026-06-12).
+> **🔄 RUNNING GOVERNANCE DOCUMENT (Kyle directive 2026-06-12).** Tier-1 during Phase 19: updated after **EVERY Phase-19 batch AND sub-batch** — sequence position, per-item status, decisions taken. Created 2026-06-12 at phase kickoff (Claude New + Kyle planning session). Langston sequence review: **✅ APPROVED 2026-06-12** ("APPROVE the B1→B14 sequence as ordered — no re-sequencing required") with 4 required additions + 3 recommendations, ALL folded in same-day (B7a/B7b split §1, pre-flight checklist §6, disposition table §7, decisions §5).
 >
 > **One-home rule:** this doc owns Phase-19 **sequencing + live status + phase-scoped decisions**. Item DETAIL stays homed in `POST_AUDIT_ROADMAP.md` §3.2 (locked items 19-1…19-20, §19.6.x, 19.x) — entries here pointer to those anchors, never duplicate them. Batch-level detail lives in the normal scope/completion files per CLAUDE.md §2.
 >
@@ -15,12 +15,13 @@
 | P19-B1 | Test-suite cleanup | §16.7 + TEC.b strict-throw restore (parked 2026-06-09) | **NEXT — first batch** | — |
 | P19-B2 | Live-mode build-approach decision | 19-18 (reshaped — see §3.2) | queued | — |
 | P19-B3 | Known-broken active-path repairs | 19-6 (#137) + 19-10 (#139) | queued | — |
-| P19-B4 | xStock wire-in (merged) | 19-1 + 19-7 (#92) + 19-8 residual latency check + B3.2 active-path strategy gates | queued | — |
-| P19-B5 | Data-capture completion | 19-3 (§19.0.5 remaining half) | queued | — |
-| P19-B6 | Daily loss-budget kill switch | 19-4 (§19.0.B — Kyle: build it, cheap insurance) | queued | — |
-| P19-B7 | **THE SWITCH-ON** + paper pipeline tabs + results dashboard | 19-2 + Kyle UI directives (§4) | queued | — |
+| P19-B4 | xStock wire-in (merged) | 19-1 + 19-7 (#92) + 19-8 residual (latency **+ WS staleness/reconnect fitness for execution** — Langston) + B3.2 active-path strategy gates + #153 0.50-cap gate + Kraken paper-order smoke test (Langston req. — here or B7 pre-flight) + B11-tagging decision (§5) | queued | — |
+| P19-B5 | Data-capture completion | 19-3 (§19.0.5 remaining half) + #86 Q-D probe scope decision | queued | — |
+| P19-B6 | Daily loss-budget kill switch | 19-4 (§19.0.B) — **reuse existing `dailyLossKillSwitchPct` knob + existing `tripKillSwitch` signature, no new constants (Langston); force-trip verification mandatory before trusting it** | queued | — |
+| P19-B7a | Paper pipeline tabs + results dashboard (UI shells) | Kyle UI directives (§4) — built/reviewed against VTS-style fixture data, merged BEFORE the flip commit (Langston split — same calendar as B7b, separate diffs for fault isolation) | queued | — |
+| P19-B7b | **THE SWITCH-ON** + observability T2 | 19-2 — gated on §6 pre-flight checklist; **staged per-class flip: crypto_spot first → confirm open→close clean → xstock_spot → rest** (Langston) | queued | — |
 | P19-B8 | Shadow-trade layer | 19-17 | queued | — |
-| P19-B9 | Paper trading run + audit | 19-11 + 19-12 (AMR shadow→active ~1 week in) | queued | — |
+| P19-B9 | Paper trading run + audit | 19-11 + 19-12 (AMR shadow→active ~1 week into the RUN — §5 re-anchor) + **opening task: first-48h capture-completeness audit** (every B5 hook landing rows, esp. paper-engine admit — Langston req., #206 failure class) + #138 first-confluence watch | queued | — |
 | P19-B10 | Performance + exit verification | 19-13 + 19-14 (§19.3.5; absorbs exit-protection proving — see §3.4) | queued | — |
 | P19-B11 | xStock safety additions | 19-9 (entry-side failure modes) + 19-16 (sector clustering) | queued | — |
 | P19-B12 | Diagnostics + internal-health monitoring | §19.6 + §19.6.6 (long-tail spills to Phase 20 §20.4.5) | queued | — |
@@ -94,6 +95,47 @@ Timing decision (Kyle 2026-06-12): tabs/dashboard built **alongside the switch-o
 | 2026-06-12 | Open/Closed paper trade tabs mirror VTS equivalents; results dashboard sourced from current dashboard ideas | Kyle |
 | 2026-06-12 | Loss-budget kill switch (19-4, roadmap-optional) WILL be built pre-flip | Kyle ("cheap insurance") |
 | 2026-06-12 | First batch = P19-B1 test-suite cleanup | Kyle |
+| 2026-06-12 | Langston review: APPROVE as ordered + 4 required additions (disposition sweep §7, Kraken paper-order smoke, B9 first-48h capture audit, AMR re-anchor below) + B7a/B7b split + staged per-class flip + B6 force-trip test — ALL ACCEPTED by CC, folded same-day | CC ↔ Langston consensus |
+| 2026-06-12 | **AMR shadow-window RE-ANCHOR ratified:** roadmap 19-19 says shadow "first ~5-7 days of Phase 19"; correct reading = first ~week **of the paper-active RUN** (B9). Shadow against VTS-only flow proves nothing about the dials; the debug-confounder concern applies to the active run. Plan reading is canonical; recorded so roadmap/plan divergence is a decision, not drift | Langston (his original amendment) + CC |
+| 2026-06-12 | **B11-timing contamination guard:** entry-side halt/earnings guards land AFTER xstock paper trading starts → either pull a minimal halt-check into B4 or tag all pre-B11 xstock trades for Phase-25 exclusion. **DECIDE AT B4 SCOPE**; record outcome here | Langston flag |
+
+---
+
+## §6 — P19-B7b PRE-FLIGHT CHECKLIST (Langston req. — de-facto gates live in earlier batches; nothing else aggregates them)
+
+ALL must be ✅ before the flip commit. Verify each at B7b Step 2, cite evidence in the B7b scope:
+
+| # | Gate | Built in | Status |
+|---|---|---|---|
+| 1 | Test suite green (no stale-failure noise floor) | B1 | ☐ |
+| 2 | #153 xstock 0.50 pattern-pool-cap placeholder validated (HARD gate per WIRE-IN doc) | B4 | ☐ |
+| 3 | RTB `SET NOT NULL` Phase-4 migration shipped (zero-null gate) | B4 | ☐ |
+| 4 | xStock pricing latency + staleness/reconnect fitness verified for execution | B4 | ☐ |
+| 5 | Kraken paper-order-system smoke test passed (minimal order round-trip — API surface unexercised since Phase 8) | B4 tail or B7b pre-flight | ☐ |
+| 6 | All §19.0.5 capture hooks live (pre-filter, RTB TTL, TCL, paper admit) | B5 | ☐ |
+| 7 | Loss-budget auto-trip armed AND force-trip-tested (trip + recovery path proven) | B6 | ☐ |
+| 8 | #213 legacy `/live-trading` routes confirmed inert (5-min check — gate-bypassing legacy route is a worse latent once execution machinery is hot) | B7b pre-flight | ☐ |
+| 9 | UI shells (B7a) merged + reviewed against fixture data | B7a | ☐ |
+
+---
+
+## §7 — RUNNING_ISSUES PHASE-19 DISPOSITION TABLE (Langston req. — every Phase-19-homed open issue gets an explicit home or an explicit Kyle-signed deferral)
+
+| # | Issue (one line) | Disposition |
+|---|---|---|
+| #92 | Wire xstockSpotScanner through signal-orchestration | → **B4** (core of the merged wire-in) |
+| #137 | Active-trading-path restoration intake (54 files / 231 errors + routes/storage share; baseline tags still TBD) | → **B3** (opens with tag-triage pass) |
+| #139 | vts-runner 9 remaining throwing resolveAssetClass sites | → **B3** |
+| #153 | xstock 0.50 pattern-pool-cap placeholder validation | → **B4** (pre-flight gate #2) |
+| #138 | Hybrid first-confluence label verification (fires on first confluence under active trading) | → **B9 watch-list** |
+| #95 | xStock real-time WS pricing adapter | → **SUPERSEDED by reconciliation §3.1** (B74 WS feed live since archiver batch); B4 residual = latency/staleness/reconnect fitness; rewrite-or-close #95 at B4 close |
+| #96 | Sector-aware portfolio-cluster prevention | → **B11** (19-16) |
+| #97 | xStock characteristics inventory (earnings/market-cap/P/E/IV) | → **B13** (19-15) |
+| #83 | Boot Readiness Coordinator (boot-ordering half) | → **B14** (conditional, triggers per roadmap 19.x) |
+| #56 residue | §19.0.5 promoted capture hooks (FX5 pre-filter + active-path SQE/RTB) | → **B5** |
+| #86 | Continuous Q-D friction probe + dedicated history table (gates xstock friction extraction) | → **B5 scope decision** (capture-infrastructure family; confirm or re-home at B5 Step 1) |
+| #94 | xstock macro confidence modifiers (currently deliberate NO-OP = 1.0; issue argues no-macro-awareness shouldn't ship into active trading) | → **B11 proposed** (xstock-quality family). Alternative: accept 1.0 for the paper run, calibrate Phase 25. **Needs Kyle sign-off either way** — flagged in kickoff summary |
+| #80 | Extend B73 exit-strategy ablation to xstock_spot (drives per-class TEC config) | → **B10 scope decision, lean Phase 25** (needs real xstock active fills, which only exist post-flip; calibration-flavored). Explicit deferral needs Kyle sign-off |
 
 ---
 
