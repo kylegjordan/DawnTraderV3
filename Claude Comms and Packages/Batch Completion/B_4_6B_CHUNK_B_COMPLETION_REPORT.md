@@ -1,0 +1,50 @@
+# B-4.6-B chunk B COMPLETION REPORT — scan-stall structural fix (readiness item 4.6 half B)
+
+**Date:** 2026-06-12 · **Author:** Claude New (CC-B) · **Status:** COMPLETE pending the formal 24h gate read (scheduled alert) + Kyle ACK
+**Commits (all CI-green):** `ff0b0e36e` (yields) → `7a28ac307` (GC observer + 2 loop wraps) → `31e39bbf6` (STALL watchdog) → `c1a252bbe` (root-cause JSONL — superseded same-day) → `b35f7e5fe` (deletion, FINAL; deployed 2026-06-12T13:55:57Z)
+**Langston (every gate):** chunk-B Step-4 APPROVE-TO-PUSH (2 judgment calls ratified) → iteration-4 APPROVE-TO-PUSH (attribution chain; 2 confirm items verified at source) → iteration-5 APPROVE-TO-PUSH (independent no-consumer grep; rm-no-tar; deploy-ordering note honored) → Step-8 final (see addendum below)
+**Kyle rulings folded in-batch:** (1) overnight mandate — fix dependency issues surfaced by the work; (2) **legacy ruling: "check to see if it is legacy and therefore can be deleted instead of creating a fix for a fix" — executed as iteration 5.**
+
+## PREVIOUSLY-STATED-VS-NOW (§9.2)
+
+1. **PREVIOUSLY:** the chunk-A soak verdict attributed the 200-700ms per-interval stall to the cumulative crypto-prefetch run. **NOW:** PARTIAL — the prefetch was a real contiguous-block contributor (the yields verifiably collapsed it), but the interval MAX was the Batch-44 `persistDiagnostics` sync disk write, sitting between two log lines no instrument covered. **REASON:** the chunk-A segment set could not see it; the iteration-3 watchdog could. Langston confirmed the correction ("the escalation sequence worked exactly as designed").
+2. **PREVIOUSLY:** "1.6GB removed at the deletion deploy" (early phrasing). **NOW:** the iteration-4 retention sweep removed the 73 legacy files (1.6GB) at ITS deploy (02:39:04Z); the iteration-5 deploy removed only the residual ~12MB JSONL. **REASON:** Langston rule-7 catch — report the telemetry, not the plan.
+3. **PREVIOUSLY:** Langston's PROCEED caveat-2 phrased the re-check as "max_ms < 50ms/interval." **NOW:** residual singles persist well above it (see delta 4). **REASON:** the once-per-sweep stall is eliminated; the residual is the family the soak verdict itself pre-declared a separate follow-up (now #225). Langston's Step-8 ruling: caveat-2 does not block the close and reconciles to the #225 entry — NOT to the scope gate, whose max clause fails on the same family.
+4. **PREVIOUSLY (CC's first Step-8 evidence summary):** "9 STALL events in 11 hours; interval max 114-182ms." **NOW (Langston full-window read, CC-reverified):** **96 STALL events / 11.5h (~8/h, p50 191ms, max 554ms); 29 of 691 intervals ≥250ms (worst 507.77ms).** **REASON:** the 9 was a ~80-minute windowed count wrongly extrapolated; the 114-182 range was snapshot tails (critical rule 13). Caught by Langston's Step-8 full-window scan BEFORE governance landed — same failure shape as BUG-2026-05-06-A; the corrected figures are what every governance doc now carries.
+
+## Objectives (scope `B_4_6B_SCAN_STALL_SCOPE.md`)
+
+| # | Objective | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Instrument first (chunk A) | **YES** (closed pre-batch) | `[4.6B][ELD]`/`[SEG]` METRIC lines; 18h soak named crypto_prefetch (batch 95ms / pair 72ms; 1073/1076 intervals >200ms). Extended in-batch: GC observer, 2 loop wraps, the 50ms STALL watchdog — **kept permanently** (Langston-endorsed standing tripwire; it found the root cause). |
+| 2 | Yield-chunk the proven-hot loops, NO behavioral change | **YES** | ScanYielder, 20ms elapsed gate, pair/batch boundaries ONLY (granularity lock → SIM). All four instrumented segments collapsed to <17ms max spans (from 95/72/32/25.5). Counters byte-identical (xstock 73-75/75; crypto pair counts in normal band; 30s cadence exact); `[4.6B][YIELD]` lanes witness 10-68 yields/min. 5 unit tests incl. the macrotask-mechanism lock (a swapped microtask yield fails the test). Bench: tsc baseline gate OK; full-suite failures identical to clean-bench stash-proof. |
+| 2+ | **Kyle fix-dependencies mandate: the residual stall root cause** | **YES — DELETED as legacy** | Attribution chain (evidence, not inference): iteration-2 cleared GC (max 19-47ms) + main-filter (≤59ms, await-polluted) + 19F (≤3ms); iteration-3 watchdog bracketed the block EXACTLY between `[19H][DIAG]` (out.log:5693249) and `[19F][VTS_PARITY]` (:5693250) = `fx5-scanner.ts persistDiagnostics()` — 20-30MB sync stringify+write EVERY 30s (24MB on disk at 02:28Z), Batch-44 era, never in the SIM. **Kyle legacy ruling executed:** consumer walk (enumerate-don't-assert) found the disk files' ONLY reader was the scanner's own boot rehydrate — no script/alert/trading-logic/client (Langston independent grep concurred). Disk layer deleted (~90 lines incl. the interim iteration-4 JSONL machinery); diagnostics in-memory only; live consumers (filter-diagnostics endpoint/panel, vts trace stamps) untouched; disclosed cost = panel 24h trend restart-volatile. |
+| 3 | Acceptance gate: p99<50ms AND max<250ms over ≥24h; zero skipped crons | **PARTIAL** (Langston-ruled disposition) | Pre-fix: 179 intervals max 229-574ms median 319, 0/179 <50; ~120 stalls/h. Post-fix 11.5h / 691 intervals: **p99 clause PASS** (worst p99 26.61ms, zero intervals ≥50 — huge margin); **max clause FAIL** — 29/691 intervals ≥250ms (worst 507.77), attributable to the reclassified residual single-event family (96 STALL events ≈8/h, p50 191ms, max 554ms; the once-per-sweep cadence is GONE — ~15× rate cut). **Zero actual cron misses** (verifier no-ops only — Langston-verified). Disposition: scan-starvation objective achieved (Langston concurs); the gate's max clause fails on #225's family → **either #225's resolution becomes the gate-pass path, or Kyle explicitly accepts a gate amendment — KYLE DECISION, PENDING.** Formal ≥24h read rules on the gate AS WRITTEN (re-issued alert, fires 2026-06-13T15:00:00Z; expected to fail the max clause the same way — it reports, not rubber-stamps). |
+| 4 | Governance | **YES** | List below. |
+
+**Boundaries honored:** no scan redesign, no pair-universe/threshold changes, no worker threads (the off-lane escalation was never needed — the root cause was an I/O block, not compute capacity). Main filter + 19F loops got measurement only, NO yields (not proven hot — chunk-A R1 escalation rule).
+
+## What stays in the system (permanent)
+
+1. `scan-yield.ts` ScanYielder + yields at the 4 boundary sites (3 loops).
+2. The scan-stall instrument with ELD histogram + 6 segments + GC observer + per-lane yield counts + **the 50ms STALL watchdog** — the standing ≥150ms tripwire: any future block logs its wall-clock window; bracketing out.log lines name the source (the method that caught Batch 44).
+3. The fx5 tombstone comment recording Kyle's delete-not-optimize ruling.
+
+## Governance files changed (Step 10)
+
+1. `1-system-manual/CHANGES_AND_FIXES.md` — FIX-2026-06-12-C (full arc, corrected attribution, disk telemetry per rule 7, dbs_compute_ms + yields= interpretation notes)
+2. `1-system-manual/RUNNING_ISSUES.md` — #165 cron-miss attribution sharpened; **#225 opened** (residual 110-180ms single-event family, watchdog as tripwire); header updated
+3. `1-system-manual/SYSTEM_IMPACT_MAP.md` — B-4.6-B section: ScanYielder + GRANULARITY LOCK verbatim; per-loop yield points incl. the xstock DBS pre-loop recorded as a **NEW interleave class** with its mutation-harmless basis (Langston's documentation condition — NOT flattened into the frequency argument); instrument extensions; fx5 diagnostics in-memory-only
+4. `1-system-manual/SYSTEM_MANUAL.md` — Chapter 3 banner: the microtask-starvation mechanism, the granularity lock, the deleted disk layer, the watchdog method
+5. `1-system-manual/BATCH_CATALOG.md` + `PHASE_HISTORY.md` — B-4.6-B chunk-B entries (iteration 4 recorded as superseded — no phantom intermediate state)
+6. `.claude/memory/MEMORY.md` mirror + user-cache truth + Langston `/home/langston/MEMORY.md` (§10.b)
+
+**Not applicable:** POST_AUDIT_ROADMAP (item 4.6 closes as planned; no resequencing), ADJUSTMENT_FRAMEWORK, AUTHORITY_BASELINE, MULTI_ASSET working list (no bar-interval item), no migration, no UI change (no Claude-in-Chrome pass claimed; the only UI-adjacent effect is the disclosed panel-trend restart-volatility).
+
+## Step-8 addendum (Langston final verdict)
+
+**FLAG → corrections → CONFIRMED.** His independent verification confirmed: deploy state, deletion complete (zero write-path references), once-per-sweep block eliminated (the 02:38 restart boundary visibly changes the stall character), p99 clause pass at worst 26.61ms, zero actual cron misses. He FLAGGED two factual discrepancies in CC's evidence summary — the 9-vs-96 STALL count and the snapshot-tail interval-max range — both corrected throughout governance before anything landed (PREVIOUSLY/NOW delta 4). His caveat-2 ruling: does not block the close; reconciles to #225, not to the scope gate. His framing requirement honored verbatim: the close-out to Kyle says the every-30-seconds freeze is gone and the system is dramatically smoother, but brief one-off hiccups still happen about eight times an hour and are tracked as their own work item — with the gate-amendment-vs-#225-resolution decision belonging to Kyle.
+
+## Sync gate
+
+Verified at the closing push: GoogleDrive `git status` clean, **`rev-list HEAD..origin = 0` AND `rev-list origin..HEAD = 0` (both directions — Langston's final-confirm catch: the one-directional check cannot detect committed-but-unpushed local work; CLAUDE.md §7.1 updated to require both)**, staging pulled to the pushed head. Langston's final sign-off applies to the pushed governance-close commit (hash cited in his spot-check ping).
