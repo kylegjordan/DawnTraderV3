@@ -75,6 +75,12 @@ interface SegAgg {
   spans: number;
   sumMs: number;
   maxSpanMs: number;
+  // B-4.6-B iteration 6 (Kyle-prompted #225 investigation): WHO held the max.
+  // Distinguishes "genuinely special pair" (same label recurs across
+  // intervals) from "GC-inside-the-measurement-window artifact" (random
+  // label each interval — spans are wall-clock, and a same-thread GC pause
+  // landing mid-pair inflates an ordinary pair's reading).
+  maxLabel?: string;
 }
 
 const segs = new Map<SegmentKey, SegAgg>();
@@ -123,11 +129,13 @@ function flush(): void {
     if (agg.spans === 0) continue;
     console.log(
       `[4.6B][SEG] METRIC segment=${key} interval_s=60 spans=${agg.spans} ` +
-        `sum_ms=${Math.round(agg.sumMs)} max_span_ms=${Math.round(agg.maxSpanMs * 100) / 100}`,
+        `sum_ms=${Math.round(agg.sumMs)} max_span_ms=${Math.round(agg.maxSpanMs * 100) / 100}` +
+        (agg.maxLabel ? ` max_span_label=${agg.maxLabel}` : ''),
     );
     agg.spans = 0;
     agg.sumMs = 0;
     agg.maxSpanMs = 0;
+    agg.maxLabel = undefined;
   }
   for (const [lane, n] of yields) {
     if (n === 0) continue;
@@ -188,7 +196,7 @@ export function syncSpanStart(): number {
 }
 
 /** Record one contiguous synchronous span (ms since `startedAt`). */
-export function recordSyncSpan(key: SegmentKey, startedAt: number): number {
+export function recordSyncSpan(key: SegmentKey, startedAt: number, label?: string): number {
   const ms = performance.now() - startedAt;
   let agg = segs.get(key);
   if (!agg) {
@@ -197,12 +205,15 @@ export function recordSyncSpan(key: SegmentKey, startedAt: number): number {
   }
   agg.spans++;
   agg.sumMs += ms;
-  if (ms > agg.maxSpanMs) agg.maxSpanMs = ms;
+  if (ms > agg.maxSpanMs) {
+    agg.maxSpanMs = ms;
+    agg.maxLabel = label;
+  }
   return ms;
 }
 
 /** Record a pre-computed span value in ms (used for batch sums). */
-export function recordSyncSpanMs(key: SegmentKey, ms: number): void {
+export function recordSyncSpanMs(key: SegmentKey, ms: number, label?: string): void {
   ensureScanStallInstrument();
   let agg = segs.get(key);
   if (!agg) {
@@ -211,7 +222,10 @@ export function recordSyncSpanMs(key: SegmentKey, ms: number): void {
   }
   agg.spans++;
   agg.sumMs += ms;
-  if (ms > agg.maxSpanMs) agg.maxSpanMs = ms;
+  if (ms > agg.maxSpanMs) {
+    agg.maxSpanMs = ms;
+    agg.maxLabel = label;
+  }
 }
 
 /** B-4.6-B chunk B: count one cooperative yield for `lane` (ScanYielder). */

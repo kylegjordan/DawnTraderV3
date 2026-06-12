@@ -688,7 +688,7 @@ export async function collectAdaptiveBatch(
             timestamp: typeof c.time === 'number' ? c.time : (c.time ? Date.parse(c.time) : 0),
           }));
           const atr = computeATR14(ohlcFull);
-          if (atr <= 0) { _chunkSyncMs += recordSyncSpan('crypto_prefetch_pair', _ss46b); return; }
+          if (atr <= 0) { _chunkSyncMs += recordSyncSpan('crypto_prefetch_pair', _ss46b, pair.symbol); return; }
           const dbsResult = computeDirectionalBias(ohlcFull, atr);
           let slope = 0;
           const priorOHLC = ohlcFull.slice(0, -3);
@@ -700,12 +700,12 @@ export async function collectAdaptiveBatch(
             }
           }
           dbsCache.set(pair.symbol, { score: dbsResult.score, category: dbsResult.category, slope, atr });
-          _chunkSyncMs += recordSyncSpan('crypto_prefetch_pair', _ss46b);
+          _chunkSyncMs += recordSyncSpan('crypto_prefetch_pair', _ss46b, pair.symbol);
         } catch {
           // OHLC unavailable — pair will fall back to standard filters (no DBS-aware routing)
         }
       }));
-      if (_chunkSyncMs > 0) recordSyncSpanMs('crypto_prefetch_batch', _chunkSyncMs);
+      if (_chunkSyncMs > 0) recordSyncSpanMs('crypto_prefetch_batch', _chunkSyncMs, chunk[0]?.symbol);
       await _yield46b.maybeYield(); // B-4.6-B chunk B: batch-of-10 boundary
     }
     const strongCount = Array.from(dbsCache.values()).filter(d => d.score >= B63_STRONG_DBS_THRESHOLD).length;

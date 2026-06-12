@@ -3516,7 +3516,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
       vtsService.updateMarketPrice(pair.symbol, priceData.price);
 
-      recordSyncSpan('vts_eval', _ss46b);
+      recordSyncSpan('vts_eval', _ss46b, pair.symbol);
       for (const stratDef of effectiveStrategies) {
         // B70.3 (2026-05-05): exclude universally-disabled strategies BEFORE
         // they reach detect(). Per Kyle directive 2026-05-05: liquidity_trap

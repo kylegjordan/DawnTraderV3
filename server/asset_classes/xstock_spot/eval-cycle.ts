@@ -431,7 +431,7 @@ export async function evaluateXstockPairForVTS(
       return;
     }
 
-    recordSyncSpan('xstock_eval', _ss46b);
+    recordSyncSpan('xstock_eval', _ss46b, symbol);
     // ── 6. Lane × strategy fan-out (mirrors crypto fx5-scanner.ts:1607-1643) ──
     // B79.0m.b2-followup (Kyle 2026-05-12): per-lane pair-pool eval counts.
     // Counts unique pair-into-lane events so the "Pair-Pool Evaluations"
