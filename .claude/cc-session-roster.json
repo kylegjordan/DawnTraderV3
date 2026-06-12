@@ -12,10 +12,11 @@
     {
       "name": "Claude New",
       "alias": "CC-B",
-      "session_id": "PENDING — Claude New fills this in at activation (its own session UUID), then removes this note",
+      "session_id": "7f66d970-154c-441a-9aa1-e12a77e67cce",
       "role_note": "batch-implementation session",
       "named_by": "Kyle 2026-06-12",
-      "status": "awaiting-activation"
+      "status": "active",
+      "activated": "2026-06-12 (self-registered at naming; session began as the B-5 AMR build session)"
     }
   ],
   "rules": [
