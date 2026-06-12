@@ -98,6 +98,9 @@ Timing decision (Kyle 2026-06-12): tabs/dashboard built **alongside the switch-o
 | 2026-06-12 | Langston review: APPROVE as ordered + 4 required additions (disposition sweep §7, Kraken paper-order smoke, B9 first-48h capture audit, AMR re-anchor below) + B7a/B7b split + staged per-class flip + B6 force-trip test — ALL ACCEPTED by CC, folded same-day | CC ↔ Langston consensus |
 | 2026-06-12 | **AMR shadow-window RE-ANCHOR ratified:** roadmap 19-19 says shadow "first ~5-7 days of Phase 19"; correct reading = first ~week **of the paper-active RUN** (B9). Shadow against VTS-only flow proves nothing about the dials; the debug-confounder concern applies to the active run. Plan reading is canonical; recorded so roadmap/plan divergence is a decision, not drift | Langston (his original amendment) + CC |
 | 2026-06-12 | **B11-timing contamination guard:** entry-side halt/earnings guards land AFTER xstock paper trading starts → either pull a minimal halt-check into B4 or tag all pre-B11 xstock trades for Phase-25 exclusion. **DECIDE AT B4 SCOPE**; record outcome here | Langston flag |
+| 2026-06-13 | **#80 exit-strategy ablation xstock extension → Phase 25** (needs real fills; calibration-flavored) | **Kyle decision** |
+| 2026-06-13 | **Phase-19 working-style directive:** every pre-implementation audit = thorough CODE-LEVEL audit; SIM dug through for upstream + downstream impacts of every touched component + System Manual consulted; NO dismissiveness toward small errors — certainty about the issue before any deletion or cut; CC + Langston iterate autonomously per batch until verified complete AND verified correct, escalate to Kyle only on no-consensus | **Kyle directive** (P19-B1 turn) |
+| 2026-06-13 | Bench DB: **Docker Desktop install APPROVED + executed** (winget, pgvector/pg17 compose to follow in P19-B1 Bucket A); reboot timing Kyle's call | Kyle |
 
 ---
 
@@ -134,8 +137,8 @@ ALL must be ✅ before the flip commit. Verify each at B7b Step 2, cite evidence
 | #83 | Boot Readiness Coordinator (boot-ordering half) | → **B14** (conditional, triggers per roadmap 19.x) |
 | #56 residue | §19.0.5 promoted capture hooks (FX5 pre-filter + active-path SQE/RTB) | → **B5** |
 | #86 | Continuous Q-D friction probe + dedicated history table (gates xstock friction extraction) | → **B5 scope decision** (capture-infrastructure family; confirm or re-home at B5 Step 1) |
-| #94 | xstock macro confidence modifiers (currently deliberate NO-OP = 1.0; issue argues no-macro-awareness shouldn't ship into active trading) | → **B11 proposed** (xstock-quality family). Alternative: accept 1.0 for the paper run, calibrate Phase 25. **Needs Kyle sign-off either way** — flagged in kickoff summary |
-| #80 | Extend B73 exit-strategy ablation to xstock_spot (drives per-class TEC config) | → **B10 scope decision, lean Phase 25** (needs real xstock active fills, which only exist post-flip; calibration-flavored). Explicit deferral needs Kyle sign-off |
+| #94 | xstock macro confidence modifiers (currently deliberate NO-OP = 1.0; issue argues no-macro-awareness shouldn't ship into active trading) | → **CC recommendation 2026-06-13: DEFER BUILD to Phase 25 + ensure equity-macro raw inputs are CAPTURED at B5** (capture-now/modulate-later, same doctrine as 19-20 + AMR body/brain). Rationale: zero-data hand-tuning pre-run would confound the debug window; mid-run build (B11) splits the calibration population; interim protection = paper-only stakes + AMR active from week 1 + per-class regime/DBS (B-4.7). Langston's Step-1 lean was B11 — reconciling in the P19-B1 loop; final recording pending Kyle confirm |
+| #80 | Extend B73 exit-strategy ablation to xstock_spot (drives per-class TEC config) | → **✅ DEFERRED to Phase 25 — KYLE DECISION 2026-06-13** ("for the exit strategy study, yes, let's wait for phase twenty five") |
 
 ---
 
