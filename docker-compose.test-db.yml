@@ -1,0 +1,35 @@
+# ════════════════════════════════════════════════════════════════════════════
+# P19-B1 Bucket A (2026-06-13) — local test-bench database, CI-parity mirror.
+#
+# Mirrors the CI Test Suite job's service container EXACTLY (ci.yml:65-83):
+# same image tag, same credentials, same port, same healthcheck. The image tag
+# MUST track ci.yml — if the CI job's image changes, change it here in the
+# same batch (deliberately the same floating tag CI uses; pinning a digest
+# here while CI floats would itself be a parity gap).
+#
+# The user/pass/db triplet conforms to the hardcoded vitest URL
+# (vitest.config.ts:10, postgresql://test:test@localhost:5432/test) — the
+# vitest config is CI-parity ground truth; the bench conforms to it, never
+# vice versa (Langston P19-B1 Step-1 review).
+#
+# Bench runbook (from the C:\dev clone root):
+#   1. docker compose -f docker-compose.test-db.yml up -d --wait
+#   2. DATABASE_URL=postgresql://test:test@localhost:5432/test npm run db:migrate
+#   3. npx vitest run
+# Clean-slate reset (keeps db:migrate honest, disposable by design):
+#   docker compose -f docker-compose.test-db.yml down -v
+# ════════════════════════════════════════════════════════════════════════════
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "test", "-d", "test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

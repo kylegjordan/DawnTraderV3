@@ -23,8 +23,13 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import type { OHLCData } from '../../types/market-regime.types';
+import {
+  _seedModuleCacheForTests,
+  clearModuleConstantsCache,
+} from '../../services/module-constants-service.js';
+import type { ModuleConstant } from '../../../shared/schema.js';
 
 // Mock storage.getScreenerFilters — we control the resolved row per test.
 // Langston Step 4 nit #4: use vi.fn so call args are observable.
@@ -79,6 +84,27 @@ const PATTERN_ROW = {
 };
 
 describe('B79.0m.b2 — Pattern Filter', () => {
+  // P19-B1 (2026-06-13): B-NEW-34 (2026-05-15) gave the filter a real DB read
+  // (getConstant 'xstock_spot'.'min_ohlc_history_bars' at pattern-filter.ts:247)
+  // AFTER this test was authored, and no mock was ever added — on a bench with
+  // no DB every case that reaches the history gate dies with ECONNREFUSED
+  // (CI masked it via its Postgres service container). Seed the module cache
+  // (same mechanism the resolver reads through, cost_cache.test.ts precedent)
+  // so this stays a hermetic unit test exercising the REAL resolution code.
+  // Value 24 mirrors the production seed migration cited in case (c).
+  beforeAll(() => {
+    _seedModuleCacheForTests('xstock_spot', [
+      {
+        moduleName: 'xstock_spot', exchange: '*', assetClass: 'xstock_spot',
+        strategy: '*', regime: '*', constantName: 'min_ohlc_history_bars', value: 24,
+      } as unknown as ModuleConstant,
+    ]);
+  });
+
+  afterAll(() => {
+    clearModuleConstantsCache();
+  });
+
   beforeEach(() => {
     mockRow.current = { ...PATTERN_ROW };
     metrics.LQ = 50; metrics.VN = 0.5; metrics.Corr = 0.5;

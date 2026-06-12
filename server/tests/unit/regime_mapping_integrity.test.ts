@@ -80,11 +80,19 @@ describe('Regime Mapping Integrity — No Hardcoded Regime Strings', () => {
     const serverDir = path.resolve(__dirname, '../../');
     const files = getAllTsFiles(serverDir);
     const violations: string[] = [];
-    
-    const pattern = new RegExp(`['"]${regime}['"]`, 'g');
-    
+
+    // P19-B1 (2026-06-13): no `g` flag — a global regex carries lastIndex state
+    // across .test() calls, which can silently SKIP violations on lines after a
+    // match. Single-line membership test needs no global flag.
+    const pattern = new RegExp(`['"]${regime}['"]`);
+
     for (const file of files) {
-      if (EXCLUDED_PATHS.some(p => file.includes(p))) continue;
+      // P19-B1 (2026-06-13): EXCLUDED_PATHS entries use '/' but path.join
+      // builds '\\' paths on Windows, so the '/config/' and '/tests/'
+      // exemptions never matched on a Windows bench and the canonical map
+      // itself got flagged. Compare on a separator-normalized path.
+      const normalizedPath = file.split(path.sep).join('/');
+      if (EXCLUDED_PATHS.some(p => normalizedPath.includes(p))) continue;
       
       try {
         const content = fs.readFileSync(file, 'utf-8');
