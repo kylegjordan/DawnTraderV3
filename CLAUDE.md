@@ -223,7 +223,7 @@ MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200
 **Roles:**
 - **Kyle** — decider. Approves scope, architecture, risk. Breaks ties. Only person who can override governance with explicit exception. **Communicates with CC in this Claude Desktop conversation directly, not via Telegram.** Communicates with Langston via Telegram (DM `@LangstonDTBot` or post in topic 21).
 - **Langston** — senior PM + code-level reviewer. Independent perspective on scope, pre-audit, code diff, completion reports. Runs on Claude Code **Fable 5** (1M-context `[1m]` variant; switched from Opus 4.8 on 2026-06-09) under `langston-bridge.service` on Hetzner `204.168.141.77`. Reachable via `@LangstonDTBot` from Telegram OR direct SSH+`claude -p --session-id <UUID>` invocation.
-- **Claude Code (you)** — implementation lead. Drafts scope, runs audits, writes code, deploys, verifies, writes reports, packages governance updates. Peer to Langston on review discussions.
+- **Claude Code (you)** — implementation lead. Drafts scope, runs audits, writes code, deploys, verifies, writes reports, packages governance updates. Peer to Langston on review discussions. **TWO named CC sessions run concurrently (Kyle directive 2026-06-12): "Claude Old" (CC-A — comms/roadmap/governance session) and "Claude New" (CC-B — batch-implementation session).** Know which one you are (unsure → ask Kyle). Full naming + wake-routing protocol: §6.9.
 
 **Telegram forum** (group `-1003575211453`, "Dawn Trader HQ"): topic **21** (Batch Implementation) = primary. Topic 28 (Design) is unused — use thread 21 for anything that needs Langston's attention.
 
@@ -237,7 +237,7 @@ MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200
 
 ### 6.2 Kyle ↔ CC
 
-Kyle messages CC in the Claude Desktop conversation. He does NOT DM `@CCDTCommsBot`. Telegram is for the 3-way coordination + Langston.
+Kyle messages CC in the Claude Desktop conversation as the primary channel. **NEW (2026-06-12): Kyle can ALSO reach CC via Telegram** — a DM to `@CCDTCommsBot` or a post in topic 21 (text or voice) WAKES the targeted CC session(s) through the wake watcher (§6.9), so Telegram doubles as Kyle's remote prompt for CC when a session is open on his desktop.
 
 ### 6.3 Kyle → Langston
 
@@ -357,6 +357,25 @@ Both bridges detect voice/audio Telegram messages and transcribe locally via `wh
 - Topic 21: BOTH bots receive the voice. CC posts ACK. Langston transcribes silently (no preview ACK) and only posts back if his reply is non-[SILENT].
 
 **Failure modes:** transcription failure → inbox entry `kind: "voice_inbound_failed"` + `failure_reason` + `stderr_tail`. DM bot posts a "⚠️ Voice transcription failed" notice; topic 21 is silent. Bridge wrapper errors logged to inbox; suppressed from group posts. Read transcriptions via the same `tail /var/log/cc-bridge-inbox.jsonl` pattern.
+
+### 6.9 CC wake channel + session naming — "Claude Old" / "Claude New" (Kyle directive 2026-06-11/12) — ONE HOME for this protocol
+
+**What it is:** each open CC desktop session arms a persistent background watcher at session start that WAKES the session (no Kyle prompt needed) on inbound events. Built + live-verified 2026-06-11/12.
+
+**Session names (also the Telegram speaker prefixes per §6.4):**
+| Name | Alias | Role |
+|---|---|---|
+| **Claude Old** | CC-A | Kyle-facing comms / roadmap / governance session |
+| **Claude New** | CC-B | Batch-implementation session |
+
+**What wakes a session (three sources, one watcher):**
+1. **Kyle via Telegram** — DM to `@CCDTCommsBot` or post in topic 21, text OR voice. Name-mention routing: "Claude Old …" wakes only CC-A; "Claude New …" only CC-B; BOTH names ("Claude Old and Claude New, weigh in on…") wakes both and BOTH reply in topic 21 under their own prefixes; NO name = broadcast, all armed sessions wake. Works whether the session is the front tab or backgrounded — only a fully closed session misses.
+2. **Langston alert completions** — every `invoke DONE` line in `/var/log/langston-alert-invokes.log` (Helsinki) wakes CC automatically so alert follow-through starts immediately (Langston ACK ≠ resolved; the work is usually CC's).
+3. **The wake file** `/var/log/cc-wake.log` (Helsinki, langston-writable) — Langston's explicit summon channel: `echo "Claude Old: <reason+pointer>" >> /var/log/cc-wake.log`. Same name-routing rules.
+
+**Mechanics (re-arm EVERY session start — MEMORY.md session-start item 4.5 is the canonical command):** persistent Monitor running a self-healing SSH loop tailing the three Helsinki sources through the filter `C:\Users\kyleg\.claude\cc-wake-filter.py <ALIAS>`. The filter holds the name registry (adding a session = one registry line) and forces UTF-8 output (Windows cp1252 pipe encoding silently killed non-ASCII events — fixed 2026-06-11). Watcher dies with the session; the self-healing loop survives SSH drops and announces reconnects.
+
+**Limitation (honest):** the watcher lives inside an OPEN desktop session. Closed session = no wake (a known Claude Code platform gap — official feature requests for persistent external wake are open). Mitigation = the session-start re-arm step.
 
 ---
 
