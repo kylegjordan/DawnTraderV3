@@ -367,7 +367,9 @@ Both bridges detect voice/audio Telegram messages and transcribe locally via `wh
 | Name | Alias | Bound to | Role (descriptive, NOT the binding) |
 |---|---|---|---|
 | **Claude Old** | CC-A | session `3ce652e6-…` (roster) | comms / roadmap / governance |
-| **Claude New** | CC-B | registers own ID at activation (roster) | batch implementation |
+| **Claude New** | CC-B | session `7f66d970-…` (roster; self-registered 2026-06-12) | batch implementation |
+
+**Status: BOTH sessions ACTIVE + the full system live-verified 2026-06-12** — Kyle's real both-names Telegram test woke both sessions independently; both replied in topic 21 under their own prefixes.
 
 **What wakes a session (three sources, one watcher):**
 1. **Kyle via Telegram** — DM to `@CCDTCommsBot` or post in topic 21, text OR voice. Name-mention routing: "Claude Old …" wakes only CC-A; "Claude New …" only CC-B; BOTH names ("Claude Old and Claude New, weigh in on…") wakes both and BOTH reply in topic 21 under their own prefixes; NO name = broadcast, all armed sessions wake. Works whether the session is the front tab or backgrounded — only a fully closed session misses.
