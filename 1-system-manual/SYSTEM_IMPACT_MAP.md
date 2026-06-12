@@ -144,13 +144,23 @@
 - **Execution**: **Timer-based** — 30s for Tier A, on-demand with caching for others
 - **Blast Radius**: **MEDIUM** — affects data freshness but has fallback caching
 
-### 2.5 Cost Cache
-- **File**: `server/services/cost-cache.ts`
-- **What**: Lightweight volume lookup and friction coefficient cache. TTL: 5 minutes. Fallback when FX5 metadata unavailable at order creation.
-- **Upstream**: FX5 Scanner (populates during scans), Kraken REST API
-- **Downstream**: Cost Model friction calculations, execution sizing
-- **Execution**: **Passive** — populated by FX5, read on-demand
-- **Blast Radius**: **LOW** — fallback cache, not primary data path
+### 2.5 Cost Cache — (consumer table refreshed B-5.1, 2026-06-12; grep-exhaustive per Langston Step-8)
+- **File**: `server/core/cache/cost-cache.ts` (path corrected B-5.1 — the old `server/services/cost-cache.ts` reference was stale)
+- **What**: Per-symbol cost-metrics cache (spread/slippage/volume...), TTL 5 minutes. `setCostMetrics` merges partial writes onto existing entries; `getOrSetCostMetrics` creates a defaults entry on miss (DEFAULT_SPREAD ≥ 0).
+- **B-5.1 write guard (#223):** negative `data.spread` (crossed/stale book = non-measurement) is dropped at the FIELD level — existing entry keeps prior good spread while sibling fields update; NO existing entry → `setCostMetrics` returns `null`, nothing fabricated (a cache miss is the honest state; a defaults-stamped entry would inflate the friction sampler's n). Zero spread (locked book) accepted. Rejection logged once-per-symbol-per-5min on **stderr → `error.log`** (NOT out.log — Step-8 evidence lesson).
+- **Upstream (writers)**: Market Scanner (crypto per-pair prefetch), FX5 Scanner — both via the `setCostMetrics` chokepoint
+- **Downstream (readers — all 7 call sites proven miss-safe at call-site level, B-5.1 pre-audit ADDENDUM + Langston independent grep)**:
+  | Reader | Site | Miss handling |
+  |---|---|---|
+  | market-indicators (friction sampler) | :281 | `if (metrics && metrics.spread >= 0)` — skip symbol (B-5 read guard) |
+  | telemetry-aggregator | :1402-1410 | null → canonical-symbol retry → `getOrSetCostMetrics` defaults |
+  | fx5-scanner (spread audit log) | :1775 | `cachedMetrics?.spread ?? 0.001` — debug only |
+  | tec-costs diagnostics | :43-58 | explicit `if (metrics)` else labeled defaults branch |
+  | tec-costs diagnostics (2nd site) | :86 | `getOrSetCostMetrics` — never-null defaults path (added to this table per Langston Step-8) |
+  | routes diagnostics ×2 | :8508-8523, :8559 | explicit defaults branch / `getOrSetCostMetrics` |
+  | cost-model | :179 | `getOrSetCostMetrics` — never-null (cost-model.ts:205 `getCostMetricsCache` is cost-model's OWN map, NOT this cache) |
+- **Execution**: **Passive** — populated by scanners, read on-demand
+- **Blast Radius**: **MEDIUM** (raised from LOW at B-5.1: the friction sampler that feeds AMR weather reads it — no longer "fallback-only")
 
 ### 2.6 OHLC Cache (Batch 18 — NEW)
 - **File**: `server/services/ohlc-cache.ts`
@@ -2886,3 +2896,10 @@ export function getPatternPoolGuardrailsForAssetClass(
 12. **Deleted:** TOP_100_FALLBACK_PAIRS (market-indicators); legacy wildcard `governance_modes */aggressive_mode_confidence_floor` DB row.
 
 **Known cross-cutting facts recorded:** crypto DBS store equity contamination #222 (52.6% weight — PRE-EXISTING, exposed by the dump surface); negative-spread writer #223 (market-scanner crossed quotes; read guard live); restart-transient CALM #224 (Phase-19 design); session-boundary classification flapping with dwell-ladder damping (shadow-week quantifies).
+
+### B-5.1 deltas (input-integrity fixes #222/#223/#224 — 2026-06-12, deployed 5737b1ddb at 01:01:56Z)
+
+- **MCE → DirectionalBiasStore write is now class-allowlisted (#222).** `market-context-engine.ts:~1395` — the ONLY production `directionalBiasStore.updatePair` call site — wrapped in `if (assetClass === 'crypto_spot')`. The crypto store can no longer receive non-crypto symbols regardless of which class flows through `computeContext` (allowlist: any FUTURE class is excluded by default). Self-heal: PAIR_HARD_EXPIRY_MS=5min + in-memory store (restart = clean). Permanent lock: audit-script leg `probe_dbs_class_purity` (registry-based; empty store → SKIP, never vacuous-PASS) + class-generic unit regression. UPSTREAM unchanged; DOWNSTREAM consumers of crypto global DBS (AMR weather dbs input, market-indicators display, MCE bias modifier, VTS `globalDirectionalBias[Score]` stamps) all read the now-clean aggregate — **intra-epoch-4 boundary `2026-06-12T01:01:56Z`** (rows stamped before/after carry contaminated/clean aggregates respectively; no epoch bump — input cleanup, not a formula change).
+- **Cost-cache write guard (#223)** — see refreshed §2.5 (field-level negative-spread drop at the `setCostMetrics` chokepoint; 18 live rejections in the first 10 min post-deploy, all −1 stale-ask sentinels; rejection log on stderr → error.log).
+- **amr-weather-report IDLE extension (#224):** friction `null` with reason WARMING/NO_SOURCE → IDLE (staleness `friction_warming`/`friction_no_source`); LOW_VOLUME_THIN + MARKET_CLOSED remain LIVE (measured absence ≠ warm-up). Consequence: xstock weekends under ACTIVE = IDLE all weekend (correct by construction). **Friction source = a PREREQUISITE for AMR LIVE classification** — onboarding a new asset class without a friction sampler leaves its AMR permanently IDLE (recorded in ASSET_CLASS_ONBOARDING_WORKFLOW).
+- **amr-gates `no_posture` fail-closed split (the Note-3 4th gap):** item 4's "Fail-closed under ACTIVE only" now extends to the null-mode branch — `enforce` + `mode === null` → `{allowed:false, gate:'no_posture'}` (previously allowed/skipped = ungated ACTIVE-restart window). `dry_run` + null → skipped, unchanged. Safety basis: all 4 gate sites are ENTRY-side (exits never gated); posture is in-memory-only (no persisted-posture hazard); restart sequence is always null → blocked-under-active → first LIVE ≤ NORMAL (post-IDLE cap).
