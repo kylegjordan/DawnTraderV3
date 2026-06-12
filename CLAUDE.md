@@ -362,11 +362,12 @@ Both bridges detect voice/audio Telegram messages and transcribe locally via `wh
 
 **What it is:** each open CC desktop session arms a persistent background watcher at session start that WAKES the session (no Kyle prompt needed) on inbound events. Built + live-verified 2026-06-11/12.
 
-**Session names (also the Telegram speaker prefixes per §6.4):**
-| Name | Alias | Role |
-|---|---|---|
-| **Claude Old** | CC-A | Kyle-facing comms / roadmap / governance session |
-| **Claude New** | CC-B | Batch-implementation session |
+**Session names (also the Telegram speaker prefixes per §6.4) — names are PERMANENTLY BOUND to session IDs in the roster `(repo)/.claude/cc-session-roster.json` (Kyle directive 2026-06-12). At session start, look up YOUR OWN session id in the roster: found → that is your name, period; not found → you are UNNAMED — ask Kyle, then register yourself. NEVER infer your name from your role/work; a fresh conversation NEVER inherits a name automatically (name carry-over to a successor session happens only on Kyle's explicit say-so). Self-ID: any background Bash task's output path contains your session UUID.**
+
+| Name | Alias | Bound to | Role (descriptive, NOT the binding) |
+|---|---|---|---|
+| **Claude Old** | CC-A | session `3ce652e6-…` (roster) | comms / roadmap / governance |
+| **Claude New** | CC-B | registers own ID at activation (roster) | batch implementation |
 
 **What wakes a session (three sources, one watcher):**
 1. **Kyle via Telegram** — DM to `@CCDTCommsBot` or post in topic 21, text OR voice. Name-mention routing: "Claude Old …" wakes only CC-A; "Claude New …" only CC-B; BOTH names ("Claude Old and Claude New, weigh in on…") wakes both and BOTH reply in topic 21 under their own prefixes; NO name = broadcast, all armed sessions wake. Works whether the session is the front tab or backgrounded — only a fully closed session misses.

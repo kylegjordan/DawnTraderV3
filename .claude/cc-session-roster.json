@@ -1,0 +1,27 @@
+{
+  "_purpose": "PERMANENT session-name registry (Kyle directive 2026-06-12). A name belongs to EXACTLY ONE session ID, forever. At session start, look up YOUR OWN session id here: found = that is your name, period; not found = you are UNNAMED — ask Kyle to assign a name, then add your entry. NEVER infer a name from your role or your work. NEVER reuse a retired name without Kyle's explicit say-so. Self-ID trick: run any background Bash task — the task output path contains your session UUID (...\\<session-uuid>\\tasks\\...).",
+  "roster": [
+    {
+      "name": "Claude Old",
+      "alias": "CC-A",
+      "session_id": "3ce652e6-e92e-4699-b225-e679f5db9377",
+      "role_note": "comms / roadmap / governance session",
+      "named_by": "Kyle 2026-06-12",
+      "status": "active"
+    },
+    {
+      "name": "Claude New",
+      "alias": "CC-B",
+      "session_id": "PENDING — Claude New fills this in at activation (its own session UUID), then removes this note",
+      "role_note": "batch-implementation session",
+      "named_by": "Kyle 2026-06-12",
+      "status": "awaiting-activation"
+    }
+  ],
+  "rules": [
+    "One name = one session_id, permanent. A new conversation NEVER inherits a name automatically.",
+    "If a named session is retired and Kyle wants the name to carry to a successor conversation, Kyle says so explicitly and the session_id field is updated with a dated note.",
+    "Telegram speaker prefixes and wake-routing aliases come FROM this roster.",
+    "Unnamed sessions must not arm a wake watcher with someone else's alias."
+  ]
+}
