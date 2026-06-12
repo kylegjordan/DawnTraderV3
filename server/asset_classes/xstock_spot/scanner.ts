@@ -38,6 +38,7 @@
  */
 
 import { centralClock, type ClockTick } from '../../services/central-clock.js';
+import { ScanYielder } from '../../services/scan-yield.js';
 import { getXstockSpotInstances } from '../../services/asset-class-instances.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
 import { recordXstockFrictionCycle, resetXstockFrictionWarmup } from './friction-sample-store.js';
@@ -806,7 +807,21 @@ class XstockSpotScannerService {
 
         const dbsCycleStart = Date.now();
         const dbsBySymbol = new Map<string, { score: number; category: string; slope: number }>();
+        // B-4.6-B chunk B: ONE yielder spans the DBS pre-compute loop AND the
+        // eval loop below (shared elapsed budget — the event loop does not care
+        // which loop starved it). Elapsed-gated macrotask yields at SYMBOL
+        // boundaries ONLY, never inside a symbol's compute span.
+        // NOTE: this DBS pre-loop is an ADDITION beyond the pre-audit's three
+        // named loops — fully synchronous (dbs_compute_ms historically ~50ms
+        // contiguous) and outside the chunk-A segment set. Shared-state basis:
+        // a mid-loop reader of xstockDirectionalBiasStore sees mixed-vintage
+        // per-pair scores (this cycle for processed symbols, last cycle for the
+        // rest) — on 15-minute bars the per-cycle drift is far inside the
+        // store's publish floors; same mutation-harmless class as the pre-audit
+        // C1 cost-cache row. dbsBySymbol is loop-local.
+        const _yield46b = new ScanYielder('xstock_cycle');
         for (const symbol of symbolList) {
+          await _yield46b.maybeYield(); // B-4.6-B chunk B: symbol boundary
           const ohlc = ohlcBatch.get(symbol) ?? [];
           if (ohlc.length < minOhlcHistoryBars) continue;
           const atr = computeATRFromOHLC(ohlc, xstockDbsAtrPeriod);
@@ -862,13 +877,14 @@ class XstockSpotScannerService {
         const dbsComputeDurationMs = Date.now() - dbsCycleStart;
         console.log(
           `[B-PHASE-A2][CYCLE_DBS_TIMING] tick=${tick.tickNumber} dbs_compute_ms=${dbsComputeDurationMs} ` +
-          `pairs_with_dbs=${dbsBySymbol.size} universe=${symbolList.length}`,
+          `pairs_with_dbs=${dbsBySymbol.size} universe=${symbolList.length} yields=${_yield46b.count}`,
         );
 
         // ════════════════════════════════════════════════════════════════════
         // Eval loop — same as before, plus thread propagatedDbs.
         // ════════════════════════════════════════════════════════════════════
         for (const symbol of symbolList) {
+          await _yield46b.maybeYield(); // B-4.6-B chunk B: pair boundary ONLY
           const ohlc = ohlcBatch.get(symbol) ?? [];
           if (ohlc.length < minOhlcHistoryBars) {
             insufficientHistory++;

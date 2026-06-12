@@ -2,6 +2,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { storage } from '../storage';
 import { activeFilterPool } from './active-filter-pool.js';
 import { recordSyncSpan, recordSyncSpanMs, syncSpanStart } from './scan-stall-instrument.js';
+import { ScanYielder } from './scan-yield.js';
 import { getAdaptiveScanManager, type AdaptiveScanBatch } from './adaptive-scan-manager.js';
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { setCostMetrics } from '../core/cache/cost-cache.js';
@@ -661,6 +662,12 @@ export async function collectAdaptiveBatch(
   if (strongTrendFilters) {
     const preFetchStart = Date.now();
     const B63_OHLC_FETCH_CONCURRENCY = 10; // Kraken-friendly burst size
+    // B-4.6-B chunk B: the prefetch loop is THE proven hot segment (soak:
+    // batch max 95ms / pair max 72ms sync spans run back-to-back warm →
+    // 200-700ms event-loop stall per cycle). Elapsed-gated macrotask yields
+    // at BATCH-OF-10 BOUNDARIES ONLY (granularity lock — never mid-batch:
+    // the 10 callbacks' sync tails drain as one atomic span by design).
+    const _yield46b = new ScanYielder('crypto_prefetch');
     for (let i = 0; i < batch.length; i += B63_OHLC_FETCH_CONCURRENCY) {
       const chunk = batch.slice(i, i + B63_OHLC_FETCH_CONCURRENCY);
       // B-4.6-B chunk A (measurement only): per-pair ATR/DBS sync spans + the
@@ -699,9 +706,10 @@ export async function collectAdaptiveBatch(
         }
       }));
       if (_chunkSyncMs > 0) recordSyncSpanMs('crypto_prefetch_batch', _chunkSyncMs);
+      await _yield46b.maybeYield(); // B-4.6-B chunk B: batch-of-10 boundary
     }
     const strongCount = Array.from(dbsCache.values()).filter(d => d.score >= B63_STRONG_DBS_THRESHOLD).length;
-    console.log(`[B63.3][AdaptiveScan] Pre-DBS pass: ${dbsCache.size}/${batch.length} pairs with OHLC, ${strongCount} strong-DBS (>=0.35) candidates (${Date.now() - preFetchStart}ms, batched ${B63_OHLC_FETCH_CONCURRENCY} concurrent)`);
+    console.log(`[B63.3][AdaptiveScan] Pre-DBS pass: ${dbsCache.size}/${batch.length} pairs with OHLC, ${strongCount} strong-DBS (>=0.35) candidates (${Date.now() - preFetchStart}ms, batched ${B63_OHLC_FETCH_CONCURRENCY} concurrent, yields=${_yield46b.count})`);
   }
 
   for (const pair of batch) {

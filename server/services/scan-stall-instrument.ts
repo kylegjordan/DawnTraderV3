@@ -68,6 +68,9 @@ interface SegAgg {
 }
 
 const segs = new Map<SegmentKey, SegAgg>();
+// B-4.6-B chunk B: per-lane yield counts (ScanYielder reports here so the
+// yield witness rides the SAME 60s METRIC stream the soak analysis reads).
+const yields = new Map<string, number>();
 const eld = monitorEventLoopDelay({ resolution: 10 });
 let timer: NodeJS.Timeout | null = null;
 
@@ -92,6 +95,11 @@ function flush(): void {
     agg.spans = 0;
     agg.sumMs = 0;
     agg.maxSpanMs = 0;
+  }
+  for (const [lane, n] of yields) {
+    if (n === 0) continue;
+    console.log(`[4.6B][YIELD] METRIC lane=${lane} interval_s=60 yields=${n}`);
+    yields.set(lane, 0);
   }
 }
 
@@ -137,8 +145,15 @@ export function recordSyncSpanMs(key: SegmentKey, ms: number): void {
   if (ms > agg.maxSpanMs) agg.maxSpanMs = ms;
 }
 
+/** B-4.6-B chunk B: count one cooperative yield for `lane` (ScanYielder). */
+export function recordYield(lane: string): void {
+  ensureScanStallInstrument();
+  yields.set(lane, (yields.get(lane) ?? 0) + 1);
+}
+
 /** Test-only. */
 export function _resetScanStallInstrument(): void {
   segs.clear();
+  yields.clear();
   eld.reset();
 }

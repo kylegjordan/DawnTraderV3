@@ -32,6 +32,7 @@
 import { vtsService, type VirtualSignal } from './vts-service.js';
 import { resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 import { recordSyncSpan, syncSpanStart } from './scan-stall-instrument.js';
+import { ScanYielder } from './scan-yield.js';
 // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
@@ -3308,7 +3309,13 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   // Batch 22 HF3: Track unique duplicate combos for observability
   const blockedDupCombos = new Set<string>();
 
+  // B-4.6-B chunk B: elapsed-gated macrotask yields at PAIR boundaries ONLY
+  // in this EVAL loop (the resolve loop above gets NO yields in this scope —
+  // pre-audit C1: its .state weekend-suspend read-coherence spans stay atomic).
+  const _yield46b = new ScanYielder('vts_eval');
+
   for (const pair of pairs) {
+    await _yield46b.maybeYield(); // B-4.6-B chunk B: pair boundary
     try {
       // Batch 23: Max open trades check (B72: from module_constants).
       if (openVirtualTrades.size >= getMaxOpenTrades()) {
