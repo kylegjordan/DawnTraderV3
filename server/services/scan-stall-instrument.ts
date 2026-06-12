@@ -146,6 +146,18 @@ function flush(): void {
   }
 }
 
+// B-4.6-B chunk-B iteration 3: stall WATCHDOG — generic attribution when the
+// named-suspect wraps all read cold (iteration-2 result: GC max 20-47ms,
+// main-filter ≤59ms await-polluted, pattern ≤3ms — yet ELD max 286-451ms
+// EVERY interval). A 50ms heartbeat timestamps each blockage window:
+// any gap > STALL_GAP_MS logs wall-clock start/end so the culprit is named
+// by the out.log lines bracketing the window. Diagnostic-grade; remove or
+// quiet once the residual source is identified and fixed.
+const HEARTBEAT_MS = 50;
+const STALL_GAP_MS = 150;
+let lastBeat = 0;
+let beatTimer: NodeJS.Timeout | null = null;
+
 /** Idempotent. Arms the histogram + the 60s interval-scoped METRIC line. */
 export function ensureScanStallInstrument(): void {
   if (timer) return;
@@ -153,7 +165,20 @@ export function ensureScanStallInstrument(): void {
   gcObserver.observe({ entryTypes: ['gc'] });
   timer = setInterval(flush, LOG_INTERVAL_MS);
   timer.unref();
-  console.log('[4.6B][ELD] scan-stall instrument armed (monitorEventLoopDelay; 60s interval-scoped histogram + segment sync-spans + gc observer)');
+  lastBeat = Date.now();
+  beatTimer = setInterval(() => {
+    const now = Date.now();
+    const gap = now - lastBeat - HEARTBEAT_MS;
+    if (gap > STALL_GAP_MS) {
+      console.log(
+        `[4.6B][STALL] gap_ms=${gap} blocked_from=${new Date(lastBeat).toISOString()} ` +
+          `blocked_until=${new Date(now).toISOString()}`,
+      );
+    }
+    lastBeat = now;
+  }, HEARTBEAT_MS);
+  beatTimer.unref();
+  console.log('[4.6B][ELD] scan-stall instrument armed (monitorEventLoopDelay; 60s interval-scoped histogram + segment sync-spans + gc observer + 50ms stall watchdog)');
 }
 
 /** Monotonic start marker for a sync span. */
