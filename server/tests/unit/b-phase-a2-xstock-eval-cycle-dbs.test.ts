@@ -63,14 +63,9 @@ describe('B-PHASE-A2 — XSTOCK_SPOT_REGISTRY sector completeness', () => {
     }
   });
 
-  it.skip('SKIPPED post-UNIVERSE-DISCOVERY: registry size range check moved to b79-0n-universe-service.test.ts', () => {
-    // B79.0n.UNIVERSE-DISCOVERY 2026-05-21: registry is now DB-backed + populated
-    // by universe-service.initializeFromDB() at boot. At test module load time
-    // the registry is empty. Range check moved to universe-service Layer 4
-    // bootstrap test where the registry IS synchronously populated.
-    expect(XSTOCK_SPOT_REGISTRY.size).toBeGreaterThanOrEqual(100);
-    expect(XSTOCK_SPOT_REGISTRY.size).toBeLessThanOrEqual(2000);
-  });
+  // P19-B1 Bucket E (2026-06-13): the parked size-range skip was DELETED.
+  // Replacement coverage verified before deletion: b79-0n-universe-service
+  // .test.ts Layer 2 (initializeFromDB population) + Layer 4 (bootstrap set).
 
   it('all sector values are in the allowed XstockSector union', () => {
     const allowed = new Set([

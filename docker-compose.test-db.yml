@@ -15,7 +15,9 @@
 # Bench runbook (from the C:\dev clone root):
 #   1. docker compose -f docker-compose.test-db.yml up -d --wait
 #   2. DATABASE_URL=postgresql://test:test@localhost:5432/test npm run db:migrate
-#   3. npx vitest run
+#   3. COINGECKO_API_TIER=demo npx vitest run
+#      (env var mirrors ci.yml — external-macro-feed.ts hard-fails at import
+#      without it per the no-silent-fallback rule; CI sets the same value)
 # Clean-slate reset (keeps db:migrate honest, disposable by design):
 #   docker compose -f docker-compose.test-db.yml down -v
 # ════════════════════════════════════════════════════════════════════════════

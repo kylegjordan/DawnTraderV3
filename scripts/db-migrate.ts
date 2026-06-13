@@ -32,6 +32,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Load DATABASE_URL from .env before using it — `npm run` does not auto-load
 // .env, so the script does it itself. `dotenv` is already a project dependency.
 import 'dotenv/config';
@@ -40,8 +41,11 @@ import 'dotenv/config';
 import pg from 'pg';
 const { Client } = pg;
 
+// P19-B1 (2026-06-13): fileURLToPath, NOT URL.pathname — pathname yields
+// "/C:/..." on Windows, which path.resolve doubles into "C:\C:\...". Identical
+// behavior on the Linux CI/staging runners; required for the bench runbook.
 const MIGRATIONS_DIR = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '..',
   'drizzle',
   'migrations',

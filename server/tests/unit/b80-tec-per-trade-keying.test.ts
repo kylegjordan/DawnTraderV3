@@ -86,6 +86,8 @@ function seedTECRowsForB80() {
     { ...wildcardBase, constantName: 'moonbag_max_duration_ms', value: 14400000 },
     { ...wildcardBase, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
     { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
+    // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
+    { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
   ];
 }
 

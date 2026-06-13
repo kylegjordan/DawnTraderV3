@@ -91,6 +91,8 @@ function seedFullActive(beValue: boolean = false) {
     { ...wildcardBase, constantName: 'moonbag_max_duration_ms', value: 14400000 },
     { ...wildcardBase, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
     { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
+    // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
+    { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
   ];
 }
 
@@ -141,6 +143,8 @@ describe('B79.TEC — per-asset-class TEC config cache', () => {
       { ...wildcardBase, constantName: 'moonbag_max_duration_ms', value: 14400000 },
       { ...wildcardBase, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
       { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
+      // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
+      { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
     ];
     await primeTECConfig();
     expect(resolveTECConfig('crypto_spot').breakEvenEnabled).toBe(false);
@@ -164,6 +168,8 @@ describe('B79.TEC — per-asset-class TEC config cache', () => {
       { ...wildcardBase, constantName: 'moonbag_max_duration_ms', value: 14400000 },
       { ...wildcardBase, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
       { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
+      // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
+      { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
     ];
     await expect(primeTECConfig()).rejects.toThrow(/TEC_BOOTSTRAP_FAIL/);
     // Verify the per-class status reflects the failure.
@@ -201,23 +207,26 @@ describe('B79.TEC — per-asset-class TEC config cache', () => {
     ).toThrow(/TEC_UPDATE_MISSING_ASSET_CLASS/);
   });
 
-  it('TEC_DEFAULTS.breakEvenEnabled is false (fail-closed)', async () => {
-    // Seed only the assertion-required rows; omit the actual break_even_enabled row's
-    // value field so that `pick('break_even_enabled', TEC_DEFAULTS.breakEvenEnabled)`
-    // falls back to TEC_DEFAULTS. Wait — primeTECConfig requires the per-class row to
-    // exist. We seed the row with `null` value, which makes pick() fall back.
+  it('TEC_DEFAULTS backfill is RETIRED — BE-rows-only rowset hard-fails at boot (P19-B1 TEC.b)', async () => {
+    // PRE-TEC.b this test asserted the opposite contract: seed ONLY the four
+    // break_even_enabled rows and verify the soft `pick` backfilled the other
+    // 10 keys from TEC_DEFAULTS. That backfill is exactly what B79.0n.TEC.b
+    // removed (RUNNING_ISSUES #141) — the same sparse rowset must now REFUSE
+    // to boot, naming the first missing key. Rewritten 2026-06-13 to lock the
+    // strict contract at the site that used to lock the soft one.
     mockRows.current = [
       { ...wildcardBase, assetClass: 'crypto_spot', constantName: 'break_even_enabled', value: false },
       { ...wildcardBase, assetClass: 'crypto_perp', constantName: 'break_even_enabled', value: false },
       { ...wildcardBase, assetClass: 'xstock_spot', constantName: 'break_even_enabled', value: false },
       { ...wildcardBase, assetClass: 'xstock_perp', constantName: 'break_even_enabled', value: false },
-      // Intentionally NO other config keys — TEC_DEFAULTS will be used for those.
+      // Intentionally NO other config keys — strict resolution must throw.
     ];
-    await primeTECConfig();
-    const cfg = resolveTECConfig('crypto_spot');
-    // Default TTL/trigger fields should still match documented TEC_DEFAULTS.
-    expect(cfg.breakEvenEnabled).toBe(false);
-    expect(cfg.breakEvenTriggerR).toBe(1.0);
-    expect(cfg.persistenceDebounceMs).toBe(5000);
+    const err = await primeTECConfig().then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(err).not.toBeNull();
+    expect(err!.message).toContain('[TEC_BOOTSTRAP_FAIL]');
+    expect(err!.message).toContain('TEC_MISSING_KEY');
   });
 });

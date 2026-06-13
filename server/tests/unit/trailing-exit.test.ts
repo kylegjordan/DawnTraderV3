@@ -83,6 +83,9 @@ function seedB79TECRows() {
     { ...wildcardBase, constantName: 'moonbag_max_duration_ms', value: 14400000 },
     { ...wildcardBase, constantName: 'moonbag_cap_mode', value: 'reserved_slots' },
     { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
+    // P19-B1 TEC.b (2026-06-13): strict requireKey — every fixture must carry
+    // the full 11-key set; this key was silently backfilled by the old soft pick.
+    { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
   ];
 }
 

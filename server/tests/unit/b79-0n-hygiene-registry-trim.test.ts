@@ -51,55 +51,17 @@ describe('B79.0n.HYGIENE — 5-symbol registry trim', () => {
     }
   });
 
-  it.skip('SKIPPED post-UNIVERSE-DISCOVERY: XSTOCK_SPOT_REGISTRY.size range check moved to b79-0n-universe-service.test.ts (Layer 4 bootstrap)', () => {
-    expect(XSTOCK_SPOT_REGISTRY.size).toBeGreaterThanOrEqual(100);
-    expect(XSTOCK_SPOT_REGISTRY.size).toBeLessThanOrEqual(2000);
-  });
+  // P19-B1 Bucket E (2026-06-13): the parked size-range skip + the fully-skipped
+  // sector-coverage describe (XLV/XLK/XLC/XLP/total floors) were DELETED.
+  // Replacement coverage verified before deletion:
+  //   - b79-0n-universe-service.test.ts Layer 2 (initializeFromDB population,
+  //     sector handling, delisted skip) + Layer 4 bootstrap (>=5 distinct sectors)
+  //   - operational sector-distribution watch in the daily UNIVERSE-DISCOVERY
+  //     cron health check (discovery_runs + per-sector counts).
+  // The static-literal post-trim expectations could never hold again — the
+  // registry is DB-backed and dynamic since 2026-05-21.
 
   it('XSTOCK_SPOT_SYMBOLS.size in sync with registry (vacuously: both empty at test boot)', () => {
     expect(XSTOCK_SPOT_SYMBOLS.size).toBe(XSTOCK_SPOT_REGISTRY.size);
-  });
-
-  describe('sector-coverage post-trim — none drops below B-PHASE-A2 floor of 7', () => {
-    // Pre-trim → post-trim counts per affected sector:
-    //   XLV: 42 → 40 (HOLX, SAGE retired)
-    //   XLK: 39 → 38 (BITF retired)
-    //   XLC: 22 → 21 (PARA retired)
-    //   XLP: 15 → 14 (WBA retired)
-    // The B-PHASE-A2 sector-coverage floor is 7 distinct sectors. The per-sector
-    // assertion below is paranoia-strong: catches the case where someone later
-    // removes the OTHER XLV symbol unaware that HYGIENE depended on it staying.
-    const sectorCounts = new Map<string, number>();
-    for (const entry of XSTOCK_SPOT_REGISTRY.values()) {
-      sectorCounts.set(entry.sector, (sectorCounts.get(entry.sector) ?? 0) + 1);
-    }
-
-    // B79.0n.UNIVERSE-DISCOVERY 2026-05-21: per-sector floor assertions are
-    // SKIPPED. The semantically-equivalent check has moved to:
-    //   - server/tests/unit/b79-0n-universe-service.test.ts — Layer 4 bootstrap
-    //     test asserts >=5 distinct sectors covered by the survival set.
-    //   - integration verification at Step 7 against /api/internal/universe-
-    //     discovery/health endpoint which returns sectors_present count.
-    // The static-literal expectations of "XLV has 40 after trim" etc. no longer
-    // hold because the registry is dynamic.
-    it.skip('SKIPPED post-UNIVERSE-DISCOVERY: XLV floor (moved to universe-service + health endpoint)', () => {
-      expect(sectorCounts.get('XLV') ?? 0).toBeGreaterThanOrEqual(7);
-    });
-
-    it.skip('SKIPPED post-UNIVERSE-DISCOVERY: XLK floor', () => {
-      expect(sectorCounts.get('XLK') ?? 0).toBeGreaterThanOrEqual(7);
-    });
-
-    it.skip('SKIPPED post-UNIVERSE-DISCOVERY: XLC floor', () => {
-      expect(sectorCounts.get('XLC') ?? 0).toBeGreaterThanOrEqual(7);
-    });
-
-    it.skip('SKIPPED post-UNIVERSE-DISCOVERY: XLP floor', () => {
-      expect(sectorCounts.get('XLP') ?? 0).toBeGreaterThanOrEqual(7);
-    });
-
-    it.skip('SKIPPED post-UNIVERSE-DISCOVERY: total distinct sectors floor', () => {
-      expect(sectorCounts.size).toBeGreaterThanOrEqual(7);
-    });
   });
 });
