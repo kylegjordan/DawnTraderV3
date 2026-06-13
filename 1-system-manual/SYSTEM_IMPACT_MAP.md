@@ -2489,6 +2489,15 @@ Sub-batch 5 of 18 in the B79.0n umbrella v4 arc. Implementation commit `af99bd5`
 
 **Migration 2 (2026-05-26-b79-0n-tec-wildcard-retire.sql):** EXISTS-gated `DELETE` for all 11 TEC keys. Single-batch confirmed safe via Langston D-4 pre-audit grep (zero consumers reading `assetClass='*'` directly).
 
+### P19-B1 (2026-06-13) — TEC.b strict restore SHIPPED + test-infrastructure parity (supersedes the "SOFTENED" state above)
+
+**Subsystem:** TEC config resolution + test infrastructure.
+
+- **`server/services/trailing-exit-controller.ts`** — the B79.0n.TEC soft `pick(key, TEC_DEFAULTS.x)` path is GONE: all 11 keys now strict `requireKey<T>` (throws `[B79.0n.TEC.b][TEC_MISSING_KEY]` naming module/class/key/remediation; refresh fails loudly, prior cached snapshot intact — fail-loud, not fail-dead mid-session). Scaffolding DELETED (`_tecPickFallbackCount`, `TEC_PICK_FALLBACK_LOG_EVERY`, `getTECPickFallbackStats`) after a zero-external-consumer sweep — **any future log/dashboard grep for `PICK_FALLBACK` will find nothing; that signal no longer exists.** `ALL_TEC_KEYS` now EXPORTED (test SSOT). `hasExplicitAssetClassRow` BE kill-switch check unchanged (stricter than requireKey — wildcard does not satisfy it). UPSTREAM: module_constants `trailing_exit` rows (11 keys × per-class/wildcard) are now BOOT-REQUIRED for all 4 active classes. DOWNSTREAM unchanged (tec-evaluator, vts-runner exit loop, paper checkExitConditions). Edit-checklist addition: **every test priming TEC must mock the FULL 11-key set** — the new `b79-0n-tec-b-strict-hardfail.test.ts` test (e) is the 12th-key fixture-parity tripwire. Known edge (#226): JSONB `null`-valued row still passes (`=== undefined` check) — pre-existing semantics, flip to `== null` at next TEC touch.
+- **`scripts/db-migrate.ts`** — `URL.pathname` → `fileURLToPath` (Windows `C:\C:\` doubling fix; behavior-identical on Linux CI/staging; also fixes percent-encoded paths).
+- **NEW `docker-compose.test-db.yml`** (repo root) — CI-parity local test DB (pgvector/pg17 mirror of ci.yml:65-83 + runbook header incl. `COINGECKO_API_TIER=demo`). Image tag MUST track ci.yml in the same batch if either changes.
+- **Test-suite state:** bench + CI both fully green (1880/1880, 0 skipped); the 7 parked-stale skips deleted with replacement coverage verified (universe-service tests + daily discovery health check); regime-scan test hardened (path-separator normalization + g-flag lastIndex statefulness fix, guard-the-guard verified).
+
 **B79.0n.TEC.b** queued for strict 11-key HARD-FAIL restoration via `requireKey<T>` (7-day SLA per Langston Step 4 ACK condition #1).
 
 **Blast radius:** CRITICAL — TEC owns exit-decision authority for every paper + live trade. The kill-switch HARD-FAIL preserved on `break_even_enabled` ensures operator-flip safety; other 10 keys' counter-based observability provides 48h verify-gate evidence before strict throw restoration.

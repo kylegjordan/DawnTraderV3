@@ -12,7 +12,7 @@
 
 | Seq | Batch | Roadmap items absorbed | Status | Completion report |
 |---|---|---|---|---|
-| P19-B1 | Test-suite cleanup | §16.7 + TEC.b strict-throw restore (parked 2026-06-09) | **NEXT — first batch** | — |
+| P19-B1 | Test-suite cleanup | §16.7 + TEC.b strict-throw restore (parked 2026-06-09) | **✅ DONE 2026-06-13** — 12-fail/141-skip → **0/0 both environments** (1880/1880, 161/161 files); TEC.b strict LIVE (#141 closed, deploy-verified 4-class boot 29ms); bench=CI parity via Docker; #226 opened (tier separation); Langston APPROVE Steps 2+4, CONFIRMED Step 8 | `P19_B1_COMPLETION_REPORT.md` |
 | P19-B2 | Live-mode build-approach decision | 19-18 (reshaped — see §3.2) | queued | — |
 | P19-B3 | Known-broken active-path repairs | 19-6 (#137) + 19-10 (#139) | queued | — |
 | P19-B4 | xStock wire-in (merged) | 19-1 + 19-7 (#92) + 19-8 residual (latency **+ WS staleness/reconnect fitness for execution** — Langston) + B3.2 active-path strategy gates + #153 0.50-cap gate + Kraken paper-order smoke test (Langston req. — here or B7 pre-flight) + B11-tagging decision (§5) | queued | — |
@@ -101,6 +101,7 @@ Timing decision (Kyle 2026-06-12): tabs/dashboard built **alongside the switch-o
 | 2026-06-13 | **#80 exit-strategy ablation xstock extension → Phase 25** (needs real fills; calibration-flavored) | **Kyle decision** |
 | 2026-06-13 | **Phase-19 working-style directive:** every pre-implementation audit = thorough CODE-LEVEL audit; SIM dug through for upstream + downstream impacts of every touched component + System Manual consulted; NO dismissiveness toward small errors — certainty about the issue before any deletion or cut; CC + Langston iterate autonomously per batch until verified complete AND verified correct, escalate to Kyle only on no-consensus | **Kyle directive** (P19-B1 turn) |
 | 2026-06-13 | Bench DB: **Docker Desktop install APPROVED + executed** (winget, pgvector/pg17 compose to follow in P19-B1 Bucket A); reboot timing Kyle's call | Kyle |
+| 2026-06-13 | **P19-B1 CLOSED.** Headline: the "59/12 pre-existing failures" story was FALSE — CI was already zero-tolerance green; all bench red was environment + 2 latent bugs (db-migrate Windows path doubling; regime-scan stateful-regex guard weakener — both fixed). TEC.b strict restore SHIPPED with blast radius MEASURED (exactly the predicted +50) before repair; obsolete defaults-backfill test REWRITTEN to lock the strict contract; 7 parked skips DELETED with replacement coverage verified first; #141 closed, #226 opened (unit/integration tier separation — Langston cond-2 + notes A/B). Mock-mechanism decision: cache seeder (real resolver exercised; sibling vi.mock pattern proven non-viable). All four Langston gates clean (Step-1 ACK, Step-2 PROCEED, Step-4 APPROVE, Step-8 CONFIRMED) | CC + Langston (Kyle autonomy directive) |
 
 ---
 
@@ -110,7 +111,7 @@ ALL must be ✅ before the flip commit. Verify each at B7b Step 2, cite evidence
 
 | # | Gate | Built in | Status |
 |---|---|---|---|
-| 1 | Test suite green (no stale-failure noise floor) | B1 | ☐ |
+| 1 | Test suite green (no stale-failure noise floor) | B1 | ✅ 2026-06-13 (0 failed / 0 skipped, bench + CI) |
 | 2 | #153 xstock 0.50 pattern-pool-cap placeholder validated (HARD gate per WIRE-IN doc) | B4 | ☐ |
 | 3 | RTB `SET NOT NULL` Phase-4 migration shipped (zero-null gate) | B4 | ☐ |
 | 4 | xStock pricing latency + staleness/reconnect fitness verified for execution | B4 | ☐ |

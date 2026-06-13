@@ -2,6 +2,21 @@
 
 ---
 
+## FIX-2026-06-13-A — P19-B1: test-suite to TRUE green (12-fail/141-skip → 0/0 both environments) + TEC.b strict restore SHIPPED (#141) + 2 latent production-tooling bugs
+
+**Class:** test-infrastructure correctness + config-resolution strictness. **Fixed:** 2026-06-13, commits `cc5f6d627`+`5a4926062` (CI `27450164011` green), deployed 00:21:28Z, Langston Step-2 PROCEED + Step-4 APPROVE.
+
+1. **Bench/CI parity (Bucket A):** the "59/12 pre-existing failures" story was FALSE — CI has been zero-tolerance green since B-NEW-43; all bench failures were environment (no local DB / Windows). Fix: Docker Desktop (Kyle-approved install) + `docker-compose.test-db.yml` (pgvector/pg17 ci.yml mirror) + runbook. 134 of the 141 "skipped" tests were DB-collapsed file contents — all run and pass now.
+2. **Latent bug — `scripts/db-migrate.ts`:** `URL.pathname` doubled the Windows drive (`C:\C:\`); `fileURLToPath` fix, behavior-identical on Linux (+ fixes percent-encoded paths). Never seen before because the script had only ever run on Linux.
+3. **Latent bug — `regime_mapping_integrity.test.ts`:** beyond the Windows separator mismatch, the scan regex carried the `g` flag → stateful `lastIndex` could silently SKIP violations on any platform after a match. Both fixed; guard-the-guard verified (planted violation caught + named, re-green after removal).
+4. **Pattern-filter hermeticity (Bucket C):** all 7 failures = ONE unmocked B-NEW-34 DB read (`pattern-filter.ts:247`), masked in CI by its real DB since 2026-05-23. Fixed via `_seedModuleCacheForTests` (real resolver exercised). Zero production regressions — both review drift-hypotheses refuted with evidence. Systemic mask survives → #226 (unit/integration tier separation).
+5. **TEC.b strict restore (#141, Bucket D):** `pick`→`requireKey` all 11 keys, scaffolding deleted (zero-consumer sweep), `ALL_TEC_KEYS` exported, 5-test strict regression lock incl. 12th-key fixture tripwire, 8 stale fixtures repaired across 6 files (blast radius MEASURED at exactly the park-record +50 before repair), obsolete defaults-backfill test REWRITTEN to lock the strict contract. Deploy proof: `[TEC_PRIME] bootstrap complete — 4 active classes warmed in 29ms`, zero TEC throws.
+6. **Skip audit (Bucket E):** 7 parked-stale skips DELETED with replacement coverage verified first (universe-service Layers 2+4 + daily discovery health check); 5 b72 skips legitimately conditional (run with DB present).
+
+**Final state:** 1880/1880 tests, 161/161 files, 0 failed, 0 skipped — bench AND CI. Every future red is a real signal.
+
+---
+
 ## FIX-2026-06-12-C — B-4.6-B chunk B: scan-stall eliminated (yields + the Batch-44 persistDiagnostics root cause DELETED per Kyle's legacy ruling)
 
 **Class:** event-loop starvation (scan stalls 200-700ms every 30s sweep; the 2026-06-09 cron-miss source). **Found:** item-4 throughput study caveat-0 → chunk-A instrument soak → chunk-B iterations. **Fixed:** 2026-06-12, commits `ff0b0e36e` (yields) → `7a28ac307`+`31e39bbf6` (attribution instruments) → `c1a252bbe` (root-cause JSONL, superseded) → `b35f7e5fe` (deletion, FINAL), all CI-green, final deploy 13:55:57Z. Langston full-cycle: Step-4 APPROVE (judgment calls ratified) → iteration-4 APPROVE (attribution chain) → iteration-5 APPROVE (deletion) → Step-8.
