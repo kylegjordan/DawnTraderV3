@@ -4258,6 +4258,8 @@ The engine checks four exit conditions in order:
 
 ### 3.7 Position Close: closePosition()
 
+> **P19-B3a (2026-06-13):** both the open fill (`executeSimulatedTrade` §3.9) and the close fill (`closePosition` here) now route through the typed **OrderPlacer port** (`server/services/execution/types.ts` + `order-placer.ts`). The port wraps ONLY the fill (the slippage+fee math → a `FillResult`); the P/L breakdown + all bookkeeping below is UNCHANGED and consumes `fillResult.{fillPrice, feeQuote, slippageQuote}`. `PaperOrderPlacer` always returns `filled` (paper is sync/atomic/always-full); the `partial/delayed/rejected` variants + the **close-seam state rule** (a non-`filled` close leaves the position OPEN, retried next cycle — never half-closed) are the live-swap insurance (Option A, P19-B2: live reuses the paper engine by extension, swapping only this fill seam). Behaviour-identical extraction — Langston Step-4 confirmed fee-base, slippage-sign, close fee-rate source, and totalSlippage all identical. See SIM §9.14.
+
 Implements Phase 8.8.3-C2 P/L breakdown:
 
 ```
