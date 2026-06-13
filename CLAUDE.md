@@ -223,7 +223,7 @@ MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200
 
 **Roles:**
 - **Kyle** — decider. Approves scope, architecture, risk. Breaks ties. Only person who can override governance with explicit exception. **Communicates with CC in this Claude Desktop conversation directly, not via Telegram.** Communicates with Langston via Telegram (DM `@LangstonDTBot` or post in topic 21).
-- **Langston** — senior PM + code-level reviewer. Independent perspective on scope, pre-audit, code diff, completion reports. Runs on Claude Code **Fable 5** (1M-context `[1m]` variant; switched from Opus 4.8 on 2026-06-09) under `langston-bridge.service` on Hetzner `204.168.141.77`. Reachable via `@LangstonDTBot` from Telegram OR direct SSH+`claude -p --session-id <UUID>` invocation.
+- **Langston** — senior PM + code-level reviewer. Independent perspective on scope, pre-audit, code diff, completion reports. Runs on Claude Code **Opus 4.8** (1M-context `[1m]` variant; switched back from Fable 5 on 2026-06-13 when Fable access was retired) under `langston-bridge.service` on Hetzner `204.168.141.77`. Reachable via `@LangstonDTBot` from Telegram OR direct SSH+`claude -p --session-id <UUID>` invocation.
 - **Claude Code (you)** — implementation lead. Drafts scope, runs audits, writes code, deploys, verifies, writes reports, packages governance updates. Peer to Langston on review discussions. **TWO named CC sessions run concurrently (Kyle directive 2026-06-12): "Claude Old" (CC-A — comms/roadmap/governance session) and "Claude New" (CC-B — batch-implementation session).** Know which one you are (unsure → ask Kyle). Full naming + wake-routing protocol: §6.9.
 
 **Telegram forum** (group `-1003575211453`, "Dawn Trader HQ"): topic **21** (Batch Implementation) = primary. Topic 28 (Design) is unused — use thread 21 for anything that needs Langston's attention.
@@ -231,7 +231,7 @@ MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200
 ### 6.1 Send / receive architecture
 
 **Hetzner-side systemd services (24/7):**
-- `langston-bridge.service` — long-polls `@LangstonDTBot` `getUpdates`. On inbound from Kyle (DM or topic 21), invokes `claude -p --session-id <UUID> --model claude-fable-5[1m]` to drive Langston's reasoning. Posts response to Telegram via `sendMessage`. No @-mention required in topic 21 (as of 2026-05-06) — Langston judges per his CLAUDE.md §11 whether to respond + outputs `[SILENT]` when not his to answer. Mirrors all in/out + silent decisions to `/var/log/cc-bridge-inbox.jsonl`.
+- `langston-bridge.service` — long-polls `@LangstonDTBot` `getUpdates`. On inbound from Kyle (DM or topic 21), invokes `claude -p --session-id <UUID> --model claude-opus-4-8[1m]` to drive Langston's reasoning. Posts response to Telegram via `sendMessage`. No @-mention required in topic 21 (as of 2026-05-06) — Langston judges per his CLAUDE.md §11 whether to respond + outputs `[SILENT]` when not his to answer. Mirrors all in/out + silent decisions to `/var/log/cc-bridge-inbox.jsonl`.
 - `cc-comms-bridge.service` — long-polls `@CCDTCommsBot` `getUpdates` for inbound traffic Kyle posts in topic 21. Writes to `/var/log/cc-bridge-inbox.jsonl`. Provides `cc-comms-bridge send --thread-id 21 --message "..."` CLI for outbound. Mirrors CC outbound to the same log for Langston's visibility.
 
 **Unified inbox log** `/var/log/cc-bridge-inbox.jsonl` on Hetzner is the single read-tap point. Each line is a JSON entry with `kind` ∈ {direct inbound (unset kind), `langston_inbound`, `langston_outbound`, `langston_silent`, `cc_outbound`, `voice_inbound`, `voice_inbound_failed`}.
@@ -310,7 +310,7 @@ CC sessions MUST actively check on background Langston SSH+claude-cli dispatches
 
     ```bash
     FRESH_UUID=$(python3 -c "import uuid; print(uuid.uuid4())")
-    ssh root@204.168.141.77 "sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=\$(cat /etc/langston/oauth.env | cut -d= -f2-) && export HOME=/home/langston && cd /home/langston && /usr/bin/claude -p --session-id ${FRESH_UUID} --model claude-fable-5[1m] --permission-mode bypassPermissions \"<your message>\"'" > /tmp/langston_reply.txt 2>&1
+    ssh root@204.168.141.77 "sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=\$(cat /etc/langston/oauth.env | cut -d= -f2-) && export HOME=/home/langston && cd /home/langston && /usr/bin/claude -p --session-id ${FRESH_UUID} --model claude-opus-4-8[1m] --permission-mode bypassPermissions \"<your message>\"'" > /tmp/langston_reply.txt 2>&1
     ```
 
 3. **Post Langston's response to Telegram — MANDATORY (Kyle directive 2026-05-07)** via `@LangstonDTBot`'s `sendMessage`:
@@ -431,7 +431,7 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
 
 - **Server:** Hetzner CPX22 at `204.168.141.77` (Helsinki). Ubuntu 24.04. Hostname `dawntrader-agent`.
 - **Runtime:** Claude Code 2.1.159+ under Kyle's Max OAuth (updated from 2.1.131 on 2026-06-01 to fix the `[1m]` thinking-block-on-tool-use error). Token at `/etc/langston/oauth.env` (mode 640 root:langston, valid 1 year — rotate by 2027-04 via `claude setup-token`).
-- **Default model:** **Fable 5 with 1M context window — `claude-fable-5[1m]` (switched 2026-06-09**, same day Kyle moved CC to Fable 5; verified by one-off invocation on CLI 2.1.159 BEFORE flipping the bridge). Bridge invocation passes `--model claude-fable-5[1m]` (`langston-bridge.py:362`). **Rollback:** `/usr/local/bin/langston-bridge.py.pre-fable5-backup-20260609` (restore + `systemctl restart langston-bridge.service`). Prior: Opus 4.8 `[1m]` (re-enabled 2026-06-01 after CLI 2.1.159 fixed the thinking-block-on-tool-use error); older backups `*.pre-4.8-backup-20260601` + `*.pre-1m-20260601`.
+- **Default model:** **Opus 4.8 with 1M context window — `claude-opus-4-8[1m]` (switched 2026-06-13** when Fable 5 access was retired — Fable invocations began returning "model may not exist or you may not have access"; verified by one-off `claude-opus-4-8[1m]` invocation on Langston's box BEFORE flipping the bridge, same discipline as the prior switch). Bridge invocation passes `--model claude-opus-4-8[1m]` (`langston-bridge.py:362`). **Rollback:** `/usr/local/bin/langston-bridge.py.pre-opus48-backup-20260613` (restore + `systemctl restart langston-bridge.service`). Prior: Fable 5 `[1m]` 2026-06-09→2026-06-13 (backup `*.pre-fable5-backup-20260609`); before that Opus 4.8 `[1m]` (re-enabled 2026-06-01); older backups `*.pre-4.8-backup-20260601` + `*.pre-1m-20260601`.
 - **Working directory:** `/home/langston/` owned by `langston`. Contains `CLAUDE.md` (persona, ~261 lines including §11 "When to respond in the group" with `[SILENT]` marker rules) + `MEMORY.md` (volatile state, mirrors project's MEMORY.md, ≤200 lines). Both auto-load every claude-cli invocation.
 - **Bot identities:**
   - `@LangstonDTBot` — Langston's outbound. Bound to `langston-bridge.service`. Token at `/etc/langston/telegram-bot.env`.
