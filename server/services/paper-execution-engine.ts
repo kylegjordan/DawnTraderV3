@@ -49,6 +49,8 @@
 
 import { storage } from '../storage';
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site mode map
+import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: typed order-placement port
+import type { OrderPlacer } from './execution/types.js'; // P19-B3a: FillResult/port contract
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 // B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
 // moved to module='paper_execution'.
@@ -125,7 +127,10 @@ export class PaperExecutionEngine {
   private monitoringInterval: NodeJS.Timeout | null = null;
   private priceHistory: Map<string, PriceData[]> = new Map();
   private lastCycleSummary: any = {}; // Phase 27.F.14.DIAG: Cache last cycle for telemetry
-  
+  // P19-B3a: typed order-placement boundary (paper = atomic slippage+fee fill). The ONLY
+  // thing that differs paper↔live is HOW an order fills; see execution/types.ts + order-placer.ts.
+  private readonly orderPlacer: OrderPlacer;
+
   // Configuration
   private readonly SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // Batch 18J: from exchange-defaults.ts (0.05%)
   // B-4.5: FEE_PERCENT static field RETIRED — per-class DB-resolved per symbol.
@@ -173,6 +178,10 @@ export class PaperExecutionEngine {
     this.mode = mode;
     this.krakenService = new KrakenService();
     this.strategyEngine = new StrategyEngine();
+    // P19-B3a: inject slippage% + the per-class fee resolver so the port stays decoupled
+    // from this engine. The SLIPPAGE_PERCENT field-initializer runs before the constructor
+    // body, so it is already set here.
+    this.orderPlacer = new PaperOrderPlacer(this.SLIPPAGE_PERCENT, (s) => this.feePercentFor(s));
   }
 
   /**
@@ -1138,16 +1147,26 @@ export class PaperExecutionEngine {
     const intendedEntryValue = intendedEntryPrice * quantity;
 
     // Apply exit slippage and fees
-    const _b45FeePct = this.feePercentFor(position.symbol); // B-4.5 per-class
-    const exitSlippagePerUnit = exitPrice * (this.SLIPPAGE_PERCENT / 100);
-    const actualExitPrice = exitPrice - exitSlippagePerUnit; // Worse price due to slippage
-    const exitValue = actualExitPrice * quantity;
-    const exitFee = exitValue * (_b45FeePct / 100);
+    const _b45FeePct = this.feePercentFor(position.symbol); // B-4.5 per-class (reused for the entry-fee fallback below)
+    // P19-B3a: exit fill via the OrderPlacer port. BEHAVIOUR-IDENTICAL to the prior inline math
+    // (fillPrice = exit-slippage; feeQuote = notional*feePct; slippageQuote = slippage*qty).
+    const _closeFill = await this.orderPlacer.closeOrder({
+      symbol: position.symbol, side: 'sell', quantity, requestedPrice: exitPrice, mode: this.mode, positionId,
+    });
+    if (_closeFill.status !== 'filled') {
+      // C3 CLOSE-SEAM STATE RULE: a non-filled close leaves the position OPEN (close NOT
+      // recorded), retried next exit-monitor cycle — never half-closed. Nothing above this
+      // point has mutated the position. Paper always fills; this guards live.
+      console.error(`[PaperExecution:${this.mode}][CLOSE_FILL_NONFILLED] ${position.symbol} pos=${positionId} status=${_closeFill.status} — position left OPEN, retry next cycle (paper fills must be atomic)`);
+      return;
+    }
+    const actualExitPrice = _closeFill.fillPrice;
+    const exitFee = _closeFill.feeQuote;
     
     // Get entry costs from position (persisted at entry time)
     const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (_b45FeePct / 100));
     const entrySlippage = position.entrySlippage ? parseFloat(position.entrySlippage) : 0;
-    const exitSlippage = exitSlippagePerUnit * quantity;
+    const exitSlippage = _closeFill.slippageQuote; // P19-B3a: from the close FillResult (== exitSlippagePerUnit * quantity)
 
     // Phase 8.8.3-C2: P/L breakdown per directive
     // Gross P/L = Pure market movement (no slippage, no fees)
@@ -2022,12 +2041,23 @@ export class PaperExecutionEngine {
       return;
     }
 
-    // Apply entry slippage and fees
-    const slippage = signal.entryPrice * (this.SLIPPAGE_PERCENT / 100);
-    const actualEntryPrice = signal.entryPrice + slippage; // Worse price due to slippage
+    // P19-B3a: entry fill via the OrderPlacer port. Paper = atomic slippage+fee fill,
+    // BEHAVIOUR-IDENTICAL to the prior inline math (fillPrice = entry+slippage; feeQuote =
+    // notional*feePct; slippageQuote = slippage*qty). The port shape already holds live's
+    // partial/delayed/rejected reality; downstream bookkeeping consumes the FillResult.
+    const _openFill = await this.orderPlacer.openOrder({
+      symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice, mode: this.mode,
+    });
+    if (_openFill.status !== 'filled') {
+      // C3 contained fail-loud: paper fills are always atomic — a non-fill is a bug, not a
+      // normal outcome. Skip this trade; never an uncaught throw that stalls the cycle.
+      console.error(`[PaperExecution:${this.mode}][OPEN_FILL_NONFILLED] ${signal.symbol} status=${_openFill.status} — skipping trade (paper fills must be atomic)`);
+      return;
+    }
+    const actualEntryPrice = _openFill.fillPrice;
     const positionValue = actualEntryPrice * quantity;
-    const entryFee = positionValue * (this.feePercentFor(signal.symbol) / 100);
-    const totalSlippage = slippage * quantity;
+    const entryFee = _openFill.feeQuote;
+    const totalSlippage = _openFill.slippageQuote;
 
     console.log(`  Quantity: ${quantity.toFixed(4)}, Position Value: $${positionValue.toFixed(2)}`);
     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);

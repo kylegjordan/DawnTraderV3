@@ -1245,7 +1245,7 @@ async function generatePhase10Signal(
   const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
   
   // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-  const costMetrics = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
+  const costMetrics = getCachedCostMetrics(symbol, safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot');
   const frictionCost = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
   
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1537,7 +1537,7 @@ async function generatePhase10Signal(
     })(),
     pairFriction: (() => {
       // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-      const cm = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
+      const cm = getCachedCostMetrics(symbol, safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot');
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     })(),
     globalFriction: getGlobalFriction(tradeAssetClass) ?? undefined, // B-4.7: per-class (undefined until same-class sample)
@@ -1891,7 +1891,7 @@ async function generatePhase10Signal(
           regimeConfig: _fullRegimeConfig,
           // B79.0n.MCE: resolve the pair's asset class for the b68_5
           // label-counterfactual re-classification (no assetClass var in scope here).
-          assetClass: resolveAssetClass(symbol, 'kraken'),
+          assetClass: safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
         });
         console.log(
           `[B68.5][gate] pair=${symbol} dbs=${dbsScore.toFixed(3)} ` +
@@ -1932,7 +1932,7 @@ async function generatePhase10Signal(
   // statically imported at top of file; same pattern used at line 1828 below
   // in the open-trade INSERT). REQUIRED parameter — no default, no silent
   // fallback. Compile fails if missed.
-  const _assetClassForAblation = resolveAssetClass(symbol, 'kraken');
+  const _assetClassForAblation = safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot'; // P19-B3a #139
   emitAblationRecord(
     { kind: 'vts_trade', vtsTradeId: signal.id },
     symbol,
@@ -1961,7 +1961,7 @@ async function generatePhase10Signal(
   // openTrade record's persisted value instead (set at line 1722).
   try {
     const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
-    const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+    const { safeResolveAssetClass } = await import('../../shared/asset-classes.js'); // P19-B3a #139: safe variant (alarms + crypto_spot fallback at use site)
     const persistedTrade = openVirtualTrades.get(tradeId);
     const chainModulatedConfidence =
       persistedTrade?.regimeConfidenceModulated ?? predictiveConfidence ?? undefined;
@@ -1969,7 +1969,7 @@ async function generatePhase10Signal(
       mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
       symbol,
       exchange: 'kraken',
-      assetClass: resolveAssetClass(symbol, 'kraken'),
+      assetClass: safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
       source: 'vts-runner',
       strategy,
       regimeLabel: regime ?? undefined,
@@ -2607,7 +2607,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // Fire-and-forget, try/catch wrapped — must never block the VTS exit loop.
     try {
       const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
-      const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+      const { safeResolveAssetClass } = await import('../../shared/asset-classes.js'); // P19-B3a #139: safe variant (alarms + crypto_spot fallback at use site)
       const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'other'> = {
         stop_hit: 'SL_hit',
         target_hit: 'TP_target_hit',
@@ -2634,7 +2634,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         tradeId: trade.id,
         symbol: trade.symbol,
         exchange: 'kraken',
-        assetClass: resolveAssetClass(trade.symbol, 'kraken'),
+        assetClass: safeResolveAssetClass(trade.symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
         source: 'vts-runner',
         strategy: trade.strategy,
         exitReason: mappedReason,
@@ -3010,7 +3010,7 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
   const resolvedPairFriction = input.pairFriction ?? (() => {
     try {
       // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-      const cm = getCachedCostMetrics(input.symbol, resolveAssetClass(input.symbol, 'kraken'));
+      const cm = getCachedCostMetrics(input.symbol, safeResolveAssetClass(input.symbol, 'kraken') ?? 'crypto_spot');
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     } catch {
       return undefined;
@@ -3645,7 +3645,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           //   anything else null  → 'strategy_internal'
           try {
             const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
-            const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+            const { safeResolveAssetClass } = await import('../../shared/asset-classes.js'); // P19-B3a #139: safe variant (alarms + crypto_spot fallback at use site)
             const stageMap: Record<string, 'sqe' | 'tcl' | 'strategy_internal'> = {
               net_ev_rejected: 'sqe',
               duplicate_position: 'tcl',
@@ -3657,7 +3657,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
               symbol: pair.symbol,
               exchange: 'kraken',
-              assetClass: resolveAssetClass(pair.symbol, 'kraken'),
+              assetClass: safeResolveAssetClass(pair.symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
               source: 'vts-runner',
               strategy: stratDef.strategyKey,
               regimeLabel: pairRegime ?? undefined,
@@ -3743,12 +3743,12 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
           // B70.1 Step 3.6b: caller-side Net-EV reject → reject_stage='sqe'
           try {
             const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
-            const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+            const { safeResolveAssetClass } = await import('../../shared/asset-classes.js'); // P19-B3a #139: safe variant (alarms + crypto_spot fallback at use site)
             archiveSignalEval({
       mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
               symbol: pair.symbol,
               exchange: 'kraken',
-              assetClass: resolveAssetClass(pair.symbol, 'kraken'),
+              assetClass: safeResolveAssetClass(pair.symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
               source: 'vts-runner',
               strategy: stratDef.strategyKey,
               regimeLabel: pairRegime ?? undefined,

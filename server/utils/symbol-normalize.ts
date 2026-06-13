@@ -30,7 +30,7 @@
  *     for callers that want a hard error on unrecognized input.
  */
 
-import { ASSET_CLASSES, type AssetClass } from '../../shared/asset-classes.js';
+import { ASSET_CLASSES, CRYPTO_SPOT_CANONICAL, type AssetClass } from '../../shared/asset-classes.js';
 
 export interface NormalizeOptions {
   /** When true, throw on unrecognized symbols. Default false (fail-soft). */
@@ -71,7 +71,10 @@ export function normalize(
  */
 function normalizeCryptoSpot(symbol: string, options: NormalizeOptions): string {
   // Already canonical? `BASE/QUOTE` — uppercase letters/digits, slash.
-  if (/^[A-Z0-9]{2,10}\/[A-Z0-9]{3,4}$/.test(symbol)) {
+  // P19-B3a (#139): SSOT — the SAME regex object the classifier uses, built from
+  // CRYPTO_SPOT_BASE_MAX_LEN in shared/asset-classes.ts. Langston C1: one constant,
+  // not two synced literals → no drift possible between this gate and the classifier.
+  if (CRYPTO_SPOT_CANONICAL.test(symbol)) {
     return symbol.toUpperCase();
   }
 

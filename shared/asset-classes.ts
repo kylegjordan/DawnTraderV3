@@ -401,8 +401,29 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
  * + §3.4 + §5.1; RUNNING_ISSUES #120 (5-symbol gap traced separately).
  */
 
-/** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. */
-const CRYPTO_SPOT_CANONICAL = /^[A-Z0-9]{2,10}\/[A-Z0-9]{3,4}$/;
+/**
+ * P19-B3a (#139) — SSOT base-length cap for the crypto-spot canonical form.
+ *
+ * Langston C1: a SINGLE exported constant imported by BOTH the regex below AND
+ * `server/utils/symbol-normalize.ts` — NOT two regex literals kept in sync by a
+ * comment (two synced literals IS the drift risk, just relocated).
+ *
+ * The ceiling is a FINITE TRIPWIRE, not a universe-fit. Live Kraken spot bases are
+ * <=6 chars (longest in the verified map = RENDER); 15 gives generous headroom for
+ * plausible future long-ticker tokens while still ALARMING on implausibly-long
+ * (garbage / misclassified) forms — exactly where a bad or mis-routed symbol would
+ * hide, since the alarm fires on throw/null, not on confident-but-wrong. A future
+ * legitimate token approaching this cap prompts a DELIBERATE bump, never a silent
+ * re-trip. Widened from 10 — an 11+-char base was the one demonstrable gap between
+ * the permissive ingress normalizer and this classifier.
+ */
+export const CRYPTO_SPOT_BASE_MAX_LEN = 15;
+
+/** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. Built FROM the SSOT
+ *  cap above so this and `symbol-normalize.ts` cannot drift apart. */
+export const CRYPTO_SPOT_CANONICAL = new RegExp(
+  `^[A-Z0-9]{2,${CRYPTO_SPOT_BASE_MAX_LEN}}\\/[A-Z0-9]{3,4}$`,
+);
 
 /** Crypto spot Kraken raw form 1: `X<BASE>Z<QUOTE>` (e.g., XXBTZUSD). */
 const CRYPTO_SPOT_KRAKEN_RAW_1 = /^X[A-Z0-9]+Z(USD|USDT|EUR|GBP|JPY|CAD|AUD|CHF)$/;
@@ -498,12 +519,43 @@ export function resolveAssetClass(symbol: string, exchange: string): AssetClass 
 }
 
 /**
+ * P19-B3a (#139) — CENTRALIZED classify-fall-through alarm.
+ *
+ * `_classifyFallthroughCount` is the loud, central counter every safe-call-site
+ * inherits WITHOUT a per-site edit (Langston: alarm at the resolver, not at 21
+ * sites). A non-zero value means a pair reached classification in a form NEITHER
+ * the widened canonical regex NOR the Kraken raw forms recognized — i.e. the
+ * residual "raw-unchanged" path the regex widen does not cover. Investigate the
+ * named symbol immediately; this must NEVER read as a silent skip (Kyle directive).
+ */
+let _classifyFallthroughCount = 0;
+export function getClassifyFallthroughCount(): number {
+  return _classifyFallthroughCount;
+}
+
+/**
+ * Optional escalation hook. Lives here as a SLOT so server-side code can register
+ * active-vs-passive escalation (e.g. a system-alert when active trading is ON)
+ * WITHOUT `shared/` importing `server/` (a layering violation). Registered at
+ * server boot when the active execution path is wired (P19-B4 — see the homed
+ * active-path-throwing-resolve item). Null = passive: WARN + counter only
+ * (Langston A3: telemetry-only on the VTS/passive path is acceptable).
+ */
+let _classifyFallthroughHook: ((symbol: string, exchange: string) => void) | null = null;
+export function setClassifyFallthroughHook(
+  hook: ((symbol: string, exchange: string) => void) | null,
+): void {
+  _classifyFallthroughHook = hook;
+}
+
+/**
  * Caller-protected variant of `resolveAssetClass`. Per Langston cc-inbox #890
- * B.2: a single bad symbol must not crash PM2. This helper logs a WARN +
- * returns null; caller decides whether null = skip pair / null = use default /
+ * B.2: a single bad symbol must not crash PM2. This helper logs a loud WARN +
+ * bumps the central fall-through counter + fires the optional escalation hook,
+ * then returns null; caller decides whether null = skip pair / null = use default /
  * null = fail batch.
  *
- * @returns AssetClass on success; null on unknown pattern (logged as WARN).
+ * @returns AssetClass on success; null on unknown pattern (logged + counted + hooked).
  */
 export function safeResolveAssetClass(
   symbol: string,
@@ -513,8 +565,13 @@ export function safeResolveAssetClass(
     return resolveAssetClass(symbol, exchange);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    _classifyFallthroughCount++;
+    // P19-B3a (#139): LOUD, centralized alarm — NEVER a silent skip (Kyle directive).
+    // Passive path = WARN + counter; active path registers a hook (P19-B4) to escalate
+    // to a system-alert. The widen closes the base-length gap; this catches the residual.
     // eslint-disable-next-line no-console
-    console.warn(`[B69] unknown symbol pattern; pair=${symbol}@${exchange}: ${msg}`);
+    console.warn(`[B69][CLASSIFY_FALLTHROUGH] unclassifiable pair=${symbol}@${exchange} (count=${_classifyFallthroughCount}): ${msg}`);
+    try { _classifyFallthroughHook?.(symbol, exchange); } catch { /* hook must never break the resolver */ }
     return null;
   }
 }
