@@ -508,6 +508,12 @@ Pre-audit and completion reports MUST include a "PREVIOUSLY-STATED-VS-NOW" secti
 
 **No assumptions when Kyle reports issues.** Every issue raised must be confirmed (reproduce + locate code path + quote actual data), investigated (not dismissed with "marked N/A"), tracked in a dedicated batch-tracking document. Quick-fixing one item + declaring everything resolved is the failure mode. Enumerate → tackle each with evidence → only mark resolved when independently re-verified. See history doc §9.3 for the full rationale.
 
+### 9.4 SURFACED-ISSUE SCHEDULING — every "fix it later" gets a named home, NOW (Kyle directive 2026-06-13)
+
+When CC and/or Langston surface an issue worth fixing and agree it should be fixed, it MUST be given a **concrete scheduled home at the moment of agreement** — a named batch, a specific roadmap phase AND item number, or a dated scheduled task/alert. **"Fix it later" / "in a future phase" / "post-launch" without a named home is NOT acceptable.** The failure mode this kills: vague deferral → everyone forgets → it never happens.
+
+**Mechanics (mandatory):** (1) the item lands in `RUNNING_ISSUES.md` with its assigned home stated explicitly in the entry; (2) if it's a roadmap item, it is written into `POST_AUDIT_ROADMAP.md` (or the active phase plan, e.g. `PHASE_19_PLAN.md`) as a real numbered/named item — not just referenced; (3) the completion report or message that surfaces it NAMES the home; (4) if the right home is genuinely a judgment call (e.g. Phase 19 small-batch vs Phase 20 workstream), CC + Langston decide it then and there (escalate to Kyle only on no-consensus) — but a home IS chosen before the item is considered "handled." A surfaced issue with no home is an open loop, and open loops get dropped. Applies to BOTH CC and Langston (his CLAUDE.md carries the matching rule).
+
 ---
 
 ## 10. Session Startup Checklist
