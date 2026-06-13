@@ -61,6 +61,9 @@ export interface VirtualSignal {
   decayPenalty: number;
   expectedEdge: number;
   frictionCost: number; // M50: Added for schema parity
+  // P19-B3b: net expected value attached by generatePhase10Signal (vts-runner) so the
+  // caller-side Net-EV floor check can read it. Computed by computeNetExpectancyKernel.
+  netEV?: number;
   regime: string;
   regimeScore?: number; // Directive 11.4H.4A: Dynamic 0-100 score for UI display
   pool: 'ideal' | 'rotational';

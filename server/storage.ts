@@ -3643,17 +3643,19 @@ export class DatabaseStorage implements IStorage {
 
   async getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]> {
     const limit = filters?.limit || 50;
-    
-    const conditions = [eq(paperSimSessions.userId, userId)];
+
+    // P19-B3b: paper_sim_sessions is single-tenant (Phase 2C — userId column
+    // removed). The legacy userId-equality filter referenced a dropped column;
+    // remove it. The userId param is retained for interface compatibility but no
+    // longer filters (mode-based, single-tenant). Optional status filter stays.
+    const query = db.select().from(paperSimSessions)
+      .orderBy(desc(paperSimSessions.startedAt));
+
     if (filters?.status) {
-      conditions.push(eq(paperSimSessions.status, filters.status as any));
+      return await query.where(eq(paperSimSessions.status, filters.status as any)).limit(limit);
     }
-    
-    return await db.select()
-      .from(paperSimSessions)
-      .where(and(...conditions))
-      .orderBy(desc(paperSimSessions.startedAt))
-      .limit(limit);
+
+    return await query.limit(limit);
   }
   
   // Phase 8.8.3-J: Execution Attempt Audit methods (read-only diagnostics)
@@ -3774,14 +3776,14 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getPortfolioState({ globalContextId: contextId, mode: data.mode });
     
     if (existing) {
-      // Phase 41.1: When updating balance, also update cash/crypto to stay synchronized
+      // P19-B3b: portfolio_state has only balance + lastUpdate as mutable columns
+      // (cash, cryptoValue, userId are not columns on this table — single-tenant,
+      // mode-based). The prior .set referenced those dropped/nonexistent columns;
+      // update only the real ones.
       const [updated] = await db.update(portfolioState)
-        .set({ 
-          balance: data.balance, 
-          cash: data.cash || data.balance, // Default cash = balance if not specified
-          cryptoValue: data.cryptoValue || '0', // Default crypto = 0 if not specified
-          lastUpdate: new Date(), 
-          userId: data.userId 
+        .set({
+          balance: data.balance,
+          lastUpdate: new Date(),
         })
         .where(and(
           eq(portfolioState.globalContextId, contextId),
@@ -4219,10 +4221,13 @@ export class DatabaseStorage implements IStorage {
       // 3. End any running paper sim sessions (this table HAS a mode column)
       await db
         .update(paperSimSessions)
-        .set({ 
+        .set({
           status: 'stopped',
           stoppedAt: new Date(),
-          stoppedBy: 'hard_reset'
+          // P19-B3b: paper_sim_sessions has no stoppedBy column (only startedAt/
+          // stoppedAt/startedBy). The stop is recorded by status='stopped' +
+          // stoppedAt; the 'hard_reset' provenance is in the [B7.A][DB] log line
+          // above. Removed the nonexistent-column reference.
         })
         .where(and(
           eq(paperSimSessions.mode, mode),

@@ -43,7 +43,7 @@
  */
 
 import { fxConversionService } from './fx-conversion-service.js';
-import { getConstant } from './module-constants-service.js';
+import { getConstant, GLOBAL_KEY } from './module-constants-service.js';
 
 /**
  * Result of a B67.3 admission check. `allowed === false` means the signal
@@ -98,11 +98,11 @@ export async function checkPerUnderlyingCap(
   // global wildcard rows seeded by the migration. If a row is missing
   // (someone hand-edited the table), default to safe values.
   const enabled =
-    (await getConstant<boolean>('per_underlying_cap', 'b67_3_enabled', {})) ?? false;
+    (await getConstant<boolean>('per_underlying_cap', 'b67_3_enabled', GLOBAL_KEY)) ?? false;
   const splitActive =
-    (await getConstant<boolean>('per_underlying_cap', 'b67_3_universe_split_active', {})) ?? true;
+    (await getConstant<boolean>('per_underlying_cap', 'b67_3_universe_split_active', GLOBAL_KEY)) ?? true;
   const cap =
-    (await getConstant<number>('per_underlying_cap', 'b67_3_max_concurrent_per_underlying', {})) ?? 2;
+    (await getConstant<number>('per_underlying_cap', 'b67_3_max_concurrent_per_underlying', GLOBAL_KEY)) ?? 2;
 
   const cohort = assignCohortHash(symbol);
   const shadowMode = !enabled;

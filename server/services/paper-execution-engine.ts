@@ -2112,10 +2112,16 @@ export class PaperExecutionEngine {
     console.log(`[AJ10.3][TRADE_CREATE_START] symbol=${signal.symbol} | strategy=${signal.strategy} | qty=${quantity.toFixed(8)} | estimatedValue=$${(signal.estimatedValue || 0).toFixed(2)}`);
     
     try {
-      // Directive 10.3: Extract signal type fields for persistence
-      const signalType = signal.signalType || 'QUANT';
-      const patternType = signal.patternType || null;
-      const patternStrength = signal.patternStrength?.toString() || null;
+      // Directive 10.3: Extract signal type fields for persistence.
+      // P19-B3b: signalType/patternType/patternStrength are not first-class on
+      // StrategySignal — they are carried in signal.metadata (set by the pattern
+      // recognizer; see pattern-recognizer.test metadata.patternType). Read from
+      // there with the same top-level-then-metadata fallback the signal
+      // orchestrator uses (signal-orchestrator.ts:666), defaulting to QUANT/null.
+      const sigMeta = signal.metadata ?? {};
+      const signalType = sigMeta.signalType || 'QUANT';
+      const patternType = sigMeta.patternType || null;
+      const patternStrength = sigMeta.patternStrength?.toString() || null;
       
       console.log(`[10.3] Trade Execute: ${signal.symbol} | Type=${signalType} | Pattern=${patternType || 'N/A'} | Strength=${patternStrength || 'N/A'}`);
       

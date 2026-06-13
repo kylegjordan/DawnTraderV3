@@ -167,6 +167,12 @@ interface SizedStrategySignal extends StrategySignal {
   riskScore?: number;     // Computed risk score
   volatility?: number;    // Estimated volatility
   profitRate?: number;    // Profit per time unit
+  // P19-B3b: FinalScore-native quality metrics the builder copies from
+  // extendedMetrics (mirrors the sqeSignalInput builder). These were assigned on
+  // the sized signal but never declared on the type — TS2353 on `finalScore`.
+  finalScore?: number;    // Composite FinalScore (Directive 11.0E)
+  regimeWeight?: number;  // Regime weight contribution to FinalScore
+  hybridScore?: number;   // Hybrid quant+pattern score
   // Directive 11.3A: Net Expectancy fields
   netExpectedEdge?: number;    // Net profit after costs
   netRewardToRisk?: number;    // Net R:R after costs
@@ -550,14 +556,18 @@ export class SignalOrchestrator {
     // confidence was computed and logged but never consumed by the pipeline.
 
     // Directive 11.0E: Trace raw metrics before SQE evaluation (FinalScore-native)
+    // P19-B3b: traceOrchestrator's rawMetrics param is { finalScore?, profit?, risk? }.
+    // The prior object passed confidence/volatility/trendStrength/entryPrice — NONE of
+    // which are valid keys, so the trace recorded all-null raw metrics. Use the real
+    // FinalScore-native values extendedMetrics already computes (expectedReturn = profit,
+    // riskScore = risk).
     diagnosticTrace.traceOrchestrator(
       rawSignal.symbol,
       strategyId,
       {
-        confidence: extendedMetrics.confidence,
-        volatility: extendedMetrics.volatility ?? 0.3,
-        trendStrength: 0.5, // Default for legacy signals
-        entryPrice: rawSignal.entryPrice,
+        finalScore: extendedMetrics.finalScore,
+        profit: extendedMetrics.expectedReturn,
+        risk: extendedMetrics.riskScore,
       },
       false // not yet normalized by SQE
     );
@@ -565,12 +575,21 @@ export class SignalOrchestrator {
     // Directive 11.0E: Apply SQE quality filter with FinalScore and RegimeWeight only
     // Phase 14: Pass pre-computed FinalScore and RegimeWeight — SQE no longer backfills
     // HF9 Item B: Compute regimeStability for governance gate in SQE
-    let sqeRegimeStability: import('../../config/strategy-governance.js').RegimeStability | undefined;
+    // P19-B3b: corrected relative path — strategy-governance.ts lives at
+    // server/config/, so from server/services/ it is ONE `../` (was two).
+    let sqeRegimeStability: import('../config/strategy-governance.js').RegimeStability | undefined;
     try {
       const { computeGlobalStability } = await import('../core/governance/regime-stability.js');
+      // P19-B3b: driftScore + volZ are NOT computed in this orchestrator scope.
+      // calculateExtendedSignalMetrics produces no drift/vol-Z fields, so the prior
+      // `extendedMetrics.driftScore`/`.volZ` reads were always undefined (masked by
+      // `|| 0.5` / `|| 0`). The rolling-stats z-scores that vts-runner feeds here come
+      // from getNormalizedRegimeWithDetails(), which is NOT run on this path. Until that
+      // wiring exists, pass the documented cold-start defaults explicitly (was silently
+      // undefined). Homed to the VTS/regime-stability wiring follow-up.
       const stabilityResult = computeGlobalStability(
-        extendedMetrics.driftScore || 0.5,
-        extendedMetrics.volZ || 0,
+        0.5, // driftScore — unavailable in orchestrator scope; cold-start default
+        0,   // volZ — unavailable in orchestrator scope; cold-start default
         extendedMetrics.confidence || 0.5
       );
       sqeRegimeStability = stabilityResult.stability;
@@ -654,6 +673,13 @@ export class SignalOrchestrator {
       quantity: sizingResult.quantity,
       notional: sizingResult.estimatedValue,
       confidence: extendedMetrics.confidence,
+      // P19-B3b (landmine #2): riskScore + profitRate are REQUIRED by queueSQESignal
+      // (written to the risk_score + expected_return columns). They were never set
+      // here, so queueSQESignal threw on `input.riskScore.toString()` and the catch
+      // below silently dropped EVERY qualified signal. extendedMetrics already
+      // computes both — thread them through.
+      riskScore: extendedMetrics.riskScore,
+      profitRate: extendedMetrics.profitRate,
       finalScore: extendedMetrics.finalScore,
       regimeWeight: extendedMetrics.regimeWeight,
       hybridScore: (rawSignal as any).hybridScore ?? extendedMetrics.confidence,
@@ -674,9 +700,13 @@ export class SignalOrchestrator {
     console.log(`[L9][SIGNAL_WEIGHT] ${rawSignal.symbol}/${strategyId}: strategyWeight=${strategyWeight.toFixed(4)}`);
     console.log(`[L10][EXPOSURE_BIAS] ${rawSignal.symbol}/${strategyId}: exposureBias=${exposureBias.toFixed(4)}`);
 
-    // Queue to RTB pool (fire-and-forget, non-blocking)
+    // Queue to RTB pool (fire-and-forget, non-blocking).
+    // P19-B3b (landmine #2): route the catch to an OBSERVABLE counter — a drop here
+    // means a SQE-qualified signal never reached the queue. Previously this was a
+    // bare console.error that read like normal operation while silently losing every
+    // signal. recordQueueFailure increments a metric + logs [RTB_QUEUE_DROP][CRITICAL].
     readyToBuyService.queueSQESignal(sqeSignalInput).catch(err => {
-      console.error(`[8.8.4-C.5][RTB_ERROR] Failed to queue ${rawSignal.symbol}/${strategyId}:`, err);
+      readyToBuyService.recordQueueFailure(rawSignal.symbol, strategyId, err);
     });
 
     // B67.0 — Factor ablation emit hook. Today this fires with an empty
@@ -751,7 +781,10 @@ export class SignalOrchestrator {
       // B79.0n.MCE: append required assetClass — the cache is keyed by (symbol, assetClass).
       const symbolCtx = mce.getCachedContext(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'));
       const strategyKey = (rawSignal as any).strategy ?? 'unknown';
-      const regimeLabel = extendedMetrics.regime ?? 'UNKNOWN';
+      // P19-B3b: regime LABEL comes from the cached MCE context (symbolCtx), not from
+      // extendedMetrics — calculateExtendedSignalMetrics produces no `regime` field, so
+      // the prior `extendedMetrics.regime` read was always undefined (masked by ?? 'UNKNOWN').
+      const regimeLabel = symbolCtx?.regime.regime ?? 'UNKNOWN';
       const baseConf = extendedMetrics.confidence ?? 0.5;
       // modulatedConfChain initialized above; Pass 1 multiplies factors into it
 
@@ -996,7 +1029,14 @@ export class SignalOrchestrator {
     // built from it satisfy `alt.conf = chainFinal / factor` for divide-out
     // factors (or label-counterfactual semantics for B68.5).
     const chainFinalConfidence = modulatedConfChain;
-    const regimeLabelForEmit = extendedMetrics.regime ?? 'UNKNOWN';
+    // P19-B3b: regime LABEL from the cached MCE context (symbolCtx is block-scoped above,
+    // so re-read the cache here). extendedMetrics has no `regime` field — the prior read
+    // was always undefined (masked by ?? 'UNKNOWN'). getCachedContext is the read-only
+    // accessor for the (symbol, assetClass) context the upstream cycle already computed.
+    const regimeLabelForEmit =
+      getMarketContextEngine()
+        .getCachedContext(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'))
+        ?.regime.regime ?? 'UNKNOWN';
     const ablationAlternates = buildAllAlternates(
       alternateInputs,
       chainFinalConfidence,
@@ -1043,7 +1083,9 @@ export class SignalOrchestrator {
         assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
         source: 'signal-orchestrator',
         strategy: strategyId,
-        regimeLabel: extendedMetrics.regime ?? undefined,
+        // P19-B3b: reuse the regime label resolved from the cached MCE context above
+        // (extendedMetrics has no `regime` field — prior read was always undefined).
+        regimeLabel: regimeLabelForEmit,
         rejectStage: 'admitted',
         finalScore: extendedMetrics.finalScore,
         confidenceModulated: modulatedConfChain,
@@ -1150,7 +1192,11 @@ export class SignalOrchestrator {
         return;
       }
 
-      const filters = await storage.getScreenerFilters({ mode: this.mode });
+      // P19-B3b: getScreenerFilters REQUIRES assetClass (B79.0n.STORAGE). This
+      // orchestrator is the crypto active-trading path — crypto_spot by construction
+      // (DEFAULT_ASSET_CLASS), matching the literal 'crypto_spot' usages in the pattern
+      // loops below. No silent fallback.
+      const filters = await storage.getScreenerFilters({ mode: this.mode, assetClass: DEFAULT_ASSET_CLASS });
       if (!filters) {
         console.error(`[37.A][SIGNAL] No filters found for mode ${this.mode}`);
         telemetryTrace.trace('SignalOrchestrator', 'NO_FILTERS', 'ERROR', { mode: this.mode });
@@ -1158,7 +1204,7 @@ export class SignalOrchestrator {
       }
 
       // Batch 19G VN HF: Load active_quant VN threshold from DB for EXTREME_NOISE veto
-      const activeQuantFilters = await storage.getScreenerFilters({ mode: this.mode, filterPath: 'active_quant' });
+      const activeQuantFilters = await storage.getScreenerFilters({ mode: this.mode, assetClass: DEFAULT_ASSET_CLASS, filterPath: 'active_quant' });
       const vnMaxVeto = parseFloat(activeQuantFilters?.vnMax ?? '0.93');
       console.log(`[19G_VN_HF][ORCHESTRATOR] VN veto threshold loaded from DB: ${vnMaxVeto}`);
 
@@ -1345,7 +1391,10 @@ export class SignalOrchestrator {
           // Pattern path: pattern-detection-driven strategy selection (this loop)
 
           // Get OHLC data (uses ohlcCache — no new API calls)
-          const ohlcData = await ohlcCache.getOHLCData(symbol, 60);
+          // P19-B3b: getOHLCData returns { ohlc, last } — destructure the candle array
+          // (was treated as an array directly, breaking .length/index/.map/computeContext).
+          // Mirrors the destructure at the per-symbol scan path below (~line 1508).
+          const { ohlc: ohlcData } = await ohlcCache.getOHLCData(symbol, 60);
           if (!ohlcData || ohlcData.length < 10) continue;
 
           const currentPrice = parseFloat(ohlcData[ohlcData.length - 1].close);
@@ -1361,8 +1410,19 @@ export class SignalOrchestrator {
             category: ((poolPair as any).dbsCategory as string) || 'NEUTRAL',
             slope: (poolPair as any).dbsSlope as number | undefined,
           } : undefined;
+          // P19-B3b: computeContext requires OHLCData[] (number fields + timestamp), but
+          // the cache yields OHLCCandle[] (string fields + time). Convert first — same
+          // shape as `candles` below and the ohlcForRegime conversion at the scan path.
+          const ohlcForContext: OHLCData[] = ohlcData.map(d => ({
+            open: parseFloat(d.open),
+            high: parseFloat(d.high),
+            low: parseFloat(d.low),
+            close: parseFloat(d.close),
+            volume: parseFloat(d.volume || '0'),
+            timestamp: d.time * 1000,
+          }));
           // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
-          const context = mce.computeContext(symbol, ohlcData, currentPrice, volume24h, undefined, propagatedDbs, resolveAssetClass(symbol, 'kraken'));
+          const context = mce.computeContext(symbol, ohlcForContext, currentPrice, volume24h, undefined, propagatedDbs, resolveAssetClass(symbol, 'kraken'));
 
           // Pattern recognition
           const candles = ohlcData.map(d => ({
@@ -1384,9 +1444,16 @@ export class SignalOrchestrator {
             const atr = context.indicators?.atr ?? (currentPrice * 0.02);
             const tradeSignal = getPatternRecognizer().patternToTradeSignal(patternSig, currentPrice, atr, 'crypto_spot');
 
-            const rawSignal = {
+            // P19-B3b: patternToTradeSignal yields a dynamic `pattern_*` strategy string
+            // that the narrow StrategySignal.strategy union does not enumerate (pattern
+            // strategies are runtime-generated, not part of the canonical strategy enum).
+            // Type the literal as StrategySignal and narrow the strategy field to the
+            // union — same bridge the strategy-engine pattern call sites below use
+            // (`'morning_star' as any`, etc.). Not a silencing cast: the value is a real
+            // runtime pattern-strategy label outside the compile-time enum.
+            const rawSignal: StrategySignal = {
               symbol,
-              strategy: tradeSignal.strategy || patternSig.pattern,
+              strategy: (tradeSignal.strategy || patternSig.pattern) as StrategySignal['strategy'],
               entryPrice: tradeSignal.entryPrice ?? currentPrice,
               stopPrice: tradeSignal.stopPrice ?? currentPrice * 0.97,
               targetPrice: tradeSignal.targetPrice ?? currentPrice * 1.03,
@@ -1401,7 +1468,7 @@ export class SignalOrchestrator {
             };
 
             const sizedSignal = await this.buildSizedSignalForStrategy(
-              rawSignal, rawSignal.strategy, sizingContext
+              rawSignal, rawSignal.strategy as StrategyType, sizingContext
             );
 
             if (sizedSignal) {

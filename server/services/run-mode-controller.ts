@@ -50,9 +50,14 @@ export function getCurrentMode(): RunMode {
   // Fire-and-forget refresh if cache is stale; do not await.
   const now = Date.now();
   if (now - lastRefresh > REFRESH_INTERVAL_MS && !refreshInFlight) {
-    refreshInFlight = refreshMode().finally(() => {
-      refreshInFlight = null;
-    });
+    // P19-B3b: refreshMode() resolves to RunMode, but refreshInFlight is only a
+    // completion latch (callers await it, never read its value). Map to void so
+    // the latch type stays Promise<void>.
+    refreshInFlight = refreshMode()
+      .then(() => undefined)
+      .finally(() => {
+        refreshInFlight = null;
+      });
     // We deliberately do not await — return the cached value.
   }
   return cachedMode;

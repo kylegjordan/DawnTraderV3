@@ -22,6 +22,7 @@ import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { getTelemetryAggregator, TelemetryAggregatorService, type PoolType } from './telemetry-aggregator.js';
 import { adaptiveRatioManager, type AdaptiveRatio } from './adaptive-ratio-manager.js';
 import { BENCHMARK_SYMBOLS, isBenchmarkSymbol } from './fx5-scanner.js';
+import { type MarketRegime } from './telemetry-repository.js';
 
 export interface FailedPairEntry {
   symbol: string;
@@ -188,7 +189,12 @@ export class AdaptiveScanManager {
     let currentRatio: AdaptiveRatio | undefined;
     
     if (this.useAdaptiveRatio) {
-      const regime = this.telemetry.getCurrentMarketRegime();
+      // P19-B3b: the telemetry getter yields canonical MarketRegime values but is
+      // typed `string`; narrow with the codebase's established convention for this
+      // exact case (cf. telemetry-repository.ts:117/340 `record.regime as MarketRegime`).
+      // A runtime allow-list would hardcode regime string literals, which the
+      // regime-mapping-integrity governance test forbids outside config/tests.
+      const regime = this.telemetry.getCurrentMarketRegime() as MarketRegime;
       const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
       currentRatio = await adaptiveRatioManager.computeAdaptiveRatio(regime, mode);
       idealRatio = currentRatio.idealRatio;

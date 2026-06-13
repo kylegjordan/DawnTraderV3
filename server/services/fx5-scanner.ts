@@ -198,6 +198,15 @@ export interface ScanDiagnostics {
     imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number; benchmarkBypassed: number } | null;
     survivors: number;
   };
+  // Batch 22 / P19-B3b: per-family path diagnostics (imf breakdown + survivor
+  // count + survivor symbols for VTS family tagging). Written at the scanDiag
+  // build site and read by vts-runner (lastDiag.familyPaths). Optional because
+  // the aggregated rolling-window view (line ~476) omits it when empty.
+  familyPaths?: Record<string, {
+    imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number };
+    survivors: number;
+    survivorSymbols: string[];
+  }>;
   // Batch 48: Track unique family-qualified pairs for Pipeline Summary reconciliation
   familyQualifiedUnique: number;
   destination: 'active_pool' | 'vts_batch';
@@ -697,13 +706,24 @@ export class Fx5ScannerService {
       const activePatternGlobalFilters = patternDbRow ? {
         MIN_VOLUME_USD: parseFloat(patternDbRow.minVolume ?? 'NaN'),
         MAX_BID_ASK_SPREAD: parseFloat(patternDbRow.maxBidAskSpread ?? 'NaN'),
-        MIN_HISTORY_DAYS: patternDbRow.minHistoryDays,
+        // P19-B3b: minHistoryDays is a nullable integer DB column (number | null);
+        // the target requires number. Coalesce a null DB value to NaN, the same
+        // no-valid-threshold sentinel the sibling string fields produce via
+        // parseFloat(x ?? 'NaN').
+        MIN_HISTORY_DAYS: patternDbRow.minHistoryDays ?? NaN,
         MIN_PRICE: parseFloat(patternDbRow.minPrice ?? 'NaN'),
         MAX_PRICE: parseFloat(patternDbRow.maxPrice ?? 'NaN'),
-        EXCLUDE_STABLECOINS: patternDbRow.excludeStablecoins,
+        // P19-B3b: nullable boolean DB column → optional boolean target; null
+        // (column unset) maps to undefined so the consumer's own default applies
+        // (collectAdaptiveBatch: EXCLUDE_STABLECOINS ?? excludeStablecoins).
+        EXCLUDE_STABLECOINS: patternDbRow.excludeStablecoins ?? undefined,
         MIN_LIQUIDITY: parseFloat(patternDbRow.minLiquidity ?? 'NaN'),
         MIN_MARKET_CAP: parseFloat(patternDbRow.minMarketCap ?? 'NaN'),
-      } : null;
+        // P19-B3b: the "no DB row" branch is `undefined`, not `null`, to match the
+        // collectAdaptiveBatch patternFilters param ({...} | undefined) and the
+        // sibling strongTrendFilters producer below. null vs undefined at the object
+        // level was the only remaining mismatch.
+      } : undefined;
       console.log(`[19G][FX5] Pattern global filters from DB (${patternFilterPath}):`, activePatternGlobalFilters);
 
       // Batch 19G: Also load quant IMF DB row for VTS relaxed thresholds
@@ -1185,15 +1205,19 @@ export class Fx5ScannerService {
       // Batch 48: Pattern IMF thresholds from DB only — no regime overrides.
       // Regime-based DI overrides (Batch 19C) removed per Kyle directive.
       // DB screener_filters is the sole authority for all IMF thresholds.
-      const activePatternThresholds = {
+      // P19-B3b: patternImfThresholds is null when the pattern DB row is missing
+      // (patternConfigValid=false, already logged loud at line ~734). Mirror the
+      // family-threshold fail-loud pattern below — null thresholds = skip pattern
+      // IMF filtering this cycle (no pair passes without a valid config).
+      const activePatternThresholds = patternImfThresholds ? {
         LQ_MIN: patternImfThresholds.LQ_MIN,
         VN_MAX: patternImfThresholds.VN_MAX,
         DI_TRENDING_MIN: patternImfThresholds.DI_MIN,
-      };
+      } : null;
 
       // Apply pattern IMF thresholds to pattern global survivors
       // Now uses allClassifiedForPatternLookup which includes BOTH quant survivors AND pattern-only pairs
-      const patternPoolSurvivors = patternGlobalSurvivors
+      const patternPoolSurvivors = !activePatternThresholds ? [] : patternGlobalSurvivors
         .map(s => {
           const normalizedSym = normalizeToInternalSymbol(s.symbol);
           // Find IMF metrics from ALL classified pairs (quant + pattern-only)
@@ -1220,18 +1244,22 @@ export class Fx5ScannerService {
       let patternImfFailedDI = 0;
       const patternImfTotal = patternGlobalSurvivors.length;
       // Re-evaluate which metric failed for each rejected pair
-      for (const s of patternGlobalSurvivors) {
-        const normalizedSym = normalizeToInternalSymbol(s.symbol);
-        const classified = allClassifiedForPatternLookup.find(cs => cs.symbol === normalizedSym || cs.symbol === s.symbol);
-        if (!classified) continue;
-        const lq = classified.LQ ?? 0;
-        const vn = classified.VolNoise ?? 1.0;
-        const di = classified.DI ?? 0;
-        const passedAll = lq >= activePatternThresholds.LQ_MIN && vn <= activePatternThresholds.VN_MAX && di >= activePatternThresholds.DI_TRENDING_MIN;
-        if (!passedAll) {
-          if (lq < activePatternThresholds.LQ_MIN) patternImfFailedLQ++;
-          if (vn > activePatternThresholds.VN_MAX) patternImfFailedVN++;
-          if (di < activePatternThresholds.DI_TRENDING_MIN) patternImfFailedDI++;
+      // P19-B3b: only when thresholds exist (null = pattern IMF skipped this cycle,
+      // failed-counts stay 0 — same skip semantics as the survivor filter above).
+      if (activePatternThresholds) {
+        for (const s of patternGlobalSurvivors) {
+          const normalizedSym = normalizeToInternalSymbol(s.symbol);
+          const classified = allClassifiedForPatternLookup.find(cs => cs.symbol === normalizedSym || cs.symbol === s.symbol);
+          if (!classified) continue;
+          const lq = classified.LQ ?? 0;
+          const vn = classified.VolNoise ?? 1.0;
+          const di = classified.DI ?? 0;
+          const passedAll = lq >= activePatternThresholds.LQ_MIN && vn <= activePatternThresholds.VN_MAX && di >= activePatternThresholds.DI_TRENDING_MIN;
+          if (!passedAll) {
+            if (lq < activePatternThresholds.LQ_MIN) patternImfFailedLQ++;
+            if (vn > activePatternThresholds.VN_MAX) patternImfFailedVN++;
+            if (di < activePatternThresholds.DI_TRENDING_MIN) patternImfFailedDI++;
+          }
         }
       }
 
@@ -1531,7 +1559,12 @@ export class Fx5ScannerService {
       // Batch 19F: VTS Sim-to-Live Parity — duplicate pairs that pass BOTH filters
       // A pair in both quant and pattern pools appears TWICE (once per sourcePool)
       // This matches active trading path behavior where the same pair can be in both pools
-      const taggedVtsSurvivors: Array<typeof vtsFilteredSurvivors[0] & { sourcePool: string }> = [];
+      // P19-B3b: vtsFilteredSurvivors[0] is a union of the quant + pattern-only
+      // branches; only the quant branch surfaces isBenchmark on its type even
+      // though both carry the flag through from classified survivors. Add
+      // isBenchmark? to the element type so the b62BenchmarkCount read below
+      // sees it without a cast.
+      const taggedVtsSurvivors: Array<typeof vtsFilteredSurvivors[0] & { sourcePool: string; isBenchmark?: boolean }> = [];
       const bothPoolsCount = { count: 0 };
 
       // Batch 37: Family-qualified sourcePool tagging

@@ -62,7 +62,9 @@ export class PaperPortfolioManager {
   constructor(mode: 'live' | 'paper', userId?: string) {
     this.mode = mode;
     this.userId = userId || 'system'; // Fallback for backward compatibility
-    this.executionEngine = new PaperExecutionEngine(mode, userId);
+    // P19-B3b: PaperExecutionEngine is mode-based — the legacy userId constructor
+    // arg was dropped (engine no longer user-coupled). Pass mode only.
+    this.executionEngine = new PaperExecutionEngine(mode);
     this.microExecutionService = new MicroExecutionService(mode); // Phase 27.F.14.MICRO
     this.kraken = new KrakenService();
     
@@ -405,8 +407,9 @@ export class PaperPortfolioManager {
     this.isRefreshingWatchlist = true;
     
     try {
-      // Get user's paper mode watchlist
-      const watchlist = await storage.getWatchlist({ userId: this.userId, mode: 'paper' });
+      // Get the paper mode watchlist
+      // P19-B3b: getWatchlist is mode-based — the legacy userId param was dropped.
+      const watchlist = await storage.getWatchlist({ mode: 'paper' });
       
       if (watchlist.length === 0) {
         return; // No symbols to refresh
@@ -594,7 +597,8 @@ export class PaperPortfolioManager {
           const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
 
           // Update trade record
-          await storage.updatePaperSimTrade(trade.id, {
+          // P19-B3b: updatePaperSimTrade signature is (mode, id, updates) — thread this.mode.
+          await storage.updatePaperSimTrade(this.mode, trade.id, {
             exitPrice: currentPrice.toString(),
             pnl: pnl.toString(),
             pnlPercent: pnlPercent.toString(),
@@ -603,8 +607,10 @@ export class PaperPortfolioManager {
           });
 
           // Log the close event
-          await storage.createPaperSimTradeLog({
-            userId: this.userId,
+          // P19-B3b: createPaperSimTradeLog is (mode, log); thread this.mode. The
+          // legacy userId field was dropped from paper_sim_trade_logs (single-tenant,
+          // mode-based) so it is removed from the log object.
+          await storage.createPaperSimTradeLog(this.mode, {
             tradeId: trade.id,
             positionId: position.id,
             eventType: 'position_closed',
@@ -619,7 +625,8 @@ export class PaperPortfolioManager {
         }
 
         // Delete open position
-        await storage.deletePaperSimOpenPosition(position.id);
+        // P19-B3b: deletePaperSimOpenPosition signature is (mode, id) — thread this.mode.
+        await storage.deletePaperSimOpenPosition(this.mode, position.id);
       } catch (error) {
         console.error(`[PaperPortfolio:${this.userId}] Error closing position ${position.symbol}:`, error);
       }

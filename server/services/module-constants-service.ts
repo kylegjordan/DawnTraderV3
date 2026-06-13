@@ -70,6 +70,24 @@ export interface ResolutionKey {
 }
 
 /**
+ * GLOBAL_KEY — the explicit "resolve the global / wildcard row" resolution key.
+ *
+ * P19-B3b (2026-06-13): callers that intentionally want the global wildcard row
+ * (no per-exchange/asset-class/strategy/regime specificity) must pass THIS, not
+ * an untyped `{}`. `scoreRowForKey` treats every `'*'` dimension here as "match a
+ * wildcard row, reject a concrete row" — identical runtime behaviour to the old
+ * `{}` arg, but type-safe and self-documenting (`{}` failed under the tightened
+ * 4-field `ResolutionKey`). Use ONLY where the constant is seeded as a single
+ * global wildcard row (e.g. `per_underlying_cap` b67.3, `factor_ablation`).
+ */
+export const GLOBAL_KEY: ResolutionKey = {
+  exchange: '*',
+  assetClass: '*',
+  strategy: '*',
+  regime: '*',
+};
+
+/**
  * Fetch all rows for a module from DB, cache them for 60s.
  */
 async function loadModule(moduleName: string): Promise<ModuleConstant[]> {

@@ -42,7 +42,7 @@
 
 import { db } from '../db.js';
 import { regimeFactorAlternates, type InsertRegimeFactorAlternate } from '../../shared/schema.js';
-import { getConstant } from './module-constants-service.js';
+import { getConstant, GLOBAL_KEY } from './module-constants-service.js';
 // BATCH_82 (2026-05-14): AssetClass enum import for the required `assetClass`
 // parameter threaded through emitAblationRecord(). Caller MUST resolve and pass
 // — no default, no silent fallback (CLAUDE.md §11 + §5 #15 NO PATCHES).
@@ -209,7 +209,7 @@ async function persistRecord(
   const enabled = await getConstant<boolean>(
     'ablation_framework',
     'b67_0_ablation_emit_enabled',
-    {},
+    GLOBAL_KEY,
   );
   if (enabled === false) {
     return;

@@ -88,7 +88,19 @@ export class PreExecutionValidator {
     try {
       // Phase 8.8.3-H4: Build complete settings from guardrails
       const settings = await buildSettingsFromGuardrails(request.mode);
-      
+
+      // P19-B3b: portfolioValue/riskPerTradePct inherit TradingSettings' nullable
+      // decimal columns (string | null). buildSettingsFromGuardrails populates them
+      // from guardrails_v2, but the declared return type leaks the nullable source.
+      // Fail hard (no silent fallback) if the DB-sourced values are missing — the
+      // catch block below converts the throw into a blocked ValidationResponse.
+      if (settings.portfolioValue == null || settings.riskPerTradePct == null) {
+        throw new Error(
+          `[PreValidator] Missing DB-sourced sizing settings for mode=${request.mode} ` +
+          `(portfolioValue=${settings.portfolioValue}, riskPerTradePct=${settings.riskPerTradePct})`
+        );
+      }
+
       const portfolioValue = parseFloat(settings.portfolioValue);
       const riskPct = parseFloat(settings.riskPerTradePct);
       const riskAmount = calculateRiskAmount(portfolioValue, riskPct);

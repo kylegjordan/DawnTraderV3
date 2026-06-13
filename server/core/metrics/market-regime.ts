@@ -364,7 +364,12 @@ export function calculatePairRegime(
     volatility: vol,
     momentum: mom,
     adx: dx,
-    confidence
+    confidence,
+    // P19-B3b: dynamic 0-100 regime score derived from the just-classified
+    // regime + ADX + volatility (same inputs/formula as every other consumer).
+    // Makes RegimeCalculationResult.regimeScore a genuinely-produced field so
+    // MCE's per-class vote reads a real value (no phantom field / silent default).
+    regimeScore: calculateRegimeScore(regime, { adx: dx, volatility: vol }),
   };
 }
 

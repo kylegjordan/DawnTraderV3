@@ -482,6 +482,12 @@ async function loadVTSConfig(): Promise<VTSConfig> {
 
 interface Phase10TradeRecord {
   symbol: string;
+  // P19-B3b: asset class captured on the learning-substrate archive record. The
+  // active-paper path co-writes this substrate, so the class must be persisted
+  // (sourced from the resolved class at signal-gen / the OpenVirtualTrade record,
+  // both of which carry it). Required — every construction site sets it, and the
+  // per-class telemetry write reads it as a strict AssetClass.
+  assetClass: AssetClass;
   regime: MarketRegimeType;
   regimeScore?: number; // Directive 11.4H.4A: Dynamic 0-100 score for telemetry
   signalType: CanonicalSignalType;
@@ -1628,12 +1634,22 @@ async function generatePhase10Signal(
     regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for UI display
     pool,
     source: 'vts', // Phase 14: Source tag for fresh VTS data (legacy 'simulation' records flagged by migration)
+    // P19-B3b: attach the computed net expected value so the caller-side Net-EV
+    // floor check (Batch 26, ~line 3746) actually works. The kernel computes netEV
+    // here (line ~1267 / 1289) and rejects below-floor inside, but never attached it
+    // to the returned signal — so the caller-side `signal.netEV !== undefined` guard
+    // was permanently false (dead branch). Now it's a real, surfaced value.
+    netEV: kernelResult.netEV,
   };
   
   // Directive 11.6: Trade record marked as pending - exit determined by resolveOpenVirtualTrades()
   // Directive 11.7R: Uses finalScore with governance multiplier
   const tradeRecord: Phase10TradeRecord = {
     symbol,
+    // P19-B3b: stamp the asset class on the substrate record so the per-class
+    // telemetry write (recordPairTelemetry, ~line 3812) reads a real value rather
+    // than undefined. _assetClass is non-null here (guarded at function entry).
+    assetClass: _assetClass,
     regime,
     regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for telemetry
     signalType,
@@ -2458,6 +2474,9 @@ async function resolveOpenVirtualTrades(): Promise<{
     // Create completed trade record
     const closedTradeRecord: Phase10TradeRecord = {
       symbol: trade.symbol,
+      // P19-B3b: carry the asset class onto the closed substrate record too
+      // (the open trade always has it; keeps the record consistent for telemetry).
+      assetClass: trade.assetClass,
       regime: trade.regime,
       regimeScore: trade.regimeScore,
       signalType: trade.signalType,
@@ -3854,7 +3873,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
                   signalType: 'HYBRID' as const,
                   sourcePool: 'hybrid' as const,
                   finalScore: hybridConfidence,
-                  patternType: patternSig.patternType,
+                  // P19-B3b: buffered pattern signals carry patternType as a raw string;
+                  // Phase10TradeRecord.patternType is PatternType | null. Normalize through
+                  // the canonical converter (same convention as canonicalPatternType at
+                  // ~line 1041/1056) instead of assigning the bare string.
+                  patternType: normalizePatternToCanonical(patternSig.patternType) as PatternType | null,
                   hybridSource: {
                     quantStrategy: tradeRecord.strategy,
                     patternType: patternSig.patternType,

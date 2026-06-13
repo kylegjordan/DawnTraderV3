@@ -33,6 +33,11 @@ export interface RegimeCalculationResult {
   momentum: number;
   adx: number;
   confidence: number;
+  // P19-B3b: dynamic 0-100 regime score (Directive 11.4H.4A). Derived from
+  // (regime, adx, volatility) via calculateRegimeScore — all three already on
+  // this result — so it is produced wherever the result is built. Consumed by
+  // MCE's per-class regime vote (market-context-engine.collectClassRegimeEntries).
+  regimeScore: number;
 }
 
 /**

@@ -583,14 +583,17 @@ async function syncTradeModeToStorage(symbol: string, tradeMode: TradeMode): Pro
     const paperPositions = await storage.getPaperSimOpenPositions('paper');
     const paperPosition = paperPositions.find((p: any) => p.symbol === symbol);
     if (paperPosition) {
-      await storage.updatePaperSimOpenPosition(paperPosition.id, { tradeMode });
+      // P19-B3b: updatePaperSimOpenPosition signature is (mode, id, updates);
+      // this position was fetched from the 'paper' set, so thread that mode.
+      await storage.updatePaperSimOpenPosition('paper', paperPosition.id, { tradeMode });
       console.log(`[9.2][MODE_SYNC] ${symbol} DB updated to ${tradeMode}`);
     }
     // Also check live positions
     const livePositions = await storage.getPaperSimOpenPositions('live');
     const livePosition = livePositions.find((p: any) => p.symbol === symbol);
     if (livePosition) {
-      await storage.updatePaperSimOpenPosition(livePosition.id, { tradeMode });
+      // P19-B3b: fetched from the 'live' set — thread 'live' as the mode arg.
+      await storage.updatePaperSimOpenPosition('live', livePosition.id, { tradeMode });
       console.log(`[9.2][MODE_SYNC] ${symbol} DB (live) updated to ${tradeMode}`);
     }
   } catch (err) {
@@ -1370,8 +1373,18 @@ export async function primeTECConfig(): Promise<void> {
   tecBootstrap.bootstrapCompletedAt = null;
 
   // Initialize per-class status entries.
+  // P19-B3b: TECBootstrapResult.perClassStatus carries refreshFailCount +
+  // stalenessMs (Langston Q1 degradation signals). At init nothing has primed
+  // yet, so fail-count is 0 and staleness is the -1 "never succeeded" sentinel
+  // (same sentinel getTECBootstrapStatus uses for lastSuccess=0).
   for (const cls of ACTIVE_ASSET_CLASSES) {
-    tecBootstrap.perClassStatus[cls] = { ready: false, lastWarmupAt: null, error: null };
+    tecBootstrap.perClassStatus[cls] = {
+      ready: false,
+      lastWarmupAt: null,
+      error: null,
+      refreshFailCount: tecRefreshFailCount.get(cls) ?? 0,
+      stalenessMs: -1,
+    };
   }
 
   // Iterate every active class, accumulate failures rather than fail-fast,
@@ -1381,17 +1394,29 @@ export async function primeTECConfig(): Promise<void> {
   for (const cls of ACTIVE_ASSET_CLASSES) {
     try {
       await primeOneAssetClass(cls);
+      // P19-B3b: a successful prime resets the maps (tecConfigLastSuccessAt=now,
+      // tecRefreshFailCount=0 at line ~430). Source the degradation signals from
+      // those same maps so the stored snapshot matches the live accessor: a
+      // just-succeeded class has 0 fails and ~0ms staleness.
+      const lastSuccess = tecConfigLastSuccessAt.get(cls) ?? 0;
       tecBootstrap.perClassStatus[cls] = {
         ready: true,
         lastWarmupAt: Date.now(),
         error: null,
+        refreshFailCount: tecRefreshFailCount.get(cls) ?? 0,
+        stalenessMs: lastSuccess > 0 ? Date.now() - lastSuccess : -1,
       };
     } catch (err) {
       failures.push({ cls, err });
+      // P19-B3b: prime threw before stamping success, so the maps are unchanged.
+      // Report whatever fail-count is recorded and the -1 "never succeeded"
+      // staleness sentinel.
       tecBootstrap.perClassStatus[cls] = {
         ready: false,
         lastWarmupAt: null,
         error: (err as Error)?.message ?? String(err),
+        refreshFailCount: tecRefreshFailCount.get(cls) ?? 0,
+        stalenessMs: -1,
       };
     }
   }

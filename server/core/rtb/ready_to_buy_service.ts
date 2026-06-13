@@ -96,6 +96,18 @@ export interface SQESignalInput {
   quantity?: number;
   notional?: number;
   confidence: number;
+  // P19-B3b (2026-06-13, landmine #2): riskScore + profitRate are REQUIRED RTB
+  // inputs — queueSQESignal writes them to the risk_score + expected_return
+  // columns. They were read off this input (`input.riskScore`/`input.profitRate`)
+  // but never declared, and the sole caller (signal-orchestrator) never set them,
+  // so `.toString()` threw at runtime and the orchestrator's fire-and-forget
+  // `.catch` swallowed it → EVERY SQE-qualified signal silently dropped once
+  // active-paper turns on. Declared here + populated at the orchestrator build
+  // site from extendedMetrics (which already computes both). NGC retired: the DB
+  // `ngc` column is now written from `confidence` (Directive 12.3.3 — deterministic
+  // confidence replaced NGC), so there is no `ngc` field on this input (rule 16).
+  riskScore: number;
+  profitRate: number;
   finalScore: number; // Directive 11.0E: PRIMARY ranking metric
   regimeWeight?: number; // Directive 11.0E: Market regime alignment
   decayPenalty?: number; // Freshness penalty
@@ -348,7 +360,37 @@ class ReadyToBuyService {
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
   private promotionHandlerRegistered = false; // Directive 8.8.4-A1: Track handler registration
-  
+
+  // P19-B3b (2026-06-13, landmine #2): observable counter for SQE-signal queue
+  // DROPS. queueSQESignal is called fire-and-forget from the orchestrator; a throw
+  // there (e.g. a malformed SQESignalInput) is caught and the signal is lost. A
+  // non-zero count here means qualified signals are being dropped BEFORE the queue —
+  // surfaced as a metric (read via getQueueFailureStats(), exposed on health/
+  // diagnostics) so the next regression of this silent-drop shape is caught by a
+  // number, not by reading orchestrator logs after the fact (Langston Q3 + rules 10/11).
+  private queueFailureCount = 0;
+  private lastQueueFailure: { at: number; symbol: string; strategy: string; error: string } | null = null;
+
+  /** Record a dropped SQE-qualified signal (called from the orchestrator's queue catch). */
+  recordQueueFailure(symbol: string, strategy: string, error: unknown): void {
+    this.queueFailureCount++;
+    this.lastQueueFailure = {
+      at: Date.now(),
+      symbol,
+      strategy,
+      error: error instanceof Error ? error.message : String(error),
+    };
+    console.error(
+      `[RTB_QUEUE_DROP][CRITICAL] count=${this.queueFailureCount} ${symbol}/${strategy} — SQE-qualified signal DROPPED before queue insert:`,
+      error,
+    );
+  }
+
+  /** Observable surface for health/diagnostics: dropped-signal count + last failure. */
+  getQueueFailureStats(): { count: number; last: { at: number; symbol: string; strategy: string; error: string } | null } {
+    return { count: this.queueFailureCount, last: this.lastQueueFailure };
+  }
+
   constructor() {
     console.log('[RTB] Ready-to-Buy Queue Service initialized');
     this.registerPromotionHandler();
@@ -1668,7 +1710,7 @@ class ReadyToBuyService {
     // Directive 8.8.4-A3.R8.5: Trust upstream SQE result
     // SQE evaluation already happened upstream before calling queueSQESignal
     // Log trace for audit trail without re-running evaluation
-    console.log(`[A3.R8.5][SQE][GATE] pair=${normalizedSymbol} TRUSTED NGC=${input.ngc.toFixed(4)} FinalScore=${(input.finalScore).toFixed?.(4) || '0'}`);
+    console.log(`[A3.R8.5][SQE][GATE] pair=${normalizedSymbol} TRUSTED confidence=${input.confidence.toFixed(4)} FinalScore=${(input.finalScore).toFixed?.(4) || '0'}`);
 
     // Directive 8.8.4-A3: Pair-level duplicate validation
     // Check if this pair already exists in active trades (duplicate_pair_active)
@@ -1733,11 +1775,13 @@ class ReadyToBuyService {
       targetPrice: input.targetPrice?.toString(),
       quantity: input.quantity?.toString(),
       notional: input.notional?.toString(),
-      confidence: input.ngc.toString(), // Use NGC as confidence
+      confidence: input.confidence.toString(), // P19-B3b: deterministic confidence (NGC retired, Directive 12.3.3)
       riskScore: input.riskScore.toString(),
       expectedReturn: input.profitRate.toString(),
       finalScore: (input.finalScore).toString(),
-      ngc: input.ngc.toString(),
+      // P19-B3b: removed dead `ngc:` write — rtb_signals has NO ngc column (NGC
+      // retired; the column was dropped). The write targeted a nonexistent column
+      // (suppressed TS2353 in baseline). `confidence` captures the metric.
       currentPrice: input.currentPrice?.toString(), // Directive 8.8.4-C.14.A
       // B.1.5 (2026-05-30, pre-audit §5.2 Row-8): for xstock_spot the input's
       // `volume24h` is the UNDERLYING equity's share volume, not the token's —
@@ -1784,7 +1828,7 @@ class ReadyToBuyService {
       input.strategy,
       {
         finalScore: input.finalScore,
-        ngc: input.ngc,
+        ngc: input.confidence, // P19-B3b: NGC retired — audit ngc field fed from confidence
         profitRate: input.profitRate,
         blockReason: 'SQE_QUALIFIED',
       }
@@ -1793,7 +1837,7 @@ class ReadyToBuyService {
     // Get current pool size for warm-up tracking
     const poolSize = await this.getPoolSize(input.mode);
 
-    console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: FinalScore=${(input.finalScore).toFixed?.(4) || '0'}, NGC=${input.ngc.toFixed(4)}, poolSize=${poolSize}`);
+    console.log(`[8.8.4-C.5][RTB_INSERT] ${normalizedSymbol}/${input.strategy}: FinalScore=${(input.finalScore).toFixed?.(4) || '0'}, confidence=${input.confidence.toFixed(4)}, poolSize=${poolSize}`);
     
     // Directive 8.8.4-A3.R9.3-D: Simplified TCL - always check threshold on enqueue
     // Global barrier removed per R9.3-A (per-signal refresh model)

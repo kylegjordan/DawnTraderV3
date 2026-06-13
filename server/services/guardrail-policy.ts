@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import type { GuardrailsV2 } from '@shared/schema';
+import type { GuardrailsV2, InsertGuardrailsV2 } from '@shared/schema';
 import { storage } from '../storage';
 
 /**
@@ -444,11 +444,22 @@ class GuardrailPolicyService {
     
     // 1. Persist kill switch state to database
     const guardrails = await storage.getGuardrailsV2({ mode });
-    const { lockedByUser, ...rest } = guardrails;
+    // P19-B3b: getGuardrailsV2 returns GuardrailsV2 | null; destructuring before a
+    // null guard is what tsc flagged ("property does not exist on ... | null").
+    // Guard null (fail-hard — a kill switch with no configured guardrails row is a
+    // real error, not something to silently default).
+    if (!guardrails) {
+      throw new Error(`[GuardrailPolicy] Cannot trip kill switch: no guardrails_v2 row for mode=${mode}`);
+    }
+    const { lockedByUser: _lockedByUserRaw, ...rest } = guardrails;
+    // P19-B3b: the jsonb select type surfaces lockedByUser as `unknown`, but the insert
+    // shape wants the column's Json lock-map type. Narrow to the exact insert field type
+    // (the per-parameter lock map this jsonb column holds) — type-accurate, not `any`.
+    const lockedByUser = _lockedByUserRaw as InsertGuardrailsV2['lockedByUser'];
     await storage.upsertGuardrailsV2({
       ...rest,
       mode,
-      lockedByUser: lockedByUser as any,
+      lockedByUser,
       killSwitchTripped: true,
       killSwitchReason: reason,
       killSwitchTrippedAt: new Date()
@@ -464,7 +475,10 @@ class GuardrailPolicyService {
     
     // 3. REB 8.8.3-KS-B: Clear Active Filter Pool (same as trading stop)
     try {
-      const { activeFilterPool } = await import('./fx5-scanner.js');
+      // P19-B3b: activeFilterPool is exported from active-filter-pool.js (fx5-scanner
+      // re-consumes it from there); the old ./fx5-scanner.js import path no longer
+      // re-exports it.
+      const { activeFilterPool } = await import('./active-filter-pool.js');
       activeFilterPool.enforcePassiveModeIfStopped(mode, false);
       console.log(`[GuardrailPolicy][KS-B] Cleared Active Pool for ${mode}`);
     } catch (err: any) {
@@ -478,9 +492,13 @@ class GuardrailPolicyService {
         await stopPaperSimulation('system'); // System-initiated stop
         console.log(`[GuardrailPolicy][KS-B] Paper simulation stopped`);
       } else {
-        const { globalLiveEngine } = await import('./global-live-engine.js');
-        await globalLiveEngine.stop();
-        console.log(`[GuardrailPolicy][KS-B] Live trading engine stopped`);
+        // P19-B3b: the live trading engine does not exist yet (Phase-21 work). The
+        // prior dynamic import of ./global-live-engine.js referenced a non-existent
+        // module. Do NOT import it; log honestly that the live kill-switch engine
+        // stop is not wired. The kill-switch state + isEngineActive=false above are
+        // already persisted, so live trading cannot resume; only the (absent)
+        // in-memory engine.stop() is a no-op until Phase-21.
+        console.warn(`[GuardrailPolicy][KS-B] Live kill-switch not wired until Phase-21 (live engine not built); kill-switch state persisted, isEngineActive=false for ${mode}`);
       }
     } catch (err: any) {
       console.error(`[GuardrailPolicy] Failed to stop engine:`, err.message);
@@ -519,11 +537,18 @@ class GuardrailPolicyService {
     
     // Persist to database
     const guardrails = await storage.getGuardrailsV2({ mode });
-    const { lockedByUser, ...rest } = guardrails;
+    // P19-B3b: null guard before destructure (GuardrailsV2 | null), same as tripKillSwitch.
+    if (!guardrails) {
+      throw new Error(`[GuardrailPolicy] Cannot reset kill switch: no guardrails_v2 row for mode=${mode}`);
+    }
+    const { lockedByUser: _lockedByUserRaw, ...rest } = guardrails;
+    // P19-B3b: narrow the jsonb `unknown` select type to the insert column type
+    // (same as tripKillSwitch above).
+    const lockedByUser = _lockedByUserRaw as InsertGuardrailsV2['lockedByUser'];
     await storage.upsertGuardrailsV2({
       ...rest,
       mode,
-      lockedByUser: lockedByUser as any,
+      lockedByUser,
       killSwitchTripped: false,
       killSwitchReason: null,
       killSwitchTrippedAt: null
