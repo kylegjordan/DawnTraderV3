@@ -63,13 +63,18 @@ Live = the same `PaperExecutionEngine` (or a thin subclass) constructed with `mo
 
 ## §4 — WHY THIS IS AN EARLY DECISION (the Phase-19 plumbing constraint it imposes)
 
-Because live reuses the engine by extension, the **two order seams must stay thin and explicitly bounded** while we debug paper in B3–B6. The constraint P19-B2 records (and that later Phase-19 batches must honor):
+Because live reuses the engine by extension, the divergence surface must stay live-swappable while we debug paper in B3–B6. **Reframed after Langston's review (§9):** the surface is **two order-placement seams** (the swap points) **+ two shared-path invariants** (the things shared code must not hard-bake). The constraint P19-B2 records (and that later Phase-19 batches must honor):
 
-1. **The open/close order-placement seams stay a single, clearly-marked boundary** — not logic sprawled across the monitoring loop. When Phase 21 builds live, it should override *only* those two points.
-2. **No paper-only assumption leaks into shared paths.** Specifically the **"fill is instant, total, and never rejected"** assumption that paper bakes in (modeled slippage at `:2120-2121`, the mock-price fallback in the pricing adapter). Live fills can be **partial, delayed, or rejected** — so the seam must be the place fill-confirmation lives, and the shared monitoring/exit code must not assume a position exists the instant a signal promotes. If we let paper treat "promoted → filled" as atomic *inside shared code*, live reuse gets expensive.
-3. **Position sizing already threads mode** — keep it that way; live sizes against a real balance, paper against the simulated portfolio, but both go through the same mode-aware sizing entry (no new fork).
+**The two order-placement seams** (where a simulated fill swaps for a real Kraken order):
+1. **OPEN-order placement + CLOSE-order placement stay a single, clearly-marked boundary** — not logic sprawled across the monitoring loop. When Phase 21 builds live, it overrides *only* those two points.
 
-This is the concrete payoff of deciding now: B3–B6 keep the seam clean instead of us discovering at Phase 21 that paper-only assumptions calcified into shared code.
+**The two shared-path invariants that must stay live-swappable:**
+2. **Fill-confirmation lifecycle (Langston's #1 named seam).** Paper writes the open-position row **synchronously** at `:2196` with no pending state — promote → modeled fill → row exists, atomic. Live breaks that atomicity: the real fill arrives **asynchronously and can be partial, delayed, or rejected**, and the monitoring loop at `:221` already enumerates open positions assuming they are real fills. B3–B6 must **not** bake "promoted == open-position row exists" into shared monitoring/exit code. This is the single most important thing to keep clean.
+3. **Balance/equity source for sizing (corrects this scope's earlier understatement).** The *mode* already threads through sizing — but the *balance source* is paper-specific: sizing reads `portfolioValue` off the **simulated** `portfolioState.balance`. Live sizes against **real Kraken account equity**, a different read entirely. This is a genuine seam that must stay swappable — NOT "already done."
+
+**Correctly Phase-21-build (not Phase-19 plumbing) concerns:** close-side order type (market vs resting stop/target — lives *inside* the CLOSE seam when built), guardrail strictness for real money (already per-mode config — a tuning exercise), and reconcile-on-restart (a net-new live subsystem with no paper analog — but it *depends on* the fill-lifecycle seam being clean, since restart-during-pending-fill is where the two meet).
+
+This is the concrete payoff of deciding now: B3–B6 keep all four points clean instead of us discovering at Phase 21 that paper-only assumptions calcified into shared code.
 
 ---
 
@@ -87,7 +92,9 @@ This is the concrete payoff of deciding now: B3–B6 keep the seam clean instead
 1. **Ratified build-approach decision** — Option A, via CC↔Langston architectural consensus (§3) **and** Kyle sign-off (architecture/go-live is Kyle's call per §6.7).
 2. **Recorded Phase-19 plumbing constraint** (§4) — written into PHASE_19_PLAN §5 decision log and surfaced to B3–B6 so the seam discipline is honored during paper debugging.
 3. **Legacy-stub finding homed** (§5) — RUNNING_ISSUES #136 register entry + Phase-21 retire note; cross-referenced to plan gate #8 / #213.
-4. **No production code change** — live stays 409-gated; this batch is decision + governance only.
+4. **`OrderPlacer` port homed to P19-B3 (§9 Q3 consensus)** — P19-B3 §1 status row records that its FIRST deliverable is the typed open/close order-placement port with a **partial/delayed/rejected-capable fill-result type**. Recorded in PHASE_19_PLAN §1 + §5.
+5. **Pre-flight gate #8 widened (§9 Q4 consensus)** — PHASE_19_PLAN §6 gate #8 asserts the legacy `/live-trading` routes can't emit the misleading "live trading active" broadcast, not just "can't execute."
+6. **No production code change** — live stays 409-gated; this batch is decision + governance only.
 
 ---
 
@@ -117,4 +124,21 @@ No staging/UI verification applies (no runtime change). No CI run beyond governa
 
 ---
 
-*P19-B2 is decision + governance only. On Langston consensus + Kyle sign-off, record the decision and close — no code, no deploy.*
+---
+
+## §9 — LANGSTON REVIEW + CONSENSUS RESOLUTION (2026-06-13)
+
+Langston independently verified Findings 1/3/5 against the code on his mount (engine mode-parametric at `:120`/`:172`; OPEN seam `:2196`/`:2121` modeled fill; CLOSE seam `:1104` simulated exit; `live-trading-service.ts:164-170` confirmed fake placeholder). **His calls:**
+
+- **Q1 (build approach): AGREE, Option A, without reservation.** A separate engine would fork the exit controller / RTB / sizing / monitoring / metadata into *unproven copies of the exact code Phase 19 exists to harden* — "not isolation, shipping live on logic that never earned its confidence in paper." Isolation is already delivered by the 409 gate + the order-placement boundary + the per-mode storage partition. **CC: agree — consensus.**
+- **Q2 (two-seam claim): correct count, wrong frame — reframed (folded into §4 above).** "Two seams" is right for the *swap points* but undercounts the divergence *surface*. Two shared-path invariants are added as named Phase-19 seams: **fill-confirmation lifecycle** (his #1 — paper's synchronous atomic fill vs live's async/partial/rejectable) and **balance/equity source for sizing** (paper-simulated balance vs real Kraken equity). Close-side order type, guardrail strictness, and reconcile-on-restart are correctly Phase-21-build concerns. **CC: agree — both are real catches; §4 reframed.**
+- **Q3 (seam formalism): stronger than discipline, but P19-B2 stays code-free — RESOLVED via §9.4 homing.** Do NOT define the interface in P19-B2 (charter is code-free), but do NOT rely on discipline alone either. **Resolution: P19-B2 ratifies that a typed `OrderPlacer` port (open-order → fill-result, close-order → fill-result) gets defined, and homes that definition as the FIRST deliverable of P19-B3** (the first paper-plumbing batch). **Critical rider:** the fill-result type MUST express partial / delayed / rejected from day one, so B3–B6 write paper's fill handling against a shape that can already hold live's reality (defer the *type* and paper fills get written against an instant-total-fill shape and pay to retrofit — the exact leak §4.2 prevents). **CC: agree — consensus; homed to B3 per §9.4.**
+- **Q4 (legacy stub): AGREE disposition, with one gate-#8 tightening.** Stub is not-the-live-path, homed to #136, Phase-21 retire candidate; no earlier retirement (gratuitous churn). BUT the real risk isn't execution (the fake object does nothing) — it's **operator integrity**: the stub calls `clusterBus.publish` and flips a "live trading active" broadcast (`:182-187`) off a do-nothing object, which could mislead Kyle's dashboard during Phase-19/20 paper debugging. **Resolution: widen pre-flight gate #8 (#213) to assert the legacy `/live-trading` routes can't emit that misleading broadcast — not just "can't execute."** One-line widening of an existing gate. **CC: agree — consensus.**
+
+**CONSENSUS: Option A ratified by CC + Langston. Two additive amendments folded in (§4 reframe; `OrderPlacer` port + partial/rejected-capable fill-result type homed to B3 first deliverable). Q4 disposition stands with gate-#8 broadcast-integrity tightening. Neither amendment requires P19-B2 to ship code — both are governance.** Remaining gate: **Kyle sign-off** on the build direction.
+
+> **MEMORY drift flag (Langston, per §12):** Langston's `/home/langston/MEMORY.md` still references B79 / Phase 24–25; he anchored to the dispatch + PHASE_19_PLAN (authoritative) and flagged it for the 10.b MEMORY sync at P19-B2 close.
+
+---
+
+*P19-B2 is decision + governance only. CC + Langston consensus reached (Option A + 2 amendments). On Kyle sign-off, record the decision and close — no code, no deploy.*
