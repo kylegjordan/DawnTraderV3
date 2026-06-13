@@ -38,6 +38,16 @@
  */
 export const KNOWN_NONEXISTENT_NAMES = [
   {
+    exchange: 'Kraken (Spot)',
+    type: 'Paper-trading / demo / sandbox fill system',
+    badName: 'Kraken spot paper-trading account (hosted demo that fills orders + tracks a virtual balance)',
+    badContext: 'Assumed (incl. old CLAUDE.md rule-20 wording "paper mode routes through Kraken paper order system" + a Kyle Sept/Oct-2025 recollection of advertised spot paper trading) that Kraken hosts a spot paper-trading system to route active paper-mode orders through.',
+    correctAlternative: 'Kraken has NO hosted spot paper-fill system for ordinary users. For SPOT only: (1) AddOrder/addOrder validate=true — validates an order for errors but NEVER fills + returns no order id; (2) a by-request qualified-client test env gated behind API-team onboarding (unconfirmed to simulate fills). Kraken hosted demo with simulated fills is FUTURES-ONLY (demo-futures.kraken.com, $50k virtual). Even Kraken own March-2026 CLI does spot paper LOCALLY (offline sim off live ticker). => Spot paper MUST use an INTERNAL high-fidelity fill model, made Kraken-vetted by sending each order with validate=true + pricing off real Kraken WS + real fee/slippage/partial-fill modeling.',
+    dateDiscovered: '2026-06-13',
+    reason: 'P19-B2 exhaustive verification — Kraken Account-Management FAQ verbatim: "We do not offer test accounts with virtual balances for clients to practice on Kraken. You can, however, create a demo account for Kraken Derivatives." + API-test-env support article + Reddit/GitHub cross-check (community Kraken bots all build their own spot paper/dry-run because no native endpoint exists). The Sept/Oct-2025 memory maps to the FUTURES demo amid heavy 2025 Kraken derivatives marketing, not a spot product.',
+    ref: 'P19_B2_COMPLETION_REPORT.md + PHASE_19_PLAN §5 (2026-06-13 paper-execution-target decision); CLAUDE.md rule 20 corrected',
+  },
+  {
     exchange: 'Kraken Futures',
     type: 'WebSocket subscription feed',
     badName: 'candles_trade_1m',
