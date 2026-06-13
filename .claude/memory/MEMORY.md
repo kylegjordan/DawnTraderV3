@@ -16,7 +16,9 @@
 
 ---
 
-## CURRENT STATE (2026-06-13 ~13:2xZ — P19-B1 CLOSED + Kyle ACKs/decisions recorded; NEXT = P19-B2)
+## CURRENT STATE (2026-06-13 — P19-B2 CLOSED; NEXT = P19-B3)
+
+**★P19-B2 CLOSED 2026-06-13 (design/decision + Kyle-directed legacy removal; live stays 409-gated til Phase 21).** (1) **Build approach = Option A reuse-by-extension** (Kyle+CC+Langston): live = same `PaperExecutionEngine` w/ mode='live'; only 2 order seams diverge (open :2196, close :1104). Langston reframe: 2 order seams + 2 shared-path invariants to keep live-swappable thru B3-B6 = fill-confirmation lifecycle (#1: paper sync-atomic vs live async/partial/rejectable) + balance/equity source. (2) **PAPER EXEC TARGET (Kyle, investigation-confirmed): Kraken-vetted high-fidelity INTERNAL fill** — Kraken has NO spot paper-fill system (futures-only demo; spot validate=true validates-not-fills; even Kraken's Mar-2026 CLI does spot paper LOCALLY; Kyle Sept/Oct-2025 memory = the futures demo). Paper = internal fill made real-vetted via validate=true on every order + real prices/fees + honest L2-slippage/partial-fills (paper EV≈live EV — Langston's #1 must). rule 20 CORRECTED; rule-14 KNOWN_NONEXISTENT_NAMES entry added; #227 = non-blocking Kraken institutional-spot-env inquiry. (3) **Simultaneity (Kyle): paper always-on ALONGSIDE live once fixed, per-mode labels + own pages.** Homed→B4: paper's own rate-limit lane + shared-singleton split-brain audit (RTB cooldown/portfolio-heat worst leak) before any Phase-21 co-run. (4) **Legacy `live-trading-service` stub DELETED** (commit 59d501fc4, +6/−593: stub+4 routes+dead approval branch+harness scenario+stale archiver type; #213 RESOLVED). tsc+vitest green, modern gated path+UI untouched, Langston Step-4 APPROVE. CI 27469343597 + 27469648745 green; deploy verified (HTTP 200, removed route 404). Homed: `OrderPlacer` port+partial/rejected fill-result type → P19-B3 first deliverable.
 
 **P19-B1 (test-suite cleanup) CLOSED + Kyle-ACKNOWLEDGED 2026-06-13.** Suite 12-fail/141-skip -> 0/0 both environments (1880/1880, 161 files); TEC.b strict LIVE (#141 closed); deploy 00:21:28Z TEC_PRIME 4 classes 29ms zero throws; CI 27450164011 green. Kyle acknowledged B-5.1 + B-4.6-B + P19-B1 (confirmed all 3 B-5.1 fixes are ROOT fixes not sidelined: #222 crypto allowlist refilled pure, #223 writer guard rejects only impossible crossed-quote values nothing shut down, #224 honest IDLE on warm-up).
 
@@ -29,10 +31,11 @@
 **★NEW RULES (both CLAUDE.md + Langston CLAUDE.md, pushed):**
 - **SURFACED-ISSUE SCHEDULING (CLAUDE.md §9.4 / Langston §13):** every agreed fix-later gets a CONCRETE named home (batch / roadmap phase+item / dated task) AT moment of agreement; vague deferral not acceptable; lands in RUNNING_ISSUES + roadmap + named in the surfacing report.
 - **TEMPORARY Phase-19-doc-upkeep (CLAUDE.md §3 Tier-1 / Langston §14, SELF-REMOVING):** PHASE_19_PLAN.md updated after EVERY batch AND sub-batch (§1 board + §5 log); DELETE both rule copies at Phase-19 close.
+- **★NEVER-LEAVE-LEGACY-LINGERING (Kyle 2026-06-13, CLAUDE.md rule 18 — SUPERSEDES "mark, don't delete in-flight"):** legacy code surfaced → either discuss+delete on the spot (full workflow + certainty-before-cutting blast-radius verify) OR schedule a concrete dated deletion; never stub/comment/deprecate/leave. Record in `1-system-manual/DELETED_COMPONENTS_LOG.md` + archive to `_archive/deleted-code/` (`.removed` suffix); list "left intentionally" items so a later grep isn't read as a missed sweep. (Langston CLAUDE.md gets the matching rule.)
 
 **★LANGSTON MODEL: Fable 5 RETIRED (no access) -> claude-opus-4-8[1m] 2026-06-13.** Bridge flipped + verified live before flip; service active. **Langston dispatch model is now claude-opus-4-8[1m] NOT fable.** CLAUDE.md §6/§8 + dispatch snippet updated; rollback `/usr/local/bin/langston-bridge.py.pre-opus48-backup-20260613`.
 
-**NEXT: P19-B2 (live-mode build-approach decision)** — short design batch: how much of paper engine the live build reuses (Item-4 separation already cleaved the systems; live hard-gated 409 until Phase 21). Draft scope -> Langston -> decide. Then P19-B3 (known-broken repairs #137/#139).
+**NEXT: P19-B3 (known-broken active-path repairs #137/#139)** — OPENS WITH the typed `OrderPlacer` execution port (open/close → fill-result; the fill-result type MUST express partial/delayed/rejected from day one — P19-B2 first-deliverable home). Then continues #137 (54 files/231 errors) + #139 (9 throwing resolveAssetClass sites). Draft scope -> Langston -> implement.
 
 **Alerts armed:** 24h AMENDED B-4.6-B gate read 06532d55 Jun 13 15:00Z (rules amended gate + max_span_label verdict); first AMR weekend Jun 13-15 (Sunday 8PM ET restart watch); B-NEW-53 parity 7362f63f Jul 5.
 
