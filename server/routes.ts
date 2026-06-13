@@ -5540,67 +5540,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Live Trading Routes (Phase 22.3)
-  // Control live trading mode with manual approval requirements
-  apiRouter.post('/live-trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { liveTradingService } = await import('./services/live-trading-service.js');
-      
-      const result = await liveTradingService.startLiveTrading(userId);
-      
-      if (result.success) {
-        res.json(result);
-      } else {
-        // Manual approval required - return 202 Accepted with approval prompt
-        res.status(202).json(result);
-      }
-    } catch (error: any) {
-      console.error('Error starting live trading:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  apiRouter.post('/live-trading/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { liveTradingService } = await import('./services/live-trading-service.js');
-      
-      const result = await liveTradingService.stopLiveTrading(userId);
-      res.json(result);
-    } catch (error: any) {
-      console.error('Error stopping live trading:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  apiRouter.get('/live-trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { liveTradingService } = await import('./services/live-trading-service.js');
-      
-      const result = await liveTradingService.checkLiveTradingStatus(userId);
-      res.json(result);
-    } catch (error: any) {
-      console.error('Error checking live trading status:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Approval endpoint for live trading (called after user confirms)
-  apiRouter.post('/live-trading/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { liveTradingService } = await import('./services/live-trading-service.js');
-      
-      const result = await liveTradingService.activateLiveTrading(userId);
-      res.json(result);
-    } catch (error: any) {
-      console.error('Error approving live trading:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // Phase 24: Automatic Test Harness API
   apiRouter.post('/auto-test/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
@@ -17499,14 +17438,10 @@ Please:
       // Execute the approved change based on action type
       let executionResult: any = { success: true };
       
-      // Phase 27.2: Execute action-based approvals (e.g., start_live_trading)
+      // Phase 27.2: Execute action-based approvals
+      // (legacy start_live_trading action removed P19-B2 2026-06-13 — see DELETED_COMPONENTS_LOG.md)
       if (approval.action) {
-        if (approval.action === 'start_live_trading') {
-          const { liveTradingService } = await import('./services/live-trading-service');
-          const result = await liveTradingService.activateLiveTrading(userId);
-          executionResult = { success: result.success, message: result.message, data: result.data };
-          console.log(`[Phase 27.2] Executed start_live_trading:`, executionResult);
-        } else if (approval.action === 'start_paper_simulation') {
+        if (approval.action === 'start_paper_simulation') {
           const { startPaperSimulation } = await import('./services/paper-sim-service');
           const result = await startPaperSimulation(userId);
           executionResult = { success: result.success, message: result.message, data: result.data };

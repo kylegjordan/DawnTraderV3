@@ -10,7 +10,6 @@ import { storage } from '../storage';
 // Directive 12.2.7: nlai-action-registry import removed (deprecated)
 import { paperSimHeartbeat } from './paper_sim_heartbeat';
 import { startPaperSimulation, stopPaperSimulation, getPaperSimulationStatus } from './paper-sim-service';
-import { startLiveTrading, stopLiveTrading, checkLiveTradingStatus } from './live-trading-service';
 import { db } from '../db';
 import { clusterBusEvent } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
@@ -59,7 +58,6 @@ class AutoTestHarness {
       this.createPaperSimStartStopScenario(),
       // Directive 12.2.7: createMultiIntentScenario removed (depended on NLAI)
       this.createHeartbeatScenario(),
-      this.createLiveTradingScenario(),
     ];
 
     const results: TestResult[] = [];
@@ -221,62 +219,6 @@ class AutoTestHarness {
           verify: async (events) => {
             // Should have some heartbeat events logged
             return events.length >= 0; // Relaxed check since heartbeat may not have fired yet
-          },
-        },
-      ],
-    };
-  }
-
-  /**
-   * Scenario 4: Live Trading Activation (Two-Step Approval Flow)
-   */
-  private createLiveTradingScenario(): TestScenario {
-    return {
-      name: 'Live Trading Activation Flow',
-      steps: [
-        {
-          action: 'request_live_trading',
-          description: 'Request live trading activation (expect manual approval prompt)',
-          execute: async () => {
-            return await startLiveTrading(this.testUserId);
-          },
-          verify: async (result) => {
-            // Should return success: false with manual approval required
-            return result.success === false && result.data?.requiresApproval === true;
-          },
-        },
-        {
-          action: 'activate_with_approval',
-          description: 'Activate live trading after synthetic approval',
-          execute: async () => {
-            // Call activateLiveTrading directly (simulates post-approval activation)
-            const { activateLiveTrading } = await import('./live-trading-service');
-            return await activateLiveTrading(this.testUserId);
-          },
-          verify: async (result) => {
-            // Should successfully activate via two-step approval flow
-            // Or may return policy block if kill switch is enabled
-            return result.success || result.data?.policyBlocked === true;
-          },
-        },
-        {
-          action: 'check_live_status',
-          description: 'Check live trading status after activation',
-          execute: async () => {
-            return await checkLiveTradingStatus(this.testUserId);
-          },
-          verify: async (result) => {
-            return result.success; // Should successfully check status regardless of active/inactive
-          },
-        },
-        {
-          action: 'cleanup_stop_live_trading',
-          description: 'Stop live trading for cleanup',
-          execute: async () => {
-            return await stopLiveTrading(this.testUserId);
-          },
-          verify: async (result) => {
-            return result.success; // Should successfully stop
           },
         },
       ],

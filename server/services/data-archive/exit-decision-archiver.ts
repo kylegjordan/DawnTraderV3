@@ -5,7 +5,8 @@
  * ablation). Hooks into:
  *   - vts-runner.ts:exit-loop → source='vts-runner'
  *   - paper-execution-engine.ts:closePosition → source='paper-execution-engine'
- *   - live-trading-service.ts:closePosition → source='live-trading-service' (Phase 21)
+ *   - (Phase 21 live exit source TBD — live reuses the paper engine path, mode='live';
+ *      legacy live-trading-service removed P19-B2 2026-06-13, see DELETED_COMPONENTS_LOG.md)
  *
  * Low cadence: 50–300 rows/day. Captures full state snapshot at exit time
  * (regime/DBS at entry vs at exit, R-multiple, time-in-trade) for downstream
@@ -50,8 +51,7 @@ export function ensureExitDecisionArchiverRegistered(): void {
 
 export type ExitDecisionSource =
   | 'vts-runner'
-  | 'paper-execution-engine'
-  | 'live-trading-service';
+  | 'paper-execution-engine';
 export type ExitReason =
   | 'BE_stop'
   | 'SL_hit'
