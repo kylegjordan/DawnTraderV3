@@ -13,7 +13,7 @@
 | Seq | Batch | Roadmap items absorbed | Status | Completion report |
 |---|---|---|---|---|
 | P19-B1 | Test-suite cleanup | §16.7 + TEC.b strict-throw restore (parked 2026-06-09) | **✅ DONE 2026-06-13** — 12-fail/141-skip → **0/0 both environments** (1880/1880, 161/161 files); TEC.b strict LIVE (#141 closed, deploy-verified 4-class boot 29ms); bench=CI parity via Docker; #226 opened (tier separation); Langston APPROVE Steps 2+4, CONFIRMED Step 8 | `P19_B1_COMPLETION_REPORT.md` |
-| P19-B2 | Live-mode build-approach decision | 19-18 (reshaped — see §3.2) | queued | — |
+| P19-B2 | Live-mode build-approach decision | 19-18 (reshaped — see §3.2) | **🔄 IN PROGRESS 2026-06-13** — scope drafted (`P19_B2_SCOPE.md`); code-level read DONE (engine already mode-parametric, only 2 order seams diverge, live stub is legacy); CC recommendation = **Option A reuse-by-extension**; dispatched to Langston (design ask Q1-Q4); Kyle sign-off pending | — |
 | P19-B3 | Known-broken active-path repairs | 19-6 (#137) + 19-10 (#139) | queued | — |
 | P19-B4 | xStock wire-in (merged) | 19-1 + 19-7 (#92) + 19-8 residual (latency **+ WS staleness/reconnect fitness for execution** — Langston) + B3.2 active-path strategy gates + #153 0.50-cap gate + Kraken paper-order smoke test (Langston req. — here or B7 pre-flight) + B11-tagging decision (§5) | queued | — |
 | P19-B5 | Data-capture completion | 19-3 (§19.0.5 remaining half) + #86 Q-D probe scope decision + **#94 capture precondition (Kyle 2026-06-13): every xStock decision record carries the equity-macro snapshot (VIX + DXY z-scores at decision time) so Phase-25 item 25-7 has the build material** | queued | — |
