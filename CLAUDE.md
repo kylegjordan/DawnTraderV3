@@ -83,7 +83,7 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
 **Tier 1 — EVERY batch (no exceptions):**
 - `1-system-manual/BATCH_CATALOG.md` — add the new batch entry
 - `1-system-manual/PHASE_HISTORY.md` — update phase status
-- `1-system-manual/PHASE_19_PLAN.md` — **⏳ DURING PHASE 19 ONLY (Kyle directive 2026-06-12):** the running Phase-19 plan — update §1 status board + §5 decision log after EVERY Phase-19 batch AND sub-batch. Owns sequencing + live status + phase-scoped decisions (item detail stays homed in `POST_AUDIT_ROADMAP.md` §3.2). Retire this Tier-1 line at Phase-19 close.
+- `1-system-manual/PHASE_19_PLAN.md` — **⏳ TEMPORARY RULE — DURING PHASE 19 ONLY (Kyle directive 2026-06-12, reaffirmed 2026-06-13):** the running Phase-19 plan MUST be updated after EVERY Phase-19 batch AND sub-batch — update §1 status board + §5 decision log, no exceptions. Owns sequencing + live status + phase-scoped decisions (item detail stays homed in `POST_AUDIT_ROADMAP.md` §3.2). **🗑 SELF-REMOVING: delete this Tier-1 line (and Langston CLAUDE.md §14, the matching rule) at Phase-19 close — this is a temporary rule, not permanent governance.**
 - `.claude/memory/MEMORY.md` — volatile state block (phase / batch / next-step) every batch
 - `Claude Comms and Packages/Scope Files/BATCH_N_SCOPE.md` — written in Step 1
 - `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md` — written in Step 11, includes list of governance files changed
