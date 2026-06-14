@@ -690,7 +690,13 @@ export class SignalOrchestrator {
       volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null,
       sourcePool: rawSignal.metadata?.sourcePool || undefined,
       signalType: (rawSignal as any).signalType || rawSignal.metadata?.signalType || 'QUANT',
-      assetClass: rawSignal.metadata?.assetClass || DEFAULT_ASSET_CLASS,
+      // P19-B4a (A1.5, Langston spine): resolver-backed, NOT metadata-OR-default.
+      // The sizing input above (:464) already resolves the class from the symbol with
+      // "no silent crypto_spot fallback"; this RTB queue input MUST match it. A missing
+      // metadata.assetClass must NOT silently write crypto_spot onto an xstock row.
+      // resolveAssetClass is deterministic from symbol + throws on an unclassifiable
+      // symbol (fail loud, no silent fallback — CLAUDE.md §10).
+      assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
       metadata: {
         strategyWeight,
         exposureBias,

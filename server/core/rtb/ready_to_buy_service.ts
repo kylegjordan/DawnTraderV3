@@ -1745,20 +1745,25 @@ class ReadyToBuyService {
       await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore SQE signal');
     }
 
-    // B79.0n.RTB N1 (Langston Step 4 non-blocking note): surface upstream gaps
-    // where SQEInput.assetClass is missing. Silent crypto_spot fallback hides
-    // bugs in caller threading (B79.0n.STORAGE was supposed to thread assetClass
-    // end-to-end; any unthreaded path triggers this warn).
+    // B79.0n.RTB N1 (Langston Step 4) — surface upstream gaps where SQEInput.assetClass
+    // is missing. P19-B4a (A1.5, Langston Step-2): NO silent crypto_spot default. The
+    // single queueSQESignal caller (orchestrator :708) now resolves the class from the
+    // symbol before queueing, so a missing assetClass here is a real threading bug. We
+    // resolve-from-symbol-OR-THROW (resolveAssetClass throws on an unclassifiable
+    // symbol — fail loud, CLAUDE.md §10) and use the result for BOTH the metadata mirror
+    // and the first-class column below. The QUEUE_FALLBACK warn stays as the zero-target
+    // tripwire for the A4 SET-NOT-NULL gate (any occurrence = an upstream threading bug).
     if (!input.assetClass) {
-      console.warn(`[B79.0n.RTB][QUEUE_FALLBACK] queueSQESignal received missing assetClass; defaulting to crypto_spot. symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`);
+      console.warn(`[B79.0n.RTB][QUEUE_FALLBACK] queueSQESignal received missing assetClass; resolving from symbol. symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`);
     }
+    const resolvedAssetClass = input.assetClass ?? resolveAssetClass(normalizedSymbol, 'kraken');
 
     // Phase 14.5: Persist routing and ranking metadata for auditability
     const enrichedMetadata = {
       ...(input.metadata || {}),
       sourcePool: input.sourcePool || undefined,
       signalType: input.signalType || 'QUANT',
-      assetClass: input.assetClass || 'crypto_spot',
+      assetClass: resolvedAssetClass, // P19-B4a (A1.5): resolve-or-throw, no silent default
       rankingScore: input.rankingScore ?? parseFloat(String(input.finalScore || '0')),
     };
 
@@ -1796,10 +1801,10 @@ class ReadyToBuyService {
       blockReason: 'SQE_QUALIFIED', // Mark as SQE-qualified, not capacity-blocked
       metadata: enrichedMetadata as any,
       // B79.0n.RTB (2026-05-27, Phase 1 dual-write): populate first-class
-      // asset_class column alongside metadata.assetClass. Defaults to
-      // crypto_spot if SQEInput didn't carry it (legacy path; B79.0n.STORAGE
-      // threaded assetClass into SQE inputs but pre-batch rows lack it).
-      assetClass: input.assetClass || 'crypto_spot',
+      // asset_class column alongside metadata.assetClass. P19-B4a (A1.5): uses the
+      // resolve-from-symbol-OR-THROW result computed above — no silent crypto_spot
+      // default (CLAUDE.md §10). This is the column the A4 Phase-4 SET NOT NULL guards.
+      assetClass: resolvedAssetClass,
     };
 
     // Directive 8.8.4-A3.R8: Log trace event for new signal insertion
