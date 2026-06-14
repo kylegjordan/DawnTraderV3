@@ -1,0 +1,27 @@
+# P19-B4a — C2 xStock active-path dispatch: design for Langston sign-off
+
+> **For Langston.** Step-3 chunk C2 (the xStock wire-in). You APPROVED the shape in Step-2 ("public wrapper over `buildSizedSignalForStrategy` taking explicit xStock sizingContext + marketContext; both classes funnel through identical code"). This pins the specifics from a code-level reachability audit + surfaces two real traps. Author: Claude New (CC-B). Stamp-at-source (SizingContext.assetClass required) already landed (commit 89b76c8b8, local).
+
+## §1 — Reachability seam (audited)
+
+The active-paper `SignalOrchestrator` is owned by `PaperPortfolioManager` (private, `paper-portfolio-manager.ts:50`; started `:191/210`) and reachable via the existing module helper **`getOrchestratorByMode('paper')`** (`paper-sim-service.ts:290`). The xStock scanner is a boot-time module singleton (`index.ts:821`, centralClock-driven), **decoupled** from any engine — so it must PULL the orchestrator at dispatch time, not hold a handle.
+
+**Proposal:** add a thin PUBLIC method on `SignalOrchestrator` — `dispatchExternalSignal(rawSignal, strategyId, sizingContext, marketContext)` — that simply `return this.buildSizedSignalForStrategy(...)` (which already sizes → SQE → queues to RTB internally at `:743`; **no post-build routing to replicate** — `onSignalCallback` is a no-op in paper, `paper-portfolio-manager.ts:210-214`). The xStock-side dispatch (new helper called from `eval-cycle.ts` after the VTS register `:831`) does: `const orch = getOrchestratorByMode('paper'); if (!orch) return; // active trading OFF — dormant until B7b`. **Do NOT use `onSignalCallback`** (it's an OUTPUT notification, not an input seam).
+
+## §2 — StrategySignal construction (xStock data → type)
+
+`StrategySignal` (`strategy-engine.ts:116-129`) all-required: `symbol, strategy, entryPrice, stopPrice, targetPrice, confidence, metadata`. xStock has all of it at `eval-cycle.ts:598-612` / `:722-756`: entry/stop/target (`:598-600`, long-only geometry holds — BUY-only scanner), `strategyKey` (`:446`), `predictiveConfidence`/`hybridScore`/`finalScore` (`:602-612`), `sourcePool` (lane), `signalType` (`:734`), `atrAtOpen ← mceContext.indicators.atr` (`:744`). `SizingContext` stamped `assetClass:'xstock_spot'` + `portfolioValue` (via `getPortfolioBalanceV2('paper')`, mirroring the crypto path `:1278`) + `guardrails` + `mode:'paper'`. `marketContext` = `{ atr: atrAtOpen, high24h, low24h }` (all optional; atr at minimum).
+
+## §3 — TWO TRAPS (need your call)
+
+**Trap B — confidence scale (the silent-drop risk; same shape as B3b landmine #2).** xStock scores are **0–1** (`predictiveConfidence`/`hybridScore`/`finalScore`). `buildSizedSignalForStrategy` treats `rawSignal.confidence` as **0–1** in its metrics (`:465/:533`), but `validateStrategySignal` requires **0–100** (`:2209`). Since the C2 public entry calls **build only** (validate is NOT on the build path — it's a post-build crypto-loop check the entry doesn't replicate), CC's plan: **pass the chosen 0–1 confidence straight to build, matching the crypto path's build input**, and do NOT call validateStrategySignal. **Q1: confirm the crypto `rawSignal.confidence` into build is 0–1 (so xStock's 0–1 matches with no scaling), and pick the xStock confidence source — CC leans `predictiveConfidence` (the per-signal confidence) over hybridScore/finalScore.** If you want validate mirrored as a pre-check, it needs a ×100 for that check only.
+
+**Trap A — strategy alias + union cast.** `strategyKey` is typed `string` (`canonical-regime-strategy-map.ts:74`); `StrategySignal['strategy']` is a narrow union. Also `range_trade` (canonical-map name) vs `range_trading` (union, `strategy-engine.ts:120`). **Q2: confirm CC handles this with a small alias map (`range_trade→range_trading`) + an `as StrategySignal['strategy']` bridge (the crypto pattern path already does this at `:1496`), failing loud on an unmapped strategy** (not silently passing a bad strategy string).
+
+## §4 — Other calls
+
+- **Q3 — null-guard semantics (§9.1 scaffolding):** with active trading OFF (B4a does NOT flip it), `getOrchestratorByMode('paper')` returns null, so the dispatch is **structurally wired but dormant until B7b**. CC will declare this scaffolding-not-functional in the completion report. Confirm the null-skip is silent-but-counted (a debug counter), not a warn (it's the normal state pre-flip), with the real fail-loud reserved for the in-build stamp assert + the confidence/strategy traps. Agree?
+- **Q4 — test:** the two-pipe collision regression-lock lands at the **public-entry level** — call `dispatchExternalSignal` with a `SizingContext` stamped `xstock_spot` vs `crypto_spot` for a collision symbol (SUI/USD), assert the RTB row carries the stamp (orchestrator mocked/real-with-stubbed-RTB). Plus a test that an xStock-shaped signal reaches `queueSQESignal` with `assetClass='xstock_spot'`. Agree this is the right test altitude?
+- **Q5 — anything missing** in the blast radius (the audit flagged SIM gaps: no entry for the `getOrchestratorByMode`→orchestrator reachability chain; xStock scanner still documented "no orchestrator wiring yet" — both to fix at Step-10).
+
+Net: seam = `getOrchestratorByMode('paper')` + new public `dispatchExternalSignal` wrapping build (no post-routing); xStock side builds StrategySignal + xstock_spot SizingContext + atr marketContext; two traps (confidence-scale, strategy-alias) handled fail-loud; dormant-until-B7b null-guard. Your call on Q1–Q5, then I build.
