@@ -400,6 +400,28 @@ export class SignalOrchestrator {
   }
 
   /**
+   * P19-B4a (C2 stamp-at-source wire-in) — PUBLIC external-dispatch entry.
+   * The xStock active path is a separate scanner/cycle, decoupled from this orchestrator
+   * instance; it reaches the shared per-signal pipeline through here. The caller builds a
+   * StrategySignal + a SizingContext stamped with its asset class at the per-pipe
+   * chokepoint (xStock → 'xstock_spot') and calls this. The method only delegates to the
+   * private buildSizedSignalForStrategy, which sizes → SQE → queues to RTB internally
+   * (no post-routing to replicate — onSignalCallback is a no-op in paper, the RTB enqueue
+   * is terminal). Both pipes (crypto via evaluateSymbol, xStock via this entry) funnel
+   * through identical code; the only difference is the class the caller stamps on the
+   * SizingContext (the single source of truth post-89b76c8b8). Langston-approved seam
+   * (P19_B4a_C2_DISPATCH_DESIGN_rev1.md).
+   */
+  async dispatchExternalSignal(
+    rawSignal: StrategySignal,
+    strategyId: StrategyType,
+    sizingContext: SizingContext,
+    marketContext?: { high24h?: number; low24h?: number; atr?: number }
+  ): Promise<SizedStrategySignal | null> {
+    return this.buildSizedSignalForStrategy(rawSignal, strategyId, sizingContext, marketContext);
+  }
+
+  /**
    * B6 + B.1 + B.3: Build a sized signal from a raw strategy signal
    * Routes all strategies through the centralized sizing helper
    * Phase 8.8.4-A: SLAL instrumentation for GENERATION and SIZING stages

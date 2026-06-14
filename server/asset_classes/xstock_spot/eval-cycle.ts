@@ -53,6 +53,8 @@ import {
   checkPreOpenGates,
   VTS_NET_EV_FLOOR,
 } from '../../services/vts-runner.js';
+// P19-B4a (C2): xStock active-path dispatch (stamp-at-source wire-in; dormant until B7b).
+import { dispatchXstockActiveSignal } from './active-dispatch.js';
 import { resetNullReason, getNullReason } from '../../utils/null-reason-tracker.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
 import { evaluateXstockGlobalFilter } from './global-filter.js';
@@ -829,6 +831,25 @@ export async function evaluateXstockPairForVTS(
         } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }
 
         const tradeId = await registerOpenVtsTrade(xOpenTrade);
+
+        // P19-B4a (C2): ALSO route this signal onto the active paper pipeline when active
+        // trading is authoritatively ON (gated inside the helper on system_context.isEngineActive,
+        // the flag B7b flips — DORMANT until then, §9.1 scaffolding). Fire-and-forget: the helper
+        // never throws into this loop, and the VTS dispatch above is unaffected either way.
+        void dispatchXstockActiveSignal({
+          symbol,
+          strategyKey,
+          entryPrice,
+          stopPrice: stopLoss,
+          targetPrice: takeProfit,
+          predictiveConfidence,
+          signalType: stratDef.signalType,
+          sourcePool: lane.sourcePool,
+          atr: mceContext.indicators?.atr,
+          high24h: mceContext.indicators?.high24h,
+          low24h: mceContext.indicators?.low24h,
+        });
+
         if (tradeId) {
           counters.tradesOpened++;
           // B-NEW-9 per-lane trade counts (2026-05-12): panel "Trades Opened"
