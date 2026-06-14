@@ -121,7 +121,7 @@ export interface SQESignalInput {
   skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
   sourcePool?: string;    // Batch 37: Family-qualified source pool
   signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';  // Phase 14.5: signal family
-  assetClass?: string;                  // Phase 14.5: 'crypto_spot' default
+  assetClass?: string;                  // P19-B4a stamp-at-source: pipe-stamped class; queueSQESignal THROWS if absent (no default)
   rankingScore?: number;                // Phase 14.5: cross-family desirability score
 }
 
@@ -1745,18 +1745,21 @@ class ReadyToBuyService {
       await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore SQE signal');
     }
 
-    // B79.0n.RTB N1 (Langston Step 4) — surface upstream gaps where SQEInput.assetClass
-    // is missing. P19-B4a (A1.5, Langston Step-2): NO silent crypto_spot default. The
-    // single queueSQESignal caller (orchestrator :708) now resolves the class from the
-    // symbol before queueing, so a missing assetClass here is a real threading bug. We
-    // resolve-from-symbol-OR-THROW (resolveAssetClass throws on an unclassifiable
-    // symbol — fail loud, CLAUDE.md §10) and use the result for BOTH the metadata mirror
-    // and the first-class column below. The QUEUE_FALLBACK warn stays as the zero-target
-    // tripwire for the A4 SET-NOT-NULL gate (any occurrence = an upstream threading bug).
+    // P19-B4a stamp-at-source (Langston Q4 backstop): the orchestrator stamps assetClass
+    // at the per-pipe dispatch chokepoint (sizingContext.assetClass), so a missing
+    // assetClass on this single caller path is a real bug — an `as any` / JSON-boundary /
+    // future-caller bypass that defeated the required-field type. FAIL LOUD rather than
+    // re-derive from the symbol: re-derivation mislabels the collision-set tickers (exist
+    // as BOTH xStock and crypto with identical canonical form, so only the pipe is correct).
+    // The QUEUE_FALLBACK warn stays as the zero-target tripwire for the A4 SET-NOT-NULL gate.
     if (!input.assetClass) {
-      console.warn(`[B79.0n.RTB][QUEUE_FALLBACK] queueSQESignal received missing assetClass; resolving from symbol. symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`);
+      console.warn(`[B79.0n.RTB][QUEUE_FALLBACK] queueSQESignal received NO assetClass — upstream stamp bug. symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`);
+      throw new Error(
+        `[B79.0n.RTB][STAMP_MISSING] queueSQESignal requires a stamped assetClass (stamp-at-source); ` +
+        `none supplied for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
+      );
     }
-    const resolvedAssetClass = input.assetClass ?? resolveAssetClass(normalizedSymbol, 'kraken');
+    const resolvedAssetClass = input.assetClass; // string, narrowed non-undefined by the throw above
 
     // Phase 14.5: Persist routing and ranking metadata for auditability
     const enrichedMetadata = {

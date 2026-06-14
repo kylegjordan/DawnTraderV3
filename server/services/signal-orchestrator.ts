@@ -179,10 +179,22 @@ interface SizedStrategySignal extends StrategySignal {
   totalRoundTripCost?: number; // Total costs (fee + slippage + spread)
 }
 
+// P19-B4a (stamp-at-source — Kyle directive 2026-06-14, Langston-approved; revises the
+// B79.0n.ORCHESTRATOR Probe-8 resolve-from-symbol choice): the asset class is REQUIRED
+// and supplied by the caller at the per-pipe dispatch chokepoint (where the pipe — and
+// thus the class — is known by construction), NOT re-derived from the symbol downstream.
+// Re-deriving via resolveAssetClass is wrong-by-construction for the collision-set tickers
+// (exist as BOTH xStock and crypto with identical canonical form) — only the pipe gets
+// them right. resolveAssetClass survives ONLY for stored-row / diagnostic re-resolution.
+// 🔒 INVARIANT: one SizingContext = one asset class = one pipe. NEVER build a SizingContext
+// that serves mixed classes (would silently corrupt per-class sizing, friction, regime,
+// and the RTB asset_class write). Required (no `?`) so the compiler rejects any pipe that
+// omits it — that IS the compile-enforcement of the stamp.
 interface SizingContext {
   portfolioValue: number;
   guardrails: GuardrailsV2 | null;
   mode: 'live' | 'paper';
+  assetClass: AssetClass;
 }
 
 export class SignalOrchestrator {
@@ -413,12 +425,29 @@ export class SignalOrchestrator {
     // Ensure normalized symbol is used in signal
     rawSignal.symbol = canonicalSymbol;
 
+    // P19-B4a stamp-at-source fail-loud (Langston primary guard): the asset class is
+    // carried on sizingContext from the per-pipe dispatch chokepoint and is NEVER
+    // re-derived from the symbol here — re-derivation mislabels the collision-set tickers
+    // (exist as BOTH xStock and crypto with identical canonical form; the symbol alone
+    // can't disambiguate, only the pipe can). The required SizingContext.assetClass field
+    // makes a missing stamp a COMPILE error on the typed path; this runtime backstop catches
+    // an `as any` / JSON-boundary bypass and screams with full pipe + symbol + strategy
+    // context instead of a silent default deep in the RTB write.
+    const _stampedAssetClass = sizingContext.assetClass as AssetClass | undefined;
+    if (!_stampedAssetClass) {
+      throw new Error(
+        `[P19-B4a][STAMP_MISSING] sizingContext.assetClass absent on the active build path — ` +
+        `symbol=${rawSignal.symbol} strategy=${strategyId} mode=${sizingContext.mode}. The dispatch ` +
+        `pipe must stamp the asset class (invariant: one sizingContext = one class = one pipe).`,
+      );
+    }
+
     // W2.1 (2026-06-06): central max-holding-ms stamp for the active dispatch
     // path. Guarantees every active-path signal carries an unambiguous
     // metadata.maxHoldingMs (milliseconds) before it reaches the paper-execution
     // enforcer. No-op if the strategy's builder already set it. Forward-prep
     // only — active trading is OFF; this changes no live behavior today.
-    stampMaxHoldingMs(rawSignal, resolveAssetClass(rawSignal.symbol, 'kraken'));
+    stampMaxHoldingMs(rawSignal, sizingContext.assetClass);
 
     // Phase 8.8.4-A: Generate unique signal ID for lifecycle tracking
     const signalId = signalLifecycleAudit.generateSignalId(rawSignal.symbol, strategyId);
@@ -461,7 +490,7 @@ export class SignalOrchestrator {
       // B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class dispatch key.
       // Deterministic from symbol (resolveAssetClass) per Langston Step 2
       // Probe 8 ACK — single source of truth, no silent crypto_spot fallback.
-      assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
+      assetClass: sizingContext.assetClass,
     });
 
     // Phase 8.8.3-C5-2: Guardrail Input Verification - log balance used for trade sizing
@@ -534,7 +563,7 @@ export class SignalOrchestrator {
       // swallowed the failure and this telemetry always emitted 'UNKNOWN'.
       // getCachedContext is the correct read-only API; assetClass resolved
       // from the symbol.
-      const mceCtx = mce.getCachedContext(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'));
+      const mceCtx = mce.getCachedContext(rawSignal.symbol, sizingContext.assetClass);
       _phase15bDbsCategory = mceCtx?.directionalBias?.category ?? 'UNKNOWN';
     } catch { /* MCE not ready */ }
     emitConsumerTelemetry({
@@ -595,11 +624,11 @@ export class SignalOrchestrator {
       sqeRegimeStability = stabilityResult.stability;
     } catch { /* stability unavailable — SQE governance gate will be skipped */ }
 
-    // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput. Resolves via the
-    // raw signal's metadata (set by the upstream cycle) or falls through to the
-    // resolveAssetClass(symbol, exchange) primary resolver. NO silent crypto default.
-    const sqeAssetClass = (rawSignal.metadata?.assetClass as AssetClass | undefined)
-      ?? resolveAssetClass(rawSignal.symbol, 'kraken');
+    // P19-B4a stamp-at-source: the SQE asset class is the pipe-stamped class on
+    // sizingContext — NOT re-derived from the symbol (which mislabels collision tickers)
+    // nor read from optional metadata (which an upstream step might omit). Single
+    // authoritative source per the one-sizingContext-one-class-one-pipe invariant.
+    const sqeAssetClass = sizingContext.assetClass;
 
     const sqeInput: SQEInput = {
       signalId,
@@ -696,7 +725,7 @@ export class SignalOrchestrator {
       // metadata.assetClass must NOT silently write crypto_spot onto an xstock row.
       // resolveAssetClass is deterministic from symbol + throws on an unclassifiable
       // symbol (fail loud, no silent fallback — CLAUDE.md §10).
-      assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
+      assetClass: sizingContext.assetClass,
       metadata: {
         strategyWeight,
         exposureBias,
@@ -749,11 +778,11 @@ export class SignalOrchestrator {
       // block per CLAUDE.md §5 #15 (B79.0n.PATTERN-DETECT Step 9 capture-and-reuse pattern).
       // safeResolveAssetClass returns null on unresolvable + logs WARN — avoids
       // per-call throws in the hot loop. Skip the entire chain block when null.
-      const _pairAssetClass = safeResolveAssetClass(rawSignal.symbol, 'kraken');
-      if (_pairAssetClass === null) {
-        console.warn(`[B79.0n.CONFIDENCE-CHAIN][orchestrator] cannot resolve asset class for ${rawSignal.symbol} — skipping ablation hook`);
-        // Skip all factor pushes; chain stays at base confidence.
-      } else {
+      // P19-B4a stamp-at-source: the chain-block asset class is the pipe-stamped class
+      // (sizingContext.assetClass), always present — the old safeResolveAssetClass null-skip
+      // is removed (a stamped signal can never be unclassifiable). Bare block preserves scope.
+      const _pairAssetClass: AssetClass = sizingContext.assetClass;
+      {
       // Per-class accessors (B79.0n.CONFIDENCE-CHAIN) — pulled FIRST so all
       // 7 push sites below can thread `_pairAssetClass` uniformly. Legacy
       // global accessors retained for non-per-class data (cold-start logging).
@@ -785,7 +814,7 @@ export class SignalOrchestrator {
       const regimeAgeConfig = mce.getCurrentRegimeAgeConfig();
       const fullRegimeConfig = mce.getCurrentRegimeConfig();
       // B79.0n.MCE: append required assetClass — the cache is keyed by (symbol, assetClass).
-      const symbolCtx = mce.getCachedContext(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'));
+      const symbolCtx = mce.getCachedContext(rawSignal.symbol, sizingContext.assetClass);
       const strategyKey = (rawSignal as any).strategy ?? 'unknown';
       // P19-B3b: regime LABEL comes from the cached MCE context (symbolCtx), not from
       // extendedMetrics — calculateExtendedSignalMetrics produces no `regime` field, so
@@ -1041,7 +1070,7 @@ export class SignalOrchestrator {
     // accessor for the (symbol, assetClass) context the upstream cycle already computed.
     const regimeLabelForEmit =
       getMarketContextEngine()
-        .getCachedContext(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'))
+        .getCachedContext(rawSignal.symbol, sizingContext.assetClass)
         ?.regime.regime ?? 'UNKNOWN';
     const ablationAlternates = buildAllAlternates(
       alternateInputs,
@@ -1052,7 +1081,7 @@ export class SignalOrchestrator {
     // BATCH_82 (2026-05-14): resolve assetClass via resolveAssetClass (already
     // statically imported at top of file; same pattern used at line 990 below).
     // REQUIRED parameter — no default, no silent fallback. Compile fails if missed.
-    const assetClassForAblation = resolveAssetClass(rawSignal.symbol, 'kraken');
+    const assetClassForAblation = sizingContext.assetClass;
     emitAblationRecord(
       { kind: 'active_signal', signalId },
       rawSignal.symbol,
@@ -1086,7 +1115,7 @@ export class SignalOrchestrator {
         mode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1): this instance's OWN mode — not the global
         symbol: rawSignal.symbol,
         exchange: 'kraken',
-        assetClass: resolveAssetClass(rawSignal.symbol, 'kraken'),
+        assetClass: sizingContext.assetClass,
         source: 'signal-orchestrator',
         strategy: strategyId,
         // P19-B3b: reuse the regime label resolved from the cached MCE context above
@@ -1123,7 +1152,7 @@ export class SignalOrchestrator {
 
     // Directive 11.3A: Compute net geometry with cost-aware adjustments
     // B79.0n.MCE: assetClass REQUIRED — resolved from the signal symbol.
-    const costMetrics = getCachedCostMetrics(rawSignal.symbol, resolveAssetClass(rawSignal.symbol, 'kraken'));
+    const costMetrics = getCachedCostMetrics(rawSignal.symbol, sizingContext.assetClass);
     const netGeometry = computeNetGeometry(
       rawSignal.entryPrice,
       rawSignal.stopPrice,
@@ -1286,6 +1315,11 @@ export class SignalOrchestrator {
         portfolioValue,
         guardrails,
         mode: this.mode,
+        // P19-B4a stamp-at-source: this is the CRYPTO pipe — evaluateMarket iterates the
+        // FX5 crypto survivor pool — so the class is crypto_spot by construction. One
+        // SizingContext = one class = one pipe (see SizingContext def). The xStock dispatch
+        // (C2) builds its own SizingContext stamped 'xstock_spot'.
+        assetClass: 'crypto_spot',
       };
 
       console.log(`[B6][CONTEXT] portfolioValue=$${portfolioValue.toFixed(2)}, guardrails=${guardrails ? 'loaded' : 'null'}`);

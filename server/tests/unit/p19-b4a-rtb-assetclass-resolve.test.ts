@@ -1,31 +1,28 @@
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * P19-B4a — C1 (A1.5 spine): RTB writes a RESOLVED asset_class, never a silent default
+ * P19-B4a — C1 (stamp-at-source): RTB writes the PIPE-STAMPED asset_class, never re-derives
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Before B4a, `queueSQESignal` wrote `input.assetClass || 'crypto_spot'` to BOTH the
- * metadata mirror and the first-class `asset_class` column — so a signal that reached
- * the queue without an assetClass (e.g. an xStock signal whose metadata field was
- * dropped) would be SILENTLY mislabeled `crypto_spot`. B4a (Langston Step-2 spine)
- * replaces the silent default with resolve-from-symbol-OR-THROW: a missing assetClass
- * is resolved deterministically from the (normalized) symbol via `resolveAssetClass`,
- * which THROWS on an unclassifiable symbol (fail loud — CLAUDE.md §10). The orchestrator
- * (the single queueSQESignal caller, :708) now also resolves from the raw symbol before
- * queueing, so this RTB resolve is defense-in-depth; the `[B79.0n.RTB][QUEUE_FALLBACK]`
- * warn stays as the zero-target tripwire for the A4 SET-NOT-NULL gate.
+ * Stamp-at-source (Kyle directive 2026-06-14, Langston-approved — revises Probe-8): the
+ * asset class is stamped at the per-pipe dispatch chokepoint (xStock scanner → xstock_spot,
+ * FX5 scanner → crypto_spot) and carried as a REQUIRED field; downstream READS it and never
+ * re-derives from the symbol. Re-deriving via resolveAssetClass is wrong-by-construction for
+ * the collision-set tickers (exist as BOTH an xStock AND a Kraken crypto with identical
+ * canonical form — the symbol alone can't disambiguate, only the pipe can).
  *
- * These tests lock the row-write contract: with `input.assetClass` absent, the row
- * carries the class RESOLVED FROM THE SYMBOL — an xStock symbol lands `xstock_spot`,
- * NOT the old `crypto_spot` default. xStock spot classification on the (normalized)
- * canonical `TICKER/QUOTE` form is registry-membership-based (`asset-classes.ts:504`),
- * and the universe is DB/discovery-seeded — empty in unit tests — so we seed one entry
- * via the exported `_replaceXstockUniverse` and restore it after (file-isolated, but
- * tidy). Fail-loud-on-unclassifiable is delegated to `resolveAssetClass`'s own contract
- * (B3a classify tests); the C1 line calls it directly, so a throw propagates.
+ * `queueSQESignal` therefore writes `input.assetClass` to BOTH the metadata mirror and the
+ * first-class column, and THROWS (Langston Q4 backstop) if it is missing — an `as any` /
+ * JSON-boundary / future-caller bypass that defeated the required-field type. The
+ * `[B79.0n.RTB][QUEUE_FALLBACK]` warn stays as the zero-target tripwire for the A4 gate.
+ *
+ * The decisive regression-lock is the collision test: SUI/USD stamped via the xStock pipe
+ * lands xstock_spot, via the crypto pipe lands crypto_spot — same symbol, two pipes, two
+ * correct classes. This test COULD NOT pass under resolve-from-symbol (which forces SUI to
+ * crypto_spot every time).
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 let capturedInsert: any = null;
 
@@ -50,31 +47,10 @@ vi.mock('../../storage.js', () => ({
   },
 }));
 
-import { readyToBuyService, normalizePairKey } from '../../core/rtb/ready_to_buy_service.js';
-import {
-  resolveAssetClass,
-  _replaceXstockUniverse,
-  XSTOCK_SPOT_REGISTRY,
-} from '../../../shared/asset-classes.js';
+import { readyToBuyService } from '../../core/rtb/ready_to_buy_service.js';
+import { resolveAssetClass } from '../../../shared/asset-classes.js';
 
-// Seed one xStock under the NORMALIZED pair key, since queueSQESignal resolves the
-// normalized form. Restore the original universe after.
-const XSTOCK_RAW = 'TSLA/USD';
-const XSTOCK_NORM = normalizePairKey(XSTOCK_RAW);
-let originalUniverse: ReadonlyMap<string, any>;
-
-beforeAll(() => {
-  originalUniverse = new Map(XSTOCK_SPOT_REGISTRY);
-  _replaceXstockUniverse(
-    new Map<string, any>([[XSTOCK_NORM, { name: 'Tesla xStock (test)', sector: 'XLY' }]]),
-  );
-});
-
-afterAll(() => {
-  _replaceXstockUniverse(originalUniverse);
-});
-
-function baseInput(symbol: string): any {
+function baseInput(symbol: string, assetClass: any): any {
   return {
     symbol,
     mode: 'paper',
@@ -91,29 +67,43 @@ function baseInput(symbol: string): any {
     notional: 100,
     currentPrice: 100,
     skipSelfCheck: true, // skip the self-dedupe read (not under test)
-    // NOTE: assetClass intentionally OMITTED — this is what exercises the resolve path.
+    assetClass, // the pipe-stamped class (or undefined to exercise the fail-loud backstop)
   };
 }
 
-describe('P19-B4a C1 (A1.5) — queueSQESignal resolves asset_class from the symbol', () => {
-  it('sanity: the seeded xStock symbol resolves to xstock_spot (registry membership)', () => {
-    expect(resolveAssetClass(XSTOCK_NORM, 'kraken')).toBe('xstock_spot');
-  });
-
-  it('writes xstock_spot for an xStock symbol when assetClass is missing (not the old crypto_spot default)', async () => {
+describe('P19-B4a C1 (stamp-at-source) — queueSQESignal honors the pipe-stamped asset_class', () => {
+  it('writes the stamped xstock_spot to column + metadata mirror', async () => {
     capturedInsert = null;
-    await readyToBuyService.queueSQESignal(baseInput(XSTOCK_RAW));
-
+    await readyToBuyService.queueSQESignal(baseInput('TSLA/USD', 'xstock_spot'));
     expect(capturedInsert, 'upsertRtbSignal should have been called').toBeTruthy();
-    expect(capturedInsert.assetClass).toBe('xstock_spot'); // first-class column — resolved, not defaulted
-    expect(capturedInsert.metadata?.assetClass).toBe('xstock_spot'); // metadata mirror — same
+    expect(capturedInsert.assetClass).toBe('xstock_spot');
+    expect(capturedInsert.metadata?.assetClass).toBe('xstock_spot');
   });
 
-  it('writes crypto_spot for a crypto symbol when assetClass is missing (control)', async () => {
+  it('writes the stamped crypto_spot (control)', async () => {
     capturedInsert = null;
-    await readyToBuyService.queueSQESignal(baseInput('BTC/USD'));
-
-    expect(capturedInsert).toBeTruthy();
+    await readyToBuyService.queueSQESignal(baseInput('BTC/USD', 'crypto_spot'));
     expect(capturedInsert.assetClass).toBe('crypto_spot');
+  });
+
+  it('COLLISION regression-lock: SUI/USD honors the PIPE stamp over the symbol (both pipes)', async () => {
+    // The symbol alone forces crypto_spot (SUI is a Kraken crypto / collision ticker)...
+    expect(resolveAssetClass('SUI/USD', 'kraken')).toBe('crypto_spot');
+
+    // ...but stamped via the xStock pipe, the write must land xstock_spot.
+    capturedInsert = null;
+    await readyToBuyService.queueSQESignal(baseInput('SUI/USD', 'xstock_spot'));
+    expect(capturedInsert.assetClass).toBe('xstock_spot');
+
+    // ...and via the crypto pipe, crypto_spot. Same symbol, two pipes, two correct classes.
+    capturedInsert = null;
+    await readyToBuyService.queueSQESignal(baseInput('SUI/USD', 'crypto_spot'));
+    expect(capturedInsert.assetClass).toBe('crypto_spot');
+  });
+
+  it('FAIL-LOUD: a missing stamp throws (backstop), never a silent crypto_spot default', async () => {
+    await expect(
+      readyToBuyService.queueSQESignal(baseInput('TSLA/USD', undefined)),
+    ).rejects.toThrow(/STAMP_MISSING/);
   });
 });
