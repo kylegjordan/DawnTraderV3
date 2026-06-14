@@ -41,6 +41,25 @@ vi.mock('../../storage.js', () => ({
 vi.mock('../../services/guardrail-settings.js', () => ({
   getPortfolioBalanceV2: async () => 1000,
 }));
+// P19-B4a C3: the active-fill safety gate now runs before the C2 confidence/
+// strategy checks. Stub it OPEN (config present, in-window, fresh tick) so these
+// C2-specific assertions still exercise the downstream logic. (The gate's own
+// blocking behavior is covered by p19-b4a-c3-gate-watchdog.test.ts.)
+vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: 1000 }] }) } }));
+vi.mock('../../services/system-alerts.js', () => ({ addAlert: async () => ({}) }));
+vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
+  resolveXstockFillSafetyConfig: async () => ({
+    activeFillMaxAgeMs: 15000,
+    liquidFillWindowOpenMinEt: 570,
+    liquidFillWindowCloseMinEt: 960,
+    stallReconnectMsRth: 75000,
+    stallReconnectMsOffrth: 750000,
+  }),
+}));
+vi.mock('../../asset_classes/xstock_spot/market-hours.js', () => ({
+  isXstockLiquidFillWindowET: () => true,
+  isInXstockWeekendClose: () => false,
+}));
 
 import {
   dispatchXstockActiveSignal,

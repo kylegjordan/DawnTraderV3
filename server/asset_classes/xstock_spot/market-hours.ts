@@ -71,8 +71,12 @@ function getETParts(now: Date): { weekday: string; hour: number; minute: number 
 /**
  * Returns true iff `now` falls within the unified xStock weekend close window
  * (Friday 20:00 ET → Sunday 20:00 ET).
+ *
+ * P19-B4a (C3): exported — the equity-feed silent-stall watchdog gates on this
+ * (the 24/5 feed-live window) so it watches for stalls whenever the feed SHOULD
+ * be live and only sleeps across the weekend close.
  */
-function isInXstockWeekendClose(now: Date): boolean {
+export function isInXstockWeekendClose(now: Date): boolean {
   const { weekday, hour } = getETParts(now);
   if (weekday === 'Fri' && hour >= 20) return true;
   if (weekday === 'Sat') return true;
@@ -99,4 +103,35 @@ function isInXstockWeekendClose(now: Date): boolean {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function isXstockMarketOpenUTC(symbol: string, now: Date = new Date()): boolean {
   return !isInXstockWeekendClose(now);
+}
+
+/**
+ * P19-B4a (C3) — is `now` inside the xStock ACTIVE-FILL LIQUID WINDOW (ET)?
+ *
+ * ⚠️ This is a FILL-QUALITY LIQUIDITY GATE, **not** a market-hours claim. xStocks
+ * trade 24/5 (CLAUDE.md rule 17) and the scanner + VTS ingest/learn around the
+ * clock — this predicate ONLY gates the moment of placing an *active fill*, to the
+ * window where the underlying equity reference shows real price discovery
+ * (measured P19-B4a from the Fri 2026-06-12 session: `last` moved on 12–22% of
+ * snapshots during US regular hours vs only 2–7% pre-/after-hours — a fresh
+ * snapshot outside that window is a stale, untradeable price). Deliberately NOT
+ * named `…MarketOpen…` / `…Session…` so a future reader does not re-litigate
+ * rule 17 (Langston C3 review framing nit).
+ *
+ * Pure + testable: the open/close ET-minute bounds are DB-resolved by the caller
+ * (module_constants `xstock_fill_safety`) and passed in; this function does no I/O.
+ *
+ * @param openMinEt  - inclusive window open, minutes since ET-midnight (570 = 09:30)
+ * @param closeMinEt - exclusive window close, minutes since ET-midnight (960 = 16:00)
+ * @param now        - reference time (defaults to `new Date()`); tests inject a clock.
+ */
+export function isXstockLiquidFillWindowET(
+  openMinEt: number,
+  closeMinEt: number,
+  now: Date = new Date(),
+): boolean {
+  if (isInXstockWeekendClose(now)) return false;
+  const { hour, minute } = getETParts(now);
+  const minutesEt = hour * 60 + minute;
+  return minutesEt >= openMinEt && minutesEt < closeMinEt;
 }

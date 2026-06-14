@@ -34,15 +34,66 @@ import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-m
 import type { StrategySignal } from '../../services/strategy-engine.js';
 import type { StrategyType } from '../../services/paper-position-sizing.js';
 import type { AssetClass } from '../../../shared/asset-classes.js';
+import { db } from '../../db.js';
+import { sql } from 'drizzle-orm';
+import { addAlert } from '../../services/system-alerts.js';
+import { resolveXstockFillSafetyConfig } from './fill-safety-config.js';
+import { isXstockLiquidFillWindowET } from './market-hours.js';
 
 // Observable counters (Langston Q3: silent-but-counted, not silent). Surfaced via getter.
 let _dormantSkips = 0;     // active trading authoritatively OFF (normal pre-B7b)
 let _noOrchSkips = 0;      // engine flagged active but no orchestrator handle (should not happen)
 let _dispatched = 0;       // signals routed onto the active pipeline
 let _dispatchErrors = 0;   // assert/build/dispatch failures (loud-logged, never thrown into the loop)
+// P19-B4a (C3) — fill-safety gate counters (all fail-CLOSED, all observable).
+let _configClosedSkips = 0; // fill-safety config missing/incomplete → fail-closed block
+let _outOfSessionSkips = 0; // outside the liquid fill window (24/5-safe liquidity gate)
+let _staleSkips = 0;        // latest tick older than the freshness threshold (or absent)
 
 export function getXstockActiveDispatchStats() {
-  return { dormantSkips: _dormantSkips, noOrchSkips: _noOrchSkips, dispatched: _dispatched, dispatchErrors: _dispatchErrors };
+  return {
+    dormantSkips: _dormantSkips,
+    noOrchSkips: _noOrchSkips,
+    dispatched: _dispatched,
+    dispatchErrors: _dispatchErrors,
+    configClosedSkips: _configClosedSkips,
+    outOfSessionSkips: _outOfSessionSkips,
+    staleSkips: _staleSkips,
+  };
+}
+
+/**
+ * P19-B4a (C3) — latest-tick age (ms) for `symbol` from the append-only ticker
+ * snapshots, or `null` when no tick exists. Index-served by
+ * `xstock_spot_ticker_snap_sym_time (symbol, captured_at DESC)`.
+ */
+async function getLatestTickAgeMs(symbol: string): Promise<number | null> {
+  const res = await db.execute<{ age_ms: string | number | null }>(sql`
+    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(captured_at))) * 1000 AS age_ms
+    FROM xstock_spot_ticker_snap
+    WHERE symbol = ${symbol}
+  `);
+  const rows = (res as any).rows ?? res;
+  const raw = Array.isArray(rows) ? rows[0]?.age_ms : undefined;
+  if (raw === null || raw === undefined) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** P19-B4a (C3) — dedup'd warning when an active fill is blocked on a stale price. */
+async function raiseStaleFillAlert(symbol: string, ageMs: number | null, maxAgeMs: number): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'warning',
+      title: 'xStock active fill blocked — stale price',
+      body: `An active xStock fill was blocked because the latest price for ${symbol} was ${ageMs === null ? 'absent' : `${Math.round(ageMs)}ms old`} (limit ${maxAgeMs}ms). Routine if transient; persistent staleness during US regular hours indicates a feed problem — see the equity-feed silent-stall watchdog.`,
+      dedupe_key: 'xstock-stale-fill-block',
+    });
+  } catch (err) {
+    console.error(`[P19-B4a][C3] failed to raise stale-fill alert for ${symbol}:`, err);
+  }
 }
 
 /** Only canonical→type-union name mismatch (Langston: the single alias in the 19). */
@@ -78,6 +129,33 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
     if (!orch) {
       _noOrchSkips++; // engine flagged active but no orchestrator — surface, do not fabricate.
       console.warn(`[P19-B4a][C2] active-trading ON but no paper orchestrator handle — skip ${input.symbol}/${input.strategyKey}`);
+      return;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // P19-B4a (C3) — HARD fill-safety gate. Three fail-CLOSED + counted checks
+    // before any active fill (audit-4 R1: never fill on a dead/untradeable price).
+    // Config is DB-resolved (module_constants xstock_fill_safety); missing config
+    // blocks every fill until seeded.
+    // ════════════════════════════════════════════════════════════════════════
+    const safety = await resolveXstockFillSafetyConfig();
+    if (!safety) {
+      _configClosedSkips++; // fail-closed: no DB fill-safety config → do not fill (resolver logs loudly).
+      return;
+    }
+    // (a) Liquid-fill window — a fill-quality LIQUIDITY gate, NOT a market-hours
+    //     claim (xStock stays 24/5 for scan + VTS; only the fill moment is gated).
+    //     Blocks fresh-but-untradeable off-hours snapshots regardless of tick age
+    //     (Langston Q5: load-bearing on top of freshness, not redundant).
+    if (!isXstockLiquidFillWindowET(safety.liquidFillWindowOpenMinEt, safety.liquidFillWindowCloseMinEt)) {
+      _outOfSessionSkips++;
+      return;
+    }
+    // (b) Freshness — the symbol's latest tick must be within the max-age window.
+    const ageMs = await getLatestTickAgeMs(input.symbol);
+    if (ageMs === null || ageMs > safety.activeFillMaxAgeMs) {
+      _staleSkips++;
+      await raiseStaleFillAlert(input.symbol, ageMs, safety.activeFillMaxAgeMs);
       return;
     }
 

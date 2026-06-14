@@ -24,6 +24,10 @@ import { loadEquitySpotUniverse } from './universe-loader.js';
 import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
+// P19-B4a (C3) — silent-stall watchdog deps.
+import { addAlert } from '../system-alerts.js';
+import { isInXstockWeekendClose, isXstockLiquidFillWindowET } from '../../asset_classes/xstock_spot/market-hours.js';
+import { resolveXstockFillSafetyConfig } from '../../asset_classes/xstock_spot/fill-safety-config.js';
 
 const WS_URL = 'wss://ws-equities.kraken.com';
 // B69: renamed from 'equity_spot' → 'xstock_spot' (tokenized equity, not real equity)
@@ -34,6 +38,7 @@ interface ArchiverState {
   symbols: string[];
   backoff: BackoffPolicy;
   enabled: boolean;
+  reconnectPending: boolean; // P19-B4a (C3): true between scheduleReconnect() and the next open
   lastMsgAt: number;
   rowsPersistedLastMinute: number;
   rowsPersistedLastMinuteWindowStart: number;
@@ -47,6 +52,7 @@ const state: ArchiverState = {
   symbols: [],
   backoff: makeBackoff(30),
   enabled: true,
+  reconnectPending: false,
   lastMsgAt: 0,
   rowsPersistedLastMinute: 0,
   rowsPersistedLastMinuteWindowStart: Date.now(),
@@ -210,6 +216,7 @@ async function connect(): Promise<void> {
   ws.on('open', () => {
     console.log(`[B74][equity-spot] connected (attempt ${state.backoff.attempts() + 1})`);
     state.backoff.reset();
+    state.reconnectPending = false; // P19-B4a (C3): connection restored.
     subscribe(ws);
   });
 
@@ -227,6 +234,7 @@ async function connect(): Promise<void> {
 
 function scheduleReconnect(): void {
   if (!state.enabled) return;
+  state.reconnectPending = true; // P19-B4a (C3): so the stall watchdog doesn't race an in-flight reconnect.
   const delay = state.backoff.nextDelayMs();
   console.warn(`[B74][equity-spot] reconnecting in ${delay}ms (attempt ${state.backoff.attempts()})`);
   setTimeout(() => { connect().catch(err => console.error('[B74][equity-spot] reconnect failed:', err)); }, delay);
@@ -245,6 +253,84 @@ setInterval(() => {
   state.rowsPersistedLastMinuteWindowStart = now;
 }, 60_000);
 
+// ════════════════════════════════════════════════════════════════════════════
+// P19-B4a (C3) — SILENT-STALL WATCHDOG
+// ════════════════════════════════════════════════════════════════════════════
+// The close-handler only reconnects on a socket `close`. A feed that goes silent
+// on an OPEN socket (Kraken stops sending while keeping the connection alive)
+// never self-heals — that is audit-4's R1, and it would feed stale prices to an
+// active fill. This watchdog catches it.
+//
+//  - Gated on the 24/5 FEED-LIVE window (`!isInXstockWeekendClose`), NOT the RTH
+//    fill window (Langston C3 condition 1): the feed should be live 24/5, so the
+//    watchdog must cover 24/5 to protect VTS ingestion too, and only sleeps across
+//    the weekend close.
+//  - TWO-TIER, DB-resolved threshold: tight in RTH (protect fills; above the
+//    measured RTH p99.9 of 28.7s) vs loose off-RTH (above the measured off-RTH
+//    p99 of 192s) so it neither misses an RTH stall nor thrashes on legitimately-
+//    sparse off-hours gaps.
+//  - Forces a reconnect by CLOSING the socket (reuses the existing backoff path —
+//    one reconnect path, not two) and raises a dedup'd CRITICAL alert. Skipped
+//    when a reconnect is already pending so it can't race the close-handler.
+const STALL_WATCHDOG_CHECK_MS = 30_000;
+
+async function raiseStallAlert(ageMs: number, thresholdMs: number, inLiquid: boolean): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'critical',
+      title: 'xStock equity feed silent-stall — forcing reconnect',
+      body: `The Kraken equity-spot WS socket was OPEN but delivered no data for ${Math.round(ageMs / 1000)}s (threshold ${Math.round(thresholdMs / 1000)}s, inLiquidWindow=${inLiquid}). Forced a reconnect. If this recurs, the upstream feed is degraded — active xStock fills are freshness-gated and will block until ticks resume.`,
+      dedupe_key: 'xstock-equity-feed-stall',
+    });
+  } catch (err) {
+    console.error('[B74][equity-spot][STALL] failed to raise stall alert:', err);
+  }
+}
+
+async function raiseStallConfigMissingAlert(): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'critical',
+      title: 'xStock fill-safety config missing — stall watchdog inert',
+      body: 'The equity-feed silent-stall watchdog could not resolve its DB thresholds (module_constants xstock_fill_safety). It is inert this cycle (socket-close reconnect still works). Seed the config to restore open-socket stall protection.',
+      dedupe_key: 'xstock-fill-safety-config-missing',
+    });
+  } catch (err) {
+    console.error('[B74][equity-spot][STALL] failed to raise config-missing alert:', err);
+  }
+}
+
+export async function runStallWatchdogTick(now: Date = new Date()): Promise<void> {
+  if (!state.enabled) return;
+  if (isInXstockWeekendClose(now)) return; // feed legitimately closed — do not watch.
+  const safety = await resolveXstockFillSafetyConfig();
+  if (!safety) {
+    await raiseStallConfigMissingAlert(); // loud + inert this tick (rule-15: no silent default).
+    return;
+  }
+  const ageMs = state.lastMsgAt > 0 ? Date.now() - state.lastMsgAt : Infinity;
+  const inLiquid = isXstockLiquidFillWindowET(
+    safety.liquidFillWindowOpenMinEt,
+    safety.liquidFillWindowCloseMinEt,
+    now,
+  );
+  const threshold = inLiquid ? safety.stallReconnectMsRth : safety.stallReconnectMsOffrth;
+  const open = state.ws?.readyState === WebSocket.OPEN;
+  if (open && !state.reconnectPending && ageMs > threshold) {
+    console.error(
+      `[B74][equity-spot][STALL] open socket silent ${Math.round(ageMs)}ms > ${threshold}ms (inLiquid=${inLiquid}) — forcing reconnect`,
+    );
+    await raiseStallAlert(ageMs, threshold, inLiquid);
+    try { state.ws?.close(); } catch { /* close handler → scheduleReconnect (reuses backoff) */ }
+  }
+}
+
+setInterval(() => { void runStallWatchdogTick(); }, STALL_WATCHDOG_CHECK_MS);
+
 export async function startEquitySpotArchiver(): Promise<void> {
   state.symbols = await loadEquitySpotUniverse();
   if (state.symbols.length === 0) {
@@ -261,4 +347,12 @@ export function stopEquitySpotArchiver(): void {
     try { state.ws.close(); } catch { /* ignore */ }
     state.ws = null;
   }
+}
+
+// P19-B4a (C3) test-only: patch the watchdog-relevant archiver state so unit
+// tests can exercise runStallWatchdogTick without a live socket.
+export function _setArchiverStateForTest(
+  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'ws'>>,
+): void {
+  Object.assign(state, patch);
 }
