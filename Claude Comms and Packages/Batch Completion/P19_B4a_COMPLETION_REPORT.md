@@ -33,7 +33,7 @@
 | A7 (C6) | calibration_state tag on paper_sim tables | ✅ YES | NOT NULL DEFAULT + auto-backfill on both paper_sim tables (commit 0cd3e0575) |
 
 ## Decisions for Kyle (flagged) + Langston (ratified Step-4)
-1. **xStock active FILLS gated to US regular hours (RTH 09:30–16:00 ET)** as a fill-quality liquidity gate — token still 24/5 for scan+VTS; config-widenable. _(Flagged to Kyle 2026-06-14 for morning confirmation.)_
+1. **xStock active FILLS gated to US regular hours (RTH 09:30–16:00 ET)** as a fill-quality liquidity gate — token still 24/5 for scan+VTS; config-widenable. **★ KYLE RESOLUTION 2026-06-15:** the RTH clock was only a PROXY for book liquidity (used because B4a had no live order-book-depth feed). Kyle's call — gate on actual book-depth-sufficiency, 24/5, NOT a clock. RESOLVED: the liquid-fill-window clock is RETIRED and replaced by a book-depth-sufficiency gate once B4b.1 builds the depth feed (RUNNING_ISSUES #295; no live impact — B4a's gate is dormant and B4b.1 lands before B7b activation). The freshness + stall-watchdog gates stay (both correct, both 24/5).
 2. **C5 strategy gate default-open** (not explicit-allowlist — would black out crypto).
 3. **C7 SET-NOT-NULL deferred** to B7b post-activation soak (#237).
 4. **C8 pattern cap 0.50 → 0.15** (interim; final Phase-25).
