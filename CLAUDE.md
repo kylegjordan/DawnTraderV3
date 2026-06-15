@@ -131,6 +131,8 @@ MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200
 
 ## 4. Canonical File Locations (post-reorganization 2026-04-14)
 
+**CLAUDE.md canonical location = repo ROOT `./CLAUDE.md` ONLY (Kyle directive 2026-06-15).** Claude Code auto-loads BOTH `./CLAUDE.md` AND `./.claude/CLAUDE.md` if present and CONCATENATES them (doubling tokens) — the two are interchangeable alternatives per the official docs, NOT a pair meant to coexist. A stale untracked `./.claude/CLAUDE.md` duplicate was removed 2026-06-15. **Do NOT recreate `./.claude/CLAUDE.md`** — keep the root file as the sole source. (Contrast: the MEMORY.md two-file pattern in §3.1 IS intentional — its truth file lives OUTSIDE the repo in the user cache, so the in-repo `.claude/memory/MEMORY.md` mirror is a real git backup. That reasoning does not apply to CLAUDE.md, which is fully in-repo either way.)
+
 **Governance (all in `1-system-manual/`):** BATCH_CATALOG, PHASE_HISTORY, SYSTEM_MANUAL, SYSTEM_IMPACT_MAP, CHANGES_AND_FIXES, POST_AUDIT_ROADMAP, ADJUSTMENT_FRAMEWORK, AUTHORITY_BASELINE, RUNNING_ISSUES, MULTI_ASSET_VTS_EXPANSION_PLAN, ASSET_CLASS_ONBOARDING_WORKFLOW, `_archive/CLAUDE_MD_RULE_HISTORY.md` (this file's companion).
 
 **Claude Comms and Packages (inside repo at `DawnTraderV3/Claude Comms and Packages/`):**
