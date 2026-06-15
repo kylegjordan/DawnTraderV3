@@ -254,7 +254,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Execution**: **Background** — `startAssetNameResolver()` at boot (`index.ts`, after the universe-discovery cron), first sweep +90s then every 6h. Off the request hot path. **Fail-graceful**: any failure leaves the name hidden; errors do NOT negative-cache (retry next sweep).
 - **Blast Radius**: **LOW** — cosmetic display backfill; isolated new table + new endpoints; no trading-path coupling. A TIER-0 pin bypasses the negative-cache backoff so a freshly-pinned id takes effect on the next sweep (Langston Step-4 condition).
 - **Tests**: `server/tests/unit/b-names-asset-name-resolver.test.ts` (10 — pure disambiguation accept/skip cases + `getCuratedCryptoName`).
-- **Sibling (pending)**: B-NAMES.1 (xStock half of #298) backfills `xstock_spot_universe.name` at discovery + a curated Backed-ETF static map; #298 stays OPEN until it lands.
+- **Sibling (LANDED 2026-06-15)**: B-NAMES.1 (xStock half of #298) — root-caused the discovery ticker-echo (`XstockSpotEntry.name` now `string|null`; discoverer stores `?? null` not the bare ticker; `xstock_spot_universe.name` dropped NOT NULL) + `CURATED_XSTOCK_NAMES` static map (33 Backed-ETF/foreign-equity symbols Finnhub's profile endpoint misses) wired into the discoverer fallback `override → Finnhub → curated → null`; backfilled the 33 existing rows (`scripts/b-names-1-xstock-name-backfill.ts`). **#298 CLOSED (both halves).**
 
 ---
 
