@@ -468,6 +468,8 @@ Check in this order:
 
 **Framing rule — buried implemented logic is a governance failure, not just a documentation miss.** The job of CC and Langston is to SURFACE buried details. See history doc §9.framing for the DBS-orphan canonical example.
 
+**Both maps are SELF-DOCUMENTING — read/maintain per their own top-of-file header (Kyle directive 2026-06-15; substance lives in-doc where it's used, NOT duplicated in this always-loaded file).** `SYSTEM_IMPACT_MAP.md` opens with How-to-Use + a Table of Contents + the **"Cross-Cutting Runtime State, Singletons & Liveness Registry"** (read it before any change touching mode / engines / shared in-memory state); per-batch history is archived at the BOTTOM. `SYSTEM_MANUAL.md` opens with a "How to read & maintain" note + Table of Contents (Chapters 1–12 + Part VI Appendices). **Maintenance convention for both:** write new architecture INTO the relevant Layer/Chapter and update the Table of Contents — do NOT append dated sections at the tail; per-batch notes go in the bottom archive / Part VI, and a still-core note folds up into its Layer/Chapter.
+
 **Rules:**
 
 1. **Pre-audit (Step 2):** Read `1-system-manual/SYSTEM_IMPACT_MAP.md` for every affected component. Trace UPSTREAM dependencies, DOWNSTREAM consumers, SHARED STATE, BACKGROUND EXECUTION, BLAST RADIUS. Also read `SYSTEM_MANUAL.md` for architectural / mathematical truth. If scope contradicts System Manual, one of them is wrong — flag it. If either file is silent on something the batch touches, that itself is a governance gap — flag it. Document in `BATCH_N_PRE_AUDIT.md`. Langston reviews the SIM + System Manual analysis before implementation.

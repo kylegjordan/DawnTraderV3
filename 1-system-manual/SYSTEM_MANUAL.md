@@ -6,6 +6,7 @@
 > **Source**: Systematic 11-phase repository audit
 > **Companion Documents**: CHANGES_AND_FIXES.md, LEGACY_DEPRECATION_PLAN.md, POST_AUDIT_ROADMAP.md, ADJUSTMENT_FRAMEWORK.md (parameter governance), AUTHORITY_BASELINE.md (V1.0 snapshot)
 > **Status**: Complete (all 11 phases consolidated)
+> **2026-06-15 navigability pass:** rebuilt the Table of Contents to be current + complete (it was missing Chapter 12, the Operational Model, and all of Part VI); relocated Chapter 12 (AMR) out from *after* the appendices to its proper place after Chapter 11; grouped the dated per-batch appendices under **Part VI: Appendices**; added a "How to read & maintain this manual" note to the Table of Contents. No content removed — verified lossless. The per-chapter currency audit (does each section still match the live code?) is a recommended follow-up; a chapter is large but the document is intentionally kept unified (navigated by chapter, consulted on demand) rather than split into feeder files.
 
 ---
 
@@ -53,9 +54,14 @@ The codebase is a TypeScript monorepo with a React frontend, Express API server,
 
 ## Table of Contents
 
+### How to read & maintain this manual
+- **It is a reference, not a read-through.** Jump to the chapter you need from the list below. It documents **what the system IS** — architecture, components, data flows, configuration.
+- **Where other things live:** bugs/risks → `CHANGES_AND_FIXES.md`; removal plans → `LEGACY_DEPRECATION_PLAN.md`; the file-dependency map + the runtime shared-state / singleton / liveness registry → the top of `SYSTEM_IMPACT_MAP.md`.
+- **Maintenance convention (keep this document useful):** write new architecture INTO the relevant Chapter — do NOT append dated sections at the tail. Per-batch architecture notes go in **Part VI: Appendices** at the bottom; when an appendix becomes core, fold its substance up into its Chapter and leave a dated pointer. **Update this Table of Contents whenever you add or move a top-level section.**
+
 ### Part I: Core Trading Engine
 - **Chapter 1**: Core Math & Scoring (Phase 1) — FinalScore kernel, Expectancy Gate, cost model, quality metrics
-- **Chapter 2**: Strategy Deep Dives (Phase 2) — 17 canonical strategies, regime classification, DSS analysis
+- **Chapter 2**: Strategy Deep Dives (Phase 2) — 19 canonical strategies, regime classification, DSS analysis
 - **Chapter 3**: Market Scanning & Pair Management (Phase 3) — FX5 Scanner, watchlist, screener filters
 
 ### Part II: Risk & Execution
@@ -73,6 +79,13 @@ The codebase is a TypeScript monorepo with a React frontend, Express API server,
 ### Part V: Quality & Data
 - **Chapter 10**: Testing & Quality Assurance (Phase 10) — Test frameworks, coverage, runtime validation
 - **Chapter 11**: Database Schema & Migrations (Phase 11) — Schema inventory, migration infrastructure, data access
+- **Operational Model** (standalone) — Development Pipeline & Actor Roles
+
+### Chapter 12: Adaptive Market Response (AMR)
+- **Chapter 12**: AMR — the per-asset-class "market weather" layer (regime vote / friction / DBS / flip-rate / EV-gap / macro → one favorability score → strategy mode). SHADOW for both classes as of B-5.
+
+### Part VI: Appendices (dated architecture notes — fold into Chapters over time)
+- B63 (Strong-Trend Lane + Global DBS Store) · B64a (Drift Dashboard) · B65.4.x (Ladder Trailing Model) · REGIME (Master Planning Doc ref) · B67/B68 (7-Modulator Confidence Chain) · Data Capture (B70/B70.1) · Configuration Surface (B72) · Data Lifecycle (B75) · Calibration Aggregator (post-B76) · Modularization Phase (post-B78) · DBS→xStocks (B-PHASE-A2) · Source-side dedup (B-NEW-35) · Off-hours session-lifecycle (B-NEW-36b) · xStock universe discovery (B79.0n) · Storage API REQUIRED-assetClass (B79.0n)
 
 ---
 
@@ -87,7 +100,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 | **cost-model.ts** | `server/core/cost-model.ts` | Cost-of-trade authority. Real spread + slippage + fees. |
 | **calculatePairRegime()** | `server/core/metrics/market-regime.ts` | Canonical pair-level regime classification. 5 regimes. DBS-integrated (B62): accepts `dbsScore` parameter, gates RBS/TFS/IE. |
 | **Market Context Engine (MCE)** | `server/services/market-context-engine.ts`, `server/types/market-context.ts` | Centralized VWAP/SMA/ATR/regime computation. Signal orchestrator and VTS both call `MCE.computeContext()`. Singleton, 60s cache TTL. |
-| **Canonical Regime Strategy Map** | `server/config/canonical-regime-strategy-map.ts` | SSOT: 5 regimes, 17 strategies. **Wired via MCE** (Batch 14). |
+| **Canonical Regime Strategy Map** | `server/config/canonical-regime-strategy-map.ts` | SSOT: 5 regimes, 19 strategies. **Wired via MCE** (Batch 14). |
 | **Guardrails V2** | `guardrails-v2.ts` | Risk gate authority. 10 named guardrails + kill switch. |
 | **Pre-Execution Validator** | `pre-execution-validator.ts` | Final gate before trade execution. Two-gate system (post goal-alignment removal). |
 | **FinalScore Kernel** | `signal-orchestrator.ts` | Score authority. Adaptive weighting with volatility adjustment. |
@@ -10600,6 +10613,55 @@ ChatGPT recommended a 5-phase database cleanup strategy, which aligns with and e
 
 ---
 
+# Chapter 12: Adaptive Market Response (AMR)
+
+> Added B-5 (2026-06-12). Current state: SHADOW for both classes — the system computes and records, applies nothing. Activation is a Phase-19 decision.
+
+## 12.1 Concept and contract
+
+AMR is the per-asset-class "market weather" layer: every 30 seconds, per class (crypto_spot, xstock_spot), it reads seven live inputs, produces ONE monotone favorability score (continuousScore in [0,1], higher = more favorable), and classifies that class's market as CALM / CHOPPY / STORMY / FAVORABLE / IDLE.
+
+**The M2 contract (load-bearing):** the classification IS a pure bucketing of continuousScore. Hard rules NEVER act as side-channels — they apply as SCORE CAPS: a quarantined input caps the score at 0.5 (R2: quarantine may tighten posture, never loosen), and FAVORABLE requires the FULL five-input weighted evidence set (the input-completeness cap pins thin-data scores at favorable_min - 0.001 — favorable is earned, never assumed from partial data). This makes the future learned brain a one-site swap: resolveStrategyModeFromWeather (strategy-modes.ts) is the single seam mapping classification -> strategy mode (FAVORABLE->AGGRESSIVE, CALM->NORMAL, CHOPPY->DEFENSIVE, STORMY->SURVIVAL, IDLE->null/hold).
+
+**Inputs (per class):** regime vote % (per-class MCE vote, B-4.7), measured friction (crypto: the scanned universe via cost-cache, ~496 names, negative-spread read guard + B-5.1 writer guard at the setCostMetrics chokepoint; xstock: the scanner-fed friction-sample store, reason-coded — the cost-cache is structurally crypto-only), DBS (per-class store snapshot, staleness honored), regime flip-rate (per-class tracker; epochs = LIVE cycles, IDLE never counts), EV-gap ratio (realized vs predicted percent-of-notional from the VTS close hook; 30-obs warm), and macro z-scores (crypto: BTC dominance / funding / mcap-momentum baselines; xstock: VIX + DXY from the equity feed). Observation-denominated baselines throughout — delayed sources count distinct observations, not polling ticks.
+
+**Modes and dials (DB-governed, per-class, fail-hard, boot-asserted):** NORMAL (1.0 baseline; slots crypto 10 / xstock 8), DEFENSIVE (0.6x size, 1.2x stops, 0.8x targets, 1.5x cooldown; slots 6/5), SURVIVAL (0.25x, 1.5x, 0.6x, 2x; slots 3/2), AGGRESSIVE (1.25x size, 1.2x targets, 0.75x cooldown; slots 12/10; stop 1.0; confidence floor = NORMAL floor — B1: aggression NEVER lowers the quality bar). AGGRESSIVE exists per-class ONLY; class-less access THROWS by design.
+
+**Dwell + ladder:** posture tightens immediately, relaxes one rung at a time after a dwell of consecutive supporting LIVE epochs; post-IDLE resume = min(firstRead, NORMAL) (B5 rule — a restart/weekend can never wake into AGGRESSIVE).
+
+**Flag (per class, module_constants amr_runtime.mode):** disabled (no compute — A5), shadow (compute + ledger, apply nothing), active (gates + overlays consult the resolved mode; fail-closed). Gates: SQE unconditional self-sourcing check (F1), paper engine + realtime executor + RTB promotion re-check; precedence killSwitch > AMR > TCL as independent ANDs (F3).
+
+**Warm-up honesty + the no-posture gate (B-5.1, 2026-06-12):** friction `null` with reason WARMING or NO_SOURCE classifies **IDLE** (staleness carries `friction_warming`/`friction_no_source`) — a restart can never produce a thin-input CALM (#224; the pre-fix transient read CALM for ~90s before the friction sentinel warmed). LOW_VOLUME_THIN and MARKET_CLOSED stay LIVE — those are *measured* states, not warm-up. **A measured friction source is therefore a PREREQUISITE for any class to reach a LIVE AMR classification** — a class without a friction sampler sits permanently IDLE (onboarding-workflow prerequisite). Gate side: under `enforce` (flag=active), `mode === null` (boot / warm-up / IDLE) **fails closed** with gate `no_posture` — there is no ungated window between restart and the first LIVE read. Safe by construction: all four gate sites are entry-side (exits never gated — fail-closed cannot trap an open position); posture is in-memory-only (no persisted-posture hazard); the restart sequence is always null → blocked-under-active → first LIVE ≤ NORMAL (post-IDLE cap). Under `dry_run` (shadow), null-mode remains skipped — nothing to rehearse; the ledger records the IDLE cycle. Corollary: xstock weekends under ACTIVE = IDLE all weekend = no new xstock entries while the market is closed, correct by construction.
+
+## 12.2 Decision ledger and evidence
+
+amr_decision_ledger (one row per class-cycle): full weather json (inputs incl. health[] and staleness[]), continuousScore, resolvedMode, would-dials, would_blocks (dry-run gate verdicts), flagState. Retention: 90-day IN-SERVICE delete (maybePruneLedger), deliberately NOT in the B-NEW-47 archive sweep. This is the shadow-week evidence substrate and the future ML training set. Note (#217/#221): rankingShadow stamps ride the rows but populate ONLY from the RTB selection path — structurally null in VTS passive operation; substantive evidence begins when Phase 19 enables selection.
+
+## 12.3 Input-health sentinels (Obj-15b) and the honest detectability boundary
+
+Every cycle each input reports {fresh, inBounds, varying, crossConsistent}; failures alert through the system-alerts queue (incident-deduped; incidents CLOSE on recovery so a feed breaking twice re-alerts). Detector classes: absence/staleness (never-seeded inputs escalate), out-of-bounds (QUARANTINE — nulled-with-reason, never clamped, never consumed), stuck-value (distinct-value-count arming K over a window, then N identical; stuck-at-EXACTLY-ZERO uses a faster N — the #219 frozen-feed class), cross-source divergence (CBOE-vs-FRED VIX on matching trade dates).
+
+**The honest detectability boundary:** sentinels detect feeds that stop, freeze, leave plausibility rails, or diverge from a second source. They CANNOT detect a feed that is wrong-but-plausible-and-moving with no second source (e.g., a subtly mis-scaled input that stays within rails). That class is covered only by (a) the correctness audit (repeatable via the permanent audit-dump surface — section 12.4) and (b) cross-source checks where second sources exist. Claims of "input health monitored" must carry this boundary.
+
+## 12.4 The correctness-audit surface (Obj-15a, permanent)
+
+GET /api/diagnostics/amr/audit-dump: per class, ONE synchronous pass captures the per-pair aggregation inputs AND the system-computed aggregate for vote / DBS / friction (separate sections are not atomic with each other; EXACT/1e-6 comparisons are per-section). scripts/b5-amr-correctness-audit.ts recomputes everything with independent implementations and scores against pinned bars. First full run (2026-06-12): every leg PASS at zero deviation; the audit caught the Finding-A2 units bug (EV-gap/B67.4 realized side ~100x understated — fixed, vts epochs bumped to crypto 4 / xstock 5), the Finding-B xstock stamp gap (fixed), and the legacy wildcard AGGRESSIVE row (deleted). Re-run cadence: any AMR-touching batch + shadow-week reviews.
+
+## 12.5 UI
+
+Analytics -> Overview -> "Adaptive Market Response — Weather Report": per-class cards (classification + score bar + would-run/running mode + health chips with raw values + triggers + staleness + 5-row legend). The behavior descriptions template from the LIVE dial values served by /api/diagnostics/amr/current — a retune updates the copy automatically (no hardcoded numbers; CALM falls back to numeric copy if any NORMAL dial leaves 1.0; FAVORABLE renders the stop dial only when it differs from 1.0).
+
+## 12.6 Known open items at ship — STATUS UPDATE (B-5.1, 2026-06-12)
+
+~~#222 crypto DBS equity contamination~~ **RESOLVED B-5.1** (crypto_spot allowlist on the single MCE→store write site; permanent registry-based purity audit leg; deployed 5737b1ddb at 01:01:56Z = the intra-epoch-4 clean/contaminated boundary for DBS-stamped rows). ~~#223 negative-spread writer guard~~ **RESOLVED B-5.1** (field-level drop at the setCostMetrics chokepoint; nothing fabricated on first-write-crossed; 18 live rejections in the first 10 min — all −1 stale-ask sentinels; log on stderr→error.log). ~~#224 restart-transient CALM~~ **RESOLVED B-5.1** (friction WARMING/NO_SOURCE → IDLE + the `no_posture` fail-closed gate — see 12.1). Still open: session-boundary classification flapping (dwell ladder damps MODE correctly; shadow-week quantifies whether classification-level hysteresis is needed), DXY z warming (~30 ECB dates), FRED first cross-check pending first publish, DBS per-pair weight-cap design question (`GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT=1.0` — Phase-19 prep).
+
+
+---
+
+# Part VI: Appendices (dated architecture notes)
+
+> These appendices were added per-batch as the system grew; each documents a still-relevant slice of architecture (not a changelog — bugs live in CHANGES_AND_FIXES.md, removals in LEGACY_DEPRECATION_PLAN.md). **Maintenance convention:** keep appendices at the BOTTOM; when an appendix documents a now-core component, fold its substance up into the relevant Chapter and leave a dated pointer here. New architecture should be written into the Chapters, not appended here.
+
 # Appendix B63: Strong-Trend Lane Architecture & Global DBS Store (2026-04-21)
 
 This appendix documents the architectural additions shipped in B63 Items 10-14 + 16. These are now first-class concepts in the system and should be treated as architecture, not batch-specific tuning.
@@ -12455,45 +12517,3 @@ Tracked at RUNNING_ISSUES #129.
 - SIM entries: see "Recent Additions (B79.0n.SCORING + B79.0n.TEC, 2026-05-26)" section of `SYSTEM_IMPACT_MAP.md`
 - Onboarding patterns shipped: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.15 (promote-then-retire two-step) + §4.16 (all-keys HARD-FAIL coverage) + §4.17 (Step 6 deploy-SHA verification) + §4.18 (CI initial-schema pg_dump divergence)
 
-
-# Chapter 12: Adaptive Market Response (AMR)
-
-> Added B-5 (2026-06-12). Current state: SHADOW for both classes — the system computes and records, applies nothing. Activation is a Phase-19 decision.
-
-## 12.1 Concept and contract
-
-AMR is the per-asset-class "market weather" layer: every 30 seconds, per class (crypto_spot, xstock_spot), it reads seven live inputs, produces ONE monotone favorability score (continuousScore in [0,1], higher = more favorable), and classifies that class's market as CALM / CHOPPY / STORMY / FAVORABLE / IDLE.
-
-**The M2 contract (load-bearing):** the classification IS a pure bucketing of continuousScore. Hard rules NEVER act as side-channels — they apply as SCORE CAPS: a quarantined input caps the score at 0.5 (R2: quarantine may tighten posture, never loosen), and FAVORABLE requires the FULL five-input weighted evidence set (the input-completeness cap pins thin-data scores at favorable_min - 0.001 — favorable is earned, never assumed from partial data). This makes the future learned brain a one-site swap: resolveStrategyModeFromWeather (strategy-modes.ts) is the single seam mapping classification -> strategy mode (FAVORABLE->AGGRESSIVE, CALM->NORMAL, CHOPPY->DEFENSIVE, STORMY->SURVIVAL, IDLE->null/hold).
-
-**Inputs (per class):** regime vote % (per-class MCE vote, B-4.7), measured friction (crypto: the scanned universe via cost-cache, ~496 names, negative-spread read guard + B-5.1 writer guard at the setCostMetrics chokepoint; xstock: the scanner-fed friction-sample store, reason-coded — the cost-cache is structurally crypto-only), DBS (per-class store snapshot, staleness honored), regime flip-rate (per-class tracker; epochs = LIVE cycles, IDLE never counts), EV-gap ratio (realized vs predicted percent-of-notional from the VTS close hook; 30-obs warm), and macro z-scores (crypto: BTC dominance / funding / mcap-momentum baselines; xstock: VIX + DXY from the equity feed). Observation-denominated baselines throughout — delayed sources count distinct observations, not polling ticks.
-
-**Modes and dials (DB-governed, per-class, fail-hard, boot-asserted):** NORMAL (1.0 baseline; slots crypto 10 / xstock 8), DEFENSIVE (0.6x size, 1.2x stops, 0.8x targets, 1.5x cooldown; slots 6/5), SURVIVAL (0.25x, 1.5x, 0.6x, 2x; slots 3/2), AGGRESSIVE (1.25x size, 1.2x targets, 0.75x cooldown; slots 12/10; stop 1.0; confidence floor = NORMAL floor — B1: aggression NEVER lowers the quality bar). AGGRESSIVE exists per-class ONLY; class-less access THROWS by design.
-
-**Dwell + ladder:** posture tightens immediately, relaxes one rung at a time after a dwell of consecutive supporting LIVE epochs; post-IDLE resume = min(firstRead, NORMAL) (B5 rule — a restart/weekend can never wake into AGGRESSIVE).
-
-**Flag (per class, module_constants amr_runtime.mode):** disabled (no compute — A5), shadow (compute + ledger, apply nothing), active (gates + overlays consult the resolved mode; fail-closed). Gates: SQE unconditional self-sourcing check (F1), paper engine + realtime executor + RTB promotion re-check; precedence killSwitch > AMR > TCL as independent ANDs (F3).
-
-**Warm-up honesty + the no-posture gate (B-5.1, 2026-06-12):** friction `null` with reason WARMING or NO_SOURCE classifies **IDLE** (staleness carries `friction_warming`/`friction_no_source`) — a restart can never produce a thin-input CALM (#224; the pre-fix transient read CALM for ~90s before the friction sentinel warmed). LOW_VOLUME_THIN and MARKET_CLOSED stay LIVE — those are *measured* states, not warm-up. **A measured friction source is therefore a PREREQUISITE for any class to reach a LIVE AMR classification** — a class without a friction sampler sits permanently IDLE (onboarding-workflow prerequisite). Gate side: under `enforce` (flag=active), `mode === null` (boot / warm-up / IDLE) **fails closed** with gate `no_posture` — there is no ungated window between restart and the first LIVE read. Safe by construction: all four gate sites are entry-side (exits never gated — fail-closed cannot trap an open position); posture is in-memory-only (no persisted-posture hazard); the restart sequence is always null → blocked-under-active → first LIVE ≤ NORMAL (post-IDLE cap). Under `dry_run` (shadow), null-mode remains skipped — nothing to rehearse; the ledger records the IDLE cycle. Corollary: xstock weekends under ACTIVE = IDLE all weekend = no new xstock entries while the market is closed, correct by construction.
-
-## 12.2 Decision ledger and evidence
-
-amr_decision_ledger (one row per class-cycle): full weather json (inputs incl. health[] and staleness[]), continuousScore, resolvedMode, would-dials, would_blocks (dry-run gate verdicts), flagState. Retention: 90-day IN-SERVICE delete (maybePruneLedger), deliberately NOT in the B-NEW-47 archive sweep. This is the shadow-week evidence substrate and the future ML training set. Note (#217/#221): rankingShadow stamps ride the rows but populate ONLY from the RTB selection path — structurally null in VTS passive operation; substantive evidence begins when Phase 19 enables selection.
-
-## 12.3 Input-health sentinels (Obj-15b) and the honest detectability boundary
-
-Every cycle each input reports {fresh, inBounds, varying, crossConsistent}; failures alert through the system-alerts queue (incident-deduped; incidents CLOSE on recovery so a feed breaking twice re-alerts). Detector classes: absence/staleness (never-seeded inputs escalate), out-of-bounds (QUARANTINE — nulled-with-reason, never clamped, never consumed), stuck-value (distinct-value-count arming K over a window, then N identical; stuck-at-EXACTLY-ZERO uses a faster N — the #219 frozen-feed class), cross-source divergence (CBOE-vs-FRED VIX on matching trade dates).
-
-**The honest detectability boundary:** sentinels detect feeds that stop, freeze, leave plausibility rails, or diverge from a second source. They CANNOT detect a feed that is wrong-but-plausible-and-moving with no second source (e.g., a subtly mis-scaled input that stays within rails). That class is covered only by (a) the correctness audit (repeatable via the permanent audit-dump surface — section 12.4) and (b) cross-source checks where second sources exist. Claims of "input health monitored" must carry this boundary.
-
-## 12.4 The correctness-audit surface (Obj-15a, permanent)
-
-GET /api/diagnostics/amr/audit-dump: per class, ONE synchronous pass captures the per-pair aggregation inputs AND the system-computed aggregate for vote / DBS / friction (separate sections are not atomic with each other; EXACT/1e-6 comparisons are per-section). scripts/b5-amr-correctness-audit.ts recomputes everything with independent implementations and scores against pinned bars. First full run (2026-06-12): every leg PASS at zero deviation; the audit caught the Finding-A2 units bug (EV-gap/B67.4 realized side ~100x understated — fixed, vts epochs bumped to crypto 4 / xstock 5), the Finding-B xstock stamp gap (fixed), and the legacy wildcard AGGRESSIVE row (deleted). Re-run cadence: any AMR-touching batch + shadow-week reviews.
-
-## 12.5 UI
-
-Analytics -> Overview -> "Adaptive Market Response — Weather Report": per-class cards (classification + score bar + would-run/running mode + health chips with raw values + triggers + staleness + 5-row legend). The behavior descriptions template from the LIVE dial values served by /api/diagnostics/amr/current — a retune updates the copy automatically (no hardcoded numbers; CALM falls back to numeric copy if any NORMAL dial leaves 1.0; FAVORABLE renders the stop dial only when it differs from 1.0).
-
-## 12.6 Known open items at ship — STATUS UPDATE (B-5.1, 2026-06-12)
-
-~~#222 crypto DBS equity contamination~~ **RESOLVED B-5.1** (crypto_spot allowlist on the single MCE→store write site; permanent registry-based purity audit leg; deployed 5737b1ddb at 01:01:56Z = the intra-epoch-4 clean/contaminated boundary for DBS-stamped rows). ~~#223 negative-spread writer guard~~ **RESOLVED B-5.1** (field-level drop at the setCostMetrics chokepoint; nothing fabricated on first-write-crossed; 18 live rejections in the first 10 min — all −1 stale-ask sentinels; log on stderr→error.log). ~~#224 restart-transient CALM~~ **RESOLVED B-5.1** (friction WARMING/NO_SOURCE → IDLE + the `no_posture` fail-closed gate — see 12.1). Still open: session-boundary classification flapping (dwell ladder damps MODE correctly; shadow-week quantifies whether classification-level hysteresis is needed), DXY z warming (~30 ECB dates), FRED first cross-check pending first publish, DBS per-pair weight-cap design question (`GLOBAL_DBS_MAX_PAIR_WEIGHT_PCT=1.0` — Phase-19 prep).
