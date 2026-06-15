@@ -31,8 +31,9 @@ import { getCachedNumberRequired } from '../../services/module-constants-service
 const _RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
 import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
-// B79.0n.STORAGE (2026-05-21): resolveAssetClass + AssetClass type for SQEInput population.
-import { resolveAssetClass, type AssetClass } from '../../../shared/asset-classes';
+// B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput population.
+// P19-B4a (C4): prefer the row's stamp (asValidAssetClass), safe-resolve+skip as fallback.
+import { safeResolveAssetClass, asValidAssetClass, type AssetClass } from '../../../shared/asset-classes';
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
@@ -661,20 +662,26 @@ class ReadyToBuyService {
     let geometryRefreshed = false;
     
     if (shouldRecalculateGeometry(signal, currentVol, currentSpread)) {
-      // B79.0n.MCE: getCachedCostMetrics now REQUIRES assetClass. RtbSignal DB
-      // rows lack an asset_class column (schema gap tracked for RTB batch #11),
-      // so the class is resolved from the symbol via resolveAssetClass — the
-      // same interim STORAGE established for the RTB SQEInput sites.
-      const costMetrics = getCachedCostMetrics(normalizedSymbol, resolveAssetClass(normalizedSymbol, 'kraken'));
+      // P19-B4a (C4): getCachedCostMetrics REQUIRES assetClass. PREFER the row's
+      // stamp — rtb_signals.asset_class (schema.ts:1885) is stamped at queue-write
+      // and is the source of truth post-C1. Read it (validated against the canonical
+      // set); safe-resolve from the symbol only as a legacy-row fallback; SKIP the
+      // geometry refresh on an unclassifiable symbol (re-deriving is wrong-by-
+      // construction for collision tickers — asset-classes.ts:489 — and a guessed
+      // class would mis-price the net geometry).
+      const geomClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
       const entryPrice = parseFloat(signal.entryPrice?.toString() || '0');
       const stopPrice = parseFloat(signal.stopPrice?.toString() || '0');
       const targetPrice = parseFloat(signal.targetPrice?.toString() || '0');
-      
-      if (entryPrice > 0 && stopPrice > 0 && targetPrice > 0) {
+
+      if (geomClass !== null && entryPrice > 0 && stopPrice > 0 && targetPrice > 0) {
+        const costMetrics = getCachedCostMetrics(normalizedSymbol, geomClass);
         const geometry = computeNetGeometry(entryPrice, stopPrice, targetPrice, costMetrics);
         netExpectedEdge = geometry.netExpectedEdge;
         geometryRefreshed = true;
         console.log(`[11.3A][GEOMETRY_REFRESH] ${normalizedSymbol}: netEdge=${(netExpectedEdge * 100).toFixed(3)}%`);
+      } else if (geomClass === null) {
+        console.warn(`[11.3A][GEOMETRY_SKIP] unclassifiable ${normalizedSymbol} — skipping geometry refresh (no valid stamp, unresolvable)`);
       }
     }
     
@@ -691,10 +698,19 @@ class ReadyToBuyService {
     ));
     
     // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
-    // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput. RtbSignal DB row
-    // does not carry asset_class today (schema gap tracked for RTB batch #11). Resolve
-    // from the symbol via resolveAssetClass(symbol, 'kraken').
-    const sqeAssetClass = resolveAssetClass(normalizedSymbol, 'kraken');
+    // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
+    // (rtb_signals.asset_class, schema.ts:1885, stamped at queue-write — the source
+    // of truth post-C1); safe-resolve from the symbol only as a legacy-row fallback.
+    // Unclassifiable (no valid stamp, unresolvable) → drop from the queue rather than
+    // evaluate SQE against a guessed class (mirrors the SQE-fail removal path below).
+    const sqeAssetClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
+    if (sqeAssetClass === null) {
+      await storage.deleteRtbSignals({ mode, id: signal.id });
+      performanceMonitor.recordQueueRemove(1);
+      console.warn(`[11.0E][SQE_SKIP] unclassifiable ${normalizedSymbol} — dropped from queue (no valid stamp, unresolvable)`);
+      this.signalRefreshStates.delete(signal.signalId);
+      return { passed: false };
+    }
 
     const sqeInput: SQEInput = {
       signalId: signal.signalId,
@@ -915,9 +931,18 @@ class ReadyToBuyService {
               ));
               
               // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
-              // B79.0n.STORAGE (2026-05-21): assetClass REQUIRED on SQEInput.
-              // Resolve from symbol via resolveAssetClass (RtbSignal DB row lacks asset_class).
-              const sqeAssetClass = resolveAssetClass(normalizedSymbol, 'kraken');
+              // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
+              // (rtb_signals.asset_class, schema.ts:1885, stamped at queue-write — the
+              // source of truth post-C1); safe-resolve from the symbol only as a legacy
+              // fallback. Unclassifiable → drop from the queue (mirrors the SQE-fail
+              // bulkDelete below) rather than THROW and reject the whole concurrent chunk.
+              const sqeAssetClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
+              if (sqeAssetClass === null) {
+                console.warn(`[11.0E][SQE_SKIP] unclassifiable ${normalizedSymbol} — dropping from queue (no valid stamp, unresolvable)`);
+                bulkDeletes.push(signal.id);
+                expiredCount++;
+                return;
+              }
 
               const sqeInput: SQEInput = {
                 signalId: signal.signalId,

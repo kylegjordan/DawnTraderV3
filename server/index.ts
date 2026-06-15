@@ -210,6 +210,43 @@ app.use((req, res, next) => {
     throw b72Err;
   }
 
+  // P19-B4a (C4 / #228) — register the asset-class classify fall-through escalation
+  // hook. When a symbol cannot be classified on the active path,
+  // safeResolveAssetClass returns null + fires this hook. The active-vs-passive cut
+  // lives HERE (shared/ cannot know trading mode): if active trading is ON (paper
+  // OR live), raise a dedup'd CRITICAL alert — a symbol the orchestrator selected
+  // could not be classified and the signal/operation was skipped, which needs
+  // investigation. During passive VTS/learning (active trading OFF) it stays silent;
+  // the centralized counter in safeResolveAssetClass is the observability there.
+  try {
+    const { setClassifyFallthroughHook } = await import('../shared/asset-classes.js');
+    const { storage } = await import('./storage.js');
+    const { addAlert } = await import('./services/system-alerts.js');
+    setClassifyFallthroughHook((symbol, exchange) => {
+      void (async () => {
+        try {
+          const [paperCtx, liveCtx] = await Promise.all([
+            storage.getSystemContext('paper'),
+            storage.getSystemContext('live'),
+          ]);
+          if (paperCtx?.isEngineActive || liveCtx?.isEngineActive) {
+            await addAlert({
+              triggers_at: new Date(),
+              category: 'breakage',
+              severity: 'critical',
+              title: 'Asset-class classify fall-through during ACTIVE trading',
+              body: `A symbol could not be classified to an asset class on the active path: ${symbol}@${exchange}. The signal/operation was skipped. Investigate the symbol registry / canonicalizer (KNOWN_NONEXISTENT_NAMES, the xStock universe seed).`,
+              dedupe_key: 'classify-fallthrough-active',
+            });
+          }
+        } catch { /* hook must never break the resolver */ }
+      })();
+    });
+    console.log('[P19-B4a][C4][INIT_OK] classify fall-through escalation hook registered (active-only alerts)');
+  } catch (hookErr) {
+    console.error('[P19-B4a][C4] failed to register classify fall-through hook:', hookErr);
+  }
+
   /**
    * Initialize Boot Orchestrator (VTS runner bootstrap).
    * B-NEW-54 (2026-06-08): the Python ML microservice was retired; the

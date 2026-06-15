@@ -1144,7 +1144,10 @@ async function generatePhase10Signal(
   // Call strategy-specific detect function (replaces generic volatility formula)
   const ohlcAsAny = ohlcData as any[];
   // B79.0j: thread symbol + assetClass for ORB (other strategies ignore them).
-  const _resolvedAssetClass = safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot';
+  // P19-B4a (C4 / #230): reuse the captured _assetClass (non-null past the :981
+  // function-entry skip) instead of re-resolving with a `?? 'crypto_spot'` default —
+  // an unclassifiable symbol already returned null above, so no mislabel can occur.
+  const _resolvedAssetClass = _assetClass;
   const strategySignal = callStrategyDetect(strategy, stratDetectIndicators, ohlcAsAny, stratPatternInput, symbol, _resolvedAssetClass);
 
   if (!strategySignal) {
@@ -1251,7 +1254,9 @@ async function generatePhase10Signal(
   const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
   
   // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-  const costMetrics = getCachedCostMetrics(symbol, safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot');
+  // P19-B4a (C4 / #230): reuse the captured _assetClass (non-null past the :981 skip)
+  // rather than re-resolving with a crypto_spot default — no mislabel-by-construction.
+  const costMetrics = getCachedCostMetrics(symbol, _assetClass);
   const frictionCost = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
   
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1543,7 +1548,9 @@ async function generatePhase10Signal(
     })(),
     pairFriction: (() => {
       // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-      const cm = getCachedCostMetrics(symbol, safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot');
+      // P19-B4a (C4 / #230): reuse the captured _assetClass (non-null past the :981 skip)
+      // instead of a crypto_spot default — no mislabel-by-construction at the friction read.
+      const cm = getCachedCostMetrics(symbol, _assetClass);
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     })(),
     globalFriction: getGlobalFriction(tradeAssetClass) ?? undefined, // B-4.7: per-class (undefined until same-class sample)
@@ -1906,8 +1913,11 @@ async function generatePhase10Signal(
           macroModifier: macroValue,
           regimeConfig: _fullRegimeConfig,
           // B79.0n.MCE: resolve the pair's asset class for the b68_5
-          // label-counterfactual re-classification (no assetClass var in scope here).
-          assetClass: safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
+          // label-counterfactual re-classification.
+          // P19-B4a (C4 / #230): PERSISTED learning sample — reuse the captured
+          // _assetClass (non-null past the :981 skip) so this sample carries the TRUE
+          // class, never a crypto_spot mislabel-by-construction (Langston's #230 call).
+          assetClass: _assetClass,
         });
         console.log(
           `[B68.5][gate] pair=${symbol} dbs=${dbsScore.toFixed(3)} ` +
@@ -1944,11 +1954,12 @@ async function generatePhase10Signal(
     _regimeLabelForEmit,
   );
 
-  // BATCH_82 (2026-05-14): resolve assetClass via resolveAssetClass (already
-  // statically imported at top of file; same pattern used at line 1828 below
-  // in the open-trade INSERT). REQUIRED parameter — no default, no silent
-  // fallback. Compile fails if missed.
-  const _assetClassForAblation = safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot'; // P19-B3a #139
+  // BATCH_82 (2026-05-14): resolve assetClass for the ablation record. REQUIRED
+  // parameter — no default, no silent fallback. Compile fails if missed.
+  // P19-B4a (C4 / #230): PERSISTED learning sample — reuse the captured _assetClass
+  // (non-null past the :981 function-entry skip) so the ablation row carries the TRUE
+  // class, never a crypto_spot mislabel-by-construction (Langston's #230 hard-skip call).
+  const _assetClassForAblation = _assetClass; // P19-B3a #139 / P19-B4a (C4)
   emitAblationRecord(
     { kind: 'vts_trade', vtsTradeId: signal.id },
     symbol,

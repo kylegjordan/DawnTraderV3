@@ -160,6 +160,19 @@ export function isValidAssetClass(value: string): value is AssetClass {
   return value in ASSET_CLASS_REGISTRY;
 }
 
+/**
+ * P19-B4a (C4 / Langston condition C1) — return a stamped asset-class value ONLY
+ * if it is a VALID registered class, else `null`. Used at prefer-stamp sites to
+ * trust the upstream stamp (`signal.assetClass` / `metadata.assetClass` /
+ * `position.assetClass`) without trusting a garbage/legacy/typo'd value from a
+ * loose jsonb blob — a present-but-invalid stamp is treated as MISSING (caller
+ * falls through to `safeResolveAssetClass`, then skips). "Trust a *valid* stamp,"
+ * not "trust the stamp."
+ */
+export function asValidAssetClass(value: unknown): AssetClass | null {
+  return typeof value === 'string' && isValidAssetClass(value) ? value : null;
+}
+
 // ─── Symbol-pattern matchers ────────────────────────────────────────────────
 //
 // Per Langston cc-inbox #890 O.1 + #891 D.5: tighter regex anchors so xstock

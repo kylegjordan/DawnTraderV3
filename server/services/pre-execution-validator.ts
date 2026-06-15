@@ -7,7 +7,9 @@ import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, t
 import { getCachedNumbersForModule, getCachedNumberRequired } from './module-constants-service.js';
 // B-4.5: per-class fee resolution (DB-governed) for the fee-aware validation block.
 import { getFrictionForAssetClass } from '../core/math/cost-model.js';
-import { resolveAssetClass } from '../../shared/asset-classes.js';
+// P19-B4a (C4): safe variant — a single unclassifiable symbol returns an explicit
+// blocked ValidationResponse instead of throwing into the catch with a generic reason.
+import { safeResolveAssetClass } from '../../shared/asset-classes.js';
 
 // B72.1 (2026-05-05): goal_alignment + strategy_profiles atomic block.
 // Read all weights/thresholds + strategy profile in ONE pass at top of
@@ -140,7 +142,26 @@ export class PreExecutionValidator {
 
       const orderValue = quantity * request.signal.entryPrice;
       // B-4.5: calculateFees is per-class (DB-governed Tier-1 rates, fail-hard).
-      const _b45AssetClass = resolveAssetClass(request.signal.symbol, 'kraken');
+      // P19-B4a (C4): an unclassifiable symbol can't be priced per-class — return an
+      // EXPLICIT typed block (not a generic catch throw). The try/catch below stays in
+      // place (additive) so the validator remains crash-proof for any other throw.
+      const _b45AssetClass = safeResolveAssetClass(request.signal.symbol, 'kraken');
+      if (_b45AssetClass === null) {
+        return {
+          canExecute: false,
+          slippageEstimate: 0,
+          fees: 0,
+          goalAlignmentScore: 0,
+          riskChecks: {
+            approved: false,
+            failedCheck: 'unclassifiable_symbol',
+            details: [`Cannot resolve asset class for ${request.signal.symbol}`]
+          },
+          traceId,
+          timestamp,
+          blockReason: `Blocked: unclassifiable symbol ${request.signal.symbol} — cannot price per-class friction`
+        };
+      }
       const feeModel = slippageFeeModel.calculateFees(orderValue, false, _b45AssetClass);
 
       const slippagePercent = Math.abs(slippageModel.slippageBps / 100);

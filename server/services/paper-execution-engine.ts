@@ -57,7 +57,9 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
-import { resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+// P19-B4a (C4): top-level resolveAssetClass dropped — all sites now prefer the
+// stamp (asValidAssetClass) then fall through to safeResolveAssetClass (skip on null).
+import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
@@ -135,7 +137,15 @@ export class PaperExecutionEngine {
   private readonly SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // Batch 18J: from exchange-defaults.ts (0.05%)
   // B-4.5: FEE_PERCENT static field RETIRED — per-class DB-resolved per symbol.
   private feePercentFor(symbol: string): number {
-    return getFrictionForAssetClass(resolveAssetClass(symbol, 'kraken')).feeRateTaker * 100;
+    // P19-B4a (C4): money-boundary leaf — sites 7/8/9 skip BEFORE a position can open,
+    // so by construction this is unreachable with an unclassifiable symbol. Treat a null
+    // here as a broken invariant (stamp lost between sizing and fill) — assert-unreachable,
+    // never silently return fee=0.
+    const _cls = safeResolveAssetClass(symbol, 'kraken');
+    if (_cls === null) {
+      throw new Error('[P19-B4a][C4][INVARIANT] feePercentFor reached with unclassifiable ' + symbol + ' — sites 7/8/9 should have skipped upstream (stamp lost between sizing and fill)');
+    }
+    return getFrictionForAssetClass(_cls).feeRateTaker * 100;
   }
   // B72: monitoring interval read at setInterval start from module='paper_execution'.
   private get MONITOR_INTERVAL_MS(): number {
@@ -1242,7 +1252,7 @@ export class PaperExecutionEngine {
     // forget, try/catch wrapped — must never block closePosition.
     try {
       const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
-      const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+      const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
       const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'manual' | 'other'> = {
         stop_hit: 'SL_hit',
         target_hit: 'TP_target_hit',
@@ -1253,13 +1263,22 @@ export class PaperExecutionEngine {
       };
       const mappedReason = exitReasonMap[exitCondition.type] ?? 'other';
       const exchange = (position as any).exchange ?? 'kraken';
+      // P19-B4a (C4): prefer the position's authoritative stamp; cold-resolve only
+      // if the stamp is missing/invalid. archiveExitDecision requires a non-null
+      // asset_class, so on a null resolution we skip the archive write entirely
+      // (archive-only, fire-and-forget) rather than persist a wrong/blank class.
       const assetClass =
-        (position as any).assetClass ?? resolveAssetClass(position.symbol, exchange);
+        asValidAssetClass((position as any).assetClass) ?? safeResolveAssetClass(position.symbol, exchange);
       const rMultiple =
         position.stopLoss && position.avgPrice && position.avgPrice !== position.stopLoss
           ? (actualExitPrice - avgPrice) /
             Math.abs(avgPrice - parseFloat(String(position.stopLoss)))
           : undefined;
+      // P19-B4a (C4): asset_class is REQUIRED on the archive row — skip the write
+      // on an unclassifiable symbol rather than persist a wrong/blank class.
+      if (assetClass === null) {
+        console.warn(`[B70][ARCH] paper exit-decision archive skipped — unclassifiable ${position.symbol} (no valid asset class)`);
+      } else {
       archiveExitDecision({
         mode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1): this engine's OWN mode
         tradeId: positionId,
@@ -1288,6 +1307,7 @@ export class PaperExecutionEngine {
           sourcePool: (position as any).sourcePool,
         },
       });
+      } // P19-B4a (C4): end assetClass-present guard
     } catch (b70Err) {
       console.warn(
         `[B70][ARCH] paper exit-decision archive enqueue failed:`,
@@ -2140,7 +2160,10 @@ export class PaperExecutionEngine {
       // MCE cache is cold for this pair (rare).
       const _b67_2_1_mce = (() => { try { return getMarketContextEngine(); } catch { return null; } })();
       // B79.0n.MCE: append required assetClass — the cache is keyed by (symbol, assetClass).
-      const _b67_2_1_ctx = _b67_2_1_mce?.getCachedContext(signal.symbol, resolveAssetClass(signal.symbol, 'kraken')) ?? null;
+      // P19-B4a (C4): prefer the signal stamp; cold-cache (null context) on an
+      // unclassifiable symbol — enrichment-only, never skip the trade for it.
+      const _b67Class = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+      const _b67_2_1_ctx = (_b67Class && _b67_2_1_mce) ? (_b67_2_1_mce.getCachedContext(signal.symbol, _b67Class) ?? null) : null;
       const _b67_2_1_macro = _b67_2_1_mce?.getCurrentMacroContext() ?? null;
       const _b67_2_1_phaseWeights = _b67_2_1_mce?.getCurrentPhaseWeights() ?? null;
       const _b67_2_1_phase = _b67_2_1_ctx?.regime.phase ?? null;
@@ -2153,6 +2176,15 @@ export class PaperExecutionEngine {
       const _b67_2_1_rawConf = (_b67_2_1_modulatedConf !== null && _b67_2_1_modifierValue !== null && _b67_2_1_modifierValue > 0)
         ? _b67_2_1_modulatedConf / _b67_2_1_modifierValue
         : _b67_2_1_modulatedConf;
+
+      // P19-B4a (C4): authoritative position class — prefer the signal stamp, cold-resolve
+      // only if absent/invalid. Computed BEFORE any DB write so an unclassifiable symbol
+      // skips the trade entirely rather than opening a position with no/blank class.
+      const _tradeClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+      if (_tradeClass === null) {
+        console.warn('[B79.TEC][TRADE_SKIP] unclassifiable ' + signal.symbol + ' — refusing to open a position without a class');
+        return;
+      }
 
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
@@ -2255,7 +2287,8 @@ export class PaperExecutionEngine {
         // dispatch (line ~927) becomes a silent no-op the moment any non-crypto
         // symbol enters paper — exactly the latent failure mode this batch fights.
         exchange: 'kraken',
-        assetClass: resolveAssetClass(signal.symbol, 'kraken'),
+        // P19-B4a (C4): use the class resolved + skip-guarded above (stamp-preferred).
+        assetClass: _tradeClass,
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         metadata: {
@@ -2690,6 +2723,14 @@ export class PaperExecutionEngine {
         const portfolioValue = portfolioState ? parseFloat(String(portfolioState.balance)) : 0;
         
         if (portfolioValue > 0) {
+          // P19-B4a (C4): prefer the signal stamp; reuse the _amrClass resolved
+          // upstream (line ~2590) otherwise. Skip sizing on an unclassifiable
+          // symbol rather than throw — mirrors the SIZING_FAILED skip-return below.
+          const _sizeClass = asValidAssetClass(signal.metadata?.assetClass) ?? _amrClass;
+          if (_sizeClass === null) {
+            console.warn('[B6][SIZING_SKIP] unclassifiable ' + signal.symbol + ' — cannot size, skipping');
+            return;
+          }
           const sizingResult = sizePaperPositionForSignal({
             portfolioValue,
             guardrails,
@@ -2701,10 +2742,9 @@ export class PaperExecutionEngine {
             // pattern-pool reduced sizing applies (was an undeclared ref in TS2304).
             sourcePool: (signal as any)?.metadata?.sourcePool,
             // B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class dispatch key.
-            // Deterministic from symbol (resolveAssetClass) — no silent fallback
-            // to crypto_spot per Langston Step 2 Probe 8 ACK. Throws on B69-
-            // unregistered symbols (correct fail-fast behavior at sizing boundary).
-            assetClass: resolveAssetClass(signal.symbol, 'kraken'),
+            // P19-B4a (C4): stamp-preferred / _amrClass-reuse, skip-guarded above —
+            // no silent crypto_spot fallback (Langston Step 2 Probe 8 ACK).
+            assetClass: _sizeClass,
           });
           
           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {

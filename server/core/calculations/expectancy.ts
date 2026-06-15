@@ -38,7 +38,7 @@ import { calculateDirectionalIntegrity, calculateVolNoise } from '../../utils/an
 import { getCachedCostMetrics, computeTotalRoundTripCost } from '../math/cost-model.js';
 // B79.0n.MCE: resolveAssetClass — getCachedCostMetrics now REQUIRES an explicit
 // asset class; evaluateTradeExpectancy resolves it from the symbol (interim).
-import { resolveAssetClass } from '../../../shared/asset-classes.js';
+import { safeResolveAssetClass } from '../../../shared/asset-classes.js';
 import { covarianceEngine } from '../../utils/covariance-engine.js';
 // Batch 19G VN HF: Unused SYSTEM_GUARDS import removed
 // B72 (2026-05-05): ROI_FLEX_MULTIPLIER, ROI_MIN, ROI_MAX, FRICTION_SAFETY_BUFFER
@@ -554,11 +554,22 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta): T
   
   // Directive 12.1.2: Use canonical cost model — real per-pair fee/slippage/spread
   // getCachedCostMetrics always returns valid defaults on cache miss (exchange-defaults.ts)
-  // B79.0n.MCE: getCachedCostMetrics now REQUIRES assetClass. evaluateTradeExpectancy
-  // takes no asset-class param, so the class is resolved from the symbol via
-  // resolveAssetClass (interim — flagged in B79.0n.MCE Step 3 diff per Langston C2;
-  // a future batch threading assetClass through the expectancy kernel removes it).
-  const costMetrics = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
+  // B79.0n.MCE: getCachedCostMetrics REQUIRES assetClass. evaluateTradeExpectancy
+  // takes no asset-class param, so it is resolved from the symbol (interim — a future
+  // batch threading assetClass through the kernel removes it). P19-B4a (C4): safe-resolve
+  // + SKIP — an unclassifiable symbol cannot be priced (re-deriving is wrong for collision
+  // tickers; pricing crypto friction onto an unknown symbol corrupts EV), so return a clean
+  // NON-TRADEABLE result rather than throw (crash the cycle) or guess the friction class.
+  const _evAssetClass = safeResolveAssetClass(symbol, 'kraken');
+  if (_evAssetClass === null) {
+    console.warn(`[11.8B-A][ExpectancyGate][SKIP] unclassifiable ${symbol} — cannot price friction; returning non-tradeable (skip, not throw)`);
+    return {
+      isTradeable: false, ev: 0, netEV: 0, rawEV: 0, friction: 0,
+      score: 0, pWin: 0, pLoss: 0, meanCorrelation: 0,
+      rejectionReason: `unclassifiable symbol ${symbol} — cannot resolve asset class to price friction`,
+    };
+  }
+  const costMetrics = getCachedCostMetrics(symbol, _evAssetClass);
   const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
   const friction = frictionPct * tradeMeta.entryPrice;
   
