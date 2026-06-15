@@ -57,3 +57,30 @@
 **Archive copy:** none — this is inline literals + in-class machinery (not whole files), so there is no `.removed` archive file; git history is the authoritative archive (per this log's preamble).
 **Removal commit:** _(recorded at C5 close)_
 **Reviewed by:** Langston (Step-4 diff review) — _pending_
+
+---
+
+## 2026-06-15 — Vestigial paper-sim busy-flag / operation-lock mechanism (P19-B4b D5)
+
+**Removed:** the `globalPaperSimBusyFlag` + `globalPaperSimOperationLock` start/stop concurrency mechanism and all of its now-dead supporting code, surfaced while isolating the S1 portfolio-manager cluster per-mode.
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| Two `declare global` vars | `paper-sim-service.ts:248-249` | `var globalPaperSimOperationLock: Promise<void> \| null` + `var globalPaperSimBusyFlag: boolean`. |
+| Two module timestamps | `paper-sim-service.ts:36-37` (+ 2 threshold consts `:38-39`) | `busyFlagSetAt` / `operationLockSetAt` (and `BUSY_FLAG_STALE_THRESHOLD_MS` / `OPERATION_LOCK_STALE_THRESHOLD_MS`) — only ever set to `null`. |
+| `clearStaleBusyFlag` flag/lock branches | `paper-sim-service.ts:42-61` | The stale-flag and stale-lock auto-clear branches. The function's orphaned-manager cleanup (the part that does real work) was KEPT. |
+| `resetPaperSimService` lock clear | `paper-sim-service.ts:1126-1129` | `if (global.globalPaperSimOperationLock) { … = null }`. |
+| Route catch/finally clears | `routes.ts` paper-sim start (init-guard `:5745-5746`, catch `:11236`, finally busy-flag `:11238-11242`) + stop catch (`:11266`) | Five `(global as any).globalPaperSim{OperationLock,BusyFlag} = null/false` dead writes. |
+| Reset-service clears | `paper-session-reset.ts:296-297` | `(global as any).globalPaperSimOperationLock = null; …BusyFlag = false`. |
+
+**Why removed:** the entire mechanism is **vestigial** — superseded by `paperOperationQueue` (Phase 41F: "use operation queue instead of busy flag and operation lock"). It is provably dead, not just unused: `globalPaperSimBusyFlag` is **never set `true`** anywhere; `globalPaperSimOperationLock` is **never assigned a Promise** anywhere; `busyFlagSetAt`/`operationLockSetAt` are **only ever set to `null`** — so `clearStaleBusyFlag`'s guards (`if (flag && setAt)`) are unreachable. Leaving dead split-brain-shaped globals while the batch's whole purpose is to isolate per-mode state would be exactly the lingering-legacy hazard rule 18 forbids; mode-keying dead state would be a NO-PATCHES violation (maintaining dead code).
+
+**Blast-radius verification (certainty-before-cutting, #297 discipline):**
+- Repo-wide grep for `globalPaperSimBusyFlag` / `globalPaperSimOperationLock` / `busyFlagSetAt` / `operationLockSetAt` enumerated **every** reference — all are either the removed declarations or dead null/false clears; **zero truthy acquisition** anywhere.
+- The live start/stop concurrency control is `paperOperationQueue.enqueue(...)` (`paper-sim-service.ts:439`) — untouched.
+- tsc baseline gate after removal: **no regressions** (the typed `global.globalPaperSim*` references that would have errored on the removed `declare global` were all removed; the remaining `(global as any)` casts were also removed).
+- vitest 1945/1945 after removal.
+
+**Archive copy:** none — inline machinery (not a whole file); git history is the authoritative archive.
+**Removal commit:** _(recorded at D5 close)_
+**Reviewed by:** Langston (Step-4 diff review) — _pending_
