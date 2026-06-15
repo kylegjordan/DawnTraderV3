@@ -110,3 +110,35 @@ Ranked worst→least (all keyed-not-cloned):
 ## 8. Ask (Langston Step-2)
 
 PROCEED on D1 (this audit) → D5 (the isolation implementation per §5), confirming: (1) the SSOT-on-DB-flag + synchronous-write + invariant-check liveness design; (2) the 6-item keyed-isolation table; (3) deleting dead `global.tradingEngines` in D5 under rule-18; (4) the B4b/B4b.1 boundary (§6). Flag any singleton this audit missed.
+
+---
+
+## 9. Langston Step-2 verdict + resolutions (2026-06-15) — PROCEED-WITH-CONDITIONS (all resolved)
+
+Langston: **PROCEED on D1→D5**, 3 of 4 asks confirmed outright, with the resolutions below (review at `P19_B4b_STEP2_LANGSTON_REVIEW.md`). All flagged items are now resolved by read-only code checks — D1 audit is FINAL.
+
+**Liveness SSOT — CONFIRMED + 2 hardening conditions (fold into D5):**
+- **H1 — broadcast ordered ON COMMIT, not on call.** The broadcast fires only as a `.then()` of the *resolved* DB write; if the write throws, the broadcast must NOT fire. (A synchronous-but-unawaited write reintroduces the race with a smaller window.)
+- **H2 — settling guard on the invariant-check.** Add a transition-in-progress flag / "no flip within last N s" suppressor before incrementing `LIVENESS_SPLIT`, so legitimate in-flight start/stop transitions straddling a tick don't false-positive (otherwise Phase-21's co-run gate is untrustworthy on its first real start/stop).
+
+**C1 — S2 covarianceEngine RECLASSIFIED → PER-MODE-SAFE (Langston catch, confirmed in code).** `covariance-engine.ts:74` `updateFromPrices(symbol, prices)` → `calculateReturns(prices)` (`:76`) → stores **price-derived MARKET returns** in `returnHistory: Map<symbol, number[]>`. Market returns are **mode-invariant** (both modes observe identical prices per symbol), so the return history + pairwise covariance matrix is shared-safe like S5/S14. **Keying it `Map<mode,…>` would duplicate return-history + pairwise compute for every overlapping symbol = the exact 2× engine-dup the §8-#11 anti-backpressure rule forbids.** → **S2 (and S2-note) DROP from the isolation list; leave SHARED.** The only mode-specific part is the *portfolio-weighted* query, which already lives per-mode in S4. **Isolation list shrinks 6 → 5.**
+
+**M1 — daily-loss / kill-switch: NOT a module-level global (resolved).** Kill-switch is DB-backed: threshold = the per-mode guardrail `dailyLossKillSwitchPct` (read + logged separately for paper vs live, `index.ts:1154/1158`); events = the `killSwitchEvents` DB table (`storage.ts:2136`). No module-level in-memory daily-loss accumulator exists → Langston's highest-consequence worry (live losses tripping the paper kill-switch via a shared counter) does not materialize. **Residual D5 verify (low):** confirm the trip computation (`storage.ts:905 isKillSwitchTripped`) reads per-mode P&L and that `killSwitchEvents` userId-keying doesn't conflate modes. Not a new split-brain global.
+
+**M2 — trade-identity / dedup / clustering registry: NO separate global (resolved).** No module-level dedup/clustering Map exists outside the audited items. Dedup = the DB-backed, mode-separated RTB mechanism `(symbol, strategy, createdAt)` (S6); recently-traded lookups = per-mode storage (`getRecentTrades`); exposure-stacking + symbol-clustering prevention live in the per-mode manager (S1) + risk-concentration (S4) + the per-mode-instanced `symbolCooldowns` (S12). All already audited per-mode. **No new item.**
+
+**S3 / O-2 blast-radius — REAL, homed separately (Langston note).** `new KrakenService()` appears at **35 non-test call-sites across ~29 files** (most are scripts/diagnostics; the active-pipeline subset that co-runs paper+live is ~12: paper-execution-engine, paper-portfolio-manager, paper-sim-service, signal-orchestrator, trading-engine, fx5-scanner, price-cache, ohlc-cache, risk-concentration, trading-state-sync, unified-filter-gateway, cost-metrics). **DECISION:** D5 builds the ONE shared `${userId}:${mode}` limiter + migrates the **active-pipeline subset** (the only sites that can co-run and corrupt each other's lockout). The full 35-site consolidation (incl. scripts/diagnostics that never co-run) is homed as **RUNNING_ISSUES #296** so the residual isn't read as covered. This keeps D5 scoped to the split-brain-relevant sites.
+
+**Dead `global.tradingEngines` deletion — CONFIRMED** (rule-18): D5 deletes it during liveness consolidation with `tsc`-clean dangling-ref check, test-reader cleanup in the same pass, DELETED_COMPONENTS_LOG + `_archive/deleted-code/` `.removed`.
+
+**B4b/B4b.1 boundary — CONFIRMED** (§6 stands).
+
+### FINAL D5 isolation list (post-resolution) — 5 items, not 6
+1. **S1** portfolio-manager/heat → `Map<'paper'|'live', Manager>` (worst leak; holds heat ceilings).
+2. **Liveness** → DB `isEngineActive` SSOT + commit-ordered broadcast (H1) + settling-guarded invariant-check (H2) + delete dead `global.tradingEngines`.
+3. **S3** → ONE shared `${userId}:${mode}` Kraken limiter, migrate the ~12 active-pipeline sites (rest → #296).
+4. **S4** riskConcentrationAnalyzer → `Map<mode, Map<symbol,…>>` (position-weighted, genuinely mode-specific).
+5. **S6/S8/S13** → verify signalId uniqueness (S6); `Map<mode,number>` poolSize (S8); per-mode-derive vtsAudit.tradingActive (S13).
+   - **~~S2 covarianceEngine~~ — DROPPED (shared-safe; keying would violate anti-backpressure).**
+
+Plus: 4 SIM governance-gap additions (S1-heat, S2-now-documented-as-safe, S3, S4) at D5 governance.
