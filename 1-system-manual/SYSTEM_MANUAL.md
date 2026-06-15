@@ -4034,6 +4034,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 > - **Mode tag at entry, carried on the payload.** Producers stamp `sourceMode` at the pipeline possession boundary and every terminal write (B70 archivers, learning store, confluence buffer) takes the CARRIED tag — write-time mode lookups are retired (Ch6 banner + SIM step-2 entries).
 > - **Throughput verdict (study, 2026-06-10):** VTS + paper concurrent in ONE process is a measured GO (all 6 gates; `ITEM_4_THROUGHPUT_STUDY_RESULTS.md`); the separate-VTS-process option is resolved NOT-needed pre-Phase-19, re-evaluate at Phase 21.
 > - **⚠️ Known lying-state surfaces (do NOT trust for engine liveness):** the `health_engine` broadcast ENGINE block reads the legacy `global.tradingEngines` registry (#214 — reports `isRunning:false` during active paper; consolidation targeted at Phase-19 prep); the legacy Phase-22.3 `/live-trading/*` routes bypass the Phase-21 gate and broadcast fake live-active state (#213 — gate-or-retire before Phase 21).
+> - **⚠️ Paper-fill destination (rule-20 correction, P19-B2 2026-06-13):** for SPOT there is **NO "Kraken paper order system."** Kraken's hosted demo is FUTURES-only; spot `validate=true` validates an order but never fills it. So paper-mode SPOT fills are a **Kraken-vetted, high-fidelity INTERNAL fill** — every paper order is sent to Kraken with `validate=true` (real-venue vetting) and then filled locally off real Kraken WS prices with a real-fee + L2-depth-slippage + partial-fill model (so paper EV ≈ live EV). The engine path is otherwise identical; only the order DESTINATION differs (live → real Kraken order; paper → validate-vetted local fill, via the OrderPlacer port — §3.7/§9.14 SIM). Any older text describing paper as "routing through Kraken's paper order system" for spot is stale.
 
 ## Table of Contents
 
@@ -11468,6 +11469,10 @@ The architectural commitment "differences live in DB, not code" is enforced by t
 
 The `isStrategyEligibleForLane(strategyKey, lane)` helper in `server/asset_classes/xstock_spot/lane-eligibility.ts` is the single source of truth for this routing.
 
+#### Active-path per-class strategy gate (P19-B4a, 2026-06-14)
+
+On the ACTIVE build path the per-class strategy enablement above is enforced by a DB-resolved gate at the `buildSizedSignalForStrategy` chokepoint (right after the stamp-missing throw): `isStrategyEnabledForAssetClass(canonicalStrategy, assetClass)` reads `module_constants.strategy_gates.<class>.<strategy>.enabled` and returns `null` (drop) when the strategy is disabled for that class. A reverse-alias `range_trading → range_trade` reconciles the type-union strategy name to the canonical gate key. **This REPLACES the orchestrator's old hardcoded `enabledStrategies` allowlist** (two inline `[9]` literals + a `Set` + two now-dead public methods, all disposed — DELETED_COMPONENTS_LOG). The gate is **default-open**: the DB resolver is the sole authority and throws on a cold cache, but absent an explicit disable row a strategy runs (an explicit-allowlist would have blacked out ALL crypto until a separate crypto_spot seed migration). The `/reb-2-12F/strategy-health` diagnostic, which had been regex-parsing the orchestrator source text for the deleted `Set`, was re-pointed at `STRATEGY_DISPLAY_NAMES` (a fragile source-text coupling removed).
+
 ### LONG-only invariant (per-strategy enforcement)
 
 Every enabled xstock_spot strategy MUST return `null` (with `setNullReason('sell_disabled_long_only')`) when the detection geometry would produce a SELL signal. Verified per-strategy 2026-05-11:
@@ -11500,6 +11505,14 @@ Every persistence site that writes an `asset_class` column MUST receive the valu
 - Future writers when new asset-class-scoped tables are added
 
 When adding a new asset class, the pre-launch grep `grep -rn "asset_class" server/services/` enumerates every site that touches the column. Each site is verified to accept a typed parameter — no exceptions.
+
+### Stamp-at-source — `SizingContext.assetClass` is the single source of truth on the active build path (P19-B4a, 2026-06-14)
+
+The BATCH_82 writer-side rule (thread the typed value from the caller) is extended to the active signal-build path by **stamping the asset class once at the per-pipe entry chokepoint and never re-deriving it from the symbol downstream.** `SizingContext.assetClass` is a REQUIRED field (`AssetClass`, no `?`) on the orchestrator's `buildSizedSignalForStrategy` input, and it is the SINGLE source of truth for asset class through sizing → friction/EV → cache-context → SQE → RTB queue. It is stamped at construction: the crypto pipe at `evaluateMarket` (`'crypto_spot'`), the xStock active pipe at the dispatch connector (`'xstock_spot'`). The ~9 symbol-derived sites inside the build method read `sizingContext.assetClass` — NOT `resolveAssetClass(rawSignal.symbol)`.
+
+**Why re-deriving from the symbol is wrong-by-construction.** The 17 collision tickers (9 USD + 8 EUR — e.g. `SUI/USD`) have an identical canonical form as BOTH an xStock and a crypto pair, so `resolveAssetClass(symbol)` always returns `crypto_spot` for them (the collision rule in `asset-classes.ts`). Only the PIPE that built the signal knows its true class. The invariant: **one `SizingContext` = one class = one pipe.** Consequence for the EV gate — a collision xStock re-resolved as crypto would read CRYPTO friction at the Net-EV computation, mispricing the gate. `resolveAssetClass` survives ONLY for stored-row / diagnostic re-resolution (its collision rule is intentionally kept there for re-reading already-stored rows); it is removed from the active build path.
+
+**Fail-loud both ways:** a build-site assert (names pipe + symbol + strategy) is the primary tripwire; the RTB write THROWS on a missing/invalid class as the backstop (catches an as-any / JSON-boundary loss). When adding a new asset class with an active-paper pipe, stamp `SizingContext.assetClass` at the pipe's entry connector — never let a downstream site re-resolve from the symbol.
 
 ### Per-cycle xstock counter surface (B79.0m.b2 additions)
 
