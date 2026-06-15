@@ -62,7 +62,7 @@ Default 'paper' → every existing accessor caller (16 internal + trade-safety:6
 
 ## Verification (bench, C:\dev @ HEAD 8693239 + the 15 changed files)
 - ✅ **tsc baseline gate (`scripts/check-tsc-baseline.mjs`): OK — no regressions above baseline** (404 current vs 494 baseline; the change set adds zero new type errors).
-- ✅ **vitest: 1945 / 1945 passed (170 files).**
+- ✅ **vitest: 1952 / 1952 passed (171 files)** — includes the 7 new isolation/witness tests added at Step-4. _(An earlier draft of this line said 1945/170, the pre-test-addition count — the authoritative final figure is 1952/171.)_
 - New unit tests for the witnesses pending (I'll add a liveness-split + per-mode-isolation test before push if you want them in this batch, or home them — your call at Step-4).
 
 ## Net D5 = S1 + liveness(H1/H2) + S4 + S6 + governance. S3 → follow-up (locked module). Files changed (15): paper-sim-service, paper-trading-stop, operation-queue, paper-session-reset, state-awareness, intent-executor(#297), routes, trading-state-sync, risk-concentration, paper-execution-engine, trade-safety, paper-position-sizing, signal-orchestrator, ready_to_buy_service, b79-0n-orchestrator-cascade.test.
