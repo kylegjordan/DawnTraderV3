@@ -245,6 +245,17 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Tests**: None specific (validated via integration through signal-orchestrator and VTS)
 - **B68.1 update (2026-05-03):** Now serves a SECOND interval per pair (60-min and 240-min keys coexist). 240-min keys consumed by B68.1 multi-tf-agreement emit hooks. ~177 pairs × ~720 candles × 80 bytes ≈ 10MB additional in-memory state. Same 5-min TTL. No code change in `ohlc-cache.ts` itself — the existing `${symbol}_${interval}` cache key generalizes; B68.1 is the first consumer of the 4h interval. Other Kraken-supported intervals available (1, 5, 15, 30, 60, 240, 1440, 10080, 21600 minutes) for future batches without code change.
 
+### 2.7 Asset-Name Resolver (B-NAMES — 2026-06-15, #298 crypto backfill)
+- **File**: `server/services/asset-name-resolver.ts` (+ `asset_names` table; `shared/asset-names.ts` overlay; `GET /api/crypto/asset-names` + `/api/internal/asset-name-resolver/stats`)
+- **What**: Last-resort backfill of the human-readable crypto token NAME for the Open/Closed Simulated Trades Symbol column, for symbols whose curated `CRYPTO_NAMES` map MISSES or ticker-echoes. **Display-only — NO trading-path impact.** TIER-0 pinned id (`SYMBOL_TO_COINGECKO_ID`, exported from `market-data.ts`) → TIER-1 `/coins/list` symbol→id + NAMED market-cap-gap disambiguation (`DISAMBIGUATION_DOMINANCE_MULTIPLE=5`× + `DISAMBIGUATION_MIN_MCAP_FLOOR_USD=$10M`; lone-candidate accept-on-identity; else skip→hide) → `/coins/markets` name.
+- **Upstream**: CoinGecko REST (`/coins/list`, `/coins/markets`; tier-aware auth + B69.3 429-backoff + 1.5s throttle + 24h list cache — shares the env config pattern with `external-macro-feed.ts`); `vts_open_trades` (sweep source = DISTINCT crypto symbols, open + soft-deleted historical); `CRYPTO_NAMES` curated map (skip-if-covered).
+- **Downstream**: `asset_names` overlay table (write-through positive + negative-cache with `next_retry_at` backoff) → `GET /api/crypto/asset-names` → client `setCryptoNameOverlay` → `getAssetName` (curated map FIRST, overlay SECOND, hide on miss).
+- **Shared State**: module-level `_coinsListIndex` (24h TTL), `_lastCgCallAt` throttle gate, `_stats` two-way counter (ambiguous vs hard_miss + resolved/pinned/errors), `_sweepRunning` guard, `_sweepTimer`.
+- **Execution**: **Background** — `startAssetNameResolver()` at boot (`index.ts`, after the universe-discovery cron), first sweep +90s then every 6h. Off the request hot path. **Fail-graceful**: any failure leaves the name hidden; errors do NOT negative-cache (retry next sweep).
+- **Blast Radius**: **LOW** — cosmetic display backfill; isolated new table + new endpoints; no trading-path coupling. A TIER-0 pin bypasses the negative-cache backoff so a freshly-pinned id takes effect on the next sweep (Langston Step-4 condition).
+- **Tests**: `server/tests/unit/b-names-asset-name-resolver.test.ts` (10 — pure disambiguation accept/skip cases + `getCuratedCryptoName`).
+- **Sibling (pending)**: B-NAMES.1 (xStock half of #298) backfills `xstock_spot_universe.name` at discovery + a curated Backed-ETF static map; #298 stays OPEN until it lands.
+
 ---
 
 ## Layer 3: Scanning & Filtering

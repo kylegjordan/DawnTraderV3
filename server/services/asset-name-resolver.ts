@@ -343,6 +343,14 @@ async function fetchUnresolvedCryptoSymbols(): Promise<string[]> {
   for (const base of bases) {
     if (positive.has(base)) continue;          // already resolved (overlay covers it)
     if (getCuratedCryptoName(base)) continue;  // curated CRYPTO_NAMES map covers it
+    // B-NAMES Langston Step-4 condition: a TIER-0 pin (adding the symbol to
+    // SYMBOL_TO_COINGECKO_ID) is the documented remediation for an 'ambiguous'
+    // row. Let a pinned symbol BYPASS the negative-cache backoff so a freshly-
+    // pinned id takes effect on the NEXT sweep instead of waiting out the ≤30-day
+    // backoff (otherwise the documented fix is silently ineffective until a manual
+    // row-delete). The positive-set check above already skips symbols that DID
+    // resolve, so this only re-resolves pinned symbols not yet positively named.
+    if (SYMBOL_TO_COINGECKO_ID[base]) { out.push(base); continue; }
     if (backingOff.has(base)) continue;        // negative-cache backoff window
     out.push(base);
   }
