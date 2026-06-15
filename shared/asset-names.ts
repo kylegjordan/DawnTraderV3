@@ -49,6 +49,29 @@ export function _getXstockNameOverlaySize(): number {
   return _xstockNameOverlay.size;
 }
 
+/**
+ * B-NAMES (2026-06-15): client-side overlay map for CRYPTO names, mirroring the
+ * xStock overlay above. The curated CRYPTO_NAMES map below stays the primary
+ * (map-first) source; this overlay is the server-backfilled gap-filler for
+ * symbols the map MISSES or ticker-echoes (e.g. CHIP, XRP-class). The frontend
+ * fetches /api/crypto/asset-names and calls setCryptoNameOverlay() to populate
+ * it; getAssetName() consults the curated map FIRST, then this overlay. Keyed
+ * by base symbol (UPPER), e.g. 'CHIP'. Server-side this stays empty (the server
+ * reads asset_names directly). RUNNING_ISSUES #298 backfill half.
+ */
+const _cryptoNameOverlay = new Map<string, string>();
+
+export function setCryptoNameOverlay(entries: Record<string, string>): void {
+  _cryptoNameOverlay.clear();
+  for (const [symbol, name] of Object.entries(entries)) {
+    if (symbol && name) _cryptoNameOverlay.set(symbol.toUpperCase(), name);
+  }
+}
+
+export function _getCryptoNameOverlaySize(): number {
+  return _cryptoNameOverlay.size;
+}
+
 /** Crypto top symbols seen across the universe (active trades + benchmarks). */
 export const CRYPTO_NAMES: Record<string, string> = {
   // ─── Top 50 by market cap (rough order) ────────────────────────────────
@@ -237,6 +260,20 @@ function _warnUnmappedOnce(pair: string, assetClass: string): void {
   );
 }
 
+/**
+ * B-NAMES (2026-06-15): does the curated CRYPTO_NAMES map carry a REAL
+ * (non-ticker-echo) name for this base symbol? Used server-side by the
+ * asset-name resolver to skip symbols the curated map already covers (no
+ * external CoinGecko lookup needed). Returns the real name, or null if the map
+ * misses or merely echoes the ticker.
+ */
+export function getCuratedCryptoName(baseSymbol: string | null | undefined): string | null {
+  if (!baseSymbol) return null;
+  const upper = baseSymbol.toUpperCase();
+  const name = CRYPTO_NAMES[upper];
+  return name && name.trim().toUpperCase() !== upper ? name : null;
+}
+
 export function getAssetName(
   pair: string | null | undefined,
   assetClass: string | null | undefined,
@@ -256,8 +293,13 @@ export function getAssetName(
     name && name.trim().toUpperCase() !== baseSymbol ? name : null;
 
   if (assetClass.startsWith('crypto')) {
-    const name = realName(CRYPTO_NAMES[baseSymbol]);
-    if (name) return name;
+    // B-NAMES: curated map FIRST (trusted, hand-vetted), then the server-
+    // backfilled overlay for symbols the map misses/ticker-echoes. Map-first so
+    // a known-good curated name always wins over an automated resolution.
+    const curated = realName(CRYPTO_NAMES[baseSymbol]);
+    if (curated) return curated;
+    const overlay = realName(_cryptoNameOverlay.get(baseSymbol));
+    if (overlay) return overlay;
     _warnUnmappedOnce(pair, assetClass);
     return null; // #298: no real name available → hide the line (was: ticker echo)
   }

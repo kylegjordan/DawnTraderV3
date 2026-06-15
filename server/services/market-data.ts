@@ -13,7 +13,12 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
+// B-NAMES (2026-06-15): exported so the asset-name resolver can use these
+// already-pinned coin ids as its TIER-0 disambiguation source (Langston Step-2
+// condition) — for our most-traded coins the symbol→id is already resolved
+// here, so the resolver skips /coins/list lookup + collision disambiguation
+// entirely for them (zero ambiguity on the symbols that matter most).
+export const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
   'BTC': 'bitcoin',
   'ETH': 'ethereum',
   'SOL': 'solana',

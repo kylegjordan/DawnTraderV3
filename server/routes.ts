@@ -8161,6 +8161,44 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/crypto/asset-names — B-NAMES (2026-06-15). Mirrors the xStock
+  // overlay endpoint above. Returns { 'CHIP': 'Chintai', ... } of server-
+  // backfilled crypto names from the asset_names overlay table (the resolver's
+  // write-through SSOT). The client fetches this + calls setCryptoNameOverlay();
+  // the curated CRYPTO_NAMES map still wins client-side (map-first) — this only
+  // fills the gaps the map misses or ticker-echoes. RUNNING_ISSUES #298.
+  apiRouter.get('/crypto/asset-names', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const result: any = await db.execute(sql`
+        SELECT symbol, name FROM asset_names
+        WHERE asset_class LIKE 'crypto%' AND name IS NOT NULL
+      `);
+      const rows: any[] = result?.rows ?? result ?? [];
+      const names: Record<string, string> = {};
+      for (const r of rows) {
+        if (r.symbol && r.name) names[String(r.symbol).toUpperCase()] = String(r.name);
+      }
+      res.json({ ok: true, count: Object.keys(names).length, names });
+    } catch (error: any) {
+      console.error('[B-NAMES][crypto-asset-names] failed:', error);
+      res.status(500).json({ ok: false, error: error?.message ?? String(error) });
+    }
+  });
+
+  // GET /api/internal/asset-name-resolver/stats — B-NAMES observability.
+  // Surfaces the two-way resolution counters (resolved / pinned / ambiguous /
+  // hard-miss / errors) so coverage + a source going down are visible without
+  // log-tailing. Langston Step-2 CONDITION 2 (ambiguous vs hard-miss split).
+  apiRouter.get('/internal/asset-name-resolver/stats', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getAssetNameResolverStats } = await import('./services/asset-name-resolver.js');
+      res.json({ ok: true, stats: getAssetNameResolverStats() });
+    } catch (error: any) {
+      console.error('[B-NAMES][resolver-stats] failed:', error);
+      res.status(500).json({ ok: false, error: error?.message ?? String(error) });
+    }
+  });
+
   // GET /api/internal/universe-discovery/health — lightweight diagnostic
   // surface. Doesn't wire to Grafana now but the endpoint exists for future
   // monitoring (Langston Q9 #4).

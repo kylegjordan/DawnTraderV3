@@ -93,6 +93,15 @@ try {
   // Register daily 06:00 UTC discovery cron (Q-PA-6 ACK same-host shape)
   const { registerXstockUniverseCron } = await import('./services/xstock-universe-cron.js');
   registerXstockUniverseCron();
+
+  // B-NAMES (2026-06-15): start the crypto asset-name backfill resolver — a
+  // throttled background sweep (first run +90s, then every 6h) that fills the
+  // real token name for crypto symbols the curated CRYPTO_NAMES map misses or
+  // ticker-echoes, via CoinGecko → the asset_names overlay table. Off the
+  // request hot path; fail-graceful (any miss leaves the name hidden, already
+  // shipped). RUNNING_ISSUES #298 backfill half.
+  const { startAssetNameResolver } = await import('./services/asset-name-resolver.js');
+  startAssetNameResolver();
 }
 
 const app = express();

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AssetClassBadge } from "@/components/ui/asset-class-badge";
-import { getAssetName, setXstockNameOverlay } from "@shared/asset-names";
+import { getAssetName, setXstockNameOverlay, setCryptoNameOverlay } from "@shared/asset-names";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Brain, RefreshCw, Download, TrendingUp, TrendingDown, Clock, Target, AlertTriangle, Sliders, Activity, ArrowUpDown, ArrowUp, ArrowDown, Filter, LineChart } from "lucide-react";
@@ -3331,6 +3331,22 @@ export default function MachineLearningPage() {
     queryFn: async () => {
       const data = await apiFetch('/api/xstocks/asset-names');
       if (data && data.names) setXstockNameOverlay(data.names);
+      return data;
+    },
+    refetchInterval: 60 * 60 * 1000,  // 1 hour
+    staleTime: 30 * 60 * 1000,
+  });
+
+  // B-NAMES (2026-06-15): fetch the server-backfilled CRYPTO name overlay and
+  // populate the client-side overlay used by getAssetName(). The curated
+  // CRYPTO_NAMES map still wins (map-first); this only fills symbols the map
+  // misses or ticker-echoes (e.g. CHIP). Refresh hourly like the xStock overlay
+  // to pick up names the 6-hourly server resolver sweep newly backfills.
+  useQuery<{ ok: boolean; count: number; names: Record<string, string> }>({
+    queryKey: ['/api/crypto/asset-names'],
+    queryFn: async () => {
+      const data = await apiFetch('/api/crypto/asset-names');
+      if (data && data.names) setCryptoNameOverlay(data.names);
       return data;
     },
     refetchInterval: 60 * 60 * 1000,  // 1 hour
