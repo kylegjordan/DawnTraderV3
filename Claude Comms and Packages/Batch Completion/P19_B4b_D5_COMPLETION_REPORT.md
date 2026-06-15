@@ -21,8 +21,11 @@
 ## Verification
 - ✅ **Bench (C:\dev @ HEAD `8693239` + changes): tsc baseline gate "no regressions above baseline"** (404 current vs 494 baseline — zero new type errors) · **vitest 1952 / 1952 passed (171 files, +7 new).**
 - ✅ **New tests** (`server/tests/unit/p19-b4b-d5-isolation.test.ts`, 7): liveness split-FIRES on DB/engine disagreement, NO-split on agreement, paper-also-checks-orchestrator, settling-SUPPRESSES-within-window; S4 per-mode no-clobber + per-mode reset; S1 paper/live separate slots.
-- ⏳ Staging deploy + §9.3 UI re-verify (paper-sim status/metrics/health pages still render after the routes accessor change) + clean-boot/no-new-errors + CI all-4-green — _recorded at close._
-- ⏳ Langston Step-8 second-pass — _pending._
+- ✅ **CI run `27579933800` all-4-green** on head `deb74e58e`.
+- ✅ **Staging deploy clean** (`deb74e58e`, `pm2` restart #392, build OK, HTTP 200). PM2 boot scan: no `LIVENESS_SPLIT`, no manager errors, no throws from any D5 path (the one `/home/runner` health-log EACCES is a pre-existing Replit-era path issue, unrelated).
+- ✅ **The 4 changed routes verified end-to-end through the live server:** `/paper-sim/status`→200 `isRunning:false`, `/metrics`→200 dormant stats, `/health`→400 "not running" — all the correct dormant responses, **zero 500s** (proves the per-mode accessor read works in production).
+- ✅ **§9.3 UI:** Claude-in-Chrome navigated staging — app renders ("The Dawn Trader - Pro Platform"), **zero console errors/exceptions**. (D5 adds no new on-screen element; the visual check is that the page still loads cleanly after the routes accessor change.)
+- ⏳ **Langston Step-8 independent UI re-verify — PENDING (Helsinki SSH instability at close; his Step-4 code APPROVE + line-level verification are DONE).** Pick up when the box is stable. Does not block the substance (Step-4 + CC Step-7 cover it).
 
 ## Langston gates
 - **Step-2** PROCEED-WITH-CONDITIONS (D1 audit; the H1/H2 hardening + S2-stays-shared + S3-blast-radius all ratified).
