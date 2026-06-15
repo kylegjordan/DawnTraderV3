@@ -597,6 +597,11 @@ export async function runDiscovery(triggeredBy: 'cron_daily' | 'manual_endpoint'
   // ── Stage 5: load overrides + merge + upsert ───────────────────────────
   const overrides = await loadOverrides();
   let upsertCount = 0;
+  // B-NAMES.1 (#298): capture each computed finalEntry so Stage 8's file-cache
+  // write can REUSE the exact same names (incl. the curated/null fallback) — no
+  // independent recompute that could diverge. (Langston Step-4 caught the
+  // original recompute still echoing the ticker on this fallback path.)
+  const computedEntries = new Map<string, XstockSpotEntry>();
   for (const symbol of probeResult.accepted) {
     const finnhubMeta = finnhubResult.metadata.get(symbol) ?? { sector: 'UNCATEGORIZED' as XstockSector };
     const override = overrides.get(symbol);
@@ -609,6 +614,7 @@ export async function runDiscovery(triggeredBy: 'cron_daily' | 'manual_endpoint'
       cryptoAdjacent: override?.crypto_adjacent_override ?? false,
       adr: override?.adr_override ?? false,
     };
+    computedEntries.set(symbol, finalEntry);
     try {
       await upsertUniverseRow(symbol, finalEntry, {
         coingecko: cgResult.symbols.has(symbol),
@@ -634,18 +640,11 @@ export async function runDiscovery(triggeredBy: 'cron_daily' | 'manual_endpoint'
 
   // ── Stage 8: write file cache (layer-3 fallback durability) ────────────
   try {
-    const fcEntries = Array.from(probeResult.accepted)
-      .map((sym) => {
-        const meta = finnhubResult.metadata.get(sym);
-        const override = overrides.get(sym);
-        const entry: XstockSpotEntry = {
-          name: override?.name_override ?? meta?.name ?? sym.split('/')[0],
-          sector: (override?.sector_override as XstockSector | undefined) ?? (meta?.sector ?? 'UNCATEGORIZED' as XstockSector),
-          cryptoAdjacent: override?.crypto_adjacent_override ?? false,
-          adr: override?.adr_override ?? false,
-        };
-        return [sym, entry] as [string, XstockSpotEntry];
-      });
+    // B-NAMES.1 (#298): REUSE the Stage-5 computed entries verbatim — identical
+    // names (curated/null fallback included) to what the DB upsert wrote. No
+    // independent recompute, so the file cache can never diverge from the DB or
+    // re-introduce a ticker-echo on the layer-3 cold-start fallback path.
+    const fcEntries = Array.from(computedEntries.entries());
     await xstockUniverseService.writeFileCache(fcEntries);
   } catch (err) {
     logWarn(`writeFileCache stage failed (non-fatal):`, err);
