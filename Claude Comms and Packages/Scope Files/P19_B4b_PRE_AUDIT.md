@@ -142,3 +142,28 @@ Langston: **PROCEED on D1→D5**, 3 of 4 asks confirmed outright, with the resol
    - **~~S2 covarianceEngine~~ — DROPPED (shared-safe; keying would violate anti-backpressure).**
 
 Plus: 4 SIM governance-gap additions (S1-heat, S2-now-documented-as-safe, S3, S4) at D5 governance.
+
+---
+
+## 10. Independent re-verification (2026-06-15) — confirmations + 3 NEW items
+
+A second, independent verification pass re-checked every claim against live code (the same hand-verification that caught the `global.tradingEngines` error). **The corrected inventory is confirmed; the pass found 3 shared items the named S-list missed + refined several classifications.** Full verified registry is now seeded into `SYSTEM_IMPACT_MAP.md` ("Cross-Cutting Runtime State, Singletons & Liveness Registry," top of file).
+
+**Confirmed:** S1 (worst; creation hardcodes `mode='paper'` at `paper-sim-service.ts:444,558`), S3 (instance-field, key defaults to `'default'`; risk is *fragmentation* — 36 sites / 30 files vs one account budget), S4 (writer `trade-safety.ts:804` writes mode-scoped weights into the mode-agnostic global → clobber), S13, the `setTimeout(…,0)` deferral (real, `trading-state-sync.ts:274-279`), M1 (DB-backed per-mode, no accumulator), S2 (correctly PER-MODE-SAFE), `global.tradingEngines` (correctly excluded → #297; bonus: `intent-executor.ts:208` has a stale `new PaperPortfolioManager(userId)` wrong-arg call — more evidence that subsystem is dormant).
+
+**NEW items found (now in the registry + D5 list):**
+- **S1-lock** — `globalPaperSimOperationLock` + `globalPaperSimBusyFlag` (`paper-sim-service.ts:44-61`): single-global paper-sim start/stop/reset concurrency guards, not mode-keyed → belong to the **S1 cluster** (isolate with S1).
+- **Liveness reader #5** — `getGlobalSession()` → `globalSimulationSession` (`routes.ts:5774`): single global, not mode-keyed, read by 4+ sites → **fold into the liveness consolidation** (the model is FIVE readers, not four).
+
+**Refinements:**
+- **S6** — `signalId` (`symbol-strategy-Date.now()-rand6`, `signal_lifecycle_audit.ts:108`) is **statistically** unique, NOT structurally mode-namespaced → D5 should **mode-prefix the key** (make it structural), not just "verify uniqueness."
+- **S8** — confirmed **benign** (shadowed by a per-mode local in tcl_watchdog; a CPU-load knob, not per-mode trade state) → optional, low priority.
+
+### REVISED FINAL D5 isolation list (verified)
+1. **S1 cluster** → `Map<'paper'|'live',Manager>` + isolate `globalPaperSimOperationLock`/`globalPaperSimBusyFlag` with it.
+2. **Liveness** → DB SSOT + commit-ordered broadcast (H1) + settling-guarded invariant-check (H2), folding **all FIVE readers** (incl. `globalSimulationSession` #5). (`global.tradingEngines` deletion stays REMOVED → #297.)
+3. **S3** → one shared `${userId}:${mode}` limiter; migrate ~12 active-pipeline sites (rest → #296).
+4. **S4** → `Map<mode,Map<symbol,…>>`.
+5. **S6** mode-prefix key · **S13** per-mode-derive `tradingActive` · **S8** optional `Map<mode,number>` (benign).
+   - S2 excluded (shared-safe).
+- **Unproven (D5 implementation-time checks):** S6 collision-impossibility (statistical only); M1 trip-WRITE per-mode P&L scoping.

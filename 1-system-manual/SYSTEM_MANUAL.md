@@ -4144,6 +4144,8 @@ All signal generation now flows exclusively through the FX5 → RTB → TCL pipe
 
 ## 2. Dual Execution Engine Architecture
 
+> **⚠️ RUNTIME SHARED-STATE — see the System Impact Map.** The two engines run the SAME pipeline and (in Phase 21) will run SIMULTANEOUSLY in paper + live mode. Which in-memory state is safely shared (market data) vs which MUST be separated by mode (trade state, risk budgets, the "is trading on?" flag) is documented in the **"Cross-Cutting Runtime State, Singletons & Liveness Registry"** at the top of `SYSTEM_IMPACT_MAP.md`. Read that registry before any change touching mode, the engines, or shared state — it is the canonical "who-shares-what" map (the file-by-file maps here do not capture runtime shared state). The paper↔live mode-isolation gate (P19-B4b Objective-3) MUST pass before the two engines co-run.
+
 ### The Two Engines
 
 | Property | PaperExecutionEngine | TradingEngine |

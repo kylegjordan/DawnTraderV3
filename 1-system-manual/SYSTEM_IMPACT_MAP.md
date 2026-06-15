@@ -30,6 +30,50 @@
 
 ---
 
+## Cross-Cutting Runtime State, Singletons & Liveness Registry (the "who-shares-what" map)
+
+> **Read this first if you are new, or before ANY change that touches paper/live mode, the trading engines, or shared in-memory state.** This registry exists because the file-by-file layer maps below do NOT capture *runtime shared state* — the process-global and module-singleton objects that many components read and write at once. That shared state is where the worst, hardest-to-see bugs live (one mode corrupting another's risk budget; a stale "is trading on?" flag). Built from the P19-B4b D1 split-brain audit + independent re-verification (2026-06-15); every entry is code-verified with file:line.
+>
+> **MAINTENANCE DISCIPLINE (governance rule):** any batch that adds, removes, or re-keys a process-global / module-singleton / `static` field / mode-keyed map MUST update this registry in the same batch (this is the SIM's existing "cross-cutting state" charter, now made explicit). A new shared singleton that is not listed here is a governance gap. When you isolate or delete one, update its row + note the batch.
+
+### Two-axis model the system runs on
+Two **orthogonal** axes (see CLAUDE.md rule 20): **mode** = `paper` | `live`; **active-trading** = ON | OFF. Phase 21 will run paper AND live **simultaneously**. Therefore every piece of mutable runtime state must be either (a) genuinely mode-invariant (market data — safe to share) or (b) **keyed by mode** (trade state — must be separated). State that is shared-but-should-be-mode-keyed is a **SPLIT-BRAIN risk** and a hard blocker for the Phase-21 co-run (P19-B4b Objective-3 gate).
+
+### Shared singletons & cross-cutting state
+
+| ID | Singleton / state · file:line | Holds | Keying today | Verdict | Readers / writers (verified) |
+|---|---|---|---|---|---|
+| **S1** | `global.globalPaperPortfolioManager` · `paper-sim-service.ts:247` (decl), getter `:256`, setter `:260` | the single active `PaperPortfolioManager` (owns orchestrator, watchlist refresh, and the **per-instance** heat ceilings `MAX_OPEN_POSITIONS=10` / `MAX_PORTFOLIO_EXPOSURE_PERCENT=80` / `MAX_DRAWDOWN_PERCENT=20`, `paper-portfolio-manager.ts:57-59`) | **single global slot; creation hardcodes `mode='paper'` (`:444,558`)** | 🔴 **SPLIT-BRAIN (worst)** | W: `setGlobalPaperSimManager:260`, `intent-executor.ts:211`, `paper-sim-service.ts:512/602/1163`. R: `trade-safety.ts:664`, `paper-session-reset.ts:161`, `paper_sim_heartbeat.ts:66`, `state-awareness.ts:307`, `routes.ts:12610/12648/12666/11667`. Isolation → `Map<'paper'\|'live',Manager>`. |
+| **S1-lock** | `globalPaperSimOperationLock` + `globalPaperSimBusyFlag` · `paper-sim-service.ts:44-61` | concurrency guards serializing paper-sim start/stop/reset | single global (not mode-keyed) | 🟠 **S1 cluster** | W: `routes.ts:11198/11202/11235`, `paper-session-reset.ts:296-297`. Belong to S1; if live shares this service path they'd serialize/collide across modes. Isolate with S1. |
+| **S3** | `KrakenService.rateLimitStates` · `kraken.ts:75` | per-`userId` REST lockout (120s `Temporary lockout`) | **instance field** (per-`new KrakenService()`); key defaults to literal `'default'` (`:197`) | 🟠 **FRAGMENTED → O-2** | **36 `new KrakenService()` across 30 files.** Risk is the INVERSE of split-brain: ~36 independent cooldown trackers vs ONE account-level Kraken budget, no coordination. Isolation → one shared `${userId}:${mode}` limiter (P19-B4b D5 builds it; migrates ~12 active-pipeline sites, rest → #296). |
+| **S4** | `riskConcentrationAnalyzer` · `risk-concentration.ts:377` (singleton); maps `:57-58` | symbol-keyed `positionWeights` + `concentrationScores` (pre-trade concentration guard) | **symbol-keyed module singleton** | 🔴 **SPLIT-BRAIN** | W: `trade-safety.ts:804` (`updatePositionWeights` — weights built from mode-scoped `getActivePositions(mode):797` but written into the mode-agnostic global → modes **clobber each other**). R: `paper-position-sizing.ts:194`, `paper-execution-engine.ts:405`. Isolation → `Map<mode,Map<symbol,…>>`. |
+| **S6** | RTB `signalRefreshStates` · `ready_to_buy_service.ts:360` | per-signal refresh latch | keyed by `signalId` | 🟡 **SAFE (statistical, not structural)** | `signalId` = `` `${symbol}-${strategy}-${Date.now()}-${rand6}` `` (`signal_lifecycle_audit.ts:108`) — **does NOT include mode**; collision astronomically unlikely but not structurally namespaced. The OTHER 4 RTB maps ARE `Map<mode,…>` (`:357/358/361/362`). **D5: mode-prefix the key to make it structural.** |
+| **S8** | `currentPoolSize` · `tcl_watchdog.ts:31` + `ready_to_buy_service.ts:60` | Active-Filtered-Pool size (CPU-load concurrency knob) | module-global scalar (bus not mode-tagged) | 🟢 **SHARED-BENIGN** | In tcl_watchdog the global is **shadowed by a per-mode local** (`:211/230`) for actual TCL decisions; it's a system-wide load knob, not per-mode trade state. Low correctness risk; optional `Map<mode,number>`. |
+| **S2** | `covarianceEngine.returnHistory` · `covariance-engine.ts:40` | rolling per-symbol return history | symbol-keyed | 🟢 **PER-MODE-SAFE** | Fed **market-price-derived returns** (`updateFromPrices:74` → `calculateReturns`) → mode-invariant. **Do NOT key by mode** — would be forbidden 2× compute (anti-backpressure rule §8 #11). Mode-specific use is the portfolio-weighted query in S4. |
+| **S5/S14** | `restRateLimiter`, `UnifiedPriceCache` | market-data throttle + price cache | symbol/endpoint | 🟢 **PER-MODE-SAFE** | Feed, not trade-state; both modes mark off identical prices. Intentionally shared. |
+| **S7/S9/S10/S11/S12** | `tclWatchdog.states`, `activeFilterPool`, `ModeRegistry`, `globalLive/PaperEngine`, `MicroExecutionService.symbolCooldowns` | TCL state / active pools / engine + micro registries / micro cooldown | **mode (or per-mode instance)** | 🟢 **PER-MODE-SAFE** | Already correctly separated — reference patterns for the right design. (`tcl_watchdog.ts:53`, `active-filter-pool.ts:59`, `mode-registry.ts:36`, `routes.ts:102-103`, `micro-execution-service.ts:47`.) |
+
+### Trading liveness model — FIVE readers of "is (paper\|live) trading active right now?"
+The SSOT is the **DB flag** `system_context.isEngineActive` per mode. The other four are derived/cached and **can diverge** — the **root cause is a deferred write**: `setEngineActive` (`trading-state-sync.ts:251-293`) broadcasts the new state synchronously (`:251-266`) while deferring the DB write AND the cluster-bus emit via `setTimeout(…,0)` (`:274-279`).
+
+| # | Reader · file:line | Type | Divergence |
+|---|---|---|---|
+| 1 (SSOT) | DB `getSystemContext(mode).isEngineActive` — active-pipeline gate (`fx5-scanner.ts:544`, `xstock_spot/active-dispatch.ts:124`) | DB per-mode | written one tick LATE (the `setTimeout` deferral) |
+| 2 | engine/orchestrator presence `getEngine`/`getOrchestratorByMode` (`active-dispatch.ts:128`, its `:18-20` comment names this split-brain) | in-memory | present-but-flag-not-flipped, or vice-versa |
+| 3 | `tradingStateSync.currentMode` cache `Map<userId,mode>` (`trading-state-sync.ts:25,143`) | in-memory by userId | lags on cross-process change |
+| 4 | `vtsModeAudit.tradingActive` (`vts-mode-audit.ts:67-126`) | single global bool | collapses both modes into one bool; sticks if a bus event drops |
+| 5 | `getGlobalSession()` → `globalSimulationSession` (`routes.ts:5774`) — single global, NOT mode-keyed; read by `context-refresh-coordinator.ts:194/300`, `system-health-service.ts:60`, `routes.ts:4260/5836/11668` | in-memory global | not mode-separated |
+
+**Consolidation target (P19-B4b D5 / issue #214):** make the DB flag the sole SSOT; write-then-broadcast on COMMIT (broadcast as a `.then()` of the resolved write; no broadcast if it throws); demote 2–5 to derived/reconciliation-only; add a per-mode divergence invariant-check (with an in-flight-transition settling guard) in the 30s reconciliation guard → emits `LIVENESS_SPLIT` if they ever disagree. **This invariant passing is the hard precondition for the Phase-21 paper+live co-run.**
+
+### Vestigial / legacy shared globals (do NOT assume removable — verify, then schedule)
+- **`global.tradingEngines`** — referenced in 6 files (`intent-executor.ts`, `health-monitor.ts:444`, `context-refresh-coordinator.ts:198/304`, `state-awareness.ts:317`, `routes.ts:4059`, `operation-queue.ts:324`) but **NEVER assigned anywhere** → always `undefined`. Most readers guard via `?.`; `intent-executor.ts:234/239/281/282` writers are **UNGUARDED** (would throw if those dormant paths ran). Part of the legacy "live-engine / agent-intent" subsystem (further evidence: `intent-executor.ts:208` calls `new PaperPortfolioManager(userId)` with the args in the wrong order vs the `(mode, userId?)` constructor — a stale call site). **Removal is NOT a clean cut → RUNNING_ISSUES #297** (investigate subsystem liveness first). This entry is the canonical example of *why this registry exists*: a grep said "no writers," but the truth needed hand-verification.
+
+### Kill-switch / daily-loss (confirmed safe)
+Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-policy.ts:567`) reads the per-mode `killSwitchTripped` DB column; `dailyLossKillSwitchPct` is a per-mode guardrail; events → `killSwitchEvents` table. **No module-level in-memory daily-loss accumulator exists.** (Residual D5 check: confirm the trip-WRITE computes per-mode daily P&L.)
+
+---
+
 ## Layer 1: Core Math & Scoring
 
 ### 1.1 FinalScore Kernel
