@@ -138,3 +138,4 @@
 2026-06-14-p19-b4a-c6-paper-sim-calibration-state.sql
 2026-06-14-p19-b4a-c8-xstock-pattern-cap-correction.sql
 2026-06-15-b-names-asset-names.sql
+2026-06-15-b-names-1-xstock-name-nullable.sql

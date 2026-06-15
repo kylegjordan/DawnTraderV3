@@ -52,7 +52,7 @@ const CACHE_TTL_MS = 60 * 60 * 1000;  // 1 hour
 
 interface DbUniverseRow {
   symbol: string;
-  name: string;
+  name: string | null;  // B-NAMES.1 (#298): nullable — discoverer stores null, not a ticker-echo
   sector: string;
   crypto_adjacent: boolean;
   adr: boolean;
@@ -144,7 +144,7 @@ class XstockUniverseService {
   async loadFromFileCache(): Promise<boolean> {
     try {
       const raw = await fs.readFile(FILE_CACHE_PATH, 'utf-8');
-      const parsed = JSON.parse(raw) as Array<{ symbol: string; name: string; sector: string; cryptoAdjacent?: boolean; adr?: boolean }>;
+      const parsed = JSON.parse(raw) as Array<{ symbol: string; name: string | null; sector: string; cryptoAdjacent?: boolean; adr?: boolean }>;
       if (!Array.isArray(parsed) || parsed.length === 0) {
         logWarn(`loadFromFileCache: ${FILE_CACHE_PATH} parsed empty`);
         return false;

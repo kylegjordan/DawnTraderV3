@@ -277,8 +277,15 @@ export const _XSTOCK_SECTOR_VALUES_FOR_CHECK: ReadonlySet<string> = new Set<stri
 ]);
 
 export interface XstockSpotEntry {
-  /** Human-readable display name (e.g., 'Apple', 'nVent Electric'). REQUIRED. */
-  name: string;
+  /**
+   * Human-readable display name (e.g., 'Apple', 'nVent Electric').
+   * B-NAMES.1 (#298): NULLABLE. The discoverer stores `null` — NOT the bare
+   * ticker — when no real name is available (Finnhub missed it AND it is not in
+   * CURATED_XSTOCK_NAMES below). `getXstockName` already returns null and the UI
+   * hides the redundant middle line, so a missing name shows nothing rather than
+   * echoing the ticker (the root-cause fix for the xStock half of #298).
+   */
+  name: string | null;
   /**
    * GICS sector tag OR special bucket (INDEX_PROXY / BROAD_ETF / INTL_ETF). **REQUIRED.**
    *
@@ -337,6 +344,58 @@ export function _replaceXstockUniverse(entries: ReadonlyMap<string, XstockSpotEn
 // REMOVED here. The canonical declaration now lives above (line ~306) as a
 // ReadonlySet view of the mutable internal _xstockSymbolsInternal set,
 // kept in sync with XSTOCK_SPOT_REGISTRY by _replaceXstockUniverse.
+
+/**
+ * B-NAMES.1 (#298, 2026-06-15) — curated display names for the bounded set of
+ * xStocks whose name the Finnhub company-profile endpoint MISSES (almost all
+ * are ETFs — Finnhub's profile API covers operating companies, not funds — plus
+ * a couple of foreign/ADR equities). Keyed by canonical pair. This is the
+ * vetted static map Langston endorsed (Step-1 Q2) over a flaky third-party
+ * stock-name API: the xStock universe is bounded (dozens of Backed-tokenized
+ * instruments), so a hand-vetted map is more robust than an open-ended lookup.
+ *
+ * Applied in the discovery fallback chain AFTER a manual override and AFTER a
+ * live Finnhub name, but BEFORE falling to null — so Finnhub still wins for the
+ * equities it covers, this fills the fund gap, and anything still unknown shows
+ * a hidden line (never a ticker-echo). Names are the underlying fund/company's
+ * official name. Extend this map (don't echo the ticker) when discovery surfaces
+ * a new name-less symbol.
+ */
+export const CURATED_XSTOCK_NAMES: Readonly<Record<string, string>> = {
+  'ARKG/USD': 'ARK Genomic Revolution ETF',
+  'ARKK/USD': 'ARK Innovation ETF',
+  'COPX/USD': 'Global X Copper Miners ETF',
+  'EWA/USD': 'iShares MSCI Australia ETF',
+  'EWC/USD': 'iShares MSCI Canada ETF',
+  'EWG/USD': 'iShares MSCI Germany ETF',
+  'EWI/USD': 'iShares MSCI Italy ETF',
+  'EWL/USD': 'iShares MSCI Switzerland ETF',
+  'EWN/USD': 'iShares MSCI Netherlands ETF',
+  'EWP/USD': 'iShares MSCI Spain ETF',
+  'EWQ/USD': 'iShares MSCI France ETF',
+  'EWS/USD': 'iShares MSCI Singapore ETF',
+  'EWU/USD': 'iShares MSCI United Kingdom ETF',
+  'EWZ/USD': 'iShares MSCI Brazil ETF',
+  'GLD/USD': 'SPDR Gold Shares',
+  'IEMG/USD': 'iShares Core MSCI Emerging Markets ETF',
+  'IWM/USD': 'iShares Russell 2000 ETF',
+  'MOO/USD': 'VanEck Agribusiness ETF',
+  'PALL/USD': 'abrdn Physical Palladium Shares ETF',
+  'PARA/USD': 'Paramount Global',
+  'PPLT/USD': 'abrdn Physical Platinum Shares ETF',
+  'QQQ/USD': 'Invesco QQQ Trust',
+  'SAP/USD': 'SAP SE',
+  'SCHF/USD': 'Schwab International Equity ETF',
+  'SLV/USD': 'iShares Silver Trust',
+  'SPY/USD': 'SPDR S&P 500 ETF Trust',
+  'TBLL/USD': 'Invesco Short Term Treasury ETF',
+  'TOTL/USD': 'SPDR DoubleLine Total Return Tactical ETF',
+  'TQQQ/USD': 'ProShares UltraPro QQQ',
+  'VT/USD': 'Vanguard Total World Stock ETF',
+  'VTI/USD': 'Vanguard Total Stock Market ETF',
+  'XBI/USD': 'SPDR S&P Biotech ETF',
+  'XLE/USD': 'Energy Select Sector SPDR Fund',
+};
 
 /** Look up the human-readable display name for an xstock pair. Returns null if unknown. */
 export function getXstockName(pair: string): string | null {

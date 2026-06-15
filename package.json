@@ -20,7 +20,8 @@
     "b-new-40:soak-verify": "tsx scripts/b-new-40-soak-verify.ts",
     "b-phase-a2:backfill": "tsx scripts/b-phase-a2-backfill.ts",
     "b-new-34b:prewarm": "tsx scripts/b-new-34b-prewarm-snapshot.ts",
-    "b79-0n-rtb-backfill": "tsx scripts/b79-0n-rtb-backfill-asset-class.ts"
+    "b79-0n-rtb-backfill": "tsx scripts/b79-0n-rtb-backfill-asset-class.ts",
+    "b-names-1-backfill": "tsx scripts/b-names-1-xstock-name-backfill.ts"
   },
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",

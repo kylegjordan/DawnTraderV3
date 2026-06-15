@@ -37,6 +37,7 @@ import WebSocket from 'ws';
 import { getSp500BackstopCandidates } from '../asset_classes/xstock_spot/sp500-backstop.js';
 import { xstockUniverseService } from '../asset_classes/xstock_spot/universe-service.js';
 import type { XstockSpotEntry, XstockSector } from '../../shared/asset-classes.js';
+import { CURATED_XSTOCK_NAMES } from '../../shared/asset-classes.js';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -600,7 +601,10 @@ export async function runDiscovery(triggeredBy: 'cron_daily' | 'manual_endpoint'
     const finnhubMeta = finnhubResult.metadata.get(symbol) ?? { sector: 'UNCATEGORIZED' as XstockSector };
     const override = overrides.get(symbol);
     const finalEntry: XstockSpotEntry = {
-      name: override?.name_override ?? finnhubMeta.name ?? symbol.split('/')[0],
+      // B-NAMES.1 (#298): override → live Finnhub name → curated static map →
+      // null. NEVER echo the bare ticker (the root-cause fix); a null name makes
+      // the UI hide the redundant middle line.
+      name: override?.name_override ?? finnhubMeta.name ?? CURATED_XSTOCK_NAMES[symbol] ?? null,
       sector: (override?.sector_override as XstockSector | undefined) ?? finnhubMeta.sector,
       cryptoAdjacent: override?.crypto_adjacent_override ?? false,
       adr: override?.adr_override ?? false,

@@ -1,0 +1,15 @@
+-- B-NAMES.1 (#298 xStock half, 2026-06-15) — allow xstock_spot_universe.name to be NULL.
+--
+-- Root-cause fix for the ticker-echo bug Kyle reported (PALL showing "PALL"):
+-- the universe-discovery name-fetch fell back to storing the bare TICKER when
+-- Finnhub returned no name (Finnhub's company-profile endpoint covers operating
+-- companies, not the ETFs that make up most of these misses). The discoverer
+-- now stores NULL instead — and a NULL name makes getXstockName() return null,
+-- which the UI already hides (the redundant middle line disappears rather than
+-- echoing the ticker). Real names still populate from Finnhub (equities) and the
+-- new CURATED_XSTOCK_NAMES static map (the bounded ETF/foreign-equity set).
+--
+-- The 33 existing ticker-echo rows are backfilled to their curated names by
+-- scripts/b-names-1-xstock-name-backfill.ts (run once at deploy). Implements the
+-- xStock half of RUNNING_ISSUES #298; closes #298 together with B-NAMES (crypto).
+ALTER TABLE xstock_spot_universe ALTER COLUMN name DROP NOT NULL;
