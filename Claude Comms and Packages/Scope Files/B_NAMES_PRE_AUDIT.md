@@ -33,3 +33,17 @@
 5. Fail-graceful: any failure → hidden line (already shipped). Never blocks render.
 
 **Q for Langston (Step-2):** confirm F2 (the resolver leans on `/coins/list`+mcap-disambiguation as the PRIMARY crypto path since only 21 symbols have a pinned id) — accept the slightly larger crypto scope? Everything else maps cleanly to your Step-1 conditions.
+
+---
+
+## Langston Step-2 outcome (2026-06-15) — PROCEED-to-implement (refinements accepted, consensus)
+
+Full review: `Claude Comms and Packages/Langston Design Asks/B_NAMES_STEP2_LANGSTON_REVIEW.md`. F2 confirmed (accept the larger scope), **with a tier-0 refinement + 2 build conditions for Step-3:**
+
+- **TIER-0 (the 21 pinned coins) — keep, don't discard:** if the symbol is in `SYMBOL_TO_COINGECKO_ID` (`market-data.ts:16-38`), use that id DIRECTLY → zero ambiguity, zero `/coins/list` lookup (our most-traded coins; pin-first keeps disambiguation risk off the symbols that matter most). A ~3-line guard BEFORE the `/coins/list` call. Then **TIER-1** = `/coins/list` symbol→id → mcap-gap disambiguation → `/coins/markets` (the broad universe; where the volume lives).
+- **CONDITION 1 — disambiguation gap = a NAMED, documented config constant, not a magic number.** CoinGecko ticker collisions are severe (scam/clone tokens routinely outrank by listing, not real mcap). Define: leader mcap ≥ N× runner-up **AND** leader above an absolute mcap floor — as a constant with a comment naming the failure it guards. Ambiguous OR no-clear-leader OR leader-below-floor → **skip→hide, counted**. (Rather hide than render the wrong project's name — a wrong name reads as a data-integrity bug.)
+- **CONDITION 2 — the skip counter is TWO-WAY:** distinguish **collision-ambiguous** (multiple coins, no clear leader → tune the gap) from **hard-miss** (symbol not on `/coins/list` at all → needs a curated entry). Don't collapse into one number.
+
+All other Step-1 conditions confirmed mapped (asset_names + negative-cache + manual-clear; batch `/coins/markets` + B69.3 backoff + dedicated throttle; background sweep off hot path; fail-graceful → hidden line; observable counters). **B-NAMES.1:** `?? null` at `discoverer.ts:603` + curated static map for the bounded ETF set confirmed; blast radius = `XstockSpotEntry.name` non-null→nullable + `universe-service.ts:101` load (trace at Step-4). **Langston: "Green to implement. I'll take the diff at Step-4 — want eyes on the disambiguation constant and the two-way counter split specifically."**
+
+**NEXT (Step-3 implementation, next session):** `asset_names` migration + table → resolver service (tier-0 pinned-id → tier-1 `/coins/list`+mcap-gap → `/coins/markets` name → write-through / negative-cache) → named disambiguation constant + two-way counter → crypto name endpoint + client overlay → background sweep → tests/bench/CI/deploy/UI-verify → Langston Step-4 (eyes on the constant + counter). Then B-NAMES.1 (xStock). Then #298 CLOSE. Then resume P19-B4b D5.
