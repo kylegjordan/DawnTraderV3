@@ -95,3 +95,31 @@ The 3 liveness readers: `system_context.isEngineActive` (DB, canonical) · `getO
 ## 6. Governance at close (Step 10)
 
 Tier-1: BATCH_CATALOG, PHASE_HISTORY, PHASE_19_PLAN §1/§5, MEMORY (truth + repo-mirror + Langston), P19_B4b_COMPLETION_REPORT. Tier-2: SIM (the depth feed + validate path + isolation registry + liveness SSOT), SYSTEM_MANUAL (high-fidelity fill math + the co-run isolation gate), CHANGES_AND_FIXES, RUNNING_ISSUES, ASSET_CLASS_ONBOARDING_WORKFLOW (depth-feed + validate-vetting learnings), MULTI_ASSET_VTS_EXPANSION_PLAN. Close gates: §7.1 sync both-directions-0, rule-19 CI all-4-green cited, push from Google-Drive.
+
+---
+
+## 7. Langston Step-1 outcome (2026-06-15) — APPROVE-WITH-CONDITIONS (all accepted, CC↔Langston consensus)
+
+Full review: `Claude Comms and Packages/Langston Design Asks/P19_B4b_STEP1_LANGSTON_REVIEW.md`.
+
+**★ DECOMPOSITION RATIFIED (O4).** Ship the Objective-3 co-run gate FIRST (zero depth-feed dependency, it IS the Phase-21 precondition), split the depth-fidelity work second:
+- **B4b = D1 + D5** — split-brain audit (D1, read-only, own Step-4 review) + per-mode isolation implementation + the userId→mode rate-limiter fix + the 3-liveness-reader consolidation to the DB `isEngineActive` SSOT (D5). Highest value, unblocks Phase-21.
+- **B4b.1 = D2 + D3 + D4** — depth-feed substrate + depth-walked fill model + `validate=true` vetting. All depth-feed-gated. The **B4b/B4b.1 boundary is finalized at Step-2 pre-audit** once O1 (depth surface) is resolved.
+
+**Conditions (all accepted):**
+- **C1** D1 ships first, standalone, its own Step-4 diff review.
+- **C2** D2's home decided at pre-audit (default split to B4b.1); a depth-feed bug must never ship in the same diff as a fill-model bug.
+- **C3** rate-limiter is a *scope-internal split-brain* — O-2 (lane) and O-3b (limiter) are the SAME work. Build ONCE in D5; D4 consumes it. (Scope §1 O-2 / §4 D4 corrected accordingly.)
+- **C4** D3 depth-walks BOTH legs (entry AND exit slippage), not entry-only — entry-only leaves paper EV optimistic and defeats the #1 invariant.
+- **C5** `validate=true` is fail-closed-with-alert on its own circuit-breaker on the isolated lane (2 new real Kraken calls in the paper hot path must not hang); covariance isolation = per-mode-KEYED state inside ONE engine, NOT a cloned singleton (no 2× compute — §8 #11 backpressure rule).
+- **C6** the co-run gate is a NUMBERED hard-blocker item in PHASE_19_PLAN §5 + POST_AUDIT_ROADMAP Phase-21, with a verification owner — not prose in the completion report.
+- **C7** name out-of-scope items with homes (RUNNING_ISSUES + revisit trigger): (i) maker/queue-position + latency fidelity (taker-only fills are the B4b.1 boundary), (ii) true 30-day-volume tier ladder.
+
+**Open-question answers:**
+- **O1** reuse the xStock depth-store **interface/abstraction**, build a **net-new crypto feed adapter** under it (one depth-store contract, two venue adapters). D1 returns the evidence-based verdict that fixes the B4b/B4b.1 boundary.
+- **O2** static, DB-resolved fee — but resolve to **Kyle's account's actual current Kraken taker tier**, not the headline rate (else paper EV drifts from live). Volume-ladder revisit homed per C7.
+- **O3** `validate=true` is param-correctness ONLY (pair/precision/min-size); it does **NOT** vet liquidity. D3 (depth-walk/partial) and D4 (validate) are orthogonal and both required — state this in the completion criteria so validate is never mistaken for fill realism.
+- **O5** co-run gate wording (for PHASE_19_PLAN §5 + POST_AUDIT_ROADMAP Phase-21): *"Phase-21 (live+paper co-run) MUST NOT begin until P19-B4b Objective-3 is verified PASS: split-brain audit complete, per-mode isolation implemented for every singleton classified SPLIT-BRAIN-risk, and the 3 liveness readers consolidated to the DB `isEngineActive` SSOT with a divergence invariant-check. Any risk-classified singleton left un-isolated is a hard blocker."*
+
+**NEXT:** Step-2 pre-audit (resolves O1 + finalizes the B4b/B4b.1 boundary) → D1 split-brain audit (read-only, own Step-4) → D5. "Send me D1 first" (Langston).
+
