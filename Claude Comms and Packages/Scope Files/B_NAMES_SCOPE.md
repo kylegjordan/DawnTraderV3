@@ -61,4 +61,26 @@ The Symbol-column name comes from two LOCAL sources: crypto → the static `CRYP
 
 ## 5. Governance at close
 
-Tier-1: BATCH_CATALOG, PHASE_HISTORY, MEMORY (3-way), completion report. Tier-2: SIM (the new resolver service + its place in the name-resolution chain + the CoinGecko/stock-name dependencies), SYSTEM_MANUAL (the name-resolution architecture), RUNNING_ISSUES (#298 → resolved/closed), CHANGES_AND_FIXES. Close gates: §7.1 sync both-directions-0, rule-19 CI all-4-green, push from Google-Drive.
+Tier-1: BATCH_CATALOG, PHASE_HISTORY, MEMORY (3-way), completion report. Tier-2: SIM (the new resolver service + its place in the name-resolution chain + the CoinGecko/stock-name dependencies), SYSTEM_MANUAL (the name-resolution architecture), RUNNING_ISSUES (#298 — stays OPEN until BOTH B-NAMES + B-NAMES.1 land), CHANGES_AND_FIXES. Close gates: §7.1 sync both-directions-0, rule-19 CI all-4-green, push from Google-Drive.
+
+---
+
+## 6. Langston Step-1 outcome (2026-06-15) — APPROVE-WITH-CONDITIONS (all accepted, consensus)
+
+Full review: `Claude Comms and Packages/Langston Design Asks/B_NAMES_STEP1_LANGSTON_REVIEW.md`.
+
+**★ SPLIT RATIFIED (Q5):** **B-NAMES = crypto** (O-1/O-2/O-4/O-5; rides the existing CoinGecko lane, low-risk, ships coverage fast). **B-NAMES.1 = xStock** (O-3; different source + carries the discovery name-fetch root-cause fix). Independent risk profiles. **#298 stays OPEN until BOTH land** — the crypto batch resolves only the crypto half.
+
+**Conditions (all accepted):**
+- **C1 — Negative-cache + invalidation (the gap I missed).** Cache MISSES too (TTL/backoff) so a permanently-unresolvable symbol isn't re-hit every sweep — negative-caching is part of "one lookup," not an afterthought. AND store `source` + `resolved_at` + `confidence` + a manual **re-resolve/override path**, so a wrong disambiguation isn't permanent + silent (otherwise the first bad name is load-bearing forever).
+- **C2 — Pre-audit resolves Q1 endpoint + surfaces the existing symbol→id mapping** BEFORE O-2 design (that mapping is the backbone of both O-2 and the disambiguation).
+- **C3 — Disambiguation tiers (Q4):** **tier-1 = reuse the already-pinned trade CoinGecko-id** (if we trade the pair we ALREADY resolved symbol→id to fetch price → zero ambiguity, covers nearly everything in the UI); tier-2 = highest market-cap rank ABOVE a clear-leader gap threshold (+ exchange cross-ref) for unresolved/discovery-only symbols; tier-3 = **ambiguous → skip → hide** (never first-hit, never a wrong name). The counter must distinguish **ambiguous-skip** from **hard-fail-miss** (so we can tell "genuinely ambiguous" from "source is down").
+- **C4 — One SSOT per tier; no runtime mutation of the static code map (Q3).** Persistence = a dedicated **`asset_names` overlay table** (`symbol, asset_class, name, source, confidence, resolved_at`) — the resolver's backfill SSOT, merged by the existing `/api/xstocks/asset-names`-style endpoint. The crypto static map STAYS as tier-1 local source (code — you cannot write-through to a source file). For xStock, fix discovery to write the correct name into `xstock_spot_universe.name` AT SOURCE; `asset_names` overlays anything still missing. The overlay READS, it doesn't fight the local source (no dual-write race).
+- **C5 — Discovery ticker-echo is itself a bug (Q2a):** the xStock discovery name-fetch fell back to storing the ticker (PALL→'PALL') — that fallback violates the new hidden-line principle; it should store NULL, not the echo. Root-cause it in B-NAMES.1.
+
+**Q-answers (Langston):**
+- **Q1:** depends on the B69.3 endpoint — `/coins/markets` returns `name` (nearly free); `/simple/price` has no name BUT is keyed by coin **id** (so symbol→id is ALREADY resolved = the disambiguation answer; id→name is a cheap `/coins/list` join or one `/coins/{id}`). Pre-audit identifies the endpoint + where symbol→id lives.
+- **Q2:** xStock universe is SMALL + bounded (~dozens of Backed-tokenized equities). For a fixed small set, a **vetted static map + provider (Backed) metadata at discovery is MORE robust than a flaky third-party stock API** (stock tickers collide worse than crypto). Online stock-API path reserved only if the universe is genuinely open-ended. Pre-audit confirms universe size.
+- **Q3 → C4.** **Q4 → C3.** **Q5 → the split above.**
+
+**NEXT:** Step-2 pre-audit — resolve C2 (CoinGecko endpoint + symbol→id mapping location), the xStock universe size + current discovery name source (B-NAMES.1), then implement B-NAMES (crypto) first. "Clear these at pre-audit and I'm green to implement" (Langston).
