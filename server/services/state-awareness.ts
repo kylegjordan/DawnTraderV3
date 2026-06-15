@@ -303,8 +303,12 @@ class StateAwarenessService {
     let paperStatus: 'active' | 'stopped' | 'unknown' = 'stopped';
     let liveStatus: 'active' | 'stopped' | 'unknown' = 'stopped';
     
-    // Check paper trading engine status
-    const globalPaperPortfolioManager = (global as any).globalPaperPortfolioManager;
+    // Check paper trading engine status.
+    // P19-B4b D5: routed through the per-mode accessor (mode='paper'). NOTE (#297): this dormant
+    // agent-intent subsystem is paper-only today; when #297 revives its live branch this 'paper'
+    // default must be revisited.
+    const { getGlobalPaperSimManager } = await import('./paper-sim-service.js');
+    const globalPaperPortfolioManager = getGlobalPaperSimManager('paper');
     if (globalPaperPortfolioManager) {
       // Check if it's actually running (has monitoring interval)
       const isRunning = globalPaperPortfolioManager.isRunning || 

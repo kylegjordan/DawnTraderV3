@@ -58,6 +58,7 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
       entryPrice: 100,
       stopPrice: 97,
       sourcePool: 'pattern' as const,
+      mode: 'paper' as const, // P19-B4b D5: per-mode sizing param (S4 isolation)
     };
 
     it('xstock pattern signal sized against xstock 0.50 MAX_POSITION_PCT', () => {

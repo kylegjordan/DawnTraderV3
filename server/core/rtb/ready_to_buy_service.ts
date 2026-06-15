@@ -357,7 +357,7 @@ class ReadyToBuyService {
   private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
   private clockTickHandlers: Map<TradingMode, (tick: ClockTick) => void> = new Map(); // Directive A3.R7
   // Directive R9.3-A: Per-signal refresh tracking (replaces global isRefreshing)
-  private signalRefreshStates: Map<string, SignalRefreshState> = new Map(); // key = signalId
+  private signalRefreshStates: Map<string, SignalRefreshState> = new Map(); // P19-B4b D5: key = `${mode}:${signalId}`
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
   private promotionHandlerRegistered = false; // Directive 8.8.4-A1: Track handler registration
@@ -502,18 +502,26 @@ class ReadyToBuyService {
   /**
    * Directive 8.8.4-A3.R9.3-A: Per-signal refresh helpers
    */
-  private getSignalRefreshState(signalId: string): SignalRefreshState {
-    if (!this.signalRefreshStates.has(signalId)) {
-      this.signalRefreshStates.set(signalId, {
+  // P19-B4b D5 (S6): mode-prefix the key so paper + live can never collide on a shared
+  // signalId (which is only statistically unique — `${symbol}-${strategy}-${Date.now()}-${rand6}`,
+  // no mode namespace). Makes the per-signal refresh latch structurally per-mode.
+  private _refreshKey(mode: TradingMode, signalId: string): string {
+    return `${mode}:${signalId}`;
+  }
+
+  private getSignalRefreshState(mode: TradingMode, signalId: string): SignalRefreshState {
+    const key = this._refreshKey(mode, signalId);
+    if (!this.signalRefreshStates.has(key)) {
+      this.signalRefreshStates.set(key, {
         nextRefreshAt: Date.now() + RTB_REFRESH_INTERVAL_MS,
         isRefreshing: false
       });
     }
-    return this.signalRefreshStates.get(signalId)!;
+    return this.signalRefreshStates.get(key)!;
   }
 
-  isSignalRefreshing(signalId: string): boolean {
-    return this.signalRefreshStates.get(signalId)?.isRefreshing ?? false;
+  isSignalRefreshing(mode: TradingMode, signalId: string): boolean {
+    return this.signalRefreshStates.get(this._refreshKey(mode, signalId))?.isRefreshing ?? false;
   }
 
   /**
@@ -600,7 +608,7 @@ class ReadyToBuyService {
 
     // R9.3-A: Process each signal individually with try/finally (R9.3-B)
     for (const signal of signals) {
-      const signalState = this.getSignalRefreshState(signal.signalId);
+      const signalState = this.getSignalRefreshState(mode, signal.signalId);
       
       // R9.3-B: Set isRefreshing flag and ensure it's reset in finally
       signalState.isRefreshing = true;
@@ -708,7 +716,7 @@ class ReadyToBuyService {
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
       console.warn(`[11.0E][SQE_SKIP] unclassifiable ${normalizedSymbol} — dropped from queue (no valid stamp, unresolvable)`);
-      this.signalRefreshStates.delete(signal.signalId);
+      this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
       return { passed: false };
     }
 
@@ -731,8 +739,8 @@ class ReadyToBuyService {
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
       console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
-      
-      this.signalRefreshStates.delete(signal.signalId);
+
+      this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
       return { passed: false };
     }
     
@@ -1621,7 +1629,7 @@ class ReadyToBuyService {
 
     // R9.3-C: No expiry check - signals are valid until SQE rejects them
     // R9.3-A: Check if signal is currently refreshing
-    if (this.isSignalRefreshing(topSignal.signalId)) {
+    if (this.isSignalRefreshing(mode, topSignal.signalId)) {
       console.log(`[A3.R9.3][PROMOTION] Signal ${topSignal.symbol}/${topSignal.strategy} is refreshing - skipping`);
       return null;
     }
@@ -1660,7 +1668,7 @@ class ReadyToBuyService {
 
     // R9.3-C: No expiry filter - all queued signals are valid (SQE governs lifecycle)
     // R9.3-A: Filter out signals currently being refreshed
-    let validSignals = signals.filter(s => !this.isSignalRefreshing(s.signalId));
+    let validSignals = signals.filter(s => !this.isSignalRefreshing(mode, s.signalId));
 
     // Batch 19F: Pair-level promotion guard (prevent overexposure)
     // Filter out signals for pairs that already have active trades

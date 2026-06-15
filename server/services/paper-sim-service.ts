@@ -32,34 +32,11 @@ export interface PaperSimResult {
   currentBalance?: number; // Phase 27.F.14.D-POST: Current balance for confirmation prompt
 }
 
-// Phase 41E-S: Track when busy flag and operation lock were set
-let busyFlagSetAt: number | null = null;
-let operationLockSetAt: number | null = null;
-const BUSY_FLAG_STALE_THRESHOLD_MS = 10000; // 10 seconds (start/stop should complete within 3s)
-const OPERATION_LOCK_STALE_THRESHOLD_MS = 10000; // 10 seconds
-
-// Phase 41E-S: Auto-clear stale busy flags, operation locks, and orphaned managers
+// Phase 41E-S / P19-B4b D5: Auto-clear orphaned managers (manager exists but no DB session).
+// The stale busy-flag / operation-lock branches that used to live here were REMOVED — that
+// mechanism was vestigial (superseded by paperOperationQueue since Phase 41F; verified never
+// acquired anywhere, only defensively cleared). See 1-system-manual/DELETED_COMPONENTS_LOG.md.
 async function clearStaleBusyFlag() {
-  // Clear stale busy flag (after 10 seconds)
-  if (global.globalPaperSimBusyFlag && busyFlagSetAt) {
-    const age = Date.now() - busyFlagSetAt;
-    if (age > BUSY_FLAG_STALE_THRESHOLD_MS) {
-      console.log(`[SAFEGUARD] Cleared stale busy flag (age: ${age}ms)`);
-      global.globalPaperSimBusyFlag = false;
-      busyFlagSetAt = null;
-    }
-  }
-  
-  // Clear stale operation locks (after 10 seconds - should complete within 3s)
-  if (global.globalPaperSimOperationLock && operationLockSetAt) {
-    const age = Date.now() - operationLockSetAt;
-    if (age > OPERATION_LOCK_STALE_THRESHOLD_MS) {
-      console.log(`[SAFEGUARD] Cleared stale operation lock (age: ${age}ms)`);
-      global.globalPaperSimOperationLock = null;
-      operationLockSetAt = null;
-    }
-  }
-  
   // Phase 41E-S: Clear orphaned managers (manager exists but no DB session)
   const hasManager = !!getGlobalPaperSimManager();
   if (hasManager) {
@@ -241,30 +218,43 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
   }
 }
 
-// Global in-memory state for the active portfolio manager
-// This is reconciled with the database on every operation
+// P19-B4b D5 (S1 isolation): the active portfolio manager is now keyed BY MODE.
+// Pre-fix this was a single global slot shared by paper + live — the WORST split-brain leak,
+// because the manager owns the per-instance heat ceilings (MAX_OPEN_POSITIONS /
+// MAX_PORTFOLIO_EXPOSURE_PERCENT / MAX_DRAWDOWN). With one slot, whichever mode registered
+// last owned those ceilings for BOTH modes. Now each mode has its own manager.
+// The accessors default to 'paper' so every existing paper-only caller is behavior-identical;
+// live wiring (Phase 21) passes mode='live'.
+// (The vestigial globalPaperSimOperationLock / globalPaperSimBusyFlag globals were removed —
+//  superseded by paperOperationQueue since Phase 41F. See DELETED_COMPONENTS_LOG.md.)
+type PaperSimMode = 'live' | 'paper';
 declare global {
-  var globalPaperPortfolioManager: any;
-  var globalPaperSimOperationLock: Promise<void> | null;
-  var globalPaperSimBusyFlag: boolean;
+  var globalPaperPortfolioManagers: Map<PaperSimMode, any> | undefined;
+}
+
+function _paperSimManagers(): Map<PaperSimMode, any> {
+  if (!global.globalPaperPortfolioManagers) {
+    global.globalPaperPortfolioManagers = new Map();
+  }
+  return global.globalPaperPortfolioManagers;
 }
 
 /**
- * Phase 27.F.9: Synchronized Manager API
- * Provides atomic access to global PaperSim manager with reconciliation
+ * Phase 27.F.9 / P19-B4b D5: Synchronized per-mode Manager API.
+ * Provides atomic access to the active PaperSim manager for a given mode (default 'paper').
  */
-export function getGlobalPaperSimManager(): any {
-  return global.globalPaperPortfolioManager || null;
+export function getGlobalPaperSimManager(mode: PaperSimMode = 'paper'): any {
+  return _paperSimManagers().get(mode) || null;
 }
 
-export function setGlobalPaperSimManager(manager: any): void {
-  global.globalPaperPortfolioManager = manager;
-  console.log('[PaperSimService] Manager registered globally');
+export function setGlobalPaperSimManager(manager: any, mode: PaperSimMode = 'paper'): void {
+  _paperSimManagers().set(mode, manager);
+  console.log(`[PaperSimService] Manager registered globally (mode=${mode})`);
 }
 
-export function clearGlobalPaperSimManager(): void {
-  global.globalPaperPortfolioManager = null;
-  console.log('[PaperSimService] Manager cleared from global scope');
+export function clearGlobalPaperSimManager(mode: PaperSimMode = 'paper'): void {
+  _paperSimManagers().delete(mode);
+  console.log(`[PaperSimService] Manager cleared from global scope (mode=${mode})`);
 }
 
 /**
@@ -1056,7 +1046,7 @@ export async function getPaperSimulationStatus(userId: string): Promise<any> {
     const dbSession = await storage.getActivePaperSimSession(mode);
     
     // Get in-memory manager state (check for both null and undefined)
-    const hasManager = !!global.globalPaperPortfolioManager;
+    const hasManager = !!getGlobalPaperSimManager('paper');
     
     // State reconciliation diagnostics
     const isConsistent = (dbSession !== undefined) === hasManager;
@@ -1106,28 +1096,24 @@ export async function getPaperSimulationStatus(userId: string): Promise<any> {
 export function resetPaperSimService(): void {
   console.log('[PaperSimService] Resetting service state...');
   
-  // Clear in-memory manager
-  if (global.globalPaperPortfolioManager) {
+  // Clear in-memory manager (per-mode). P19-B4b D5: routed through the accessor; the vestigial
+  // operation-lock clear was removed (mechanism deleted — see DELETED_COMPONENTS_LOG.md).
+  const orphanedManager = getGlobalPaperSimManager('paper');
+  if (orphanedManager) {
     console.log('[PaperSimService] Clearing orphaned manager from previous session');
     try {
       // Attempt graceful stop if manager has stop method
-      if (typeof global.globalPaperPortfolioManager.stop === 'function') {
-        global.globalPaperPortfolioManager.stop().catch((err: any) => {
+      if (typeof orphanedManager.stop === 'function') {
+        orphanedManager.stop().catch((err: any) => {
           console.warn('[PaperSimService] Error during manager cleanup:', err);
         });
       }
     } catch (error) {
       console.warn('[PaperSimService] Failed to stop orphaned manager:', error);
     }
-    global.globalPaperPortfolioManager = null;
+    clearGlobalPaperSimManager('paper');
   }
-  
-  // Clear operation lock
-  if (global.globalPaperSimOperationLock) {
-    console.log('[PaperSimService] Clearing operation lock');
-    global.globalPaperSimOperationLock = null;
-  }
-  
+
   console.log('[PaperSimService] ✅ Reset complete - clean state confirmed');
   console.log('[PaperSimService] Initialized - no active sessions');
   console.log('[PaperSimService] State: { hasManager: false, hasDbSession: false }');

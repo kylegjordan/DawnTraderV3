@@ -37,6 +37,15 @@ export class TradingStateSync {
   // Directive 11.7I-02: ReconciliationGuard state-diff tracking
   private lastReconciliationState: string | null = null;
 
+  // P19-B4b D5 (liveness consolidation, H2): per-mode last-flip timestamp = settling guard,
+  // so the reconciliation invariant-check does NOT false-positive on an in-flight start/stop
+  // transition that straddles a reconciliation tick. Stamped in setEngineActive.
+  private lastEngineFlipAt: Map<TradingMode, number> = new Map();
+  private readonly LIVENESS_SETTLING_MS = 15000; // ignore divergence within 15s of a flip
+  // P19-B4b D5: observable LIVENESS_SPLIT witness (B3b counter discipline). If any entry's
+  // count is > 0 during a paper+live co-run dry-run, the Phase-21 flip is BLOCKED.
+  private livenessSplitStats: Map<string, { count: number; lastReason: string; lastAt: number }> = new Map();
+
   constructor() {
     // Listen for cluster bus events to synchronize state across services
     this.setupClusterBusListeners();
@@ -244,8 +253,21 @@ export class TradingStateSync {
       console.warn('[Phase-33.C] Failed to fetch portfolio overview for instant broadcast');
     }
     
-    // Phase 33.C: Fire instant broadcast with full portfolioOverview object
-    // REB 2.4 Stage-1g: Add ACK markers for engine_start broadcasts
+    // P19-B4b D5 (liveness H1): WRITE-THEN-BROADCAST, ordered ON COMMIT.
+    // Pre-fix this was an instant broadcast followed by a setTimeout(…,0) deferred DB write —
+    // the broadcast beat the DB write, so the DB SSOT trailed every derived reader by a tick
+    // (the root cause of the 5-reader liveness divergence). Now: stamp the settling window,
+    // AWAIT the authoritative DB write, and only broadcast AFTER it commits. If the write
+    // throws, nothing is broadcast (no derived reader is told a state the DB never persisted).
+    this.lastEngineFlipAt.set(mode, Date.now());
+
+    // Phase 27.F.13.O: Persist the authoritative per-mode DB SSOT FIRST (awaited).
+    await storage.updateSystemContext(mode, {
+      isEngineActive: isActive,
+      updatedAt: new Date()
+    });
+
+    // Write committed → fan out to every derived reader.
     const { contextBridge } = await import('./context-bridge.js');
     const stateVersion = Date.now(); // REB 2.4 Stage-1f: Generate stateVersion for engine_start
     await contextBridge.broadcast({
@@ -265,32 +287,27 @@ export class TradingStateSync {
       mode
     });
     console.log(`[STAGE1G][ACK] engine_start broadcasted v=${stateVersion} for ${mode}`);
-    console.log(`[Phase-33.C] ⚡ Instant broadcast sent: mode=${mode}, active=${isActive}, portfolio=$${portfolioOverview.totalValue}, latency=<50ms`);
-    
-    // Then update database and do heavy operations asynchronously
-    setTimeout(async () => {
-      try {
-        // Phase 27.F.13.O: Update global system_context by mode
-        await storage.updateSystemContext(mode, {
-          isEngineActive: isActive,
-          updatedAt: new Date()
-        });
-        
-        clusterBus.emit('engine_state_changed', {
-          userId,
-          mode,
-          isActive,
-          timestamp: new Date()
-        });
-        
-        // Phase 27.F.3: Broadcast complete state snapshot (background refresh)
-        await this.broadcastUserUpdate(userId);
-        
-        console.log(`[SYNC][Phase-27.F.3] Engine state updated for ${mode} mode: ${isActive ? 'ACTIVE' : 'INACTIVE'} (userId: ${userId})`);
-      } catch (error) {
-        console.error('[Phase-33.A] Error in background state update:', error);
-      }
-    }, 0);
+
+    clusterBus.emit('engine_state_changed', {
+      userId,
+      mode,
+      isActive,
+      timestamp: new Date()
+    });
+
+    // Re-stamp the settling window from broadcast time so the invariant-check gives downstream
+    // readers (vtsModeAudit, engine teardown) the full window to converge before it asserts.
+    this.lastEngineFlipAt.set(mode, Date.now());
+
+    // Phase 27.F.3: Broadcast complete state snapshot (secondary refresh). The state is already
+    // committed + broadcast above, so a failure of this secondary snapshot must NOT fail the call.
+    try {
+      await this.broadcastUserUpdate(userId);
+    } catch (error) {
+      console.error('[P19-B4b-H1] secondary snapshot broadcast failed (state already committed+broadcast):', error);
+    }
+
+    console.log(`[SYNC][P19-B4b-H1] Engine state committed-then-broadcast for ${mode}: ${isActive ? 'ACTIVE' : 'INACTIVE'} v=${stateVersion} (userId: ${userId})`);
   }
 
   /**
@@ -588,12 +605,92 @@ export class TradingStateSync {
           // Directive 11.7I-02: Skip broadcast when state unchanged (reduces UI flashing)
           console.log('[SYNC][11.7I-02][ReconciliationGuard] State unchanged - broadcast skipped');
         }
+
+        // P19-B4b D5 (liveness H2): per-mode divergence invariant-check (settling-guarded).
+        // The witness the Phase-21 paper+live co-run gate reads — see checkLivenessInvariants.
+        await this.checkLivenessInvariants(paperContext, liveContext);
       } catch (error) {
         console.error('[SYNC][Phase-27.F.3][ReconciliationGuard] Error during reconciliation:', error);
       }
     }, 30000); // Phase 35.3.B: Increased from 15s to 30s to reduce update volume
-    
+
     console.log('[35.3][SYNC][11.7I-02] Reconciliation interval = 30s (with state-diff guard)');
+  }
+
+  /**
+   * P19-B4b D5 — Liveness invariant-check (the Phase-21 paper+live co-run WITNESS).
+   *
+   * The DB `system_context.isEngineActive` per mode is the single source of truth. The other
+   * derived readers (engine presence, orchestrator presence, vtsModeAudit.tradingActive) must
+   * AGREE with it. Any disagreement — after a per-mode settling window that ignores in-flight
+   * start/stop transitions — increments an observable LIVENESS_SPLIT counter (B3b discipline).
+   * If any counter is > 0 during a paper+live co-run dry-run, the Phase-21 flip is blocked.
+   */
+  private async checkLivenessInvariants(
+    paperContext: any,
+    liveContext: any
+  ): Promise<void> {
+    try {
+      const now = Date.now();
+      const { getEngine } = await import('./mode-registry.js');
+      let getOrchestratorByMode: ((m: TradingMode) => any) | null = null;
+      try {
+        ({ getOrchestratorByMode } = await import('./paper-sim-service.js'));
+      } catch { /* paper-sim-service not always importable in every context */ }
+
+      const perMode: Array<[TradingMode, any]> = [
+        ['paper', paperContext],
+        ['live', liveContext],
+      ];
+      for (const [mode, ctx] of perMode) {
+        const flippedAt = this.lastEngineFlipAt.get(mode) ?? 0;
+        if (now - flippedAt < this.LIVENESS_SETTLING_MS) continue; // in-flight transition — skip
+        const dbActive = ctx?.isEngineActive ?? false;
+        const enginePresent = getEngine(mode) !== null;
+        if (dbActive !== enginePresent) {
+          this.recordLivenessSplit(mode, `db=${dbActive} vs enginePresent=${enginePresent}`);
+        }
+        // Orchestrator lives under the paper manager today; only meaningful for paper.
+        if (mode === 'paper' && getOrchestratorByMode) {
+          const orchPresent = getOrchestratorByMode('paper') !== null;
+          if (dbActive !== orchPresent) {
+            this.recordLivenessSplit('paper-orchestrator', `db=${dbActive} vs orchestratorPresent=${orchPresent}`);
+          }
+        }
+      }
+
+      // vtsModeAudit collapses both modes into ONE global bool — compare to (paperDB || liveDB).
+      const anyActive = (paperContext?.isEngineActive ?? false) || (liveContext?.isEngineActive ?? false);
+      const flippedAny = Math.max(
+        this.lastEngineFlipAt.get('paper') ?? 0,
+        this.lastEngineFlipAt.get('live') ?? 0
+      );
+      if (now - flippedAny >= this.LIVENESS_SETTLING_MS) {
+        try {
+          const { vtsModeAuditService } = await import('./vts-mode-audit.js');
+          const vtsActive = vtsModeAuditService.getState()?.tradingActive ?? false;
+          if (vtsActive !== anyActive) {
+            this.recordLivenessSplit('vts-audit', `vtsTradingActive=${vtsActive} vs anyDbActive=${anyActive}`);
+          }
+        } catch { /* vts-mode-audit optional */ }
+      }
+    } catch (error: any) {
+      console.error('[P19-B4b-H2][LivenessInvariant] check error:', error?.message);
+    }
+  }
+
+  private recordLivenessSplit(key: string, reason: string): void {
+    const s = this.livenessSplitStats.get(key) ?? { count: 0, lastReason: '', lastAt: 0 };
+    s.count += 1;
+    s.lastReason = reason;
+    s.lastAt = Date.now();
+    this.livenessSplitStats.set(key, s);
+    console.warn(`[LIVENESS_SPLIT][${key}] ${reason} (count=${s.count})`);
+  }
+
+  /** P19-B4b D5 — expose the LIVENESS_SPLIT witness for diagnostics + the Phase-21 co-run gate. */
+  getLivenessSplitStats(): Record<string, { count: number; lastReason: string; lastAt: number }> {
+    return Object.fromEntries(this.livenessSplitStats);
   }
 
   /**

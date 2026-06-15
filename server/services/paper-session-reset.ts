@@ -291,10 +291,10 @@ class PaperSessionResetService {
         throw dbErr;
       }
 
-      // 5) Clear global paper sim state flags
-      (global as any).globalPaperPortfolioManager = null;
-      (global as any).globalPaperSimOperationLock = null;
-      (global as any).globalPaperSimBusyFlag = false;
+      // 5) Clear global paper sim state (per-mode). P19-B4b D5: routed through the accessor;
+      //    the vestigial operation-lock / busy-flag clears were removed (mechanism deleted —
+      //    see DELETED_COMPONENTS_LOG.md).
+      clearGlobalPaperSimManager('paper');
 
       // Phase 8.8.3-A2R: Lightweight post-reset integrity audit
       await this.checkPostResetState(mode);

@@ -75,6 +75,12 @@ export interface PaperPositionSizingParams {
    * signals route to PATTERN_POOL_GUARDRAILS (0.15 cap, literal).
    */
   assetClass: AssetClass;
+  /**
+   * P19-B4b D5 (S4 isolation): the trading mode this sizing is for. Threaded so the
+   * correlation/concentration scaling factor is read from the correct per-mode store
+   * (paper vs live position weights are isolated). Required — no silent default.
+   */
+  mode: 'live' | 'paper';
 }
 
 export interface PaperPositionSizingResult {
@@ -113,7 +119,7 @@ export interface PaperPositionSizingResult {
  * (NaN, zero, negative values, malformed data)
  */
 export function sizePaperPositionForSignal(params: PaperPositionSizingParams): PaperPositionSizingResult {
-  const { portfolioValue, guardrails, entryPrice, stopPrice, symbol, strategy } = params;
+  const { portfolioValue, guardrails, entryPrice, stopPrice, symbol, strategy, mode } = params;
   
   const invalidResult: PaperPositionSizingResult = { quantity: 0, estimatedValue: 0 };
   
@@ -191,7 +197,7 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     estimatedValue = quantity * entryPrice;
   }
 
-  const correlationScale = getScalingFactor(symbol);
+  const correlationScale = getScalingFactor(mode, symbol); // P19-B4b D5: per-mode scaling
   if (correlationScale < 1) {
     quantity = quantity * correlationScale;
     estimatedValue = quantity * entryPrice;

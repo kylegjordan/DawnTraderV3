@@ -40,11 +40,12 @@ async function stopPaperTrading() {
         console.log('✅ Simulation session deregistered');
       }
       
-      // Access global manager
-      const globalManager = (global as any).globalPaperPortfolioManager;
+      // P19-B4b D5: per-mode accessor (mode='paper'). Was a raw global slot.
+      const { getGlobalPaperSimManager, clearGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
+      const globalManager = getGlobalPaperSimManager('paper');
       if (globalManager && typeof globalManager.stop === 'function') {
         await globalManager.stop();
-        (global as any).globalPaperPortfolioManager = null;
+        clearGlobalPaperSimManager('paper');
         console.log('✅ Portfolio manager stopped');
       }
     } else {

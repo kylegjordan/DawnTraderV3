@@ -315,10 +315,13 @@ export async function initializeQueues(): Promise<void> {
       console.log('[41F-B][RECOVERY] No orphaned paper trading sessions found');
     }
     
-    // Clear any global manager state (should already be null on fresh start, but ensure it)
-    if ((global as any).globalPaperPortfolioManager) {
+    // Clear any global manager state (should already be null on fresh start, but ensure it).
+    // P19-B4b D5: per-mode accessor (paper). Dynamic import avoids the paper-sim-service ↔
+    // operation-queue import cycle.
+    const { getGlobalPaperSimManager, clearGlobalPaperSimManager } = await import('../services/paper-sim-service.js');
+    if (getGlobalPaperSimManager('paper')) {
       console.warn('[41F-B][RECOVERY] Clearing orphaned global paper portfolio manager');
-      (global as any).globalPaperPortfolioManager = null;
+      clearGlobalPaperSimManager('paper');
     }
     
     if ((global as any).tradingEngines) {

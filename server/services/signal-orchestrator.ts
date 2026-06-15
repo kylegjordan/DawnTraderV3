@@ -491,6 +491,7 @@ export class SignalOrchestrator {
 
     // Phase 8.8.4-B.3: STEP 1 - Sizing FIRST (before metrics computation)
     const sizingResult = sizePaperPositionForSignal({
+      mode: sizingContext.mode, // P19-B4b D5: per-mode concentration sizing
       portfolioValue: sizingContext.portfolioValue,
       guardrails: sizingContext.guardrails,
       entryPrice: rawSignal.entryPrice,

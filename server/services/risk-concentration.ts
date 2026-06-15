@@ -52,12 +52,29 @@ export interface PortfolioExposure {
 // resolve from module_constants on every read.
 const _UPDATE_INTERVAL_MS = 60000;
 
+type RcMode = 'live' | 'paper';
+
 class RiskConcentrationAnalyzer {
   private _configOverride: Partial<RiskConcentrationConfig> = {};
-  private positionWeights: Map<string, number> = new Map();
-  private concentrationScores: Map<string, ConcentrationScore> = new Map();
+  // P19-B4b D5 (S4 isolation): position weights + concentration scores are now keyed BY MODE.
+  // Pre-fix these were single symbol-keyed Maps shared by paper + live — trade-safety writes
+  // mode-scoped weights (built from getActivePositions(mode)) into them, so a paper write and a
+  // live write CLOBBERED each other when co-running. Now each mode has its own inner map.
+  private positionWeightsByMode: Map<RcMode, Map<string, number>> = new Map();
+  private concentrationScoresByMode: Map<RcMode, Map<string, ConcentrationScore>> = new Map();
   private lastUpdateTime: Date | null = null;
   private updateInterval: ReturnType<typeof setInterval> | null = null;
+
+  private _weights(mode: RcMode): Map<string, number> {
+    let m = this.positionWeightsByMode.get(mode);
+    if (!m) { m = new Map(); this.positionWeightsByMode.set(mode, m); }
+    return m;
+  }
+  private _scores(mode: RcMode): Map<string, ConcentrationScore> {
+    let m = this.concentrationScoresByMode.get(mode);
+    if (!m) { m = new Map(); this.concentrationScoresByMode.set(mode, m); }
+    return m;
+  }
 
   constructor(config: Partial<RiskConcentrationConfig> = {}) {
     this._configOverride = config;
@@ -78,14 +95,15 @@ class RiskConcentrationAnalyzer {
   /**
    * Update position weights from current portfolio
    */
-  updatePositionWeights(weights: Record<string, number>): void {
-    this.positionWeights.clear();
+  updatePositionWeights(mode: RcMode, weights: Record<string, number>): void {
+    const w = this._weights(mode);
+    w.clear();
     for (const [symbol, weight] of Object.entries(weights)) {
       if (weight > 0) {
-        this.positionWeights.set(symbol, weight);
+        w.set(symbol, weight);
       }
     }
-    console.log(`[9.4][RISK] Updated position weights for ${this.positionWeights.size} symbols`);
+    console.log(`[9.4][RISK] Updated position weights for ${w.size} symbols (mode=${mode})`);
   }
 
   /**
@@ -93,10 +111,12 @@ class RiskConcentrationAnalyzer {
    * C_i = Σ|ρ_ij| × w_j
    */
   calculateConcentrationScore(
+    mode: RcMode,
     symbol: string,
     correlationMatrix: CorrelationMatrix
   ): ConcentrationScore {
     const { matrix, symbols } = correlationMatrix;
+    const weights = this._weights(mode);
     
     if (!matrix[symbol]) {
       return {
@@ -116,7 +136,7 @@ class RiskConcentrationAnalyzer {
       
       const correlation = matrix[symbol][other] ?? 0;
       const absCorrelation = Math.abs(correlation);
-      const weight = this.positionWeights.get(other) || 0;
+      const weight = weights.get(other) || 0;
 
       concentrationScore += absCorrelation * weight;
 
@@ -125,7 +145,7 @@ class RiskConcentrationAnalyzer {
       }
     }
 
-    const ownWeight = this.positionWeights.get(symbol) || 0;
+    const ownWeight = weights.get(symbol) || 0;
     concentrationScore += ownWeight;
 
     const isOverexposed = concentrationScore > this.config.maxConcentration;
@@ -151,36 +171,38 @@ class RiskConcentrationAnalyzer {
   /**
    * Recalculate all concentration scores
    */
-  recalculateScores(): void {
+  recalculateScores(mode: RcMode): void {
     const correlationMatrix = covarianceEngine.getCorrelationMatrix();
     if (!correlationMatrix) {
       console.log(`[9.4][RISK] No correlation matrix available, skipping score calculation`);
       return;
     }
 
-    this.concentrationScores.clear();
+    const scores = this._scores(mode);
+    scores.clear();
     const { symbols } = correlationMatrix;
 
     for (const symbol of symbols) {
-      const score = this.calculateConcentrationScore(symbol, correlationMatrix);
-      this.concentrationScores.set(symbol, score);
+      const score = this.calculateConcentrationScore(mode, symbol, correlationMatrix);
+      scores.set(symbol, score);
     }
 
     this.lastUpdateTime = new Date();
-    const overexposed = Array.from(this.concentrationScores.values()).filter(s => s.isOverexposed);
-    console.log(`[9.4][RISK] Recalculated scores for ${symbols.length} symbols, ${overexposed.length} overexposed`);
+    const overexposed = Array.from(scores.values()).filter(s => s.isOverexposed);
+    console.log(`[9.4][RISK] Recalculated scores for ${symbols.length} symbols, ${overexposed.length} overexposed (mode=${mode})`);
   }
 
   /**
    * Get scaling factor for a symbol (used by SizingHelper)
    */
-  getScalingFactor(symbol: string): number {
-    const score = this.concentrationScores.get(symbol);
+  getScalingFactor(mode: RcMode, symbol: string): number {
+    const scores = this._scores(mode);
+    const score = scores.get(symbol);
     if (!score) {
       const correlationMatrix = covarianceEngine.getCorrelationMatrix();
       if (correlationMatrix && correlationMatrix.matrix[symbol]) {
-        const calculated = this.calculateConcentrationScore(symbol, correlationMatrix);
-        this.concentrationScores.set(symbol, calculated);
+        const calculated = this.calculateConcentrationScore(mode, symbol, correlationMatrix);
+        scores.set(symbol, calculated);
         return calculated.scalingFactor;
       }
       return 1;
@@ -192,14 +214,14 @@ class RiskConcentrationAnalyzer {
    * Check if adding a position would create correlated exposure
    * Returns true if correlation with existing positions exceeds threshold
    */
-  isCorrelatedExposure(symbol: string): boolean {
+  isCorrelatedExposure(mode: RcMode, symbol: string): boolean {
     const correlationMatrix = covarianceEngine.getCorrelationMatrix();
     if (!correlationMatrix) return false;
 
     const { matrix } = correlationMatrix;
     if (!matrix[symbol]) return false;
 
-    for (const [existingSymbol, weight] of this.positionWeights.entries()) {
+    for (const [existingSymbol, weight] of this._weights(mode).entries()) {
       if (weight <= 0 || existingSymbol === symbol) continue;
       
       const correlation = matrix[symbol]?.[existingSymbol];
@@ -215,31 +237,33 @@ class RiskConcentrationAnalyzer {
   /**
    * Get concentration score for a symbol
    */
-  getConcentrationScore(symbol: string): ConcentrationScore | null {
-    return this.concentrationScores.get(symbol) || null;
+  getConcentrationScore(mode: RcMode, symbol: string): ConcentrationScore | null {
+    return this._scores(mode).get(symbol) || null;
   }
 
   /**
    * Get all concentration scores
    */
-  getAllScores(): ConcentrationScore[] {
-    return Array.from(this.concentrationScores.values());
+  getAllScores(mode: RcMode): ConcentrationScore[] {
+    return Array.from(this._scores(mode).values());
   }
 
   /**
    * Calculate overall portfolio exposure metrics
    */
-  getPortfolioExposure(): PortfolioExposure {
+  getPortfolioExposure(mode: RcMode): PortfolioExposure {
     const correlationMatrix = covarianceEngine.getCorrelationMatrix();
     let totalExposure = 0;
     let correlatedExposure = 0;
     const overexposedSymbols: string[] = [];
+    const weights = this._weights(mode);
+    const scores = this._scores(mode);
 
-    for (const [symbol, weight] of this.positionWeights.entries()) {
+    for (const [symbol, weight] of weights.entries()) {
       totalExposure += weight;
 
       if (correlationMatrix && correlationMatrix.matrix[symbol]) {
-        for (const [other, otherWeight] of this.positionWeights.entries()) {
+        for (const [other, otherWeight] of weights.entries()) {
           if (other === symbol) continue;
           const correlation = correlationMatrix.matrix[symbol][other] ?? 0;
           if (Math.abs(correlation) >= this.config.correlationThreshold) {
@@ -248,7 +272,7 @@ class RiskConcentrationAnalyzer {
         }
       }
 
-      const score = this.concentrationScores.get(symbol);
+      const score = scores.get(symbol);
       if (score?.isOverexposed) {
         overexposedSymbols.push(symbol);
       }
@@ -289,7 +313,9 @@ class RiskConcentrationAnalyzer {
     if (updated > 0) {
       covarianceEngine.computeCovarianceMatrix();
       covarianceEngine.computeCorrelationMatrix();
-      this.recalculateScores();
+      // P19-B4b D5: this periodic market-data path is dormant (no external caller of
+      // startPeriodicUpdates/updateFromMarketData); recalc the paper mode by default.
+      this.recalculateScores('paper');
     }
 
     console.log(`[9.4][RISK] Market data update: ${updated}/${symbols.length} symbols in ${Date.now() - startTime}ms`);
@@ -345,17 +371,19 @@ class RiskConcentrationAnalyzer {
   /**
    * Get diagnostic information
    */
-  getDiagnostics(): {
+  getDiagnostics(mode: RcMode = 'paper'): {
     positionCount: number;
     scoreCount: number;
     overexposedCount: number;
     lastUpdateTime: Date | null;
     config: RiskConcentrationConfig;
   } {
-    const overexposed = Array.from(this.concentrationScores.values()).filter(s => s.isOverexposed);
+    const weights = this._weights(mode);
+    const scores = this._scores(mode);
+    const overexposed = Array.from(scores.values()).filter(s => s.isOverexposed);
     return {
-      positionCount: this.positionWeights.size,
-      scoreCount: this.concentrationScores.size,
+      positionCount: weights.size,
+      scoreCount: scores.size,
       overexposedCount: overexposed.length,
       lastUpdateTime: this.lastUpdateTime,
       config: this.config
@@ -363,23 +391,28 @@ class RiskConcentrationAnalyzer {
   }
 
   /**
-   * Reset analyzer state
+   * Reset analyzer state. P19-B4b D5: pass a mode to reset only that mode; omit to reset all.
    */
-  reset(): void {
+  reset(mode?: RcMode): void {
     this.stopPeriodicUpdates();
-    this.positionWeights.clear();
-    this.concentrationScores.clear();
+    if (mode) {
+      this._weights(mode).clear();
+      this._scores(mode).clear();
+    } else {
+      this.positionWeightsByMode.clear();
+      this.concentrationScoresByMode.clear();
+    }
     this.lastUpdateTime = null;
-    console.log(`[9.4][RISK] Analyzer reset`);
+    console.log(`[9.4][RISK] Analyzer reset${mode ? ` (mode=${mode})` : ' (all modes)'}`);
   }
 }
 
 export const riskConcentrationAnalyzer = new RiskConcentrationAnalyzer();
 
-export function getScalingFactor(symbol: string): number {
-  return riskConcentrationAnalyzer.getScalingFactor(symbol);
+export function getScalingFactor(mode: RcMode, symbol: string): number {
+  return riskConcentrationAnalyzer.getScalingFactor(mode, symbol);
 }
 
-export function isCorrelatedExposure(symbol: string): boolean {
-  return riskConcentrationAnalyzer.isCorrelatedExposure(symbol);
+export function isCorrelatedExposure(mode: RcMode, symbol: string): boolean {
+  return riskConcentrationAnalyzer.isCorrelatedExposure(mode, symbol);
 }

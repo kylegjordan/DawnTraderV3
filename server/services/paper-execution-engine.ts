@@ -402,7 +402,7 @@ export class PaperExecutionEngine {
           covarianceEngine.computeCorrelationMatrix();
           // Import and call recalculateScores to update concentration metrics
           const { riskConcentrationAnalyzer } = await import('./risk-concentration.js');
-          riskConcentrationAnalyzer.recalculateScores();
+          riskConcentrationAnalyzer.recalculateScores(this.mode); // P19-B4b D5: per-mode scores
           console.log(`[9.4][COV] Engine initialized with ${loadedCount}/${topSymbols.length} symbols`);
         } else {
           console.log(`[9.4][COV] Insufficient data (${loadedCount} symbols) - need >= 2 for correlation`);
@@ -2732,6 +2732,7 @@ export class PaperExecutionEngine {
             return;
           }
           const sizingResult = sizePaperPositionForSignal({
+            mode: this.mode, // P19-B4b D5: per-mode concentration sizing
             portfolioValue,
             guardrails,
             entryPrice: signal.entryPrice,

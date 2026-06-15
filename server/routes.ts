@@ -5738,13 +5738,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // NOTE: Paper trading is SYSTEM-WIDE. Only ONE simulation can run at a time.
   // All users see the same simulation status.
   
-  // Initialize on global object so paper-sim-service can access it
-  if ((global as any).globalPaperPortfolioManager === undefined) {
-    (global as any).globalPaperPortfolioManager = null;
-  }
-  if ((global as any).globalPaperSimOperationLock === undefined) {
-    (global as any).globalPaperSimOperationLock = null;
-  }
+  // P19-B4b D5: the manager is now a lazily-initialized per-mode Map inside paper-sim-service
+  // (getGlobalPaperSimManager), so no global init is needed here. The operation-lock init was
+  // removed with the vestigial lock/flag mechanism (see DELETED_COMPONENTS_LOG.md).
 
   // Global system-wide simulation session registry
   // NOTE: This is SYSTEM-WIDE, not user-specific. All users see the same simulation status.
@@ -11233,12 +11229,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.json({ success: true, message: result.message });
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
-      (global as any).globalPaperSimOperationLock = null;
+      // P19-B4b D5: vestigial operation-lock / busy-flag clears removed (mechanism deleted —
+      // superseded by paperOperationQueue since Phase 41F). See DELETED_COMPONENTS_LOG.md.
       res.status(500).json({ error: error.message || 'Failed to start paper trading simulation' });
-    } finally {
-      // Phase 41D: Ensure busy flag is always cleared
-      (global as any).globalPaperSimBusyFlag = false;
-      console.log('[41D-FIX] Busy flag cleared in finally block');
     }
   });
 
@@ -11270,7 +11263,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.json({ success: true, message: result.message });
     } catch (error: any) {
       console.error('Error stopping paper trading simulation:', error);
-      (global as any).globalPaperSimOperationLock = null;
+      // P19-B4b D5: vestigial operation-lock clear removed (mechanism deleted).
       res.status(500).json({ error: error.message || 'Failed to stop paper trading simulation' });
     }
   });
@@ -11702,7 +11695,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     // Directive 12.2.3: Bob Core transparent routing removed (Batch 7B)
     try {
       // Return GLOBAL system-wide status (same for all users)
-      const hasUISimulation = (global as any).globalPaperPortfolioManager !== null;
+      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
+      const hasUISimulation = getGlobalPaperSimManager('paper') !== null; // P19-B4b D5: per-mode accessor
       const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
       const has48HrSimulation = !!(globalSession && globalSession.isRunning);
       
@@ -12645,7 +12639,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const status = await getPaperSimulationStatus(userId);
-      const manager = (global as any).globalPaperPortfolioManager;
+      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
+      const manager = getGlobalPaperSimManager('paper'); // P19-B4b D5: per-mode accessor
       
       if (!status.isRunning || !manager) {
         const stats = await storage.getPaperSimStats('paper');
@@ -12683,7 +12678,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const status = await getPaperSimulationStatus(userId);
-      const manager = (global as any).globalPaperPortfolioManager;
+      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
+      const manager = getGlobalPaperSimManager('paper'); // P19-B4b D5: per-mode accessor
       
       if (!status.isRunning || !manager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
@@ -12701,7 +12697,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const status = await getPaperSimulationStatus(userId);
-      const manager = (global as any).globalPaperPortfolioManager;
+      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
+      const manager = getGlobalPaperSimManager('paper'); // P19-B4b D5: per-mode accessor
       
       if (!status.isRunning || !manager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });

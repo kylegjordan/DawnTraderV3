@@ -801,9 +801,9 @@ export async function checkGuardrailRisk(
     const price = parseFloat(pos.entryPrice) || 0;
     weights[pos.symbol] = qty * price;
   }
-  riskConcentrationAnalyzer.updatePositionWeights(weights);
-  
-  if (isCorrelatedExposure(trade.symbol)) {
+  riskConcentrationAnalyzer.updatePositionWeights(mode, weights); // P19-B4b D5: per-mode weights
+
+  if (isCorrelatedExposure(mode, trade.symbol)) { // P19-B4b D5: per-mode correlation check
     const correlationResult: TradeSafetyResult = {
       ok: false,
       code: 'CORRELATION_EXPOSURE',
