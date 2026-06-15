@@ -47,7 +47,8 @@
 - **Push:** `fd05fe7b7..1523ff7ac` from the Google-Drive source-of-truth folder; sync gate both-directions-0.
 - **Staging deploy verified:** db:migrate applied all 3 pending migrations (C3 fill-safety seed ✓, C6 calibration_state ✓, C8 cap-correction ✓); build done; `pm2 restart` online; **HTTP 200**; clean boot (`[P19-B4a][C4][INIT_OK] classify fall-through escalation hook registered`, BOOT_ORCHESTRATOR INIT_OK, TEC_PRIME 4 classes warmed 30ms). DB confirms: xstock_spot `pattern_max_position_pct` = **0.15** (C8), 5 `xstock_fill_safety` rows (C3), `calibration_state` columns present on both paper_sim tables with 0 nulls (C6). C7 NOT applied (deferred #237).
 - **UI verification (§9.3): N/A** — the xStock active dispatch + all gates are DORMANT (`isEngineActive`=false) until B7b; there is no UI-visible behavior change to Chrome-verify (§9.1 scaffolding). Backend evidence above is the appropriate Step-7 proof.
-- **Langston Step-4: APPROVE-WITH-CONDITIONS** (3 decisions ratified; conditions 2–4 confirmed inline; condition 1 homed #238). Step-8 deploy-evidence confirm: _pending lightweight Langston confirm._
+- **Langston Step-4: APPROVE-WITH-CONDITIONS** (3 decisions ratified; conditions 2–4 confirmed inline; condition 1 homed #238).
+- **Langston Step-8: CONFIRMED-CLOSED** — independently re-verified on staging (cap=0.15 both classes, exactly 5 `xstock_fill_safety` rows matching the seed, `calibration_state` NOT NULL DEFAULT on both paper_sim tables, hook at `index.ts:245`, engine DORMANT/passive). Deferred homes confirmed §13-compliant. **SHA NOTE (Langston):** deployed CODE = `1523ff7ac` (all C2–C8); repo head = `659b8c60e` (governance docs only — docs don't require redeploy; the SHA gap is consistent, NOT a deploy miss).
 
 ## Governance files changed (Step 10)
 - **Tier-1:** BATCH_CATALOG (P19-B4a row), PHASE_HISTORY, PHASE_19_PLAN §1/§5/§6, `.claude/memory/MEMORY.md` (repo-mirror) + the auto-loaded MEMORY truth file, this completion report.
