@@ -51,26 +51,18 @@ export class TradingEngine {
     telemetryTrace.trace('TradingEngine', 'ENGINE_STARTED', 'INFO', { mode: this.mode });
 
     // Phase 37: Start signal orchestrator for automatic signal generation
+    // P19-B4a C5: the hardcoded enabledStrategies allowlist was DISPOSED (rule-18).
+    // Per-asset-class strategy enablement is now DB-resolved at the orchestrator's
+    // buildSizedSignalForStrategy chokepoint (strategy_gates); per-symbol selection is
+    // regime-driven. The orchestrator no longer accepts an enabledStrategies config.
     this.signalOrchestrator = new SignalOrchestrator({
       mode: this.mode,
       evaluationIntervalMs: 30000, // 30 seconds
-      enabledStrategies: [
-        'vwap_pullback',
-        'abcd_long',
-        'sma_trend_ride',
-        'breakout',
-        'mean_reversion',
-        'range_trading',
-        'vwap_bounce',
-        'liquidity_trap',
-        'dhma'
-      ]
     });
 
-    telemetryTrace.trace('TradingEngine', 'SIGNAL_ORCHESTRATOR_INIT', 'INFO', { 
+    telemetryTrace.trace('TradingEngine', 'SIGNAL_ORCHESTRATOR_INIT', 'INFO', {
       mode: this.mode,
       interval: 30000,
-      strategies: 9
     });
 
     await this.signalOrchestrator.start(async (signal: StrategySignal) => {

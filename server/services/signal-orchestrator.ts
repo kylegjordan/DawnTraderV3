@@ -89,6 +89,7 @@ import {
   STRATEGY_DISPLAY_NAMES,
   normalizeStrategy,
   normalizePatternToCanonical,
+  isStrategyEnabledForAssetClass,
   type CanonicalRegimeType as MarketRegimeType
 } from '../config/canonical-regime-strategy-map.js';
 // Directive 11.4H Task 1: Symbol normalization at data ingress
@@ -146,7 +147,6 @@ import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.j
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
   evaluationIntervalMs?: number;
-  enabledStrategies?: string[];
 }
 
 export interface EvaluationStats {
@@ -207,7 +207,6 @@ export class SignalOrchestrator {
   private evaluationTimer: NodeJS.Timeout | null = null;
   private weightsRefreshTimer: NodeJS.Timeout | null = null; // L9: Timer for strategy weights cache refresh
   private readonly evaluationIntervalMs: number;
-  private readonly enabledStrategies: Set<string>;
   private onSignalCallback: ((signal: StrategySignal) => Promise<void>) | null = null;
   
   private stats: EvaluationStats = {
@@ -224,30 +223,12 @@ export class SignalOrchestrator {
     this.evaluationIntervalMs = config.evaluationIntervalMs ||
       getCachedNumberRequired('signal_orchestrator', 'evaluation_interval_ms',
         { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
-    // Directive 12.3.2: All 17 canonical strategies enabled by default
-    this.enabledStrategies = new Set(config.enabledStrategies || [
-      // Original 9
-      'vwap_pullback',
-      'abcd_long',
-      'sma_trend_ride',
-      'breakout',
-      'mean_reversion',
-      'range_trading',      // Legacy name — canonical map uses 'range_trade'
-      'range_trade',        // Directive 12.3.2: Canonical name added
-      'vwap_bounce',
-      'liquidity_trap',
-      'dhma',
-      // Directive 12.3.2: 8 new strategies
-      'morning_star',
-      'inside_bar_reversal',
-      'support_bounce',
-      'pivot_shift',
-      'reverse_impulse',
-      'defensive_hedge',
-      'adaptive_flow',
-      'volatility_edge'
-    ]);
-    
+    // P19-B4a C5: the hardcoded enabledStrategies allowlist was DISPOSED (rule-18).
+    // Per-asset-class strategy enablement is now resolved from DB at the
+    // buildSizedSignalForStrategy chokepoint via isStrategyEnabledForAssetClass
+    // (strategy_gates) — the sole authority. Per-symbol regime selection still happens
+    // in evaluateSymbol via the MCE regime allowlist.
+
     this.strategyEngine = new StrategyEngine();
     // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
     this.kraken = new KrakenService();
@@ -284,13 +265,17 @@ export class SignalOrchestrator {
       console.warn(`[L10][BIAS_WARMUP] Failed to pre-warm exposure bias cache:`, err);
     }
     
-    console.log(`[37.A][SignalOrchestrator][${this.mode}] Starting with ${this.enabledStrategies.size} strategies, interval ${this.evaluationIntervalMs}ms`);
+    // P19-B4a C5: the hardcoded enabledStrategies Set was disposed. The strategy
+    // universe is the canonical map; per-class enablement is DB-resolved at the build
+    // chokepoint and per-symbol selection is regime-driven in evaluateSymbol.
+    const strategyUniverseCount = Object.keys(STRATEGY_DISPLAY_NAMES).length;
+    console.log(`[37.A][SignalOrchestrator][${this.mode}] Starting with ${strategyUniverseCount} strategies (canonical universe; per-class gate is DB-resolved), interval ${this.evaluationIntervalMs}ms`);
     console.log(`[B.3][FLOW_CORRECTED] Signal flow order: Sizing → Metrics → SQE → RTB → TCL`);
     console.log(`[WARMUP][DEBUG] SignalOrchestrator starting (non-blocking)`);
-    telemetryTrace.trace('SignalOrchestrator', 'START', 'INFO', { 
-      mode: this.mode, 
-      strategies: this.enabledStrategies.size, 
-      interval: this.evaluationIntervalMs 
+    telemetryTrace.trace('SignalOrchestrator', 'START', 'INFO', {
+      mode: this.mode,
+      strategies: strategyUniverseCount,
+      interval: this.evaluationIntervalMs
     });
 
     this.evaluateMarket().catch(err => {
@@ -391,14 +376,6 @@ export class SignalOrchestrator {
     return { ...this.stats };
   }
 
-  isStrategyEnabled(strategyId: string): boolean {
-    return this.enabledStrategies.has(strategyId);
-  }
-
-  getEnabledStrategies(): string[] {
-    return Array.from(this.enabledStrategies);
-  }
-
   /**
    * P19-B4a (C2 stamp-at-source wire-in) — PUBLIC external-dispatch entry.
    * The xStock active path is a separate scanner/cycle, decoupled from this orchestrator
@@ -462,6 +439,20 @@ export class SignalOrchestrator {
         `symbol=${rawSignal.symbol} strategy=${strategyId} mode=${sizingContext.mode}. The dispatch ` +
         `pipe must stamp the asset class (invariant: one sizingContext = one class = one pipe).`,
       );
+    }
+
+    // P19-B4a C5 (A5): DB-resolved per-asset-class strategy gate (replaces the disposed
+    // hardcoded enabledStrategies allowlist). Authoritative for BOTH pipes (crypto via
+    // evaluateSymbol, xStock via dispatchExternalSignal) since the stamped class lives here.
+    // strategyId is the 9-wide StrategyType union ('range_trading'); the gate + strategy_gates
+    // rows + STRATEGY_DISPLAY_NAMES use the canonical name ('range_trade'). normalizeStrategy()
+    // does NOT bridge this (its legacy map is PascalCase + 'range_trading' is not a
+    // STRATEGY_DISPLAY_NAMES key → returns unchanged → silent default-open), so an explicit
+    // one-entry reverse-alias is required (mirror of the C2 forward-alias).
+    const _canonicalStrategy = strategyId === 'range_trading' ? 'range_trade' : (strategyId as string);
+    if (!isStrategyEnabledForAssetClass(_canonicalStrategy, _stampedAssetClass)) {
+      console.log(`[P19-B4a][C5][STRATEGY_GATE] blocked ${rawSignal.symbol}/${_canonicalStrategy} — disabled for assetClass=${_stampedAssetClass} (strategy_gates DB).`);
+      return null;
     }
 
     // W2.1 (2026-06-06): central max-holding-ms stamp for the active dispatch
@@ -1353,7 +1344,10 @@ export class SignalOrchestrator {
 
       for (const symbol of eligibleSymbols) {
         try {
-          const selectedStrategies = Array.from(this.enabledStrategies);
+          // P19-B4a C5: log-only — the disposed enabledStrategies Set is replaced by the
+          // canonical strategy universe for this banner. Actual per-symbol selection is
+          // regime-driven (evaluateSymbol) and per-class enablement is DB-resolved.
+          const selectedStrategies = Object.keys(STRATEGY_DISPLAY_NAMES);
           console.log("[8.8.3-B][SELECTION]", JSON.stringify({
             symbol,
             regime: null,
@@ -1364,7 +1358,11 @@ export class SignalOrchestrator {
 
           const signals = await this.evaluateSymbol(symbol, settings, filters, sizingContext, fx5Survivors, symbolFamilies, STRATEGY_FAMILY_MAP, HYBRID_FAMILY_ELIGIBILITY, vnMaxVeto);
           symbolsEvaluated++;
-          strategiesRun += this.enabledStrategies.size;
+          // P19-B4a C5: stat counter — the disposed enabledStrategies.size is replaced by
+          // the canonical strategy-universe count (activeStrategies is local to
+          // evaluateSymbol and not in scope here; this is the faithful stand-in for the
+          // former fixed per-symbol count).
+          strategiesRun += Object.keys(STRATEGY_DISPLAY_NAMES).length;
           signalsGenerated += signals.length;
 
           for (const signal of signals) {
@@ -1662,10 +1660,12 @@ export class SignalOrchestrator {
       console.log(`[Phase13][MCE] ${symbol}: regime=${mceContext.regime.regime}, weight=${mceContext.regime.regimeWeight.toFixed(2)}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
 
       // Phase 13: Strategy filtering from MCE regime (replaces DSS getRegimeAllowedStrategies)
+      // P19-B4a C5: the hardcoded enabledStrategies allowlist was disposed — the regime map
+      // IS the per-symbol selector, and the DB-resolved per-asset-class gate at the
+      // buildSizedSignalForStrategy chokepoint is now the per-class authority. So the
+      // regime allowlist is taken directly (no intersection with a static enabled set).
       const regimeStrategies = new Set(mceContext.regime.allowedStrategies);
-      const activeStrategies = new Set(
-        [...this.enabledStrategies].filter(s => regimeStrategies.has(s))
-      );
+      const activeStrategies = new Set(regimeStrategies);
 
       // Batch 22: Family-aware strategy filtering
       // Only run strategies whose family matches the families this symbol survived.

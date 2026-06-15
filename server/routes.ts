@@ -10614,20 +10614,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const strategyEngine = new StrategyEngine();
 
-      // REB 2.12F: Read source code to verify orchestrator enabledStrategies set
-      const orchestratorPath = path.join(process.cwd(), 'server/services/signal-orchestrator.ts');
-      const orchestratorSource = fs.readFileSync(orchestratorPath, 'utf-8');
-      
-      // Parse the enabledStrategies set from source code
-      const enabledMatch = orchestratorSource.match(/enabledStrategies\s*=\s*new\s*Set\([^[]*\[([\s\S]*?)\]/);
-      const sourceStrategies = enabledMatch 
-        ? enabledMatch[1].match(/'([a-z_]+)'/g)?.map(s => s.replace(/'/g, '')) || []
-        : [];
-      
-      // Verify DHMA evaluation block is uncommented in source
-      const dhmaBlockPattern = /if\s*\(this\.enabledStrategies\.has\('dhma'\)\)\s*\{[\s\S]*?detectDHMA[\s\S]*?\}/;
-      const dhmaCommentedPattern = /\/\/\s*if\s*\(this\.enabledStrategies\.has\('dhma'\)\)/;
-      const dhmaWired = dhmaBlockPattern.test(orchestratorSource) && !dhmaCommentedPattern.test(orchestratorSource);
+      // P19-B4a (C5): the hardcoded orchestrator `enabledStrategies` Set was disposed
+      // (replaced by the DB-resolved isStrategyEnabledForAssetClass gate at the
+      // buildSizedSignalForStrategy chokepoint). This diagnostic previously regex-parsed
+      // the orchestrator SOURCE TEXT for that Set — a fragile coupling broken by the
+      // disposal. Re-point it at the canonical strategy SSOT so it reports the real
+      // strategy universe instead of a source match.
+      const { STRATEGY_DISPLAY_NAMES } = await import('./config/canonical-regime-strategy-map.js');
+      const sourceStrategies = Object.keys(STRATEGY_DISPLAY_NAMES);
+      // DHMA is wired iff it is a registered canonical strategy (dispatch is now
+      // DB-gated per asset class, not a source-commented block).
+      const dhmaWired = 'dhma' in STRATEGY_DISPLAY_NAMES;
 
       const strategyMethods: { id: string; displayName: string; method: string }[] = [
         { id: 'vwap_pullback', displayName: 'VWAP Pullback', method: 'detectVWAPPullback' },
