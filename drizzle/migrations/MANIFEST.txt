@@ -136,3 +136,4 @@
 2026-06-12a-b5-evgap-units-epoch.sql
 2026-06-14-p19-b4a-c3-xstock-fill-safety-seed.sql
 2026-06-14-p19-b4a-c6-paper-sim-calibration-state.sql
+2026-06-14-p19-b4a-c8-xstock-pattern-cap-correction.sql
