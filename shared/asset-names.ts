@@ -245,11 +245,21 @@ export function getAssetName(
   const baseSymbol = pair.split('/')[0]?.toUpperCase();
   if (!baseSymbol) return null;
 
+  // #298: a "name" that merely echoes the base ticker (e.g. CRYPTO_NAMES['XRP']='XRP',
+  // or an xstock_spot_universe row whose name was stored as the ticker like PALL→'PALL')
+  // is a non-name placeholder — it adds nothing the symbol line already shows. Return
+  // such cases (and outright misses) as null so the UI hides the redundant middle line
+  // instead of echoing the ticker. Real distinct names (e.g. 'Bitcoin Cash', 'Seagate…')
+  // still render. Backfilling real names for the placeholders is a separate data task
+  // (RUNNING_ISSUES #298) — including the xStock universe-discovery name-fetch gap.
+  const realName = (name: string | null | undefined): string | null =>
+    name && name.trim().toUpperCase() !== baseSymbol ? name : null;
+
   if (assetClass.startsWith('crypto')) {
-    const name = CRYPTO_NAMES[baseSymbol];
+    const name = realName(CRYPTO_NAMES[baseSymbol]);
     if (name) return name;
     _warnUnmappedOnce(pair, assetClass);
-    return baseSymbol; // fail-loud fallback: show ticker, not blank
+    return null; // #298: no real name available → hide the line (was: ticker echo)
   }
 
   if (assetClass.startsWith('xstock') || assetClass.startsWith('equity')) {
@@ -257,14 +267,14 @@ export function getAssetName(
     // bundled into the client is empty post-B79.0n.UNIVERSE-DISCOVERY (registry
     // is server-side dynamic). Frontend fetches /api/xstocks/asset-names once
     // and calls setXstockNameOverlay() to populate the overlay.
-    const overlay = _xstockNameOverlay.get(pair);
+    const overlay = realName(_xstockNameOverlay.get(pair));
     if (overlay) return overlay;
     // B-NEW-30 server-side path: read from SSOT registry in asset-classes.ts.
     // getXstockName takes the FULL pair (e.g. 'AAPL/USD'), not just the base symbol.
-    const name = getXstockName(pair);
+    const name = realName(getXstockName(pair));
     if (name) return name;
     _warnUnmappedOnce(pair, assetClass);
-    return baseSymbol;
+    return null; // #298
   }
 
   return null;
