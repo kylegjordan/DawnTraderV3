@@ -21,6 +21,36 @@ export interface TradingStateChangeEvent {
   timestamp: Date;
 }
 
+// P19-B4b D5 — pure, testable helpers for the liveness invariant-check (the Phase-21 co-run
+// witness). Extracted so the "split-fires-on-disagreement" and "settling-suppresses-in-flight"
+// logic can be unit-tested without mocking the engine/orchestrator/vtsAudit module graph.
+
+/** True once a flip has settled (no false-positive while a start/stop transition is in flight). */
+export function isFlipSettled(now: number, flippedAt: number, settlingMs: number): boolean {
+  return now - flippedAt >= settlingMs;
+}
+
+/**
+ * The per-mode liveness invariant: the DB `isEngineActive(mode)` SSOT must equal engine presence
+ * (and, for paper, orchestrator presence). Returns one entry per disagreement (empty = consistent).
+ * `orchestratorPresent` is null when not applicable (live has no orchestrator in this slot).
+ */
+export function livenessSplitsForMode(
+  mode: TradingMode,
+  dbActive: boolean,
+  enginePresent: boolean,
+  orchestratorPresent: boolean | null
+): Array<{ key: string; reason: string }> {
+  const out: Array<{ key: string; reason: string }> = [];
+  if (dbActive !== enginePresent) {
+    out.push({ key: mode, reason: `db=${dbActive} vs enginePresent=${enginePresent}` });
+  }
+  if (mode === 'paper' && orchestratorPresent !== null && dbActive !== orchestratorPresent) {
+    out.push({ key: 'paper-orchestrator', reason: `db=${dbActive} vs orchestratorPresent=${orchestratorPresent}` });
+  }
+  return out;
+}
+
 export class TradingStateSync {
   private currentMode: Map<string, TradingMode> = new Map();
   private initialized = false;
@@ -644,18 +674,15 @@ export class TradingStateSync {
       ];
       for (const [mode, ctx] of perMode) {
         const flippedAt = this.lastEngineFlipAt.get(mode) ?? 0;
-        if (now - flippedAt < this.LIVENESS_SETTLING_MS) continue; // in-flight transition — skip
+        if (!isFlipSettled(now, flippedAt, this.LIVENESS_SETTLING_MS)) continue; // in-flight — skip
         const dbActive = ctx?.isEngineActive ?? false;
         const enginePresent = getEngine(mode) !== null;
-        if (dbActive !== enginePresent) {
-          this.recordLivenessSplit(mode, `db=${dbActive} vs enginePresent=${enginePresent}`);
-        }
         // Orchestrator lives under the paper manager today; only meaningful for paper.
-        if (mode === 'paper' && getOrchestratorByMode) {
-          const orchPresent = getOrchestratorByMode('paper') !== null;
-          if (dbActive !== orchPresent) {
-            this.recordLivenessSplit('paper-orchestrator', `db=${dbActive} vs orchestratorPresent=${orchPresent}`);
-          }
+        const orchestratorPresent = (mode === 'paper' && getOrchestratorByMode)
+          ? (getOrchestratorByMode('paper') !== null)
+          : null;
+        for (const split of livenessSplitsForMode(mode, dbActive, enginePresent, orchestratorPresent)) {
+          this.recordLivenessSplit(split.key, split.reason);
         }
       }
 
