@@ -38,6 +38,7 @@
 - `1-system-manual/RUNNING_ISSUES.md` — #296 (S3 deferred + credential-keying + named follow-up home), #297 (R1 paper-default revisit caveat).
 - `1-system-manual/PHASE_19_PLAN.md` — §5 decision log: D5 closure + C3 credential-keying amendment + the numbered Phase-21 co-run gate.
 - `1-system-manual/SYSTEM_IMPACT_MAP.md` — Cross-Cutting Registry: D5 isolation status banner + the liveness consolidation-target marked SHIPPED.
+- `1-system-manual/SYSTEM_MANUAL.md` — **(added 2026-06-15 — this was MISSED in the first governance pass; Kyle caught it)** the dual-engine "Runtime Shared-State" box now records that D5 SHIPPED the per-mode isolation + the DB-SSOT liveness model (H1 write-then-broadcast-on-commit + the `LIVENESS_SPLIT` Objective-3 witness), and the #214 "lying-state surfaces" note reflects the consolidation. Lesson logged: reorganizing a doc (the 2026-06-15 navigability pass) is NOT the same as keeping its content current — the System Manual gets a content update at every batch that changes architecture, no exceptions.
 - `1-system-manual/BATCH_CATALOG.md` + `PHASE_HISTORY.md` (Tier-1).
 - MEMORY (3-way: user-cache truth + in-repo mirror + Langston Helsinki).
 - `Claude Comms and Packages/` — `P19_B4b_D5_DESIGN_REFINEMENTS.md`, `P19_B4b_D5_CHANGE_LIST.md`, this report.
