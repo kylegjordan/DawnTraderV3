@@ -113,35 +113,45 @@ export async function runQdProbeOnce(fireTime: Date, config: QdProbeConfig): Pro
   const fireMs = fireTime.getTime();
   const bucketStart = floorToCadenceGrid(fireMs, config.cadenceMinutes);
   const symbols = Array.from(XSTOCK_SPOT_SYMBOLS);
-  const universeSet = new Set(symbols);
   const representative = symbols[0] ?? 'AAPL/USD';
   const marketOpen = isXstockMarketOpenUTC(representative, fireTime);
 
-  // Latest snap per symbol in ONE index-served query (DISTINCT ON over the
-  // xStock-only ticker table; filtered to the active universe in JS).
-  const snapRes = await db.execute<SnapRow>(sql`
-    SELECT DISTINCT ON (symbol)
-           symbol,
-           bid::text     AS bid,
-           ask::text     AS ask,
-           bid_qty::text AS bid_qty,
-           ask_qty::text AS ask_qty,
-           captured_at
-      FROM xstock_spot_ticker_snap
-     ORDER BY symbol, captured_at DESC
-  `);
-  const snapRows = (snapRes as any).rows ?? (snapRes as unknown as SnapRow[]);
-
+  // Latest snap per symbol via the `(symbol, captured_at)` index — one LIMIT-1
+  // indexed seek per symbol, bounded concurrency. ★Step-7 fix: the earlier
+  // single `DISTINCT ON (symbol)` with NO WHERE did a FULL-TABLE scan+sort of
+  // the multi-GB tick archive and hit the 30s statement_timeout (Postgres does
+  // not auto-do a loose index skip-scan). Per-symbol seeks are O(log n) each
+  // (range-scan symbol, walk to max captured_at, LIMIT 1) — instant; ~40 of
+  // them across the pool. Mirrors `depth-source.ts`. No quote filter here — we
+  // capture + CLASSIFY degenerate quotes (A1), we don't drop them.
   const snapBySymbol = new Map<string, QdRawSnap>();
-  for (const r of snapRows as SnapRow[]) {
-    if (!universeSet.has(r.symbol)) continue; // only the active universe
-    snapBySymbol.set(r.symbol, {
-      bid: r.bid !== null ? parseFloat(r.bid) : null,
-      ask: r.ask !== null ? parseFloat(r.ask) : null,
-      bidQty: r.bid_qty !== null ? parseFloat(r.bid_qty) : null,
-      askQty: r.ask_qty !== null ? parseFloat(r.ask_qty) : null,
-      capturedAtMs: r.captured_at !== null ? new Date(r.captured_at).getTime() : null,
-    });
+  const SNAP_QUERY_CONCURRENCY = 8;
+  for (let i = 0; i < symbols.length; i += SNAP_QUERY_CONCURRENCY) {
+    const batch = symbols.slice(i, i + SNAP_QUERY_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (sym): Promise<SnapRow | null> => {
+        const res = await db.execute<SnapRow>(sql`
+          SELECT symbol, bid::text AS bid, ask::text AS ask,
+                 bid_qty::text AS bid_qty, ask_qty::text AS ask_qty, captured_at
+            FROM xstock_spot_ticker_snap
+           WHERE symbol = ${sym}
+           ORDER BY captured_at DESC
+           LIMIT 1
+        `);
+        const rows = (res as any).rows ?? (res as unknown as SnapRow[]);
+        return Array.isArray(rows) && rows.length ? (rows[0] as SnapRow) : null;
+      }),
+    );
+    for (const r of results) {
+      if (!r) continue;
+      snapBySymbol.set(r.symbol, {
+        bid: r.bid !== null ? parseFloat(r.bid) : null,
+        ask: r.ask !== null ? parseFloat(r.ask) : null,
+        bidQty: r.bid_qty !== null ? parseFloat(r.bid_qty) : null,
+        askQty: r.ask_qty !== null ? parseFloat(r.ask_qty) : null,
+        capturedAtMs: r.captured_at !== null ? new Date(r.captured_at).getTime() : null,
+      });
+    }
   }
 
   const toInsert: InsertXstockQdProbeHistory[] = [];
