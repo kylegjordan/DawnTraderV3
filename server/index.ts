@@ -94,6 +94,23 @@ try {
   const { registerXstockUniverseCron } = await import('./services/xstock-universe-cron.js');
   registerXstockUniverseCron();
 
+  // P19-B5c (#86): start the continuous Q-D (quote-depth) friction probe cron —
+  // an always-on every-~5-min sweep that records per-symbol on-venue spread +
+  // top-of-book depth + freshness into `xstock_qd_probe_history` (capture-only;
+  // friction-extraction → B81/Phase-25). Fail-loud-but-non-crashing: a missing
+  // module_constants seed logs an error + leaves the cron unarmed (visible in
+  // the cron-registry boot log + smoke test) rather than taking down boot.
+  try {
+    const { registerXstockQdProbeCron } = await import('./services/xstock-qd-probe-cron.js');
+    await registerXstockQdProbeCron();
+  } catch (err) {
+    console.error(
+      '[CRITICAL][P19-B5c][qd-probe] cron failed to arm (qd_probe module_constants likely unseeded — ' +
+      'run `npm run db:migrate` for 2026-06-16-p19-b5c-qd-probe-history.sql):',
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
   // B-NAMES (2026-06-15): start the crypto asset-name backfill resolver — a
   // throttled background sweep (first run +90s, then every 6h) that fills the
   // real token name for crypto symbols the curated CRYPTO_NAMES map misses or

@@ -16,6 +16,7 @@ import {
   vector,
   serial,
   bigserial,
+  bigint,
   doublePrecision,
   real,
   numeric
@@ -4716,6 +4717,48 @@ export const xstockPerpTickerSnap = pgTable("xstock_perp_ticker_snap", tickerSna
 export const cryptoSpotTickerSnap = pgTable("crypto_spot_ticker_snap", tickerSnapColumns, (table) => ({
   symTimeIdx: index("crypto_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
 }));
+
+// ── P19-B5c (#86): continuous Q-D friction-evidence probe history ────────────
+// Compact DERIVED on-venue friction series (bid/ask spread + top-of-book depth
+// + freshness) per active xStock symbol, written every ~5 min by the
+// xstock-qd-probe cron from `xstock_spot_ticker_snap`. Retention-tuned (90d via
+// the B75 plain-table pass) so friction-extraction (B81/Phase-25) has a stable
+// long-horizon distribution the pruned+cold-offloaded raw tick archive cannot
+// provide. CAPTURE-ONLY this batch — nothing consumes it yet.
+//   ★D5: `bucket_start` = the probe-FIRE time floored to the cadence grid (NOT
+//   captured_at); `capturedAt` is the real snap timestamp (staleness source).
+//   UNIQUE(symbol,bucket_start) + ON CONFLICT DO NOTHING. The dedicated index is
+//   on `bucket_start` ALONE (the UNIQUE already indexes (symbol,bucket_start))
+//   so the B75 age-delete (WHERE bucket_start < cutoff) is served.
+//   ★A1: raw bid/ask/qty always stored; mid/spread/depth computed only when
+//   valid; degenerate quotes leave derived NULL + a `quote_quality` reason.
+export const xstockQdProbeHistory = pgTable("xstock_qd_probe_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  symbol: text("symbol").notNull(),
+  assetClass: text("asset_class").notNull().default("xstock_spot"), // forward-proof; xstock_spot-only this batch
+  bucketStart: timestamp("bucket_start", { withTimezone: true }).notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }),
+  recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  bid: numeric("bid", { precision: 20, scale: 8 }),
+  ask: numeric("ask", { precision: 20, scale: 8 }),
+  bidQty: numeric("bid_qty", { precision: 28, scale: 8 }),
+  askQty: numeric("ask_qty", { precision: 28, scale: 8 }),
+  mid: numeric("mid", { precision: 20, scale: 8 }),
+  spreadAbs: numeric("spread_abs", { precision: 20, scale: 8 }),
+  spreadBps: numeric("spread_bps", { precision: 12, scale: 4 }),
+  bidDepthNotional: numeric("bid_depth_notional", { precision: 28, scale: 8 }),
+  askDepthNotional: numeric("ask_depth_notional", { precision: 28, scale: 8 }),
+  snapAgeMs: bigint("snap_age_ms", { mode: "number" }),
+  stale: boolean("stale").notNull().default(false),
+  quoteQuality: text("quote_quality").notNull().default("ok"), // ok|crossed|zero_bid|zero_ask|nonpositive_mid|zero_depth|no_snap
+  metadata: jsonb("metadata").notNull().default(sql`'{"schema_version": 1}'::jsonb`),
+}, (table) => ({
+  symbolBucketUniq: uniqueIndex("xstock_qd_probe_history_symbol_bucket_uniq").on(table.symbol, table.bucketStart),
+  bucketIdx: index("xstock_qd_probe_history_bucket_idx").on(table.bucketStart),
+}));
+
+export type XstockQdProbeHistory = typeof xstockQdProbeHistory.$inferSelect;
+export type InsertXstockQdProbeHistory = typeof xstockQdProbeHistory.$inferInsert;
 
 // Type exports — B79.0e renamed const refs from equity*→xstock*. Type names
 // kept (Equity*) to avoid touching every importer; the underlying inferred

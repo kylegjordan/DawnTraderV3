@@ -78,6 +78,29 @@ const B74_TABLES: B74TableSpec[] = [
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
+// P19-B5c — PLAIN (non-partitioned) retention tables
+// ───────────────────────────────────────────────────────────────────────────
+// B75's partition machinery (pg_inherits / monthly YYYY_MM children / cold
+// archive) does NOT apply to a plain table — a plain table has no partition
+// children, so the partition loop above silently no-ops it. These tables get a
+// batched age-DELETE + VACUUM instead (the canonical context-bridge-log-ttl
+// pattern), NO cold-offload. This keeps B75 the SINGLE retention owner (one
+// cron / one script) without partitioning a small derived-telemetry table.
+// Table identifiers below are a STATIC allow-list (never user input) — safe to
+// interpolate into the DELETE/VACUUM (Postgres has no bind param for an ident).
+interface PlainRetentionTableSpec {
+  table: string;
+  timestampColumn: string;
+  retentionConstantName: string; // key in module_constants under data_lifecycle
+}
+
+const PLAIN_RETENTION_TABLES: PlainRetentionTableSpec[] = [
+  { table: 'xstock_qd_probe_history', timestampColumn: 'bucket_start', retentionConstantName: 'xstock_qd_probe_history.hot_retention_days' },
+];
+
+const PLAIN_DELETE_BATCH = 5000;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Config loader
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -114,6 +137,10 @@ async function loadConfig(client: pg.Client): Promise<SweepConfig> {
   const retentionByTable = new Map<string, number>();
   for (const spec of B74_TABLES) {
     retentionByTable.set(spec.parent, reqNum(spec.retentionConstantName));
+  }
+  // P19-B5c: plain (non-partitioned) retention tables share the same map.
+  for (const spec of PLAIN_RETENTION_TABLES) {
+    retentionByTable.set(spec.table, reqNum(spec.retentionConstantName));
   }
 
   return {
@@ -698,6 +725,79 @@ async function raiseSweepAlert(
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// P19-B5c — plain-table age-delete pass
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Batched age-DELETE + VACUUM for the plain (non-partitioned) retention tables.
+ * Mirrors the canonical context-bridge-log-ttl pattern (delete the oldest N rows
+ * by the timestamp column via a PK subselect, loop until under a batch, then
+ * VACUUM). No cold-offload — these are small derived-telemetry tables; rows past
+ * `hot_retention_days` are simply removed. Per-table failure is isolated +
+ * alerted; the partition sweep + the other plain tables continue.
+ */
+async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; failed: number }> {
+  let deletedTotal = 0;
+  let failed = 0;
+
+  for (const spec of PLAIN_RETENTION_TABLES) {
+    const retentionDays = cfg.retentionByTable.get(spec.table);
+    if (retentionDays === undefined) {
+      failed++;
+      console.error(`[B75 sweep][plain] ${spec.table}: no retention configured — skipping`);
+      continue;
+    }
+    const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
+    const ctl = new Client({ connectionString: process.env.DATABASE_URL });
+    await ctl.connect();
+    try {
+      let tableDeleted = 0;
+      // Delete the oldest rows in bounded batches (the bucket_start index serves
+      // the predicate; deleting by PK avoids long row-lock windows).
+      // Identifiers come from the static PLAIN_RETENTION_TABLES allow-list.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const r = await ctl.query(
+          `DELETE FROM ${spec.table}
+            WHERE id IN (
+              SELECT id FROM ${spec.table}
+               WHERE ${spec.timestampColumn} < $1
+               ORDER BY ${spec.timestampColumn} ASC
+               LIMIT $2
+            )`,
+          [cutoff, PLAIN_DELETE_BATCH],
+        );
+        const n = r.rowCount ?? 0;
+        tableDeleted += n;
+        if (n < PLAIN_DELETE_BATCH) break;
+      }
+      deletedTotal += tableDeleted;
+      await ctl.query(`VACUUM ${spec.table}`); // not in a txn; plain VACUUM — no exclusive lock
+      console.log(
+        `[B75 sweep][plain] ${spec.table}: deleted ${tableDeleted} rows older than ` +
+          `${cutoff.toISOString().slice(0, 10)} (retentionDays=${retentionDays}) + VACUUM`,
+      );
+    } catch (err) {
+      failed++;
+      console.error(
+        `[B75 sweep][plain] ${spec.table}: FAILED — ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await raiseSweepAlert(
+        `B75 plain-table retention FAILED: ${spec.table}`,
+        `The nightly age-delete for plain table ${spec.table} failed. Old rows were NOT removed ` +
+          `(data is safe; retried next run). Reason: ${err instanceof Error ? err.message : String(err)}`,
+        'warning',
+        { table: spec.table },
+      );
+    } finally {
+      await ctl.end();
+    }
+  }
+
+  return { deleted: deletedTotal, failed };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Main
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -799,14 +899,19 @@ async function main(): Promise<void> {
     }
   }
 
+  // P19-B5c: plain (non-partitioned) retention pass — runs after the partition
+  // sweep so B75 remains the single retention owner for all archive tables.
+  const plainResult = await sweepPlainTables(cfg);
+
   const totalMs = Date.now() - startedAt.getTime();
   console.log(
     `[B75 sweep] DONE — examined=${partitionsExamined} dropped=${partitionsDropped} ` +
       `failed=${partitionsFailed} bytes_freed=${bytesFreedTotal} ` +
-      `bytes_archived=${bytesArchivedTotal} duration_ms=${totalMs}`,
+      `bytes_archived=${bytesArchivedTotal} plain_deleted=${plainResult.deleted} ` +
+      `plain_failed=${plainResult.failed} duration_ms=${totalMs}`,
   );
 
-  if (partitionsFailed > 0) {
+  if (partitionsFailed > 0 || plainResult.failed > 0) {
     process.exit(1);
   }
 }
