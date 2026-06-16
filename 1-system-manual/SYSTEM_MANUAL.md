@@ -699,6 +699,8 @@ TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
 
 This is computed by `computeTotalRoundTripCost()` in `server/core/math/cost-model.ts`. Per-pair cost metrics (fee, slippage, spread) are sourced from `getCachedCostMetrics(symbol, assetClass)`. **B-4.5 (2026-06-11):** the fee component is DB-governed (`fee_model`, Tier-1 taker 0.008) — cache-miss defaults are fee=0.80% (DB-resolved, fail-hard), slippage=0.05%, spread=0.10% → total=**1.80%** (xstock synthesizes from the friction merge: spread 0.12% → **1.82%**).
 
+> **Friction-evidence substrate (P19-B5c, #86):** a continuous on-venue friction-evidence series now accrues in `xstock_qd_probe_history` (per-symbol bid/ask spread + top-of-book depth + freshness, every ~5 min; SIM §"qd-probe-service" + registry S15). It is **CAPTURE-ONLY** — consumption (deriving per-pair `perPairOverrides` from the spread/depth distribution to replace the static `spreadRateDefault`/`slippageRateDefault` per-class constants above) is deferred to **B81 / Phase-25 friction-extraction**, at which point this chapter gets the full per-pair-friction-model write.
+
 **Previously incorrect model** (deprecated, zero runtime callers as of Directive 12.1.2):
 ```
 friction = (entryPrice + exitPrice) × quantity × BASE_FEE_SLIPPAGE   // DEPRECATED
