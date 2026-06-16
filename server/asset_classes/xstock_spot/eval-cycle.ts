@@ -68,6 +68,7 @@ import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
 import { getCachedCostMetrics } from '../../core/math/cost-model.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver.js'; // B-NEW-53 shared forming-bar snapshot
+import { buildMacroSnapshot } from './macro-snapshot.js'; // P19-B5b (#94): xStock decision-time macro snapshot
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 import type { OHLCData } from '../../types/market-regime.types';
@@ -563,7 +564,7 @@ export async function evaluateXstockPairForVTS(
               regimeLabel: regime ?? undefined,
               rejectStage: 'strategy_internal',
               gateDecision: { gate: 'strategy_detect', accepted: false, reason },
-              features: { sourcePool: lane.sourcePool, detailReason: reason },
+              features: { sourcePool: lane.sourcePool, detailReason: reason, macro: buildMacroSnapshot() }, // P19-B5b #94
               // B-NEW-53: forming bar only — detect returned null, no stop/target yet.
               provenance: _provBase,
             });
@@ -664,7 +665,7 @@ export async function evaluateXstockPairForVTS(
                 netEv: kernelResult.netEV,
                 netEvFloor: VTS_NET_EV_FLOOR,
               },
-              features: { sourcePool: lane.sourcePool },
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() }, // P19-B5b #94
               // B-NEW-53: forming bar + the resolved stop/target LEVELS (RI-a checksum).
               provenance: _provBase
                 ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
@@ -700,7 +701,7 @@ export async function evaluateXstockPairForVTS(
                 accepted: false,
                 reason: gateCheck.reason,
               },
-              features: { sourcePool: lane.sourcePool },
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() }, // P19-B5b #94
               // B-NEW-53: forming bar + resolved stop/target LEVELS (RI-a checksum).
               provenance: _provBase
                 ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
@@ -817,6 +818,10 @@ export async function evaluateXstockPairForVTS(
               // Cohort marker + ATR
               pairIdHash: null, // crypto-only cohort A/B marker (B67.3)
               atrAtOpen: xOpenTrade.atrAtOpen ?? null,
+              // P19-B5b #94: decision-time equity-macro snapshot (VIX/DXY z + raw +
+              // freshness). Distinct from `macroModifierValue` above (the AMR modifier
+              // scalar) — this is the backdrop Phase-25 25-7 trains on.
+              macro: buildMacroSnapshot(),
             },
             modulators: {
               chain_modulated_confidence: null, // xStock applies no B67 confidence chain
