@@ -56,10 +56,9 @@ vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
     stallReconnectMsOffrth: 750000,
   }),
 }));
-vi.mock('../../asset_classes/xstock_spot/market-hours.js', () => ({
-  isXstockLiquidFillWindowET: () => true,
-  isInXstockWeekendClose: () => false,
-}));
+// P19-B4b.1 (#295): active-dispatch no longer imports the RTH-window predicate as a
+// fill gate (the depth gate moved to the engine seam), so the market-hours mock is
+// no longer needed by this SUT.
 
 import {
   dispatchXstockActiveSignal,

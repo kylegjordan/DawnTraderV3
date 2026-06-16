@@ -25,6 +25,7 @@
  */
 
 import type { AssetClass } from '../../../shared/asset-classes.js';
+import type { BookLevel } from './depth-walk.js';
 
 /**
  * Trading mode. Matches `PaperExecutionEngine.mode` (`'live' | 'paper'`, declared
@@ -107,6 +108,14 @@ export interface OpenOrderRequest {
   mode: ExecutionMode;
   /** Resolved asset class (drives per-class fee tier); optional — adapter falls back. */
   assetClass?: AssetClass;
+  /**
+   * P19-B4b.1: ask-side book levels (best-first) for the depth-walked open fill.
+   * The engine passes a snapshot AFTER its 24/5 depth-sufficiency gate has passed.
+   * Absent/empty → the placer rejects (an open with no book is a bug; the gate
+   * should have blocked it). May produce a `partial` if the book moved thinner
+   * between gate and fill.
+   */
+  bookAsks?: BookLevel[];
 }
 
 /** Close-order request for an existing position. */
@@ -122,6 +131,20 @@ export interface CloseOrderRequest {
   positionId: string;
   /** Resolved asset class (drives per-class fee tier); optional — adapter falls back. */
   assetClass?: AssetClass;
+  /**
+   * P19-B4b.1: bid-side book levels (best-first) for the depth-walked close. The
+   * close ALWAYS full-fills (R2 — a market exit always gets out); any remainder
+   * beyond the captured book is priced with `beyondDepthPenaltyBps`. When absent
+   * (cold book), the close fills at `requestedPrice` worsened by the penalty (if
+   * available) + a LOUD log — never a phantom stuck position.
+   */
+  bookBids?: BookLevel[];
+  /**
+   * P19-B4b.1: DB-resolved per-class beyond-captured-depth close penalty (bps).
+   * NOT a hardcoded constant (Langston Q-A condition). When absent (config missing
+   * → fail-closed), the close exits at `requestedPrice` with a loud unavailable log.
+   */
+  beyondDepthPenaltyBps?: number;
 }
 
 /**

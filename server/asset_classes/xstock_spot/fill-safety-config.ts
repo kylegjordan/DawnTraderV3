@@ -28,11 +28,14 @@ import { getModuleConstants } from '../../services/module-constants-service.js';
 export interface XstockFillSafetyConfig {
   /** Max age of a symbol's latest tick before its fill is blocked as stale (ms). */
   activeFillMaxAgeMs: number;
-  /** Liquid-fill window open, minutes since ET-midnight (570 = 09:30 ET). */
+  /**
+   * RTH window open/close (minutes since ET-midnight). P19-B4b.1 (#295): NO LONGER an
+   * active-fill gate — RETAINED only to select the silent-stall watchdog's RTH-vs-off-RTH
+   * reconnect threshold (`equity-spot-archiver.ts`).
+   */
   liquidFillWindowOpenMinEt: number;
-  /** Liquid-fill window close (exclusive), minutes since ET-midnight (960 = 16:00 ET). */
   liquidFillWindowCloseMinEt: number;
-  /** Silent-stall reconnect threshold while inside the liquid (RTH) window (ms). */
+  /** Silent-stall reconnect threshold while inside the RTH window (ms). */
   stallReconnectMsRth: number;
   /** Silent-stall reconnect threshold off-RTH but inside the 24/5 feed-live window (ms). */
   stallReconnectMsOffrth: number;

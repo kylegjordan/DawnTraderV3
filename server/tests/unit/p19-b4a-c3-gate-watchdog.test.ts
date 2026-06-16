@@ -103,13 +103,10 @@ describe('P19-B4a C3 — active-fill safety gate', () => {
     expect(getXstockActiveDispatchStats().configClosedSkips).toBe(before + 1);
   });
 
-  it('outside the liquid fill window → blocked + outOfSessionSkips (regardless of tick age)', async () => {
-    inLiquidWindow = false;
-    const before = getXstockActiveDispatchStats().outOfSessionSkips;
-    await dispatchXstockActiveSignal(input());
-    expect(captured).toBeNull();
-    expect(getXstockActiveDispatchStats().outOfSessionSkips).toBe(before + 1);
-  });
+  // P19-B4b.1 (#295): the active-dispatch "outside the liquid fill window → blocked"
+  // test is REMOVED — the RTH clock is no longer a fill gate here (the 24/5 book-depth-
+  // sufficiency gate at the engine open seam replaced it; the watchdog block below still
+  // exercises `inLiquidWindow` for its RTH-vs-off-RTH stall threshold).
 
   it('stale latest tick (> max age) → blocked + staleSkips + dedup alert', async () => {
     tickAgeMs = 30000; // > 15000ms

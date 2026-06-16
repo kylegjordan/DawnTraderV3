@@ -127,6 +127,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   
   // 8.9.4-Patch: Stateful mini-book tracking for stable mid-price computation
   private orderBooks = new Map<string, { bids: Map<number, number>; asks: Map<number, number> }>();
+  // P19-B4b.1: per-symbol last book-update wall-clock (ms) — book-specific freshness
+  // for the depth-walked fill warmth gate (distinct from symbolStats.lastUpdate which
+  // can conflate ticker + book channels).
+  private bookUpdatedAt = new Map<string, number>();
   private lastSeq: Record<string, number> = {}; // Track sequence numbers for out-of-order detection
   
   // Phase 8.8.3-I8C: Subscription reliability - open positions provider and audit interval
@@ -747,6 +751,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         }
       }
       
+      // P19-B4b.1: stamp book-specific freshness on every applied delta (before the
+      // BBO-validity continue below, so a transiently one-sided book still records its age).
+      this.bookUpdatedAt.set(internalSymbol, Date.now());
+
       // 8.9.4-Patch: Compute best bid/ask from stateful mini-book
       const bestBid = book.bids.size > 0 ? Math.max(...book.bids.keys()) : 0;
       const bestAsk = book.asks.size > 0 ? Math.min(...book.asks.keys()) : 0;
@@ -3042,6 +3050,35 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       ask: bestAsk,
       mid: (bestBid + bestAsk) / 2
     };
+  }
+
+  /**
+   * P19-B4b.1: fill-grade order-book accessor for the depth-walked paper fill +
+   * the 24/5 depth-sufficiency gate. Returns the full mini-book as sorted level
+   * arrays (asks ascending / bids descending = best-first, the order `walkBook`
+   * consumes) plus the book's age in ms (book-specific freshness for the warmth
+   * gate). Returns `null` when no two-sided book exists yet (caller fails-closed).
+   */
+  getBookForFill(symbol: string): {
+    asks: Array<{ price: number; qty: number }>;
+    bids: Array<{ price: number; qty: number }>;
+    ageMs: number;
+  } | null {
+    const book = this.orderBooks.get(symbol);
+    const updatedAt = this.bookUpdatedAt.get(symbol);
+    if (!book || updatedAt === undefined || book.asks.size === 0 || book.bids.size === 0) {
+      return null;
+    }
+    const asks = [...book.asks.entries()]
+      .filter(([p, q]) => p > 0 && q > 0)
+      .sort((a, b) => a[0] - b[0])
+      .map(([price, qty]) => ({ price, qty }));
+    const bids = [...book.bids.entries()]
+      .filter(([p, q]) => p > 0 && q > 0)
+      .sort((a, b) => b[0] - a[0])
+      .map(([price, qty]) => ({ price, qty }));
+    if (asks.length === 0 || bids.length === 0) return null;
+    return { asks, bids, ageMs: Date.now() - updatedAt };
   }
 
   /**

@@ -93,7 +93,16 @@ import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
 import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
 import { dataAggregator } from './data-aggregator.js';
-import { DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from '../config/exchange-defaults';
+// P19-B4b.1: the flat-slippage constant is retired from the fill seam — the active
+// paper fill now depth-walks the real book (Langston C-Q5: RNG-free, no magic %).
+import { resolveFillDepthGateConfig } from './execution/depth-gate-config.js';
+import {
+  getDepthSnapshot,
+  assessWarmth,
+  assessSufficiency,
+  recordDepthGateBlock,
+  type DepthSnapshot,
+} from './execution/depth-source.js';
 // B-4.5: fees are DB-governed per asset class — resolved per symbol at the
 // fill sites via the single cost-model merge (no static fee field).
 import { getFrictionForAssetClass } from '../core/math/cost-model.js';
@@ -134,7 +143,9 @@ export class PaperExecutionEngine {
   private readonly orderPlacer: OrderPlacer;
 
   // Configuration
-  private readonly SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // Batch 18J: from exchange-defaults.ts (0.05%)
+  // P19-B4b.1: the flat SLIPPAGE_PERCENT (0.05%) is RETIRED from the fill seam — the
+  // active paper fill depth-walks the real order book (no flat constant on the active
+  // path; Langston C-Q5 RNG-free / no-magic-% discipline).
   // B-4.5: FEE_PERCENT static field RETIRED — per-class DB-resolved per symbol.
   private feePercentFor(symbol: string): number {
     // P19-B4a (C4): money-boundary leaf — sites 7/8/9 skip BEFORE a position can open,
@@ -146,6 +157,28 @@ export class PaperExecutionEngine {
       throw new Error('[P19-B4a][C4][INVARIANT] feePercentFor reached with unclassifiable ' + symbol + ' — sites 7/8/9 should have skipped upstream (stamp lost between sizing and fill)');
     }
     return getFrictionForAssetClass(_cls).feeRateTaker * 100;
+  }
+
+  /**
+   * P19-B4b.1 (#295): the 24/5 book-depth-sufficiency + warmth gate for an OPEN,
+   * replacing the B4a-C3 RTH liquid-fill-window clock proxy. Per-class, DB-resolved,
+   * FAIL-CLOSED: missing config / no book / stale book / thin book / insufficient
+   * depth → block the open (the caller skips loudly). On pass, returns the depth
+   * snapshot so the placer walks the SAME book the gate just measured (single fetch).
+   */
+  private async _evaluateOpenDepthGate(
+    symbol: string,
+    assetClass: AssetClass,
+    orderNotional: number,
+  ): Promise<{ pass: boolean; reason: string; snapshot: DepthSnapshot | null }> {
+    const config = await resolveFillDepthGateConfig(assetClass);
+    if (!config) return { pass: false, reason: 'depth_gate_config_missing', snapshot: null };
+    const snapshot = await getDepthSnapshot(symbol, assetClass);
+    const warmth = assessWarmth(snapshot, 'asks', config);
+    if (!warmth.warm || !snapshot) return { pass: false, reason: warmth.reason, snapshot: null };
+    const suff = assessSufficiency(snapshot, 'asks', orderNotional, config);
+    if (!suff.sufficient) return { pass: false, reason: suff.reason, snapshot };
+    return { pass: true, reason: 'ok', snapshot };
   }
   // B72: monitoring interval read at setInterval start from module='paper_execution'.
   private get MONITOR_INTERVAL_MS(): number {
@@ -188,10 +221,10 @@ export class PaperExecutionEngine {
     this.mode = mode;
     this.krakenService = new KrakenService();
     this.strategyEngine = new StrategyEngine();
-    // P19-B3a: inject slippage% + the per-class fee resolver so the port stays decoupled
-    // from this engine. The SLIPPAGE_PERCENT field-initializer runs before the constructor
-    // body, so it is already set here.
-    this.orderPlacer = new PaperOrderPlacer(this.SLIPPAGE_PERCENT, (s) => this.feePercentFor(s));
+    // P19-B4b.1: inject ONLY the per-class fee resolver — the placer depth-walks the
+    // real book passed on each request (no flat slippage% to inject anymore), so the
+    // port stays decoupled from this engine.
+    this.orderPlacer = new PaperOrderPlacer((s) => this.feePercentFor(s));
   }
 
   /**
@@ -1158,10 +1191,20 @@ export class PaperExecutionEngine {
 
     // Apply exit slippage and fees
     const _b45FeePct = this.feePercentFor(position.symbol); // B-4.5 per-class (reused for the entry-fee fallback below)
-    // P19-B3a: exit fill via the OrderPlacer port. BEHAVIOUR-IDENTICAL to the prior inline math
-    // (fillPrice = exit-slippage; feeQuote = notional*feePct; slippageQuote = slippage*qty).
+    // P19-B4b.1: exit fill via the DEPTH-WALKED OrderPlacer port. The close ALWAYS
+    // full-fills (R2 — a market exit always gets out, never a phantom stuck position);
+    // the placer walks the live bid snapshot and prices any beyond-book remainder with
+    // the DB-resolved per-class penalty (no magic constant; Langston Q-A). Cold book →
+    // requestedPrice worsened by the penalty, loudly. Closes are NOT depth-gated (you
+    // must always be able to exit), so there is no skip path here.
+    const _closeClass = asValidAssetClass((position as any).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
+    const _closeCfg = _closeClass ? await resolveFillDepthGateConfig(_closeClass) : null;
+    const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass) : null;
     const _closeFill = await this.orderPlacer.closeOrder({
       symbol: position.symbol, side: 'sell', quantity, requestedPrice: exitPrice, mode: this.mode, positionId,
+      assetClass: _closeClass ?? undefined,
+      bookBids: _closeSnap?.bids,
+      beyondDepthPenaltyBps: _closeCfg?.beyondDepthPenaltyBps,
     });
     if (_closeFill.status !== 'filled') {
       // C3 CLOSE-SEAM STATE RULE: a non-filled close leaves the position OPEN (close NOT
@@ -2061,17 +2104,51 @@ export class PaperExecutionEngine {
       return;
     }
 
-    // P19-B3a: entry fill via the OrderPlacer port. Paper = atomic slippage+fee fill,
-    // BEHAVIOUR-IDENTICAL to the prior inline math (fillPrice = entry+slippage; feeQuote =
-    // notional*feePct; slippageQuote = slippage*qty). The port shape already holds live's
-    // partial/delayed/rejected reality; downstream bookkeeping consumes the FillResult.
+    // P19-B4b.1: resolve the position class BEFORE the depth gate + fill — an
+    // unclassifiable symbol skips here rather than reaching the fill with no class.
+    const _openClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+    if (_openClass === null) {
+      console.warn('[P19-B4b.1][OPEN_SKIP] unclassifiable ' + signal.symbol + ' — refusing to open without a class');
+      return;
+    }
+
+    // P19-B4b.1 (#295): 24/5 book-depth-sufficiency + warmth gate BEFORE the fill,
+    // replacing the B4a-C3 RTH liquid-fill-window clock proxy. Fail-closed — a missing
+    // config / cold / thin / insufficient book skips the open loudly (observable counter).
+    const _gate = await this._evaluateOpenDepthGate(signal.symbol, _openClass, signal.entryPrice * quantity);
+    if (!_gate.pass || !_gate.snapshot) {
+      console.warn(`[P19-B4b.1][DEPTH_GATE_BLOCK:${this.mode}] ${signal.symbol} (${_openClass}) ${_gate.reason} — skipping open`);
+      recordDepthGateBlock(_openClass, _gate.reason);
+      return;
+    }
+
+    // P19-B4b.1: entry fill via the DEPTH-WALKED OrderPlacer port — the placer walks the
+    // gate's ask snapshot → VWAP fill (replaces the flat 0.05% slippage). `partial` = the
+    // book thinned between gate and fill (size the position down); `rejected` = no fillable book.
     const _openFill = await this.orderPlacer.openOrder({
-      symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice, mode: this.mode,
+      symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice,
+      mode: this.mode, assetClass: _openClass, bookAsks: _gate.snapshot.asks,
     });
-    if (_openFill.status !== 'filled') {
-      // C3 contained fail-loud: paper fills are always atomic — a non-fill is a bug, not a
-      // normal outcome. Skip this trade; never an uncaught throw that stalls the cycle.
-      console.error(`[PaperExecution:${this.mode}][OPEN_FILL_NONFILLED] ${signal.symbol} status=${_openFill.status} — skipping trade (paper fills must be atomic)`);
+    if (_openFill.status === 'rejected') {
+      console.error(`[PaperExecution:${this.mode}][OPEN_FILL_REJECTED] ${signal.symbol} reason=${_openFill.reason} — skipping trade`);
+      return;
+    }
+    if (_openFill.status !== 'filled' && _openFill.status !== 'partial') {
+      // `delayed` is a live-only outcome paper never produces; any other status → skip.
+      console.error(`[PaperExecution:${this.mode}][OPEN_FILL_NONFILLED] ${signal.symbol} status=${_openFill.status} — skipping trade`);
+      return;
+    }
+    // P19-B4b.1 (Langston hold #1): SIZE DOWN to the ACTUAL filled qty. Reassigning
+    // `quantity` here is the SINGLE point that makes every downstream consumer — trade +
+    // open-position record writes, portfolio heat, risk-concentration weights, broadcasts,
+    // SLAL — use the filled qty, never the requested qty (the partial-open exposure
+    // split-brain). The EV/risk pre-checks ran earlier on the requested size, correctly.
+    if (_openFill.status === 'partial') {
+      console.warn(`[P19-B4b.1][OPEN_PARTIAL:${this.mode}] ${signal.symbol} requested=${quantity} filled=${_openFill.fillQty} remaining=${_openFill.remainingQty} — sizing position to filled qty`);
+    }
+    quantity = _openFill.fillQty;
+    if (!(quantity > 0)) {
+      console.error(`[PaperExecution:${this.mode}][OPEN_FILL_ZERO] ${signal.symbol} filledQty=0 — skipping`);
       return;
     }
     const actualEntryPrice = _openFill.fillPrice;

@@ -106,20 +106,14 @@ export function isXstockMarketOpenUTC(symbol: string, now: Date = new Date()): b
 }
 
 /**
- * P19-B4a (C3) — is `now` inside the xStock ACTIVE-FILL LIQUID WINDOW (ET)?
+ * Is `now` inside the xStock RTH window (ET)? Open/close ET-minute bounds are
+ * DB-resolved by the caller (`xstock_fill_safety`) and passed in; pure, no I/O.
  *
- * ⚠️ This is a FILL-QUALITY LIQUIDITY GATE, **not** a market-hours claim. xStocks
- * trade 24/5 (CLAUDE.md rule 17) and the scanner + VTS ingest/learn around the
- * clock — this predicate ONLY gates the moment of placing an *active fill*, to the
- * window where the underlying equity reference shows real price discovery
- * (measured P19-B4a from the Fri 2026-06-12 session: `last` moved on 12–22% of
- * snapshots during US regular hours vs only 2–7% pre-/after-hours — a fresh
- * snapshot outside that window is a stale, untradeable price). Deliberately NOT
- * named `…MarketOpen…` / `…Session…` so a future reader does not re-litigate
- * rule 17 (Langston C3 review framing nit).
- *
- * Pure + testable: the open/close ET-minute bounds are DB-resolved by the caller
- * (module_constants `xstock_fill_safety`) and passed in; this function does no I/O.
+ * P19-B4b.1 (#295): this predicate is NO LONGER an active-FILL gate (that role was a
+ * wrong time-of-day proxy, retired in favour of the 24/5 book-depth-sufficiency gate
+ * at the engine open seam). It is RETAINED for its OTHER, valid use: the equity-feed
+ * silent-stall watchdog (`equity-spot-archiver.ts`) selects its RTH-vs-off-RTH stall
+ * reconnect threshold from this window (feed-cadence expectation, not fill quality).
  *
  * @param openMinEt  - inclusive window open, minutes since ET-midnight (570 = 09:30)
  * @param closeMinEt - exclusive window close, minutes since ET-midnight (960 = 16:00)

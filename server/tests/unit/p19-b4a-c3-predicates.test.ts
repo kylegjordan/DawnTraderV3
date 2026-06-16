@@ -4,6 +4,10 @@
  * Verifies the liquid-fill-window + weekend predicates with an injected clock
  * (June dates → EDT, UTC-4: 13:30 UTC = 09:30 ET) and the rule-15 fail-CLOSED
  * contract of the fill-safety config resolver.
+ *
+ * P19-B4b.1 (#295): `isXstockLiquidFillWindowET` is no longer an active-FILL gate, but
+ * it is RETAINED (the silent-stall watchdog selects its RTH-vs-off-RTH threshold from
+ * it), so its predicate + config keys still exist and stay tested here.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
@@ -24,7 +28,7 @@ import {
 const OPEN = 570; // 09:30 ET
 const CLOSE = 960; // 16:00 ET
 
-describe('P19-B4a C3 — liquid-fill-window predicate (RTH 09:30–16:00 ET; fill-quality gate, not market hours)', () => {
+describe('P19-B4a C3 — RTH-window predicate (now only the stall-watchdog threshold selector, #295)', () => {
   it('inside RTH → true (Wed 14:30 UTC = 10:30 ET)', () => {
     expect(isXstockLiquidFillWindowET(OPEN, CLOSE, new Date('2026-06-17T14:30:00Z'))).toBe(true);
   });

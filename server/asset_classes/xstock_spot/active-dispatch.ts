@@ -38,7 +38,8 @@ import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 import { addAlert } from '../../services/system-alerts.js';
 import { resolveXstockFillSafetyConfig } from './fill-safety-config.js';
-import { isXstockLiquidFillWindowET } from './market-hours.js';
+// P19-B4b.1 (#295): the RTH liquid-fill-window clock predicate is retired from the
+// active path — the 24/5 book-depth-sufficiency gate at the engine open seam replaces it.
 
 // Observable counters (Langston Q3: silent-but-counted, not silent). Surfaced via getter.
 let _dormantSkips = 0;     // active trading authoritatively OFF (normal pre-B7b)
@@ -47,7 +48,6 @@ let _dispatched = 0;       // signals routed onto the active pipeline
 let _dispatchErrors = 0;   // assert/build/dispatch failures (loud-logged, never thrown into the loop)
 // P19-B4a (C3) — fill-safety gate counters (all fail-CLOSED, all observable).
 let _configClosedSkips = 0; // fill-safety config missing/incomplete → fail-closed block
-let _outOfSessionSkips = 0; // outside the liquid fill window (24/5-safe liquidity gate)
 let _staleSkips = 0;        // latest tick older than the freshness threshold (or absent)
 
 export function getXstockActiveDispatchStats() {
@@ -57,7 +57,6 @@ export function getXstockActiveDispatchStats() {
     dispatched: _dispatched,
     dispatchErrors: _dispatchErrors,
     configClosedSkips: _configClosedSkips,
-    outOfSessionSkips: _outOfSessionSkips,
     staleSkips: _staleSkips,
   };
 }
@@ -143,14 +142,13 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
       _configClosedSkips++; // fail-closed: no DB fill-safety config → do not fill (resolver logs loudly).
       return;
     }
-    // (a) Liquid-fill window — a fill-quality LIQUIDITY gate, NOT a market-hours
-    //     claim (xStock stays 24/5 for scan + VTS; only the fill moment is gated).
-    //     Blocks fresh-but-untradeable off-hours snapshots regardless of tick age
-    //     (Langston Q5: load-bearing on top of freshness, not redundant).
-    if (!isXstockLiquidFillWindowET(safety.liquidFillWindowOpenMinEt, safety.liquidFillWindowCloseMinEt)) {
-      _outOfSessionSkips++;
-      return;
-    }
+    // (a) #295 (P19-B4b.1): the RTH liquid-fill-window CLOCK gate is RETIRED here —
+    //     replaced by the direct 24/5 BOOK-DEPTH-SUFFICIENCY gate at the engine open
+    //     seam (PaperExecutionEngine._evaluateOpenDepthGate, both asset classes). The
+    //     clock was a proxy for "is the book deep enough"; it was wrong in BOTH
+    //     directions (blocked fillable off-hours books, passed thin RTH books). The
+    //     other two C3 gates — freshness (b) + the silent-stall watchdog — STAY
+    //     (both 24/5-correct; #295 keeps them).
     // (b) Freshness — the symbol's latest tick must be within the max-age window.
     const ageMs = await getLatestTickAgeMs(input.symbol);
     if (ageMs === null || ageMs > safety.activeFillMaxAgeMs) {
