@@ -1820,6 +1820,16 @@ Adds the active-pipeline reject/admit rows to `signal_eval_archive` (telemetry-o
 
 ---
 
+### P19-B5b (2026-06-16, commit `c9f2e8285`) — #94 xStock decision-time macro snapshot
+
+Every xStock decision record in `signal_eval_archive` now carries a `features.macro` object — the equity-macro backdrop AT decision time, captured for Phase-25 item 25-7 (the macro-modifier build; **capture-only**, the modifier itself stays Phase-25). **NOT DORMANT** — rides the xStock eval-cycle `archiveSignalEval` writes (`server/asset_classes/xstock_spot/eval-cycle.ts`, all 4 sites: strategy_internal / sqe / tcl / admitted), which fire every cycle in the VTS/passive path, so it began writing on merge (live-verified: vixZ + ageSeconds + raw vix populated on post-deploy xStock rows).
+- **Field set:** `{ vixZ, dxyZ, vix, dxy, ageSeconds, partialFeed, vixObservedAt, dxyEcbDate }` — z-scores AND raw values (raw = baseline-independent ground truth; z depends on the rolling baseline 25-7 may recompute). Freshness via `ageSeconds` (`Infinity`/never-polled → explicit null) + per-source stamps. `partialFeed` disambiguates degraded-feed from below-min-obs. Straight-copy null-preserving (explicit `null` ≠ `0`).
+- **Source:** `getLatestEquitySnapshot()` (`server/services/amr-equity-feed.ts`, sync in-mem, no DB/fetch) via the NEW `server/asset_classes/xstock_spot/macro-snapshot.ts` `buildMacroSnapshot()` helper (extracted for unit-testability; **xStock-only** — crypto records get no macro). **ZERO migration** (`features` JSONB).
+- **Distinct from** the admitted block's existing `macroModifierValue` (the AMR class-level modifier scalar) — different key, different concept.
+- **System Manual N/A** (telemetry enrichment; no signal/regime/strategy/pipeline-control change).
+
+---
+
 ## B74 — Passive OHLC + Ticker Archive Pipeline (2026-04-30, commits `ce4a7e40` → `bd60add3` → `778cd4ed`, PM2 #119 → #122)
 
 Continuous 1-min OHLC + per-update ticker snapshots captured to month-partitioned dump tables across three asset universes via persistent WebSocket connections. NO signal-pipeline integration; substrate accumulation only. Verified non-impact on FX5 / VTS / signal-orchestrator / B73 hooks per pre-audit §A.3.
