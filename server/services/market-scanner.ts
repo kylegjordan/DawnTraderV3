@@ -10,6 +10,9 @@ import { setCostMetrics } from '../core/cache/cost-cache.js';
 import { ohlcCache } from './ohlc-cache.js';
 import { computeDirectionalBias } from '../core/metrics/directional-bias.js';
 import type { OHLCData } from '../types/market-regime.types.js';
+// P19-B5a: active-path pre_filter reject capture (gated on !isPassiveLearning).
+import { capturePreFilterReject } from './data-archive/signal-eval-archiver.js';
+import { tradingModeToRunMode } from './run-mode-controller.js';
 
 // B63.3: Local ATR helper (mirrors fx5-scanner.ts computeATRFromOHLC — 14-period Wilder)
 function computeATR14(ohlcData: OHLCData[]): number {
@@ -786,18 +789,22 @@ export async function collectAdaptiveBatch(
       if (!rejected && volume24h < activeMinVolume) {
         breakdown.failed_min_volume++;
         rejected = true;
+        // P19-B5a: active-path pre_filter reject capture (dormant in VTS/passive).
+        if (!isPassiveLearning) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: pair.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'market-scanner', label: 'low_volume', gateDetail: { observed: volume24h, threshold: activeMinVolume } });
       }
 
       // Filter: Min price (B63.3: uses strong_trend threshold for strong-DBS pairs)
       if (!rejected && currentPrice < activeMinPrice) {
         breakdown.failed_min_price++;
         rejected = true;
+        if (!isPassiveLearning) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: pair.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'market-scanner', label: 'low_price', gateDetail: { observed: currentPrice, threshold: activeMinPrice } });
       }
-      
+
       // Filter: Bid-ask spread (B63.3: strong-DBS pairs use strong_trend spread threshold)
       if (!rejected && bidAskSpread > activeMaxBidAskSpread) {
         breakdown.failed_spread++;
         rejected = true;
+        if (!isPassiveLearning) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: pair.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'market-scanner', label: 'wide_spread', gateDetail: { observed: bidAskSpread, threshold: activeMaxBidAskSpread } });
       }
 
       // Filter: History (async, B63.3: strong-DBS pairs use strong_trend history requirement)
@@ -937,6 +944,8 @@ export async function collectAdaptiveBatch(
       if (currentPrice < patternMinPrice) {
         console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: price ${currentPrice} < ${patternMinPrice}`);
         priceRejects++;
+        // P19-B5a: active-path pre_filter reject capture (dormant in VTS/passive).
+        if (!isPassiveLearning) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: pair.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'market-scanner', label: 'pattern_low_price', gateDetail: { observed: currentPrice, threshold: patternMinPrice } });
         continue;
       }
 
@@ -944,6 +953,7 @@ export async function collectAdaptiveBatch(
       if (currentPrice > patternMaxPrice) {
         console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: price ${currentPrice} > maxPrice ${patternMaxPrice}`);
         maxPriceRejects++;
+        if (!isPassiveLearning) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: pair.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'market-scanner', label: 'pattern_high_price', gateDetail: { observed: currentPrice, threshold: patternMaxPrice } });
         continue;
       }
 
@@ -951,6 +961,7 @@ export async function collectAdaptiveBatch(
       if (volume24h < patternMinVolume) {
         console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: volume ${volume24h} < ${patternMinVolume}`);
         volumeRejects++;
+        if (!isPassiveLearning) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: pair.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'market-scanner', label: 'pattern_low_volume', gateDetail: { observed: volume24h, threshold: patternMinVolume } });
         continue;
       }
 
@@ -958,6 +969,7 @@ export async function collectAdaptiveBatch(
       if (bidAskSpread > patternMaxSpread) {
         console.log(`[DIAG_PATTERN] REJECTED ${pair.symbol}: spread ${bidAskSpread}% > ${patternMaxSpread}%`);
         spreadRejects++;
+        if (!isPassiveLearning) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: pair.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'market-scanner', label: 'pattern_wide_spread', gateDetail: { observed: bidAskSpread, threshold: patternMaxSpread } });
         continue;
       }
 

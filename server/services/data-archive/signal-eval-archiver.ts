@@ -79,7 +79,15 @@ export function ensureSignalEvalArchiverRegistered(): void {
   registered = true;
 }
 
-export type SignalEvalSource = 'vts-runner' | 'signal-orchestrator' | 'paper-execution-engine';
+export type SignalEvalSource =
+  | 'vts-runner'
+  | 'signal-orchestrator'
+  | 'paper-execution-engine'
+  // P19-B5a: active-path scanner pre_filter capture sources (crypto path).
+  | 'market-scanner'
+  | 'fx5-scanner'
+  // P19-B5a: active-path reject source — RTB confidence-drop (reject_stage='rtb').
+  | 'ready-to-buy';
 export type RejectStage =
   | 'admitted'
   | 'pre_filter'
@@ -177,6 +185,52 @@ export interface SignalEvalArchiveInput {
   gateDecision?: Record<string, unknown>;
   /** B-NEW-53: decision-provenance for exact future replay (telemetry-only). */
   provenance?: SignalEvalProvenanceInput;
+}
+
+/**
+ * P19-B5a: thin wrapper for ACTIVE-PATH pre_filter reject capture from the
+ * crypto scanners (market-scanner global filters + fx5-scanner family/pattern
+ * IMF). Centralizes the fixed pre_filter row shape so the scanner call-sites
+ * stay one-liners and the semantics live in exactly one place:
+ *   - rejectStage = 'pre_filter' (the pair was evaluated against a quality/
+ *     liquidity bar and FAILED — not an eligibility exclusion);
+ *   - score fields stay NULL (a pre_filter pair was never scored — Langston rule);
+ *   - strategy defaults to 'none'; family-IMF rows pass the FAMILY name here, so
+ *     at pre_filter the `strategy` column carries a family, NOT a strategy
+ *     (query convention: reject_stage='pre_filter' AND label LIKE 'family_imf%');
+ *   - the failing gate label + observed/threshold detail go in gate_decision.
+ * Fire-and-forget + try/catch: a telemetry write must NEVER throw into the scan
+ * path (B11/§11 — telemetry degrades silently, never backpressures the cycle).
+ * The CALLER gates on the canonical active-mode SoT (isEngineActive /
+ * !isPassiveLearning), so NOTHING is written while the engine is in VTS/passive
+ * learning — these are the active-pipeline reject sites, dormant until paper-
+ * active turns on (the gate_decision table is expected EMPTY mid-Phase-19-build).
+ */
+export function capturePreFilterReject(args: {
+  mode: RunMode;
+  symbol: string;
+  exchange: string;
+  assetClass: string;
+  source: SignalEvalSource;
+  label: string;
+  strategy?: string;
+  gateDetail?: Record<string, unknown>;
+}): void {
+  try {
+    archiveSignalEval({
+      mode: args.mode,
+      symbol: args.symbol,
+      exchange: args.exchange,
+      assetClass: args.assetClass,
+      source: args.source,
+      strategy: args.strategy ?? 'none',
+      rejectStage: 'pre_filter',
+      // scores stay null — a pre_filter pair was never scored.
+      gateDecision: { label: args.label, ...(args.gateDetail ?? {}) },
+    });
+  } catch {
+    /* B5a: telemetry must never throw into the scan path (Langston Step-4 (c)). */
+  }
 }
 
 export function archiveSignalEval(input: SignalEvalArchiveInput): void {

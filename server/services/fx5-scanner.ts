@@ -34,6 +34,9 @@ import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { centralClock, ClockTick } from './central-clock.js';
 import { dataAggregator } from './data-aggregator.js';
+// P19-B5a: active-path pre_filter reject capture (gated on isEngineActive).
+import { capturePreFilterReject } from './data-archive/signal-eval-archiver.js';
+import { tradingModeToRunMode } from './run-mode-controller.js';
 import {
   classifyVolume,
   type VolumeClass,
@@ -1229,11 +1232,17 @@ export class Fx5ScannerService {
           const lq = s.LQ ?? 0;
           const vn = s.VolNoise ?? 1.0;
           const di = s.DI ?? 0;
-          return (
+          // P19-B5a: capture-on-fail. The boolean below is UNCHANGED — the SAME
+          // pairs drop; a pre_filter reject row is emitted (active only) for each
+          // dropped pattern-pool pair. No flipped comparison, no threshold change.
+          const passed =
             lq >= activePatternThresholds.LQ_MIN &&
             vn <= activePatternThresholds.VN_MAX &&
-            di >= activePatternThresholds.DI_TRENDING_MIN
-          );
+            di >= activePatternThresholds.DI_TRENDING_MIN;
+          if (!passed && isEngineActive) {
+            capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: (s as any).symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'fx5-scanner', label: 'pattern_imf', gateDetail: { lq, vn, di, lqMin: activePatternThresholds.LQ_MIN, vnMax: activePatternThresholds.VN_MAX, diMin: activePatternThresholds.DI_TRENDING_MIN } });
+          }
+          return passed;
         });
 
       console.log(`[19F][PATTERN_POOL] Pattern pool: ${patternPoolSurvivors.length}/${patternGlobalSurvivors.length} passed IMF (DB thresholds, dual-path)`);
@@ -1297,9 +1306,12 @@ export class Fx5ScannerService {
         const vn = s.VolNoise ?? 1;
         const di = s.DI ?? 50;
 
-        if (lq < thresholds.LQ_MIN) { failedLQ++; continue; }
-        if (vn > thresholds.VN_MAX) { failedVN++; continue; }
-        if (di < thresholds.DI_MIN || di > thresholds.DI_MAX) { failedDI++; continue; }
+        // P19-B5a: active-path pre_filter reject capture (dormant in VTS/passive).
+        // The family loop is the operative quant-IMF gate (the global stage was
+        // removed in Batch 43); `strategy` carries the FAMILY name at pre_filter.
+        if (lq < thresholds.LQ_MIN) { failedLQ++; if (isEngineActive) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: s.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'fx5-scanner', strategy: family, label: 'family_imf_lq', gateDetail: { observed: lq, threshold: thresholds.LQ_MIN } }); continue; }
+        if (vn > thresholds.VN_MAX) { failedVN++; if (isEngineActive) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: s.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'fx5-scanner', strategy: family, label: 'family_imf_vn', gateDetail: { observed: vn, threshold: thresholds.VN_MAX } }); continue; }
+        if (di < thresholds.DI_MIN || di > thresholds.DI_MAX) { failedDI++; if (isEngineActive) capturePreFilterReject({ mode: tradingModeToRunMode(mode), symbol: s.symbol, exchange: 'kraken', assetClass: 'crypto_spot', source: 'fx5-scanner', strategy: family, label: 'family_imf_di', gateDetail: { observed: di, diMin: thresholds.DI_MIN, diMax: thresholds.DI_MAX } }); continue; }
 
         passed++;
         survivors.push(s);

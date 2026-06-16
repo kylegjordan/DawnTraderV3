@@ -35,6 +35,8 @@ import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality
 // P19-B4a (C4): prefer the row's stamp (asValidAssetClass), safe-resolve+skip as fallback.
 import { safeResolveAssetClass, asValidAssetClass, type AssetClass } from '../../../shared/asset-classes';
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
+// P19-B5a: active-path RTB reject capture (structurally dormant — queue is empty in VTS/passive).
+import { tradingModeToRunMode } from '../../services/run-mode-controller.js';
 import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
 import { tclWatchdog } from './tcl_watchdog';
@@ -1606,6 +1608,27 @@ class ReadyToBuyService {
       if (confidence < minQueueConfidence) {
         await this.expireSignal(signal.id, `Confidence ${confidence.toFixed(2)} below threshold`);
         removed++;
+        // P19-B5a: RTB confidence-drop reject capture. The queue only holds signals
+        // when active trading is ON (orchestrator emit is dormant in VTS/passive),
+        // so this is dormant by construction — no explicit active gate. Langston
+        // NO-PATCHES: confidence_modulated IS the value tested at the drop — capture
+        // it (not null). Fire-and-forget, try/catch — never throw into RTB refresh.
+        try {
+          const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
+          archiveSignalEval({
+            mode: tradingModeToRunMode(mode),
+            symbol: signal.symbol,
+            exchange: 'kraken',
+            assetClass: asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken') ?? 'crypto_spot',
+            source: 'ready-to-buy',
+            strategy: signal.strategy,
+            rejectStage: 'rtb',
+            confidenceModulated: confidence,
+            gateDecision: { gate: 'rtb', accepted: false, reason: 'confidence_below_min_queue', observed: confidence, threshold: minQueueConfidence },
+          });
+        } catch (b70Err) {
+          console.warn(`[B70][ARCH] RTB-reject signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
+        }
       }
     }
 

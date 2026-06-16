@@ -2201,6 +2201,28 @@ export class PaperExecutionEngine {
           'DUPLICATE_POSITION'
         );
       }
+      // P19-B5a: TCL duplicate-position reject capture (active path; the paper
+      // engine open only runs when paper-active → dormant by construction).
+      // This is the ONLY active-path TCL reject: max_open_trades is a cycle-level
+      // promotion DEFER (signals stay queued), not a per-signal reject, so it is
+      // NOT captured (would be semantically-false telemetry). finalScore is not
+      // threaded to the engine here; confidence_modulated (signal.confidence) is.
+      try {
+        const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+        archiveSignalEval({
+          mode: tradingModeToRunMode(this.mode),
+          symbol: signal.symbol,
+          exchange: 'kraken',
+          assetClass: asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken') ?? 'crypto_spot',
+          source: 'paper-execution-engine',
+          strategy: signal.strategy,
+          rejectStage: 'tcl',
+          confidenceModulated: signal.confidence,
+          gateDecision: { gate: 'tcl', accepted: false, reason: 'duplicate_position', existingCount },
+        });
+      } catch (b70Err) {
+        console.warn(`[B70][ARCH] TCL-reject signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
+      }
       return; // Exit early - do not create trade or position
     }
 
@@ -2384,6 +2406,29 @@ export class PaperExecutionEngine {
 
       // AJ10.3: Diagnostic - open position created
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
+
+      // P19-B5a: terminal ADMIT capture — the position ACTUALLY OPENED (survived
+      // SQE, RTB confidence-revalidation, and the TCL dedup gate). Distinct from the
+      // orchestrator 'admitted' row (which marks SQE-pass → queued); source
+      // 'paper-execution-engine' disambiguates the funnel endpoint. Dormant until
+      // paper-active (the open path only runs then). Fire-and-forget, try/catch.
+      try {
+        const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+        archiveSignalEval({
+          mode: tradingModeToRunMode(this.mode),
+          symbol: signal.symbol,
+          exchange: 'kraken',
+          assetClass: _tradeClass,
+          source: 'paper-execution-engine',
+          strategy: signal.strategy,
+          rejectStage: 'admitted',
+          confidenceModulated: signal.confidence,
+          gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice },
+          features: { entrySlippage: totalSlippage, entryFee },
+        });
+      } catch (b70Err) {
+        console.warn(`[B70][ARCH] paper-open admit signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
+      }
 
       // Phase 8.8.4-A: SLAL - Record EXECUTION success (trade successfully opened)
       if (signal.signalId) {

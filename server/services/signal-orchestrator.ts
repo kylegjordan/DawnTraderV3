@@ -672,6 +672,27 @@ export class SignalOrchestrator {
         'SQE_QUALITY_REJECT',
         { sqeReject: true, reason: sqeResult.reason }
       );
+      // P19-B5a: SQE-reject capture (active path; dormant until paper-active —
+      // this emit branch only runs when the active orchestrator emits). Langston
+      // NO-PATCHES: capture the failing FinalScore (the below-floor score is the
+      // most analytically valuable number on the row), NOT null. Fire-and-forget.
+      try {
+        const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+        archiveSignalEval({
+          mode: tradingModeToRunMode(this.mode),
+          symbol: rawSignal.symbol,
+          exchange: 'kraken',
+          assetClass: sqeAssetClass,
+          source: 'signal-orchestrator',
+          strategy: strategyId,
+          rejectStage: 'sqe',
+          finalScore: extendedMetrics.finalScore,
+          features: { predictiveConfidence: extendedMetrics.confidence },
+          gateDecision: { gate: 'sqe', accepted: false, reason: sqeResult.reason, path: 'active-signal-orchestrator' },
+        });
+      } catch (b70Err) {
+        console.warn(`[B70][ARCH] SQE-reject signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
+      }
       return null;
     }
 
