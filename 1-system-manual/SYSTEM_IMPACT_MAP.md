@@ -1791,7 +1791,7 @@ NEW per-VTS-trade observability field `entryLiquidityValue` (number) + `entryLiq
 
 ### B70 known limitations / deferred to B70.1
 
-- ~~Reject-stage signal_eval capture (`pre_filter`/`sqe`/`rtb`/`tcl`/`strategy_internal`)~~ — admitted-only in v1. Each reject site needs a small `archiveSignalEval({rejectStage: '<stage>', ...})` call. RUNNING_ISSUES #56.
+- ~~Reject-stage signal_eval capture (`pre_filter`/`sqe`/`rtb`/`tcl`)~~ — **active-path capture LANDED in P19-B5a (2026-06-16)**, see the B5a sub-entry below. (VTS-path reject capture already existed via `vts-runner.ts`.) **Still deferred:** active-path `strategy_internal` (orchestrator strategy-detect-null) — not in B5a scope. RUNNING_ISSUES #56.
 - ~~B62 retroactive labels runner~~ — table created, runner script deferred. RUNNING_ISSUES #57.
 - ~~Parquet exporter~~ — off-by-default toggle in place; script deferred. RUNNING_ISSUES #58.
 - ~~Unit tests~~ — live integration verified; synthetic-event tests deferred. RUNNING_ISSUES #59.
@@ -1801,6 +1801,22 @@ NEW per-VTS-trade observability field `entryLiquidityValue` (number) + `entryLiq
 - **Trend Mining Engine (Phase 17.6 / 18.5, post-launch)** — consumes `pair_scan_archive` + `signal_eval_archive` + `exit_decision_archive` joined to B74 OHLC by timestamp. JSONB schema_version field allows feature evolution without retroactive migration.
 - **B67.5 consumer wiring (gated on calibration check ~2026-05-15)** — when active trading turns on, the signal-orchestrator's existing admitted-path archive hook fires automatically with `mode='live'`.
 - **Phase 19 paper-sim activation** — `paper-execution-engine.closePosition` hook fires automatically with `mode='paper_sim'`. No code change.
+
+### P19-B5a (2026-06-16, commit `1e119531a`) — active-path reject/admit data-capture hooks
+
+Adds the active-pipeline reject/admit rows to `signal_eval_archive` (telemetry-only, fire-and-forget, **dormant until paper-active turns on** — live-verified zero rows while in VTS/passive). ZERO migration (the `reject_stage` enum + nullable `final_score`/`confidence_modulated` already existed).
+
+- **New `SignalEvalSource` values:** `'market-scanner'`, `'fx5-scanner'` (pre_filter scanner sources), `'ready-to-buy'` (RTB reject source). Existing `'signal-orchestrator'` / `'paper-execution-engine'` reused for the sqe / tcl+admit hooks.
+- **New centralized helper** `capturePreFilterReject()` in `signal-eval-archiver.ts` — the one place the pre_filter row shape lives (rejectStage='pre_filter', scores null, strategy defaults `'none'` / family name for family-IMF rows, label+detail in `gate_decision`).
+- **Capture sites by stage:**
+  - `pre_filter` — `market-scanner.ts` global filters (low_volume / low_price / wide_spread; pattern_low_price / pattern_high_price / pattern_low_volume / pattern_wide_spread) gated `if(!isPassiveLearning)`; `fx5-scanner.ts` family IMF (family_imf_lq/_vn/_di, `strategy`=family) + pattern-pool drop (pattern_imf) gated `if(isEngineActive)`. The gate reuses the existing canonical `isEngineActive` SoT (no new boolean).
+  - `sqe` — `signal-orchestrator.ts` `!sqeResult.passed` chokepoint; captures the failing `final_score`.
+  - `rtb` — `ready_to_buy_service.ts` `reEvaluateQueue` confidence-drop; captures `confidence_modulated` (the value tested at the drop).
+  - `tcl` — `paper-execution-engine.ts` `duplicate_position` guard ONLY. **`max_open_trades` is a cycle-level promotion DEFER (signals stay queued), NOT a per-signal reject — deliberately NOT captured** (capturing it would be semantically-false telemetry).
+  - `admitted` — `paper-execution-engine.ts` terminal open (position actually opened).
+- **⚠️ DOUBLE-COUNT RULE (consumers MUST heed):** `reject_stage='admitted'` now appears at **TWO milestones**, disambiguated by `source`: `signal-orchestrator` (SQE-pass → queued) and `paper-execution-engine` (position actually opened). **Do NOT `SUM`/`COUNT` admitted rows without `GROUP BY source`** — orchestrator-admit minus paper-engine-admit = the queue→open leakage (RTB drops + TCL dups). Un-grouped, every opened position counts 2×.
+- **Score-recovery by join:** `tcl` rows carry `confidence_modulated` but null `final_score` (finalScore isn't threaded to the paper engine). The failing/passing score is recoverable by joining to the upstream `sqe`/`admitted` row on `(symbol, mode, captured_at)` — all four key columns (`id`, `symbol`, `mode`, `captured_at`) confirmed present.
+- **System Manual:** intentionally NOT updated — B5a is pure observe-only instrumentation with zero change to signal selection / regime / strategy math / pipeline control flow; the reject taxonomy is component/state metadata (SIM's lane).
 
 ---
 
