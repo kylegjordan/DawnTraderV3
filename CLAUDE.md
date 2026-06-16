@@ -392,6 +392,12 @@ Both bridges detect voice/audio Telegram messages and transcribe locally via `wh
 
 **Limitation (honest):** the watcher lives inside an OPEN desktop session. Closed session = no wake (a known Claude Code platform gap — official feature requests for persistent external wake are open). Mitigation = the session-start re-arm step.
 
+### 6.10 Remote Control + push-when-blocked (Kyle directive 2026-06-16) — DON'T be the bottleneck
+
+**Remote Control is ON** (app Settings → Claude Code → "Enable remote control by default"). Kyle can view + drive + **approve permission prompts** for any open session from claude.ai/code or the Claude mobile app (signed into his account). To attach a session that started before the toggle: run `/remote-control` in it. The local machine must stay awake/open (same limit as §6.9). With `bypassPermissions` ON, routine prompts are gone; the rare remaining ones (catastrophic patterns, protected paths) Kyle can now approve from his phone.
+
+**★ STANDING RULE — when you are BLOCKED awaiting Kyle, fire `PushNotification` so his phone buzzes.** Applies to: a permission prompt you can't proceed past, OR any point where you genuinely need Kyle's decision / answer / feedback to continue and he may be away. Kyle's explicit ask: he does not want to be a silent bottleneck. Mechanics: `PushNotification` reaches his phone ONLY when Remote Control is connected AND Kyle has been idle ≥60s (it suppresses while he's actively typing — by design, not a failure). So: end the turn with the clear ask AND fire the push. Keep it to genuine blocks/decisions — NOT routine progress (the default push guidance still holds; this rule overrides it only for "I need you to continue" moments).
+
 ---
 
 ## 7. Infrastructure Reference
