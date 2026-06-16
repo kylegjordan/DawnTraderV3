@@ -109,3 +109,34 @@
 **Blast-radius verification:** repo-wide grep (`server/` only) for the retired symbols → the only remaining `isXstockLiquidFillWindowET` consumer is the watchdog (`equity-spot-archiver.ts`) + tests; no remaining `SLIPPAGE_PERCENT`/`CANONICAL_SLIPPAGE` on the active fill seam (a separate legacy manual-close route in `routes.ts:12200` keeps its own flat slippage — out of B4b.1 scope, noted). tsc baseline no-regression (404<494); vitest 1979.
 
 **Archive copy:** none — inline blocks; git history (`b74526dc3`) is the authoritative archive.
+
+---
+
+## P19-B4b.2 (2026-06-16) — dead paper-fill machinery sweep (#300)
+
+**Batch:** P19-B4b.2. **Removal commit:** `977f3be08`. **CI:** `27598725568` all-4-green. **Deployed:** restart#394, root HTTP200, `/api/execution/metrics` → 404. **Reviewed by:** Langston Step-1/2/4 APPROVE; Step-8 _pending_.
+
+| Removed | Location | What |
+|---|---|---|
+| `realtime-paper-executor.ts` (WHOLE FILE, −255) | `server/services/realtime-paper-executor.ts` | The Phase-8-era real-time paper executor. `executeTrade()` had **0 callers**; `recordPaperTrade()` was never finished (*"just log - will integrate with storage in next step"*). Only live surface was `getStatus()` — a pass-through wrapper over mdCoordinator/executionTiming/rateControl. |
+| `GET /api/execution/metrics` | `server/routes.ts` | Dead diagnostic endpoint backed by the executor's `getStatus()`. **0 client consumers** (the UI's `ExecutionMetricsPanel` reads a different surface); already returned a stale `killSwitch: undefined`. The adjacent `/api/execution/timing/export` (reads `executionTiming` directly) was KEPT. |
+| order-book read sub-path | `server/services/market-data-coordinator.ts` | `latestOrderBooks` map + the `wsClient.on('orderbook')` handler (its re-`emit('orderbook')` had **0 listeners**) + `getLatestOrderBook()` (its **only caller** was the deleted executor). |
+| dead `'orderbook'` emission | `server/services/market-data-ws.ts` | the `snapshot` construction + `this.emit('orderbook', snapshot)` in the `book`-channel handler. |
+
+**Consumer reroute (NOT a removal):** `system-health-monitor.getExecutionMetrics()` — swapped `realtimePaperExecutor.getStatus()` for direct reads of `getMarketDataCoordinator().getStatus()` + `rateControl.getStatus('private')` + `executionTiming.getMetrics(10)`. **Value-identical** (Langston-verified line-by-line): the executor's `getStatus()` was already a pass-through over exactly these three singletons; the `try/catch` + `'N/A'` defaults are untouched.
+
+**Why removed:** rule-18 — never leave legacy lingering; a dead paper-fill path could accidentally re-enter the live system once paper trading turns on. #300 named home.
+
+**Blast-radius verification (certainty-before-cutting):**
+- `executeTrade()` 0 callers (the two `.executeTrade(` grep hits are `trading-engine`'s own method + a different `engine` object). **0 test imports** of the file/endpoint/accessor (`grep server/tests` + `**/*.test.ts` → 0 — Langston diff-guard #3).
+- ⚠️ **Framing correction vs the original #300 plan:** the "dup 2nd WS book path" is NOT a clean module cut — `market-data-coordinator` + `market-data-ws` are LIVE shared infra (imported by `feed-integrity-monitor`, `health-monitor`, `parity-gate`). Only the order-book SUB-PATH was dead. The `book` SUBSCRIPTION + the midpoint-`'tick'` emission are LIVE (load-bearing for the live tick stream) and were KEPT (Langston diff-guard #1: `market-data-ws.ts` `lastTickTimestamp` line preserved between the two removal targets).
+- tsc baseline no-regression; vitest 1979/1979.
+
+**Left intentionally (NOT a missed sweep — do not re-grep as dead):**
+- `slippage-fee-model.ts:91-125 calculatePriceImpact` — KEPT as the `depth-walk.ts` golden-test reference; its parent module is still imported by `pre-execution-validator` (#297) + `routes.ts`.
+- `pre-execution-validator.ts` — LEFT pending the #297 investigation (its only non-diagnostic caller is #297's `intent-executor`).
+- the whole `MarketDataCoordinator`/`MarketDataWebSocket` subsystem — likely vestigial (zero `subscribeToPair` callers) but its removal is a SEPARATE liveness-then-remove audit → homed **#301**.
+- `OrderBookSnapshot` interface export (`market-data-ws`) — KEPT (`slippage-fee-model` type-imports it).
+
+**Archive copy:** `1-system-manual/_archive/deleted-code/realtime-paper-executor.ts.removed`.
+**Reviewed by:** Langston Step-1/2/4 APPROVE; Step-8 _pending_.
