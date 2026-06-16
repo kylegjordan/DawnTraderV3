@@ -1,7 +1,8 @@
 import os from 'os';
 import { performance } from 'perf_hooks';
 import { filePersistence } from './file-persistence';
-import { realtimePaperExecutor } from './realtime-paper-executor';
+import { getMarketDataCoordinator } from './market-data-coordinator';
+import { rateControl } from './rate-control';
 import { executionTiming } from './execution-timing';
 
 export interface HealthMetrics {
@@ -287,16 +288,20 @@ class SystemHealthMonitor {
   // Get execution layer metrics (Phase 8.5)
   private getExecutionMetrics() {
     try {
-      const executorStatus = realtimePaperExecutor.getStatus();
+      // (P19-B4b.2 / #300) Read directly from the live services. The
+      // realtime-paper-executor that previously wrapped these (getStatus()) was a
+      // dead pass-through over exactly these three sources and has been deleted.
+      const mdStatus = getMarketDataCoordinator().getStatus();
+      const rateStatus = rateControl.getStatus('private');
       const execTimingMetrics = executionTiming.getMetrics(10);
 
       return {
-        marketDataSource: executorStatus.marketData.source as 'ws' | 'rest_fallback' | 'N/A',
-        lastTickAgeMs: executorStatus.marketData.lastTickAgeMs,
+        marketDataSource: mdStatus.dataSource as 'ws' | 'rest_fallback' | 'N/A',
+        lastTickAgeMs: mdStatus.lastTickAgeMs,
         avgSubmitAckMs: execTimingMetrics.avgSubmitAckMs,
         avgSlippageBps: execTimingMetrics.avgSlippageBps,
         avgFeesPerTrade: execTimingMetrics.avgFeesPerTrade,
-        ratePressure: executorStatus.rateControl.backpressure,
+        ratePressure: rateStatus.backpressure,
       };
     } catch (error) {
       // Return default values if executor not initialized

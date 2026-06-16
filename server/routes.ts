@@ -10933,42 +10933,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ==================== Phase 8.5: Real-Time Execution Layer ====================
 
-  // Get execution metrics
-  apiRouter.get('/execution/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { realtimePaperExecutor } = await import('./services/realtime-paper-executor');
-      const { executionTiming } = await import('./services/execution-timing');
-      const { rateControl } = await import('./services/rate-control');
-      
-      const execStatus = realtimePaperExecutor.getStatus();
-      const timingMetrics = executionTiming.getMetrics(50);
-      const rateMetrics = rateControl.getMetrics();
-      
-      res.json({
-        ok: true,
-        marketData: execStatus.marketData,
-        execution: {
-          avgSubmitAckMs: timingMetrics.avgSubmitAckMs,
-          avgAckFillMs: timingMetrics.avgAckFillMs,
-          avgTotalMs: timingMetrics.avgTotalMs,
-          avgSlippageBps: timingMetrics.avgSlippageBps,
-          avgFeesPerTrade: timingMetrics.avgFeesPerTrade,
-          orderCount: timingMetrics.orderCount,
-        },
-        rateControl: {
-          backpressure: execStatus.rateControl.backpressure,
-          queuedRequests: execStatus.rateControl.queuedRequests,
-          totalRequests: rateMetrics.totalRequests,
-          throttledRequests: rateMetrics.throttledRequests,
-        },
-        killSwitch: execStatus.killSwitch,
-        concurrency: execStatus.concurrency,
-      });
-    } catch (error: any) {
-      console.error('[ExecutionMetrics] Error:', error);
-      res.status(500).json({ ok: false, error: error.message });
-    }
-  });
+  // (P19-B4b.2 / #300) GET /api/execution/metrics removed — it was backed by the
+  // now-deleted realtime-paper-executor and had 0 client consumers (the UI's
+  // ExecutionMetricsPanel reads a different surface). /execution/timing/export
+  // below stays — it reads executionTiming directly, not the executor.
 
   // Export execution timing data to CSV
   apiRouter.get('/execution/timing/export', authenticateToken, async (req: AuthenticatedRequest, res) => {

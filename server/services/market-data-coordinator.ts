@@ -1,4 +1,4 @@
-import { getMarketDataWS, TickData, OrderBookSnapshot } from './market-data-ws';
+import { getMarketDataWS, TickData } from './market-data-ws';
 import { EventEmitter } from 'events';
 
 /**
@@ -17,7 +17,6 @@ class MarketDataCoordinator extends EventEmitter {
   private config: MarketDataConfig;
   private usingFallback = false;
   private latestTicks: Map<string, TickData> = new Map();
-  private latestOrderBooks: Map<string, OrderBookSnapshot> = new Map();
   private fallbackCheckInterval: NodeJS.Timeout | null = null;
 
   constructor(config?: Partial<MarketDataConfig>) {
@@ -56,12 +55,6 @@ class MarketDataCoordinator extends EventEmitter {
         lastWsTickISO: tick.timestamp,
         lastTickSymbol: tick.symbol,
       });
-    });
-
-    // Forward order book data
-    this.wsClient.on('orderbook', (book: OrderBookSnapshot) => {
-      this.latestOrderBooks.set(book.symbol, book);
-      this.emit('orderbook', book);
     });
 
     // Handle connection events
@@ -128,13 +121,6 @@ class MarketDataCoordinator extends EventEmitter {
    */
   public getLatestTick(symbol: string): TickData | undefined {
     return this.latestTicks.get(symbol);
-  }
-
-  /**
-   * Get latest order book for a symbol
-   */
-  public getLatestOrderBook(symbol: string): OrderBookSnapshot | undefined {
-    return this.latestOrderBooks.get(symbol);
   }
 
   /**

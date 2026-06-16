@@ -194,15 +194,12 @@ export class MarketDataWebSocket extends EventEmitter {
           const sortedBids = Array.from(book.bids.entries()).sort((a, b) => b[0] - a[0]);
           const sortedAsks = Array.from(book.asks.entries()).sort((a, b) => a[0] - b[0]);
           
-          const snapshot: OrderBookSnapshot = {
-            symbol: symbol,
-            bids: sortedBids.slice(0, 10) as [number, number][],
-            asks: sortedAsks.slice(0, 10) as [number, number][],
-            timestamp: new Date().toISOString(),
-          };
-          
+          // (P19-B4b.2 / #300) Dead 'orderbook' emission + snapshot construction removed.
+          // Only consumer chain (market-data-coordinator order-book store -> deleted
+          // realtime-paper-executor) is gone. The mini-book + the midpoint-tick emission
+          // below are LIVE and unchanged. The OrderBookSnapshot interface export is
+          // retained (slippage-fee-model type-imports it).
           this.lastTickTimestamp = Date.now();
-          this.emit('orderbook', snapshot);
           
           // Emit tick with midpoint for stable pricing
           if (sortedBids.length > 0 && sortedAsks.length > 0) {
