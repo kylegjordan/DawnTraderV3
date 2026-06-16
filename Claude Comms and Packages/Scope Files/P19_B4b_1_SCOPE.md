@@ -98,4 +98,21 @@ xStock has no L2 feed (§1.D). B4b.1 ships xStock with a **conservative document
 
 ---
 
-*Step-1 deliverable. On Langston ACK → Step-2 pre-audit (deeper SIM per-component + the #1.D SIM-vs-code discrepancy verification + threshold-evidence measurement) → chunked implementation.*
+## §7 — LANGSTON STEP-1 ACK + CONDITIONS (consensus 2026-06-16 — THIS IS THE SCOPE OF RECORD)
+
+Langston **ACK with conditions** — objective spine accepted unchanged (crypto-first OBJ-1→2→3→4), conditions all agreed by CC. Verbatim relay posted to thread 21.
+
+- **C-Q1 (defer D4):** validate=true round-trip + credential rate-limit lane → #296. **Hold:** the §6/§9.1 "paper fill is NOT venue-vetted until #296" disclosure must survive into the completion report (don't drop it at close).
+- **C-Q2a (extract + golden test):** extract a pure, deterministic, Box-Muller-free book-walk helper owned by the active seam — AND ship a **golden test pinning it to `slippage-fee-model.calculatePriceImpact`'s outputs** (same book + size → same avg fill; order > book → the 0.5% behavior). Port-and-prove, never re-derive-and-hope.
+- **C-Q2b (concrete dead-code home — §9.4):** a NUMBERED `RUNNING_ISSUES` entry with a real disposition target (batch-id / roadmap phase+item), NOT "tied to #297". It must cover: `realtime-paper-executor.ts`, `pre-execution-validator.ts`, the **left-behind duplicate book-walk math in `slippage-fee-model.ts`**, AND the dup `market-data-ws`/`market-data-coordinator` second WS `book` connection. Log the left-behind dup math in `DELETED_COMPONENTS_LOG` as "left intentionally — deleted with <named home>" so a later grep doesn't read it as a missed cut.
+- **C-Q3 (retire clock now + write the B7b artifact THIS batch):** retire the RTH clock now (it's not real protection); xStock keeps freshness + silent-stall. BUT write the **B7b dual-gate pre-flight assertion into PHASE_19_PLAN / B7b scope this batch** (not a verbal promise): active trading BLOCKS if, per asset class, the applicable fill-quality gate is absent/unwired — crypto: depth-sufficiency; xStock: #236 price-discovery-liveness. Cross-ref #236/B6.6 in RUNNING_ISSUES at #295 close.
+- **C-Q4 (fail-closed precision + two measured distributions):** missing threshold ≠ default → **refuse the fill (warmth-fail) + alarm, OR deterministic cold-start warmup-seed** (warmup acceptable; a silent hardcoded constant is NOT). Step-2 must produce **two distinct MEASURED distributions** on live crypto books: (a) book-update inter-arrival staleness (mirror the C3 freshness method); (b) depth-notional-vs-order-size sufficiency. Step-4: Langston greps the fill seam for any literal slippage/depth constant standing in as a fallback.
+- **C-Q5 (RNG-free):** drop the stochastic micro-move; Step-4 assertion = **the active fill seam is RNG-free end-to-end** (no `Math.random`, no time-seeded jitter in the helper or the placer path).
+- **Step-2 blast-radius holds (both about partials not corrupting downstream accounting):** (1) partial fill must propagate **ACTUAL filled qty, not requested qty**, to risk sizing, portfolio heat, position clustering, trade-identity — trace it; (2) **partial CLOSE** must track the reduced remaining position and NOT double-count realized PnL on the already-closed chunk.
+- **Promoted from §1.D footnote:** the SIM-vs-code xStock `entryLiquidityValue`/`askDepthUsd` discrepancy may be a LIVE bug, not doc drift — trace whether any gate/score CONSUMES that value expecting a number (an `undefined`→silent-default path). Resolve + correct whichever side is wrong at Step-2.
+
+**Step-2 deliverables Langston will hold the pre-audit to:** the two measured distributions; the partial-fill downstream trace; the SIM-vs-code resolution; confirmation the three concrete homes land (dead-executor sweep #, B7b dual-gate pre-flight artifact, #236 cross-ref).
+
+---
+
+*Step-1 CLOSED — Langston ACK-with-conditions, consensus reached (no Kyle escalation). Next = Step-2 pre-audit per the §7 deliverable list → `P19_B4b_1_PRE_AUDIT.md` → Langston Step-2 → chunked implementation.*
