@@ -16,7 +16,7 @@
 ## Scope objectives
 | Objective | Status | Evidence |
 |---|---|---|
-| **OBJ-1 — delete the genuinely-dead `realtime-paper-executor`** | **YES** | Whole file DELETED (archived `_archive/deleted-code/realtime-paper-executor.ts.removed`). `executeTrade` 0 callers; `recordPaperTrade` never finished. |
+| **OBJ-1 — delete the genuinely-dead `realtime-paper-executor`** | **YES** | Whole file DELETED (archived `1-system-manual/_archive/deleted-code/realtime-paper-executor.ts.removed`). `executeTrade` 0 callers; `recordPaperTrade` never finished. |
 | **OBJ-2 — detach its 2 live `getStatus()` consumers without behavior change** | **YES** | `GET /api/execution/metrics` DELETED (0 client consumers, stale `killSwitch`); `system-health-monitor.getExecutionMetrics()` REROUTED value-identically to mdCoordinator/rateControl/executionTiming (Langston-verified line-by-line). |
 | **OBJ-3 — remove the dead order-book read sub-path (surgically, inside live modules)** | **YES** | `market-data-coordinator`: `latestOrderBooks` map + `orderbook` handler + `getLatestOrderBook` removed. `market-data-ws`: dead `'orderbook'` emission removed; `book` subscription + midpoint tick + `OrderBookSnapshot` export KEPT (load-bearing). |
 | **OBJ-4 — keep what the directive said to keep; home the new finding** | **YES** | `calculatePriceImpact` KEPT (golden ref); `pre-execution-validator` LEFT pending #297; vestigial coordinator subsystem homed → #301 (incl. Langston's Q2 "is the health block dead?" follow-up). |
@@ -39,7 +39,7 @@
 - **#300 CLOSED.**
 
 ## Governance files changed
-`1-system-manual/`: DELETED_COMPONENTS_LOG.md (B4b.2 section), SYSTEM_IMPACT_MAP.md (§2992 caller list + §3006 AMR-gates downstream), SYSTEM_MANUAL.md (§7 banner + Status line), RUNNING_ISSUES.md (#300 RESOLVED + #301 NEW), PHASE_19_PLAN.md (§1 board row → done + §5 decision log), BATCH_CATALOG.md, PHASE_HISTORY.md (plain-language narrative). `Claude Comms and Packages/`: scope+pre-audit, change list, this report. `_archive/deleted-code/realtime-paper-executor.ts.removed`. MEMORY (4-way).
+`1-system-manual/`: DELETED_COMPONENTS_LOG.md (B4b.2 section), SYSTEM_IMPACT_MAP.md (§2992 caller list + §3006 AMR-gates downstream), SYSTEM_MANUAL.md (§7 banner + Status line), RUNNING_ISSUES.md (#300 RESOLVED + #301 NEW), PHASE_19_PLAN.md (§1 board row → done + §5 decision log), BATCH_CATALOG.md, PHASE_HISTORY.md (plain-language narrative). `Claude Comms and Packages/`: scope+pre-audit, change list, this report. `1-system-manual/_archive/deleted-code/realtime-paper-executor.ts.removed`. MEMORY (4-way).
 
 ## Next
 **#296** (validate round-trip + credential rate-limit lane — needs Kyle's locked-`kraken.ts` directive) · **B6.5** (crypto resurrection #235) + **B6.6** (price-discovery-liveness gate #236) still HARD-GATE B7b · **#301** (vestigial coordinator audit) · **#297** (live-engine subsystem) at next touch.
