@@ -12,10 +12,16 @@
  *     constant bump + a restart (no code change). cadence_minutes must divide 60.
  *
  * D7 fire-evidence: the meta carries {market_open, universe_size, rows_written,
- * symbols_skipped_no_snap, symbols_stale} so a weekend feed-pause (market_open
- * false, full skip, rows_written=0) is DISTINGUISHABLE from a probe breakage.
- * ⚠️ A healthy weekend fire has rows_written=0 — downstream MUST NOT alert on
- * rows_written>0 (the B-NEW-49 verifier checks fire-row presence, not counts).
+ * symbols_skipped_no_snap, symbols_stale} so a weekend is DISTINGUISHABLE from a
+ * probe breakage. ⚠️ A weekend does NOT zero rows_written (Langston Step-4): the
+ * feed PAUSES (market_open=false) but Friday's last snaps REMAIN in the table
+ * within their 30d retention, so DISTINCT ON returns them → they write with
+ * stale=true → rows_written ≈ universe_size and symbols_stale ≈ universe_size.
+ * The genuine rows_written=0 cases are a DUP-FIRE (all dedup-skipped in-bucket)
+ * and ALL-NO-SNAP (empty snap table, e.g. fresh deploy). So a future breakage
+ * alert must key off {market_open=false + symbols_stale≈universe} for "weekend"
+ * and off fire-row presence/staleness (the B-NEW-49 verifier) for "broke" —
+ * NEVER off rows_written>0.
  *
  * Failure semantics: a probe fire that throws does NOT crash the server; the
  * callback try/catch logs loud + still writes the (error) fire-evidence row.

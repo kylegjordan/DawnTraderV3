@@ -19,9 +19,13 @@
  *   - D7: a symbol with NO snap is SKIPPED (no row) and COUNTED; a stale-but-
  *     present snap IS written with stale=true. The fire-evidence meta carries
  *     {market_open, universe_size, rows_written, symbols_skipped_no_snap,
- *     symbols_stale} so a weekend feed-pause (market_open=false, full skip) is
- *     distinguishable from a probe breakage. NOTE: a healthy fire can have
- *     rows_written=0 (weekend) — downstream MUST NOT alert on rows_written>0.
+ *     symbols_stale} so a weekend is distinguishable from a probe breakage.
+ *     NOTE (Langston Step-4): a weekend does NOT zero rows_written — Friday's
+ *     last snaps persist in the table (30d retention), so they're returned and
+ *     written with stale=true → rows_written ≈ universe_size, symbols_stale ≈
+ *     universe_size, market_open=false. The genuine rows_written=0 cases are a
+ *     dup-fire (all dedup-skipped) or all-no-snap (empty table). Downstream MUST
+ *     NOT treat rows_written>0 as a health signal.
  *   - DB-governed (no hardcoded fallbacks): cadence + freshness from
  *     module_constants (fail-loud if unseeded).
  * ════════════════════════════════════════════════════════════════════════════
