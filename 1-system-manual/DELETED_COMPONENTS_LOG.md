@@ -84,3 +84,28 @@
 **Archive copy:** none — inline machinery (not a whole file); git history is the authoritative archive.
 **Removal commit:** _(recorded at D5 close)_
 **Reviewed by:** Langston (Step-4 diff review) — _pending_
+
+---
+
+## P19-B4b.1 (2026-06-16) — the RTH liquid-fill-window FILL gate + the flat paper slippage constant
+
+**Batch:** P19-B4b.1 (paper fill fidelity). **Removal commit:** `b74526dc3`. **Reviewed by:** Langston Step-4 APPROVE.
+
+| Removed | Location | What |
+|---|---|---|
+| RTH liquid-fill-window FILL gate block | `xstock_spot/active-dispatch.ts` (the `if (!isXstockLiquidFillWindowET(...))` skip + `_outOfSessionSkips` counter + the `getXstockActiveDispatchStats` field + the `isXstockLiquidFillWindowET` import) | The time-of-day proxy that gated active xStock fills to US RTH. Retired as a FILL gate (#295) — replaced by the 24/5 book-depth-sufficiency gate at the engine open seam. |
+| Flat slippage on the active fill seam | `paper-execution-engine.ts` (the `SLIPPAGE_PERCENT` field + the `CANONICAL_SLIPPAGE` import) + `order-placer.ts` (the `slippagePercent` constructor arg + the flat `intendedPrice ± slippage%` math) | The flat 0.05% paper slippage. Replaced by the honest depth-walk (`execution/depth-walk.ts`). |
+
+**Why removed:** #295 — the RTH clock was a proxy for "is the book deep enough", wrong in both directions (blocked fillable off-hours books, passed thin RTH books); B4b.1 measures depth directly. The flat slippage is superseded by the real book-walk (no magic % on the active seam — Langston Q-A / C-Q5).
+
+**★ RETAINED (verify-before-cut correction — NOT removed):** `isXstockLiquidFillWindowET` (the predicate) + its two `module_constants xstock_fill_safety.liquid_fill_window_*` keys are KEPT — the grep sweep caught that `equity-spot-archiver.ts:316` (the silent-stall watchdog) still uses them to select its RTH-vs-off-RTH reconnect threshold (a feed-cadence use, NOT a fill-quality use). Deleting them would have regressed the watchdog. Only the FILL-gate use was removed. Confirmed in staging: 2 `liquid_fill_window_*` keys live in the DB post-deploy.
+
+**★ LEFT INTENTIONALLY — scheduled for deletion with #300 / P19-B4b.2 (rule-18; do NOT read these as a missed sweep):**
+- `slippage-fee-model.ts:91-125 calculatePriceImpact` — the proven book-walk math B4b.1 PORTED into the fresh deterministic `depth-walk.ts` helper; the original is now reachable only from dead-on-active-path code (it stays as the golden-test reference until #300 deletes its dead callers).
+- `realtime-paper-executor.ts` — dead on the active path (referenced only by a diagnostic endpoint).
+- `pre-execution-validator.ts` — dead on the active path; its removal coordinates with the #297 investigation (its only non-diagnostic caller is #297's `intent-executor`).
+- the SECOND, dormant WS `book` connection `market-data-ws.ts` → `market-data-coordinator.getLatestOrderBook` — a duplicate of the active adapter's book, feeding only the dead executor + diagnostics.
+
+**Blast-radius verification:** repo-wide grep (`server/` only) for the retired symbols → the only remaining `isXstockLiquidFillWindowET` consumer is the watchdog (`equity-spot-archiver.ts`) + tests; no remaining `SLIPPAGE_PERCENT`/`CANONICAL_SLIPPAGE` on the active fill seam (a separate legacy manual-close route in `routes.ts:12200` keeps its own flat slippage — out of B4b.1 scope, noted). tsc baseline no-regression (404<494); vitest 1979.
+
+**Archive copy:** none — inline blocks; git history (`b74526dc3`) is the authoritative archive.
