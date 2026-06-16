@@ -28,6 +28,21 @@ FOUR classes (the rulebook each applies):
 - Gate = `scripts/governance-gate.mjs` (deterministic, seconds). Home order: script + `/close-batch` first → Stop hook (with stop_hook_active loop guard) + CI backstop second.
 - HARD-gate objective (a required doc/citation/verification is absent); SOFT-flag subjective (content quality) so it never loops. `N/A with reason` is the escape valve.
 
+## More refinements Kyle locked 2026-06-16 (round 2)
+C. **Bump = RECLASSIFY + RENAME + RE-SLOT (not just stricter rules).** When the gate auto-bumps (hotfix→sub-batch/batch), it must (i) RENAME the item (e.g. "hotfix-6" → its new batch/sub-batch name) and (ii) SLOT the renamed item into ALL tracking docs current at that time: roadmap, the active per-phase plan, PHASE_HISTORY, BATCH_CATALOG. The bump is a full re-identification + registration event, gate-enforced (the rename + the new registrations become required items the gate checks).
+D. **Document CREATION + AD-HOC / TEMPORARY docs are first-class (Kyle emphasis).** The system governs not just UPDATES but CREATION and RETIREMENT:
+   - CREATE-required: entering a new phase REQUIRES creating that phase's plan doc (break into batches etc.); milestone docs required at their milestone.
+   - AD-HOC / TEMPORARY docs: a batch/phase can REGISTER a temporary working doc into its own scope (example: Batch-24 assumed xStock was wired into active-trading, found it wasn't → created a separate doc within the umbrella plan to install the xStock piping into that sub-batch — a doc maintained TEMPORARILY within a batch of a phase). The config/manifest must let a session register such a doc as "required-while-this-scope-is-active," then RETIRE/ARCHIVE it (or PROMOTE it to permanent) at close. So the doc list is not a fixed permanent set — it supports per-scope, lifecycle-managed (create→maintain→retire/promote) docs.
+   → Doc lifecycle in the config: CREATE (phase/milestone/ad-hoc) · UPDATE (existing) · RETIRE/ARCHIVE or PROMOTE (temporary at close).
+
+## WHO IS THE CHECKER (Kyle question 2026-06-16) — answer
+TWO distinct things, do NOT conflate:
+- **The GATE = a deterministic SCRIPT (`scripts/governance-gate.mjs`), NOT an agent.** Plain code, runs in seconds, no LLM, no cost: reads config, compares manifest vs git diff, checks citations/verification-blocks present+typed, detects bump triggers, confirms required CREATE/RETIRE. This is ~90% of enforcement. Runs locally (Stop hook + `/close-batch`) AND in CI. It cannot be "skipped" — it's infrastructure.
+- **The AUDITOR = LLM judgment, TIERED, NO new server agent needed:**
+  - Routine closes → a FRESH local SUB-AGENT spawned by the running session (cheap, ephemeral, fresh-context, adversarial prompt: "find a doc that should've been updated but is marked N/A; verify each cited file:line actually supports its claim"). Independent-enough via fresh context + adversarial framing.
+  - Ambiguous / architectural / high-stakes → the EXISTING Langston (already our independent reviewer on a separate box; truly independent). No 3rd standing agent — adds cost+maintenance for no gain.
+  - The running session NEVER grades its own homework directly; the gate is mechanical + the auditor is a separate context.
+
 ## Open items to settle when CC-B research + Langston land
 - Exact diff→applicability heuristics (conservative) + the hotfix size-bump threshold N.
 - Auditor tiering (sub-agent routine vs Langston) — confirm split.
