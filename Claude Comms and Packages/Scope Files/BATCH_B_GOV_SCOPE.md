@@ -78,17 +78,35 @@ Our written governance is good; **enforcement is inconsistent** — docs that sh
 ## §5 — Gotchas baked in as TEST CASES (from research)
 Stop-hook infinite-loop (guard + ceiling + verify field name); subagents bypass parent hooks → gate MUST also run in CI; model self-modifying settings/hooks → `permissions.deny` protection + a self-modification check; `cat >` heredoc bypassing a Write-matcher → match Bash / rely on CI; `@`-imports don't slim → use rules/skills; **exit 1 ≠ block — only exit 2 / `decision:block`.**
 
-## §6 — Open items for Langston + CC-B to settle
-1. The hotfix size-bump threshold N (Obj 3).
-2. How aggressive the diff→applicability heuristics (conservative recommended; the n/a-with-reason valve + auditor cover the rest).
-3. Auditor tiering split (which close-types go sub-agent vs Langston).
-4. How far to slim CLAUDE.md in THIS batch vs a fast-follow (it's the constitution — careful, move-don't-delete).
-5. Config format (`.json` vs `.mjs` for expressiveness of `detect` predicates).
+## §6 — Open items — SETTLED at Langston Step-1 (2026-06-16); see §9 for the full review
+1. **Hotfix bump threshold N = 3** (≥3 files OR adds/removes a file OR a migration OR **any** architecture/strategy/regime/filter/signal-pipeline/math path). **Path-trigger WINS over count** (a 1-file change to `strategy-engine.ts` is a batch, not a hotfix). Bias to over-bump.
+2. **Heuristics: conservative-hard, liberal-soft.** Hard-gate fires only on clear diff→doc mappings; the Obj-13 sweep + L4 auditor flag freely (false positives there are free); `n/a:reason` covers the middle.
+3. **Auditor: fresh sub-agent on EVERY close (mandatory, non-negotiable — it's what prevents enforcement theater); Langston = escalation only** (phase/umbrella closes, auto-bumped closes, architecture/strategy/regime/signal/math touches, or anything the sub-agent flags uncertain). Do NOT route every batch to Langston (rebuilds the bottleneck).
+4. **CLAUDE.md slim = NARROW this batch:** move ONLY the now-executable rules — §3 Tier-1/2 doc lists → the config (source of truth; prose duplicate = drift), §9 SIM/SysManual discipline → config-spec + a `.claude/rules/` path-scoped file. LEAVE persona / §5 comms / §7 prime-invariant / taxonomy blocks alone (genuine context, not gate-enforceable). Target "remove redundant enforcement prose," prove via Obj-11 before/after inventory — NOT a <200-line chase on the constitution this batch. Rest fast-follow.
+5. **Config format = `.mjs`** (predicates need real expressiveness; JSON forces a brittle stringly-DSL). Keep DATA (doc list, classes, thresholds) as declarative objects at top; only `applies_when`/`detect` are functions `(diff, ctx) => bool`. Already covered by `permissions.deny` (Obj 10).
+6. **Obj-13 cleanup cadence = phase-close trigger (mandatory) + a 2-WEEK scheduled floor** (monthly too slow vs the cited drift), fired through the system-alerts queue (§10.5) — no new mechanism; detector-only, never auto-edits.
 
 ## §7 — Governance (Tier-1 + applicable Tier-2) for B-GOV itself
 BATCH_CATALOG + PHASE_HISTORY + MEMORY (+ Langston MEMORY) + this scope + pre-audit + completion report; SIM IF a component/cross-cutting-state is added (the gate/hook are new components → SIM entry); CLAUDE.md §3/§9 restructured (Obj 11) + a new `governance.md`. CI all-4-green. Its own close run through the gate (Obj 12).
 
 ## §8 — Sequencing
-Near-term (Kyle: every batch until it lands keeps leaking). Step-1 (this scope) → Langston review + Kyle confirm → Step-2 pre-audit (consult SIM for every touched surface; confirm the Claude Code build's hook field names) → Step-3 build in the order of Obj 10 → Step-4 Langston code review → CI → Step-7/8 verify → governance close (dogfooded through the gate).
+Near-term (Kyle: every batch until it lands keeps leaking). Step-1 (this scope, Langston APPROVE-W-REVISIONS 2026-06-16) → Step-2 pre-audit (consult SIM for every touched surface; **confirm the installed Claude Code build's Stop-hook field names — esp. `stop_hook_active`**) → Step-3 build in the order of §9 item E → Step-4 Langston code review → CI → Step-7/8 verify → governance close (dogfooded through the gate).
 
-— CC-A (Claude Old), 2026-06-16
+## §9 — LANGSTON STEP-1 REVIEW: APPROVE-WITH-REVISIONS (2026-06-16) — all folded, BINDING
+Verdict APPROVE-WITH-REVISIONS; additions not redesign. §6 above records the settled open items. THREE genuine gaps + two structural musts, now binding scope:
+
+**A. Concurrency (Kyle-visible — two CC sessions run live).** All gate state MUST be **per-batch-id keyed, never global** — the Stop-hook iteration-ceiling counter, the manifest, "current phase plan," and the umbrella running-report are shared mutable state two sessions can race. The running-report is the contended one → **append-only / keyed sub-batch rows** so simultaneous closes don't clobber. Make concurrency EXPLICIT in the §7 SIM cross-cutting-state entry (ties to the §17 liveness registry).
+
+**B. Obj-3 bump needs a NAME-SOURCE + path-override.** The gate can require the rename + 4-doc re-slot but can't mint the id → it reads the canonical next-id from **BATCH_CATALOG** (two live bumps must not grab the same name). And the **path-trigger overrides the size threshold** (per §6 item 1).
+
+**C. Don't oversell the diff-heuristic (no-silent-caps ethos).** A config/DB-driven BEHAVIORAL change won't appear in `git diff`, so the gate WILL miss some "doc-should-update" cases. State it: gate floors the obvious; manifest `n/a:reason` + L4 auditor carry the non-obvious; **the gate LOGS what its heuristic did NOT assess** so a green gate is never read as "everything was checked." Obj-13's touched-vs-substantive detector stays **soft-flag only** (never hard-gates).
+
+**D. Biggest risk = ENFORCEMENT THEATER / false-green.** The gate checks presence+type, not truth → the danger is sessions satisfying the letter (rubber-stamp `n/a:reason`, boilerplate verification block) and earning a green on a hollow close — worse than today, because the checkmark manufactures false confidence. Two mandatory mitigations IN THIS BATCH: (1) the L4 sub-agent auditor runs on **every** close with an adversarial prompt that explicitly hunts the satisfied-letter-not-spirit pattern (non-negotiable, not optional-under-time-pressure); (2) **a LOGGED manual override `--override <reason>`** — recorded + CI-visible + auditor-reviewed — built the SAME batch as the gate. Rationale: a gate BUG that red-lights a legitimately-clean close would otherwise freeze EVERY future batch until someone with `permissions.deny` access intervenes (single point of failure for the whole program). The override is NOT a silent backdoor; it is logged and audited.
+
+**E. Build order (revised — swap CI before the Stop hook):** (1) gate `.mjs` + `/close-batch`; (2) **CI backstop** (the only unbypassable layer; independent of the hook field-name risk — land it before the fragile local piece so we're enforced while the hook is debugged); (3) **Stop hook LAST** (fiddliest; `stop_hook_active` guard + iteration ceiling + field-name verified against our build). Supersedes the Obj-10 order.
+
+**F. §3 table tweaks:** Phase row inherits the Obj-13b phase-plan cleanup + roll-up reconciliation (not just CREATE-the-plan); Hotfix path-trigger overrides size.
+
+Langston: "approve, build it … happy to take Step-2 once the pre-audit confirms the hook field names." CC-A agrees with all six; no points contested.
+
+— CC-A (Claude Old), 2026-06-16 (v2, Langston Step-1 folded)
