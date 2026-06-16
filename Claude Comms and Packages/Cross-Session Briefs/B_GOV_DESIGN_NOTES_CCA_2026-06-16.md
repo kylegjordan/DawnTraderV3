@@ -49,5 +49,9 @@ TWO distinct things, do NOT conflate:
 - Parameterized doc-types: per-phase plan (PHASE_19_PLAN→PHASE_20_PLAN) + the umbrella running-progress report.
 - How far to slim CLAUDE.md §3/§9 in-batch vs fast-follow.
 
+## Research done (CC-A, 2026-06-16) — synthesis in `B_GOV_RESEARCH_SYNTHESIS_CCA_2026-06-16.md`
+Confirmed the premise officially (Anthropic: "CLAUDE.md is context, not enforced config; use a hook to block"; "<200 lines"). Sharpened design: the 6-LAYER STACK (L0 slim prose → L1 /close-batch → L2 gate script → L3 Stop hook → L4 auditor → L5 CI+permissions.deny) maps onto our 3-doors. Key mechanics locked: only exit-2/`decision:block` blocks; Stop-hook needs `stop_hook_active` guard + iteration ceiling + verify field name in our build; subagents bypass hooks → gate MUST run in CI; protect settings/hooks via permissions.deny; slim via `.claude/rules/` path-scoped + skills (NOT @-imports). Auditor in separate context = Langston already qualifies.
+
+## STATUS: SCOPE DRAFTED → `Claude Comms and Packages/Scope Files/BATCH_B_GOV_SCOPE.md` (Step-1 v1, 12 objectives)
 ## Next steps
-1. Receive `B_GOV_CCB_RESEARCH_HANDOFF.md` (CC-B). 2. Kyle confirms the plain-language model. 3. Draft `BATCH_B_GOV_SCOPE.md` → Langston Step-1. 4. Build (its own close = first live test of the gate).
+1. Kyle eyeballs the scope (or sends straight to Langston Step-1). 2. Fold CC-B research if it lands. 3. Langston Step-1 review + Kyle confirm. 4. Step-2 pre-audit. 5. Build per Obj-10 order. (Its own close = first live test of the gate.)
