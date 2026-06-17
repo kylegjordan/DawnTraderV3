@@ -27,7 +27,7 @@ This manual documents both **what the system currently does** and **what it is d
 - Components are labeled with their status: **ACTIVE**, **LEGACY**, **CANONICAL CANDIDATE**, **DEPRECATED**, **LOCKED**, etc.
 - The phrase "defined but not wired" or "implemented but not actively selected" indicates a component that exists in code but is not in the live execution path
 
-**When in doubt**: The active trading path uses the Market Context Engine (MCE), which computes DBS first, then calls `calculatePairRegime(momentum, adx, volatility, dbsScore)` for canonical 5-regime classification and looks up strategies via `CANONICAL_REGIME_STRATEGY_MAP` (17 strategies). The classifier uses DBS to gate regime assignments (B62 redesign). The legacy 6-regime / 9-quant-only map has been fully replaced (Batch 13 DSS rewire + Batch 14 MCE installation). See Chapter 2 for the full regime architecture breakdown.
+**When in doubt**: The active trading path uses the Market Context Engine (MCE), which computes DBS first, then calls `calculatePairRegime(momentum, adx, volatility, dbsScore)` for canonical 5-regime classification and looks up strategies via `CANONICAL_REGIME_STRATEGY_MAP` (19 strategies — the `STRATEGY_DISPLAY_NAMES` key count; "17" was the pre-`strong_bull_trend`/pre-`orb` figure, corrected P19-B6.5c). The classifier uses DBS to gate regime assignments (B62 redesign). The legacy 6-regime / 9-quant-only map has been fully replaced (Batch 13 DSS rewire + Batch 14 MCE installation). See Chapter 2 for the full regime architecture breakdown.
 
 > **★ ACTIVE-TRADING GATING — TWO orthogonal axes (P19-B6.5a, 2026-06-17).** Whether the active trading pipeline runs for a given signal is now gated on **two** independent flags, both DB-resolved on `system_context`: (1) the per-MODE master `isEngineActive` ("is active trading on at all for `paper` / `live`?"); and (2) the per-(mode, asset_class) flag `active_asset_classes` (a JSONB map, e.g. `{"crypto_spot": true, "xstock_spot": false}`). **A class trades iff `isEngineActive(mode) === true` AND `active_asset_classes[class] === true`.** The per-class flag is **fail-closed** (a missing key = inactive; default `'{}'` = both OFF) and is an *additional* gate — never a replacement for the master. It exists so the B7b turn-on can go **crypto-first** (master ON + `crypto_spot` ON + `xstock_spot` OFF) without co-activating the still-incomplete xStock active path. The single typed read is `isAssetClassActiveInContext()` (`trading-state-sync.ts`); the gates live at the two class entry points (crypto = `fx5-scanner.ts`, where a gated-OFF crypto falls back to passive/VTS scanning; xStock = `xstock_spot/active-dispatch.ts`, where a gated-OFF xStock takes the dormant-skip branch). The setter `setAssetClassActive()` mirrors `setEngineActive`'s write-DB-first-then-broadcast discipline. SHIPPED DORMANT (both classes default OFF). See SIM "Per-asset-class active gate" + `P19_B6_5a_COMPLETION_REPORT.md`.
 
@@ -63,7 +63,7 @@ The codebase is a TypeScript monorepo with a React frontend, Express API server,
 
 ### Part I: Core Trading Engine
 - **Chapter 1**: Core Math & Scoring (Phase 1) — FinalScore kernel, Expectancy Gate, cost model, quality metrics
-- **Chapter 2**: Strategy Deep Dives (Phase 2) — 19 canonical strategies, regime classification, DSS analysis
+- **Chapter 2**: Strategy Deep Dives (Phase 2) — 19 canonical strategies, regime classification, DSS analysis, active crypto pattern→strategy routing (exact-match-or-drop, P19-B6.5c)
 - **Chapter 3**: Market Scanning & Pair Management (Phase 3) — FX5 Scanner, watchlist, screener filters
 
 ### Part II: Risk & Execution
@@ -1425,7 +1425,9 @@ Market Data → Regime Classifier (Canonical 5-Regime Model)
 | **HIGH_VOL_IMPULSE** | > 0.010 | > 30 | > 0.03 | Strong breakout, trend acceleration, violent expansion |
 | **TRANSITION** | ±0.004 | 20-25 | 0.015-0.03 | Reversal zone, weakening trend, volatility uplift |
 
-### Full Canonical Strategy Map (17 Strategies)
+### Full Canonical Strategy Map (19 Strategies)
+
+> **★ Count correction (P19-B6.5c, 2026-06-17):** the canonical strategy count is **19**, not 17. The authoritative basis is the literal key count of `STRATEGY_DISPLAY_NAMES` in `server/config/canonical-regime-strategy-map.ts`: `sma_trend_ride, vwap_pullback, morning_star, pivot_shift, mean_reversion, reverse_impulse, defensive_hedge, inside_bar_reversal, range_trade, support_bounce, abcd_long, adaptive_flow, breakout, vwap_bounce, volatility_edge, dhma, liquidity_trap, strong_bull_trend, orb` = 19. The "17" figure predated `strong_bull_trend` (added B63) and `orb` (added B79.0d); both are now first-class canonical strategies. The per-regime tables immediately below predate those two additions and have not been re-tabulated, but the canonical count is 19.
 
 #### BULL_STABLE (3 strategies, riskMultiplier: 1.2, minConfidence: 0.65)
 
@@ -1496,6 +1498,28 @@ The canonical map provides `selectContextAwareStrategy()` which considers detect
 5. **Primary**: Default to the first strategy in the regime's list
 
 This selection logic ensures pattern and hybrid strategies are actively chosen when conditions warrant — but **only if the DSS is wired to use it**.
+
+### Active Crypto Pattern→Strategy Routing — Exact-Match-or-Drop (P19-B6.5c, 2026-06-17)
+
+> **Patterns are triggers, not strategies.** A detected candlestick pattern (PINBAR, ABCD, MORNING_STAR, ENGULFING, INSIDE_BAR, THREE_SOLDIERS, …) is an *entry trigger* that FEEDS one of the 19 canonical strategies — it is never a strategy in its own right. The system does **not** invent strategies; the canonical set is fixed at 19 (`STRATEGY_DISPLAY_NAMES`).
+
+The crypto active orchestrator resolves a detected pattern to its **consuming canonical strategy** via `resolvePatternConsumingStrategy(regime, detectedPattern, assetClass)` in `server/config/canonical-regime-strategy-map.ts`. The contract is **EXACT-MATCH-OR-DROP**:
+
+1. **Exact match:** the pattern is mapped to the canonical strategy whose declared `patternType` matches the detected pattern, **in the current regime and asset class**. That canonical strategy name (a valid `strategy_type` enum value) is what flows downstream.
+2. **No-match → DROP:** if no consuming PATTERN/HYBRID strategy exists for that pattern in the current regime+class, the pattern signal is **dropped** (not mislabeled, not best-effort-mapped to a "nearest" strategy — that would pollute the unrelated strategy's NetEV / win-rate statistics). Drops are counted via `getPatternNoMatchDropStats()` and surfaced in the live log as `[PATTERN_NOMATCH_DROPS]`.
+
+**This resolution is REGIME-DEPENDENT** — the same pattern routes to different strategies (or drops) depending on the active regime:
+
+| Detected Pattern | Regime | Consuming Canonical Strategy |
+|------------------|--------|------------------------------|
+| PINBAR | HIGH_VOLATILITY_UNSTABLE | `reverse_impulse` |
+| PINBAR | RANGE_BOUND_STABLE | `support_bounce` |
+| ABCD | IMPULSE_EXPANSION | `volatility_edge` (the pattern feeds `volatility_edge` — **NOT** the `abcd_long` quant strategy) |
+| ABCD | (any other regime) | DROPPED (no consumer) |
+
+**Strictly additive.** `resolvePatternConsumingStrategy` is a *new* resolver layered alongside — it does **not** change the shared `selectContextAwareStrategy` fallback resolver described above, which VTS and the xStock path continue to use unchanged.
+
+**What this REPLACED (the prior bug).** Before B6.5c, the pattern recognizer fabricated invalid strategy strings of the form `pattern_<name>` (e.g. `pattern_abcd`) that were **not** valid `strategy_type` enum values; every such signal was then rejected at the ready-to-buy insert, so 100% of pattern-pool crypto signals silently failed to reach the ready-to-buy queue. The fix moves naming authority out of the recognizer: `patternToTradeSignal` now returns **geometry/confidence only (no strategy)**, and the orchestrator assigns the canonical consuming strategy via `resolvePatternConsumingStrategy`. A redundant duplicate pattern-emission loop in the orchestrator was also removed — the `activeStrategies` dispatch already evaluates every pattern-consuming strategy via its `detect*()` function plus `buildPatternInputForStrategy`, so the second emission path was dead duplication.
 
 ### Pattern-to-Canonical Mapping (Directive 11.4G)
 
