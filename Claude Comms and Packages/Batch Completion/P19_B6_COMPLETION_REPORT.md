@@ -1,7 +1,7 @@
 # P19-B6 COMPLETION REPORT — Daily Loss-Budget Kill Switch (RESTORE + auto-trip)
 
 > **Batch:** P19-B6 · **Phase:** 19 · **Author:** Claude New (CC-B) · **Date:** 2026-06-17
-> **Status:** code shipped + deployed + force-trip-proven; **Langston Step-8 pending; Kyle ack pending.**
+> **Status:** code shipped + deployed + force-trip-proven; **Langston Step-8 CONFIRMED (independent staging verification 2026-06-17); Kyle ack pending.**
 > **Roadmap:** 19-4 / §19.0.B · **Pre-flight gate:** PHASE_19_PLAN §6 gate 7.
 
 ---
@@ -45,7 +45,7 @@
 - **migration:** per-mode warning columns + coherency RULE_011 + (conditional, didn't fire) paper-kill bump.
 
 ## §5 REVIEW + VERIFICATION
-- **Langston Step-1/2** ACK→PROCEED (restore reframe + flatten + circuit-breaker + the re-entrancy design). **Step-4** CHANGES-NEEDED (2 real blockers: RULE_011 string-compare; thrown-doKill latch) → both fixed → **re-APPROVED** + 3 notes (1 fixed: NaN-fail+test; 2 confirmed: retry idempotency; 3 covered: gate-7 integration test). **Step-8 PENDING.**
+- **Langston Step-1/2** ACK→PROCEED (restore reframe + flatten + circuit-breaker + the re-entrancy design). **Step-4** CHANGES-NEEDED (2 real blockers: RULE_011 string-compare; thrown-doKill latch) → both fixed → **re-APPROVED** + 3 notes (1 fixed: NaN-fail+test; 2 confirmed: retry idempotency; 3 covered: gate-7 integration test). **Step-8 CONFIRMED** (independent staging verification 2026-06-17, HEAD `43601300f` / restart #399): all 4 objectives PASS — warning guardrails 50/75 on both modes (paper kill 10 / live kill 15), `daily-loss-budget.ts` deployed + clean boot (zero daily-loss + zero uncaught errors in `out.log`), RULE_011 live in `validate()` incl the NaN-fail branch, engine passive on both modes (`is_engine_active=false`) so the auto-trip is correctly dormant; no active alerts. Cleared for Kyle ack.
 - **Bench:** tsc-baseline no-regression; **vitest 23/23 B6** (18 unit + 5 force-trip integration).
 - **CI:** all-4-green on `096031448` (run 27678051366) + `43601300f`.
 - **Deploy:** staging restart #399, HTTP 200, migration applied, clean boot (no daily-loss errors).
