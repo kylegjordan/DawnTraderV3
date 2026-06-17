@@ -91,6 +91,7 @@ import {
   normalizePatternToCanonical,
   normalizeRegime,
   resolvePatternConsumingStrategy,
+  getPatternNoMatchDropStats,
   isStrategyEnabledForAssetClass,
   type CanonicalRegimeType as MarketRegimeType
 } from '../config/canonical-regime-strategy-map.js';
@@ -1588,7 +1589,10 @@ export class SignalOrchestrator {
           console.warn(`[14.5][ORCHESTRATOR] Pattern pool eval failed for ${symbol}:`, err);
         }
       }
-      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s)`);
+      // P19-B6.5c: surface the exact-match no-match DROP counter (Langston D3/D4 obs gate — "no silent caps").
+      // Cumulative per (pattern|regime|class); a high/rising drop count vs signals-generated is the tell that
+      // pattern coverage went dark (e.g. a regime-field misread routing everything to a no-consumer regime).
+      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s) | [P19-B6.5c][PATTERN_NOMATCH_DROPS] ${JSON.stringify(getPatternNoMatchDropStats())}`);
 
       const now = new Date();
       this.stats = {
