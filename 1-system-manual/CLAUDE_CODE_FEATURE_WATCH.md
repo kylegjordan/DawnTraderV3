@@ -20,4 +20,5 @@
 
 ## Surfaced to Kyle (task appends here — newest first)
 
-*(none yet — task adds `- YYYY-MM-DD | <feature> | <one-line why it helps DawnTrader> | <Kyle's decision once known>` rows here)*
+- 2026-06-17 | Nested sub-agents (a sub-agent can spawn its own sub-agents, up to 5 levels deep — CC 2.1.172) | A single pre-audit/codebase-survey dispatch can branch out and cover far more of the system autonomously, instead of CC sending helpers one at a time — faster, deeper SIM blast-radius traces with less hand-holding | (Kyle decision: pending)
+- 2026-06-17 | Parameter-level permission rules `Tool(param:value)` (CC 2.1.178) | Permission allow/deny can now match the exact arguments of a command, not just its name — lets us block a specific destructive variant (e.g. a force-push) while the safe variant still auto-runs; tightens the §5/rule-16 safety posture we currently hand-roll at command-name granularity | (Kyle decision: pending)
