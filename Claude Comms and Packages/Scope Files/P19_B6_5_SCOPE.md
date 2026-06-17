@@ -1,8 +1,23 @@
 # P19-B6.5 SCOPE — Crypto Active-Pipeline RESURRECTION
 
-> **Batch:** P19-B6.5 · **Phase:** 19 · **Author:** Claude New (CC-B) · **Date:** 2026-06-17 · **Rev:** 1 (Step-1, for Langston ACK)
-> **Issue:** #235 · **Roadmap:** PHASE_19_PLAN §1 row P19-B6.5 · **Gate:** PHASE_19_PLAN §6 **gate 10** (B7b HARD-GATED on B6.5-green)
+> **Batch:** P19-B6.5 (split into **B6.5a** + **B6.5b**) · **Phase:** 19 · **Author:** Claude New (CC-B) · **Date:** 2026-06-17 · **Rev:** 2 (Langston Step-1 ACK + rulings adopted)
+> **Issue:** #235 · **Roadmap:** PHASE_19_PLAN §1 rows P19-B6.5a/b · **Gate:** PHASE_19_PLAN §6 **gate 10** (B7b HARD-GATED on B6.5-green)
 > **Predecessor closed:** P19-B6 (daily-loss auto-trip) — 2026-06-17.
+
+---
+
+## §0.5 REV-2 — LANGSTON STEP-1 RULING (ACK + adopted 2026-06-17)
+
+**Step-1 = ACK** (scope sound, proof/repair-distinct-from-flip framing right, per-class-toggle gap correctly surfaced before committing to a mechanism).
+
+- **Q1 → Option C (Langston OVERRODE CC's lean toward A).** Build a **first-class per-asset-class active gate**. Reasoning is gate-dependency, not preference: **B7b is staged crypto-first with xStock still dormant (gate 11/B6.6 unbuilt), so B7b ITSELF cannot flip the shared per-mode `isEngineActive` without co-activating the incomplete xStock path** → a per-class active gate is **mandatory B7b infrastructure that was missing**, not B6.5 scope-balloon. Option A (mid-chain harness) bypasses the very turn-on B6.5 must prove + leaves B7b's real mechanism unproven at the moment we hard-gate on it; rejected. Option B (fail-closed suppression) is a silent fallback → rule #10 / NO-PATCHES violation; rejected. **C subsumes B; the dry-run becomes a real, time-boxed, reverted crypto-only turn-on through the EXACT mechanism B7b will use (highest-fidelity proof).**
+- **SPLIT ADOPTED (CC decision, Langston-sanctioned):** **B6.5a = the per-class active gate** (net-new infra + tests + the isolation acceptance test); **B6.5b = the accretion-delta audit + crypto-only dry-run + fill-parity** (uses the gate). Both stay under the single **B7b-green gate 10**. Rationale: the gate is discrete, independently testable B7b infrastructure deserving its own clean Langston review; bundling with the audit+dry-run mixes concerns. Matches the small-batch pattern.
+- **Q2 → agree** (break-fix blocking a crypto lifecycle = in-batch; calibration/threshold tuning defers to a named §13 home decided at surfacing).
+- **Q3 → agree + addition:** gate 10 = Obj-1 audit clean + Obj-2 full closed lifecycle + Obj-3 fill-parity **+ the C-gate verified** (crypto-only turn-on confirmed, xStock provably untouched, clean revert).
+- **Q4 → agree + addition:** tiny balance + hard position cap + P19-B6 daily-loss armed **+ prove xStock-path isolation during the run (zero xStock signals/opens) = the new gate's acceptance test.**
+- **Q5 → agree:** confirm gate 13 (crypto depth fill-quality, shipped B4b.1) + gate 7 (daily-loss, shipped B6) present + wired BEFORE the dry-run (it exercises both).
+
+**★Finding elevated:** the per-asset-class active gate is a **B7b prerequisite**, not merely a B6.5 dry-run convenience — surfaced to Kyle in plain language. → Proceed to Step-2 pre-audit for **B6.5a**.
 
 ---
 
@@ -44,7 +59,7 @@ Confirm the crypto paper fill behaves correctly through the B4b.1 depth-walk INT
 
 ---
 
-## §2 ★ KEY DESIGN QUESTION — how to do a CRYPTO-ONLY dry-run (needs Langston)
+## §2 ★ KEY DESIGN QUESTION — RESOLVED → Option C (per-class active gate = B6.5a). See §0.5.
 
 **Step-1.a surfaced a real blocker:** there is **no per-asset-class active toggle**. The active path is gated only on the per-MODE `system_context.isEngineActive` (confirmed `fx5-scanner.ts:543-555`; grep for `activeAssetClasses`/`isAssetClassActive` → 0 hits). The xStock active-dispatch (`active-dispatch.ts:123`) gates on the **same** `isEngineActive` flag. So **naively flipping paper `isEngineActive=true` activates BOTH crypto and the dormant xStock active paths at once** — which is not a crypto-only dry-run, and risks exercising the still-incomplete xStock turn-on (gate 11 holiday-liveness #236/B6.6 not built yet).
 
@@ -73,7 +88,7 @@ Confirm the crypto paper fill behaves correctly through the B4b.1 depth-walk INT
 - Strategy/threshold CALIBRATION (correctness-tuning) — B6.5 is break-fix + proof, not calibration.
 
 ## §5 SEQUENCING
-B6 (done) → **B6.5 (this)** → B6.6 → B6.7 → B6.8 → B7a → B7b. **B7b HARD-GATED on B6.5 green** (§6 gate 10). B6.5 sits between B6 and B7a per the §1 board.
+B6 (done) → **B6.5a (per-class active gate)** → **B6.5b (audit + crypto-only dry-run + fill-parity)** → B6.6 → B6.7 → B6.8 → B7a → B7b. **B7b HARD-GATED on B6.5 green** (§6 gate 10 — both a + b green). B6.5a is the prerequisite infra for B6.5b's dry-run (and for B7b's crypto-first flip itself).
 
 ## §6 WORKFLOW
 Full 11-step. Step-2 pre-audit will do the per-component DIRECT reads (run-mode-controller, trading-state-sync, the Phase-8 baseline diff via git archaeology of the last active-paper commit) + SIM consultation. Run AUTONOMOUSLY with Langston per standing directive; escalate to Kyle only on no-consensus or a Kyle-owned decision (e.g. if the dry-run mechanism needs his risk sign-off).
