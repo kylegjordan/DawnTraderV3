@@ -1,0 +1,448 @@
+diff --git a/drizzle/migrations/2026-06-17-p19-b6-5a-per-class-active-gate-rollback.sql b/drizzle/migrations/2026-06-17-p19-b6-5a-per-class-active-gate-rollback.sql
+new file mode 100644
+index 000000000..6b81cb18a
+--- /dev/null
++++ b/drizzle/migrations/2026-06-17-p19-b6-5a-per-class-active-gate-rollback.sql
+@@ -0,0 +1,4 @@
++-- Rollback P19-B6.5a per-asset-class active gate.
++-- Safe: additive column, no data dependency. Reverting restores the pre-B6.5a per-MODE-only gating.
++ALTER TABLE system_context
++  DROP COLUMN IF EXISTS active_asset_classes;
+diff --git a/drizzle/migrations/2026-06-17-p19-b6-5a-per-class-active-gate.sql b/drizzle/migrations/2026-06-17-p19-b6-5a-per-class-active-gate.sql
+new file mode 100644
+index 000000000..eac52457d
+--- /dev/null
++++ b/drizzle/migrations/2026-06-17-p19-b6-5a-per-class-active-gate.sql
+@@ -0,0 +1,16 @@
++-- P19-B6.5a — per-asset-class active gate (Langston Option C ruling; Q-A = JSONB on system_context).
++--
++-- Adds a fail-closed, default-OFF per-(mode, asset_class) active flag, co-located on the existing
++-- per-mode `system_context` row (the read is already in hand at every gate via getSystemContext(mode),
++-- so this adds NO new hot-path query — fx5 scans every 30s).
++--
++-- Semantics: a class is active in a mode IFF active_asset_classes ->> '<class>' = 'true'. A MISSING
++-- key = inactive = FAIL-CLOSED. The gate is ADDITIONAL (never a replacement): a class trades iff
++--   isEngineActive(mode) === true  AND  isAssetClassActive(mode, class) === true.
++--
++-- ADDITIVE + DORMANT: shipping this changes NOTHING about today's behavior — both classes default OFF,
++-- and isEngineActive is already false in VTS/passive. The gate can only ever RESTRICT. B7b crypto-first
++-- becomes expressible as: master ON + crypto_spot ON + xstock_spot OFF (xStock stays dormant even with
++-- the master flag flipped).
++ALTER TABLE system_context
++  ADD COLUMN IF NOT EXISTS active_asset_classes jsonb NOT NULL DEFAULT '{}'::jsonb;
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index 2c2c614e4..a95efa4d0 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -142,3 +142,4 @@
+ 2026-06-16-p19-b4b1-fill-depth-gate-seed.sql
+ 2026-06-16-p19-b5c-qd-probe-history.sql
+ 2026-06-16-p19-b6-daily-loss-warning-tiers.sql
++2026-06-17-p19-b6-5a-per-class-active-gate.sql
+diff --git a/server/asset_classes/xstock_spot/active-dispatch.ts b/server/asset_classes/xstock_spot/active-dispatch.ts
+index 14ad5ac8f..d43b7f0c9 100644
+--- a/server/asset_classes/xstock_spot/active-dispatch.ts
++++ b/server/asset_classes/xstock_spot/active-dispatch.ts
+@@ -30,6 +30,7 @@
+ import { getOrchestratorByMode } from '../../services/paper-sim-service.js';
+ import { getPortfolioBalanceV2 } from '../../services/guardrail-settings.js';
+ import { storage } from '../../storage.js';
++import { tradingStateSync, isAssetClassActiveInContext } from '../../services/trading-state-sync.js';
+ import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-map.js';
+ import type { StrategySignal } from '../../services/strategy-engine.js';
+ import type { StrategyType } from '../../services/paper-position-sizing.js';
+@@ -49,6 +50,9 @@ let _dispatchErrors = 0;   // assert/build/dispatch failures (loud-logged, never
+ // P19-B4a (C3) — fill-safety gate counters (all fail-CLOSED, all observable).
+ let _configClosedSkips = 0; // fill-safety config missing/incomplete → fail-closed block
+ let _staleSkips = 0;        // latest tick older than the freshness threshold (or absent)
++// P19-B6.5a — per-asset-class active gate: master engine ON but xstock_spot class gated OFF
++// (fail-closed, default-OFF). The expected state until B7b explicitly activates xStock.
++let _classDormantSkips = 0;
+ 
+ export function getXstockActiveDispatchStats() {
+   return {
+@@ -58,6 +62,7 @@ export function getXstockActiveDispatchStats() {
+     dispatchErrors: _dispatchErrors,
+     configClosedSkips: _configClosedSkips,
+     staleSkips: _staleSkips,
++    classDormantSkips: _classDormantSkips,
+   };
+ }
+ 
+@@ -124,6 +129,16 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
+       _dormantSkips++; // §9.1 scaffolding: wire-in dormant until B7b. Normal state pre-flip.
+       return;
+     }
++    // P19-B6.5a — per-asset-class active gate (fail-closed, default-OFF). Even with the per-mode
++    // master ON, xStock stays dormant until its class flag is explicitly flipped — the exact
++    // isolation B7b's crypto-first turn-on requires. Uses the paperCtx already in hand (no extra
++    // query); typed pure helper, never reads the raw JSONB here.
++    const xstockActive = isAssetClassActiveInContext(paperCtx, 'xstock_spot');
++    tradingStateSync.recordAssetClassGateDecision('paper', 'xstock_spot', xstockActive);
++    if (!xstockActive) {
++      _classDormantSkips++; // master ON but xstock_spot class gated OFF — the expected state pre-B7b.
++      return;
++    }
+     const orch = getOrchestratorByMode('paper');
+     if (!orch) {
+       _noOrchSkips++; // engine flagged active but no orchestrator — surface, do not fabricate.
+diff --git a/server/core/rtb/ready_to_buy_service.ts b/server/core/rtb/ready_to_buy_service.ts
+index f9c9c95f1..74fcd838d 100644
+--- a/server/core/rtb/ready_to_buy_service.ts
++++ b/server/core/rtb/ready_to_buy_service.ts
+@@ -590,6 +590,11 @@ class ReadyToBuyService {
+    */
+   private async executePerSignalRefresh(mode: TradingMode): Promise<void> {
+     // Check if engine is active
++    // P19-B6.5a (Q-B / RUNNING_ISSUES #320): the per-asset-class active gate is enforced UPSTREAM at
++    // the class entry points (fx5-scanner crypto scan + xstock_spot/active-dispatch), so a gated-OFF
++    // class never emits a signal that reaches this queue. RTB therefore does NOT re-check the per-class
++    // flag here. The B6.5b accretion-delta audit must PROVE this upstream guarantee (no admission path
++    // bypasses the entry gates); if it finds one, RTB per-signal assetClass-active enforcement goes in.
+     const systemContext = await storage.getSystemContext(mode);
+     if (!systemContext?.isEngineActive) {
+       return; // Skip refresh when engine is inactive
+@@ -783,6 +788,9 @@ class ReadyToBuyService {
+   private async executeRefreshCycle(mode: TradingMode): Promise<void> {
+     // Directive 8.8.4-A3.R1: Engine-aware refresh control
+     // Only run refresh cycle when trading engine is active for this mode
++    // P19-B6.5a (Q-B / RUNNING_ISSUES #320): per-asset-class gating is enforced UPSTREAM at the class
++    // entry points; a gated-OFF class emits no signal that reaches this queue. No per-class re-check
++    // here (defense-in-depth deferred to B6.5b pending the audit's upstream-guarantee proof).
+     const systemContext = await storage.getSystemContext(mode);
+     if (!systemContext?.isEngineActive) {
+       return; // Skip refresh when engine is inactive (passive learning mode)
+diff --git a/server/services/fx5-scanner.ts b/server/services/fx5-scanner.ts
+index 88cd8ebf6..947121886 100644
+--- a/server/services/fx5-scanner.ts
++++ b/server/services/fx5-scanner.ts
+@@ -22,6 +22,7 @@
+  */
+ 
+ import { storage } from '../storage.js';
++import { tradingStateSync, isAssetClassActiveInContext } from './trading-state-sync.js';
+ // Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused import
+ import { KrakenService } from '../exchanges/kraken/kraken.js';
+ import { updateStage3Cache } from './stage3-state-cache.js';
+@@ -548,6 +549,18 @@ export class Fx5ScannerService {
+             const liveContext = await storage.getSystemContext('live');
+             tradingActive = paperContext?.isEngineActive || liveContext?.isEngineActive || false;
+             activeMode = liveContext?.isEngineActive ? 'live' : 'paper';
++            // P19-B6.5a — crypto active scan is ADDITIONALLY gated on the per-class active flag
++            // (fail-closed, default-OFF). fx5 scans crypto pairs → the gate class is 'crypto_spot'.
++            // We already hold the active mode's context (no extra DB query); the typed pure helper
++            // reads it. If crypto is gated OFF, tradingActive falls to false → the scan runs in
++            // PASSIVE/VTS mode exactly as when the engine is off (crypto keeps learning, just not on
++            // the active path). This lets B7b run crypto-active while xStock stays dormant.
++            if (tradingActive) {
++              const activeCtx = activeMode === 'live' ? liveContext : paperContext;
++              const cryptoActive = isAssetClassActiveInContext(activeCtx, 'crypto_spot');
++              tradingStateSync.recordAssetClassGateDecision(activeMode, 'crypto_spot', cryptoActive);
++              if (!cryptoActive) tradingActive = false;
++            }
+           } catch (err) {
+             console.warn('[11.4H.6A][ModeCheck] Failed to get context, defaulting to paper');
+           }
+diff --git a/server/services/trading-state-sync.ts b/server/services/trading-state-sync.ts
+index 97f7ff0ec..d44309795 100644
+--- a/server/services/trading-state-sync.ts
++++ b/server/services/trading-state-sync.ts
+@@ -9,6 +9,7 @@ import { storage } from '../storage.js';
+ import { clusterBus } from './cluster-bus.js';
+ import { contextBridge } from './context-bridge.js';
+ import type { SystemContext } from '@shared/schema';
++import type { AssetClass } from '@shared/asset-classes';
+ 
+ export type TradingMode = 'live' | 'paper';
+ 
+@@ -51,6 +52,21 @@ export function livenessSplitsForMode(
+   return out;
+ }
+ 
++/**
++ * P19-B6.5a — the single typed per-asset-class gate read. Fail-closed: a missing context, a missing
++ * key, a non-object column, or a non-`true` value all resolve to FALSE. Pure + synchronous so the
++ * active-path entry gates (which already hold a freshly-fetched SystemContext) call it with NO extra
++ * DB query — never reading the raw JSONB at the call site. The async `isAssetClassActive(mode,class)`
++ * method delegates to this for callers that don't already hold the context.
++ */
++export function isAssetClassActiveInContext(
++  context: SystemContext | undefined,
++  assetClass: AssetClass
++): boolean {
++  const map = (context?.activeAssetClasses ?? {}) as Record<string, unknown>;
++  return map[assetClass] === true;
++}
++
+ export class TradingStateSync {
+   private currentMode: Map<string, TradingMode> = new Map();
+   private initialized = false;
+@@ -349,6 +365,93 @@ export class TradingStateSync {
+     return context?.isEngineActive || false;
+   }
+ 
++  // ════════════════════════════════════════════════════════════════════════════════════════
++  // P19-B6.5a — PER-ASSET-CLASS ACTIVE GATE (Langston Option C).
++  //
++  // An ADDITIONAL, fail-closed, default-OFF gate layered on top of the per-mode `isEngineActive`
++  // master switch. A class is active in a mode IFF the per-mode `system_context.active_asset_classes`
++  // JSONB carries `<class>: true`. A MISSING key = inactive = FAIL-CLOSED. Active-path entry points
++  // (fx5-scanner crypto scan, xstock_spot/active-dispatch) gate on `isEngineActive(mode) AND
++  // isAssetClassActive(mode, class)`, so B7b can activate crypto-first while xStock stays dormant
++  // under the same master flag. The setter mirrors `setEngineActive`'s H1 discipline:
++  // AWAIT the authoritative DB write FIRST, then broadcast.
++  // ════════════════════════════════════════════════════════════════════════════════════════
++
++  /** P19-B6.5a per-class gate-decision witness (reuses the LIVENESS_SPLIT observability discipline):
++   *  counts gate ALLOW/SKIP per (mode, class) so a crypto-only run is provably xStock-silent, and a
++   *  class that emits while gated-OFF is observable (recordLivenessSplit), never silent. */
++  private assetClassGateStats: Map<string, { allowed: number; skipped: number; lastAt: number }> = new Map();
++
++  /**
++   * Typed accessor — is this asset class active in this mode? Fail-closed: a missing key, a non-object
++   * column, or any read error all resolve to FALSE (never accidentally-active). NEVER read the raw
++   * JSONB elsewhere — this is the single typed gate.
++   */
++  async isAssetClassActive(mode: 'live' | 'paper', assetClass: AssetClass): Promise<boolean> {
++    try {
++      const context = await storage.getSystemContext(mode);
++      return isAssetClassActiveInContext(context, assetClass);
++    } catch (err) {
++      // Fail-closed: an unreadable state must never green-light a class.
++      console.warn(`[P19-B6.5a][isAssetClassActive] read failed for ${mode}/${assetClass} — fail-closed OFF:`, err instanceof Error ? err.message : err);
++      return false;
++    }
++  }
++
++  /**
++   * Setter — flip a per-(mode, class) active flag. Mirrors `setEngineActive`'s P19-B4b-D5/H1 ordering:
++   * AWAIT the authoritative DB write FIRST (merge into the JSONB, never clobber sibling classes), then
++   * broadcast. If the write throws, nothing is broadcast (no reader is told a state the DB never holds).
++   * Guarded entry point for the B6.5b dry-run + the eventual B7b flip.
++   */
++  async setAssetClassActive(userId: string, mode: 'live' | 'paper', assetClass: AssetClass, isActive: boolean): Promise<void> {
++    // Read-merge-write so flipping one class never clobbers another's flag.
++    const context = await storage.getSystemContext(mode);
++    const current = { ...((context?.activeAssetClasses ?? {}) as Record<string, boolean>) };
++    current[assetClass] = isActive;
++
++    // H1: persist the authoritative DB SSOT FIRST (awaited) — only broadcast after it commits.
++    await storage.updateSystemContext(mode, {
++      activeAssetClasses: current as SystemContext['activeAssetClasses'],
++      updatedAt: new Date(),
++    });
++
++    // Write committed → fan out a lightweight state-change so derived readers re-read.
++    try {
++      const { contextBridge } = await import('./context-bridge.js');
++      await contextBridge.broadcast({
++        type: 'trading_state_changed',
++        payload: { userId, mode, assetClassGate: { assetClass, active: isActive }, timestamp: new Date().toISOString() },
++        mode,
++      });
++    } catch (err) {
++      // State is already committed; a failed secondary broadcast must not fail the flip.
++      console.error('[P19-B6.5a][setAssetClassActive] post-commit broadcast failed (state already persisted):', err instanceof Error ? err.message : err);
++    }
++    console.log(`[P19-B6.5a][setAssetClassActive] ${mode}/${assetClass} → ${isActive ? 'ACTIVE' : 'INACTIVE'} (committed-then-broadcast, userId: ${userId})`);
++  }
++
++  /** Witness: record a per-class gate decision at an active-path entry point (observable; for the
++   *  xStock-isolation acceptance test + diagnostics). `allowed=false` = the normal dormant skip. */
++  recordAssetClassGateDecision(mode: 'live' | 'paper', assetClass: AssetClass, allowed: boolean): void {
++    const key = `${mode}:${assetClass}`;
++    const s = this.assetClassGateStats.get(key) ?? { allowed: 0, skipped: 0, lastAt: 0 };
++    if (allowed) s.allowed++; else s.skipped++;
++    s.lastAt = Date.now();
++    this.assetClassGateStats.set(key, s);
++  }
++
++  /** Hard witness: a class produced active output while its gate is OFF — a real isolation breach.
++   *  Reuses the LIVENESS_SPLIT counter (Langston Q-D) so the breach is observable, never silent. */
++  witnessAssetClassEmissionWhileInactive(mode: 'live' | 'paper', assetClass: AssetClass): void {
++    this.recordLivenessSplit(`asset-class-gate:${mode}:${assetClass}`, `${assetClass} emitted active output while gate INACTIVE in ${mode}`);
++  }
++
++  /** Expose the per-class gate witness for diagnostics + the B6.5b dry-run isolation proof. */
++  getAssetClassGateStats(): Record<string, { allowed: number; skipped: number; lastAt: number }> {
++    return Object.fromEntries(this.assetClassGateStats);
++  }
++
+   /**
+    * Emergency stop - force paper mode and disable engine
+    * Phase 27.F.14.D: Updated to use mode-based system context
+diff --git a/server/tests/unit/p19-b4a-c2-xstock-dispatch.test.ts b/server/tests/unit/p19-b4a-c2-xstock-dispatch.test.ts
+index fea6ace63..bffa8b9f3 100644
+--- a/server/tests/unit/p19-b4a-c2-xstock-dispatch.test.ts
++++ b/server/tests/unit/p19-b4a-c2-xstock-dispatch.test.ts
+@@ -34,7 +34,9 @@ vi.mock('../../services/paper-sim-service.js', () => ({
+ }));
+ vi.mock('../../storage.js', () => ({
+   storage: {
+-    getSystemContext: async (_mode: string) => ({ isEngineActive: engineActive }),
++    // P19-B6.5a: the per-class active gate runs right after the master isEngineActive check, so the
++    // mocked context must opt xstock_spot ACTIVE for these C2 post-gate assertions to be reached.
++    getSystemContext: async (_mode: string) => ({ isEngineActive: engineActive, activeAssetClasses: { xstock_spot: true } }),
+     getGuardrailsV2: async () => null,
+   },
+ }));
+diff --git a/server/tests/unit/p19-b4a-c3-gate-watchdog.test.ts b/server/tests/unit/p19-b4a-c3-gate-watchdog.test.ts
+index 09e3b9ae7..7e14065a1 100644
+--- a/server/tests/unit/p19-b4a-c3-gate-watchdog.test.ts
++++ b/server/tests/unit/p19-b4a-c3-gate-watchdog.test.ts
+@@ -36,7 +36,9 @@ vi.mock('../../services/paper-sim-service.js', () => ({
+ }));
+ vi.mock('../../storage.js', () => ({
+   storage: {
+-    getSystemContext: async () => ({ isEngineActive: engineActive }),
++    // P19-B6.5a: the per-class active gate runs right after the master isEngineActive check, so the
++    // mocked context must opt xstock_spot ACTIVE for these C3 fill-safety assertions to be reached.
++    getSystemContext: async () => ({ isEngineActive: engineActive, activeAssetClasses: { xstock_spot: true } }),
+     getGuardrailsV2: async () => null,
+   },
+ }));
+diff --git a/server/tests/unit/p19-b6-5a-per-class-active-gate.test.ts b/server/tests/unit/p19-b6-5a-per-class-active-gate.test.ts
+new file mode 100644
+index 000000000..16fa97223
+--- /dev/null
++++ b/server/tests/unit/p19-b6-5a-per-class-active-gate.test.ts
+@@ -0,0 +1,122 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * P19-B6.5a — per-asset-class active gate (Langston Option C)
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * The gate is an ADDITIONAL, fail-closed, default-OFF AND-condition layered on top of the per-mode
++ * `isEngineActive` master switch: a class trades iff isEngineActive(mode) AND
++ * isAssetClassActive(mode, class). These tests cover (1) the typed pure helper's fail-closed
++ * semantics (missing key / missing column / undefined context all → inactive), and (2) the
++ * gate-10 xStock-ISOLATION acceptance test — with the master ON and crypto active but xStock
++ * INACTIVE, the xStock active-dispatch must take the dormant branch and emit ZERO signals (never
++ * reaching the orchestrator), while leaving crypto unaffected.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++
++// Mutable system-context the mocks serve — flip `activeAssetClasses` per test.
++let ctx: any = { isEngineActive: true, activeAssetClasses: {} };
++const orchSpy = vi.fn(async () => null);
++
++// Light stubs so importing the REAL trading-state-sync (for isAssetClassActiveInContext +
++// tradingStateSync) is cheap and side-effect-free.
++vi.mock('../../storage.js', () => ({
++  storage: {
++    getSystemContext: async (_mode: string) => ctx,
++    getGuardrailsV2: async () => null,
++    updateSystemContext: async (_mode: string, updates: any) => { ctx = { ...ctx, ...updates }; return ctx; },
++    getPortfolioState: async () => ({ balance: '1000' }),
++  },
++}));
++vi.mock('../../services/cluster-bus.js', () => ({ clusterBus: { emit: () => {}, on: () => {} } }));
++vi.mock('../../services/context-bridge.js', () => ({ contextBridge: { broadcast: async () => {} } }));
++
++// Active-dispatch leaf deps (mirrors p19-b4a-c2-xstock-dispatch.test.ts) so the connector is drivable.
++vi.mock('../../services/paper-sim-service.js', () => ({
++  getOrchestratorByMode: () => { orchSpy(); return { dispatchExternalSignal: async () => null }; },
++}));
++vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000 }));
++vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: 1000 }] }) } }));
++vi.mock('../../services/system-alerts.js', () => ({ addAlert: async () => ({}) }));
++vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
++  resolveXstockFillSafetyConfig: async () => ({ activeFillMaxAgeMs: 15000 }),
++}));
++
++import { isAssetClassActiveInContext, tradingStateSync } from '../../services/trading-state-sync';
++import { dispatchXstockActiveSignal, getXstockActiveDispatchStats } from '../../asset_classes/xstock_spot/active-dispatch';
++
++describe('P19-B6.5a isAssetClassActiveInContext (fail-closed typed gate)', () => {
++  it('undefined context → inactive (fail-closed)', () => {
++    expect(isAssetClassActiveInContext(undefined, 'crypto_spot')).toBe(false);
++  });
++  it('empty map → inactive (default-OFF)', () => {
++    expect(isAssetClassActiveInContext({ activeAssetClasses: {} } as any, 'crypto_spot')).toBe(false);
++  });
++  it('missing column → inactive (fail-closed, pre-migration-shaped row)', () => {
++    expect(isAssetClassActiveInContext({} as any, 'crypto_spot')).toBe(false);
++  });
++  it('class present + true → active', () => {
++    expect(isAssetClassActiveInContext({ activeAssetClasses: { crypto_spot: true } } as any, 'crypto_spot')).toBe(true);
++  });
++  it('ISOLATION: a different class being active does NOT activate this one', () => {
++    expect(isAssetClassActiveInContext({ activeAssetClasses: { crypto_spot: true } } as any, 'xstock_spot')).toBe(false);
++  });
++  it('explicit false → inactive', () => {
++    expect(isAssetClassActiveInContext({ activeAssetClasses: { xstock_spot: false } } as any, 'xstock_spot')).toBe(false);
++  });
++  it('non-boolean truthy ("true" string) → inactive (strict === true, no coercion)', () => {
++    expect(isAssetClassActiveInContext({ activeAssetClasses: { crypto_spot: 'true' } } as any, 'crypto_spot')).toBe(false);
++  });
++});
++
++describe('P19-B6.5a accessor + setter round-trip (async, H1 write-then-state)', () => {
++  beforeEach(() => { ctx = { isEngineActive: true, activeAssetClasses: {} }; });
++
++  it('isAssetClassActive reads the DB SSOT; setAssetClassActive flips it without clobbering siblings', async () => {
++    expect(await tradingStateSync.isAssetClassActive('paper', 'crypto_spot')).toBe(false);
++    await tradingStateSync.setAssetClassActive('u1', 'paper', 'crypto_spot', true);
++    expect(await tradingStateSync.isAssetClassActive('paper', 'crypto_spot')).toBe(true);
++    // sibling untouched
++    expect(await tradingStateSync.isAssetClassActive('paper', 'xstock_spot')).toBe(false);
++    await tradingStateSync.setAssetClassActive('u1', 'paper', 'xstock_spot', true);
++    expect(await tradingStateSync.isAssetClassActive('paper', 'crypto_spot')).toBe(true); // not clobbered
++    expect(await tradingStateSync.isAssetClassActive('paper', 'xstock_spot')).toBe(true);
++  });
++});
++
++describe('P19-B6.5a xStock-ISOLATION acceptance (gate 10)', () => {
++  const signal: any = {
++    symbol: 'AAPLx/USD', strategyKey: 'momentum_breakout', predictiveConfidence: 0.8,
++    atr: 1, high24h: 110, low24h: 90,
++  };
++  beforeEach(() => { orchSpy.mockClear(); });
++
++  it('master ON + crypto active + xStock INACTIVE → xStock dispatch takes the class-dormant branch, ZERO emission', async () => {
++    ctx = { isEngineActive: true, activeAssetClasses: { crypto_spot: true } }; // xstock_spot absent = OFF
++    const before = getXstockActiveDispatchStats();
++    await dispatchXstockActiveSignal(signal);
++    const after = getXstockActiveDispatchStats();
++    expect(after.classDormantSkips).toBe(before.classDormantSkips + 1); // skipped at the per-class gate
++    expect(after.dispatched).toBe(before.dispatched);                   // emitted nothing
++    expect(orchSpy).not.toHaveBeenCalled();                             // never reached the orchestrator
++  });
++
++  it('master OFF entirely → the master-dormant branch (not the class branch) handles it', async () => {
++    ctx = { isEngineActive: false, activeAssetClasses: { xstock_spot: true } };
++    const before = getXstockActiveDispatchStats();
++    await dispatchXstockActiveSignal(signal);
++    const after = getXstockActiveDispatchStats();
++    expect(after.dormantSkips).toBe(before.dormantSkips + 1);            // master gate, not class gate
++    expect(after.classDormantSkips).toBe(before.classDormantSkips);
++    expect(orchSpy).not.toHaveBeenCalled();
++  });
++
++  it('master ON + xStock ACTIVE → passes the per-class gate (reaches the orchestrator lookup)', async () => {
++    ctx = { isEngineActive: true, activeAssetClasses: { xstock_spot: true } };
++    const before = getXstockActiveDispatchStats();
++    await dispatchXstockActiveSignal(signal);
++    const after = getXstockActiveDispatchStats();
++    expect(after.classDormantSkips).toBe(before.classDormantSkips);      // NOT blocked by the class gate
++    expect(orchSpy).toHaveBeenCalled();                                  // proceeded past the gate
++  });
++});
+diff --git a/shared/schema.ts b/shared/schema.ts
+index 05dd05088..51d700c39 100644
+--- a/shared/schema.ts
++++ b/shared/schema.ts
+@@ -4190,6 +4190,12 @@ export const systemContext = pgTable("system_context", {
+   tradingMode: tradingModeEnum("trading_mode").notNull().default("paper"),
+   lastSafeState: jsonb("last_safe_state").notNull().default(sql`'{}'`),
+   isEngineActive: boolean("is_engine_active").notNull().default(false),
++  // P19-B6.5a — per-asset-class active gate (Langston Option C). Fail-closed, default-OFF
++  // per-(mode,asset_class) flag: a class is active in this mode IFF active_asset_classes['<class>']
++  // === true (missing key = inactive). This is an ADDITIONAL AND-gate on top of isEngineActive —
++  // a class trades iff isEngineActive(mode) AND isAssetClassActive(mode,class). Lets B7b activate
++  // crypto-first while xstock_spot stays dormant under the same per-mode master switch.
++  activeAssetClasses: jsonb("active_asset_classes").notNull().default(sql`'{}'`),
+   lastModeChange: timestamp("last_mode_change", { withTimezone: true }),
+   changedBy: varchar("changed_by", { length: 50 }), // 'user', 'recovery', 'admin'
+   changeReason: text("change_reason"),

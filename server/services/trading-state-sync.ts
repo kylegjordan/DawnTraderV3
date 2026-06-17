@@ -417,8 +417,8 @@ export class TradingStateSync {
     });
 
     // Write committed → fan out a lightweight state-change so derived readers re-read.
+    // (Uses the static contextBridge import at the top of the file — Langston Step-4 cleanup.)
     try {
-      const { contextBridge } = await import('./context-bridge.js');
       await contextBridge.broadcast({
         type: 'trading_state_changed',
         payload: { userId, mode, assetClassGate: { assetClass, active: isActive }, timestamp: new Date().toISOString() },
