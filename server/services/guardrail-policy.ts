@@ -580,7 +580,18 @@ class GuardrailPolicyService {
       killSwitchReason: null,
       killSwitchTrippedAt: null
     });
-    
+
+    // P19-B6: clear the in-memory daily-loss-budget state for this mode — releases the
+    // `killInProgress` re-entrancy latch AND re-arms the warning tiers (Langston invariant 1b).
+    // Tied to the same restart that advances engineSessionStart, so the loss window, the latch,
+    // and the warnings all rebaseline together (circuit-breaker semantics).
+    try {
+      const { resetDailyLossBudgetState } = await import('./daily-loss-budget.js');
+      resetDailyLossBudgetState(mode);
+    } catch (err: any) {
+      console.error('[GuardrailPolicy] Failed to reset daily-loss budget state:', err?.message);
+    }
+
     await this.emitEvent('guardrail.kill_switch.reset', {
       mode,
       timestamp: new Date().toISOString()

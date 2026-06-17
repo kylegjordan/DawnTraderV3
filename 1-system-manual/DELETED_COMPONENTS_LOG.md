@@ -140,3 +140,18 @@
 
 **Archive copy:** `1-system-manual/_archive/deleted-code/realtime-paper-executor.ts.removed`.
 **Reviewed by:** Langston Step-1/2/4 APPROVE; Step-8 _pending_.
+
+---
+
+## P19-B6 (2026-06-16) — orphaned `paper-metrics.ts::calculate24hPL()` method
+
+| Removed | File | Detail |
+|---|---|---|
+| `calculate24hPL()` method | `server/services/paper-metrics.ts` (was lines ~122-166) | A rolling-24h P/L calculator on `PaperMetricsService`. **ZERO live callers** (re-verified: `grep -rE "\.calculate24hPL\(" server/ client/ shared/` → 0; the only hits are old training-data backups under `.claude/worktrees/`). An orphaned remnant of the deleted Phase-8 `risk-manager.ts::calculate24hPL`. |
+
+**Why removed:** rule-18 / §15 — never leave two sources of truth. P19-B6 RESTORES the authoritative rolling-24h loss evaluator at `server/services/daily-loss-budget.ts` (re-homing the deleted Phase-8 `risk-manager.ts::checkKillSwitch` + `calculate24hPL`); this orphan was a stale duplicate that would have been a second, divergent 24h-P&L computation. Deleted in the same batch that establishes the authoritative one.
+
+**Blast-radius verification (certainty-before-cutting):** `.calculate24hPL(` call-site count across `server/`/`client/`/`shared/` = **0**. The method was self-contained (used `storage.getAllPaperTrades` + `this.getPortfolioMetrics`); no other method referenced it. tsc baseline no-regression (bench).
+
+**Archive:** git history (single-method removal within a still-live file — no `.removed` file). Commit: P19-B6 Step-3 service chunk.
+**Reviewed by:** Langston Step-4 _pending_.

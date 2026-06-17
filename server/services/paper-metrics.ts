@@ -119,51 +119,11 @@ export class PaperMetricsService {
     };
   }
 
-  /**
-   * Calculate rolling 24h P/L for paper trading
-   */
-  async calculate24hPL(): Promise<{
-    totalPL: number;
-    realizedPL: number;
-    unrealizedPL: number;
-    portfolioValueBefore: number;
-    portfolioValueCurrent: number;
-    lossPercent: number;
-  }> {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
-    const allTrades = await storage.getAllPaperTrades();
-    const closedTrades = allTrades.filter(t => t.status === 'closed');
-    
-    // Get trades closed in last 24h
-    const recent24hTrades = closedTrades.filter(trade =>
-      trade.exitTime && new Date(trade.exitTime) >= twentyFourHoursAgo
-    );
-
-    const realizedPL = recent24hTrades.reduce((sum, trade) => 
-      sum + parseFloat(trade.realizedPL || '0'), 0
-    );
-
-    // Get current metrics
-    const currentMetrics = await this.getPortfolioMetrics();
-    const unrealizedPL = currentMetrics.unrealizedPL;
-    
-    const totalPL = realizedPL + unrealizedPL;
-    const portfolioValueCurrent = currentMetrics.totalValue;
-    const portfolioValueBefore = portfolioValueCurrent - totalPL;
-    const lossPercent = portfolioValueBefore > 0 
-      ? (totalPL / portfolioValueBefore) * 100 
-      : 0;
-
-    return {
-      totalPL,
-      realizedPL,
-      unrealizedPL,
-      portfolioValueBefore,
-      portfolioValueCurrent,
-      lossPercent
-    };
-  }
+  // P19-B6 (2026-06-16): `calculate24hPL()` DELETED — orphaned duplicate (ZERO live callers,
+  // re-verified) of the rolling-24h loss calc, superseded by the restored authoritative
+  // daily-loss evaluator at `server/services/daily-loss-budget.ts` (which re-homes the Phase-8
+  // `risk-manager.ts::calculate24hPL`). Removed per rule-18 / §15 (no two sources of truth for
+  // 24h P&L). See DELETED_COMPONENTS_LOG.md. Git history is the archive.
 
   /**
    * Get earnings by period for paper trading

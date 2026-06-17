@@ -243,6 +243,19 @@ export class PaperExecutionEngine {
     this.tradeClosedHandler = async (event: TradeClosedEvent) => {
       if (event.mode !== this.mode) return;
       console.log(`[8.8.4-C.12][EVENT_RECEIVED] TRADE_CLOSED for ${this.mode}, symbol=${event.symbol}`);
+
+      // P19-B6: daily loss-budget evaluation on every closed trade. TICK-DEFERRED (setImmediate,
+      // not merely no-await) so it runs AFTER this event frame unwinds + any close-path locks
+      // release — and FIRE-AND-FORGET so it can never block or throw into the close/event path.
+      // The evaluator is gated on isEngineActive (dormant in VTS/passive) and self-guards
+      // re-entrancy via the in-memory killInProgress latch (the kill flatten re-emits TRADE_CLOSED).
+      const _dlbMode = this.mode;
+      setImmediate(() => {
+        void import('./daily-loss-budget.js')
+          .then(({ evaluateDailyLossBudgetOnClose }) => evaluateDailyLossBudgetOnClose(_dlbMode))
+          .catch((err: any) => console.error('[DailyLossBudget] hook dispatch error:', err?.message ?? err));
+      });
+
       await this.checkRtbPromotion();
     };
 
