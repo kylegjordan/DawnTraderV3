@@ -323,7 +323,13 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   
   // 4. Daily Loss Kill Switch (%) - Range: 1.00% - 20.00%
   dailyLossKillSwitchPct: decimal("daily_loss_kill_switch_pct", { precision: 5, scale: 2 }).notNull().default("7.00"),
-  
+
+  // 4a. Daily Loss Warning Tiers (P19-B6) — stored as % OF the kill switch threshold, NOT absolute loss %.
+  // Two-tier early warning before the hard kill. Coherency (RULE_011): 0 < warn1 < warn2 < 100.
+  // e.g. kill=15% with warn1=50 / warn2=75 → info alert at 7.5% loss, warning alert at 11.25% loss, kill at 15% loss.
+  dailyLossWarning1Pct: decimal("daily_loss_warning1_pct", { precision: 5, scale: 2 }).notNull().default("50.00"),
+  dailyLossWarning2Pct: decimal("daily_loss_warning2_pct", { precision: 5, scale: 2 }).notNull().default("75.00"),
+
   // 5. Max Position Percent (%) - Range: 1.00% - 100.00%
   // REB 8.8.3-G: Maximum size of any single position as % of portfolio value
   maxPositionPercentPct: decimal("max_position_percent_pct", { precision: 5, scale: 2 }).notNull().default("30.00"),

@@ -76,6 +76,8 @@ export interface EffectiveGuardrails {
   symbolCooldownMinutes: number;
   maxOpenPositions: number;
   dailyLossKillSwitchPct: number;
+  dailyLossWarning1Pct: number; // P19-B6: tier-1 warning, % OF the kill threshold (coherency: 0 < w1 < w2 < 100)
+  dailyLossWarning2Pct: number; // P19-B6: tier-2 warning, % OF the kill threshold
   maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
   // REB 8.8.3-H: Low-Priced Coin Protection (LPCP) Module
   lpcp: {
@@ -246,6 +248,9 @@ class GuardrailPolicyService {
       symbolCooldownMinutes: guardrail.symbolCooldownMinutes,
       maxOpenPositions: guardrail.maxOpenPositions,
       dailyLossKillSwitchPct: parseFloat(String(guardrail.dailyLossKillSwitchPct)),
+      // P19-B6: warning tiers (% of kill threshold). Fallback to defaults for pre-migration rows.
+      dailyLossWarning1Pct: guardrailAny.dailyLossWarning1Pct != null ? parseFloat(String(guardrailAny.dailyLossWarning1Pct)) : 50.00,
+      dailyLossWarning2Pct: guardrailAny.dailyLossWarning2Pct != null ? parseFloat(String(guardrailAny.dailyLossWarning2Pct)) : 75.00,
       maxPositionPercentPct, // REB 8.8.3-G
       lpcp, // REB 8.8.3-H
       management: {
@@ -411,6 +416,28 @@ class GuardrailPolicyService {
         expected: '1 - 20'
       });
       this.incrementMetric('ruleFailures', 'RULE_008');
+    }
+
+    // RULE_011: Daily loss warning tiers strictly ordered + strictly below kill (P19-B6)
+    // warn1/warn2 are % OF the kill threshold; equal tiers = duplicate noise, warn2=100 is inert.
+    const warn1 = guardrail.dailyLossWarning1Pct;
+    const warn2 = guardrail.dailyLossWarning2Pct;
+    if (warn1 !== undefined && warn2 !== undefined) {
+      if (!(warn1 > 0 && warn1 < warn2 && warn2 < 100)) {
+        const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_011');
+        failures.push({
+          ruleId: 'RULE_011',
+          ruleName: rule?.name || 'Daily Loss Warning Tier Ordering',
+          severity: 'error',
+          message: (rule?.error_message || 'Daily loss warning tiers must satisfy 0 < warn1 ({warn1}) < warn2 ({warn2}) < 100')
+            .replace('{warn1}', warn1.toFixed(2))
+            .replace('{warn2}', warn2.toFixed(2)),
+          param: 'dailyLossWarning1Pct',
+          value: warn1,
+          expected: `0 < warn1 < warn2 < 100 (got ${warn1.toFixed(2)}, ${warn2.toFixed(2)})`
+        });
+        this.incrementMetric('ruleFailures', 'RULE_011');
+      }
     }
 
     // Determine overall status

@@ -141,3 +141,4 @@
 2026-06-15-b-names-1-xstock-name-nullable.sql
 2026-06-16-p19-b4b1-fill-depth-gate-seed.sql
 2026-06-16-p19-b5c-qd-probe-history.sql
+2026-06-16-p19-b6-daily-loss-warning-tiers.sql

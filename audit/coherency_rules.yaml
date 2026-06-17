@@ -194,6 +194,27 @@ rules:
       - daily_loss_kill_switch_pct: 26.00
         result: "FAIL (exceeds 25.00% cap)"
 
+  - name: "Daily Loss Warning Tier Ordering"
+    id: "RULE_011"
+    description: "The two daily-loss warning tiers must be strictly ordered and strictly below the kill (P19-B6)"
+    condition: "0 < daily_loss_warning1_pct < daily_loss_warning2_pct < 100"
+    rationale: "P19-B6: warnings are stored as % OF the kill threshold. Equal tiers (warn1 == warn2) fire two alerts at the same loss point (noise); warn2 == 100 coincides with the kill and is inert under the if>=kill else-if>=warn precedence. Strict 0 < warn1 < warn2 < 100 keeps both tiers meaningful and below the trip."
+    severity: "error"
+    error_message: "Daily loss warning tiers must satisfy 0 < warn1 ({warn1}) < warn2 ({warn2}) < 100 (% of kill threshold)"
+    phase: "Phase 19 / P19-B6"
+    enforcement: "GuardrailPolicy.validate() + guardrails settings API"
+    example_valid:
+      - daily_loss_warning1_pct: 50.00
+        daily_loss_warning2_pct: 75.00
+        result: "PASS (0 < 50 < 75 < 100)"
+    example_invalid:
+      - daily_loss_warning1_pct: 75.00
+        daily_loss_warning2_pct: 75.00
+        result: "FAIL (warn1 not strictly less than warn2)"
+      - daily_loss_warning1_pct: 50.00
+        daily_loss_warning2_pct: 100.00
+        result: "FAIL (warn2 not strictly less than 100)"
+
 # Migration-specific validation rules
 migration_rules:
   - name: "Legacy Data Preservation"
