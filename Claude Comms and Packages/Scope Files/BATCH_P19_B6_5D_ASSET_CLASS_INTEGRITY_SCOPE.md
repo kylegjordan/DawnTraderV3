@@ -6,6 +6,16 @@
 
 ---
 
+## PROVENANCE — the 26 re-derive sites were left DELIBERATELY by P19-B4a; B6.5d is the NAMED completion (Kyle asked 2026-06-17; history-verified)
+Kyle's challenge — "a recent batch attached asset class to the pair; the 26 weren't missed, find why" — is correct. History:
+- **The stamp-at-source architecture is P19-B4a (C1+C4)** (Kyle directive 2026-06-14; design `P19_B4a_STAMP_AT_SOURCE_rev1.md` + `P19_B4a_C4_CLASSIFY_HARDENING_rev1.md`; report `P19_B4a_COMPLETION_REPORT.md`), built on B69 (taxonomy + the "read the row, never re-resolve" note `asset-classes.ts:511-513`), B79.0f (collision gate), B79.0n.STORAGE (`SQEInput.assetClass` REQUIRED), P19-B3a (safe-resolve + `CRYPTO_SPOT_BASE_MAX_LEN`).
+- **B4a-C4 CONSCIOUSLY scoped itself to the ~10 THROWING active-path sites with an adjacent stamp** (Langston-ratified): "6 of 10 have an upstream assetClass STAMP right next to them → prefer-stamp; the remaining 4 have no stamp → safe-skip/block." Everything else was intentionally out of that frame.
+- **The 26 are NOT bugs-as-a-class:** (a) the **14 passive/VTS** sites are correct-by-design (resolve-once-at-entry, no upstream stamp, telemetry-acceptable — "Langston A3") → **B6.5d LEAVES them (OBJ-6); do NOT 'fix' them**; (b) crypto-only re-derives are **correct today** (hardcoded `kraken` is right for the crypto pipe — the error is latent, only a collision ticker via the xStock pipe misroutes, dormant until B7b); (c) the 2 kernel/leaf sites (`expectancy.ts:563`, `feePercentFor:155`) are an **explicit verbatim "future batch" deferral** in the code (`expectancy.ts:557-562`); (d) `SQE:227` is a scope-FRAME artifact — C4 keyed on THROWING sites and :227 already used the non-throwing `safeResolveAssetClass`, so it fell just outside C4's net (latent, not a live bug).
+- **B6.5d IS that named future batch.** OBJ-4 is precisely the kernel-thread the `expectancy.ts:559` comment names; OBJ-3 finishes the prefer-stamp propagation; OBJ-1 is the NEW single-letter resolver gap (the live `A/EUR` trigger, distinct from the latent collision exposure). **B6.5d does not contradict B4a — it completes B4a's explicit deferral under the NO-PATCHES directive.**
+- **Step-4 note:** B4a-C4 claimed "6 of 10 throwing sites → prefer-stamp," yet the audit still finds the 4 `signal-orchestrator.ts` throwing sites (1510/1692/2038/2142) re-deriving — reconcile B4a's exact converted-set vs the current state at Step-4 (likely those were the "no-stamp→safe-skip" four or out-of-frame; confirm none were converted-then-regressed).
+
+---
+
 ## STEP-1 RECONCILIATIONS (Langston review 2026-06-17 — APPROVE-structural / CHANGES-NEEDED, all folded in)
 - **§A1 inventory gap FIXED:** `ready_to_buy_service.ts:1243/1256` were in the §5 inventory but missing from OBJ-3's actionable list → added as OBJ-3 item 11 (OBJ-3 covers ~12 distinct call sites, not "10").
 - **§A2 double-list RESOLVED:** `ready_to_buy_service.ts:1562` is USES-STAMP for its PRIMARY path (`asValidAssetClass(signal.assetClass) ?? …`); its issue is only the **tail `?? 'crypto_spot'` default**, which OBJ-5 (active-path) removes. Not a re-derive site; the silent tail-default is the only thing to fix there.
