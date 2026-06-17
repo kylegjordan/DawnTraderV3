@@ -211,7 +211,14 @@ export function getDailyLossEvalStats(): { failures: Record<string, number> } {
   return { failures: { paper: evalFailures.get('paper') || 0, live: evalFailures.get('live') || 0 } };
 }
 
-// ─── System-alert helper (the existing §10.5 queue channel — reaches Kyle/Langston) ──────────
+// ─── Alert helper — fires on BOTH surfaces (each independently fault-isolated) ────────────────
+//   (1) the operational §10.5 queue (`.jsonl` via addAlert) — the per-turn CC/Langston channel +
+//       the dispatcher's Telegram push (away-from-keyboard awareness);
+//   (2) the USER-FACING website notification (DB `system_alerts` via AlertsService.createAlert →
+//       GET /api/alerts → the dismissible alert banner/panel; the user clicks to acknowledge and
+//       it goes away). Reads are mode-global (AlertsService comment), so one row per event shows
+//       to every user in that mode. The two writes are independently try/caught so one failing
+//       never suppresses the other (the warning must be impossible to silently drop).
 
 async function fireAlert(
   severity: 'info' | 'warning' | 'critical',
@@ -220,6 +227,7 @@ async function fireAlert(
   body: string,
   dedupeKey: string,
 ): Promise<void> {
+  // (1) Operational queue / Telegram.
   try {
     const { addAlert } = await import('./system-alerts.js');
     await addAlert({
@@ -232,7 +240,28 @@ async function fireAlert(
       dedupe_key: dedupeKey,
     });
   } catch (err) {
-    console.error(`[DailyLossBudget] failed to fire ${severity} alert:`, err instanceof Error ? err.message : err);
+    console.error(`[DailyLossBudget] failed to fire ${severity} operational alert:`, err instanceof Error ? err.message : err);
+  }
+
+  // (2) User-facing website notification (dismissible banner).
+  try {
+    const { AlertsService } = await import('./alerts-service.js');
+    const users = await storage.getAllUsers();
+    const target = users.find((u: any) => u.role === 'owner') ?? users[0];
+    if (target) {
+      await AlertsService.createAlert({
+        userId: target.id,
+        mode,
+        alertType: severity === 'critical' ? 'daily_loss_kill' : 'daily_loss_warning',
+        severity,
+        message: `${title} — ${body}`,
+        metadata: { source: 'daily-loss-budget', mode },
+      });
+    } else {
+      console.warn('[DailyLossBudget] no user found to attach website alert to (skipping banner alert)');
+    }
+  } catch (err) {
+    console.error(`[DailyLossBudget] failed to fire ${severity} website alert:`, err instanceof Error ? err.message : err);
   }
 }
 
