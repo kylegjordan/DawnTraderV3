@@ -420,9 +420,15 @@ class GuardrailPolicyService {
 
     // RULE_011: Daily loss warning tiers strictly ordered + strictly below kill (P19-B6)
     // warn1/warn2 are % OF the kill threshold; equal tiers = duplicate noise, warn2=100 is inert.
-    const warn1 = guardrail.dailyLossWarning1Pct;
-    const warn2 = guardrail.dailyLossWarning2Pct;
-    if (warn1 !== undefined && warn2 !== undefined) {
+    // P19-B6 fix (Langston Step-4 Blocker-1): decimal(5,2) columns arrive off Drizzle as STRINGS,
+    // so a raw `warn1 < warn2` would be a LEXICOGRAPHIC compare ("9.00" < "80.00" === false → a
+    // legal config rejected; "80.00" < "9.00" === true → an inverted one passes). parseFloat both
+    // (mirroring the getEffective() resolver) before the numeric ordering compare.
+    const warn1raw = guardrail.dailyLossWarning1Pct;
+    const warn2raw = guardrail.dailyLossWarning2Pct;
+    const warn1 = warn1raw !== undefined ? parseFloat(String(warn1raw)) : undefined;
+    const warn2 = warn2raw !== undefined ? parseFloat(String(warn2raw)) : undefined;
+    if (warn1 !== undefined && warn2 !== undefined && Number.isFinite(warn1) && Number.isFinite(warn2)) {
       if (!(warn1 > 0 && warn1 < warn2 && warn2 < 100)) {
         const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_011');
         failures.push({

@@ -168,11 +168,13 @@ interface ModeBudgetState {
   killInProgress: boolean;     // re-entrancy circuit breaker (a kill is underway)
   warn1Armed: boolean;
   warn2Armed: boolean;
+  warn1Gen: number;            // arm-cycle generation — bumped on each disarmed→armed re-arm so a
+  warn2Gen: number;            // legitimate hysteresis re-cross gets a fresh alert dedupe key (D).
 }
 const stateMap = new Map<TradingMode, ModeBudgetState>();
 
 function freshState(epoch: number | null): ModeBudgetState {
-  return { sessionEpoch: epoch, killInProgress: false, warn1Armed: true, warn2Armed: true };
+  return { sessionEpoch: epoch, killInProgress: false, warn1Armed: true, warn2Armed: true, warn1Gen: 0, warn2Gen: 0 };
 }
 
 /** Get the per-mode state, resetting it whenever the session epoch advances (anchor change). */
@@ -225,7 +227,8 @@ async function fireAlert(
   mode: TradingMode,
   title: string,
   body: string,
-  dedupeKey: string,
+  dedupeKey?: string, // omitted → no operational-queue dedup (e.g. the trip-FAILED retry alert,
+                      // which should re-surface on every failing close as escalating emergency)
 ): Promise<void> {
   // (1) Operational queue / Telegram.
   try {
@@ -295,17 +298,37 @@ export async function evaluateDailyLossBudgetOnClose(mode: TradingMode): Promise
     if (verdict.tier === 'kill') {
       // ★ ATOMIC check-and-set — the re-entrancy circuit breaker. NO await may sit between the
       //   check and the set (Langston invariant 1a): that adjacency is what serializes two
-      //   same-tick evaluators. The latch stays true until resetDailyLossBudgetState clears it.
+      //   same-tick evaluators.
       if (st.killInProgress) return;
       st.killInProgress = true;
-      await doKill(mode, verdict, epoch);
+      try {
+        await doKill(mode, verdict, epoch);
+      } catch (killErr) {
+        // Langston Step-4 Blocker-2: a thrown kill must NOT permanently latch the evaluator OFF
+        // while trading may still be live + bleeding (tripKillSwitch reads guardrails BEFORE it
+        // persists the trip, so an early throw can leave the trip un-persisted). Roll the latch
+        // back (single-threaded → race-free) so the NEXT close retries, and fire a CRITICAL
+        // trip-FAILED alert (no dedupe key → re-surfaces every failing close; also covers the
+        // case where the trip persisted but a later step threw — the user is still notified).
+        // Do NOT fall through to the warning logic.
+        st.killInProgress = false;
+        recordEvalFailure(mode, killErr);
+        await fireAlert(
+          'critical', mode,
+          `Daily loss kill TRIP FAILED — ${mode}`,
+          `The automatic kill-switch trip threw and did NOT complete cleanly (${killErr instanceof Error ? killErr.message : String(killErr)}). Trading may still be ACTIVE — consider a manual stop now. The system will retry on the next closed trade.`,
+        );
+      }
       return;
     }
 
     // Hysteresis re-arm: a tier re-arms once the loss recedes below REARM_FRACTION of its
-    // threshold (anti-flap). A session-epoch advance already re-armed everything via getState.
-    if (verdict.lossPercent < verdict.warn1Loss * REARM_FRACTION) st.warn1Armed = true;
-    if (verdict.lossPercent < verdict.warn2Loss * REARM_FRACTION) st.warn2Armed = true;
+    // threshold (anti-flap). On each disarmed→armed TRANSITION bump the arm-generation so the next
+    // fire's dedupe key is fresh — this keeps the operational queue (which dedups on the key) in
+    // step with the website banner (which does not dedup) on a legitimate re-cross (Langston D).
+    // A session-epoch advance already re-armed everything (gen 0) via getState.
+    if (!st.warn1Armed && verdict.lossPercent < verdict.warn1Loss * REARM_FRACTION) { st.warn1Armed = true; st.warn1Gen++; }
+    if (!st.warn2Armed && verdict.lossPercent < verdict.warn2Loss * REARM_FRACTION) { st.warn2Armed = true; st.warn2Gen++; }
 
     // Ratchet: fire only the HIGHEST crossed+armed tier; mark lower tiers consumed so a later
     // close cannot belatedly fire warn1 after warn2 already fired (reads backwards).
@@ -317,7 +340,7 @@ export async function evaluateDailyLossBudgetOnClose(mode: TradingMode): Promise
           'warning', mode,
           `Daily loss warning (75%) — ${mode}`,
           `Rolling-24h loss ${verdict.lossPercent.toFixed(2)}% has crossed 75% of the kill limit (${verdict.killThreshold.toFixed(2)}%). Kill switch trips at ${verdict.killThreshold.toFixed(2)}%.`,
-          `daily-loss-warn2-${mode}-${epoch}`,
+          `daily-loss-warn2-${mode}-${epoch}-g${st.warn2Gen}`,
         );
       }
     } else if (verdict.tier === 'warn1') {
@@ -327,7 +350,7 @@ export async function evaluateDailyLossBudgetOnClose(mode: TradingMode): Promise
           'info', mode,
           `Daily loss warning (50%) — ${mode}`,
           `Rolling-24h loss ${verdict.lossPercent.toFixed(2)}% has crossed 50% of the kill limit (${verdict.killThreshold.toFixed(2)}%).`,
-          `daily-loss-warn1-${mode}-${epoch}`,
+          `daily-loss-warn1-${mode}-${epoch}-g${st.warn1Gen}`,
         );
       }
     }

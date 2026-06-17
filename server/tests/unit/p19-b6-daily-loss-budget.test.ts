@@ -11,6 +11,7 @@ import {
   resetDailyLossBudgetState,
   peekDailyLossBudgetState,
 } from '../../services/daily-loss-budget';
+import { guardrailPolicy } from '../../services/guardrail-policy';
 
 describe('P19-B6 computeLossPercent', () => {
   it('returns 0 loss on a profit', () => {
@@ -86,5 +87,30 @@ describe('P19-B6 in-memory state reset (invariant 1b)', () => {
     expect(s!.warn1Armed).toBe(true);
     expect(s!.warn2Armed).toBe(true);
     expect(s!.sessionEpoch).toBeNull();
+  });
+});
+
+describe('P19-B6 RULE_011 warning-tier ordering in validate() (Langston Blocker-1: string-coercion)', () => {
+  // decimal(5,2) columns arrive off Drizzle as STRINGS; the pre-fix `warn1 < warn2` was a
+  // lexicographic compare. These cases pass the warns AS STRINGS (the real row shape) to prove
+  // the parseFloat fix: "9.00" < "80.00" is lexicographically FALSE but numerically TRUE.
+  const base = { mode: 'paper' as const, dailyLossKillSwitchPct: 15 };
+  const hasR11 = (g: any) => guardrailPolicy.validate(g).failures.some((f) => f.ruleId === 'RULE_011');
+
+  it('PASSES a legal config that does NOT sort lexicographically (warn1=9, warn2=80)', () => {
+    expect(hasR11({ ...base, dailyLossWarning1Pct: '9.00', dailyLossWarning2Pct: '80.00' })).toBe(false);
+  });
+
+  it('FAILS an inverted config that DOES sort lexicographically "valid" (warn1=80, warn2=9)', () => {
+    expect(hasR11({ ...base, dailyLossWarning1Pct: '80.00', dailyLossWarning2Pct: '9.00' })).toBe(true);
+  });
+
+  it('PASSES the seeded defaults (50/75)', () => {
+    expect(hasR11({ ...base, dailyLossWarning1Pct: 50, dailyLossWarning2Pct: 75 })).toBe(false);
+  });
+
+  it('FAILS equal tiers (warn1 == warn2) and warn2 == 100', () => {
+    expect(hasR11({ ...base, dailyLossWarning1Pct: 50, dailyLossWarning2Pct: 50 })).toBe(true);
+    expect(hasR11({ ...base, dailyLossWarning1Pct: 50, dailyLossWarning2Pct: 100 })).toBe(true);
   });
 });
