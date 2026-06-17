@@ -590,6 +590,11 @@ class ReadyToBuyService {
    */
   private async executePerSignalRefresh(mode: TradingMode): Promise<void> {
     // Check if engine is active
+    // P19-B6.5a (Q-B / RUNNING_ISSUES #320): the per-asset-class active gate is enforced UPSTREAM at
+    // the class entry points (fx5-scanner crypto scan + xstock_spot/active-dispatch), so a gated-OFF
+    // class never emits a signal that reaches this queue. RTB therefore does NOT re-check the per-class
+    // flag here. The B6.5b accretion-delta audit must PROVE this upstream guarantee (no admission path
+    // bypasses the entry gates); if it finds one, RTB per-signal assetClass-active enforcement goes in.
     const systemContext = await storage.getSystemContext(mode);
     if (!systemContext?.isEngineActive) {
       return; // Skip refresh when engine is inactive
@@ -783,6 +788,9 @@ class ReadyToBuyService {
   private async executeRefreshCycle(mode: TradingMode): Promise<void> {
     // Directive 8.8.4-A3.R1: Engine-aware refresh control
     // Only run refresh cycle when trading engine is active for this mode
+    // P19-B6.5a (Q-B / RUNNING_ISSUES #320): per-asset-class gating is enforced UPSTREAM at the class
+    // entry points; a gated-OFF class emits no signal that reaches this queue. No per-class re-check
+    // here (defense-in-depth deferred to B6.5b pending the audit's upstream-guarantee proof).
     const systemContext = await storage.getSystemContext(mode);
     if (!systemContext?.isEngineActive) {
       return; // Skip refresh when engine is inactive (passive learning mode)

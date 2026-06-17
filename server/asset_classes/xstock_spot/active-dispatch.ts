@@ -30,6 +30,7 @@
 import { getOrchestratorByMode } from '../../services/paper-sim-service.js';
 import { getPortfolioBalanceV2 } from '../../services/guardrail-settings.js';
 import { storage } from '../../storage.js';
+import { tradingStateSync, isAssetClassActiveInContext } from '../../services/trading-state-sync.js';
 import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-map.js';
 import type { StrategySignal } from '../../services/strategy-engine.js';
 import type { StrategyType } from '../../services/paper-position-sizing.js';
@@ -49,6 +50,9 @@ let _dispatchErrors = 0;   // assert/build/dispatch failures (loud-logged, never
 // P19-B4a (C3) — fill-safety gate counters (all fail-CLOSED, all observable).
 let _configClosedSkips = 0; // fill-safety config missing/incomplete → fail-closed block
 let _staleSkips = 0;        // latest tick older than the freshness threshold (or absent)
+// P19-B6.5a — per-asset-class active gate: master engine ON but xstock_spot class gated OFF
+// (fail-closed, default-OFF). The expected state until B7b explicitly activates xStock.
+let _classDormantSkips = 0;
 
 export function getXstockActiveDispatchStats() {
   return {
@@ -58,6 +62,7 @@ export function getXstockActiveDispatchStats() {
     dispatchErrors: _dispatchErrors,
     configClosedSkips: _configClosedSkips,
     staleSkips: _staleSkips,
+    classDormantSkips: _classDormantSkips,
   };
 }
 
@@ -122,6 +127,16 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
     const paperCtx = await storage.getSystemContext('paper');
     if (!paperCtx?.isEngineActive) {
       _dormantSkips++; // §9.1 scaffolding: wire-in dormant until B7b. Normal state pre-flip.
+      return;
+    }
+    // P19-B6.5a — per-asset-class active gate (fail-closed, default-OFF). Even with the per-mode
+    // master ON, xStock stays dormant until its class flag is explicitly flipped — the exact
+    // isolation B7b's crypto-first turn-on requires. Uses the paperCtx already in hand (no extra
+    // query); typed pure helper, never reads the raw JSONB here.
+    const xstockActive = isAssetClassActiveInContext(paperCtx, 'xstock_spot');
+    tradingStateSync.recordAssetClassGateDecision('paper', 'xstock_spot', xstockActive);
+    if (!xstockActive) {
+      _classDormantSkips++; // master ON but xstock_spot class gated OFF — the expected state pre-B7b.
       return;
     }
     const orch = getOrchestratorByMode('paper');

@@ -9,6 +9,7 @@ import { storage } from '../storage.js';
 import { clusterBus } from './cluster-bus.js';
 import { contextBridge } from './context-bridge.js';
 import type { SystemContext } from '@shared/schema';
+import type { AssetClass } from '@shared/asset-classes';
 
 export type TradingMode = 'live' | 'paper';
 
@@ -49,6 +50,21 @@ export function livenessSplitsForMode(
     out.push({ key: 'paper-orchestrator', reason: `db=${dbActive} vs orchestratorPresent=${orchestratorPresent}` });
   }
   return out;
+}
+
+/**
+ * P19-B6.5a — the single typed per-asset-class gate read. Fail-closed: a missing context, a missing
+ * key, a non-object column, or a non-`true` value all resolve to FALSE. Pure + synchronous so the
+ * active-path entry gates (which already hold a freshly-fetched SystemContext) call it with NO extra
+ * DB query — never reading the raw JSONB at the call site. The async `isAssetClassActive(mode,class)`
+ * method delegates to this for callers that don't already hold the context.
+ */
+export function isAssetClassActiveInContext(
+  context: SystemContext | undefined,
+  assetClass: AssetClass
+): boolean {
+  const map = (context?.activeAssetClasses ?? {}) as Record<string, unknown>;
+  return map[assetClass] === true;
 }
 
 export class TradingStateSync {
@@ -347,6 +363,93 @@ export class TradingStateSync {
   async isEngineActive(mode: 'live' | 'paper' = 'paper'): Promise<boolean> {
     const context = await storage.getSystemContext(mode);
     return context?.isEngineActive || false;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════════════════
+  // P19-B6.5a — PER-ASSET-CLASS ACTIVE GATE (Langston Option C).
+  //
+  // An ADDITIONAL, fail-closed, default-OFF gate layered on top of the per-mode `isEngineActive`
+  // master switch. A class is active in a mode IFF the per-mode `system_context.active_asset_classes`
+  // JSONB carries `<class>: true`. A MISSING key = inactive = FAIL-CLOSED. Active-path entry points
+  // (fx5-scanner crypto scan, xstock_spot/active-dispatch) gate on `isEngineActive(mode) AND
+  // isAssetClassActive(mode, class)`, so B7b can activate crypto-first while xStock stays dormant
+  // under the same master flag. The setter mirrors `setEngineActive`'s H1 discipline:
+  // AWAIT the authoritative DB write FIRST, then broadcast.
+  // ════════════════════════════════════════════════════════════════════════════════════════
+
+  /** P19-B6.5a per-class gate-decision witness (reuses the LIVENESS_SPLIT observability discipline):
+   *  counts gate ALLOW/SKIP per (mode, class) so a crypto-only run is provably xStock-silent, and a
+   *  class that emits while gated-OFF is observable (recordLivenessSplit), never silent. */
+  private assetClassGateStats: Map<string, { allowed: number; skipped: number; lastAt: number }> = new Map();
+
+  /**
+   * Typed accessor — is this asset class active in this mode? Fail-closed: a missing key, a non-object
+   * column, or any read error all resolve to FALSE (never accidentally-active). NEVER read the raw
+   * JSONB elsewhere — this is the single typed gate.
+   */
+  async isAssetClassActive(mode: 'live' | 'paper', assetClass: AssetClass): Promise<boolean> {
+    try {
+      const context = await storage.getSystemContext(mode);
+      return isAssetClassActiveInContext(context, assetClass);
+    } catch (err) {
+      // Fail-closed: an unreadable state must never green-light a class.
+      console.warn(`[P19-B6.5a][isAssetClassActive] read failed for ${mode}/${assetClass} — fail-closed OFF:`, err instanceof Error ? err.message : err);
+      return false;
+    }
+  }
+
+  /**
+   * Setter — flip a per-(mode, class) active flag. Mirrors `setEngineActive`'s P19-B4b-D5/H1 ordering:
+   * AWAIT the authoritative DB write FIRST (merge into the JSONB, never clobber sibling classes), then
+   * broadcast. If the write throws, nothing is broadcast (no reader is told a state the DB never holds).
+   * Guarded entry point for the B6.5b dry-run + the eventual B7b flip.
+   */
+  async setAssetClassActive(userId: string, mode: 'live' | 'paper', assetClass: AssetClass, isActive: boolean): Promise<void> {
+    // Read-merge-write so flipping one class never clobbers another's flag.
+    const context = await storage.getSystemContext(mode);
+    const current = { ...((context?.activeAssetClasses ?? {}) as Record<string, boolean>) };
+    current[assetClass] = isActive;
+
+    // H1: persist the authoritative DB SSOT FIRST (awaited) — only broadcast after it commits.
+    await storage.updateSystemContext(mode, {
+      activeAssetClasses: current as SystemContext['activeAssetClasses'],
+      updatedAt: new Date(),
+    });
+
+    // Write committed → fan out a lightweight state-change so derived readers re-read.
+    try {
+      const { contextBridge } = await import('./context-bridge.js');
+      await contextBridge.broadcast({
+        type: 'trading_state_changed',
+        payload: { userId, mode, assetClassGate: { assetClass, active: isActive }, timestamp: new Date().toISOString() },
+        mode,
+      });
+    } catch (err) {
+      // State is already committed; a failed secondary broadcast must not fail the flip.
+      console.error('[P19-B6.5a][setAssetClassActive] post-commit broadcast failed (state already persisted):', err instanceof Error ? err.message : err);
+    }
+    console.log(`[P19-B6.5a][setAssetClassActive] ${mode}/${assetClass} → ${isActive ? 'ACTIVE' : 'INACTIVE'} (committed-then-broadcast, userId: ${userId})`);
+  }
+
+  /** Witness: record a per-class gate decision at an active-path entry point (observable; for the
+   *  xStock-isolation acceptance test + diagnostics). `allowed=false` = the normal dormant skip. */
+  recordAssetClassGateDecision(mode: 'live' | 'paper', assetClass: AssetClass, allowed: boolean): void {
+    const key = `${mode}:${assetClass}`;
+    const s = this.assetClassGateStats.get(key) ?? { allowed: 0, skipped: 0, lastAt: 0 };
+    if (allowed) s.allowed++; else s.skipped++;
+    s.lastAt = Date.now();
+    this.assetClassGateStats.set(key, s);
+  }
+
+  /** Hard witness: a class produced active output while its gate is OFF — a real isolation breach.
+   *  Reuses the LIVENESS_SPLIT counter (Langston Q-D) so the breach is observable, never silent. */
+  witnessAssetClassEmissionWhileInactive(mode: 'live' | 'paper', assetClass: AssetClass): void {
+    this.recordLivenessSplit(`asset-class-gate:${mode}:${assetClass}`, `${assetClass} emitted active output while gate INACTIVE in ${mode}`);
+  }
+
+  /** Expose the per-class gate witness for diagnostics + the B6.5b dry-run isolation proof. */
+  getAssetClassGateStats(): Record<string, { allowed: number; skipped: number; lastAt: number }> {
+    return Object.fromEntries(this.assetClassGateStats);
   }
 
   /**

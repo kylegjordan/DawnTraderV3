@@ -36,7 +36,9 @@ vi.mock('../../services/paper-sim-service.js', () => ({
 }));
 vi.mock('../../storage.js', () => ({
   storage: {
-    getSystemContext: async () => ({ isEngineActive: engineActive }),
+    // P19-B6.5a: the per-class active gate runs right after the master isEngineActive check, so the
+    // mocked context must opt xstock_spot ACTIVE for these C3 fill-safety assertions to be reached.
+    getSystemContext: async () => ({ isEngineActive: engineActive, activeAssetClasses: { xstock_spot: true } }),
     getGuardrailsV2: async () => null,
   },
 }));

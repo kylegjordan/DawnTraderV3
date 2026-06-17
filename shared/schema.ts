@@ -4190,6 +4190,12 @@ export const systemContext = pgTable("system_context", {
   tradingMode: tradingModeEnum("trading_mode").notNull().default("paper"),
   lastSafeState: jsonb("last_safe_state").notNull().default(sql`'{}'`),
   isEngineActive: boolean("is_engine_active").notNull().default(false),
+  // P19-B6.5a — per-asset-class active gate (Langston Option C). Fail-closed, default-OFF
+  // per-(mode,asset_class) flag: a class is active in this mode IFF active_asset_classes['<class>']
+  // === true (missing key = inactive). This is an ADDITIONAL AND-gate on top of isEngineActive —
+  // a class trades iff isEngineActive(mode) AND isAssetClassActive(mode,class). Lets B7b activate
+  // crypto-first while xstock_spot stays dormant under the same per-mode master switch.
+  activeAssetClasses: jsonb("active_asset_classes").notNull().default(sql`'{}'`),
   lastModeChange: timestamp("last_mode_change", { withTimezone: true }),
   changedBy: varchar("changed_by", { length: 50 }), // 'user', 'recovery', 'admin'
   changeReason: text("change_reason"),

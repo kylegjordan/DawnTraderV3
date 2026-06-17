@@ -22,6 +22,7 @@
  */
 
 import { storage } from '../storage.js';
+import { tradingStateSync, isAssetClassActiveInContext } from './trading-state-sync.js';
 // Phase 8.8.7: FilteredPairsService DEPRECATED - removed unused import
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { updateStage3Cache } from './stage3-state-cache.js';
@@ -548,6 +549,18 @@ export class Fx5ScannerService {
             const liveContext = await storage.getSystemContext('live');
             tradingActive = paperContext?.isEngineActive || liveContext?.isEngineActive || false;
             activeMode = liveContext?.isEngineActive ? 'live' : 'paper';
+            // P19-B6.5a — crypto active scan is ADDITIONALLY gated on the per-class active flag
+            // (fail-closed, default-OFF). fx5 scans crypto pairs → the gate class is 'crypto_spot'.
+            // We already hold the active mode's context (no extra DB query); the typed pure helper
+            // reads it. If crypto is gated OFF, tradingActive falls to false → the scan runs in
+            // PASSIVE/VTS mode exactly as when the engine is off (crypto keeps learning, just not on
+            // the active path). This lets B7b run crypto-active while xStock stays dormant.
+            if (tradingActive) {
+              const activeCtx = activeMode === 'live' ? liveContext : paperContext;
+              const cryptoActive = isAssetClassActiveInContext(activeCtx, 'crypto_spot');
+              tradingStateSync.recordAssetClassGateDecision(activeMode, 'crypto_spot', cryptoActive);
+              if (!cryptoActive) tradingActive = false;
+            }
           } catch (err) {
             console.warn('[11.4H.6A][ModeCheck] Failed to get context, defaulting to paper');
           }
