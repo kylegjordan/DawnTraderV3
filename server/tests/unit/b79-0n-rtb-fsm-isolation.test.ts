@@ -66,11 +66,6 @@ vi.mock('../../storage', () => ({
       table[id] = { ...table[id], ...data, id };
       return table[id];
     }),
-    insertRtbSignal: vi.fn(async (data: any) => {
-      const id = `id-${data.symbol}-${data.strategy}-${data.assetClass}`;
-      table[id] = { ...table[id], ...data, id };
-      return table[id];
-    }),
   },
 }));
 

@@ -238,14 +238,37 @@ async function checkSymbolCooldown(
       return { ok: true };
     }
 
-    const lastTrades = await storage.getTrades(mode, {
-      symbol: trade.symbol,
-      status: 'closed' as const,
-      limit: 1
-    });
+    // P19-B6.5b (F3 / audit H16): active-paper closes write to paper_sim_trades, NOT the legacy
+    // `trades` table — so reading getTrades() for paper made this per-symbol cooldown a SILENT NO-OP
+    // (it always found zero closed trades → returned ok:true → cooldown never enforced). Re-point paper
+    // mode to paper_sim_trades (the same table daily-loss-budget already reads correctly). Live keeps
+    // the legacy `trades` read until the Phase-21 live path is built. Both branches resolve a single
+    // most-recent CLOSED-trade timestamp for this symbol.
+    let lastTradeTime: number | null = null;
+    if (mode === 'paper') {
+      const { trades: paperTrades } = await storage.getPaperSimTradesPaginated(mode, {
+        symbol: trade.symbol,
+        closedOnly: true,
+        sortBy: 'closedAt',
+        order: 'desc',
+        limit: 1,
+      });
+      const last = paperTrades?.[0];
+      const t = last?.closedAt ?? last?.openedAt ?? null;
+      lastTradeTime = t ? new Date(t).getTime() : null;
+    } else {
+      const lastTrades = await storage.getTrades(mode, {
+        symbol: trade.symbol,
+        status: 'closed' as const,
+        limit: 1,
+      });
+      const last = lastTrades?.[0];
+      const t = last ? (last.exitTime || last.entryTime) : null;
+      lastTradeTime = t ? new Date(t).getTime() : null;
+    }
 
-    if (!lastTrades || lastTrades.length === 0) {
-      // [AJ16.2] Log cooldown check - no previous trades
+    if (lastTradeTime === null) {
+      // [AJ16.2] Log cooldown check - no previous closed trade for this symbol
       aj16Diagnostic.logCooldownCheck({
         cycleId,
         symbol: trade.symbol,
@@ -256,12 +279,6 @@ async function checkSymbolCooldown(
       return { ok: true };
     }
 
-    const lastTrade = lastTrades[0];
-    const exitOrEntryTime = lastTrade.exitTime || lastTrade.entryTime;
-    if (!exitOrEntryTime) {
-      return { ok: true };
-    }
-    const lastTradeTime = new Date(exitOrEntryTime).getTime();
     const currentTime = Date.now();
     const minutesSinceLastTrade = (currentTime - lastTradeTime) / (1000 * 60);
 

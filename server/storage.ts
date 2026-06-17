@@ -642,7 +642,7 @@ export interface IStorage {
   getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number; since?: Date }): Promise<AuditLog[]>;
   
   // Phase 8.8.4-B: RTB Signals Queue methods
-  insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
+  // P19-B6.5b: insertRtbSignal removed (zero callers — see DELETED_COMPONENTS_LOG). upsert is the live writer.
   upsertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
   getRtbSignals(filters: {
     mode: 'live' | 'paper';
@@ -4002,13 +4002,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Phase 8.8.4-B: RTB Signals Queue methods
-  async insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal> {
-    const [created] = await db
-      .insert(rtbSignals)
-      .values(data)
-      .returning();
-    return created;
-  }
+  // P19-B6.5b: insertRtbSignal impl removed (zero callers — DELETED_COMPONENTS_LOG). upsertRtbSignal is live.
 
   /**
    * Phase 8.8.4-C.13.B: Upsert RTB signal with ON CONFLICT UPDATE

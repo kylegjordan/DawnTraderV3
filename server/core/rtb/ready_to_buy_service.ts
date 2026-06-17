@@ -43,6 +43,9 @@ import { tclWatchdog } from './tcl_watchdog';
 import { eventBus, type PromotionEvent } from '../../lib/event-bus';
 import { contextBridge } from '../../services/context-bridge';
 import { centralClock, ClockTick } from '../../services/central-clock';
+// P19-B6.5b (F1b/F2/#320/#321): per-asset-class active gate defense-in-depth at the single RTB
+// admission chokepoint + the #321 hard-breach witness. trading-state-sync does NOT import RTB → no cycle.
+import { tradingStateSync, isAssetClassActiveInContext } from '../../services/trading-state-sync.js';
 import { performanceMonitor } from '../diagnostics/performance_monitor';
 import { normalizeInternal } from '../../markets/kraken-symbol-resolver';
 import { diagnosticTrace } from '../diagnostics/trace_service';
@@ -65,21 +68,10 @@ poolBus.on('POOL_UPDATE', (size: number) => {
   console.log(`[8.8.4-A4.R10R-3.T5][ACT][SYNC] ReadyToBuyService updated pool=${size}`);
 });
 
-export interface RTBSignalInput {
-  signalId: string;
-  mode: TradingMode;
-  symbol: string;
-  strategy: string;
-  entryPrice: number;
-  stopPrice: number;
-  targetPrice?: number;
-  quantity?: number;
-  notional?: number;
-  confidence: number;
-  atr?: number;
-  blockReason: string; // The capacity guardrail that blocked this signal
-  metadata?: Record<string, unknown>;
-}
+// P19-B6.5b (rule 18, Langston Q4): `RTBSignalInput` + the `queueSignal` capacity-block
+// insertion variant were DELETED here — zero callers (the live path is queueSQESignal →
+// upsertRtbSignal). Archived: 1-system-manual/_archive/deleted-code/p19-b6-5b-rtb-deadcode.removed;
+// logged: DELETED_COMPONENTS_LOG.md.
 
 /**
  * Phase 8.8.4-C.5: SQE-qualified signal input for unified RTB pool
@@ -586,19 +578,50 @@ class ReadyToBuyService {
   }
 
   /**
+   * P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth re-eval purge): drop any QUEUED signal
+   * whose per-asset-class active gate is OFF for this mode. The admission chokepoint (queueSQESignal)
+   * blocks NEW entries; this clears STALE ones (e.g. a class deactivated while it held live queued
+   * signals) so a gated-OFF class can never be re-ranked or promoted out of the queue. Runs once per
+   * refresh cycle on the SystemContext the caller already fetched (no extra round-trip per signal).
+   * Reads the SAME isAssetClassActiveInContext the entry gate uses; witnesses each breach via the
+   * #321 hard-breach hook (LIVENESS_SPLIT) so an isolation failure is observable, never silent.
+   */
+  private async purgeInactiveClassSignals(
+    mode: TradingMode,
+    systemContext: Parameters<typeof isAssetClassActiveInContext>[0],
+  ): Promise<number> {
+    const queued = await this.getQueuedSignals(mode);
+    let purged = 0;
+    for (const sig of queued) {
+      const cls = asValidAssetClass(sig.assetClass);
+      if (cls && !isAssetClassActiveInContext(systemContext, cls)) {
+        tradingStateSync.witnessAssetClassEmissionWhileInactive(mode, cls);
+        await storage.deleteRtbSignals({ mode, id: sig.id });
+        performanceMonitor.recordQueueRemove(1);
+        this.signalRefreshStates.delete(this._refreshKey(mode, sig.signalId));
+        purged++;
+        console.warn(`[P19-B6.5b][#320][RTB_GATE_PURGE] queued ${cls} signal ${sig.symbol} purged — per-class gate OFF in ${mode} (defense-in-depth re-eval).`);
+      }
+    }
+    if (purged > 0) console.log(`[P19-B6.5b][#320] purged ${purged} inactive-class signal(s) from ${mode} queue.`);
+    return purged;
+  }
+
+  /**
    * Directive 8.8.4-A3.R9.3-A: Per-signal refresh with try/finally error handling (R9.3-B)
    */
   private async executePerSignalRefresh(mode: TradingMode): Promise<void> {
     // Check if engine is active
-    // P19-B6.5a (Q-B / RUNNING_ISSUES #320): the per-asset-class active gate is enforced UPSTREAM at
-    // the class entry points (fx5-scanner crypto scan + xstock_spot/active-dispatch), so a gated-OFF
-    // class never emits a signal that reaches this queue. RTB therefore does NOT re-check the per-class
-    // flag here. The B6.5b accretion-delta audit must PROVE this upstream guarantee (no admission path
-    // bypasses the entry gates); if it finds one, RTB per-signal assetClass-active enforcement goes in.
+    // P19-B6.5b (F1b / RUNNING_ISSUES #320): the B6.5b audit PROVED the crypto entry gate could be
+    // bypassed at the scanMode pool layer (now structurally fixed in F1), so the deferred per-class
+    // RTB enforcement is now IN — the admission chokepoint (queueSQESignal) rejects new inactive-class
+    // entries, and purgeInactiveClassSignals clears any STALE queued signal whose class flipped off
+    // mid-flight, before the per-signal refresh re-ranks/promotes.
     const systemContext = await storage.getSystemContext(mode);
     if (!systemContext?.isEngineActive) {
       return; // Skip refresh when engine is inactive
     }
+    await this.purgeInactiveClassSignals(mode, systemContext);
 
     const startTime = Date.now();
     const signals = await this.getQueuedSignals(mode);
@@ -788,14 +811,15 @@ class ReadyToBuyService {
   private async executeRefreshCycle(mode: TradingMode): Promise<void> {
     // Directive 8.8.4-A3.R1: Engine-aware refresh control
     // Only run refresh cycle when trading engine is active for this mode
-    // P19-B6.5a (Q-B / RUNNING_ISSUES #320): per-asset-class gating is enforced UPSTREAM at the class
-    // entry points; a gated-OFF class emits no signal that reaches this queue. No per-class re-check
-    // here (defense-in-depth deferred to B6.5b pending the audit's upstream-guarantee proof).
+    // P19-B6.5b (F1b / RUNNING_ISSUES #320): per-class defense-in-depth is now IN (the audit proved the
+    // crypto entry gate could be bypassed at the pool layer — structurally fixed in F1). Purge any
+    // stale queued signal whose per-class gate is OFF BEFORE the re-eval/re-rank/promotion downstream.
     const systemContext = await storage.getSystemContext(mode);
     if (!systemContext?.isEngineActive) {
       return; // Skip refresh when engine is inactive (passive learning mode)
     }
-    
+    await this.purgeInactiveClassSignals(mode, systemContext);
+
     const startTime = Date.now();
     
     // Step 1: Clean up expired signals
@@ -1158,101 +1182,9 @@ class ReadyToBuyService {
     return this.refreshIntervals.has(mode);
   }
 
-  /**
-   * Queue a signal that was blocked by a capacity constraint
-   * 
-   * @param input - Signal data to queue
-   * @returns The queued signal record or null if rejected
-   */
-  async queueSignal(input: RTBSignalInput): Promise<RtbSignal | null> {
-    // Validate this is a capacity block (not quality block)
-    if (!isCapacityBlock(input.blockReason)) {
-      console.log(`[RTB] Rejecting signal ${input.symbol}/${input.strategy} - ${input.blockReason} is a QUALITY block, not CAPACITY`);
-      return null;
-    }
-
-    // Check minimum confidence threshold (B72: from module_constants).
-    const minQueueConfidence = getCachedNumberRequired('queue_admission', 'min_queue_confidence', _RTB_GK);
-    if (input.confidence < minQueueConfidence) {
-      console.log(`[RTB] Rejecting signal ${input.symbol}/${input.strategy} - confidence ${input.confidence.toFixed(2)} below threshold ${minQueueConfidence}`);
-      return null;
-    }
-
-    // Calculate FinalScore
-    const finalScore = calculateFinalScore({
-      confidence: input.confidence,
-      hybridScore: input.confidence, // Use confidence as hybrid score for capacity-blocked signals
-      regimeWeight: 0.5, // Default regime weight
-      decayPenalty: 0, // No decay for new signals
-    });
-
-    // Phase 14.1 HF8 (B1): Duplicate FinalScore check REMOVED — SQE already enforces FinalScore >= 0.35
-    // (signal_quality_evaluator.ts line 130). Signals reaching RTB have already passed SQE.
-    console.log(`[11.0E][RTB] Processing signal ${input.symbol}/${input.strategy} - FinalScore ${finalScore.toFixed(4)}`);
-
-    const now = new Date();
-    // R9.3-C: TTL removed - lifecycle governed by SQE results only
-
-    // Check for existing queued signal with same symbol+strategy
-    const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
-    
-    if (existingSignal) {
-      const existingFinalScore = parseFloat(existingSignal.finalScore || '0');
-      if (existingFinalScore >= finalScore) {
-        console.log(`[11.0E][RTB] Keeping existing signal ${input.symbol}/${input.strategy} with FinalScore ${existingFinalScore.toFixed(4)} >= new ${finalScore.toFixed(4)}`);
-        return existingSignal;
-      }
-      
-      // New signal is better - expire the old one
-      await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore signal');
-    }
-
-    // Directive 11.0E: Calculate simple risk score from stop distance
-    const riskScore = input.stopPrice > 0 
-      ? Math.min(1, Math.abs(input.entryPrice - input.stopPrice) / input.entryPrice * 10)
-      : 0.5;
-
-    // Insert new signal
-    const insertData: InsertRtbSignal = {
-      mode: input.mode,
-      signalId: input.signalId,
-      symbol: input.symbol,
-      strategy: input.strategy as any,
-      entryPrice: input.entryPrice.toString(),
-      stopPrice: input.stopPrice.toString(),
-      targetPrice: input.targetPrice?.toString(),
-      quantity: input.quantity?.toString(),
-      notional: input.notional?.toString(),
-      confidence: input.confidence.toString(),
-      riskScore: riskScore.toString(),
-      expectedReturn: '0.15', // Default expected return
-      finalScore: finalScore.toString(),
-      status: 'queued',
-      queuedAt: now,
-      // R9.3-C: expiresAt removed - lifecycle governed by SQE
-      blockReason: input.blockReason,
-      metadata: input.metadata as any,
-    };
-
-    // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
-    const signal = await storage.upsertRtbSignal(insertData);
-
-    // Record SLAL QUEUED event
-    signalLifecycleAudit.recordQueued(
-      input.signalId,
-      input.mode,
-      input.symbol,
-      input.strategy,
-      {
-        finalScore,
-        blockReason: input.blockReason,
-      }
-    );
-
-    console.log(`[11.0E][RTB] Queued signal ${input.symbol}/${input.strategy} with FinalScore ${finalScore.toFixed(4)}`);
-    
-    return signal;
-  }
+  // P19-B6.5b (rule 18 / Langston Q4): `queueSignal` (capacity-block insertion variant) DELETED —
+  // zero production + zero test callers. Live admission = queueSQESignal → upsertRtbSignal.
+  // Archived: _archive/deleted-code/p19-b6-5b-rtb-deadcode.removed; logged: DELETED_COMPONENTS_LOG.md.
 
   /**
    * Directive 11.0E: Get the highest-FinalScore queued signal for a mode
@@ -1824,6 +1756,24 @@ class ReadyToBuyService {
       );
     }
     const resolvedAssetClass = input.assetClass; // string, narrowed non-undefined by the throw above
+
+    // P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth): queueSQESignal is the SINGLE live RTB
+    // admission chokepoint. The per-asset-class active gate is enforced upstream at the entry points
+    // (fx5 crypto scan + xstock active-dispatch, now structurally hardened in F1), but a per-class reject
+    // HERE is the durable B7b / Phase-21 co-run guarantee: a signal whose stamped class is NOT active for
+    // its mode never enters the queue. Reads the SAME isAssetClassActiveInContext the entry gate uses (so
+    // it can never reject a legitimately-active class) and witnesses any breach via the #321 hard-breach
+    // hook (LIVENESS_SPLIT) so an isolation failure is observable, never silent.
+    const admissionContext = await storage.getSystemContext(input.mode);
+    if (!isAssetClassActiveInContext(admissionContext, resolvedAssetClass as AssetClass)) {
+      tradingStateSync.witnessAssetClassEmissionWhileInactive(input.mode, resolvedAssetClass as AssetClass);
+      console.warn(
+        `[P19-B6.5b][#320][RTB_GATE_REJECT] ${resolvedAssetClass} signal reached queueSQESignal while its ` +
+        `per-class active gate is OFF in ${input.mode} — REJECTED (defense-in-depth). ` +
+        `symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`,
+      );
+      return null;
+    }
 
     // Phase 14.5: Persist routing and ranking metadata for auditability
     const enrichedMetadata = {

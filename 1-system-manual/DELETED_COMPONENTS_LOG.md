@@ -155,3 +155,26 @@
 
 **Archive:** git history (single-method removal within a still-live file — no `.removed` file). Commit: P19-B6 Step-3 service chunk.
 **Reviewed by:** Langston Step-4 _pending_.
+
+---
+
+## 2026-06-17 — Dead RTB capacity-block insertion path (P19-B6.5b)
+
+**Removed:** the unused `queueSignal` RTB variant + its input type + the orphaned `storage.insertRtbSignal`.
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `queueSignal()` | `server/core/rtb/ready_to_buy_service.ts` (was ~line 1202, ~90 lines) | The "capacity-block" RTB insertion variant. Wrote via `storage.upsertRtbSignal`. **Distinct from the LIVE admission path** `queueSQESignal` (the only path the orchestrator calls). Also **class-blind** — built `InsertRtbSignal` with no `assetClass`, so reviving it would re-introduce the exact pre-stamp-at-source bug. |
+| `RTBSignalInput` interface | `server/core/rtb/ready_to_buy_service.ts` (was ~line 71) | The input type used **only** by `queueSignal`. |
+| `insertRtbSignal()` | `server/storage.ts` IStorage decl (~645) + impl (~4005) | Plain insert (no upsert). **Zero callers at all** — `queueSignal` itself used `upsertRtbSignal`, not this. |
+| 2 test-mock stubs | `b79-0n-rtb-fsm-isolation.test.ts`, `b79-0n-rtb-isolation.test.ts` | `insertRtbSignal: vi.fn(...)` stubs that mocked the storage method but never called it. Removed with the impl (both test files still pass — 9 tests). |
+
+**Why removed:** rule 18 (never leave legacy lingering) + Langston Q4 delete-on-the-spot ruling (P19-B6.5b Step-2). A class-blind RTB insertion variant lingering is precisely the accidental-re-entry risk rule 18 targets; B6.5b's #320 work hardens the per-class gate, so a parallel un-gated insertion path is exactly what must not survive.
+
+**Blast-radius verification (certainty-before-cutting):** repo-wide grep `server/ client/ shared/ scripts/`: `queueSignal` (excluding the `queueSQESignal` substring) = **definition + 1 doc-comment only, ZERO callers**; `insertRtbSignal` = interface decl + impl + 2 test-mock stubs (no callers). tsc baseline = no regression (bench). Affected isolation tests re-run green (19 tests across the 2 isolation files + the 2 new B6.5b files). Langston Step-4 diff review pending.
+
+**Left intentionally (NOT dead — do not read as a missed sweep):** `storage.upsertRtbSignal` (the LIVE admission writer — `queueSQESignal` uses it); `queueSQESignal` (the live SQE-qualified admission chokepoint, now carrying the B6.5b #320 defense-in-depth guard).
+
+**Archive copy:** `1-system-manual/_archive/deleted-code/p19-b6-5b-rtb-deadcode.removed`
+**Removal commit:** _(recorded at P19-B6.5b Step-4/push)_
+**Reviewed by:** Langston Step-4 _pending_.

@@ -1,0 +1,133 @@
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * DELETED in P19-B6.5b (2026-06-17) — dead RTB capacity-block insertion path
+ * ════════════════════════════════════════════════════════════════════════════
+ * Rule 18 (never leave legacy lingering) + Langston Q4 delete-on-the-spot.
+ * Verification: repo-wide grep (server/client/shared/scripts) + tsc baseline.
+ *   - `queueSignal` (ready_to_buy_service.ts): ZERO production callers, ZERO test
+ *     callers (only the definition + one doc-comment reference inside queueSQESignal).
+ *     The live admission path is queueSQESignal → storage.upsertRtbSignal. queueSignal
+ *     was the capacity-block variant; nothing has called it post-B79.0n.
+ *   - `RTBSignalInput` (ready_to_buy_service.ts): used ONLY by queueSignal.
+ *   - `storage.insertRtbSignal` (interface + impl): ZERO callers at all (queueSignal
+ *     itself used upsertRtbSignal, not insertRtbSignal). Referenced only by 2 test
+ *     mocks (b79-0n-rtb-fsm-isolation.test.ts, b79-0n-rtb-isolation.test.ts) which
+ *     STUB it but never call it — those stub lines were removed with this deletion.
+ * Why removed (not stubbed): a class-blind RTB insertion variant lingering is exactly
+ * the rule-18 accidental-re-entry risk. Git history (commit at deletion) is the
+ * authoritative archive; this copy is for quick browse. `.removed` suffix = non-compilable.
+ * Left intentionally elsewhere: upsertRtbSignal (LIVE — the real admission writer).
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+// ── FROM server/core/rtb/ready_to_buy_service.ts (interface, was ~line 71) ──
+export interface RTBSignalInput {
+  signalId: string;
+  mode: TradingMode;
+  symbol: string;
+  strategy: string;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice?: number;
+  quantity?: number;
+  notional?: number;
+  confidence: number;
+  atr?: number;
+  blockReason: string; // The capacity guardrail that blocked this signal
+  metadata?: Record<string, unknown>;
+}
+
+// ── FROM server/core/rtb/ready_to_buy_service.ts (method, was ~line 1202) ──
+  /**
+   * Queue a signal that was blocked by a capacity constraint
+   *
+   * @param input - Signal data to queue
+   * @returns The queued signal record or null if rejected
+   */
+  async queueSignal(input: RTBSignalInput): Promise<RtbSignal | null> {
+    // Validate this is a capacity block (not quality block)
+    if (!isCapacityBlock(input.blockReason)) {
+      console.log(`[RTB] Rejecting signal ${input.symbol}/${input.strategy} - ${input.blockReason} is a QUALITY block, not CAPACITY`);
+      return null;
+    }
+
+    // Check minimum confidence threshold (B72: from module_constants).
+    const minQueueConfidence = getCachedNumberRequired('queue_admission', 'min_queue_confidence', _RTB_GK);
+    if (input.confidence < minQueueConfidence) {
+      console.log(`[RTB] Rejecting signal ${input.symbol}/${input.strategy} - confidence ${input.confidence.toFixed(2)} below threshold ${minQueueConfidence}`);
+      return null;
+    }
+
+    // Calculate FinalScore
+    const finalScore = calculateFinalScore({
+      confidence: input.confidence,
+      hybridScore: input.confidence, // Use confidence as hybrid score for capacity-blocked signals
+      regimeWeight: 0.5, // Default regime weight
+      decayPenalty: 0, // No decay for new signals
+    });
+
+    // Phase 14.1 HF8 (B1): Duplicate FinalScore check REMOVED — SQE already enforces FinalScore >= 0.35
+    console.log(`[11.0E][RTB] Processing signal ${input.symbol}/${input.strategy} - FinalScore ${finalScore.toFixed(4)}`);
+
+    const now = new Date();
+
+    // Check for existing queued signal with same symbol+strategy
+    const existingSignal = await this.getQueuedSignal(input.mode, input.symbol, input.strategy);
+
+    if (existingSignal) {
+      const existingFinalScore = parseFloat(existingSignal.finalScore || '0');
+      if (existingFinalScore >= finalScore) {
+        console.log(`[11.0E][RTB] Keeping existing signal ${input.symbol}/${input.strategy} with FinalScore ${existingFinalScore.toFixed(4)} >= new ${finalScore.toFixed(4)}`);
+        return existingSignal;
+      }
+      await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore signal');
+    }
+
+    // Directive 11.0E: Calculate simple risk score from stop distance
+    const riskScore = input.stopPrice > 0
+      ? Math.min(1, Math.abs(input.entryPrice - input.stopPrice) / input.entryPrice * 10)
+      : 0.5;
+
+    // Insert new signal
+    const insertData: InsertRtbSignal = {
+      mode: input.mode,
+      signalId: input.signalId,
+      symbol: input.symbol,
+      strategy: input.strategy as any,
+      entryPrice: input.entryPrice.toString(),
+      stopPrice: input.stopPrice.toString(),
+      targetPrice: input.targetPrice?.toString(),
+      quantity: input.quantity?.toString(),
+      notional: input.notional?.toString(),
+      confidence: input.confidence.toString(),
+      riskScore: riskScore.toString(),
+      expectedReturn: '0.15', // Default expected return
+      finalScore: finalScore.toString(),
+      status: 'queued',
+      queuedAt: now,
+      blockReason: input.blockReason,
+      metadata: input.metadata as any,
+    };
+
+    const signal = await storage.upsertRtbSignal(insertData);
+
+    signalLifecycleAudit.recordQueued(
+      input.signalId, input.mode, input.symbol, input.strategy,
+      { finalScore, blockReason: input.blockReason },
+    );
+
+    console.log(`[11.0E][RTB] Queued signal ${input.symbol}/${input.strategy} with FinalScore ${finalScore.toFixed(4)}`);
+    return signal;
+  }
+
+// ── FROM server/storage.ts (IStorage interface decl, was ~line 645) ──
+  insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal>;
+
+// ── FROM server/storage.ts (impl, was ~line 4005) ──
+  async insertRtbSignal(data: InsertRtbSignal): Promise<RtbSignal> {
+    const [created] = await db
+      .insert(rtbSignals)
+      .values(data)
+      .returning();
+    return created;
+  }

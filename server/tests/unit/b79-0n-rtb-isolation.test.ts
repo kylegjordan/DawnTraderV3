@@ -46,7 +46,6 @@ vi.mock('../../storage', () => ({
     }),
     getActiveTrades: vi.fn(async () => []),
     upsertRtbSignal: vi.fn(async (data: any) => ({ ...data, id: `id-${Math.random()}` })),
-    insertRtbSignal: vi.fn(async (data: any) => ({ ...data, id: `id-${Math.random()}` })),
     getRtbSignalById: vi.fn(async () => undefined),
   },
 }));

@@ -253,8 +253,22 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
   //      owns the target-hit decision (qualifier gate + moonbag flip vs.
   //      close-at-target) and the stop-hit decision (via its ratcheted
   //      internal stop). So we skip these when useTrailing=true.
-  if (!input.useTrailing) {
+  //
+  //      P19-B6.5b (F5 / audit H14 — ATR-zero exit FLOOR): the trailing engine
+  //      at step 5 only engages when `atr > 0`. If trailing is ON but ATR is
+  //      0/missing (e.g. a position opened without a stamped atr_at_open), NEITHER
+  //      this block (gated useTrailing===false) NOR the trailing block (gated
+  //      atr>0) would run — leaving a position that NEVER closes on stop or target
+  //      (only the MAX_HOLD timeout valve at step 2 could close it = unbounded
+  //      exposure to the stop). So the hard stop/target acts as a FLOOR that always
+  //      runs when ATR is unavailable, regardless of useTrailing. With trailing ON +
+  //      a valid ATR (the normal paper path), this stays skipped — trailing owns it,
+  //      behavior unchanged. Unit-tested: atr=0 forces the floor (b6-5b F5 test).
+  const atrUnavailableForTrailing = !(input.atr > 0);
+  if (!input.useTrailing || atrUnavailableForTrailing) {
+    const viaAtrFloor = input.useTrailing && atrUnavailableForTrailing;
     if (currentPrice <= input.stopPrice) {
+      if (viaAtrFloor) console.warn(`[TEC][P19-B6.5b][F5][ATR_FLOOR] ${input.symbol} stop_hit via hard floor (useTrailing but ATR<=0=${input.atr}); trailing engine could not engage. tradeId=${input.tradeId}`);
       return {
         shouldExit: true,
         exitReason: 'stop_hit',
@@ -263,6 +277,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       };
     }
     if (currentPrice >= input.targetPrice) {
+      if (viaAtrFloor) console.warn(`[TEC][P19-B6.5b][F5][ATR_FLOOR] ${input.symbol} target_hit via hard floor (useTrailing but ATR<=0=${input.atr}). tradeId=${input.tradeId}`);
       return {
         shouldExit: true,
         exitReason: 'target_hit',

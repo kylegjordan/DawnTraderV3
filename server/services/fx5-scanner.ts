@@ -1143,8 +1143,23 @@ export class Fx5ScannerService {
       const isEngineActive = earlyContext?.isEngineActive || false;
       console.log(`[FX5Scanner][11.4H.4][${mode}] Engine active: ${isEngineActive} (reused from earlyContext)`);
 
-      // REB 2.8.7: Enforce passive mode - clear pool if engine stopped
-      activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
+      // P19-B6.5b (F1 / RUNNING_ISSUES #320): the per-asset-class active gate must propagate
+      // INTO the active-pool population decision, not just the tick-handler scan-mode label.
+      // The tick handler down-converts its local `tradingActive` when crypto is gated OFF, but
+      // scanMode independently re-derives `isEngineActive` (the per-MODE master flag) — so without
+      // this AND, master ON + crypto_spot OFF would still populate the active crypto pool and the
+      // orchestrator would emit crypto signals past the gate (the audited bypass). fx5 scans crypto
+      // pairs → the gate class is 'crypto_spot'. Gating pool population (+ enforcePassiveMode) on the
+      // combined flag makes crypto-OFF route to passive/VTS and CLEAR the pool, structurally mirroring
+      // the xstock active-dispatch gate. Master axis (passive-learning + B5a capture) stays on
+      // `isEngineActive` — crypto keeps LEARNING while gated off the active path.
+      const cryptoActivePoolEligible = isEngineActive && isAssetClassActiveInContext(earlyContext, 'crypto_spot');
+      if (isEngineActive && !cryptoActivePoolEligible) {
+        console.log(`[FX5Scanner][P19-B6.5b][#320][${mode}] master engine ACTIVE but crypto_spot gated OFF → active pool NOT populated (passive/VTS); orchestrator sees no crypto signal.`);
+      }
+
+      // REB 2.8.7: Enforce passive mode - clear pool if engine stopped OR crypto class gated off (B6.5b F1 / #320)
+      activeFilterPool.enforcePassiveModeIfStopped(mode, cryptoActivePoolEligible);
 
       // Batch 43: Global quant IMF stage REMOVED.
       // classifiedSurvivors flow directly into the family fan-out (lines below).
@@ -1384,7 +1399,9 @@ export class Fx5ScannerService {
       console.log(`[43][ScanFlow] Global: ${classifiedSurvivors.length} | Family-qualified (unique): ${familyQualifiedUnion.length} | Family-qualified (sum): ${totalFamilySurvivors} | Benchmarks: ${benchmarkCountUnique} unique / ${benchmarkCount} fan-out`);
 
       // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE
-      if (isEngineActive) {
+      // P19-B6.5b (F1 / #320): AND the per-class crypto gate so crypto-OFF clears the active pool
+      // rather than feeding the orchestrator past the entry gate.
+      if (cryptoActivePoolEligible) {
         // Batch 43: Active pool built from family-qualified union (not global quant IMF)
         const poolStats = activeFilterPool.addSurvivors(mode, familyQualifiedUnion);
         console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${familyQualifiedUnion.length} (family-qualified)`);
