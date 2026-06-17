@@ -113,4 +113,8 @@ describe('P19-B6 RULE_011 warning-tier ordering in validate() (Langston Blocker-
     expect(hasR11({ ...base, dailyLossWarning1Pct: 50, dailyLossWarning2Pct: 50 })).toBe(true);
     expect(hasR11({ ...base, dailyLossWarning1Pct: 50, dailyLossWarning2Pct: 100 })).toBe(true);
   });
+
+  it('FAILS a present-but-non-finite value (Langston note-1: NaN must FAIL, not silently skip)', () => {
+    expect(hasR11({ ...base, dailyLossWarning1Pct: 'abc', dailyLossWarning2Pct: '75' })).toBe(true);
+  });
 });

@@ -426,10 +426,15 @@ class GuardrailPolicyService {
     // (mirroring the getEffective() resolver) before the numeric ordering compare.
     const warn1raw = guardrail.dailyLossWarning1Pct;
     const warn2raw = guardrail.dailyLossWarning2Pct;
-    const warn1 = warn1raw !== undefined ? parseFloat(String(warn1raw)) : undefined;
-    const warn2 = warn2raw !== undefined ? parseFloat(String(warn2raw)) : undefined;
-    if (warn1 !== undefined && warn2 !== undefined && Number.isFinite(warn1) && Number.isFinite(warn2)) {
-      if (!(warn1 > 0 && warn1 < warn2 && warn2 < 100)) {
+    if (warn1raw !== undefined && warn2raw !== undefined) {
+      const warn1 = parseFloat(String(warn1raw));
+      const warn2 = parseFloat(String(warn2raw));
+      // Langston Step-4 note-1: a present-but-non-finite value must FAIL the rule, not skip it —
+      // a skipped validation reads as "passed", letting a malformed value bypass RULE_011 silently.
+      // So Number.isFinite is part of the validity predicate (NaN → ok=false → failure emitted),
+      // not an outer skip-guard.
+      const ok = Number.isFinite(warn1) && Number.isFinite(warn2) && warn1 > 0 && warn1 < warn2 && warn2 < 100;
+      if (!ok) {
         const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_011');
         failures.push({
           ruleId: 'RULE_011',
