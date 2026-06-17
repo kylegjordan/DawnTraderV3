@@ -47,4 +47,19 @@
 
 ---
 
-*Step-2 deliverable. On Langston PROCEED → Step-3 implementation (chunked: migration → restored service → latch+trip wiring → warnings → hook → F3 delete → force-trip tests).*
+---
+
+## §4 — STEP-3 CARRY-INS (Langston PROCEED 2026-06-16 + CC decisions on his two open points)
+
+**Langston conditions (fold into the named chunks):**
+1. **`killInProgress` lifecycle — two hard invariants (latch+trip chunk):** (a) the **check-and-set is one synchronous block with NO `await` between** `if(killInProgress[mode]) return` and `killInProgress[mode]=true` (this atomicity — not the DB guard — is what closes the same-tick double-close window; `calculate24hPL` runs AFTER the set). (b) **`killInProgress[mode]` resets on `resetKillSwitch`/restart**, tied to the same `engineSessionStart` epoch as the warning de-dup (else the latch stays true and the evaluator is permanently off next session). Reset lands where `resetKillSwitch` clears.
+2. **Warning de-dup hysteresis — ✅ CC DECISION: HYSTERESIS RE-ARM** (Langston leaned it; correct for multi-day active-paper sessions where losses roll out of the 24h window and a fresh breach is a real event). A tier fires + disarms on cross; **re-arms when the loss ratio drops back below `(tier − band)`** (small anti-flap band). Band = a documented small fixed proportion or `module_constants`-resolved (operational anti-flap, NOT a risk-threshold constant — fail-loud if module-resolved). Documented in the warnings chunk + completion report.
+3. **Live-mode flatten — ✅ CC DECISION: NAMED HOME = Phase-21 live-activation (RUNNING_ISSUES, added at Step-10).** The flatten=stop-sequence proof is paper-only. Today a `tripKillSwitch('live')` is a persisted no-op (live engine not built — `guardrail-policy.ts:501`) and live trading is 409-gated with ZERO live positions, so a live trip cannot silently leave live positions open *today*. The Phase-21 precondition: **before live go-live, verify/wire that `tripKillSwitch('live')` flattens open live positions** (no silent-leave). Documented in pre-audit + completion report + a RUNNING_ISSUES item.
+
+**Minor (Langston):** the migration columns `dailyLossWarning1Pct`/`dailyLossWarning2Pct` are **% OF THE KILL THRESHOLD** (NOT absolute loss %) — documented in the migration chunk so the bounds `0<warn1<warn2<100` and the evaluator's `warningThreshold = (warnPct/100)×killThreshold` math read the same units.
+
+**Trace-1 completion-report note (Langston):** state explicitly that the session-anchored budget is a **circuit-breaker, NOT a hard calendar-day cap** — an operator restart rebaselines the window, so repeated restarts could exceed multiple budgets in one day (intended; restart = deliberate human action).
+
+---
+
+*Step-2 deliverable + carry-ins. Langston PROCEED to Step-3. Step-3 chunks: A migration (per-mode warn fields + seed + coherency strict-bounds) → B restored `daily-loss-budget.ts` (calculate24hPL + evaluator, re-pointed) → C latch+trip wiring (atomic latch, trip-only kill, critical alert) → D 2 warning tiers (hysteresis re-arm, ratchet, system-alert) → E setImmediate post-close hook (gated, observable counter) → F delete F3 orphan → G force-trip tests + bench.*
