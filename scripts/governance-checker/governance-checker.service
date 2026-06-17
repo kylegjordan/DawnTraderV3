@@ -1,0 +1,20 @@
+# B-GOV governance-checker — systemd oneshot (Item 4: own process, NOT a while-true daemon,
+# isolated from the dawntrader node event loop). Paired with governance-checker.timer.
+# Deploy to a LOCAL clone on the box (NOT the gdrive FUSE mount — Langston C6).
+[Unit]
+Description=B-GOV governance-checker tick (post-batch doc-set + deadline checker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=governance
+WorkingDirectory=/opt/governance-checker/DawnTraderV3
+# Pure local clone; never the gdrive mount (C6). State persisted outside the repo tree.
+Environment=GOV_STATE_FILE=/var/lib/governance-checker/state.json
+Environment=GOV_BRANCH=origin/migration/aws-supabase
+Environment=GOV_STAGING=deploy@188.245.193.8
+Environment=GOV_STAGING_REPO=/home/deploy/dawntrader
+ExecStart=/usr/bin/node scripts/governance-checker/poller.mjs
+# Hard ceiling so a wedged git/ssh can never hang the box (the §18 lesson).
+TimeoutStartSec=120

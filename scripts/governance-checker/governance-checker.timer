@@ -1,0 +1,16 @@
+# B-GOV governance-checker — systemd timer. 30-min tick (Q3): the 4h deadline has huge
+# margin, so 30-min detection latency is fine and minimizes box load + git-fetch churn.
+# A missed tick (box down) is harmless — the next tick re-reads persisted state and
+# re-evaluates against current branch state (restart-safe by construction, Obj-8).
+[Unit]
+Description=B-GOV governance-checker timer (every 30 min)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+# If the box was off when a tick was due, run once on resume (dead-man backstop also
+# detects prolonged silence via the heartbeat in state.json — HEARTBEAT_MISS_LIMIT).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

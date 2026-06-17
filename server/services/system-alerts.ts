@@ -48,7 +48,8 @@ export type AlertCategory =
   | 'health_check'
   | 'breakage'
   | 'one_off'
-  | 'recurring';
+  | 'recurring'
+  | 'governance'; // B-GOV governance-checker: missing/thin/hollow doc-set gaps
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
 export interface SystemAlert {

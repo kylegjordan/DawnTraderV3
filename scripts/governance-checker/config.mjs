@@ -1,0 +1,130 @@
+// B-GOV governance-checker — configuration (single source of truth).
+// Deterministic, no LLM. Defines: batch-id/phase naming + parser, the per-change-class
+// expected-doc-set, and the paths the mechanical checks read. See
+// "Claude Comms and Packages/Scope Files/BATCH_B_GOV_SCOPE_CONVERGED_2026-06-17.md".
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. NAMING + PARSER (Obj-9). Must recognize alpha/letter batch-ids (B-NAMES, B-GOV),
+//    not only P19-B<n> — the raw 68% tag rate was a parser-coverage artifact, real
+//    code-push discipline is ~100% (pre-audit §1.b.i).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Ordered most-specific → least-specific so the first match wins (sub-batch before batch).
+export const BATCH_ID_PATTERNS = [
+  /\bP\d{1,3}-B\d+(?:\.\d+)?[a-z]?\b/,      // P19-B6, P19-B6.5a  (phase-scoped batch + sub-batch)
+  /\bB-NEW-\d+[a-z]?\b/,                     // B-NEW-53, B-NEW-53a (historical)
+  /\bB\d{2,}\.\d+[a-z]?(?:-[A-Z])?\b/,       // B79.0n, B4.6-B style
+  /\bB-[A-Z][A-Z0-9]+(?:\.\d+)?\b/,          // B-NAMES, B-GOV, B-NAMES.1 (letter-named)
+];
+
+// Commits that legitimately carry NO batch tag (not code pushes — pre-audit §1.b.i).
+// A commit whose files are ENTIRELY within these paths is exempt from the untagged-code flag.
+export const HOUSEKEEPING_ONLY_PATHS = [
+  '.claude/memory/',                  // MEMORY mirror
+  'Claude Comms and Packages/Cross-Session Briefs/',
+];
+export const HOUSEKEEPING_ONLY_BASENAMES = ['MEMORY.md', 'CLAUDE.md'];
+
+export function extractBatchId(subject) {
+  for (const re of BATCH_ID_PATTERNS) {
+    const m = subject.match(re);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+// Canonical separators in batch-ids vs filenames differ ("P19-B6.5a" ↔ "P19_B6_5a").
+// Build a filename matcher that is EXACT at the sub-batch boundary so "P19-B6" never
+// matches "P19-B6.5a" files (Langston C8 / exact-match-not-prefix).
+export function batchIdToFileRegex(bid) {
+  const flex = bid.replace(/[-_.]/g, '[-_. ]');
+  // leading boundary = any non-alphanumeric (so "(P19-B6", "*P19-B6*" match) + flexible
+  // separators. Two trailing guards (Langston Step-4 C8): reject a numeric continuation
+  // ([._-]?digit) so "P19-B6" ≠ "P19-B6.5a" / "P19-B60"; AND reject a bare trailing letter
+  // so "P19-B3" ≠ "P19-B3b" (real lettered sub-batches exist). Separator-led suffixes
+  // (".md", "_COMPLETION", "-x") still match.
+  return new RegExp(`(?<![A-Za-z0-9])${flex}(?![._-]?\\d)(?![A-Za-z])`, 'i');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. PATH CLASSIFICATION (code vs governance) for commit classification + deadline.
+// ─────────────────────────────────────────────────────────────────────────────
+export const CODE_PREFIXES = ['server/', 'shared/', 'client/', 'scripts/', 'drizzle/'];
+export const GOVERNANCE_PREFIXES = [
+  '1-system-manual/',
+  'Claude Comms and Packages/Batch Completion/',
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. DOC REGISTRY — where each governance doc lives + how presence is detected.
+//    kind:'file-glob'  → a per-batch file whose name contains the batch-id.
+//    kind:'entry'      → an append-style shared doc; presence = batch-id appears inside it.
+// ─────────────────────────────────────────────────────────────────────────────
+export const DOCS = {
+  scope:            { kind: 'file-glob', dir: 'Claude Comms and Packages/Scope Files',     match: /SCOPE/i },
+  pre_audit:        { kind: 'file-glob', dir: 'Claude Comms and Packages/Scope Files',     match: /PRE[_-]?AUDIT/i },
+  completion_report:{ kind: 'file-glob', dir: 'Claude Comms and Packages/Batch Completion', match: /COMPLETION|COMPLETE/i },
+  batch_catalog:    { kind: 'entry', path: '1-system-manual/BATCH_CATALOG.md' },
+  phase_history:    { kind: 'entry', path: '1-system-manual/PHASE_HISTORY.md' },
+  phase_19_plan:    { kind: 'entry', path: '1-system-manual/PHASE_19_PLAN.md' },
+  system_manual:    { kind: 'entry', path: '1-system-manual/SYSTEM_MANUAL.md' },
+  sim:              { kind: 'entry', path: '1-system-manual/SYSTEM_IMPACT_MAP.md' },
+  changes_and_fixes:{ kind: 'entry', path: '1-system-manual/CHANGES_AND_FIXES.md' },
+  running_issues:   { kind: 'entry', path: '1-system-manual/RUNNING_ISSUES.md' },
+  roadmap:          { kind: 'entry', path: '1-system-manual/POST_AUDIT_ROADMAP.md' },
+  deleted_log:      { kind: 'entry', path: '1-system-manual/DELETED_COMPONENTS_LOG.md' },
+  adjustment_framework: { kind: 'entry', path: '1-system-manual/ADJUSTMENT_FRAMEWORK.md' },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. CHANGE-CLASS → expected-doc-set (CLAUDE.md §3, validated in pre-audit §3).
+//    REQUIRED → absence is RED. CONDITIONAL → absence is at most a low-sev Langston-route.
+//    Predicates for CONDITIONAL run against the batch's commit diff (live poller); in the
+//    backtest only REQUIRED + always-checkable docs are asserted.
+// ─────────────────────────────────────────────────────────────────────────────
+export const CLASS_DOCSET = {
+  architecture: {
+    required: ['scope', 'pre_audit', 'completion_report', 'batch_catalog', 'phase_history', 'system_manual', 'sim'],
+    conditional: ['changes_and_fixes', 'running_issues', 'roadmap', 'deleted_log', 'phase_19_plan'],
+  },
+  non_architecture: {
+    required: ['scope', 'pre_audit', 'completion_report', 'batch_catalog', 'phase_history'],
+    // system_manual conditional here too (Langston Step-4 d): a non-arch batch can still
+    // touch strategy/regime/filter/pipeline (System-Manual scope, 2026-06-16 rule).
+    conditional: ['system_manual', 'sim', 'changes_and_fixes', 'running_issues', 'roadmap', 'deleted_log', 'adjustment_framework', 'phase_19_plan'],
+  },
+  sub_batch: {
+    required: ['completion_report', 'batch_catalog', 'phase_history'],
+    conditional: ['scope', 'pre_audit', 'system_manual', 'sim', 'changes_and_fixes', 'running_issues', 'deleted_log', 'adjustment_framework', 'phase_19_plan'],
+  },
+  hotfix: {
+    required: ['changes_and_fixes'],
+    conditional: ['completion_report', 'deleted_log'],
+  },
+};
+
+// architecture conditional also carries adjustment_framework (Langston Step-4 d).
+CLASS_DOCSET.architecture.conditional.push('adjustment_framework');
+
+// Predicate-required docs (Langston Step-4 d): required when the predicate matches the
+// batch-id, independent of class. phase_19_plan is REQUIRED for every P19-* batch + sub-batch
+// while the §14 temp rule is live (delete this entry at Phase-19 close with the rule).
+export const REQUIRED_IF = {
+  phase_19_plan: (batchId) => /^P19-/i.test(batchId),
+};
+
+// Undeclared class → strictest (architecture) + flag (Item 5 / fail-closed).
+export const DEFAULT_CLASS = 'architecture';
+
+// Deadline (R1): hours from last code-bearing push before a governance-miss alarm.
+// Validated empirically — 13/13 recent closes within 4h, max 2.1h (pre-audit §1.a).
+export const DEADLINE_HOURS = 4;
+// Poller tick + dead-man (Item 4 / Q3): 30-min tick, heartbeat alarm at 2 missed ticks.
+export const TICK_MINUTES = 30;
+export const HEARTBEAT_MISS_LIMIT = 2;
+// Open-state backstop (R1 / C3): a declared-open batch open past this routes to Langston.
+export const OPEN_STATE_BACKSTOP_HOURS = 48;
+
+// Emptiness floor (Obj-3 / C7 / C10): a doc touched but with <= this many net
+// content lines (after stripping whitespace/date-bump/TOC/heading-only) is "hollow".
+export const HOLLOW_NET_LINE_FLOOR = 3;
