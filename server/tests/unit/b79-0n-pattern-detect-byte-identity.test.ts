@@ -119,7 +119,10 @@ describe('B79.0n.PATTERN-DETECT — crypto byte-identity regression locks', () =
       expect(tradeSignal.stopPrice).toBe(50000 - 1.5 * 500);   // 49250
       expect(tradeSignal.targetPrice).toBe(50000 + 2.5 * 500); // 51250
       expect(tradeSignal.confidence).toBe(75);  // strength * 100
-      expect(tradeSignal.strategy).toBe('pattern_pinbar');
+      // P19-B6.5c: patternToTradeSignal no longer asserts a strategy (patterns are
+      // triggers, not strategies; the consuming canonical strategy is resolved by the
+      // orchestrator via resolvePatternConsumingStrategy). Geometry only.
+      expect((tradeSignal as any).strategy).toBeUndefined();
     });
 
     it('MORNING_STAR trade signal preserves geometry (ETHUSD, crypto_spot)', () => {
@@ -138,7 +141,8 @@ describe('B79.0n.PATTERN-DETECT — crypto byte-identity regression locks', () =
       expect(tradeSignal.stopPrice).toBe(3000 - 1.5 * 50);   // 2925
       expect(tradeSignal.targetPrice).toBe(3000 + 2.5 * 50); // 3125
       expect(tradeSignal.confidence).toBe(85);
-      expect(tradeSignal.strategy).toBe('pattern_morning_star');
+      // P19-B6.5c: geometry only — no fabricated `pattern_*` strategy.
+      expect((tradeSignal as any).strategy).toBeUndefined();
     });
   });
 });

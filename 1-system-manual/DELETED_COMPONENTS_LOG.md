@@ -178,3 +178,29 @@
 **Archive copy:** `1-system-manual/_archive/deleted-code/p19-b6-5b-rtb-deadcode.removed`
 **Removal commit:** _(recorded at P19-B6.5b Step-4/push)_
 **Reviewed by:** Langston Step-4 _pending_.
+
+---
+
+## 2026-06-17 — Redundant pattern double-emission loop + fabricated `pattern_*` strategy + leftover `cwqi` column (P19-B6.5c)
+
+**Removed (three items, the two crypto signal→RTB breaks the B6.5b dry-run surfaced):**
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| Site-2 pattern emission loop | `server/services/signal-orchestrator.ts` (the `// Convert pattern signals to trade signals and add to queue` `for (const patternSig of patternSignals)` block in `evaluateMarket`, ~L2054-2088) | A second emitter that, for every detected BUY pattern, built a raw signal labeled with the invalid `pattern_*` strategy and **sized it under a hardcoded `'breakout'`** while the label said pattern. Redundant double-emission. |
+| `strategy` field on `patternToTradeSignal` | `server/services/pattern-recognizer.ts` (`patternToTradeSignal` return type + `strategy: \`pattern_${pattern.pattern.toLowerCase()}\``) | The origin of the `pattern_abcd / pattern_pinbar / …` values — non-canonical strings outside the `strategy_type` enum. Patterns are TRIGGERS, not strategies, so the recognizer should never have asserted one. Function now returns geometry/confidence only. |
+| `rtb_signals.cwqi` column (staging DB) | `rtb_signals` table on staging | A `numeric NOT NULL`-no-default column the code removed long ago (not in `shared/schema.ts`; documented removed in `server/legacy/metrics_archive.ts`). The Drizzle insert no longer sent it → NOT-NULL violation on every row (16,930 dry-run drops, ALL strategies). Dropped via migration `2026-06-17-p19-b6-5c-drop-rtb-cwqi.sql`. |
+
+**Why removed:** the two breaks blocked 100% of crypto signals from reaching the ready-to-buy queue (the B6.5b dry-run proved the front half healthy; ZERO reached RTB). The `pattern_*` value also poisoned `paper_sim_trades.strategy_name` + `trades.strategy` downstream — so the fix is at the source (the recognizer stops asserting a strategy; the orchestrator resolves the CANONICAL consuming strategy via `resolvePatternConsumingStrategy`, exact-match-or-drop). The site-2 loop was redundant: the `activeStrategies` dispatch above it already evaluates every pattern-consuming strategy (morning_star / inside_bar_reversal / support_bounce / pivot_shift / reverse_impulse / defensive_hedge / adaptive_flow / volatility_edge) via `detect*()` fed the matching pattern by `buildPatternInputForStrategy` (B57 routing); the pattern-pool path (site 1) now emits canonically. Canonicalizing the duplicate instead of removing it would double-count (Langston D4).
+
+**Blast-radius verification (certainty-before-cutting):**
+- **cwqi (DB-level dependency check, live staging):** no views, no CHECK/FK constraints, no triggers, no generated columns/defaults reference cwqi. The only dependent object — index `rtb_signals_cwqi_idx` — is auto-dropped with the column. Table had 0 rows. Code-side, cwqi appears only in `legacy/metrics_archive.ts` (archival) + tests asserting its removal. Migration uses `DROP COLUMN IF EXISTS` (idempotent); rollback re-adds nullable (documented asymmetry — the original NOT-NULL-no-default was itself the bug).
+- **`patternToTradeSignal.strategy` consumers (repo-wide):** the two orchestrator sites (site 1 now uses the resolver; site 2 removed) + `b79-0n-pattern-detect-byte-identity.test.ts` (two `.strategy` assertions updated to geometry-only). VTS + xStock eval-cycle do NOT call `patternToTradeSignal` (they use `selectContextAwareStrategy` directly) — unaffected.
+- **Site-2 loop removal:** the `activeStrategies` dispatch (same function, lines ~1689-2040) provides full coverage of pattern-consuming strategies. RTB dedup key is `(mode, symbol, strategy)` (`storage.ts` `upsertRtbSignal` on-conflict) so any pattern-path/quant-path overlap on the same canonical strategy collapses to one row — no double-count after removal.
+- **`selectContextAwareStrategy` (shared with VTS/xStock):** UNTOUCHED — the exact-match logic is a strictly-additive sibling (`resolvePatternConsumingStrategy`), so the fallback contract VTS/xStock rely on is unchanged (locked by a regression test).
+
+**Left intentionally (NOT dead):** `selectContextAwareStrategy` (shared fallback resolver, VTS/xStock); `scanPatterns` + the 6 detect functions (pattern DETECTION, unchanged); `patternToTradeSignal` itself (still the geometry converter, now strategy-free); `abcd_long` (a real QUANT strategy — distinct from the ABCD pattern that feeds `volatility_edge`).
+
+**Archive copy:** none — inline orchestrator block + a return-field + a DB column (not whole files); git history is the authoritative archive (per this log's preamble). The cwqi migration + rollback SQL are versioned in `drizzle/migrations/`.
+**Removal commit:** _(recorded at P19-B6.5c Step-4/push)_
+**Reviewed by:** Langston Step-4 _pending_.

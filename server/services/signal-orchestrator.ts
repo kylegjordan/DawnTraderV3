@@ -89,6 +89,8 @@ import {
   STRATEGY_DISPLAY_NAMES,
   normalizeStrategy,
   normalizePatternToCanonical,
+  normalizeRegime,
+  resolvePatternConsumingStrategy,
   isStrategyEnabledForAssetClass,
   type CanonicalRegimeType as MarketRegimeType
 } from '../config/canonical-regime-strategy-map.js';
@@ -1524,18 +1526,29 @@ export class SignalOrchestrator {
 
           for (const patternSig of buyPatterns) {
             const atr = context.indicators?.atr ?? (currentPrice * 0.02);
+
+            // P19-B6.5c: patterns are TRIGGERS, not strategies. Resolve the detected
+            // pattern to the CANONICAL strategy that consumes it in THIS regime
+            // (crypto_spot), EXACT-MATCH only — no fallback to a non-consuming strategy
+            // (Langston D3: never map-to-nearest; that pollutes the wrong strategy's Net
+            // Expectancy). No consuming strategy in this regime → DROP (counted via
+            // resolvePatternConsumingStrategy's per-(pattern,regime,class) tally, not
+            // silent); the quant-path dispatch independently evaluates the regime's quant
+            // strategies, so nothing actionable is lost. This replaces the old `pattern_*`
+            // fabrication that the rtb_signals enum rejected on every row (B6.5b dry-run).
+            const patternRegime = normalizeRegime((context as any).regime?.regime ?? '');
+            const consuming = resolvePatternConsumingStrategy(patternRegime, patternSig.pattern, 'crypto_spot');
+            if (!consuming) {
+              continue;
+            }
+
             const tradeSignal = getPatternRecognizer().patternToTradeSignal(patternSig, currentPrice, atr, 'crypto_spot');
 
-            // P19-B3b: patternToTradeSignal yields a dynamic `pattern_*` strategy string
-            // that the narrow StrategySignal.strategy union does not enumerate (pattern
-            // strategies are runtime-generated, not part of the canonical strategy enum).
-            // Type the literal as StrategySignal and narrow the strategy field to the
-            // union — same bridge the strategy-engine pattern call sites below use
-            // (`'morning_star' as any`, etc.). Not a silencing cast: the value is a real
-            // runtime pattern-strategy label outside the compile-time enum.
             const rawSignal: StrategySignal = {
               symbol,
-              strategy: (tradeSignal.strategy || patternSig.pattern) as StrategySignal['strategy'],
+              // Verified-canonical strategy key (one of the 19) — a benign string→union
+              // narrowing, NOT the old invalid `pattern_*` bridge.
+              strategy: consuming.strategy as StrategySignal['strategy'],
               entryPrice: tradeSignal.entryPrice ?? currentPrice,
               stopPrice: tradeSignal.stopPrice ?? currentPrice * 0.97,
               targetPrice: tradeSignal.targetPrice ?? currentPrice * 1.03,
@@ -1550,7 +1563,7 @@ export class SignalOrchestrator {
             };
 
             const sizedSignal = await this.buildSizedSignalForStrategy(
-              rawSignal, rawSignal.strategy as StrategyType, sizingContext
+              rawSignal, consuming.strategy as StrategyType, sizingContext
             );
 
             if (sizedSignal) {
@@ -2040,41 +2053,16 @@ export class SignalOrchestrator {
 
       console.log(`[12.3.2][EVAL] ${symbol}: ${signals.length} signals from ${activeStrategies.size} strategies (pattern=${bestPattern?.pattern ?? 'none'})`);
 
-      // Convert pattern signals to trade signals and add to queue
-      for (const patternSig of patternSignals) {
-        // Only process BUY patterns for long-only trading
-        if (patternSig.direction !== 'BUY') continue;
-        
-        // B79.0n.PATTERN-DETECT (2026-05-24): REQUIRED-`assetClass` threaded.
-        const tradeSignal = patternRecognizer.patternToTradeSignal(patternSig, currentPrice, atr, 'crypto_spot');
-        
-        // Build StrategySignal-compatible object
-        const rawPatternSignal = {
-          symbol,
-          strategy: tradeSignal.strategy as any,
-          entryPrice: tradeSignal.entryPrice,
-          stopPrice: tradeSignal.stopPrice,
-          targetPrice: tradeSignal.targetPrice,
-          confidence: tradeSignal.confidence,
-          metadata: {
-            ...tradeSignal.metadata,
-            signalType: 'PATTERN' as SignalType,
-            patternType: patternSig.pattern,
-            patternStrength: patternSig.strength
-          }
-        };
-        
-        // Size the pattern signal (use 'breakout' as base strategy type for sizing)
-        const sizedPatternSignal = await this.buildSizedSignalForStrategy(rawPatternSignal as any, 'breakout' as StrategyType, sizingContext);
-        if (sizedPatternSignal) {
-          // Tag with PATTERN signalType
-          (sizedPatternSignal as any).signalType = 'PATTERN';
-          (sizedPatternSignal as any).patternType = patternSig.pattern;
-          (sizedPatternSignal as any).patternStrength = patternSig.strength;
-          signals.push(sizedPatternSignal);
-          console.log(`[10.2][PATTERN] ${symbol}: Added ${patternSig.pattern} signal with strength=${patternSig.strength.toFixed(2)}`);
-        }
-      }
+      // P19-B6.5c: REMOVED the redundant pattern double-emission loop (rule 18).
+      // It re-emitted a raw signal for every detected pattern, labeled with the invalid
+      // `pattern_*` strategy (rejected by the rtb_signals strategy_type enum) and sized
+      // under a hardcoded 'breakout' — incoherent. It was redundant: the activeStrategies
+      // dispatch above already evaluates EVERY pattern-consuming strategy (morning_star,
+      // inside_bar_reversal, support_bounce, pivot_shift, reverse_impulse, defensive_hedge,
+      // adaptive_flow, volatility_edge) via detect*() fed the matching pattern by
+      // buildPatternInputForStrategy (B57 per-strategy routing); the pattern-pool path
+      // emits canonically (B6.5c site-1 fix). Removing it ends the double-count.
+      // See DELETED_COMPONENTS_LOG.md (P19-B6.5c).
 
       // Directive 10.4: Hybrid Integration - Detect confluence between Quant and Pattern signals
       // Use the most recent candle timestamp for quant signal alignment (consistent clock source)

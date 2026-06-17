@@ -552,14 +552,21 @@ export function scanPatterns(candles: Candle[], symbol: string, assetClass: Asse
 }
 
 /**
- * Convert PatternSignal to StrategySignal-compatible format
+ * Convert a detected PatternSignal to trade GEOMETRY (entry/stop/target/confidence).
+ *
+ * P19-B6.5c (2026-06-17): this function no longer asserts a `strategy`. It used to
+ * fabricate a non-canonical `pattern_<name>` label (e.g. `pattern_abcd`) that is NOT
+ * a valid `strategy_type` enum value, so the RTB insert (and paper_sim_trades /
+ * trades downstream) rejected every pattern signal — the B6.5b dry-run's 8,503
+ * drops. Patterns are TRIGGERS, not strategies; the consuming CANONICAL strategy is
+ * resolved by the caller (the signal orchestrator) via
+ * `resolvePatternConsumingStrategy(regime, pattern, assetClass)` — exact-match,
+ * regime+class dependent. This function now returns geometry/confidence only; the
+ * recognizer (Directive 10.2 LOCKED) stays free of strategy taxonomy.
+ *
+ * B79.0n.PATTERN-DETECT — REQUIRED `assetClass`. ATR multipliers (1.5× stop /
+ * 2.5× target) stay hardcoded; per-class tuning deferred to Layer-3 (SIM §11263).
  */
-// B79.0n.PATTERN-DETECT (2026-05-24) — REQUIRED `assetClass: AssetClass`.
-// Per Langston R-1 (A) + R-6 + R-7: orphan today (test-only callers), but
-// threaded for type-discipline consistency with the 6 detect functions +
-// scanPatterns. Forward-loads correctly for Phase 19 active-trading
-// restoration. ATR multipliers (1.5× stop / 2.5× target) stay hardcoded —
-// per-class tuning deferred to Layer-3 (SIM §11263 flag).
 export function patternToTradeSignal(
   pattern: PatternSignal,
   currentPrice: number,
@@ -567,7 +574,6 @@ export function patternToTradeSignal(
   assetClass: AssetClass,
 ): {
   symbol: string;
-  strategy: string;
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -578,12 +584,11 @@ export function patternToTradeSignal(
   // Use ATR for stop/target calculation, fallback to 1% of price
   const stopDistance = atr > 0 ? atr * 1.5 : currentPrice * 0.01;
   const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
-  
+
   const isBuy = pattern.direction === 'BUY';
-  
+
   return {
     symbol: pattern.symbol,
-    strategy: `pattern_${pattern.pattern.toLowerCase()}`,
     entryPrice: currentPrice,
     stopPrice: isBuy ? currentPrice - stopDistance : currentPrice + stopDistance,
     targetPrice: isBuy ? currentPrice + targetDistance : currentPrice - targetDistance,

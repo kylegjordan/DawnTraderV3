@@ -857,6 +857,87 @@ export function selectContextAwareStrategy(
   };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// P19-B6.5c — exact-match pattern→consuming-canonical-strategy resolver (NO fallback)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// WHY a separate function (not a flag on selectContextAwareStrategy): the crypto
+// active orchestrator's pattern path must NOT fall back to an unrelated HYBRID/
+// PATTERN strategy when the detected pattern has no consuming strategy in the
+// current regime+class — that misattributes the signal and pollutes the WRONG
+// strategy's per-strategy Net Expectancy (Langston D3: never map-to-nearest).
+// selectContextAwareStrategy (shared with VTS + xStock) keeps its fallback
+// contract UNCHANGED; this is a strictly-additive sibling used ONLY by the crypto
+// orchestrator pattern path. No match → null (the caller drops the signal; the
+// QUANT path independently evaluates the regime's quant strategies, so nothing
+// actionable is lost). Patterns are TRIGGERS, not strategies — this never invents
+// a strategy and never maps to a non-consuming one.
+//
+// Coverage is OBSERVABLE, not silent: every drop increments a counter keyed by
+// (canonicalPattern, regime, assetClass), peekable via getPatternNoMatchDropStats()
+// — a high no-match rate is a real coverage signal (no silent caps).
+
+const patternNoMatchDrops = new Map<string, number>();
+
+function recordPatternNoMatchDrop(
+  canonicalPattern: CanonicalPatternType,
+  regime: CanonicalRegimeType,
+  assetClass: string,
+): void {
+  const key = `${canonicalPattern ?? 'null'}|${regime}|${assetClass}`;
+  patternNoMatchDrops.set(key, (patternNoMatchDrops.get(key) ?? 0) + 1);
+}
+
+/** P19-B6.5c: peek the per-(pattern,regime,class) no-match drop counter (gate-10 telemetry). */
+export function getPatternNoMatchDropStats(): Record<string, number> {
+  return Object.fromEntries(patternNoMatchDrops);
+}
+
+/** P19-B6.5c: reset the no-match counter (test hook). */
+export function resetPatternNoMatchDropStats(): void {
+  patternNoMatchDrops.clear();
+}
+
+/**
+ * P19-B6.5c — resolve a DETECTED pattern to the CANONICAL strategy that consumes
+ * it in the given regime + asset class, EXACT-MATCH ONLY (no fallback chain).
+ *
+ * Returns the consuming strategy (a PATTERN or HYBRID strategy whose declared
+ * `patternType` equals the detected pattern's canonical form), or null if no such
+ * strategy is active in this regime+class — in which case the caller MUST drop the
+ * pattern signal. On a counted null the (pattern, regime, class) drop counter is
+ * incremented; an unrecognized (non-canonical) pattern returns null UNcounted
+ * (there was no canonical trigger to consume).
+ */
+export function resolvePatternConsumingStrategy(
+  regime: CanonicalRegimeType,
+  detectedPattern: string | null,
+  assetClass: import('../../shared/asset-classes.js').AssetClass,
+): { strategy: string; signalType: CanonicalSignalType; patternType: CanonicalPatternType } | null {
+  const canonicalPattern = normalizePatternToCanonical(detectedPattern);
+  if (!canonicalPattern) {
+    return null; // unrecognized pattern — nothing to route, not a regime-coverage drop
+  }
+
+  const classTree = CANONICAL_REGIME_STRATEGY_MAP[assetClass as AssetClassKey];
+  const mapping = classTree?.[regime];
+  if (!mapping || mapping.strategies.length === 0) {
+    recordPatternNoMatchDrop(canonicalPattern, regime, assetClass);
+    return null;
+  }
+
+  const match = mapping.strategies.find(s =>
+    (s.signalType === 'HYBRID' || s.signalType === 'PATTERN') &&
+    s.patternType === canonicalPattern,
+  );
+  if (!match) {
+    recordPatternNoMatchDrop(canonicalPattern, regime, assetClass);
+    return null;
+  }
+
+  return { strategy: match.strategyKey, signalType: match.signalType, patternType: match.patternType };
+}
+
 /**
  * Compute a simple hash from symbol string for deterministic diversity.
  */

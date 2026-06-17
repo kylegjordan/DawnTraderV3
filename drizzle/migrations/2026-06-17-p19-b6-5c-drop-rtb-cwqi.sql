@@ -1,0 +1,17 @@
+-- P19-B6.5c — drop the leftover NOT-NULL `cwqi` column on rtb_signals (schema-drift reconciliation).
+--
+-- BACKGROUND: `cwqi` (Confidence-Weighted Quality Index) was removed from the code schema long ago
+-- (not in shared/schema.ts; documented in server/legacy/metrics_archive.ts: "cwqi: Removed from
+-- rtb_signals table") and superseded by FinalScore. But the staging DB still carried the column as
+-- `numeric NOT NULL` with NO default, so the Drizzle insert (which no longer sends cwqi) violated the
+-- NOT-NULL constraint on EVERY row → the B6.5b crypto dry-run dropped 16,930 signals here (ALL
+-- strategies, incl. pure-quant breakout). This was the dominant of the two RTB-insert breaks.
+--
+-- DEPENDENCY CHECK (live staging, P19-B6.5c pre-audit): no views, no CHECK/FK constraints, no triggers,
+-- no generated columns or defaults reference cwqi. The only dependent object is the single-column index
+-- `rtb_signals_cwqi_idx`, which Postgres auto-drops together with the column. rtb_signals had 0 rows
+-- (every insert was rejected), so there is no data to migrate.
+--
+-- IF EXISTS makes this idempotent and drift-reconciling on any box: a fresh box built from the current
+-- schema.ts never had the column, and re-running is a no-op.
+ALTER TABLE rtb_signals DROP COLUMN IF EXISTS cwqi;
