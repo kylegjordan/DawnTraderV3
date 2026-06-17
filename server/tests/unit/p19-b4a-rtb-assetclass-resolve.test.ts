@@ -40,6 +40,11 @@ vi.mock('../../storage.js', () => ({
   storage: {
     hasActivePair: async () => false,
     getRtbSignals: async () => [],
+    // P19-B6.5b (F1b): queueSQESignal now reads system context for the per-class admission gate.
+    // These stamp-honoring tests exercise legitimately-active classes, so return both ON — the
+    // guard passes and the stamp-honoring assertions run unchanged (the gate itself is tested in
+    // p19-b6-5b-crypto-isolation.test.ts).
+    getSystemContext: async () => ({ isEngineActive: true, activeAssetClasses: { crypto_spot: true, xstock_spot: true } }),
     upsertRtbSignal: async (data: any) => {
       capturedInsert = data;
       return { id: 1, ...data };
