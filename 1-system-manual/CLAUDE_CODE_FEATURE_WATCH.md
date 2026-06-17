@@ -18,6 +18,12 @@
 | Hooks | KNOWN, not used | Evaluated; the bypassPermissions structural fix was preferred over per-event hooks. |
 | Workflows (multi-agent orchestration) | KNOWN | Opt-in only; high token cost. Not standing-on. |
 
+## WATCHING FOR — not yet shipped; surface to Kyle the moment it lands (Kyle directive 2026-06-17)
+
+> The daily check should monitor these OPEN Anthropic feature requests / known gaps and tell Kyle as soon as any ships, since each removes a real friction we hit. Confirm via the official changelog/docs (+ the GitHub issue status) before surfacing.
+
+- **Persistent / auto-enabled Remote Control on the DESKTOP APP.** Today the desktop app does NOT honor the `remoteControlAtStartup` auto-arm setting (the CLI does), and remote control dies on every reboot/update — so after a forced restart Kyle must manually re-arm `/remote-control` (a resumed session never auto-arms). Watch GitHub issues **#48949** (desktop ignores remoteControlAtStartup — OPEN, no maintainer reply), **#60790** (RC disconnects on resume after PC restart), **#30447 / #29116** (headless / daemon mode requests), **#60699** (in-session toggle). The win: Kyle wants remote control reachable from his phone at ALL times after a reboot with zero manual steps — none of the current community workarounds achieve this safely on Windows (token-only is binary-rejected; the one Windows Task-Scheduler project is unverified + still needs an interactive login). Surface + recommend adoption the day Anthropic ships desktop-app persistent/auto RC or a real headless mode. (Researched 2026-06-17 via official docs + community forum scan.)
+
 ## Surfaced to Kyle (task appends here — newest first)
 
 - 2026-06-17 | Nested sub-agents (a sub-agent can spawn its own sub-agents, up to 5 levels deep — CC 2.1.172) | A single pre-audit/codebase-survey dispatch can branch out and cover far more of the system autonomously, instead of CC sending helpers one at a time — faster, deeper SIM blast-radius traces with less hand-holding | (Kyle decision: pending)
