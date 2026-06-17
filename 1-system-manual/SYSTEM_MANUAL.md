@@ -3416,7 +3416,7 @@ The kill switch is DawnTrader's emergency shutdown mechanism. Understanding its 
 ### Triggers
 
 1. **Manual**: User clicks stop button → API route → `guardrailPolicy.tripKillSwitch()`
-2. **Automatic**: Daily P&L loss exceeds `dailyLossKillSwitchPct` threshold
+2. **Automatic (P19-B6 — now IMPLEMENTED, was previously documented-but-absent)**: `server/services/daily-loss-budget.ts` (`evaluateDailyLossBudgetOnClose`, a `setImmediate`-deferred fire-and-forget hook off `paper-execution-engine`'s `tradeClosedHandler`) computes the **session-anchored rolling-24h realized loss %** (`max(now−24h, engineSessionStart)` window; `getPortfolioBalanceV2` denominator; `≤0`-balance → force-breach) and, on breach of the per-mode `dailyLossKillSwitchPct`, calls `tripKillSwitch` (which flattens all open positions via the existing `stopPaperSimulation → forceCloseAllOpenPositionsOnStop` — NOT a separate close). Two warning tiers (`dailyLossWarning1Pct`/`dailyLossWarning2Pct` = % OF the kill threshold; coherency RULE_011 `0<w1<w2<100`) fire info/warning alerts first (ratchet + hysteresis re-arm). Re-entrancy is closed by trip-persists-before-flatten + the `setImmediate` defer + a synchronous in-memory `killInProgress` latch. Restored from the deleted Phase-8 `risk-manager.ts` (`594aad717^`). It is a **circuit-breaker on the current run** (a restart rebaselines the window via `resetDailyLossBudgetState`), NOT a hard calendar-day lockout. DORMANT-in-effect until active paper trading is on (gated on `isEngineActive`)
 3. **SafetyGuardrails toggle**: Legacy wrapper delegates to `guardrailPolicy`
 4. **Cluster bus**: `kill_switch_activated` event for multi-node awareness
 
