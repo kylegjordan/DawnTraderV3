@@ -83,7 +83,17 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
-import { rtbMetricsService } from './rtb-metrics-service.js';
+import { rtbMetricsService, type OpenFailStage } from './rtb-metrics-service.js';
+
+/**
+ * P19-B6.5e: the typed result of an open attempt. Replaces `executeSimulatedTrade`'s
+ * silent `void` + `executePromotedSignal`'s brittle trade-count-delta success inference.
+ * Every post-guardrail early-exit now returns a labelled `{opened:false, stage, reason}`,
+ * so a sized signal can NEVER again vanish unaccounted (the I3 invariant reconciles).
+ */
+export type OpenOutcome =
+  | { opened: true; tradeId: string }
+  | { opened: false; stage: OpenFailStage; reason: string };
 import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service.js';
 import { marketVolumeCache } from './market-volume-cache.js';
@@ -1832,10 +1842,6 @@ export class PaperExecutionEngine {
       const quantity = signal.quantity ? parseFloat(signal.quantity) : undefined;
       const notional = signal.notional ? parseFloat(signal.notional) : undefined;
 
-      // Get trade count before execution to detect if new trade was created
-      const tradesBefore = await storage.getPaperSimTradesBySymbol(this.mode, signal.symbol);
-      const openTradesBefore = tradesBefore.filter(t => t.openedAt && !t.closedAt);
-
       // Build a StrategySignal compatible object for processSignal
       const promotedSignal: StrategySignal = {
         symbol: signal.symbol,
@@ -1859,23 +1865,15 @@ export class PaperExecutionEngine {
         }
       } as any;
 
-      // Execute the trade via processSignal
-      await this.processSignal(promotedSignal);
-
-      // Check if a new trade was created
-      const tradesAfter = await storage.getPaperSimTradesBySymbol(this.mode, signal.symbol);
-      const openTradesAfter = tradesAfter.filter(t => t.openedAt && !t.closedAt);
-
-      // Find new trade (if any)
-      const newTrade = openTradesAfter.find(t => 
-        !openTradesBefore.some(ob => ob.id === t.id)
-      );
-
-      if (newTrade) {
-        return { success: true, tradeId: newTrade.id };
-      } else {
-        return { success: false, error: 'No new trade created after processSignal' };
+      // P19-B6.5e: read the typed open outcome directly from processSignal — no more
+      // brittle trade-count-delta inference (which silently mapped EVERY post-guardrail
+      // failure to a generic "no new trade created" and hid the actual stage). The
+      // openFailed stage+reason now flow straight through to the promote-loop log.
+      const outcome = await this.processSignal(promotedSignal);
+      if (outcome.opened) {
+        return { success: true, tradeId: outcome.tradeId };
       }
+      return { success: false, error: `${outcome.stage}: ${outcome.reason}` };
     } catch (error: any) {
       return { success: false, error: error.message || 'Exception during promoted signal execution' };
     }
@@ -1893,7 +1891,10 @@ export class PaperExecutionEngine {
     signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string },
     settings: TradingSettings,
     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
-  ): Promise<void> {
+  ): Promise<OpenOutcome> {
+    // P19-B6.5e: returns a typed OpenOutcome. Every post-guardrail early-exit below
+    // records an `openFailed` (so the I3 invariant reconciles) AND returns a labelled
+    // `{opened:false,stage,reason}` — the open can no longer silently vanish.
     console.log(`[PaperExecution:${this.mode}] Signal detected for ${signal.symbol}:`);
     console.log(`  Strategy: ${signal.strategy}, Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
     console.log(`  Entry: ${signal.entryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
@@ -1928,7 +1929,8 @@ export class PaperExecutionEngine {
       });
       
       console.log(`[AJ19][DRY_RUN_NO_GUARDRAILS] Skipping guardrails and trade creation for ${signal.symbol}`);
-      return; // Exit early - no trade created, no guardrails checked
+      // P19-B6.5e: pre-attempt skip (no recordAttempt yet) → NOT recorded as openFailed.
+      return { opened: false, stage: 'DRY_RUN', reason: 'dry-run-no-guardrails' };
     }
 
     // Phase 8.8.3-H4: Pre-trade guardrail checks (replaces legacy RiskManager)
@@ -2021,8 +2023,10 @@ export class PaperExecutionEngine {
         targetPrice: signal.targetPrice.toString(),
         confidence: (signal.confidence * 100).toString(),
       }).catch(err => console.error('[8.8.3-J][AUDIT_ERROR] Failed to log blocked execution attempt:', err));
-      
-      return;
+
+      // P19-B6.5e: guardrail block already counted via checkGuardrailRisk→recordBlock;
+      // label the outcome but do NOT recordOpenFailed (would double-count).
+      return { opened: false, stage: 'GUARDRAIL_BLOCK', reason: riskCheck.reason || riskCheck.code || 'guardrail_block' };
     }
 
     // Directive 11.8B: Net Expectancy Gate
@@ -2067,10 +2071,12 @@ export class PaperExecutionEngine {
           score: expectancyResult.score
         }
       });
-      
-      return;
+
+      // P19-B6.5e: Net-Expectancy gate is a POST-guardrail open-stage failure.
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'EV_REJECT', expectancyResult.rejectionReason || 'negative net expectancy');
+      return { opened: false, stage: 'EV_REJECT', reason: expectancyResult.rejectionReason || 'negative net expectancy' };
     }
-    
+
     // Log expectancy gate pass with score for future analytics
     console.log(`[11.8B][EV_PASS] ${signal.symbol} EV=${expectancyResult.ev.toFixed(6)} Score=${expectancyResult.score.toFixed(1)}`);
 
@@ -2113,7 +2119,8 @@ export class PaperExecutionEngine {
       portfolioValue = parseFloat(settings.portfolioValue || '0');
       if (portfolioValue <= 0) {
         console.error(`[J7][EXEC_P3_ERROR] No valid portfolio value for ${this.mode} mode - cannot size position`);
-        return;
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', `no valid portfolio value (${portfolioValue})`);
+        return { opened: false, stage: 'SIZING_INVALID', reason: `no valid portfolio value (${portfolioValue})` };
       }
       const riskPerTradePct = parseFloat(settings.riskPerTradePct || '4.0');
       riskAmount = (portfolioValue * riskPerTradePct) / 100;
@@ -2124,7 +2131,8 @@ export class PaperExecutionEngine {
     
     if (quantity <= 0) {
       console.log(`[8.8.3-F][RISK_REJECT] Invalid position size (quantity=${quantity}) - skipping trade`);
-      return;
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', `invalid position size (quantity=${quantity})`);
+      return { opened: false, stage: 'SIZING_INVALID', reason: `invalid position size (quantity=${quantity})` };
     }
 
     // P19-B4b.1: resolve the position class BEFORE the depth gate + fill — an
@@ -2132,7 +2140,8 @@ export class PaperExecutionEngine {
     const _openClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
     if (_openClass === null) {
       console.warn('[P19-B4b.1][OPEN_SKIP] unclassifiable ' + signal.symbol + ' — refusing to open without a class');
-      return;
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'UNCLASSIFIABLE', 'unclassifiable symbol at open');
+      return { opened: false, stage: 'UNCLASSIFIABLE', reason: 'unclassifiable symbol at open' };
     }
 
     // P19-B4b.1 (#295): 24/5 book-depth-sufficiency + warmth gate BEFORE the fill,
@@ -2141,8 +2150,10 @@ export class PaperExecutionEngine {
     const _gate = await this._evaluateOpenDepthGate(signal.symbol, _openClass, signal.entryPrice * quantity);
     if (!_gate.pass || !_gate.snapshot) {
       console.warn(`[P19-B4b.1][DEPTH_GATE_BLOCK:${this.mode}] ${signal.symbol} (${_openClass}) ${_gate.reason} — skipping open`);
-      recordDepthGateBlock(_openClass, _gate.reason);
-      return;
+      recordDepthGateBlock(_openClass, _gate.reason); // fine-grained per-class counter (unchanged)
+      // P19-B6.5e: ALSO fold into the I3 invariant so the open no longer vanishes from attempts=opened+blocked+openFailed.
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'DEPTH_GATE', _gate.reason);
+      return { opened: false, stage: 'DEPTH_GATE', reason: _gate.reason };
     }
 
     // P19-B4b.1: entry fill via the DEPTH-WALKED OrderPlacer port — the placer walks the
@@ -2154,12 +2165,14 @@ export class PaperExecutionEngine {
     });
     if (_openFill.status === 'rejected') {
       console.error(`[PaperExecution:${this.mode}][OPEN_FILL_REJECTED] ${signal.symbol} reason=${_openFill.reason} — skipping trade`);
-      return;
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'FILL_REJECTED', `fill rejected: ${_openFill.reason ?? 'no fillable book'}`);
+      return { opened: false, stage: 'FILL_REJECTED', reason: `fill rejected: ${_openFill.reason ?? 'no fillable book'}` };
     }
     if (_openFill.status !== 'filled' && _openFill.status !== 'partial') {
       // `delayed` is a live-only outcome paper never produces; any other status → skip.
       console.error(`[PaperExecution:${this.mode}][OPEN_FILL_NONFILLED] ${signal.symbol} status=${_openFill.status} — skipping trade`);
-      return;
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'FILL_REJECTED', `fill non-filled status=${_openFill.status}`);
+      return { opened: false, stage: 'FILL_REJECTED', reason: `fill non-filled status=${_openFill.status}` };
     }
     // P19-B4b.1 (Langston hold #1): SIZE DOWN to the ACTUAL filled qty. Reassigning
     // `quantity` here is the SINGLE point that makes every downstream consumer — trade +
@@ -2172,7 +2185,8 @@ export class PaperExecutionEngine {
     quantity = _openFill.fillQty;
     if (!(quantity > 0)) {
       console.error(`[PaperExecution:${this.mode}][OPEN_FILL_ZERO] ${signal.symbol} filledQty=0 — skipping`);
-      return;
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'FILL_REJECTED', 'filled quantity = 0');
+      return { opened: false, stage: 'FILL_REJECTED', reason: 'filled quantity = 0' };
     }
     const actualEntryPrice = _openFill.fillPrice;
     const positionValue = actualEntryPrice * quantity;
@@ -2254,7 +2268,8 @@ export class PaperExecutionEngine {
       } catch (b70Err) {
         console.warn(`[B70][ARCH] TCL-reject signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
       }
-      return; // Exit early - do not create trade or position
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'DUP_POSITION', `duplicate position (existingCount=${existingCount})`);
+      return { opened: false, stage: 'DUP_POSITION', reason: `duplicate position (existingCount=${existingCount})` }; // Exit early - do not create trade or position
     }
 
     // [27.F.14.DIAG] Create trade record with comprehensive error handling
@@ -2313,7 +2328,8 @@ export class PaperExecutionEngine {
       const _tradeClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
       if (_tradeClass === null) {
         console.warn('[B79.TEC][TRADE_SKIP] unclassifiable ' + signal.symbol + ' — refusing to open a position without a class');
-        return;
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'UNCLASSIFIABLE', 'unclassifiable symbol at trade-create');
+        return { opened: false, stage: 'UNCLASSIFIABLE', reason: 'unclassifiable symbol at trade-create' };
       }
 
       const trade = await storage.createPaperSimTrade(this.mode, {
@@ -2607,11 +2623,18 @@ export class PaperExecutionEngine {
         positionSize: quantity.toString(),
         tradeId: trade.id,
       }).catch(err => console.error('[8.8.3-J][AUDIT_ERROR] Failed to log opened execution attempt:', err));
-      
+
+      // P19-B6.5e: the position opened — return the typed success outcome (recordOpen
+      // already fired at :2574). This replaces executePromotedSignal's trade-count-delta inference.
+      return { opened: true, tradeId: trade.id };
     } catch (err: any) {
       // [27.F.14.DIAG] DIAGNOSTIC: Trade insert failed
       console.error(`[DB] trade_insert_err {symbol:${signal.symbol}, error:${err.message}}`);
-      throw err; // Re-throw to allow caller to handle
+      // P19-B6.5e: the trade/position insert threw — count it as a post-guardrail open
+      // failure (TRADE_INSERT_ERROR) and return a typed outcome instead of re-throwing into
+      // processSignal's swallowing catch. The open no longer vanishes on a DB error.
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'TRADE_INSERT_ERROR', err?.message || 'trade/position insert threw');
+      return { opened: false, stage: 'TRADE_INSERT_ERROR', reason: err?.message || 'trade/position insert threw' };
     }
   }
 
@@ -2690,12 +2713,16 @@ export class PaperExecutionEngine {
    * REB 8.8.3-F: Restored execution using guardrails_v2 + risk-manager path
    * B6: Trust pre-sized signals from orchestrator, only fall back if missing
    */
-  async processSignal(signal: StrategySignal): Promise<void> {
+  async processSignal(signal: StrategySignal): Promise<OpenOutcome> {
+    // P19-B6.5e: returns the typed OpenOutcome threaded from executeSimulatedTrade so
+    // executePromotedSignal can read success directly (no trade-count-delta inference).
+    // The pre-attempt guard-returns below happen BEFORE checkGuardrailRisk's recordAttempt,
+    // so they DON'T touch the I3 invariant — they only label "did not open + why".
     if (!this.isRunning) {
       // Phase 8.8.3-I7-PM-FOCUS: BLOCK_AFTER_STOP diagnostic
       console.log(`[I7-PM-FOCUS][BLOCK_AFTER_STOP] symbol=${signal.symbol} reason="engine_stopped"`);
       console.log(`[PaperExecution:${this.mode}] Cannot process signal - engine not running`);
-      return;
+      return { opened: false, stage: 'OTHER', reason: 'engine not running' };
     }
 
     // Directive 8.8.4-C.3: Signal origin validation
@@ -2735,14 +2762,14 @@ export class PaperExecutionEngine {
       const systemContext = await storage.getSystemContext(this.mode);
       if (!systemContext || !systemContext.lastStartedBy) {
         console.error(`[PaperExecution:${this.mode}] No system context or user for ${this.mode} mode`);
-        return;
+        return { opened: false, stage: 'OTHER', reason: 'no system context / user' };
       }
 
       const settings = await buildSettingsFromGuardrails(this.mode, systemContext.lastStartedBy);
       
       if (settings.killSwitchTripped) {
         console.log(`[8.8.3-F][RISK_REJECT] Kill switch tripped - signal rejected for ${signal.symbol}`);
-        return;
+        return { opened: false, stage: 'OTHER', reason: 'kill switch tripped' };
       }
 
       // ══════════════════════════════════════════════════════════════════════════════
@@ -2820,7 +2847,7 @@ export class PaperExecutionEngine {
         });
         if (!gate.allowed) {
           console.log(`[B-5][Paper][AMR_GATE] BLOCK ${signal.symbol}: ${gate.blocks.map(b => b.gate).join(',')} (mode=${gate.mode})`);
-          return;
+          return { opened: false, stage: 'OTHER', reason: `AMR execution-entry gate block: ${gate.blocks.map(b => b.gate).join(',')}` };
         }
       }
       
@@ -2831,7 +2858,7 @@ export class PaperExecutionEngine {
       // per-class floor when it is.
       if (!(signalConfidence >= modeOverlay.confidenceFloor)) {
         console.log(`[11.7S][Paper] SKIP: ${signal.symbol} ${signal.strategy} - confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
-        return;
+        return { opened: false, stage: 'OTHER', reason: `confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor}` };
       }
       
       console.log(`[11.7S][Paper] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
@@ -2888,7 +2915,7 @@ export class PaperExecutionEngine {
           const _sizeClass = asValidAssetClass(signal.metadata?.assetClass) ?? _amrClass;
           if (_sizeClass === null) {
             console.warn('[B6][SIZING_SKIP] unclassifiable ' + signal.symbol + ' — cannot size, skipping');
-            return;
+            return { opened: false, stage: 'OTHER', reason: 'unclassifiable symbol at fallback sizing' };
           }
           const sizingResult = sizePaperPositionForSignal({
             mode: this.mode, // P19-B4b D5: per-mode concentration sizing
@@ -2917,11 +2944,11 @@ export class PaperExecutionEngine {
             console.log(`[B6][FALLBACK_SIZED] ${signal.symbol}: qty=${adjustedQuantity.toFixed(8)}, value=$${adjustedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay.positionSizeMultiplier})`);
           } else {
             console.log(`[B6][SIZING_FAILED] Zero sizing result for ${signal.symbol} - skipping`);
-            return;
+            return { opened: false, stage: 'SIZING_INVALID', reason: 'zero sizing result (fallback)' };
           }
         } else {
           console.error(`[B6][SIZING_ERROR] Invalid portfolio value for fallback sizing: ${portfolioValue}`);
-          return;
+          return { opened: false, stage: 'SIZING_INVALID', reason: `invalid portfolio value for fallback sizing (${portfolioValue})` };
         }
       }
 
@@ -2940,10 +2967,14 @@ export class PaperExecutionEngine {
       }
       
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
-      await this.executeSimulatedTrade(signal, settings);
-      
+      // P19-B6.5e: thread the typed open outcome up to executePromotedSignal.
+      return await this.executeSimulatedTrade(signal, settings);
+
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error processing signal for ${signal.symbol}:`, error);
+      // P19-B6.5e: a setup-stage throw (settings/storage/AMR import) BEFORE the attempt —
+      // not an open-stage openFailed (no recordAttempt fired); label it for the caller.
+      return { opened: false, stage: 'OTHER', reason: `processSignal error: ${error instanceof Error ? error.message : String(error)}` };
     }
   }
   

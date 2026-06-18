@@ -1150,7 +1150,8 @@ export class SignalOrchestrator {
     // write-time getCurrentMode() lookup is gone. Fire-and-forget, try/catch.
     try {
       const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
-      const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+      // P19-B6.5e (#327): removed the dead dynamic `resolveAssetClass` import — this
+      // archive block writes the carried `sizingContext.assetClass` (below), never re-resolves.
       archiveSignalEval({
         mode: tradingModeToRunMode(this.mode), // ITEM-4 step 2 (D1): this instance's OWN mode — not the global
         symbol: rawSignal.symbol,

@@ -29,11 +29,34 @@ export type RtbBlockReason =
   | 'ENGINE_STOPPING'
   | 'OTHER';
 
+/**
+ * P19-B6.5e: post-guardrail OPEN-stage failure classes. Distinct from a guardrail
+ * BLOCK — these fire AFTER all guardrails pass, inside the paper-engine open path
+ * (EV gate, sizing, depth-sufficiency gate, fill, dup-guard, trade-insert). Before
+ * B6.5e every one of these was a silent bare-`return` invisible to the I3 invariant,
+ * which is why a sized crypto signal could vanish (`attempts>0 / opened=0 / blocked=0`).
+ */
+export type OpenFailStage =
+  | 'DRY_RUN'             // AJ19 dry-run-no-guardrails skip (pre-attempt; NOT recorded)
+  | 'GUARDRAIL_BLOCK'     // guardrail rejection — return label only; already counted via recordBlock, NOT recorded as openFailed
+  | 'EV_REJECT'           // Net-Expectancy gate (11.8B)
+  | 'SIZING_INVALID'      // quantity <= 0 / no valid portfolio value
+  | 'UNCLASSIFIABLE'      // open/trade asset-class could not be resolved
+  | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
+  | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
+  | 'DUP_POSITION'        // duplicate-position guard
+  | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
+  | 'OTHER';
+
 export interface RtbStats {
   attemptsTotal: number;
   openedTotal: number;
   blockedTotal: number;
   blockedByReason: Record<RtbBlockReason, number>;
+  // P19-B6.5e: post-guardrail open-stage failures — the third term that makes the
+  // I3 invariant reconcile: attemptsTotal === openedTotal + blockedTotal + openFailedTotal.
+  openFailedTotal: number;
+  openFailedByStage: Record<OpenFailStage, number>;
   sessionStart: Date;
 }
 
@@ -45,6 +68,8 @@ class RtbMetricsService {
     openedTotal: 0,
     blockedTotal: 0,
     blockedByReason: {} as Record<RtbBlockReason, number>,
+    openFailedTotal: 0,
+    openFailedByStage: {} as Record<OpenFailStage, number>,
     sessionStart: new Date(),
   };
 
@@ -68,6 +93,14 @@ class RtbMetricsService {
     ];
     for (const reason of reasons) {
       this.stats.blockedByReason[reason] = 0;
+    }
+    // P19-B6.5e: initialize the open-stage failure breakdown
+    const stages: OpenFailStage[] = [
+      'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'DEPTH_GATE',
+      'FILL_REJECTED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
+    ];
+    for (const stage of stages) {
+      this.stats.openFailedByStage[stage] = 0;
     }
   }
 
@@ -110,6 +143,32 @@ class RtbMetricsService {
     if (this.byStrategy[strategy]) {
       this.byStrategy[strategy].opened++;
     }
+  }
+
+  /**
+   * P19-B6.5e: Record a POST-GUARDRAIL open-stage failure (the attempt passed all
+   * guardrails but the open path bailed: EV gate, sizing, depth gate, fill, dup-guard,
+   * or trade-insert). This is the third term that makes the I3 invariant reconcile —
+   * `attempts === opened + blocked + openFailed`. Do NOT call for the pre-attempt
+   * DRY_RUN skip (no attempt was recorded for it).
+   */
+  recordOpenFailed(symbol: string, strategy: string, stage: OpenFailStage, reason: string): void {
+    this.stats.openFailedTotal++;
+    this.stats.openFailedByStage[stage] = (this.stats.openFailedByStage[stage] || 0) + 1;
+
+    // [8.8.3-I5]-parallel: per-symbol/strategy funnel — count an open-stage failure
+    // as a "blocked" in the per-symbol/strategy rollups (which only track attempts/
+    // opened/blocked) so those funnels still reconcile; the precise stage lives in
+    // openFailedByStage above. The reason string carries the fine detail.
+    if (this.bySymbol[symbol]) {
+      this.bySymbol[symbol].blocked++;
+      this.bySymbol[symbol].byReason[`OPEN_${stage}`] = (this.bySymbol[symbol].byReason[`OPEN_${stage}`] || 0) + 1;
+    }
+    if (this.byStrategy[strategy]) {
+      this.byStrategy[strategy].blocked++;
+    }
+
+    console.log(`[8.8.3-I3][OPEN_FAILED] stage=${stage} symbol=${symbol} strategy=${strategy} reason=${reason} timestamp=${Date.now()}`);
   }
 
   /**
@@ -217,18 +276,20 @@ class RtbMetricsService {
   getSummary(): {
     timestamp: string;
     sessionStart: string;
-    totals: { attempts: number; opened: number; blocked: number };
+    totals: { attempts: number; opened: number; blocked: number; openFailed: number };
     byReason: Record<string, number>;
+    openFailedByStage: Record<string, number>;
     byStrategy: Record<string, { attempts: number; opened: number; blocked: number }>;
     bySymbol: Record<string, { attempts: number; opened: number; blocked: number; byReason: Record<string, number> }>;
     invariantCheck: { valid: boolean; message: string };
   } {
-    const { attemptsTotal, openedTotal, blockedTotal } = this.stats;
-    const expectedTotal = openedTotal + blockedTotal;
+    // P19-B6.5e: invariant is now attemptsTotal === openedTotal + blockedTotal + openFailedTotal
+    const { attemptsTotal, openedTotal, blockedTotal, openFailedTotal } = this.stats;
+    const expectedTotal = openedTotal + blockedTotal + openFailedTotal;
     const invariantValid = attemptsTotal === expectedTotal;
 
     if (!invariantValid) {
-      console.error(`[8.8.3-I2][RTB_INVARIANT_VIOLATION] attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, expected=${expectedTotal}`);
+      console.error(`[8.8.3-I2][RTB_INVARIANT_VIOLATION] attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, openFailed=${openFailedTotal}, expected=${expectedTotal}`);
     }
 
     const reasonSum = Object.values(this.stats.blockedByReason).reduce((a, b) => a + b, 0);
@@ -243,15 +304,17 @@ class RtbMetricsService {
         attempts: attemptsTotal,
         opened: openedTotal,
         blocked: blockedTotal,
+        openFailed: openFailedTotal,
       },
       byReason: { ...this.stats.blockedByReason },
+      openFailedByStage: { ...this.stats.openFailedByStage },
       byStrategy: { ...this.byStrategy },
       bySymbol: { ...this.bySymbol },
       invariantCheck: {
         valid: invariantValid && reasonSum === blockedTotal,
         message: invariantValid && reasonSum === blockedTotal
-          ? 'OK: attemptsTotal === openedTotal + blockedTotal && blockedTotal === sum(byReason)'
-          : `MISMATCH: attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, reasonSum=${reasonSum}`,
+          ? 'OK: attemptsTotal === openedTotal + blockedTotal + openFailedTotal && blockedTotal === sum(byReason)'
+          : `MISMATCH: attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, openFailed=${openFailedTotal}, reasonSum=${reasonSum}`,
       },
     };
   }
@@ -265,6 +328,8 @@ class RtbMetricsService {
       openedTotal: 0,
       blockedTotal: 0,
       blockedByReason: {} as Record<RtbBlockReason, number>,
+      openFailedTotal: 0,
+      openFailedByStage: {} as Record<OpenFailStage, number>,
       sessionStart: new Date(),
     };
     this.initializeBlockReasons();
@@ -307,24 +372,33 @@ class RtbMetricsService {
    * Logs every 60 seconds to verify attemptsTotal === openedTotal + blockedTotal
    */
   private logInvariantCheck(): void {
-    const { attemptsTotal, openedTotal, blockedTotal, blockedByReason } = this.stats;
-    const expectedTotal = openedTotal + blockedTotal;
+    // P19-B6.5e: invariant now reconciles the post-guardrail open stage too \u2014
+    // attemptsTotal === openedTotal + blockedTotal + openFailedTotal. The openFailedByStage
+    // breakdown is what names WHERE a sized signal vanished (e.g. DEPTH_GATE) instead of opening.
+    const { attemptsTotal, openedTotal, blockedTotal, openFailedTotal, blockedByReason, openFailedByStage } = this.stats;
+    const expectedTotal = openedTotal + blockedTotal + openFailedTotal;
     const invariantValid = attemptsTotal === expectedTotal;
     const reasonSum = Object.values(blockedByReason).reduce((a, b) => a + b, 0);
-    const breakdownValid = reasonSum === blockedTotal;
+    const stageSum = Object.values(openFailedByStage).reduce((a, b) => a + b, 0);
+    const breakdownValid = reasonSum === blockedTotal && stageSum === openFailedTotal;
 
     const status = invariantValid && breakdownValid ? 'OK' : 'MISMATCH';
     const symbol = invariantValid && breakdownValid ? '\u2713' : '\u2717';
 
-    console.log(`[8.8.3-I3][INVARIANT_CHECK][${status}] ${symbol} attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, reasonSum=${reasonSum}`);
+    // Compact non-zero openFailed breakdown for the log line (only when there are any).
+    const stageBreakdown = openFailedTotal > 0
+      ? ' [' + Object.entries(openFailedByStage).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(',') + ']'
+      : '';
+
+    console.log(`[8.8.3-I3][INVARIANT_CHECK][${status}] ${symbol} attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, openFailed=${openFailedTotal}${stageBreakdown}, reasonSum=${reasonSum}`);
 
     if (!invariantValid) {
-      console.error(`[8.8.3-I3][INVARIANT_VIOLATION] attemptsTotal(${attemptsTotal}) !== openedTotal(${openedTotal}) + blockedTotal(${blockedTotal}) = ${expectedTotal}`);
+      console.error(`[8.8.3-I3][INVARIANT_VIOLATION] attemptsTotal(${attemptsTotal}) !== openedTotal(${openedTotal}) + blockedTotal(${blockedTotal}) + openFailedTotal(${openFailedTotal}) = ${expectedTotal}`);
     }
 
     if (!breakdownValid) {
-      console.error(`[8.8.3-I3][BREAKDOWN_MISMATCH] blockedTotal(${blockedTotal}) !== reasonSum(${reasonSum})`);
-      console.error(`[8.8.3-I3][BREAKDOWN_DETAILS]`, blockedByReason);
+      console.error(`[8.8.3-I3][BREAKDOWN_MISMATCH] blockedTotal(${blockedTotal}) !== reasonSum(${reasonSum}) OR openFailedTotal(${openFailedTotal}) !== stageSum(${stageSum})`);
+      console.error(`[8.8.3-I3][BREAKDOWN_DETAILS]`, { blockedByReason, openFailedByStage });
     }
   }
 }
