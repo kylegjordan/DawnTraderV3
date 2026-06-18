@@ -38,6 +38,12 @@
  */
 
 import { getMarketContextEngine } from '../../services/market-context-engine.js';
+// B-XSTOCK-GLOBALS (Kyle-raised 2026-06-18): the per-class GLOBAL market-structure
+// cache getters. getMarketIndicators('xstock_spot') populates these every cycle; the
+// xStock VTS open-path reads them here to stamp the at-open global snapshot (the crypto
+// inline path at vts-runner.ts:1561-1576 does the equivalent; the xStock caller did not,
+// so every xStock VTS row persisted blank globalRegime/Friction/DBS — UI "—"/"pending").
+import { getCurrentRegime, getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from '../../services/market-indicators.js';
 import { recordSyncSpan, syncSpanStart } from '../../services/scan-stall-instrument.js';
 import {
   getStrategiesForRegime,
@@ -747,6 +753,22 @@ export async function evaluateXstockPairForVTS(
           atrAtOpen: mceContext.indicators.atr,
           pairDirectionalBias: mceContext.directionalBias?.category,
           pairDirectionalBiasScore: mceContext.directionalBias?.score ?? null,
+          // B-XSTOCK-GLOBALS (Kyle-raised 2026-06-18): at-open per-class GLOBAL snapshot.
+          // B-4.7 made registerOpenVtsTrade caller-pass-only (it no longer back-fills these);
+          // the crypto inline path passes them (vts-runner.ts:1561-1576) but this xStock caller
+          // never did, so xStock VTS rows persisted blank while getMarketIndicators('xstock_spot')
+          // was LIVE upstream. Read the SAME per-class cache (regime via getCurrentRegime = the
+          // displayed cachedGlobalRegime; friction/DBS mirror the crypto per-class getters,
+          // null preserved as the honest no-sample value).
+          // NOTE (Langston Step-4): getCurrentRegime returns the last-known regime during
+          // idle/warming (not null) — INTENTIONAL. xStock's live regime source is MCE (not the
+          // telemetry-aggregator dominant the crypto path reads), so a null-when-idle source
+          // would stamp undefined on the very field we are fixing; a recent regime ≫ blank for
+          // learning context, and this keeps the stamped regime == the displayed regime.
+          globalRegime: getCurrentRegime(ASSET_CLASS),
+          globalFriction: getGlobalFriction(ASSET_CLASS) ?? undefined,
+          globalDirectionalBias: getLastGlobalDBSCategory(ASSET_CLASS),
+          globalDirectionalBiasScore: getLastGlobalDBSScore(ASSET_CLASS) ?? undefined,
           macroModifierValue: getMarketContextEngine().getCurrentMacroContext()?.modifier.value,
           regimeConfidenceModulated: mceContext.regime.confidence,
           regimeConfidenceRaw: mceContext.regime.confidence,
