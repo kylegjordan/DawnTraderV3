@@ -30,7 +30,7 @@
  */
 
 import { vtsService, type VirtualSignal } from './vts-service.js';
-import { resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { asValidAssetClass, resolveAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 import { recordSyncSpan, syncSpanStart } from './scan-stall-instrument.js';
 import { ScanYielder } from './scan-yield.js';
 // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
@@ -143,6 +143,21 @@ import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeEx
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import path from 'path';
+
+/**
+ * P19-B6.5d (OBJ-5 passive rule): VTS/telemetry sites must NEVER silently default an
+ * unclassifiable symbol to crypto_spot — a silent mislabel poisons per-class training
+ * data. This resolves the class and, on the (pathological) null, LOGS the mislabel +
+ * returns crypto_spot so the passive sim/telemetry stays fail-soft but the mislabel is
+ * DETECTABLE. (safeResolveAssetClass already bumps the central classify-fall-through
+ * counter on null; this adds the per-site visibility OBJ-5 requires.)
+ */
+function vtsResolveClassOrLoggedDefault(symbol: string): AssetClass {
+  const c = safeResolveAssetClass(symbol, 'kraken');
+  if (c !== null) return c;
+  console.warn(`[P19-B6.5d][VTS] ${symbol} unclassifiable — telemetry labeled crypto_spot (logged passive default, not silent)`);
+  return 'crypto_spot';
+}
 
 // Phase 14 HF6: Strategy call settings (same defaults as signal orchestrator lines 680-688)
 const STRATEGY_CALL_SETTINGS = {
@@ -1996,7 +2011,7 @@ async function generatePhase10Signal(
       mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
       symbol,
       exchange: 'kraken',
-      assetClass: safeResolveAssetClass(symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
+      assetClass: vtsResolveClassOrLoggedDefault(symbol), // P19-B6.5d (was safeResolve ?? crypto_spot silent default)
       source: 'vts-runner',
       strategy,
       regimeLabel: regime ?? undefined,
@@ -2664,7 +2679,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         tradeId: trade.id,
         symbol: trade.symbol,
         exchange: 'kraken',
-        assetClass: safeResolveAssetClass(trade.symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
+        assetClass: vtsResolveClassOrLoggedDefault(trade.symbol), // P19-B6.5d (was safeResolve ?? crypto_spot silent default)
         source: 'vts-runner',
         strategy: trade.strategy,
         exitReason: mappedReason,
@@ -2769,7 +2784,15 @@ async function resolveOpenVirtualTrades(): Promise<{
     // BOTH formats during the transition so neither path misses cooldowns.
     // Future cleanup: migrate generatePhase10Signal to assetClass-keyed format
     // and drop the legacy write.
-    const assetClass = trade.assetClass ?? 'crypto_spot';
+    // P19-B6.5d (Langston JC#3): a STAMP read, not a resolver — prefer the carried trade
+    // stamp; on a missing/invalid stamp, LOG the mislabel (passive telemetry, never silent)
+    // before the crypto_spot cooldown-key default. Folded in so vts-runner is fully
+    // consistent with the five sibling default-sites converted this batch.
+    const _cooldownStamp = asValidAssetClass(trade.assetClass);
+    if (_cooldownStamp === null) {
+      console.warn(`[P19-B6.5d][VTS] cooldown-key: trade ${trade.symbol}/${trade.strategy} missing/invalid asset-class stamp — labeled crypto_spot (logged passive default)`);
+    }
+    const assetClass = _cooldownStamp ?? 'crypto_spot';
     recentCloses.set(`${assetClass}:${trade.symbol}:${trade.strategy}`, Date.now());
     if (assetClass === 'crypto_spot') {
       recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
@@ -3040,7 +3063,7 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
   const resolvedPairFriction = input.pairFriction ?? (() => {
     try {
       // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-      const cm = getCachedCostMetrics(input.symbol, safeResolveAssetClass(input.symbol, 'kraken') ?? 'crypto_spot');
+      const cm = getCachedCostMetrics(input.symbol, vtsResolveClassOrLoggedDefault(input.symbol)); // P19-B6.5d (was safeResolve ?? crypto_spot)
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     } catch {
       return undefined;
@@ -3687,7 +3710,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
               symbol: pair.symbol,
               exchange: 'kraken',
-              assetClass: safeResolveAssetClass(pair.symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
+              assetClass: vtsResolveClassOrLoggedDefault(pair.symbol), // P19-B6.5d (was safeResolve ?? crypto_spot silent default)
               source: 'vts-runner',
               strategy: stratDef.strategyKey,
               regimeLabel: pairRegime ?? undefined,
@@ -3778,7 +3801,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
       mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
               symbol: pair.symbol,
               exchange: 'kraken',
-              assetClass: safeResolveAssetClass(pair.symbol, 'kraken') ?? 'crypto_spot', // P19-B3a #139
+              assetClass: vtsResolveClassOrLoggedDefault(pair.symbol), // P19-B6.5d (was safeResolve ?? crypto_spot silent default)
               source: 'vts-runner',
               strategy: stratDef.strategyKey,
               regimeLabel: pairRegime ?? undefined,

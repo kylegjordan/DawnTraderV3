@@ -37,10 +37,16 @@ import type {
   CloseOrderRequest,
   FillResult,
 } from './types.js';
+import type { AssetClass } from '../../../shared/asset-classes.js';
 import { openFill, closeFillFull } from './depth-walk.js';
 
-/** Returns the per-class fee percentage (e.g. 0.26 for 0.26%) for a symbol. */
-export type FeePercentResolver = (symbol: string) => number;
+/**
+ * Returns the per-class fee percentage (e.g. 0.26 for 0.26%) for a symbol.
+ * P19-B6.5d (OBJ-4): an optional carried asset-class stamp is threaded so the fill fee
+ * is priced by the order's actual class (collision-correct), not re-derived from the
+ * symbol. The engine resolver falls back to symbol-resolution when the stamp is absent.
+ */
+export type FeePercentResolver = (symbol: string, assetClass?: AssetClass) => number;
 
 export class PaperOrderPlacer implements OrderPlacer {
   /**
@@ -66,7 +72,7 @@ export class PaperOrderPlacer implements OrderPlacer {
     const fillPrice = walked.avgFillPrice;
     const fillQty = walked.filledQty;
     const notional = fillPrice * fillQty;
-    const feeQuote = notional * (this.feePercentFor(req.symbol) / 100);
+    const feeQuote = notional * (this.feePercentFor(req.symbol, req.assetClass) / 100); // P19-B6.5d (OBJ-4): use the carried stamp
     // Slippage vs intended price over the FILLED qty. Positive when the book ask is
     // worse (higher) than the signal price; negative if the book moved favorably.
     const slippageQuote = (fillPrice - req.intendedPrice) * fillQty;
@@ -109,7 +115,7 @@ export class PaperOrderPlacer implements OrderPlacer {
       );
     }
     const notional = fillPrice * req.quantity;
-    const feeQuote = notional * (this.feePercentFor(req.symbol) / 100);
+    const feeQuote = notional * (this.feePercentFor(req.symbol, req.assetClass) / 100); // P19-B6.5d (OBJ-4): use the carried stamp
     // Slippage vs requested price (positive when the fill is worse/lower for a sell).
     const slippageQuote = (req.requestedPrice - fillPrice) * req.quantity;
     return { status: 'filled', fillPrice, fillQty: req.quantity, feeQuote, slippageQuote };

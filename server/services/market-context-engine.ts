@@ -1433,13 +1433,18 @@ export class MarketContextEngine {
       (async () => {
         try {
           const { archivePairScan } = await import('./data-archive/pair-scan-archiver.js');
-          const { resolveAssetClass } = await import('../../shared/asset-classes.js');
+          const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+          // P19-B6.5d (OBJ-6): SAFE (non-throwing) variant — an unclassifiable symbol on
+          // this passive archival path skips the write rather than throwing and crashing
+          // the scan cycle. No stamp threading (targeted crash-fix only).
+          const _pairScanClass = safeResolveAssetClass(symbol, 'kraken');
+          if (_pairScanClass === null) return;
           const atrPct = atr && currentPrice ? (atr / currentPrice) * 100 : undefined;
           archivePairScan({
             capturedAt: now,
             symbol,
             exchange: 'kraken',
-            assetClass: resolveAssetClass(symbol, 'kraken'),
+            assetClass: _pairScanClass,
             regimeLabel: regimeResult.regime,
             regimeConfidence: regimeResult.confidence,
             dbsScore: directionalBias.score,

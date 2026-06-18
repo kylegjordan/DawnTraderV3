@@ -70,7 +70,7 @@ import os from 'os';
 import { DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from './config/exchange-defaults.js';
 // B-4.5: display/diagnostic fee surfaces read the resolved per-class rate.
 import { getFrictionForAssetClass } from './core/math/cost-model.js';
-import { resolveAssetClass } from '../shared/asset-classes.js';
+import { asValidAssetClass, safeResolveAssetClass } from '../shared/asset-classes.js'; // P19-B6.5d: prefer carried stamp + non-throwing resolve on P/L routes
 import { validateFilterChange, logAdjustmentEvent } from './config/adjustment-registry.js';
 import { getBaselineVersion } from './config/authority-baseline.js';
 
@@ -11832,7 +11832,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Phase 8.8.3-C2: P/L Breakdown for cost transparency
         // Batch 18J: Canonical fee/slippage from exchange-defaults.ts
         const SLIPPAGE_PCT = CANONICAL_SLIPPAGE * 100; // 0.05% from exchange-defaults
-        const FEE_PCT = getFrictionForAssetClass(resolveAssetClass(pos.symbol, 'kraken')).feeRateTaker * 100; // B-4.5: DB-governed per-class
+        // P19-B6.5d: prefer the carried position stamp (collision-correct); safe-resolve
+        // fallback so a bad symbol can't throw and 500 the P/L route. A stored position
+        // carries a NOT-NULL asset_class, so the fallback is defensive only.
+        let _pnlPosClass = asValidAssetClass((pos as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(pos.symbol, 'kraken');
+        if (!_pnlPosClass) {
+          console.warn(`[P19-B6.5d][PNL_FEE] position ${pos.symbol} has no resolvable asset class; using crypto_spot friction for display only`);
+          _pnlPosClass = 'crypto_spot';
+        }
+        const FEE_PCT = getFrictionForAssetClass(_pnlPosClass).feeRateTaker * 100; // B-4.5: DB-governed per-class
         
         // Get intended entry price (signal price before slippage)
         const intendedEntryPrice = pos.intendedEntryPrice 
@@ -12162,7 +12170,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 8.8.3-C7-FIX: Calculate exit slippage and fees mirroring engine's closePosition method
       // Batch 18J: Canonical fee/slippage from exchange-defaults.ts
       const SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // 0.05% from exchange-defaults
-      const FEE_PERCENT = getFrictionForAssetClass(resolveAssetClass(position.symbol, 'kraken')).feeRateTaker * 100; // B-4.5: DB-governed per-class
+      // P19-B6.5d: prefer the carried position stamp (collision-correct); safe-resolve
+      // fallback so a bad symbol can't throw and 500 the close-trade route.
+      let _exitPosClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
+      if (!_exitPosClass) {
+        console.warn(`[P19-B6.5d][EXIT_FEE] position ${position.symbol} has no resolvable asset class; using crypto_spot friction for display only`);
+        _exitPosClass = 'crypto_spot';
+      }
+      const FEE_PERCENT = getFrictionForAssetClass(_exitPosClass).feeRateTaker * 100; // B-4.5: DB-governed per-class
       
       // Calculate exit slippage (same formula as paper-execution-engine.ts line 772-780)
       const exitSlippagePerUnit = currentPrice * (SLIPPAGE_PERCENT / 100);

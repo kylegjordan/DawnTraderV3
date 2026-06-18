@@ -39,7 +39,7 @@ import { computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias
 // threshold changes, ACT scaler logic rewrites.
 // Per Langston C-2: shared global ACT pool UNCHANGED — per-class isolation
 // comes from the bucket structure, not from splitting the ACT scaler.
-import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 
 // B79.0n.RTB: active asset classes that get their own bucket set. Reserved-
 // future classes (equity_spot/equity_futures/commodity_futures/fx_spot)
@@ -331,22 +331,24 @@ class RTBRefreshService {
           // Resolve assetClass: prefer first-class column, fallback to
           // resolveAssetClass(symbol, exchange='kraken') for null rows
           // pre-Phase-3 backfill completion.
+          // P19-B6.5d (OBJ-5): prefer the carried first-class stamp; if absent, SAFE-resolve
+          // (non-throwing) — never the old throwing resolveAssetClass. An unclassifiable
+          // signal on this active RTB bucket path is DROPPED (fail-closed) + the per-pair
+          // classify-fall-through alarm fires via safeResolveAssetClass — it is NEVER masked
+          // as crypto_spot (rule #10 no-silent-fallback). Same for a correctly-classed but
+          // non-RTB-active signal: it DROPS rather than being relabeled crypto_spot (which
+          // would misroute an xStock/perp ticker into the crypto pipe with crypto friction).
           let assetClass = signal.assetClass as AssetClass | null;
           if (!assetClass) {
-            try {
-              assetClass = resolveAssetClass(signal.symbol, 'kraken');
-            } catch (err) {
-              // B79.0n.RTB N2 (Langston Step 4 non-blocking note): surface
-              // upstream gaps where neither signal.assetClass column nor
-              // resolveAssetClass could resolve. Defaulting to crypto_spot
-              // matches the non-active-class warn below.
-              console.warn(`[B79.0n.RTB][BUCKET_ASSIGN] resolveAssetClass threw for signalKey=${signalKey} symbol=${signal.symbol}; defaulting to crypto_spot. err=${(err as Error)?.message ?? String(err)}`);
-              assetClass = 'crypto_spot';
+            assetClass = safeResolveAssetClass(signal.symbol, 'kraken');
+            if (!assetClass) {
+              console.warn(`[P19-B6.5d][RTB][BUCKET_ASSIGN] signalKey=${signalKey} symbol=${signal.symbol} unclassifiable — SKIPPING (no silent crypto_spot default)`);
+              continue;
             }
           }
           if (!RTB_ACTIVE_CLASSES.includes(assetClass as AssetClass)) {
-            console.warn(`[B79.0n.RTB][BUCKET_ASSIGN] signalKey=${signalKey} resolved to non-active assetClass=${assetClass}; defaulting to crypto_spot`);
-            assetClass = 'crypto_spot';
+            console.warn(`[P19-B6.5d][RTB][BUCKET_ASSIGN] signalKey=${signalKey} class=${assetClass} not RTB-active — SKIPPING (no crypto_spot relabel)`);
+            continue;
           }
 
           const hash = this.hashString(signalKey);

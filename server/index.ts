@@ -262,7 +262,9 @@ app.use((req, res, next) => {
               severity: 'critical',
               title: 'Asset-class classify fall-through during ACTIVE trading',
               body: `A symbol could not be classified to an asset class on the active path: ${symbol}@${exchange}. The signal/operation was skipped. Investigate the symbol registry / canonicalizer (KNOWN_NONEXISTENT_NAMES, the xStock universe seed).`,
-              dedupe_key: 'classify-fallthrough-active',
+              // P19-B6.5d (OBJ-2): per-pair dedupe key so a second distinct
+              // unclassifiable pair is not silently suppressed behind the first.
+              dedupe_key: `classify-fallthrough-active:${symbol}@${exchange}`,
             });
           }
         } catch { /* hook must never break the resolver */ }

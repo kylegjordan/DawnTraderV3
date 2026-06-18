@@ -183,16 +183,34 @@ export function asValidAssetClass(value: unknown): AssetClass | null {
 // preserved for xstock_perp detection. Once stored on a row, downstream
 // consumers read assetClass from the row, never re-resolve.
 
+/**
+ * P19-B6.5d — SSOT floor for ticker base length. Widened from an implicit 2 to
+ * 1 so single-letter bases classify (the live `A/EUR@kraken` classify
+ * fall-through: A = Vaulta, a real Kraken-spot crypto). Mirrors
+ * `CRYPTO_SPOT_BASE_MAX_LEN`: ONE constant feeds every resolver regex so the
+ * floor cannot drift between this classifier and `symbol-normalize.ts`. The MAX
+ * tripwire still alarms on implausibly-long garbage; 1 is simply the smallest
+ * legal base. Collision precedence is UNAFFECTED — XSTOCK_SPOT_DISPLAY and
+ * XSTOCK_SPOT_KRAKEN_COLLISIONS are consulted BEFORE the widened crypto
+ * canonical in `resolveAssetClass`, so a single-letter crypto match can never
+ * shadow an xStock collision ticker.
+ */
+export const TICKER_BASE_MIN_LEN = 1;
+
 /** xStock perp on Kraken Futures: `PF_<TICKER>XUSD` raw form.
- *  Tighter anchor: ticker is 2-6 capital letters; quote is USD/EUR/GBP. */
-const XSTOCK_PERP_RAW = /^PF_[A-Z]{2,6}X(USD|EUR|GBP)$/;
+ *  Tighter anchor: ticker is TICKER_BASE_MIN_LEN-6 capital letters; quote USD/EUR/GBP. */
+const XSTOCK_PERP_RAW = new RegExp(
+  `^PF_[A-Z]{${TICKER_BASE_MIN_LEN},6}X(USD|EUR|GBP)$`,
+);
 
 /** xStock spot display form (Kraken Pro): `<TICKER>x/<QUOTE>`. This form
  *  appears in Kraken Pro UI only — the WS feed at ws-equities.kraken.com uses
  *  plain `<TICKER>/<QUOTE>` (e.g., AAPL/USD, not AAPLx/USD). Therefore xstock
  *  spot detection CANNOT rely on the symbol alone — it requires the exchange
  *  context. This pattern is kept for documentation + optional explicit tagging. */
-const XSTOCK_SPOT_DISPLAY = /^[A-Z]{2,5}x\/[A-Z]{3,4}$/;
+const XSTOCK_SPOT_DISPLAY = new RegExp(
+  `^[A-Z]{${TICKER_BASE_MIN_LEN},5}x\\/[A-Z]{3,4}$`,
+);
 
 /**
  * B-NEW-30 (2026-05-13): xstock_spot universe — SSOT registry pattern.
@@ -494,7 +512,7 @@ export const CRYPTO_SPOT_BASE_MAX_LEN = 15;
 /** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. Built FROM the SSOT
  *  cap above so this and `symbol-normalize.ts` cannot drift apart. */
 export const CRYPTO_SPOT_CANONICAL = new RegExp(
-  `^[A-Z0-9]{2,${CRYPTO_SPOT_BASE_MAX_LEN}}\\/[A-Z0-9]{3,4}$`,
+  `^[A-Z0-9]{${TICKER_BASE_MIN_LEN},${CRYPTO_SPOT_BASE_MAX_LEN}}\\/[A-Z0-9]{3,4}$`,
 );
 
 /** Crypto spot Kraken raw form 1: `X<BASE>Z<QUOTE>` (e.g., XXBTZUSD). */

@@ -9,7 +9,7 @@ import { getCachedNumbersForModule, getCachedNumberRequired } from './module-con
 import { getFrictionForAssetClass } from '../core/math/cost-model.js';
 // P19-B4a (C4): safe variant — a single unclassifiable symbol returns an explicit
 // blocked ValidationResponse instead of throwing into the catch with a generic reason.
-import { safeResolveAssetClass } from '../../shared/asset-classes.js';
+import { asValidAssetClass, safeResolveAssetClass } from '../../shared/asset-classes.js';
 
 // B72.1 (2026-05-05): goal_alignment + strategy_profiles atomic block.
 // Read all weights/thresholds + strategy profile in ONE pass at top of
@@ -145,7 +145,16 @@ export class PreExecutionValidator {
       // P19-B4a (C4): an unclassifiable symbol can't be priced per-class — return an
       // EXPLICIT typed block (not a generic catch throw). The try/catch below stays in
       // place (additive) so the validator remains crash-proof for any other throw.
-      const _b45AssetClass = safeResolveAssetClass(request.signal.symbol, 'kraken');
+      // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve
+      // only as fallback, and flag a missing stamp on this active execution path
+      // (Langston §B stamp-missing-active). The fail-closed block below still blocks
+      // a truly-unclassifiable symbol.
+      const _b45Stamp = asValidAssetClass((request.signal as { assetClass?: unknown }).assetClass)
+        ?? asValidAssetClass((request.signal as { metadata?: { assetClass?: unknown } }).metadata?.assetClass);
+      const _b45AssetClass = _b45Stamp ?? safeResolveAssetClass(request.signal.symbol, 'kraken');
+      if (!_b45Stamp && _b45AssetClass) {
+        console.warn(`[P19-B6.5d][STAMP_MISSING_ACTIVE] pre-execution-validator re-derived asset class for ${request.signal.symbol} — the sizing stamp should have been carried`);
+      }
       if (_b45AssetClass === null) {
         return {
           canExecute: false,

@@ -30,7 +30,7 @@ import { getCachedNumberRequired } from './module-constants-service.js';
 import { computeTotalRoundTripCost, getCachedCostMetrics } from '../core/math/cost-model.js';
 // B79.0n.MCE: resolveAssetClass — getCachedCostMetrics now REQUIRES an explicit
 // asset class; resolved from the signal symbol.
-import { resolveAssetClass } from '../../shared/asset-classes.js';
+import { safeResolveAssetClass } from '../../shared/asset-classes.js'; // P19-B6.5d: safe variant (crash-fix on the passive VTS sim path)
 import { MLCalibrationService, setGetRecentTradesFn } from './ml-calibration';
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
@@ -337,8 +337,15 @@ export class VTSService extends EventEmitter {
     }
 
     const grossProfit = (exitPrice - entry) / entry;
-    // B79.0n.MCE: assetClass REQUIRED — resolved from the signal symbol.
-    const costMetrics = getCachedCostMetrics(signal.symbol, resolveAssetClass(signal.symbol, 'kraken'));
+    // P19-B6.5d (OBJ-6): SAFE (non-throwing) variant — a single unclassifiable symbol must
+    // not crash the VTS simulation cycle. Passive/telemetry path: on the (pathological)
+    // null, log + fall back to crypto_spot friction so the sim still produces a result
+    // (OBJ-5 passive rule: LOGGED default, never silent). No stamp threading here.
+    const _vtsSimClass = safeResolveAssetClass(signal.symbol, 'kraken');
+    if (_vtsSimClass === null) {
+      console.warn(`[P19-B6.5d][VTS] simulateTrade: unclassifiable ${signal.symbol} — using crypto_spot friction (logged fallback, telemetry only)`);
+    }
+    const costMetrics = getCachedCostMetrics(signal.symbol, _vtsSimClass ?? 'crypto_spot');
     const frictionRate = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
     const netProfit = grossProfit - frictionRate;
 

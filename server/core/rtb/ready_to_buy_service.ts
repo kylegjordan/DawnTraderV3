@@ -1235,12 +1235,15 @@ class ReadyToBuyService {
     // the selection path. Runs only when the class flag is shadow|active.
     void (async () => {
       try {
-        const { safeResolveAssetClass } = await import('../../../shared/asset-classes.js');
+        const { safeResolveAssetClass, asValidAssetClass } = await import('../../../shared/asset-classes.js');
         const { getAmrFlagState, recordRankingShadow } = await import('../../services/amr-weather-report.js');
         const { computeContextBonusShadow } = await import('../../services/amr-context-bonus-shadow.js');
         const byClass = new Map<string, typeof signals>();
         for (const s of signals) {
-          const k = safeResolveAssetClass(s.symbol, 'kraken');
+          // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve fallback.
+          const k = asValidAssetClass((s as { assetClass?: unknown }).assetClass)
+            ?? asValidAssetClass((s as { metadata?: { assetClass?: unknown } }).metadata?.assetClass)
+            ?? safeResolveAssetClass(s.symbol, 'kraken');
           if (k === null) continue;
           const arr = byClass.get(k) ?? [];
           arr.push(s);
@@ -1253,7 +1256,9 @@ class ReadyToBuyService {
           const stamp = await computeContextBonusShadow(
             klass as never,
             classSignals.map(s => ({ symbol: s.symbol, regime: (s as { regime?: string | null }).regime ?? null, finalScore: s.finalScore, metadata: s.metadata as Record<string, unknown> | null })),
-            bestSignal && safeResolveAssetClass(bestSignal.symbol, 'kraken') === klass ? bestSignal.symbol : null,
+            bestSignal && (asValidAssetClass((bestSignal as { assetClass?: unknown }).assetClass)
+              ?? asValidAssetClass((bestSignal as { metadata?: { assetClass?: unknown } }).metadata?.assetClass)
+              ?? safeResolveAssetClass(bestSignal.symbol, 'kraken')) === klass ? bestSignal.symbol : null,
           );
           recordRankingShadow(klass as never, stamp);
           if (stamp.rank1Changed) {
@@ -1554,18 +1559,26 @@ class ReadyToBuyService {
         // NO-PATCHES: confidence_modulated IS the value tested at the drop — capture
         // it (not null). Fire-and-forget, try/catch — never throw into RTB refresh.
         try {
-          const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
-          archiveSignalEval({
-            mode: tradingModeToRunMode(mode),
-            symbol: signal.symbol,
-            exchange: 'kraken',
-            assetClass: asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken') ?? 'crypto_spot',
-            source: 'ready-to-buy',
-            strategy: signal.strategy,
-            rejectStage: 'rtb',
-            confidenceModulated: confidence,
-            gateDecision: { gate: 'rtb', accepted: false, reason: 'confidence_below_min_queue', observed: confidence, threshold: minQueueConfidence },
-          });
+          // P19-B6.5d (OBJ-5): prefer the carried stamp; safe-resolve fallback; on a
+          // genuinely-unclassifiable symbol SKIP the archive row rather than mislabel it
+          // crypto_spot (the old silent tail-default would pollute per-class reject telemetry).
+          const _evalClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+          if (_evalClass !== null) {
+            const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
+            archiveSignalEval({
+              mode: tradingModeToRunMode(mode),
+              symbol: signal.symbol,
+              exchange: 'kraken',
+              assetClass: _evalClass,
+              source: 'ready-to-buy',
+              strategy: signal.strategy,
+              rejectStage: 'rtb',
+              confidenceModulated: confidence,
+              gateDecision: { gate: 'rtb', accepted: false, reason: 'confidence_below_min_queue', observed: confidence, threshold: minQueueConfidence },
+            });
+          } else {
+            console.warn(`[P19-B6.5d][ARCH] RTB-reject signal-eval archive SKIPPED for ${signal.symbol} — unclassifiable (no crypto_spot mislabel)`);
+          }
         } catch (b70Err) {
           console.warn(`[B70][ARCH] RTB-reject signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
         }

@@ -44,7 +44,7 @@ import { getCachedNumberRequired } from '../../services/module-constants-service
 // B79: xstock_spot weekend-pause + per-asset-class strategy whitelist.
 // safeResolveAssetClass returns null on unknown — we treat null as
 // crypto_spot back-compat to keep existing behavior identical.
-import { safeResolveAssetClass, type AssetClass } from '../../../shared/asset-classes.js';
+import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../../shared/asset-classes.js';
 import { isXstockMarketOpenUTC } from '../../asset_classes/xstock_spot/market-hours.js';
 import { isStrategyEnabledForAssetClass } from '../../config/canonical-regime-strategy-map.js';
 
@@ -221,10 +221,27 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   const canonicalSymbol = normalizeInternal(input.symbol);
 
   // ───── B79: per-asset-class gates ──────────────────────────────────────
-  // Resolve assetClass from symbol; null (unknown pattern) → treat as
-  // crypto_spot for back-compat. Crypto_spot path skips all xstock_spot
-  // gates explicitly (no-touch fence).
-  const resolvedAssetClass = safeResolveAssetClass(input.symbol, 'kraken') ?? 'crypto_spot';
+  // P19-B6.5d (OBJ-3 + OBJ-5): the SQE gate decides the xstock-vs-crypto path, so it
+  // MUST honor the CARRIED stamp (input.assetClass, REQUIRED at the SQEInput interface)
+  // — re-deriving from the symbol misroutes a collision ticker (a plain-kraken collision
+  // resolves crypto, silently skipping every xStock gate). asValidAssetClass guards a
+  // runtime-missing stamp (a caller that bypassed the REQUIRED type); a truly-absent
+  // stamp on this active money gate FAILS CLOSED — no silent crypto_spot default
+  // (Langston OBJ-5, rule #10). The safe-resolve fallback fires the central
+  // classify-fall-through alarm if it too cannot classify.
+  const resolvedAssetClass = asValidAssetClass(input.assetClass) ?? safeResolveAssetClass(input.symbol, 'kraken');
+  if (resolvedAssetClass === null) {
+    return {
+      passed: false,
+      signalId: input.signalId,
+      symbol: canonicalSymbol,
+      strategy: input.strategy,
+      metrics: { finalScore: 0, regimeWeight: 0 },
+      thresholds: { finalScoreMin: 0, regimeWeightMin: 0 },
+      failures: ['unclassifiable_asset_class'],
+      reason: 'unclassifiable_asset_class',
+    };
+  }
 
   if (resolvedAssetClass === 'xstock_spot') {
     // (a) Weekend-pause — ARCA hours. B79.0c: per-symbol — 24/7 names

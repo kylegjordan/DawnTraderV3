@@ -147,12 +147,13 @@ export class PaperExecutionEngine {
   // active paper fill depth-walks the real order book (no flat constant on the active
   // path; Langston C-Q5 RNG-free / no-magic-% discipline).
   // B-4.5: FEE_PERCENT static field RETIRED — per-class DB-resolved per symbol.
-  private feePercentFor(symbol: string): number {
-    // P19-B4a (C4): money-boundary leaf — sites 7/8/9 skip BEFORE a position can open,
-    // so by construction this is unreachable with an unclassifiable symbol. Treat a null
-    // here as a broken invariant (stamp lost between sizing and fill) — assert-unreachable,
-    // never silently return fee=0.
-    const _cls = safeResolveAssetClass(symbol, 'kraken');
+  private feePercentFor(symbol: string, assetClass?: AssetClass): number {
+    // P19-B6.5d (OBJ-4): prefer the CARRIED stamp threaded by the caller (collision-correct
+    // fee tier); safe-resolve from the symbol only as a fallback. Money-boundary leaf —
+    // sites 7/8/9 skip BEFORE a position can open, so a null here (neither stamp nor resolve)
+    // is a broken invariant (stamp lost between sizing and fill): assert-unreachable, never
+    // silently return fee=0.
+    const _cls = assetClass ?? safeResolveAssetClass(symbol, 'kraken');
     if (_cls === null) {
       throw new Error('[P19-B4a][C4][INVARIANT] feePercentFor reached with unclassifiable ' + symbol + ' — sites 7/8/9 should have skipped upstream (stamp lost between sizing and fill)');
     }
@@ -224,7 +225,7 @@ export class PaperExecutionEngine {
     // P19-B4b.1: inject ONLY the per-class fee resolver — the placer depth-walks the
     // real book passed on each request (no flat slippage% to inject anymore), so the
     // port stays decoupled from this engine.
-    this.orderPlacer = new PaperOrderPlacer((s) => this.feePercentFor(s));
+    this.orderPlacer = new PaperOrderPlacer((s, ac) => this.feePercentFor(s, ac)); // P19-B6.5d (OBJ-4): thread the carried class to the fill-fee resolver
   }
 
   /**
@@ -1203,7 +1204,7 @@ export class PaperExecutionEngine {
     const intendedEntryValue = intendedEntryPrice * quantity;
 
     // Apply exit slippage and fees
-    const _b45FeePct = this.feePercentFor(position.symbol); // B-4.5 per-class (reused for the entry-fee fallback below)
+    const _b45FeePct = this.feePercentFor(position.symbol, asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? undefined); // P19-B6.5d (OBJ-4): prefer the position stamp; B-4.5 per-class
     // P19-B4b.1: exit fill via the DEPTH-WALKED OrderPlacer port. The close ALWAYS
     // full-fills (R2 — a market exit always gets out, never a phantom stuck position);
     // the placer walks the live bid snapshot and prices any beyond-book remainder with
@@ -1753,11 +1754,18 @@ export class PaperExecutionEngine {
         // and slot-cap are re-asked per signal here. Under enforce a block
         // DEFERS the signal (stays in queue); shadow records the would-block.
         {
-          const _promoClass = safeResolveAssetClass(signal.symbol, 'kraken');
+          // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve
+          // only as fallback, and flag a missing stamp — a stamp absent on the active
+          // promotion path is a pipe-entry bug (Langston §B stamp-missing-active).
+          const _promoStamp = asValidAssetClass(signal.metadata?.assetClass);
+          const _promoClass = _promoStamp ?? safeResolveAssetClass(signal.symbol, 'kraken');
+          if (!_promoStamp && _promoClass) {
+            console.warn(`[P19-B6.5d][STAMP_MISSING_ACTIVE] rtb_promotion re-derived asset class for ${signal.symbol} — the sizing stamp should have been carried`);
+          }
           if (_promoClass !== null) {
             try {
               const { evaluateAmrGates } = await import('../core/governance/amr-gates.js');
-              const sameClassCount = openPositions.filter(p => safeResolveAssetClass(p.symbol, 'kraken') === _promoClass).length;
+              const sameClassCount = openPositions.filter(p => (asValidAssetClass((p as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(p.symbol, 'kraken')) === _promoClass).length;
               const gate = evaluateAmrGates({
                 assetClass: _promoClass,
                 site: 'rtb_promotion',
@@ -2029,7 +2037,9 @@ export class PaperExecutionEngine {
       prices: signal.metadata?.prices,
       sourcePool: (signal as any).sourcePool ?? signal.metadata?.sourcePool,
       dbsScore: signal.metadata?.dbsScore,
-    });
+      // P19-B6.5d (OBJ-4): thread the carried stamp so EV friction is priced by the
+      // signal's actual class, not re-derived from a (possibly collision) symbol.
+    }, asValidAssetClass(signal.metadata?.assetClass) ?? undefined);
     
     if (!expectancyResult.isTradeable) {
       // [B4] Log funnel attempt blocked by Net Expectancy Gate
@@ -2221,18 +2231,26 @@ export class PaperExecutionEngine {
       // NOT captured (would be semantically-false telemetry). finalScore is not
       // threaded to the engine here; confidence_modulated (signal.confidence) is.
       try {
-        const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
-        archiveSignalEval({
-          mode: tradingModeToRunMode(this.mode),
-          symbol: signal.symbol,
-          exchange: 'kraken',
-          assetClass: asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken') ?? 'crypto_spot',
-          source: 'paper-execution-engine',
-          strategy: signal.strategy,
-          rejectStage: 'tcl',
-          confidenceModulated: signal.confidence,
-          gateDecision: { gate: 'tcl', accepted: false, reason: 'duplicate_position', existingCount },
-        });
+        // P19-B6.5d (OBJ-5): prefer the carried stamp; safe-resolve fallback; on a
+        // genuinely-unclassifiable symbol SKIP the archive row rather than mislabel it
+        // crypto_spot (the old silent tail-default would pollute per-class reject telemetry).
+        const _evalClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+        if (_evalClass !== null) {
+          const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+          archiveSignalEval({
+            mode: tradingModeToRunMode(this.mode),
+            symbol: signal.symbol,
+            exchange: 'kraken',
+            assetClass: _evalClass,
+            source: 'paper-execution-engine',
+            strategy: signal.strategy,
+            rejectStage: 'tcl',
+            confidenceModulated: signal.confidence,
+            gateDecision: { gate: 'tcl', accepted: false, reason: 'duplicate_position', existingCount },
+          });
+        } else {
+          console.warn(`[P19-B6.5d][ARCH] TCL-reject signal-eval archive SKIPPED for ${signal.symbol} — unclassifiable (no crypto_spot mislabel)`);
+        }
       } catch (b70Err) {
         console.warn(`[B70][ARCH] TCL-reject signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
       }
@@ -2755,7 +2773,13 @@ export class PaperExecutionEngine {
       // legacy path below is bit-identical (parity gate A2).
       let strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
       let modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
-      const _amrClass = safeResolveAssetClass(signal.symbol, 'kraken');
+      // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve
+      // fallback + flag a missing stamp (Langston §B stamp-missing-active).
+      const _amrStamp = asValidAssetClass(signal.metadata?.assetClass);
+      const _amrClass = _amrStamp ?? safeResolveAssetClass(signal.symbol, 'kraken');
+      if (!_amrStamp && _amrClass) {
+        console.warn(`[P19-B6.5d][STAMP_MISSING_ACTIVE] execution_entry re-derived asset class for ${signal.symbol} — the sizing stamp should have been carried`);
+      }
       if (_amrClass !== null) {
         try {
           const { getActiveModeForClass } = await import('./amr-weather-report.js');
@@ -2781,7 +2805,7 @@ export class PaperExecutionEngine {
         let _sameClassCount: number | undefined;
         try {
           const _gateOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
-          _sameClassCount = _gateOpenPositions.filter(p => safeResolveAssetClass(p.symbol, 'kraken') === _amrClass).length;
+          _sameClassCount = _gateOpenPositions.filter(p => (asValidAssetClass((p as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(p.symbol, 'kraken')) === _amrClass).length;
         } catch (countErr) {
           console.warn(`[B-5][Paper] open-position count fetch failed (slot gate skips this signal): ${countErr instanceof Error ? countErr.message : countErr}`);
         }

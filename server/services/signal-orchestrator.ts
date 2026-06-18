@@ -28,9 +28,11 @@
 import { StrategyEngine, StrategySignal, stampMaxHoldingMs } from './strategy-engine';
 // B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
 import { getCachedNumberRequired } from './module-constants-service.js';
-// B79.0d: synchronous resolveAssetClass for ORB dispatch guard.
 // B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput.assetClass population.
-import { resolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+// P19-B6.5d: the four active-path re-derives (MCE context, evaluateSymbol capture,
+// ORB gate, NetEV filter) now read the CARRIED crypto-pipe stamp, so the throwing
+// resolveAssetClass top-level import is no longer needed here.
+import { type AssetClass } from '../../shared/asset-classes.js';
 // B79.0n.CONFIDENCE-CHAIN: capture-and-reuse pattern at chain composition entry.
 // safeResolveAssetClass returns null + logs WARN on unresolvable (vs throw).
 import { safeResolveAssetClass } from '../../shared/asset-classes.js';
@@ -1506,8 +1508,9 @@ export class SignalOrchestrator {
             volume: parseFloat(d.volume || '0'),
             timestamp: d.time * 1000,
           }));
-          // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
-          const context = mce.computeContext(symbol, ohlcForContext, currentPrice, volume24h, undefined, propagatedDbs, resolveAssetClass(symbol, 'kraken'));
+          // P19-B6.5d: use the carried crypto-pipe stamp (sizingContext.assetClass =
+          // 'crypto_spot' by construction in evaluateMarket) — never re-derive downstream.
+          const context = mce.computeContext(symbol, ohlcForContext, currentPrice, volume24h, undefined, propagatedDbs, sizingContext.assetClass);
 
           // Pattern recognition
           const candles = ohlcData.map(d => ({
@@ -1689,11 +1692,13 @@ export class SignalOrchestrator {
         category: ((poolEntry as any).dbsCategory as string) || 'NEUTRAL',
         slope: (poolEntry as any).dbsSlope as number | undefined,
       } : undefined;
-      // B79.0n.MCE: append required assetClass — resolved from the pair symbol.
-      // B79.0n.STRATEGY (2026-05-24): capture assetClass into local for reuse across
-      // the 18-strategy dispatch block below + any other resolver-key sites in this
-      // function (avoids 18× resolveAssetClass calls).
-      const assetClass = resolveAssetClass(symbol, 'kraken');
+      // B79.0n.MCE: assetClass is REQUIRED by computeContext + the dispatch block.
+      // B79.0n.STRATEGY (2026-05-24): captured into a local for reuse across the
+      // 18-strategy dispatch + the ORB gate + the NetEV filter below.
+      // P19-B6.5d: read the CARRIED crypto-pipe stamp (sizingContext.assetClass =
+      // 'crypto_spot' by construction in evaluateMarket) — do NOT re-derive from the
+      // symbol string (carry-the-stamp invariant; removes the throwing re-derive).
+      const assetClass = sizingContext.assetClass;
       const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20, orchestratorDbs, assetClass);
 
       console.log(`[Phase13][MCE] ${symbol}: regime=${mceContext.regime.regime}, weight=${mceContext.regime.regimeWeight.toFixed(2)}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
@@ -2039,7 +2044,7 @@ export class SignalOrchestrator {
       // enforce 24/7-symbol exclusion + DB gate. SQE whitelist (layer 3) ensures
       // any signal that does fire is kept off crypto_spot at the filter layer.
       if (activeStrategies.has('orb')) {
-        const orbAssetClass = resolveAssetClass(symbol, 'kraken');
+        const orbAssetClass = assetClass; // P19-B6.5d: reuse the carried stamp (was a throwing re-derive)
         if (orbAssetClass === 'xstock_spot') {
           const rawSignal = this.strategyEngine.detectORB(
             symbol,
@@ -2142,8 +2147,9 @@ export class SignalOrchestrator {
 
           if (entry <= 0 || target <= 0 || stop <= 0) return false;
 
-          // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-          const costMetrics = getCachedCostMetrics(symbol, resolveAssetClass(symbol, 'kraken'));
+          // B79.0n.MCE: assetClass REQUIRED. P19-B6.5d: reuse the carried stamp captured
+          // above (closure) — do NOT re-derive inside the filter callback.
+          const costMetrics = getCachedCostMetrics(symbol, assetClass);
           const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
           const frictionPerUnit = frictionPct * entry;
           const DI = calculateDirectionalIntegrity(closePrices);
