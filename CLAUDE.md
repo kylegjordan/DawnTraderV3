@@ -123,6 +123,8 @@ Two MEMORY.md files, kept in sync:
 
 **Two-step update (non-negotiable):** (1) edit the user-cache MEMORY.md (truth file); (2) copy entire updated file to in-repo persistence path + commit/push in the same governance turn. See history doc §3.1 for rationale.
 
+**★ PER-SESSION MEMORY SPLIT (Kyle directive 2026-06-19 — two CC sessions run concurrently, and a shared MEMORY.md let CC-A and CC-B clobber each other's volatile state).** The shared `MEMORY.md` (truth + repo mirror, both per the two-step above) now holds ONLY the **shared protocols + project-consensus truths** — edit it surgically, coordinate any big change. **Each session's VOLATILE working-state lives in its OWN file in the same memory dir: Claude Old (CC-A) → `MEMORY_CC_A.md`; Claude New (CC-B) → `MEMORY_CC_B.md`** (each also mirrors to `.claude/memory/`). Each session READS its own (+ optionally the other's, for cross-visibility) at session-start per the MEMORY.md SESSION-START PROTOCOL step 2, and WRITES ONLY its own — never volatile per-session state into the shared `MEMORY.md`. This eliminates the cross-session clobber; the shared file's churn drops to occasional consensus updates. The §3.2 200-line cap now applies per file (shared + each per-session file stays lean).
+
 ### 3.2 MEMORY.md hard cap: 200 lines (Kyle directive 2026-04-29)
 
 MEMORY.md MUST NEVER EXCEED 200 lines. Every update: `wc -l` after edit; if >200, prune before commit (collapse stale entries, drop resolved items, condense state block). Auto-loads every session — runaway growth wastes context.

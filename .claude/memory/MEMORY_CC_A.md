@@ -1,0 +1,22 @@
+# MEMORY — Claude Old (CC-A) volatile working-state
+
+> **This file is OWNED by Claude Old (CC-A), session `3ce652e6` (comms / roadmap / governance).** I read it + the shared `MEMORY.md` (protocols) at session-start, and write volatile state ONLY here. Claude New (CC-B) owns `MEMORY_CC_B.md`. Shared protocols + project-consensus state live in `MEMORY.md`. Detailed recent scratch: `_scratch_xstock_globals_resume.md` (xStock fix + fee/exchange direction + the trading-approach 3-way — still valid reference).
+
+## ★ WHERE I AM (2026-06-19)
+**Just CLOSED two batches — governance committed + pushed `b1453d22b` (sync 0/0):**
+- **B-XSTOCK-GLOBALS — CLOSED.** xStock VTS opens now stamp at-open per-class global regime/friction/DBS (code `a93e274c8`, deployed restart#405, UI+DATA verified). Root cause = B-4.7 made `registerOpenVtsTrade` caller-pass-only; xStock eval-cycle caller never passed the 4 globals. Fix mirrors the crypto per-class stamp. **Pending:** Langston Step-8.
+- **B-GOV-2 — activated-in-shadow but PAUSED.** Governance-checker (code `ec37b2990`, CI green, 35/35) installed on STAGING (dedicated clone `/opt/governance-checker/DawnTraderV3`, deploy user, local system-alerts CLI). **Timers DISABLED** after the first tick flooded the §10.5 queue with 88 backfill entries (all resolved). **2 follow-ups before live-paging (RUNNING_ISSUES, §13-homed):** (a) seed `GOVERNANCE_EXCEPTIONS.md` for pre-rule/closed batches; (b) shadow-surfacing fix — `info` shadow entries STILL surface in the §10.5 read (severity-blind), so make shadow genuinely non-surfacing before `GOV_SHADOW=0`. Then re-enable in shadow → watch 1-2 real batch closes → flip live. **Pending:** Langston Step-8.
+
+## ★ NEXT ACTIONS (CC-A queue)
+1. **Memory-file split** (IN PROGRESS this session) — created MEMORY_CC_A.md (this) + convention in shared MEMORY.md + CLAUDE.md §3.1 note; Claude New to create MEMORY_CC_B.md via Kyle-relayed prompt. Commit the mirror + CLAUDE.md.
+2. **Get pruned** — Claude New prunes THIS transcript (3ce652e6, ~457MB+, never trimmed) per the runbook `1-system-manual/CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md`; prerequisite (governance committed) is MET; Kyle archives me → CN swaps → Kyle reopens. The reopen = my compaction.
+3. **Langston Step-8** for B-XSTOCK-GLOBALS + B-GOV-2.
+4. **B-GOV-2 clean re-activation** — the 2 calibration follow-ups, then re-enable in shadow, then go-live (Kyle: shadow = a few days / 1-2 batches, not indefinite).
+5. **xStock guardrail-tripwire** §13 follow-up — a centralized witness in `registerOpenVtsTrade` (alert if an xStock VTS row opens blank-globals while voteStatus=LIVE), deduped.
+6. **Discord migration** — Kyle wants it (removes the Telegram bot-to-bot block that forces our back-channels). Do a feasibility study + migration plan (NOT a flip; re-point the 2 bridges + wake watcher + voice from Telegram→Discord; free; bots can read each other). Build alongside Telegram, test, cut over, then retire Telegram.
+
+## ★ KEY CONTEXT (Kyle decisions still live)
+- **FEE REALITY (verified):** Kraken July-9 cross-platform Tier 1 = **0.40% maker / 0.80% taker** = EXACTLY our model (NOT 2× too high — I was wrong, corrected). No US-person-accessible exchange escapes it (Binance/Bybit/OKX block US persons; Coinbase 0.40%/0.60% marginally better taker only; Gemini worse). Strategy was modeled for ~0.10% fees. → don't switch exchanges; adapt strategy. Detail in scratch file.
+- **TRADING-APPROACH 3-way (CC-A + Langston converged; Kyle told CN to proceed with its+Langston decision — I do NOT owe a concur/fee-post anymore):** maker entry + bigger targets (≥3.5-4%, taker stops break symmetric math) + "liquid+volatile" not pure majors + 2 concentrated positions + AoP tier-climb as the portfolio grows. Phase-3 (Tier-3 ~0.22% taker) = original fast style returns. Brief: `Claude Comms and Packages/Langston Design Asks/FEE_AWARE_STARTING_TRADING_APPROACH_3WAY_rev1.md`.
+- **Claude New is doing:** the both-classes Phase-19 plan ("both in code, one live at a time" hybrid, CN+Langston converged) — folding into PHASE_19_PLAN §1; the active-trading-pipeline audit (committed, Langston-approved). I handed CN the shared-doc window back after my governance push.
+- **Transcript-trim tooling:** `memory/distill_transcript.py` (safe) + `memory/trim_transcript.py` (aggressive); runbook in 1-system-manual. Scripts refined 2026-06-19 (image→text-block redaction). CN's session was pruned 784→309MB yesterday (works).
