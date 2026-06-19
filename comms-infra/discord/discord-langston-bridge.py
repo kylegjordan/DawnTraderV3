@@ -53,6 +53,9 @@ CLAUDE_MODEL = "claude-opus-4-8[1m]"
 # intervening Kyle message, stop auto-replying + post one alert. Hard floor under [SILENT].
 BOT_TURN_LIMIT = 6
 ADDRESS_RE = re.compile(r"langston", re.I)  # CC-bot messages engage Langston only when they name him
+# Name-routing (crossed-wire fix): a Kyle message that names a CC session but NOT Langston is
+# not Langston's to answer — skip it so the CC session handles it (mirrors the wake filter).
+CC_NAME_RE = re.compile(r"claude[\s_-]*(old|new)|(old|new)[\s_-]*claude|\bcc[\s_-]*[ab]\b", re.I)
 
 BOT_TOKEN = dc.load_env_value(BOT_TOKEN_FILE, "DISCORD_BOT_TOKEN")
 OAUTH_TOKEN = dc.load_env_value(OAUTH_TOKEN_FILE, "CLAUDE_CODE_OAUTH_TOKEN")
@@ -208,7 +211,10 @@ def process_task(task, state, breaker):
     log(f"handling msg {msg_id} channel={channel_id} kind={kind}: {prompt[:120]}")
     response = invoke_claude(prompt, state["session_id"], state=state)
     resp_stripped = (response or "").strip()
-    is_silent = (not resp_stripped) or resp_stripped.upper().startswith("[SILENT]") or resp_stripped.upper() == "SILENT"
+    # Robust: treat as silent if empty, starts with the marker, or carries [SILENT] anywhere
+    # (Langston sometimes prepends a one-line "not mine to answer" before the marker).
+    up = resp_stripped.upper()
+    is_silent = (not resp_stripped) or up.startswith("[SILENT]") or up == "SILENT" or ("[SILENT]" in up)
     is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
     if is_bridge_error and not is_dm:
         is_silent = True
@@ -296,7 +302,10 @@ def build_client(task_q):
             if not author_is_kyle:
                 return  # only Kyle sends voice notes
         elif author_is_kyle:
-            pass
+            # Crossed-wire fix: if Kyle names a CC session and NOT Langston, it's not Langston's
+            # to answer — skip entirely (deterministic, no wasted Langston turn).
+            if CC_NAME_RE.search(content) and not ADDRESS_RE.search(content):
+                return
         elif author_is_cc_bot and ADDRESS_RE.search(content):
             pass
         else:

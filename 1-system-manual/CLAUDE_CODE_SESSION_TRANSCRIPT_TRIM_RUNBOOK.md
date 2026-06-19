@@ -39,6 +39,40 @@ for day in sorted(byday): cum+=byday[day][1]; print(day, f"{byday[day][1]/1e6:.1
 PY
 ```
 
+## 2.5 Duplicate-ID corruption — scroll bounces / sticks on a repeated message (2026-06-19)
+**Distinct from size bloat — a SEPARATE defect with its own fix.** Symptom (Kyle, both Claude New shells): the scrollbar starts at the top, scrolls down, then **sticks on one message that appears repeated multiple times**, and scrolling below it **snaps back to the top of those duplicates**. Cause: the on-disk transcript contains **duplicate message IDs (`uuid`)** — the renderer keys each message by its `uuid`, so a repeated id makes it loop. Two flavors: byte-identical copies (whole history blocks re-appended), and worse, the **same id stamped on *different* messages** (one id shared by up to 7 different user messages — that collision is what loops the renderer).
+
+**Origin (autopsy):** the duplicates **cluster in a few large contiguous blocks**, and the biggest block begins **exactly at a `/compact` marker** → the mechanism is **compaction re-appending a block of history** instead of replacing it, accumulated over a very large, repeatedly-compacted session (the original 7f66d970 had ~25,000 duplicate ids; trimming shrank but didn't remove them). NOT introduced by the trim/distill tools — they preserve whatever ids exist; they just don't dedupe.
+
+**Diagnose (on a COPY or read-only):**
+```bash
+python3 - "$F" <<'PY'
+import json,sys; from collections import Counter
+seen=Counter()
+for line in open(sys.argv[1],encoding='utf-8'):
+    s=line.strip()
+    if not s: continue
+    try: u=json.loads(s).get('uuid')
+    except: continue
+    if u is not None: seen[u]+=1
+dup={u:c for u,c in seen.items() if c>1}
+print("duplicate uuids:",len(dup),"  extra occurrences:",sum(c-1 for c in dup.values()))
+PY
+```
+If `duplicate uuids` > 0, repair with `dedup_transcript.py` (lives in `memory/`):
+- keeps the FIRST occurrence of each uuid,
+- **drops** byte-identical repeats (lossless),
+- **re-stamps a fresh uuid** on same-id-different-content collisions (preserves the message, fixes the clash).
+
+**Procedure (session MUST be archived/closed first — never edit a live transcript):**
+```bash
+cp LIVE.jsonl LIVE.jsonl.BACKUP-<date>-pre-dedup            # 1. backup
+python3 memory/dedup_transcript.py LIVE.jsonl OUT.tmp        # 2. dedup (pass paths as ARGS — MSYS path quirk on Windows)
+python3 memory/validate.py OUT.tmp                           # 3. expect duplicate_uuids=0, bad_json=0, ONE distinct sessionId (must match the filename)
+cp OUT.tmp LIVE.jsonl && rm OUT.tmp                          # 4. replace, keep backup
+```
+First run 2026-06-19: f9ed24c3 70→52 MB (dropped 1927 + re-stamped 316 → 0 dupes); 7f66d970 311→250 MB (dropped 7052 + re-stamped 1540 → 0 dupes). After reopen, scroll is smooth. **Prevention:** keep sessions lean (small, regularly-trimmed files barely accumulate dupes); run the §2.5 dupe-check as part of every trim; and a dedupe pass should be folded into any future re-home/seed build.
+
 ## 3. Method ladder (try least-destructive first)
 1. **Distill (SAFE, no deletions)** — `distill_transcript.py`: redact ALL images (fixes the send-hang) + trim oversized tool blobs. Keeps every entry + chain. Typical cut ~20–35%. Use when the main symptom is **can't-send**.
 2. **Aggressive distill** — same script, lower `BLOB_MAX`, no date cutoff. Bigger cut, still no deletions.
