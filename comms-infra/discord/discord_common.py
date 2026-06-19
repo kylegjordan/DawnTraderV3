@@ -92,7 +92,7 @@ def load_shared_config():
         cfg["webhook_id"] = None
     # Optional per-sender avatar icons (URLs), keyed by sender label.
     cfg["avatars"] = {}
-    for key, label in (("AVATAR_CLAUDE_OLD", "Claude Old"), ("AVATAR_CLAUDE_NEW", "Claude New")):
+    for key, label in (("AVATAR_CLAUDE_OLD", "OLD Claude"), ("AVATAR_CLAUDE_NEW", "NEW Claude")):
         try:
             cfg["avatars"][label] = load_env_value(SHARED_CONFIG_FILE, key)
         except Exception:

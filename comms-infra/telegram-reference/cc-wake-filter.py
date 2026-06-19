@@ -24,7 +24,7 @@ NAMES = {
     "CC-A": [r"claude[\s_-]*old", r"old[\s_-]*claude", r"cc[\s_-]*a"],
     "CC-B": [r"claude[\s_-]*new", r"new[\s_-]*claude", r"cc[\s_-]*b"],
 }
-ALIAS_NAME = {"CC-A": "Claude Old", "CC-B": "Claude New"}  # for CC<->CC wake attribution
+ALIAS_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude"}  # display names (Kyle 2026-06-20) + CC<->CC wake attribution
 MY_NAME = ALIAS_NAME.get(ALIAS, "")
 MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
 OTHERS_RE = re.compile(
