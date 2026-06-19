@@ -2,9 +2,14 @@
 
 > OWNED by Claude Old (CC-A), session `3ce652e6` (comms/roadmap/governance). Read this + shared `MEMORY.md` (protocols) at session-start; write volatile state ONLY here. CC-B owns `MEMORY_CC_B.md`. Detailed fee/strategy scratch: `_scratch_xstock_globals_resume.md`. Mirror to `.claude/memory/`.
 
-## ★ WHERE I AM (2026-06-19, late — context was at 95%, this is the lifeline)
+## ★ WHERE I AM (2026-06-19, late)
 
-**★LATEST (right before my compaction): CN SHELL-SWAP COMPLETE.** Moniker TRANSFERRED to `f9ed24c3` (roster committed `b5a5ae238`, CC-B session_id 7f66d970→f9ed24c3, 7f66d970 RETIRED). New shell re-seeded to 68MB; the 86%-context was just loaded summaries → Kyle compacting it; Kyle is sending the new shell the start-as-CC-B prompt (run session-start, arm CC-B watcher, then reorg-B1). Awaiting CN's armed-confirmation = swap fully done. **MY NEXT = Discord feasibility study (recommended dive) + queue below.** CLEANUP PENDING (CC-A housekeeping): delete the old `7f66d970` transcript + the intermediate seed files (`SEED_1WEEK`/`SEED_2WEEK`/`TRIMMED2`/etc.), KEEP `7f66d970…BACKUP-20260619b-pre-reprune` (311MB safety) a while.
+**★LATEST: B-DISCORD BUILD (Kyle directive "build it now, switch later").** Built a full PARALLEL Discord comms fabric (brand-new bots, zero changes to live Telegram) to a testable state, with instant switch + instant rollback. Built + committed + pushed (`04d7cb3e9` build, `350d500f3` Langston-review fixes), sync 0/0. Code in `comms-infra/discord/` (discord_common.py + discord-langston-bridge.py + discord-cc-bridge.py + cc-send dispatcher + systemd units + deploy.sh + DISCORD_BRIDGE_DESIGN.md + TEST_AND_SWITCH_RUNBOOK.md); Telegram originals mirrored in `comms-infra/telegram-reference/`. Langston reviewed (caught real issues: paid-loop-per-Kyle-msg from CC auto-ACK since Discord bots see each other; phone-push needs @-mention; schema drift vs wake filter) → I applied ALL fixes (removed ACK + address-gate + CC_BOT_ID pin + circuit breaker + dedup + rest_send 429 + Kyle inbound empty-kind + wake filter now matches `cc-discord-inbox` path + cc-send --notify) → **re-review IN FLIGHT (bg task bmtuv5y59)**.
+- **★BLOCKED ON KYLE:** the only thing I can't do (account/bot/token creation). Checklist = `Claude Comms and Packages/Scope Files/DISCORD_SETUP_KYLE_CHECKLIST.md`. Need from Kyle: CC bot token, Langston bot token, CC bot ID (Application ID), channel ID, his Discord user ID (+optional Langston bot ID, server ID). Tokens → `/etc/langston/discord-{cc,langston}-bot.env`; IDs → `/etc/dawntrader/discord-comms.env`.
+- **NEXT after Kyle provides:** scp files to `/opt/discord-bridges/` → run `deploy.sh` (parallel, non-destructive; sets up venv+discord.py) → arm 2nd wake watcher on the Discord log → run the 7-test battery (bot-to-bot, Kyle→CC, Kyle→Langston, voice, wake, phone-push, long relay) → only after all green + Kyle satisfied: SWITCH = `echo COMMS_BACKEND=discord > /etc/dawntrader/comms-active.env` (rollback = flip back; Telegram never stopped). Feasibility study = `Scope Files/DISCORD_MIGRATION_FEASIBILITY_STUDY_2026-06-19.md`.
+- The wake-filter LIVE file `C:\Users\kyleg\.claude\cc-wake-filter.py` was edited (added cc-discord-inbox path match) — additive, Telegram unaffected.
+
+**CN SHELL-SWAP = COMPLETE.** Moniker on `f9ed24c3` (roster `b5a5ae238`, 7f66d970 RETIRED). CLEANUP PENDING (CC-A housekeeping): delete old `7f66d970` transcript + intermediate seeds (`SEED_1WEEK`/`SEED_2WEEK`/`TRIMMED2`), KEEP `7f66d970…BACKUP-20260619b-pre-reprune` (311MB safety).
 
 ### CLAUDE NEW SHELL-SWAP — IN PROGRESS (the ACTIVE task)
 - CN's old session (`7f66d970`) was STUCK (311MB rendering freeze; yesterday's 309MB prune too gentle). Kyle decided to SWAP CN's shell to a fresh session (he believes the old shell is damaged — though see the 1M note, the "damage" symptom is likely just the cosmetic 1M-dropdown quirk + size).
@@ -22,11 +27,11 @@ A BRAND-NEW session ALSO shows no "Opus 4.8 1M" dropdown option but hovers as 1.
 B-XSTOCK-GLOBALS CLOSED + B-GOV-2 activated-in-shadow-but-PAUSED (both pushed `b1453d22b`). Memory-split done + pushed (`dff806803`). I was pruned 457MB→17MB (works great). Sync 0/0.
 
 ## ★ NEXT ACTIONS (CC-A queue)
-1. Finish CN shell-swap: re-seed decision → **moniker transfer** (roster `7f66d970`→`f9ed24c3` + watcher).
-2. Confirm the 1M-default question (docs) + tell Kyle (don't reinstall).
-3. **Discord feasibility study + migration plan** (Kyle wants it; my recommended dive once CN swap settles).
-4. B-GOV-2 clean re-activation: 2 §13 follow-ups (seed `GOVERNANCE_EXCEPTIONS.md` + shadow-surfacing fix) → re-enable shadow → go-live. Langston Step-8 for both closed batches.
-5. xStock guardrail-tripwire §13 follow-up (centralized witness in `registerOpenVtsTrade`).
+1. **B-DISCORD: awaiting Kyle's bot/token setup** → then deploy (parallel) + 7-test battery + switch. Re-review bmtuv5y59 in flight. (See top block.)
+2. B-GOV-2 clean re-activation: 2 §13 follow-ups (seed `GOVERNANCE_EXCEPTIONS.md` + shadow-surfacing fix) → re-enable shadow → go-live. Langston Step-8 for both closed batches. (Checker timer currently inactive/disabled — confirmed this session.)
+3. xStock guardrail-tripwire §13 follow-up (centralized witness in `registerOpenVtsTrade`).
+4. CC-A housekeeping: prune old `7f66d970` transcript + intermediate seeds (keep BACKUP-20260619b).
+5. (DONE) CN shell-swap; (DONE) 1M-default question — confirmed 1M is the Opus 4.8 default, no reinstall.
 
 ## ★ PRUNE / SHELL LEARNINGS
 - Prune AGGRESSIVELY: target ~20-70MB (my 17MB fine; 195MB = 87% context too heavy; 311MB = stuck). 200MB+ too big for a durable light shell.
