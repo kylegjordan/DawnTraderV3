@@ -40,6 +40,10 @@ echo "== 5. config sanity =="
 for f in /etc/langston/discord-cc-bot.env /etc/langston/discord-langston-bot.env /etc/dawntrader/discord-comms.env; do
   if [ ! -f "$f" ]; then echo "MISSING $f — provision before starting services" >&2; exit 1; fi
 done
+# CC_BOT_ID is hard-required (load_shared_config raises without it → both bridges crash-loop).
+for k in DISCORD_CHANNEL_ID KYLE_DISCORD_ID CC_BOT_ID; do
+  grep -q "^${k}=" /etc/dawntrader/discord-comms.env || { echo "MISSING $k in /etc/dawntrader/discord-comms.env" >&2; exit 1; }
+done
 
 echo "== 6. systemd units =="
 cp "$BRIDGE_DIR/discord-cc-bridge.service" /etc/systemd/system/discord-cc-bridge.service

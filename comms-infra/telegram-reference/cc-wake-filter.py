@@ -61,10 +61,11 @@ for raw in sys.stdin:
                 continue
             kind = d.get("kind") or ""
             text = (d.get("text") or "")[:400]
+            tp = "Discord" if d.get("transport") == "discord" else "Telegram"
             if kind == "":
                 deliver, body = addressed_to_me(text)
                 if deliver:
-                    print(f"WAKE[KYLE via Telegram->{ALIAS}]: {body}", flush=True)
+                    print(f"WAKE[KYLE via {tp}->{ALIAS}]: {body}", flush=True)
             elif kind == "voice_inbound":
                 deliver, body = addressed_to_me(text)
                 if deliver:

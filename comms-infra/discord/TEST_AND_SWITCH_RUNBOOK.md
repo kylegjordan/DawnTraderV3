@@ -5,23 +5,22 @@ The concrete operational checklist. Build is done + committed; this is what CC e
 ## Pre-req (Kyle, one-time) — see DISCORD_SETUP_KYLE_CHECKLIST.md
 - Discord account + private server + 1 channel.
 - Two bot apps ("DawnTrader CC", "Langston"), MESSAGE_CONTENT intent ON for both, both invited to the server.
-- Provide / place: CC bot token, Langston bot token, channel ID, Kyle's Discord user ID (guild ID optional).
+- Provide / place: CC bot token, Langston bot token, **CC bot Application ID** (REQUIRED — `CC_BOT_ID`; both bridges crash at startup without it), channel ID, Kyle's Discord user ID (Langston bot ID + guild ID optional).
 
 ## Deploy (parallel, non-destructive)
-1. scp `comms-infra/discord/{discord_common.py, discord-langston-bridge.py, discord-cc-bridge.py, *.service, cc-send, comms-active.env}` → `/opt/discord-bridges/` on 204.168.141.77.
+1. scp `comms-infra/discord/{discord_common.py, discord-langston-bridge.py, discord-cc-bridge.py, *.service, cc-send, comms-active.env}` → `/opt/discord-bridges/` on 204.168.141.77. **Also push the updated `cc-wake-filter.py`** (the one matching the `cc-discord-inbox` path) to the box running the watcher — the old filter ignores Discord events.
 2. Provision (Kyle's values):
    - `/etc/langston/discord-cc-bot.env`        → `DISCORD_BOT_TOKEN=<CC token>`  (chmod 640 root:langston)
    - `/etc/langston/discord-langston-bot.env`  → `DISCORD_BOT_TOKEN=<Langston token>` (chmod 640 root:langston)
-   - `/etc/dawntrader/discord-comms.env`       → from template (channel + kyle + guild IDs)
+   - `/etc/dawntrader/discord-comms.env`       → from template: `DISCORD_CHANNEL_ID`, `KYLE_DISCORD_ID`, **`CC_BOT_ID` (required)**, `LANGSTON_BOT_ID`+`DISCORD_GUILD_ID` (optional)
 3. Run `bash /opt/discord-bridges/deploy.sh` (sets up venv+discord.py, installs the two services, leaves Telegram untouched).
 4. Verify: `systemctl is-active discord-cc-bridge discord-langston-bridge` → active; `langston-bridge cc-comms-bridge` → still active.
-5. CC arms a SECOND wake watcher tailing the Discord log (Telegram watcher stays as-is):
-   `tail -F /var/log/cc-discord-inbox.jsonl | python3 cc-wake-filter.py CC-A` (added to the existing watcher's source list).
+5. CC FOLDS the Discord log into its EXISTING multi-file wake watcher (do NOT run a standalone single-file `tail -F` — GNU `tail -F` on a single file prints no `==> path <==` header, so the filter never sets `cur` and emits zero wakes). Add `/var/log/cc-discord-inbox.jsonl` to the session-start watcher's multi-file tail list (MEMORY.md step 4.5): `tail -n0 -F /var/log/cc-bridge-inbox.jsonl /var/log/cc-discord-inbox.jsonl /var/log/langston-alert-invokes.log /var/log/cc-wake.log | cc-wake-filter.py CC-A`. Multi-file tail → headers present → the `cc-discord-inbox` branch matches.
 
 ## Test battery (all must pass before SWITCH)
 | # | Test | How | Pass criteria |
 |---|---|---|---|
-| 1 | Kyle→CC log+ACK | Kyle posts in the Discord channel | `discord_inbound` in cc-discord-inbox.jsonl + ✅ ACK appears |
+| 1 | Kyle→CC log + wake | Kyle posts in the Discord channel | empty-`kind` entry with `sender_id`+`text` in cc-discord-inbox.jsonl + CC wake fires (no ACK — removed by design) |
 | 2 | Kyle→Langston reply | Kyle posts a question | Langston bot replies in-channel; `langston_inbound`+`langston_outbound` logged |
 | 3 | **Bot-to-bot CC→Langston** | `cc-send` (backend=discord, temporarily) posts a message addressed to Langston | Langston's bot SEES the CC-bot message + replies in-channel — the capability Telegram blocks |
 | 4 | Voice note | Kyle sends a Discord voice message | transcript in log + ✅ preview ACK |
