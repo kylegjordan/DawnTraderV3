@@ -72,10 +72,15 @@ for raw in sys.stdin:
                 deliver, body = addressed_to_me(text)
                 if deliver:
                     print(f"WAKE[KYLE-VOICE->{ALIAS}]: {body}", flush=True)
-            elif kind == "langston_outbound" and re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", text, re.I):
-                deliver, body = addressed_to_me(text)
-                if deliver:
-                    print(f"WAKE[LANGSTON->{ALIAS}]: {body}", flush=True)
+            elif kind == "langston_outbound":
+                # Wake when Langston (a) uses an explicit wake-tag (broadcast OK), or (b) names
+                # me specifically. NOT on his plain replies to Kyle (no name/tag) — too noisy.
+                if re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", text, re.I):
+                    deliver, body = addressed_to_me(text)
+                    if deliver:
+                        print(f"WAKE[LANGSTON->{ALIAS}]: {body}", flush=True)
+                elif MY_RE.search(text):
+                    print(f"WAKE[LANGSTON->{ALIAS}]: {text}", flush=True)
             elif kind == "cc_outbound":
                 # CC<->CC waking: wake on the OTHER session's post if it names me. The `sender`
                 # field (set on Discord --sender posts) attributes it; sender==MY_NAME is my own
