@@ -1,0 +1,18 @@
+[Unit]
+Description=Langston Discord gateway bridge (Claude Code via discord.py)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=langston
+Group=langston
+WorkingDirectory=/home/langston
+Environment="HOME=/home/langston"
+Environment="PATH=/opt/discord-bridges/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-langston-bridge.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# cc-send — outbound dispatcher. Routes CC's outbound message to either the
+# Telegram bridge or the Discord bridge per /etc/dawntrader/comms-active.env.
+#
+# This is the SWITCH: flipping COMMS_BACKEND between "telegram" and "discord"
+# reroutes ALL of CC's outbound with no code change. Telegram services are left
+# running during the Discord trial, so reverting the var is an instant, lossless
+# rollback.
+#
+# Usage:  cc-send --message "..."  [--thread-id 21]
+#   --thread-id applies to Telegram only (Discord uses its single configured channel).
+set -euo pipefail
+
+CONFIG=/etc/dawntrader/comms-active.env
+COMMS_BACKEND=telegram
+# shellcheck disable=SC1090
+[ -f "$CONFIG" ] && source "$CONFIG"
+
+MESSAGE=""
+THREAD_ID=21
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --message) MESSAGE="$2"; shift 2 ;;
+    --thread-id) THREAD_ID="$2"; shift 2 ;;
+    *) echo "cc-send: unknown arg $1" >&2; exit 2 ;;
+  esac
+done
+
+if [ -z "$MESSAGE" ]; then
+  echo "cc-send: --message is required" >&2
+  exit 2
+fi
+
+case "$COMMS_BACKEND" in
+  discord)
+    exec /opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-cc-bridge.py send --message "$MESSAGE"
+    ;;
+  telegram|*)
+    exec cc-comms-bridge send --thread-id "$THREAD_ID" --message "$MESSAGE"
+    ;;
+esac

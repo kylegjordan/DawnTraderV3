@@ -1,0 +1,16 @@
+[Unit]
+Description=CC Discord gateway bridge (CC inbound log + send, via discord.py)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment="PATH=/opt/discord-bridges/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-cc-bridge.py daemon
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
