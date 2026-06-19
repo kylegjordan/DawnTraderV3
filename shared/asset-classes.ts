@@ -197,6 +197,19 @@ export function asValidAssetClass(value: unknown): AssetClass | null {
  */
 export const TICKER_BASE_MIN_LEN = 1;
 
+/**
+ * P19-B6.5f (reorg-B1) — SSOT quote-currency LENGTH bound (mirrors the base-length
+ * SSOT pattern). ONE constant feeds `CRYPTO_SPOT_CANONICAL`, `XSTOCK_SPOT_DISPLAY`, and
+ * the `symbol-normalize.ts` matchers so the quote-length cap cannot drift between asset
+ * classes or files. MAX = the longest CONFIRMED live Kraken quote leg, enumerated from
+ * `/0/public/AssetPairs` 2026-06-19 (1,552 pairs → longest = 5: EUROP / PYUSD / RLUSD).
+ * Widened from an implicit 4 — that 4-char cap silently dropped the 5-char stablecoin
+ * quotes (the 6 B6.5e `classify-fallthrough-active` alerts). Re-check when the discovered
+ * quote set grows (the loud `classify-unknown-quote` alert flags drift between audits).
+ */
+export const QUOTE_LEN_MIN = 3;
+export const QUOTE_LEN_MAX = 5;
+
 /** xStock perp on Kraken Futures: `PF_<TICKER>XUSD` raw form.
  *  Tighter anchor: ticker is TICKER_BASE_MIN_LEN-6 capital letters; quote USD/EUR/GBP. */
 const XSTOCK_PERP_RAW = new RegExp(
@@ -209,7 +222,11 @@ const XSTOCK_PERP_RAW = new RegExp(
  *  spot detection CANNOT rely on the symbol alone — it requires the exchange
  *  context. This pattern is kept for documentation + optional explicit tagging. */
 const XSTOCK_SPOT_DISPLAY = new RegExp(
-  `^[A-Z]{${TICKER_BASE_MIN_LEN},5}x\\/[A-Z]{3,4}$`,
+  // P19-B6.5f (reorg-B1, Langston Q4 / D2): quote bound widened {3,4}→QUOTE_LEN in
+  // LOCKSTEP with CRYPTO_SPOT_CANONICAL — one constant, no class-to-class drift, so the
+  // same 5-char-quote gap can never open on the xStock side if an xStock ever quotes in
+  // a 5-char stablecoin. Today xStock spot is /USD-only, so this is pre-emptive.
+  `^[A-Z]{${TICKER_BASE_MIN_LEN},5}x\\/[A-Z]{${QUOTE_LEN_MIN},${QUOTE_LEN_MAX}}$`,
 );
 
 /**
@@ -509,17 +526,75 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
  */
 export const CRYPTO_SPOT_BASE_MAX_LEN = 15;
 
-/** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. Built FROM the SSOT
- *  cap above so this and `symbol-normalize.ts` cannot drift apart. */
+/**
+ * P19-B6.5f (reorg-B1) — SSOT recognition quote-currency SET (the quote-LIST sites).
+ * COMPLETE curated set, enumerated from live `/0/public/AssetPairs` 2026-06-19 (23 distinct
+ * canonical quote legs). This is the cold-start + fallback set; the server injects the
+ * live-discovered set via `setDiscoveredQuotes()` at boot AND on every kraken-asset-pairs
+ * refresh (self-healing). `shared/` must NOT import `server/` (client imports `shared/`),
+ * so the server PUSHES the set in via a SLOT — mirrors `setClassifyFallthroughHook` below.
+ * Recognition uses the discovered set if registered, else this curated set; BOTH are
+ * complete, so there is never a narrow path (Kyle §11 no-silent-narrow; Langston cond #2).
+ *
+ * Canonical quote forms (XBT→BTC already normalized) to match BOTH the canonical pair form
+ * recognition operates on AND the normalized `dynamicQuotes` the server injects.
+ *
+ * RECOGNITION ≠ TRADE-ELIGIBILITY: recognizing a quote means the pair is classified (not
+ * silently dropped); WHETHER it trades is the downstream `allowedTradingPairs` / b74
+ * USD-USDT-USDC universe filter, UNCHANGED by this batch. Re-verify quarterly (the loud
+ * `classify-unknown-quote` alert catches drift between audits).
+ */
+export const KNOWN_QUOTE_CURRENCIES: ReadonlySet<string> = new Set<string>([
+  'USD', 'EUR', 'USDT', 'USDC', 'BTC', 'GBP', 'ETH', 'AUD', 'CAD', 'JPY', 'CHF',
+  'EURC', 'USD1', 'SOL', 'DAI', 'EUROP', 'FIDD', 'PYUSD', 'AUSD', 'USDD', 'RLUSD', 'USDQ', 'USDR',
+]);
+
+/** Server-injected live-discovered quote set (SLOT). Null until the server registers it
+ *  from `kraken-asset-pairs-service.dynamicQuotes`; recognition then prefers it, else falls
+ *  back to the complete curated `KNOWN_QUOTE_CURRENCIES`. */
+let _discoveredQuotes: ReadonlySet<string> | null = null;
+
+/** Register the live-discovered quote set. Called by the server at boot AND at the tail of
+ *  EVERY kraken-asset-pairs `refresh()` (Langston Step-3 condition — a once-at-boot call
+ *  would hold a stale snapshot when `refresh()` reassigns the set, silently killing
+ *  self-healing). Pass null/empty to clear (tests). Rebuilds the raw-form regexes so the
+ *  compact-form recognizers stay in sync with the active set. */
+export function setDiscoveredQuotes(quotes: ReadonlySet<string> | null): void {
+  _discoveredQuotes = quotes && quotes.size > 0 ? quotes : null;
+  _rebuildQuoteRegexes();
+}
+
+/** The active recognition quote set: live-discovered if registered, else the complete
+ *  curated SSOT. ALWAYS complete — never narrow. */
+export function getRecognitionQuotes(): ReadonlySet<string> {
+  return _discoveredQuotes ?? KNOWN_QUOTE_CURRENCIES;
+}
+
+/** Quote alternation for the raw-form regexes — sorted LONGEST-FIRST so a longer quote
+ *  wins before a shorter suffix of itself (EUROP before EUR), built from the active set. */
+function _quoteAlternation(): string {
+  return Array.from(getRecognitionQuotes())
+    .filter((q) => /^[A-Z0-9]+$/i.test(q))
+    .sort((a, b) => b.length - a.length)
+    .join('|');
+}
+
+/** Crypto spot canonical form: `<BASE>/<QUOTE>`, all uppercase. Built FROM the SSOT base +
+ *  quote length caps so this and `symbol-normalize.ts` cannot drift apart. */
 export const CRYPTO_SPOT_CANONICAL = new RegExp(
-  `^[A-Z0-9]{${TICKER_BASE_MIN_LEN},${CRYPTO_SPOT_BASE_MAX_LEN}}\\/[A-Z0-9]{3,4}$`,
+  `^[A-Z0-9]{${TICKER_BASE_MIN_LEN},${CRYPTO_SPOT_BASE_MAX_LEN}}\\/[A-Z0-9]{${QUOTE_LEN_MIN},${QUOTE_LEN_MAX}}$`,
 );
 
-/** Crypto spot Kraken raw form 1: `X<BASE>Z<QUOTE>` (e.g., XXBTZUSD). */
-const CRYPTO_SPOT_KRAKEN_RAW_1 = /^X[A-Z0-9]+Z(USD|USDT|EUR|GBP|JPY|CAD|AUD|CHF)$/;
-
-/** Crypto spot Kraken raw form 2: `<BASE><QUOTE>` for newer pairs (e.g., SOLUSD). */
-const CRYPTO_SPOT_KRAKEN_RAW_2 = /^[A-Z]{3,5}(USD|USDT|EUR|GBP|JPY|CAD|AUD|CHF)$/;
+/** Crypto spot Kraken raw forms — `let` (not const) because they are REBUILT from the
+ *  active recognition quote set whenever `setDiscoveredQuotes()` fires (self-healing). The
+ *  initial value uses the curated SSOT (complete at module load). Base bounds unchanged —
+ *  this batch is QUOTE-side only (B6.5d owns the base side). */
+let CRYPTO_SPOT_KRAKEN_RAW_1 = new RegExp(`^X[A-Z0-9]+Z(${_quoteAlternation()})$`);
+let CRYPTO_SPOT_KRAKEN_RAW_2 = new RegExp(`^[A-Z]{3,5}(${_quoteAlternation()})$`);
+function _rebuildQuoteRegexes(): void {
+  CRYPTO_SPOT_KRAKEN_RAW_1 = new RegExp(`^X[A-Z0-9]+Z(${_quoteAlternation()})$`);
+  CRYPTO_SPOT_KRAKEN_RAW_2 = new RegExp(`^[A-Z]{3,5}(${_quoteAlternation()})$`);
+}
 
 /**
  * Resolve the asset class for a (symbol, exchange) pair.
@@ -631,9 +706,16 @@ export function getClassifyFallthroughCount(): number {
  * active-path-throwing-resolve item). Null = passive: WARN + counter only
  * (Langston A3: telemetry-only on the VTS/passive path is acceptable).
  */
-let _classifyFallthroughHook: ((symbol: string, exchange: string) => void) | null = null;
+/** P19-B6.5f (reorg-B1, OBJ-4): optional metadata the resolver passes to the hook when it
+ *  can name WHY classification failed. `unknownQuote` set = a slash-form pair whose quote
+ *  leg is not in the recognition set → the server raises the dedicated `classify-unknown-quote`
+ *  alert; absent = the generic `classify-fallthrough-active`. Backward-compatible (optional). */
+export type ClassifyFallthroughMeta = { unknownQuote?: string };
+let _classifyFallthroughHook:
+  | ((symbol: string, exchange: string, meta?: ClassifyFallthroughMeta) => void)
+  | null = null;
 export function setClassifyFallthroughHook(
-  hook: ((symbol: string, exchange: string) => void) | null,
+  hook: ((symbol: string, exchange: string, meta?: ClassifyFallthroughMeta) => void) | null,
 ): void {
   _classifyFallthroughHook = hook;
 }
@@ -661,7 +743,17 @@ export function safeResolveAssetClass(
     // to a system-alert. The widen closes the base-length gap; this catches the residual.
     // eslint-disable-next-line no-console
     console.warn(`[B69][CLASSIFY_FALLTHROUGH] unclassifiable pair=${symbol}@${exchange} (count=${_classifyFallthroughCount}): ${msg}`);
-    try { _classifyFallthroughHook?.(symbol, exchange); } catch { /* hook must never break the resolver */ }
+    // P19-B6.5f (reorg-B1, OBJ-4): if the failure is a slash-form pair whose QUOTE leg is
+    // not in the recognition set, NAME it so the next gap is a one-line diagnosis. The server
+    // hook raises the dedicated storm-safe `classify-unknown-quote` alert (dedup on exchange,
+    // per Langston Q1); the quote + full pair ride in the alert body, not the dedup key.
+    let meta: ClassifyFallthroughMeta | undefined;
+    const slashIdx = symbol.indexOf('/');
+    if (slashIdx >= 0) {
+      const q = symbol.slice(slashIdx + 1).toUpperCase();
+      if (q && !getRecognitionQuotes().has(q)) meta = { unknownQuote: q };
+    }
+    try { _classifyFallthroughHook?.(symbol, exchange, meta); } catch { /* hook must never break the resolver */ }
     return null;
   }
 }

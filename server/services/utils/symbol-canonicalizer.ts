@@ -27,6 +27,11 @@
  * domain. If the registry grows large enough to deserve its own file, split it.
  */
 
+// P19-B6.5f (reorg-B1): the compact-form (no-slash) quote split below draws from the SSOT
+// recognition quote set (live-discovered or the complete curated fallback) instead of a
+// hardcoded narrow list — so a newer Kraken stablecoin quote isn't silently dropped.
+import { getRecognitionQuotes } from '../../../shared/asset-classes.js';
+
 /**
  * Registry of exchange API names we've verified DO NOT EXIST. Each entry
  * documents a failed discovery so it's not re-attempted.
@@ -146,11 +151,15 @@ export function toCanonical(exchangeIdOrPair: string): string {
     base = exchangeIdOrPair.substring(1, zIndex);
     quote = exchangeIdOrPair.substring(zIndex + 1);
   }
-  // Pattern 2: [base][quote] where quote is known (USD, USDT, EUR, etc.)
+  // Pattern 2: [base][quote] where quote is a recognized currency.
+  // P19-B6.5f (reorg-B1): quotes come from the SSOT recognition set (getRecognitionQuotes —
+  // live-discovered or the complete curated fallback), iterated LONGEST-FIRST so a longer
+  // quote wins before a shorter suffix of itself (EUROP before EUR). Replaces the hardcoded
+  // narrow 8-quote list that silently dropped the newer stablecoin quotes.
   else {
-    const knownQuotes = ['USD', 'USDT', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF'];
+    const knownQuotes = Array.from(getRecognitionQuotes()).sort((a, b) => b.length - a.length);
     for (const q of knownQuotes) {
-      if (exchangeIdOrPair.endsWith(q)) {
+      if (exchangeIdOrPair.endsWith(q) && exchangeIdOrPair.length > q.length) {
         base = exchangeIdOrPair.substring(0, exchangeIdOrPair.length - q.length);
         quote = q;
         break;

@@ -30,7 +30,13 @@
  *     for callers that want a hard error on unrecognized input.
  */
 
-import { ASSET_CLASSES, CRYPTO_SPOT_CANONICAL, type AssetClass } from '../../shared/asset-classes.js';
+import { ASSET_CLASSES, CRYPTO_SPOT_CANONICAL, QUOTE_LEN_MIN, QUOTE_LEN_MAX, type AssetClass } from '../../shared/asset-classes.js';
+
+// P19-B6.5f (reorg-B1): the xStock quote-length bounds below are built from the shared
+// QUOTE_LEN SSOT (not a hardcoded {3,4}) so they widen in lockstep with the crypto canonical
+// — no class-to-class drift if a 5-char-quote xStock ever appears.
+const _XSTOCK_CANON_RE = new RegExp(`^[A-Z]{1,5}\\/[A-Z]{${QUOTE_LEN_MIN},${QUOTE_LEN_MAX}}$`);
+const _XSTOCK_DISP_RE = new RegExp(`^([A-Z]{1,5})X\\/([A-Z]{${QUOTE_LEN_MIN},${QUOTE_LEN_MAX}})$`);
 
 export interface NormalizeOptions {
   /** When true, throw on unrecognized symbols. Default false (fail-soft). */
@@ -95,15 +101,15 @@ function normalizeCryptoSpot(symbol: string, options: NormalizeOptions): string 
 function normalizeXstockSpot(symbol: string, options: NormalizeOptions): string {
   const upper = symbol.toUpperCase();
 
-  // Already canonical? `BASE/QUOTE`, no x-suffix.
-  if (/^[A-Z]{1,5}\/[A-Z]{3,4}$/.test(upper)) {
+  // Already canonical? `BASE/QUOTE`, no x-suffix. (quote bound from the shared QUOTE_LEN SSOT)
+  if (_XSTOCK_CANON_RE.test(upper)) {
     return upper;
   }
 
   // Display form `BASEx/QUOTE` -> strip x-suffix.
   // Match: BASEx/QUOTE OR BASEX/QUOTE (case-insensitive after upper).
   // E.g. `AAPLX/USD` -> `AAPL/USD`.
-  const dispMatch = upper.match(/^([A-Z]{1,5})X\/([A-Z]{3,4})$/);
+  const dispMatch = upper.match(_XSTOCK_DISP_RE);
   if (dispMatch) {
     return `${dispMatch[1]}/${dispMatch[2]}`;
   }

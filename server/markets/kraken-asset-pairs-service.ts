@@ -7,6 +7,9 @@
 
 import axios from 'axios';
 import { KRAKEN_SYMBOL_MAP, KrakenPairMapping } from './kraken-symbol-map';
+// P19-B6.5f (reorg-B1): push the live-discovered quote set into the shared recognition SSOT
+// slot (shared/ never imports server/, so the server pushes). Called on every refresh().
+import { setDiscoveredQuotes } from '../../shared/asset-classes.js';
 
 const LOG_PREFIX = '[I7-MAP-AUTO]';
 
@@ -118,10 +121,18 @@ const WS_ASSET_REVERSE: Record<string, string> = {
 /**
  * Valid quote currencies for automatic detection
  */
+// P19-B6.5f (reorg-B1): widened to the COMPLETE live quote set (Langston cond #2 — seed =
+// fallback = complete, so the pre-first-refresh window is never narrow). Enumerated from live
+// /0/public/AssetPairs 2026-06-19 (23 distinct legs). Keeps raw forms (XBT) alongside
+// canonical (BTC) because parseAltname matches RAW altname suffixes (e.g. "ETHXBT").
 const VALID_QUOTES = new Set([
+  // fiat
   'USD', 'EUR', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD',
-  'USDT', 'USDC', 'PYUSD', 'DAI',
-  'BTC', 'ETH', 'XBT',
+  // USD-/EUR-likes + stablecoins (full live set)
+  'USDT', 'USDC', 'PYUSD', 'DAI', 'EUROP', 'RLUSD', 'EURC', 'USD1',
+  'AUSD', 'USDD', 'USDQ', 'USDR', 'FIDD',
+  // crypto quote legs (canonical + raw form for altname suffix matching)
+  'BTC', 'ETH', 'XBT', 'SOL',
 ]);
 
 class KrakenAssetPairsService {
@@ -284,6 +295,11 @@ class KrakenAssetPairsService {
       }
       this.dynamicQuotes = newDynamicQuotes;
       console.log(`${LOG_PREFIX} Built dynamic quotes: ${newDynamicQuotes.size} unique quotes`);
+      // P19-B6.5f (reorg-B1): push the freshly-rebuilt quote set into the shared recognition
+      // SSOT slot on EVERY refresh (not just boot — Langston Step-3 condition), so a newly-
+      // listed Kraken quote is recognized without a server restart. The curated 23-leg
+      // KNOWN_QUOTE_CURRENCIES covers the pre-first-refresh + refresh-failure path.
+      setDiscoveredQuotes(newDynamicQuotes);
 
       // Clear previous data
       this.autoMap.clear();
@@ -443,6 +459,14 @@ class KrakenAssetPairsService {
     });
 
     return this.initPromise;
+  }
+
+  /**
+   * P19-B6.5f (reorg-B1): public read of the live-discovered quote set (the recognition
+   * SSOT source the shared slot is fed from). Returns a copy. Diagnostics / tests.
+   */
+  getDiscoveredQuotes(): Set<string> {
+    return new Set(this.dynamicQuotes);
   }
 
   /**

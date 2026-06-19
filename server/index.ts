@@ -248,7 +248,7 @@ app.use((req, res, next) => {
     const { setClassifyFallthroughHook } = await import('../shared/asset-classes.js');
     const { storage } = await import('./storage.js');
     const { addAlert } = await import('./services/system-alerts.js');
-    setClassifyFallthroughHook((symbol, exchange) => {
+    setClassifyFallthroughHook((symbol, exchange, meta) => {
       void (async () => {
         try {
           const [paperCtx, liveCtx] = await Promise.all([
@@ -256,16 +256,31 @@ app.use((req, res, next) => {
             storage.getSystemContext('live'),
           ]);
           if (paperCtx?.isEngineActive || liveCtx?.isEngineActive) {
-            await addAlert({
-              triggers_at: new Date(),
-              category: 'breakage',
-              severity: 'critical',
-              title: 'Asset-class classify fall-through during ACTIVE trading',
-              body: `A symbol could not be classified to an asset class on the active path: ${symbol}@${exchange}. The signal/operation was skipped. Investigate the symbol registry / canonicalizer (KNOWN_NONEXISTENT_NAMES, the xStock universe seed).`,
-              // P19-B6.5d (OBJ-2): per-pair dedupe key so a second distinct
-              // unclassifiable pair is not silently suppressed behind the first.
-              dedupe_key: `classify-fallthrough-active:${symbol}@${exchange}`,
-            });
+            if (meta?.unknownQuote) {
+              // P19-B6.5f (reorg-B1, OBJ-4): the failure NAMES an unrecognized quote leg.
+              // Dedicated, STORM-SAFE alert — dedup on EXCHANGE only (Langston Q1), so a
+              // garbage feed can't spam one row per junk quote string; the specific quote +
+              // full pair ride in the body, not the dedup key.
+              await addAlert({
+                triggers_at: new Date(),
+                category: 'breakage',
+                severity: 'critical',
+                title: 'Unrecognized quote currency during ACTIVE trading',
+                body: `Pair ${symbol}@${exchange} was SKIPPED: quote currency '${meta.unknownQuote}' is not in the recognition set. Verify it against live /0/public/AssetPairs, then add it to KNOWN_QUOTE_CURRENCIES in shared/asset-classes.ts (the live-discovered set should normally pick it up on the next refresh).`,
+                dedupe_key: `classify-unknown-quote:${exchange}`,
+              });
+            } else {
+              await addAlert({
+                triggers_at: new Date(),
+                category: 'breakage',
+                severity: 'critical',
+                title: 'Asset-class classify fall-through during ACTIVE trading',
+                body: `A symbol could not be classified to an asset class on the active path: ${symbol}@${exchange}. The signal/operation was skipped. Investigate the symbol registry / canonicalizer (KNOWN_NONEXISTENT_NAMES, the xStock universe seed).`,
+                // P19-B6.5d (OBJ-2): per-pair dedupe key so a second distinct
+                // unclassifiable pair is not silently suppressed behind the first.
+                dedupe_key: `classify-fallthrough-active:${symbol}@${exchange}`,
+              });
+            }
           }
         } catch { /* hook must never break the resolver */ }
       })();
