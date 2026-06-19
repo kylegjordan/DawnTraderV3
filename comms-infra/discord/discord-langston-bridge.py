@@ -220,25 +220,27 @@ def process_task(task, state, breaker):
         log(f"voice msg {msg_id} not addressed to Langston — silent")
         return
 
+    # Langston is ONLY ever invoked when directly addressed (the bridge gates on his name), so tell
+    # him so and require a substantive reply — Kyle 2026-06-19: "Langston responds when called, ALWAYS."
+    addressed_prompt = ("[Discord: you have been directly addressed by name. Respond substantively in "
+                        "one or a few lines. Do NOT reply with [SILENT] — on this channel you only "
+                        "receive messages addressed to you.]\n\n" + prompt)
     log(f"handling msg {msg_id} channel={channel_id} kind={kind}: {prompt[:120]}")
-    response = invoke_claude(prompt, state["session_id"], state=state)
+    response = invoke_claude(addressed_prompt, state["session_id"], state=state)
     resp_stripped = (response or "").strip()
-    # Robust: treat as silent if empty, starts with the marker, or carries [SILENT] anywhere
-    # (Langston sometimes prepends a one-line "not mine to answer" before the marker).
-    up = resp_stripped.upper()
-    is_silent = (not resp_stripped) or up.startswith("[SILENT]") or up == "SILENT" or ("[SILENT]" in up)
     is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
     if is_bridge_error and not is_dm:
-        is_silent = True
-    if is_silent:
-        mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id,
-                     reason=resp_stripped[:200])
-        log(f"silent on msg {msg_id} (no Discord post)")
-    else:
-        sent_id = dc.rest_send(BOT_TOKEN, channel_id, response, LOG_FILE)
-        mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id,
-                     reply_to=msg_id, text=response)
-        log(f"responded to msg {msg_id}")
+        # infra error, not a real reply — mirror only, don't spam the channel
+        mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="bridge_error_suppressed")
+        log(f"bridge error on msg {msg_id} — suppressed in channel")
+        return
+    # Strip any reflexive [SILENT] marker and post; brief ack only if nothing substantive remains.
+    cleaned = re.sub(r"\[SILENT\]", "", resp_stripped, flags=re.I).strip()
+    if len(cleaned) < 3:
+        cleaned = "Langston here — acknowledged."
+    sent_id = dc.rest_send(BOT_TOKEN, channel_id, cleaned, LOG_FILE)
+    mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
+    log(f"responded to msg {msg_id}")
 
 
 def task_worker(task_q, state):
