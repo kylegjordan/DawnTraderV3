@@ -12,11 +12,12 @@
     {
       "name": "Claude New",
       "alias": "CC-B",
-      "session_id": "7f66d970-154c-441a-9aa1-e12a77e67cce",
+      "session_id": "f9ed24c3-9a40-4fa7-a9c4-f6c479801602",
       "role_note": "batch-implementation session",
       "named_by": "Kyle 2026-06-12",
       "status": "active",
-      "activated": "2026-06-12 (self-registered at naming; session began as the B-5 AMR build session)"
+      "activated": "2026-06-12 (self-registered at naming; session began as the B-5 AMR build session)",
+      "shell_swap": "2026-06-19 (Kyle directive) — name CARRIED from the retired session 7f66d970 (intermittently froze ~311MB) to a fresh shell f9ed24c3, seeded with the last-week transcript + all 116 compaction summaries (re-homed + re-stamped by CC-A, then re-seeded to ~68MB for headroom). 7f66d970 is RETIRED — it must NOT arm a CC-B watcher."
     }
   ],
   "rules": [
