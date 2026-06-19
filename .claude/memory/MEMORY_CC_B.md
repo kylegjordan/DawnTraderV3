@@ -3,7 +3,7 @@
 > Per-session working-state for **Claude New (CC-B)**, session `f9ed24c3-9a40-4fa7-a9c4-f6c479801602` (roster-bound; moniker carried from retired `7f66d970` on the 2026-06-19 shell-swap). Shared protocols + project-consensus live in `MEMORY.md` (read that too). This file = "what I'm doing / where I am" — I write volatile state ONLY here (Kyle per-session split directive 2026-06-19). Mirror to `.claude/memory/MEMORY_CC_B.md`. Hard cap ~200 lines.
 
 ## IDENTITY
-Claude New (CC-B), session `f9ed24c3-9a40-4fa7-a9c4-f6c479801602` (roster-bound; shell-swapped from retired `7f66d970` 2026-06-19). Telegram prefix **CLAUDE NEW (CC) SPEAKING:**. Role = batch implementation. Re-arm the wake watcher per shared `MEMORY.md` session-start item 4.5 every session start.
+Claude New (CC-B), session `f9ed24c3-9a40-4fa7-a9c4-f6c479801602` (roster-bound; shell-swapped from retired `7f66d970` 2026-06-19). Telegram prefix **CLAUDE NEW (CC) SPEAKING:**. **★DISCORD DISPLAY NAME = "NEW Claude" (Kyle rename 2026-06-20; was "Claude New") → Discord posts use `--sender "NEW Claude"`; the wake-filter name map maps my CC-B alias to "NEW Claude", so my --sender MUST match or I wake myself.** Role = batch implementation. **★Arm the wake watcher via the Monitor TOOL (`persistent:true`), NOT Bash run_in_background — a backgrounded `while true` never exits so it never wakes you (shared MEMORY.md step 4.5; Kyle root-caused 2026-06-20).** Re-arm every session start (re-arm to reload filter changes).
 
 ---
 
