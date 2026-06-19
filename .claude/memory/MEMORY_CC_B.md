@@ -7,7 +7,15 @@ Claude New (CC-B), session `f9ed24c3-9a40-4fa7-a9c4-f6c479801602` (roster-bound;
 
 ---
 
-## ★★ CURRENT STATE / RESUME HERE (2026-06-19) — AUDIT DONE + REORG PLAN LOCKED
+## ★★ CURRENT STATE / RESUME HERE (2026-06-19) — reorg-B1 CLOSED; NEXT = reorg-B2
+
+**✅ reorg-B1 / P19-B6.5f FULLY CLOSED 2026-06-19** (all 11 steps; CC-B + Langston consensus; awaiting only Kyle's formal ack). Both-class symbol-recognition completeness. Code `b06eb9e5c`, governance `48c0f6bf1`, CI both heads all-4-green (`27837279938` code + `27837707609` governance), deployed staging + live-verified (6 dropped pairs → crypto_spot; xStock complete; eligibility-gate proven recognized≠traded). Langston Step-1/2/4/8 all PROCEED/CONFIRMED-CLOSED. Governance landed: SIM §17/S17 + System-Manual recognition-path note + BATCH_CATALOG + PHASE_HISTORY (Phase 19→IN PROGRESS) + PHASE_19_PLAN §1 + RUNNING_ISSUES #698 RESOLVED + completion report.
+
+**★NEXT = reorg-B2 = rung-1 target-floor + liquid-volatile universe selector** (the minimum, WITH B1, to get crypto trades opening at TAKER rates → gate-10). Per-class. SHARED build. Then B3 EV-input plumbing (#233), B4 shadow layer, B5 the ranking fix (make-or-break), B6 Filter Diagnostics, B7 maker build, B8 xStock net-new, B9 turn-on. (Board: `P19_REORG_BOTH_CLASSES_PLAN_2026-06-19.md` §2.)
+
+---
+
+## ARCHIVED — reorg plan lock + audit (2026-06-19)
 
 The Active Trading Pipeline Audit is COMPLETE + 3-way APPROVED (`1-system-manual/ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md`). Reorganized Phase-19 program LOCKED on **CC-B + Langston** agreement (Kyle released the CC-A-concur dependency 2026-06-19; Langston APPROVED). **AUTHORITATIVE PLAN = `Claude Comms and Packages/Scope Files/P19_REORG_BOTH_CLASSES_PLAN_2026-06-19.md` + `PHASE_19_PLAN.md` §1 reorg banner + POST_AUDIT_ROADMAP §6 (2026-06-19).**
 
