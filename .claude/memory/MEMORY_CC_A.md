@@ -1,22 +1,36 @@
 # MEMORY — Claude Old (CC-A) volatile working-state
 
-> **This file is OWNED by Claude Old (CC-A), session `3ce652e6` (comms / roadmap / governance).** I read it + the shared `MEMORY.md` (protocols) at session-start, and write volatile state ONLY here. Claude New (CC-B) owns `MEMORY_CC_B.md`. Shared protocols + project-consensus state live in `MEMORY.md`. Detailed recent scratch: `_scratch_xstock_globals_resume.md` (xStock fix + fee/exchange direction + the trading-approach 3-way — still valid reference).
+> OWNED by Claude Old (CC-A), session `3ce652e6` (comms/roadmap/governance). Read this + shared `MEMORY.md` (protocols) at session-start; write volatile state ONLY here. CC-B owns `MEMORY_CC_B.md`. Detailed fee/strategy scratch: `_scratch_xstock_globals_resume.md`. Mirror to `.claude/memory/`.
 
-## ★ WHERE I AM (2026-06-19)
-**Just CLOSED two batches — governance committed + pushed `b1453d22b` (sync 0/0):**
-- **B-XSTOCK-GLOBALS — CLOSED.** xStock VTS opens now stamp at-open per-class global regime/friction/DBS (code `a93e274c8`, deployed restart#405, UI+DATA verified). Root cause = B-4.7 made `registerOpenVtsTrade` caller-pass-only; xStock eval-cycle caller never passed the 4 globals. Fix mirrors the crypto per-class stamp. **Pending:** Langston Step-8.
-- **B-GOV-2 — activated-in-shadow but PAUSED.** Governance-checker (code `ec37b2990`, CI green, 35/35) installed on STAGING (dedicated clone `/opt/governance-checker/DawnTraderV3`, deploy user, local system-alerts CLI). **Timers DISABLED** after the first tick flooded the §10.5 queue with 88 backfill entries (all resolved). **2 follow-ups before live-paging (RUNNING_ISSUES, §13-homed):** (a) seed `GOVERNANCE_EXCEPTIONS.md` for pre-rule/closed batches; (b) shadow-surfacing fix — `info` shadow entries STILL surface in the §10.5 read (severity-blind), so make shadow genuinely non-surfacing before `GOV_SHADOW=0`. Then re-enable in shadow → watch 1-2 real batch closes → flip live. **Pending:** Langston Step-8.
+## ★ WHERE I AM (2026-06-19, late — context was at 95%, this is the lifeline)
+
+### CLAUDE NEW SHELL-SWAP — IN PROGRESS (the ACTIVE task)
+- CN's old session (`7f66d970`) was STUCK (311MB rendering freeze; yesterday's 309MB prune too gentle). Kyle decided to SWAP CN's shell to a fresh session (he believes the old shell is damaged — though see the 1M note, the "damage" symptom is likely just the cosmetic 1M-dropdown quirk + size).
+- **New session Kyle created = `f9ed24c3-9a40-4fa7-a9c4-f6c479801602`** ("Awaiting instructions").
+- I RE-HOMED a 196MB seed (last week, since 2026-06-12, + ALL 116 compaction summaries) into `f9ed24c3`: re-stamped every entry's `sessionId` → f9ed24c3, dropped 7922 old custom-title entries, validated (0 bad JSON, 0 dangling, all sessionId correct). DONE.
+- **Health check on f9ed24c3 PASSED:** files open (CLAUDE.md + MEMORY.md + MEMORY_CC_B.md), oriented (correctly recalled CN's recent work — memory split, pruning me, the audit reversal, both-classes plan, reorg-B1 next), responsive (no freeze / no can't-send). **The stuck-UI is FIXED on the new shell — the transplant works.**
+- ★OPEN DECISION (awaiting Kyle): the 196MB seed loads ~865k tokens = **87% context (too heavy)** + 196MB file still near the freeze-zone. I RECOMMENDED a quick re-seed to **~69MB** (all 116 summaries + last ~2.5 days = since 2026-06-17; re-stamped to f9ed24c3) → ~30% context, durable headroom. Kyle picks: re-seed-69MB (my reco) vs accept-196MB + transfer-moniker now.
+- PENDING after the seed decision: **TRANSFER the "Claude New" moniker to f9ed24c3** — update `(repo)/.claude/cc-session-roster.json` CC-B `session_id` `7f66d970` → `f9ed24c3`; then the new shell runs session-start (re-arm watcher as CC-B, §10.5 alerts, roster-bind) + picks up **reorg-B1** (the old B6.5f re-scoped to cover BOTH crypto + xStock symbol-recognition completeness).
+- Backups/seeds: `7f66d970…BACKUP-20260619b-pre-reprune` (311MB full), `f9ed24c3…ORIG-tiny` (new session's original 36KB). Seeds built: `…SEED_1WEEK`(196MB, currently live in f9ed24c3), `…TRIMMED2`(69MB, Jun17), 135MB(Jun15 cutoff), `…SEED_2WEEK`(303MB).
+
+### 1M MODEL QUESTION (Kyle, VERIFYING via docs)
+A BRAND-NEW session ALSO shows no "Opus 4.8 1M" dropdown option but hovers as 1.0M context. Kyle's hypothesis: **1M is now the DEFAULT (no 200K option)** → that fully explains the non-issue. Checking Anthropic/Claude docs (claude-code-guide). If confirmed: everyone's on 1M by default, the dropdown just doesn't distinguish — NO reinstall needed; the "damage" theory for CN is mostly the rendering-bug-from-size, not a defect.
+
+### MY GOVERNANCE (done earlier today — landed)
+B-XSTOCK-GLOBALS CLOSED + B-GOV-2 activated-in-shadow-but-PAUSED (both pushed `b1453d22b`). Memory-split done + pushed (`dff806803`). I was pruned 457MB→17MB (works great). Sync 0/0.
 
 ## ★ NEXT ACTIONS (CC-A queue)
-1. **Memory-file split** (IN PROGRESS this session) — created MEMORY_CC_A.md (this) + convention in shared MEMORY.md + CLAUDE.md §3.1 note; Claude New to create MEMORY_CC_B.md via Kyle-relayed prompt. Commit the mirror + CLAUDE.md.
-2. **Get pruned** — Claude New prunes THIS transcript (3ce652e6, ~457MB+, never trimmed) per the runbook `1-system-manual/CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md`; prerequisite (governance committed) is MET; Kyle archives me → CN swaps → Kyle reopens. The reopen = my compaction.
-3. **Langston Step-8** for B-XSTOCK-GLOBALS + B-GOV-2.
-4. **B-GOV-2 clean re-activation** — the 2 calibration follow-ups, then re-enable in shadow, then go-live (Kyle: shadow = a few days / 1-2 batches, not indefinite).
-5. **xStock guardrail-tripwire** §13 follow-up — a centralized witness in `registerOpenVtsTrade` (alert if an xStock VTS row opens blank-globals while voteStatus=LIVE), deduped.
-6. **Discord migration** — Kyle wants it (removes the Telegram bot-to-bot block that forces our back-channels). Do a feasibility study + migration plan (NOT a flip; re-point the 2 bridges + wake watcher + voice from Telegram→Discord; free; bots can read each other). Build alongside Telegram, test, cut over, then retire Telegram.
+1. Finish CN shell-swap: re-seed decision → **moniker transfer** (roster `7f66d970`→`f9ed24c3` + watcher).
+2. Confirm the 1M-default question (docs) + tell Kyle (don't reinstall).
+3. **Discord feasibility study + migration plan** (Kyle wants it; my recommended dive once CN swap settles).
+4. B-GOV-2 clean re-activation: 2 §13 follow-ups (seed `GOVERNANCE_EXCEPTIONS.md` + shadow-surfacing fix) → re-enable shadow → go-live. Langston Step-8 for both closed batches.
+5. xStock guardrail-tripwire §13 follow-up (centralized witness in `registerOpenVtsTrade`).
 
-## ★ KEY CONTEXT (Kyle decisions still live)
-- **FEE REALITY (verified):** Kraken July-9 cross-platform Tier 1 = **0.40% maker / 0.80% taker** = EXACTLY our model (NOT 2× too high — I was wrong, corrected). No US-person-accessible exchange escapes it (Binance/Bybit/OKX block US persons; Coinbase 0.40%/0.60% marginally better taker only; Gemini worse). Strategy was modeled for ~0.10% fees. → don't switch exchanges; adapt strategy. Detail in scratch file.
-- **TRADING-APPROACH 3-way (CC-A + Langston converged; Kyle told CN to proceed with its+Langston decision — I do NOT owe a concur/fee-post anymore):** maker entry + bigger targets (≥3.5-4%, taker stops break symmetric math) + "liquid+volatile" not pure majors + 2 concentrated positions + AoP tier-climb as the portfolio grows. Phase-3 (Tier-3 ~0.22% taker) = original fast style returns. Brief: `Claude Comms and Packages/Langston Design Asks/FEE_AWARE_STARTING_TRADING_APPROACH_3WAY_rev1.md`.
-- **Claude New is doing:** the both-classes Phase-19 plan ("both in code, one live at a time" hybrid, CN+Langston converged) — folding into PHASE_19_PLAN §1; the active-trading-pipeline audit (committed, Langston-approved). I handed CN the shared-doc window back after my governance push.
-- **Transcript-trim tooling:** `memory/distill_transcript.py` (safe) + `memory/trim_transcript.py` (aggressive); runbook in 1-system-manual. Scripts refined 2026-06-19 (image→text-block redaction). CN's session was pruned 784→309MB yesterday (works).
+## ★ PRUNE / SHELL LEARNINGS
+- Prune AGGRESSIVELY: target ~20-70MB (my 17MB fine; 195MB = 87% context too heavy; 311MB = stuck). 200MB+ too big for a durable light shell.
+- Runbook `1-system-manual/CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md`; scripts `memory/trim_transcript.py` (aggressive) + `distill_transcript.py` (safe). Re-home = set `sessionId` per entry to the new UUID + drop `custom-title` entries; session must be ARCHIVED (released) during the file swap; filename+sessionId match → loads (proven on f9ed24c3); picker metadata may lag (cosmetic).
+
+## ★ KEY CONTEXT (still live; detail in `_scratch_xstock_globals_resume.md`)
+- FEE REALITY: Kraken July-9 Tier1 = 0.40% maker / 0.80% taker = our model (correct). No US-person-accessible exchange escapes it. Strategy modeled for ~0.10%. → don't switch; adapt (maker + bigger targets ≥3.5-4% + AoP tier-climb).
+- TRADING-APPROACH 3-way: CC-A + Langston converged; **Kyle told CN to proceed with its+Langston decision — I do NOT owe a concur/fee-post.**
+- CN carries the both-classes Phase-19 plan + reorg-B1 next; the active-pipeline audit is done (Langston-approved).
